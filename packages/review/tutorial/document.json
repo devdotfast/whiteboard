@@ -11,25 +11,7 @@
       "children": [
         {
           "type": "markdown",
-          "markdown": "A Review is a guided, interactive explanation of a code change. The document\nkeeps the important code and system views in one place.\n"
-        },
-        {
-          "type": "tutorial",
-          "kind": "conversation",
-          "conversation": {
-            "version": 1,
-            "title": "How this Review was made",
-            "messages": [
-              {
-                "role": "user",
-                "body": "Create a Review of the feature we just worked on."
-              },
-              {
-                "role": "assistant",
-                "body": "Ok, I'm on it..."
-              }
-            ]
-          }
+          "markdown": "A whiteboard is a guided, interactive explanation of a code change. Code,\ndiffs, and diagrams live in one document.\n"
         },
         {
           "type": "markdown",
@@ -41,42 +23,42 @@
         },
         {
           "type": "markdown",
-          "markdown": "### Put the keybindings to work\n\nThe editor below is live. Try hover, **Go to Definition**, or **Go to\nReferences** with the same commands you use in VS Code.\n"
+          "markdown": "### Read code like your editor\n\nThe editor below is live. Hover a symbol to see its type. **Go to\nDefinition** and **Find References** use the same keys as your editor.\n"
         },
         {
           "type": "code_peek",
           "source": "head/src/orders/order-service.ts#L13-L29",
           "caption": "Order service creates the order"
-        },
-        {
-          "type": "markdown",
-          "markdown": "Prose in the review also supports [links to code](review-source:head/src/orders/order-service.ts#L13-L29).\n"
         }
       ]
     },
     {
       "type": "section",
-      "title": "Commits and diffs",
+      "title": "Diffs and lenses",
       "children": [
         {
           "type": "markdown",
-          "markdown": "Whiteboard pins an exact base and head before the agent starts writing. Open\n**Commits** to see the change in author order. Expand the sample commit to see\nits files, then choose the **<>** button to inspect only that commit.\n\nThe **Diff** tab shows the complete change between the pinned base and head.\nChoose **Review** when you are ready to return to this tour.\n"
+          "markdown": "The **Diff** tab shows the whole change between the pinned base and head.\ndiffr folds unchanged structure so you read only what moved; select a fold to\nexpand it.\n"
         },
         {
           "type": "tutorial",
           "kind": "view",
-          "view": "commits",
-          "label": "Explore the sample commits"
+          "view": "diff",
+          "label": "Open the diff"
+        },
+        {
+          "type": "markdown",
+          "markdown": "**Lenses** split a change into the parts that matter. Select a lens to\nfilter the diff to just those lines. Mark lines viewed and the remaining\ncounts go down.\n\nAI summaries for folded code are opt-in under **Settings → Diff display and\nAI summaries**.\n"
         }
       ]
     },
     {
       "type": "section",
-      "title": "Interactive Diagrams",
+      "title": "Interactive diagrams",
       "children": [
         {
           "type": "markdown",
-          "markdown": "The sequence diagram connects the checkout request to fulfillment. Select any\nmessage to open its supporting code.\n"
+          "markdown": "The sequence diagram connects the checkout request to fulfillment. Select\n**Tour** to walk it fullscreen; each message opens its supporting code.\n"
         },
         {
           "type": "sequence",
@@ -134,30 +116,33 @@
         },
         {
           "type": "markdown",
-          "markdown": "The database view groups writes by use case. Its operations open code too.\n"
+          "markdown": "The database view groups reads and writes by use case. Its operations open\ncode too.\n"
         },
         {
           "type": "database_lens",
           "title": "Order storage",
           "actors": {
             "orderService": {
-              "label": "Order service",
-              "softwareMapPath": "orderService.application.orders"
+              "label": "Order service"
             },
             "worker": {
-              "label": "Fulfillment worker",
-              "softwareMapPath": "orderService.fulfillment.worker"
+              "label": "Fulfillment worker"
             }
           },
           "stores": {
             "orderDatabase": {
               "label": "Order database",
               "storage": "relational",
-              "softwareMapPath": "orderService.data.ordersDatabase",
               "collections": {
                 "orders": {
                   "label": "orders",
                   "fields": {
+                    "id": {
+                      "label": "id",
+                      "dataType": "text",
+                      "primaryKey": true,
+                      "example": "order-customer-42"
+                    },
                     "customerId": {
                       "label": "customerId",
                       "dataType": "text",
@@ -178,7 +163,8 @@
                       "dataType": "timestamp",
                       "example": "2026-08-10T12:00:00Z"
                     }
-                  }
+                  },
+                  "source": "head/src/database/schema.ts#L3-L9"
                 }
               }
             }
@@ -213,43 +199,6 @@
               ]
             }
           ]
-        },
-        {
-          "type": "tutorial",
-          "kind": "feature",
-          "feature": "softwareMap",
-          "children": [
-            {
-              "type": "markdown",
-              "markdown": "The experimental **Map** moves from the order system to its components and\ncode. Select a node to explore the sample service.\n"
-            },
-            {
-              "type": "tutorial",
-              "kind": "view",
-              "view": "map",
-              "label": "Open the software map"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "section",
-      "title": "Agent traces",
-      "children": [
-        {
-          "type": "markdown",
-          "markdown": "Trace quotes connect a Review to the agent conversation behind a change.\nSelect this quote from an illustrative session to read it in context:\n"
-        },
-        {
-          "type": "trace_quote",
-          "traceId": "tutorial-trace",
-          "eventId": "0",
-          "text": "we want to have one shared server / source of truth for all agent chats."
-        },
-        {
-          "type": "markdown",
-          "markdown": "To capture your own sessions, open **Preferences → Settings → Experimental\nFeatures → Trace capture**. Enter your S3/R2 bucket credentials and choose\n**Enable**. Have everyone on your team do this (with the same bucket credentials) to sync and review each other's traces.\n\nTrace capture is off by default; this sample works without setup.\n"
         }
       ]
     },
@@ -259,17 +208,9 @@
       "children": [
         {
           "type": "markdown",
-          "markdown": "To connect Whiteboard to your agents, open **Preferences →\nSettings**. To revisit setup or take this tour again, open **Preferences →\nGetting Started**.\n"
+          "markdown": "To connect Whiteboard to your agents, open **Preferences → Settings**. To\nrevisit setup or take this tour again, open **Preferences → Getting Started**.\n"
         }
       ]
-    },
-    {
-      "type": "software_map",
-      "mapVersionId": "tutorial-map-base"
-    },
-    {
-      "type": "software_map",
-      "mapVersionId": "tutorial-map-head"
     }
   ]
 }

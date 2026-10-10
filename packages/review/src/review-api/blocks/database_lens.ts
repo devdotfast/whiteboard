@@ -57,6 +57,11 @@ export const storeSchema = z.strictObject({
       label,
       key: label.optional(),
       fields: z.record(text, fieldSchema),
+      source: anchorSchema
+        .optional()
+        .describe(
+          "Where the table or collection is declared, such as its schema definition. Its use cases' tours start here.",
+        ),
     }),
   ),
 });

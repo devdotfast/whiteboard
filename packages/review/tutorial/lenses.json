@@ -1,0 +1,10 @@
+[
+  {
+    "title": "Inventory reservation",
+    "targets": [{ "kind": "files", "patterns": ["src/inventory/**"] }]
+  },
+  {
+    "title": "Payment charge",
+    "targets": [{ "kind": "files", "patterns": ["src/payments/**"] }]
+  }
+]

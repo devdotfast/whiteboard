@@ -65,7 +65,10 @@ export function withLens(instantiation: IInstantiationService, entries: readonly
 						}) ? { ...gap, collapsed: false } : gap)
 					};
 					const section = progress()?.sections?.find(section => section.id === entry.sectionId);
-					return lens && !lens.wholeFiles ? { ...diff, contextGaps: lensContextGaps(diff, original.getLineCount(), modified.getLineCount(), lensRanges(section ? { ...lens, ranges: section.sources } : lens, entry)) } : diff;
+					if (!lens || lens.wholeFiles) return diff;
+					const gaps = lensContextGaps(diff, original.getLineCount(), modified.getLineCount(), lensRanges(section ? { ...lens, ranges: section.sources } : lens, entry));
+					// A document snippet has no lens to be outside of.
+					return { ...diff, contextGaps: lens.id.startsWith("document:") ? gaps.map(gap => gap.label === 'Outside lens' ? { ...gap, label: undefined } : gap) : gaps };
 				},
 			};
 		},

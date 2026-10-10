@@ -23,7 +23,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 - Opening a Go file installs Go tools from the network without asking — fixed (#354)
 - A review's Rust language server never starts when the extension wins a race with the workspace folder — fix-pr #854
 - Home offers no way to dismiss an active review — open
-- The tutorial's live editor gets no hover or Go to Definition — open
+- The tutorial's live editor gets no hover or Go to Definition — fixed
 - Activating the Go extension opens its welcome page over the review — open
 - Peeks and tour stops never offer to show their element in the software map — open
 - A focus request that mounts the Map view loses to its default selection — fixed
@@ -152,7 +152,7 @@ Server` cannot help — the captured workspace is never re-read. The fix
 
 ## The tutorial's live editor gets no hover or Go to Definition
 
-- **Journey:** `tutorial` · **Found:** 2026-09-28 · **Status:** open
+- **Journey:** `tutorial` · **Found:** 2026-09-28 · **Status:** fixed
 - **Repro:** open the tutorial (`Whiteboard: Open Tutorial...`), pick a keymap,
   then hover `totalCents` or any typed identifier in the Welcome section's
   `src/orders/order-service.ts` editor and press `F12` on it.
@@ -188,9 +188,9 @@ Server` cannot help — the captured workspace is never re-read. The fix
 ## Peeks and tour stops never offer to show their element in the software map
 
 - **Journey:** `canvas-resume` · **Found:** 2026-09-28 · **Status:** open
-- **Repro:** open the tutorial with the software map enabled and start the
-  database lens tour under Interactive Diagrams; its actors name
-  `softwareMapPath`s such as `orderService.application.orders`.
+- **Repro:** open a review whose database lens actors name `softwareMapPath`s
+  such as `orderService.application.orders` (`createDiagramReview` in
+  `harness.mjs`) and start the lens's tour.
 - **Expected:** a stop whose element is on the map shows its
   "Show … in software map" button, as the side peek and tour stop render it.
 - **Actual:** no `button[aria-label$=" in software map"]` renders anywhere, so

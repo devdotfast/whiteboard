@@ -1,17 +1,16 @@
 import type { TutorialStepId } from "@dev.fast/review-protocol";
 
-export type TutorialChapterId =
-  | "welcome"
-  | "commits"
-  | "diagrams"
-  | "traces"
-  | "finish";
+import type { OverlayTourKind } from "./review-panel-store";
+
+export type TutorialChapterId = "welcome" | "diffs" | "diagrams" | "finish";
 
 export type TutorialStepCompletion =
   | "external"
   | "click"
   | "inline-hover"
-  | "inline-navigation"
+  | "tour-open"
+  | "tour-advance"
+  | "tour-close"
   | "finish";
 
 export interface TutorialChapterDefinition {
@@ -25,19 +24,25 @@ export interface TutorialStepDefinition {
   title: string;
   instruction: string;
   completion: TutorialStepCompletion;
+  /** The fullscreen tour a tour step watches. */
+  tour?: OverlayTourKind;
   targetSelector: string;
-  requiresSoftwareMap?: boolean;
+  /** What gets the ring, when not the target. */
+  highlightSelector?: string;
+  /** Ring only the topmost highlight. */
+  ringFirst?: boolean;
+  /** Doing the task marks it done; the reader moves on with Next. */
+  confirm?: boolean;
 }
 
 export const TUTORIAL_CHAPTERS: readonly TutorialChapterDefinition[] = [
   { id: "welcome", title: "Welcome" },
-  { id: "commits", title: "Commits and diffs" },
-  { id: "diagrams", title: "Interactive Diagrams" },
-  { id: "traces", title: "Agent traces" },
+  { id: "diffs", title: "Diffs and lenses" },
+  { id: "diagrams", title: "Interactive diagrams" },
   { id: "finish", title: "Get help" },
 ];
 
-const tutorialSteps: readonly TutorialStepDefinition[] = [
+export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
   {
     id: "chooseKeymap",
     chapter: "welcome",
@@ -52,69 +57,73 @@ const tutorialSteps: readonly TutorialStepDefinition[] = [
     chapter: "welcome",
     title: "Inspect a symbol",
     instruction:
-      "Move the pointer over a typed symbol in the live editor to see its type information.",
+      "Hover a symbol in the live editor to see its type. Go to Definition works with your usual keys too.",
     completion: "inline-hover",
+    confirm: true,
     targetSelector:
       '[data-review-section="Welcome"] [data-review-inline-editor]',
-  },
-  {
-    id: "gotoDefinition",
-    chapter: "welcome",
-    title: "Navigate the code",
-    instruction:
-      "Use Go to Definition on a symbol—the same command you use in your editor.",
-    completion: "inline-navigation",
-    targetSelector:
-      '[data-review-section="Welcome"] [data-review-inline-editor]',
-  },
-  {
-    id: "openPeek",
-    chapter: "welcome",
-    title: "Follow the prose",
-    instruction:
-      "Select the order creation path in the prose to open its focused code.",
-    completion: "click",
-    targetSelector: '[data-review-section="Welcome"] a[data-review-anchor-id]',
-  },
-  {
-    id: "openCommits",
-    chapter: "commits",
-    title: "Inspect the commits",
-    instruction:
-      "Open Commits to see how the change was built in author order.",
-    completion: "click",
-    targetSelector:
-      'button[aria-label="Commits"], .tutorial-view-button[data-tutorial-view="commits"]',
   },
   {
     id: "openDiff",
-    chapter: "commits",
-    title: "Open a focused diff",
+    chapter: "diffs",
+    title: "Open the diff",
     instruction:
-      "Open the sample commit's diff to inspect only the change it introduced.",
+      "Open Diff to see the whole change, with unchanged structure folded away.",
     completion: "click",
-    targetSelector: ".review-commit-open",
+    targetSelector:
+      '.review-segment[aria-label="Diff"], .tutorial-view-button[data-tutorial-view="diff"]',
+  },
+  {
+    id: "selectLens",
+    chapter: "diffs",
+    title: "Filter with a lens",
+    instruction: "Select a lens to filter the diff to just that part.",
+    completion: "click",
+    targetSelector:
+      ".diff-sidebar-lenses [data-lens-id] button[aria-pressed]:not(:disabled)",
+    highlightSelector:
+      ".diff-sidebar-lenses [data-lens-id]:first-of-type .diff-lens-chip",
+  },
+  {
+    id: "expandFold",
+    chapter: "diffs",
+    title: "Expand a fold",
+    instruction: "Select a folded region to reveal the code diffr hid.",
+    completion: "click",
+    targetSelector: ".review-fold-pill, .diff-fold-reveal",
+    highlightSelector:
+      ".modified-in-monaco-diff-editor :is(.diff-fold-reveal, .review-fold-pill)",
+    ringFirst: true,
+    confirm: true,
+  },
+  {
+    id: "backToWhiteboard",
+    chapter: "diffs",
+    title: "Back to the whiteboard",
+    instruction: "Select Whiteboard to return to the document.",
+    completion: "click",
+    targetSelector: '.review-segment[aria-label="Whiteboard"]',
   },
   {
     id: "openSequence",
     chapter: "diagrams",
     title: "Walk the sequence",
     instruction:
-      "Open the sequence Tour, then select its messages to follow the supporting code.",
-    completion: "external",
+      "Open the sequence Tour, then step to the next message to follow its code.",
+    completion: "tour-advance",
+    tour: "sequence",
     targetSelector:
-      '[data-review-section="Interactive Diagrams"] .sequence-diagram .diagram-tour-button',
+      '[data-review-section="Interactive diagrams"] .sequence-diagram .diagram-tour-button, .diagram-tour-overlay .tour-pager-next',
   },
   {
-    id: "openMap",
+    id: "closeSequence",
     chapter: "diagrams",
-    title: "Explore the software map",
-    instruction:
-      "Open Map to move from the sample system to its components and code.",
-    completion: "click",
+    title: "Close the tour",
+    instruction: "Close the tour to return to the document.",
+    completion: "tour-close",
+    tour: "sequence",
     targetSelector:
-      'button[aria-label="Map (Experimental)"], .tutorial-view-button[data-tutorial-view="map"]',
-    requiresSoftwareMap: true,
+      '.diagram-tour-overlay button[aria-label="Close guided tour"]',
   },
   {
     id: "openDatabase",
@@ -122,18 +131,10 @@ const tutorialSteps: readonly TutorialStepDefinition[] = [
     title: "Inspect the database flow",
     instruction:
       "Open the database Tour to follow the order write from the service into storage.",
-    completion: "external",
+    completion: "tour-open",
+    tour: "database",
     targetSelector:
-      '[data-review-section="Interactive Diagrams"] .database-lens .diagram-tour-button',
-  },
-  {
-    id: "openTraceQuote",
-    chapter: "traces",
-    title: "Read the agent conversation",
-    instruction:
-      "Select the trace quote to read it in context. Enable capture for your own sessions in Settings → Experimental Features → Trace capture.",
-    completion: "click",
-    targetSelector: '[data-review-section="Agent traces"] a[href^="#trace-"]',
+      '[data-review-section="Interactive diagrams"] .database-lens .diagram-tour-button',
   },
   {
     id: "getHelp",
@@ -145,14 +146,6 @@ const tutorialSteps: readonly TutorialStepDefinition[] = [
     targetSelector: '[data-review-section="Get help"] .review-section-body',
   },
 ];
-
-export function availableTutorialSteps(
-  softwareMapEnabled: boolean,
-): readonly TutorialStepDefinition[] {
-  return tutorialSteps.filter(
-    (step) => !step.requiresSoftwareMap || softwareMapEnabled,
-  );
-}
 
 export function tutorialChapter(
   id: TutorialChapterId,

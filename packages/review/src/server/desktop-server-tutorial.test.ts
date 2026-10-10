@@ -4,7 +4,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { type JsonObject, isJsonObject } from "@dev.fast/review-protocol";
-import { elements } from "@review/review-api/document";
 import { openLocalReviewStore } from "@review/review-api/local-data";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -28,7 +27,7 @@ type TutorialServerOverrides = Pick<
 afterEach(() => vi.unstubAllEnvs());
 
 describe("Review Desktop tutorial preparation", () => {
-  it("opens a prepared native tutorial into the JSON canvas with interactive content, pins and resources", async () => {
+  it("opens a prepared native tutorial into the JSON canvas with its pins", async () => {
     const home = await mkdtemp(path.join(os.tmpdir(), "review-tutorial-json-"));
     vi.stubEnv("DEV_REVIEW_HOME", home);
 
@@ -66,20 +65,6 @@ describe("Review Desktop tutorial preparation", () => {
       });
       expect(snapshot.origin?.tutorial).toBe(true);
       expect(local.store.list()).toEqual([]);
-      const blocks = elements(snapshot.document);
-      expect(
-        blocks.filter((b) => b.type === "tutorial").map((b) => b.kind),
-      ).toEqual(
-        expect.arrayContaining(["conversation", "keymap", "view", "feature"]),
-      );
-      expect(blocks.some((b) => b.type === "code_peek")).toBe(true);
-      expect(blocks.some((b) => b.type === "sequence")).toBe(true);
-      expect(blocks.some((b) => b.type === "database_lens")).toBe(true);
-      expect(blocks.some((b) => b.type === "trace_quote")).toBe(true);
-      expect(blocks.some((b) => b.type === "software_map")).toBe(true);
-      expect(
-        blocks.some((b) => b.type === "section" && b.title === "Software map"),
-      ).toBe(false);
       const repeated = await tutorialJson(server.url, "/tutorial/open", "POST");
       expect(repeated.reviewUuid).toBe(original.reviewId);
       expect(local.store.read(original.reviewId)).toEqual(snapshot);

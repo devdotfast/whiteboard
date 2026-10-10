@@ -1,8 +1,8 @@
-/** The built-in tutorial renders as a native JSON review and a reader drives every step; completion is read from storage. */
+/** A reader finishes the tour by clicking only what the guide rings (and hovering one symbol); the guide follows each step, also above fullscreen tours. */
 import assert from "node:assert/strict";
 import path from "node:path";
 
-import { closeSourceWindow, openHome, sourceWindowFor } from "../harness.mjs";
+import { openHome } from "../harness.mjs";
 import { readApplicationStorage } from "../storage.mjs";
 
 export const name = "tutorial";
@@ -15,18 +15,16 @@ const TITLE = "Whiteboard Desktop: three-minute tour";
 
 const PROGRESS_KEY = "review.tutorial.progress.v1";
 
-/** Every step of the tour with the software map enabled, in plan order. */
 const STEPS = [
   "chooseKeymap",
   "showHover",
-  "gotoDefinition",
-  "openPeek",
-  "openCommits",
   "openDiff",
+  "selectLens",
+  "expandFold",
+  "backToWhiteboard",
   "openSequence",
-  "openMap",
+  "closeSequence",
   "openDatabase",
-  "openTraceQuote",
   "getHelp",
 ];
 
@@ -36,14 +34,70 @@ const progress = (ctx) => {
   return raw ? JSON.parse(raw) : { checked: [], dismissed: false };
 };
 
-async function waitChecked(ctx, id) {
-  await ctx.until(
-    () => progress(ctx).checked.includes(id),
-    `tutorial step ${id} checked`,
-    30000,
-  );
-  ctx.check(`tutorial: ${id}`);
-}
+/** The center of a visible, ringed target of the step, scrolled into view; a ringed group yields its first button. */
+const ringedPoint = (page, id) =>
+  page.evaluate((step) => {
+    const rings = [...document.querySelectorAll("[data-tutorial-ring]")].map(
+      (ring) => ring.getBoundingClientRect(),
+    );
+
+    const ringed = (box) =>
+      rings.some(
+        (r) =>
+          r.left <= box.left + 8 &&
+          r.top <= box.top + 8 &&
+          r.right >= box.right - 8 &&
+          r.bottom >= box.bottom - 8,
+      );
+
+    const target = [
+      ...document.querySelectorAll(`[data-tutorial-target="${step}"]`),
+    ].find(
+      (element) =>
+        element.getClientRects().length > 0 &&
+        ringed(element.getBoundingClientRect()),
+    );
+
+    if (!target) return null;
+
+    const clickable =
+      target.matches("button, a, [role=button], .review-fold-pill") ||
+      target.closest("button")
+        ? target
+        : target.querySelector("button");
+
+    if (!clickable) return null;
+    const box = clickable.getBoundingClientRect();
+
+    if (box.top < 0 || box.bottom > innerHeight) {
+      clickable.scrollIntoView({ block: "center" });
+
+      return null;
+    }
+
+    return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  }, id);
+
+const guideStep = (page) =>
+  page
+    .locator('aside[aria-label="Tutorial guide"]')
+    .getAttribute("data-tutorial-step", { timeout: 1000 })
+    .catch(() => null);
+
+const guideOnTop = (page) =>
+  page.evaluate(() => {
+    const guide = document.querySelector('aside[aria-label="Tutorial guide"]');
+
+    if (!guide) return false;
+    const box = guide.getBoundingClientRect();
+
+    return guide.contains(
+      document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2,
+      ),
+    );
+  });
 
 export async function run(ctx) {
   const { apiCanvasFor, until, root } = ctx;
@@ -59,180 +113,144 @@ export async function run(ctx) {
   const page = await apiCanvasFor(TITLE);
 
   await ctx.watchPage(page);
-  await page.getByRole("complementary", { name: "Tutorial guide" }).waitFor();
-
-  const keybindings = page.getByRole("group", { name: "Keybindings" });
-
-  await keybindings.getByRole("button", { name: "VS Code default" }).click();
-  await until(
-    async () =>
-      (await keybindings
-        .getByRole("button", { name: "VS Code default" })
-        .getAttribute("aria-pressed")) === "true",
-    "tutorial keybinding selection",
-  );
-  await page.screenshot({ path: path.join(root, "tutorial.png") });
-  ctx.check(
-    "native JSON tutorial renders with its guide and working keybinding picker",
-  );
-
-  const canvas = page.locator(".review-canvas-root [data-review-api]");
-
-  const guide = page.locator(
-    'aside[aria-label="Tutorial guide"]',
-  );
-
-  const viewTab = (label) =>
-    page.locator(`[aria-label="Session views"] button[aria-label="${label}"]`);
+  const guide = page.locator('aside[aria-label="Tutorial guide"]');
 
   await guide.waitFor();
 
-  // The picker's bridge checks the step before it runs the keymap command, so the render check above completed it.
-  await waitChecked(ctx, "chooseKeymap");
+  // The sticky telemetry notice covers the guide's footer.
+  const clearNotice = page
+    .locator(".notifications-toasts")
+    .getByRole("button", { name: /^Clear Notification/ });
 
-  const editor = canvas
-    .locator('[data-review-section="Welcome"] [data-review-inline-editor]')
-    .first();
+  if (await clearNotice.count()) await clearNotice.first().click();
 
-  await editor.locator(".view-line").first().waitFor();
+  const overlay = page.locator(".diagram-tour-overlay");
 
-  // `inline-hover` completes on non-empty hover contents, so this is a real tsserver test.
-  // Monaco pads identifier spans with the spaces around them.
-  const tokens = editor
-    .locator(".view-line span")
-    .filter({ hasText: /^\s*[A-Za-z_]\w{2,}\s*$/ });
+  /** Click whatever the guide rings until the guide moves past the step. */
+  async function clickThrough(id) {
+    await until(
+      async () => (await guideStep(page)) === id,
+      `the guide on ${id}`,
+    );
 
-  const hoverText = async () =>
-    (
-      await page
-        .locator(".monaco-hover-content")
-        .allInnerTexts()
-        .catch(() => [])
+    for (let clicks = 0; (await guideStep(page)) === id; clicks++) {
+      assert.ok(clicks < 4, `${id} did not advance after ${clicks} clicks`);
+
+      // Smooth scrolling moves the target; click once it holds still.
+      const point = await until(
+        async () => {
+          const first = await ringedPoint(page, id);
+
+          await page.waitForTimeout(250);
+          const second = await ringedPoint(page, id);
+
+          return first &&
+            second &&
+            Math.abs(first.x - second.x) < 1 &&
+            Math.abs(first.y - second.y) < 1
+            ? second
+            : null;
+        },
+        `a ringed ${id} target`,
+        15000,
+      );
+
+      await page.mouse.click(point.x, point.y);
+      await until(
+        async () =>
+          (await guideStep(page)) !== id || (await ringedPoint(page, id)),
+        `${id} to advance or ring its next target`,
+        15000,
+      ).catch(() => {});
+      await page.waitForTimeout(300);
+    }
+
+    assert.ok(progress(ctx).checked.includes(id), `${id} is not checked`);
+    ctx.check(`tutorial: ${id}`);
+  }
+
+  await clickThrough("chooseKeymap");
+
+  // Hovering is the one step a click cannot do.
+  await until(
+    async () => (await guideStep(page)) === "showHover",
+    "hover step",
+  );
+
+  const totalCents = page
+    .locator(
+      '[data-review-section="Welcome"] .modified-in-monaco-diff-editor .view-line span',
     )
-      .join("")
-      .trim();
-
-  // A hover widget outlives the hover it showed, so the step's own record is the only reliable signal.
-  const hovered = await until(
-    async () => {
-      const count = await tokens.count();
-
-      for (let index = 0; index < Math.min(count, 12); index++) {
-        await tokens.nth(index).hover();
-        await page.waitForTimeout(600);
-
-        if (progress(ctx).checked.includes("showHover")) return "checked";
-      }
-
-      return null;
-    },
-    "tsserver hover in the Welcome editor",
-    60000,
-  ).catch((error) => {
-    if (!error.message.startsWith("Timed out waiting for")) throw error;
-
-    return "none";
-  });
-
-  const guideNext = guide.getByRole("button", { name: "Next", exact: true });
-
-  // `totalCents` is declared and used inside the authored window, so tsserver can always resolve it.
-  const totalCents = editor
-    .locator(".view-line span")
     .filter({ hasText: /^\s*totalCents\s*$/ })
     .first();
 
-  if (hovered === "checked") {
-    await waitChecked(ctx, "showHover");
-    await page.keyboard.press("Escape");
-    await totalCents.click();
-    await page.keyboard.press("F12");
-    // `inline-navigation` completes on an actual navigation.
-    await waitChecked(ctx, "gotoDefinition");
+  await until(
+    async () => {
+      await totalCents.scrollIntoViewIfNeeded();
+      const box = await totalCents.boundingBox();
 
-    // `totalCents` is declared in the same file, so its Source window shows that file.
-    await closeSourceWindow(await sourceWindowFor(ctx, "order-service.ts"));
-    ctx.check("Go to Definition opens the definition in a Source window");
-  } else {
-    // The signature: a minute of hovers left no hover content and the step unchecked, and F12 navigates nowhere.
-    assert.equal(await hoverText(), "", "a hover showed content");
-    await totalCents.click();
-    await page.keyboard.press("F12");
-    await page.waitForTimeout(10000);
-    assert.ok(
-      !progress(ctx).checked.includes("gotoDefinition"),
-      "Go to Definition navigated although hover had nothing",
-    );
-    await ctx.knownBug(
-      "The tutorial's live editor gets no hover or Go to Definition",
-    );
+      await page.mouse.move(0, 0);
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.waitForTimeout(800);
 
-    // The sticky telemetry notice covers the guide's footer.
-    const clearNotice = page
-      .locator(".notifications-toasts")
-      .getByRole("button", { name: /^Clear Notification/ });
-
-    if (await clearNotice.count()) await clearNotice.first().click();
-
-    // Next is the guide's own way past a step, so the tour can go on to the rest.
-    for (const id of ["showHover", "gotoDefinition"]) {
-      await guideNext.click();
-      await waitChecked(ctx, id);
-    }
-  }
-
-  await guide.waitFor();
-
-  await canvas
-    .locator('[data-review-section="Welcome"] a[data-review-anchor-id]')
-    .first()
-    .click();
-  await waitChecked(ctx, "openPeek");
-
-  await viewTab("Commits").click();
-  await waitChecked(ctx, "openCommits");
-  await page.locator(".review-commit-open").first().click();
-  await waitChecked(ctx, "openDiff");
-  await viewTab("Whiteboard").click();
-
-  // The two `external` steps complete when the tour overlay mounts, not when the reader steps through it.
-  await canvas
-    .locator(
-      '[data-review-section="Interactive Diagrams"] .sequence-diagram .diagram-tour-button',
-    )
-    .first()
-    .click();
-  await page.locator('[role="dialog"][aria-label$=" tour"]').waitFor();
-  await waitChecked(ctx, "openSequence");
+      return (await guide.textContent()).includes("Done.");
+    },
+    "tsserver hover in the Welcome editor",
+    90000,
+  );
+  assert.ok(
+    !progress(ctx).checked.includes("showHover"),
+    "a confirm step advanced on its own",
+  );
+  await page.screenshot({ path: path.join(root, "tutorial-hover.png") });
   await page.keyboard.press("Escape");
+  // The guide rings its own Next once the task is done.
+  await clickThrough("showHover");
 
-  await viewTab("Map (Experimental)").click();
-  await waitChecked(ctx, "openMap");
-  await viewTab("Whiteboard").click();
+  await clickThrough("openDiff");
+  await page.screenshot({ path: path.join(root, "tutorial-lenses.png") });
+  await clickThrough("selectLens");
+  await page.screenshot({ path: path.join(root, "tutorial-fold.png") });
+  await clickThrough("expandFold");
+  await clickThrough("backToWhiteboard");
 
-  await canvas
-    .locator(
-      '[data-review-section="Interactive Diagrams"] .database-lens .diagram-tour-button',
-    )
-    .first()
-    .click();
-  await page.locator('[role="dialog"][aria-label$=" tour"]').waitFor();
-  await waitChecked(ctx, "openDatabase");
-  await page.keyboard.press("Escape");
+  await until(
+    async () => (await guideStep(page)) === "openSequence",
+    "sequence step",
+  );
+  await page.screenshot({ path: path.join(root, "tutorial-sequence.png") });
+  await clickThrough("openSequence");
+  await until(() => guideOnTop(page), "the guide above the sequence tour");
+  await page.screenshot({
+    path: path.join(root, "tutorial-sequence-tour.png"),
+  });
+  ctx.check("the guide stays above the fullscreen sequence tour");
+  await clickThrough("closeSequence");
+  await overlay.waitFor({ state: "hidden" });
 
-  await canvas
-    .locator('[data-review-section="Agent traces"] a[href^="#trace-"]')
-    .first()
-    .click();
-  await waitChecked(ctx, "openTraceQuote");
+  await clickThrough("openDatabase");
+  await until(() => guideOnTop(page), "the guide above the database tour");
+  // The tour opens on the table's schema declaration.
+  await overlay.getByText("orders schema").first().waitFor();
+  await until(
+    async () => (await overlay.textContent()).includes("pgTable"),
+    "the schema code in the database tour",
+  );
+  await page.screenshot({
+    path: path.join(root, "tutorial-database-tour.png"),
+  });
+  ctx.check("the guide stays above the fullscreen database tour");
 
   await guide.getByRole("button", { name: "Finish tour" }).click();
-  await waitChecked(ctx, "getHelp");
+  await until(
+    () => progress(ctx).checked.includes("getHelp"),
+    "getHelp checked",
+  );
 
-  const final = progress(ctx);
-
-  assert.deepEqual([...final.checked].sort(), [...STEPS].sort());
-  ctx.check("all eleven tutorial steps are checked in application storage");
+  assert.deepEqual([...progress(ctx).checked].sort(), [...STEPS].sort());
+  ctx.check(
+    `all ${STEPS.length} tutorial steps are checked in application storage`,
+  );
 
   await openHome(ctx);
 
@@ -240,7 +258,7 @@ export async function run(ctx) {
 
   // The tour step's body stays shut until the command is installed, so its note is what the rail shows.
   await home.getByText(`${STEPS.length} of ${STEPS.length} checks`).waitFor();
-  ctx.check("Welcome shows 11 of 11 checks");
+  ctx.check(`Welcome shows ${STEPS.length} of ${STEPS.length} checks`);
 
   const status = async () => (await ctx.api("/tutorial/status")).value;
 

@@ -378,7 +378,8 @@ export function ReviewDiffView({
                       {/* The title and hover wash sit on the chip, not the
                           toggle, so they never stack on the counts' tooltip. */}
                       <span
-                        {...stylex.props(
+                        {...withClass(
+                          "diff-lens-chip",
                           lensChipMarker,
                           styles.chip,
                           selected && styles.chipActive,

@@ -92,15 +92,6 @@ export function DocumentCodeView({
   progressRef.current = progress;
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
 
-  const handleNavigation = useCallback(
-    () =>
-      emitReviewInteraction(container, {
-        kind: "inline-navigation",
-        path,
-      }),
-    [container, path],
-  );
-
   const handleHover = useCallback(
     () => emitReviewInteraction(container, { kind: "inline-hover", path }),
     [container, path],
@@ -253,7 +244,6 @@ export function DocumentCodeView({
         countRanges,
         onDidFocus: handleFocus,
         onDidOpen: handleOpen,
-        onDidNavigate: handleNavigation,
         onDidShowHover: handleHover,
       });
     } catch (caught) {
@@ -290,7 +280,6 @@ export function DocumentCodeView({
     countRangesKey,
     handleFocus,
     handleHover,
-    handleNavigation,
     handleOpen,
     heightMode,
     inlineEditorFactory,

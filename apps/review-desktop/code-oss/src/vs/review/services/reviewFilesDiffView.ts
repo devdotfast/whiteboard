@@ -195,6 +195,7 @@ export class ReviewFilesDiffView extends Disposable {
 	private pendingViewState: IMultiDiffEditorViewState | undefined;
 	private viewModel: MultiDiffEditorViewModel | undefined;
 	private input: ReviewFilesEditorInput | undefined;
+	private readonly applyLayout: () => void;
 	private readonly readyFiles = new Set<string>();
 	private readonly fileStates = new Map<string, string>();
 	private readonly settleHold = this._register(new MutableDisposable<DisposableStore>());
@@ -263,7 +264,7 @@ export class ReviewFilesDiffView extends Disposable {
 						section: entry.sectionStart ? this.progress?.sections?.find(section => section.id === entry.sectionId) : undefined,
 						onToggleSection: () => entry.sectionId && this.onToggleSection?.(entry.sectionId),
 						// A binary is folded like a hidden file, with its size as the reason.
-						note: entry.file.status === "unchanged" ? "Unchanged" : entry.file.binary ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path),
+						note: entry.file.status === "unchanged" ? (this.document ? undefined : "Unchanged") : entry.file.binary ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path),
 						noteTooltip: entry.file.binary ? { label: "No text to show · binary files stay folded" } : undefined,
 							// A binary has no text to open.
 							onDidOpen: entry.file.binary ? undefined : () => {
@@ -300,9 +301,11 @@ export class ReviewFilesDiffView extends Disposable {
 		);
 		// The widget's own switch, not the per-item option refresh: it pins the
 		// width heuristic off, so the chosen layout is what renders at any width.
-		const applyLayout = () => this.widget.setRenderSideBySide(layout.get() === "split");
-		this._register(layout.onDidChange(applyLayout));
-		applyLayout();
+		// A document snippet of an unchanged file reads as plain code.
+		this.applyLayout = () => this.widget.setRenderSideBySide(layout.get() === "split"
+			&& !(this.document && this.input?.entries.length && this.input.entries.every(entry => entry.file.status === "unchanged")));
+		this._register(layout.onDidChange(this.applyLayout));
+		this.applyLayout();
 		if (document) {
 			this._register(this.widget.onDidChangeContentHeight(() => {
 				const height = Math.max(40, this.widget.getContentHeight());
@@ -387,6 +390,7 @@ export class ReviewFilesDiffView extends Disposable {
 		this.settleHold.clear();
 		this.pendingViewState = viewState;
 		this.input = input;
+		this.applyLayout();
 		this.changedFilesTree?.setFiles(Array.from(new Map(input.entries.map(entry => [entry.file.path, entry.file])).values()));
 		const viewModel = await input.getViewModel();
 		if (this._store.isDisposed) return;
@@ -562,7 +566,7 @@ export class ReviewFilesDiffView extends Disposable {
 		this.pendingSource = source; this.pendingSectionId = sectionId;
 		if (this.fileStates.has(entry.file.path)) { this.pendingPath = entry.file.path; return; }
 		this.itemFor(entry)?.collapsed.set(false, undefined);
-		this.reveal(entry, { highlight: true, side: source.side === 'base' ? 'original' : 'modified', range: new Range(source.fromLine, 1, source.toLine, 1) });
+		this.reveal(entry, { highlight: true, side: source.side === 'base' && entry.file.status !== 'unchanged' ? 'original' : 'modified', range: new Range(source.fromLine, 1, source.toLine, 1) });
 		this.pendingSource = undefined;
 	}
 

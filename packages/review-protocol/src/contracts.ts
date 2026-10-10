@@ -153,7 +153,6 @@ export interface ReviewInlineEditorSpec {
   active: boolean;
   onDidFocus?: () => void;
   onDidOpen?: () => void;
-  onDidNavigate?: () => void;
   onDidShowHover?: () => void;
 }
 
@@ -254,6 +253,7 @@ export interface ReviewDiffViewSpec {
     onDidChangeHeight(height: number): void;
     onDidFocus?: () => void;
     onDidOpen?: () => void;
+    onDidShowHover?: () => void;
   };
   container: HTMLElement;
   fileTreeContainer?: HTMLElement;
@@ -418,17 +418,16 @@ export type ReviewReadyNotificationChoice =
   | "off";
 
 export const REVIEW_TUTORIAL_STEP_IDS = [
-  "openPeek",
-  "gotoDefinition",
+  "chooseKeymap",
   "showHover",
-  "openCommits",
   "openDiff",
+  "selectLens",
+  "expandFold",
+  "backToWhiteboard",
   "openSequence",
-  "openMap",
+  "closeSequence",
   "openDatabase",
   "getHelp",
-  "chooseKeymap",
-  "openTraceQuote",
 ] as const;
 
 export type TutorialStepId = (typeof REVIEW_TUTORIAL_STEP_IDS)[number];

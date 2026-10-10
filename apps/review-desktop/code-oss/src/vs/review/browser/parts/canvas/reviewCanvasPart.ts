@@ -949,11 +949,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	 */
 	private resolveOnboarding(status: ReviewCliInstallStatus): ReviewCanvasOnboarding {
 		const checked = new Set(this.readTutorialProgress().checked);
-		const steps = REVIEW_TUTORIAL_STEP_IDS.filter((step) => step !== "openMap" || this.currentSoftwareMapEnabled());
 		return {
 			installed: !status.cli || status.shim.installed,
-			tutorialChecked: steps.filter((step) => checked.has(step)).length,
-			tutorialTotal: steps.length,
+			tutorialChecked: REVIEW_TUTORIAL_STEP_IDS.filter((step) => checked.has(step)).length,
+			tutorialTotal: REVIEW_TUTORIAL_STEP_IDS.length,
 			// Drafts are filtered out of this list, the tutorial never joins
 			// it and the scratchpad is set aside, so this counts only a real
 			// published review.
