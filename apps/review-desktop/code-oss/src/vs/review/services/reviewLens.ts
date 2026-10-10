@@ -16,7 +16,7 @@ export function lensRanges(lens: ReviewDiffLens, entry: ReviewFilesEditorEntry):
 	return lens.ranges.filter(range => range.file === (range.side === 'base' ? entry.file.previousPath ?? entry.file.path : entry.file.path));
 }
 
-export function withLens(instantiation: IInstantiationService, entries: readonly ReviewFilesEditorEntry[], lens: ReviewDiffLens | undefined, lifetime: DisposableStore, progress: () => ReviewDiffProgress | undefined, onProgress: Event<void>, structuralViewed = false): IInstantiationService {
+export function withLens(instantiation: IInstantiationService, entries: readonly ReviewFilesEditorEntry[], lens: ReviewDiffLens | undefined, lifetime: DisposableStore, progress: () => ReviewDiffProgress | undefined, onProgress: Event<void>, structuralViewed = false, snippet = false): IInstantiationService {
 	const delegate = instantiation.invokeFunction(a => a.get(IDiffProviderFactoryService));
 	const factory: IDiffProviderFactoryService = {
 		_serviceBrand: undefined,
@@ -65,7 +65,10 @@ export function withLens(instantiation: IInstantiationService, entries: readonly
 						}) ? { ...gap, collapsed: false } : gap)
 					};
 					const section = progress()?.sections?.find(section => section.id === entry.sectionId);
-					return lens && !lens.wholeFiles ? { ...diff, contextGaps: lensContextGaps(diff, original.getLineCount(), modified.getLineCount(), lensRanges(section ? { ...lens, ranges: section.sources } : lens, entry)) } : diff;
+					if (!lens || lens.wholeFiles) return diff;
+					const gaps = lensContextGaps(diff, original.getLineCount(), modified.getLineCount(), lensRanges(section ? { ...lens, ranges: section.sources } : lens, entry));
+					// A document snippet's folds are hidden lines, not lines outside a lens.
+					return { ...diff, contextGaps: snippet ? gaps.map(gap => gap.label === 'Outside lens' ? { ...gap, label: undefined } : gap) : gaps };
 				},
 			};
 		},

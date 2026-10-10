@@ -322,7 +322,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 				const byFile = new Map(selected.map(entry => [entry.file, entry]));
 				selected = orderReviewDiffFiles([...byFile.keys()]).map(file => byFile.get(file)!);
 			}
-			const instantiation = withLens(structural.instantiation, selected, lens, store, () => this.progress, this.progressChanged.event, !!viewed);
+			const instantiation = withLens(structural.instantiation, selected, lens, store, () => this.progress, this.progressChanged.event, !!viewed, !!this.spec.document);
 			// The input owns the text-model references its view model resolves, so
 			// this handle disposes it alongside the view.
 			const input = store.add(instantiation.createInstance(ReviewFilesEditorInput, sourceUri, selected,
