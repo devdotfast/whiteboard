@@ -250,9 +250,9 @@ export class ReviewFilesDiffView extends Disposable {
 					? this.input.entries.map((entry) => ({
 							original: entry.original,
 							modified: entry.modified,
-							additions: entry.file.status === "unchanged" || entry.file.binary ? undefined : this.entryProgress(entry)?.remaining.additions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.added),
-							deletions: entry.file.status === "unchanged" || entry.file.binary ? undefined : this.entryProgress(entry)?.remaining.deletions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.removed),
-							collapseLocked: !!entry.file.binary,
+							additions: entry.file.status === "unchanged" || this.isBinary(entry) ? undefined : this.entryProgress(entry)?.remaining.additions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.added),
+							deletions: entry.file.status === "unchanged" || this.isBinary(entry) ? undefined : this.entryProgress(entry)?.remaining.deletions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.removed),
+							collapseLocked: this.isBinary(entry),
 						countsTooltip: this.progressTooltip(entry) ?? this.streamStats.get(entry.file.path)?.tooltip,
 						viewedState: this.entryProgress(entry)?.state,
 						viewedScope: this.viewedScope,
@@ -263,10 +263,10 @@ export class ReviewFilesDiffView extends Disposable {
 						section: entry.sectionStart ? this.progress?.sections?.find(section => section.id === entry.sectionId) : undefined,
 						onToggleSection: () => entry.sectionId && this.onToggleSection?.(entry.sectionId),
 						// A binary is folded like a hidden file, with its size as the reason.
-						note: entry.file.status === "unchanged" ? "Unchanged" : entry.file.binary ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path),
-						noteTooltip: entry.file.binary ? { label: "No text to show · binary files stay folded" } : undefined,
+						note: entry.file.status === "unchanged" ? "Unchanged" : this.isBinary(entry) ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path),
+						noteTooltip: this.isBinary(entry) ? { label: "No text to show · binary files stay folded" } : undefined,
 							// A binary has no text to open.
-							onDidOpen: entry.file.binary ? undefined : () => {
+							onDidOpen: this.isBinary(entry) ? undefined : () => {
 								if (document?.onDidOpen) { document.onDidOpen(); return; }
 								const target = this.widget.tryGetCodeEditor(entry.goToFileResource);
 								const change = isDiffEditor(target?.diffEditor) ? target.diffEditor.getDiffComputationResult()?.changes2[0] : undefined;
@@ -476,6 +476,10 @@ export class ReviewFilesDiffView extends Disposable {
 	private lineCounts(path: string) {
 		const counts = this.streamStats.get(path)?.counts;
 		return isBinaryCounts(counts) ? undefined : counts;
+	}
+
+	private isBinary(entry: ReviewFilesEditorEntry): boolean {
+		return !!entry.file.binary || isBinaryCounts(this.streamStats.get(entry.file.path)?.counts);
 	}
 
 	private binaryNote(path: string): string {
