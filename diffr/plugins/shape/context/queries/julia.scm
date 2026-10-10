@@ -31,5 +31,5 @@
 ((comprehension_expression (if_clause) @fold) (#set! tag "context:relevant"))
 ((else_clause "else" @fold.open . (_) @fold.indent) @fold (#set! tag "context:body"))
 ((elseif_clause "elseif" @fold.open . (_) @fold.indent) @fold (#set! tag "context:body"))
-((if_statement condition: (_) @fold @fold.open . (_) @fold.indent "end" @fold @fold.close) (#set! tag "context:body"))
-((if_statement condition: (_) @fold @fold.open . (_) @fold.indent "end" @fold @fold.close) (#set! tag "context:branches"))
+((if_statement "if" @fold condition: (_) @fold.open . (_) @fold.indent "end" @fold @fold.close) (#set! tag "context:body"))
+((if_statement "if" @fold condition: (_) @fold.open . (_) @fold.indent "end" @fold @fold.close) (#set! tag "context:branches"))

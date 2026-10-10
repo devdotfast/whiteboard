@@ -26,9 +26,7 @@
   (case_item)
   (case_statement)
   (elif_clause)
-  (else_clause)
 ] @fold (#set! tag "context:clause"))
 
-((else_clause "else" . (_) @fold @fold.indent (_)* @fold) (#set! tag "context:body"))
-
-((else_clause) @fold (#set! tag "context:scope"))
+((else_clause "else" @fold.open . (_) @fold.indent) @fold (#set! tag "context:body"))
+((else_clause "else" @fold (_) @fold .) (#set! tag "context:scope") (#set! tag "context:clause"))

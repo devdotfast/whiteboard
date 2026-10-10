@@ -31,9 +31,8 @@
   (exception_handler)
 ] @fold (#set! tag "context:clause"))
 
-((if_statement statements: (_) @fold @fold.indent statements: (_)* @fold) (#set! tag "context:body"))
-((if_statement else_statements: (_) @fold @fold.indent else_statements: (_)* @fold) (#set! tag "context:body"))
-((if_statement "else" @fold) (#set! tag "context:relevant"))
+((if_statement "then" @fold . statements: (_) @fold.indent statements: (_)* @fold) (#set! tag "context:body"))
+((if_statement "else" @fold @fold.open . (_) @fold.indent "end" @fold @fold.close) (#set! tag "context:body"))
 ((if_statement "elsif" @fold) (#set! tag "context:relevant"))
 ((handled_sequence_of_statements . (_) @fold.indent) @fold (#set! tag "context:body"))
 

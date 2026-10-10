@@ -24,7 +24,7 @@
   (list "[" @fold.open . (_) @fold.indent "]" @fold.close)
   (dictionary "{" @fold.open . (_) @fold.indent "}" @fold.close)
   (set "{" @fold.open . (_) @fold.indent "}" @fold.close)
-  (tuple "(" @fold.open . (_) @fold.indent ")" @fold.close)
+  (tuple . "(" @fold.open . (_) @fold.indent ")" @fold.close)
 ] @fold
 ((tuple) @fold (#not-match? @fold "^\\("))
 [
