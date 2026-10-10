@@ -4,4 +4,4 @@
 ((line_comment)+ @fold . (_))
 (else_clause "else" @fold.open . (_) @fold.indent) @fold
 (elseif_clause "elseif" @fold.open . (_) @fold.indent) @fold
-(if_statement condition: (_) @fold @fold.open . (_) @fold.indent "end" @fold @fold.close)
+(if_statement "if" @fold condition: (_) @fold.open . (_) @fold.indent "end" @fold @fold.close)
