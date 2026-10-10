@@ -29,6 +29,10 @@ export interface TutorialStepDefinition {
   targetSelector: string;
   /** What gets the ring, when not the target. */
   highlightSelector?: string;
+  /** Ring only the topmost highlight. */
+  ringFirst?: boolean;
+  /** Doing the task marks it done; the reader moves on with Next. */
+  confirm?: boolean;
 }
 
 export const TUTORIAL_CHAPTERS: readonly TutorialChapterDefinition[] = [
@@ -55,6 +59,7 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     instruction:
       "Hover a symbol in the live editor to see its type. Go to Definition works with your usual keys too.",
     completion: "inline-hover",
+    confirm: true,
     targetSelector:
       '[data-review-section="Welcome"] [data-review-inline-editor]',
   },
@@ -77,7 +82,7 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     targetSelector:
       ".diff-sidebar-lenses [data-lens-id] button[aria-pressed]:not(:disabled)",
     highlightSelector:
-      ".diff-sidebar-lenses [data-lens-id]:first-of-type button[aria-pressed]",
+      ".diff-sidebar-lenses [data-lens-id]:first-of-type .diff-lens-chip",
   },
   {
     id: "expandFold",
@@ -86,6 +91,10 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     instruction: "Select a folded region to reveal the code diffr hid.",
     completion: "click",
     targetSelector: ".review-fold-pill, .diff-fold-reveal",
+    highlightSelector:
+      ".modified-in-monaco-diff-editor :is(.diff-fold-reveal, .review-fold-pill)",
+    ringFirst: true,
+    confirm: true,
   },
   {
     id: "backToWhiteboard",

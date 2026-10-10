@@ -1,5 +1,6 @@
 import { documentType } from "@canvas/document-type.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
+import type { TutorialStepId } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
@@ -54,6 +55,7 @@ interface TutorialExperienceState {
   totalSteps: number;
   hidden: boolean;
   aboveTour: boolean;
+  awaitingNext: boolean;
   onBack(): void;
   onNext(): void;
   onDismiss(): void;
@@ -118,10 +120,16 @@ export function TutorialExperienceProvider({
   const hidden = !tutorial || dismissed;
   const aboveTour = tourKind !== null;
 
+  // A confirm step, once done, waits for Next.
+  const [doneStep, setDoneStep] = useState<TutorialStepId | null>(null);
+  const awaitingNext = activeStep !== null && doneStep === activeStep.id;
+
   const completeStep = useCallback(
     (step: TutorialStepDefinition) => {
       if (!tutorial || checked.has(step.id)) return;
-      tutorial.setStep(step.id, true);
+
+      if (step.confirm) setDoneStep(step.id);
+      else tutorial.setStep(step.id, true);
     },
     [checked, tutorial],
   );
@@ -154,7 +162,7 @@ export function TutorialExperienceProvider({
     if (!root || dismissed || !activeStep) return;
 
     const onClick = (event: Event) => {
-      if (activeStep.completion !== "click") return;
+      if (awaitingNext || activeStep.completion !== "click") return;
       const clicked = event.target;
 
       if (!(clicked instanceof Element)) return;
@@ -180,7 +188,7 @@ export function TutorialExperienceProvider({
       root.removeEventListener("click", onClick, true);
       root.removeEventListener(REVIEW_INTERACTION_EVENT, onReviewInteraction);
     };
-  }, [activeStep, completeStep, dismissed, root]);
+  }, [activeStep, awaitingNext, completeStep, dismissed, root]);
 
   // Bring a newly active chapter into view once. The section itself expands
   // through the section context; nothing collapses the other chapters.
@@ -219,7 +227,9 @@ export function TutorialExperienceProvider({
     const apply = () => {
       const next = [
         ...root.querySelectorAll<HTMLElement>(
-          activeStep.highlightSelector ?? activeStep.targetSelector,
+          awaitingNext
+            ? "[data-tutorial-next]"
+            : (activeStep.highlightSelector ?? activeStep.targetSelector),
         ),
       ];
 
@@ -231,11 +241,19 @@ export function TutorialExperienceProvider({
       targets = next;
 
       // Over a fullscreen tour, only its own targets show.
-      const visible = targets.filter(
+      let visible = targets.filter(
         (target) =>
           target.closest("[hidden]") === null &&
           (!aboveTour || target.closest(".diagram-tour-overlay") !== null),
       );
+
+      if (activeStep.ringFirst && !awaitingNext)
+        visible = visible
+          .map((target) => ({ target, box: target.getBoundingClientRect() }))
+          .filter(({ box }) => box.width > 0)
+          .sort((a, b) => a.box.top - b.box.top || a.box.left - b.box.left)
+          .slice(0, 1)
+          .map(({ target }) => target);
 
       setTargets((current) =>
         current.length === visible.length &&
@@ -288,7 +306,7 @@ export function TutorialExperienceProvider({
 
       for (const target of targets) delete target.dataset.tutorialTarget;
     };
-  }, [aboveTour, activeStep, hidden, root]);
+  }, [aboveTour, activeStep, awaitingNext, hidden, root]);
 
   const rings = useTargetRings(targets, layer, region);
 
@@ -296,6 +314,7 @@ export function TutorialExperienceProvider({
   // lands on that chapter's last step rather than its first.
   const goBack = useCallback(() => {
     if (!tutorial || activeIndex <= 0) return;
+    setDoneStep(null);
     tutorial.setStep(steps[activeIndex - 1]!.id, false);
   }, [activeIndex, tutorial]);
 
@@ -318,6 +337,7 @@ export function TutorialExperienceProvider({
         totalSteps: steps.length,
         hidden,
         aboveTour,
+        awaitingNext,
         onBack: goBack,
         onNext: goNext,
         onDismiss: tutorial.dismiss,
@@ -364,11 +384,6 @@ export function TutorialExperienceProvider({
         aboveTour && styles.overlayAboveTour,
       )}
     >
-      {rings
-        .filter((ring) => ring.host === "layer")
-        .map((ring) => (
-          <TutorialTargetRing key={ring.key} ring={ring} />
-        ))}
       {dismissed ? (
         <button
           type="button"
@@ -382,6 +397,11 @@ export function TutorialExperienceProvider({
       ) : (
         <TutorialGuide experience={experience} />
       )}
+      {rings
+        .filter((ring) => ring.host === "layer")
+        .map((ring) => (
+          <TutorialTargetRing key={ring.key} ring={ring} />
+        ))}
     </div>
   ) : null;
 
@@ -470,6 +490,9 @@ function TutorialGuide({
           {activeStep?.instruction ??
             "You have walked through the core Whiteboard experience."}
         </p>
+        {experience.awaitingNext ? (
+          <p {...stylex.props(styles.chapter)}>Done. Select Next to go on.</p>
+        ) : null}
       </div>
       <footer {...stylex.props(styles.guideFooter)}>
         <Button
@@ -484,7 +507,11 @@ function TutorialGuide({
             Finish tour
           </Button>
         ) : activeStep ? (
-          <Button variant="ghost" onClick={experience.onNext}>
+          <Button
+            variant="ghost"
+            onClick={experience.onNext}
+            data-tutorial-next=""
+          >
             Next
           </Button>
         ) : (
@@ -585,14 +612,26 @@ function useTargetRings(
                   if (inRegion) return box;
 
                   // Keep an edge-to-edge target's ring inside the layer.
-                  const left = Math.max(box.left, RING_GAP + 2);
+                  const inset = RING_GAP + 2;
+                  const left = Math.max(box.left, inset);
+                  const top = Math.max(box.top, inset);
 
                   const right = Math.min(
                     box.left + box.width,
-                    layerRect.width - RING_GAP - 2,
+                    layerRect.width - inset,
                   );
 
-                  return { ...box, left, width: Math.max(0, right - left) };
+                  const bottom = Math.min(
+                    box.top + box.height,
+                    layerRect.height - inset,
+                  );
+
+                  return {
+                    left,
+                    top,
+                    width: Math.max(0, right - left),
+                    height: Math.max(0, bottom - top),
+                  };
                 }),
             };
           }),
