@@ -191,7 +191,7 @@ describe("TutorialExperience", () => {
     expect(
       canvasRoot
         .querySelector(".tutorial-keymap-picker")
-        ?.getAttribute("data-tutorial-target"),
+        ?.getAttribute("data-tour-ringed"),
     ).toBe("chooseKeymap");
   });
 
@@ -284,7 +284,7 @@ describe("TutorialExperience", () => {
     )!;
 
     expect(card()?.textContent).toContain("Open the diff");
-    expect(diff.dataset.tutorialTarget).toBe("openDiff");
+    expect(diff.dataset.tourRinged).toBe("openDiff");
     act(() => diff.click());
     expect(tutorial.setStep).toHaveBeenCalledWith("openDiff", true);
   });
@@ -443,7 +443,7 @@ describe("TutorialExperience", () => {
 
     expect(card()).toBeNull();
     expect(section("Welcome").dataset.tutorialChapterState).toBeUndefined();
-    expect(canvasRoot.querySelector("[data-tutorial-target]")).toBeNull();
+    expect(canvasRoot.querySelector("[data-tour-ringed]")).toBeNull();
   });
 
   it("shrinks to a floating Tutorial button when hidden", () => {

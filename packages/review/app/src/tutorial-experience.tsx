@@ -50,7 +50,7 @@ import {
  * Drives the tutorial for the document shell it wraps. The guide card sits in
  * the bottom right corner of the shell in every view, bottom left over a
  * fullscreen diagram tour; hidden, it shrinks to a small floating button. The
- * step's target carries `data-tutorial-target` for its highlight.
+ * step's target carries `data-tour-ringed` for its highlight.
  */
 export function TutorialExperienceProvider({
   shellRef,
@@ -213,9 +213,9 @@ export function TutorialExperienceProvider({
         }
       }
 
-      if (marked && marked !== next) delete marked.dataset.tutorialTarget;
+      if (marked && marked !== next) delete marked.dataset.tourRinged;
 
-      if (next) next.dataset.tutorialTarget = activeStep.id;
+      if (next) next.dataset.tourRinged = activeStep.id;
       marked = next;
       setTarget(next);
 
@@ -256,7 +256,7 @@ export function TutorialExperienceProvider({
 
       if (scheduledFrame !== null) cancelAnimationFrame(scheduledFrame);
 
-      if (marked) delete marked.dataset.tutorialTarget;
+      if (marked) delete marked.dataset.tourRinged;
     };
   }, [aboveTour, activeStep, hidden, root]);
 

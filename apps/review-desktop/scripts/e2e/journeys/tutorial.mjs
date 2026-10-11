@@ -51,7 +51,7 @@ const ringedPoint = (page, id) =>
       );
 
     const target = [
-      ...document.querySelectorAll(`[data-tutorial-target="${step}"]`),
+      ...document.querySelectorAll(`[data-tour-ringed="${step}"]`),
     ].find(
       (element) =>
         element.getClientRects().length > 0 &&
