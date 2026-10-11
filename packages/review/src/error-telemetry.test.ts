@@ -194,6 +194,18 @@ describe("deriveErrorTelemetryProperties", () => {
     );
   });
 
+  it("gives one digest to an error that differs only by file path", () => {
+    const digest = (path: string) =>
+      deriveErrorTelemetryProperties({
+        name: "Error",
+        message: `diffr did not supply a text result for ${path}.`,
+      }).message_hash;
+
+    expect(digest("/Users/alice/acme/a.ts")).toBe(
+      digest("/Users/alice/acme/b.ts"),
+    );
+  });
+
   it("keeps the class name only when it is identifier-like", () => {
     expect(deriveErrorTelemetryProperties(raw).error_name).toBe("TypeError");
     expect(

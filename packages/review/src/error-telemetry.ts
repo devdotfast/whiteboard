@@ -95,17 +95,21 @@ export function deriveErrorTelemetryProperties(
     const message = jsonString(cause.message);
 
     if (message !== undefined && message.length > 0) {
+      const cleaned = cleanTelemetryText(message, NO_DELETED_DIRECTORIES);
+
       // The digest goes on every report, cleaned message or not. It is what
       // groups the reports whose message does not survive the checks below.
-      derived.message_hash = hashErrorMessage(message);
+      // Cleaned, so an error that names a file has one digest for all files.
+      derived.message_hash = hashErrorMessage(cleaned);
 
-      if (!SCHEMA_ERROR_NAMES.has(derived.error_name ?? "")) {
-        const cleaned = cleanTelemetryText(message, NO_DELETED_DIRECTORIES);
-
-        // Ask the allowlist's own check before sending. Failing here rather
-        // than there keeps a message that the cleaner could not finish out of
-        // the payload entirely, instead of relying on the later gate.
-        if (isReportableCleanedMessage(cleaned)) derived.message = cleaned;
+      // Ask the allowlist's own check before sending. Failing here rather
+      // than there keeps a message that the cleaner could not finish out of
+      // the payload entirely, instead of relying on the later gate.
+      if (
+        !SCHEMA_ERROR_NAMES.has(derived.error_name ?? "") &&
+        isReportableCleanedMessage(cleaned)
+      ) {
+        derived.message = cleaned;
       }
     }
 

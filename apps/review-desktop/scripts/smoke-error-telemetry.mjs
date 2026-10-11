@@ -57,12 +57,11 @@ function leakTokens(home) {
 /**
  * Each case: what the app throws, and the exact message the report must carry.
  *
- * Reports are matched to cases by the digest of the message that was thrown,
+ * Reports are matched to cases by the digest of the cleaned message,
  * not by arrival order. Order matching looked simpler until a run lost one
  * report and every later case failed against its neighbour's result, turning
- * one fault into six. `match` names the digest source; the engine case cannot
- * use one because the wording belongs to the JavaScript engine, so it is found
- * by its error class instead.
+ * one fault into six. The engine case cannot use one because the wording
+ * belongs to the JavaScript engine, so it is found by its error class instead.
  */
 function cases(home) {
   return [
@@ -79,32 +78,27 @@ function cases(home) {
     {
       name: "a path under the real home directory is replaced whole",
       throws: `ENOENT: no such file or directory, open '${home}/work/acme-repo/plan.md'`,
-      match: { hashOf: `ENOENT: no such file or directory, open '${home}/work/acme-repo/plan.md'` },
       expected:
         "ENOENT: no such file or directory, open '<REDACTED: user-file-path>'",
     },
     {
       name: "an e-mail address is replaced",
       throws: "no account for someone@example.com",
-      match: { hashOf: "no account for someone@example.com" },
       expected: "<REDACTED: Email>",
     },
     {
       name: "a token is replaced",
       throws: "rejected credential ghp_012345678901234567890123456789012345",
-      match: { hashOf: "rejected credential ghp_012345678901234567890123456789012345" },
       expected: "<REDACTED: GitHub Token>",
     },
     {
       name: "a password is replaced",
       throws: "connect failed: password=hunter2",
-      match: { hashOf: "connect failed: password=hunter2" },
       expected: "<REDACTED: Generic Secret>",
     },
     {
       name: "a rejected promise is reported too",
       rejects: "the review request did not complete",
-      match: { hashOf: "the review request did not complete" },
       expected: "the review request did not complete",
     },
   ];
@@ -299,9 +293,9 @@ export async function smokeErrorTelemetry({
     await browser.close();
 
     const matchesProbe = (event, probe) =>
-      probe.match.errorName
+      probe.match
         ? event.properties?.error_name === probe.match.errorName
-        : event.properties?.message_hash === digestOf(probe.match.hashOf);
+        : event.properties?.message_hash === digestOf(probe.expected);
 
     // Warm-up reports can arrive after the first one has been observed.
     const readProbeReports = async () =>
