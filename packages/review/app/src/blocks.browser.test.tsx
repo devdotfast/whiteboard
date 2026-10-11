@@ -224,6 +224,7 @@ async function mountFixture(
         deletions: 0,
       },
     ],
+    files: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }],
     resources:
       options.trace === null
         ? { [FIXTURE_IMAGE_ID]: image }

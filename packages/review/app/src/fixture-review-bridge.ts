@@ -2,6 +2,7 @@ import type {
   JsonValue,
   ReviewCanvasBridge,
   ReviewCommitSummary,
+  ReviewDiffFileWire,
 } from "@dev.fast/review-protocol";
 import type { ReviewProgress } from "@review/review-api/review-progress";
 import type { Snapshot } from "@review/review-api/store";
@@ -17,6 +18,7 @@ export interface FixtureReviewApi {
   resources?: Record<string, JsonValue | FixtureBytes>;
   maps?: Record<string, JsonValue>;
   commits?: ReviewCommitSummary[];
+  files?: ReviewDiffFileWire[];
 }
 
 // A lens or map routes its edges through libavoid; Vite serves the wasm from
@@ -122,7 +124,7 @@ export function fixtureReviewBridge(api: FixtureReviewApi): ReviewCanvasBridge {
         },
       },
       diffView: {
-        files: async () => [],
+        files: async () => api.files ?? [],
         create: () => {
           throw new Error("Diff is not mounted by this test.");
         },
