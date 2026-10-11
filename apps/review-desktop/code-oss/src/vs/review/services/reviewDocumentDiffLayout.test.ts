@@ -23,7 +23,7 @@ test("identical documents collapse and changed or pending documents follow the p
 	>("diff", undefined);
 	const item = { isDiffUpToDate, diff };
 	const items = observableValue<
-		readonly (DocumentDiffLayoutItem | undefined)[]
+		readonly (DocumentDiffLayoutItem | "one-sided" | undefined)[]
 	>("items", []);
 	let split: boolean | undefined;
 	const binding = bindDocumentDiffLayout(layout, items, (value) => {
@@ -86,6 +86,8 @@ test("identical documents collapse and changed or pending documents follow the p
 		);
 		items.set([item], undefined);
 		assert.equal(split, false);
+		items.set(["one-sided"], undefined);
+		assert.equal(split, false, "added and deleted files have one side to show");
 	} finally {
 		binding.dispose();
 		changes.dispose();

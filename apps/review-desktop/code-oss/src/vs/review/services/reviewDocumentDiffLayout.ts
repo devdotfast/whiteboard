@@ -13,10 +13,10 @@ export interface DocumentDiffLayoutItem {
 	>;
 }
 
-/** Only completed, identical document comparisons override the user's layout. */
+/** One-sided entries and completed, identical comparisons override the user's layout. */
 export function bindDocumentDiffLayout(
 	layout: ReviewDiffLayoutSetting,
-	items: IObservable<readonly (DocumentDiffLayoutItem | undefined)[]>,
+	items: IObservable<readonly (DocumentDiffLayoutItem | "one-sided" | undefined)[]>,
 	setRenderSideBySide: (split: boolean) => void,
 ): IDisposable {
 	const preference = observableFromEvent(layout.onDidChange, () =>
@@ -24,14 +24,15 @@ export function bindDocumentDiffLayout(
 	);
 	return autorun((reader) => {
 		const current = items.read(reader);
-		const identical =
+		const onePane =
 			current.length > 0 &&
 			current.every((item) => {
 				if (!item) return false;
+				if (item === "one-sided") return true;
 				const upToDate = item.isDiffUpToDate.read(reader);
 				const diff = item.diff.read(reader);
 				return upToDate && diff?.identical === true && !diff.quitEarly;
 			});
-		setRenderSideBySide(preference.read(reader) === "split" && !identical);
+		setRenderSideBySide(preference.read(reader) === "split" && !onePane);
 	});
 }

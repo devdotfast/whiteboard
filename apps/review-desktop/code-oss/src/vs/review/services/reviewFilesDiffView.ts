@@ -397,10 +397,10 @@ export class ReviewFilesDiffView extends Disposable {
 		this.viewModel = viewModel;
 		if (this.document) {
 			const comparisons = derived(reader => viewModel.items.read(reader).map(item => {
-				// Missing sides and binaries are not identical text documents.
 				const entry = input.entries.find(entry => sameResource(item.originalUri, entry.original) && sameResource(item.modifiedUri, entry.modified));
-				return item.originalUri && item.modifiedUri && entry && !entry.file.binary && entry.file.status !== "added" && entry.file.status !== "deleted" && item.diffEditorViewModel instanceof DiffEditorViewModel
-					? item.diffEditorViewModel : undefined;
+				if (!entry || entry.file.binary) return undefined;
+				if (entry.file.status === "added" || entry.file.status === "deleted") return "one-sided" as const;
+				return item.diffEditorViewModel instanceof DiffEditorViewModel ? item.diffEditorViewModel : undefined;
 			}));
 			this.documentLayout.value = bindDocumentDiffLayout(this.diffLayout, comparisons, split => this.widget.setRenderSideBySide(split));
 		}
