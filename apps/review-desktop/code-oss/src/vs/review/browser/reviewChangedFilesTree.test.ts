@@ -55,7 +55,7 @@ test('a viewed file says "Viewed" in place of its counts', () => {
 
 test('a file with changes left to read shows its remaining counts, not greyed', () => {
 	const unread = row('unread');
-	assert.equal(unread.counts, '+3−0');
+	assert.equal(unread.counts, '+3');
 	assert.ok(!unread.row.classList.contains('review-file-folded'));
 	assert.ok(!unread.row.classList.contains('review-file-viewed'));
 });

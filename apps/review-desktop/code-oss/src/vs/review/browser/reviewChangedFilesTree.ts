@@ -174,8 +174,8 @@ export class ChangedFilesTreeRenderer
 			else if (progress?.state === 'viewed') template.counts.textContent = 'Viewed';
 			else if (progress?.state === 'folded') template.counts.textContent = 'Folded';
 			else if (additions !== undefined && deletions !== undefined) {
-				const added = append(template.counts, $('span.review-tree-added')); added.textContent = `+${compact(additions)}`;
-				const removed = append(template.counts, $('span.review-tree-removed')); removed.textContent = `−${compact(deletions)}`;
+				if (additions) append(template.counts, $('span.review-tree-added')).textContent = `+${compact(additions)}`;
+				if (deletions) append(template.counts, $('span.review-tree-removed')).textContent = `−${compact(deletions)}`;
 			}
 			const total = progress?.total ?? { additions: lines?.added ?? 0, deletions: lines?.removed ?? 0 };
 			if (!binary) template.countsTooltip.content = element.file.status === "unchanged"

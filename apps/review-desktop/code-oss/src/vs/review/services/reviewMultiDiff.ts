@@ -207,13 +207,17 @@ export class ReviewMultiDiffUIElementFactory
 				deletions.textContent = `−${compactCount(current.deletions!)}`;
           counts.setAttribute(
             "aria-label",
-            `${current.additions} lines added, ${current.deletions} lines removed`,
+            [current.additions ? `${current.additions} lines added` : "", current.deletions ? `${current.deletions} lines removed` : ""].filter(Boolean).join(", "),
           );
         }
 			countsTooltip.content = current.countsTooltip;
+			const settled = current.viewedState === "viewed" || current.viewedState === "folded";
+			additions.hidden = current.additions === 0 && !settled;
+			deletions.hidden = current.deletions === 0;
+			counts.hidden ||= additions.hidden && deletions.hidden;
 			const path = current.modified ?? current.original;
 			viewed.update(current.viewedState, `${current.viewedScope === 'lens' ? 'selected lens in ' : ''}${path ? reviewMultiDiffLabelPath(path) : 'file'}`, !current.onToggleViewed);
-			counts.classList.toggle("review-counts-viewed", current.viewedState === "viewed" || current.viewedState === "folded");
+			counts.classList.toggle("review-counts-viewed", settled);
 			counts.classList.toggle("review-counts-folded", current.viewedState === "folded");
 			if (current.viewedState === "viewed") { additions.textContent = current.viewedScope === 'lens' ? 'Lens viewed' : 'Viewed'; deletions.textContent = ""; }
 			else if (current.viewedState === "folded") {
