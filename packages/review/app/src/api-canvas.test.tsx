@@ -894,7 +894,11 @@ it("reads a worktree review's range as its base against the working tree, and a 
       "Committed work",
     );
 
-    expect(range(committed)).toContain("head c14db218");
+    expect(range(committed)).toBeUndefined();
+    expect(
+      committed.querySelector('[data-side="head"]')?.textContent,
+    ).toContain("c14db218");
+    expect(committed.querySelector('[data-side="base"]')).toBeNull();
     expect(committed.textContent).not.toContain("Working tree");
   } finally {
     await store.close();

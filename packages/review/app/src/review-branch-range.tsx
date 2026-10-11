@@ -43,6 +43,16 @@ export function ReviewBranchRange({
     resetTimer.current = setTimeout(() => setCopied(null), 1500);
   };
 
+  if (baseRef === headRef)
+    return (
+      <BranchRef
+        label="head"
+        name={headRef}
+        copied={copied === "head"}
+        onCopy={() => void copy("head", headRef)}
+      />
+    );
+
   return (
     <div
       {...stylex.props(styles.range)}
