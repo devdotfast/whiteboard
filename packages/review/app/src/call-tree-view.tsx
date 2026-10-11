@@ -5,6 +5,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useState } from "react";
 
 import { type CallTreeStop, callTreeStops } from "./call-tree";
+import { CopyDiagramButton } from "./copy-diagram-button";
 import { DiagramHeader } from "./diagram-header";
 import { compactDiffCount as compact, diffCountStyles } from "./diff-count";
 import { drawStyles } from "./draw-styles";
@@ -228,7 +229,11 @@ export function DocumentCallTree({ block }: { block: CallStackDiffBlock }) {
       {...stylex.props(styles.figure, drawStyles.blockChild)}
       data-review-call-stack="ready"
     >
-      <DiagramHeader kind="Call tree" title={block.title ?? "Call tree"} />
+      <DiagramHeader
+        kind="Call tree"
+        title={block.title ?? "Call tree"}
+        action={<CopyDiagramButton />}
+      />
       <CallTree
         block={block}
         onReveal={(source, sectionId, anchorId) => {

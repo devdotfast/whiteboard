@@ -21,7 +21,7 @@ import { IContextMenuService, IContextViewService } from "../../../../platform/c
 import { IHoverService } from "../../../../platform/hover/browser/hover.js";
 import { createDecorator, IInstantiationService } from "../../../../platform/instantiation/common/instantiation.js";
 import { ILogService } from "../../../../platform/log/common/log.js";
-import { FocusMode } from "../../../../platform/native/common/native.js";
+import { FocusMode, INativeHostService } from "../../../../platform/native/common/native.js";
 import { INotificationService } from "../../../../platform/notification/common/notification.js";
 import { IProductService } from "../../../../platform/product/common/productService.js";
 import { IEditorProgressService, LongRunningOperation } from "../../../../platform/progress/common/progress.js";
@@ -200,6 +200,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		@IContextViewService private readonly contextViewService: IContextViewService,
 		@IDialogService private readonly dialogService: IDialogService,
 		@INotificationService private readonly notificationService: INotificationService,
+		@INativeHostService private readonly nativeHostService: INativeHostService,
 		@IEditorProgressService editorProgressService: IEditorProgressService,
 		@ILifecycleService lifecycleService: ILifecycleService,
 	) {
@@ -465,6 +466,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 								assets,
 							),
 							request: requestReviewApi,
+							capturePageImage: (page) => this.nativeHostService.captureClipboardPage(page),
 							post: async (request) => {
 								if (request.name === "openSourceTree") {
 									await this.tabsService.openApiSource(sourceSelection, input.getName());

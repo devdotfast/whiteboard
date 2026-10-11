@@ -15,6 +15,14 @@ import { AuthInfo, Credentials } from '../../request/common/request.js';
 import { IPartsSplash } from '../../theme/common/themeService.js';
 import { IColorScheme, IOpenedAuxiliaryWindow, IOpenedMainWindow, IOpenEmptyWindowOptions, IOpenWindowOptions, IPoint, IRectangle, IWindowOpenable } from '../../window/common/window.js';
 
+export interface IClipboardCapturePage {
+	html: string;
+	styles: { href?: string; css?: string }[];
+	width: number;
+	height: number;
+	background: string;
+}
+
 export interface IToastOptions {
 	readonly id: string;
 
@@ -265,6 +273,7 @@ export interface ICommonNativeHostService {
 	readClipboardFindText(): Promise<string>;
 	writeClipboardFindText(text: string): Promise<void>;
 	writeClipboardBuffer(format: string, buffer: VSBuffer, type?: 'selection' | 'clipboard'): Promise<void>;
+	captureClipboardPage(page: IClipboardCapturePage): Promise<void>;
 	readClipboardBuffer(format: string): Promise<VSBuffer>;
 	hasClipboard(format: string, type?: 'selection' | 'clipboard'): Promise<boolean>;
 	readImage(): Promise<Uint8Array>;

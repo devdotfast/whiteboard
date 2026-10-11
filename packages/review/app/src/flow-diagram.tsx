@@ -8,6 +8,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useMemo } from "react";
 import { createPortal } from "react-dom";
 
+import { CopyDiagramButton } from "./copy-diagram-button";
 import { DiagramHeader } from "./diagram-header";
 import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
@@ -109,15 +110,18 @@ export function FlowDiagram({
         title={node.title}
         meta={`${node.nodes.length} ${node.nodes.length === 1 ? "node" : "nodes"}`}
         action={
-          <button
-            {...withClass("diagram-tour-button", diagramStyles.control)}
-            onClick={() => (fullscreen ? close() : open())}
-            aria-label={
-              fullscreen ? "Close expanded diagram" : "Expand diagram"
-            }
-          >
-            {fullscreen ? "Close" : "Expand"}
-          </button>
+          <>
+            <CopyDiagramButton />
+            <button
+              {...withClass("diagram-tour-button", diagramStyles.control)}
+              onClick={() => (fullscreen ? close() : open())}
+              aria-label={
+                fullscreen ? "Close expanded diagram" : "Expand diagram"
+              }
+            >
+              {fullscreen ? "Close" : "Expand"}
+            </button>
+          </>
         }
       />
       {node.description && (

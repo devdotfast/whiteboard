@@ -9,10 +9,7 @@ const appDirectory = path.resolve(
 
 const monorepoRoot = path.resolve(appDirectory, "../..");
 
-const sourceRoot = path.join(
-  monorepoRoot,
-  "packages/review/app/dist/desktop",
-);
+const sourceRoot = path.join(monorepoRoot, "packages/review/app/dist/desktop");
 
 export function canvasTargets(args, appRoot = appDirectory) {
   const targets = [path.join(appRoot, "code-oss/out/vs/review/canvas")];
@@ -76,6 +73,11 @@ export async function copyCanvas(targets = canvasTargets([])) {
     await cp(path.join(sourceRoot, "assets"), path.join(targetRoot, "assets"), {
       recursive: true,
     });
+    await cp(
+      path.join(monorepoRoot, "packages/review/app/native-capture"),
+      targetRoot,
+      { recursive: true },
+    );
     await writeFile(
       path.join(targetRoot, "canvas-loader.js"),
       canvasLoaderSource({
