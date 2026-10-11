@@ -41,6 +41,9 @@ export function rootEventMatters(
 const CHECKOUT_STATE =
   /^(?:index|[A-Z_]+|(?:rebase-merge|rebase-apply|sequencer|refs\/(?:bisect|worktree|rewritten))(?:\/.*)?)$/;
 
+/** Objects, reflogs, LFS objects and Review's own checkouts; never watched. */
+export const INERT_GIT_PATHS = ["objects", "logs", "lfs", "dev-fast"];
+
 /** Objects, reflogs, locks and other checkouts' state cannot change this one. */
 export function gitEventMatters(name: string, prefix: string): boolean {
   const file = normalize(name);

@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { type FSWatcher, existsSync, watch } from "node:fs";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -30,6 +30,7 @@ import type {
   StructuralDiffEvent,
 } from "@dev.fast/review-protocol";
 import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
+import type { AsyncSubscription, subscribe } from "@parcel/watcher";
 import { textIncludesQuote } from "@review/evidence.js";
 import { isMissingFileError } from "@review/fs-utils.js";
 import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
@@ -88,6 +89,7 @@ import {
 import { traceSchema } from "./trace-schema.js";
 import { ReviewWorkspaces } from "./workspaces.js";
 import {
+  INERT_GIT_PATHS,
   gitDirectoryPrefix,
   gitEventMatters,
   rootEventMatters,
@@ -569,7 +571,7 @@ export class LocalReviewData {
       blobReaderIdleTimeoutMs?: number;
       workspaceDatabase?: string;
       manageWorkspaces?: boolean;
-      watch?: typeof watch;
+      subscribe?: typeof subscribe;
       /** gh, git and GitHub API access for pull request targets. */
       pullRequests?: PullRequestDeps;
     } = {},
@@ -640,7 +642,7 @@ export class LocalReviewData {
     {
       epoch: number;
       inspectedEpoch: number;
-      watchers: FSWatcher[];
+      subscriptions: Map<string, AsyncSubscription>;
       healthy: boolean;
       inspection?: Omit<Awaited<ReturnType<typeof inspectWorktree>>, "files">;
       tracked?: Set<string>;
@@ -652,7 +654,7 @@ export class LocalReviewData {
   private forgetWorktree(repositoryId: string) {
     const entry = this.worktrees.get(repositoryId);
 
-    if (entry) for (const watcher of entry.watchers) watcher.close();
+    if (entry) void unwatch(entry);
     this.worktrees.delete(repositoryId);
   }
 
@@ -663,12 +665,13 @@ export class LocalReviewData {
       entry = {
         epoch: 0,
         inspectedEpoch: -1,
-        watchers: [],
+        subscriptions: new Map(),
         healthy: true,
         forks: new Map(),
       };
       this.worktrees.set(repositoryId, entry);
       const state = entry;
+      const current = () => this.worktrees.get(repositoryId) === state;
       const common = await gitCommonDir(vcs.rootPath);
 
       // jj snapshots untracked files, so every event can matter there.
@@ -677,49 +680,60 @@ export class LocalReviewData {
           ? await gitDirectoryPrefix(vcs.rootPath, common)
           : null;
 
-      const roots = new Map([
-        [
-          vcs.rootPath,
-          (name: string) =>
-            prefix === null || rootEventMatters(name, state.tracked),
-        ],
-      ]);
-
-      if (common)
-        roots.set(
-          common,
-          (name) => prefix === null || gitEventMatters(name, prefix),
-        );
-
-      for (const [root, matters] of roots) {
+      // Linux watches each directory, so skip what cannot matter.
+      const watch = async (
+        root: string,
+        ignore: string[],
+        matters: (name: string) => boolean,
+      ) => {
         try {
-          const watcher = (this.options.watch ?? watch)(
+          const subscription = await (
+            this.options.subscribe ??
+            (await import("@parcel/watcher")).subscribe
+          )(
             root,
-            { recursive: true },
-            (_event, name) => {
-              if (name === null || matters(String(name))) state.epoch++;
+            (error, events) => {
+              if (error) {
+                state.healthy = false;
+                const failed = state.subscriptions.get(root);
+
+                if (failed) void release(failed);
+                state.subscriptions.delete(root);
+              } else if (
+                events.some((event) => matters(path.relative(root, event.path)))
+              )
+                state.epoch++;
             },
+            { ignore },
           );
 
-          watcher.on("error", () => {
-            state.epoch++;
-            state.inspectedEpoch = -1;
-            state.healthy = false;
-            watcher.close();
-          });
-          watcher.unref();
-          state.watchers.push(watcher);
+          if (current()) state.subscriptions.set(root, subscription);
+          else void release(subscription);
         } catch {
           state.healthy = false;
         }
-      }
+      };
+
+      await Promise.all([
+        watch(
+          vcs.rootPath,
+          common ? [path.join(vcs.rootPath, ".git")] : [],
+          (name) => prefix === null || rootEventMatters(name, state.tracked),
+        ),
+        common &&
+          watch(
+            common,
+            INERT_GIT_PATHS.map((directory) => path.join(common, directory)),
+            (name) => prefix === null || gitEventMatters(name, prefix),
+          ),
+      ]);
     }
 
     if (
       entry.inspection &&
       entry.inspectedEpoch === entry.epoch &&
       entry.healthy &&
-      entry.watchers.length
+      entry.subscriptions.size
     )
       return { ...entry.inspection, forks: entry.forks };
 
@@ -742,8 +756,7 @@ export class LocalReviewData {
     this.closed = true;
     await this.workspaceManager?.close();
 
-    for (const entry of this.worktrees.values())
-      for (const watcher of entry.watchers) watcher.close();
+    await Promise.all([...this.worktrees.values()].map(unwatch));
     this.worktrees.clear();
     const readers = [...this.readers.values()];
 
@@ -1809,12 +1822,25 @@ function inputError<T>(run: () => T): T {
   }
 }
 
+async function unwatch(entry: {
+  subscriptions: Map<string, AsyncSubscription>;
+}) {
+  const subscriptions = [...entry.subscriptions.values()];
+
+  entry.subscriptions.clear();
+  await Promise.all(subscriptions.map(release));
+}
+
+/** Linux fails to unwatch a directory that is already gone. */
+const release = (subscription: AsyncSubscription) =>
+  subscription.unsubscribe().catch(() => {});
+
 export function openLocalReviewStore(
   databasePath: string,
   options: {
     blobReaderIdleTimeoutMs?: number;
     manageWorkspaces?: boolean;
-    watch?: typeof watch;
+    subscribe?: typeof subscribe;
     pullRequests?: PullRequestDeps;
   } = {},
 ) {

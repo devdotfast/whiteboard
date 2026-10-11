@@ -1,7 +1,6 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import {
-  type FSWatcher,
   appendFileSync,
   existsSync,
   mkdirSync,
@@ -11,7 +10,6 @@ import {
   renameSync,
   rmSync,
   symlinkSync,
-  watch,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -24,6 +22,7 @@ import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
 } from "@dev.fast/review-protocol";
+import { type SubscribeCallback, subscribe } from "@parcel/watcher";
 import { rangeAnchor } from "@review/lens-selection";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { Hono } from "hono";
@@ -59,6 +58,9 @@ const git = (...args: string[]) =>
   execFileSync("git", args, { cwd: repository, encoding: "utf8" }).trim();
 
 const spawns: string[][] = [];
+
+/** Parcel delivers events late, in batches. */
+const watcherLatency = () => new Promise((resolve) => setTimeout(resolve, 200));
 
 const recordSpawns = () => {
   spawns.length = 0;
@@ -2658,7 +2660,7 @@ it("leaves other checkouts alone while a nested worktree works", async () => {
   writeFileSync(path.join(sibling, "node_modules/built.js"), "built\n");
   writeFileSync(path.join(sibling, source.file), "export const edited = 1;\n");
   execFileSync("git", ["add", source.file], { cwd: sibling });
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await watcherLatency();
   await local.store.refreshWorktrees();
 
   expect(local.store.read(siblingReview).pins!.worktreeRevision).not.toBe(
@@ -2691,14 +2693,14 @@ it("follows its base branch when only the ref moves", async () => {
   writeFileSync(path.join(linked, "linked.ts"), "export {};\n");
   linkedGit("add", ".");
   linkedGit("-c", "commit.gpgsign=false", "commit", "-qm", "Linked");
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await watcherLatency();
   await local.store.refreshWorktrees();
   const head = linkedGit("rev-parse", "HEAD");
   expect(local.store.read(reviewId).pins!.base).not.toBe(head);
 
   // Nothing in the linked checkout changes: only main moves.
   git("update-ref", "refs/heads/main", head);
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await watcherLatency();
   await local.store.refreshWorktrees();
 
   expect(local.store.read(reviewId).pins!.base).toBe(head);
@@ -2743,7 +2745,7 @@ it("reads current working source across authored versions, commits and retargeti
     path.join(repository, "example.ts"),
     "export const live = 2;\n",
   );
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await watcherLatency();
   await local.store.refreshWorktrees();
   const current = local.store.read(result.reviewId);
   expect(
@@ -2762,7 +2764,7 @@ it("reads current working source across authored versions, commits and retargeti
   expect(git("diff", "--cached")).toBe(beforeIndex);
   git("add", ".");
   git("commit", "-qm", "Save changes");
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await watcherLatency();
   await local.store.refreshWorktrees();
   expect(
     await local.data.changes(local.store.read(result.reviewId).pins!),
@@ -2857,7 +2859,7 @@ describe("worktree base", () => {
     const forkPoint = local.store.read(reviewId).pins!.base;
 
     const refresh = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await watcherLatency();
       await local.store.refreshWorktrees();
 
       return local.store.read(reviewId).pins!.base;
@@ -2950,7 +2952,7 @@ it("reads symlink text and an unborn repository without following external links
     "-qm",
     "First",
   ]);
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await watcherLatency();
   await local.store.refreshWorktrees();
   expect(local.store.read(result.reviewId).pins!.head).not.toBe(
     snapshot.pins!.head,
@@ -2997,7 +2999,7 @@ it("keeps authored coordinates fixed as live source changes and warns only on un
     path.join(repository, "range.ts"),
     "// inserted\nconst first = 1;\nconst second = 2;\nconst third = 3;\n",
   );
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await watcherLatency();
   await local.store.refreshWorktrees();
   expect(local.store.read(result.reviewId).document[0]).toMatchObject({
     source: "head/range.ts#L2",
@@ -3334,7 +3336,7 @@ it("recovers persisted stale source and clears flags on set_target", async () =>
   ).rejects.toThrow("exceeds the pinned file");
   writeFileSync(path.join(repository, "recover.ts"), original);
   git("add", "-N", "recover.ts");
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await watcherLatency();
   await local.store.refreshWorktrees();
   expect(local.store.read(created.reviewId).staleSources).toEqual([]);
   expect(local.store.read(created.reviewId).document[0]).toMatchObject({
@@ -3429,14 +3431,13 @@ it("does not report clean tracked symlinks and submodules as modified", async ()
 it("continues capturing after watchers fail and stop emitting changes", async () => {
   await local.data.close();
   await local.store.close();
-  const watchers: FSWatcher[] = [];
+  const callbacks: SubscribeCallback[] = [];
   local = openLocalReviewStore(database, {
-    watch: ((...args: Parameters<typeof watch>) => {
-      const watcher = watch(...args);
-      watchers.push(watcher);
+    subscribe: (dir, callback, options) => {
+      callbacks.push(callback);
 
-      return watcher;
-    }) as typeof watch,
+      return subscribe(dir, callback, options);
+    },
   });
 
   const created = await local.store.execute(
@@ -3451,11 +3452,8 @@ it("continues capturing after watchers fail and stop emitting changes", async ()
     }),
   );
 
-  for (const watcher of watchers)
-    watcher.emit(
-      "error",
-      Object.assign(new Error("Watch limit"), { code: "ENOSPC" }),
-    );
+  for (const callback of callbacks)
+    callback(new Error("No space left on device"), []);
 
   for (const value of ["first change\n", "second change\n"]) {
     writeFileSync(path.join(repository, "example.ts"), value);
