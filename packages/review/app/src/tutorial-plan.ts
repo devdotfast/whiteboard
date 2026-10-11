@@ -10,6 +10,7 @@ export type TutorialStepCompletion =
   | "inline-hover"
   | "tour-open"
   | "tour-advance"
+  | "tour-close"
   | "finish";
 
 export interface TutorialChapterDefinition {
@@ -23,10 +24,10 @@ export interface TutorialStepDefinition {
   title: string;
   instruction: string;
   completion: TutorialStepCompletion;
-  /** The fullscreen tour a tour-open or tour-advance step watches. */
+  /** The fullscreen tour a tour step watches. */
   tour?: OverlayTourKind;
   targetSelector: string;
-  /** What gets the ring, when not the target. */
+  /** What gets the ring, when not the target; the topmost visible match. */
   highlightSelector?: string;
 }
 
@@ -34,7 +35,7 @@ export const TUTORIAL_CHAPTERS: readonly TutorialChapterDefinition[] = [
   { id: "welcome", title: "Welcome" },
   { id: "diffs", title: "Diffs and lenses" },
   { id: "diagrams", title: "Interactive diagrams" },
-  { id: "finish", title: "Get help" },
+  { id: "finish", title: "You're all done" },
 ];
 
 export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
@@ -66,6 +67,7 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     completion: "click",
     targetSelector:
       '.review-segment[aria-label="Diff"], .tutorial-view-button[data-tutorial-view="diff"]',
+    highlightSelector: '.review-segment[aria-label="Diff"]',
   },
   {
     id: "selectLens",
@@ -75,7 +77,8 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     completion: "click",
     targetSelector:
       ".diff-sidebar-lenses [data-lens-id] button[aria-pressed]:not(:disabled)",
-    highlightSelector: ".diff-sidebar-lenses",
+    highlightSelector:
+      ".diff-sidebar-lenses [data-lens-id]:first-of-type .diff-lens-chip",
   },
   {
     id: "expandFold",
@@ -84,6 +87,16 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     instruction: "Select a folded region to reveal the code diffr hid.",
     completion: "click",
     targetSelector: ".review-fold-pill, .diff-fold-reveal",
+    highlightSelector:
+      ".modified-in-monaco-diff-editor :is(.diff-fold-reveal, .review-fold-pill)",
+  },
+  {
+    id: "backToWhiteboard",
+    chapter: "diffs",
+    title: "Go back to the whiteboard",
+    instruction: "Select Whiteboard to return to the document.",
+    completion: "click",
+    targetSelector: '.review-segment[aria-label="Whiteboard"]',
   },
   {
     id: "openSequence",
@@ -95,6 +108,16 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     tour: "sequence",
     targetSelector:
       '[data-review-section="Interactive diagrams"] .sequence-diagram .diagram-tour-button, .diagram-tour-overlay .tour-pager-next',
+  },
+  {
+    id: "closeSequence",
+    chapter: "diagrams",
+    title: "Close the tour",
+    instruction: "Close the tour to return to the document.",
+    completion: "tour-close",
+    tour: "sequence",
+    targetSelector:
+      '.diagram-tour-overlay button[aria-label="Close guided tour"]',
   },
   {
     id: "openDatabase",
@@ -110,11 +133,12 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
   {
     id: "getHelp",
     chapter: "finish",
-    title: "Know where to get help",
+    title: "Tour complete!",
     instruction:
-      "Use Settings to connect your agents, or Getting Started to revisit setup and this tour.",
+      "We hope you enjoy Whiteboard :), let us know what you think on GH or Discord.",
     completion: "finish",
-    targetSelector: '[data-review-section="Get help"] .review-section-body',
+    targetSelector:
+      '[data-review-section="You\'re all done"] .review-section-body',
   },
 ];
 

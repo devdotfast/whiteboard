@@ -1,5 +1,6 @@
 import { documentType } from "@canvas/document-type.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
+import type { TutorialStepId } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
@@ -21,6 +22,7 @@ import {
   reviewInteractionDetail,
 } from "./review-interaction-event";
 import { useOptionalReviewPanel } from "./review-panel";
+import type { OverlayTourKind } from "./review-panel-store";
 import { useReviewContainer } from "./review-root-context";
 import {
   elevation,
@@ -46,20 +48,6 @@ import {
   TutorialSectionProvider,
 } from "./tutorial-section-context";
 
-interface TutorialExperienceState {
-  activeStep: TutorialStepDefinition | null;
-  activeIndex: number;
-  steps: readonly TutorialStepDefinition[];
-  totalSteps: number;
-  hidden: boolean;
-  aboveTour: boolean;
-  onBack(): void;
-  onNext(): void;
-  onDismiss(): void;
-  onFinish(): void;
-  onClose(): void;
-}
-
 /**
  * Drives the tutorial for the document shell it wraps. The guide card sits in
  * the bottom right corner of the shell in every view, bottom left over a
@@ -80,7 +68,6 @@ export function TutorialExperienceProvider({
   const tutorial = useTutorial();
   const container = useReviewContainer();
   const { theme } = useReviewDebugSettings();
-  const revealedChapterRef = useRef<TutorialChapterId | null>(null);
   // The shell ref belongs to an ancestor, so it attaches after this
   // provider's layout effects. Read it once mounted and key effects on it.
   const [shell, setShell] = useState<HTMLElement | null>(null);
@@ -90,9 +77,14 @@ export function TutorialExperienceProvider({
     setRegion(scrollRegionRef?.current ?? null);
   }, [scrollRegionRef, shellRef]);
   const [layer, setLayer] = useState<HTMLElement | null>(null);
-  const [targets, setTargets] = useState<readonly HTMLElement[]>([]);
+  const [target, setTarget] = useState<HTMLElement | null>(null);
 
   const overlayTour = useOptionalReviewPanel((state) => state.overlayTour);
+
+  const closeOverlayTour = useOptionalReviewPanel(
+    (state) => state.closeOverlayTour,
+  );
+
   const tourKind = overlayTour?.kind ?? null;
   const tourAnchor = overlayTour?.anchor ?? null;
   // Fullscreen tours portal outside the shell.
@@ -114,7 +106,9 @@ export function TutorialExperienceProvider({
     ? steps.findIndex((step) => step.id === activeStep.id)
     : steps.length;
 
-  const hidden = !tutorial || dismissed;
+  // Finishing hides the guide at once; closing the review is not instant.
+  const [finished, setFinished] = useState(false);
+  const hidden = !tutorial || dismissed || finished;
   const aboveTour = tourKind !== null;
 
   const completeStep = useCallback(
@@ -127,24 +121,26 @@ export function TutorialExperienceProvider({
 
   // The anchor a watched tour opened on; moving off it advances the tour.
   const openedAnchorRef = useRef<string | null>(null);
+  const lastTourRef = useRef<OverlayTourKind | null>(null);
 
   useEffect(() => {
-    if (!tourKind) {
-      openedAnchorRef.current = null;
+    const closedTour = tourKind ? null : lastTourRef.current;
+    lastTourRef.current = tourKind;
 
-      return;
-    }
+    if (tourKind) openedAnchorRef.current ??= tourAnchor;
+    else openedAnchorRef.current = null;
 
-    openedAnchorRef.current ??= tourAnchor;
+    if (dismissed || !activeStep?.tour) return;
 
-    if (dismissed || !activeStep || activeStep.tour !== tourKind) return;
+    const done =
+      activeStep.completion === "tour-close"
+        ? closedTour === activeStep.tour
+        : activeStep.tour === tourKind &&
+          (activeStep.completion === "tour-open" ||
+            (activeStep.completion === "tour-advance" &&
+              tourAnchor !== openedAnchorRef.current));
 
-    if (
-      activeStep.completion === "tour-open" ||
-      (activeStep.completion === "tour-advance" &&
-        tourAnchor !== openedAnchorRef.current)
-    )
-      completeStep(activeStep);
+    if (done) completeStep(activeStep);
   }, [activeStep, completeStep, dismissed, tourAnchor, tourKind]);
 
   useEffect(() => {
@@ -179,85 +175,67 @@ export function TutorialExperienceProvider({
     };
   }, [activeStep, completeStep, dismissed, root]);
 
-  // Bring a newly active chapter into view once. The section itself expands
-  // through the section context; nothing collapses the other chapters.
-  useLayoutEffect(() => {
-    const root = shell;
-
-    if (!root || hidden) {
-      revealedChapterRef.current = null;
-
-      return;
-    }
-
-    if (revealedChapterRef.current === activeChapterId) return;
-    revealedChapterRef.current = activeChapterId;
-    const activeTitle = tutorialChapter(activeChapterId).title;
-    [...root.querySelectorAll<HTMLElement>("[data-review-section]")]
-      .find((section) => section.dataset.reviewSection === activeTitle)
-      ?.scrollIntoView({ block: "start", behavior: "smooth" });
-  }, [activeChapterId, hidden, shell]);
-
-  // Mark the active step's target. DOM changes coalesce into one query per
-  // frame; no geometry is measured and state changes only when the answer does.
+  // Ring the topmost visible match, re-queried at most once per frame.
   useLayoutEffect(() => {
     if (!root || hidden || !activeStep) {
-      setTargets([]);
+      setTarget(null);
 
       return;
     }
 
-    // A step can name several targets (a toolbar tab and a prose button that
-    // open the same view); every match is marked.
-    let targets: HTMLElement[] = [];
+    let marked: HTMLElement | null = null;
     let revealed = false;
     let scheduledFrame: number | null = null;
 
     const apply = () => {
-      const next = [
-        ...root.querySelectorAll<HTMLElement>(
-          activeStep.highlightSelector ?? activeStep.targetSelector,
-        ),
-      ];
+      let next: HTMLElement | null = null;
+      let nextBox: DOMRect | null = null;
 
-      for (const target of targets) {
-        if (!next.includes(target)) delete target.dataset.tutorialTarget;
+      for (const candidate of root.querySelectorAll<HTMLElement>(
+        activeStep.highlightSelector ?? activeStep.targetSelector,
+      )) {
+        // Over a fullscreen tour, only its own targets show.
+        if (
+          !candidate.checkVisibility({
+            visibilityProperty: true,
+            opacityProperty: true,
+          }) ||
+          (aboveTour && candidate.closest(".diagram-tour-overlay") === null)
+        )
+          continue;
+
+        const box = candidate.getBoundingClientRect();
+
+        if (box.width === 0) continue;
+
+        if (
+          !nextBox ||
+          box.top < nextBox.top ||
+          (box.top === nextBox.top && box.left < nextBox.left)
+        ) {
+          next = candidate;
+          nextBox = box;
+        }
       }
 
-      for (const target of next) target.dataset.tutorialTarget = activeStep.id;
-      targets = next;
+      if (marked && marked !== next) delete marked.dataset.tutorialTarget;
 
-      // Over a fullscreen tour, only its own targets show.
-      const visible = targets.filter(
-        (target) =>
-          target.closest("[hidden]") === null &&
-          (!aboveTour || target.closest(".diagram-tour-overlay") !== null),
-      );
+      if (next) next.dataset.tutorialTarget = activeStep.id;
+      marked = next;
+      setTarget(next);
 
-      setTargets((current) =>
-        current.length === visible.length &&
-        current.every((target, index) => target === visible[index])
-          ? current
-          : visible,
-      );
+      // Bring an off-screen target into view once per step.
+      if (!next || revealed) return;
+      revealed = true;
 
-      // Bring an off-screen target into view once per step. This is the only
-      // measurement the tutorial makes, and it happens on a step change, not
-      // on scroll.
-      const first = visible[0];
+      const view = (
+        root.querySelector(".review-view-region") ?? root
+      ).getBoundingClientRect();
 
-      if (first && !revealed) {
-        revealed = true;
+      const rect = next.getBoundingClientRect();
 
-        const view = (
-          root.querySelector(".review-view-region") ?? root
-        ).getBoundingClientRect();
-
-        const rect = first.getBoundingClientRect();
-
-        if (rect.bottom > view.bottom || rect.top < view.top) {
-          first.scrollIntoView({ block: "center", behavior: "smooth" });
-        }
+      if (rect.bottom > view.bottom || rect.top < view.top) {
+        next.scrollIntoView({ block: "center", behavior: "smooth" });
       }
     };
 
@@ -272,7 +250,7 @@ export function TutorialExperienceProvider({
     const observer = new MutationObserver(scheduleApply);
     observer.observe(root, {
       attributes: true,
-      attributeFilter: ["hidden"],
+      attributeFilter: ["hidden", "aria-hidden"],
       childList: true,
       subtree: true,
     });
@@ -283,11 +261,11 @@ export function TutorialExperienceProvider({
 
       if (scheduledFrame !== null) cancelAnimationFrame(scheduledFrame);
 
-      for (const target of targets) delete target.dataset.tutorialTarget;
+      if (marked) delete marked.dataset.tutorialTarget;
     };
   }, [aboveTour, activeStep, hidden, root]);
 
-  const rings = useTargetRings(targets, layer, region);
+  const ring = useTargetRing(target, layer, region);
 
   // Back reopens the previous step only, so crossing a chapter boundary
   // lands on that chapter's last step rather than its first.
@@ -298,30 +276,19 @@ export function TutorialExperienceProvider({
 
   const goNext = useCallback(() => {
     if (!tutorial || !activeStep || activeStep.completion === "finish") return;
-    tutorial.setStep(activeStep.id, true);
-  }, [activeStep, tutorial]);
+
+    // Closing the tour completes the step, as the close button would.
+    if (activeStep.completion === "tour-close" && tourKind === activeStep.tour)
+      closeOverlayTour?.();
+    else tutorial.setStep(activeStep.id, true);
+  }, [activeStep, closeOverlayTour, tourKind, tutorial]);
 
   const finishTour = useCallback(() => {
     if (!tutorial || activeStep?.completion !== "finish") return;
+    setFinished(true);
     completeStep(activeStep);
     tutorial.close();
   }, [activeStep, completeStep, tutorial]);
-
-  const experience: TutorialExperienceState | null = tutorial
-    ? {
-        activeStep,
-        activeIndex,
-        steps,
-        totalSteps: steps.length,
-        hidden,
-        aboveTour,
-        onBack: goBack,
-        onNext: goNext,
-        onDismiss: tutorial.dismiss,
-        onFinish: finishTour,
-        onClose: tutorial.close,
-      }
-    : null;
 
   const sectionValue = useMemo(() => {
     const chapterStates = new Map<string, TutorialChapterState>();
@@ -350,49 +317,51 @@ export function TutorialExperienceProvider({
   }, [activeChapterId, checked, completed, dismissed, tutorial]);
 
   // Over a fullscreen tour the layer portals beside it, so it carries the theme.
-  const guideLayer = tutorial ? (
-    <div
-      ref={setLayer}
-      {...withClass(
-        aboveTour ? `review-app--theme-${theme}` : undefined,
-        aboveTour && themeStyles.vars,
-        aboveTour && theme === "light" && themeStyles.light,
-        styles.overlay,
-        aboveTour && styles.overlayAboveTour,
-      )}
-    >
-      {rings
-        .filter((ring) => ring.host === "layer")
-        .map((ring) => (
-          <TutorialTargetRing key={ring.key} ring={ring} />
-        ))}
-      {dismissed ? (
-        <button
-          type="button"
-          {...stylex.props(styles.pill, aboveTour && styles.pillAboveTour)}
-          aria-label="Show tutorial"
-          title="Show tutorial"
-          onClick={tutorial.reopen}
-        >
-          <TutorialIcon xstyle={styles.pillIcon} />
-        </button>
-      ) : (
-        <TutorialGuide experience={experience} />
-      )}
-    </div>
-  ) : null;
+  const guideLayer =
+    tutorial && !finished ? (
+      <div
+        ref={setLayer}
+        {...withClass(
+          aboveTour ? `review-app--theme-${theme}` : undefined,
+          aboveTour && themeStyles.vars,
+          aboveTour && theme === "light" && themeStyles.light,
+          styles.overlay,
+          aboveTour && styles.overlayAboveTour,
+        )}
+      >
+        {dismissed ? (
+          <button
+            type="button"
+            {...stylex.props(styles.pill, aboveTour && styles.pillAboveTour)}
+            aria-label="Show tutorial"
+            title="Show tutorial"
+            onClick={tutorial.reopen}
+          >
+            <TutorialIcon xstyle={styles.pillIcon} />
+          </button>
+        ) : (
+          <TutorialGuide
+            activeStep={activeStep}
+            activeIndex={activeIndex}
+            aboveTour={aboveTour}
+            onBack={goBack}
+            onNext={goNext}
+            onDismiss={tutorial.dismiss}
+            onFinish={finishTour}
+            onClose={tutorial.close}
+          />
+        )}
+        {ring?.host === "layer" ? <TutorialTargetRing ring={ring} /> : null}
+      </div>
+    ) : null;
 
   return (
     <TutorialSectionProvider value={sectionValue}>
       {children}
-      {region && rings.some((ring) => ring.host === "region")
+      {region && ring?.host === "region"
         ? createPortal(
             <div {...stylex.props(styles.targetLayer)} aria-hidden="true">
-              {rings
-                .filter((ring) => ring.host === "region")
-                .map((ring) => (
-                  <TutorialTargetRing key={ring.key} ring={ring} />
-                ))}
+              <TutorialTargetRing ring={ring} />
             </div>,
             region,
           )
@@ -406,12 +375,24 @@ export function TutorialExperienceProvider({
 
 /** The guide card: chapter, step, instruction, and tour controls. */
 function TutorialGuide({
-  experience,
+  activeStep,
+  activeIndex,
+  aboveTour,
+  onBack,
+  onNext,
+  onDismiss,
+  onFinish,
+  onClose,
 }: {
-  experience: TutorialExperienceState | null;
-}): ReactElement | null {
-  if (!experience || experience.hidden) return null;
-  const { activeStep, activeIndex, totalSteps } = experience;
+  activeStep: TutorialStepDefinition | null;
+  activeIndex: number;
+  aboveTour: boolean;
+  onBack(): void;
+  onNext(): void;
+  onDismiss(): void;
+  onFinish(): void;
+  onClose(): void;
+}): ReactElement {
   const chapter = tutorialChapter(activeStep?.chapter ?? "finish");
 
   const chapterIndex = TUTORIAL_CHAPTERS.findIndex(
@@ -420,7 +401,7 @@ function TutorialGuide({
 
   // "3.2" reads as chapter 3, step 2 within that chapter.
   const stepInChapter = activeStep
-    ? experience.steps
+    ? steps
         .filter((step) => step.chapter === activeStep.chapter)
         .findIndex((step) => step.id === activeStep.id) + 1
     : 0;
@@ -431,10 +412,7 @@ function TutorialGuide({
 
   return (
     <aside
-      {...stylex.props(
-        styles.guide,
-        experience.aboveTour && styles.guideAboveTour,
-      )}
+      {...stylex.props(styles.guide, aboveTour && styles.guideAboveTour)}
       aria-label="Tutorial guide"
       data-tutorial-step={activeStep?.id ?? "complete"}
     >
@@ -444,7 +422,7 @@ function TutorialGuide({
         </span>
         <IconButton
           xstyle={styles.guideClose}
-          onClick={experience.onDismiss}
+          onClick={onDismiss}
           aria-label="Hide tutorial"
         >
           ×
@@ -454,7 +432,7 @@ function TutorialGuide({
         <span
           {...stylex.props(styles.progressBar)}
           style={{
-            width: `${Math.round((activeIndex / Math.max(1, totalSteps)) * 100)}%`,
+            width: `${Math.round((activeIndex / steps.length) * 100)}%`,
           }}
         />
       </div>
@@ -469,23 +447,19 @@ function TutorialGuide({
         </p>
       </div>
       <footer {...stylex.props(styles.guideFooter)}>
-        <Button
-          variant="ghost"
-          onClick={experience.onBack}
-          disabled={activeIndex <= 0}
-        >
+        <Button variant="ghost" onClick={onBack} disabled={activeIndex <= 0}>
           Back
         </Button>
         {activeStep?.completion === "finish" ? (
-          <Button variant="ghost" onClick={experience.onFinish}>
+          <Button variant="ghost" onClick={onFinish}>
             Finish tour
           </Button>
         ) : activeStep ? (
-          <Button variant="ghost" onClick={experience.onNext}>
+          <Button variant="ghost" onClick={onNext}>
             Next
           </Button>
         ) : (
-          <Button variant="ghost" onClick={experience.onClose}>
+          <Button variant="ghost" onClick={onClose}>
             Close tutorial
           </Button>
         )}
@@ -494,106 +468,88 @@ function TutorialGuide({
   );
 }
 
-interface TutorialRingBox {
+interface TutorialRing {
+  /** Where the ring is drawn: inside the scroll region (moves with the
+      content) or in the guide's layer (toolbar, Diff and tour targets). */
+  host: "region" | "layer";
+  radius: number;
   left: number;
   top: number;
   width: number;
   height: number;
 }
 
-interface TutorialRing {
-  key: string;
-  /** Where the ring is drawn: inside the scroll region (moves with the
-      content) or in the guide's layer (toolbar, Diff and tour targets). */
-  host: "region" | "layer";
-  /** Inline targets (links) get one wash box per line, no outline. */
-  inline: boolean;
-  radius: number;
-  boxes: TutorialRingBox[];
-}
-
 const RING_GAP = 4;
 
-/**
- * Measures the marked targets and describes a ring for each. Measurement
- * happens on a target change, on a target or content resize, on a window
- * resize, and when a nested scroller moves. Rings for content inside the
- * scroll region are placed in the region's own coordinate space, so they
- * travel with the content and never lag.
- */
-function useTargetRings(
-  targets: readonly HTMLElement[],
+/** Measures the target's ring. Inside the scroll region, the ring uses the
+    region's coordinates so it scrolls with the content. */
+function useTargetRing(
+  target: HTMLElement | null,
   layer: HTMLElement | null,
   region: HTMLElement | null,
-): TutorialRing[] {
-  const [rings, setRings] = useState<TutorialRing[]>([]);
+): TutorialRing | null {
+  const [ring, setRing] = useState<TutorialRing | null>(null);
   useLayoutEffect(() => {
-    if (!layer || targets.length === 0) {
-      setRings([]);
+    if (!layer || !target) {
+      setRing(null);
 
       return;
     }
 
+    const inRegion = region !== null && region.contains(target);
     let frame = 0;
 
     const measure = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        const rect = target.getBoundingClientRect();
+        const radius = parseFloat(getComputedStyle(target).borderRadius);
+
+        const base = {
+          radius: (Number.isFinite(radius) ? radius : 4) + RING_GAP,
+          width: rect.width,
+          height: rect.height,
+        };
+
+        if (inRegion) {
+          const regionRect = region.getBoundingClientRect();
+
+          setRing({
+            ...base,
+            host: "region",
+            left: rect.left - regionRect.left + region.scrollLeft,
+            top: rect.top - regionRect.top + region.scrollTop,
+          });
+
+          return;
+        }
+
+        // Keep an edge target's ring inside the layer, centered.
         const layerRect = layer.getBoundingClientRect();
-        const regionRect = region?.getBoundingClientRect();
-        setRings(
-          targets.map((target, index) => {
-            const inRegion = region !== null && region.contains(target);
+        const left = rect.left - layerRect.left;
+        const top = rect.top - layerRect.top;
+        const inset = RING_GAP + 2;
 
-            const originLeft =
-              inRegion && regionRect
-                ? regionRect.left - region.scrollLeft
-                : layerRect.left;
-
-            const originTop =
-              inRegion && regionRect
-                ? regionRect.top - region.scrollTop
-                : layerRect.top;
-
-            const inline = target instanceof HTMLAnchorElement;
-
-            const rects = inline
-              ? [...target.getClientRects()]
-              : [target.getBoundingClientRect()];
-
-            const radius = parseFloat(getComputedStyle(target).borderRadius);
-
-            return {
-              key: `${index}:${target.dataset.tutorialTarget ?? ""}`,
-              host: inRegion ? "region" : "layer",
-              inline,
-              radius: (Number.isFinite(radius) ? radius : 4) + RING_GAP,
-              boxes: (rects.length ? rects : [target.getBoundingClientRect()])
-                // A wrapped link reports an empty rect at the break.
-                .filter((rect, _, all) => all.length === 1 || rect.width > 0)
-                .map((rect) => {
-                  const box = {
-                    left: rect.left - originLeft,
-                    top: rect.top - originTop,
-                    width: rect.width,
-                    height: rect.height,
-                  };
-
-                  if (inRegion) return box;
-
-                  // Keep an edge-to-edge target's ring inside the layer.
-                  const left = Math.max(box.left, RING_GAP + 2);
-
-                  const right = Math.min(
-                    box.left + box.width,
-                    layerRect.width - RING_GAP - 2,
-                  );
-
-                  return { ...box, left, width: Math.max(0, right - left) };
-                }),
-            };
-          }),
+        const dx = Math.max(
+          0,
+          inset - left,
+          left + rect.width - (layerRect.width - inset),
         );
+
+        const dy = Math.max(
+          0,
+          inset - top,
+          top + rect.height - (layerRect.height - inset),
+        );
+
+        setRing({
+          ...base,
+          host: "layer",
+          left: left + dx,
+          top: top + dy,
+          width: Math.max(0, rect.width - dx * 2),
+          height: Math.max(0, rect.height - dy * 2),
+        });
       });
     };
 
@@ -602,7 +558,7 @@ function useTargetRings(
         ? null
         : new ResizeObserver(measure);
 
-    for (const target of targets) resizeObserver?.observe(target);
+    resizeObserver?.observe(target);
 
     // Content above a target can grow (an editor mounts)
     // without the target itself resizing, so watch the region's content too.
@@ -615,11 +571,8 @@ function useTargetRings(
     }
 
     // Monaco scrolls without scroll events, so wheels re-measure too.
-    const tracksScroll = targets.some(
-      (target) =>
-        !region?.contains(target) ||
-        target.closest(".monaco-scrollable-element") !== null,
-    );
+    const tracksScroll =
+      !inRegion || target.closest(".monaco-scrollable-element") !== null;
 
     let settle = 0;
 
@@ -655,38 +608,24 @@ function useTargetRings(
       document.removeEventListener("scroll", onScroll, true);
       document.removeEventListener("wheel", onScroll, true);
     };
-  }, [layer, region, targets]);
+  }, [layer, region, target]);
 
-  return rings;
+  return ring;
 }
 
 function TutorialTargetRing({ ring }: { ring: TutorialRing }): ReactElement {
   return (
-    <>
-      {ring.boxes.map((box, index) => (
-        <div
-          key={index}
-          data-tutorial-ring=""
-          {...stylex.props(styles.ring, ring.inline && styles.ringInline)}
-          style={
-            ring.inline
-              ? {
-                  left: box.left - 4,
-                  top: box.top - 1,
-                  width: box.width + 8,
-                  height: box.height + 2,
-                }
-              : {
-                  left: box.left - RING_GAP,
-                  top: box.top - RING_GAP,
-                  width: box.width + RING_GAP * 2,
-                  height: box.height + RING_GAP * 2,
-                  borderRadius: ring.radius,
-                }
-          }
-        />
-      ))}
-    </>
+    <div
+      data-tutorial-ring=""
+      {...stylex.props(styles.ring)}
+      style={{
+        left: ring.left - RING_GAP,
+        top: ring.top - RING_GAP,
+        width: ring.width + RING_GAP * 2,
+        height: ring.height + RING_GAP * 2,
+        borderRadius: ring.radius,
+      }}
+    />
   );
 }
 
@@ -700,21 +639,11 @@ const targetPulse = stylex.keyframes({
   },
 });
 
-const linkPulse = stylex.keyframes({
-  "0%, 100%": {
-    backgroundColor: tokens.tutorialRingGlow,
-  },
-  "50%": {
-    backgroundColor: `color-mix(in srgb, ${tokens.tutorialRing} 22%, transparent)`,
-  },
-});
-
 const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 
 const styles = stylex.create({
   // The tutorial lives in the bottom right corner of the shell, one layer
-  // above the sticky toolbar, in every view. It never measures its target:
-  // the target carries data-tutorial-target and draws its own outline.
+  // above the sticky toolbar, in every view.
   overlay: {
     position: "absolute",
     zIndex: `calc(${tokens.reviewDebugLayer} + 1)`,
@@ -845,10 +774,8 @@ const styles = stylex.create({
     },
     outlineOffset: { default: null, ":focus-visible": "2px" },
   },
-  // Target rings are their own elements, drawn in a layer nothing clips:
-  // inside the scroll region for document content (so they travel with it),
-  // in the shell overlay for toolbar controls. Each ring follows its
-  // target's corner radius.
+  // The ring is drawn in a layer nothing clips: the scroll region for
+  // document content, the shell overlay otherwise.
   targetLayer: {
     position: "absolute",
     zIndex: `calc(${tokens.reviewDebugLayer} + 1)`,
@@ -876,16 +803,6 @@ const styles = stylex.create({
       [reducedMotion]: "ease",
     },
     animationIterationCount: { default: "infinite", [reducedMotion]: 1 },
-  },
-  // An inline link reads as marked text: one wash box per line.
-  ringInline: {
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: radius.small,
-    backgroundColor: tokens.tutorialRingGlow,
-    boxShadow: "none",
-    animationName: { default: linkPulse, [reducedMotion]: "none" },
   },
   pillAboveTour: {
     right: "auto",
