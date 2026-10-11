@@ -6,6 +6,8 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
+  readlinkSync,
   realpathSync,
   renameSync,
   rmSync,
@@ -2672,6 +2674,58 @@ it("leaves other checkouts alone while a nested worktree works", async () => {
       spawns.filter((spawn) => spawn.includes(realpathSync(root))),
     ).toEqual([]);
 });
+
+const inotifyWatches = () =>
+  readdirSync("/proc/self/fd").reduce((count, fd) => {
+    try {
+      if (readlinkSync(`/proc/self/fd/${fd}`) !== "anon_inode:inotify")
+        return count;
+
+      return (
+        count +
+        readFileSync(`/proc/self/fdinfo/${fd}`, "utf8")
+          .split("\n")
+          .filter((line) => line.startsWith("inotify wd")).length
+      );
+    } catch {
+      return count;
+    }
+  }, 0);
+
+it.runIf(process.platform === "linux")(
+  "watches only tracked directories on Linux",
+  async () => {
+    const tree = (root: string) => {
+      for (let i = 0; i < 200; i++)
+        mkdirSync(path.join(repository, root, `${i}`, "nested"), {
+          recursive: true,
+        });
+    };
+
+    writeFileSync(
+      path.join(repository, ".gitignore"),
+      "node_modules/\ntarget/\n",
+    );
+    tree("node_modules");
+    tree(".git/dev-fast/reviews/other");
+    const before = inotifyWatches();
+
+    await local.store.execute(
+      command({
+        type: "create",
+        title: "Main",
+        target: { kind: "worktree", repositoryId: pins.repositoryId },
+      }),
+    );
+    await local.store.refreshWorktrees();
+    expect(inotifyWatches() - before).toBeLessThan(50);
+
+    tree("target");
+    await vi.waitFor(() => expect(inotifyWatches() - before).toBeLessThan(50), {
+      timeout: 5000,
+    });
+  },
+);
 
 it("follows its base branch when only the ref moves", async () => {
   const linked = path.join(directory, "linked");

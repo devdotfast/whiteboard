@@ -37,6 +37,49 @@ export function rootEventMatters(
   return !tracked || tracked.has(parent(file));
 }
 
+/** A directory appearing at the edge of the tracked tree may be newly ignored. */
+export function atTrackedEdge(
+  name: string,
+  tracked: Set<string> | undefined,
+): boolean {
+  const file = normalize(name);
+
+  return !!tracked && tracked.has(parent(file)) && !tracked.has(file);
+}
+
+/** Wholly ignored directories, so watchers can skip them. */
+export async function ignoredDirectories(
+  rootPath: string,
+  gitDirectory?: string,
+): Promise<string[]> {
+  try {
+    const { stdout } = await exec(
+      "git",
+      [
+        "-C",
+        rootPath,
+        ...(gitDirectory
+          ? ["--git-dir", gitDirectory, "--work-tree", rootPath]
+          : []),
+        "ls-files",
+        "-z",
+        "--others",
+        "--ignored",
+        "--exclude-standard",
+        "--directory",
+      ],
+      { maxBuffer: 32 * 1024 * 1024 },
+    );
+
+    return stdout
+      .split("\0")
+      .filter((entry) => entry.endsWith("/") && entry !== ".jj/")
+      .map((entry) => entry.slice(0, -1));
+  } catch {
+    return [];
+  }
+}
+
 // A checkout's own state, per gitrepository-layout(5).
 const CHECKOUT_STATE =
   /^(?:index|[A-Z_]+|(?:rebase-merge|rebase-apply|sequencer|refs\/(?:bisect|worktree|rewritten))(?:\/.*)?)$/;
