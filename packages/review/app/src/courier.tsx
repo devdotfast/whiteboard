@@ -116,10 +116,11 @@ export function Courier({
     "hopping" | "jumping" | "leaving" | null
   >(null);
 
-  const [idle, setIdle] = useState<Idle>("none");
-  const [gone, setGone] = useState(false);
-
   const live = scopeLive(activity, scope);
+
+  const [idle, setIdle] = useState<Idle>("none");
+  // Mounting after the agent stopped: he has already left.
+  const [gone, setGone] = useState(!live);
 
   const unknown = activity === "unknown";
 

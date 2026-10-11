@@ -172,6 +172,9 @@ it("stays off the board while no activity is known and while viewing history", a
   await render(undefined, at("b1", "focus", 1));
   expect(courier()).toBeNull();
 
+  await render(ended, at("b1", "focus", 1));
+  expect(courier()).toBeNull();
+
   await render(working(), null);
   expect(courier()).toBeNull();
 });
