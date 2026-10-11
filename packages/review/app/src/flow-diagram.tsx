@@ -14,6 +14,7 @@ import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { drawStyles } from "./draw-styles";
 import { FlowGraph } from "./flow-graph";
 import { documentMarker } from "./markers.stylex";
+import { useReviewLenses } from "./review-lenses";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { GuidedTour, GuidedTourStop } from "./review-panel-model";
 import { withClass } from "./stylex-props";
@@ -45,7 +46,7 @@ export function flowTourStops(
             label: node.label,
             content: {
               kind: "explanation" as const,
-              text: node.description ?? "This node has no code attachments.",
+              text: node.description,
             },
           },
         ];
@@ -59,6 +60,14 @@ export function FlowDiagram({
   snapshot: Snapshot;
 }) {
   const stops = useMemo(() => flowTourStops(node), [node]);
+
+  const sources = stops.flatMap((stop) =>
+    stop.content.kind === "source" ? [stop.content.source] : [],
+  );
+
+  const lenses = useReviewLenses();
+  const total = lenses?.stats(lenses.resolve(sources)).total;
+  const changed = !!total && total.additions + total.deletions > 0;
 
   const tour = useMemo<GuidedTour>(
     () => ({ id: node.id, title: node.title, stops }),
@@ -138,20 +147,21 @@ export function FlowDiagram({
           />
         </div>
       </div>
-      <footer {...stylex.props(styles.footer)}>
-        <span>
-          Select a node to explore its code
-          {!fullscreen && " · pinch or ⌘/Ctrl + scroll to zoom"}
-        </span>
-        <span {...stylex.props(styles.legend)}>
-          <i {...stylex.props(styles.swatch, styles.added)} />
-          Added
-          <i {...stylex.props(styles.swatch, styles.removed)} />
-          Removed
-          <i {...stylex.props(styles.swatch, styles.modified)} />
-          Modified
-        </span>
-      </footer>
+      {(footerHint(sources.length > 0, fullscreen) || changed) && (
+        <footer {...stylex.props(styles.footer)}>
+          <span>{footerHint(sources.length > 0, fullscreen)}</span>
+          {changed && (
+            <span {...stylex.props(styles.legend)}>
+              <i {...stylex.props(styles.swatch, styles.added)} />
+              Added
+              <i {...stylex.props(styles.swatch, styles.removed)} />
+              Removed
+              <i {...stylex.props(styles.swatch, styles.modified)} />
+              Modified
+            </span>
+          )}
+        </footer>
+      )}
     </figure>
   );
 
@@ -176,6 +186,14 @@ export function FlowDiagram({
     </>
   );
 }
+
+const footerHint = (hasCode: boolean, fullscreen: boolean) =>
+  [
+    hasCode && "Select a node to explore its code",
+    !fullscreen && "Pinch or ⌘/Ctrl + scroll to zoom",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
 const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 

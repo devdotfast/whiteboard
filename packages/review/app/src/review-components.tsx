@@ -1327,7 +1327,8 @@ function ReviewPeekContentView({
   onNativeFocus?: () => void;
   reportOutcome?: boolean;
 }) {
-  if (content.kind === "explanation") return <p>{content.text}</p>;
+  if (content.kind === "explanation")
+    return content.text ? <p>{content.text}</p> : null;
 
   if (content.kind === "source") {
     return (

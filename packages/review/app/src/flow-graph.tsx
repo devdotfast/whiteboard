@@ -556,7 +556,9 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
           ? availability === "pending"
             ? "Waiting for diff…"
             : "Source unavailable at these pins"
-          : `${node.label} · Total +${progress.total.additions} −${progress.total.deletions}`
+          : progress.total.additions + progress.total.deletions
+            ? `${node.label} · Total +${progress.total.additions} −${progress.total.deletions}`
+            : node.label
       }
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
@@ -624,9 +626,7 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
             )
           ) : sources.length ? (
             <ElementCountsText progress={progress} />
-          ) : (
-            "Concept"
-          )}
+          ) : null}
         </span>
       </div>
     </div>
