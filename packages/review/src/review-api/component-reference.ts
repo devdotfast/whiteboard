@@ -22,7 +22,7 @@ export const COMPONENT_REFERENCE = [
   "- call_stack_diff {title, base: frame[], head: frame[], pins?}; either side may be empty",
   "- frame {source: anchor, label?, key?, parentKey? (an earlier frame on that side), callSite?: anchor, contextSources?: anchor[], via?: {kind: call|queue|callback|rpc, reason}, pins?}",
   "- database_lens {title, actors: {key: label}, stores: {key: store}, useCases: useCase[] (1 or more), pins?}",
-  "- store {label, storage: relational|document, collections: {key: {label, fields: {key: field}}}, dataStoreKind?: database|objectStore|bucket|artifactStore|fileStore}",
+  "- store {label, storage: relational|document, collections: {key: {label, fields: {key: field}, source?: anchor of its schema declaration}}, dataStoreKind?: database|objectStore|bucket|artifactStore|fileStore}",
   "- field {label, dataType, nullable?, primaryKey?, references?: {store, collection, field}, fields?: {key: field}}",
   "- useCase {label, summary?, operations: operation[] (1 or more)}; operation {kind: read|write, actor, store, collection, label, source: anchor, field?, detail?, pins?}, naming declared keys",
   "",

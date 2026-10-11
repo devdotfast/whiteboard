@@ -353,18 +353,32 @@ function documentReferences(
       });
 
     if (element.type === "database_lens")
-      return element.useCases.flatMap((useCase) =>
-        useCase.operations.flatMap((operation) =>
-          select(operation.source, operation.pins ?? element.pins).map(
-            (source) => ({
-              id: operation.id!,
-              source,
-              label: operation.label,
-              peek: true,
-            }),
+      return [
+        ...Object.entries(element.stores).flatMap(([storeKey, store]) =>
+          Object.entries(store.collections).flatMap(([key, collection]) =>
+            collection.source
+              ? select(collection.source, element.pins).map((source) => ({
+                  id: `${element.id}:schema:${storeKey}:${key}`,
+                  source,
+                  label: collection.label,
+                  peek: true,
+                }))
+              : [],
           ),
         ),
-      );
+        ...element.useCases.flatMap((useCase) =>
+          useCase.operations.flatMap((operation) =>
+            select(operation.source, operation.pins ?? element.pins).map(
+              (source) => ({
+                id: operation.id!,
+                source,
+                label: operation.label,
+                peek: true,
+              }),
+            ),
+          ),
+        ),
+      ];
 
     return [];
   });
