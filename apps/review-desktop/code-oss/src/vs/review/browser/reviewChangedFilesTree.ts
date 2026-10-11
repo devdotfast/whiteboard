@@ -145,10 +145,12 @@ export class ChangedFilesTreeRenderer
 
     template.row.classList.toggle("review-changed-files-folder", !isFile);
 		const done = isFile ? this.progress.get(element.file.path)?.state : undefined;
+		const stored = isFile ? this.counts.get(element.file.path) : undefined;
+		const binary = isFile && (!!element.file.binary || isBinaryCounts(stored));
 		// Folded files read as done, like viewed ones: greyed, with the reason in place of counts.
 		template.row.classList.toggle("review-file-viewed", done === "viewed");
 		// A binary stays folded: nothing in it can be read, so it looks and counts like a folded file.
-		template.row.classList.toggle("review-file-folded", done === "folded" || (isFile && !!element.file.binary && done !== "viewed"));
+		template.row.classList.toggle("review-file-folded", done === "folded" || (binary && done !== "viewed"));
     template.icon.hidden = !isFile;
     template.icon.className = isFile
       ? `review-changed-files-icon review-changed-files-icon-${element.file.status} ${ThemeIcon.asClassName(fileStatusIcon(element.file.status))}`
@@ -159,11 +161,10 @@ export class ChangedFilesTreeRenderer
 		if (isFile) {
 			const progress = this.progress.get(element.file.path);
 			const compact = (n: number) => new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(n).toLowerCase();
-			const stored = this.counts.get(element.file.path);
 			const lines = isBinaryCounts(stored) ? undefined : stored;
 			const additions = progress?.remaining.additions ?? lines?.added;
 			const deletions = progress?.remaining.deletions ?? lines?.removed;
-			if (element.file.binary) {
+			if (binary) {
 				// Where a folded file says "Folded", a binary says its size, or "Binary" until diffr reports it.
 				const size = isBinaryCounts(stored) ? binarySizeLabel(stored) : undefined;
 				template.counts.textContent = progress?.state === 'viewed' ? 'Viewed' : progress?.state === 'folded' ? 'Folded' : size ?? 'Binary';
@@ -177,7 +178,7 @@ export class ChangedFilesTreeRenderer
 				const removed = append(template.counts, $('span.review-tree-removed')); removed.textContent = `−${compact(deletions)}`;
 			}
 			const total = progress?.total ?? { additions: lines?.added ?? 0, deletions: lines?.removed ?? 0 };
-			if (!element.file.binary) template.countsTooltip.content = element.file.status === "unchanged"
+			if (!binary) template.countsTooltip.content = element.file.status === "unchanged"
 				? { label: "Referenced context; no changed lines" }
 				: additions === undefined || deletions === undefined
 					? REVIEW_COUNTS_PENDING_TOOLTIP

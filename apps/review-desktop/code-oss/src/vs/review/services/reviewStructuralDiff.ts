@@ -77,8 +77,8 @@ export function createStructuralDiffEditors(
 			} else {
 				const result = await session.fileResult(source.path);
 				if (result.error) throw new Error(result.error);
-				if (result.diff?.type !== "text") throw new Error(`diffr did not supply a text result for ${source.path}.`);
-				text = result.diff[source.side]?.text ?? "";
+				// diffr's binary check is stricter than git's.
+				text = result.diff?.type === "text" ? result.diff[source.side]?.text ?? "" : "";
 			}
 			return modelService.getModel(uri) ?? modelService.createModel(text, languages.createByFilepathOrFirstLine(uri, text.split("\n", 1)[0]), uri);
 		},
