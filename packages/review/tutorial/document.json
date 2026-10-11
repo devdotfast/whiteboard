@@ -27,7 +27,7 @@
         },
         {
           "type": "code_peek",
-          "source": "head/src/orders/order-service.ts#L13-L29",
+          "source": "head/src/orders/order-service.ts#L13-L30",
           "caption": "Order service creates the order"
         }
       ]
@@ -86,7 +86,7 @@
               "to": "repository",
               "label": "Save order",
               "style": "call",
-              "source": "head/src/orders/order-service.ts#L13-L29"
+              "source": "head/src/orders/order-service.ts#L13-L30"
             },
             {
               "type": "step",

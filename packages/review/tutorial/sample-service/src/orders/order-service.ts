@@ -1,6 +1,6 @@
 import type { InventoryService } from "../inventory/inventory-service.js";
 import type { PaymentGateway } from "../payments/payment-gateway.js";
-import type { CheckoutRequest, Order } from "./order.js";
+import type { Cents, CheckoutRequest, Order } from "./order.js";
 import type { OrdersRepository } from "./orders-repository.js";
 
 export class OrderService {
@@ -10,8 +10,9 @@ export class OrderService {
     private readonly orders: OrdersRepository,
   ) {}
 
+  /** Reserves the stock, charges the customer, and saves a pending order. */
   placeOrder(request: CheckoutRequest): Order {
-    const totalCents = request.items.reduce(
+    const totalCents: Cents = request.items.reduce(
       (sum, item) => sum + item.quantity * item.unitPriceCents,
       0,
     );
