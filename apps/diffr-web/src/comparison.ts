@@ -10,7 +10,14 @@ import { URI } from "vs/base/common/uri.js";
 import { ICodeEditorService } from "vs/editor/browser/services/codeEditorService.js";
 import type { IInstantiationService } from "vs/platform/instantiation/common/instantiation.js";
 
-import type { Classified, Engine, FileRequest } from "./engine/engine.js";
+import { cache, cacheKey, cached } from "./cache.js";
+import type {
+  Classified,
+  Diffed,
+  Engine,
+  FileEvent,
+  FileRequest,
+} from "./engine/engine.js";
 import { foldIds, gapIds } from "./folds.js";
 import {
   type Change,
@@ -21,10 +28,13 @@ import {
   loadChange,
   targetPath,
 } from "./github.js";
+import type { Lens } from "./lenses.js";
 import type { ReviewDiffFileWire, StructuralLineCounts } from "./protocol.js";
 import { orderReviewDiffFiles } from "./review/common/reviewChangedFilesModel.js";
 import {
+  type StructuralRegion,
   type StructuralTextDiff,
+  regionLines,
   reviewFileCounts,
 } from "./review/common/reviewStructuralDiff.js";
 import type { ReviewDiffLayoutSetting } from "./review/services/reviewDiffLayout.js";
@@ -43,6 +53,9 @@ import { ViewedProgress } from "./viewed.js";
 /** Files fetched or diffed at once. The engine spreads them over its workers. */
 const IN_FLIGHT = 12;
 
+/** A lens closes a fold outside its ranges only from this many lines. */
+const MIN_LENS_FOLD = 3;
+
 /** Milliseconds from page start, for the engine panel. */
 export interface Timing {
   listed?: number;
@@ -55,11 +68,19 @@ export interface Work {
   fetching: number;
   diffing: number;
   diffed: number;
+  /** Of those, the files whose results this browser had kept (cache.ts). */
+  cached: number;
   hidden: number;
   failed: number;
   /** Total diffr time, and the file that took longest. */
   diffMs: number;
   slowest?: { path: string; ms: number };
+  /** Files whose summaries are being written, are in, or failed, and why. */
+  summarizing: number;
+  summarized: number;
+  summaryErrors: { path: string; message: string }[];
+  /** Agent plugins that threw, by file. */
+  pluginErrors: { path: string; message: string }[];
 }
 
 interface File {
@@ -78,9 +99,14 @@ export class Comparison extends Disposable {
     fetching: 0,
     diffing: 0,
     diffed: 0,
+    cached: 0,
     hidden: 0,
     failed: 0,
     diffMs: 0,
+    summarizing: 0,
+    summarized: 0,
+    summaryErrors: [],
+    pluginErrors: [],
   };
   preview: Preview | undefined;
   change: Change | undefined;
@@ -92,6 +118,10 @@ export class Comparison extends Disposable {
   private viewed: ViewedProgress | undefined;
   /** Files the reader asked for, most recent first. */
   private requested: string[] = [];
+  private lens: Lens | undefined;
+  /** What the lens changed, to put back: folds by `path\0id`, and files by path. */
+  private readonly lensFolds = new Map<string, boolean>();
+  private readonly lensFiles = new Map<string, boolean>();
 
   constructor(
     private readonly container: HTMLElement,
@@ -158,6 +188,247 @@ export class Comparison extends Disposable {
     this.view?.focus();
   }
 
+  /** Every changed file, in the list's order, and whether diffr has it yet. */
+  get fileList(): {
+    path: string;
+    previousPath?: string;
+    status: ChangedFile["status"];
+    hidden?: string;
+    diffed: boolean;
+    additions: number;
+    deletions: number;
+    binary: boolean;
+  }[] {
+    return this.order.map((path) => {
+      const file = this.files.get(path)!;
+      const diff = this.session?.getFileResult(path)?.diff;
+      const counts = diff ? reviewFileCounts(diff) : undefined;
+
+      return {
+        path,
+        previousPath: file.changed.previousPath,
+        status: file.changed.status,
+        hidden: file.classified?.hidden,
+        diffed: file.state === "done",
+        additions:
+          counts && !("binary" in counts)
+            ? counts.added
+            : file.changed.additions,
+        deletions:
+          counts && !("binary" in counts)
+            ? counts.removed
+            : file.changed.deletions,
+        binary: diff?.type === "binary",
+      };
+    });
+  }
+
+  /** Scroll to a file and show it, diffing it first if it is still waiting. */
+  openFile(path: string): void {
+    if (!this.files.has(path)) return;
+    this.requested = [path, ...this.requested.filter((p) => p !== path)];
+    this.pump();
+    this.view?.revealFile(path, true);
+  }
+
+  /** Resolves once a file is diffed, or failed, asking for it first if it waits. */
+  async whenDiffed(path: string): Promise<void> {
+    const file = this.files.get(path);
+
+    if (!file) throw new Error(`${path} is not a changed file`);
+
+    if (file.state === "done") return;
+
+    if (file.state === "waiting") {
+      this.requested = [path, ...this.requested.filter((p) => p !== path)];
+      this.pump();
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const listener = this.onDidChange(() => {
+        if (file.state !== "done" && !this._store.isDisposed) return;
+        listener.dispose();
+
+        if (this._store.isDisposed) reject(new Error("The comparison closed"));
+        else resolve();
+      });
+    });
+  }
+
+  /** A diffed file's result: its diff, or why it has none. */
+  fileResult(path: string) {
+    return this.session?.getFileResult(path);
+  }
+
+  isRegionCollapsed(path: string, id: number): boolean | undefined {
+    return this.session?.isRegionCollapsed(path, id);
+  }
+
+  setRegionCollapsed(path: string, id: number, collapsed: boolean): void {
+    this.session?.setRegionCollapsed(path, id, collapsed);
+  }
+
+  get activeLens(): Lens | undefined {
+    return this.lens;
+  }
+
+  /**
+   * Show only a lens: its files listed and open, every other file folded and left out of the tree,
+   * and in a file it gives line ranges for, the folds that hold none of them closed. `undefined`
+   * puts everything back as it was.
+   */
+  showLens(lens: Lens | undefined): void {
+    const session = this.session;
+
+    for (const [key, collapsed] of this.lensFolds) {
+      const at = key.lastIndexOf("\0");
+      session?.setRegionCollapsed(
+        key.slice(0, at),
+        Number(key.slice(at + 1)),
+        collapsed,
+      );
+    }
+
+    for (const [path, collapsed] of this.lensFiles)
+      this.view?.setFileCollapsed(path, collapsed);
+    this.lensFolds.clear();
+    this.lensFiles.clear();
+    this.lens = lens;
+
+    this.view?.listOnly(
+      lens
+        ? new Set(this.order.filter((path) => this.lensMember(path)))
+        : undefined,
+    );
+
+    if (lens) {
+      for (const path of this.order) this.applyLens(path);
+      const first = this.order.find((path) => this.lensMember(path));
+
+      if (first) this.openFile(first);
+    }
+
+    this.changed.fire();
+  }
+
+  private lensMember(path: string) {
+    const previous = this.files.get(path)?.changed.previousPath;
+
+    return this.lens?.files.find(
+      (file) => file.path === path || (!!previous && file.path === previous),
+    );
+  }
+
+  /** Apply the lens to one file, once listed and again once diffed. */
+  private applyLens(path: string): void {
+    const file = this.files.get(path);
+
+    if (!this.lens || !file) return;
+    const member = this.lensMember(path);
+
+    const hidden = !!(
+      file.classified?.hidden ?? this.session?.getFileResult(path)?.hidden
+    );
+
+    if (!this.lensFiles.has(path)) this.lensFiles.set(path, hidden);
+    this.view?.setFileCollapsed(path, !member);
+    const session = this.session;
+    const diff = session?.getTextDiff(path);
+
+    if (!member?.ranges?.length || !session || !diff) return;
+    const foldable = new Set(foldIds(diff));
+    // A fold state is shared by both sides: it opens if either side's region holds a range.
+    const open = new Map<number, boolean>();
+
+    for (const [name, source] of [
+      ["base", diff.lhs],
+      ["head", diff.rhs],
+    ] as const) {
+      const ranges = member.ranges.filter((range) => range.side === name);
+
+      const visit = (region: StructuralRegion) => {
+        const { start, end } = regionLines(region);
+
+        // Ranges count from 1 and include their last line; regions count from 0 and exclude it.
+        const holds = ranges.some(
+          (range) =>
+            range.from - 1 < Math.max(end, start + 1) && range.to > start,
+        );
+
+        // Folds outside the ranges close; anything inside opens, a context gap included. Lines
+        // between folds, and folds too short to save a row, stay as they are.
+        if (
+          foldable.has(region.fold_state_id) &&
+          (holds || (region.kind === "fold" && end - start >= MIN_LENS_FOLD))
+        )
+          open.set(
+            region.fold_state_id,
+            (open.get(region.fold_state_id) ?? false) || holds,
+          );
+
+        if (holds && region.kind === "fold") region.children.forEach(visit);
+      };
+
+      if (source?.root.kind === "fold") source.root.children.forEach(visit);
+    }
+
+    for (const [id, opened] of open) {
+      const key = `${path}\0${id}`;
+
+      if (!this.lensFolds.has(key))
+        this.lensFolds.set(key, session.isRegionCollapsed(path, id) ?? false);
+      session.setRegionCollapsed(path, id, !opened);
+    }
+  }
+
+  /** Each diffed file's text, by side, for searching. */
+  texts(): { path: string; original?: string; modified?: string }[] {
+    return this.order.flatMap((path) => {
+      const diff = this.session?.getTextDiff(path);
+
+      return diff
+        ? [{ path, original: diff.lhs?.text, modified: diff.rhs?.text }]
+        : [];
+    });
+  }
+
+  /** Whether a 0-based base line of a diffed file was removed or changed. */
+  removedLines(path: string): (line: number) => boolean {
+    const ranges =
+      this.session?.getTextDiff(path)?.structural_changes.base ?? [];
+
+    return (line) => ranges.some(([start, end]) => line >= start && line < end);
+  }
+
+  /** Open every fold over one side's `line` (1-based), then scroll to it. */
+  revealLine(path: string, side: "original" | "modified", line: number): void {
+    const session = this.session;
+
+    const source =
+      session?.getTextDiff(path)?.[side === "original" ? "lhs" : "rhs"];
+
+    if (!session || !source) return;
+
+    const open = (region: StructuralRegion) => {
+      const { start, end } = regionLines(region);
+
+      if (line - 1 < start || line - 1 >= Math.max(end, start + 1)) return;
+
+      if (session.isRegionCollapsed(path, region.fold_state_id))
+        session.setRegionCollapsed(path, region.fold_state_id, false);
+
+      if (region.kind === "fold") region.children.forEach(open);
+    };
+
+    open(source.root);
+    this.view?.revealLine(path, side, line);
+  }
+
+  /** The editor showing one side of a file, while it is on screen. */
+  codeEditor(path: string, side: "original" | "modified") {
+    return this.view?.codeEditor(path, side);
+  }
+
   goToChange(direction: "next" | "previous"): void {
     this.view?.goToChange(direction);
   }
@@ -180,6 +451,15 @@ export class Comparison extends Disposable {
   }
 
   /** Folds or unfolds everything diffr can fold, in every file. */
+  filesCollapsed = false;
+
+  toggleAllFiles(): void {
+    this.filesCollapsed = !this.filesCollapsed;
+
+    for (const path of this.order)
+      this.view?.setFileCollapsed(path, this.filesCollapsed);
+  }
+
   foldAll(collapsed: boolean): void {
     this.setFolds(foldIds, collapsed);
   }
@@ -366,6 +646,25 @@ export class Comparison extends Disposable {
     this.pump();
   }
 
+  /** Names a file's result in the cache (cache.ts): the commits, the file, and the engine's build and configuration. */
+  private async cacheKey(
+    file: File,
+    kind: "diff" | "summary",
+  ): Promise<string> {
+    const { changed } = file;
+
+    return cacheKey([
+      await this.engine.fingerprint,
+      targetPath(this.target),
+      this.change!.base,
+      this.change!.head,
+      changed.status,
+      changed.previousPath,
+      changed.path,
+      kind,
+    ]);
+  }
+
   /** What diffr is told about a file: its sides, with their text once fetched. */
   private request(
     file: File,
@@ -451,31 +750,54 @@ export class Comparison extends Disposable {
     this.changed.fire();
 
     try {
-      const [lhs, rhs] = await Promise.all([
-        changed.status === "added"
-          ? undefined
-          : fileText(
-              this.target,
-              change.base,
-              changed.previousPath ?? changed.path,
-            ),
-        changed.status === "deleted"
-          ? undefined
-          : fileText(this.target, change.head, changed.path),
-      ]);
+      const key = await this.cacheKey(file, "diff");
+      const hit = await cached<Omit<Diffed, "ms">>(key);
+
+      if (this._store.isDisposed) return;
+
+      const text =
+        hit?.event.diff?.type === "text"
+          ? { lhs: hit.event.diff.lhs?.text, rhs: hit.event.diff.rhs?.text }
+          : undefined;
+
+      const [lhs, rhs] = hit
+        ? [text?.lhs, text?.rhs]
+        : await Promise.all([
+            changed.status === "added"
+              ? undefined
+              : fileText(
+                  this.target,
+                  change.base,
+                  changed.previousPath ?? changed.path,
+                ),
+            changed.status === "deleted"
+              ? undefined
+              : fileText(this.target, change.head, changed.path),
+          ]);
 
       if (this._store.isDisposed) return;
       this.work.fetching--;
       this.work.diffing++;
       file.state = "diffing";
       this.changed.fire();
-      const diffed = await this.engine.diff(this.request(file, { lhs, rhs }));
+
+      const diffed = hit
+        ? { ...hit, ms: 0 }
+        : await this.engine.diff(this.request(file, { lhs, rhs }));
 
       if (this._store.isDisposed) return;
       this.work.diffing--;
       this.work.diffMs += diffed.ms;
 
-      if (!this.work.slowest || diffed.ms > this.work.slowest.ms)
+      if (hit) this.work.cached++;
+      else if (diffed.event.diff)
+        void cache(key, {
+          classified: diffed.classified,
+          event: diffed.event,
+          pluginErrors: diffed.pluginErrors,
+        } satisfies Omit<Diffed, "ms">);
+
+      if (!hit && (!this.work.slowest || diffed.ms > this.work.slowest.ms))
         this.work.slowest = { path: changed.path, ms: diffed.ms };
       const event = diffed.event;
 
@@ -492,6 +814,33 @@ export class Comparison extends Disposable {
           diff: event.diff,
           hidden: diffed.classified.hidden,
         });
+
+        if (
+          !diffed.classified.hidden &&
+          event.diff.type === "text" &&
+          this.engine.summarizes
+        )
+          void this.summarize(file, { lhs, rhs });
+
+        // diffr folds a hidden file's whole text behind its reason; the header already folds the
+        // file, so showing it shows the text instead of a second fold to open.
+        if (diffed.classified.hidden && event.diff.type === "text")
+          for (const side of [event.diff.lhs, event.diff.rhs])
+            if (side?.root.visibility?.collapsed)
+              session.setRegionCollapsed(
+                changed.path,
+                side.root.fold_state_id,
+                false,
+              );
+
+        if (diffed.pluginErrors.length)
+          this.work.pluginErrors.push(
+            ...diffed.pluginErrors.map((message) => ({
+              path: changed.path,
+              message,
+            })),
+          );
+        this.applyLens(changed.path);
       } else {
         this.work.failed++;
         session.setFileResult(changed.path, { error: event.error.message });
@@ -515,6 +864,46 @@ export class Comparison extends Disposable {
       this.timing.done = performance.now();
     this.changed.fire();
     this.pump();
+  }
+
+  /**
+   * Shown first without them, a file's summaries arrive from a second pass that waits on the
+   * model, and relabel its folds in place.
+   */
+  private async summarize(
+    file: File,
+    text: { lhs?: string; rhs?: string },
+  ): Promise<void> {
+    const path = file.changed.path;
+    this.work.summarizing++;
+    this.changed.fire();
+
+    try {
+      const key = await this.cacheKey(file, "summary");
+      const hit = await cached<FileEvent>(key);
+
+      const event =
+        hit ?? (await this.engine.diff(this.request(file, text), true)).event;
+
+      if (this._store.isDisposed) return;
+
+      if (event.diff?.type === "text") {
+        this.session?.updateFileDiff(path, event.diff);
+        this.work.summarized++;
+
+        if (!hit) void cache(key, event);
+      } else if (event.error)
+        this.work.summaryErrors.push({ path, message: event.error.message });
+    } catch (error) {
+      if (this._store.isDisposed) return;
+      this.work.summaryErrors.push({
+        path,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+
+    this.work.summarizing--;
+    this.changed.fire();
   }
 
   /** Review Desktop's observeSession: each result goes to the view once. */

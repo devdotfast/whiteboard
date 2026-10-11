@@ -3,19 +3,34 @@
  * `/owner/repo/compare/base...head`. Everything runs here; GitHub is the only server it talks to.
  */
 import "vs/base/browser/ui/codicons/codiconStyles.js";
-import { observableValue } from "vs/base/common/observable.js";
+import { derived, observableValue } from "vs/base/common/observable.js";
 
 import "./fonts.css";
 import "./styles.css";
 import "./editorFont.js";
+import { loadCacheUsage, onCacheChange } from "./cache.js";
+import { cacheSection } from "./cacheSection.js";
 import { Comparison } from "./comparison.js";
+import { mobileWordWrap, showLineNumbers } from "./display.js";
 import { Engine, onEngineChange } from "./engine/engine.js";
-import { parseTarget, setToken, targetPath, token } from "./github.js";
+import { FindBar } from "./find.js";
+import { parseTarget, targetPath } from "./github.js";
+import { renderLensBar } from "./lenses.js";
+import { MobileFiles } from "./mobileFiles.js";
+import { mobileViewport } from "./nativeDiffScroll.js";
 import { Panels } from "./panels.js";
+import { agentPluginsSection } from "./pluginsSection.js";
+import { quickOpen } from "./quickOpen.js";
 import { ReviewDiffLayoutSetting } from "./review/services/reviewDiffLayout.js";
-import { readSetting, writeSetting } from "./settings.js";
+import { configOverrides, readSetting } from "./settings.js";
+import {
+  type SettingsHost,
+  openOnboarding,
+  openSettings,
+} from "./settingsDialog.js";
 import { StandaloneServices } from "./standalone/browser/standaloneServices.js";
 import { applyTheme } from "./theme.js";
+import { actionButton, element } from "./ui.js";
 
 const instantiation = StandaloneServices.initialize({});
 
@@ -23,14 +38,22 @@ const layout = new ReviewDiffLayoutSetting();
 
 const wordWrap = observableValue("wordWrap", false);
 
+const narrow = observableValue("narrow", mobileViewport.matches);
+
+const effectiveWordWrap = derived((reader) =>
+  narrow.read(reader) ? mobileWordWrap.read(reader) : wordWrap.read(reader),
+);
+
 const root = document.getElementById("app")!;
 
 // Review Desktop's stylesheet is scoped to its workbench; the theme's variables to Monaco components.
 root.className = "app monaco-workbench review-workbench monaco-component";
 
-applyTheme(root);
+const setTheme = applyTheme(root);
 
 const header = root.appendChild(element("header", "app-header"));
+
+let headerUpdatePending = false;
 
 const status = root.appendChild(element("div", "app-status"));
 
@@ -42,6 +65,26 @@ const statusMessage = status.appendChild(element("span", "app-status-message"));
 
 const retry = status.appendChild(actionButton("Retry", route));
 
+const openSettingsButton = status.appendChild(
+  actionButton("Settings", () => openSettings(settings)),
+);
+
+const dismiss = status.appendChild(
+  actionButton("Dismiss", () => {
+    summaryNoticeDismissed = true;
+    renderHeader();
+  }),
+);
+
+const lensBar = root.appendChild(element("nav", "app-lens-bar"));
+
+lensBar.hidden = true;
+
+lensBar.setAttribute("aria-label", "Lenses");
+
+/** The reader closed this comparison's notice that summaries failed. */
+let summaryNoticeDismissed = false;
+
 const body = root.appendChild(element("main", "app-body"));
 
 const overflow = root.appendChild(element("div", "monaco-editor app-overflow"));
@@ -50,53 +93,83 @@ let engine: Engine | undefined;
 
 let comparison: Comparison | undefined;
 
+const mobileFiles = new MobileFiles(() => comparison);
+
+root.appendChild(mobileFiles.element);
+
 const panels = new Panels(() => comparison);
 
 root.appendChild(panels.element);
 
+const find = new FindBar(() => comparison);
+
+body.appendChild(find.element);
+
 onEngineChange(() => panels.update());
 
-function element<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className?: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
+onCacheChange(() => panels.update());
 
-  if (className) node.className = className;
-
-  if (text !== undefined) node.textContent = text;
-
-  return node;
-}
+loadCacheUsage();
 
 function iconButton(
   icon: string,
   tooltip: string,
-  onClick: () => void,
+  onClick?: () => void,
 ): HTMLButtonElement {
   const button = element("button", `app-icon-button codicon codicon-${icon}`);
   button.title = tooltip;
   button.setAttribute("aria-label", tooltip);
-  button.addEventListener("click", onClick);
+
+  if (onClick) button.addEventListener("click", onClick);
 
   return button;
 }
 
 /** One engine for the page, remade when the configuration changes. */
 function currentEngine(): Engine {
-  return (engine ??= new Engine(readSetting("config")));
+  return (engine ??= new Engine(readSetting("config"), configOverrides()));
 }
+
+const settings: SettingsHost = {
+  root,
+  engine: currentEngine,
+  replaceEngine(next) {
+    engine?.dispose();
+    engine = next;
+    route();
+  },
+  reload: () => route(),
+  sections: (parent) => {
+    cacheSection(parent);
+    agentPluginsSection(parent, (next) => settings.replaceEngine(next));
+  },
+};
+
+// Only where the browser offers its agent the page's tools, which bring their own decoder.
+if (document.modelContext ?? navigator.modelContext)
+  void import("./agent.js").then(({ registerAgentTools }) =>
+    registerAgentTools({
+      comparison: () => comparison,
+      replaceEngine: (next) => settings.replaceEngine(next),
+      changed: () => {
+        renderLensBar(lensBar, comparison);
+        panels.update();
+      },
+    }),
+  );
 
 function route(): void {
   comparison?.dispose();
   comparison = undefined;
-  body.replaceChildren();
+  summaryNoticeDismissed = false;
+  find.hide();
+  body.replaceChildren(find.element);
   const target = parseTarget(location.pathname);
 
   if (!target) {
     document.title = "diffr";
     renderHeader();
+    renderLensBar(lensBar, undefined);
     renderLanding();
     panels.update();
 
@@ -111,7 +184,7 @@ function route(): void {
     target,
     currentEngine(),
     layout,
-    wordWrap,
+    effectiveWordWrap,
     instantiation,
   ));
 
@@ -119,7 +192,9 @@ function route(): void {
     if (comparison !== current) return;
     document.title = current.title ? `${current.title} · diffr` : "diffr";
     renderHeader();
+    renderLensBar(lensBar, current);
     panels.update();
+    find.refresh();
   };
 
   current.onDidChange(update);
@@ -127,6 +202,17 @@ function route(): void {
 }
 
 function renderHeader(): void {
+  mobileFiles.update();
+
+  // Streaming file results must not tear down the menu the reader is using.
+  if (header.querySelector(":popover-open")) {
+    headerUpdatePending = true;
+
+    return;
+  }
+
+  headerUpdatePending = false;
+
   const focusedButton = Array.from(header.querySelectorAll("button")).findIndex(
     (button) => button === document.activeElement,
   );
@@ -137,11 +223,20 @@ function renderHeader(): void {
   const loading =
     comparison && !comparison.preview && !comparison.change && !error;
 
-  status.hidden = !error && !loading;
-  status.classList.toggle("is-error", !!error);
-  status.setAttribute("role", error ? "alert" : "status");
-  statusMessage.textContent = error ?? (loading ? "Loading comparison…" : "");
+  const summaryErrors = comparison?.work.summaryErrors ?? [];
+
+  const summaryNotice =
+    !error && !loading && !summaryNoticeDismissed && summaryErrors.length
+      ? `Summaries failed for ${summaryErrors.length} file${summaryErrors.length === 1 ? "" : "s"}: ${summaryErrors[0]!.message}`
+      : undefined;
+
+  status.hidden = !error && !loading && !summaryNotice;
+  status.classList.toggle("is-error", !!error || !!summaryNotice);
+  status.setAttribute("role", error || summaryNotice ? "alert" : "status");
+  statusMessage.textContent =
+    error ?? summaryNotice ?? (loading ? "Loading comparison…" : "");
   retry.hidden = !error;
+  openSettingsButton.hidden = dismiss.hidden = !summaryNotice;
   const home = header.appendChild(element("a", "app-wordmark", "diffr"));
   home.href = "/";
   home.title = "Open another pull request";
@@ -151,6 +246,20 @@ function renderHeader(): void {
   });
 
   if (comparison) {
+    if (mobileViewport.matches) {
+      const files = iconButton("list-tree", "Open file tree", () =>
+        mobileFiles.toggle(),
+      );
+
+      files.classList.add("app-header-files");
+      files.setAttribute("aria-haspopup", "dialog");
+      files.setAttribute(
+        "aria-expanded",
+        String(!!document.querySelector(".app-mobile-files[open]")),
+      );
+      header.appendChild(files);
+    }
+
     const title = header.appendChild(
       element(
         "a",
@@ -169,7 +278,7 @@ function renderHeader(): void {
 
   header.appendChild(element("span", "app-spacer"));
 
-  if (comparison) {
+  if (comparison && !mobileViewport.matches) {
     for (const [panel, icon, label] of [
       ["stats", "graph", "Diff stats (F2)"],
       ["engine", "dashboard", "Engine stats (F3)"],
@@ -204,21 +313,110 @@ function renderHeader(): void {
     );
   }
 
-  header.appendChild(
-    iconButton("settings-gear", "diffr configuration", openConfig),
-  );
-  header.appendChild(
-    iconButton(
-      token() ? "unlock" : "key",
-      token() ? "GitHub token set" : "Add a GitHub token",
-      openToken,
-    ),
-  );
+  if (comparison && mobileViewport.matches) {
+    const quick = element("div", "app-header-quick");
+
+    const fold = iconButton(
+      comparison.filesCollapsed ? "expand-all" : "collapse-all",
+      comparison.filesCollapsed ? "Expand all files" : "Collapse all files",
+      () => {
+        comparison?.toggleAllFiles();
+        renderHeader();
+      },
+    );
+
+    fold.setAttribute("aria-pressed", String(comparison.filesCollapsed));
+    const theme = quickMenu("color-mode", "Theme settings");
+
+    for (const mode of ["auto", "light", "dark"] as const) {
+      const button = actionButton(mode[0].toUpperCase() + mode.slice(1), () => {
+        setTheme(mode);
+
+        for (const child of theme.panel.querySelectorAll("button"))
+          child.setAttribute("aria-pressed", String(child === button));
+      });
+
+      button.setAttribute(
+        "aria-pressed",
+        String((readSetting("theme") ?? "auto") === mode),
+      );
+      theme.panel.append(button);
+    }
+
+    const display = quickMenu("settings-gear", "Display settings");
+
+    for (const [label, value] of [
+      ["Word wrap", mobileWordWrap],
+      ["Line numbers", showLineNumbers],
+    ] as const) {
+      const row = element("label", "app-quick-setting");
+      const input = element("input");
+      input.type = "checkbox";
+      input.checked = value.get();
+      input.addEventListener("change", () =>
+        value.set(input.checked, undefined),
+      );
+      row.append(element("span", undefined, label), input);
+      display.panel.append(row);
+    }
+
+    display.panel.append(
+      actionButton("All settings…", () => {
+        display.panel.hidePopover();
+        openSettings(settings);
+      }),
+    );
+    quick.append(
+      fold,
+      theme.button,
+      theme.panel,
+      display.button,
+      display.panel,
+    );
+    header.append(quick);
+  } else {
+    header.appendChild(
+      iconButton(
+        "settings-gear",
+        "Settings: GitHub token, summaries, diffr",
+        () => openSettings(settings),
+      ),
+    );
+  }
 
   if (focusedButton >= 0) {
     const button = header.querySelectorAll("button").item(focusedButton);
     button?.focus({ preventScroll: true });
   }
+}
+
+function quickMenu(icon: string, label: string) {
+  const panel = element("div", "app-header-popover");
+  panel.popover = "auto";
+  panel.setAttribute("aria-label", label);
+  const button = iconButton(icon, label);
+  button.popoverTargetElement = panel;
+  button.setAttribute("aria-expanded", "false");
+  button.setAttribute("aria-haspopup", "dialog");
+  panel.setAttribute("role", "dialog");
+  panel.addEventListener("toggle", () => {
+    const open = panel.matches(":popover-open");
+    button.setAttribute("aria-expanded", String(open));
+
+    if (!open)
+      void Promise.allSettled(
+        panel.getAnimations().map((animation) => animation.finished),
+      ).then(() => {
+        if (
+          headerUpdatePending &&
+          panel.isConnected &&
+          !panel.matches(":popover-open")
+        )
+          renderHeader();
+      });
+  });
+
+  return { button, panel };
 }
 
 function togglePanel(panel: "stats" | "engine"): void {
@@ -258,119 +456,12 @@ function navigate(path: string): void {
   route();
 }
 
-function dialog(
-  title: string,
-  build: (dialog: HTMLDialogElement, actions: HTMLElement) => void,
-): void {
-  const node = root.appendChild(element("dialog", "app-dialog"));
-  node.appendChild(element("h2", undefined, title));
-  const actions = element("div", "app-dialog-actions");
-  build(node, actions);
-  node.appendChild(actions);
-  node.addEventListener("close", () => node.remove());
-  node.showModal();
-}
-
-function actionButton(
-  label: string,
-  onClick: () => void,
-  primary = false,
-): HTMLButtonElement {
-  const button = element(
-    "button",
-    primary ? "app-button primary" : "app-button",
-    label,
-  );
-
-  button.type = "button";
-  button.addEventListener("click", onClick);
-
-  return button;
-}
-
-function openToken(): void {
-  dialog("GitHub token", (node, actions) => {
-    node.appendChild(
-      element(
-        "p",
-        undefined,
-        "For private repositories, and GitHub's higher rate limit. It stays in this browser and is sent only to GitHub.",
-      ),
-    );
-    const input = node.appendChild(element("input"));
-    input.type = "password";
-    input.placeholder = "github_pat_…";
-    input.value = token() ?? "";
-    input.setAttribute("aria-label", "GitHub token");
-
-    const save = (value: string | null) => {
-      setToken(value);
-      node.close();
-      route();
-    };
-
-    if (token()) actions.appendChild(actionButton("Remove", () => save(null)));
-    actions.appendChild(actionButton("Cancel", () => node.close()));
-    actions.appendChild(
-      actionButton("Save", () => save(input.value.trim() || null), true),
-    );
-  });
-}
-
-function openConfig(): void {
-  dialog("diffr configuration", (node, actions) => {
-    node.appendChild(
-      element(
-        "p",
-        undefined,
-        "diffr's config.toml: file tags, hidden files and plugins. It stays in this browser.",
-      ),
-    );
-    const input = node.appendChild(element("textarea"));
-    input.spellcheck = false;
-    input.value = readSetting("config") ?? "";
-    input.placeholder = "# diffr's defaults";
-    input.setAttribute("aria-label", "config.toml");
-    const status = node.appendChild(element("p", "app-dialog-status"));
-
-    const show = (candidate: Engine) => {
-      candidate.notices.then(
-        (notices) => (status.textContent = notices.join("\n")),
-        (error: Error) => (status.textContent = error.message),
-      );
-    };
-
-    show(currentEngine());
-    actions.appendChild(actionButton("Cancel", () => node.close()));
-    actions.appendChild(
-      actionButton(
-        "Save",
-        () => {
-          const config = input.value.trim() ? input.value : undefined;
-          // Tried in its own engine first, so a broken file leaves the page as it was.
-          const candidate = new Engine(config);
-          status.textContent = "Checking…";
-          candidate.notices.then(
-            () => {
-              writeSetting("config", config);
-              engine?.dispose();
-              engine = candidate;
-              node.close();
-              route();
-            },
-            (error: Error) => {
-              candidate.dispose();
-              status.textContent = error.message;
-            },
-          );
-        },
-        true,
-      ),
-    );
-  });
-}
-
 window.addEventListener("popstate", route);
+
+mobileViewport.addEventListener("change", () => {
+  narrow.set(mobileViewport.matches, undefined);
+  renderHeader();
+});
 
 /** A `z` waiting for its fold command. */
 let chord = false;
@@ -389,8 +480,20 @@ function command(event: KeyboardEvent): (() => void) | undefined {
   if (!comparison) return undefined;
   const current = comparison;
 
-  if ((event.metaKey || event.ctrlKey) && !event.altKey && key === "b")
-    return () => current.toggleFileTree();
+  if ((event.metaKey || event.ctrlKey) && !event.altKey) {
+    if (key === "b")
+      return () =>
+        mobileViewport.matches
+          ? mobileFiles.toggle()
+          : current.toggleFileTree();
+
+    // The browser's own find sees only the lines on screen; print has nothing to print.
+    if (key === "f") return () => find.show();
+
+    if (key === "p")
+      return () =>
+        quickOpen(body, current.fileList, (path) => current.openFile(path));
+  }
 
   // Plain keys only, and never while typing. The editors are read only, so their input area types
   // nothing.
@@ -476,3 +579,5 @@ window.addEventListener(
 );
 
 route();
+
+if (!readSetting("onboarded")) openOnboarding(settings);

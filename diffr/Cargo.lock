@@ -1008,6 +1008,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "diffr-plugin-summarize"
+version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "diffr-plugin-sdk",
+ "http",
+ "http-body-util",
+ "serde",
+ "serde_json",
+ "wasip3",
+]
+
+[[package]]
 name = "diffr-plugin-test-bodies"
 version = "0.1.1"
 dependencies = [
@@ -1028,9 +1042,11 @@ dependencies = [
  "diffr-plugin-deleted-bodies",
  "diffr-plugin-removed-runs",
  "diffr-plugin-sdk",
+ "diffr-plugin-summarize",
  "diffr-plugin-test-bodies",
  "serde",
  "serde_json",
+ "toml 0.8.23",
  "wasm-bindgen",
 ]
 
@@ -4900,6 +4916,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasip3"
+version = "0.9.0+wasi-0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1d5749fdf69bb9400562eba50f8f25f5cd800ef4b74300038b6f99ae7409674"
+dependencies = [
+ "bytes",
+ "http",
+ "http-body",
+ "thiserror 2.0.20",
+ "wit-bindgen 0.62.0",
+]
+
+[[package]]
 name = "wasm-bindgen"
 version = "0.2.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5566,6 +5595,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53cb4b5556c3a791e86838ea287782bdafa704d55b0e68b5b81a3a16b9ea5f4b"
 dependencies = [
  "bitflags 2.13.2",
+ "futures",
  "wit-bindgen-rust-macro",
 ]
 

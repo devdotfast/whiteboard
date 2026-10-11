@@ -30,6 +30,10 @@ import {
 
 import { nestedIds } from "../../folds.js";
 import {
+  horizontalTouchScroll,
+  mobileViewport,
+} from "../../nativeDiffScroll.js";
+import {
   bandDetail,
   structuralFoldables,
   type StructuralFoldable,
@@ -89,6 +93,20 @@ export class StructuralFoldControls extends Disposable {
     StructuralFoldable[]
   >();
   private readonly rails = new ScopeRails(this.editor);
+  private readonly touchFolds = new TouchFoldButtons(
+    this.editor,
+    (foldable) => {
+      this.toggle(
+        {
+          foldable,
+          collapsed: this.isFolded(foldable) || this.isSummaryFolded(foldable),
+          rail: false,
+          control: true,
+        },
+        false,
+      );
+    },
+  );
   private hovered: FoldTarget | undefined;
   private overChevronColumn = false;
   private pressed: FoldTarget | undefined;
@@ -106,6 +124,8 @@ export class StructuralFoldControls extends Disposable {
   ) {
     super();
     controls.set(editor, this);
+    this.installPinchFolding();
+    this._register(horizontalTouchScroll(this.editor));
     this._register({ dispose: () => controls.delete(editor) });
     this._register({
       dispose: () => {
@@ -120,7 +140,8 @@ export class StructuralFoldControls extends Disposable {
           this.sharedHover.state.set(undefined, undefined);
         }
         this.decorations.clear();
-        this.rails.hide();
+        this.rails.dispose();
+        this.touchFolds.dispose();
       },
     });
     this._register(
@@ -161,7 +182,7 @@ export class StructuralFoldControls extends Disposable {
     );
     // Folding changes which lines show, and so the rail's length.
     this._register(editor.onDidContentSizeChange(() => this.render()));
-    this._register(editor.onDidScrollChange(() => this.render()));
+    this._register(editor.onDidScrollChange(() => this.render(false)));
     this._register(editor.onDidLayoutChange(() => this.render()));
     this._register(editor.onDidChangeViewZones(() => this.render()));
     this._register(editor.onDidChangeConfiguration(() => this.render()));
@@ -263,6 +284,97 @@ export class StructuralFoldControls extends Disposable {
     );
   }
 
+  private installPinchFolding(): void {
+    const node = this.editor.getContainerDomNode();
+    let pinch:
+      | { distance: number; line: number; y: number; done: boolean }
+      | undefined;
+    const distance = (touches: TouchList) =>
+      Math.hypot(
+        touches[0].clientX - touches[1].clientX,
+        touches[0].clientY - touches[1].clientY,
+      );
+    const start = (event: TouchEvent) => {
+      if (!mobileViewport.matches || event.touches.length !== 2) {
+        pinch = undefined;
+        return;
+      }
+      event.preventDefault();
+      const x = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+      const y = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+      const position = this.editor.getTargetAtClientPoint(x, y)?.position;
+      pinch = {
+        distance: distance(event.touches),
+        line: position ? position.lineNumber - 1 : -1,
+        y,
+        done: false,
+      };
+    };
+    const move = (event: TouchEvent) => {
+      if (!pinch || event.touches.length !== 2) return;
+      event.preventDefault();
+      if (pinch.done) return;
+      const delta = distance(event.touches) - pinch.distance;
+      if (Math.abs(delta) < Math.max(24, pinch.distance * 0.18)) return;
+      pinch.done = true;
+      const path = this.path();
+      const diff = path ? this.session.getTextDiff(path) : undefined;
+      if (!path || !diff) return;
+      const collapse = delta < 0;
+      const line = pinch.line;
+      const localY = pinch.y - node.getBoundingClientRect().top;
+      const candidates = this.foldablesOf(diff).filter(
+        (f) => f.chevron && this.isCollapsed(path, f) !== collapse,
+      );
+      const containing = candidates.filter(
+        (f) =>
+          f.line === line ||
+          (collapse && f.rail && f.rail.start <= line && line <= f.rail.end),
+      );
+      const foldable =
+        containing.sort(
+          (a, b) =>
+            (a.rail ? a.rail.end - a.rail.start : 0) -
+            (b.rail ? b.rail.end - b.rail.start : 0),
+        )[0] ??
+        candidates
+          .map((f) => ({
+            f,
+            distance: Math.abs(
+              this.editor.getTopForLineNumber(f.line + 1) -
+                this.editor.getScrollTop() +
+                this.editor.getOption(EditorOption.lineHeight) / 2 -
+                localY,
+            ),
+          }))
+          .filter((f) => f.distance <= 44)
+          .sort((a, b) => a.distance - b.distance)[0]?.f;
+      if (foldable) this.setCollapsed(path, diff, foldable, collapse, false);
+    };
+    const end = () => {
+      pinch = undefined;
+    };
+    const gesture = (event: Event) => {
+      if (mobileViewport.matches) event.preventDefault();
+    };
+    node.addEventListener("touchstart", start, { passive: false });
+    node.addEventListener("touchmove", move, { passive: false });
+    node.addEventListener("touchend", end);
+    node.addEventListener("touchcancel", end);
+    node.addEventListener("gesturestart", gesture);
+    node.addEventListener("gesturechange", gesture);
+    this._register({
+      dispose: () => {
+        node.removeEventListener("touchstart", start);
+        node.removeEventListener("touchmove", move);
+        node.removeEventListener("touchend", end);
+        node.removeEventListener("touchcancel", end);
+        node.removeEventListener("gesturestart", gesture);
+        node.removeEventListener("gesturechange", gesture);
+      },
+    });
+  }
+
   /** Recursively, every fold inside takes the same state. */
   private setCollapsed(
     path: string,
@@ -315,7 +427,7 @@ export class StructuralFoldControls extends Disposable {
     }
   }
 
-  private render(): void {
+  private render(updateDecorations = true): void {
     const model = this.editor.getModel();
     const path = this.path();
     const diff = path ? this.session.getTextDiff(path) : undefined;
@@ -326,50 +438,54 @@ export class StructuralFoldControls extends Disposable {
     if (!model || !path || !diff) {
       this.decorations.clear();
       this.rails.hide();
+      this.touchFolds.hide();
       for (const control of this.viewedControls.values()) control.hide();
       return;
     }
     const decorations: IModelDeltaDecoration[] = [];
-    for (const range of this.viewed?.getViewedRanges(path) ?? []) {
-      if (range.side !== (this.side === "rhs" ? "head" : "base")) continue;
-      decorations.push({
-        range: new Range(
-          range.fromLine,
-          1,
-          range.toLine,
-          model.getLineMaxColumn(range.toLine),
-        ),
-        options: {
-          description: "review-scope-viewed",
-          isWholeLine: true,
-          inlineClassName: "review-scope-viewed-ink",
-          className: "review-scope-viewed-tint",
-          zIndex: 5,
-        },
-      });
-    }
-    for (const foldable of this.foldablesOf(diff)) {
-      // A function and its doc comment can share one fold state. Every
-      // member participates in hover, rather than only the first match.
-      const active = target?.foldable.foldStateId === foldable.foldStateId;
-      if (this.isFolded(foldable)) {
-        decorations.push(...this.folded(model, foldable, active));
-      } else if (active) {
-        decorations.push(
-          ...this.lit(model, {
-            ...target!,
-            foldable,
-            collapsed: this.isSummaryFolded(foldable),
-          }),
-        );
-      } else if (
-        shared?.column &&
-        foldable.chevron &&
-        (!this.isCollapsed(path, foldable) || this.isSummaryFolded(foldable))
-      ) {
-        decorations.push(
-          this.chevron(foldable, this.isSummaryFolded(foldable), false),
-        );
+    // Scrolling only moves controls; replacing model decorations also invalidates text layout.
+    if (updateDecorations) {
+      for (const range of this.viewed?.getViewedRanges(path) ?? []) {
+        if (range.side !== (this.side === "rhs" ? "head" : "base")) continue;
+        decorations.push({
+          range: new Range(
+            range.fromLine,
+            1,
+            range.toLine,
+            model.getLineMaxColumn(range.toLine),
+          ),
+          options: {
+            description: "review-scope-viewed",
+            isWholeLine: true,
+            inlineClassName: "review-scope-viewed-ink",
+            className: "review-scope-viewed-tint",
+            zIndex: 5,
+          },
+        });
+      }
+      for (const foldable of this.foldablesOf(diff)) {
+        // A function and its doc comment can share one fold state. Every
+        // member participates in hover, rather than only the first match.
+        const active = target?.foldable.foldStateId === foldable.foldStateId;
+        if (this.isFolded(foldable)) {
+          decorations.push(...this.folded(model, foldable, active));
+        } else if (active) {
+          decorations.push(
+            ...this.lit(model, {
+              ...target!,
+              foldable,
+              collapsed: this.isSummaryFolded(foldable),
+            }),
+          );
+        } else if (
+          shared?.column &&
+          foldable.chevron &&
+          (!this.isCollapsed(path, foldable) || this.isSummaryFolded(foldable))
+        ) {
+          decorations.push(
+            this.chevron(foldable, this.isSummaryFolded(foldable), false),
+          );
+        }
       }
     }
     const hidden = this.regions
@@ -379,14 +495,30 @@ export class StructuralFoldControls extends Disposable {
           ? region.getHiddenModifiedRange(undefined)
           : region.getHiddenOriginalRange(undefined),
       );
+    const visible = this.editor.getVisibleRanges();
+    const first = visible[0]?.startLineNumber ?? 1;
+    const last = visible.at(-1)?.endLineNumber ?? 0;
+    const headerVisible = (scope: StructuralFoldable) =>
+      scope.line + 1 >= first && scope.line + 1 <= last;
+    const intersectsViewport = (scope: StructuralFoldable) =>
+      scope.line + 1 <= last && !!scope.rail && scope.rail.end + 1 >= first;
+    this.touchFolds.show(
+      this.foldablesOf(diff).filter(
+        (foldable) =>
+          foldable.chevron &&
+          headerVisible(foldable) &&
+          !hidden.some((range) => range.contains(foldable.line + 1)),
+      ),
+      (foldable) => this.isFolded(foldable) || this.isSummaryFolded(foldable),
+    );
     const visibleScopes = this.foldablesOf(diff).filter(
       (foldable) =>
-        foldable.rail &&
+        intersectsViewport(foldable) &&
         !this.isFolded(foldable) &&
         !hidden.some((range) => range.contains(foldable.line + 1)),
     );
     this.rails.show(model, visibleScopes, target);
-    this.decorations.set(decorations);
+    if (updateDecorations) this.decorations.set(decorations);
     // Completed scopes remain discoverable after the pointer leaves. Only
     // visible headers get widgets, so folded descendants never float over code.
     const wanted = new Map<
@@ -395,11 +527,15 @@ export class StructuralFoldControls extends Disposable {
     >();
     const completed = this.foldablesOf(diff).filter(
       (scope) =>
-        scope.rail &&
+        intersectsViewport(scope) &&
         this.viewed?.get(path, scope.foldStateId).state === "viewed",
     );
     for (const scope of this.foldablesOf(diff)) {
-      if (!scope.rail || hidden.some((range) => range.contains(scope.line + 1)))
+      if (
+        !scope.rail ||
+        !headerVisible(scope) ||
+        hidden.some((range) => range.contains(scope.line + 1))
+      )
         continue;
       const active = scope.foldStateId === target?.foldable.foldStateId;
       const progress = this.viewed?.get(path, scope.foldStateId);
@@ -527,7 +663,7 @@ export class StructuralFoldControls extends Disposable {
         },
       });
     }
-    if (targeted && foldable.rail) {
+    if (targeted && foldable.rail && !mobileViewport.matches) {
       const lines = foldable.rail.end - foldable.rail.start;
       const end = model.getLineMaxColumn(line);
       result.push({
@@ -803,6 +939,7 @@ class ScopeRails implements IOverlayWidget {
     const scrollTop = this.editor.getScrollTop();
     const scrollLeft = this.editor.getScrollLeft();
     const spaceWidth = this.editor.getOption(EditorOption.fontInfo).spaceWidth;
+    this.node.style.display = "";
     this.node.style.width = `${layout.contentWidth}px`;
     this.node.style.height = `${layout.height}px`;
     const segments: HTMLElement[] = [];
@@ -862,6 +999,11 @@ class ScopeRails implements IOverlayWidget {
   }
 
   hide(): void {
+    // Model attachment can synchronously trigger layout while Monaco iterates
+    // its overlay registry. Keep the entry stable until this control is disposed.
+    this.node.style.display = "none";
+  }
+  dispose(): void {
     if (this.added) {
       this.added = false;
       this.editor.removeOverlayWidget(this);
@@ -880,4 +1022,97 @@ function leadingWidth(model: ITextModel, lineNumber: number): number {
     column,
     model.getOptions().tabSize,
   );
+}
+
+/** Native buttons bypass Monaco's mouse-only press/release cycle on touch screens. */
+class TouchFoldButtons implements IOverlayWidget {
+  private readonly node = document.createElement("div");
+  private readonly buttons = new Map<number, HTMLButtonElement>();
+  private added = false;
+  constructor(
+    private readonly editor: ICodeEditor,
+    private readonly toggle: (foldable: StructuralFoldable) => void,
+  ) {
+    this.node.className = "app-touch-folds";
+    for (const event of ["pointerdown", "mousedown", "mouseup"])
+      this.node.addEventListener(event, (e) => e.stopPropagation());
+  }
+  getId(): string {
+    return "review.touchFolds";
+  }
+  getDomNode(): HTMLElement {
+    return this.node;
+  }
+  getPosition(): IOverlayWidgetPosition {
+    return {
+      // Share the number column's hit area rather than reserving extra code width.
+      preference: {
+        top: 0,
+        left: Math.max(0, this.editor.getLayoutInfo().contentLeft - 44),
+      },
+    };
+  }
+  show(
+    foldables: readonly StructuralFoldable[],
+    collapsed: (foldable: StructuralFoldable) => boolean,
+  ): void {
+    if (!mobileViewport.matches) {
+      this.hide();
+      return;
+    }
+    const layout = this.editor.getLayoutInfo();
+    const width = Math.min(44, layout.contentLeft);
+    const lineHeight = this.editor.getOption(EditorOption.lineHeight);
+    const visible = new Set<number>();
+    for (const foldable of foldables) {
+      const top =
+        this.editor.getTopForLineNumber(foldable.line + 1) -
+        this.editor.getScrollTop();
+      if (top < 0 || top >= layout.height) continue;
+      visible.add(foldable.line);
+      let button = this.buttons.get(foldable.line);
+      if (!button) {
+        button = document.createElement("button");
+        button.type = "button";
+        button.className = "app-touch-fold";
+        this.buttons.set(foldable.line, button);
+        this.node.append(button);
+      }
+      const folded = collapsed(foldable);
+      button.setAttribute(
+        "aria-label",
+        `${folded ? "Expand" : "Fold"} scope at line ${foldable.line + 1}`,
+      );
+      button.setAttribute("aria-expanded", String(!folded));
+      button.style.top = `${top}px`;
+      button.style.width = `${width}px`;
+      button.style.height = `${lineHeight}px`;
+      button.onclick = (event) => {
+        event.stopPropagation();
+        this.toggle(foldable);
+      };
+    }
+    for (const [line, button] of this.buttons)
+      if (!visible.has(line)) {
+        button.remove();
+        this.buttons.delete(line);
+      }
+    this.node.style.height = `${layout.height}px`;
+    this.node.style.width = `${width}px`;
+    this.node.style.display = "";
+    if (this.added) this.editor.layoutOverlayWidget(this);
+    else {
+      this.added = true;
+      this.editor.addOverlayWidget(this);
+    }
+  }
+  hide(): void {
+    this.node.style.display = "none";
+  }
+  dispose(): void {
+    if (this.added) {
+      this.editor.removeOverlayWidget(this);
+      this.added = false;
+    }
+  }
 }

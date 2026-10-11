@@ -50,6 +50,8 @@ import './style.css';
 import { CSSStyle, ObservableElementSizeObserver, RefCounted, applyStyle, applyViewZones, translatePosition } from './utils.js';
 
 export interface IDiffCodeEditorWidgetOptions {
+	/** The containing file list preserves the viewport when fold view zones change. */
+	scrollPositionManagedExternally?: boolean;
 	originalEditor?: ICodeEditorWidgetOptions;
 	modifiedEditor?: ICodeEditorWidgetOptions;
 }
@@ -334,6 +336,7 @@ export class DiffEditorWidget extends DelegatingEditor implements IDiffEditor {
 		let scrollState: StableEditorScrollState | undefined;
 		this._register(applyViewZones(this._editors.modified, modifiedViewZones, isUpdatingModViewZones => {
 			isUpdatingViewZones = isUpdatingModViewZones;
+			if (codeEditorWidgetOptions.scrollPositionManagedExternally) { return; }
 			if (isUpdatingViewZones) {
 				scrollState = StableEditorScrollState.capture(this._editors.modified);
 			} else {

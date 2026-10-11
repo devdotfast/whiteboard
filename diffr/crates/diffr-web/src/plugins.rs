@@ -2,7 +2,8 @@
 //! a browser, so each plugin's own crate is compiled in against the SDK's
 //! `native` contract and walks the engine's [`Cursor`] directly. The walk is
 //! the native host's: every node before and after its children, every plugin
-//! in `plugins.shape.order`.
+//! in `plugins.shape.order`. The summarizer's model calls go through the
+//! page ([`PageHttp`]).
 use anyhow::{anyhow, Context as _};
 use diffr_core::pairing::Pairing;
 use diffr_core::plugin::config::{ComponentSource, Folder, PluginsConfig};
@@ -10,7 +11,7 @@ use diffr_core::plugin::cursor::{self, Cursor};
 use diffr_core::plugin::MutationFailed;
 use diffr_core::protocol::{self, FileChange, FileStatus, Source};
 use diffr_core::tags;
-use diffr_plugin_sdk::native::{CursorHost, GitHost};
+use diffr_plugin_sdk::native::{CursorHost, GitHost, HttpHost};
 use diffr_plugin_sdk::prelude::{GuestClassifier, GuestPlugin};
 use diffr_plugin_sdk::{FileEntry, MoveError, Region, RegionIds, RegionView, Side, Tag, Visit};
 use serde_json::Value;
@@ -44,8 +45,11 @@ fn make<T: GuestPlugin>(options: String) -> Result<Box<dyn Shape>, String> {
 
 type Constructor = fn(String) -> Result<Box<dyn Shape>, String>;
 
+/// The bundled shape plugin that calls a model, which the page runs in a
+/// pass of its own (see [`Pipeline::run`]).
+pub(crate) const SUMMARIZE: &str = "summarize";
+
 /// The bundled shape plugins this build links, by manifest name.
-/// `summarize` calls a model over HTTP and is left to the native diffr.
 const LINKED: &[(&str, Constructor)] = &[
     ("context", make::<diffr_plugin_context::Context>),
     (
@@ -57,6 +61,7 @@ const LINKED: &[(&str, Constructor)] = &[
         make::<diffr_plugin_removed_runs::RemovedRuns>,
     ),
     ("test-bodies", make::<diffr_plugin_test_bodies::TestBodies>),
+    (SUMMARIZE, make::<diffr_plugin_summarize::Summarize>),
 ];
 
 fn is_bundled(folder: &Folder) -> bool {
@@ -101,11 +106,19 @@ impl Pipeline {
         Ok(Self { plugins })
     }
 
-    /// Walk one file's sides with every plugin in order.
+    /// Whether the summarizer is enabled.
+    pub(crate) fn summarizes(&self) -> bool {
+        self.plugins.iter().any(|(name, _)| name == SUMMARIZE)
+    }
+
+    /// Walk one file's sides with every plugin in order. The summarizer
+    /// waits on a model for each body, so it runs only when `summarize` asks:
+    /// the page shows a file first and asks again for its summaries.
     pub(crate) fn run(
         &self,
         file: &FileChange,
         sides: Pairing<Source>,
+        summarize: bool,
     ) -> anyhow::Result<Pairing<Source>> {
         let cursor = match Cursor::new(file.clone(), sides) {
             Ok(cursor) => cursor,
@@ -114,6 +127,9 @@ impl Pipeline {
         let cursor = diffr_plugin_sdk::Cursor::new(Box::new(Host(cursor)));
         let mut walked = Ok(());
         for (name, plugin) in &self.plugins {
+            if name == SUMMARIZE && !summarize {
+                continue;
+            }
             host(&cursor).0.rewind();
             walked = walk(&cursor, plugin.as_ref()).with_context(|| MutationFailed(name.clone()));
             if walked.is_err() {
@@ -242,6 +258,59 @@ impl Classifier {
             })
             .collect::<anyhow::Result<BTreeSet<String>>>()?;
         Ok((names.into_iter().collect(), classification.hidden))
+    }
+}
+
+/// The page's HTTP: synchronous requests from the worker (`diffrHost` in
+/// worker.ts), which a worker, unlike a page, may make.
+pub(crate) struct PageHttp;
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen::prelude::wasm_bindgen]
+extern "C" {
+    /// One JSON request to the worker; it answers in JSON and never throws.
+    #[wasm_bindgen(js_name = diffrHost)]
+    fn diffr_host(request: &str) -> String;
+}
+
+/// Tests run off the web, with no page to ask.
+#[cfg(not(target_arch = "wasm32"))]
+fn diffr_host(_request: &str) -> String {
+    serde_json::json!({"error": "no page to make HTTP requests"}).to_string()
+}
+
+impl HttpHost for PageHttp {
+    fn post(
+        &self,
+        url: &str,
+        headers: &[(&str, String)],
+        body: &str,
+        timeout_ms: u64,
+    ) -> Result<(u16, Vec<u8>), String> {
+        #[derive(serde::Deserialize)]
+        struct Response {
+            status: Option<u16>,
+            #[serde(default)]
+            body: String,
+            error: Option<String>,
+        }
+        let request = serde_json::json!({
+            "post": url,
+            "headers": headers,
+            "body": body,
+            "timeout_ms": timeout_ms,
+        });
+        let response: Response = serde_json::from_str(&diffr_host(&request.to_string()))
+            .map_err(|error| format!("the page answered badly: {error}"))?;
+        match (response.error, response.status) {
+            (Some(error), _) => Err(error),
+            (None, Some(status)) => Ok((status, response.body.into_bytes())),
+            (None, None) => Err("the page sent no status".to_owned()),
+        }
+    }
+
+    fn sleep(&self, duration: std::time::Duration) {
+        diffr_host(&serde_json::json!({"sleep_ms": duration.as_millis() as u64}).to_string());
     }
 }
 

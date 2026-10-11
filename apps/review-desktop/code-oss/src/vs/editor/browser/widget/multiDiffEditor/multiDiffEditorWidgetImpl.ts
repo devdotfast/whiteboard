@@ -258,7 +258,9 @@ export class MultiDiffEditorWidgetImpl extends Disposable {
 						const index = viewItems.indexOf(previousItems[i]);
 						if (index >= 0) {
 							const newBefore = viewItems.slice(0, index).reduce((sum, item) => sum + item.contentHeight.get() + this._spaceBetweenPx, 0);
-							anchoredScrollTop = newBefore + oldTop - before - this._scrollStart();
+							const heightDelta = viewItems[index].preserveBottomOnMeasure
+								? viewItems[index].contentHeight.get() + this._spaceBetweenPx - previousHeights[i] : 0;
+							anchoredScrollTop = newBefore + oldTop - before + heightDelta - this._scrollStart();
 						}
 						break;
 					}
@@ -695,7 +697,13 @@ export class MultiDiffEditorWidgetImpl extends Disposable {
 
 			if (itemContentRange.isBefore(contentViewPort)) {
 				contentScrollOffsetToScrollOffset -= itemContentHeight - itemHeight;
-				v.hide();
+				// Measure the preceding viewport before a fast upward flick can skip its placeholders.
+				if (itemContentRange.endExclusive > contentViewPort.start - viewPortHeight) {
+					const viewPort = OffsetRange.ofStartAndLength(scrollTop + contentScrollOffsetToScrollOffset, viewPortHeight);
+					v.render(itemRange, itemContentHeight - itemHeight, width, viewPort);
+				} else {
+					v.hide();
+				}
 			} else if (itemContentRange.isAfter(contentViewPort)) {
 				v.hide();
 			} else {
@@ -749,6 +757,7 @@ export interface IMultiDiffEditorOptionsViewState {
 export type IMultiDiffResourceId = { original: URI | undefined; modified: URI | undefined };
 
 class VirtualizedViewItem extends Disposable {
+	public preserveBottomOnMeasure = false;
 	private readonly _templateRef = this._register(disposableObservableValue<IReference<DiffEditorItemTemplate> | undefined>(this, undefined));
 
 	public readonly contentHeight = derived(this, reader =>
@@ -859,7 +868,14 @@ class VirtualizedViewItem extends Disposable {
 
 		let ref = this._templateRef.get();
 		if (!ref) {
-			ref = this._objectPool.getUnusedObj(new TemplateData(this.viewModel, this._deltaScrollVertical));
+			// Entering an unmeasured file from below must retain its bottom edge.
+			// Keep the anchor through the observable updates flushed after render.
+			this.preserveBottomOnMeasure = verticalSpace.start < viewPort.start;
+			queueMicrotask(() => { this.preserveBottomOnMeasure = false; });
+			ref = this._objectPool.getUnusedObj(new TemplateData(this.viewModel, delta => {
+				// Initial diff alignment is already included in the outer height anchor.
+				if (!this.preserveBottomOnMeasure) { this._deltaScrollVertical(delta); }
+			}));
 			this._templateRef.set(ref, undefined);
 
 			const selections = this.viewModel.lastTemplateData.get().selections;

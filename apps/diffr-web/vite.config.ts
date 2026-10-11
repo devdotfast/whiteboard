@@ -80,7 +80,12 @@ export default defineConfig({
       { find: /^\.\/codicon\.ttf$/, replacement: codicons },
     ],
   },
-  server: { fs: { allow: [fileURLToPath(new URL("../..", import.meta.url))] } },
+  server: {
+    fs: {
+      // Linked dependencies can resolve outside the workspace in local checkouts.
+      allow: [fileURLToPath(new URL("../..", import.meta.url)), codicons],
+    },
+  },
   worker: { format: "es", plugins: () => [dropRawEngine()] },
   // Keep local UI fixtures available in dev without publishing them.
   build: {

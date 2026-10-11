@@ -1,4 +1,6 @@
 /** The diff stats (F2) and engine (F3) panels: a card over the foot of the file tree. */
+import { cacheUsage } from "./cache.js";
+import { megabytes } from "./cacheSection.js";
 import type { Comparison } from "./comparison.js";
 import { engineStats } from "./engine/engine.js";
 import { readSetting, writeSetting } from "./settings.js";
@@ -11,8 +13,6 @@ type Row = [label: string, value: string, tooltip?: string];
 const number = (n: number) => n.toLocaleString("en");
 
 const seconds = (ms: number) => `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)}s`;
-
-const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(0)} MB`;
 
 export class Panels {
   readonly element: HTMLElement;
@@ -97,6 +97,13 @@ export class Panels {
       ],
     ];
 
+    if (work.cached)
+      rows.push([
+        "From cache",
+        number(work.cached),
+        "Files this browser had diffed before, shown without fetching or diffing them again",
+      ]);
+
     if (work.hidden)
       rows.push([
         "Hidden by diffr",
@@ -115,6 +122,33 @@ export class Panels {
 
     if (work.failed) rows.push(["Failed", number(work.failed)]);
 
+    if (work.summarizing || work.summarized)
+      rows.push([
+        "Summarized",
+        work.summarizing
+          ? `${number(work.summarized)} · ${number(work.summarizing)} waiting`
+          : number(work.summarized),
+        "Files whose long new bodies the model has summarized; they arrive after the file shows",
+      ]);
+
+    if (work.summaryErrors.length)
+      rows.push([
+        "Summaries failed",
+        number(work.summaryErrors.length),
+        work.summaryErrors
+          .map(({ path, message }) => `${path}: ${message}`)
+          .join("\n"),
+      ]);
+
+    if (work.pluginErrors.length)
+      rows.push([
+        "Plugin errors",
+        number(work.pluginErrors.length),
+        work.pluginErrors
+          .map(({ path, message }) => `${path}: ${message}`)
+          .join("\n"),
+      ]);
+
     return rows;
   }
 
@@ -127,7 +161,7 @@ export class Panels {
       [
         "Workers",
         `${stats.workers} of ${stats.maxWorkers}`,
-        "Workers grow while files queue and shrink after ten idle seconds",
+        "Workers grow while files queue and all stop after three idle seconds",
       ],
       ["Engine download", stats.bytes ? megabytes(stats.bytes) : "…"],
       ["Engine compiled", at(stats.compiled)],
@@ -155,6 +189,12 @@ export class Panels {
       "Memory",
       stats.memory ? megabytes(stats.memory) : "…",
       "The largest wasm memory a worker holds; it never shrinks",
+    ]);
+    const cache = cacheUsage();
+    rows.push([
+      "Cache",
+      `${number(cache.entries)} · ${megabytes(cache.bytes)}`,
+      "Results kept in this browser; clear them in Settings",
     ]);
 
     return rows;

@@ -25,7 +25,7 @@ body {
   display: flex;
   flex-direction: column;
   color: var(--vscode-foreground);
-  font-family: "Geist Mono", ui-monospace, Menlo, monospace;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 13px;
 }
 
@@ -268,4 +268,1196 @@ body {
 .app-panel-row > :last-child {
   font-family: "Geist Mono", ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
+}
+
+/* ⌘P: VS Code's Quick Open, centred at the top of the diff. */
+.app-quick-open {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 60;
+  width: min(600px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  padding: 6px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 8px;
+  background: var(
+    --vscode-quickInput-background,
+    var(--vscode-editorWidget-background)
+  );
+  box-shadow: 0 8px 28px var(--vscode-widget-shadow);
+}
+
+.app-quick-open input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--vscode-focusBorder);
+  border-radius: 5px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground, var(--vscode-foreground));
+  font: inherit;
+  outline: none;
+}
+
+.app-quick-open ul {
+  max-height: min(440px, 60vh);
+  margin: 6px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.app-quick-open li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-quick-open li[aria-selected="true"] {
+  background: var(
+    --vscode-quickInputList-focusBackground,
+    var(--vscode-list-activeSelectionBackground)
+  );
+  color: var(
+    --vscode-quickInputList-focusForeground,
+    var(--vscode-list-activeSelectionForeground)
+  );
+}
+
+.app-quick-open li:not([aria-selected="true"]):hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.app-quick-open mark {
+  background: none;
+  color: var(--vscode-list-highlightForeground, var(--vscode-focusBorder));
+  font-weight: 600;
+}
+
+.app-quick-open-icon {
+  flex: none;
+}
+
+.app-quick-open-icon.is-added {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.app-quick-open-icon.is-deleted {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+.app-quick-open-icon.is-modified {
+  color: var(--vscode-gitDecoration-modifiedResourceForeground);
+}
+
+.app-quick-open-icon.is-renamed,
+.app-quick-open-icon.is-copied {
+  color: var(--vscode-gitDecoration-renamedResourceForeground);
+}
+
+.app-quick-open-name {
+  flex: none;
+}
+
+.app-quick-open-folder,
+.app-quick-open-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+}
+
+.app-quick-open-note {
+  flex: none;
+  margin-left: auto;
+}
+
+.app-quick-open li.app-quick-open-empty {
+  color: var(--vscode-descriptionForeground);
+  cursor: default;
+}
+
+/* ⌘F: VS Code's find widget, at the top right of the diff, searching every file. */
+.app-find {
+  position: absolute;
+  top: 6px;
+  right: 22px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 6px;
+  background: var(--vscode-editorWidget-background);
+  box-shadow: 0 4px 16px var(--vscode-widget-shadow);
+}
+
+.app-find[hidden] {
+  display: none;
+}
+
+.app-find-field {
+  display: flex;
+  align-items: center;
+  width: min(300px, 50vw);
+  border: 1px solid
+    var(--vscode-input-border, var(--vscode-editorWidget-border));
+  border-radius: 4px;
+  background: var(--vscode-input-background);
+}
+
+.app-find-field:focus-within {
+  border-color: var(--vscode-focusBorder);
+}
+
+.app-find.no-results .app-find-field {
+  border-color: var(
+    --vscode-inputValidation-errorBorder,
+    var(--vscode-errorForeground)
+  );
+}
+
+.app-find input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-input-foreground, var(--vscode-foreground));
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.app-find-toggle,
+.app-find-button {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-icon-foreground);
+  cursor: pointer;
+}
+
+.app-find-toggle:hover,
+.app-find-button:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.app-find-toggle[aria-pressed="true"] {
+  border-color: var(
+    --vscode-inputOption-activeBorder,
+    var(--vscode-focusBorder)
+  );
+  background: var(--vscode-inputOption-activeBackground);
+  color: var(--vscode-inputOption-activeForeground, var(--vscode-foreground));
+}
+
+.app-find-count {
+  min-width: 70px;
+  padding: 0 6px;
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.app-find.no-results .app-find-count {
+  color: var(--vscode-errorForeground);
+}
+
+/* Settings and the first visit's walk through them. */
+.app-settings-dialog {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100dvh - 48px);
+  display: flex;
+  flex-direction: column;
+}
+
+.app-settings-dialog[open] {
+  display: flex;
+}
+
+.app-settings {
+  min-height: 0;
+  margin: 0 -18px;
+  padding: 0 18px;
+  overflow-y: auto;
+}
+
+.app-settings section {
+  padding: 12px 0;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.app-settings section:first-child {
+  border-top: 0;
+}
+
+.app-settings h3,
+.app-onboarding h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.app-onboarding h3 {
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.app-onboarding > div:focus {
+  outline: none;
+}
+
+.app-onboarding-dialog .app-dialog-actions {
+  flex-wrap: wrap;
+}
+
+.app-settings p,
+.app-settings section > :is(span, a, code) {
+  color: var(--vscode-descriptionForeground);
+}
+
+.app-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0 0;
+}
+
+.app-field-label {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-field-hint {
+  color: var(--vscode-descriptionForeground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.app-dialog select {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid var(--vscode-editorWidget-border);
+  border-radius: 6px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-foreground);
+  font: inherit;
+}
+
+.app-dialog a {
+  color: var(--vscode-textLink-foreground);
+}
+
+.app-dialog code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--vscode-textCodeBlock-background, rgb(127 127 127 / 0.15));
+  font-size: 12px;
+}
+
+.app-settings textarea {
+  height: 180px;
+  margin-top: 10px;
+}
+
+.app-config-reference {
+  margin-top: 10px;
+}
+
+.app-config-reference summary {
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.app-config-reference dl {
+  margin: 8px 0;
+  font-size: 12px;
+}
+
+.app-config-reference dt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+  margin-top: 10px;
+}
+
+.app-config-reference dd {
+  margin: 2px 0 0 12px;
+  color: var(--vscode-descriptionForeground);
+  line-height: 1.45;
+}
+
+.app-config-type,
+.app-config-default {
+  color: var(--vscode-descriptionForeground);
+  font-size: 11px;
+}
+
+.app-config-default {
+  display: block;
+  margin-top: 2px;
+}
+
+/* Lenses an agent made for this comparison (lenses.ts). */
+.app-lens-bar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px 5px 14px;
+  background: var(--vscode-sideBar-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.app-lens-bar[hidden] {
+  display: none;
+}
+
+.app-lens-label {
+  color: var(--vscode-descriptionForeground);
+  margin-right: 4px;
+}
+
+.app-lens {
+  font: inherit;
+  color: var(--vscode-foreground);
+  background: transparent;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 11px;
+  padding: 1px 10px;
+  cursor: pointer;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-lens:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.app-lens[aria-pressed="true"] {
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border-color: var(--vscode-button-background);
+}
+
+.app-lens-clear {
+  margin-left: auto;
+  color: var(--vscode-icon-foreground);
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+  padding: 3px;
+  cursor: pointer;
+}
+
+.app-lens-clear:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+/* Agent plugins, in the settings (pluginsSection.ts). */
+.app-plugin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.app-plugin,
+.app-plugin-empty {
+  padding: 8px 0;
+  border-top: 1px solid var(--vscode-panel-border);
+}
+
+.app-plugin-empty {
+  color: var(--vscode-descriptionForeground);
+}
+
+.app-plugin-head,
+.app-cache {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-cache button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.app-plugin-head input {
+  flex: none;
+  width: auto;
+  margin: 0;
+}
+
+.app-plugin p {
+  margin: 4px 0;
+  color: var(--vscode-descriptionForeground);
+}
+
+.app-plugin pre {
+  max-height: 200px;
+  overflow: auto;
+  padding: 8px;
+  background: var(--vscode-textCodeBlock-background);
+  font-size: 12px;
+}
+
+/* Find in all files (find.ts): the editor's own find styles, which the page does not load. */
+.app .monaco-editor .findMatch {
+  background-color: var(
+    --vscode-editor-findMatchHighlightBackground,
+    rgba(234, 92, 0, 0.33)
+  );
+}
+
+.app .monaco-editor .currentFindMatch {
+  background-color: var(
+    --vscode-editor-findMatchBackground,
+    rgba(234, 92, 0, 0.6)
+  );
+  border: 2px solid var(--vscode-editor-findMatchBorder, transparent);
+  box-sizing: border-box;
+}
+
+/*
+ * A summary stands in for the code it folds, so it reads like code: the editor's own colour, upright,
+ * with an accent rule that marks it as written by a model. Click it for the code.
+ */
+.app
+  .monaco-editor
+  .diff-hidden-lines.summary-fold
+  .detail
+  pre.diff-hidden-lines-detail {
+  color: color-mix(
+    in srgb,
+    var(--vscode-editor-foreground) 85%,
+    transparent
+  ) !important;
+  font-style: normal;
+  padding-left: 10px;
+  border-left: 2px solid
+    color-mix(in srgb, var(--vscode-textLink-foreground) 60%, transparent);
+}
+
+.app
+  .monaco-editor
+  .diff-hidden-lines.summary-fold
+  .detail:hover
+  pre.diff-hidden-lines-detail {
+  border-left-color: var(--vscode-textLink-foreground);
+}
+
+/* Read-only diffs keep selection and copy, without an editing caret. */
+.app .monaco-editor .cursors-layer {
+  display: none;
+}
+.app-native-scroll,
+.app-native-scroll-extent,
+.app-diff-viewport {
+  height: 100%;
+  width: 100%;
+}
+.app-native-scroll {
+  overflow: hidden;
+}
+.app-native-scroll.is-native {
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  overflow-anchor: none;
+}
+.is-native .app-diff-viewport {
+  position: sticky;
+  top: 0;
+  touch-action: pan-y;
+}
+.is-native .monaco-editor .view-lines,
+.is-native .monaco-editor .view-line,
+.is-native .monaco-editor .lines-content {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+.is-native .monaco-editor .inputarea {
+  pointer-events: none;
+}
+.is-native
+  .multiDiffEditor
+  > div
+  > .monaco-scrollable-element
+  > .scrollbar.vertical {
+  display: none !important;
+}
+.app-mobile-files-host:not([hidden]) {
+  display: contents;
+}
+.app-mobile-files {
+  position: fixed;
+  inset: auto 0 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: none;
+  height: min(85dvh, 760px);
+  max-height: 85dvh;
+  margin: 0;
+  padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 14px 14px 0 0;
+  color: var(--vscode-foreground);
+  background: var(--vscode-sideBar-background);
+}
+.app-mobile-files[open] {
+  display: flex;
+  flex-direction: column;
+}
+.app-mobile-files::backdrop {
+  background: rgb(0 0 0 / 0.25);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.app-mobile-files-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.app-mobile-files-heading h2 {
+  margin: 8px 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+.app-mobile-file-search {
+  flex: none;
+  box-sizing: border-box;
+  width: 100%;
+  margin: 8px 0;
+  padding: 12px;
+  font-size: 16px;
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+}
+.app-mobile-file-list {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.app-mobile-file-list .app-button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  margin-bottom: 4px;
+}
+.app-mobile-file-list .app-button[hidden] {
+  display: none;
+}
+.app-mobile-folder-label {
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 12px 4px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.app-mobile-folder-children {
+  margin-left: 12px;
+  padding-left: 8px;
+  border-left: 1px solid var(--vscode-panel-border);
+}
+.app-mobile-folder-label:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+}
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  .app {
+    height: 100dvh;
+  }
+  .app-header {
+    display: grid;
+    grid-template-columns: 44px minmax(0, 1fr) 44px;
+    grid-template-rows: 48px auto;
+    height: auto;
+    gap: 0;
+    padding: env(safe-area-inset-top) 12px 0;
+  }
+  .app-header .app-wordmark {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: center;
+  }
+  .app-header > .app-icon-button {
+    grid-column: 3;
+    grid-row: 1;
+  }
+  .app-header > .app-header-files {
+    grid-column: 1;
+  }
+  .app-header .app-spacer {
+    display: none;
+  }
+  .app-header .app-title {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    display: block;
+    padding: 10px 0;
+    border-top: 1px solid var(--vscode-panel-border);
+    font-size: 13px;
+  }
+  .app-icon-button {
+    width: 44px;
+    height: 44px;
+  }
+  .app-lens-bar {
+    display: none;
+  }
+  .app-status {
+    flex-wrap: wrap;
+  }
+  .app-landing input {
+    box-sizing: border-box;
+    max-width: 100%;
+    font-size: 16px;
+  }
+  .app-mobile-files .app-button {
+    min-height: 44px;
+  }
+}
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  .app-dialog {
+    max-height: 85dvh;
+    overflow: auto;
+  }
+  .app-dialog input,
+  .app-dialog select,
+  .app-dialog textarea {
+    font-size: 16px;
+  }
+}
+.is-native .monaco-editor .inputarea {
+  font-size: 16px !important;
+}
+.app-touch-folds {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+  overflow: hidden;
+}
+.app-touch-fold {
+  position: absolute;
+  left: 0;
+  pointer-events: auto;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  padding: 0;
+  touch-action: manipulation;
+}
+.app-touch-fold::before,
+.app .monaco-editor .diff-fold-chevron.codicon::before,
+.app .monaco-editor .diff-fold-chevron .codicon::before {
+  content: "";
+  display: block;
+  width: 12px;
+  height: 12px;
+  background: currentColor;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M4.25 2.5 8 6l-3.75 3.5' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+    center / 12px 12px no-repeat;
+}
+.app-touch-fold::before {
+  position: absolute;
+  right: 6px;
+  top: calc(50% - 6px);
+}
+.app-touch-fold[aria-expanded="true"]::before {
+  transform: rotate(90deg);
+}
+.app-touch-fold:active {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+.app-touch-fold:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -2px;
+}
+.app-mobile-fold-actions {
+  display: flex;
+  gap: 8px;
+  padding: 4px 0;
+}
+.app-mobile-fold-actions > button {
+  flex: 1;
+}
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  .review-workbench .monaco-editor .review-fold-chevron {
+    visibility: hidden;
+  }
+  .app.review-workbench .monaco-editor .review-scope-viewed-control,
+  .app .review-multidiff-note,
+  .app .review-multidiff-open-container {
+    display: none;
+  }
+}
+
+/* Mobile navigation uses the desktop tree's status marks and line-count colors. */
+.app-mobile-files-heading .app-mobile-files-close:focus:not(:focus-visible) {
+  outline: none;
+}
+.app-mobile-files-heading .app-mobile-files-close {
+  border: 0;
+  background: transparent;
+  width: 40px;
+  padding: 0;
+  font: 24px/1 sans-serif;
+}
+.app-mobile-file-row .review-changed-files-label {
+  display: flex;
+}
+.app-mobile-file-stem {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app-mobile-file-extension {
+  flex: none;
+}
+.app-mobile-files-tools {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: none;
+}
+.app-mobile-file-search {
+  min-width: 0;
+  flex: none;
+  padding: 10px;
+}
+.app-mobile-file-search[hidden],
+.app-mobile-filter-menu[hidden] {
+  display: none;
+}
+.app-mobile-files-heading .app-mobile-tree-tool {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+.app-mobile-tree-tool .codicon {
+  font-size: 18px;
+}
+.app-mobile-tree-tool:hover,
+.app-mobile-tree-tool.is-active {
+  background: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+}
+.app-mobile-filter-wrapper {
+  position: relative;
+}
+.app-mobile-filter-menu {
+  position: absolute;
+  top: 44px;
+  right: 0;
+  z-index: 2;
+  width: 160px;
+  padding: 4px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  background: var(--vscode-sideBar-background);
+  box-shadow: 0 6px 20px #0003;
+}
+.app-mobile-filter-menu .app-button {
+  display: block;
+  width: 100%;
+  border: 0;
+  text-align: left;
+  font-size: 13px;
+}
+.app-mobile-filter-menu .app-button[aria-pressed="true"] {
+  background: var(--vscode-list-inactiveSelectionBackground);
+}
+.app-mobile-file-list {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.app-mobile-folder-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  font-weight: 500;
+  list-style: none;
+}
+.app-mobile-folder-label::-webkit-details-marker {
+  display: none;
+}
+.app-mobile-folder-label::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  background: currentColor;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M4.25 2.5 8 6l-3.75 3.5' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+    center / 12px 12px no-repeat;
+  opacity: 0.65;
+}
+.app-mobile-folder[open] > .app-mobile-folder-label::before {
+  transform: rotate(90deg);
+}
+.app-mobile-folder-children {
+  margin-left: 8px;
+  padding-left: 6px;
+  border: 0;
+}
+.app-mobile-file-row {
+  width: 100%;
+  min-height: 28px;
+  height: 28px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-foreground);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.app-mobile-file-row[hidden] {
+  display: none;
+}
+.app-mobile-file-row:hover,
+.app-mobile-folder-label:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+.app-mobile-file-row[aria-current="true"] {
+  background: var(--vscode-list-inactiveSelectionBackground);
+}
+.app-mobile-file-row:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+.app-mobile-file-row .review-tree-counts {
+  font-size: 11px;
+  gap: 5px;
+  padding: 0;
+}
+.app-mobile-fold-actions {
+  border-top: 1px solid var(--vscode-panel-border);
+  padding-top: 8px;
+}
+.app-mobile-files-empty {
+  text-align: center;
+  color: var(--vscode-descriptionForeground);
+}
+.app-header-quick {
+  display: flex;
+  align-items: center;
+  grid-column: 3;
+  grid-row: 1;
+}
+.app-header-popover {
+  position: fixed;
+  inset: calc(48px + env(safe-area-inset-top)) 12px auto auto;
+  margin: 0;
+  padding: 6px;
+  min-width: 190px;
+  background: var(--vscode-sideBar-background);
+  color: var(--vscode-foreground);
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px #0004;
+}
+.app-header-popover .app-button {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  text-align: left;
+}
+.app-header-popover .app-button[aria-pressed="true"] {
+  background: var(--vscode-list-inactiveSelectionBackground);
+}
+.app-quick-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 44px;
+  padding: 0 8px;
+  font-size: 13px;
+}
+.app-quick-setting input {
+  width: 18px;
+  height: 18px;
+}
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  .app-header:has(.app-header-quick) {
+    grid-template-columns: 132px minmax(0, 1fr) 132px;
+  }
+}
+
+/* Shared mobile chrome: quiet surfaces, compact labels, generous control hit areas. */
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  .app-header {
+    background: var(--vscode-editor-background);
+    padding-inline: 8px;
+  }
+  .app-header .app-wordmark {
+    font-size: 15px;
+    letter-spacing: -0.06em;
+  }
+  .app-header .app-title {
+    padding-inline: 6px;
+    font-size: 12px;
+    line-height: 18px;
+  }
+  .app-header .app-icon-button {
+    display: grid;
+    place-items: center;
+    padding: 0;
+    color: var(--vscode-descriptionForeground);
+    -webkit-tap-highlight-color: transparent;
+  }
+  .app-header .app-icon-button .codicon {
+    font-size: 18px;
+  }
+  .app-header .app-icon-button[aria-expanded="true"] {
+    color: var(--vscode-foreground);
+    background: var(--vscode-toolbar-hoverBackground);
+  }
+  .app .multiDiffEntry > .header > .header-content {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  .app
+    .monaco-component.multiDiffEditor
+    .multiDiffEntry.active
+    > .header
+    .header-content {
+    border-top-color: var(--vscode-multiDiffEditor-border);
+  }
+  .app
+    .monaco-component.multiDiffEditor
+    .multiDiffEntry.active
+    > .editorParent {
+    border-bottom-color: var(--vscode-multiDiffEditor-border);
+  }
+  .app .review-multidiff-counts {
+    font-size: 11px;
+    gap: 5px;
+  }
+  .app-mobile-files {
+    background: var(--vscode-editor-background);
+    box-shadow: 0 -12px 48px rgb(0 0 0 / 0.12);
+  }
+  .app-mobile-files-heading {
+    min-height: 44px;
+    padding: 0 0 6px 6px;
+    border-bottom: 1px solid var(--vscode-panel-border);
+  }
+  .app-mobile-file-list {
+    padding-block: 6px;
+    font-family: "Geist Mono", ui-monospace, Menlo, monospace;
+    font-size: 12px;
+  }
+  .app-mobile-folder-label {
+    color: var(--vscode-foreground);
+    font-weight: 400;
+    min-height: 28px;
+  }
+  .app-mobile-file-row {
+    gap: 4px;
+    border-radius: 4px;
+  }
+  .app-mobile-folder-children {
+    margin-left: 9px;
+    padding-left: 9px;
+    border-left: 1px solid
+      color-mix(in srgb, var(--vscode-foreground) 9%, transparent);
+  }
+  .app-mobile-file-row .review-tree-counts > span {
+    min-width: 3.5ch;
+    text-align: right;
+  }
+  .app-mobile-file-row .review-tree-counts > .is-zero {
+    color: var(--vscode-descriptionForeground);
+    opacity: 0.5;
+  }
+  .app-mobile-file-row .review-tree-counts {
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+  }
+  .app-mobile-fold-actions {
+    gap: 4px;
+  }
+  .app-mobile-fold-actions .app-button {
+    min-height: 32px;
+    border: 0;
+    font-size: 12px;
+    color: var(--vscode-descriptionForeground);
+  }
+  .app-mobile-fold-actions .app-button:active {
+    background: var(--vscode-toolbar-hoverBackground);
+  }
+}
+.app-header-popover {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.18);
+}
+.app-quick-setting input {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 30px;
+  height: 18px;
+  margin: 0;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--vscode-foreground) 24%, transparent);
+  cursor: pointer;
+}
+.app-quick-setting input::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--vscode-editor-background);
+}
+.app-quick-setting input:checked {
+  background: var(--vscode-textLink-foreground);
+}
+.app-quick-setting input:checked::before {
+  transform: translateX(12px);
+}
+.app-quick-setting input:focus-visible {
+  outline: 2px solid var(--vscode-focusBorder);
+  outline-offset: 3px;
+}
+
+/* Keep motion on the surrounding UI, never on the scrolling diff surface. */
+@media (prefers-reduced-motion: no-preference) {
+  .app-mobile-files {
+    opacity: 0;
+    transform: translateY(100%);
+    transition:
+      transform 240ms cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 180ms ease;
+  }
+  .app-mobile-files[open]:not(.is-closing) {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .app-mobile-files::backdrop {
+    opacity: 0;
+    transition: opacity 240ms ease;
+  }
+  .app-mobile-files[open]:not(.is-closing)::backdrop {
+    opacity: 1;
+  }
+
+  .app-header-popover {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+    transform-origin: top right;
+    transition:
+      opacity 140ms ease,
+      transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+      display 180ms allow-discrete,
+      overlay 180ms allow-discrete;
+  }
+  .app-header-popover:popover-open {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  @starting-style {
+    .app-mobile-files[open]:not(.is-closing) {
+      opacity: 0;
+      transform: translateY(100%);
+    }
+    .app-mobile-files[open]:not(.is-closing)::backdrop {
+      opacity: 0;
+    }
+    .app-header-popover:popover-open {
+      opacity: 0;
+      transform: translateY(-4px) scale(0.98);
+    }
+  }
+  .app-mobile-filter-menu:not([hidden]),
+  .app-mobile-file-search:not([hidden]) {
+    animation: app-control-enter 160ms ease-out;
+  }
+  .app-mobile-folder-label::before,
+  .app-touch-fold::before {
+    transition: transform 160ms ease;
+  }
+  .app-icon-button,
+  .app-mobile-tree-tool,
+  .app-mobile-file-row,
+  .app-mobile-folder-label {
+    transition:
+      background-color 140ms ease,
+      color 140ms ease;
+  }
+  .app-quick-setting input {
+    transition: background-color 160ms ease;
+  }
+  .app-quick-setting input::before {
+    transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+@keyframes app-control-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.app .monaco-editor .diff-hidden-lines .detail pre.diff-hidden-lines-detail {
+  overflow-x: auto;
+  text-overflow: clip;
+  scrollbar-width: thin;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.app .multiDiffEditor > div > .monaco-scrollable-element > .scrollbar {
+  z-index: 2000;
+}
+
+/* Monaco translates this virtual content itself. A hidden overflow container can still be
+   scrolled by browser focus, which makes Safari shift the whole diff after a resize. */
+.is-native .multiDiffEditor .scrollContent > div:first-child {
+  overflow: clip !important;
 }

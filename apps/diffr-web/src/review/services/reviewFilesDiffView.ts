@@ -2,7 +2,6 @@ import {
   $,
   addDisposableListener,
   append,
-  Dimension,
   getWindow,
   scheduleAtNextAnimationFrame,
 } from "vs/base/browser/dom.js";
@@ -10,14 +9,14 @@ import {
   Orientation,
   SplitView,
 } from "vs/base/browser/ui/splitview/splitview.js";
+import { disposableTimeout } from "vs/base/common/async.js";
+import { Emitter, Event } from "vs/base/common/event.js";
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) dev.fast. All rights reserved.
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
 import "../browser/media/review.css";
-import { disposableTimeout } from "vs/base/common/async.js";
-import { Emitter, Event } from "vs/base/common/event.js";
 import {
   Disposable,
   DisposableStore,
@@ -32,7 +31,11 @@ import {
 import { isEqual } from "vs/base/common/resources.js";
 import { URI } from "vs/base/common/uri.js";
 import { ElementSizeObserver } from "vs/editor/browser/config/elementSizeObserver.js";
-import type { IDiffEditor } from "vs/editor/browser/editorBrowser.js";
+import {
+  type ICodeEditor,
+  type IDiffEditor,
+  isDiffEditor,
+} from "vs/editor/browser/editorBrowser.js";
 import { RefCounted } from "vs/editor/browser/widget/diffEditor/utils.js";
 import type { IDocumentDiffItem } from "vs/editor/browser/widget/multiDiffEditor/model.js";
 import { MultiDiffEditorViewModel } from "vs/editor/browser/widget/multiDiffEditor/multiDiffEditorViewModel.js";
@@ -41,7 +44,10 @@ import {
   type RevealOptions,
 } from "vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js";
 import type { IMultiDiffEditorViewState } from "vs/editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js";
-import { IDiffEditorOptions } from "vs/editor/common/config/editorOptions.js";
+import {
+  EditorOption,
+  IDiffEditorOptions,
+} from "vs/editor/common/config/editorOptions.js";
 import { Range } from "vs/editor/common/core/range.js";
 import { ILanguageService } from "vs/editor/common/languages/language.js";
 import { PLAINTEXT_LANGUAGE_ID } from "vs/editor/common/languages/modesRegistry.js";
@@ -49,6 +55,8 @@ import { IModelService } from "vs/editor/common/services/model.js";
 import { IHoverService } from "vs/platform/hover/browser/hover.js";
 import { IInstantiationService } from "vs/platform/instantiation/common/instantiation.js";
 
+import { showLineNumbers } from "../../display.js";
+import { mobileViewport, NativeDiffScroll } from "../../nativeDiffScroll.js";
 import type {
   ReviewDiffProgress,
   ReviewDiffLens,
@@ -76,17 +84,18 @@ import {
 import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
 
 const FILE_TREE_MINIMUM_WIDTH = 180;
-const DIFF_MINIMUM_WIDTH = 320;
-const FILE_TREE_COLLAPSE_WIDTH = FILE_TREE_MINIMUM_WIDTH + DIFF_MINIMUM_WIDTH;
+const DIFF_MINIMUM_WIDTH = 0;
+const FILE_TREE_COLLAPSE_WIDTH = 760;
 const REVIEW_FILES_DIFF_EDITOR_OPTIONS = {
   hideUnchangedRegions: { enabled: true },
   originalEditable: false,
   readOnly: true,
+  domReadOnly: true,
+  renderLineHighlight: "none",
+  cursorBlinking: "solid",
   glyphMargin: false,
   lineNumbersMinChars: 3,
-  // A peek or diff on the page is read until it is clicked into; the current
-  // line highlight belongs to the cursor, not to the first revealed line.
-  renderLineHighlightOnlyWhenFocus: true,
+
   // Review Desktop's editor defaults (reviewConfigurationDefaults.ts), which
   // the page has no configuration service to supply.
   fontFamily: '"Geist Mono", Menlo, Monaco, "Courier New", monospace',
@@ -120,6 +129,8 @@ export class ReviewFilesEditorInput extends Disposable {
   private readonly documents = new Map<string, RefCounted<IDocumentDiffItem>>();
   private current: readonly RefCounted<IDocumentDiffItem>[] = [];
   private loading: boolean;
+  private ready: ReadonlySet<string> = new Set();
+  private listed: ReadonlySet<string> | undefined;
 
   constructor(
     readonly entries: readonly ReviewFilesEditorEntry[],
@@ -142,11 +153,23 @@ export class ReviewFilesEditorInput extends Disposable {
   }
 
   setReadyFiles(paths: ReadonlySet<string>, loading: boolean): void {
+    this.ready = paths;
     this.loading = loading;
+    this.update();
+  }
+
+  /** List only `paths`, as a lens does; `undefined` lists every ready file. */
+  setListedFiles(paths: ReadonlySet<string> | undefined): void {
+    this.listed = paths;
+    this.update();
+  }
+
+  private update(): void {
     this.current = this.entries.flatMap((entry) => {
-      if (!paths.has(entry.file.path)) return [];
-      const document =
-        this.documents.get(entry.file.path) ?? this.createDocument(entry);
+      const path = entry.file.path;
+      if (!this.ready.has(path) || (this.listed && !this.listed.has(path)))
+        return [];
+      const document = this.documents.get(path) ?? this.createDocument(entry);
       return document ? [document] : [];
     });
     this.changes.fire();
@@ -170,6 +193,12 @@ export class ReviewFilesEditorInput extends Disposable {
     const text = (side: "lhs" | "rhs") =>
       diff.type === "text" ? (diff[side]?.text ?? "") : "";
     const wordWrap = this.wordWrap;
+    // Line numbers sit right-aligned against the split's sash; one spare column keeps the longest
+    // clear of it.
+    const longest = Math.max(
+      text("lhs").split("\n").length,
+      text("rhs").split("\n").length,
+    );
     // Every hidden line comes from the one fold model: diffr's regions,
     // never the diff editor's own unchanged-region hiding.
     const options = {
@@ -182,6 +211,10 @@ export class ReviewFilesEditorInput extends Disposable {
         contextLineCount: 0,
       },
       folding: false,
+      lineNumbersMinChars: Math.max(
+        REVIEW_FILES_DIFF_EDITOR_OPTIONS.lineNumbersMinChars,
+        String(longest).length + 1,
+      ),
       // Structural rails use one geometry through code, folds and deleted rows.
       guides: { indentation: false, bracketPairs: false },
       // Fold controls follow the line numbers, with breathing room before code.
@@ -197,10 +230,28 @@ export class ReviewFilesEditorInput extends Disposable {
       get options() {
         return {
           ...options,
+          lineNumbers: showLineNumbers.get()
+            ? ("on" as const)
+            : ("off" as const),
+          hideOriginalLineNumbers:
+            mobileViewport.matches || options.hideOriginalLineNumbers,
+          glyphMargin: !mobileViewport.matches && options.glyphMargin,
+          lineNumbersMinChars: mobileViewport.matches
+            ? Math.max(3, String(longest).length)
+            : options.lineNumbersMinChars,
+          lineHeight: mobileViewport.matches ? 24 : 0,
+          fontSize: mobileViewport.matches ? 12 : options.fontSize,
+          lineDecorationsWidth: mobileViewport.matches
+            ? 24
+            : options.lineDecorationsWidth,
           wordWrap: wordWrap.get() ? ("on" as const) : ("off" as const),
         };
       },
-      onOptionsDidChange: Event.fromObservableLight(wordWrap),
+      onOptionsDidChange: Event.any(
+        Event.fromObservableLight(wordWrap),
+        Event.fromObservableLight(showLineNumbers),
+        Event.fromDOMEventEmitter(mobileViewport, "change"),
+      ),
     };
     const document = RefCounted.createOfNonDisposable(item, store, this);
     this.documents.set(entry.file.path, document);
@@ -272,6 +323,7 @@ export class ReviewFilesDiffView extends Disposable {
   private readonly hiddenFiles = new Map<string, string>();
   private readonly hiddenApplied = new Set<string>();
   private pendingPath: string | undefined;
+  private pendingOpen = false;
   private pendingSectionId: string | undefined;
   private pendingSource: ReviewDiffLens["ranges"][number] | undefined;
   private progress: ReviewDiffProgress | undefined;
@@ -282,7 +334,9 @@ export class ReviewFilesDiffView extends Disposable {
   private readonly streamStatus: HTMLElement;
   private offscreen = false;
   private layoutDeferred = false;
+  private sideBySide = true;
   viewedScope: "lens" | undefined;
+  private listedPaths: ReadonlySet<string> | undefined;
 
   constructor(
     private readonly container: HTMLElement,
@@ -401,19 +455,30 @@ export class ReviewFilesDiffView extends Disposable {
     if (document) factory.bottomScrollPadding = 0;
     this.headerFactory = factory;
 
+    const nativeScroll = this._register(new NativeDiffScroll(diffContainer));
+
     this.widget = this._register(
       this.reviewInstantiationService.createInstance(
         MultiDiffEditorWidget,
-        diffContainer,
+        nativeScroll.viewport,
         factory,
         undefined,
       ),
     );
+    nativeScroll.attach(this.widget);
     // The widget's own switch, not the per-item option refresh: it pins the
     // width heuristic off, so the chosen layout is what renders at any width.
-    const applyLayout = () =>
-      this.widget.setRenderSideBySide(layout.get() === "split");
+    const applyLayout = () => {
+      this.sideBySide = !mobileViewport.matches && layout.get() === "split";
+      this.widget.setRenderSideBySide(this.sideBySide);
+    };
     this._register(layout.onDidChange(applyLayout));
+    mobileViewport.addEventListener("change", applyLayout);
+    this._register(
+      toDisposable(() =>
+        mobileViewport.removeEventListener("change", applyLayout),
+      ),
+    );
     applyLayout();
     if (document) {
       this._register(
@@ -491,7 +556,7 @@ export class ReviewFilesDiffView extends Disposable {
         element: diffContainer,
         layout: (width, _offset, height) => {
           diffContainer.style.width = `${width}px`;
-          this.widget.layout(new Dimension(width, height ?? 0));
+          nativeScroll.layout(width, height ?? 0);
         },
         maximumSize: Number.POSITIVE_INFINITY,
         minimumSize: DIFF_MINIMUM_WIDTH,
@@ -537,13 +602,8 @@ export class ReviewFilesDiffView extends Disposable {
     this.settleHold.clear();
     this.pendingViewState = viewState;
     this.input = input;
-    this.changedFilesTree?.setFiles(
-      Array.from(
-        new Map(
-          input.entries.map((entry) => [entry.file.path, entry.file]),
-        ).values(),
-      ),
-    );
+    input.setListedFiles(this.listedPaths);
+    this.listFiles();
     const viewModel = await input.getViewModel();
     if (this._store.isDisposed) return;
     this.viewModel = viewModel;
@@ -583,6 +643,7 @@ export class ReviewFilesDiffView extends Disposable {
             item.collapsed.set(this.documentCollapsed, undefined);
           }
         this.applyHiddenFiles(items);
+        this.applyFileFolds();
         this.applyViewedFiles();
         const entry = this.input?.entries.find(
           (e) => e.file.path === this.pendingPath,
@@ -602,7 +663,11 @@ export class ReviewFilesDiffView extends Disposable {
           if (!this._store.isDisposed) {
             if (this.pendingSource)
               this.revealSource(this.pendingSource, this.pendingSectionId);
-            else this.reveal(entry);
+            else {
+              if (this.pendingOpen)
+                this.itemFor(entry)?.collapsed.set(false, undefined);
+              this.reveal(entry);
+            }
           }
         });
       }),
@@ -638,6 +703,26 @@ export class ReviewFilesDiffView extends Disposable {
     this.showStreamStatus();
   }
 
+  /** List only `paths` in the tree and summary, as a lens does; `undefined` lists every file. */
+  listOnly(paths: ReadonlySet<string> | undefined): void {
+    this.listedPaths = paths;
+    this.input?.setListedFiles(paths);
+    this.listFiles();
+    this.renderSummary();
+  }
+
+  private listFiles(): void {
+    this.changedFilesTree?.setFiles(
+      Array.from(
+        new Map(
+          (this.input?.entries ?? [])
+            .filter((entry) => this.listedPaths?.has(entry.file.path) ?? true)
+            .map((entry) => [entry.file.path, entry.file]),
+        ).values(),
+      ),
+    );
+  }
+
   /** Coverage counts are independent of fold state. */
   fileCounts(path: string, counts: ReviewFileCounts): void {
     this.streamStats.set(path, {
@@ -668,9 +753,12 @@ export class ReviewFilesDiffView extends Disposable {
   private renderSummary(): void {
     if (this.fileTreeContainer || !this.input) return;
     const previousHeight = this.summary.offsetHeight;
-    const paths = new Set(
+    const all = new Set(
       (this.input?.entries ?? []).map((entry) => entry.file.path),
     );
+    const paths = this.listedPaths
+      ? new Set([...all].filter((path) => this.listedPaths!.has(path)))
+      : all;
     const complete = [...paths].every((path) => this.streamStats.has(path));
     const total = { added: 0, removed: 0 };
     const remaining = { added: 0, removed: 0 };
@@ -692,7 +780,9 @@ export class ReviewFilesDiffView extends Disposable {
       this.summary,
       $("span.review-files-editor-summary-files"),
     );
-    files.textContent = `${paths.size} files`;
+    files.textContent = this.listedPaths
+      ? `${paths.size} of ${all.size} files`
+      : `${paths.size} files`;
     if (complete) {
       append(this.summary, $("span")).textContent = "Remaining";
       const format = new Intl.NumberFormat("en", {
@@ -764,6 +854,29 @@ export class ReviewFilesDiffView extends Disposable {
       if (!item) continue;
       item.collapsed.set(true, undefined);
       this.hiddenApplied.add(entry.file.path);
+    }
+  }
+
+  /** Files to fold or unfold once they join the list. */
+  private readonly fileFolds = new Map<string, boolean>();
+
+  /** Fold or unfold a file's body, as its header's chevron does, now or once it is listed. */
+  setFileCollapsed(path: string, collapsed: boolean): void {
+    this.fileFolds.set(path, collapsed);
+    this.applyFileFolds();
+  }
+
+  private applyFileFolds(): void {
+    for (const [path, collapsed] of this.fileFolds) {
+      const entry = this.input?.entries.find(
+        (entry) => entry.file.path === path,
+      );
+      const item = entry && this.itemFor(entry);
+      if (!item) continue;
+      // After a hidden file's own fold, which waits for the same item.
+      this.hiddenApplied.add(path);
+      item.collapsed.set(collapsed, undefined);
+      this.fileFolds.delete(path);
     }
   }
 
@@ -859,14 +972,94 @@ export class ReviewFilesDiffView extends Disposable {
     this.pendingSource = undefined;
   }
 
-  /** Scroll to a file, or to it once its diff has loaded. */
-  revealFile(path: string): void {
+  /** Scroll to a file, or to it once its diff has loaded; `open` also unfolds a folded file. */
+  revealFile(path: string, open = false): void {
     this.settleHold.clear();
     const entry = this.input?.entries.find((entry) => entry.file.path === path);
     if (!entry) return;
     this.pendingPath = this.fileStates.has(path) ? path : undefined;
+    this.pendingOpen = open;
     this.showStreamStatus();
-    if (!this.pendingPath) this.reveal(entry);
+    if (this.pendingPath) return;
+    if (open) this.itemFor(entry)?.collapsed.set(false, undefined);
+    this.reveal(entry);
+  }
+
+  /**
+   * Scroll so one side's `line` (1-based) of a diffed file sits a third of the way down the list,
+   * opening the file if it is folded. Its folds are the session's; open them first.
+   */
+  revealLine(path: string, side: "original" | "modified", line: number): void {
+    this.settleHold.clear();
+    const entry = this.input?.entries.find((entry) => entry.file.path === path);
+    if (!entry || !this.readyFiles.has(path)) return;
+    this.itemFor(entry)?.collapsed.set(false, undefined);
+    this.widget.reveal(entry, { highlight: false });
+    // The file renders, and its folds open, over the next frames.
+    this.settle(() => {
+      const offset = this.lineOffset(entry, side, line);
+      if (offset === undefined) return;
+      const delta = offset - this.diffContainer.clientHeight / 3;
+      if (Math.abs(delta) > 1)
+        this.widget.setScrollTop(this.widget.getScrollTop() + delta);
+    });
+  }
+
+  /** The editor that shows one side of a file, while the file is rendered. */
+  codeEditor(
+    path: string,
+    side: "original" | "modified",
+  ): ICodeEditor | undefined {
+    const entry = this.input?.entries.find((entry) => entry.file.path === path);
+    const diffEditor =
+      entry?.modified &&
+      this.widget.tryGetCodeEditor(entry.modified)?.diffEditor;
+    if (!isDiffEditor(diffEditor)) return undefined;
+    // Unified, the base side's lines are drawn inside the head side's editor.
+    return side === "original" && this.sideBySide
+      ? diffEditor.getOriginalEditor()
+      : diffEditor.getModifiedEditor();
+  }
+
+  /** Pixels from the top of the list to one side's line, as it is laid out now. */
+  private lineOffset(
+    entry: ReviewFilesEditorEntry,
+    side: "original" | "modified",
+    line: number,
+  ): number | undefined {
+    const diffEditor =
+      entry.modified &&
+      this.widget.tryGetCodeEditor(entry.modified)?.diffEditor;
+    const editor = this.codeEditor(entry.file.path, side);
+    const node = editor?.getDomNode();
+    if (!isDiffEditor(diffEditor) || !editor || !node) return undefined;
+    let top: number | undefined;
+    if (side === "original" && !this.sideBySide) {
+      // A removed line sits in the block drawn above its change's head lines; any other base line
+      // is shifted by the changes before it.
+      const lineHeight = editor.getOption(EditorOption.lineHeight);
+      let shift = 0;
+      for (const change of diffEditor.getDiffComputationResult()?.changes2 ??
+        []) {
+        if (line < change.original.startLineNumber) break;
+        if (line < change.original.endLineNumberExclusive) {
+          top =
+            editor.getTopForLineNumber(change.modified.startLineNumber) -
+            (change.original.endLineNumberExclusive - line) * lineHeight;
+          break;
+        }
+        shift =
+          change.modified.endLineNumberExclusive -
+          change.original.endLineNumberExclusive;
+      }
+      top ??= editor.getTopForLineNumber(line + shift);
+    } else top = editor.getTopForLineNumber(line);
+    return (
+      node.getBoundingClientRect().top -
+      this.diffContainer.getBoundingClientRect().top +
+      top -
+      editor.getScrollTop()
+    );
   }
 
   /** The file at the top of the list, among those diffed. */
@@ -1002,7 +1195,8 @@ export class ReviewFilesDiffView extends Disposable {
     const fileTreeVisible =
       !this.fileTreeContainer &&
       !this.fileTreeHidden &&
-      width >= FILE_TREE_COLLAPSE_WIDTH;
+      !mobileViewport.matches &&
+      width > FILE_TREE_COLLAPSE_WIDTH;
     if (
       !this.fileTreeContainer &&
       !this.document &&
@@ -1082,8 +1276,12 @@ export class ReviewFilesDiffView extends Disposable {
         sameResource(entry.modified, resource.modified),
     );
     if (index === -1) return;
-    // Passive editor updates must not move a sidebar the reader scrolled independently.
-    this.changedFilesTree?.setActiveFile(input.entries[index].file.path, false);
+    // The tree follows the diff from file to file, but leaves a sidebar the reader scrolled alone
+    // while the same file stays on top.
+    this.changedFilesTree?.setActiveFile(
+      input.entries[index].file.path,
+      "follow",
+    );
   }
 }
 function sameResource(left: URI | undefined, right: URI | undefined): boolean {

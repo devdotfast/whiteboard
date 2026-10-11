@@ -21,8 +21,10 @@ diffr-plugin-context = { path = "../../plugins/shape/context/rust" }
 diffr-plugin-deleted-bodies = { path = "../../plugins/shape/deleted-bodies/rust" }
 diffr-plugin-removed-runs = { path = "../../plugins/shape/removed-runs/rust" }
 diffr-plugin-test-bodies = { path = "../../plugins/shape/test-bodies/rust" }
+diffr-plugin-summarize = { path = "../../plugins/shape/summarize/rust" }
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+toml = { version = "0.8", default-features = false, features = ["display", "parse"] }
 wasm-bindgen = "0.2.129"
 console_error_panic_hook = "0.1.7"

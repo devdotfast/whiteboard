@@ -97,7 +97,7 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 		this.editor = this._register(this._instantiationService.createInstance(DiffEditorWidget, this._elements.editor, {
 			overflowWidgetsDomNode: this._overflowWidgetsDomNode,
 			fixedOverflowWidgets: true
-		}, this._workbenchUIElementFactory.codeEditorWidgetOptions ?? {}));
+		}, { ...this._workbenchUIElementFactory.codeEditorWidgetOptions, scrollPositionManagedExternally: true }));
 		this.isModifedFocused = observableCodeEditor(this.editor.getModifiedEditor()).isFocused;
 		this.isOriginalFocused = observableCodeEditor(this.editor.getOriginalEditor()).isFocused;
 		this.isFocused = derived(this, reader => this.isModifedFocused.read(reader) || this.isOriginalFocused.read(reader));
@@ -151,7 +151,9 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 		}));
 
 		this._register(this.editor.getOriginalEditor().onDidScrollChange(e => {
-			if (this._isSettingScrollTop) {
+			// Folding can clamp this editor to its new bottom. The outer list owns
+			// the viewport, so shrinking a file must reveal the following file instead.
+			if (this._isSettingScrollTop || e.scrollHeightChanged) {
 				return;
 			}
 
@@ -300,15 +302,16 @@ export class DiffEditorItemTemplate extends Disposable implements IPooledObject<
 		const delta = Math.max(0, Math.min(viewPort.start + stickySectionHeight - verticalRange.start - (this._sectionHeader?.height.get() ?? 0), maxDelta));
 		this._resourceHeader.element.style.transform = `translateY(${delta}px)`;
 
-		globalTransaction(tx => {
-			const dimension = {
-				width: width - 2 * 8 - 2 * 1,
-				height: Math.max(0, verticalRange.length - this._outerEditorHeight - (this._sectionHeader?.height.get() ?? 0)),
-			};
-			this.editor.layout(dimension);
-		});
 		try {
+			// Layout may clamp the inner scroll position; it must not scroll the file list.
 			this._isSettingScrollTop = true;
+			globalTransaction(tx => {
+				const dimension = {
+					width: width - 2 * 8 - 2 * 1,
+					height: Math.max(0, verticalRange.length - this._outerEditorHeight - (this._sectionHeader?.height.get() ?? 0)),
+				};
+				this.editor.layout(dimension);
+			});
 			this._lastScrollTop = editorScroll;
 			this.editor.getOriginalEditor().setScrollTop(editorScroll);
 		} finally {
