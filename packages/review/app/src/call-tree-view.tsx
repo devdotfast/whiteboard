@@ -83,7 +83,11 @@ export function CallTree({
                 )}
                 data-review-anchor-id={stop.anchorId}
                 aria-current={stop.id === active ? "true" : undefined}
-                aria-label={`${stop.label}, ${change}`}
+                aria-label={
+                  change === "unchanged"
+                    ? stop.label
+                    : `${stop.label}, ${change}`
+                }
                 title={
                   unavailable
                     ? availability === "pending"

@@ -179,9 +179,7 @@ export function CodePeekCard({
         {...withClass("code-peek", styles.peek, drawStyles.blockChild)}
         role="status"
       >
-        {outcome === "failed"
-          ? "Diff selection unavailable"
-          : "Loading diff selection…"}
+        {outcome === "failed" ? "Code unavailable" : "Loading code…"}
       </section>
     );
 
