@@ -424,14 +424,21 @@ function ReviewLayoutContent({
       ? diffFiles.files.length
       : null;
 
+  const hasDiff =
+    hasChangeRange &&
+    !(diffFiles.status === "loaded" && diffFiles.files.length === 0);
+
+  const hasCommits = commits.length > 0;
+
   const reviewViews = useMemo(
     () =>
       offeredReviewViews({
-        hasChangeRange,
+        hasCommits,
+        hasDiff,
         softwareMapEnabled,
         hasTraceSessions,
       }),
-    [hasChangeRange, hasTraceSessions, softwareMapEnabled],
+    [hasCommits, hasDiff, hasTraceSessions, softwareMapEnabled],
   );
 
   useLayoutEffect(() => {
@@ -659,7 +666,7 @@ function ReviewLayoutContent({
               </IconButton>
               <BugReportControl />
               <ReviewBatonChip outcome={review.submissionOutcome} />
-              <DiffLayoutControl />
+              {(hasDiff || scratchpad) && <DiffLayoutControl />}
               {!scratchpad &&
                 !review.historicalRevision &&
                 !review.submissionOutcome && (

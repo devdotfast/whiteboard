@@ -184,7 +184,8 @@ export function readReviewNavigationRestore(
     view: stored.activeView ?? "review",
     // Traces are listed after mount; the canvas narrows this once they are.
     availableViews: offeredReviewViews({
-      hasChangeRange: canvas.hasChangeRange,
+      hasCommits: canvas.commits.length > 0,
+      hasDiff: canvas.hasChangeRange,
       softwareMapEnabled: canvas.softwareMapEnabled,
       hasTraceSessions: true,
     }),

@@ -26,6 +26,24 @@ let store: ReviewStore, directory: string;
 
 let canvas: ReturnType<typeof mount> | undefined;
 
+const commit = {
+  commit: "a".repeat(40),
+  parentCommit: "b".repeat(40),
+  subject: "Add the API",
+  author: "Developer",
+  authoredAt: "2026-09-28T10:00:00Z",
+  fileCount: 1,
+  additions: 1,
+  deletions: 0,
+};
+
+const changedFile = {
+  path: "a.ts",
+  status: "modified" as const,
+  additions: 1,
+  deletions: 0,
+};
+
 const command = <Operation,>(operation: Operation) =>
   store.execute({ operation });
 
@@ -93,7 +111,7 @@ it("resumes the view and lens a reader left, on the version they left them", asy
     }),
   );
   app.route("/reviews-api", createReviewApi(store));
-  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+  app.get("/reviews-api/:id/commits", (context) => context.json([commit]));
 
   const listeners = new Set<Parameters<ReviewCanvasBridge["subscribe"]>[0]>();
   const diffLenses: (string | undefined)[] = [];
@@ -108,7 +126,7 @@ it("resumes the view and lens a reader left, on the version they left them", asy
         return { dispose: () => void listeners.delete(listener) };
       },
       diffView: {
-        files: async () => [],
+        files: async () => [changedFile],
         create(spec) {
           diffLenses.push(spec.lens?.id);
 
@@ -232,7 +250,7 @@ it("reopens a stored fullscreen tour only while its diagram is in the document",
 
   const app = new Hono();
   app.route("/reviews-api", createReviewApi(store));
-  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+  app.get("/reviews-api/:id/commits", (context) => context.json([commit]));
 
   const bridge = testReviewBridge(
     {},
@@ -309,7 +327,7 @@ it("keeps a flow diagram's tour in the canvas navigation", async () => {
 
   const app = new Hono();
   app.route("/reviews-api", createReviewApi(store));
-  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+  app.get("/reviews-api/:id/commits", (context) => context.json([commit]));
 
   const bridge = testReviewBridge(
     {},
@@ -367,17 +385,6 @@ it("resumes a commit diff with its scope", async () => {
       head: "head",
     },
   });
-
-  const commit = {
-    commit: "a".repeat(40),
-    parentCommit: "b".repeat(40),
-    subject: "Add the API",
-    author: "Developer",
-    authoredAt: "2026-09-28T10:00:00Z",
-    fileCount: 1,
-    additions: 1,
-    deletions: 0,
-  };
 
   // Only the first version lists the commit.
   const scopedVersion = store.read(review.reviewId).version;
@@ -534,7 +541,7 @@ function traceCanvas(reviewId: string, sessions: (typeof traceSession)[]) {
   app.get("/reviews-api/:id/agent-traces", (context) =>
     context.json({ ok: true, configured: true, sessions }),
   );
-  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+  app.get("/reviews-api/:id/commits", (context) => context.json([commit]));
   app.route("/reviews-api", createReviewApi(store));
 
   return canvasHarness(app, reviewId);
@@ -553,7 +560,7 @@ function canvasHarness(app: Hono, reviewId: string) {
         return { dispose: () => void listeners.delete(listener) };
       },
       diffView: {
-        files: async () => [],
+        files: async () => [changedFile],
         create: () => ({
           focus() {},
           onDidError: () => ({ dispose() {} }),

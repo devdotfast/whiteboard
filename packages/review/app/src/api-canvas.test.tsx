@@ -6,6 +6,7 @@ import path from "node:path";
 
 import type {
   ReviewCanvasBridge,
+  ReviewDiffFileWire,
   ReviewInlineEditorSpec,
   ReviewSurfaceEvent,
 } from "@dev.fast/review-protocol";
@@ -1028,7 +1029,10 @@ it("offers the Diff view for a live worktree review and refreshes it on each sav
       context.json({ files: [], resolvedSelections: {}, lenses: [] }),
     );
     let progressReads = 0;
-    const files = vi.fn<() => Promise<never[]>>(async () => []);
+
+    const files = vi.fn<() => Promise<ReviewDiffFileWire[]>>(async () => [
+      { path: "a.ts", status: "modified" as const, additions: 1, deletions: 0 },
+    ]);
 
     const bridge = testReviewBridge(
       {},

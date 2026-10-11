@@ -4,17 +4,20 @@ export type { ReviewView } from "@dev.fast/review-protocol";
 
 /** The views a canvas offers, in switcher order. */
 export function offeredReviewViews({
-  hasChangeRange,
+  hasCommits,
+  hasDiff,
   softwareMapEnabled,
   hasTraceSessions,
 }: {
-  hasChangeRange: boolean;
+  hasCommits: boolean;
+  hasDiff: boolean;
   softwareMapEnabled: boolean;
   hasTraceSessions: boolean;
 }): readonly ReviewView[] {
   return [
     "review",
-    ...(hasChangeRange ? (["commits", "diff"] as const) : []),
+    ...(hasCommits ? (["commits"] as const) : []),
+    ...(hasDiff ? (["diff"] as const) : []),
     ...(softwareMapEnabled ? (["map"] as const) : []),
     ...(hasTraceSessions ? (["trace"] as const) : []),
   ];

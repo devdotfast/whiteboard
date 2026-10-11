@@ -212,6 +212,18 @@ async function mountFixture(
   const bridge = fixtureReviewBridge({
     snapshot,
     progress: fixtureProgress,
+    commits: [
+      {
+        commit: "a".repeat(40),
+        parentCommit: "b".repeat(40),
+        subject: "Fixture",
+        author: "Developer",
+        authoredAt: "2026-09-16T00:00:00.000Z",
+        fileCount: 1,
+        additions: 1,
+        deletions: 0,
+      },
+    ],
     resources:
       options.trace === null
         ? { [FIXTURE_IMAGE_ID]: image }
