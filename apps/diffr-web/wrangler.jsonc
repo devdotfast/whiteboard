@@ -1,0 +1,13 @@
+// diffsthatgetyoustiff.com: the built page as Workers static assets, with no Worker code.
+// Deployed by .github/workflows/diffr-web.yml; pull requests get preview URLs.
+{
+  "name": "diffsthatgetyoustiff",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    // Every path is a route of the page: /owner/repo/pull/N, /owner/repo/compare/a...b.
+    "not_found_handling": "single-page-application",
+  },
+  "preview_urls": true,
+  "routes": [{ "pattern": "diffsthatgetyoustiff.com", "custom_domain": true }],
+}

@@ -1,0 +1,28 @@
+[package]
+name = "diffr-web"
+description = "diffr for the browser: the engine and the bundled plugins behind a wasm-bindgen API."
+repository = "https://github.com/devdotfast/whiteboard"
+license = "MIT"
+version = "0.1.16"
+edition = "2021"
+rust-version = "1.99.0"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+diffr-core = { path = "../diffr-core" }
+# The plugin contract as plain Rust, and the bundled plugins linked against it.
+diffr-plugin-sdk = { path = "../diffr-plugin-sdk", features = ["native"] }
+diffr-plugin-classify = { path = "../../plugins/classify/rust" }
+diffr-plugin-context = { path = "../../plugins/shape/context/rust" }
+diffr-plugin-deleted-bodies = { path = "../../plugins/shape/deleted-bodies/rust" }
+diffr-plugin-removed-runs = { path = "../../plugins/shape/removed-runs/rust" }
+diffr-plugin-test-bodies = { path = "../../plugins/shape/test-bodies/rust" }
+anyhow = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+wasm-bindgen = "0.2.129"
+console_error_panic_hook = "0.1.7"

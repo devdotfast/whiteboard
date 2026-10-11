@@ -54,6 +54,9 @@ pub mod plugin;
 pub mod present;
 pub mod protocol;
 pub mod summary;
+pub mod tags;
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+mod wasm_libc;
 mod words;
 
 #[macro_use]

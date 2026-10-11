@@ -51,10 +51,9 @@ mod options;
 mod plugin;
 mod pprint;
 mod run;
-mod tags;
 mod version;
 
-use diffr_core::{config, engine, pairing, parse, present, protocol, summary};
+use diffr_core::{config, engine, pairing, parse, present, protocol, summary, tags};
 
 use crate::config::{ConfigError, Params};
 
