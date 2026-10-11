@@ -1,8 +1,7 @@
 import type { CoverageProgress } from "@review/viewed-coverage";
 import * as stylex from "@stylexjs/stylex";
 
-import { compactDiffCount as compact, diffCountStyles } from "./diff-count";
-import { tokens } from "./tokens.stylex";
+import { DiffCountHalves } from "./diff-count";
 
 /** The same counts for an HTML caption, outside SVG text. */
 export function ElementCountsText({
@@ -15,27 +14,15 @@ export function ElementCountsText({
   ) : progress.state === "folded" ? (
     <span>Folded</span>
   ) : (
-    <>
-      {progress.remaining.additions > 0 && (
-        <span {...stylex.props(diffCountStyles.added, styles.added)}>
-          +{compact(progress.remaining.additions)}
-        </span>
-      )}{" "}
-      {progress.remaining.deletions > 0 && (
-        <span {...stylex.props(diffCountStyles.removed, styles.removed)}>
-          −{compact(progress.remaining.deletions)}
-        </span>
-      )}
-    </>
+    <span {...stylex.props(styles.counts)}>
+      <DiffCountHalves {...progress.remaining} />
+    </span>
   );
 }
 
-// Flow node captions.
 const styles = stylex.create({
-  added: {
-    fill: tokens.changeAdded,
-  },
-  removed: {
-    fill: tokens.changeRemoved,
+  counts: {
+    display: "inline-flex",
+    gap: "0.3em",
   },
 });

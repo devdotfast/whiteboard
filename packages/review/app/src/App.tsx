@@ -666,7 +666,7 @@ function ReviewLayoutContent({
               </IconButton>
               <BugReportControl />
               <ReviewBatonChip outcome={review.submissionOutcome} />
-              {(hasDiff || scratchpad) && <DiffLayoutControl />}
+              <DiffLayoutControl />
               {!scratchpad &&
                 !review.historicalRevision &&
                 !review.submissionOutcome && (
