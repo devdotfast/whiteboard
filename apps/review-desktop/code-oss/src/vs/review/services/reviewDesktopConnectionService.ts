@@ -14,6 +14,7 @@ REVIEW_DESKTOP_CONNECTION_VERSION,
 type ReviewDesktopConnection,
 } from "../common/reviewDesktopBootstrap.js";
 import { consumeReviewEventStream } from "../common/reviewEventStream.js";
+import type { ReviewExternalEditorTarget } from "../common/reviewExternalEditor.js";
 import {
 type JsonValue,
 	type ReviewDiffrConfig,
@@ -58,6 +59,12 @@ export interface IReviewDesktopConnectionService {
 	getConnection(): Promise<ReviewServerConnection>;
 	/** Closes the reviews' source windows, whose checkouts dismissal and deletion free. */
 	closeSourceWindows(reviewIds: readonly string[]): Promise<void>;
+	/** Opens a file in the reader's editor, from the main process with a clean environment. */
+	openInExternalEditor(target: ReviewExternalEditorTarget): Promise<void>;
+	/** Opens a file in an application the reader picked, the same way. */
+	openInApplication(application: string, filePath: string): Promise<void>;
+	/** Shows the native application picker; null when the reader cancels. */
+	chooseApplication(): Promise<string | null>;
 	readDiffrConfig(): Promise<ReviewDiffrConfig>;
 	saveDiffrSummarizer(input: ReviewDiffrSummarizerInput): Promise<ReviewDiffrConfig>;
 	testDiffrSummarizer(input: ReviewDiffrSummarizerInput): Promise<string>;
@@ -161,6 +168,18 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 	async closeSourceWindows(reviewIds: readonly string[]): Promise<void> {
 		if (reviewIds.length === 0) return;
 		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("closeSourceWindows", reviewIds);
+	}
+
+	async openInExternalEditor(target: ReviewExternalEditorTarget): Promise<void> {
+		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("openInExternalEditor", target);
+	}
+
+	async openInApplication(application: string, filePath: string): Promise<void> {
+		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("openInApplication", { application, filePath });
+	}
+
+	chooseApplication(): Promise<string | null> {
+		return this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call<string | null>("chooseApplication");
 	}
 
 	async readDiffrConfig(): Promise<ReviewDiffrConfig> {

@@ -1227,6 +1227,7 @@ it("keeps a live navigator attached to the live checkout without preparing it", 
   });
 
   expect(live.filePath).toBe(path.join(root, source.file));
+  expect(live.rootPath).toBe(root);
 
   const base = await local.data.navigatorWorkspace(local.store.read(reviewId), {
     side: "base",

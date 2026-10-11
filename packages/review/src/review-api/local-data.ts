@@ -371,7 +371,7 @@ export class LocalReviewData {
       commit?: string;
       anchor?: SourcePins;
     } = {},
-  ): Promise<{ workspacePath: string; filePath?: string }> {
+  ): Promise<{ workspacePath: string; filePath?: string; rootPath: string }> {
     const { pins } = await this.resolveSource(
       snapshot,
       source.commit,
@@ -504,7 +504,8 @@ export class LocalReviewData {
       }
     }
 
-    return { workspacePath, filePath };
+    // External editors open the checkout as their workspace beside the file.
+    return { workspacePath, filePath, rootPath };
   }
 
   /** A document read that needs default pins; 409 when the document has none. */

@@ -33,7 +33,7 @@ async function closeWelcome(updateNeeded: boolean): Promise<number> {
 		groups as never,
 		connection as never,
 		{} as never,
-		{ warn() {} } as never,
+		{ warn() {} } as never, {} as never,
 	);
 	try {
 		const welcome = await tabs.openWelcome(true);

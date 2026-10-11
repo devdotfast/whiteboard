@@ -393,8 +393,8 @@ export interface ReviewCanvasOnboarding {
 
 // The workbench owns the theme and the keymap; the canvas only names a choice.
 // These lists mirror the workbench side (`reviewThemeChoice.ts`, and
-// `REVIEW_KEYMAPS`, `REVIEW_CTRL_TAB_CHOICES` and `REVIEW_DOCUMENT_WIDTH_CHOICES`
-// in `reviewConfigurationDefaults.ts`).
+// `REVIEW_KEYMAPS`, `REVIEW_CTRL_TAB_CHOICES`, `REVIEW_DOCUMENT_WIDTH_CHOICES` and
+// `REVIEW_OPEN_FILES_IN_CHOICES` in `reviewConfigurationDefaults.ts`).
 export const REVIEW_THEME_CHOICES = ["dark", "light", "system"] as const;
 
 export type ReviewThemeChoice = (typeof REVIEW_THEME_CHOICES)[number];
@@ -409,6 +409,22 @@ export const REVIEW_KEYMAP_CHOICES = [
 export type ReviewKeymapChoice = (typeof REVIEW_KEYMAP_CHOICES)[number];
 
 export type ReviewCtrlTabChoice = "recent" | "next";
+
+export type ReviewOpenFilesInChoice =
+  | "whiteboard"
+  | "vscode"
+  | "cursor"
+  | "zed"
+  | "application";
+
+/**
+ * Where Open file sends a file. `application` is one the reader picked with
+ * the native picker; `name` is how the page labels it.
+ */
+export interface ReviewOpenFilesIn {
+  choice: ReviewOpenFilesInChoice;
+  application: { path: string; name: string } | null;
+}
 
 export type ReviewDocumentWidthChoice = "standard" | "wide" | "full";
 
@@ -548,6 +564,10 @@ export interface ReviewCanvasSettingsContent {
   setKeymap(choice: ReviewKeymapChoice): Promise<ReviewKeymapChoice>;
   ctrlTab: ReviewCtrlTabChoice;
   setCtrlTab(choice: ReviewCtrlTabChoice): Promise<ReviewCtrlTabChoice>;
+  openFilesIn: ReviewOpenFilesIn;
+  setOpenFilesIn(choice: ReviewOpenFilesInChoice): Promise<ReviewOpenFilesIn>;
+  // Shows the native application picker; a cancelled pick changes nothing.
+  chooseOpenFilesInApplication(): Promise<ReviewOpenFilesIn>;
   documentWidth: ReviewDocumentWidthChoice;
   setDocumentWidth(
     choice: ReviewDocumentWidthChoice,

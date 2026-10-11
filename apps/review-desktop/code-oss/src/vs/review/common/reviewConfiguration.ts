@@ -20,7 +20,7 @@
 import { localize } from '../../nls.js';
 import { Registry } from '../../platform/registry/common/platform.js';
 import { ConfigurationScope, Extensions, type IConfigurationRegistry } from '../../platform/configuration/common/configurationRegistry.js';
-import { REVIEW_CTRL_TAB_CHOICES, REVIEW_CTRL_TAB_SETTING, REVIEW_DOCUMENT_WIDTH_CHOICES, REVIEW_DOCUMENT_WIDTH_SETTING, REVIEW_KEYMAPS, REVIEW_KEYMAP_SETTING, REVIEW_READY_NOTIFICATION_CHOICES, REVIEW_READY_NOTIFICATION_SETTING, REVIEW_SOFTWARE_MAP_SETTING, REVIEW_STRUCTURAL_DIFF_SETTING, REVIEW_TELEMETRY_SETTING, curatedExtensionConfigurationDefaults, reviewConfigurationDefaults } from './reviewConfigurationDefaults.js';
+import { REVIEW_CTRL_TAB_CHOICES, REVIEW_CTRL_TAB_SETTING, REVIEW_DOCUMENT_WIDTH_CHOICES, REVIEW_DOCUMENT_WIDTH_SETTING, REVIEW_KEYMAPS, REVIEW_KEYMAP_SETTING, REVIEW_OPEN_FILES_IN_APPLICATION_SETTING, REVIEW_OPEN_FILES_IN_CHOICES, REVIEW_OPEN_FILES_IN_SETTING, REVIEW_READY_NOTIFICATION_CHOICES, REVIEW_READY_NOTIFICATION_SETTING, REVIEW_SOFTWARE_MAP_SETTING, REVIEW_STRUCTURAL_DIFF_SETTING, REVIEW_TELEMETRY_SETTING, curatedExtensionConfigurationDefaults, reviewConfigurationDefaults } from './reviewConfigurationDefaults.js';
 
 const configurationRegistry = Registry.as<IConfigurationRegistry>(Extensions.Configuration);
 
@@ -45,6 +45,26 @@ configurationRegistry.registerConfiguration({
 			],
 			default: 'recent',
 			description: localize('review.tabs.ctrlTab', "What Ctrl+Tab does."),
+		},
+		[REVIEW_OPEN_FILES_IN_SETTING]: {
+			type: 'string',
+			enum: [...REVIEW_OPEN_FILES_IN_CHOICES],
+			enumDescriptions: [
+				localize('review.openFilesIn.whiteboard', "Open files in Whiteboard's source window."),
+				localize('review.openFilesIn.vscode', "Open files in Visual Studio Code."),
+				localize('review.openFilesIn.cursor', "Open files in Cursor."),
+				localize('review.openFilesIn.zed', "Open files in Zed."),
+				localize('review.openFilesIn.application', "Open files in the application set in `#review.openFilesInApplication#`, without a line."),
+			],
+			default: 'whiteboard',
+			description: localize('review.openFilesIn', "Where Open file sends a file. A file at a pinned revision opens from the copy Whiteboard keeps for the review. Diffs always open in Whiteboard."),
+		},
+		[REVIEW_OPEN_FILES_IN_APPLICATION_SETTING]: {
+			type: 'string',
+			default: '',
+			// Names a program to run, as `workbench.externalBrowser` does.
+			restricted: true,
+			description: localize('review.openFilesInApplication', "The application Open file uses when `#review.openFilesIn#` is `application`: an `.app` on macOS, or a program elsewhere."),
 		},
 		[REVIEW_DOCUMENT_WIDTH_SETTING]: {
 			type: 'string',
