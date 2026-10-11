@@ -22,14 +22,59 @@ const GitHubStacksSchema = z.array(
 
 export type RunGitHubApi = (host: string, endpoint: string) => Promise<string>;
 
+type Subject = Pick<ReviewApiSummary, "origin"> & { reviewId?: string };
+
+type Candidate = Pick<
+  ReviewApiSummary,
+  "reviewId" | "title" | "origin" | "pins" | "trashedAt"
+>;
+
+interface StackEntry {
+  branch: string;
+  pullRequestNumber: number;
+  pullRequestUrl: string;
+  current: boolean;
+  reviews: readonly Candidate[];
+}
+
 export async function resolveReviewStackLayers(
-  subject: Pick<ReviewApiSummary, "origin"> & { reviewId?: string },
-  reviews: readonly Pick<
-    ReviewApiSummary,
-    "reviewId" | "title" | "origin" | "pins" | "trashedAt"
-  >[],
+  subject: Subject,
+  reviews: readonly Candidate[],
   runGitHubApi: RunGitHubApi = defaultRunGitHubApi,
 ): Promise<ReviewStackLayer[]> {
+  const entries = await gitHubStack(subject, reviews, runGitHubApi);
+
+  const currentIndex = entries.findIndex((entry) => entry.current);
+
+  return entries.map((entry, index) => {
+    const review =
+      entry.reviews.find(
+        (candidate) => candidate.reviewId === subject.reviewId,
+      ) ??
+      entry.reviews.findLast((candidate) => !candidate.trashedAt) ??
+      entry.reviews.at(-1);
+
+    return {
+      branch: entry.branch,
+      pullRequestNumber: entry.pullRequestNumber,
+      pullRequestUrl: entry.pullRequestUrl,
+      reviewUuid: review?.reviewId ?? null,
+      reviewTitle: review?.title ?? null,
+      relation:
+        index < currentIndex
+          ? "earlier"
+          : index === currentIndex
+            ? "current"
+            : "later",
+    };
+  });
+}
+
+async function gitHubStack(
+  subject: Subject,
+  reviews: readonly Candidate[],
+  runGitHubApi: RunGitHubApi,
+): Promise<StackEntry[]> {
   const binding = subject.origin?.pullRequestUrl?.match(
     /^https:\/\/([a-z0-9.-]+)\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/([1-9]\d*)$/,
   );
@@ -59,43 +104,18 @@ export async function resolveReviewStackLayers(
     candidate.pull_requests.some((pr) => pr.number === pullRequestNumber),
   );
 
-  if (!stack) return [];
-
-  const currentIndex = stack.pull_requests.findIndex(
-    (pr) => pr.number === pullRequestNumber,
-  );
-
-  return stack.pull_requests.map((pr, index) => {
-    const matches = reviews.filter((candidate) => {
-      const repository =
-        candidate.origin?.pullRequestUrl?.replace(/\/pull\/\d+.*$/, "") ??
-        candidate.pins?.repositoryId;
-
-      return (
-        repository === repoKey &&
-        candidate.origin?.pullRequestNumber === pr.number
-      );
-    });
-
-    const review =
-      matches.find((candidate) => candidate.reviewId === subject.reviewId) ??
-      matches.findLast((candidate) => !candidate.trashedAt) ??
-      matches.at(-1);
-
-    return {
-      branch: pr.head.ref,
-      pullRequestNumber: pr.number,
-      pullRequestUrl: `${repoKey}/pull/${pr.number}`,
-      reviewUuid: review?.reviewId ?? null,
-      reviewTitle: review?.title ?? null,
-      relation:
-        index < currentIndex
-          ? "earlier"
-          : index === currentIndex
-            ? "current"
-            : "later",
-    };
-  });
+  return (stack?.pull_requests ?? []).map((pr) => ({
+    branch: pr.head.ref,
+    pullRequestNumber: pr.number,
+    pullRequestUrl: `${repoKey}/pull/${pr.number}`,
+    current: pr.number === pullRequestNumber,
+    reviews: reviews.filter(
+      (candidate) =>
+        (candidate.origin?.pullRequestUrl?.replace(/\/pull\/\d+.*$/, "") ??
+          candidate.pins?.repositoryId) === repoKey &&
+        candidate.origin?.pullRequestNumber === pr.number,
+    ),
+  }));
 }
 
 async function defaultRunGitHubApi(
