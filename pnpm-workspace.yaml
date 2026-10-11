@@ -9,6 +9,7 @@ packages:
   - "apps/*"
 
 catalog:
+  "@parcel/watcher": "2.6.0"
   zod: "4.6.5"
 
 catalogMode: strict
@@ -62,3 +63,5 @@ ignoredOptionalDependencies:
 
 allowBuilds:
   esbuild: true
+  # Ships prebuilt binaries; its install script only builds from source.
+  "@parcel/watcher": false
