@@ -51,6 +51,7 @@ import {
 } from "./side-panel-resizer";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
+import { useTutorial } from "./tutorial-context";
 import { ProgressRing } from "./ui/progress-ring";
 import { useTooltip } from "./use-tooltip";
 import { ViewedButton } from "./viewed-button";
@@ -173,6 +174,8 @@ export function ReviewDiffView({
   });
 
   const lenses = useReviewLenses();
+  // The courier would nudge the lens the tour rings.
+  const tutorial = useTutorial() !== null;
   const diffFiles = useReviewDiffFiles();
   const lens = scope ? undefined : lenses?.active;
   const [lensList, setLensList] = useState<HTMLDivElement | null>(null);
@@ -447,11 +450,13 @@ export function ReviewDiffView({
                 </section>
               );
             })}
-            <Courier
-              scope="lenses"
-              container={lensList}
-              find={lensRowElement}
-            />
+            {!tutorial && (
+              <Courier
+                scope="lenses"
+                container={lensList}
+                find={lensRowElement}
+              />
+            )}
           </div>
           <div
             {...cabinetsResize.separatorProps}
