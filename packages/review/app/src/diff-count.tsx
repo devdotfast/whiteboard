@@ -9,6 +9,30 @@ export const compactDiffCount = (count: number) =>
     .format(count)
     .toLowerCase();
 
+/** The +n and −n halves, each left out at zero. */
+export function DiffCountHalves({
+  additions,
+  deletions,
+}: {
+  additions: number;
+  deletions: number;
+}): ReactElement {
+  return (
+    <>
+      {additions > 0 && (
+        <span {...stylex.props(diffCountStyles.added)}>
+          +{compactDiffCount(additions)}
+        </span>
+      )}
+      {deletions > 0 && (
+        <span {...stylex.props(diffCountStyles.removed)}>
+          −{compactDiffCount(deletions)}
+        </span>
+      )}
+    </>
+  );
+}
+
 /**
  * The one way a +n −n pair is written anywhere in the app: the add and
  * delete tokens, tabular mono at 11px, compact past 999. Cards, meta lines,
@@ -17,21 +41,22 @@ export const compactDiffCount = (count: number) =>
 export function DiffCount({
   additions,
   deletions,
+  binary = false,
   large = false,
 }: {
   additions: number;
   deletions: number;
+  binary?: boolean;
   /** The review header's size. */
   large?: boolean;
 }): ReactElement {
   return (
     <span {...stylex.props(diffCountStyles.counts, large && styles.large)}>
-      <span {...stylex.props(diffCountStyles.added)}>
-        +{compactDiffCount(additions)}
-      </span>
-      <span {...stylex.props(diffCountStyles.removed)}>
-        −{compactDiffCount(deletions)}
-      </span>
+      {binary ? (
+        "Binary"
+      ) : (
+        <DiffCountHalves additions={additions} deletions={deletions} />
+      )}
     </span>
   );
 }

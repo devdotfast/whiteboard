@@ -32,7 +32,7 @@ import {
 import { AuthoringActivityContext } from "./authoring-activity-context";
 import { scopeLive } from "./authoring-cursor";
 import { Courier, LensCursorContext, lensRowElement } from "./courier";
-import { compactDiffCount, diffCountStyles } from "./diff-count";
+import { DiffCountHalves, diffCountStyles } from "./diff-count";
 import { type MotionPhase, withErasedBlocks } from "./draw-queue";
 import { useMotionPhases } from "./draw-queue-provider";
 import { drawStyles } from "./draw-styles";
@@ -125,14 +125,10 @@ export function DiffCounts({
       ) : progress.state === "folded" ? (
         "Folded"
       ) : (
-        <>
-          <span {...stylex.props(diffCountStyles.added)}>
-            +{compactDiffCount(remaining.additions)}
-          </span>
-          <span {...stylex.props(diffCountStyles.removed)}>
-            −{compactDiffCount(remaining.deletions)}
-          </span>
-        </>
+        <DiffCountHalves
+          additions={remaining.additions}
+          deletions={remaining.deletions}
+        />
       )}
     </span>
   );

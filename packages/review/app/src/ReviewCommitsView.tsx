@@ -188,6 +188,7 @@ function CommitRow({
               <DiffCount
                 additions={file.additions}
                 deletions={file.deletions}
+                binary={file.binary}
               />
             </button>
           ))}

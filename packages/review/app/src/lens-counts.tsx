@@ -16,12 +16,16 @@ export function ElementCountsText({
     <span>Folded</span>
   ) : (
     <>
-      <span {...stylex.props(diffCountStyles.added, styles.added)}>
-        +{compact(progress.remaining.additions)}
-      </span>{" "}
-      <span {...stylex.props(diffCountStyles.removed, styles.removed)}>
-        −{compact(progress.remaining.deletions)}
-      </span>
+      {progress.remaining.additions > 0 && (
+        <span {...stylex.props(diffCountStyles.added, styles.added)}>
+          +{compact(progress.remaining.additions)}
+        </span>
+      )}{" "}
+      {progress.remaining.deletions > 0 && (
+        <span {...stylex.props(diffCountStyles.removed, styles.removed)}>
+          −{compact(progress.remaining.deletions)}
+        </span>
+      )}
     </>
   );
 }
