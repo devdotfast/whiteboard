@@ -212,9 +212,7 @@ export class ReviewMultiDiffUIElementFactory
         }
 			countsTooltip.content = current.countsTooltip;
 			const settled = current.viewedState === "viewed" || current.viewedState === "folded";
-			additions.hidden = current.additions === 0 && !settled;
-			deletions.hidden = current.deletions === 0;
-			counts.hidden ||= additions.hidden && deletions.hidden;
+			additions.hidden = deletions.hidden = false;
 			const path = current.modified ?? current.original;
 			viewed.update(current.viewedState, `${current.viewedScope === 'lens' ? 'selected lens in ' : ''}${path ? reviewMultiDiffLabelPath(path) : 'file'}`, !current.onToggleViewed);
 			counts.classList.toggle("review-counts-viewed", settled);
@@ -224,6 +222,10 @@ export class ReviewMultiDiffUIElementFactory
 				// A hidden file's note already says why it is folded.
 				additions.textContent = "Folded"; deletions.textContent = "";
 				counts.hidden ||= !!current.note;
+			} else {
+				additions.hidden = !current.additions;
+				deletions.hidden = !current.deletions;
+				counts.hidden ||= additions.hidden && deletions.hidden;
 			}
 
 			note.hidden = !current.note;

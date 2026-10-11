@@ -11,7 +11,7 @@ import { Orientation, SplitView } from "../../base/browser/ui/splitview/splitvie
 import { disposableTimeout } from "../../base/common/async.js";
 import { Emitter, Event } from "../../base/common/event.js";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
-import { autorun, derived, observableValue } from "../../base/common/observable.js";
+import { autorun, observableFromEvent, observableValue } from "../../base/common/observable.js";
 import { isEqual } from "../../base/common/resources.js";
 import { URI } from "../../base/common/uri.js";
 import { ElementSizeObserver } from "../../editor/browser/config/elementSizeObserver.js";
@@ -38,7 +38,6 @@ import { REVIEW_COUNTS_PENDING_TOOLTIP, reviewChangesTooltip, reviewCountsToolti
 import { type ReviewDiffFileWire } from "../common/reviewProtocol.js";
 import { binarySizeLabel, isBinaryCounts, type ReviewFileCounts } from "../common/reviewStructuralDiff.js";
 import type { ReviewDiffLayoutSetting } from "./reviewDiffLayout.js";
-import { bindDocumentDiffLayout } from "./reviewDocumentDiffLayout.js";
 import { reviewMultiDiffLabelUris, ReviewMultiDiffUIElementFactory } from "./reviewMultiDiff.js";
 import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
 
@@ -396,13 +395,21 @@ export class ReviewFilesDiffView extends Disposable {
 		if (this._store.isDisposed) return;
 		this.viewModel = viewModel;
 		if (this.document) {
-			const comparisons = derived(reader => viewModel.items.read(reader).map(item => {
-				const entry = input.entries.find(entry => sameResource(item.originalUri, entry.original) && sameResource(item.modifiedUri, entry.modified));
-				if (!entry || entry.file.binary) return undefined;
-				if (entry.file.status === "added" || entry.file.status === "deleted") return "one-sided" as const;
-				return item.diffEditorViewModel instanceof DiffEditorViewModel ? item.diffEditorViewModel : undefined;
-			}));
-			this.documentLayout.value = bindDocumentDiffLayout(this.diffLayout, comparisons, split => this.widget.setRenderSideBySide(split));
+			const preference = observableFromEvent(this.diffLayout.onDidChange, () => this.diffLayout.get());
+			// Unchanged and one-sided files, and completed identical comparisons, override the user's layout.
+			this.documentLayout.value = autorun(reader => {
+				const items = viewModel.items.read(reader);
+				const onePane = items.length > 0 && items.every(item => {
+					const entry = input.entries.find(entry => sameResource(item.originalUri, entry.original) && sameResource(item.modifiedUri, entry.modified));
+					if (!entry || entry.file.binary) return false;
+					if (entry.file.status === "added" || entry.file.status === "deleted" || entry.file.status === "unchanged") return true;
+					const comparison = item.diffEditorViewModel;
+					if (!(comparison instanceof DiffEditorViewModel)) return false;
+					const diff = comparison.diff.read(reader);
+					return comparison.isDiffUpToDate.read(reader) && diff?.identical === true && !diff.quitEarly;
+				});
+				this.widget.setRenderSideBySide(preference.read(reader) === "split" && !onePane);
+			});
 		}
 		// The canvas mounts this view without a user gesture, so the widget's
 		// first-change navigation must never take keyboard focus.
