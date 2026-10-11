@@ -31,6 +31,39 @@ export interface TutorialStepDefinition {
   highlightSelector?: string;
 }
 
+const target = (name: string) => `[data-tour-target="${name}"]`;
+
+/**
+ * Everything the tour looks for. Targets carry a `data-tour-target` name set by
+ * the component that renders them. Folds and the containers a step searches
+ * within keep their own class names.
+ */
+export const TUTORIAL_TARGETS = {
+  keymapPicker: target("keymap-picker"),
+  welcomeEditor: `[data-review-section="Welcome"] ${target("code-editor")}`,
+  diffTab: target("diff-tab"),
+  /** The Whiteboard tab shows the "review" view. */
+  whiteboardTab: target("review-tab"),
+  diffButton: target("open-diff"),
+  lens: `${target("lens")}:not(:disabled)`,
+  lensChip: `${target("lens")}:not(:disabled) ${target("lens-chip")}`,
+  /** Folded code in a diff. */
+  fold: ".review-fold-pill, .diff-fold-reveal",
+  modifiedFold:
+    ".modified-in-monaco-diff-editor :is(.diff-fold-reveal, .review-fold-pill)",
+  sequenceTour: `[data-review-section="Interactive diagrams"] .sequence-diagram ${target("diagram-tour")}`,
+  databaseTour: `[data-review-section="Interactive diagrams"] .database-lens ${target("diagram-tour")}`,
+  /** The fullscreen diagram tour. */
+  tourOverlay: ".diagram-tour-overlay",
+  tourNext: `.diagram-tour-overlay ${target("tour-next")}`,
+  tourClose: `.diagram-tour-overlay ${target("tour-close")}`,
+  finishSection: `[data-review-section="You're all done"] ${target("section-body")}`,
+  /** The view's scrolling region. */
+  viewRegion: ".review-view-region",
+} as const;
+
+const T = TUTORIAL_TARGETS;
+
 export const TUTORIAL_CHAPTERS: readonly TutorialChapterDefinition[] = [
   { id: "welcome", title: "Welcome" },
   { id: "diffs", title: "Diffs and lenses" },
@@ -46,7 +79,7 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     instruction:
       "Choose the editor keys you want to use while reading sessions.",
     completion: "external",
-    targetSelector: ".tutorial-keymap-picker",
+    targetSelector: T.keymapPicker,
   },
   {
     id: "showHover",
@@ -55,8 +88,7 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     instruction:
       "Hover a symbol in the live editor to see its type. Go to Definition works with your usual keys too.",
     completion: "inline-hover",
-    targetSelector:
-      '[data-review-section="Welcome"] [data-review-inline-editor]',
+    targetSelector: T.welcomeEditor,
   },
   {
     id: "openDiff",
@@ -65,9 +97,8 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     instruction:
       "Open Diff to see the whole change, with unchanged structure folded away.",
     completion: "click",
-    targetSelector:
-      '.review-segment[aria-label="Diff"], .tutorial-view-button[data-tutorial-view="diff"]',
-    highlightSelector: '.review-segment[aria-label="Diff"]',
+    targetSelector: `${T.diffTab}, ${T.diffButton}`,
+    highlightSelector: T.diffTab,
   },
   {
     id: "selectLens",
@@ -75,10 +106,8 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     title: "Filter with a lens",
     instruction: "Select a lens to filter the diff to just that part.",
     completion: "click",
-    targetSelector:
-      ".diff-sidebar-lenses [data-lens-id] button[aria-pressed]:not(:disabled)",
-    highlightSelector:
-      ".diff-sidebar-lenses [data-lens-id]:first-of-type .diff-lens-chip",
+    targetSelector: T.lens,
+    highlightSelector: T.lensChip,
   },
   {
     id: "expandFold",
@@ -86,9 +115,8 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     title: "Expand a fold",
     instruction: "Select a folded region to reveal the code diffr hid.",
     completion: "click",
-    targetSelector: ".review-fold-pill, .diff-fold-reveal",
-    highlightSelector:
-      ".modified-in-monaco-diff-editor :is(.diff-fold-reveal, .review-fold-pill)",
+    targetSelector: T.fold,
+    highlightSelector: T.modifiedFold,
   },
   {
     id: "backToWhiteboard",
@@ -96,7 +124,7 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     title: "Go back to the whiteboard",
     instruction: "Select Whiteboard to return to the document.",
     completion: "click",
-    targetSelector: '.review-segment[aria-label="Whiteboard"]',
+    targetSelector: T.whiteboardTab,
   },
   {
     id: "openSequence",
@@ -106,8 +134,7 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
       "Open the sequence Tour, then step to the next message to follow its code.",
     completion: "tour-advance",
     tour: "sequence",
-    targetSelector:
-      '[data-review-section="Interactive diagrams"] .sequence-diagram .diagram-tour-button, .diagram-tour-overlay .tour-pager-next',
+    targetSelector: `${T.sequenceTour}, ${T.tourNext}`,
   },
   {
     id: "closeSequence",
@@ -116,8 +143,7 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     instruction: "Close the tour to return to the document.",
     completion: "tour-close",
     tour: "sequence",
-    targetSelector:
-      '.diagram-tour-overlay button[aria-label="Close guided tour"]',
+    targetSelector: T.tourClose,
   },
   {
     id: "openDatabase",
@@ -127,8 +153,7 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
       "Open the database Tour to follow the order write from the service into storage.",
     completion: "tour-open",
     tour: "database",
-    targetSelector:
-      '[data-review-section="Interactive diagrams"] .database-lens .diagram-tour-button',
+    targetSelector: T.databaseTour,
   },
   {
     id: "getHelp",
@@ -137,8 +162,7 @@ export const TUTORIAL_STEPS: readonly TutorialStepDefinition[] = [
     instruction:
       "We hope you enjoy Whiteboard :), let us know what you think on GH or Discord.",
     completion: "finish",
-    targetSelector:
-      '[data-review-section="You\'re all done"] .review-section-body',
+    targetSelector: T.finishSection,
   },
 ];
 

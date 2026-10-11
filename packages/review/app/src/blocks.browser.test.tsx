@@ -162,7 +162,7 @@ const rendered: Record<
     has(c, "button[aria-expanded='true']") && text(c).includes("Hello."),
   tutorial: (c) =>
     has(c, ".tutorial-keymap-picker") &&
-    has(c, '.tutorial-view-button[data-tutorial-view="diff"]'),
+    has(c, '[data-tour-target="open-diff"]'),
   callout: (c) =>
     c.querySelector("blockquote[data-tone='warning'] strong")?.textContent ===
       "Note" && text(c).includes("Careful."),
@@ -395,7 +395,7 @@ describe("block components", () => {
       await settled(
         () =>
           has(container, ".tutorial-keymap-picker") &&
-          has(container, ".tutorial-view-button"),
+          has(container, '[data-tour-target="open-diff"]'),
       ),
     ).toBe(true);
 
@@ -410,7 +410,7 @@ describe("block components", () => {
     expect(selectKeymap).toHaveBeenCalledWith("vim");
 
     const diff = container.querySelector<HTMLButtonElement>(
-      '[data-tutorial-view="diff"]',
+      '[data-tour-target="open-diff"]',
     )!;
 
     expect(diff).not.toBeNull();

@@ -206,7 +206,7 @@ export function BugReportControl({
         xstyle={shellStyles.topbarItem}
         aria-label="Report a bug"
         ref={tooltip}
-        disabled={tutorial !== null || capturing}
+        disabled={Boolean(tutorial) || capturing}
         onClick={() => void openDialog()}
       >
         <BugIcon xstyle={controlStyles.chromeIcon} />

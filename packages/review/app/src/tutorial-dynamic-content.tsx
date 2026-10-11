@@ -2,7 +2,6 @@ import { fontSize } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement, ReactNode } from "react";
 
-import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 
@@ -15,17 +14,14 @@ export function TutorialViewButton({
 }): ReactElement | null {
   if (!useTutorial()) return null;
 
-  // The class is the tutorial's target.
   return (
     <button
       type="button"
-      {...withClass("tutorial-view-button", styles.button)}
-      data-tutorial-view={view}
+      {...stylex.props(styles.button)}
+      data-tour-target={`open-${view}`}
       onClick={() =>
         document
-          .querySelector<HTMLButtonElement>(
-            '.review-segment[aria-label="Diff"]',
-          )
+          .querySelector<HTMLButtonElement>(`[data-tour-target="${view}-tab"]`)
           ?.click()
       }
     >

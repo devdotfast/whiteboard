@@ -171,11 +171,6 @@ export async function run(ctx) {
 
   await clickThrough("chooseKeymap");
 
-  await until(
-    async () => (await guideStep(page)) === "showHover",
-    "hover step",
-  );
-
   const totalCents = page
     .locator(
       '[data-review-section="Welcome"] .modified-in-monaco-diff-editor .view-line span',
@@ -218,11 +213,6 @@ export async function run(ctx) {
   await page.screenshot({ path: path.join(root, "tutorial-fold.png") });
   await clickThrough("expandFold");
   await clickThrough("backToWhiteboard");
-
-  await until(
-    async () => (await guideStep(page)) === "openSequence",
-    "sequence step",
-  );
   await page.screenshot({ path: path.join(root, "tutorial-sequence.png") });
   await clickThrough("openSequence");
   await until(() => guideOnTop(page), "the guide above the sequence tour");

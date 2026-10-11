@@ -580,6 +580,7 @@ function SequenceDiagramFigure({
               <button
                 type="button"
                 {...withClass("diagram-tour-button", diagramStyles.control)}
+                data-tour-target="diagram-tour"
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();

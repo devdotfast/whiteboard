@@ -201,6 +201,7 @@ function ReviewPanelFrame({
             xstyle={panelStyles.close}
             onClick={onClose}
             aria-label={closeLabel}
+            data-tour-target={tour ? "tour-close" : undefined}
           >
             <CloseIcon xstyle={controlStyles.inertIcon} />
           </IconButton>
@@ -321,6 +322,7 @@ export function ReviewSection({
       <div
         ref={bodyRef}
         className="review-section-body"
+        data-tour-target="section-body"
         hidden={collapsed || undefined}
       >
         {children}
@@ -1132,11 +1134,8 @@ export function GuidedTourPanel({
             {showIntroPill ? (
               <button
                 type="button"
-                {...withClass(
-                  "tour-pager-next",
-                  tourStyles.pill,
-                  tourStyles.pillIntro,
-                )}
+                {...stylex.props(tourStyles.pill, tourStyles.pillIntro)}
+                data-tour-target="tour-next"
                 onClick={() => {
                   setHasScrolled(true);
                   stepTo(1);
@@ -1168,7 +1167,7 @@ export function GuidedTourPanel({
                   {displayIndex + 1}/{tour.stops.length}
                 </span>
                 <IconButton
-                  className="tour-pager-next"
+                  data-tour-target="tour-next"
                   xstyle={tourStyles.pillButton}
                   aria-label="Next step"
                   disabled={displayIndex === lastIndex}

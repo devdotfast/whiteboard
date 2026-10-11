@@ -175,7 +175,7 @@ export function ReviewDiffView({
 
   const lenses = useReviewLenses();
   // The courier would nudge the lens the tour rings.
-  const tutorial = useTutorial() !== null;
+  const tutorial = useTutorial();
   const diffFiles = useReviewDiffFiles();
   const lens = scope ? undefined : lenses?.active;
   const [lensList, setLensList] = useState<HTMLDivElement | null>(null);
@@ -373,6 +373,7 @@ export function ReviewDiffView({
                         stats.state === "viewed" && !selected && styles.faded,
                       )}
                       aria-pressed={selected}
+                      data-tour-target="lens"
                       disabled={!!item.unavailable || (empty && !selected)}
                       onClick={() =>
                         selected ? lenses.clear() : lenses.select(item.id)
@@ -381,12 +382,12 @@ export function ReviewDiffView({
                       {/* The title and hover wash sit on the chip, not the
                           toggle, so they never stack on the counts' tooltip. */}
                       <span
-                        {...withClass(
-                          "diff-lens-chip",
+                        {...stylex.props(
                           lensChipMarker,
                           styles.chip,
                           selected && styles.chipActive,
                         )}
+                        data-tour-target="lens-chip"
                         title={
                           item.unavailable ??
                           (selected ? "Clear lens filter" : undefined)

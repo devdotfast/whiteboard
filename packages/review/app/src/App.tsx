@@ -107,7 +107,6 @@ import { withClass } from "./stylex-props";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { traceStyles } from "./trace-styles";
-import { useTutorial } from "./tutorial-context";
 import { TutorialExperienceProvider } from "./tutorial-experience";
 import { captureUiEvent } from "./ui-telemetry";
 import { useReviewTabTelemetry } from "./use-review-tab-telemetry";
@@ -443,8 +442,6 @@ function ReviewLayoutContent({
 
   useReviewTabTelemetry(activeView);
 
-  const tutorial = useTutorial() !== null;
-
   const tocEntries = document.tocEntries ?? [];
 
   // Subscribe before the canvas signals ready so a reveal immediately after
@@ -541,6 +538,7 @@ function ReviewLayoutContent({
                         : reviewViewLabel(view)
                     }
                     aria-pressed={activeView === view}
+                    data-tour-target={`${view}-tab`}
                     title={view === "map" ? "Map (Experimental)" : undefined}
                     {...withClass(
                       "review-segment",

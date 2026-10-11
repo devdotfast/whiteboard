@@ -34,8 +34,7 @@ describe("tutorial dynamic content", () => {
   it("opens the native Diff view", () => {
     const container = document.createElement("div");
     const nativeView = document.createElement("button");
-    nativeView.className = "review-segment";
-    nativeView.setAttribute("aria-label", "Diff");
+    nativeView.dataset.tourTarget = "diff-tab";
     const openView = vi.fn<() => void>();
     nativeView.addEventListener("click", openView);
     document.body.append(nativeView, container);

@@ -321,6 +321,7 @@ export function DocumentCodeView({
         ref={setContainer}
         {...stylex.props(styles.editor)}
         data-review-inline-editor={path}
+        data-tour-target="code-editor"
         data-review-inline-editor-active={active ? "true" : "false"}
         style={{ height }}
       />

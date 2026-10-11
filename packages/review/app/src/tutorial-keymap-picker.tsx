@@ -18,7 +18,6 @@ export function TutorialKeymapPicker() {
   const [pending, setPending] = useState<ReviewKeymapChoice | null>(null);
 
   return (
-    // The class is the tutorial's target.
     <div
       {...withClass(
         "tutorial-keymap-picker",
@@ -27,6 +26,7 @@ export function TutorialKeymapPicker() {
       )}
       role="group"
       aria-label="Keybindings"
+      data-tour-target="keymap-picker"
     >
       {choices.map((choice) => {
         const pressed = tutorial?.content.keymap === choice.value;

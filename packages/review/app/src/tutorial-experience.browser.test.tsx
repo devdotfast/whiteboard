@@ -88,14 +88,11 @@ function Shell(): ReactElement {
           type="button"
           {...withClass("review-segment", controlStyles.segment)}
           aria-label="Diff"
+          data-tour-target="diff-tab"
         >
           Diff
         </button>
-        <button
-          type="button"
-          className="tutorial-view-button"
-          data-tutorial-view="diff"
-        >
+        <button type="button" data-tour-target="open-diff">
           Open the diff
         </button>
         <section
@@ -107,7 +104,10 @@ function Shell(): ReactElement {
               <ReviewSection key={title} title={title}>
                 <h2>{title}</h2>
                 {title === "Welcome" ? (
-                  <div className="tutorial-keymap-picker" />
+                  <div
+                    className="tutorial-keymap-picker"
+                    data-tour-target="keymap-picker"
+                  />
                 ) : (
                   <p>{title} body</p>
                 )}

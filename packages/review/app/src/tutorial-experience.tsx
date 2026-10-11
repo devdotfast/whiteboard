@@ -38,6 +38,7 @@ import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 import {
   TUTORIAL_CHAPTERS,
+  TUTORIAL_TARGETS,
   type TutorialChapterId,
   type TutorialStepDefinition,
   TUTORIAL_STEPS as steps,
@@ -200,7 +201,8 @@ export function TutorialExperienceProvider({
             visibilityProperty: true,
             opacityProperty: true,
           }) ||
-          (aboveTour && candidate.closest(".diagram-tour-overlay") === null)
+          (aboveTour &&
+            candidate.closest(TUTORIAL_TARGETS.tourOverlay) === null)
         )
           continue;
 
@@ -229,7 +231,7 @@ export function TutorialExperienceProvider({
       revealed = true;
 
       const view = (
-        root.querySelector(".review-view-region") ?? root
+        root.querySelector(TUTORIAL_TARGETS.viewRegion) ?? root
       ).getBoundingClientRect();
 
       const rect = next.getBoundingClientRect();
