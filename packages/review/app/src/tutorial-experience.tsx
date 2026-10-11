@@ -17,10 +17,7 @@ import { createPortal } from "react-dom";
 
 import { useReviewDebugSettings } from "./debug-settings";
 import { TutorialIcon } from "./icons";
-import {
-  REVIEW_INTERACTION_EVENT,
-  reviewInteractionDetail,
-} from "./review-interaction-event";
+import { INLINE_HOVER_EVENT } from "./inline-hover-event";
 import { useOptionalReviewPanel } from "./review-panel";
 import type { OverlayTourKind } from "./review-panel-store";
 import { useReviewContainer } from "./review-root-context";
@@ -156,23 +153,19 @@ export function TutorialExperienceProvider({
       if (clicked.closest(activeStep.targetSelector)) completeStep(activeStep);
     };
 
-    const onReviewInteraction = (event: Event) => {
-      if (
-        activeStep.completion === "inline-hover" &&
-        reviewInteractionDetail(event)
-      )
-        completeStep(activeStep);
+    const onInlineHover = () => {
+      if (activeStep.completion === "inline-hover") completeStep(activeStep);
     };
 
     // Monaco acts on pointer down.
     root.addEventListener("pointerdown", onClick, true);
     root.addEventListener("click", onClick, true);
-    root.addEventListener(REVIEW_INTERACTION_EVENT, onReviewInteraction);
+    root.addEventListener(INLINE_HOVER_EVENT, onInlineHover);
 
     return () => {
       root.removeEventListener("pointerdown", onClick, true);
       root.removeEventListener("click", onClick, true);
-      root.removeEventListener(REVIEW_INTERACTION_EVENT, onReviewInteraction);
+      root.removeEventListener(INLINE_HOVER_EVENT, onInlineHover);
     };
   }, [activeStep, completeStep, dismissed, root]);
 
