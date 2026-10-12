@@ -6,11 +6,22 @@ import {
 } from "./document.js";
 import type { Snapshot } from "./store.js";
 
+interface RelatedBoard {
+  id: string;
+  title: string;
+}
+
 /** A reading view of saved content, not another document format to maintain. */
 export function documentText(
   snapshot: Snapshot,
   targetId?: string,
   full = false,
+  /** Where the whiteboard sits among its project's, by title. */
+  relations?: {
+    parent?: RelatedBoard;
+    children: RelatedBoard[];
+    dependsOn: RelatedBoard[];
+  },
 ): string {
   const target =
     targetId === undefined
@@ -24,8 +35,22 @@ export function documentText(
   const lines = [
     `# ${snapshot.title}`,
     `Session ${snapshot.reviewId} · version ${snapshot.version}`,
-    "",
   ];
+
+  if (relations && targetId === undefined) {
+    const list = (boards: RelatedBoard[]) =>
+      boards.map((board) => `${board.title} (${board.id})`).join(", ");
+
+    if (relations.parent) lines.push(`Parent: ${list([relations.parent])}`);
+
+    if (relations.children.length)
+      lines.push(`Children, in order: ${list(relations.children)}`);
+
+    if (relations.dependsOn.length)
+      lines.push(`Depends on: ${list(relations.dependsOn)}`);
+  }
+
+  lines.push("");
 
   const write = (depth: number, text: string) => {
     for (const line of text.split("\n")) lines.push("  ".repeat(depth) + line);

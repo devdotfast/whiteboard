@@ -55,12 +55,20 @@ export interface ReviewApiSummary {
     reason?: string;
     pending?: true;
   };
+  /** The board this one is nested under; absent at top level. */
+  parentId?: string;
+  /** The boards nested under this one, in sibling order. */
+  children?: string[];
+  /** The boards in its project this one builds on. */
+  dependsOn?: string[];
 }
 
 export type ReviewStreamSnapshot<Snapshot extends object = JsonObject> =
   Snapshot & {
     activity: { workingCount: number; expiresAt: number | null };
     coverageRevision: number;
+    /** Bumped when the review's parent or siblings change. */
+    placeRevision?: number;
   };
 
 export type ReviewStreamLine<Snapshot extends object = JsonObject> =

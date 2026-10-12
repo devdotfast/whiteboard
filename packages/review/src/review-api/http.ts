@@ -8,6 +8,8 @@ import { resolveRepoContextSync } from "@dev.fast/local-vcs";
 import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
+  type ReviewApiSummary,
+  type ReviewBoardPlace,
   type ReviewRemoteLanguageEnvironment,
   type ReviewRemoteNavigatorAnswer,
   type ReviewStreamLine,
@@ -278,6 +280,11 @@ export function createReviewApi(
 
   const catalog = () => [...store.list(), ...(shared?.list() ?? [])];
 
+  /** Where a board sits among its project's: its parent, and the parent's
+   * children in order. */
+  const placeOf = (id: string): ReviewBoardPlace =>
+    isShared(id) || !store.has(id) ? { siblings: [] } : store.place(id);
+
   app.get("/", (context) => context.json(catalog()));
 
   app.get("/feedback-eligibility", (context) =>
@@ -483,6 +490,14 @@ export function createReviewApi(
     let dirtyList = lists;
     const dirtyReviews = new Set(reviewIds);
     let sentList: string | undefined;
+    // Bumped when a review's parent or siblings change, so its header
+    // reloads them.
+    const placeRevision = new Map<string, number>();
+    const placeKey = (id: string) => JSON.stringify(placeOf(id));
+
+    const placeKeys = new Map(
+      [...reviewIds].map((reviewId) => [reviewId, placeKey(reviewId)] as const),
+    );
 
     const readReviewLine = (reviewId: string): ReviewStreamLine<Snapshot> => {
       try {
@@ -493,6 +508,7 @@ export function createReviewApi(
             ...readReview(reviewId),
             activity: store.activity.read(reviewId),
             coverageRevision: data?.coverageRevision ?? 0,
+            placeRevision: placeRevision.get(reviewId) ?? 0,
           },
         };
       } catch (error) {
@@ -563,7 +579,18 @@ export function createReviewApi(
           if (markLists()) notify();
         }) ?? (() => {}),
         store.subscribeCatalog(() => {
-          if (markLists()) notify();
+          let marked = markLists();
+
+          for (const [id, key] of placeKeys) {
+            const next = placeKey(id);
+
+            if (next === key) continue;
+            placeKeys.set(id, next);
+            placeRevision.set(id, (placeRevision.get(id) ?? 0) + 1);
+            marked = markReview(id) || marked;
+          }
+
+          if (marked) notify();
         }),
       ];
 
@@ -1651,6 +1678,14 @@ export function createReviewApi(
     return context.json({ layers });
   });
 
+  app.get("/:id/place", (context) => {
+    const id = context.req.param("id");
+
+    if (!isShared(id)) store.assertExists(id);
+
+    return context.json(placeOf(id));
+  });
+
   app.get("/:id/history", (context) => {
     const id = context.req.param("id");
 
@@ -1665,6 +1700,40 @@ export function createReviewApi(
       },
     ]);
   });
+
+  /** A board's relations as session_list reports them: only those it has. */
+  const listedRelations = ({
+    parentId,
+    children,
+    dependsOn,
+  }: ReturnType<typeof store.relations>) => {
+    const listed: Partial<ReturnType<typeof store.relations>> = {};
+
+    if (parentId) listed.parentId = parentId;
+
+    if (children.length) listed.children = children;
+
+    if (dependsOn.length) listed.dependsOn = dependsOn;
+
+    return listed;
+  };
+
+  /** A board's relations, each board named by its title. */
+  const relatedBoards = (id: string) => {
+    const { parentId, children, dependsOn } = store.relations(id);
+
+    const named = (board: string) => ({
+      id: board,
+      title: store.read(board).title,
+    });
+
+    return {
+      ...(parentId && { parent: named(parentId) }),
+      children: children.map(named),
+      dependsOn: dependsOn.map(named),
+    };
+  };
+
   app.get("/:id/inspect", (context) => {
     const query = inspectQuerySchema.parse(context.req.query());
     const id = context.req.param("id");
@@ -1672,12 +1741,19 @@ export function createReviewApi(
 
     return context.json(
       query.format === "text"
-        ? documentText(snapshot, query.targetId, Boolean(query.full))
+        ? documentText(
+            snapshot,
+            query.targetId,
+            Boolean(query.full),
+            isShared(id) ? undefined : relatedBoards(id),
+          )
         : query.targetId !== undefined
           ? inspectSnapshot(snapshot, query.targetId)
-          : query.full
-            ? snapshot
-            : inspectSnapshot(snapshot),
+          : {
+              ...(query.full ? snapshot : inspectSnapshot(snapshot)),
+              // Its place among the project's boards, as session_list has it.
+              ...(!isShared(id) && listedRelations(store.relations(id))),
+            },
     );
   });
   app.get("/:id", async (context) => {
