@@ -80,7 +80,13 @@ export function DiagramTourOverlay({
       aria-label={`${tour.title ?? "Guided"} tour`}
       style={overlayStyle}
     >
-      <div {...stylex.props(styles.stage, flow && styles.flowStage)}>
+      <div
+        {...stylex.props(
+          styles.stage,
+          flow && styles.flowStage,
+          shellStyles.clearsWindowControls,
+        )}
+      >
         {children}
       </div>
       <div
@@ -91,7 +97,7 @@ export function DiagramTourOverlay({
         )}
         {...paneResize.separatorProps}
       />
-      <div {...stylex.props(styles.panel)}>
+      <div {...stylex.props(styles.panel, !flow && styles.panelAlone)}>
         <GuidedTourPanel
           tour={tour}
           activeAnchor={activeAnchor}
@@ -186,5 +192,13 @@ const styles = stylex.create({
     flexDirection: "column",
     minWidth: 0,
     minHeight: 0,
+  },
+  // Without its stage, the panel is the left column, under the window
+  // controls.
+  panelAlone: {
+    "--review-fullscreen-inset": {
+      default: null,
+      [narrow]: "var(--review-page-bar-inset, 0px)",
+    },
   },
 });

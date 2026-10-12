@@ -2761,6 +2761,8 @@ const styles = stylex.create({
     overflow: "hidden",
     padding: 0,
     backgroundColor: tokens.bg,
+    // Its header clears the window controls, as the page bar does.
+    "--review-fullscreen-inset": "var(--review-page-bar-inset, 0px)",
   },
   frame: {
     position: "relative",
@@ -2808,7 +2810,9 @@ const styles = stylex.create({
     minWidth: 0,
     alignItems: "center",
     minHeight: "36px",
-    padding: "0 12px",
+    paddingBlock: 0,
+    paddingRight: "12px",
+    paddingLeft: "calc(12px + var(--review-fullscreen-inset, 0px))",
     backgroundColor: tokens.transparent,
     boxShadow: "none",
     fontFamily: tokens.chromeFont,

@@ -5,6 +5,7 @@
 
 import { $, addDisposableListener } from "../../../../base/browser/dom.js";
 import { renderIcon } from "../../../../base/browser/ui/iconLabel/iconLabels.js";
+import { onDidChangeFullscreen, onDidChangeZoomLevel } from "../../../../base/browser/browser.js";
 import { Codicon } from "../../../../base/common/codicons.js";
 import { Emitter, Event } from "../../../../base/common/event.js";
 import { timeout } from "../../../../base/common/async.js";
@@ -23,7 +24,7 @@ import type { EditorInput } from "../../../../workbench/common/editor/editorInpu
 import { IEditorService } from "../../../../workbench/services/editor/common/editorService.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import { REVIEW_CHROME_HEIGHT } from "../../../common/reviewChrome.js";
-import { REVIEW_SIDEBAR_MINIMUM_WIDTH, TAB_COUNT_DIGITS, sidebarMinimumWidth, sidebarTabWidth, tabsRowWidth } from "./reviewSidebarWidth.js";
+import { REVIEW_SIDEBAR_MINIMUM_WIDTH, TAB_COUNT_DIGITS, measuredOnce, sidebarMinimumWidth, sidebarTabWidth, tabsRowWidth } from "./reviewSidebarWidth.js";
 import type {
 	ReviewAskState,
 	ReviewProjectThreads,
@@ -72,6 +73,8 @@ interface ReviewSidebarPane {
 	readonly tab: HTMLButtonElement;
 	readonly count: HTMLElement;
 	readonly element: HTMLElement;
+	/** Shown only while the labels are folded away. */
+	readonly tooltip: ReviewTooltip;
 }
 
 /** Where a diff view puts its changed-files tree in the Files group. */
@@ -93,12 +96,23 @@ export const REVIEW_SIDEBAR_TAB_ICONS: Record<ReviewSidebarPaneId, ReviewSidebar
 	diff: [{ tag: "path", attrs: { d: "M8 1.75 V10.25 M3.75 6 H12.25 M3.75 13 H12.25" } }],
 };
 
-/** The tabs in order; `noun` names what a tab counts. */
+/** The tabs in order; `noun` names what a tab counts, in the rail's
+ * tooltips. */
 export const REVIEW_SIDEBAR_PANES: readonly { id: ReviewSidebarPaneId; title: string; command: string; noun?: string }[] = [
 	{ id: "whiteboard", title: localize("review.sidebar.whiteboard", "Whiteboard"), command: REVIEW_SIDEBAR_TAB_COMMANDS[0] },
 	{ id: "diff", title: localize("review.sidebar.diff", "Diff"), command: REVIEW_SIDEBAR_TAB_COMMANDS[1], noun: "file" },
 	{ id: "threads", title: localize("review.sidebar.threads", "Threads"), command: REVIEW_SIDEBAR_TAB_COMMANDS[2], noun: "thread" },
 ];
+
+/** A tab's name and count, as its tooltip and accessible name say it:
+ * "Diff · 140 files". */
+function paneSummary(id: ReviewSidebarPaneId, count: string): string {
+	const { title, noun } = REVIEW_SIDEBAR_PANES.find((pane) => pane.id === id)!;
+	return count && noun ? `${title} · ${count} ${noun}${count === "1" ? "" : "s"}` : title;
+}
+
+/** The collapsed sidebar's width. KEEP IN SYNC WITH `.review-sidebar-rail`. */
+const REVIEW_SIDEBAR_RAIL_WIDTH = 52;
 
 /** Whether Threads lists this board's threads or the project's, per window. */
 const REVIEW_SIDEBAR_THREADS_FILTER_KEY = "review.sidebar.threadsFilter";
@@ -233,6 +247,31 @@ export class ReviewSidebarPart extends Part {
 	override layout(width: number, height: number, top: number, left: number): void {
 		super.layout(width, height, top, left);
 		this.fitControls();
+		this.foldTabs(width);
+	}
+
+	/** Narrower than the labelled tabs need, they fold to icons and counts.
+	 * The labelled width is measured once, apart from the layout, so the
+	 * choice follows the sidebar's width alone and can't flip back on
+	 * itself. */
+	private foldTabs(width: number): void {
+		const folded = width < this.tabsRow.get().labelled;
+		if (this.tabRow?.classList.contains("folded") === folded) return;
+		this.tabRow?.classList.toggle("folded", folded);
+		this.describeTabs();
+	}
+
+	/** Each tab's accessible name, its full label and count whether or not
+	 * the label shows, and its tooltip while folded. */
+	private describeTabs(): void {
+		const folded = this.tabRow?.classList.contains("folded") ?? false;
+		for (const { id, tab, count, tooltip } of this.panes) {
+			const summary = paneSummary(id, count.textContent ?? "");
+			tab.setAttribute("aria-label", summary);
+			const { command } = REVIEW_SIDEBAR_PANES.find((pane) => pane.id === id)!;
+			const shortcut = this.shortcut(command);
+			tooltip.content = folded ? { label: summary, ...(shortcut && { shortcut }) } : undefined;
+		}
 	}
 
 	/** Measures where the window controls end and how wide the tabs are,
@@ -240,34 +279,51 @@ export class ReviewSidebarPart extends Part {
 	private fitControls(): void {
 		const controls = this.layoutService.mainContainer.querySelector(".part.titlebar .titlebar-left");
 		if (!controls || !this.element) return;
-		const width = sidebarMinimumWidth(controls.getBoundingClientRect().right, this.element.getBoundingClientRect().left, this.tabsWidth());
+		const width = sidebarMinimumWidth(controls.getBoundingClientRect().right, this.element.getBoundingClientRect().left, this.tabsRow.get().folded);
 		if (width === this.fitWidth) return;
 		this.fitWidth = width;
 		this._onDidChange.fire(undefined);
 	}
 
-	/** Sizes every tab alike, hidden ones included, and returns the row's
-	 * width with all of them. Each label is measured in a hidden copy of the
-	 * row, with its count at full width. */
-	private tabsWidth(): number {
+	/** The tabs row's width, measured once; again when the zoom or the fonts
+	 * change. */
+	private readonly tabsRow = measuredOnce(() => this.tabsWidth());
+
+	/** Sizes every labelled tab alike, hidden ones included, and returns
+	 * the row's width with all of them labelled, and with all of them folded
+	 * to an icon and count. Each is measured in a hidden copy of the row,
+	 * with its count at full width. */
+	private tabsWidth(): { labelled: number; folded: number } {
 		const row = this.tabRow;
 		const first = this.panes[0]?.tab;
-		if (!row || !first) return 0;
+		if (!row || !first) return { labelled: 0, folded: 0 };
 		const probe = $(".review-sidebar-tabs-probe", { "aria-hidden": "true" });
-		const labels = REVIEW_SIDEBAR_PANES.map(({ title, noun }) => {
+		const foldedProbe = $(".review-sidebar-tabs-probe.folded", { "aria-hidden": "true" });
+		const tab = (noun: string | undefined, title?: string) => {
 			const label = $("span.review-sidebar-tab-label");
-			label.append($("span", undefined, title));
+			if (title) label.append($("span.review-sidebar-tab-title", undefined, title));
 			if (noun) label.append($("span.review-sidebar-tab-count", undefined, "9".repeat(TAB_COUNT_DIGITS)));
-			probe.append($("span.review-sidebar-tab", undefined, label));
-			return label;
+			const icon = $("span.review-sidebar-tab-icon");
+			icon.append(svgIcon(REVIEW_SIDEBAR_TAB_ICONS.whiteboard, 16));
+			return $("span.review-sidebar-tab", undefined, icon, label);
+		};
+		const labels = REVIEW_SIDEBAR_PANES.map(({ title, noun }) => {
+			const labelled = tab(noun, title);
+			probe.append(labelled);
+			foldedProbe.append(tab(noun));
+			return labelled.querySelector(".review-sidebar-tab-label")!;
 		});
-		row.appendChild(probe);
+		row.append(probe, foldedProbe);
 		const widths = labels.map((label) => label.getBoundingClientRect().width);
+		const foldedWidth = Math.ceil(Math.max(0, ...[...foldedProbe.children].map((child) => child.getBoundingClientRect().width)));
 		probe.remove();
+		foldedProbe.remove();
 		const width = sidebarTabWidth(widths, parseFloat(getComputedStyle(first).paddingLeft) || 0);
 		row.style.setProperty("--review-sidebar-tab-width", `${width}px`);
 		const style = getComputedStyle(row);
-		return tabsRowWidth(width, parseFloat(style.columnGap) || 0, parseFloat(style.paddingLeft) || 0);
+		const gap = parseFloat(style.columnGap) || 0;
+		const padding = parseFloat(style.paddingLeft) || 0;
+		return { labelled: tabsRowWidth(width, gap, padding), folded: tabsRowWidth(foldedWidth, gap, padding) };
 	}
 
 	override create(parent: HTMLElement): void {
@@ -294,19 +350,32 @@ export class ReviewSidebarPart extends Part {
 			if (id === "threads") icon.append(threadsBadge());
 			const count = $("span.review-sidebar-tab-count");
 			const label = $("span.review-sidebar-tab-label");
-			label.append($("span", undefined, title), count);
+			label.append($("span.review-sidebar-tab-title", undefined, title), count);
 			tab.append(icon, label);
 			tabRow.appendChild(tab);
-			// Its label shows, so no tooltip: its shortcut is read out instead.
+			// While its label shows, no tooltip: its shortcut is read out
+			// instead. Folded to its icon, it has one.
 			this._register(this.describeShortcut(tab, command));
+			const tooltip = this._register(new ReviewTooltip(this.hoverService, tab));
 			const element = $(`.review-sidebar-pane.review-sidebar-pane-${id}`, { role: "tabpanel" });
 			panes.appendChild(element);
-			this.panes.push({ id, tab, count, element });
+			this.panes.push({ id, tab, count, element, tooltip });
 			this._register(addDisposableListener(tab, "click", () => this.pick(id)));
 		}
 
 		// A count or a tab that comes or goes moves the minimum.
 		this._register(this.onDidChangeTabs(() => this.fitControls()));
+
+		// The tabs are measured once the row exists, and again only when the
+		// zoom or the fonts change their size.
+		this.tabsRow.stale();
+		const remeasure = () => {
+			this.tabsRow.stale();
+			this.fitControls();
+			if (this.element) this.foldTabs(this.element.getBoundingClientRect().width);
+		};
+		this._register(onDidChangeZoomLevel(() => requestAnimationFrame(remeasure)));
+		this._register(addDisposableListener(parent.ownerDocument.fonts, "loadingdone", remeasure));
 
 		const header = (pane: HTMLElement, title: string) => {
 			const row = $(".review-sidebar-pane-header");
@@ -426,6 +495,17 @@ export class ReviewSidebarPart extends Part {
 			pane.element.hidden = !selected;
 		}
 		this._onDidChangeTabs.fire();
+	}
+
+	/** The tabs as the collapsed rail draws them. */
+	tabStates(): { id: ReviewSidebarPaneId; active: boolean; offered: boolean; count: string; badge: HTMLElement | undefined }[] {
+		return this.panes.map((pane) => ({
+			id: pane.id,
+			active: pane.id === this.lit.active,
+			offered: this.offers(pane.id),
+			count: pane.count.textContent ?? "",
+			badge: pane.tab.querySelector<HTMLElement>(".review-sidebar-tab-badge") ?? undefined,
+		}));
 	}
 
 	/** The board the sidebar shows, from the active tab. */
@@ -595,6 +675,7 @@ export class ReviewSidebarPart extends Part {
 			threads: boardThreads.length || undefined,
 		};
 		for (const pane of this.panes) pane.count.textContent = counts[pane.id] === undefined ? "" : String(counts[pane.id]);
+		this.describeTabs();
 		// The blue dot: another board in the project changed since last viewed.
 		const badge = this.panes.find((pane) => pane.id === "whiteboard")?.tab.querySelector(".review-sidebar-tab-badge");
 		if (badge instanceof HTMLElement) badge.hidden = !project?.boards.some((board) => board.changed && board.reviewId !== reviewId);
@@ -614,6 +695,7 @@ export class ReviewSidebarPart extends Part {
 			threadsBadge.hidden = !mark;
 			threadsBadge.dataset.mark = mark ?? "";
 		}
+		// After the counts and badges, so the rail copies this render's.
 		this._onDidChangeTabs.fire();
 
 		this.rendering = this.rendering
@@ -732,7 +814,8 @@ export interface IReviewSidebarPartsService {
 	/** Shows the sidebar on its Threads tab. */
 	showThreads(): void;
 
-	/** Shows the sidebar on a tab, and that tab's view. */
+	/** Picks a tab and its view; Diff and Threads also open a folded
+	 * sidebar. */
 	showTab(id: ReviewSidebarPaneId): void;
 
 	/** Scroll requests from the sidebar for the board on screen. */
@@ -751,6 +834,9 @@ export interface IReviewSidebarPartsService {
 	/** The lens list, while the sidebar shows the board. */
 	lensList(reviewId: string | undefined): HTMLElement | undefined;
 }
+
+/** Set on the workbench while the closed sidebar shows as its rail. */
+const REVIEW_SIDEBAR_RAILED_CLASS = "review-sidebar-railed";
 
 /** Set on the workbench while a board is active, so the toggle shows. */
 const REVIEW_SIDEBAR_AVAILABLE_CLASS = "review-explorer-available";
@@ -775,12 +861,18 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 	private available = false;
 	private userClosed: boolean;
 	private applying = false;
+	/** The tabs alone, at the window's left edge while the sidebar is
+	 * closed beside a board. */
+	private readonly rail: HTMLElement;
+	private readonly railButtons = new Map<ReviewSidebarPaneId, { button: HTMLButtonElement; tooltip: ReviewTooltip; badge: HTMLElement }>();
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IEditorService private readonly editorService: IEditorService,
 		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
 		@IStorageService private readonly storageService: IStorageService,
+		@IHoverService hoverService: IHoverService,
+		@IKeybindingService private readonly keybindingService: IKeybindingService,
 	) {
 		super();
 		this.part = this._register(
@@ -789,6 +881,31 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 		const shownOrHidden = this._register(new Emitter<void>());
 		this.onDidChangeBoard = Event.any(this.part.onDidChangeBoard, shownOrHidden.event);
 		this.userClosed = this.storageService.getBoolean(REVIEW_SIDEBAR_USER_CLOSED_KEY, StorageScope.WORKSPACE, false);
+
+		this.rail = $(".review-sidebar-rail", { role: "tablist" });
+		for (const { id, title } of REVIEW_SIDEBAR_PANES) {
+			const button = $("button.review-sidebar-rail-tab", { role: "tab", "aria-label": title }) as HTMLButtonElement;
+			button.type = "button";
+			const badge = $("span.review-sidebar-rail-badge");
+			button.append(svgIcon(REVIEW_SIDEBAR_TAB_ICONS[id], 16), badge);
+			this.rail.appendChild(button);
+			// Beside the tab: the rail runs up under the window controls.
+			const tooltip = this._register(new ReviewTooltip(hoverService, button, { label: title }, "right"));
+			this.railButtons.set(id, { button, tooltip, badge });
+			// Whiteboard switches the view and keeps the rail; Diff and Threads
+			// open the sidebar, for Files and Lenses or the list.
+			this._register(addDisposableListener(button, "click", () => this.showTab(id)));
+		}
+		this.layoutService.mainContainer.appendChild(this.rail);
+		this._register(toDisposable(() => this.rail.remove()));
+		this._register(this.part.onDidChangeTabs(() => this.renderRail()));
+		this._register(this.keybindingService.onDidUpdateKeybindings(() => this.renderRail()));
+		// The window controls the page bar clears move with the window's
+		// size, with the zoom, which resizes them once the title bar lays out,
+		// and with full screen, where the traffic lights go away.
+		this._register(this.layoutService.onDidLayoutMainContainer(() => this.renderRail()));
+		this._register(onDidChangeZoomLevel(() => requestAnimationFrame(() => this.renderRail())));
+		this._register(onDidChangeFullscreen(() => this.renderRail()));
 
 		this._register(this.editorService.onDidActiveEditorChange(() => this.update()));
 		this._register(
@@ -831,14 +948,18 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 
 	showTab(id: ReviewSidebarPaneId): void {
 		if (!this.available) return;
-		this.show();
+		// A rail stays a rail for Whiteboard. Diff's Files and Lenses and
+		// the Threads list live in the sidebar, so those open it;
+		// only this pick does, and a later close sticks.
+		if (id === "diff" || id === "threads") this.show();
 		this.part.pick(id);
 	}
 
-	/** Whether the board's Files and Lenses are on screen here; a hidden
-	 * part leaves them to the Diff view. */
+	/** Whether the board's Files and Lenses belong here rather than in the
+	 * Diff view. They do while the sidebar is folded to its rail too: there
+	 * the diff takes the width, and the files wait for the sidebar. */
 	showsBoard(reviewId: string | undefined): boolean {
-		return this.layoutService.isVisible(Parts.REVIEW_SIDEBAR_PART) && this.part.showsBoard(reviewId);
+		return this.part.showsBoard(reviewId);
 	}
 
 	fileTreeHost(reviewId: string): ReviewSidebarFileTreeHost {
@@ -847,6 +968,28 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 
 	lensList(reviewId: string | undefined): HTMLElement | undefined {
 		return this.showsBoard(reviewId) ? this.part.lensList(reviewId) : undefined;
+	}
+
+	private renderRail(): void {
+		const railed = this.available && this.userClosed;
+		this.rail.hidden = !railed;
+		const main = this.layoutService.mainContainer;
+		// The page bar starts past the window controls, which the rail is
+		// narrower than.
+		const controls = main.querySelector(".part.titlebar .titlebar-left")?.getBoundingClientRect().right ?? 0;
+		main.style.setProperty("--review-page-bar-inset", railed ? `${Math.max(0, Math.round(controls) - REVIEW_SIDEBAR_RAIL_WIDTH)}px` : "0px");
+		if (!railed) return;
+		for (const tab of this.part.tabStates()) {
+			const entry = this.railButtons.get(tab.id)!;
+			const { command } = REVIEW_SIDEBAR_PANES.find((pane) => pane.id === tab.id)!;
+			entry.button.hidden = !tab.offered;
+			entry.button.classList.toggle("active", tab.active);
+			entry.button.setAttribute("aria-selected", String(tab.active));
+			entry.badge.hidden = !tab.badge || tab.badge.hidden;
+			entry.badge.dataset.mark = tab.badge?.dataset.mark ?? "";
+			const shortcut = this.keybindingService.lookupKeybinding(command)?.getLabel() ?? undefined;
+			entry.tooltip.content = { label: paneSummary(tab.id, tab.count), ...(shortcut && { shortcut }) };
+		}
 	}
 
 	private setUserClosed(userClosed: boolean): void {
@@ -862,6 +1005,8 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 		const visible = this.available && !this.userClosed;
 
 		this.layoutService.mainContainer.classList.toggle(REVIEW_SIDEBAR_AVAILABLE_CLASS, this.available);
+		this.layoutService.mainContainer.classList.toggle(REVIEW_SIDEBAR_RAILED_CLASS, this.available && this.userClosed);
+		this.renderRail();
 		this.applying = true;
 		try {
 			this.layoutService.setPartHidden(!visible, Parts.REVIEW_SIDEBAR_PART);
