@@ -18,14 +18,13 @@ import {
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
-import { ReviewBreadcrumb } from "./review-breadcrumb";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { ComparedSides, DiffChanges, PullRequestLink } from "./review-source";
 import { ReviewStackSelector } from "./review-stack-selector";
 import { tokens } from "./tokens.stylex";
 
 /** Where the board sits and its source's facts; empty until read. */
-function useBoardPlace(): ReviewBoardPlace {
+export function useBoardPlace(): ReviewBoardPlace {
   const session = useReviewSession();
   const displayedVersion = useContext(DisplayedReviewVersionContext);
   const review = session.review;
@@ -171,12 +170,6 @@ export function ReviewDocumentMetaLine({
       {...stylex.props(styles.header, drawStyles.blockChild)}
       data-review-document-header
     >
-      <div
-        {...stylex.props(styles.contents)}
-        contentEditable={editable ? false : undefined}
-      >
-        <ReviewBreadcrumb place={place} reviewId={review.reviewId} />
-      </div>
       {children}
       {facts.length ? (
         <div
@@ -249,7 +242,6 @@ const styles = stylex.create({
     whiteSpace: "nowrap",
   },
   fixed: { flexShrink: 0 },
-  contents: { display: "contents" },
   failed: { color: tokens.changeRemoved },
   retry: {
     padding: 0,

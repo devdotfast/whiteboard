@@ -2375,6 +2375,13 @@ export class ReviewStore {
             graph,
           ).map(placed)
         : [],
+      // A top-level board's own, in the order the sidebar lists them.
+      ...(!parentId && {
+        children: this.orderChildren(
+          this.listedSiblings(graph.children.get(id) ?? [], id),
+          graph,
+        ).map(placed),
+      }),
     };
   }
   /** The siblings Home and the sidebar list, which a board's place counts

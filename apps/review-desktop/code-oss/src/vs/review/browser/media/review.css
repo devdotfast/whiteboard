@@ -1602,7 +1602,7 @@ body
 /* An icon over its label, the count faint after the label. Every tab is the
    same width, set to the widest label with a 3-digit count; the tabs sit at
    the left and what is left over stays on the right. A hidden tab leaves no
-   gap. The sidebar's minimum holds all four. */
+   gap. The sidebar's minimum holds all three. */
 .monaco-workbench .review-sidebar-tab {
   position: relative;
   display: flex;

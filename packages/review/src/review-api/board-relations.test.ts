@@ -179,7 +179,12 @@ it("counts a board's place among the siblings the sidebar lists, not ones in Tra
   // The board in Trash still knows where it is.
   expect(
     store.place(trashed).siblings.map(({ reviewId }) => reviewId),
-  ).toContain(trashed);
+  ).toContain(trashed); // The parent lists the same children, in the same order.
+  expect(store.place(plan).children?.map(({ title }) => title)).toEqual([
+    "Last",
+    "First",
+  ]);
+  expect(store.place(first).children).toBeUndefined();
 });
 
 it("orders a PR stack by its commits unless a dependency says otherwise", async () => {

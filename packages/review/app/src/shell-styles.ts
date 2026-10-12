@@ -209,6 +209,21 @@ export const shellStyles = stylex.create({
     borderBottomColor: tokens.rule,
     backgroundColor: tokens.surface,
   },
+  // Notion's page bar: where you are at the far left, what you can do at
+  // the far right, on the page's own surface with no rule under it.
+  pageBar: {
+    height: "40px",
+    borderBottomWidth: 0,
+  },
+  // The breadcrumb takes what the icons leave, and clamps inside it.
+  // At the narrowest the breadcrumb clips rather than run under the icons.
+  pageBarLeft: {
+    flex: "1 1 auto",
+    minWidth: 0,
+    overflow: "clip",
+    overflowClipMargin: "4px",
+  },
+  pageBarActions: { flex: "0 0 auto", position: "relative" },
   topbarLeft: {
     display: "flex",
     flex: "0 0 auto",
