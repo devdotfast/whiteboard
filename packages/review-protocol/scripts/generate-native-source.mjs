@@ -126,6 +126,7 @@ const MODULE_PATHS = [
   path.join(sourceRoot, "review-host-status.ts"),
   path.join(sourceRoot, "code-peek-diff.ts"),
   path.join(sourceRoot, "review-api-client.ts"),
+  path.join(sourceRoot, "board-icons.ts"),
   path.join(sourceRoot, "index.ts"),
 ];
 

@@ -1520,3 +1520,13 @@ body
 .review-workbench .monaco-editor .review-ask-lane {
   pointer-events: none;
 }
+
+/* A board tab draws the canvas's icon for its board (set as a mask by the
+   board tabs contribution) in the codicon's slot. */
+.monaco-workbench .tab .monaco-icon-label.review-board-icon::before {
+  content: "" !important;
+  width: 16px;
+  background-color: currentColor;
+  -webkit-mask: var(--review-board-icon) center / 14px 14px no-repeat;
+  mask: var(--review-board-icon) center / 14px 14px no-repeat;
+}

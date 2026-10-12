@@ -95,6 +95,44 @@ describe("reading a pull request", () => {
     ]);
   });
 
+  it("reads the PR's state from gh, or from the public API", async () => {
+    const state = async (
+      gh: { state?: string; isDraft?: boolean },
+      api?: { state: string; draft?: boolean; merged_at?: string | null },
+    ) =>
+      (
+        await readPullRequest(
+          url,
+          api
+            ? deps(ghFails, async () =>
+                Response.json({
+                  number: 7,
+                  title: "Add widgets",
+                  base: {
+                    ref: "main",
+                    sha: record.baseRefOid,
+                    repo: { id: 1 },
+                  },
+                  head: { ref: "widgets", repo: { id: 1 } },
+                  ...api,
+                }),
+              )
+            : deps(async () =>
+                JSON.stringify({ ...JSON.parse(ghJson), ...gh }),
+              ),
+        )
+      ).state;
+
+    expect(await state({ state: "OPEN", isDraft: true })).toBe("draft");
+    expect(await state({}, { state: "open", draft: true })).toBe("draft");
+    expect(
+      await state({}, { state: "closed", merged_at: "2026-10-01T00:00:00Z" }),
+    ).toBe("merged");
+    expect(await state({}, { state: "closed", merged_at: null })).toBe(
+      "closed",
+    );
+  });
+
   it("reads a GitHub Enterprise PR through gh on its host, never the public API", async () => {
     const enterprise = "https://ghe.example.com/acme/widget/pull/7";
     const using = deps(async () => ghJson);

@@ -5,6 +5,7 @@ import {
 } from "@dev.fast/trace-protocol";
 import { z } from "zod";
 
+import type { BoardIconKind } from "./board-icons.js";
 import type { ReviewApiSummary } from "./review-api-client.js";
 
 // Version 3: the desktop serves prebuilt revisions instead of building them.
@@ -22,6 +23,15 @@ export const REVIEW_CLIENT_HEADER = "x-review-client";
 export const REVIEW_CLIENT_REMOTE = "remote";
 
 export const REVIEW_HOST_HEADER = "x-review-host";
+
+export const PULL_REQUEST_STATES = [
+  "open",
+  "draft",
+  "merged",
+  "closed",
+] as const;
+
+export type PullRequestState = (typeof PULL_REQUEST_STATES)[number];
 
 const requiredString = z
   .string({ error: "must be a string" })

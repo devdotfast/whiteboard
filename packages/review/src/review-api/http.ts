@@ -287,7 +287,26 @@ export function createReviewApi(
     return snapshot;
   };
 
-  const catalog = () => [...store.list(), ...(shared?.list() ?? [])];
+  /** Adds a PR board's state, as this host last read it from GitHub. */
+  const withPullRequestState = <
+    Board extends {
+      pullRequestUrl?: string;
+      origin?: { pullRequestUrl?: string };
+    },
+  >(
+    board: Board,
+  ) => {
+    const state = data?.pullRequestState(
+      board.origin?.pullRequestUrl ?? board.pullRequestUrl,
+    );
+
+    return state ? { ...board, pullRequestState: state } : board;
+  };
+
+  const catalog = () => [
+    ...store.list().map(withPullRequestState),
+    ...(shared?.list() ?? []),
+  ];
 
   /** Where a board sits among its project's: its parent, and the parent's
    * children in order. */
@@ -501,6 +520,26 @@ export function createReviewApi(
     let sentList: string | undefined;
     // Bumped when a board a review links to changes, so its links reload.
     const linksRevision = new Map<string, number>();
+
+    // The PR states its links show: only a change to one of them sends the
+    // review again. GitHub answers for every PR on launch, a few at a time.
+    const linksKey = (id: string) => {
+      if (!data || isShared(id) || !store.has(id)) return "";
+      const { outgoing, backlinks } = store.links(id);
+
+      return JSON.stringify(
+        [...outgoing, ...backlinks].map(
+          (link) =>
+            link.pullRequestUrl &&
+            data.pullRequestState(link.pullRequestUrl, { seen: false }),
+        ),
+      );
+    };
+
+    const linksKeys = new Map(
+      [...reviewIds].map((reviewId) => [reviewId, linksKey(reviewId)] as const),
+    );
+
     // Bumped when a review's parent or siblings change, so its header
     // reloads them.
     const placeRevision = new Map<string, number>();
@@ -594,6 +633,21 @@ export function createReviewApi(
         store.activity.subscribeWorking(() => {
           if (markLists()) notify();
         }),
+        // A PR's state shows on its board in the list, and on links to it.
+        data?.subscribePullRequestStates(() => {
+          let marked = markLists();
+
+          for (const reviewId of reviewIds) {
+            const next = linksKey(reviewId);
+
+            if (next === linksKeys.get(reviewId)) continue;
+            linksKeys.set(reviewId, next);
+            linksRevision.set(reviewId, (linksRevision.get(reviewId) ?? 0) + 1);
+            marked = markReview(reviewId) || marked;
+          }
+
+          if (marked) notify();
+        }) ?? (() => {}),
         shared?.subscribe(() => {
           if (markLists()) notify();
         }) ?? (() => {}),
@@ -1746,7 +1800,31 @@ export function createReviewApi(
       .pick({ version: true })
       .parse({ version: context.req.query("version") });
 
-    return context.json(store.links(id, version));
+    const { outgoing, backlinks } = store.links(id, version);
+
+    return context.json({
+      outgoing: outgoing.map(withPullRequestState),
+      backlinks: backlinks.map(withPullRequestState),
+    });
+  });
+  // A link's hover card, read when it opens.
+  app.get("/:id/links/peek", (context) => {
+    const id = context.req.param("id");
+
+    if (isShared(id)) return context.json({});
+
+    const { version } = readQuerySchemas.get
+      .pick({ version: true })
+      .parse({ version: context.req.query("version") });
+
+    const board = context.req.query("board");
+    const block = context.req.query("block");
+
+    if (!board) throw new ReviewInputError("Name the linked board.", 400);
+
+    return context.json(
+      store.linkPeek(id, { board, ...(block && { block }) }, version),
+    );
   });
   app.get("/:id/place", (context) => {
     const id = context.req.param("id");

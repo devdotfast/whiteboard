@@ -4,6 +4,7 @@ import {
   type ReviewApiSummary,
   type ReviewCanvasOnboarding,
   type ReviewRemoteHostActions,
+  boardIconKind,
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
 import { fuzzySegments } from "@review/fuzzy-match";
@@ -20,6 +21,10 @@ import {
   useState,
 } from "react";
 
+import {
+  BoardIcon as BoardTargetIcon,
+  PullRequestStateIcon,
+} from "./board-icons";
 import { useHostActionButton } from "./connection-chip";
 import { countLabel, formatRelativeTime } from "./format";
 import { homeStyles } from "./home-styles";
@@ -1252,11 +1257,19 @@ export function ReviewHome({
                             toggleRow(review.reviewId, event.shiftKey);
                           }}
                         />
-                        {review.origin?.pullRequestNumber ? (
-                          <CodeIcon xstyle={styles.kindIcon} />
-                        ) : (
-                          <BoardIcon xstyle={styles.kindIcon} />
-                        )}
+                        {/* A PR's state, else the board's target. */}
+                        <span {...stylex.props(styles.kindIcon)}>
+                          {review.origin?.pullRequestNumber ? (
+                            <PullRequestStateIcon
+                              number={review.origin.pullRequestNumber}
+                              state={review.pullRequestState}
+                            />
+                          ) : (
+                            <BoardTargetIcon
+                              icon={boardIconKind(review.target)}
+                            />
+                          )}
+                        </span>
                         <button
                           type="button"
                           aria-label={`${inTrash ? "Select" : "Open"} ${reviewTitle(review)}`}
