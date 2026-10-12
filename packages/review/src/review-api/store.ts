@@ -1441,7 +1441,7 @@ export class ReviewStore {
   private assertReusableReview(reviewId: string) {
     if (this.deletionTime(reviewId))
       throw new ReviewInputError(
-        `This PR already has a deleted review: ${reviewId}. Restore it to continue with session_attention({"sessionId":"${reviewId}","action":"restore"}).`,
+        `This PR's whiteboard is in Recently deleted. To use it again, restore it:\n\nsession_attention({"sessionId":"${reviewId}","action":"restore"})`,
         409,
       );
   }

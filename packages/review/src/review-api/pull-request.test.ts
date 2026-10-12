@@ -291,9 +291,10 @@ describe("creating a review from a pull request URL alone", () => {
     );
     const calls = ghCalls;
 
-    await expect(createFromUrl()).rejects.toThrow(
-      `This PR already has a deleted review: ${created.reviewId}. Restore it to continue`,
-    );
+    await expect(createFromUrl()).rejects.toMatchObject({
+      status: 409,
+      message: expect.stringContaining(created.reviewId),
+    });
     expect(ghCalls).toBe(calls);
     expect(local.store.list()).toHaveLength(1);
     expect(local.store.read(created.reviewId).deletedAt).toBeTruthy();
