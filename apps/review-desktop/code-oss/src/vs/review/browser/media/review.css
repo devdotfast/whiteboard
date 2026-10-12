@@ -1587,7 +1587,8 @@ body
 /* An icon over its label, the count faint after the label. Every tab is the
    same width, set to the widest label with a 3-digit count; the tabs sit at
    the left and what is left over stays on the right. A hidden tab leaves no
-   gap. The sidebar's minimum holds all three. */
+   gap. Narrower than that, the labels fold away (below); the sidebar's
+   minimum holds all three folded. */
 .monaco-workbench .review-sidebar-tab {
   position: relative;
   display: flex;
@@ -1605,6 +1606,24 @@ body
   color: var(--vscode-descriptionForeground);
   font-family: inherit;
   cursor: pointer;
+}
+
+/* Narrower than the labelled tabs need: each is its icon with its count
+   beside it, and the tabs share the row. Named in full by its tooltip. */
+.monaco-workbench .review-sidebar-tabs.folded > .review-sidebar-tab,
+.monaco-workbench .review-sidebar-tabs-probe.folded > .review-sidebar-tab {
+  flex-direction: row;
+  gap: 5px;
+  height: 32px;
+}
+
+.monaco-workbench .review-sidebar-tabs.folded > .review-sidebar-tab {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.monaco-workbench .review-sidebar-tabs.folded > .review-sidebar-tab .review-sidebar-tab-title {
+  display: none;
 }
 
 .monaco-workbench .review-sidebar-tab-icon {
@@ -2050,4 +2069,97 @@ body
   background-image: radial-gradient(circle at calc(50% + 6px) calc(50% - 6px), var(--vscode-charts-blue) 3px, transparent 3.5px);
   -webkit-mask: var(--review-board-icon) center / 14px 14px no-repeat, radial-gradient(circle at calc(50% + 6px) calc(50% - 6px), #000 3.5px, transparent 4px);
   mask: var(--review-board-icon) center / 14px 14px no-repeat, radial-gradient(circle at calc(50% + 6px) calc(50% - 6px), #000 3.5px, transparent 4px);
+}
+
+/* ---------------------------------------------------------------------------
+   The collapsed sidebar
+
+   Closed beside a board, the sidebar leaves a 52px rail of its tabs under
+   the window controls, so Commits and Diff stay one click away. The rail
+   sits on the page's own surface with no divider, as the title row does;
+   the active tab is a chip of the sidebar's gray. The board moves over to
+   clear it; the page bar starts past the controls.
+   KEEP IN SYNC WITH REVIEW_SIDEBAR_RAIL_WIDTH in reviewSidebarPart.ts.
+   --------------------------------------------------------------------------- */
+.monaco-workbench .review-sidebar-rail {
+  position: absolute;
+  top: 40px;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 52px;
+  padding-top: 6px;
+  background-color: var(--vscode-editor-background);
+  font-family: var(--review-chrome-font);
+}
+
+.monaco-workbench .review-sidebar-rail[hidden],
+.monaco-workbench .review-sidebar-rail-tab[hidden],
+.monaco-workbench .review-sidebar-rail-badge[hidden] {
+  display: none;
+}
+
+.monaco-workbench .review-sidebar-rail-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+.monaco-workbench .review-sidebar-rail-tab:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+/* A click leaves no ring; keyboard focus keeps the workbench's 1px outline,
+   as the open sidebar's tabs do. */
+.monaco-workbench .review-sidebar-rail-tab:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.monaco-workbench .review-sidebar-rail-tab.active {
+  background-color: var(--vscode-sideBar-background);
+  color: var(--vscode-foreground);
+}
+
+/* The tab's own mark, as the sidebar draws it: changed boards, or threads
+   that want the reader. */
+.monaco-workbench .review-sidebar-rail-badge {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background-color: var(--vscode-charts-blue);
+}
+
+/* Ringed in what it sits on, so it reads apart from the tab's chip. */
+.monaco-workbench .review-sidebar-rail-badge {
+  box-shadow: 0 0 0 1px var(--vscode-editor-background);
+}
+
+.monaco-workbench .review-sidebar-rail-tab.active > .review-sidebar-rail-badge {
+  box-shadow: 0 0 0 1px var(--vscode-sideBar-background);
+}
+
+.monaco-workbench .review-sidebar-rail-badge[data-mark="waiting"] {
+  background-color: var(--vscode-charts-yellow);
+}
+
+.monaco-workbench.review-sidebar-railed .review-canvas-part > .review-canvas-container {
+  box-sizing: border-box;
+  padding-left: 52px;
 }

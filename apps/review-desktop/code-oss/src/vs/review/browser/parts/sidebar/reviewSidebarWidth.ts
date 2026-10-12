@@ -37,3 +37,16 @@ export function sidebarTabWidth(labels: readonly number[], padding: number): num
 export function tabsRowWidth(tabWidth: number, gap: number, rowPadding: number, tabs = SIDEBAR_TABS): number {
 	return tabWidth * tabs + gap * Math.max(0, tabs - 1) + 2 * rowPadding;
 }
+
+/**
+ * A measurement taken once and kept until `stale()`: the tabs' widths change
+ * only with the zoom or the fonts, not at every layout, and measuring forces
+ * one.
+ */
+export function measuredOnce<T>(measure: () => T): { get(): T; stale(): void } {
+	let kept: { value: T } | undefined;
+	return {
+		get: () => (kept ??= { value: measure() }).value,
+		stale: () => { kept = undefined; },
+	};
+}
