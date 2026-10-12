@@ -1363,21 +1363,26 @@ const ReviewPlaceBoardSchema = z.strictObject({
   icon: z.enum(["board", "code"]),
 });
 
+const ReviewPlaceSiblingSchema = ReviewPlaceBoardSchema.extend({
+  pullRequestNumber: positiveInteger.optional(),
+  pullRequestState: z.enum(PULL_REQUEST_STATES).optional(),
+});
+
 /** Where a board sits, for its header: its parent and the parent's
- * children in order, and its PR's facts the summary lacks. */
+ * children in order, or a top-level board's own children, and its PR's
+ * facts the summary lacks. */
 export const ReviewBoardPlaceSchema = z.strictObject({
   /** The board's PR state and branches, as last read from GitHub. */
   pullRequestState: z.enum(PULL_REQUEST_STATES).optional(),
   baseBranch: requiredString.optional(),
   headBranch: requiredString.optional(),
+  /** The board itself. */
+  board: ReviewPlaceBoardSchema.optional(),
   parent: ReviewPlaceBoardSchema.optional(),
   /** Empty for a top-level board. */
-  siblings: z.array(
-    ReviewPlaceBoardSchema.extend({
-      pullRequestNumber: positiveInteger.optional(),
-      pullRequestState: z.enum(PULL_REQUEST_STATES).optional(),
-    }),
-  ),
+  siblings: z.array(ReviewPlaceSiblingSchema),
+  /** A top-level board's children in sibling order; absent for a child. */
+  children: z.array(ReviewPlaceSiblingSchema).optional(),
 });
 
 export type ReviewBoardPlace = z.infer<typeof ReviewBoardPlaceSchema>;

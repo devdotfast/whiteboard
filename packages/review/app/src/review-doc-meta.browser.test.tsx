@@ -10,14 +10,28 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { ReviewSessionProvider } from "./host/review-session";
+import { ReviewBreadcrumb } from "./review-breadcrumb";
 import {
   BoardSaveRetryContext,
   BoardSaveStatusContext,
   ReviewDocumentMetaLine,
+  useBoardPlace,
 } from "./review-doc-meta";
 import { testReviewSession } from "./review-session-test-utils";
 
 let root: Root | null = null;
+
+// The page bar's breadcrumb over the header's facts, as a board has them.
+function PlaceAndFacts() {
+  const place = useBoardPlace();
+
+  return (
+    <>
+      <ReviewBreadcrumb place={place} reviewId="test-review" />
+      <ReviewDocumentMetaLine />
+    </>
+  );
+}
 
 describe("ReviewDocumentMetaLine", () => {
   afterEach(async () => {
@@ -216,7 +230,7 @@ describe("ReviewDocumentMetaLine", () => {
         root?.render(
           <TestCanvasQuery>
             <ReviewSessionProvider session={session}>
-              <ReviewDocumentMetaLine />
+              <PlaceAndFacts />
             </ReviewSessionProvider>
           </TestCanvasQuery>,
         ),
@@ -227,11 +241,13 @@ describe("ReviewDocumentMetaLine", () => {
 
     await render();
 
-    const count = '[aria-label="2 of 3 in Linked whiteboards"]';
+    const count = '[aria-label="Links, 2 of 3 in Linked whiteboards"]';
 
     await vi.waitFor(() =>
       expect(container.querySelector(count)).not.toBeNull(),
     );
+    // The switcher names the board, then its place.
+    expect(container.querySelector(count)!.textContent).toBe("Links·2 of 3");
 
     await click(count);
     expect(
@@ -271,6 +287,60 @@ describe("ReviewDocumentMetaLine", () => {
       expect(container.querySelector("[aria-haspopup=menu]")).toBeNull(),
     );
     expect(container.textContent).toContain("Linked whiteboards");
+
+    // A top-level board names itself, not as a link, and lists its children.
+    const top: ReviewBoardPlace = {
+      board: { reviewId: "test-review", title: "Stack", icon: "board" },
+      siblings: [],
+      children: [sibling("kinds", "Board kinds"), sibling("links", "Links")],
+    };
+
+    session.review = { ...session.review!, place: async () => top };
+    await render();
+
+    const boards = '[aria-label="2 boards in Stack"]';
+
+    await vi.waitFor(() =>
+      expect(container.querySelector(boards)?.textContent).toBe("2 boards"),
+    );
+    expect(container.querySelector('nav button[title="Stack"]')).toBeNull();
+    await click(boards);
+    expect(
+      [...container.querySelectorAll("[role=menuitem]")].map(
+        (row) => row.textContent,
+      ),
+    ).toEqual([
+      expect.stringContaining("Board kinds"),
+      expect.stringContaining("Links"),
+    ]);
+    await click("[role=menuitem]:nth-child(2)");
+    expect(post).toHaveBeenLastCalledWith({
+      name: "openReview",
+      args: { reviewUuid: "links", active: true },
+    });
+
+    // One child is "1 board".
+    top.children = [sibling("links", "Links")];
+    session.review = { ...session.review!, place: async () => ({ ...top }) };
+    await render();
+    await vi.waitFor(() =>
+      expect(
+        container.querySelector('[aria-label="1 board in Stack"]'),
+      ).not.toBeNull(),
+    );
+
+    // A board alone names itself, with no menu.
+    session.review = {
+      ...session.review!,
+      place: async () => ({ ...top, children: undefined }),
+    };
+    await render();
+    await vi.waitFor(() =>
+      expect(container.querySelector("[aria-haspopup=menu]")).toBeNull(),
+    );
+    expect(
+      container.querySelector('nav[aria-label="Whiteboard"]')?.textContent,
+    ).toBe("Stack");
   });
 
   it.each([["https://github.com/o/r/pull/12"], [undefined]])(
@@ -334,7 +404,7 @@ describe("ReviewDocumentMetaLine", () => {
       root?.render(
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
-            <ReviewDocumentMetaLine />
+            <PlaceAndFacts />
           </ReviewSessionProvider>
         </TestCanvasQuery>,
       ),

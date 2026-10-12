@@ -237,7 +237,7 @@ export const INSTALL_LOCATION = [
   "other",
 ] as const;
 
-export const DIFF_OPENED_VIA = ["topbar", "lens", "locate"] as const;
+export const DIFF_OPENED_VIA = ["topbar", "sidebar", "lens", "locate"] as const;
 
 /** Which diff opened: a commit's, or a file diff drawn plain or structural. */
 export const DIFF_OPENED_KIND = ["commit", "structural"] as const;

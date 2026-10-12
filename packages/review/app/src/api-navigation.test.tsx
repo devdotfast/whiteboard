@@ -185,9 +185,47 @@ it("exposes JSON section and Markdown headings plus imported PR and its place un
         listener({ event: "revealHeading", reviewId, headingId: id });
     });
   expect(scroll).toHaveBeenCalledTimes(4);
+  // Desktop's sidebar tabs pick the view, so the page bar holds only the
+  // board's place and its actions.
+  const pageBar = container.querySelector("main > header")!;
+
+  expect(pageBar.querySelector('[aria-label="Session views"]')).toBeNull();
   expect(
-    container.querySelector('[aria-label="2 of 2 in Stack"]'),
+    pageBar.querySelector('[aria-label$=", 2 of 2 in Stack"]'),
   ).not.toBeNull();
+  expect(pageBar.querySelector('[aria-label="More"]')).not.toBeNull();
+
+  // Every board names its place in the page bar: a top board with its
+  // children's menu, and a board on its own by its title alone.
+  const crumbOf = async (id: string) => {
+    await act(async () => canvas?.dispose());
+    await act(async () => {
+      canvas = mountReviewCanvas(container, {
+        kind: "api",
+        reviewId: id,
+        bridge,
+      });
+    });
+    await act(async () => {
+      await vi.waitFor(() =>
+        expect(
+          container.querySelector("main > header [data-page-bar-crumb]"),
+        ).not.toBeNull(),
+      );
+    });
+
+    return container.querySelector("main > header [data-page-bar-crumb]")!;
+  };
+
+  const top = await crumbOf(parent);
+
+  expect(top.textContent).toBe("Stack2 boards");
+  expect(top.querySelector('[aria-label="2 boards in Stack"]')).not.toBeNull();
+
+  const lone = await crumbOf(await board("Alone"));
+
+  expect(lone.textContent).toBe("Alone");
+  expect(lone.querySelector("[aria-haspopup=menu]")).toBeNull();
 });
 
 it("reports a board's Contents without waiting for its diff", async () => {

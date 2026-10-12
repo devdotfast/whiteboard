@@ -65,6 +65,20 @@ export function BugIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+/** "⋯": more actions. */
+export function MoreIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <path d="M5.5 12h.01M12 12h.01M18.5 12h.01" />
+    </svg>
+  );
+}
+
 export function ContentsIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg

@@ -25,6 +25,7 @@ import type { EditorInput } from "../../../../workbench/common/editor/editorInpu
 import { IEditorService } from "../../../../workbench/services/editor/common/editorService.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import { REVIEW_CHROME_HEIGHT } from "../../../common/reviewChrome.js";
+import { REVIEW_SIDEBAR_MINIMUM_WIDTH, TAB_COUNT_DIGITS, sidebarMinimumWidth, sidebarTabWidth, tabsRowWidth } from "./reviewSidebarWidth.js";
 import type {
 	ReviewAskState,
 	ReviewProjectThreads,
@@ -93,10 +94,11 @@ export const REVIEW_SIDEBAR_TAB_ICONS: Record<ReviewSidebarPaneId, ReviewSidebar
 	diff: [{ tag: "path", attrs: { d: "M8 1.75 V10.25 M3.75 6 H12.25 M3.75 13 H12.25" } }],
 };
 
-export const REVIEW_SIDEBAR_PANES: readonly { id: ReviewSidebarPaneId; title: string; command: string }[] = [
+/** The tabs in order; `noun` names what a tab counts. */
+export const REVIEW_SIDEBAR_PANES: readonly { id: ReviewSidebarPaneId; title: string; command: string; noun?: string }[] = [
 	{ id: "whiteboard", title: localize("review.sidebar.whiteboard", "Whiteboard"), command: "review.sidebar.showWhiteboard" },
-	{ id: "diff", title: localize("review.sidebar.diff", "Diff"), command: "review.sidebar.showDiff" },
-	{ id: "threads", title: localize("review.sidebar.threads", "Threads"), command: "review.sidebar.showThreads" },
+	{ id: "diff", title: localize("review.sidebar.diff", "Diff"), command: "review.sidebar.showDiff", noun: "file" },
+	{ id: "threads", title: localize("review.sidebar.threads", "Threads"), command: "review.sidebar.showThreads", noun: "thread" },
 ];
 
 /** Whether Threads lists this board's threads or the project's, per window. */
@@ -153,7 +155,15 @@ function svgIcon(icon: ReviewSidebarIcon, size: number): SVGSVGElement {
  * Changes also holds the Diff view's file tree. The Diff view picks Changes.
  */
 export class ReviewSidebarPart extends Part {
-	override readonly minimumWidth = 170;
+	/** Kept wide enough for the window controls over the top row; the
+	 * sash stops there. */
+	private fitWidth = REVIEW_SIDEBAR_MINIMUM_WIDTH;
+	private tabRow: HTMLElement | undefined;
+
+	override get minimumWidth(): number {
+		return this.fitWidth;
+	}
+
 	override readonly maximumWidth = 480;
 	override readonly minimumHeight = 0;
 	override readonly maximumHeight = Number.POSITIVE_INFINITY;
@@ -192,6 +202,9 @@ export class ReviewSidebarPart extends Part {
 	private readonly fileTrees = new Map<string, HTMLElement>();
 	private filesNote: HTMLElement | undefined;
 	private rendering: Promise<void> = Promise.resolve();
+	private readonly _onDidChangeTabs = this._register(new Emitter<void>());
+	/** A tab was picked, shown, hidden, or recounted. */
+	readonly onDidChangeTabs = this._onDidChangeTabs.event;
 	private readonly _onDidChangeBoard = this._register(new Emitter<void>());
 	/** The sidebar shows another board. */
 	readonly onDidChangeBoard = this._onDidChangeBoard.event;
@@ -218,6 +231,46 @@ export class ReviewSidebarPart extends Part {
 		void catalog.initialize().catch((error) => logService.warn("[Whiteboard] Sidebar catalog failed:", error));
 	}
 
+	override layout(width: number, height: number, top: number, left: number): void {
+		super.layout(width, height, top, left);
+		this.fitControls();
+	}
+
+	/** Measures where the window controls end and how wide the tabs are,
+	 * and widens the minimum to hold both, as the zoom changes their size. */
+	private fitControls(): void {
+		const controls = this.layoutService.mainContainer.querySelector(".part.titlebar .titlebar-left");
+		if (!controls || !this.element) return;
+		const width = sidebarMinimumWidth(controls.getBoundingClientRect().right, this.element.getBoundingClientRect().left, this.tabsWidth());
+		if (width === this.fitWidth) return;
+		this.fitWidth = width;
+		this._onDidChange.fire(undefined);
+	}
+
+	/** Sizes every tab alike, hidden ones included, and returns the row's
+	 * width with all of them. Each label is measured in a hidden copy of the
+	 * row, with its count at full width. */
+	private tabsWidth(): number {
+		const row = this.tabRow;
+		const first = this.panes[0]?.tab;
+		if (!row || !first) return 0;
+		const probe = $(".review-sidebar-tabs-probe", { "aria-hidden": "true" });
+		const labels = REVIEW_SIDEBAR_PANES.map(({ title, noun }) => {
+			const label = $("span.review-sidebar-tab-label");
+			label.append($("span", undefined, title));
+			if (noun) label.append($("span.review-sidebar-tab-count", undefined, "9".repeat(TAB_COUNT_DIGITS)));
+			probe.append($("span.review-sidebar-tab", undefined, label));
+			return label;
+		});
+		row.appendChild(probe);
+		const widths = labels.map((label) => label.getBoundingClientRect().width);
+		probe.remove();
+		const width = sidebarTabWidth(widths, parseFloat(getComputedStyle(first).paddingLeft) || 0);
+		row.style.setProperty("--review-sidebar-tab-width", `${width}px`);
+		const style = getComputedStyle(row);
+		return tabsRowWidth(width, parseFloat(style.columnGap) || 0, parseFloat(style.paddingLeft) || 0);
+	}
+
 	override create(parent: HTMLElement): void {
 		this.element = parent;
 		super.create(parent);
@@ -228,7 +281,7 @@ export class ReviewSidebarPart extends Part {
 		// Reserve the top row for the macOS traffic lights.
 		parent.appendChild($(".review-explorer-chrome-spacer"));
 
-		const tabRow = $(".review-sidebar-tabs", { role: "tablist" });
+		const tabRow = this.tabRow = $(".review-sidebar-tabs", { role: "tablist" });
 		const panes = $(".review-sidebar-panes");
 		parent.append(tabRow, panes);
 
@@ -252,6 +305,9 @@ export class ReviewSidebarPart extends Part {
 			this.panes.push({ id, tab, count, element });
 			this._register(addDisposableListener(tab, "click", () => this.pick(id)));
 		}
+
+		// A count or a tab that comes or goes moves the minimum.
+		this._register(this.onDidChangeTabs(() => this.fitControls()));
 
 		const header = (pane: HTMLElement, title: string) => {
 			const row = $(".review-sidebar-pane-header");
@@ -370,6 +426,7 @@ export class ReviewSidebarPart extends Part {
 			pane.tab.hidden = !this.offers(pane.id);
 			pane.element.hidden = !selected;
 		}
+		this._onDidChangeTabs.fire();
 	}
 
 	/** The board the sidebar shows, from the active tab. */
@@ -558,6 +615,7 @@ export class ReviewSidebarPart extends Part {
 			threadsBadge.hidden = !mark;
 			threadsBadge.dataset.mark = mark ?? "";
 		}
+		this._onDidChangeTabs.fire();
 
 		this.rendering = this.rendering
 			.then(() => this.mountSections())
