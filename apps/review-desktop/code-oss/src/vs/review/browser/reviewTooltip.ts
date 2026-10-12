@@ -14,6 +14,8 @@ import type { ReviewDiffProgressState } from "../common/reviewProtocol.js";
 export interface ReviewTooltipContent {
 	readonly label: string;
 	readonly detail?: string;
+	/** A keyboard shortcut, faint after the label. */
+	readonly shortcut?: string;
 }
 
 export type ReviewTooltipHoverService = Pick<IHoverService, "showInstantHover">;
@@ -45,7 +47,7 @@ export class ReviewTooltip extends Disposable {
 	}
 
 	set content(content: ReviewTooltipContent | undefined) {
-		if (content?.label === this.current?.label && content?.detail === this.current?.detail) return;
+		if (content?.label === this.current?.label && content?.detail === this.current?.detail && content?.shortcut === this.current?.shortcut) return;
 		this.current = content;
 		if (this.hover.value) this.show();
 	}
@@ -54,7 +56,9 @@ export class ReviewTooltip extends Disposable {
 		this.hide();
 		if (!this.current?.label) return;
 		const body = $("span.review-tooltip-body");
-		appendCounts(append(body, $("span.review-tooltip-label")), this.current.label);
+		const label = append(body, $("span.review-tooltip-label"));
+		appendCounts(label, this.current.label);
+		if (this.current.shortcut) append(label, $("span.review-tooltip-shortcut")).textContent = this.current.shortcut;
 		if (this.current.detail) appendCounts(append(body, $("span.review-tooltip-detail")), this.current.detail);
 		this.hover.value = this.hoverService.showInstantHover({
 			target: this.target,

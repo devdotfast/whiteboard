@@ -23,7 +23,7 @@ import {
   resolveRepoContext,
   runVcs,
 } from "@dev.fast/local-vcs";
-import { structuralChangeCounts } from "@dev.fast/review-protocol";
+import { boardTitle, structuralChangeCounts } from "@dev.fast/review-protocol";
 import type {
   PullRequestState,
   ReviewLanguageEnvironment,
@@ -487,7 +487,7 @@ export class LocalReviewData {
           ),
         ));
 
-      const title = `${snapshot.title} — ${live ? "Live source" : side === "base" ? "Base source" : "Source"} — Whiteboard`;
+      const title = `${boardTitle(snapshot.title)} — ${live ? "Live source" : side === "base" ? "Base source" : "Source"} — Whiteboard`;
 
       const workspace = previous ?? {
         folders: [],

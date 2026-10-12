@@ -156,7 +156,7 @@ const placeholderKey = new PluginKey("boardPlaceholder");
 export const BODY_PLACEHOLDER = "Start writing, or type / for blocks";
 
 /** Faint hints on empty lines: "Heading" on the empty heading the caret is
- * on, and how to start on an empty board. */
+ * on, and how to start on an empty board. (An unnamed title draws its own.) */
 export const placeholders = () =>
   new Plugin({
     key: placeholderKey,

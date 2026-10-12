@@ -2,6 +2,7 @@ import {
   type ReviewApiSummary,
   type ReviewSidebarSectionProps,
   boardIconKind,
+  boardTitle,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -108,13 +109,15 @@ export function WhiteboardsList({
 
   if (needle) {
     const titles = new Map(
-      project.boards.map((board) => [board.reviewId, board.title]),
+      project.boards.map((board) => [board.reviewId, boardTitle(board.title)]),
     );
 
     return (
       <ul aria-label="Whiteboards" {...stylex.props(styles.list)}>
         {newestFirst(project.boards)
-          .filter((board) => board.title.toLowerCase().includes(needle))
+          .filter((board) =>
+            boardTitle(board.title).toLowerCase().includes(needle),
+          )
           .map((board) => (
             <li key={board.reviewId}>
               <BoardRow
@@ -155,7 +158,7 @@ export function WhiteboardsList({
             />
             {isExpanded ? (
               <ul
-                aria-label={`In ${branch.board.title}`}
+                aria-label={`In ${boardTitle(branch.board.title)}`}
                 {...stylex.props(styles.children)}
               >
                 {branch.children.map((child) => (
@@ -235,7 +238,7 @@ function BoardRow({
         <button
           type="button"
           aria-expanded={expanded}
-          aria-label={`${expanded ? "Collapse" : "Expand"} ${board.title}`}
+          aria-label={`${expanded ? "Collapse" : "Expand"} ${boardTitle(board.title)}`}
           {...stylex.props(styles.chevronSlot, styles.chevron)}
           onClick={onToggle}
         >
@@ -275,14 +278,14 @@ function BoardRow({
                 isCurrent && styles.titleCurrent,
               )}
             >
-              {board.title}
+              {boardTitle(board.title)}
             </span>
           </span>
         ) : (
           <span
             {...stylex.props(styles.title, isCurrent && styles.titleCurrent)}
           >
-            {board.title}
+            {boardTitle(board.title)}
           </span>
         )}
         <span {...stylex.props(styles.meta, isCurrent && styles.metaCurrent)}>

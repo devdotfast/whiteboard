@@ -8,6 +8,7 @@ import {
 } from "@canvas/review-document-surface";
 import { fontSize } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
+import { UNTITLED_BOARD } from "@dev.fast/review-protocol";
 import { parseMarkdown } from "@review/markdown";
 import * as stylex from "@stylexjs/stylex";
 import type { Node as PMNode } from "@tiptap/pm/model";
@@ -271,11 +272,15 @@ class TitleView implements NodeView {
   contentDOM: HTMLElement;
   private key: string;
 
-  constructor(private store: PortalStore) {
+  constructor(
+    node: PMNode,
+    private store: PortalStore,
+  ) {
     this.dom = document.createElement("div");
     this.contentDOM = document.createElement("h1");
     this.contentDOM.className = documentTitleClassName;
     this.contentDOM.dataset.reviewCopyProse = "";
+    this.unnamed(node);
     this.key = store.key();
     store.set(this.key, {
       container: this.dom,
@@ -284,7 +289,21 @@ class TitleView implements NodeView {
   }
 
   update(node: PMNode) {
-    return node.type.name === "title";
+    if (node.type.name !== "title") return false;
+    this.unnamed(node);
+
+    return true;
+  }
+
+  /** A board not yet named: "Untitled", faint, in the heading's own type,
+   * until a title is typed. */
+  private unnamed(node: PMNode) {
+    const empty = !node.content.size;
+
+    this.contentDOM.classList.toggle("review-board-placeholder", empty);
+
+    if (empty) this.contentDOM.dataset.placeholder = UNTITLED_BOARD;
+    else delete this.contentDOM.dataset.placeholder;
   }
 
   stopEvent(event: Event) {
@@ -312,7 +331,7 @@ class TitleView implements NodeView {
 
 export function nodeViews(store: PortalStore) {
   return {
-    title: () => new TitleView(store),
+    title: (node) => new TitleView(node, store),
     atom: (node, view, getPos) => new RichBlockView(node, store, view, getPos),
     md_raw: (node) => new RawBlockView(node, store),
     inline_raw: (node) => new RawInlineView(node, store),

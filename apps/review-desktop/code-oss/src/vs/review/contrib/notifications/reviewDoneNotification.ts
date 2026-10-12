@@ -1,4 +1,4 @@
-import type { ReviewApiSummary } from "../../common/reviewProtocol.js";
+import { boardTitle, type ReviewApiSummary } from "../../common/reviewProtocol.js";
 
 export class ReviewCompletionTracker {
 	private working = new Set<string>();
@@ -48,7 +48,7 @@ export async function notifyReviewDone(review: FinishedReview, effects: {
 }): Promise<void> {
 	if (effects.isViewing()) return;
 	await effects.requestAttention();
-	const result = await effects.showToast({ title: `Whiteboard ready: ${review.title}`, body: completionBody(review.document) });
+	const result = await effects.showToast({ title: `Whiteboard ready: ${boardTitle(review.title)}`, body: completionBody(review.document) });
 	if (!result.clicked) return;
 	await effects.openReview();
 	await effects.focus();

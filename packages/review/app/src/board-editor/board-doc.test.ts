@@ -93,12 +93,14 @@ describe("a board in the editor", () => {
   });
 });
 
-test("counts a board as new only while it is an empty first version still called Untitled", () => {
-  const blank = { version: 0, title: "Untitled", document: [] };
+test("counts a board as new only while it is an empty first version with no title", () => {
+  const blank = { version: 0, title: "", document: [] };
 
   expect(isNewBoard(blank)).toBe(true);
-  // An agent's empty board has a name; a saved or written board is not new.
+  // An agent's empty board has a name, even one typed as Untitled; a saved
+  // or written board is not new.
   expect(isNewBoard({ ...blank, title: "Plan" })).toBe(false);
+  expect(isNewBoard({ ...blank, title: "Untitled" })).toBe(false);
   expect(isNewBoard({ ...blank, version: 1 })).toBe(false);
   expect(isNewBoard({ ...blank, document: [{ id: "b1" }] })).toBe(false);
 });

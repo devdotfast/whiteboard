@@ -236,8 +236,8 @@ export function docToBoard(doc: PMNode, base: Board): SavedBoard {
     }
   });
 
-  // A board always has a title; a cleared one saves as a new board's.
-  return { title: doc.firstChild!.textContent.trim() || UNTITLED, document };
+  // A board not yet named saves with no title; it reads "Untitled".
+  return { title: doc.firstChild!.textContent.trim(), document };
 }
 
 /**
@@ -295,19 +295,15 @@ export function markdownOf(node: PMNode, source?: string): string {
     : whole;
 }
 
-/** A board's title until the person names it. */
-export const UNTITLED = "Untitled";
-
 /** A board just started from the sidebar or ⌘N, before anyone wrote on
- * it: an empty first version still called Untitled. */
+ * it: an empty first version with no title yet. One titled "Untitled"
+ * was named so. */
 export function isNewBoard(snapshot: {
   version: number;
   title: string;
   document: readonly unknown[];
 }): boolean {
   return (
-    snapshot.version === 0 &&
-    snapshot.title === UNTITLED &&
-    !snapshot.document.length
+    snapshot.version === 0 && snapshot.title === "" && !snapshot.document.length
   );
 }

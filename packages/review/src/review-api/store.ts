@@ -10,6 +10,7 @@ import {
   type BoardIconKind,
   type ReviewApiSummary,
   boardIconKind,
+  boardTitle,
 } from "@dev.fast/review-protocol";
 import { sourceAnchors } from "@review/lens-selection.js";
 import {
@@ -124,8 +125,10 @@ export const commandSchema = z.strictObject({
     }),
     z.strictObject({
       type: z.literal("create"),
-      /** Required unless pullRequestUrl alone names the source; then the PR title. */
-      title: z.string().trim().min(1).optional(),
+      /** Required unless pullRequestUrl alone names the source; then the PR
+       * title. A person's new board may start with none; it reads
+       * "Untitled" until they name it. */
+      title: z.string().trim().optional(),
       target: reviewTargetSchema.optional(),
       pullRequestUrl: pullRequestUrl.optional(),
       /** With pullRequestUrl and no target: the checkout to fetch the PR into. */
@@ -191,7 +194,8 @@ export const commandSchema = z.strictObject({
  * has no id and may carry a clientKey, which the response maps to its id. */
 export const personEditSchema = z.strictObject({
   baseVersion: z.number().int().nonnegative(),
-  title: z.string().trim().min(1),
+  /** Empty until the person names the board; it reads "Untitled". */
+  title: z.string().trim(),
   document: z.array(z.json()),
 });
 
@@ -1544,7 +1548,7 @@ export class ReviewStore {
             "A checkout for the PR applies only to a create from pullRequestUrl alone; name it in the target instead.",
           );
 
-        if (!op.title && op.target)
+        if (!op.title && op.target && author.kind !== "person")
           throw new ReviewInputError("Supply a title.");
       }
 
@@ -1627,6 +1631,7 @@ export class ReviewStore {
               fromPullRequest &&
                 (fromPullRequest.title ||
                   `PR #${op.pullRequestUrl!.split("/").at(-1)}`),
+              author.kind === "person",
             )
           : structuredClone(previous!);
 
@@ -2212,8 +2217,9 @@ export class ReviewStore {
 
     return result;
   }
-  /** Deletes a board the person made and left as it was: titled "Untitled",
-   * with no blocks and no child boards. A board still open on a canvas, or
+  /** Deletes a board the person made and left as it was: with no title
+   * (it reads "Untitled"), no blocks and no child boards. A title typed as
+   * "Untitled" is a title. A board still open on a canvas, or
    * one an agent is working on, is kept. A closing canvas saves, then lets
    * go of the board, so the discard waits for that first. */
   async discard(reviewId: string): Promise<{ deleted: boolean }> {
@@ -2229,7 +2235,7 @@ export class ReviewStore {
       if (
         this.leased(reviewId) ||
         this.activity.isWorking(reviewId) ||
-        snapshot.title !== UNTITLED ||
+        snapshot.title !== "" ||
         snapshot.document.length ||
         this.relations(reviewId).children.length
       )
@@ -2600,7 +2606,7 @@ export class ReviewStore {
       }
   }
   private boardName(id: string) {
-    return `"${this.read(id).title}" (${id})`;
+    return `"${boardTitle(this.read(id).title)}" (${id})`;
   }
   /** The other board exists and is in the same project. */
   private checkRelated(id: string, other: string) {
@@ -3377,7 +3383,6 @@ function highestIdNumber(document: Block[]): number {
 }
 
 /** The title of a board a person made and has not named. */
-const UNTITLED = "Untitled";
 
 /** A person's save must start from the board's current version. */
 function assertBaseVersion(base: number, current: number) {
@@ -3543,10 +3548,12 @@ function createdSnapshot(
   op: { title?: string },
   resolved: { target: ReviewTarget; pins?: Pins },
   defaultTitle?: string,
+  /** A person's new board may start untitled. */
+  untitled = false,
 ): Snapshot {
-  const title = op.title ?? defaultTitle;
+  const title = op.title || defaultTitle || (untitled ? "" : undefined);
 
-  if (!title) throw new ReviewInputError("Supply a title.");
+  if (title === undefined) throw new ReviewInputError("Supply a title.");
 
   const snapshot: Snapshot = {
     reviewId: id,

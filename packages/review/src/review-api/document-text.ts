@@ -1,3 +1,5 @@
+import { boardTitle } from "@dev.fast/review-protocol";
+
 import {
   type Element,
   ReviewInputError,
@@ -33,13 +35,15 @@ export function documentText(
   const detailed = full || target !== undefined;
 
   const lines = [
-    `# ${snapshot.title}`,
+    `# ${boardTitle(snapshot.title)}`,
     `Session ${snapshot.reviewId} · version ${snapshot.version}`,
   ];
 
   if (relations && targetId === undefined) {
     const list = (boards: RelatedBoard[]) =>
-      boards.map((board) => `${board.title} (${board.id})`).join(", ");
+      boards
+        .map((board) => `${boardTitle(board.title)} (${board.id})`)
+        .join(", ");
 
     if (relations.parent) lines.push(`Parent: ${list([relations.parent])}`);
 

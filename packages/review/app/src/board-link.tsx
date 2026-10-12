@@ -1,14 +1,15 @@
 import {
-  elevation,
   fontSize,
   fontWeight,
   layer,
   radius,
   tracking,
 } from "@canvas/scale.stylex";
-import type {
-  BoardIconKind,
-  PullRequestState,
+import { surfaceStyles } from "@canvas/ui/surface";
+import {
+  type BoardIconKind,
+  type PullRequestState,
+  boardTitle,
 } from "@dev.fast/review-protocol";
 import type { BoardLinkPreview } from "@review/review-api/link-preview";
 import * as stylex from "@stylexjs/stylex";
@@ -61,7 +62,8 @@ function missingLabel(
   }
 
   // The board still exists, so the block was deleted.
-  if (target?.title && blockId !== undefined) return "Block deleted";
+  if (target?.title !== undefined && blockId !== undefined)
+    return "Block deleted";
 
   return "Board deleted";
 }
@@ -135,7 +137,7 @@ export function BoardLink({
         <BoardIcon icon={target?.icon} xstyle={[styles.icon, styles.inherit]} />
         {children}
       </a>
-      {previewing && target?.title ? (
+      {previewing && target?.title !== undefined ? (
         <Peek target={target} reviewId={reviewId} blockId={blockId} />
       ) : null}
     </span>
@@ -314,7 +316,7 @@ function PagePeek({ target }: { target: BoardLinkTarget }): ReactNode {
   const prose = target.preview?.prose ?? [];
 
   return (
-    <span role="tooltip" {...stylex.props(styles.card)}>
+    <span role="tooltip" {...stylex.props(surfaceStyles.popover, styles.card)}>
       <span {...stylex.props(styles.top)}>
         <BoardIcon icon={target.icon} xstyle={styles.kind} />
         {target.repository ? (
@@ -325,7 +327,7 @@ function PagePeek({ target }: { target: BoardLinkTarget }): ReactNode {
           <Badge target={target} number={target.pullRequestNumber} />
         ) : null}
       </span>
-      <span {...stylex.props(styles.title)}>{target.title}</span>
+      <span {...stylex.props(styles.title)}>{boardTitle(target.title)}</span>
       {prose.length ? (
         <span {...stylex.props(styles.clip)}>
           <Prose paragraphs={prose} />
@@ -345,10 +347,10 @@ function BlockPeek({ target }: { target: BoardLinkTarget }): ReactNode {
   const preview = target.preview ?? {};
 
   return (
-    <span role="tooltip" {...stylex.props(styles.card)}>
+    <span role="tooltip" {...stylex.props(surfaceStyles.popover, styles.card)}>
       <span {...stylex.props(styles.top)}>
         <BoardIcon icon={target.icon} xstyle={styles.kind} />
-        <span {...stylex.props(styles.crumb)}>{target.title}</span>
+        <span {...stylex.props(styles.crumb)}>{boardTitle(target.title)}</span>
         {preview.section ? (
           <>
             <svg
@@ -428,13 +430,6 @@ const styles = stylex.create({
     paddingTop: "16px",
     paddingBottom: "14px",
     paddingInline: "18px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: radius.surface,
-    backgroundColor: tokens.surface,
-    boxShadow: elevation.popover,
-    color: tokens.ink,
     fontStyle: "normal",
     fontWeight: fontWeight.regular,
     textAlign: "left",

@@ -369,21 +369,18 @@ export function BoardEditor({
     editor.dom.addEventListener("review-section-expand", reveal, true);
     publish(editor.state);
 
-    // A new board opens with its title selected, so typing names it. The
-    // title's header renders on React's next commit.
+    // A new board opens with the caret in its empty title, so typing names
+    // it. The title's header renders on React's next commit.
     const naming = isNewBoard(snapshot)
       ? requestAnimationFrame(() => {
-          const title = editor.state.doc.firstChild!;
-
-          // Selected to be typed over, not asked about: no Ask toolbar
-          // until the person types.
+          // Named, not asked about: no Ask toolbar until the person types.
           editor.dom
             .querySelector("h1")
             ?.setAttribute("data-review-copy-ignore", "");
           editor.focus();
           editor.dispatch(
             editor.state.tr.setSelection(
-              TextSelection.create(editor.state.doc, 1, 1 + title.content.size),
+              TextSelection.create(editor.state.doc, 1),
             ),
           );
         })

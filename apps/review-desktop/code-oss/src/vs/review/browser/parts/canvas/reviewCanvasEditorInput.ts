@@ -15,7 +15,7 @@ import {
 import { EditorInput } from "../../../../workbench/common/editor/editorInput.js";
 import { IEditorGroupsService } from "../../../../workbench/services/editor/common/editorGroupsService.js";
 
-import type { BoardIconKind, ReviewSourceSelection } from "../../../common/reviewProtocol.js";
+import { boardTitle, type BoardIconKind, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
 import { sourceSelectionIdentity } from "../../../common/reviewSourceView.js";
 
 export type ReviewCanvasEditorTarget =
@@ -119,8 +119,11 @@ export class ReviewCanvasEditorInput extends EditorInput {
 	}
 
 	override getName(): string {
-		if (this.target.kind === "api-source") return this.target.selection.kind === "current" ? `Source — ${this.target.title}` : `Source — ${this.target.title} (v${this.target.selection.version})`;
-		if (this.target.kind === "api") return this.target.title;
+		if (this.target.kind === "api-source") {
+			const title = boardTitle(this.target.title);
+			return this.target.selection.kind === "current" ? `Source — ${title}` : `Source — ${title} (v${this.target.selection.version})`;
+		}
+		if (this.target.kind === "api") return boardTitle(this.target.title);
 		if (this.target.kind === "home") return "Home";
 		if (this.target.kind === "welcome") return "Welcome";
 		if (this.target.kind === "settings") return "Settings";

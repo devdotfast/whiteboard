@@ -4,6 +4,7 @@ import {
   type ReviewDiffViewSpec,
   type ReviewDocumentWidthChoice,
   type ReviewInlineEditorSpec,
+  boardTitle,
   parseReviewBoardPlace,
   parseReviewStackResponse,
   resolveReviewSourceView,
@@ -171,7 +172,7 @@ export function ApiCanvas({
       );
       setData(next);
       setError(undefined);
-      content.setTitle?.(snapshot.title);
+      content.setTitle?.(boardTitle(snapshot.title));
     };
 
     void (async () => {
