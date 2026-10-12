@@ -1,4 +1,5 @@
 import { type JsonValue, isJsonObject, isStringValue } from "@dev.fast/json";
+import { boardTitle } from "@dev.fast/review-protocol";
 
 import {
   type AuthoringTool,
@@ -78,7 +79,13 @@ export function publicResult(value: JsonValue): JsonValue {
 
       return [
         name,
-        key === "review" || key === "reviews" ? publicResult(item) : item,
+        key === "review" || key === "reviews"
+          ? publicResult(item)
+          : // A board's title as every surface shows it: an empty one is
+            // "Untitled".
+            key === "title" && "reviewId" in value && isStringValue(item)
+            ? boardTitle(item)
+            : item,
       ];
     }),
   );

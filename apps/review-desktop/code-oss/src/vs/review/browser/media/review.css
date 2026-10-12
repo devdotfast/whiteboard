@@ -1246,6 +1246,7 @@ body
 .review-tooltip-label,
 .review-tooltip-detail { display: block; }
 .review-tooltip-detail { color: var(--review-tooltip-fg-muted); }
+.review-tooltip-shortcut { margin-left: 8px; color: var(--vscode-disabledForeground); font: 11px/16px var(--review-chrome-font); }
 .workbench-hover-container:has(> .review-tooltip) > .workbench-hover-pointer::after {
   background-color: var(--review-tooltip-bg);
   border-right: 1px solid var(--review-tooltip-border);
@@ -1773,6 +1774,32 @@ body
 
 .monaco-workbench .review-sidebar-section-spacer {
   flex: 1;
+}
+
+/* An action at the end of a pane header, aligned with the row tags below. */
+.monaco-workbench .review-sidebar-header-action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: 0 -6px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+.monaco-workbench .review-sidebar-header-action:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+}
+
+.monaco-workbench .review-sidebar-header-action > .review-sidebar-icon {
+  stroke-width: 1.3;
 }
 
 .monaco-workbench .review-sidebar-section.collapsed {

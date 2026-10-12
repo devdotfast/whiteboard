@@ -5,6 +5,7 @@ import {
   type ReviewCanvasOnboarding,
   type ReviewRemoteHostActions,
   boardIconKind,
+  boardTitle,
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
 import { fuzzySegments } from "@review/fuzzy-match";
@@ -73,7 +74,6 @@ import {
   mergeChipOrder,
   removeHomeChip,
   reviewMetadataPills,
-  reviewTitle,
   sortHomeReviews,
   trashDaysLeft,
   trashRetentionDays,
@@ -605,10 +605,13 @@ export function ReviewHome({
       !restore &&
       !undoing &&
       ui?.confirmDelete &&
-      !(await ui.confirmDelete(chosen.map(reviewTitle), {
-        reviewIds: chosen.map((review) => review.reviewId),
-        trash: true,
-      }))
+      !(await ui.confirmDelete(
+        chosen.map((review) => boardTitle(review.title)),
+        {
+          reviewIds: chosen.map((review) => review.reviewId),
+          trash: true,
+        },
+      ))
     )
       return;
 
@@ -657,9 +660,12 @@ export function ReviewHome({
     if (
       !onDelete ||
       busyRef.current ||
-      !(await ui?.confirmDelete?.(targets.map(reviewTitle), {
-        reviewIds: targets.map((review) => review.reviewId),
-      }))
+      !(await ui?.confirmDelete?.(
+        targets.map((review) => boardTitle(review.title)),
+        {
+          reviewIds: targets.map((review) => review.reviewId),
+        },
+      ))
     )
       return;
 
@@ -1248,7 +1254,7 @@ export function ReviewHome({
                         }}
                       >
                         <Checkbox
-                          aria-label={`Select ${reviewTitle(review)}`}
+                          aria-label={`Select ${boardTitle(review.title)}`}
                           title="Select  x"
                           checked={isSelected(index)}
                           xstyle={!isSelected(index) && styles.hiddenCheck}
@@ -1274,7 +1280,7 @@ export function ReviewHome({
                         </span>
                         <button
                           type="button"
-                          aria-label={`${inTrash ? "Select" : "Open"} ${reviewTitle(review)}`}
+                          aria-label={`${inTrash ? "Select" : "Open"} ${boardTitle(review.title)}`}
                           aria-disabled={unavailable(review) || undefined}
                           {...stylex.props(styles.rowOpen)}
                           onClick={(event) => {
@@ -1288,7 +1294,7 @@ export function ReviewHome({
                             title={
                               unavailable(review)
                                 ? hostStatus(review).label
-                                : reviewTitle(review)
+                                : boardTitle(review.title)
                             }
                             {...stylex.props(
                               styles.title,
@@ -1296,7 +1302,7 @@ export function ReviewHome({
                             )}
                           >
                             <MatchedText
-                              text={reviewTitle(review)}
+                              text={boardTitle(review.title)}
                               queries={searchTerms}
                             />
                           </span>

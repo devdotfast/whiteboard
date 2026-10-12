@@ -1,7 +1,8 @@
-import type {
-  ReviewProjectThread,
-  ReviewSidebarSectionProps,
-  ReviewThreadsFilter,
+import {
+  type ReviewProjectThread,
+  type ReviewSidebarSectionProps,
+  type ReviewThreadsFilter,
+  boardTitle,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
@@ -76,7 +77,11 @@ function relation(thread: ReviewProjectThread, reviewId: string) {
 
   return {
     board: thread.anchor.board,
-    text: `From ${thread.anchor.board.title || "another whiteboard"}`,
+    text: `From ${
+      thread.anchor.board.title === undefined
+        ? "another whiteboard"
+        : boardTitle(thread.anchor.board.title)
+    }`,
     suffix: editedHere ? " · edited here" : undefined,
   };
 }

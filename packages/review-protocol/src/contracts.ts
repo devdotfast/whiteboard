@@ -494,7 +494,8 @@ export interface ReviewSidebarState {
 /** A board a thread started on or edited. */
 export interface ReviewThreadBoard {
   reviewId: string;
-  title: string;
+  /** Absent once the board is deleted. */
+  title?: string;
   icon: BoardIconKind;
 }
 

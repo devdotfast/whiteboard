@@ -6,6 +6,7 @@ import {
   PULL_REQUEST_STATE_LABELS,
   type ReviewStackLayer,
   type ReviewStackResponse,
+  boardTitle,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -244,7 +245,7 @@ function LayerRow({
         )}
       >
         {reviewed
-          ? layer.reviewTitle || layer.subject || layer.branch
+          ? boardTitle(layer.reviewTitle ?? layer.subject ?? layer.branch)
           : "No whiteboard"}
       </span>
       {layer.pullRequestNumber ? (

@@ -121,3 +121,15 @@ export function boardIconMarkup(icon: BoardIconDefinition): string {
 
   return `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 14' fill='none' stroke='black' stroke-width='${icon.strokeWidth}' stroke-linecap='round' stroke-linejoin='round'>${markup}</svg>`;
 }
+
+/** What a board with no title is called wherever its title shows. */
+export const UNTITLED_BOARD = "Untitled";
+
+/**
+ * A board's title as every surface shows it. A person's new board keeps an
+ * empty title until they name it; it reads "Untitled" everywhere. A title
+ * someone typed, "Untitled" included, shows as typed.
+ */
+export function boardTitle(title: string | null | undefined): string {
+  return title?.trim() ? title : UNTITLED_BOARD;
+}
