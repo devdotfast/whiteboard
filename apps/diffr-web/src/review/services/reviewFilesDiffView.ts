@@ -49,8 +49,6 @@ import {
   IDiffEditorOptions,
 } from "vs/editor/common/config/editorOptions.js";
 import { Range } from "vs/editor/common/core/range.js";
-import { ILanguageService } from "vs/editor/common/languages/language.js";
-import { PLAINTEXT_LANGUAGE_ID } from "vs/editor/common/languages/modesRegistry.js";
 import { IModelService } from "vs/editor/common/services/model.js";
 import { IHoverService } from "vs/platform/hover/browser/hover.js";
 import { IInstantiationService } from "vs/platform/instantiation/common/instantiation.js";
@@ -138,7 +136,6 @@ export class ReviewFilesEditorInput extends Disposable {
     /** Whether long lines wrap, in every file. */
     private readonly wordWrap: IObservable<boolean>,
     @IModelService private readonly modelService: IModelService,
-    @ILanguageService private readonly languageService: ILanguageService,
     @IInstantiationService
     private readonly instantiationService: IInstantiationService,
   ) {
@@ -181,14 +178,12 @@ export class ReviewFilesEditorInput extends Disposable {
     const diff = this.session.getFileResult(entry.file.path)?.diff;
     if (!diff) return undefined;
     const store = new DisposableStore();
+    // Plain text without a language selection: diffr's decorations colour the code, and a
+    // selection would subscribe every model to the language service.
     const model = (uri: URI, text: string) =>
       store.add(
         this.modelService.getModel(uri) ??
-          this.modelService.createModel(
-            text,
-            this.languageService.createById(PLAINTEXT_LANGUAGE_ID),
-            uri,
-          ),
+          this.modelService.createModel(text, null, uri),
       );
     const text = (side: "lhs" | "rhs") =>
       diff.type === "text" ? (diff[side]?.text ?? "") : "";
