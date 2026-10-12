@@ -12,8 +12,10 @@ import { tokens } from "./tokens.stylex";
 
 const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
-// A block's own element: it sits in the prose column.
-const inDocumentBlock = () => `${inDocument()}:is([data-review-node-id] > *)`;
+// A block's own element: it sits in the prose column. A board's Markdown
+// block is one before its first save gives it an id.
+const inDocumentBlock = () =>
+  `${inDocument()}:is([data-review-node-id] > *, [data-board-markdown] > *)`;
 
 // Inside a Markdown or trace quote block.
 const inProse = () =>
