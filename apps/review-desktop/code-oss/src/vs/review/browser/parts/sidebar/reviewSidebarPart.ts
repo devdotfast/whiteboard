@@ -9,8 +9,11 @@ import { Codicon } from "../../../../base/common/codicons.js";
 import { Emitter, Event } from "../../../../base/common/event.js";
 import { timeout } from "../../../../base/common/async.js";
 import { Disposable, type IDisposable, MutableDisposable, toDisposable } from "../../../../base/common/lifecycle.js";
-import { localize } from "../../../../nls.js";
-import { IInstantiationService, createDecorator } from "../../../../platform/instantiation/common/instantiation.js";
+import { KeyCode, KeyMod } from "../../../../base/common/keyCodes.js";
+import { localize, localize2 } from "../../../../nls.js";
+import { Action2, registerAction2 } from "../../../../platform/actions/common/actions.js";
+import { KeybindingWeight } from "../../../../platform/keybinding/common/keybindingsRegistry.js";
+import { IInstantiationService, type ServicesAccessor, createDecorator } from "../../../../platform/instantiation/common/instantiation.js";
 import { IHoverService } from "../../../../platform/hover/browser/hover.js";
 import { ICommandService } from "../../../../platform/commands/common/commands.js";
 import { IKeybindingService } from "../../../../platform/keybinding/common/keybinding.js";
@@ -41,16 +44,18 @@ import "../../media/review.css";
 import { loadReviewCanvasAssets } from "../canvas/reviewCanvasAssets.js";
 import { ReviewCanvasEditorInput } from "../canvas/reviewCanvasEditorInput.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
+import { type ReviewSidebarPaneId, ReviewSidebarTabs } from "./reviewSidebarTabs.js";
 import { REVIEW_NEW_WHITEBOARD_COMMAND_ID } from "../../../common/reviewNewWhiteboard.js";
+
+/** Whether a thread started on the board or edited it. */
+function onBoard(thread: ReviewProjectThreads["threads"][number], reviewId: string): boolean {
+	return thread.anchor.board.reviewId === reviewId || thread.edited.some((board) => board.reviewId === reviewId);
+}
 
 /** The board in a tab, when the tab is a board. */
 function boardOf(input: EditorInput | undefined): string | undefined {
 	return input instanceof ReviewCanvasEditorInput && input.target.kind === "api" ? input.target.reviewId : undefined;
 }
-
-/** The panes, picked one at a time by the tab icons under the window
- * controls. */
-type ReviewSidebarPaneId = "whiteboards" | "threads" | "changes";
 
 /** A collapsible group inside the Changes pane. */
 interface ReviewSidebarGroup {
@@ -65,6 +70,7 @@ interface ReviewSidebarGroup {
 interface ReviewSidebarPane {
 	readonly id: ReviewSidebarPaneId;
 	readonly tab: HTMLButtonElement;
+	readonly count: HTMLElement;
 	readonly element: HTMLElement;
 }
 
@@ -78,19 +84,19 @@ export interface ReviewSidebarFileTreeHost extends IDisposable {
 type ReviewSidebarIcon = readonly { tag: "path" | "rect"; attrs: Record<string, string> }[];
 
 /** The tab icons: 16px strokes. */
-const REVIEW_SIDEBAR_TAB_ICONS: Record<ReviewSidebarPaneId, ReviewSidebarIcon> = {
-	whiteboards: [
+export const REVIEW_SIDEBAR_TAB_ICONS: Record<ReviewSidebarPaneId, ReviewSidebarIcon> = {
+	whiteboard: [
 		{ tag: "rect", attrs: { x: "2.5", y: "5", width: "9", height: "8", rx: "1.5" } },
 		{ tag: "path", attrs: { d: "M5 5 V4 Q5 2.5 6.5 2.5 H12 Q13.5 2.5 13.5 4 V9.5 Q13.5 11 12 11 H11.5" } },
 	],
 	threads: [{ tag: "path", attrs: { d: "M4 3 H12 Q13.5 3 13.5 4.5 V9.5 Q13.5 11 12 11 H7.5 L4.5 13.5 V11 H4 Q2.5 11 2.5 9.5 V4.5 Q2.5 3 4 3 Z" } }],
-	changes: [{ tag: "path", attrs: { d: "M8 1.75 V10.25 M3.75 6 H12.25 M3.75 13 H12.25" } }],
+	diff: [{ tag: "path", attrs: { d: "M8 1.75 V10.25 M3.75 6 H12.25 M3.75 13 H12.25" } }],
 };
 
-const REVIEW_SIDEBAR_PANES: readonly { id: ReviewSidebarPaneId; title: string }[] = [
-	{ id: "whiteboards", title: localize("review.sidebar.whiteboards", "Whiteboards") },
-	{ id: "threads", title: localize("review.sidebar.threads", "Threads") },
-	{ id: "changes", title: localize("review.sidebar.changes", "Changes") },
+export const REVIEW_SIDEBAR_PANES: readonly { id: ReviewSidebarPaneId; title: string; command: string }[] = [
+	{ id: "whiteboard", title: localize("review.sidebar.whiteboard", "Whiteboard"), command: "review.sidebar.showWhiteboard" },
+	{ id: "diff", title: localize("review.sidebar.diff", "Diff"), command: "review.sidebar.showDiff" },
+	{ id: "threads", title: localize("review.sidebar.threads", "Threads"), command: "review.sidebar.showThreads" },
 ];
 
 /** Whether Threads lists this board's threads or the project's, per window. */
@@ -157,12 +163,13 @@ export class ReviewSidebarPart extends Part {
 	readonly snap = true;
 
 	private readonly panes: ReviewSidebarPane[] = [];
-	private active: ReviewSidebarPaneId = "whiteboards";
+	private readonly lit = new ReviewSidebarTabs((id) => this.offers(id));
 	private contentsHeader: HTMLElement | undefined;
 	private contentsBody: HTMLElement | undefined;
 	private contentsCount: HTMLElement | undefined;
+	private recentBody: HTMLElement | undefined;
 	private whiteboardsBody: HTMLElement | undefined;
-	private whiteboardsCount: HTMLElement | undefined;
+	private familyBody: HTMLElement | undefined;
 	private threadsBody: HTMLElement | undefined;
 	private threadsFilter: ReviewThreadsFilter;
 	/** Each board's project threads, as the server last sent them. */
@@ -184,8 +191,6 @@ export class ReviewSidebarPart extends Part {
 	 * switching back shows them without rebuilding the diff. */
 	private readonly fileTrees = new Map<string, HTMLElement>();
 	private filesNote: HTMLElement | undefined;
-	/** The view the pane was last picked for; a click holds until it changes. */
-	private paneView: string | undefined;
 	private rendering: Promise<void> = Promise.resolve();
 	private readonly _onDidChangeBoard = this._register(new Emitter<void>());
 	/** The sidebar shows another board. */
@@ -206,8 +211,10 @@ export class ReviewSidebarPart extends Part {
 	) {
 		super(Parts.REVIEW_SIDEBAR_PART, { hasTitle: false, borderWidth: () => 0 }, themeService, storage, layoutService);
 		this.threadsFilter = threadsFilterOf(storage.get(REVIEW_SIDEBAR_THREADS_FILTER_KEY, StorageScope.WORKSPACE));
-		// Whiteboards lists the catalog Home already keeps current.
+		// Whiteboard lists the catalog Home already keeps current.
 		this._register(catalog.onDidChange(() => this.render()));
+		// The "+" names the new-whiteboard shortcut as bound now.
+		this._register(keybindingService.onDidUpdateKeybindings(() => this.render()));
 		void catalog.initialize().catch((error) => logService.warn("[Whiteboard] Sidebar catalog failed:", error));
 	}
 
@@ -225,16 +232,24 @@ export class ReviewSidebarPart extends Part {
 		const panes = $(".review-sidebar-panes");
 		parent.append(tabRow, panes);
 
-		for (const { id, title } of REVIEW_SIDEBAR_PANES) {
-			const tab = $("button.review-sidebar-tab", { role: "tab", title, "aria-label": title }) as HTMLButtonElement;
+		for (const { id, title, command } of REVIEW_SIDEBAR_PANES) {
+			// An icon over its label; the count, faint, after the label.
+			const tab = $("button.review-sidebar-tab", { role: "tab" }) as HTMLButtonElement;
 			tab.type = "button";
-			tab.append(svgIcon(REVIEW_SIDEBAR_TAB_ICONS[id], 16));
-			if (id === "whiteboards") tab.append($("span.review-sidebar-tab-badge"));
-			if (id === "threads") tab.append(threadsBadge());
+			const icon = $("span.review-sidebar-tab-icon");
+			icon.append(svgIcon(REVIEW_SIDEBAR_TAB_ICONS[id], 16));
+			if (id === "whiteboard") icon.append($("span.review-sidebar-tab-badge"));
+			if (id === "threads") icon.append(threadsBadge());
+			const count = $("span.review-sidebar-tab-count");
+			const label = $("span.review-sidebar-tab-label");
+			label.append($("span", undefined, title), count);
+			tab.append(icon, label);
 			tabRow.appendChild(tab);
+			// Its label shows, so no tooltip: its shortcut is read out instead.
+			this._register(this.describeShortcut(tab, command));
 			const element = $(`.review-sidebar-pane.review-sidebar-pane-${id}`, { role: "tabpanel" });
 			panes.appendChild(element);
-			this.panes.push({ id, tab, element });
+			this.panes.push({ id, tab, count, element });
 			this._register(addDisposableListener(tab, "click", () => this.pick(id)));
 		}
 
@@ -245,12 +260,10 @@ export class ReviewSidebarPart extends Part {
 			return row;
 		};
 
-		// Whiteboards, then the board's contents under them, scrolling as one.
-		const whiteboards = this.pane("whiteboards");
+		// Search, then the board's contents, then This board, then Recent,
+		// scrolling as one.
+		const whiteboards = this.pane("whiteboard");
 		const stack = $(".review-sidebar-pane-body.review-sidebar-stack");
-		const whiteboardsHeader = header(stack, localize("review.sidebar.whiteboards", "Whiteboards"));
-		this.whiteboardsCount = $("span.review-sidebar-section-count");
-		whiteboardsHeader.append(this.whiteboardsCount, $("span.review-sidebar-section-spacer"), this.newWhiteboardButton());
 		this.whiteboardsBody = $(".review-sidebar-stack-body");
 		stack.appendChild(this.whiteboardsBody);
 		this.contentsHeader = header(stack, localize("review.sidebar.contents", "Contents"));
@@ -259,6 +272,11 @@ export class ReviewSidebarPart extends Part {
 		this.contentsHeader.append(this.contentsCount);
 		this.contentsBody = $(".review-sidebar-stack-body");
 		stack.appendChild(this.contentsBody);
+		this.familyBody = $(".review-sidebar-stack-body.review-sidebar-family");
+		stack.appendChild(this.familyBody);
+		// Recent comes last.
+		this.recentBody = $(".review-sidebar-stack-body.review-sidebar-recent");
+		stack.appendChild(this.recentBody);
 		whiteboards.appendChild(stack);
 
 		const threads = this.pane("threads");
@@ -266,7 +284,7 @@ export class ReviewSidebarPart extends Part {
 		this.threadsBody = $(".review-sidebar-pane-body");
 		threads.appendChild(this.threadsBody);
 
-		const changes = this.pane("changes");
+		const changes = this.pane("diff");
 		const changesHeader = header(changes, localize("review.sidebar.changes", "Changes"));
 		this.remaining = $(".review-sidebar-remaining");
 		changesHeader.append($("span.review-sidebar-section-spacer"), this.remaining);
@@ -283,21 +301,20 @@ export class ReviewSidebarPart extends Part {
 		return parent;
 	}
 
-	/** The "+" at the end of the Whiteboards header: what ⌘N does. */
-	private newWhiteboardButton(): HTMLButtonElement {
-		const label = localize("review.sidebar.newWhiteboard", "New whiteboard");
-		const button = $("button.review-sidebar-header-action", { "aria-label": label }) as HTMLButtonElement;
-		button.type = "button";
-		button.append(svgIcon([{ tag: "path", attrs: { d: "M6 2.25 V9.75 M2.25 6 H9.75" } }], 12));
-		// The tooltip names the shortcut ⌘N is bound to now, after any rebind.
-		const content = () => {
-			const shortcut = this.keybindingService.lookupKeybinding(REVIEW_NEW_WHITEBOARD_COMMAND_ID)?.getLabel() ?? undefined;
-			return { label, ...(shortcut && { shortcut }) };
+	/** Gives a screen reader the shortcut a command is bound to now, after
+	 * any rebind. */
+	private describeShortcut(target: HTMLElement, command: string): IDisposable {
+		const describe = () => {
+			const shortcut = this.keybindingService.lookupKeybinding(command)?.getAriaLabel();
+			if (shortcut) target.setAttribute("aria-description", shortcut);
+			else target.removeAttribute("aria-description");
 		};
-		const tooltip = this._register(new ReviewTooltip(this.hoverService, button, content()));
-		this._register(this.keybindingService.onDidUpdateKeybindings(() => { tooltip.content = content(); }));
-		this._register(addDisposableListener(button, "click", () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID)));
-		return button;
+		describe();
+		return this.keybindingService.onDidUpdateKeybindings(describe);
+	}
+
+	private shortcut(command: string): string | undefined {
+		return this.keybindingService.lookupKeybinding(command)?.getLabel() ?? undefined;
 	}
 
 	private pane(id: ReviewSidebarPaneId): HTMLElement {
@@ -331,29 +348,26 @@ export class ReviewSidebarPart extends Part {
 		group.chevron.classList.toggle("codicon-chevron-right", group.collapsed);
 	}
 
-	/** A click on a tab: it holds until the view changes. Changes fills from
-	 * the Diff view, so outside it the tab opens that view. */
+	/** A click on a tab: Whiteboard and Diff show their view as well as
+	 * their pane; Threads leaves the view where it is. */
 	pick(id: ReviewSidebarPaneId): void {
-		if (id === "changes" && this.state.view !== "diff") {
-			if (this.reviewId) this.emitSurfaceEvent({ event: "showReviewView", view: "diff", reviewId: this.reviewId });
-			return;
-		}
-		this.active = id;
+		const view = this.lit.pick(id, this.state.view);
+		if (view && this.reviewId) this.emitSurfaceEvent({ event: "showReviewView", view, reviewId: this.reviewId });
 		this.applyPane();
 	}
 
-	/** Whether the board has a change, and so a Changes tab. */
-	private get hasChanges(): boolean {
-		return this.state.lenses !== undefined || this.state.files !== undefined;
+	/** Whether the board has the tab: Diff needs a change. */
+	private offers(id: ReviewSidebarPaneId): boolean {
+		if (id === "diff") return this.state.lenses !== undefined || this.state.files !== undefined;
+		return true;
 	}
 
 	private applyPane(): void {
-		if (this.active === "changes" && !this.hasChanges) this.active = "whiteboards";
 		for (const pane of this.panes) {
-			const selected = pane.id === this.active;
+			const selected = pane.id === this.lit.active;
 			pane.tab.classList.toggle("active", selected);
 			pane.tab.setAttribute("aria-selected", String(selected));
-			pane.tab.hidden = pane.id === "changes" && !this.hasChanges;
+			pane.tab.hidden = !this.offers(pane.id);
 			pane.element.hidden = !selected;
 		}
 	}
@@ -488,12 +502,7 @@ export class ReviewSidebarPart extends Part {
 	}
 
 	private render(): void {
-		// The view picks the pane when it changes: the Diff view Changes, the
-		// Review view the pane last picked there. A click holds until then.
-		if (this.state.view !== this.paneView) {
-			this.paneView = this.state.view;
-			this.active = this.state.view === "diff" ? "changes" : "whiteboards";
-		}
+		this.lit.follow(this.state.view);
 		this.applyPane();
 
 		const reviewId = this.reviewId;
@@ -523,13 +532,15 @@ export class ReviewSidebarPart extends Part {
 		}
 
 		const project = reviewId ? this.project(reviewId) : undefined;
-		if (this.whiteboardsCount && project) {
-			// The count, then the repository name, not the full project path.
-			const label = project.project?.name.split("/").at(-1);
-			this.whiteboardsCount.textContent = project.project ? `${project.boards.length}${label ? ` · ${label}` : ""}` : "";
-		}
+		const boardThreads = reviewId ? (this.threads.get(reviewId)?.threads ?? []).filter((thread) => onBoard(thread, reviewId)) : [];
+		const counts: Record<ReviewSidebarPaneId, number | undefined> = {
+			whiteboard: undefined,
+			diff: this.state.files?.count,
+			threads: boardThreads.length || undefined,
+		};
+		for (const pane of this.panes) pane.count.textContent = counts[pane.id] === undefined ? "" : String(counts[pane.id]);
 		// The blue dot: another board in the project changed since last viewed.
-		const badge = this.panes.find((pane) => pane.id === "whiteboards")?.tab.querySelector(".review-sidebar-tab-badge");
+		const badge = this.panes.find((pane) => pane.id === "whiteboard")?.tab.querySelector(".review-sidebar-tab-badge");
 		if (badge instanceof HTMLElement) badge.hidden = !project?.boards.some((board) => board.changed && board.reviewId !== reviewId);
 		// One mark for the project's threads: amber when one needs the reader,
 		// else a spinner while one answers, else blue for an answer unseen.
@@ -562,6 +573,7 @@ export class ReviewSidebarPart extends Part {
 
 		const project = this.project(reviewId);
 		const lenses = this.lensReports.get(reviewId);
+		const newWhiteboardShortcut = this.shortcut(REVIEW_NEW_WHITEBOARD_COMMAND_ID);
 		const props: ReviewSidebarSectionProps = {
 			section: "contents",
 			connection: { serverUrl: connection.serverUrl, token: connection.token },
@@ -574,6 +586,8 @@ export class ReviewSidebarPart extends Part {
 			},
 			onOpenHeading: (headingId) => this.emitSurfaceEvent({ event: "revealHeading", reviewId, headingId }),
 			...(project && { project }),
+			// Recent spans every project: the catalog Home already keeps.
+			recent: [...this.catalog.reviews],
 			...(lenses && { lenses }),
 			onSelectLens: (lensId) => this.emitSurfaceEvent({ event: "selectLens", reviewId, lensId }),
 			onMarkLens: (lensId) => this.emitSurfaceEvent({ event: "markLens", reviewId, lensId }),
@@ -586,10 +600,14 @@ export class ReviewSidebarPart extends Part {
 			},
 			onFilterThreads: (filter) => this.setThreadsFilter(filter),
 			onOpenThread: (threadId) => this.emitSurfaceEvent({ event: "openAskThread", reviewId, threadId }),
+			onNewWhiteboard: () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID),
+			...(newWhiteboardShortcut && { newWhiteboardShortcut }),
 		};
 
 		const mounts: [ReviewSidebarSectionProps["section"], HTMLElement | undefined][] = [
 			["contents", this.contentsBody],
+			["family", this.familyBody],
+			["recent", this.recentBody],
 			["whiteboards", this.whiteboardsBody],
 			["threads", this.threadsBody],
 			["remaining", this.remaining],
@@ -656,6 +674,9 @@ export interface IReviewSidebarPartsService {
 
 	/** Shows the sidebar on its Threads tab. */
 	showThreads(): void;
+
+	/** Shows the sidebar on a tab, and that tab's view. */
+	showTab(id: ReviewSidebarPaneId): void;
 
 	/** Scroll requests from the sidebar for the board on screen. */
 	readonly onDidEmitSurfaceEvent: Event<ReviewSurfaceEvent>;
@@ -748,8 +769,13 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 	}
 
 	showThreads(): void {
+		this.showTab("threads");
+	}
+
+	showTab(id: ReviewSidebarPaneId): void {
+		if (!this.available) return;
 		this.show();
-		this.part.pick("threads");
+		this.part.pick(id);
 	}
 
 	/** Whether the board's Files and Lenses are on screen here; a hidden
@@ -786,4 +812,26 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 			this.applying = false;
 		}
 	}
+}
+
+// ⌘1–⌘3 pick the tabs in order. Above upstream's "Focus Nth Editor Group",
+// which has nothing to focus in a window of one group.
+for (const [index, { id, title, command }] of REVIEW_SIDEBAR_PANES.entries()) {
+	registerAction2(class extends Action2 {
+		constructor() {
+			super({
+				id: command,
+				title: localize2("review.sidebar.showTab", "Show {0}", title),
+				f1: true,
+				keybinding: {
+					primary: KeyMod.CtrlCmd | (KeyCode.Digit1 + index),
+					weight: KeybindingWeight.WorkbenchContrib + 1,
+				},
+			});
+		}
+
+		override run(accessor: ServicesAccessor): void {
+			accessor.get(IReviewSidebarPartsService).showTab(id);
+		}
+	});
 }

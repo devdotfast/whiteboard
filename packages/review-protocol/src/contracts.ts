@@ -540,7 +540,14 @@ export type ReviewThreadsFilter = "board" | "project" | "all";
 export interface ReviewSidebarSectionProps {
   /** "remaining" is the Diff view's Remaining row, above the Lenses
    * header. */
-  section: "whiteboards" | "contents" | "threads" | "lenses" | "remaining";
+  section:
+    | "whiteboards"
+    | "family"
+    | "contents"
+    | "recent"
+    | "threads"
+    | "lenses"
+    | "remaining";
   connection: { serverUrl: string; token: string };
   /** The board in the active tab. */
   reviewId: string;
@@ -556,6 +563,8 @@ export interface ReviewSidebarSectionProps {
     project: { id: string; name: string } | null;
     boards: ReviewApiSummary[];
   };
+  /** Recent: every project's boards, from Desktop's catalog. */
+  recent?: ReviewApiSummary[];
   /** Threads: every project's, the board's project, the filter, and the
    * threads open in Ask. */
   threads?: {
@@ -565,6 +574,9 @@ export interface ReviewSidebarSectionProps {
     open?: readonly string[];
   };
   onFilterThreads?(filter: ReviewThreadsFilter): void;
+  /** Whiteboard: start a new whiteboard, as its shortcut does. */
+  onNewWhiteboard?(): void;
+  newWhiteboardShortcut?: string;
   onOpenThread?(threadId: string): void;
   /** Lenses: the Diff view's, as its canvas reports them. */
   lenses?: ReviewSidebarLenses;

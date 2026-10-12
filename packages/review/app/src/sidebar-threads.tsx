@@ -9,8 +9,10 @@ import type { ReactElement } from "react";
 
 import { AGENT_LOGOS } from "./agent-logos";
 import { BoardIcon } from "./board-icons";
-import { elevation, fontSize, fontWeight, motion, radius } from "./scale.stylex";
+import { FolderLabel } from "./folder-label";
+import { fontSize, fontWeight, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
+import { SegmentedControl, segmentStyles } from "./ui/segmented";
 
 /** Whether a thread belongs to the board: it started on it, or edited it. */
 export function threadOnBoard(
@@ -112,39 +114,37 @@ export function ThreadsSectionBody({
     all: threads.list,
   }[threads.filter];
 
-  const option = (
-    filter: ReviewThreadsFilter,
-    label: string,
-    count: number,
-  ) => {
-    const selected = threads.filter === filter;
-
-    return (
-      <button
-        type="button"
-        role="radio"
-        aria-checked={selected}
-        {...stylex.props(styles.option, selected && styles.optionSelected)}
-        onClick={() => onFilterThreads?.(filter)}
-      >
-        <span {...stylex.props(styles.optionLabel)}>{label}</span>
-        <span {...stylex.props(styles.optionCount)}>{count}</span>
-      </button>
-    );
-  };
-
   return (
     <>
       <div {...stylex.props(styles.scope)}>
-        <div
-          role="radiogroup"
-          aria-label="Threads to list"
-          {...stylex.props(styles.switch)}
-        >
-          {option("board", "This board", onBoard.length)}
-          {option("project", "Project", inProject.length)}
-          {option("all", "All", threads.list.length)}
-        </div>
+        <SegmentedControl
+          label="Threads to list"
+          value={threads.filter}
+          options={(
+            [
+              ["board", "This board", onBoard.length],
+              ["project", "Project", inProject.length],
+              ["all", "All", threads.list.length],
+            ] as const
+          ).map(([value, label, count]) => ({
+            value,
+            label: (
+              <>
+                {label}
+                <span
+                  {...stylex.props(
+                    segmentStyles.segmentCount,
+                    threads.filter === value &&
+                      segmentStyles.segmentCountActive,
+                  )}
+                >
+                  {count}
+                </span>
+              </>
+            ),
+          }))}
+          onChange={(filter) => onFilterThreads?.(filter)}
+        />
       </div>
       {shown.length === 0 ? (
         <p {...stylex.props(styles.empty)}>
@@ -220,6 +220,13 @@ export function ThreadsSectionBody({
                       <span {...stylex.props(styles.relationSuffix)}>
                         {suffix}
                       </span>
+                    ) : null}
+                    {/* Every project's threads: where each lives. */}
+                    {threads.filter === "all" && thread.place ? (
+                      <>
+                        <span {...stylex.props(styles.spacer)} />
+                        <FolderLabel name={thread.place} />
+                      </>
                     ) : null}
                   </span>
                 </button>
@@ -323,59 +330,6 @@ const styles = stylex.create({
     paddingTop: "4px",
     paddingBottom: "8px",
     paddingInline: "12px",
-  },
-  switch: {
-    display: "flex",
-    flex: "1 1 0",
-    minWidth: 0,
-    padding: "2px",
-    borderRadius: radius.control,
-    backgroundColor: tokens.well,
-  },
-  // Each segment takes a third, on one line: a label too long for it ends in
-  // an ellipsis rather than wrapping.
-  option: {
-    display: "flex",
-    flex: "1 1 0",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: "6px",
-    minWidth: 0,
-    height: "24px",
-    paddingBlock: 0,
-    paddingInline: "6px",
-    whiteSpace: "nowrap",
-    borderWidth: 0,
-    borderRadius: radius.small,
-    backgroundColor: "transparent",
-    color: tokens.inkMuted,
-    fontFamily: tokens.chromeFont,
-    fontSize: fontSize.body,
-    lineHeight: "16px",
-    cursor: "pointer",
-  },
-  // Raised on a hairline, as the other segmented controls are: in dark the
-  // raised fill matches the well, so the hairline marks it.
-  optionSelected: {
-    backgroundColor: tokens.raised,
-    boxShadow: `${elevation.raised}, 0 0 0 1px ${tokens.ruleSoft}`,
-    color: tokens.ink,
-    fontWeight: fontWeight.medium,
-  },
-  optionLabel: {
-    minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-  // A count, in Inter, its digits lined up.
-  optionCount: {
-    flexShrink: 0,
-    color: tokens.inkFaint,
-    fontFamily: tokens.chromeFont,
-    fontVariantNumeric: "tabular-nums",
-    fontSize: fontSize.small,
-    fontWeight: fontWeight.regular,
-    lineHeight: "14px",
   },
   empty: {
     margin: 0,

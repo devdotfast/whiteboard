@@ -29,7 +29,7 @@ afterEach(() => {
 const props = (
   overrides: Partial<ReviewSidebarSectionProps>,
 ): ReviewSidebarSectionProps => ({
-  section: "whiteboards",
+  section: "family",
   connection: { serverUrl: "http://review.test", token: "t" },
   reviewId: "pr",
   contents: [],
@@ -76,109 +76,70 @@ const mount = async (initial: ReviewSidebarSectionProps) => {
   };
 };
 
-it("shows the five latest top-level boards, a parent ranked by its newest member", async () => {
+it("shows the open board's family with its place, the boards opened last, and a flat search", async () => {
   const project = {
     project: { id: "caps", name: "acme/caps" },
     boards: [
-      ...Array.from({ length: 7 }, (_, index) =>
-        board({
-          reviewId: `b${index + 1}`,
-          title: `Board ${index + 1}`,
-          createdAt: day(20 - index),
-        }),
-      ),
-      // An old parent whose child changed last.
       board({
         reviewId: "plan",
         title: "Plan",
-        createdAt: day(1),
-        children: ["s1", "s2"],
+        children: ["s1", "s2", "s3"],
+        viewedAt: day(3),
       }),
+      board({ reviewId: "s1", title: "Step 1", parentId: "plan" }),
+      board({ reviewId: "s2", title: "Step 2", parentId: "plan" }),
       board({
-        reviewId: "s1",
-        title: "Step 1",
+        reviewId: "s3",
+        title: "Step 3",
         parentId: "plan",
-        createdAt: day(25),
-      }),
-      board({
-        reviewId: "s2",
-        title: "Step 2",
-        parentId: "plan",
-        createdAt: day(2),
-      }),
-    ],
-  };
-
-  const view = await mount(props({ reviewId: "b7", project }));
-
-  // Collapsed, the parent is one row; the open board shows wherever it falls.
-  await vi.waitFor(() =>
-    expect(view.rows()).toEqual([
-      "Plan",
-      "Board 1",
-      "Board 2",
-      "Board 3",
-      "Board 4",
-      "Board 7",
-      expect.any(String),
-    ]),
-  );
-
-  // Expanded, the plan shows every step in the server's order, still one
-  // top-level row of the cap.
-  await view.click('[aria-label="Expand Plan"]');
-  expect(view.rows().slice(0, 4)).toEqual([
-    "Plan",
-    "  Step 1",
-    "  Step 2",
-    "Board 1",
-  ]);
-
-  await view.click("[data-show-more]");
-  expect(view.rows()).toHaveLength(11);
-  await view.dispose();
-});
-
-it("opens to the open board's parent, rolls a collapsed parent's changes up, and flattens a search", async () => {
-  const project = {
-    project: { id: "tree", name: "acme/tree" },
-    boards: [
-      board({
-        reviewId: "stack",
-        title: "Stack",
-        children: ["lower", "upper"],
-      }),
-      board({ reviewId: "lower", title: "Lower links", parentId: "stack" }),
-      board({
-        reviewId: "upper",
-        title: "Upper",
-        parentId: "stack",
         changed: true,
       }),
-      board({ reviewId: "links", title: "Dangling links", createdAt: day(1) }),
+      ...Array.from({ length: 6 }, (_, index) =>
+        board({
+          reviewId: `b${index + 1}`,
+          title: `Board ${index + 1}`,
+          viewedAt: day(20 - index),
+        }),
+      ),
+      board({ reviewId: "never", title: "Never opened" }),
     ],
   };
 
-  const view = await mount(props({ reviewId: "lower", project }));
+  const view = await mount(props({ reviewId: "s2", project }));
 
+  // This board: the parent, its children in order, and where this one sits.
   await vi.waitFor(() =>
-    expect(view.rows()).toEqual([
-      "Stack",
-      "  Lower links",
-      "  Upper •",
-      "Dangling links",
+    expect(view.rows().slice(0, 4)).toEqual([
+      "Plan",
+      "  Step 1",
+      "  Step 2",
+      "  Step 3 •",
     ]),
   );
+  expect(document.body.textContent).toContain("This board2 of 3");
 
-  // Collapsed while its child is open, the parent carries the child's dot.
-  await view.click('[aria-label="Collapse Stack"]');
-  expect(view.rows()).toEqual(["Stack •", "Dangling links"]);
+  // Recent, which Desktop puts under Contents: the five opened last, newest
+  // first, then the rest on request.
+  const recent = await mount(
+    props({ section: "recent", reviewId: "s2", project }),
+  );
 
-  // The reader's collapse holds for this project after a remount.
-  await view.dispose();
-  const again = await mount(props({ reviewId: "links", project }));
+  expect(recent.rows()).toEqual([
+    "Board 1",
+    "Board 2",
+    "Board 3",
+    "Board 4",
+    "Board 5",
+    "Show 2 more",
+  ]);
+  await recent.click("[data-show-more]");
+  expect(recent.rows().slice(5, 7)).toEqual(["Board 6", "Plan"]);
+  await recent.dispose();
 
-  await vi.waitFor(() => expect(again.rows()).toHaveLength(2));
+  // A search lists every match flat, a child after its parent's name.
+  const finder = await mount(
+    props({ section: "whiteboards", reviewId: "s2", project }),
+  );
 
   const search =
     document.querySelector<HTMLInputElement>("input[type=search]")!;
@@ -187,14 +148,35 @@ it("opens to the open board's parent, rolls a collapsed parent's changes up, and
     Object.getOwnPropertyDescriptor(
       HTMLInputElement.prototype,
       "value",
-    )!.set!.call(search, "links");
+    )!.set!.call(search, "step");
     search.dispatchEvent(new Event("input", { bubbles: true }));
   });
-  expect(again.rows()).toEqual([
-    expect.stringMatching(/Stack.*Lower links/),
-    "Dangling links",
-  ]);
-  await again.dispose();
+  expect(finder.rows()).toHaveLength(3);
+  expect(finder.rows()[0]).toMatch(/Plan.*Step/);
+  await finder.dispose();
+  await view.dispose();
+});
+
+it("shows a top-level board with its children, and starts a new whiteboard from its header", async () => {
+  const onNewWhiteboard = vi.fn<() => void>();
+
+  const project = {
+    project: { id: "top", name: "acme/top" },
+    boards: [
+      board({ reviewId: "plan", title: "Plan", children: ["s1"] }),
+      board({ reviewId: "s1", title: "Step 1", parentId: "plan" }),
+    ],
+  };
+
+  const view = await mount(
+    props({ reviewId: "plan", project, onNewWhiteboard }),
+  );
+
+  await vi.waitFor(() => expect(view.rows()).toEqual(["Plan", "  Step 1"]));
+  expect(document.body.textContent).toContain("This board1 step");
+  await view.click('[aria-label="New whiteboard"]');
+  expect(onNewWhiteboard).toHaveBeenCalledOnce();
+  await view.dispose();
 });
 
 it("lists the board's threads, the project's, or every project's", async () => {
@@ -225,7 +207,7 @@ it("lists the board's threads, the project's, or every project's", async () => {
     thread("pinned", "pr", []),
     { ...thread("edits-pr", "plan", ["pr"]), status: "waiting" as const },
     thread("elsewhere", "plan", []),
-    thread("other-project", "notes", [], "notes"),
+    { ...thread("other-project", "notes", [], "notes"), place: "notes-app" },
   ];
 
   const onOpenThread =
@@ -260,7 +242,9 @@ it("lists the board's threads, the project's, or every project's", async () => {
 
   await act(async () => handle!.update(mount("all")));
   expect(rows()).toHaveLength(4);
+  // Each says where it lives.
   expect(rows().at(-1)).toContain("Question other-project");
+  expect(rows().at(-1)).toContain("notes-app");
 
   await act(async () =>
     container.querySelector<HTMLButtonElement>("li button")!.click(),
@@ -330,4 +314,131 @@ it("reads entries without a depth as before: an h3 under the h2 above it", async
 
   expect(rows.map((row) => row.textContent)).toEqual(["1Section", "Sub"]);
   expect(left(1)).toBe(left(0));
+});
+
+it("caps a long family: the parent stays, the open board starts centred, and fades mark more above or below", async () => {
+  const steps = Array.from({ length: 17 }, (_, index) => `s${index + 1}`);
+
+  const project = {
+    project: { id: "long", name: "acme/long" },
+    boards: [
+      board({ reviewId: "plan", title: "Plan", children: steps }),
+      ...steps.map((id, index) =>
+        board({ reviewId: id, title: `Step ${index + 1}`, parentId: "plan" }),
+      ),
+    ],
+  };
+
+  const view = await mount(props({ reviewId: "s8", project }));
+
+  const scroller = () =>
+    document.querySelector<HTMLElement>("[data-family-scroller]")!;
+
+  const fades = () =>
+    [...document.querySelectorAll<HTMLElement>("[data-fade]")].map(
+      (fade) => fade.dataset.fade,
+    );
+
+  const scrollTo = (top: number) =>
+    act(async () => {
+      scroller().scrollTop = top;
+      scroller().dispatchEvent(new Event("scroll"));
+    });
+
+  /** How far the open board's row sits from the area's middle, in rows. */
+  const offCentre = () => {
+    const area = scroller().getBoundingClientRect();
+
+    const row = scroller()
+      .querySelector("[aria-current]")!
+      .getBoundingClientRect();
+
+    return (
+      Math.abs(row.top + row.height / 2 - (area.top + area.height / 2)) /
+      row.height
+    );
+  };
+
+  await vi.waitFor(() => expect(scroller()).toBeTruthy());
+
+  const parent = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent === "Plan",
+  )!;
+
+  const parentTop = parent.getBoundingClientRect().top;
+
+  // Eight and a half rows show, the open board in the middle of them.
+  expect(scroller().contains(parent)).toBe(false);
+  expect(scroller().clientHeight).toBeLessThan(scroller().scrollHeight);
+  expect(offCentre()).toBeLessThan(1);
+  expect(fades()).toEqual(["top", "bottom"]);
+
+  await scrollTo(0);
+  expect(fades()).toEqual(["bottom"]);
+  expect(parent.getBoundingClientRect().top).toBe(parentTop);
+
+  await scrollTo(scroller().scrollHeight);
+  expect(fades()).toEqual(["top"]);
+
+  // A re-render leaves the reader's scroll alone; a new open board is
+  // brought to the middle, or as near as the end allows.
+  await view.update(props({ reviewId: "s8", project }));
+  expect(fades()).toEqual(["top"]);
+  await view.update(props({ reviewId: "s17", project }));
+  expect(fades()).toEqual(["top"]);
+  await view.update(props({ reviewId: "s9", project }));
+  expect(offCentre()).toBeLessThan(1);
+  await view.dispose();
+});
+
+it("lists a short family whole, with no cap and no fades", async () => {
+  const project = {
+    project: { id: "short", name: "acme/short" },
+    boards: [
+      board({ reviewId: "plan", title: "Plan", children: ["s1", "s2"] }),
+      board({ reviewId: "s1", title: "Step 1", parentId: "plan" }),
+      board({ reviewId: "s2", title: "Step 2", parentId: "plan" }),
+    ],
+  };
+
+  const view = await mount(props({ reviewId: "s2", project }));
+
+  const scroller = document.querySelector<HTMLElement>(
+    "[data-family-scroller]",
+  )!;
+
+  expect(scroller.clientHeight).toBe(scroller.scrollHeight);
+  expect(document.querySelector("[data-fade]")).toBeNull();
+  await view.dispose();
+});
+
+it("ends every Recent row in its checkout's folder, as Home names it, else its project", async () => {
+  const recent = await mount(
+    props({
+      section: "recent",
+      reviewId: "open",
+      recent: [
+        board({
+          reviewId: "here",
+          title: "Here",
+          viewedAt: day(3),
+          repositoryPath: "/work/review-skills",
+          project: { id: "skills", name: "acme/skills" },
+        }),
+        board({
+          reviewId: "plan",
+          title: "Plan",
+          viewedAt: day(2),
+          project: { id: "caps", name: "acme/caps" },
+        }),
+      ],
+    }),
+  );
+
+  const folders = [
+    ...document.querySelectorAll<HTMLElement>("li [title]:has(svg)"),
+  ].map((folder) => folder.textContent);
+
+  expect(folders).toEqual(["review-skills", "acme/caps"]);
+  await recent.dispose();
 });

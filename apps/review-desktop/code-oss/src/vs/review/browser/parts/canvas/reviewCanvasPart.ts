@@ -249,9 +249,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		// Pass sidebar events on to the board this pane shows.
 		this._register(
 			this.sidebar.onDidEmitSurfaceEvent((event) => {
-				if ((event.event === "revealHeading" || event.event === "selectLens" || event.event === "markLens" || event.event === "openAskThread") && event.reviewId === this.apiContent?.reviewId) this.surfaceEvents.fire(event);
-				// The folded Lenses and Files headers open the board's Diff view.
-				if (event.event === "showReviewView" && event.reviewId === this.apiContent?.reviewId) this.surfaceEvents.fire(event);
+				// Every sidebar event names its board; the tabs' showReviewView too.
+				if ("reviewId" in event && event.reviewId === this.apiContent?.reviewId) this.surfaceEvents.fire(event);
 			}),
 		);
 		this._register(
