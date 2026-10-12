@@ -266,7 +266,14 @@ export const styles = stylex.create({
       ":focus-visible": 1,
     },
   },
-  kindIcon: { width: "14px", height: "14px", color: tokens.inkFaint },
+  kindIcon: {
+    // The changed badge sits on the icon's corner.
+    position: "relative",
+    display: "inline-flex",
+    width: "14px",
+    height: "14px",
+    color: tokens.inkFaint,
+  },
   rowOpen: {
     minWidth: 0,
     padding: 0,

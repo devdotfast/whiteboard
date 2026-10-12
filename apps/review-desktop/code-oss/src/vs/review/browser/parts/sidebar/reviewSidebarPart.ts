@@ -178,6 +178,7 @@ export class ReviewSidebarPart extends Part {
 			const tab = $("button.review-sidebar-tab", { role: "tab", title, "aria-label": title }) as HTMLButtonElement;
 			tab.type = "button";
 			tab.append(svgIcon(REVIEW_SIDEBAR_TAB_ICONS[id], 16));
+			if (id === "whiteboards") tab.append($("span.review-sidebar-tab-badge"));
 			tabRow.appendChild(tab);
 			const element = $(`.review-sidebar-pane.review-sidebar-pane-${id}`, { role: "tabpanel" });
 			panes.appendChild(element);
@@ -404,6 +405,9 @@ export class ReviewSidebarPart extends Part {
 			const label = project.project?.name.split("/").at(-1);
 			this.whiteboardsCount.textContent = project.project ? `${project.boards.length}${label ? ` · ${label}` : ""}` : "";
 		}
+		// The blue dot: another board in the project changed since last viewed.
+		const badge = this.panes.find((pane) => pane.id === "whiteboards")?.tab.querySelector(".review-sidebar-tab-badge");
+		if (badge instanceof HTMLElement) badge.hidden = !project?.boards.some((board) => board.changed && board.reviewId !== reviewId);
 
 		this.rendering = this.rendering
 			.then(() => this.mountSections())

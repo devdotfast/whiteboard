@@ -1309,6 +1309,8 @@ export class ReviewStore {
             : (summary.pins?.repositoryId ?? ""),
           viewedAt: row.viewed_at ? String(row.viewed_at) : null,
           trashedAt: row.deleted_at ? String(row.deleted_at) : null,
+          // Any unseen version counts, whoever saved it.
+          changed: !row.viewed_at || summary.createdAt > String(row.viewed_at),
           working: this.activity.isWorking(summary.reviewId),
         };
 

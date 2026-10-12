@@ -213,6 +213,19 @@ export const STORE_UPGRADES: readonly StoreUpgrade[] = [
   },
   {
     version: 7,
+    name: "viewed-on-upgrade",
+    // Every board counts as viewed at its latest version, so only later
+    // changes badge it.
+    run: ({ db }) =>
+      db.exec(`INSERT OR IGNORE INTO review_attention(review_id) SELECT id FROM reviews;
+        UPDATE review_attention SET viewed_at=COALESCE(NULLIF((
+          SELECT MAX(COALESCE(review_attention.viewed_at, ''), COALESCE(CASE WHEN json_valid(versions.snapshot) THEN json_extract(versions.snapshot,'$.createdAt') END, ''))
+          FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+          WHERE reviews.id=review_attention.review_id), ''), review_attention.viewed_at)
+        WHERE review_id IN (SELECT id FROM reviews);`),
+  },
+  {
+    version: 8,
     name: "ask-permissions",
     // Auto mode keeps what an Ask thread may do without asking; threads
     // saved before it lack the column.
