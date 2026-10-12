@@ -525,6 +525,43 @@ it("keeps a checkout registered when a board made with it is still being saved",
   );
 });
 
+it("deletes a board 30 days in Trash as Delete… does: its children move up and links into it stay", async () => {
+  const plan = await board("Plan");
+  const step = await board("Step");
+  const linking = await board("Linking");
+
+  await setParent(step, plan);
+  await store.execute({
+    operation: {
+      type: "edit",
+      reviewId: linking,
+      edit: {
+        type: "insert",
+        content: {
+          type: "markdown",
+          markdown: `See [the plan](whiteboard:board/${plan}).`,
+        },
+      },
+    },
+  });
+  await store.execute({
+    operation: { type: "lifecycle", state: "trash", reviewId: plan },
+  });
+
+  // A month on, the store opens and purges it.
+  vi.setSystemTime(Date.now() + 31 * 86_400_000);
+  await store.close();
+  store = new ReviewStore(path.join(directory, "reviews.db"), {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  } satisfies ReviewProviders);
+
+  expect(store.has(plan)).toBe(false);
+  expect(store.relations(step).parentId).toBeNull();
+  expect(store.linkingBoards(plan)).toEqual([linking]);
+});
+
 it("leaves a board in Trash out of its parent's children and others' dependencies until it is restored", async () => {
   const plan = await board("Plan");
   const step = await board("Step");

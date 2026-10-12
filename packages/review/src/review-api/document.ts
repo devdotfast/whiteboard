@@ -953,17 +953,32 @@ export function assignFreshIds(
   element: Element,
   allocate: (prefix: string) => string,
 ): void {
-  if (element.id !== undefined)
-    throw new ReviewInputError("IDs are assigned by the server.");
-  element.id = allocate(idPrefix(element));
+  assignIds(element, allocate, true);
+}
 
-  for (const child of children(element)) assignFreshIds(child, allocate);
+/** Give ids to the parts of an element tree that have none, keeping the
+ * rest: a person's save names the blocks it kept and leaves new ones bare. */
+export function assignMissingIds(
+  element: Element,
+  allocate: (prefix: string) => string,
+): void {
+  assignIds(element, allocate, false);
+}
 
+function assignIds(
+  element: Element,
+  allocate: (prefix: string) => string,
+  fresh: boolean,
+): void {
   const assign = (item: { id?: string }, prefix: string) => {
-    if (item.id !== undefined)
+    if (item.id === undefined) item.id = allocate(prefix);
+    else if (fresh)
       throw new ReviewInputError("IDs are assigned by the server.");
-    item.id = allocate(prefix);
   };
+
+  assign(element, idPrefix(element));
+
+  for (const child of children(element)) assignIds(child, allocate, fresh);
 
   if (element.type === "call_stack_diff")
     for (const frame of [...element.base, ...element.head])

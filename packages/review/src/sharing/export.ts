@@ -97,6 +97,7 @@ export async function exportShare(input: {
     sourceUnavailable: _sourceUnavailable,
     lastEdit: _lastEdit,
     trashedAt: _trashedAt,
+    personEdit: _personEdit,
     ...snapshot
   } = stored;
 
