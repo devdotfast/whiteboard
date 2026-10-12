@@ -897,6 +897,7 @@ dependencies = [
  "cc",
  "object",
  "rayon",
+ "ruzstd",
  "serde_json",
  "tree-sitter",
  "tree-sitter-ada",
@@ -958,6 +959,7 @@ dependencies = [
  "tree-sitter-yaml",
  "tree-sitter-zig",
  "ts-parser-perl",
+ "wasmparser 0.259.0",
  "zstd",
  "zstd-sys",
 ]
@@ -3535,6 +3537,12 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "ruzstd"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fad02996bfc73da3e301efe90b1837be9ed8f4a462b6ed410aa35d00381de89f"
 
 [[package]]
 name = "ryu"

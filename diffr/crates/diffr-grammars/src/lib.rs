@@ -4,9 +4,35 @@
 //! The first call unpacks that grammar's tables.
 use std::sync::Once;
 use tree_sitter_language::LanguageFn;
-// Links libzstd for the grammars' C code; wasm32 grammars are not packed.
+// Links libzstd for the grammars' C code; wasm32 has the pure-Rust decoder below.
 #[cfg(not(target_arch = "wasm32"))]
 use zstd_sys as _;
+
+/// libzstd's one-shot decompression, which the grammars' unpack functions call, for wasm32,
+/// where libzstd does not build. Returns the bytes written, or `usize::MAX` on a bad frame.
+///
+/// # Safety
+///
+/// `dst` must be writable for `dst_capacity` bytes and `src` readable for `src_size`.
+#[cfg(target_arch = "wasm32")]
+#[no_mangle]
+pub unsafe extern "C" fn ZSTD_decompress(
+    dst: *mut u8,
+    dst_capacity: usize,
+    src: *const u8,
+    src_size: usize,
+) -> usize {
+    // Safety: the caller passes a table's own storage and its packed bytes, with their sizes.
+    let (output, input) = unsafe {
+        (
+            std::slice::from_raw_parts_mut(dst, dst_capacity),
+            std::slice::from_raw_parts(src, src_size),
+        )
+    };
+    ruzstd::FrameDecoder::new()
+        .decode_all(input, output)
+        .unwrap_or(usize::MAX)
+}
 
 macro_rules! grammar {
     ($name:ident, $unpack:ident, $constructor:ident) => {

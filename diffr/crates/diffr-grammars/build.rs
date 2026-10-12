@@ -7,10 +7,10 @@
 //! function, `diffr_unpack_<symbol>`, fills the arrays, and `src/lib.rs` runs it
 //! once before the grammar's first use.
 //!
-//! A wasm32 build compiles each grammar as generated, with an empty unpack
-//! function: a page is served compressed, so packing would only cost the
-//! decompressor, and wasm object files hold their tables in a form this
-//! script does not read.
+//! A wasm32 build packs them too. Wasm copies a module's data into every
+//! instance's memory, so unpacked tables would cost each worker all ~110 MB of
+//! them; packed, a worker holds only the grammars it has parsed with. There the
+//! decompressor is `src/lib.rs`'s pure-Rust `ZSTD_decompress`.
 use object::{Object, ObjectSection, ObjectSymbol};
 use rayon::prelude::*;
 use std::collections::BTreeMap;
@@ -190,21 +190,6 @@ fn package_roots() -> BTreeMap<String, PathBuf> {
 /// fills them, and the grammar's constructor renamed to `diffr_<symbol>`, then compile it.
 fn pack(symbol: &str, source: &Path, out: &Path) {
     std::fs::create_dir_all(out).unwrap();
-    if std::env::var("CARGO_CFG_TARGET_ARCH").unwrap() == "wasm32" {
-        let grammar = format!(
-            "#define {symbol} diffr_{symbol}\n\
-             #include \"parser.c\"\n\
-             void diffr_unpack_{symbol}(void) {{}}\n"
-        );
-        std::fs::write(out.join("grammar.c"), grammar).unwrap();
-        let mut build = compiler(source, out);
-        build.file(out.join("grammar.c"));
-        if source.join("scanner.c").is_file() {
-            build.file(source.join("scanner.c"));
-        }
-        build.compile(symbol);
-        return;
-    }
     let parser = std::fs::read_to_string(source.join("parser.c")).unwrap();
     let header = std::fs::read_to_string(source.join("tree_sitter/parser.h")).unwrap();
     let tables = tables(&parser, &header);
@@ -289,6 +274,9 @@ fn table_bytes(
     .unwrap();
 
     let data = std::fs::read(object_path).unwrap();
+    if data.starts_with(b"\0asm") {
+        return wasm_table_bytes(symbol, &data, tables);
+    }
     let file = object::File::parse(&*data).unwrap();
     let prefix = if file.format() == object::BinaryFormat::MachO {
         "_"
@@ -318,6 +306,56 @@ fn table_bytes(
                 u64::from_be_bytes(size)
             };
             read(name, usize::try_from(size).unwrap())
+        })
+        .collect()
+}
+
+/// The same tables read from a wasm object file. Its `linking` section places each defined
+/// data symbol in a data segment, at an offset and with a size, so no size globals are needed.
+fn wasm_table_bytes(symbol: &str, data: &[u8], tables: &[Table]) -> Vec<Vec<u8>> {
+    let mut segments = Vec::new();
+    let mut symbols = BTreeMap::new();
+    for payload in wasmparser::Parser::new(0).parse_all(data) {
+        match payload.unwrap() {
+            wasmparser::Payload::DataSection(reader) => {
+                for segment in reader {
+                    segments.push(segment.unwrap().data);
+                }
+            }
+            wasmparser::Payload::CustomSection(section) if section.name() == "linking" => {
+                let linking = wasmparser::LinkingSectionReader::new(wasmparser::BinaryReader::new(
+                    section.data(),
+                    section.data_offset(),
+                ))
+                .unwrap();
+                for subsection in linking {
+                    let wasmparser::Linking::SymbolTable(table) = subsection.unwrap() else {
+                        continue;
+                    };
+                    for info in table {
+                        if let wasmparser::SymbolInfo::Data {
+                            name,
+                            symbol: Some(defined),
+                            ..
+                        } = info.unwrap()
+                        {
+                            symbols.insert(name, defined);
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    tables
+        .iter()
+        .map(|Table { name, .. }| {
+            let defined = symbols
+                .get(name)
+                .unwrap_or_else(|| panic!("{name} is missing from the {symbol} tables object"));
+            let start = usize::try_from(defined.offset).unwrap();
+            let end = start + usize::try_from(defined.size).unwrap();
+            segments[usize::try_from(defined.index).unwrap()][start..end].to_vec()
         })
         .collect()
 }
