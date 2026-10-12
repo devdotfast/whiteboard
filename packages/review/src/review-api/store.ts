@@ -1543,7 +1543,7 @@ export class ReviewStore {
         // The saved command must remain successful if a viewer disconnects.
       }
   }
-  /** Dismissed reviews, as Home lists them; only a restore clears it, not a view. */
+  /** Deleted reviews remain deleted when viewed; only Restore clears the state. */
   deletedIds(): string[] {
     return this.db
       .prepare(

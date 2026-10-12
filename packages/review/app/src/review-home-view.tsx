@@ -76,33 +76,16 @@ const visitKey = "review.home.lastVisit.v1";
 function readCollapsed(): Record<HomeGroup, boolean> {
   const defaults = { unread: false, week: false, earlier: true };
 
-  try {
-    const saved = JSON.parse(localStorage.getItem(collapseKey) ?? "{}");
+  const saved = JSON.parse(localStorage.getItem(collapseKey) ?? "{}");
 
-    for (const { id } of homeGroups)
-      if (saved?.[id] === true || saved?.[id] === false)
-        defaults[id] = saved[id];
-  } catch {
-    /* Storage is optional. */
-  }
+  for (const { id } of homeGroups)
+    if (saved?.[id] === true || saved?.[id] === false) defaults[id] = saved[id];
 
   return defaults;
 }
 
 function readLastVisit(): number {
-  try {
-    return Number(localStorage.getItem(visitKey)) || 0;
-  } catch {
-    return 0;
-  }
-}
-
-function savePreference(key: string, value: string) {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    /* Home still works without storage. */
-  }
+  return Number(localStorage.getItem(visitKey)) || 0;
 }
 
 export function ReviewHome({
@@ -219,7 +202,7 @@ export function ReviewHome({
   }, [copyNotice]);
 
   useEffect(() => {
-    savePreference(visitKey, String(Date.now()));
+    localStorage.setItem(visitKey, String(Date.now()));
     const timer = setInterval(() => setNow(Date.now()), 60_000);
 
     return () => clearInterval(timer);
@@ -490,7 +473,7 @@ export function ReviewHome({
     if (searching) return;
     setCollapsed((current) => {
       const next = { ...current, [id]: !current[id] };
-      savePreference(collapseKey, JSON.stringify(next));
+      localStorage.setItem(collapseKey, JSON.stringify(next));
 
       return next;
     });

@@ -1076,7 +1076,7 @@ describe("Home interactions", () => {
     ).toBeNull();
     expect(titles()).toEqual([]);
   });
-  it("does not select all or archive while editing text, and removes hidden selections", async () => {
+  it("does not select all or delete while editing text, and removes hidden selections", async () => {
     const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       async () => {},
     );
@@ -1085,7 +1085,7 @@ describe("Home interactions", () => {
     await select("One");
     await key("f", { metaKey: true });
     await key("a", { metaKey: true }, document.activeElement!);
-    await key("e", {}, document.activeElement!);
+    await key("Backspace", { metaKey: true }, document.activeElement!);
     expect(container.textContent).toContain("1 selected");
     expect(onDelete).not.toHaveBeenCalled();
     await search("Two");

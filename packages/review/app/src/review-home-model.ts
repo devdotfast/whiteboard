@@ -61,23 +61,21 @@ export function repositoryIdentity(
 
   if (!remote) return undefined;
 
-  try {
-    const url = new URL(remote.replace(/^git@([^:]+):/, "https://$1/"));
+  const url = URL.parse(remote.replace(/^git@([^:]+):/, "https://$1/"));
 
-    const path = url.pathname
-      .replace(/\/pull\/\d+.*$/, "")
-      .replace(/\.git\/?$/, "")
-      .replace(/^\/|\/$/g, "");
+  if (!url) return undefined;
 
-    if (!url.hostname || !path) return undefined;
+  const path = url.pathname
+    .replace(/\/pull\/\d+.*$/, "")
+    .replace(/\.git\/?$/, "")
+    .replace(/^\/|\/$/g, "");
 
-    return {
-      key: `remote:https://${url.hostname.toLowerCase()}/${path.toLowerCase()}.git`,
-      label: path,
-    };
-  } catch {
-    return undefined;
-  }
+  if (!url.hostname || !path) return undefined;
+
+  return {
+    key: `remote:https://${url.hostname.toLowerCase()}/${path.toLowerCase()}.git`,
+    label: path,
+  };
 }
 
 export function repositoryLabel(review: ReviewApiSummary): string {

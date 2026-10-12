@@ -6,13 +6,11 @@ import { type ReactNode, act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { testCanvasUi } from "./canvas-ui-test-utils";
 import {
   ConnectCard,
   LegacySkillsRow,
   REVIEW_CONNECT_TARGET_STORAGE_KEY,
 } from "./connect-card";
-import { CanvasUiContext } from "./host/canvas-ui";
 
 const status: ReviewCliInstallStatus = {
   fingerprint: "f",
@@ -166,25 +164,22 @@ describe("ConnectCard", () => {
   });
 
   it("swaps between the other agents from the menu", async () => {
-    const host = testCanvasUi();
-
-    const container = await mount(
-      <CanvasUiContext.Provider value={host.ui}>
-        <ConnectCard install={content()} />
-      </CanvasUiContext.Provider>,
-    );
+    const container = await mount(<ConnectCard install={content()} />);
 
     expect(otherTrigger(container)?.textContent).toBe("Other…");
     expect(otherTrigger(container)?.getAttribute("aria-pressed")).toBe("false");
     expect(container.querySelector("[role=menu]")).toBeNull();
 
     await act(async () => otherTrigger(container)?.click());
-    expect(host.menu.items.map((item) => item.label)).toEqual([
-      "Pi",
-      "oh-my-pi",
-      "Copilot CLI",
-    ]);
-    await act(async () => host.select("omp"));
+
+    const option = [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitemradio"]',
+      ),
+    ].find((item) => item.textContent === "oh-my-pi");
+
+    expect(option).toBeDefined();
+    await act(async () => option!.click());
     expect(container.querySelector("[role=menu]")).toBeNull();
     expect(otherTrigger(container)?.textContent).toBe("oh-my-pi");
     expect(otherTrigger(container)?.getAttribute("aria-pressed")).toBe("true");
