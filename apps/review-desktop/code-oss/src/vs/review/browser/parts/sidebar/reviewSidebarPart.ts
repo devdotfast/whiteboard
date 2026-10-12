@@ -9,10 +9,8 @@ import { Codicon } from "../../../../base/common/codicons.js";
 import { Emitter, Event } from "../../../../base/common/event.js";
 import { timeout } from "../../../../base/common/async.js";
 import { Disposable, type IDisposable, MutableDisposable, toDisposable } from "../../../../base/common/lifecycle.js";
-import { KeyCode, KeyMod } from "../../../../base/common/keyCodes.js";
 import { localize, localize2 } from "../../../../nls.js";
 import { Action2, registerAction2 } from "../../../../platform/actions/common/actions.js";
-import { KeybindingWeight } from "../../../../platform/keybinding/common/keybindingsRegistry.js";
 import { IInstantiationService, type ServicesAccessor, createDecorator } from "../../../../platform/instantiation/common/instantiation.js";
 import { IHoverService } from "../../../../platform/hover/browser/hover.js";
 import { ICommandService } from "../../../../platform/commands/common/commands.js";
@@ -46,6 +44,7 @@ import { loadReviewCanvasAssets } from "../canvas/reviewCanvasAssets.js";
 import { ReviewCanvasEditorInput } from "../canvas/reviewCanvasEditorInput.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
 import { type ReviewSidebarPaneId, ReviewSidebarTabs } from "./reviewSidebarTabs.js";
+import { REVIEW_SIDEBAR_TAB_COMMANDS } from "../../../contrib/tabs/reviewWindowKeys.js";
 import { REVIEW_NEW_WHITEBOARD_COMMAND_ID } from "../../../common/reviewNewWhiteboard.js";
 
 /** Whether a thread started on the board or edited it. */
@@ -96,9 +95,9 @@ export const REVIEW_SIDEBAR_TAB_ICONS: Record<ReviewSidebarPaneId, ReviewSidebar
 
 /** The tabs in order; `noun` names what a tab counts. */
 export const REVIEW_SIDEBAR_PANES: readonly { id: ReviewSidebarPaneId; title: string; command: string; noun?: string }[] = [
-	{ id: "whiteboard", title: localize("review.sidebar.whiteboard", "Whiteboard"), command: "review.sidebar.showWhiteboard" },
-	{ id: "diff", title: localize("review.sidebar.diff", "Diff"), command: "review.sidebar.showDiff", noun: "file" },
-	{ id: "threads", title: localize("review.sidebar.threads", "Threads"), command: "review.sidebar.showThreads", noun: "thread" },
+	{ id: "whiteboard", title: localize("review.sidebar.whiteboard", "Whiteboard"), command: REVIEW_SIDEBAR_TAB_COMMANDS[0] },
+	{ id: "diff", title: localize("review.sidebar.diff", "Diff"), command: REVIEW_SIDEBAR_TAB_COMMANDS[1], noun: "file" },
+	{ id: "threads", title: localize("review.sidebar.threads", "Threads"), command: REVIEW_SIDEBAR_TAB_COMMANDS[2], noun: "thread" },
 ];
 
 /** Whether Threads lists this board's threads or the project's, per window. */
@@ -638,9 +637,9 @@ export class ReviewSidebarPart extends Part {
 			reviewId,
 			contents: this.state.contents,
 			...(this.state.activeHeading && { activeHeading: this.state.activeHeading }),
-			onOpenBoard: (id, active) => {
+			onOpenBoard: (id) => {
 				const title = this.catalog.reviews.find((review) => review.reviewId === id)?.title ?? "Whiteboard";
-				void this.tabs.openApiReview(id, title, active);
+				void this.tabs.openApiReview(id, title);
 			},
 			onOpenHeading: (headingId) => this.emitSurfaceEvent({ event: "revealHeading", reviewId, headingId }),
 			...(project && { project }),
@@ -872,19 +871,14 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 	}
 }
 
-// ⌘1–⌘3 pick the tabs in order. Above upstream's "Focus Nth Editor Group",
-// which has nothing to focus in a window of one group.
-for (const [index, { id, title, command }] of REVIEW_SIDEBAR_PANES.entries()) {
+// ⌘1–⌘3 pick the tabs in order; reviewWindowKeys binds them.
+for (const { id, title, command } of REVIEW_SIDEBAR_PANES) {
 	registerAction2(class extends Action2 {
 		constructor() {
 			super({
 				id: command,
 				title: localize2("review.sidebar.showTab", "Show {0}", title),
 				f1: true,
-				keybinding: {
-					primary: KeyMod.CtrlCmd | (KeyCode.Digit1 + index),
-					weight: KeybindingWeight.WorkbenchContrib + 1,
-				},
 			});
 		}
 

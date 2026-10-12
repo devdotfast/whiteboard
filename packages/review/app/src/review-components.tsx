@@ -74,7 +74,7 @@ import type {
   ReviewPeekContent,
   SourcePeekAnchor,
 } from "./review-panel-model";
-import { askShown } from "./review-panel-store";
+import { askShown, peekShown } from "./review-panel-store";
 import { useReviewRoots } from "./review-root-context";
 import type { ReviewSectionSummary } from "./review-section-summary";
 import { useReviewUiState } from "./review-ui-state";
@@ -514,11 +514,13 @@ export function ReviewPanelHost() {
   const activePanel = useReviewPanel((state) => state.active);
   const close = useReviewPanel((state) => state.close);
   const columnHost = useAskPanelHost();
+  // Put away, the peek stays mounted, to come back where it was.
+  const hidden = !useReviewPanel(peekShown);
 
   return (
     <>
       {activePanel ? (
-        <AskDock host={columnHost}>
+        <AskDock host={columnHost} hidden={hidden}>
           <ReviewPeekPanel
             anchor={activePanel.anchor}
             content={activePanel.content}

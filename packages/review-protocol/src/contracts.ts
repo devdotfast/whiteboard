@@ -666,8 +666,6 @@ export const REVIEW_KEYMAP_CHOICES = [
 
 export type ReviewKeymapChoice = (typeof REVIEW_KEYMAP_CHOICES)[number];
 
-export type ReviewCtrlTabChoice = "recent" | "next";
-
 export type ReviewDocumentWidthChoice = "standard" | "wide" | "full";
 
 export type ReviewReadyNotificationChoice =
@@ -763,8 +761,6 @@ export interface ReviewCanvasSettingsContent {
   // A keymap only takes effect after the extension host restarts, so the
   // workbench offers the window reload. The page never forces one.
   setKeymap(choice: ReviewKeymapChoice): Promise<ReviewKeymapChoice>;
-  ctrlTab: ReviewCtrlTabChoice;
-  setCtrlTab(choice: ReviewCtrlTabChoice): Promise<ReviewCtrlTabChoice>;
   documentWidth: ReviewDocumentWidthChoice;
   setDocumentWidth(
     choice: ReviewDocumentWidthChoice,
@@ -1948,6 +1944,11 @@ export const ReviewSurfaceEventSchema = z.discriminatedUnion("event", [
     event: z.literal("openAskThread"),
     reviewId: requiredString,
     threadId: requiredString,
+  }),
+  /** Put the right column away, or bring back what it held. */
+  z.strictObject({
+    event: z.literal("toggleAskColumn"),
+    reviewId: requiredString,
   }),
 ]);
 

@@ -50,8 +50,6 @@ async function render(hosts: ReviewRemoteHostsSettings) {
     setTheme: reject,
     keymap: "none",
     setKeymap: reject,
-    ctrlTab: "recent",
-    setCtrlTab: reject,
     documentWidth: "standard",
     setDocumentWidth: reject,
     codeFontSize: 13,

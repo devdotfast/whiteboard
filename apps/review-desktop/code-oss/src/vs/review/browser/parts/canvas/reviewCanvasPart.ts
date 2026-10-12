@@ -44,7 +44,6 @@ import { ILifecycleService, ShutdownReason } from "../../../../workbench/service
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import {
 	EDITOR_FONT_SIZE_SETTING,
-	REVIEW_CTRL_TAB_SETTING,
 	REVIEW_DOCUMENT_WIDTH_SETTING,
 	REVIEW_KEYMAP_SETTING,
 	REVIEW_READY_NOTIFICATION_SETTING,
@@ -65,7 +64,6 @@ import type {
 	ReviewCanvasSetupActions,
 	ReviewCanvasWelcomeHost,
 	ReviewCliInstallStatus,
-	ReviewCtrlTabChoice,
 	ReviewDiffFileWire,
 	ReviewDiffViewFactory,
 	ReviewDocumentWidthChoice,
@@ -227,6 +225,15 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		);
 		this._register(toDisposable(() => this.sessionTelemetry.end("closed")));
 		this._register(toDisposable(() => this.askParts.release(this)));
+		// ⌥⌘B: the canvas on screen in the main window puts its column away
+		// or brings it back.
+		this._register(
+			this.askParts.onDidRequestToggle((owner) => {
+				const reviewId = this.apiContent?.reviewId;
+				if (owner === this && reviewId && this.targetDocument === mainWindow.document)
+					this.surfaceEvents.fire({ event: "toggleAskColumn", reviewId });
+			}),
+		);
 		let catalog = this.apiCatalog.reviews;
 		this._register(this.apiCatalog.onDidChange(() => {
 			const previous = catalog;
@@ -924,15 +931,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.commandService.executeCommand("review.setKeymap", choice);
 				return this.currentKeymap();
 			},
-			ctrlTab: this.currentCtrlTab(),
-			setCtrlTab: async (choice) => {
-				this.reviewTelemetryService.capture("setting_changed", {
-					setting: "ctrl_tab",
-					enabled: true,
-				});
-				await this.configurationService.updateValue(REVIEW_CTRL_TAB_SETTING, choice, ConfigurationTarget.USER);
-				return this.currentCtrlTab();
-			},
 			documentWidth: this.currentDocumentWidth(),
 			setDocumentWidth: async (choice) => {
 				this.reviewTelemetryService.capture("setting_changed", {
@@ -995,10 +993,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	private currentKeymap(): ReviewKeymapChoice {
 		return this.configurationService.getValue<ReviewKeymapChoice>(REVIEW_KEYMAP_SETTING) ?? "none";
-	}
-
-	private currentCtrlTab(): ReviewCtrlTabChoice {
-		return this.configurationService.getValue<ReviewCtrlTabChoice>(REVIEW_CTRL_TAB_SETTING) === "next" ? "next" : "recent";
 	}
 
 	private currentDocumentWidth(): ReviewDocumentWidthChoice {

@@ -3,7 +3,6 @@ import { Checkbox } from "@canvas/ui/checkbox";
 import type {
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
-  ReviewCtrlTabChoice,
   ReviewDocumentWidthChoice,
   ReviewKeymapChoice,
   ReviewReadyNotificationChoice,
@@ -33,11 +32,6 @@ const KEYMAP_LABELS: Record<ReviewKeymapChoice, string> = {
   vim: "Vim",
   emacs: "Emacs",
   sublime: "Sublime Text",
-};
-
-const CTRL_TAB_LABELS: Record<ReviewCtrlTabChoice, string> = {
-  recent: "Last used tab",
-  next: "Next tab",
 };
 
 const DOCUMENT_WIDTH_LABELS: Record<ReviewDocumentWidthChoice, string> = {
@@ -83,7 +77,6 @@ export function SettingsPage({
 
   const [theme, setTheme] = useState(settings.theme);
   const [keymap, setKeymap] = useState(settings.keymap);
-  const [ctrlTab, setCtrlTab] = useState(settings.ctrlTab);
   const [documentWidth, setDocumentWidth] = useState(settings.documentWidth);
   const [codeFontSize, setCodeFontSize] = useState(settings.codeFontSize);
 
@@ -257,19 +250,6 @@ export function SettingsPage({
                 onChange={(choice) => {
                   void run(() => settings.setKeymap(choice), setKeymap);
                 }}
-              />
-            </Row>
-            <Row
-              label="Ctrl+Tab"
-              description="Jump back to the last used tab, or step through the tab bar."
-            >
-              <SegmentedControl
-                label="Ctrl+Tab"
-                value={ctrlTab}
-                options={labeledOptions(CTRL_TAB_LABELS)}
-                onChange={(choice) =>
-                  void run(() => settings.setCtrlTab(choice), setCtrlTab)
-                }
               />
             </Row>
           </Section>

@@ -9,20 +9,21 @@ import { localize2 } from '../../../nls.js';
 import { Action2, registerAction2 } from '../../../platform/actions/common/actions.js';
 import { IContextKeyService, RawContextKey } from '../../../platform/contextkey/common/contextkey.js';
 import type { ServicesAccessor } from '../../../platform/instantiation/common/instantiation.js';
-import { KeybindingsRegistry, KeybindingWeight } from '../../../platform/keybinding/common/keybindingsRegistry.js';
+import { KeybindingWeight } from '../../../platform/keybinding/common/keybindingsRegistry.js';
 import { type IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../workbench/common/contributions.js';
 import type { EditorInput } from '../../../workbench/common/editor/editorInput.js';
 import { IEditorService } from '../../../workbench/services/editor/common/editorService.js';
 import { IWorkbenchLayoutService } from '../../../workbench/services/layout/browser/layoutService.js';
 import { ReviewCanvasEditorInput } from '../../browser/parts/canvas/reviewCanvasEditorInput.js';
 import { IReviewCanvasEditorTabsService } from '../../services/reviewCanvasEditorTabsService.js';
+import { REVIEW_HOME_ACTIVE as REVIEW_HOME_ACTIVE_KEY } from './reviewWindowKeys.js';
 
 /**
  * Home is a window control, not a tab. Its editor stays open with a hidden
  * tab, so back and forward still go through it.
  */
 
-const REVIEW_HOME_ACTIVE = new RawContextKey<boolean>('reviewHomeActive', false);
+const REVIEW_HOME_ACTIVE = new RawContextKey<boolean>(REVIEW_HOME_ACTIVE_KEY, false);
 
 /** Set on the workbench while Home shows: the house is lit. */
 const REVIEW_HOME_ACTIVE_CLASS = 'review-home-active';
@@ -70,13 +71,4 @@ registerAction2(class extends Action2 {
 	override async run(accessor: ServicesAccessor): Promise<void> {
 		await accessor.get(IReviewCanvasEditorTabsService).openHome(true);
 	}
-});
-
-// On Home, closing the tab closes the window, as a browser does with its
-// last tab; macOS keeps the app running.
-KeybindingsRegistry.registerKeybindingRule({
-	id: 'workbench.action.closeWindow',
-	when: REVIEW_HOME_ACTIVE,
-	primary: KeyMod.CtrlCmd | KeyCode.KeyW,
-	weight: KeybindingWeight.WorkbenchContrib + 1,
 });

@@ -25,8 +25,6 @@ function settings(): ReviewCanvasSettingsContent {
     setTheme: async (choice) => choice,
     keymap: "none",
     setKeymap: async (choice) => choice,
-    ctrlTab: "recent",
-    setCtrlTab: async (choice) => choice,
     documentWidth: "standard",
     setDocumentWidth: async (choice) => choice,
     codeFontSize: 12,
