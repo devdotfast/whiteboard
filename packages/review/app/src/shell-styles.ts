@@ -211,8 +211,16 @@ export const shellStyles = stylex.create({
   },
   // Notion's page bar: where you are at the far left, what you can do at
   // the far right, on the page's own surface with no rule under it.
+  // In Desktop a collapsed sidebar leaves the window controls over the
+  // bar's left end; --review-page-bar-inset clears them.
+  // A fullscreen surface's left column runs under those controls too: its
+  // header reads --review-fullscreen-inset to clear them as the page bar does.
+  clearsWindowControls: {
+    "--review-fullscreen-inset": "var(--review-page-bar-inset, 0px)",
+  },
   pageBar: {
     height: "40px",
+    paddingLeft: "calc(16px + var(--review-page-bar-inset, 0px))",
     borderBottomWidth: 0,
   },
   // The breadcrumb takes what the icons leave, and clamps inside it.
