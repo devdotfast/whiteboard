@@ -1607,8 +1607,22 @@ body
 }
 
 .monaco-workbench .review-sidebar-tab[hidden],
+.monaco-workbench .review-sidebar-tab-badge[hidden],
 .monaco-workbench .review-sidebar-pane[hidden] {
   display: none;
+}
+
+/* Another board in the project changed since it was last viewed. */
+.monaco-workbench .review-sidebar-tab-badge {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--vscode-sideBar-background, var(--vscode-editorGroupHeader-tabsBackground));
+  border-radius: 999px;
+  background-color: var(--vscode-charts-blue);
 }
 
 .monaco-workbench .review-sidebar-icon {
@@ -1872,4 +1886,13 @@ body
   background-color: currentColor;
   -webkit-mask: var(--review-board-icon) center / 14px 14px no-repeat;
   mask: var(--review-board-icon) center / 14px 14px no-repeat;
+}
+
+/* The changed badge on a board tab's icon: a second mask layer lets the dot
+   show through. The tab sets the box's height, so the dot is placed from the
+   icon's centre: on its top-right corner. */
+.monaco-workbench .tab .monaco-icon-label.review-board-icon.review-tab-changed::before {
+  background-image: radial-gradient(circle at calc(50% + 6px) calc(50% - 6px), var(--vscode-charts-blue) 3px, transparent 3.5px);
+  -webkit-mask: var(--review-board-icon) center / 14px 14px no-repeat, radial-gradient(circle at calc(50% + 6px) calc(50% - 6px), #000 3.5px, transparent 4px);
+  mask: var(--review-board-icon) center / 14px 14px no-repeat, radial-gradient(circle at calc(50% + 6px) calc(50% - 6px), #000 3.5px, transparent 4px);
 }

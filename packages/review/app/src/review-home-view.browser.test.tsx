@@ -165,6 +165,17 @@ describe("Home interactions", () => {
     expect(findHost.showFind()).toBe(false);
   });
   const read = { viewedAt: "2026-10-11T12:00:00Z" };
+  it("badges a row that changed since it was last viewed", async () => {
+    await render([
+      summary("Changed", { changed: true }),
+      summary("Seen", { changed: false }),
+    ]);
+    expect(
+      container.querySelectorAll(
+        '[aria-label="Changed since you last viewed it"]',
+      ),
+    ).toHaveLength(1);
+  });
   it("marks a PR's row by its state", async () => {
     await render([
       summary("Stack", {

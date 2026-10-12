@@ -60,6 +60,7 @@ export class ReviewCanvasEditorInput extends EditorInput {
 	}
 
 	private boardIcon: BoardIconKind | undefined;
+	private changed = false;
 
 	/** Sets the tab's board icon. */
 	setBoardIcon(icon: BoardIconKind): void {
@@ -68,9 +69,20 @@ export class ReviewCanvasEditorInput extends EditorInput {
 		this._onDidChangeLabel.fire();
 	}
 
+	/** Shows or clears the changed badge on the tab. */
+	setChanged(changed: boolean): void {
+		if (this.changed === changed) return;
+		this.changed = changed;
+		this._onDidChangeLabel.fire();
+	}
+
 	override getLabelExtraClasses(): string[] {
+		if (this.target.kind !== "api") return [];
 		// review.css draws the board's icon over the codicon's slot.
-		return this.target.kind === "api" && this.boardIcon ? ["review-board-icon", `review-board-icon-${this.boardIcon}`] : [];
+		return [
+			...(this.boardIcon ? ["review-board-icon", `review-board-icon-${this.boardIcon}`] : []),
+			...(this.changed ? ["review-tab-changed"] : []),
+		];
 	}
 
 	setApiTitle(title: string): void {

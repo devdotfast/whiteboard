@@ -56,3 +56,16 @@ export function cappedTree(
       branch.children.some((child) => child.reviewId === current),
   );
 }
+
+/** Whether a row shows the changed dot: it changed and isn't open, or, for
+ * a collapsed parent, so did any of its children. */
+export function showsChanged(
+  branch: WhiteboardBranch,
+  current: string,
+  collapsed: boolean,
+): boolean {
+  const changed = (board: ReviewApiSummary) =>
+    Boolean(board.changed) && board.reviewId !== current;
+
+  return changed(branch.board) || (collapsed && branch.children.some(changed));
+}
