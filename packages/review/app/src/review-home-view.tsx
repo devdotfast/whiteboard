@@ -25,6 +25,7 @@ import {
   BoardIcon as BoardTargetIcon,
   PullRequestStateIcon,
 } from "./board-icons";
+import { ChangedBadge } from "./changed-badge";
 import { useHostActionButton } from "./connection-chip";
 import { countLabel, formatRelativeTime } from "./format";
 import { homeStyles } from "./home-styles";
@@ -1269,6 +1270,7 @@ export function ReviewHome({
                               icon={boardIconKind(review.target)}
                             />
                           )}
+                          {review.changed ? <ChangedBadge onIcon /> : null}
                         </span>
                         <button
                           type="button"

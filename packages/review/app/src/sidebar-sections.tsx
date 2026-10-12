@@ -13,6 +13,7 @@ import {
 } from "react";
 
 import { BoardIcon, PullRequestStateIcon } from "./board-icons";
+import { ChangedBadge } from "./changed-badge";
 import { reviewPreferenceKey } from "./host/review-client";
 import { LensProgress, LensRows } from "./lens-list";
 import type { ReviewTocEntry } from "./review-document-headings";
@@ -20,7 +21,7 @@ import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
 import { fontSize, fontWeight, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { TooltipHostContext } from "./use-tooltip";
-import { cappedTree, whiteboardTree } from "./whiteboard-tree";
+import { cappedTree, showsChanged, whiteboardTree } from "./whiteboard-tree";
 
 export interface ProjectBoards {
   project: ReviewApiSummary["project"] | null;
@@ -143,6 +144,7 @@ export function WhiteboardsList({
               board={branch.board}
               current={current}
               expanded={parent ? isExpanded : undefined}
+              changed={showsChanged(branch, current, !isExpanded)}
               holdsCurrent={
                 !isExpanded &&
                 branch.children.some((child) => child.reviewId === current)
@@ -196,6 +198,7 @@ function BoardRow({
   current,
   nested = false,
   expanded,
+  changed = Boolean(board.changed) && board.reviewId !== current,
   holdsCurrent = false,
   parentTitle,
   onToggle,
@@ -206,6 +209,7 @@ function BoardRow({
   nested?: boolean;
   /** A parent's state; undefined for a board without children. */
   expanded?: boolean;
+  changed?: boolean;
   /** A collapsed parent whose child is open takes the open row's tint. */
   holdsCurrent?: boolean;
   /** In search results, a child's parent, named before it. */
@@ -253,6 +257,7 @@ function BoardRow({
       >
         <span {...stylex.props(styles.iconSlot)}>
           <BoardIcon icon={boardIconKind(board.target)} current={isCurrent} />
+          {changed ? <ChangedBadge onIcon /> : null}
         </span>
         {parentTitle ? (
           <span {...stylex.props(styles.path)}>

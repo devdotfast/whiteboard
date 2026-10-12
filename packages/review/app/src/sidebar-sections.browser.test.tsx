@@ -15,6 +15,7 @@ const board = (overrides: Partial<ReviewApiSummary>): ReviewApiSummary => ({
   repositoryName: "app",
   viewedAt: null,
   trashedAt: null,
+  changed: false,
   ...overrides,
 });
 
@@ -47,7 +48,8 @@ const mount = async (initial: ReviewSidebarSectionProps) => {
     handle = mountReviewSidebarSection(container, initial);
   });
 
-  /** Each row's text, a child's indented under its parent. */
+  /** Each row's text, a child's indented under its parent; a changed
+   * board's ends in "•". */
   const rows = () =>
     [...container.querySelectorAll<HTMLElement>("li")].map((row) => {
       const main = [
@@ -55,8 +57,9 @@ const mount = async (initial: ReviewSidebarSectionProps) => {
       ].at(-1)!;
 
       const nested = row.parentElement!.closest("li") ? "  " : "";
+      const changed = main.querySelector("[data-changed]") ? " •" : "";
 
-      return nested + main.textContent;
+      return nested + main.textContent + changed;
     });
 
   const click = (selector: string) =>
@@ -134,7 +137,7 @@ it("shows the five latest top-level boards, a parent ranked by its newest member
   await view.dispose();
 });
 
-it("opens to the open board's parent and flattens a search", async () => {
+it("opens to the open board's parent, rolls a collapsed parent's changes up, and flattens a search", async () => {
   const project = {
     project: { id: "tree", name: "acme/tree" },
     boards: [
@@ -144,7 +147,12 @@ it("opens to the open board's parent and flattens a search", async () => {
         children: ["lower", "upper"],
       }),
       board({ reviewId: "lower", title: "Lower links", parentId: "stack" }),
-      board({ reviewId: "upper", title: "Upper", parentId: "stack" }),
+      board({
+        reviewId: "upper",
+        title: "Upper",
+        parentId: "stack",
+        changed: true,
+      }),
       board({ reviewId: "links", title: "Dangling links", createdAt: day(1) }),
     ],
   };
@@ -155,13 +163,14 @@ it("opens to the open board's parent and flattens a search", async () => {
     expect(view.rows()).toEqual([
       "Stack",
       "  Lower links",
-      "  Upper",
+      "  Upper •",
       "Dangling links",
     ]),
   );
 
+  // Collapsed while its child is open, the parent carries the child's dot.
   await view.click('[aria-label="Collapse Stack"]');
-  expect(view.rows()).toEqual(["Stack", "Dangling links"]);
+  expect(view.rows()).toEqual(["Stack •", "Dangling links"]);
 
   // The reader's collapse holds for this project after a remount.
   await view.dispose();

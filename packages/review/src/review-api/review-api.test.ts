@@ -2445,6 +2445,28 @@ describe("snapshot authoring", () => {
     expect(store.read(reviewId).lastEdit?.threadId).toBeUndefined();
   });
 
+  it("says a board changed until it is viewed again, whoever changed it", async () => {
+    const { reviewId } = await create();
+    const changed = () => store.summary(reviewId)?.changed;
+
+    const view = () =>
+      store.execute(request({ type: "attention", reviewId, action: "view" }));
+
+    // Never viewed.
+    expect(changed()).toBe(true);
+    await view();
+    expect(changed()).toBe(false);
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await edit(reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "More." },
+    });
+    expect(changed()).toBe(true);
+    await view();
+    expect(changed()).toBe(false);
+  });
+
   it("lists the open board's project and its whiteboards for its sidebar", async () => {
     const checkout = path.join(directory, "checkout");
     execFileSync("git", ["init", "-q", checkout]);
@@ -2476,6 +2498,53 @@ describe("snapshot authoring", () => {
     expect(
       listed.boards.map((entry: { title: string }) => entry.title).sort(),
     ).toEqual(["Notes", "Plan"]);
+  });
+
+  it("counts every board as viewed on upgrade, so only later changes badge it", async () => {
+    const { reviewId } = await create();
+    await store.close();
+
+    const db = new DatabaseSync(database);
+    db.exec(
+      `DELETE FROM review_attention; PRAGMA user_version=${upgradeVersion("viewed-on-upgrade") - 1}`,
+    );
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    expect(store.summary(reviewId)?.changed).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await edit(reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "Later." },
+    });
+    expect(store.summary(reviewId)?.changed).toBe(true);
+
+    // A board made after the upgrade badges until it is opened.
+    const { reviewId: fresh } = await create();
+    expect(store.summary(fresh)?.changed).toBe(true);
+  });
+
+  it("keeps when a board was viewed if its latest version can't say when it was saved", async () => {
+    const { reviewId } = await create();
+    await store.close();
+
+    const db = new DatabaseSync(database);
+    db.prepare(
+      "INSERT OR REPLACE INTO review_attention(review_id,viewed_at) VALUES(?,'2026-09-01T00:00:00.000Z')",
+    ).run(reviewId);
+    db.exec(`UPDATE versions SET snapshot=json_remove(snapshot,'$.createdAt');
+      PRAGMA user_version=${upgradeVersion("viewed-on-upgrade") - 1};`);
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    const read = new DatabaseSync(database);
+
+    expect(
+      read
+        .prepare("SELECT viewed_at FROM review_attention WHERE review_id=?")
+        .get(reviewId),
+    ).toEqual({ viewed_at: "2026-09-01T00:00:00.000Z" });
+    read.close();
   });
 
   it("serializes edits through async validation and preserves different-field patches", async () => {
