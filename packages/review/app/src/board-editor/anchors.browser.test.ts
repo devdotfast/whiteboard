@@ -5,7 +5,7 @@ import type { Board } from "./board-doc";
 import { createBoardState } from "./editor-state";
 import { headings, headingsKey } from "./headings";
 
-it("anchors the same headings as the server, so a link lands in either", () => {
+it("anchors and nests the same headings as the server, so a link lands in either", () => {
   const board: Board = {
     title: "Plan",
     document: [
@@ -31,11 +31,11 @@ it("anchors the same headings as the server, so a link lands in either", () => {
 
   const editor = headingsKey
     .getState(state)!
-    .entries.map(({ id, text }) => [id, text]);
+    .entries.map(({ id, text, depth }) => [id, text, depth]);
 
   // SAFETY: the board's blocks are the document blocks the server stores.
   const server = documentHeadings(board.document as never).map(
-    ({ id, text }) => [id, text],
+    ({ id, text, depth }) => [id, text, depth],
   );
 
   expect(editor).toEqual(server);
