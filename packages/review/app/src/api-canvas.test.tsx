@@ -24,6 +24,7 @@ import { Hono } from "hono";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { askAnchor } from "./ask-anchor";
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { createSequenceTourEntry, sequenceView } from "./diagrams";
 import { testReviewBridge } from "./review-session-test-utils";
@@ -824,6 +825,76 @@ it("copies prose and code from the displayed historical JSON review", async () =
     write.mockRestore();
     document.getSelection()!.removeAllRanges();
   }
+});
+
+it("offers Ask and Copy ref on a selected section title, anchored to its section", async () => {
+  const review = await command({
+    type: "create",
+    title: "Selectable headings",
+    target: { kind: "commits", ...pins },
+  });
+
+  const section = await command({
+    type: "edit",
+    reviewId: review.reviewId,
+    edit: {
+      type: "insert",
+      content: {
+        type: "section",
+        title: "Retry budget",
+        children: [{ type: "markdown", markdown: "Saves retry three times." }],
+      },
+    },
+  });
+
+  const app = new Hono().route("/reviews-api", createReviewApi(store));
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+  const write = vi.spyOn(clipboard, "copyText").mockResolvedValue(true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mount(container, {
+      kind: "api",
+      reviewId: review.reviewId,
+      bridge: testReviewBridge(
+        {},
+        { request: async (url, init) => app.request(url, init) },
+      ),
+    });
+  });
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Retry budget"),
+    );
+  });
+
+  const heading = container.querySelector<HTMLElement>(
+    `h2[data-review-node-id="${section.targetId}"]`,
+  )!;
+
+  const text = document
+    .createTreeWalker(heading, NodeFilter.SHOW_TEXT)
+    .nextNode()!;
+
+  const range = document.createRange();
+  range.setStart(text, 0);
+  range.setEnd(text, text.textContent!.length);
+  range.getClientRects = () => [new DOMRect(10, 50, 100, 20)] as never;
+  document.getSelection()!.removeAllRanges();
+  document.getSelection()!.addRange(range);
+  await act(async () => document.dispatchEvent(new Event("selectionchange")));
+
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Copy ref"]')!
+      .click(),
+  );
+  expect(write.mock.lastCall![0]).toContain("> Retry budget");
+  // Ask pins the passage to the section that holds it.
+  expect(askAnchor(range)).toMatchObject({
+    blockId: section.targetId,
+    text: "Retry budget",
+  });
 });
 
 it("names a worktree review's source as its base against the working copy, and a commit review's as two commits", async () => {

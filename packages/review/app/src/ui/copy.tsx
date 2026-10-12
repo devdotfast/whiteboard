@@ -27,6 +27,7 @@ export async function copyText(text: string): Promise<boolean> {
   scratch.style.position = "fixed";
   scratch.style.opacity = "0";
   document.body.appendChild(scratch);
+  scratch.focus({ preventScroll: true });
   scratch.select();
   let copied = false;
 
@@ -38,13 +39,15 @@ export async function copyText(text: string): Promise<boolean> {
 
   scratch.remove();
 
-  if (active instanceof HTMLElement) active.focus();
-
+  // The selection goes back first: focusing an editor with none in it puts
+  // the caret at its start and scrolls there. Neither move scrolls.
   if (selection && ranges.length) {
     selection.removeAllRanges();
 
     for (const range of ranges) selection.addRange(range);
   }
+
+  if (active instanceof HTMLElement) active.focus({ preventScroll: true });
 
   return copied;
 }

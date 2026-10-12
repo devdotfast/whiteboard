@@ -19,6 +19,7 @@ import { codeInspectorMarker, documentMarker } from "./markers.stylex";
 import { peekResolutionOutcome } from "./peek-telemetry";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
 import type { SourcePeekAnchor } from "./review-panel-model";
+import { radius } from "./scale.stylex";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
@@ -429,6 +430,8 @@ const inMapInspector = () =>
 // Peeks keep the `code-peek` class: document-embed-scroll.ts finds embeds by it.
 const styles = stylex.create({
   peek: {
+    // Its card's corners, so the editor's selection ring follows them.
+    borderRadius: radius.control,
     width: {
       default: null,
       [inDocumentBlock()]: `min(100%, ${tokens.reviewBlockMaxWidth})`,

@@ -369,15 +369,20 @@ function ReviewLayoutContent({
   useReviewViewStateSync({ scrollRegionRef, panelStore });
 
   // Diagrams only read the open tour, so a restored tour whose diagram is
-  // no longer in the document would sit in the store unrendered. The
-  // document and its tour overlay commit before this effect runs.
+  // no longer in the document would sit in the store unrendered. The board
+  // editor draws its diagrams a task after the document commits, so look
+  // then.
   const canvasRoot = useReviewContainer();
   useEffect(() => {
-    const { overlayTour, closeOverlayTour } = panelStore.getState();
+    const timer = setTimeout(() => {
+      const { overlayTour, closeOverlayTour } = panelStore.getState();
 
-    if (overlayTour && !canvasRoot?.querySelector(".diagram-tour-overlay")) {
-      closeOverlayTour();
-    }
+      if (overlayTour && !canvasRoot?.querySelector(".diagram-tour-overlay")) {
+        closeOverlayTour();
+      }
+    });
+
+    return () => clearTimeout(timer);
   }, [canvasRoot, documentRevision, panelStore]);
 
   const hasChangeRange =

@@ -48,13 +48,13 @@ export function askAnchor(range: Range): AskAnchor | undefined {
   return { blockId, start: from, end: to, text: index.text };
 }
 
-/** The anchored words in the review as rendered now, with where they are
- * in their block's text; null when the block is gone or an edit touched
- * them. */
+/** The anchored words in the review as rendered now, with their block and
+ * where they are in its text; null when the block is gone or an edit
+ * touched them. */
 export function resolveAskAnchor(
   article: HTMLElement,
   anchor: AskAnchor,
-): { range: Range; start: number; end: number } | null {
+): { range: Range; block: HTMLElement; start: number; end: number } | null {
   const block = [...article.querySelectorAll<HTMLElement>(BLOCK)].find(
     (element) => element.dataset.reviewNodeId === anchor.blockId,
   );
@@ -64,7 +64,7 @@ export function resolveAskAnchor(
   const span = mapSpan(anchor.text, index.text, anchor.start, anchor.end);
   const range = span && index.range(span.start, span.end);
 
-  return span && range && { range, ...span };
+  return span && range && { range, block, ...span };
 }
 
 /** A stretch of `before` that became a stretch of `after`; an insertion

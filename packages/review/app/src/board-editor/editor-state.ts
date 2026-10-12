@@ -143,7 +143,11 @@ const richBlocks = (cut = new Set<string>()) =>
     },
   });
 
-export const boardKeymap = () =>
+/** The board's keys. A key the board acts on goes no further, so the window
+ * around it never acts on it too: ⌘B in text is bold, not the sidebar. */
+export const boardKeymap = () => owning(boardKeys());
+
+const boardKeys = () =>
   keymap({
     Enter: enter,
     "Shift-Enter": chainCommands(hardBreak),
@@ -159,6 +163,21 @@ export const boardKeymap = () =>
     "Shift-Tab": liftListItem(nodes.list_item),
     Escape: leaveEditing,
   });
+
+function owning(keys: Plugin): Plugin {
+  const handle = keys.props.handleKeyDown!;
+
+  return new Plugin({
+    props: {
+      handleKeyDown(view, event) {
+        if (!handle.call(keys, view, event)) return false;
+        event.stopPropagation();
+
+        return true;
+      },
+    },
+  });
+}
 
 export function boardPlugins(extra: Plugin[] = []): Plugin[] {
   return [

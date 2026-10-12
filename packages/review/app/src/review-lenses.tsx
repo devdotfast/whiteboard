@@ -120,6 +120,21 @@ export function ReviewLensesProvider({
 
   const progress = read.data ?? null;
 
+  // Where each selection resolved, by the commits it was read at: a new
+  // version's progress is read afresh, and a peek it leaves as it was keeps
+  // showing its code meanwhile rather than "Loading code…".
+  const resolvedBefore = useRef(new Map<string, ResolvedRange[]>());
+  const pinsKey = JSON.stringify(snapshot.pins ?? null);
+
+  const resolvedSelection = (source: LensSource) => {
+    const key = `${pinsKey}|${selectionKey(source)}`;
+    const ranges = progress?.resolvedSelections[selectionKey(source)];
+
+    if (ranges) resolvedBefore.current.set(key, ranges);
+
+    return ranges ?? resolvedBefore.current.get(key);
+  };
+
   const markViewed = useMutation({
     mutationFn: (input: {
       version: number;
@@ -286,12 +301,7 @@ export function ReviewLensesProvider({
         )
           return "unavailable";
 
-        if (
-          sources.every(
-            (source) =>
-              progress?.resolvedSelections[selectionKey(source)] !== undefined,
-          )
-        )
+        if (sources.every((source) => resolvedSelection(source) !== undefined))
           return "ready";
 
         return progress?.complete === true ? "unavailable" : "pending";
@@ -313,7 +323,7 @@ export function ReviewLensesProvider({
       clear: () => panelStore.getState().clearLens(),
       resolve: (sources) =>
         sources.flatMap((source) =>
-          (progress?.resolvedSelections[selectionKey(source)] ?? []).map(
+          (resolvedSelection(source) ?? []).map(
             (range): ResolvedRange =>
               source.pins
                 ? { ...range, comparison: comparisonKey(source.pins) }

@@ -331,3 +331,125 @@ button {
   inherits: false;
   initial-value: 560px;
 }
+
+/* The board editor's ProseMirror document (board-editor/). A heading's
+   chevron sits in the gutter, as a section's does; a collapsed heading hides
+   the lines after it; an empty line can show a faint hint. */
+
+.review-board-editor {
+  position: relative;
+  outline: none;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  overflow-wrap: break-word;
+  font-variant-ligatures: none;
+  caret-color: var(--ink);
+}
+
+/* A selected rich block shows its ring, not a text selection or a caret. */
+.review-board-editor.ProseMirror-hideselection {
+  caret-color: transparent;
+}
+
+.review-board-editor.ProseMirror-hideselection *::selection {
+  background: transparent;
+  color: inherit;
+}
+
+.review-board-editor .review-board-hidden {
+  display: none;
+}
+
+/* What a collapsed heading hides, after its text. */
+.review-board-summary {
+  margin-left: 12px;
+  color: var(--ink-faint);
+  font: 11px/1 var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Over the heading's own ink, as a collapsed section's title is. */
+.review-board-editor .review-board-heading-collapsed {
+  color: var(--ghost) !important;
+}
+
+.review-board-editor .review-board-placeholder::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+
+.review-board-chevron {
+  position: absolute;
+  top: calc((1lh - 20px) / 2);
+  left: -29px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-faint);
+  user-select: none;
+}
+
+.review-board-chevron:hover {
+  background: var(--well);
+  color: var(--ink);
+}
+
+.review-board-chevron svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+
+.review-board-chevron[aria-expanded="false"] svg {
+  transform: none;
+}
+
+/* An empty heading's chevron is ghost until the heading has text. */
+.review-board-placeholder > .review-board-chevron {
+  color: var(--ghost);
+}
+
+/* A list item's paragraphs sit flush with the item, as on the read-only
+   page; the prose margin a paragraph carries is stronger than a plain rule. */
+.review-board-editor li > p:first-child {
+  margin-top: 0 !important;
+}
+
+.review-board-editor li > p:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* The link whose target the side column shows. Its code chips wash whole. */
+.review-board-editor .review-board-link-open,
+.review-board-editor code:has(> .review-board-link-open) {
+  background-color: var(--link-open-wash);
+}
+
+.review-board-editor .review-board-code {
+  margin: 14px auto;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: var(--well);
+  font: 13px/20px var(--font-mono);
+  white-space: pre-wrap;
+}
+
+/* A selected rich block: a ring outside its card, not a wash over it. */
+.review-board-editor [data-board-selected] > [data-review-node-id] > * {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}

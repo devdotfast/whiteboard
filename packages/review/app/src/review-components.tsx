@@ -351,7 +351,10 @@ export function ReviewSection({
   );
 }
 
-function reviewSectionSummaryLabel(summary: ReviewSectionSummary): string {
+/** What a collapsed section holds, in a few words; empty when nothing. */
+export function reviewSectionSummaryLabel(
+  summary: ReviewSectionSummary,
+): string {
   const parts: string[] = [];
 
   if (summary.diagrams > 0) {

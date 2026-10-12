@@ -114,6 +114,7 @@ export class TestEditor {
       shiftKey: mods.has("Shift"),
       altKey: false,
       preventDefault() {},
+      stopPropagation() {},
     } as KeyboardEvent;
 
     return this.state.plugins.some((plugin) =>
