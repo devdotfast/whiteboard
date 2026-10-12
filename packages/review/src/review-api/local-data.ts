@@ -25,6 +25,7 @@ import {
 } from "@dev.fast/local-vcs";
 import { structuralChangeCounts } from "@dev.fast/review-protocol";
 import type {
+  PullRequestState,
   ReviewLanguageEnvironment,
   ReviewSourceEntry,
   StructuralDiffEvent,
@@ -83,6 +84,7 @@ import {
   resolvePullRequest,
 } from "./provider.js";
 import {
+  GitHubRefusedRead,
   type PullRequestDeps,
   defaultPullRequestDeps,
   fetchPullRequest,
@@ -166,7 +168,14 @@ interface RepositoryVcs {
   vcs?: LocalVcs;
 }
 
+/** How long a PR's state is shown before it is read again. */
+const PULL_REQUEST_STATE_TTL_MS = 5 * 60_000;
+
+/** How many PR states are read from GitHub at once. */
+const PULL_REQUEST_STATE_READS = 2;
+
 /** Local source/resource boundary, including Desktop-only local language context. */
+
 export class LocalReviewData {
   private readonly workspaceManager?: ReviewWorkspaces;
 
@@ -627,6 +636,8 @@ export class LocalReviewData {
       subscribe?: typeof subscribe;
       /** gh, git and GitHub API access for pull request targets. */
       pullRequests?: PullRequestDeps;
+      /** Read PR states from GitHub for the catalog. */
+      pullRequestStates?: boolean;
     } = {},
   ) {
     if (options.manageWorkspaces !== false)
@@ -1194,6 +1205,135 @@ export class LocalReviewData {
 
     return { ref: branch, commit: fork.commit };
   }
+  /** Each PR's state, by URL, as last read. */
+  private readonly pullRequestStates = new Map<
+    string,
+    {
+      state?: PullRequestState;
+      /** The branch it merges into. */
+      baseBranch?: string;
+      readAt: number;
+      /** When a board last showed it; a deleted board's PR is forgotten. */
+      seenAt: number;
+      reading: boolean;
+    }
+  >();
+
+  private readonly pullRequestStateListeners = new Set<() => void>();
+  private pullRequestStateTimer: ReturnType<typeof setInterval> | undefined;
+  private readonly pullRequestStateQueue: string[] = [];
+  private pullRequestStateReads = 0;
+
+  /** While GitHub rate-limits, no state is read. */
+  private pullRequestStatesPausedUntil = 0;
+
+  /** Calls back when a PR's state changes. While anyone listens, every PR
+   * still shown is read again once its state is a few minutes old. */
+  subscribePullRequestStates(listener: () => void): () => void {
+    this.pullRequestStateListeners.add(listener);
+    this.pullRequestStateTimer ??= setInterval(() => {
+      for (const [url, entry] of this.pullRequestStates)
+        if (Date.now() - entry.seenAt > 2 * PULL_REQUEST_STATE_TTL_MS)
+          this.pullRequestStates.delete(url);
+        else this.pullRequestState(url, { seen: false });
+      this.readPullRequestStates();
+    }, PULL_REQUEST_STATE_TTL_MS / 5);
+    this.pullRequestStateTimer.unref?.();
+
+    return () => {
+      this.pullRequestStateListeners.delete(listener);
+
+      if (!this.pullRequestStateListeners.size) {
+        clearInterval(this.pullRequestStateTimer);
+        this.pullRequestStateTimer = undefined;
+      }
+    };
+  }
+
+  /** A PR's state as last read from GitHub; a read older than a few minutes
+   * queues another in the background. Undefined until the first read lands,
+   * and a failed read keeps the last state. A merged or closed PR is not
+   * read again. */
+  pullRequestState(
+    url: string | undefined,
+    { seen = true }: { seen?: boolean } = {},
+  ): PullRequestState | undefined {
+    if (!url || !this.options.pullRequestStates) return undefined;
+
+    const entry = this.pullRequestStates.get(url) ?? {
+      readAt: 0,
+      seenAt: 0,
+      reading: false,
+    };
+
+    this.pullRequestStates.set(url, entry);
+
+    if (seen) entry.seenAt = Date.now();
+
+    if (
+      !entry.reading &&
+      entry.state !== "merged" &&
+      entry.state !== "closed" &&
+      Date.now() - entry.readAt > PULL_REQUEST_STATE_TTL_MS
+    ) {
+      entry.reading = true;
+      this.pullRequestStateQueue.push(url);
+      this.readPullRequestStates();
+    }
+
+    return entry.state;
+  }
+
+  /** Reads queued PR states a few at a time. */
+  private readPullRequestStates() {
+    while (
+      this.pullRequestStateReads < PULL_REQUEST_STATE_READS &&
+      this.pullRequestStateQueue.length &&
+      Date.now() >= this.pullRequestStatesPausedUntil
+    ) {
+      const url = this.pullRequestStateQueue.shift()!;
+      const entry = this.pullRequestStates.get(url);
+
+      if (!entry) continue;
+      this.pullRequestStateReads++;
+      void Promise.resolve()
+        .then(() => {
+          const { provider, address } = resolvePullRequest(url);
+
+          return provider.readPullRequest(
+            address,
+            this.options.pullRequests ?? defaultPullRequestDeps,
+          );
+        })
+        .then((pullRequest) => {
+          if (
+            (!pullRequest.state || pullRequest.state === entry.state) &&
+            pullRequest.baseRefName === entry.baseBranch
+          )
+            return;
+          entry.state = pullRequest.state ?? entry.state;
+          entry.baseBranch = pullRequest.baseRefName;
+
+          for (const listener of this.pullRequestStateListeners) listener();
+        })
+        .catch((error) => {
+          if (error instanceof GitHubRefusedRead)
+            this.pullRequestStatesPausedUntil = error.retryAt;
+        })
+        .finally(() => {
+          entry.readAt = Date.now();
+          entry.reading = false;
+          this.pullRequestStateReads--;
+          this.readPullRequestStates();
+        });
+    }
+  }
+
+  /** The branch a PR merges into, as last read with its state. */
+  pullRequestBaseBranch(url: string): string | undefined {
+    return this.pullRequestStates.get(url)?.baseBranch;
+  }
+
   /** The PR's current comparison, fetched into a registered checkout of its repository. */
   async resolvePullRequest(
     url: string,
@@ -2030,6 +2170,7 @@ export function openLocalReviewStore(
     manageWorkspaces?: boolean;
     subscribe?: typeof subscribe;
     pullRequests?: PullRequestDeps;
+    pullRequestStates?: boolean;
     /** From `groupCheckoutsAhead`. */
     checkoutOwners?: ReadonlyMap<string, string>;
   } = {},
@@ -2054,6 +2195,7 @@ export function openLocalReviewStore(
       validateSource: (pins, source, options) =>
         data.validateSource(pins, source, options),
       validateResource: (pins, block) => data.validateResource(pins, block),
+      pullRequestBaseBranch: (url) => data.pullRequestBaseBranch(url),
     },
     checkoutOwners,
   );

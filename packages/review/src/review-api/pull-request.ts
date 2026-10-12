@@ -8,6 +8,7 @@ import {
   renderVcsArgs,
   runVcs,
 } from "@dev.fast/local-vcs";
+import type { PullRequestState } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 
 import { ReviewInputError } from "./document.js";
@@ -41,6 +42,7 @@ export interface PullRequestRecord {
   headBranch?: string;
   /** GitHub's base commit, frozen at the PR's last update. */
   baseRefOid?: string;
+  state?: PullRequestState;
 }
 
 const FETCH_TIMEOUT_MS = 120_000;
@@ -272,6 +274,17 @@ async function indexForJj(
     for (const tag of tags)
       await git(["update-ref", "-d", tag]).catch(() => undefined);
     await jjImport().catch(() => undefined);
+  }
+}
+
+/** GitHub refused a read, as it does past a rate limit; it takes reads
+ * again at `retryAt`. */
+export class GitHubRefusedRead extends ReviewInputError {
+  constructor(
+    message: string,
+    readonly retryAt: number,
+  ) {
+    super(message, 409);
   }
 }
 

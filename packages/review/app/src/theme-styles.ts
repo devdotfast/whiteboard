@@ -147,6 +147,7 @@ export const themeStyles = stylex.create({
     "--change-added": "#1b9a57",
     "--change-removed": "#d8402c",
     "--change-modified": "#c98a0b",
+    "--merged": "#8250df",
     "--warning-wash": "rgba(201, 138, 11, 0.1)",
     "--warning-outline": "rgba(201, 138, 11, 0.24)",
     "--on-warning": "#4a3514",
