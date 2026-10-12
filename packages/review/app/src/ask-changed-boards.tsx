@@ -1,3 +1,4 @@
+import { boardTitle } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 import { z } from "zod";
@@ -78,7 +79,7 @@ export function AskChangedBoards({
           }
         >
           <BoardIcon icon={board.icon} xstyle={styles.icon} />
-          {board.title}
+          {boardTitle(board.title)}
         </button>
       ))}
     </nav>

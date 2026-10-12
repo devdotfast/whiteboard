@@ -17,6 +17,7 @@ import {
   type ReviewStructuralDiffEvent,
   type ReviewThreadBoard,
   boardIconKind,
+  boardTitle,
 } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 import {
@@ -1229,7 +1230,7 @@ export function createReviewApi(
     );
 
     return [
-      `Whiteboard: ${snapshot.title}`,
+      `Whiteboard: ${boardTitle(snapshot.title)}`,
       `Session ID: ${snapshot.reviewId}`,
       `Version: ${snapshot.version}`,
       ...(selection.apiSource?.commit
@@ -1345,7 +1346,7 @@ export function createReviewApi(
       const { reviewId } = snapshot;
 
       return [
-        `A reviewer is reading "${snapshot.title}" in Whiteboard and has a question about ${selection.target.kind === "review" ? "it" : "a selection"}.`,
+        `A reviewer is reading "${boardTitle(snapshot.title)}" in Whiteboard and has a question about ${selection.target.kind === "review" ? "it" : "a selection"}.`,
         checkout.live
           ? "Your working directory is the repository the review describes."
           : `Your working directory is a checkout of the review's head commit, ${checkout.head}. Answer from this code, not from other branches.`,
@@ -1530,7 +1531,7 @@ export function createReviewApi(
         if (!found) {
           found = store.has(id)
             ? store.boardFace(id)
-            : { reviewId: id, title: "", icon: boardIconKind(undefined) };
+            : { reviewId: id, icon: boardIconKind(undefined) };
           boards.set(id, found);
         }
 

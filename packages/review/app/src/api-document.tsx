@@ -1,4 +1,7 @@
-import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
+import {
+  type ReviewCommitSummary,
+  boardTitle,
+} from "@dev.fast/review-protocol";
 import { type DiffSelection } from "@review/lens-selection";
 import type { ReviewApiClient } from "@review/review-api/client";
 import {
@@ -286,7 +289,9 @@ export function ApiDocument({
   return (
     <>
       {!hasTitle && (
-        <ReviewDocumentTitle>{data.snapshot.title}</ReviewDocumentTitle>
+        <ReviewDocumentTitle>
+          {boardTitle(data.snapshot.title)}
+        </ReviewDocumentTitle>
       )}
       <DocumentBlocks
         nodes={data.snapshot.document}

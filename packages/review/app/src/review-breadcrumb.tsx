@@ -1,8 +1,9 @@
 import { elevation, fontSize, fontWeight, radius } from "@canvas/scale.stylex";
-import type {
-  BoardIconKind,
-  PullRequestState,
-  ReviewBoardPlace,
+import {
+  type BoardIconKind,
+  type PullRequestState,
+  type ReviewBoardPlace,
+  boardTitle,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -85,7 +86,7 @@ export function ReviewBreadcrumb({
     >
       <button
         type="button"
-        title={parent.title}
+        title={boardTitle(parent.title)}
         {...stylex.props(styles.parent)}
         onClick={(event) => openBoard(parent.reviewId, event)}
         onAuxClick={(event) => {
@@ -93,15 +94,17 @@ export function ReviewBreadcrumb({
         }}
       >
         <BoardIcon icon={parent.icon} />
-        <span {...stylex.props(styles.parentTitle)}>{parent.title}</span>
+        <span {...stylex.props(styles.parentTitle)}>
+          {boardTitle(parent.title)}
+        </span>
       </button>
       {siblings.length > 1 && index >= 0 ? (
         <PlaceCount
-          label={parent.title}
+          label={boardTitle(parent.title)}
           index={index}
           rows={siblings.map((board) => ({
             key: board.reviewId,
-            title: board.title,
+            title: boardTitle(board.title),
             icon: board.icon,
             ...(board.pullRequestNumber && {
               pullRequestNumber: board.pullRequestNumber,

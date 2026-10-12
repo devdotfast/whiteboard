@@ -12,6 +12,8 @@ import { Disposable, type IDisposable, MutableDisposable, toDisposable } from ".
 import { localize } from "../../../../nls.js";
 import { IInstantiationService, createDecorator } from "../../../../platform/instantiation/common/instantiation.js";
 import { IHoverService } from "../../../../platform/hover/browser/hover.js";
+import { ICommandService } from "../../../../platform/commands/common/commands.js";
+import { IKeybindingService } from "../../../../platform/keybinding/common/keybinding.js";
 import { ILogService } from "../../../../platform/log/common/log.js";
 import { IStorageService, StorageScope, StorageTarget } from "../../../../platform/storage/common/storage.js";
 import { IThemeService } from "../../../../platform/theme/common/themeService.js";
@@ -39,6 +41,7 @@ import "../../media/review.css";
 import { loadReviewCanvasAssets } from "../canvas/reviewCanvasAssets.js";
 import { ReviewCanvasEditorInput } from "../canvas/reviewCanvasEditorInput.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
+import { REVIEW_NEW_WHITEBOARD_COMMAND_ID } from "../../../common/reviewNewWhiteboard.js";
 
 /** The board in a tab, when the tab is a board. */
 function boardOf(input: EditorInput | undefined): string | undefined {
@@ -198,6 +201,8 @@ export class ReviewSidebarPart extends Part {
 		@IReviewApiCatalogService private readonly catalog: IReviewApiCatalogService,
 		@ILogService private readonly logService: ILogService,
 		@IHoverService private readonly hoverService: IHoverService,
+		@ICommandService private readonly commandService: ICommandService,
+		@IKeybindingService private readonly keybindingService: IKeybindingService,
 	) {
 		super(Parts.REVIEW_SIDEBAR_PART, { hasTitle: false, borderWidth: () => 0 }, themeService, storage, layoutService);
 		this.threadsFilter = threadsFilterOf(storage.get(REVIEW_SIDEBAR_THREADS_FILTER_KEY, StorageScope.WORKSPACE));
@@ -245,7 +250,7 @@ export class ReviewSidebarPart extends Part {
 		const stack = $(".review-sidebar-pane-body.review-sidebar-stack");
 		const whiteboardsHeader = header(stack, localize("review.sidebar.whiteboards", "Whiteboards"));
 		this.whiteboardsCount = $("span.review-sidebar-section-count");
-		whiteboardsHeader.append(this.whiteboardsCount);
+		whiteboardsHeader.append(this.whiteboardsCount, $("span.review-sidebar-section-spacer"), this.newWhiteboardButton());
 		this.whiteboardsBody = $(".review-sidebar-stack-body");
 		stack.appendChild(this.whiteboardsBody);
 		this.contentsHeader = header(stack, localize("review.sidebar.contents", "Contents"));
@@ -276,6 +281,23 @@ export class ReviewSidebarPart extends Part {
 
 		this.applyPane();
 		return parent;
+	}
+
+	/** The "+" at the end of the Whiteboards header: what ⌘N does. */
+	private newWhiteboardButton(): HTMLButtonElement {
+		const label = localize("review.sidebar.newWhiteboard", "New whiteboard");
+		const button = $("button.review-sidebar-header-action", { "aria-label": label }) as HTMLButtonElement;
+		button.type = "button";
+		button.append(svgIcon([{ tag: "path", attrs: { d: "M6 2.25 V9.75 M2.25 6 H9.75" } }], 12));
+		// The tooltip names the shortcut ⌘N is bound to now, after any rebind.
+		const content = () => {
+			const shortcut = this.keybindingService.lookupKeybinding(REVIEW_NEW_WHITEBOARD_COMMAND_ID)?.getLabel() ?? undefined;
+			return { label, ...(shortcut && { shortcut }) };
+		};
+		const tooltip = this._register(new ReviewTooltip(this.hoverService, button, content()));
+		this._register(this.keybindingService.onDidUpdateKeybindings(() => { tooltip.content = content(); }));
+		this._register(addDisposableListener(button, "click", () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID)));
+		return button;
 	}
 
 	private pane(id: ReviewSidebarPaneId): HTMLElement {

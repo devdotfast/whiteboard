@@ -47,19 +47,24 @@ const post = async <Body>(route: string, body?: Body) => {
   return { status: response.status, body: await response.json() };
 };
 
+/** A board an agent creates, or with no title one a person starts (⌘N). */
 const createBoard = async (title = "Plan") => {
   const checkout = path.join(directory, "checkout");
 
   mkdirSync(checkout, { recursive: true });
   const { id: repositoryId } = store.registerRepository(checkout);
 
-  const { reviewId } = await store.execute({
-    operation: {
-      type: "create",
-      title,
-      target: { kind: "project", repositoryId },
+  const { reviewId } = await store.execute(
+    {
+      operation: {
+        type: "create",
+        title,
+        target: { kind: "project", repositoryId },
+      },
     },
-  });
+    undefined,
+    title ? undefined : { kind: "person" },
+  );
 
   return reviewId;
 };
@@ -231,33 +236,61 @@ it("refuses an agent's edit to the block a person is editing until the lease end
   ]);
 });
 
-it("discards only an untouched Untitled board", async () => {
-  const empty = await createBoard("Untitled");
+it("discards only an untouched unnamed board", async () => {
+  const empty = await createBoard("");
 
-  expect(store.read(empty).document).toEqual([]);
+  expect(store.read(empty)).toMatchObject({ title: "", document: [] });
   expect(await post(`/${empty}/discard`)).toEqual({
     status: 200,
     body: { deleted: true },
   });
   expect(store.has(empty)).toBe(false);
 
-  const written = await createBoard("Untitled");
+  const written = await createBoard("");
 
   await insert(written, { type: "markdown", markdown: "Kept." });
 
   const named = await createBoard("Named");
+  // A typed "Untitled" is a title like any other.
+  const typed = await createBoard("Untitled");
 
-  const parent = await createBoard("Untitled");
+  const parent = await createBoard("");
   const child = await createBoard("Child");
 
   await store.execute({
     operation: { type: "set_parent", reviewId: child, parentId: parent },
   });
 
-  for (const id of [written, named, parent]) {
+  for (const id of [written, named, typed, parent]) {
     expect(await store.discard(id)).toEqual({ deleted: false });
     expect(store.has(id)).toBe(true);
   }
+});
+
+it("saves and reloads a board a person has not named, while an agent must name one", async () => {
+  const reviewId = await createBoard("");
+
+  const saved = await post(`/${reviewId}/person-edit`, {
+    baseVersion: 0,
+    title: "",
+    document: [{ type: "markdown", markdown: "Typed.", clientKey: "k" }],
+  });
+
+  expect(saved.status).toBe(200);
+  expect(store.read(reviewId).title).toBe("");
+
+  await expect(
+    store.execute({
+      operation: {
+        type: "create",
+        title: "",
+        target: {
+          kind: "project",
+          repositoryId: store.summary(reviewId)!.target!.repositoryId,
+        },
+      },
+    }),
+  ).rejects.toThrow("Supply a title.");
 });
 
 it("keeps an id ⌘Z brought back, and gives an agent's next insert a fresh one", async () => {
@@ -328,7 +361,7 @@ it("saves a ⌘Z that brings back a link to a board deleted since", async () => 
 });
 
 it("waits for a closing canvas to let go before discarding, and keeps a board still open", async () => {
-  const reviewId = await createBoard("Untitled");
+  const reviewId = await createBoard("");
 
   await post(`/${reviewId}/focus`, { clientId: "a", blockId: null });
   const discarding = post(`/${reviewId}/discard`);
@@ -336,7 +369,7 @@ it("waits for a closing canvas to let go before discarding, and keeps a board st
   // The canvas saves what was typed, then closes the board.
   await post(`/${reviewId}/person-edit`, {
     baseVersion: 0,
-    title: "Untitled",
+    title: "",
     document: [{ type: "markdown", markdown: "Typed.", clientKey: "k" }],
   });
   await post(`/${reviewId}/focus`, {
@@ -367,7 +400,7 @@ it("credits a person's new board, rename and restore to them", async () => {
 
   const { reviewId } = await command({
     type: "create",
-    title: "Untitled",
+    title: "",
     target: { kind: "project", repositoryPath: checkout },
     open: false,
   });

@@ -72,7 +72,8 @@ import {
 export const sharedSnapshotSchema = z.strictObject({
   reviewId: z.string().min(1),
   version: z.number().int().nonnegative(),
-  title: z.string().min(1),
+  /** Empty for a board never named; it reads "Untitled". */
+  title: z.string(),
   pins: pinsSchema
     .extend({
       base: z.string().regex(COMMIT_ID),
