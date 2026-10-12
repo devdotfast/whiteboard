@@ -100,7 +100,7 @@ export async function runReviewAppPick(
     const root = await runtime.resolveReviewRoot(input.cwd);
 
     const reviews = (await client.read<ReviewApiSummary[]>(""))
-      .filter((review) => review.repositoryPath === root && !review.dismissedAt)
+      .filter((review) => review.repositoryPath === root && !review.deletedAt)
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
     if (!reviews.length) throw new ReviewAppStateError("No review to show.");

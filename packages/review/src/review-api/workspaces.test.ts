@@ -335,7 +335,7 @@ it("removes a dismissed review's checkouts and rebuilds them on demand", async (
   const dismissed = await local.data.workspaces.source(reviewId, pins, "head");
   const kept = await local.data.workspaces.source(other, pins, "head");
 
-  await command({ type: "attention", reviewId, action: "dismiss" });
+  await command({ type: "attention", reviewId, action: "delete" });
   await local.data.workspaces.idle();
 
   expect(existsSync(dismissed.rootPath!)).toBe(false);
@@ -373,7 +373,7 @@ it("dismissing a review frees only its own managed checkout, leaving a user's si
     git("worktree", "list", "--porcelain").match(/^worktree /gm) ?? []
   ).length;
 
-  await command({ type: "attention", reviewId, action: "dismiss" });
+  await command({ type: "attention", reviewId, action: "delete" });
   await local.data.workspaces.idle();
 
   expect(existsSync(managedRoot)).toBe(false);
@@ -409,7 +409,7 @@ it("removes checkouts left by reviews dismissed while Desktop was closed", async
   await local.store.close();
   const headless = openLocalReviewStore(database, { manageWorkspaces: false });
   await headless.store.execute({
-    operation: { type: "attention", reviewId, action: "dismiss" },
+    operation: { type: "attention", reviewId, action: "delete" },
   });
   await headless.data.close();
   await headless.store.close();
@@ -432,9 +432,9 @@ it.skipIf(process.getuid?.() === 0)(
     chmodSync(rootPath!, 0o500);
 
     try {
-      await command({ type: "attention", reviewId, action: "dismiss" });
+      await command({ type: "attention", reviewId, action: "delete" });
       await local.data.workspaces.idle();
-      expect(local.store.summary(reviewId)?.dismissedAt).toBeTruthy();
+      expect(local.store.summary(reviewId)?.deletedAt).toBeTruthy();
       expect(existsSync(path.join(rootPath!, "value.ts"))).toBe(true);
     } finally {
       chmodSync(rootPath!, 0o700);
@@ -448,7 +448,7 @@ it.skipIf(process.getuid?.() === 0)(
 );
 
 const attentionWhileClosed = async (
-  ...actions: ("view" | "dismiss" | "restore")[]
+  ...actions: ("view" | "delete" | "restore")[]
 ) => {
   await local.data.close();
   await local.store.close();
@@ -475,8 +475,8 @@ it("frees the checkouts of a dismissed review that was only peeked at", async ()
   );
 
   // Opening a review from Home's Dismissed list records a view, not a restore.
-  await attentionWhileClosed("dismiss", "view");
-  expect(local.store.summary(reviewId)?.dismissedAt).toBeTruthy();
+  await attentionWhileClosed("delete", "view");
+  expect(local.store.summary(reviewId)?.deletedAt).toBeTruthy();
   expect(existsSync(rootPath!)).toBe(false);
 });
 
@@ -487,8 +487,8 @@ it("keeps the checkouts of a restored review", async () => {
     "head",
   );
 
-  await attentionWhileClosed("dismiss", "restore");
-  expect(local.store.summary(reviewId)?.dismissedAt).toBeNull();
+  await attentionWhileClosed("delete", "restore");
+  expect(local.store.summary(reviewId)?.deletedAt).toBeNull();
   expect(existsSync(path.join(rootPath!, "value.ts"))).toBe(true);
 });
 
@@ -505,7 +505,7 @@ it.skipIf(process.getuid?.() === 0)(
     chmodSync(head.rootPath!, 0o500);
 
     try {
-      await command({ type: "attention", reviewId, action: "dismiss" });
+      await command({ type: "attention", reviewId, action: "delete" });
       await local.data.workspaces.idle();
       expect(error).toHaveBeenCalled();
       expect(local.data.workspaces.failures()).toMatchObject([
@@ -542,7 +542,7 @@ it("never follows a symlink out of the managed root when freeing a dismissed rev
   symlinkSync(outside, path.join(root, "base"));
   symlinkSync(outside, path.join(path.dirname(rootPath!), "link"));
 
-  await command({ type: "attention", reviewId, action: "dismiss" });
+  await command({ type: "attention", reviewId, action: "delete" });
   await local.data.workspaces.idle();
 
   expect(existsSync(root)).toBe(false);
@@ -559,7 +559,7 @@ it("rebuilds a checkout requested while its release is running", async () => {
   }
 
   await local.data.workspaces.source(reviewId, pins, "head");
-  await command({ type: "attention", reviewId, action: "dismiss" });
+  await command({ type: "attention", reviewId, action: "delete" });
   const requested = await local.data.workspaces.source(reviewId, pins, "head");
   await local.data.workspaces.idle();
 

@@ -263,7 +263,8 @@ describe("snapshot authoring", () => {
       type: "insert",
       content: { type: "markdown", markdown: "Private review text" },
     });
-    const deletion = request({ type: "delete", reviewId });
+    await store.execute(request({ type: "delete", reviewId }));
+    const deletion = request({ type: "delete_permanently", reviewId });
     const result = await store.execute(deletion);
     expect(result).toMatchObject({ reviewId, deleted: true });
     expect(() => store.read(reviewId)).toThrow(/not found/);
@@ -279,7 +280,7 @@ describe("snapshot authoring", () => {
     ]);
     await expect(store.execute(deletion)).rejects.toThrow(/not found/);
   });
-  it("persists attention without creating a document version or notifying its readers", async () => {
+  it("persists lifecycle changes without creating a version and notifies readers", async () => {
     const { reviewId } = await create();
     const other = await create();
     const document = store.read(reviewId);
@@ -289,15 +290,18 @@ describe("snapshot authoring", () => {
 
     store.subscribe(documents);
     store.subscribeCatalog(catalog);
-    const dismiss = request({ type: "attention", reviewId, action: "dismiss" });
+    const dismiss = request({ type: "attention", reviewId, action: "delete" });
     const result = await store.execute(dismiss);
     await store.execute(
       request({ type: "attention", reviewId, action: "view" }),
     );
     expect(result).toMatchObject({ version: 0, attention: true });
-    expect(documents).not.toHaveBeenCalled();
+    expect(documents).toHaveBeenCalledOnce();
     expect(catalog).toHaveBeenCalledTimes(2);
-    expect(store.read(reviewId)).toEqual(document);
+    expect(store.read(reviewId)).toEqual({
+      ...document,
+      deletedAt: expect.any(String),
+    });
     expect(store.history(reviewId)).toHaveLength(1);
     await store.close();
     store = new ReviewStore(database, providers);
@@ -305,20 +309,106 @@ describe("snapshot authoring", () => {
       store.list().find((review) => review.reviewId === reviewId),
     ).toMatchObject({
       viewedAt: expect.any(String),
-      dismissedAt: expect.any(String),
+      deletedAt: expect.any(String),
     });
     expect(
       store.list().find((review) => review.reviewId === other.reviewId),
     ).toMatchObject({
       viewedAt: null,
-      dismissedAt: null,
+      deletedAt: null,
     });
     await store.execute(
       request({ type: "attention", reviewId, action: "restore" }),
     );
     expect(
-      store.list().find((review) => review.reviewId === reviewId)?.dismissedAt,
+      store.list().find((review) => review.reviewId === reviewId)?.deletedAt,
     ).toBeNull();
+  });
+
+  it("keeps deleted boards and history read-only until restored, across restart", async () => {
+    const { reviewId } = await create();
+    await edit(reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "Retained content" },
+    });
+    const version = store.read(reviewId).version;
+    await store.execute(request({ type: "delete", reviewId }));
+    const deletedAt = store.summary(reviewId)!.deletedAt;
+    expect(deletedAt).toBeTruthy();
+    expect(store.read(reviewId, 0).deletedAt).toBe(deletedAt);
+
+    for (const operation of [
+      { type: "rename", reviewId, title: "Overwritten" },
+      { type: "restore", reviewId, version: 0 },
+      {
+        type: "edit",
+        reviewId,
+        edit: {
+          type: "insert",
+          content: { type: "markdown", markdown: "Overwritten" },
+        },
+      },
+      { type: "set_target", reviewId, target: { kind: "commits", ...pins } },
+    ])
+      await expect(store.execute(request(operation))).rejects.toThrow(
+        /This whiteboard was deleted on .*Restore it to continue/,
+      );
+    expect(() => store.activity.update(reviewId, { action: "begin" })).toThrow(
+      /Restore it to continue/,
+    );
+    expect(store.read(reviewId).version).toBe(version);
+    expect(store.history(reviewId)).toHaveLength(2);
+    await store.close();
+    store = new ReviewStore(database, providers);
+    expect(store.summary(reviewId)!.deletedAt).toBe(deletedAt);
+    await store.execute(
+      request({ type: "attention", reviewId, action: "restore" }),
+    );
+    await store.execute(
+      request({ type: "rename", reviewId, title: "Restored and editable" }),
+    );
+    expect(store.read(reviewId).title).toBe("Restored and editable");
+    expect(store.read(reviewId).deletedAt).toBeNull();
+  });
+
+  it("purges after 30 days, including on restart, and preserves newer deleted boards", async () => {
+    vi.useFakeTimers({ now: new Date("2026-10-01T00:00:00Z") });
+    const old = await create();
+    await store.execute(request({ type: "delete", reviewId: old.reviewId }));
+    vi.setSystemTime(new Date("2026-10-02T00:00:00Z"));
+    const newer = await create();
+    await store.execute(request({ type: "delete", reviewId: newer.reviewId }));
+    await store.close();
+    vi.setSystemTime(new Date("2026-10-30T23:59:59Z"));
+    store = new ReviewStore(database, providers);
+    expect(store.has(old.reviewId)).toBe(true);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(store.has(old.reviewId)).toBe(false);
+    expect(store.has(newer.reviewId)).toBe(true);
+    await store.close();
+    vi.setSystemTime(new Date("2026-11-02T00:00:00Z"));
+    store = new ReviewStore(database, providers);
+    expect(store.has(newer.reviewId)).toBe(false);
+  });
+
+  it("migrates Archive with a fresh recovery window instead of purging old archived boards", async () => {
+    const { reviewId } = await create();
+    await store.execute(request({ type: "delete", reviewId }));
+    await store.close();
+    const db = new DatabaseSync(database);
+    db.exec(
+      "ALTER TABLE review_attention RENAME COLUMN deleted_at TO dismissed_at",
+    );
+    db.prepare(
+      "UPDATE review_attention SET dismissed_at=? WHERE review_id=?",
+    ).run("2020-01-01T00:00:00Z", reviewId);
+    db.close();
+    const before = Date.now();
+    store = new ReviewStore(database, providers);
+    expect(
+      Date.parse(store.summary(reviewId)!.deletedAt!),
+    ).toBeGreaterThanOrEqual(before);
+    expect(store.history(reviewId)).toHaveLength(1);
   });
 
   it.each([
@@ -1865,13 +1955,14 @@ it("serves the experiment through the real desktop HTTP server and existing auth
     const abort = new AbortController();
     const catalog = client.watch(null, abort.signal);
     expect(reviewsOnly((await catalog.next()).value)).toMatchObject([
-      { reviewId, dismissedAt: null },
+      { reviewId, deletedAt: null },
     ]);
-    await post({ type: "attention", reviewId, action: "dismiss" });
+    await post({ type: "attention", reviewId, action: "delete" });
     expect(reviewsOnly((await catalog.next()).value)).toMatchObject([
-      { reviewId, dismissedAt: expect.any(String) },
+      { reviewId, deletedAt: expect.any(String) },
     ]);
     await catalog.return(undefined);
+    await post({ type: "attention", reviewId, action: "restore" });
     const live = client.watch(reviewId, abort.signal);
     expect((await live.next()).value).toMatchObject({
       reviewId,
@@ -1925,9 +2016,13 @@ it("serves the experiment through the real desktop HTTP server and existing auth
     const watching = client.watch(reviewId, new AbortController().signal);
     await watching.next();
 
+    await post({ type: "delete", reviewId });
+    expect((await watching.next()).value).toMatchObject({
+      deletedAt: expect.any(String),
+    });
     await Promise.all([
       expect(watching.next()).rejects.toThrow(Error),
-      post({ type: "delete", reviewId }).then((response) => {
+      post({ type: "delete_permanently", reviewId }).then((response) => {
         expect(response.status).toBe(200);
       }),
     ]);

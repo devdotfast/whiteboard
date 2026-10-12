@@ -52,8 +52,10 @@ export function authoringTools(
     restore:
       "Restore title, source pins, PR identity and content from a saved version.",
     attention:
-      "Mark a review viewed, dismissed or restored without changing its content.",
-    delete: "Permanently delete this review and its history.",
+      "Mark a review viewed, deleted or restored without changing its content.",
+    delete: "Delete this review. It can be restored for 30 days.",
+    delete_permanently:
+      "Permanently delete an already-deleted review and its history. This cannot be undone.",
   };
 
   const tool = (

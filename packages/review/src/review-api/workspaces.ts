@@ -121,7 +121,7 @@ export class ReviewWorkspaces {
    * the Desktop's canvas tabs and source windows may still show them.
    */
   private releaseDismissed() {
-    const dismissed = new Set(this.store.dismissedIds());
+    const dismissed = new Set(this.store.deletedIds());
     const released = [...dismissed].filter((id) => !this.dismissed?.has(id));
     this.dismissed = dismissed;
 
@@ -177,7 +177,7 @@ export class ReviewWorkspaces {
 
   private async releaseCheckouts(reviewId: string, repositories: string[]) {
     // Restored since the dismissal: its checkouts may be in use.
-    if (!this.store.dismissedIds().includes(reviewId)) return;
+    if (!this.store.deletedIds().includes(reviewId)) return;
 
     const environments = this.all().filter(
       (item) => item.reviewId === reviewId,

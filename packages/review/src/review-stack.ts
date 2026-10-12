@@ -26,7 +26,7 @@ export async function resolveReviewStackLayers(
   subject: Pick<ReviewApiSummary, "origin"> & { reviewId?: string },
   reviews: readonly Pick<
     ReviewApiSummary,
-    "reviewId" | "title" | "origin" | "pins" | "dismissedAt"
+    "reviewId" | "title" | "origin" | "pins" | "deletedAt"
   >[],
   runGitHubApi: RunGitHubApi = defaultRunGitHubApi,
 ): Promise<ReviewStackLayer[]> {
@@ -79,7 +79,7 @@ export async function resolveReviewStackLayers(
 
     const review =
       matches.find((candidate) => candidate.reviewId === subject.reviewId) ??
-      matches.findLast((candidate) => !candidate.dismissedAt) ??
+      matches.findLast((candidate) => !candidate.deletedAt) ??
       matches.at(-1);
 
     return {

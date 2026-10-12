@@ -7,6 +7,8 @@ import type { LocalReviewData } from "@review/review-api/local-data.js";
 import { ReviewStore } from "@review/review-api/store.js";
 import { afterEach, beforeEach, expect, it } from "vitest";
 
+import { initializeReviewStoreSchema } from "./store-schema.js";
+
 const pins = { repositoryId: "repo", base: "base", head: "head" };
 
 const command = <Operation>(operation: Operation) => ({ operation });
@@ -82,12 +84,18 @@ it("keeps each review's conversations, newest first, until the review is deleted
   expect(history.get("newer")).toBeUndefined();
 
   await store.execute(command({ type: "delete", reviewId }));
+  expect(history.list(reviewId)).toHaveLength(1);
+  expect(() => history.rename("older", "Changed")).toThrow(
+    /Restore it to continue/,
+  );
+  await store.execute(command({ type: "delete_permanently", reviewId }));
   expect(history.list(reviewId)).toEqual([]);
   expect(history.list("shared-review").map(({ id }) => id)).toEqual(["shared"]);
 });
 
 it("keeps what the panel showed, and what each agent offered", () => {
   const db = new DatabaseSync(":memory:");
+  initializeReviewStoreSchema(db);
 
   try {
     const history = new AskHistory(db);

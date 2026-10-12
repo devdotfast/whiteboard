@@ -131,6 +131,7 @@ it("shares one live connection across reviews, reconnects, and isolates a delete
     );
 
     await command({ type: "delete", reviewId: a });
+    await command({ type: "delete_permanently", reviewId: a });
     await vi.waitFor(() => expect(errors.get("a")).toBeTruthy());
     await command({ type: "rename", reviewId: b, title: "Still live" });
     await vi.waitFor(() =>

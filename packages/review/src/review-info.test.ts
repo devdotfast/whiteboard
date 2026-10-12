@@ -23,10 +23,10 @@ it("reports the native catalog with pins and versions, filtering the current rep
     repositoryPath: "/repo",
     version: 3,
     pins: { base: "a", head: "b" },
-    dismissedAt: null,
+    deletedAt: null,
   };
 
-  const dismissed = { ...current, reviewId: "dismissed", dismissedAt: "today" };
+  const dismissed = { ...current, reviewId: "dismissed", deletedAt: "today" };
   vi.stubGlobal(
     "fetch",
     vi.fn(async () =>
@@ -59,7 +59,7 @@ it("lists the catalog at the mounted route, not a trailing-slash child", async (
     repositoryPath: "/repo",
     version: 3,
     pins: { base: "a", head: "b" },
-    dismissedAt: null,
+    deletedAt: null,
   };
 
   // Hono matches the "/reviews-api" mount strictly, so "/reviews-api/" 404s.

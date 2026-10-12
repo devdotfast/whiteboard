@@ -11,6 +11,8 @@ import {
 } from "@review/ask/thread-state.js";
 import { z } from "zod";
 
+import { ReviewInputError } from "./document.js";
+
 /** A saved Ask conversation: its history entry, and how to reopen it. */
 export const askRecordSchema = askHistoryEntrySchema.extend({
   reviewId: z.string(),
@@ -64,6 +66,10 @@ const rowSchema = z
 /** Saved Ask conversations, per review. Shared reviews are not in
  * `reviews`, so there is no foreign key; deleting a review deletes its rows. */
 export class AskHistory {
+  private externalWriteGuard?: (reviewId: string) => void;
+  setExternalWriteGuard(guard: (reviewId: string) => void) {
+    this.externalWriteGuard = guard;
+  }
   constructor(private readonly db: DatabaseSync) {
     db.exec(`CREATE TABLE IF NOT EXISTS ask_conversations(
       id TEXT PRIMARY KEY,
@@ -104,7 +110,26 @@ export class AskHistory {
     );
   }
 
+  private assertWritable(reviewId: string) {
+    if (reviewId.startsWith("shared-")) this.externalWriteGuard?.(reviewId);
+
+    const row = this.db
+      .prepare("SELECT deleted_at FROM review_attention WHERE review_id=?")
+      .get(reviewId);
+
+    if (row?.deleted_at)
+      throw new ReviewInputError(
+        `This whiteboard was deleted on ${new Date(String(row.deleted_at)).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it to continue.`,
+        409,
+      );
+  }
+  private assertThreadWritable(id: string) {
+    const record = this.get(id);
+
+    if (record) this.assertWritable(record.reviewId);
+  }
   save(record: AskRecord) {
+    this.assertWritable(record.reviewId);
     this.db
       .prepare(
         `INSERT OR REPLACE INTO ask_conversations(id,review_id,agent,session_id,version,head,cwd,selection,title,created_at,updated_at,bypass)
@@ -128,6 +153,7 @@ export class AskHistory {
 
   /** Whether reopening the conversation bypasses permissions. */
   setBypass(id: string, bypass: boolean) {
+    this.assertThreadWritable(id);
     this.db
       .prepare("UPDATE ask_conversations SET bypass=? WHERE id=?")
       .run(bypass ? 1 : 0, id);
@@ -136,6 +162,7 @@ export class AskHistory {
   /** Points a conversation at a new session, when its agent could not
    * reopen the one it had. */
   updateSession(id: string, sessionId: string) {
+    this.assertThreadWritable(id);
     this.db
       .prepare("UPDATE ask_conversations SET session_id=? WHERE id=?")
       .run(sessionId, id);
@@ -143,6 +170,7 @@ export class AskHistory {
 
   /** Keeps what the panel shows, so a reopen need not wait on the agent. */
   saveEntries(id: string, entries: AskEntry[]) {
+    this.assertThreadWritable(id);
     this.db
       .prepare("UPDATE ask_conversations SET entries=? WHERE id=?")
       .run(JSON.stringify(entries), id);
@@ -150,6 +178,7 @@ export class AskHistory {
 
   /** The agent's name for the conversation, which the list shows. */
   rename(id: string, title: string) {
+    this.assertThreadWritable(id);
     this.db
       .prepare("UPDATE ask_conversations SET title=? WHERE id=?")
       .run(title.slice(0, 200), id);
@@ -197,6 +226,7 @@ export class AskHistory {
   }
 
   touch(id: string, at = new Date().toISOString()) {
+    this.assertThreadWritable(id);
     this.db
       .prepare("UPDATE ask_conversations SET updated_at=? WHERE id=?")
       .run(at, id);
@@ -236,7 +266,14 @@ export class AskHistory {
     return row ? rowSchema.parse(row) : undefined;
   }
 
+  removeReview(reviewId: string) {
+    this.db
+      .prepare("DELETE FROM ask_conversations WHERE review_id=?")
+      .run(reviewId);
+  }
+
   delete(id: string) {
+    this.assertThreadWritable(id);
     this.db.prepare("DELETE FROM ask_conversations WHERE id=?").run(id);
   }
 }

@@ -251,10 +251,12 @@ export class SharedReviewStore {
   >();
   private readonly attention = new Map<
     string,
-    { viewedAt: string | null; dismissedAt: string | null }
+    { viewedAt: string | null; deletedAt: string | null }
   >();
   private readonly listeners = new Set<() => void>();
   private catalogLoaded = false;
+  private readonly purgeTimer: ReturnType<typeof setInterval>;
+  private purgePending: Promise<void> | undefined;
   private readonly downloads = new Set<Promise<void>>();
 
   trackImport(job: Promise<void>) {
@@ -263,6 +265,8 @@ export class SharedReviewStore {
   }
 
   async close() {
+    clearInterval(this.purgeTimer);
+    await this.purgePending;
     await Promise.allSettled([...this.downloads, ...this.jobs.values()]);
   }
 
@@ -280,10 +284,38 @@ export class SharedReviewStore {
   constructor(
     readonly root: string,
     private readonly fetchRepository = fetchPinnedRepository,
-  ) {}
+  ) {
+    this.purgeTimer = setInterval(() => {
+      void this.purgeExpired().catch((error) =>
+        console.error("Could not purge expired shared whiteboards:", error),
+      );
+    }, 60_000);
+    this.purgeTimer.unref();
+  }
+
+  private purgeExpired(): Promise<void> {
+    if (this.purgePending) return this.purgePending;
+
+    const expired = [...this.attention].filter(
+      ([, state]) =>
+        state.deletedAt &&
+        Date.parse(state.deletedAt) <= Date.now() - 30 * 86400000,
+    );
+
+    const pending = (async () => {
+      for (const [id] of expired) await this.removeLocal(id);
+    })();
+
+    this.purgePending = pending.finally(() => {
+      this.purgePending = undefined;
+    });
+
+    return this.purgePending;
+  }
 
   connect(store: ReviewStore, data: LocalReviewData) {
     this.local = { store, data };
+    store.askHistory.setExternalWriteGuard((id) => this.assertWritable(id));
     data.workspaces.attachExternalReviews({
       has: (id) =>
         this.has(id) || (!this.catalogLoaded && id.startsWith("shared-")),
@@ -517,31 +549,50 @@ export class SharedReviewStore {
           "Reopen the share link to fetch its repository.",
         );
 
-      try {
-        this.attention.set(
-          id,
-          z
-            .strictObject({
-              viewedAt: z.string().nullable(),
-              dismissedAt: z.string().nullable(),
-            })
-            .parse(
-              JSON.parse(
-                await readFile(
-                  path.join(this.root, id, "attention.json"),
-                  "utf8",
-                ),
-              ),
-            ),
-        );
-      } catch {
-        /* Attention is optional local metadata. */
+      const attentionPath = path.join(this.root, id, "attention.json");
+
+      if (existsSync(attentionPath)) {
+        const raw = JSON.parse(await readFile(attentionPath, "utf8"));
+        const migrated = Object.hasOwn(raw, "dismissedAt");
+
+        const state = z
+          .strictObject({
+            viewedAt: z.string().nullable(),
+            deletedAt: z.string().nullable(),
+          })
+          .parse(
+            migrated
+              ? {
+                  viewedAt: raw.viewedAt,
+                  deletedAt: raw.dismissedAt ? new Date().toISOString() : null,
+                }
+              : raw,
+          );
+
+        this.attention.set(id, state);
+
+        if (migrated)
+          await writeFile(attentionPath, JSON.stringify(state), {
+            mode: 0o600,
+          });
       }
     }
+
+    await this.purgeExpired();
 
     this.catalogLoaded = true;
 
     for (const listener of this.listeners) listener();
+  }
+
+  assertWritable(id: string) {
+    const deletedAt = this.attention.get(id)?.deletedAt;
+
+    if (deletedAt)
+      throw new ReviewInputError(
+        `This whiteboard was deleted on ${new Date(deletedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it to continue.`,
+        409,
+      );
   }
 
   get(id: string) {
@@ -569,6 +620,7 @@ export class SharedReviewStore {
       snapshot: {
         ...validated.snapshot,
         reviewId: id,
+        deletedAt: this.attention.get(id)?.deletedAt ?? null,
         pins: validated.snapshot.pins
           ? { ...validated.snapshot.pins, repositoryId: repositoryId! }
           : undefined,
@@ -605,7 +657,7 @@ export class SharedReviewStore {
             snapshot.version === 0 ? snapshot.createdAt : undefined,
           repositoryName: "Shared review",
           viewedAt: this.attention.get(id)?.viewedAt ?? null,
-          dismissedAt: this.attention.get(id)?.dismissedAt ?? null,
+          deletedAt: this.attention.get(id)?.deletedAt ?? null,
         };
       })
       .toArray();
@@ -649,6 +701,7 @@ export class SharedReviewStore {
     this.repositories.delete(id);
     this.states.delete(id);
     await rm(path.join(this.root, id), { recursive: true, force: true });
+    this.local?.store.askHistory.removeReview(id);
     this.loaded.delete(id);
     this.validated.delete(id);
     this.attention.delete(id);
@@ -656,18 +709,28 @@ export class SharedReviewStore {
     for (const listener of this.listeners) listener();
   }
 
-  async setAttention(id: string, action: "view" | "dismiss" | "restore") {
+  async setAttention(id: string, action: "view" | "delete" | "restore") {
     this.get(id);
+
+    if (action === "delete") this.assertWritable(id);
+    const deletedAt = this.attention.get(id)?.deletedAt;
+
+    if (deletedAt && Date.parse(deletedAt) <= Date.now() - 30 * 86400000) {
+      await this.removeLocal(id);
+      throw new ReviewInputError(
+        "This whiteboard has expired and was permanently deleted.",
+        404,
+      );
+    }
 
     const state = this.attention.get(id) ?? {
       viewedAt: null,
-      dismissedAt: null,
+      deletedAt: null,
     };
 
     if (action === "view") state.viewedAt = new Date().toISOString();
     else
-      state.dismissedAt =
-        action === "dismiss" ? new Date().toISOString() : null;
+      state.deletedAt = action === "delete" ? new Date().toISOString() : null;
     await writeFile(
       path.join(this.root, id, "attention.json"),
       JSON.stringify(state),
@@ -681,6 +744,7 @@ export class SharedReviewStore {
   async import(origin: string, shareId: string, bundle: ShareBundle) {
     const validated = validateShareBundle(bundle);
     const id = sharedReviewId(origin, shareId);
+    this.assertWritable(id);
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     const staging = await mkdtemp(path.join(this.root, ".import-"));
 

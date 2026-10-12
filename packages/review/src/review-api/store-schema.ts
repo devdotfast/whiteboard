@@ -8,7 +8,7 @@ export function initializeReviewStoreSchema(db: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS versions(review_id TEXT REFERENCES reviews(id), version INTEGER, snapshot TEXT NOT NULL,
       PRIMARY KEY(review_id,version));
     DROP TABLE IF EXISTS receipts;
-    CREATE TABLE IF NOT EXISTS review_attention(review_id TEXT PRIMARY KEY REFERENCES reviews(id), viewed_at TEXT, dismissed_at TEXT);
+    CREATE TABLE IF NOT EXISTS review_attention(review_id TEXT PRIMARY KEY REFERENCES reviews(id), viewed_at TEXT, deleted_at TEXT);
     CREATE TABLE IF NOT EXISTS repositories(id TEXT PRIMARY KEY, path TEXT NOT NULL UNIQUE, name TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS resources(id TEXT PRIMARY KEY, repository_id TEXT NOT NULL REFERENCES repositories(id),
       kind TEXT NOT NULL, mime_type TEXT NOT NULL, data BLOB NOT NULL);
@@ -19,4 +19,28 @@ export function initializeReviewStoreSchema(db: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS server_identity(one INTEGER PRIMARY KEY CHECK(one=1), id TEXT NOT NULL);
     DROP TABLE IF EXISTS authoring_drafts;
   `);
+
+  db.exec("BEGIN IMMEDIATE");
+
+  try {
+    // Migrate the former Archive timestamp without losing recoverable boards.
+    const attentionColumns = db
+      .prepare("PRAGMA table_info(review_attention)")
+      .all();
+
+    if (attentionColumns.some((column) => column.name === "dismissed_at")) {
+      db.exec(
+        "ALTER TABLE review_attention RENAME COLUMN dismissed_at TO deleted_at",
+      );
+      // Archive had no retention limit. Give migrated boards the full recovery window.
+      db.prepare(
+        "UPDATE review_attention SET deleted_at=? WHERE deleted_at IS NOT NULL",
+      ).run(new Date().toISOString());
+    }
+
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }

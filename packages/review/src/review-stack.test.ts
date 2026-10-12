@@ -8,14 +8,11 @@ const reviewSummary = (input: {
   repositoryUrl: string;
   pullRequestNumber: number;
   title: string;
-  dismissedAt?: string;
-}): Pick<
-  ReviewApiSummary,
-  "reviewId" | "title" | "origin" | "dismissedAt"
-> => ({
+  deletedAt?: string;
+}): Pick<ReviewApiSummary, "reviewId" | "title" | "origin" | "deletedAt"> => ({
   reviewId: input.reviewId,
   title: input.title,
-  dismissedAt: input.dismissedAt ?? null,
+  deletedAt: input.deletedAt ?? null,
   origin: {
     pullRequestNumber: input.pullRequestNumber,
     pullRequestUrl: `${input.repositoryUrl}/pull/${input.pullRequestNumber}`,
@@ -175,13 +172,13 @@ describe("resolveReviewStackLayers", () => {
   });
 
   it("links the open review for its own PR and the newest undismissed review elsewhere", async () => {
-    const review = (reviewId: string, number: number, dismissedAt?: string) =>
+    const review = (reviewId: string, number: number, deletedAt?: string) =>
       reviewSummary({
         reviewId,
         title: reviewId,
         repositoryUrl: "https://github.com/o/r",
         pullRequestNumber: number,
-        dismissedAt,
+        deletedAt,
       });
 
     const layers = await resolveReviewStackLayers(

@@ -152,6 +152,9 @@ it("streams activity separately from document versions and closes the stream on 
     });
     await reconnect.return(undefined);
     await store.execute({ operation: { type: "delete", reviewId } });
+    await store.execute({
+      operation: { type: "delete_permanently", reviewId },
+    });
     // A reader may already have buffered a pre-deletion snapshot.
     await expect(async () => {
       for await (const _snapshot of stream) {

@@ -220,8 +220,8 @@ it("merges preview headless history and resources without changing review IDs or
   }
 
   const reopened = await openReviewProfile(home, { manageWorkspaces: false });
-  expect(reopened.store.list()).toEqual([]);
-  expect(target.list()).toEqual([]);
+  expect(reopened.store.summary(created.reviewId)?.deletedAt).toBeTruthy();
+  expect(target.summary(created.reviewId)?.deletedAt).toBeTruthy();
   await reopened.data.close();
   await reopened.store.close();
 });

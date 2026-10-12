@@ -226,6 +226,21 @@ export function createReviewApi(
   const sharedData = shared ? new SharedReviewData(shared) : undefined;
   const isShared = (id: string) => id.startsWith("shared-");
 
+  app.use("/:id/*", async (context, next) => {
+    if (
+      !["GET", "HEAD", "OPTIONS"].includes(context.req.method) &&
+      !context.req.path.endsWith("/open") &&
+      !context.req.path.endsWith("/copy-context")
+    ) {
+      const id = context.req.param("id");
+
+      if (id && isShared(id)) shared?.assertWritable(id);
+      else if (id && store.has(id)) store.assertWritable(id);
+    }
+
+    await next();
+  });
+
   const sharedCommandSchema = z.object({
     operation: z.object({ reviewId: z.string().optional() }),
   });
@@ -1732,7 +1747,12 @@ export function createReviewApi(
     ) {
       const parsed = commandSchema.parse(input);
 
-      if (shared && parsed.operation.type === "delete") {
+      if (shared && parsed.operation.type === "delete_permanently") {
+        if (!shared.get(parsed.operation.reviewId).snapshot.deletedAt)
+          throw new ReviewInputError(
+            "Delete this whiteboard before permanently deleting it.",
+            409,
+          );
         await shared.removeLocal(parsed.operation.reviewId);
 
         return context.json({
@@ -1742,10 +1762,16 @@ export function createReviewApi(
         });
       }
 
-      if (shared && parsed.operation.type === "attention") {
+      if (
+        shared &&
+        (parsed.operation.type === "attention" ||
+          parsed.operation.type === "delete")
+      ) {
         await shared.setAttention(
           parsed.operation.reviewId,
-          parsed.operation.action,
+          parsed.operation.type === "delete"
+            ? "delete"
+            : parsed.operation.action,
         );
 
         return context.json({
