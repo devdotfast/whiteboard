@@ -589,7 +589,7 @@ const styles = stylex.create({
     flexDirection: "column",
     minHeight: 0,
   },
-  canvasFrame: { flex: "1 1 0", minHeight: 0 },
+  canvasFrame: { flex: "1 1 auto", minHeight: 0 },
   deletedBanner: {
     display: "flex",
     gap: "12px",
