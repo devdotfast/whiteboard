@@ -2316,29 +2316,14 @@ export class ReviewStore {
       const previous = this.read(reviewId);
 
       assertBaseVersion(body.baseVersion, previous.version);
-      const keys = takeClientKeys(body.document);
-      const document = documentSchema.parse(body.document);
 
-      let nextId = Number(
-        this.db.prepare("SELECT next_id FROM reviews WHERE id=?").get(reviewId)!
-          .next_id,
-      );
-
-      const allocate = (prefix: string) => `${prefix}-${++nextId}`;
-
-      adoptFlowUnits(document, allocate);
-
-      for (const block of document) assignMissingIds(block, allocate);
-      assertUniqueIds(document);
-      // An id ⌘Z brought back stays; the counter moves past it, so an agent's
-      // next insert can't be given it again.
-      nextId = Math.max(nextId, highestIdNumber(document));
-
-      const ids = Object.fromEntries(
-        [...keys.byPath].map(([path, key]) => [
-          key,
-          blockAt(document, path).id!,
-        ]),
+      const { document, nextId, ids } = personDocument(
+        body.document,
+        Number(
+          this.db
+            .prepare("SELECT next_id FROM reviews WHERE id=?")
+            .get(reviewId)!.next_id,
+        ),
       );
 
       const snapshot = structuredClone(previous);
@@ -3401,6 +3386,34 @@ function assertBaseVersion(base: number, current: number) {
       `The board changed since version ${base}; it is now at version ${current}. Merge the latest version and save again.`,
       409,
     );
+}
+
+/**
+ * A person's whole document as the store saves it: each new block's
+ * clientKey taken, the blocks parsed, a flow's units adopted and every block
+ * without an id given the next one after `nextId`. Every save then respells
+ * its links (respellDocumentLinks) and resolves commit links it has not
+ * saved before. Mutates `input`.
+ */
+export function personDocument(input: JsonValue[], nextId: number) {
+  const keys = takeClientKeys(input);
+  const document = documentSchema.parse(input);
+  const allocate = (prefix: string) => `${prefix}-${++nextId}`;
+
+  adoptFlowUnits(document, allocate);
+
+  for (const block of document) assignMissingIds(block, allocate);
+  assertUniqueIds(document);
+
+  return {
+    document,
+    // An id ⌘Z brought back stays; the counter moves past it, so an
+    // agent's next insert can't be given it again.
+    nextId: Math.max(nextId, highestIdNumber(document)),
+    ids: Object.fromEntries(
+      [...keys.byPath].map(([path, key]) => [key, blockAt(document, path).id!]),
+    ),
+  };
 }
 
 const clientKeySchema = z.string().min(1).optional();
