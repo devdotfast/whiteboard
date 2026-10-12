@@ -20,6 +20,9 @@ const agentSchema = z.enum(askAgentIds);
 /** The board's project, whose boards share the threads on screen. */
 export const AskProjectContext = createContext<string | undefined>(undefined);
 
+/** The board's title, for an Ask about the whole board. */
+export const AskBoardTitleContext = createContext("");
+
 const viewSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("new"),
@@ -66,6 +69,9 @@ function openAsksKey(
     : reviewPreferenceKey("ask", "project", projectId, "open");
 }
 
+/** Whether the window has put its column away, for every board in it. */
+const COLUMN_HIDDEN_KEY = reviewPreferenceKey("ask", "column-hidden");
+
 /** The threads on screen when a board of this project last went, by a
  * switch to another tab or a reload: they show again where they were, and
  * one whose agent still runs carries on. */
@@ -73,9 +79,25 @@ export function readOpenAsks(
   config: ReviewClientConfig | null,
   projectId: string | undefined,
 ): AskRestore | undefined {
-  return restoreSchema.safeParse(
+  const columnHidden =
+    readReviewUiState<unknown>("window", COLUMN_HIDDEN_KEY) === true;
+
+  const restored = restoreSchema.safeParse(
     readReviewUiState("window", openAsksKey(config, projectId)),
   ).data;
+
+  if (restored) return { ...restored, columnHidden };
+
+  return columnHidden
+    ? {
+        asks: [],
+        askColumn: null,
+        askWindow: null,
+        askAnchor: null,
+        askSize: null,
+        columnHidden,
+      }
+    : undefined;
 }
 
 const handoffSchema = z.object({
@@ -131,15 +153,18 @@ function remembered({ key, view, threadId, presence }: AskPanel): {
     : { key, view };
 }
 
-/** Keeps the threads on screen in the window's storage as they change.
- * Leaving the screen, or the canvas going, leaves a thread's agent
- * running. */
+/** Keeps the threads on screen, and whether the column is away, in the
+ * window's storage as they change. Leaving the screen, or the canvas going,
+ * leaves a thread's agent running. */
 export function syncOpenAsks(
   store: ReviewPanelStore,
   config: ReviewClientConfig | null,
   projectId: string | undefined,
 ): () => void {
   return store.subscribe((state, previous) => {
+    if (state.columnHidden !== previous.columnHidden)
+      writeReviewUiState("window", COLUMN_HIDDEN_KEY, state.columnHidden);
+
     const unchanged = (
       ["asks", "askColumn", "askWindow", "askAnchor", "askSize"] as const
     ).every((field) => state[field] === previous[field]);

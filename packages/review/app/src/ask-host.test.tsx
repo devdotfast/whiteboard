@@ -1,9 +1,18 @@
 // @vitest-environment jsdom
-import type { AskThreadState, AskUpdate } from "@review/ask/thread-state";
+import type {
+  ReviewAskState,
+  ReviewSurfaceEvent,
+} from "@dev.fast/review-protocol";
+import type {
+  AskHistoryEntry,
+  AskThreadState,
+  AskUpdate,
+} from "@review/ask/thread-state";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
 
+import { AskDesktopSync } from "./ask-dock";
 import { AskHistoryProvider } from "./ask-history";
 import { AskProjectContext, readOpenAsks } from "./ask-open-state";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
@@ -68,14 +77,31 @@ function watchedThreads(init: RequestInit | undefined): string[] {
 }
 
 /** A canvas with Ask: an agent named Codex that answers each question in a
- * thread of its own, which the test drives. */
+ * thread of its own, which the test drives. The project's saved threads are
+ * `threads`; the board on screen is `board`. */
 function askCanvas({
+  threads = [],
   handedOff = [],
 }: {
+  threads?: AskHistoryEntry[];
   /** Conversations the review took over as it was created. */
   handedOff?: string[];
 } = {}) {
-  const session = testReviewSession();
+  const surface = new Set<(event: ReviewSurfaceEvent) => void>();
+  const reports: ReviewAskState[] = [];
+
+  const session = testReviewSession(
+    {},
+    {
+      subscribe: (listener) => {
+        surface.add(listener);
+
+        return { dispose: () => surface.delete(listener) };
+      },
+      reportAsk: (state) => void reports.push(state),
+    },
+  );
+
   const streams = new Map<string, (update: AskUpdate) => void>();
   let asked = 0;
 
@@ -97,7 +123,8 @@ function askCanvas({
           agents: [{ id: "codex", name: "Codex", available: true }],
         });
 
-      if (endpoint === "/ask/threads") return Response.json({ threads: [] });
+      if (endpoint === "/ask/threads")
+        return Response.json({ threads, board: "board" });
 
       if (endpoint === "/ask")
         return Response.json({ threadId: `thread-${++asked}` });
@@ -158,6 +185,7 @@ function askCanvas({
                 })}
               >
                 <AskHistoryProvider>
+                  <AskDesktopSync />
                   <Probe />
                   <ReviewPanelHost />
                 </AskHistoryProvider>
@@ -194,6 +222,14 @@ function askCanvas({
   return {
     store: () => store,
     streams,
+    /** Whether Desktop was last told the column is open. */
+    docked: () => reports.at(-1)?.docked,
+    /** ⌥⌘B, as Desktop sends it. */
+    toggle: () =>
+      act(async () => {
+        for (const listener of surface)
+          listener({ event: "toggleAskColumn", reviewId: "board" });
+      }),
     closed: () => requested("/close"),
     /** The threads of each watch stream still open. */
     watching: () =>
@@ -363,7 +399,7 @@ it("leaves an agent working when its canvas goes, and carries on with it when th
   expect(canvas.closed()).toEqual([]);
 });
 
-it("opens the conversation a review took over as its agent created it minimized, and follows that agent", async () => {
+it("opens the conversation a review took over as its agent created it in the column, and follows that agent", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   await using canvas = askCanvas({ handedOff: ["thread-run"] });
 
@@ -381,12 +417,8 @@ it("opens the conversation a review took over as its agent created it minimized,
       },
     }),
   );
-  // Out of the way of the whiteboard it draws, until the reader opens it.
-  expect(document.querySelector('[aria-label="Ask"]')).toBeNull();
-  await act(async () => button(/^Open Ask: /)!.click());
-  expect(
-    document.querySelector('[role="dialog"][aria-label="Ask"]')?.textContent,
-  ).toContain("Adding the sequence diagram.");
+  // Beside the whiteboard it draws, not over it.
+  expect(column()?.textContent).toContain("Adding the sequence diagram.");
 
   // Only once: the next time the review opens, it is a saved conversation.
   await canvas.unmount();
@@ -412,4 +444,151 @@ it("starts a conversation about the whole review from its saved conversations", 
       question: { text: "What does this review cover?" },
     },
   ]);
+});
+
+/** The column's Ask. */
+const column = () => document.querySelector('aside[aria-label="Ask"]');
+
+/** Types into the open Ask's composer without sending it. */
+async function draft(text: string) {
+  const textarea = document.querySelector("textarea")!;
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      HTMLTextAreaElement.prototype,
+      "value",
+    )!.set!.call(textarea, text);
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+const entry = (
+  id: string,
+  board: string,
+  updatedAt: string,
+): AskHistoryEntry => ({
+  id,
+  agent: "codex",
+  title: id,
+  selection,
+  head: "7fd03b8e2",
+  createdAt: updatedAt,
+  updatedAt,
+  anchor: { board },
+});
+
+it("puts the column away with its working thread and brings back the same thread and draft", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await using canvas = askCanvas();
+
+  await canvas.mount();
+  await act(async () => canvas.store().getState().openAsk(selection));
+  await canvas.askQuestion("Is this safe on replicas?");
+  await act(async () =>
+    canvas.streams.get("thread-1")!({ seq: 1, snapshot: running("thread-1") }),
+  );
+  await draft("And on the primary?");
+
+  // Away: no question about stopping, and the agent works on.
+  await canvas.toggle();
+  expect(column()).toBeNull();
+  expect(button(/^Stop and close$/)).toBeNull();
+  expect(canvas.docked()).toBe(false);
+  expect(canvas.closed()).toEqual([]);
+
+  await canvas.toggle();
+  expect(canvas.docked()).toBe(true);
+  expect(column()?.textContent).toContain("Why?");
+  expect(document.querySelector("textarea")?.value).toBe("And on the primary?");
+  expect(canvas.requested("/open")).toEqual([]);
+  expect(canvas.requested("/ask")).toHaveLength(1);
+});
+
+it("keeps the column away across a reload, and brings back what it held", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await using canvas = askCanvas();
+
+  await canvas.mount();
+  await act(async () => canvas.store().getState().openAsk(selection));
+  await canvas.askQuestion("Is this safe on replicas?");
+  await canvas.toggle();
+  await canvas.unmount();
+
+  await canvas.mount();
+  expect(column()).toBeNull();
+  expect(canvas.docked()).toBe(false);
+
+  await canvas.toggle();
+  expect(column()).not.toBeNull();
+  expect(canvas.requested("/ask/thread-1/open")).toHaveLength(1);
+});
+
+it("brings back the board's latest thread when the column held nothing", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+
+  await using canvas = askCanvas({
+    threads: [
+      entry("elsewhere", "other-board", "2026-10-13T12:00:00Z"),
+      entry("latest", "board", "2026-10-13T11:00:00Z"),
+      entry("older", "board", "2026-10-13T10:00:00Z"),
+    ],
+  });
+
+  await canvas.mount();
+  await canvas.toggle();
+  expect(column()).not.toBeNull();
+  expect(canvas.requested("/open")).toEqual(["/ask/latest/open"]);
+
+  // The thread on screen is gone: ⌥⌘B shows the latest again.
+  await act(async () => button(/^Close Ask$/)!.click());
+  await canvas.toggle();
+  expect(canvas.requested("/open")).toEqual([
+    "/ask/latest/open",
+    "/ask/latest/open",
+  ]);
+});
+
+it("asks about the whole board when it has no threads, and starts none", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+
+  await using canvas = askCanvas({
+    threads: [entry("elsewhere", "other-board", "2026-10-13T12:00:00Z")],
+  });
+
+  await canvas.mount();
+  await canvas.toggle();
+  // A question about the whole board quotes nothing.
+  expect(column()).not.toBeNull();
+  expect(document.querySelector("textarea")).not.toBeNull();
+
+  await canvas.toggle();
+  await canvas.toggle();
+  expect(column()).not.toBeNull();
+  expect(canvas.requested("/ask")).toEqual([]);
+  expect(canvas.requested("/open")).toEqual([]);
+});
+
+it("puts a peek away too, and brings it back", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await using canvas = askCanvas();
+
+  await canvas.mount();
+  await act(async () =>
+    canvas
+      .store()
+      .getState()
+      .openPeek({
+        kind: "peek",
+        content: { kind: "inline-code", text: "start();" },
+      }),
+  );
+  expect(canvas.docked()).toBe(true);
+
+  await canvas.toggle();
+  expect(canvas.docked()).toBe(false);
+  expect(column()).toBeNull();
+
+  await canvas.toggle();
+  expect(canvas.docked()).toBe(true);
+  expect(canvas.store().getState().active).not.toBeNull();
 });

@@ -50,7 +50,9 @@ export const IReviewCanvasEditorTabsService = createDecorator<IReviewCanvasEdito
 export interface IReviewCanvasEditorTabsService {
 	readonly _serviceBrand: undefined;
 	inputFor(target: Extract<ReviewCanvasEditorTarget, { kind: "api" | "api-source" | "home" }>): ReviewCanvasEditorInput;
-	openApiReview(reviewId: string, title: string, active?: boolean): Promise<ReviewCanvasEditorInput>;
+	/** Shows a board. The window shows one board at a time, so it always
+	 * comes to the front. */
+	openApiReview(reviewId: string, title: string): Promise<ReviewCanvasEditorInput>;
 	isActiveReview(reviewId: string): boolean;
 	openApiSource(selection: ReviewSourceSelection, title: string): Promise<void>;
 	openSourceEditor(editor: IUntypedEditorInput): Promise<boolean>;
@@ -119,9 +121,9 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		return editor instanceof ReviewCanvasEditorInput && editor.target.kind === "api" && editor.target.reviewId === reviewId;
 	}
 
-	async openApiReview(reviewId: string, title: string, active = true): Promise<ReviewCanvasEditorInput> {
+	async openApiReview(reviewId: string, title: string): Promise<ReviewCanvasEditorInput> {
 		const input = this.inputFor({ kind: "api", reviewId, title });
-		await this.openReviewInput(input, active);
+		await this.openReviewInput(input, true);
 		return input;
 	}
 

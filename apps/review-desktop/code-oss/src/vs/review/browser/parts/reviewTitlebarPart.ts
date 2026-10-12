@@ -160,8 +160,6 @@ export class ReviewTitlebarPart extends Part implements ITitlebarPart {
 		));
 		append(navigationContainer, navigationControl.element);
 		this.createHomeButton();
-		// Between the controls and the board tabs when they share the row.
-		append(this.leftContent, $('div.review-titlebar-divider'));
 
 		this.updateStyles();
 		return this.element;

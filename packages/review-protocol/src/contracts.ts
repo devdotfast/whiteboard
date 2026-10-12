@@ -651,8 +651,8 @@ export interface ReviewCanvasOnboarding {
 
 // The workbench owns the theme and the keymap; the canvas only names a choice.
 // These lists mirror the workbench side (`reviewThemeChoice.ts`, and
-// `REVIEW_KEYMAPS`, `REVIEW_CTRL_TAB_CHOICES`, `REVIEW_DOCUMENT_WIDTH_CHOICES` and
-// `REVIEW_OPEN_FILES_IN_CHOICES` in `reviewConfigurationDefaults.ts`).
+// `REVIEW_KEYMAPS`, `REVIEW_DOCUMENT_WIDTH_CHOICES` and `REVIEW_OPEN_FILES_IN_CHOICES`
+// in `reviewConfigurationDefaults.ts`).
 export const REVIEW_THEME_CHOICES = ["dark", "light", "system"] as const;
 
 export type ReviewThemeChoice = (typeof REVIEW_THEME_CHOICES)[number];
@@ -665,8 +665,6 @@ export const REVIEW_KEYMAP_CHOICES = [
 ] as const;
 
 export type ReviewKeymapChoice = (typeof REVIEW_KEYMAP_CHOICES)[number];
-
-export type ReviewCtrlTabChoice = "recent" | "next";
 
 export type ReviewOpenFilesInChoice =
   | "whiteboard"
@@ -779,8 +777,6 @@ export interface ReviewCanvasSettingsContent {
   // A keymap only takes effect after the extension host restarts, so the
   // workbench offers the window reload. The page never forces one.
   setKeymap(choice: ReviewKeymapChoice): Promise<ReviewKeymapChoice>;
-  ctrlTab: ReviewCtrlTabChoice;
-  setCtrlTab(choice: ReviewCtrlTabChoice): Promise<ReviewCtrlTabChoice>;
   openFilesIn: ReviewOpenFilesIn;
   setOpenFilesIn(choice: ReviewOpenFilesInChoice): Promise<ReviewOpenFilesIn>;
   // Shows the native application picker; a cancelled pick changes nothing.
@@ -1980,6 +1976,11 @@ export const ReviewSurfaceEventSchema = z.discriminatedUnion("event", [
     event: z.literal("openAskThread"),
     reviewId: requiredString,
     threadId: requiredString,
+  }),
+  /** Put the right column away, or bring back what it held. */
+  z.strictObject({
+    event: z.literal("toggleAskColumn"),
+    reviewId: requiredString,
   }),
 ]);
 

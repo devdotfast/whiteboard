@@ -30,8 +30,6 @@ export const REVIEW_REMOTE_INSTALL_SETTING = 'review.remote.install';
 export const REVIEW_REMOTE_INSTALL_MODES = ['ask', 'always', 'never'] as const;
 export const REVIEW_KEYMAPS = ['none', 'vim', 'emacs', 'sublime'] as const;
 export type ReviewKeymap = typeof REVIEW_KEYMAPS[number];
-export const REVIEW_CTRL_TAB_SETTING = 'review.tabs.ctrlTab';
-export const REVIEW_CTRL_TAB_CHOICES = ['recent', 'next'] as const;
 export const REVIEW_OPEN_FILES_IN_SETTING = 'review.openFilesIn';
 export const REVIEW_OPEN_FILES_IN_CHOICES = ['whiteboard', 'vscode', 'cursor', 'zed', 'application'] as const;
 export const REVIEW_OPEN_FILES_IN_APPLICATION_SETTING = 'review.openFilesInApplication';
@@ -66,7 +64,7 @@ export const reviewConfigurationDefaults = {
 	'window.commandCenter': false,
 	'workbench.navigationControl.enabled': true,
 	'window.menuBarVisibility': 'hidden',
-	'workbench.editor.showTabs': 'multiple',
+	'workbench.editor.showTabs': 'none',
 	'workbench.editor.editorActionsLocation': 'hidden',
 	// Reduce tab widths when the row fills. The native tab control truncates the
 	// labels first. It keeps horizontal scrolling after tabs reach their minimum.
