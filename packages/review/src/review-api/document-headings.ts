@@ -1,5 +1,5 @@
+import { headingAnchors, isBoardHeading } from "@review/heading-anchors.js";
 import { markdownText, parseMarkdown } from "@review/markdown.js";
-import { slugify, uniqueId } from "@review/slug.js";
 
 import { type Block, elements } from "./document.js";
 
@@ -19,14 +19,12 @@ export interface DocumentHeading {
 /** Heading ids by the rule the MDX renderer published, `slugify(text)` made
  * unique in document order, so imported `#fragment` links still land. */
 export function documentHeadings(blocks: Block[]): DocumentHeading[] {
-  const used = new Set<string>();
+  const anchor = headingAnchors();
 
-  const assign = (heading: Omit<DocumentHeading, "id">): DocumentHeading => {
-    const id = uniqueId(slugify(heading.text) || "section", used);
-    used.add(id);
-
-    return { id, ...heading };
-  };
+  const assign = (heading: Omit<DocumentHeading, "id">): DocumentHeading => ({
+    id: anchor(heading.text),
+    ...heading,
+  });
 
   return elements(blocks).flatMap((block): DocumentHeading[] => {
     if (block.type === "section")
@@ -36,7 +34,7 @@ export function documentHeadings(blocks: Block[]): DocumentHeading[] {
     let index = 0;
 
     return (parseMarkdown(block.markdown).children ?? []).flatMap((node) =>
-      node.type === "heading" && (node.depth === 2 || node.depth === 3)
+      node.type === "heading" && isBoardHeading(node.depth)
         ? [
             assign({
               text: markdownText(node),

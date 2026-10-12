@@ -10,7 +10,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { ReviewSessionProvider } from "./host/review-session";
-import { ReviewDocumentMetaLine } from "./review-doc-meta";
+import {
+  BoardSaveRetryContext,
+  BoardSaveStatusContext,
+  ReviewDocumentMetaLine,
+} from "./review-doc-meta";
 import { testReviewSession } from "./review-session-test-utils";
 
 let root: Root | null = null;
@@ -343,5 +347,32 @@ describe("ReviewDocumentMetaLine", () => {
       ).toContain("Stack2 of 2"),
     );
     expect(container.querySelector("nav")).toBeNull();
+  });
+
+  it("says a board is not saved and offers to try again", async () => {
+    const session = testReviewSession();
+    const retry = vi.fn<() => void>();
+    const container = document.createElement("div");
+
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root?.render(
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <BoardSaveStatusContext.Provider value="failed">
+              <BoardSaveRetryContext.Provider value={retry}>
+                <ReviewDocumentMetaLine />
+              </BoardSaveRetryContext.Provider>
+            </BoardSaveStatusContext.Provider>
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
+      ),
+    );
+
+    expect(container.textContent).toContain("Not saved · Retry");
+    expect(container.textContent).not.toContain("saving…");
+    await act(async () => container.querySelector("button")!.click());
+    expect(retry).toHaveBeenCalled();
   });
 });

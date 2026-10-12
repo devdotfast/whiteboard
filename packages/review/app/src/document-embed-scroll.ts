@@ -2,7 +2,9 @@ import { type RefObject, useEffect } from "react";
 
 /** Ordinary vertical wheel gestures belong to the document, even when an
  * embedded native editor handles wheel input. Other gestures stay with embeds,
- * as do all gestures over a code peek the reader has clicked into. */
+ * as do all gestures over one the reader has clicked into: a code peek with
+ * the focus, or, on a board being edited, the block the click selected. One
+ * click does both, wherever on the block it lands. */
 export function useDocumentEmbedScroll(
   regionRef: RefObject<HTMLElement | null>,
 ) {
@@ -34,7 +36,8 @@ export function routeDocumentEmbedScroll(region: HTMLElement) {
     if (
       !embed?.closest(".review-document") ||
       !region.contains(embed) ||
-      embed.matches(".code-peek:focus-within")
+      embed.matches(".code-peek:focus-within") ||
+      embed.closest("[data-board-selected]")
     )
       return;
 

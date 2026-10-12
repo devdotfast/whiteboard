@@ -20,9 +20,29 @@ export function ReviewDocumentTitle({
   );
 }
 
+/** The header around a title the board editor owns: `title` is its h1,
+ * with the editor's text in it. */
+export function ReviewDocumentTitleSlot({
+  title,
+}: {
+  title: HTMLElement;
+}): ReactElement {
+  return (
+    <ReviewDocumentMetaLine editable>
+      <div
+        {...stylex.props(styles.slot)}
+        ref={(slot) => {
+          if (slot && title.parentElement !== slot) slot.append(title);
+        }}
+      />
+    </ReviewDocumentMetaLine>
+  );
+}
+
 const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 const styles = stylex.create({
+  slot: { display: "contents" },
   title: {
     width: { default: null, [inDocument()]: "100%" },
     maxWidth: { default: null, [inDocument()]: "1000px" },
@@ -36,3 +56,7 @@ const styles = stylex.create({
     textAlign: { default: null, [inDocument()]: "left" },
   },
 });
+
+/** The title's classes, for the board editor's own h1. */
+export const documentTitleClassName =
+  stylex.props(styles.title).className ?? "";

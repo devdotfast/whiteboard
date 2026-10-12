@@ -9,6 +9,7 @@ import {
   Fragment,
   type ReactElement,
   type ReactNode,
+  createContext,
   useContext,
   useEffect,
   useState,
@@ -51,6 +52,19 @@ function useBoardPlace(): ReviewBoardPlace {
 
 const NO_PLACE: ReviewBoardPlace = { siblings: [] };
 
+/** Where the person's edits are: none yet on a new board, being saved,
+ * saved, or not saved. */
+export type BoardSaveStatus = "new" | "saving" | "saved" | "failed";
+
+export const BoardSaveStatusContext = createContext<
+  BoardSaveStatus | undefined
+>(undefined);
+
+/** Saves again after autosave gave up. */
+export const BoardSaveRetryContext = createContext<(() => void) | undefined>(
+  undefined,
+);
+
 /**
  * The board's header: for a child, its parent and its place among the
  * parent's children; the title; then one faint line with the PR, the
@@ -58,13 +72,18 @@ const NO_PLACE: ReviewBoardPlace = { siblings: [] };
  */
 export function ReviewDocumentMetaLine({
   children,
+  editable = false,
 }: {
   children?: ReactNode;
+  /** The title is edited in place; the caret skips the rest. */
+  editable?: boolean;
 }): ReactElement {
   const session = useReviewSession();
   const displayedVersion = useContext(DisplayedReviewVersionContext);
   const diffFiles = useReviewDiffFiles();
   const place = useBoardPlace();
+  const saveStatus = useContext(BoardSaveStatusContext);
+  const retrySave = useContext(BoardSaveRetryContext);
 
   const review = session.review!;
 
@@ -111,10 +130,39 @@ export function ReviewDocumentMetaLine({
   if (diff && diff.additions + diff.deletions > 0)
     facts.push({ key: "diff", node: <DiffChanges diff={diff} /> });
 
-  if (updatedLabel)
+  // A new board says nothing about time until its first edit.
+  const time =
+    saveStatus === "saving"
+      ? "saving…"
+      : updatedLabel && saveStatus !== "new"
+        ? `updated ${updatedLabel}`
+        : null;
+
+  if (saveStatus === "failed")
     facts.push({
       key: "updated",
-      node: <span {...stylex.props(styles.fixed)}>updated {updatedLabel}</span>,
+      node: (
+        <span {...stylex.props(styles.fixed, styles.failed)} role="status">
+          Not saved
+          {retrySave && (
+            <>
+              {" · "}
+              <button
+                type="button"
+                onClick={retrySave}
+                {...stylex.props(styles.retry)}
+              >
+                Retry
+              </button>
+            </>
+          )}
+        </span>
+      ),
+    });
+  else if (time)
+    facts.push({
+      key: "updated",
+      node: <span {...stylex.props(styles.fixed)}>{time}</span>,
     });
 
   return (
@@ -123,10 +171,19 @@ export function ReviewDocumentMetaLine({
       {...stylex.props(styles.header, drawStyles.blockChild)}
       data-review-document-header
     >
-      <ReviewBreadcrumb place={place} reviewId={review.reviewId} />
+      <div
+        {...stylex.props(styles.contents)}
+        contentEditable={editable ? false : undefined}
+      >
+        <ReviewBreadcrumb place={place} reviewId={review.reviewId} />
+      </div>
       {children}
       {facts.length ? (
-        <div {...stylex.props(styles.facts)} data-review-copy-ignore>
+        <div
+          {...stylex.props(styles.facts)}
+          data-review-copy-ignore
+          contentEditable={editable ? false : undefined}
+        >
           <ReviewStackSelector />
           {facts.map(({ key, node }, index) => (
             <Fragment key={key}>
@@ -192,4 +249,15 @@ const styles = stylex.create({
     whiteSpace: "nowrap",
   },
   fixed: { flexShrink: 0 },
+  contents: { display: "contents" },
+  failed: { color: tokens.changeRemoved },
+  retry: {
+    padding: 0,
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    color: "inherit",
+    font: "inherit",
+    textDecoration: "underline",
+    cursor: "pointer",
+  },
 });

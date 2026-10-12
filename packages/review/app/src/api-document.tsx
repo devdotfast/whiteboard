@@ -341,6 +341,36 @@ function useEditingRegion(
   };
 }
 
+/** The block the agent is writing in, for the board editor, where each
+ * block is its own element: writing while the courier moves, idle once he
+ * sits, and null without a live document lease. */
+export function useEditingBlock(): {
+  id: string;
+  writing: boolean;
+  slot?: number;
+} | null {
+  const cursor = useContext(AuthoringCursorContext);
+  const activity = useContext(AuthoringActivityContext);
+  const live = scopeLive(activity, "document");
+  const [quietSeq, setQuietSeq] = useState<number>();
+  const seq = cursor?.seq;
+
+  useEffect(() => {
+    if (seq === undefined) return;
+    const timer = setTimeout(() => setQuietSeq(seq), WRITING_MS);
+
+    return () => clearTimeout(timer);
+  }, [seq]);
+
+  if (!live || !cursor) return null;
+
+  return {
+    id: cursor.blockId,
+    writing: quietSeq !== cursor.seq,
+    slot: scopePresence(activity, "document")?.slot,
+  };
+}
+
 /** Follows a `#fragment` link to one of the document's headings, which can sit
  * in a collapsed section the browser cannot reach; other fragments are left to it. */
 function useHeadingFragments(): void {
