@@ -76,6 +76,7 @@ import {
   readQuerySchemas,
 } from "./read-schemas.js";
 import {
+  REVIEW_PERSON_HEADER,
   REVIEW_THREAD_HEADER,
   type ReviewRequestVia,
   reviewRequestOrigin,
@@ -169,6 +170,10 @@ export interface ReviewApiHooks {
   }) => void;
   sharing?: SharingHostEvents;
 }
+
+/** A person's save carries the whole board, which edits one at a time can
+ * grow past the size of a single command. */
+const PERSON_EDIT_MAX_BYTES = 16 * 1024 * 1024;
 
 /** A request the gateway forwarded from another machine. */
 const remoteCaller = (context: Context) =>
@@ -522,6 +527,27 @@ export function createReviewApi(
         );
       },
     );
+  // The person's canvas, never an agent tool: a save of the whole board,
+  // the block in focus, and discarding a board left untouched.
+  app.post("/:id/person-edit", async (context) =>
+    context.json(
+      await store.personEdit(
+        context.req.param("id"),
+        await readBoundedRequestJson(context.req.raw, PERSON_EDIT_MAX_BYTES),
+      ),
+    ),
+  );
+  app.post("/:id/focus", async (context) =>
+    context.json(
+      store.focus(
+        context.req.param("id"),
+        await readBoundedRequestJson(context.req.raw),
+      ),
+    ),
+  );
+  app.post("/:id/discard", async (context) =>
+    context.json(await store.discard(context.req.param("id"))),
+  );
   app.get("/watch", (context) => {
     let input: unknown;
 
@@ -2033,6 +2059,7 @@ export function createReviewApi(
         version: snapshot.version,
         title: snapshot.title,
         createdAt: snapshot.createdAt,
+        author: "agent",
       },
     ]);
   });
@@ -2228,7 +2255,12 @@ export function createReviewApi(
       ? undefined
       : context.req.header(REVIEW_THREAD_HEADER)?.trim() || undefined;
 
-    const result = await store.execute(input, undefined, { threadId });
+    // A person's command from Desktop or the canvas, trusted only locally.
+    const person =
+      !remoteCaller(context) &&
+      context.req.header(REVIEW_PERSON_HEADER) !== undefined;
+
+    const result = await store.execute(input, undefined, { threadId, person });
 
     if (
       result.deleted ||
