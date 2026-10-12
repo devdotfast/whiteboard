@@ -22,3 +22,21 @@ export function headingAnchors(): (text: string) => string {
     return id;
   };
 }
+
+/**
+ * A Markdown heading's depth in Contents: one step under its section,
+ * whose blocks sit at `base`, and under the block's bigger headings before
+ * it. `open` holds those headings by `#` count, and takes this one.
+ */
+export function markdownHeadingDepth(
+  open: number[],
+  hashes: number,
+  base: number,
+): number {
+  while (open.length && open.at(-1)! >= hashes) open.pop();
+  const depth = base + open.length;
+
+  open.push(hashes);
+
+  return depth;
+}

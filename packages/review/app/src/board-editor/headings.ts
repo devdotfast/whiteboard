@@ -1,7 +1,11 @@
 import { reviewSectionSummaryLabel } from "@canvas/review-components";
 import type { ReviewTocEntry } from "@canvas/review-document-headings";
 import type { ReviewSectionSummary } from "@canvas/review-section-summary";
-import { headingAnchors, isBoardHeading } from "@review/heading-anchors";
+import {
+  headingAnchors,
+  isBoardHeading,
+  markdownHeadingDepth,
+} from "@review/heading-anchors";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import {
   type EditorState,
@@ -141,8 +145,18 @@ function build(
     summary: ReviewSectionSummary;
   }[] = [];
 
+  // The depth of the section a line is in, for Contents.
+  let sectionDepth = 0;
+  /** The Markdown headings open under that section, by their `#` count. */
+  let headingsOpen: number[] = [];
+
   for (const line of lines(state.doc)) {
     const end = line.pos + line.node.nodeSize;
+
+    if (line.depth !== null && line.depth < sectionDepth) {
+      sectionDepth = line.depth;
+      headingsOpen = [];
+    }
 
     while (
       open.length &&
@@ -177,7 +191,24 @@ function build(
     if (summary && !hidden)
       summaries.push({ at: end - 1, key: line.key, summary });
 
-    if (text) entries.push({ id, text, level: line.level === 1 ? "h2" : "h3" });
+    // A section sits at its level; a heading inside a Markdown block sits
+    // one step under its section, and under the block's bigger headings
+    // before it. An untitled section has no row, so it nests nothing.
+    let depth: number = line.node.attrs.level;
+
+    if (line.node.type === nodes.section) {
+      if (text) {
+        sectionDepth = depth;
+        headingsOpen = [];
+      }
+    } else {
+      const hashes: number = line.node.attrs.depth;
+
+      depth = markdownHeadingDepth(headingsOpen, hashes, sectionDepth + 1);
+    }
+
+    if (text)
+      entries.push({ id, text, level: depth === 1 ? "h2" : "h3", depth });
     found.push(
       Decoration.node(line.pos, end, {
         id,

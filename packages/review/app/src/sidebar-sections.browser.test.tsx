@@ -268,3 +268,66 @@ it("lists the board's threads, the project's, or every project's", async () => {
   expect(onOpenThread).toHaveBeenCalledWith("pinned");
   await act(async () => handle!.dispose());
 });
+
+it("indents each section level of Contents one step under its parent", async () => {
+  const container = document.createElement("div");
+
+  document.body.append(container);
+  await act(async () => {
+    mountReviewSidebarSection(
+      container,
+      props({
+        section: "contents",
+        contents: [
+          { id: "a", text: "Top", level: "h2", depth: 1 },
+          { id: "b", text: "Sub", level: "h3", depth: 2 },
+          { id: "c", text: "Subsub", level: "h3", depth: 3 },
+          { id: "d", text: "Next", level: "h2", depth: 1 },
+        ],
+      }),
+    );
+  });
+
+  const rows = [...container.querySelectorAll("button")];
+
+  const left = (index: number) =>
+    rows[index]!.querySelector("span:last-child")!.getBoundingClientRect().left;
+
+  expect(rows.map((row) => row.textContent)).toEqual([
+    "1Top",
+    "Sub",
+    "Subsub",
+    "2Next",
+  ]);
+  // A subsection's text lines up with its section's, past the number;
+  // each level below steps in once more.
+  expect(left(1)).toBe(left(0));
+  expect(left(2) - left(1)).toBe(16);
+  expect(left(3)).toBe(left(0));
+});
+
+it("reads entries without a depth as before: an h3 under the h2 above it", async () => {
+  const container = document.createElement("div");
+
+  document.body.append(container);
+  await act(async () => {
+    mountReviewSidebarSection(
+      container,
+      props({
+        section: "contents",
+        contents: [
+          { id: "a", text: "Section", level: "h2" },
+          { id: "b", text: "Sub", level: "h3" },
+        ],
+      }),
+    );
+  });
+
+  const rows = [...container.querySelectorAll("button")];
+
+  const left = (index: number) =>
+    rows[index]!.querySelector("span:last-child")!.getBoundingClientRect().left;
+
+  expect(rows.map((row) => row.textContent)).toEqual(["1Section", "Sub"]);
+  expect(left(1)).toBe(left(0));
+});

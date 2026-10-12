@@ -473,7 +473,7 @@ export interface ReviewSidebarLenses {
 }
 
 export interface ReviewSidebarState {
-  contents: { id: string; text: string; level: "h2" | "h3" }[];
+  contents: { id: string; text: string; level: "h2" | "h3"; depth?: number }[];
   view: string;
   /** The heading in view, which Contents tints. */
   activeHeading?: string;
