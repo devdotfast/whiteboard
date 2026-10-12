@@ -241,6 +241,7 @@ export const INSTALL_LOCATION = [
 
 export const DIFF_OPENED_VIA = [
   "topbar",
+  "sidebar",
   "lens",
   "locate",
   "file_picker",

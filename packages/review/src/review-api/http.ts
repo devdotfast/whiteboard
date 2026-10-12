@@ -325,7 +325,7 @@ export function createReviewApi(
   const placeOf = (id: string): ReviewBoardPlace => {
     if (isShared(id) || !store.has(id)) return { siblings: [] };
 
-    const { board, parent, siblings } = store.place(id);
+    const { board, parent, siblings, children } = store.place(id);
     const url = board.origin?.pullRequestUrl;
     const state = data?.pullRequestState(url);
     const baseBranch = url && data?.pullRequestBaseBranch(url);
@@ -337,22 +337,26 @@ export function createReviewApi(
       icon: boardIconKind(target),
     });
 
+    const listed = (child: PlacedBoard) => {
+      const childState = data?.pullRequestState(child.origin?.pullRequestUrl);
+
+      return {
+        ...place(child),
+        ...(child.origin?.pullRequestNumber && {
+          pullRequestNumber: child.origin.pullRequestNumber,
+        }),
+        ...(childState && { pullRequestState: childState }),
+      };
+    };
+
     return {
       ...(state && { pullRequestState: state }),
       ...(baseBranch && { baseBranch }),
       ...(headBranch && { headBranch }),
+      board: place(board),
       ...(parent && { parent: place(parent) }),
-      siblings: siblings.map((child) => {
-        const childState = data?.pullRequestState(child.origin?.pullRequestUrl);
-
-        return {
-          ...place(child),
-          ...(child.origin?.pullRequestNumber && {
-            pullRequestNumber: child.origin.pullRequestNumber,
-          }),
-          ...(childState && { pullRequestState: childState }),
-        };
-      }),
+      siblings: siblings.map(listed),
+      ...(children?.length && { children: children.map(listed) }),
     };
   };
 

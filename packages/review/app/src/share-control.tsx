@@ -14,7 +14,15 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  type Ref,
+  createContext,
+  useContext,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 
 import { canvasQueryKeys } from "./canvas-query";
 import { controlStyles } from "./controls-styles";
@@ -57,7 +65,19 @@ const actionError = (error: Error | null) =>
     ? error.message
     : "Could not complete this action. Please retry.");
 
-export function ShareControl() {
+/** Whether this review can be shared, so a menu may offer Share. */
+export function useCanShare(): boolean {
+  return useContext(SharingContext) !== null;
+}
+
+export function ShareControl({
+  folded = false,
+  handle,
+}: {
+  /** In "⋯": no button, and the popover hangs from the bar's right end. */
+  folded?: boolean;
+  handle?: Ref<{ open(): void }>;
+} = {}) {
   const context = useContext(SharingContext);
   const session = useOptionalReviewSession();
   const queryClient = useQueryClient();
@@ -159,6 +179,30 @@ export function ShareControl() {
 
   useDismissOnOutside(popover, open, setOpen);
 
+  const toggle = () => {
+    if (!context) return;
+
+    // An upload of this version in flight keeps its request.
+    if (!open && !(publish.isPending && target?.version === context.version)) {
+      setTarget({
+        version: context.version,
+        requestId: crypto.randomUUID(),
+      });
+      publish.reset();
+      login.reset();
+      setCopyError(undefined);
+      setCopied(false);
+    }
+
+    setOpen(!open);
+  };
+
+  useImperativeHandle(handle, () => ({
+    open: () => {
+      if (!open) toggle();
+    },
+  }));
+
   // Upload once per opening; a failure waits for Retry or a new sign-in.
   useEffect(() => {
     if (open && signedIn && target && publish.isIdle && !link) upload(target);
@@ -194,35 +238,21 @@ export function ShareControl() {
   return (
     <div
       ref={popover}
-      {...stylex.props(shellStyles.topbarItem)}
-      style={{ position: "relative" }}
+      data-page-bar-fold={folded ? undefined : "share"}
+      {...stylex.props(shellStyles.topbarItem, folded && styles.folded)}
+      style={folded ? undefined : { position: "relative" }}
     >
-      <IconButton
-        ref={tooltip}
-        aria-label={label}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => {
-          // An upload of this version in flight keeps its request.
-          if (
-            !open &&
-            !(publish.isPending && target?.version === context.version)
-          ) {
-            setTarget({
-              version: context.version,
-              requestId: crypto.randomUUID(),
-            });
-            publish.reset();
-            login.reset();
-            setCopyError(undefined);
-            setCopied(false);
-          }
-
-          setOpen(!open);
-        }}
-      >
-        <ShareIcon xstyle={controlStyles.chromeIcon} />
-      </IconButton>
+      {folded ? null : (
+        <IconButton
+          ref={tooltip}
+          aria-label={label}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={toggle}
+        >
+          <ShareIcon xstyle={controlStyles.chromeIcon} />
+        </IconButton>
+      )}
       {open && (
         <div
           ref={popoverRef}
@@ -303,6 +333,14 @@ const inTopbarActions = () =>
   stylex.when.ancestor(":is(*)", topbarActionsMarker);
 
 const styles = stylex.create({
+  // Out of the row, at its right end, so the popover still has an anchor.
+  folded: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: 0,
+    height: "100%",
+  },
   // Hovered, the open button keeps the topbar button hover colors.
   // In the topbar action row the shared anchoring (shellStyles.topbarPopover)
   // places it; these are its own values anywhere else.
