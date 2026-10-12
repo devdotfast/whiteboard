@@ -142,6 +142,21 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
   const askThreads =
     input.ask && new AskThreads(launchAskAgent, input.ask.tools);
 
+  const closeDeletedThreads = () =>
+    askThreads?.closeDeletedReviews((id) =>
+      id.startsWith("shared-")
+        ? !shared?.has(id) || Boolean(shared.get(id).snapshot.deletedAt)
+        : !store.has(id) || Boolean(store.read(id).deletedAt),
+    );
+
+  const stopLocal =
+    askThreads &&
+    store.subscribe((result) => {
+      if (result.deleted || result.lifecycle) closeDeletedThreads();
+    });
+
+  const stopShared = askThreads && shared?.subscribe(closeDeletedThreads);
+
   const api = createReviewApi(
     store,
     data,
@@ -158,7 +173,16 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
   // A shared store mounts the publisher with the rest of sharing.
   if (!shared) mountSharingPublisher(api, store, data);
 
-  return { app, api, close: () => askThreads?.closeAll() };
+  return {
+    app,
+    api,
+    close: () => {
+      stopLocal?.();
+      stopShared?.();
+      closeDeletedThreads();
+      askThreads?.closeAll();
+    },
+  };
 }
 
 /** The Desktop callbacks `createReviewApi` takes, answered over the relay. */

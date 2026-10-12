@@ -226,16 +226,25 @@ export function createReviewApi(
   const sharedData = shared ? new SharedReviewData(shared) : undefined;
   const isShared = (id: string) => id.startsWith("shared-");
 
+  const assertWritable = (id: string) => {
+    if (isShared(id)) shared?.assertWritable(id);
+    else store.assertWritable(id);
+  };
+
+  const askCleanup = (path: string) =>
+    /\/ask\/[^/]+\/(close|cancel)$/.test(path);
+
   app.use("/:id/*", async (context, next) => {
+    const id = context.req.param("id");
+
     if (
       !["GET", "HEAD", "OPTIONS"].includes(context.req.method) &&
-      !context.req.path.endsWith("/open") &&
-      !context.req.path.endsWith("/copy-context")
+      !context.req.path.endsWith(`/${id}/open`) &&
+      !context.req.path.endsWith(`/${id}/copy-context`) &&
+      !context.req.path.endsWith("/ask/watch") &&
+      !askCleanup(context.req.path)
     ) {
-      const id = context.req.param("id");
-
-      if (id && isShared(id)) shared?.assertWritable(id);
-      else if (id && store.has(id)) store.assertWritable(id);
+      if (id && (isShared(id) || store.has(id))) assertWritable(id);
     }
 
     await next();
@@ -275,7 +284,9 @@ export function createReviewApi(
     if (
       context.req.method !== "GET" &&
       !/\/(open|source|copy-context|environment)$/.test(context.req.path) &&
-      !/\/workspaces\/[^/]+\/retry$/.test(context.req.path)
+      !/\/workspaces\/[^/]+\/retry$/.test(context.req.path) &&
+      !askCleanup(context.req.path) &&
+      !context.req.path.endsWith("/ask/watch")
     )
       throw new ReviewInputError("Shared reviews are read-only.", 409);
 
@@ -1288,6 +1299,16 @@ export function createReviewApi(
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
 
+      const initialContext = await askContext(
+        input.agent,
+        snapshot,
+        checkout,
+        input.selection,
+        version,
+      );
+
+      assertWritable(reviewId);
+
       const thread = ask.threads.open({
         id,
         reviewId,
@@ -1324,13 +1345,7 @@ export function createReviewApi(
           title: input.selection.title,
           quote: target.kind === "text" ? target.quote : undefined,
         },
-        context: await askContext(
-          input.agent,
-          snapshot,
-          checkout,
-          input.selection,
-          version,
-        ),
+        context: initialContext,
         question: input.question,
       });
 
@@ -1417,6 +1432,15 @@ export function createReviewApi(
       const checkout = await data.agentCheckout(snapshot);
       const target = record.selection.target;
 
+      const initialContext = await askContext(
+        record.agent,
+        snapshot,
+        checkout,
+        record.selection,
+        record.version,
+      );
+
+      assertWritable(reviewId);
       ask.threads.open({
         id: record.id,
         reviewId,
@@ -1429,13 +1453,7 @@ export function createReviewApi(
         },
         resume: { sessionId: record.sessionId, entries: record.entries },
         // For a new session, should the agent no longer have this one.
-        context: await askContext(
-          record.agent,
-          snapshot,
-          checkout,
-          record.selection,
-          record.version,
-        ),
+        context: initialContext,
         onSession: (sessionId) =>
           store.askHistory.updateSession(record.id, sessionId),
         onTurn: () => store.askHistory.touch(record.id),
@@ -1602,7 +1620,10 @@ export function createReviewApi(
     // switched away from or a reload leaves it running, to come back to.
     app.post("/:id/ask/:threadId/close", (context) => {
       readThread(context.req.param("id"), context.req.param("threadId"));
-      ask.threads.close(context.req.param("threadId"));
+      ask.threads.close(
+        context.req.param("threadId"),
+        !readReview(context.req.param("id")).deletedAt,
+      );
 
       return context.json({ ok: true });
     });
@@ -1774,6 +1795,11 @@ export function createReviewApi(
             : parsed.operation.action,
         );
 
+        const reviewId = parsed.operation.reviewId;
+
+        if (shared.get(reviewId).snapshot.deletedAt)
+          ask?.threads.closeDeletedReviews((id) => id === reviewId);
+
         return context.json({
           reviewId: parsed.operation.reviewId,
           version: shared.get(parsed.operation.reviewId).snapshot.version,
@@ -1785,6 +1811,12 @@ export function createReviewApi(
     }
 
     const result = await store.execute(input);
+
+    if (
+      result.deleted ||
+      (result.lifecycle && store.read(result.reviewId).deletedAt)
+    )
+      ask?.threads.closeDeletedReviews((id) => id === result.reviewId);
 
     if (input.operation.type === "edit" && data && !result.deleted) {
       const { quotes, unquoted } = await anchorQuotes(

@@ -5,7 +5,7 @@ import { AskHistory, type AskRecord } from "@review/review-api/ask-history.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
 import { ReviewStore } from "@review/review-api/store.js";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { initializeReviewStoreSchema } from "./store-schema.js";
 
@@ -254,4 +254,83 @@ it("follows as many threads as a review has open over one watch", async () => {
     .map((line) => JSON.parse(line));
 
   expect(lines).toEqual(threads.map((threadId) => ({ threadId, ended: true })));
+});
+
+it("deleting a board ends its Ask threads and blocks reopening while saved history stays readable", async () => {
+  const { reviewId } = await store.execute(
+    command({
+      type: "create",
+      title: "Payments",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  store.askHistory.save(record(reviewId, "thread", "2026-09-01T10:00:00.000Z"));
+
+  const launch = vi.fn<ConstructorParameters<typeof AskThreads>[0]>(
+    async () => {
+      throw new Error("Agent unavailable");
+    },
+  );
+
+  const threads = new AskThreads(launch);
+
+  const thread = threads.open({
+    id: "thread",
+    reviewId,
+    question: { text: "Check this" },
+    agent: "claude",
+    cwd: "/checkout",
+    head: "head",
+    selection: { title: "Question" },
+    context: "Context",
+  });
+
+  const closed = vi.fn<() => void>();
+  thread.onClose(closed);
+
+  const api = createReviewApi(
+    store,
+    {} as LocalReviewData,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { threads, agents: async () => [] },
+  );
+
+  const request = (route: string, body = {}) =>
+    api.request(route, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  try {
+    const response = await request(
+      "/commands",
+      command({ type: "delete", reviewId }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(closed).toHaveBeenCalledOnce();
+    expect(threads.get("thread")).toBeUndefined();
+    const launches = launch.mock.calls.length;
+    expect((await request(`/${reviewId}/ask/thread/open`)).status).toBe(409);
+    expect(launch).toHaveBeenCalledTimes(launches);
+    expect((await api.request(`/${reviewId}/ask/thread`)).status).toBe(200);
+
+    const watch = await request(`/${reviewId}/ask/watch`, {
+      threads: ["thread"],
+    });
+
+    expect(watch.status).toBe(200);
+    expect(await watch.text()).toContain('"ended":true');
+    expect(() => threads.sweep(Date.now() + 20 * 60_000)).not.toThrow();
+  } finally {
+    threads.closeAll();
+  }
 });

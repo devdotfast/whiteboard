@@ -289,6 +289,7 @@ function openThread(
     picks?: AskPicks;
     question?: AskQuestion;
     onOffer?: (offer: AskOffer) => void;
+    onSave?: (entries: AskEntry[]) => void;
     limits?: AskThreadLimits;
   } = {},
 ) {
@@ -1718,4 +1719,70 @@ it("drops the follow-ups waiting on a turn the reviewer stops", async () => {
   await until(thread, (state) => state.status === "idle");
   expect(prompts).toHaveLength(1);
   thread.close();
+});
+
+it("disconnects and notifies watchers even if saving during close fails", async () => {
+  const fake = fakeAgent(async (client) => {
+    await say(client, "Saved answer.");
+  });
+
+  let failSave = false;
+
+  const thread = openThread(fake.launch, () => [], {
+    onSave: () => {
+      if (failSave) throw new Error("Cannot save");
+    },
+  });
+
+  await until(thread, (state) => state.status === "idle");
+  const closed = vi.fn<() => void>();
+  thread.onClose(closed);
+  failSave = true;
+  expect(() => thread.close()).toThrow("Cannot save");
+  expect(closed).toHaveBeenCalledOnce();
+  expect(() => thread.close()).not.toThrow();
+});
+
+it("ends a deleted board's active agent without saving or leaking it into idle cleanup", async () => {
+  let finish!: () => void;
+
+  const fake = fakeAgent(async (client) => {
+    const finished = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+
+    await say(client, "Working.");
+    await finished;
+  });
+
+  const threads = new AskThreads(fake.launch);
+
+  const save = vi.fn<() => void>(() => {
+    throw new Error("Deleted board rejects writes");
+  });
+
+  const thread = threads.open({
+    reviewId: "deleted-board",
+    agent: "claude",
+    cwd: "/checkout",
+    head: "abc",
+    selection: { title: "Question" },
+    context: "Context",
+    question: { text: "Check this" },
+    onSave: save,
+  });
+
+  await until(thread, (state) =>
+    state.entries.some((entry) => entry.kind === "agent"),
+  );
+  const closed = vi.fn<() => void>();
+  thread.onClose(closed);
+  threads.closeDeletedReviews((id) => id === "deleted-board");
+  finish();
+  expect(closed).toHaveBeenCalledOnce();
+  expect(save).not.toHaveBeenCalled();
+  expect(threads.get(thread.id)).toBeUndefined();
+  expect(threads.working()).toEqual([]);
+  expect(() => threads.sweep(Date.now() + 20 * 60_000)).not.toThrow();
+  expect(() => threads.closeAll()).not.toThrow();
 });

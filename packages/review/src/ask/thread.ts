@@ -463,31 +463,33 @@ export class AskThread {
         .catch(() => {});
   }
 
-  close() {
+  close(save = true) {
     if (this.closed) return;
     this.closed = true;
 
-    // A conversation still starting may be half replayed, and one that
-    // failed has nothing new; neither replaces what was saved.
-    if (
-      this.sessionId &&
-      this.state.status !== "starting" &&
-      this.state.status !== "failed"
-    )
-      this.start.onSave?.(settled(this.state.entries));
+    try {
+      // Starting and failed conversations must not replace saved history.
+      if (
+        save &&
+        this.sessionId &&
+        this.state.status !== "starting" &&
+        this.state.status !== "failed"
+      )
+        this.start.onSave?.(settled(this.state.entries));
+    } finally {
+      for (const resolve of this.decisions.values())
+        resolve({ outcome: { outcome: "cancelled" } });
 
-    for (const resolve of this.decisions.values())
-      resolve({ outcome: { outcome: "cancelled" } });
+      if (this.connection && this.sessionId)
+        void this.connection.agent
+          .notify(methods.agent.session.cancel, { sessionId: this.sessionId })
+          .catch(() => {});
+      this.disconnect();
+      this.listeners.clear();
 
-    if (this.connection && this.sessionId)
-      void this.connection.agent
-        .notify(methods.agent.session.cancel, { sessionId: this.sessionId })
-        .catch(() => {});
-    this.disconnect();
-    this.listeners.clear();
-
-    for (const closed of this.closers) closed();
-    this.closers.clear();
+      for (const closed of this.closers) closed();
+      this.closers.clear();
+    }
   }
 
   /** Runs when the thread closes, at once if it already has. */
@@ -880,6 +882,8 @@ export class AskThread {
         _meta: this.sessionMeta(),
       });
 
+      if (this.closed) throw new Error("This conversation has ended.");
+
       this.sessionId = response.sessionId;
       start.onSession?.(response.sessionId);
 
@@ -981,6 +985,8 @@ export class AskThread {
     } finally {
       clearTimeout(this.stopTimer);
     }
+
+    if (this.closed) return;
 
     if (withSelection) this.needsContext = false;
 

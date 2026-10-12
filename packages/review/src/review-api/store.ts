@@ -1412,6 +1412,14 @@ export class ReviewStore {
         ? []
         : this.reviewsForPullRequest(op.pullRequestUrl);
 
+    if (existing) {
+      try {
+        this.assertReusableReview(existing);
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    }
+
     return this.providers.resolvePullRequest(op.pullRequestUrl, {
       id: op.repositoryId,
       preferred: existing && this.read(existing).pins?.repositoryId,
@@ -1430,6 +1438,13 @@ export class ReviewStore {
       .all(pullRequestKey(url))
       .map((row) => String(row.id));
   }
+  private assertReusableReview(reviewId: string) {
+    if (this.deletionTime(reviewId))
+      throw new ReviewInputError(
+        `This PR already has a deleted review: ${reviewId}. Restore it to continue with review_attention({"reviewId":"${reviewId}","action":"restore"}).`,
+        409,
+      );
+  }
   /** The answer to a create that found its PR's review. Its target stays:
    * moving it would silently point existing links at different code. */
   private existingReview(
@@ -1438,6 +1453,8 @@ export class ReviewStore {
     requested: Pins,
   ): Result {
     const snapshot = this.read(reviewId);
+
+    this.assertReusableReview(reviewId);
 
     const headMoved =
       snapshot.pins?.repositoryId !== requested.repositoryId ||

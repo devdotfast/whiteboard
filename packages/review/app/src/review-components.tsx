@@ -563,6 +563,7 @@ function OpenAsk({ askKey }: { askKey: number }) {
   const [node] = useState(() => document.createElement("div"));
   const [header, setHeader] = useState<HTMLDivElement | null>(null);
   const checkoutGone = useReviewDiffFiles().status === "unavailable";
+  const deleted = Boolean(useReviewSession().review?.deletedAt);
   const [warning, setWarning] = useState(false);
   const closeButton = useRef<HTMLButtonElement>(null);
 
@@ -611,7 +612,7 @@ function OpenAsk({ askKey }: { askKey: number }) {
         {createPortal(
           view.type === "history" ? (
             <AskHistoryList passage={view.passage} />
-          ) : view.type === "saved" && checkoutGone ? (
+          ) : view.type === "saved" && (checkoutGone || deleted) ? (
             <AskReadOnlyThread
               selection={view.selection}
               threadId={view.threadId}

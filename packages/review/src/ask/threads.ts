@@ -265,10 +265,16 @@ export class AskThreads {
     return offer;
   }
 
-  close(id: string) {
-    this.threads.get(id)?.close();
+  close(id: string, save = true) {
+    const thread = this.threads.get(id);
     this.threads.delete(id);
     this.unwatchedSince.delete(id);
+    thread?.close(save);
+  }
+
+  closeDeletedReviews(isDeleted: (reviewId: string) => boolean) {
+    for (const [id, thread] of this.threads)
+      if (isDeleted(thread.reviewId)) this.close(id, false);
   }
 
   closeAll() {
