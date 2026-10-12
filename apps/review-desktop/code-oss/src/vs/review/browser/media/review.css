@@ -1582,24 +1582,69 @@ body
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 4px;
-  height: 36px;
+  gap: 2px;
+  height: 48px;
   padding: 0 10px;
 }
 
+/* A hidden copy of the tabs that measures their labels. */
+.monaco-workbench .review-sidebar-tabs-probe {
+  position: absolute;
+  display: flex;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.monaco-workbench .review-sidebar-tabs-probe > .review-sidebar-tab {
+  flex: none;
+}
+
+/* An icon over its label, the count faint after the label. Every tab is the
+   same width, set to the widest label with a 3-digit count; the tabs sit at
+   the left and what is left over stays on the right. A hidden tab leaves no
+   gap. The sidebar's minimum holds all four. */
 .monaco-workbench .review-sidebar-tab {
   position: relative;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 28px;
-  padding: 0;
+  gap: 3px;
+  flex: 0 0 var(--review-sidebar-tab-width, auto);
+  box-sizing: border-box;
+  height: 42px;
+  padding: 0 4px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: var(--vscode-descriptionForeground);
+  font-family: inherit;
   cursor: pointer;
+}
+
+.monaco-workbench .review-sidebar-tab-icon {
+  position: relative;
+  display: flex;
+}
+
+.monaco-workbench .review-sidebar-tab-label {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+  font-family: var(--review-chrome-font);
+  font-size: 11px;
+  line-height: 13px;
+  white-space: nowrap;
+}
+
+.monaco-workbench .review-sidebar-tab-count {
+  color: var(--vscode-disabledForeground);
+  font: 10px/13px var(--review-chrome-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.monaco-workbench .review-sidebar-tab-count:empty {
+  display: none;
 }
 
 .monaco-workbench .review-sidebar-tab:hover {
@@ -1611,6 +1656,10 @@ body
   color: var(--vscode-foreground);
 }
 
+.monaco-workbench .review-sidebar-tab.active .review-sidebar-tab-label {
+  font-weight: 500;
+}
+
 .monaco-workbench .review-sidebar-tab[hidden],
 .monaco-workbench .review-sidebar-tab-badge[hidden],
 .monaco-workbench .review-sidebar-pane[hidden] {
@@ -1620,8 +1669,8 @@ body
 /* Another board in the project changed since it was last viewed. */
 .monaco-workbench .review-sidebar-tab-badge {
   position: absolute;
-  top: 4px;
-  right: 6px;
+  top: -2px;
+  right: -3px;
   box-sizing: border-box;
   width: 7px;
   height: 7px;
@@ -1672,8 +1721,8 @@ body
   overflow-y: auto;
 }
 
-/* Whiteboards over the board's contents: one scroll, each list at its own
-   height, the Contents header a step below the last board. */
+/* Search, Contents, This board and Recent: one scroll, each list at its
+   own height, each section a step below the one above. */
 .monaco-workbench .review-sidebar-stack-body.review-canvas-root {
   height: auto;
   min-height: 0;
@@ -1684,6 +1733,16 @@ body
 
 .monaco-workbench .review-sidebar-pane-header.review-sidebar-stack-header {
   margin-top: 14px;
+}
+
+/* This board under Contents, a section's step below it; it steps aside
+   while a search lists its matches. */
+.monaco-workbench .review-sidebar-stack-body.review-sidebar-family {
+  margin-top: 8px;
+}
+
+.monaco-workbench .review-sidebar-stack:has([data-searching]) .review-sidebar-family {
+  display: none;
 }
 
 .monaco-workbench .review-sidebar-stack-body[hidden],
@@ -1768,6 +1827,7 @@ body
   min-width: 0;
   overflow: hidden;
   color: var(--vscode-disabledForeground);
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1917,8 +1977,8 @@ body
 }
 
 .monaco-workbench .review-sidebar-tab-badge-threads[data-mark="answering"] {
-  top: 2px;
-  right: 3px;
+  top: -4px;
+  right: -6px;
   width: 11px;
   height: 11px;
   border: 0;

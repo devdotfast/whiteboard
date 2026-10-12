@@ -20,8 +20,22 @@ export interface ReviewTooltipContent {
 
 export type ReviewTooltipHoverService = Pick<IHoverService, "showInstantHover">;
 
+/** Room a one-line tooltip and its pointer need above a target. */
+const TOOLTIP_ROOM = 36;
+
 /**
- * The Whiteboard tooltip: a raised card above its target, shown the moment the
+ * Where a tooltip opens: `side` beside its target, else above it, or below
+ * when above would reach into the title bar, which the window's own
+ * controls draw over.
+ */
+export function reviewTooltipPosition(targetTop: number, titleBarBottom: number, side?: "right"): HoverPosition {
+	if (side === "right") return HoverPosition.RIGHT;
+	return targetTop - TOOLTIP_ROOM < titleBarBottom ? HoverPosition.BELOW : HoverPosition.ABOVE;
+}
+
+/**
+ * The Whiteboard tooltip: a raised card above its target (below it near the
+ * title bar, or beside it when asked), shown the moment the
  * pointer or keyboard focus lands and gone on leave, click, scroll or key.
  * The `review-tooltip` class keeps its look off every other hover.
  */
@@ -34,6 +48,7 @@ export class ReviewTooltip extends Disposable {
 		private readonly hoverService: ReviewTooltipHoverService,
 		private readonly target: HTMLElement,
 		content?: ReviewTooltipContent,
+		private readonly side?: "right",
 	) {
 		super();
 		this.current = content;
@@ -64,13 +79,18 @@ export class ReviewTooltip extends Disposable {
 			target: this.target,
 			content: body,
 			additionalClasses: ["review-tooltip"],
-			position: { hoverPosition: HoverPosition.ABOVE },
+			position: { hoverPosition: this.position() },
 			appearance: { compact: true, showPointer: true, skipFadeInAnimation: true },
 			persistence: { hideOnHover: true, hideOnKeyDown: true },
 		});
 		if (this.hover.value) {
 			this.scroll.value = addDisposableListener(this.target.ownerDocument, "scroll", () => this.hide(), true);
 		}
+	}
+
+	private position(): HoverPosition {
+		const titleBar = this.target.ownerDocument.querySelector(".part.titlebar")?.getBoundingClientRect().bottom ?? 0;
+		return reviewTooltipPosition(this.target.getBoundingClientRect().top, titleBar, this.side);
 	}
 
 	private hide(): void {

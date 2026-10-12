@@ -69,3 +69,44 @@ export function showsChanged(
 
   return changed(branch.board) || (collapsed && branch.children.some(changed));
 }
+
+/** The open board's family: its parent and the parent's children in
+ * order, or, for a top-level board, itself and its own children. */
+export function boardFamily(
+  boards: readonly ReviewApiSummary[],
+  current: string,
+): WhiteboardBranch | null {
+  const byId = new Map(boards.map((board) => [board.reviewId, board]));
+  const open = byId.get(current);
+
+  if (!open) return null;
+  const head = (open.parentId && byId.get(open.parentId)) || open;
+
+  return {
+    board: head,
+    children: (head.children ?? []).flatMap((id) => {
+      const child = byId.get(id);
+
+      return child ? [child] : [];
+    }),
+  };
+}
+
+/** How many boards Recent lists before "Show N more". */
+export const RECENT_SHOWN = 5;
+
+/** The boards opened last in any project, newest first, without the open
+ * one or any in Trash. */
+export function recentBoards(
+  boards: readonly ReviewApiSummary[],
+  current: string,
+): ReviewApiSummary[] {
+  return boards
+    .filter(
+      (board) =>
+        board.reviewId !== current && board.viewedAt && !board.trashedAt,
+    )
+    .sort(
+      (left, right) => Date.parse(right.viewedAt!) - Date.parse(left.viewedAt!),
+    );
+}
