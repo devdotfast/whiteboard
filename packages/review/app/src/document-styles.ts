@@ -69,7 +69,9 @@ export const documentStyles = stylex.create({
       default: "clamp(20px, calc((100cqi - 720px) * 0.122 + 20px), 64px)",
       [narrow]: "clamp(12px, 4vw, 20px)",
     },
-    "--review-document-padding-block-start": "28px",
+    // With the view's own top padding, the header's first line sits 36px
+    // under the top bar.
+    "--review-document-padding-block-start": "16px",
     "--review-document-padding-block-end": {
       default: "72px",
       [narrow]: "48px",

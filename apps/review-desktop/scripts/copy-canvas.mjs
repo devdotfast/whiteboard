@@ -89,7 +89,7 @@ export async function copyCanvas(targets = canvasTargets([])) {
 
 export function canvasLoaderSource({ canvasFile, wasmFile, stylesheets }) {
   return [
-    `export { clearReviewViewState, mountReviewCanvas } from ${JSON.stringify(`./${canvasFile}`)};`,
+    `export { clearReviewViewState, mountReviewCanvas, mountReviewSidebarSection } from ${JSON.stringify(`./${canvasFile}`)};`,
     `export const reviewWasmUrl = new URL(${JSON.stringify(`./${wasmFile}`)}, import.meta.url).href;`,
     `export const reviewStylesheetUrls = ${JSON.stringify(stylesheets.map((file) => `./${file}`))}.map(file => new URL(file, import.meta.url).href);`,
     "",

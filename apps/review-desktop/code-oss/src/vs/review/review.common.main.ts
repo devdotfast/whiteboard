@@ -31,7 +31,7 @@ import "./contrib/telemetry/reviewTelemetry.contribution.js";
 // model, setup flow, and content part and deliberately imports no Agents UI.
 import "../workbench/browser/parts/editor/editorParts.js";
 import { IReviewCanvasPartsService, ReviewCanvasParts } from "./browser/parts/canvas/reviewCanvasPart.js";
-import { IReviewExplorerPartsService, ReviewExplorerParts } from "./browser/parts/explorer/reviewExplorerPart.js";
+import { IReviewSidebarPartsService, ReviewSidebarParts } from "./browser/parts/sidebar/reviewSidebarPart.js";
 import "./browser/reviewPaneCompositePartService.js";
 import "./common/reviewConfiguration.js";
 import { IReviewVerbsService, ReviewVerbsService } from "./contrib/verbs/reviewVerbs.js";
@@ -62,7 +62,7 @@ registerSingleton(IReviewApiSourceService, ReviewApiSourceService, Instantiation
 registerSingleton(IReviewApiCatalogService, ReviewApiCatalogService, InstantiationType.Delayed);
 registerSingleton(IReviewVerbsService, ReviewVerbsService, InstantiationType.Delayed);
 registerSingleton(IReviewCanvasPartsService, ReviewCanvasParts, InstantiationType.Eager);
-registerSingleton(IReviewExplorerPartsService, ReviewExplorerParts, InstantiationType.Eager);
+registerSingleton(IReviewSidebarPartsService, ReviewSidebarParts, InstantiationType.Eager);
 
 import "./contrib/sharing/reviewSharing.contribution.js";
 import "./contrib/notifications/reviewDoneNotification.contribution.js";

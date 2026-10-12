@@ -74,13 +74,13 @@ import {
 	getNotificationsPosition
 } from '../../workbench/common/notifications.js';
 import { IReviewCanvasPartsService } from './parts/canvas/reviewCanvasPart.js';
-import { IReviewExplorerPartsService } from './parts/explorer/reviewExplorerPart.js';
+import { IReviewSidebarPartsService } from './parts/sidebar/reviewSidebarPart.js';
 import { initialReviewPartVisibility } from '../common/reviewWorkbenchVisibility.js';
 import { REVIEW_CHROME_HEIGHT } from '../common/reviewChrome.js';
 
 const EDITOR_PART_MINIMUM_WIDTH = 300;
 const EDITOR_PART_DEFAULT_WIDTH = 600;
-const EXPLORER_PART_DEFAULT_WIDTH = 260;
+const EXPLORER_PART_DEFAULT_WIDTH = 288;
 const EditorMaximizedContext = new RawContextKey<boolean>('editorMaximized', false);
 
 //#region ReviewWorkbench Options
@@ -917,12 +917,12 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 	private createExplorerPart(): void {
 		const explorerPartContainer = document.createElement('div');
 		explorerPartContainer.classList.add('part', 'review-explorer');
-		explorerPartContainer.id = Parts.REVIEW_EXPLORER_PART;
+		explorerPartContainer.id = Parts.REVIEW_SIDEBAR_PART;
 		explorerPartContainer.setAttribute('role', 'navigation');
 
-		mark(`code/willCreatePart/${Parts.REVIEW_EXPLORER_PART}`);
-		this.getPart(Parts.REVIEW_EXPLORER_PART).create(explorerPartContainer);
-		mark(`code/didCreatePart/${Parts.REVIEW_EXPLORER_PART}`);
+		mark(`code/willCreatePart/${Parts.REVIEW_SIDEBAR_PART}`);
+		this.getPart(Parts.REVIEW_SIDEBAR_PART).create(explorerPartContainer);
+		mark(`code/didCreatePart/${Parts.REVIEW_SIDEBAR_PART}`);
 
 		this.mainContainer.appendChild(explorerPartContainer);
 	}
@@ -959,8 +959,8 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		// Forces eager creation of the sessions part so it registers itself with the
 		// layout service before renderWorkbench() looks it up via getPart().
 		accessor.get(IReviewCanvasPartsService);
-		// Same for the file explorer part, which also owns its own show/hide policy.
-		accessor.get(IReviewExplorerPartsService);
+		// Same for the sidebar part.
+		accessor.get(IReviewSidebarPartsService);
 		// The sidebar, panel, and auxiliary bar stay hidden in Review, but the
 		// part-visibility setters below still reach for this service; leaving it
 		// unassigned would throw the moment any of them ran.
@@ -1179,7 +1179,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 	private publishReviewChromeInset(tabStrip: HTMLElement): void {
 		const titlebarPart = this.getPart(Parts.TITLEBAR_PART);
 		const insets = titlebarPart instanceof MainReviewTitlebarPart ? titlebarPart.chromeInsets : { left: 0, right: 0 };
-		const explorerWidth = this.isVisible(Parts.REVIEW_EXPLORER_PART) ? this.getSize(Parts.REVIEW_EXPLORER_PART).width : 0;
+		const explorerWidth = this.isVisible(Parts.REVIEW_SIDEBAR_PART) ? this.getSize(Parts.REVIEW_SIDEBAR_PART).width : 0;
 		tabStrip.style.setProperty('--review-chrome-left-width', `${insets.left}px`);
 		tabStrip.style.setProperty('--review-chrome-right-width', `${insets.right}px`);
 		tabStrip.style.setProperty('--review-explorer-width', `${explorerWidth}px`);
@@ -1261,7 +1261,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 	createWorkbenchLayout(): void {
 		const editorPart = this.getPart(Parts.EDITOR_PART);
 		const sessionsPart = this.getPart(Parts.SESSIONS_PART);
-		const explorerPart = this.getPart(Parts.REVIEW_EXPLORER_PART);
+		const explorerPart = this.getPart(Parts.REVIEW_SIDEBAR_PART);
 
 		this.sessionsPartView = sessionsPart;
 		this.editorPartView = editorPart;
@@ -1270,7 +1270,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		const viewMap: { [key: string]: ISerializableView } = {
 			[Parts.SESSIONS_PART]: this.sessionsPartView,
 			[Parts.EDITOR_PART]: this.editorPartView,
-			[Parts.REVIEW_EXPLORER_PART]: this.explorerPartView
+			[Parts.REVIEW_SIDEBAR_PART]: this.explorerPartView
 		};
 
 		const fromJSON = ({ type }: { type: string }) => viewMap[type];
@@ -1368,7 +1368,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		// restored yet — so the leaf carries only the width a later reveal uses.
 		const explorerNode: ISerializedLeafNode = {
 			type: 'leaf',
-			data: { type: Parts.REVIEW_EXPLORER_PART },
+			data: { type: Parts.REVIEW_SIDEBAR_PART },
 			size: this._savedPartSizes.explorer ?? EXPLORER_PART_DEFAULT_WIDTH,
 			visible: this.partVisibility.explorer
 		};
@@ -1563,7 +1563,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 				return this.partVisibility.editor;
 			case Parts.SESSIONS_PART:
 				return this.partVisibility.sessions;
-			case Parts.REVIEW_EXPLORER_PART:
+			case Parts.REVIEW_SIDEBAR_PART:
 				return this.partVisibility.explorer;
 			case Parts.ACTIVITYBAR_PART:
 			case Parts.STATUSBAR_PART:
@@ -1590,7 +1590,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 			case Parts.SESSIONS_PART:
 				this.setSessionsHidden(hidden);
 				break;
-			case Parts.REVIEW_EXPLORER_PART:
+			case Parts.REVIEW_SIDEBAR_PART:
 				this.setExplorerHidden(hidden);
 				break;
 		}
@@ -1755,7 +1755,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 	/**
 	 * Shows or hides the file explorer leaf.
 	 *
-	 * `ReviewExplorerParts` is the only caller: it derives the state from the
+	 * `ReviewSidebarParts` is the only caller: it derives the state from the
 	 * active editor pane. A maximized editor owns the whole window, so a tab
 	 * switch under it must not bring the explorer back.
 	 */
@@ -1860,7 +1860,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 				return this.panelPartView;
 			case Parts.SESSIONS_PART:
 				return this.sessionsPartView;
-			case Parts.REVIEW_EXPLORER_PART:
+			case Parts.REVIEW_SIDEBAR_PART:
 				return this.explorerPartView;
 			default:
 				return undefined;
@@ -2060,7 +2060,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 			return Parts.SESSIONS_PART;
 		}
 		if (neighborView === this.explorerPartView) {
-			return Parts.REVIEW_EXPLORER_PART;
+			return Parts.REVIEW_SIDEBAR_PART;
 		}
 
 		return undefined;
