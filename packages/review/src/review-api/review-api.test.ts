@@ -263,8 +263,15 @@ describe("snapshot authoring", () => {
       type: "insert",
       content: { type: "markdown", markdown: "Private review text" },
     });
-    await store.execute(request({ type: "delete", reviewId }));
     const deletion = request({ type: "delete_permanently", reviewId });
+    const saved = store.read(reviewId);
+    await expect(store.execute(deletion)).rejects.toMatchObject({
+      status: 409,
+    });
+    expect(store.read(reviewId)).toEqual(saved);
+    expect(store.history(reviewId)).toHaveLength(2);
+
+    await store.execute(request({ type: "delete", reviewId }));
     const result = await store.execute(deletion);
     expect(result).toMatchObject({ reviewId, deleted: true });
     expect(() => store.read(reviewId)).toThrow(/not found/);
@@ -350,9 +357,9 @@ describe("snapshot authoring", () => {
       },
       { type: "set_target", reviewId, target: { kind: "commits", ...pins } },
     ])
-      await expect(store.execute(request(operation))).rejects.toThrow(
-        /This whiteboard was deleted on .*Restore it to continue/,
-      );
+      await expect(store.execute(request(operation))).rejects.toMatchObject({
+        status: 409,
+      });
     expect(() => store.activity.update(reviewId, { action: "begin" })).toThrow(
       /Restore it to continue/,
     );

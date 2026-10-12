@@ -712,7 +712,7 @@ export class ReviewStore {
 
     if (deletedAt)
       throw new ReviewInputError(
-        `This whiteboard was deleted on ${new Date(deletedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it to continue.`,
+        `This whiteboard was archived on ${new Date(deletedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it to continue.`,
         409,
       );
   }
@@ -1103,7 +1103,7 @@ export class ReviewStore {
 
         if (!this.deletionTime(op.reviewId))
           throw new ReviewInputError(
-            "Delete this whiteboard before permanently deleting it.",
+            "This whiteboard is active. Archive it before permanently deleting it.",
             409,
           );
 

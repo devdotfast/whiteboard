@@ -119,7 +119,7 @@ export class AskHistory {
 
     if (row?.deleted_at)
       throw new ReviewInputError(
-        `This whiteboard was deleted on ${new Date(String(row.deleted_at)).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it to continue.`,
+        `This whiteboard was archived on ${new Date(String(row.deleted_at)).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it to continue.`,
         409,
       );
   }

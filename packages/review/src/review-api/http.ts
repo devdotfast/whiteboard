@@ -1771,7 +1771,7 @@ export function createReviewApi(
       if (shared && parsed.operation.type === "delete_permanently") {
         if (!shared.get(parsed.operation.reviewId).snapshot.deletedAt)
           throw new ReviewInputError(
-            "Delete this whiteboard before permanently deleting it.",
+            "This whiteboard is active. Archive it before permanently deleting it.",
             409,
           );
         await shared.removeLocal(parsed.operation.reviewId);

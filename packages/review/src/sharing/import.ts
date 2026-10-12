@@ -590,7 +590,7 @@ export class SharedReviewStore {
 
     if (deletedAt)
       throw new ReviewInputError(
-        `This whiteboard was deleted on ${new Date(deletedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it to continue.`,
+        `This whiteboard was archived on ${new Date(deletedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it to continue.`,
         409,
       );
   }
@@ -718,7 +718,7 @@ export class SharedReviewStore {
     if (deletedAt && Date.parse(deletedAt) <= Date.now() - 30 * 86400000) {
       await this.removeLocal(id);
       throw new ReviewInputError(
-        "This whiteboard has expired and was permanently deleted.",
+        "The 30-day recovery period has ended. This whiteboard was permanently deleted.",
         404,
       );
     }
