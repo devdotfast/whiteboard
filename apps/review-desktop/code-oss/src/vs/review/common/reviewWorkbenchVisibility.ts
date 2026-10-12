@@ -7,13 +7,14 @@
  * Review hosts Home, review canvases, files, and diffs in one native editor
  * group. The upstream agent sessions part stays hidden in this layout.
  *
- * `explorer` is never persisted. `ReviewExplorerParts` derives it from the
- * active editor pane on every change, so the layout always starts it hidden and
- * lets that service reassert it once the restored editor is known.
+ * `explorer` (the board sidebar) is never persisted. `ReviewSidebarParts`
+ * derives it from the active editor on every change, so the layout always
+ * starts it hidden and lets that service reassert it once the restored
+ * editor is known.
  *
- * A user *closing* the tree is a separate matter. That is a decision rather than
- * derived state, so it has to survive the next tab switch and a reload.
- * `ReviewExplorerParts` persists it on its own key (`review.explorer.userClosed`)
+ * A user *closing* the sidebar is a separate matter. That is a decision rather
+ * than derived state, so it has to survive the next tab switch and a reload.
+ * `ReviewSidebarParts` persists it on its own key (`review.sidebar.userClosed`)
  * and folds it into the derived value. No part visibility is stored here.
  */
 export const initialReviewPartVisibility = {

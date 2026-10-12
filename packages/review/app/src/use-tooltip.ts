@@ -1,8 +1,23 @@
-import type { ReviewTooltipOptions } from "@dev.fast/review-protocol";
-import { useCallback, useContext } from "react";
+import type {
+  ReviewDisposable,
+  ReviewTooltipOptions,
+} from "@dev.fast/review-protocol";
+import { createContext, useCallback, useContext } from "react";
 
 import { CanvasUiContext } from "./host/canvas-ui";
 import { useOptionalReviewSession } from "./host/review-session";
+
+type SetupTooltip = (
+  target: HTMLElement,
+  text: string,
+  options?: ReviewTooltipOptions,
+) => ReviewDisposable;
+
+/** The host's tooltips where there is no board session, as in Desktop's
+ * sidebar sections. */
+export const TooltipHostContext = createContext<SetupTooltip | undefined>(
+  undefined,
+);
 
 /**
  * Attach the host's tooltip to an element, or a native `title` without a
@@ -16,7 +31,11 @@ export function useTooltip<T extends HTMLElement = HTMLButtonElement>(
 ) {
   const session = useOptionalReviewSession();
   const ui = useContext(CanvasUiContext);
-  const setupTooltip = session ? session.bridge.setupTooltip : ui?.setupTooltip;
+  const host = useContext(TooltipHostContext);
+
+  const setupTooltip = session
+    ? (session.bridge.setupTooltip ?? host)
+    : (ui?.setupTooltip ?? host);
 
   return useCallback(
     (target: T | null) => {

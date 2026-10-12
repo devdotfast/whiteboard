@@ -47,12 +47,3 @@ export function sourceTreeSelection(resource: URI): ReviewSourceSelection {
 	return version === null ? { reviewId: resource.authority, kind: "current" }
 		: { reviewId: resource.authority, kind: "version", version: Number(version) };
 }
-
-/** An open Source tab owns the tree while its files change revisions. */
-export function sourceTreeRoot(resource: URI, current?: URI): URI {
-	if (current && resource.authority === current.authority) {
-		const selection = sourceTreeSelection(current);
-		if (selection.kind === "current" || selection.version === sourceLocation(resource).view.version) return current;
-	}
-	return sourceTreeUri({ reviewId: resource.authority, kind: "version", version: sourceLocation(resource).view.version });
-}

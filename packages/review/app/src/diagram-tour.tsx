@@ -50,11 +50,11 @@ export function DiagramTourOverlay({
   const paneResize = useRightPanelResize({
     stateKey: "diagram-tour-pane-width",
     defaultWidth: 594,
-    minWidth: 360,
+    minWidth: PANE_MIN,
     maxWidth: 760,
     maxContainerFraction: 0.5,
-    minMainWidth: 480,
-    separatorWidth: 10,
+    minMainWidth: STAGE_MIN,
+    separatorWidth: SEPARATOR,
     label: "Resize tour pane",
     containerRef: overlayRef,
   });
@@ -131,9 +131,17 @@ export function useDiagramTourShell(open: boolean, onClose: () => void) {
   return { portalTarget };
 }
 
-// A terminal split can leave the canvas too narrow for both tour columns: the
-// diagram collapses before the tour panel becomes unreadable.
-const narrow = "@container review-canvas (max-width: 1080px)";
+// The tour panel gives way first, down to a readable width, while the stage
+// keeps at least its minimum (a wide diagram scrolls inside it). Below the
+// two minimums side by side, the stage collapses and the panel fills the
+// canvas.
+const STAGE_MIN = 280;
+
+const PANE_MIN = 420;
+
+const SEPARATOR = 10;
+
+const narrow = `@container review-canvas (max-width: ${STAGE_MIN + SEPARATOR + PANE_MIN - 1}px)`;
 
 // Portals inside .review-canvas-root but outside .review-app, where
 // --review-debug-layer lives, hence the literal fallback.
@@ -145,7 +153,7 @@ const styles = stylex.create({
     boxSizing: "border-box",
     display: "grid",
     gridTemplateColumns: {
-      default: "minmax(0, 1fr) 10px var(--diagram-tour-pane-width, 424px)",
+      default: `minmax(max(${STAGE_MIN}px, 38%), 1fr) ${SEPARATOR}px minmax(${PANE_MIN}px, var(--diagram-tour-pane-width, ${PANE_MIN}px))`,
       [narrow]: "minmax(0, 1fr)",
     },
     minWidth: 0,

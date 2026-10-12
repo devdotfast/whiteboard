@@ -8,10 +8,10 @@ import { KeyCode, KeyMod } from '../../../base/common/keyCodes.js';
 import { Action2, registerAction2 } from '../../../platform/actions/common/actions.js';
 import type { ServicesAccessor } from '../../../platform/instantiation/common/instantiation.js';
 import { KeybindingWeight } from '../../../platform/keybinding/common/keybindingsRegistry.js';
-import { IReviewExplorerPartsService } from '../../browser/parts/explorer/reviewExplorerPart.js';
+import { IReviewSidebarPartsService } from '../../browser/parts/sidebar/reviewSidebarPart.js';
 
 /**
- * Closes and reopens the file tree beside a reviewed file.
+ * Closes and reopens the sidebar beside a board.
  *
  * `Cmd+B` matches VS Code's Toggle Primary Side Bar, and it is taken here on
  * purpose. `ToggleSidebarVisibilityAction` in
@@ -33,7 +33,7 @@ class ToggleReviewFileTreeAction extends Action2 {
 	constructor() {
 		super({
 			id: 'review.toggleFileTree',
-			title: localize2('review.toggleFileTree', "Whiteboard: Toggle File Tree"),
+			title: localize2('review.toggleFileTree', "Whiteboard: Toggle Sidebar"),
 			f1: true,
 			keybinding: {
 				weight: KeybindingWeight.WorkbenchContrib + 1,
@@ -43,7 +43,7 @@ class ToggleReviewFileTreeAction extends Action2 {
 	}
 
 	override run(accessor: ServicesAccessor): void {
-		accessor.get(IReviewExplorerPartsService).toggle();
+		accessor.get(IReviewSidebarPartsService).toggle();
 	}
 }
 

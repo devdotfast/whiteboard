@@ -287,6 +287,9 @@ export interface ReviewDiffViewSpec {
   };
   container: HTMLElement;
   fileTreeContainer?: HTMLElement;
+  /** Desktop puts the changed-files tree in its sidebar's Files section
+   * instead, while the sidebar shows this board. */
+  sidebarFileTree?: boolean;
   progress?: ReviewDiffProgress;
   onToggleViewed?: (path: string, sectionId?: string) => void;
   /** Mark a structural scope using the same persisted line coverage as file marks. */
@@ -302,6 +305,8 @@ export interface ReviewDiffViewSpec {
 
 export interface ReviewDiffViewHandle extends ReviewDisposable {
   focus(): void;
+  /** Hides the sidebar file tree, e.g. while the lens tree replaces it. */
+  setFileTreeHidden?(hidden: boolean): void;
   setProgress?(progress: ReviewDiffProgress): void;
   revealSource?(
     source: ReviewDiffLens["ranges"][number],
@@ -403,6 +408,114 @@ export interface ReviewCanvasBridge {
   ): ReviewDisposable;
   ready(): void;
   reportDiagnostic?(diagnostic: ReviewCanvasDiagnostic): void;
+  /** Reports the document's headings and the current view to Desktop's
+   * sidebar. */
+  reportSidebar?(state: ReviewSidebarState): void;
+  /** What the sidebar's Lenses section lists, from the Diff view. */
+  reportSidebarLenses?(lenses: ReviewSidebarLenses): void;
+  /** Whether Desktop's sidebar shows this board. If so, the Diff view moves
+   * its lenses and file trees there. */
+  sidebarShowsBoard?(): boolean;
+  onDidChangeSidebarShowsBoard?(listener: () => void): ReviewDisposable;
+  /** The sidebar's lens list, where the agent's cursor is drawn. */
+  sidebarLensList?(): HTMLElement | undefined;
+}
+
+/** Changed lines over a lens or the whole diff, and how many are left. */
+export interface ReviewSidebarCoverage {
+  state: "unread" | "partial" | "viewed" | "folded";
+  total: { additions: number; deletions: number };
+  remaining: { additions: number; deletions: number };
+  folded: { additions: number; deletions: number };
+}
+
+export interface ReviewSidebarLensRow {
+  id: string;
+  title: string;
+  /** Its counts are still coming. */
+  pending?: boolean;
+  /** Why it can't filter the diff, when it can't. */
+  unavailable?: string;
+  /** No changed file to filter to. */
+  empty: boolean;
+  progress: ReviewSidebarCoverage;
+  /** Its draw-queue phase while an agent writes or erases it. */
+  phase?: string;
+}
+
+/** The Diff view's lenses, as its sidebar lists them. */
+export interface ReviewSidebarLenses {
+  /** Remaining over the whole diff; absent while counting. */
+  remaining?: ReviewSidebarCoverage;
+  /** The counts can't be read. */
+  unavailable?: boolean;
+  viewed?: { percent: number; title: string };
+  /** A viewed mark is being saved. */
+  busy: boolean;
+  /** The lens filtering the diff. */
+  active?: string;
+  /** How many changed files the active lens covers. */
+  activeFiles?: number;
+  rows: ReviewSidebarLensRow[];
+}
+
+export interface ReviewSidebarState {
+  contents: { id: string; text: string; level: "h2" | "h3" }[];
+  view: string;
+  /** The heading in view, which Contents tints. */
+  activeHeading?: string;
+  /** The change's counts are still loading: Lenses and Files keep what
+   * they show until a report has them. Contents never waits for them. */
+  countsPending?: boolean;
+  /** For the folded Lenses and Files headers; absent without a change. */
+  lenses?: number;
+  files?: {
+    count: number;
+    additions: number;
+    deletions: number;
+    /** Untracked files left out of the review, noted under the tree. */
+    untracked?: number;
+  };
+}
+
+/** Props for a section list that Desktop's sidebar mounts from the canvas
+ * bundle. */
+export interface ReviewSidebarSectionProps {
+  /** "remaining" is the Diff view's Remaining row, above the Lenses
+   * header. */
+  section: "whiteboards" | "contents" | "lenses" | "remaining";
+  connection: { serverUrl: string; token: string };
+  /** The board in the active tab. */
+  reviewId: string;
+  /** Its document's headings, as its canvas reports them. */
+  contents: ReviewSidebarState["contents"];
+  onOpenBoard(reviewId: string, active: boolean): void;
+  onOpenHeading(headingId: string): void;
+  /** The heading in view, tinted in Contents. */
+  activeHeading?: string;
+  /** Whiteboards: the board's project and its boards, from Desktop's
+   * catalog. */
+  project?: {
+    project: { id: string; name: string } | null;
+    boards: ReviewApiSummary[];
+  };
+  /** Lenses: the Diff view's, as its canvas reports them. */
+  lenses?: ReviewSidebarLenses;
+  /** Filter the diff to a lens, or clear the filter with null. */
+  onSelectLens?(lensId: string | null): void;
+  /** Toggle a lens viewed. */
+  onMarkLens?(lensId: string): void;
+  /** The workbench's tooltips, for counts and truncated names. */
+  setupTooltip?(
+    target: HTMLElement,
+    text: string,
+    options?: ReviewTooltipOptions,
+  ): ReviewDisposable;
+}
+
+export interface ReviewSidebarSectionHandle {
+  update(props: ReviewSidebarSectionProps): void;
+  dispose(): void;
 }
 
 export interface ReviewCanvasSetupActions {
@@ -933,6 +1046,10 @@ export interface ReviewCanvasModule {
     content: ReviewCanvasContent,
     ui?: ReviewCanvasUi,
   ): ReviewCanvasHandle;
+  mountReviewSidebarSection(
+    container: HTMLElement,
+    props: ReviewSidebarSectionProps,
+  ): ReviewSidebarSectionHandle;
 }
 
 // Tolerant of unknown keys so future additive fields never force a version
@@ -1715,12 +1832,34 @@ export const ReviewSurfaceEventSchema = z.discriminatedUnion("event", [
   z.strictObject({
     event: z.literal("showReviewView"),
     view: reviewViewSchema,
+    /** The board to switch, from its sidebar; else the one asking. */
+    reviewId: requiredString.optional(),
+  }),
+  /** Scroll to a heading of the board on screen, from its sidebar's
+   * Contents. */
+  z.strictObject({
+    event: z.literal("revealHeading"),
+    reviewId: requiredString,
+    headingId: requiredString,
   }),
   /** Show one block of a board, once that board is on screen. */
   z.strictObject({
     event: z.literal("revealBlock"),
     reviewId: requiredString,
     blockId: requiredString,
+  }),
+  /** Filter the board's diff to a lens, or clear it with null, from its
+   * sidebar's Lenses. */
+  z.strictObject({
+    event: z.literal("selectLens"),
+    reviewId: requiredString,
+    lensId: requiredString.nullable(),
+  }),
+  /** Toggle a lens viewed, from the sidebar's Lenses. */
+  z.strictObject({
+    event: z.literal("markLens"),
+    reviewId: requiredString,
+    lensId: requiredString,
   }),
 ]);
 

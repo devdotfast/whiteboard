@@ -289,8 +289,8 @@ export const shellStyles = stylex.create({
   commitsRegion: {
     overflow: "auto",
   },
-  // --review-toc-tail is the room the contents rail adds so the last heading
-  // can scroll up to the top edge, measured by the rail itself.
+  // --review-toc-tail is the room below the last heading so Contents can
+  // scroll it to the top edge, measured by useHeadingInView.
   reviewRegion: {
     display: "flex",
     alignItems: "flex-start",
@@ -304,9 +304,9 @@ export const shellStyles = stylex.create({
     padding: {
       default: `${tokens.reviewPageTop} 52px calc(max(120px, var(--review-bottom-scroll-padding, 0px)) + var(--review-toc-tail, 0px))`,
       "@container review-content (max-width: 1180px)": {
-        default: `${tokens.reviewPageTop} 42px 120px`,
+        default: `${tokens.reviewPageTop} 42px calc(120px + var(--review-toc-tail, 0px))`,
         "@container review-content (max-width: 1080px)": {
-          default: `${tokens.reviewPageTop} 24px 120px`,
+          default: `${tokens.reviewPageTop} 24px calc(120px + var(--review-toc-tail, 0px))`,
           [narrowViewport]: "22px 8px calc(96px + var(--review-toc-tail, 0px))",
         },
       },

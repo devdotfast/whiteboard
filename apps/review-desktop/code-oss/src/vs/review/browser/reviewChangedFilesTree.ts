@@ -72,7 +72,7 @@ registerColor(
   localize("review.gitDecoration.renamed", "Color for renamed file resources."),
 );
 
-const CHANGED_FILE_ROW_HEIGHT = 22;
+const CHANGED_FILE_ROW_HEIGHT = 24;
 
 interface ChangedFilesTreeTemplate {
   readonly row: HTMLElement;

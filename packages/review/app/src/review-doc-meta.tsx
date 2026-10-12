@@ -263,7 +263,7 @@ function relativeTimeLabel(timeMs: number, nowMs: number): string | null {
 const styles = stylex.create({
   header: {
     width: `min(100%, ${tokens.reviewProseMaxWidth})`,
-    margin: "28px auto 0",
+    margin: "0 auto",
     display: "flex",
     flexDirection: "column",
     gap: "12px",
