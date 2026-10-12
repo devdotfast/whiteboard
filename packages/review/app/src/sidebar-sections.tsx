@@ -8,22 +8,36 @@ import * as stylex from "@stylexjs/stylex";
 import {
   type MouseEvent,
   type ReactElement,
+  type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
 } from "react";
 
 import { BoardIcon, PullRequestStateIcon } from "./board-icons";
 import { ChangedBadge } from "./changed-badge";
+import { FolderLabel } from "./folder-label";
+import { countLabel } from "./format";
 import { reviewPreferenceKey } from "./host/review-client";
 import { LensProgress, LensRows } from "./lens-list";
 import type { ReviewTocEntry } from "./review-document-headings";
+import { worktreeLabel } from "./review-home-model";
 import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
-import { fontSize, fontWeight, radius } from "./scale.stylex";
+import { fontSize, fontWeight, radius, tracking } from "./scale.stylex";
 import { ThreadsSectionBody } from "./sidebar-threads";
 import { tokens } from "./tokens.stylex";
-import { TooltipHostContext } from "./use-tooltip";
-import { cappedTree, showsChanged, whiteboardTree } from "./whiteboard-tree";
+import { TooltipHostContext, useTooltip } from "./use-tooltip";
+import {
+  RECENT_SHOWN,
+  type WhiteboardBranch,
+  boardFamily,
+  cappedTree,
+  recentBoards,
+  showsChanged,
+  whiteboardTree,
+} from "./whiteboard-tree";
 
 export interface ProjectBoards {
   project: ReviewApiSummary["project"] | null;
@@ -205,6 +219,7 @@ function BoardRow({
   changed = Boolean(board.changed) && board.reviewId !== current,
   holdsCurrent = false,
   parentTitle,
+  folder,
   onToggle,
   onOpen,
 }: {
@@ -218,6 +233,8 @@ function BoardRow({
   holdsCurrent?: boolean;
   /** In search results, a child's parent, named before it. */
   parentTitle?: string | false;
+  /** In Recent, the folder of the board's checkout, at the row's end. */
+  folder?: string;
   onToggle?(): void;
   onOpen(reviewId: string, event: MouseEvent): void;
 }): ReactElement {
@@ -288,14 +305,25 @@ function BoardRow({
             {boardTitle(board.title)}
           </span>
         )}
-        <span {...stylex.props(styles.meta, isCurrent && styles.metaCurrent)}>
-          {board.origin?.pullRequestNumber ? (
-            <PullRequestStateIcon
-              number={board.origin.pullRequestNumber}
-              state={board.pullRequestState}
-            />
-          ) : null}
-        </span>
+        {/* With a folder at the end, a PR's state sits before it and no
+            empty lane is kept. */}
+        {folder && !board.origin?.pullRequestNumber ? null : (
+          <span
+            {...stylex.props(
+              styles.meta,
+              isCurrent && styles.metaCurrent,
+              Boolean(folder) && styles.metaBeforeFolder,
+            )}
+          >
+            {board.origin?.pullRequestNumber ? (
+              <PullRequestStateIcon
+                number={board.origin.pullRequestNumber}
+                state={board.pullRequestState}
+              />
+            ) : null}
+          </span>
+        )}
+        {folder ? <FolderLabel name={folder} /> : null}
       </button>
     </div>
   );
@@ -400,6 +428,25 @@ function SectionBody(props: ReviewSidebarSectionProps): ReactElement | null {
 
   if (props.section === "threads") return <ThreadsSectionBody {...props} />;
 
+  if (props.section === "recent")
+    return (
+      <RecentBoards
+        boards={recentBoards(
+          props.recent ?? props.project?.boards ?? [],
+          props.reviewId,
+        )}
+        current={props.reviewId}
+        onOpen={(id, event) =>
+          props.onOpenBoard(
+            id,
+            !(event.metaKey || event.ctrlKey || event.shiftKey),
+          )
+        }
+      />
+    );
+
+  if (props.section === "family") return <FamilySectionBody {...props} />;
+
   if (props.section === "contents")
     return (
       <ContentsList
@@ -412,6 +459,12 @@ function SectionBody(props: ReviewSidebarSectionProps): ReactElement | null {
   return <WhiteboardsSectionBody {...props} />;
 }
 
+/**
+ * The top of the Whiteboard tab: a search over every board in the
+ * project, its matches listed under it. Desktop puts the board's CONTENTS
+ * next, then THIS BOARD (the open board's family), then RECENT (the boards
+ * opened last); while a search shows matches, THIS BOARD steps aside.
+ */
 function WhiteboardsSectionBody({
   project,
   reviewId,
@@ -420,7 +473,7 @@ function WhiteboardsSectionBody({
   const [query, setQuery] = useState("");
 
   return (
-    <>
+    <div data-searching={query.trim() ? "" : undefined}>
       <label {...stylex.props(styles.search)}>
         <svg
           width="13"
@@ -444,15 +497,312 @@ function WhiteboardsSectionBody({
           }}
         />
       </label>
-      <WhiteboardsList
-        project={project ?? null}
-        current={reviewId}
-        query={query}
-        onOpen={onOpenBoard}
-      />
+      {query.trim() ? (
+        <WhiteboardsList
+          project={project ?? null}
+          current={reviewId}
+          query={query}
+          onOpen={onOpenBoard}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** THIS BOARD: the open board's family, and the "+" for a new whiteboard. */
+function FamilySectionBody({
+  project,
+  reviewId,
+  onOpenBoard,
+  onNewWhiteboard,
+  newWhiteboardShortcut,
+}: ReviewSidebarSectionProps): ReactElement {
+  const family = boardFamily(project?.boards ?? [], reviewId);
+
+  const open = (id: string, event: MouseEvent) =>
+    onOpenBoard(id, !(event.metaKey || event.ctrlKey || event.shiftKey));
+
+  return (
+    <>
+      <GroupHeader
+        title="This board"
+        count={family ? familyCount(family, reviewId) : undefined}
+      >
+        {onNewWhiteboard ? (
+          <NewWhiteboardButton
+            shortcut={newWhiteboardShortcut}
+            onClick={onNewWhiteboard}
+          />
+        ) : null}
+      </GroupHeader>
+      {family ? (
+        <BoardFamily
+          key={family.board.reviewId}
+          family={family}
+          current={reviewId}
+          onOpen={open}
+        />
+      ) : null}
     </>
   );
 }
+
+/** "3 of 8" on a child; a parent counts its children. */
+function familyCount(family: WhiteboardBranch, current: string) {
+  const index = family.children.findIndex(
+    (child) => child.reviewId === current,
+  );
+
+  if (index >= 0) return `${index + 1} of ${family.children.length}`;
+
+  return family.children.length
+    ? countLabel(family.children.length, "step")
+    : undefined;
+}
+
+/** A group's title in the pane's header type, its count faint after it. */
+function GroupHeader({
+  title,
+  count,
+  children,
+}: {
+  title: string;
+  count?: ReactNode;
+  children?: ReactNode;
+}): ReactElement {
+  return (
+    <div {...stylex.props(styles.groupHeader)}>
+      <span {...stylex.props(styles.groupTitle)}>{title}</span>
+      {count ? <span {...stylex.props(styles.groupCount)}>{count}</span> : null}
+      {children ? (
+        <span {...stylex.props(styles.groupAction)}>{children}</span>
+      ) : null}
+    </div>
+  );
+}
+
+/** The "+" that starts a new whiteboard, as ⌘N does. */
+function NewWhiteboardButton({
+  shortcut,
+  onClick,
+}: {
+  shortcut?: string;
+  onClick(): void;
+}): ReactElement {
+  const tooltip = useTooltip("New whiteboard", {
+    ...(shortcut && { detail: shortcut }),
+  });
+
+  return (
+    <button
+      ref={tooltip}
+      type="button"
+      aria-label="New whiteboard"
+      {...stylex.props(styles.headerAction)}
+      onClick={onClick}
+    >
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+        <path d="M6 2.25 V9.75 M2.25 6 H9.75" />
+      </svg>
+    </button>
+  );
+}
+
+/** The open board's parent, or the board itself at top level, with its
+ * children in order. */
+function BoardFamily({
+  family,
+  current,
+  onOpen,
+}: {
+  family: WhiteboardBranch;
+  current: string;
+  onOpen(reviewId: string, event: MouseEvent): void;
+}): ReactElement {
+  const [expanded, setExpanded] = useState(true);
+  const parent = family.children.length > 0;
+
+  return (
+    <ul aria-label="This board" {...stylex.props(styles.list)}>
+      <li>
+        <BoardRow
+          board={family.board}
+          current={current}
+          expanded={parent ? expanded : undefined}
+          changed={showsChanged(family, current, !expanded)}
+          holdsCurrent={
+            !expanded &&
+            family.children.some((child) => child.reviewId === current)
+          }
+          onToggle={() => setExpanded(!expanded)}
+          onOpen={onOpen}
+        />
+        {parent && expanded ? (
+          <FamilyChildren family={family} current={current} onOpen={onOpen} />
+        ) : null}
+      </li>
+    </ul>
+  );
+}
+
+/**
+ * A parent's children under its row, which stays put: past eight and a half
+ * rows they scroll in a capped area, the half row showing there is more.
+ * Soft fades mark the edges with more beyond them. The open board starts
+ * centred, and again when another opens; the reader's scrolling is theirs.
+ */
+function FamilyChildren({
+  family,
+  current,
+  onOpen,
+}: {
+  family: WhiteboardBranch;
+  current: string;
+  onOpen(reviewId: string, event: MouseEvent): void;
+}): ReactElement {
+  const scroller = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState({ above: false, below: false });
+
+  const measure = useCallback(() => {
+    const element = scroller.current;
+
+    if (!element) return;
+    const above = element.scrollTop > 0;
+
+    const below =
+      element.scrollTop + element.clientHeight < element.scrollHeight - 1;
+
+    setMore((last) =>
+      last.above === above && last.below === below ? last : { above, below },
+    );
+  }, []);
+
+  // The open board this area was last centred on; it centres once per
+  // board, as soon as it is laid out, and then leaves scrolling alone.
+  const centred = useRef<string | null>(null);
+
+  const centre = useCallback(() => {
+    const element = scroller.current;
+    const row = element?.querySelector<HTMLElement>("[aria-current]");
+
+    if (!element || !row || !element.clientHeight) return;
+    centred.current = current;
+    element.scrollTop =
+      row.offsetTop - (element.clientHeight - row.offsetHeight) / 2;
+  }, [current]);
+
+  useLayoutEffect(() => {
+    centred.current = null;
+    centre();
+    measure();
+  }, [current, family.board.reviewId, centre, measure]);
+
+  useEffect(() => {
+    const element = scroller.current;
+
+    if (!element) return;
+
+    const observer = new ResizeObserver(() => {
+      // Mounted hidden, it centres when it first shows.
+      if (centred.current !== current) centre();
+      measure();
+    });
+
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [centre, current, measure]);
+
+  return (
+    <div {...stylex.props(styles.familyViewport)}>
+      <div
+        ref={scroller}
+        data-family-scroller=""
+        {...stylex.props(styles.familyScroller)}
+        onScroll={measure}
+      >
+        <ul
+          aria-label={`In ${boardTitle(family.board.title)}`}
+          {...stylex.props(styles.children)}
+        >
+          {family.children.map((child) => (
+            <li key={child.reviewId}>
+              <BoardRow
+                board={child}
+                current={current}
+                nested
+                onOpen={onOpen}
+              />
+            </li>
+          ))}
+        </ul>
+      </div>
+      {more.above ? (
+        <div data-fade="top" {...stylex.props(styles.fade, styles.fadeTop)} />
+      ) : null}
+      {more.below ? (
+        <div
+          data-fade="bottom"
+          {...stylex.props(styles.fade, styles.fadeBottom)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+/** The boards opened last, five until the reader asks for the rest. */
+function RecentBoards({
+  boards,
+  current,
+  onOpen,
+}: {
+  boards: readonly ReviewApiSummary[];
+  current: string;
+  onOpen(reviewId: string, event: MouseEvent): void;
+}): ReactElement | null {
+  const [showAll, setShowAll] = useState(false);
+
+  if (!boards.length) return null;
+  const hidden = boards.length - RECENT_SHOWN;
+
+  return (
+    <>
+      <GroupHeader title="Recent" />
+      <ul aria-label="Recent" {...stylex.props(styles.list)}>
+        {(showAll ? boards : boards.slice(0, RECENT_SHOWN)).map((board) => (
+          <li key={board.reviewId}>
+            <BoardRow
+              board={board}
+              current={current}
+              // Home's worktree label, else its project's name.
+              folder={worktreeLabel(board) || board.project?.name}
+              onOpen={onOpen}
+            />
+          </li>
+        ))}
+        {hidden > 0 ? (
+          <li>
+            <button
+              type="button"
+              aria-expanded={showAll}
+              data-show-more=""
+              {...stylex.props(styles.row, styles.treeRow, styles.more)}
+              onClick={() => setShowAll(!showAll)}
+            >
+              <span {...stylex.props(styles.chevronSlot)} />
+              <span {...stylex.props(styles.moreText)}>
+                {showAll ? "Show less" : `Show ${hidden} more`}
+              </span>
+            </button>
+          </li>
+        ) : null}
+      </ul>
+    </>
+  );
+}
+
+/** A board row's height, which the family's cap counts in. */
+const FAMILY_ROW = "24px";
 
 const styles = stylex.create({
   lenses: {
@@ -572,12 +922,88 @@ const styles = stylex.create({
     minWidth: 0,
   },
   children: { margin: 0, padding: 0, listStyle: "none" },
+  familyViewport: { position: "relative" },
+  // Eight and a half rows; a thin scrollbar only while hovered.
+  familyScroller: {
+    position: "relative",
+    maxHeight: `calc(8.5 * ${FAMILY_ROW})`,
+    overflowY: "auto",
+    overscrollBehavior: "contain",
+    scrollbarWidth: "thin",
+    scrollbarColor: {
+      default: "transparent transparent",
+      ":hover": `${tokens.ghost} transparent`,
+    },
+  },
+  fade: {
+    position: "absolute",
+    insetInline: 0,
+    height: "28px",
+    pointerEvents: "none",
+  },
+  fadeTop: {
+    top: 0,
+    backgroundImage: `linear-gradient(to bottom, ${tokens.tray}, transparent)`,
+  },
+  fadeBottom: {
+    bottom: 0,
+    backgroundImage: `linear-gradient(to top, ${tokens.tray}, transparent)`,
+  },
   faint: { color: tokens.inkFaint },
   pathParent: { flex: "0 1 auto" },
   separator: { flexShrink: 0, color: tokens.inkFaint },
   // The parent's title gives way first; the board's own keeps most of the row.
   pathLeaf: { flex: "0 0 auto", maxWidth: "80%" },
   moreIcon: { marginLeft: "2px" },
+  metaBeforeFolder: { width: "auto" },
+  groupHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    height: "28px",
+    marginTop: "6px",
+    paddingInline: "14px 12px",
+    color: tokens.inkMuted,
+    fontFamily: tokens.chromeFont,
+    fontSize: fontSize.small,
+    lineHeight: "14px",
+  },
+  groupTitle: {
+    fontWeight: fontWeight.semibold,
+    letterSpacing: tracking.caps,
+    textTransform: "uppercase",
+    whiteSpace: "nowrap",
+  },
+  // A count in Inter; a branch range in it is code.
+  groupCount: {
+    minWidth: 0,
+    overflow: "hidden",
+    color: tokens.inkFaint,
+    fontVariantNumeric: "tabular-nums",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  groupAction: { display: "flex", marginLeft: "auto" },
+  headerAction: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "20px",
+    height: "20px",
+    padding: 0,
+    borderWidth: 0,
+    borderRadius: radius.small,
+    backgroundColor: {
+      default: "transparent",
+      ":hover": tokens.markerTint,
+    },
+    color: { default: tokens.inkMuted, ":hover": tokens.ink },
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.3,
+    strokeLinecap: "round",
+    cursor: "pointer",
+  },
   moreText: { marginLeft: "6px" },
   entry: { height: "24px" },
   // A subsection's text lines up with its section's, past the number.
@@ -597,7 +1023,8 @@ const styles = stylex.create({
     flexShrink: 0,
     width: "12px",
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
+    fontVariantNumeric: "tabular-nums",
     fontSize: fontSize.small,
     lineHeight: "14px",
   },
