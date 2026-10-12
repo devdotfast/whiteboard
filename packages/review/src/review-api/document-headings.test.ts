@@ -18,6 +18,7 @@ describe("documentHeadings", () => {
         level: "h2",
         block,
         index: 0,
+        depth: 1,
       },
     ]);
   });
@@ -57,6 +58,43 @@ describe("documentHeadings", () => {
     expect(documentHeadings(blocks)).toMatchObject([
       { id: "details", text: "Details", level: "h2", block: blocks[0] },
       { id: "details-2", text: "Details", level: "h2", block: nested },
+    ]);
+  });
+
+  it("puts each heading at its depth: sections by nesting, Markdown under its section", () => {
+    const blocks: Block[] = [
+      {
+        id: "b1",
+        type: "section",
+        title: "One",
+        children: [
+          {
+            id: "b2",
+            type: "section",
+            title: "Two",
+            children: [
+              {
+                id: "b3",
+                type: "markdown",
+                markdown: "## Topic\n\n### Detail\n",
+              },
+              { id: "b4", type: "section", title: "Three", children: [] },
+            ],
+          },
+        ],
+      },
+      { id: "b5", type: "section", title: "Next", children: [] },
+    ];
+
+    expect(
+      documentHeadings(blocks).map(({ text, depth }) => [text, depth]),
+    ).toEqual([
+      ["One", 1],
+      ["Two", 2],
+      ["Topic", 3],
+      ["Detail", 4],
+      ["Three", 3],
+      ["Next", 1],
     ]);
   });
 });

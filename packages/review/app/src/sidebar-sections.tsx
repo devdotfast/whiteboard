@@ -312,10 +312,14 @@ export function ContentsList({
   active?: string;
   onOpen(headingId: string): void;
 }): ReactElement {
-  // Sections are numbered; their subsections are indented under them.
+  // Top-level sections are numbered; each deeper section is indented one
+  // step under its parent.
+  const depth = (entry: ReviewTocEntry) =>
+    entry.depth ?? (entry.level === "h2" ? 1 : 2);
+
   const sectionNumbers = new Map(
     entries
-      .filter((entry) => entry.level === "h2")
+      .filter((entry) => depth(entry) === 1)
       .map((entry, index) => [entry.id, index + 1]),
   );
 
@@ -329,12 +333,13 @@ export function ContentsList({
             {...stylex.props(
               styles.row,
               styles.entry,
-              entry.level === "h3" && styles.nested,
+              depth(entry) > 1 && styles.nested,
+              depth(entry) > 1 && styles.indent(depth(entry) - 2),
               entry.id === active && styles.rowCurrent,
             )}
             onClick={() => onOpen(entry.id)}
           >
-            {entry.level === "h2" ? (
+            {depth(entry) === 1 ? (
               <span
                 {...stylex.props(
                   styles.entryNumber,
@@ -348,7 +353,7 @@ export function ContentsList({
               {...stylex.props(
                 styles.title,
                 styles.entryText,
-                entry.level === "h3" && styles.entryTextNested,
+                depth(entry) > 1 && styles.entryTextNested,
                 entry.id === active && styles.entryTextCurrent,
               )}
             >
@@ -577,6 +582,8 @@ const styles = stylex.create({
   entry: { height: "24px" },
   // A subsection's text lines up with its section's, past the number.
   nested: { height: "24px", paddingLeft: "30px" },
+  // Each level below a subsection indents one more step.
+  indent: (steps: number) => ({ paddingLeft: `${30 + 16 * steps}px` }),
   more: {
     height: "24px",
     cursor: "pointer",
