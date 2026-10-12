@@ -17,8 +17,6 @@ import { IThemeService } from '../../../platform/theme/common/themeService.js';
 import { EDITOR_GROUP_HEADER_TABS_BACKGROUND, TITLE_BAR_ACTIVE_BACKGROUND, TITLE_BAR_ACTIVE_FOREGROUND, TITLE_BAR_INACTIVE_BACKGROUND, TITLE_BAR_INACTIVE_FOREGROUND } from '../../../workbench/common/theme.js';
 import { isLinux, isMacintosh, isNative, isWeb, platformLocale } from '../../../base/common/platform.js';
 import { $, addDisposableListener, append, getWindow, getWindowId, prepend } from '../../../base/browser/dom.js';
-import { renderIcon } from '../../../base/browser/ui/iconLabel/iconLabels.js';
-import { Codicon } from '../../../base/common/codicons.js';
 import { KeyCode } from '../../../base/common/keyCodes.js';
 import { StandardKeyboardEvent } from '../../../base/browser/keyboardEvent.js';
 import { ICommandService } from '../../../platform/commands/common/commands.js';
@@ -152,6 +150,7 @@ export class ReviewTitlebarPart extends Part implements ITitlebarPart {
 		if (isLinux && isNative) {
 			this._register(this.instantiationService.createInstance(ReviewLinuxTitlebar, this.leftContent, this.windowControlsContainer, getWindow(parent)));
 		}
+		this.createFileTreeToggle();
 		const navigationContainer = append(this.leftContent, $('div.review-titlebar-navigation'));
 		const windowTitle = this._register(this.instantiationService.createInstance(WindowTitle, getWindow(parent)));
 		const navigationControl = this._register(this.instantiationService.createInstance(
@@ -160,31 +159,41 @@ export class ReviewTitlebarPart extends Part implements ITitlebarPart {
 			getDefaultHoverDelegate('mouse'),
 		));
 		append(navigationContainer, navigationControl.element);
-		this.createFileTreeToggle();
 
 		this.updateStyles();
 		return this.element;
 	}
 
 	/**
-	 * The file-tree toggle, right of the navigation arrows.
-	 *
-	 * The button holds a fixed 22px slot at all times, even with no tree to
-	 * toggle. That keeps the left cluster a constant width, and the cluster width
-	 * is what `--review-chrome-left-width` reports to the editor tab strip — so
-	 * fading the button in never moves a tab. Both icons render here and CSS picks
-	 * one, which keeps this part free of any explorer state subscription.
+	 * The sidebar toggle, left of the navigation arrows. CSS hides it on Home
+	 * and picks which icon shows, so this part needs no sidebar state.
 	 */
 	private createFileTreeToggle(): void {
 		const toggle = append(this.leftContent, $('div.review-titlebar-file-tree-toggle', {
 			role: 'button',
 			tabindex: '0',
-			title: localize('review.toggleFileTree.tooltip', "Toggle File Tree"),
-			'aria-label': localize('review.toggleFileTree.tooltip', "Toggle File Tree"),
+			title: localize('review.toggleFileTree.tooltip', "Toggle Sidebar"),
+			'aria-label': localize('review.toggleFileTree.tooltip', "Toggle Sidebar"),
 		}));
 
-		append(toggle, renderIcon(Codicon.layoutSidebarLeft)).classList.add('review-file-tree-icon-open');
-		append(toggle, renderIcon(Codicon.layoutSidebarLeftOff)).classList.add('review-file-tree-icon-closed');
+		// A rounded window with a narrow left panel.
+		const namespace = 'http://www.w3.org/2000/svg';
+		const icon = toggle.ownerDocument.createElementNS(namespace, 'svg');
+		icon.setAttribute('width', '16');
+		icon.setAttribute('height', '16');
+		icon.setAttribute('viewBox', '0 0 16 16');
+		icon.setAttribute('aria-hidden', 'true');
+		icon.classList.add('review-sidebar-toggle-icon');
+		const frame = toggle.ownerDocument.createElementNS(namespace, 'rect');
+		for (const [name, value] of [['x', '2'], ['y', '3'], ['width', '12'], ['height', '10'], ['rx', '2']]) frame.setAttribute(name, value);
+		const divider = toggle.ownerDocument.createElementNS(namespace, 'path');
+		divider.setAttribute('d', 'M6 3 V13');
+		// The left panel, filled while the sidebar is open (review.css).
+		const panel = toggle.ownerDocument.createElementNS(namespace, 'path');
+		panel.setAttribute('d', 'M6 3 H4 Q2 3 2 5 V11 Q2 13 4 13 H6 Z');
+		panel.classList.add('review-sidebar-toggle-panel');
+		icon.append(panel, frame, divider);
+		toggle.appendChild(icon);
 
 		const run = () => void this.commandService.executeCommand('review.toggleFileTree');
 		this._register(addDisposableListener(toggle, 'click', run));

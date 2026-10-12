@@ -2445,6 +2445,39 @@ describe("snapshot authoring", () => {
     expect(store.read(reviewId).lastEdit?.threadId).toBeUndefined();
   });
 
+  it("lists the open board's project and its whiteboards for its sidebar", async () => {
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+    const other = path.join(directory, "other");
+    execFileSync("git", ["init", "-q", other]);
+
+    const board = async (title: string, at: string) =>
+      (
+        await store.execute(
+          request({
+            type: "create",
+            title,
+            target: {
+              kind: "project",
+              repositoryId: store.registerRepository(at).id,
+            },
+          }),
+        )
+      ).reviewId;
+
+    const plan = await board("Plan", checkout);
+    await board("Notes", checkout);
+    await board("Elsewhere", other);
+
+    const api = createReviewApi(store);
+    const listed = await (await api.request(`/${plan}/project`)).json();
+
+    expect(listed.project).toMatchObject({ name: "checkout" });
+    expect(
+      listed.boards.map((entry: { title: string }) => entry.title).sort(),
+    ).toEqual(["Notes", "Plan"]);
+  });
+
   it("serializes edits through async validation and preserves different-field patches", async () => {
     const { reviewId } = await create();
 

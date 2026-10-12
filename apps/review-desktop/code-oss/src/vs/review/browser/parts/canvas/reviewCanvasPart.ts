@@ -7,11 +7,9 @@ import { reviewBottomScrollPadding } from "../../reviewScrollPadding.js";
 import { $, addDisposableListener, getWindow, type Dimension } from "../../../../base/browser/dom.js";
 import type { IHoverOptions, IHoverWidget } from "../../../../base/browser/ui/hover/hover.js";
 import { HoverPosition } from "../../../../base/browser/ui/hover/hoverWidget.js";
-import { createTrustedTypesPolicy } from "../../../../base/browser/trustedTypes.js";
 import type { CancellationToken } from "../../../../base/common/cancellation.js";
 import { Emitter } from "../../../../base/common/event.js";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable, type IDisposable } from "../../../../base/common/lifecycle.js";
-import { FileAccess } from "../../../../base/common/network.js";
 import { basename } from "../../../../base/common/path.js";
 import type { ICursorPositionChangedEvent } from "../../../../editor/common/cursorEvents.js";
 import { ICommandService } from "../../../../platform/commands/common/commands.js";
@@ -67,7 +65,6 @@ import type {
 	ReviewCanvasHomeHost,
 	ReviewCanvasInstallActions,
 	ReviewCanvasInstallContent,
-	ReviewCanvasModule,
 	ReviewCanvasOnboarding,
 	ReviewCanvasSettingsContent,
 	ReviewCanvasSetupActions,
@@ -75,6 +72,7 @@ import type {
 	ReviewCliInstallStatus,
 	ReviewCtrlTabChoice,
 	ReviewDiffFileWire,
+	ReviewDiffViewFactory,
 	ReviewOpenFilesIn,
 	ReviewOpenFilesInChoice,
 	ReviewDocumentWidthChoice,
@@ -114,21 +112,11 @@ import { IReviewTelemetryService } from "../../../services/reviewTelemetryServic
 import "../../media/review.css";
 import { ReviewSessionTelemetry } from "../../reviewSessionTelemetry.js";
 import { applyReviewThemeChoice, currentReviewThemeChoice } from "../../reviewThemeChoice.js";
+import { type ReviewCanvasAssetsModule, loadReviewCanvasAssets } from "./reviewCanvasAssets.js";
 import { ReviewCanvasEditorInput } from "./reviewCanvasEditorInput.js";
 import { remoteEntry, withRemoteEntry } from "./reviewRemoteEntry.js";
 import { reviewRemoteHostsSettings } from "../../reviewRemoteHostsSettings.js";
-
-interface ReviewCanvasAssetsModule extends ReviewCanvasModule {
-	readonly clearReviewViewState: (config: ReviewRuntimeConfig) => void;
-	readonly reviewWasmUrl: string;
-	readonly reviewStylesheetUrls: readonly string[];
-}
-
-interface ReviewCanvasGlobalThis {
-	__zod_globalConfig?: {
-		jitless?: boolean;
-	};
-}
+import { IReviewSidebarPartsService } from "../sidebar/reviewSidebarPart.js";
 
 interface ReviewCanvasLoadLifecycle {
 	ready(): void;
@@ -136,10 +124,6 @@ interface ReviewCanvasLoadLifecycle {
 }
 
 type ReviewCanvasState = "home" | "connecting" | "active" | "completed" | "error";
-
-const reviewCanvasPolicy = createTrustedTypesPolicy("reviewCanvas", {
-	createScriptURL: (value: string) => value,
-});
 
 const requestReviewApi: typeof fetch = (url, init) => fetch(url, init);
 
@@ -179,7 +163,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	private readonly refreshProgress: LongRunningOperation;
 	private renderedInput: ReviewCanvasEditorInput | undefined;
 	private readyInput: ReviewCanvasEditorInput | undefined;
-	private assetsPromise: Promise<ReviewCanvasAssetsModule> | null = null;
 	private readonly modelSubscription = this._register(new MutableDisposable());
 	private readonly inlineEditors: ReviewEmbeddedEditors;
 	private readonly diffViews: ReviewDiffViewService;
@@ -199,6 +182,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		@IReviewApiCatalogService private readonly apiCatalog: IReviewApiCatalogService,
 		@IReviewRemoteHostsService private readonly remoteHosts: IReviewRemoteHostsService,
 		@IReviewVerbsService private readonly verbs: IReviewVerbsService,
+		@IReviewSidebarPartsService private readonly sidebar: IReviewSidebarPartsService,
 		@IReviewCanvasEditorTabsService
 		private readonly tabsService: IReviewCanvasEditorTabsService,
 		@IInstantiationService
@@ -261,6 +245,14 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		this.refreshProgress = this._register(new LongRunningOperation(editorProgressService));
 		this.diffViews = this._register(
 			reviewInstantiationService.createInstance(ReviewDiffViewService, this.inlineEditors),
+		);
+		// Pass sidebar events on to the board this pane shows.
+		this._register(
+			this.sidebar.onDidEmitSurfaceEvent((event) => {
+				if ((event.event === "revealHeading" || event.event === "selectLens" || event.event === "markLens") && event.reviewId === this.apiContent?.reviewId) this.surfaceEvents.fire(event);
+				// The folded Lenses and Files headers open the board's Diff view.
+				if (event.event === "showReviewView" && event.reviewId === this.apiContent?.reviewId) this.surfaceEvents.fire(event);
+			}),
 		);
 		this._register(
 			verbs.onDidEmitSurfaceEvent((event) => {
@@ -459,6 +451,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						openSource: (source, range) => this.apiSource.open(source, range),
 						bridge: {
 							...source,
+							diffView: this.withSidebarFileTree(reviewId, source.diffView),
 							...this.sharedBridge(generation, () => {
 								this.readyInput = input;
 								this.sessionTelemetry.presented();
@@ -1140,32 +1133,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	private loadAssets(): Promise<ReviewCanvasAssetsModule> {
-		this.assetsPromise ??= this.importAssets().catch((error) => {
-			this.assetsPromise = null;
-			throw error;
-		});
-		return this.assetsPromise;
-	}
-
-	private async importAssets(): Promise<ReviewCanvasAssetsModule> {
-		// Zod 4 probes the Function constructor unless its CSP-safe mode is set
-		// before the canvas module graph is evaluated. Chromium reports the caught
-		// probe as a Trusted Types violation, so configure the bundled authoring
-		// runtime before importing it instead of weakening the workbench policy.
-		const canvasGlobal = globalThis as ReviewCanvasGlobalThis;
-		canvasGlobal.__zod_globalConfig ??= {};
-		canvasGlobal.__zod_globalConfig.jitless = true;
-
-		const url = FileAccess.asBrowserUri("vs/review/canvas/canvas-loader.js").toString(true);
-		const trustedUrl = reviewCanvasPolicy?.createScriptURL(url) ?? (url as string);
-		const assets = (await import(
-			/* webpackIgnore: true */ trustedUrl as unknown as string
-		)) as ReviewCanvasAssetsModule;
-		if (typeof assets.mountReviewCanvas !== "function") {
-			throw new Error("Whiteboard canvas bundle has no mount function.");
-		}
-		await Promise.all(assets.reviewStylesheetUrls.map((stylesheet) => loadStylesheet(document, stylesheet)));
-		return assets;
+		return loadReviewCanvasAssets();
 	}
 
 	private readonly setupTooltip: NonNullable<ReviewCanvasBridge["setupTooltip"]> = (target, content, tooltip) => {
@@ -1236,6 +1204,33 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return { linkedFrom, movesUp };
 	}
 
+	/**
+	 * Wraps the diff view factory so a view can put its file tree in the
+	 * sidebar's Files section. The view still owns the tree.
+	 */
+	private withSidebarFileTree(reviewId: string, factory: ReviewDiffViewFactory): ReviewDiffViewFactory {
+		return {
+			files: factory.files,
+			create: (spec) => {
+				if (!spec.sidebarFileTree) return factory.create(spec);
+				const host = this.sidebar.fileTreeHost(reviewId);
+				const view = factory.create({ ...spec, fileTreeContainer: host.element });
+				return {
+					focus: () => view.focus(),
+					setProgress: (progress) => view.setProgress?.(progress),
+					revealSource: (source, sectionId) => view.revealSource?.(source, sectionId),
+					revealFile: (path, options) => view.revealFile?.(path, options),
+					onDidError: (listener) => view.onDidError(listener),
+					setFileTreeHidden: (hidden) => host.setHidden(hidden),
+					dispose: () => {
+						view.dispose();
+						host.dispose();
+					},
+				};
+			},
+		};
+	}
+
 	/** Hands a pending block reveal to the canvas once it shows that board. */
 	private revealPending(): void {
 		const pending = this.pendingReveal;
@@ -1263,6 +1258,11 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		| "notify"
 		| "ready"
 		| "reportDiagnostic"
+		| "reportSidebar"
+		| "reportSidebarLenses"
+		| "sidebarShowsBoard"
+		| "onDidChangeSidebarShowsBoard"
+		| "sidebarLensList"
 	> {
 		return {
 			subscribe: (listener) => this.surfaceEvents.event(listener),
@@ -1278,6 +1278,15 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				this.targetDocument.body.dataset["reviewCanvasReady"] = "true";
 				onReady();
 				this.revealPending();
+			},
+			sidebarShowsBoard: () => this.sidebar.showsBoard(this.apiContent?.reviewId),
+			onDidChangeSidebarShowsBoard: (listener) => this.sidebar.onDidChangeBoard(listener),
+			sidebarLensList: () => this.sidebar.lensList(this.apiContent?.reviewId),
+			reportSidebarLenses: (lenses) => {
+				if (generation === this.loadGeneration) this.sidebar.reportLenses(this.apiContent?.reviewId, lenses);
+			},
+			reportSidebar: (state) => {
+				if (generation === this.loadGeneration) this.sidebar.report(this.apiContent?.reviewId, state);
 			},
 			reportDiagnostic: (diagnostic) => {
 				if (generation === this.loadGeneration && diagnostic.level === "error") {
@@ -1380,18 +1389,3 @@ export class ReviewCanvasParts extends Disposable implements IReviewCanvasPartsS
 	}
 }
 
-function loadStylesheet(document: Document, url: string): Promise<void> {
-	const existing = [...document.querySelectorAll<HTMLLinkElement>('link[data-review-canvas-stylesheet="true"]')].find(
-		(link) => link.href === url,
-	);
-	if (existing) return Promise.resolve();
-	return new Promise((resolve, reject) => {
-		const link = document.createElement("link");
-		link.rel = "stylesheet";
-		link.href = url;
-		link.dataset["reviewCanvasStylesheet"] = "true";
-		link.addEventListener("load", () => resolve(), { once: true });
-		link.addEventListener("error", () => reject(new Error(`Whiteboard canvas stylesheet failed: ${url}`)), { once: true });
-		document.head.appendChild(link);
-	});
-}

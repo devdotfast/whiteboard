@@ -1,6 +1,6 @@
 /**
- * Scroll-synced highlighting shared by the tour feed and the contents rail.
- * Both list anchored targets in reading order and want the same answers:
+ * Scroll-synced highlighting for the tour feed, and the tail room it and the
+ * page's Contents need. Both list anchored targets in reading order and want the same answers:
  * which target is being read at the current scroll position, and how much
  * tail room the scroller needs so the last target can be reached at all.
  */

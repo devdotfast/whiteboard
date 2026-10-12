@@ -1791,6 +1791,26 @@ export function createReviewApi(
     return context.json({ layers });
   });
 
+  // The board's project and its whiteboards, for the board's sidebar.
+  app.get("/:id/project", (context) => {
+    const id = context.req.param("id");
+
+    if (isShared(id)) return context.json({ project: null, boards: [] });
+
+    const project = store.summary(id)?.project ?? null;
+
+    return context.json({
+      project,
+      boards: project
+        ? store
+            .list()
+            .filter(
+              (board) => board.project?.id === project.id && !board.trashedAt,
+            )
+            .map(withPullRequestState)
+        : [],
+    });
+  });
   app.get("/:id/links", (context) => {
     const id = context.req.param("id");
 
