@@ -41,6 +41,9 @@ export interface ReviewPanelState {
   askAnchor: AskAnchor | null;
   /** How big the window was made; until then, as wide as the docked panel. */
   askSize: AskSize | null;
+  /** The column is put away, whatever it holds: what is there stays
+   * mounted, a working thread works on, and it all shows again as it was. */
+  columnHidden: boolean;
   motion: ReviewPanelMotion;
 }
 
@@ -120,6 +123,9 @@ export interface ReviewPanelActions {
   dockAsk: (key: number) => void;
   /** Moves the window, resizing it too. */
   placeAsk: (anchor: AskAnchor, size?: AskSize) => void;
+  /** Puts the column away, or brings back what it held; if it held
+   * nothing, `fallback` opens in it. */
+  toggleColumn: (fallback: AskView) => void;
 }
 
 export interface AskOpenOptions {
@@ -167,6 +173,8 @@ export interface AskRestore extends Pick<
   ReviewPanelState,
   "askColumn" | "askWindow" | "askAnchor" | "askSize"
 > {
+  /** Kept for the window rather than the project. */
+  columnHidden?: boolean;
   asks: { key: number; view: AskView }[];
 }
 
@@ -216,8 +224,16 @@ export function createReviewPanelStore({
     { from, replace = false, keepFocus = false }: AskOpenOptions,
   ): Partial<ReviewPanelState> => {
     // The Ask asking for its own view wants it afresh, as to reconnect.
-    if (state.asks.some((ask) => ask.key !== from && showsView(ask, view)))
-      return { motion: "live" };
+    const showing = state.asks.find(
+      (ask) => ask.key !== from && showsView(ask, view),
+    );
+
+    // One already in a hidden column shows again.
+    if (showing)
+      return {
+        motion: "live",
+        ...(showing.key === state.askColumn && { columnHidden: false }),
+      };
 
     const ask: AskPanel = {
       ...newAsk(nextAskKey++, view),
@@ -236,6 +252,7 @@ export function createReviewPanelStore({
           active: null,
           asks: [...rest.asks, ask],
           askColumn: ask.key,
+          columnHidden: false,
           motion: "live",
         };
       }
@@ -245,7 +262,9 @@ export function createReviewPanelStore({
       return { ...rest, asks: [...rest.asks, ask], askWindow: ask.key };
     }
 
-    const occupied = state.active !== null || state.askColumn !== null;
+    const occupied =
+      !state.columnHidden &&
+      (state.active !== null || state.askColumn !== null);
 
     const rest =
       replace && from !== undefined && from === state.askColumn
@@ -256,6 +275,7 @@ export function createReviewPanelStore({
       ...rest,
       asks: [...rest.asks, ask],
       askColumn: ask.key,
+      columnHidden: false,
       // Switching what an open column shows is not a new panel.
       motion: occupied ? "restored" : "live",
     };
@@ -268,6 +288,7 @@ export function createReviewPanelStore({
     askWindow: open(restored?.askWindow),
     askAnchor: restored?.askAnchor ?? null,
     askSize: restored?.askSize ?? null,
+    columnHidden: restored?.columnHidden ?? false,
     motion: "live",
     view: initialView,
     availableViews,
@@ -283,6 +304,7 @@ export function createReviewPanelStore({
       set((state) => ({
         ...vacateColumn(state),
         active: panel,
+        columnHidden: false,
         motion: "live",
       })),
     openAsk: (selection, agent, options = {}) =>
@@ -322,11 +344,18 @@ export function createReviewPanelStore({
           ...rest,
           askWindow: rest.askWindow ?? null,
           askColumn: key,
+          columnHidden: false,
           motion: "live",
         };
       }),
     placeAsk: (askAnchor, askSize) =>
       set(askSize ? { askAnchor, askSize } : { askAnchor }),
+    toggleColumn: (fallback) =>
+      set((state) =>
+        state.active !== null || state.askColumn !== null
+          ? { columnHidden: !state.columnHidden, motion: "live" }
+          : { ...showAsk(state, fallback, {}), motion: "live" },
+      ),
     showView: (next) => set((state) => viewTransition(state, next)),
     openCommitDiff: (scope) =>
       set((state) => {
@@ -421,12 +450,17 @@ type AskShownState = ReviewPanelState &
 export function askShown(state: AskShownState, key: number): AskShown | null {
   if (key === state.askWindow) return "window";
 
-  return key === state.askColumn && !state.overlayTour ? "panel" : null;
+  return key === state.askColumn && askColumnShown(state) ? "panel" : null;
 }
 
 /** Whether a thread fills the column. */
 export function askColumnShown(state: AskShownState): boolean {
-  return state.askColumn !== null && !state.overlayTour;
+  return state.askColumn !== null && !state.overlayTour && !state.columnHidden;
+}
+
+/** Whether the column shows its peek. */
+export function peekShown(state: ReviewPanelState): boolean {
+  return state.active !== null && !state.columnHidden;
 }
 
 const historyPresence: AskPresence = { agentName: "Ask" };

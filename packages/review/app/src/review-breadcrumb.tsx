@@ -261,6 +261,9 @@ function PlaceList({
   /** What they belong to. */
   within: string;
 }): ReactElement {
+  // Desktop shows one board at a time, so it opens every board in front.
+  const background = useReviewSession().bridge.reportSidebar === undefined;
+
   // A long list opens scrolled to the board on screen.
   useEffect(() => {
     popover.current
@@ -287,7 +290,9 @@ function PlaceList({
           title={
             row.here
               ? undefined
-              : "Open whiteboard (Cmd/Ctrl-click to open in the background)"
+              : background
+                ? "Open whiteboard (Cmd/Ctrl-click to open in the background)"
+                : "Open whiteboard"
           }
           {...stylex.props(
             menuStyles.item,

@@ -58,7 +58,7 @@ registerAction2(class extends Action2 {
 			}
 			const reviewId = await catalog.createReview(repositoryPath);
 			// Unnamed: the tab reads "Untitled" until a title is typed.
-			await tabs.openApiReview(reviewId, "", true);
+			await tabs.openApiReview(reviewId, "");
 		} catch (error) {
 			notifications.error(localize("review.newWhiteboard.failed", "Could not start a new whiteboard: {0}", error instanceof Error ? error.message : String(error)));
 		}

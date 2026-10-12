@@ -16,6 +16,7 @@ import {
 import {
 	EditorExtensions,
 	EditorResourceAccessor,
+	EditorsOrder,
 	SideBySideEditor,
 	type IEditorFactoryRegistry,
 } from "../../../../workbench/common/editor.js";
@@ -59,11 +60,14 @@ class ReviewCanvasEditorContribution extends Disposable implements IWorkbenchCon
 			if (editor && resource && isReviewReadonlySource(resource)) this.tabsService.registerReviewEditor(resource.authority, editor);
 		}));
 		this._register(
-			this.editorService.onDidCloseEditor(({ editor }) => {
-				if (!(editor instanceof ReviewCanvasEditorInput)) return;
-				if (editor.target.kind !== "api") {
-					void this.tabsService.openHome(true);
-				}
+			this.editorService.onDidCloseEditor(({ editor, groupId }) => {
+				if (!(editor instanceof ReviewCanvasEditorInput) || editor.target.kind === "api") return;
+				// Closing Settings or Welcome returns to the board shown
+				// before it, or Home when there is none.
+				const board = this.editorGroupsService.getGroup(groupId)?.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE)
+					.find((open) => open instanceof ReviewCanvasEditorInput && open.target.kind === "api");
+				if (board) void this.editorGroupsService.getGroup(groupId)?.openEditor(board);
+				else void this.tabsService.openHome(true);
 			}),
 		);
 		this._register(

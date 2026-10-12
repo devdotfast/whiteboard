@@ -4,7 +4,6 @@ import { fieldStyles } from "@canvas/ui/text-field";
 import type {
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
-  ReviewCtrlTabChoice,
   ReviewDocumentWidthChoice,
   ReviewKeymapChoice,
   ReviewOpenFilesIn,
@@ -36,11 +35,6 @@ const KEYMAP_LABELS: Record<ReviewKeymapChoice, string> = {
   vim: "Vim",
   emacs: "Emacs",
   sublime: "Sublime Text",
-};
-
-const CTRL_TAB_LABELS: Record<ReviewCtrlTabChoice, string> = {
-  recent: "Last used tab",
-  next: "Next tab",
 };
 
 // The editors open at the selected line; a picked application gets the file.
@@ -99,7 +93,6 @@ export function SettingsPage({
 
   const [theme, setTheme] = useState(settings.theme);
   const [keymap, setKeymap] = useState(settings.keymap);
-  const [ctrlTab, setCtrlTab] = useState(settings.ctrlTab);
   const [openFilesIn, setOpenFilesIn] = useState(settings.openFilesIn);
   const [documentWidth, setDocumentWidth] = useState(settings.documentWidth);
   const [codeFontSize, setCodeFontSize] = useState(settings.codeFontSize);
@@ -274,19 +267,6 @@ export function SettingsPage({
                 onChange={(choice) => {
                   void run(() => settings.setKeymap(choice), setKeymap);
                 }}
-              />
-            </Row>
-            <Row
-              label="Ctrl+Tab"
-              description="Jump back to the last used tab, or step through the tab bar."
-            >
-              <SegmentedControl
-                label="Ctrl+Tab"
-                value={ctrlTab}
-                options={labeledOptions(CTRL_TAB_LABELS)}
-                onChange={(choice) =>
-                  void run(() => settings.setCtrlTab(choice), setCtrlTab)
-                }
               />
             </Row>
           </Section>

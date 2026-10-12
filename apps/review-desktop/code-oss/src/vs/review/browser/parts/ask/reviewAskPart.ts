@@ -4,8 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { $ } from "../../../../base/browser/dom.js";
+import { Emitter, type Event } from "../../../../base/common/event.js";
 import { Disposable } from "../../../../base/common/lifecycle.js";
-import { IInstantiationService, createDecorator } from "../../../../platform/instantiation/common/instantiation.js";
+import { localize2 } from "../../../../nls.js";
+import { Action2, registerAction2 } from "../../../../platform/actions/common/actions.js";
+import { IInstantiationService, createDecorator, type ServicesAccessor } from "../../../../platform/instantiation/common/instantiation.js";
 import { IStorageService } from "../../../../platform/storage/common/storage.js";
 import { IThemeService } from "../../../../platform/theme/common/themeService.js";
 import { Part } from "../../../../workbench/browser/part.js";
@@ -72,6 +75,12 @@ export interface IReviewAskPartsService {
 
 	/** Removes the pane's host once the pane is disposed. */
 	release(owner: object): void;
+
+	/** Asks the pane on screen to put its column away, or bring it back. */
+	toggle(): void;
+
+	/** Fires with the pane `toggle` asks. */
+	readonly onDidRequestToggle: Event<object>;
 }
 
 interface AskOwner {
@@ -86,6 +95,8 @@ export class ReviewAskParts extends Disposable implements IReviewAskPartsService
 
 	private readonly part: ReviewAskPart;
 	private readonly owners = new Map<object, AskOwner>();
+	private readonly toggleRequests = this._register(new Emitter<object>());
+	readonly onDidRequestToggle = this.toggleRequests.event;
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
@@ -115,6 +126,10 @@ export class ReviewAskParts extends Disposable implements IReviewAskPartsService
 		this.update();
 	}
 
+	toggle(): void {
+		for (const [key, owner] of this.owners) if (owner.shown) this.toggleRequests.fire(key);
+	}
+
 	private owner(key: object): AskOwner {
 		let owner = this.owners.get(key);
 		if (!owner) {
@@ -134,3 +149,15 @@ export class ReviewAskParts extends Disposable implements IReviewAskPartsService
 		this.layoutService.setPartHidden(!visible, Parts.REVIEW_ASK_PART);
 	}
 }
+
+export const REVIEW_TOGGLE_ASK_COLUMN = "review.toggleAskColumn";
+
+registerAction2(class extends Action2 {
+	constructor() {
+		super({ id: REVIEW_TOGGLE_ASK_COLUMN, title: localize2("review.toggleAskColumn", "Toggle Ask Column"), f1: true });
+	}
+
+	override run(accessor: ServicesAccessor): void {
+		accessor.get(IReviewAskPartsService).toggle();
+	}
+});

@@ -333,21 +333,6 @@
   stroke: var(--vscode-foreground);
 }
 
-/* With no sidebar under them, the controls share the row with the board
-   tabs; a rule parts them. */
-.monaco-workbench .review-titlebar-divider {
-  display: none;
-  flex-shrink: 0;
-  width: 1px;
-  height: 16px;
-  margin-left: 8px;
-  background-color: var(--review-tab-separator, var(--vscode-panel-border));
-}
-
-.monaco-workbench:not(.review-explorer-visible) .review-titlebar-divider {
-  display: block;
-}
-
 /* A rounded window with a narrow left panel, filled while the sidebar is
    open; the workbench class flips with the part, so Cmd+B and clicks show at
    once. */
