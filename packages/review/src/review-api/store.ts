@@ -5,9 +5,11 @@ import { DatabaseSync } from "node:sqlite";
 
 import type { JsonValue } from "@dev.fast/json";
 import { runVcs } from "@dev.fast/local-vcs";
-import type {
-  ReviewApiSummary,
-  ReviewBoardPlace,
+import {
+  type BoardIconKind,
+  type ReviewApiSummary,
+  type ReviewBoardPlace,
+  boardIconKind,
 } from "@dev.fast/review-protocol";
 import { sourceAnchors } from "@review/lens-selection.js";
 import {
@@ -71,6 +73,7 @@ import {
   sourceReferences,
   summarizeEdit,
 } from "./document.js";
+import { type BoardLinkPreview, boardLinkPreview } from "./link-preview.js";
 import { pullRequestKey, pullRequestUrl, setPullRequest } from "./origin.js";
 import { upgradeStore } from "./store-migrations.js";
 import {
@@ -2239,6 +2242,58 @@ export class ReviewStore {
     for (const { from, to } of boardLinks(id, document))
       insert.run(from.board, from.block, to.board, to.block ?? null);
   }
+  /** Link previews by board, version and block; a version never changes. */
+  private readonly linkPreviews = new Map<string, BoardLinkPreview>();
+
+  private linkPreview(target: Snapshot, block?: string): BoardLinkPreview {
+    const key = `${target.reviewId}@${target.version}#${block ?? ""}`;
+    let preview = this.linkPreviews.get(key);
+
+    if (!preview) {
+      preview = boardLinkPreview(target.document, block);
+
+      if (this.linkPreviews.size >= 500)
+        this.linkPreviews.delete(this.linkPreviews.keys().next().value!);
+
+      this.linkPreviews.set(key, preview);
+    }
+
+    return preview;
+  }
+
+  /** What a link's hover card shows of the board or block it links to,
+   * read when the card opens rather than with every link. Only for a link
+   * the version has. */
+  linkPeek(
+    id: string,
+    to: { board: string; block?: string },
+    version?: number,
+  ): BoardLinkPreview {
+    const linked = boardLinks(id, this.read(id, version).document).some(
+      (link) => link.to.board === to.board && link.to.block === to.block,
+    );
+
+    if (!linked || !this.has(to.board))
+      throw new ReviewInputError("The board has no such link.", 404);
+
+    return this.linkPreview(this.read(to.board), to.block);
+  }
+
+  /** "owner / repo" for a board in a GitHub repository, else its folder. */
+  private repositoryLabel(board: Snapshot): string | undefined {
+    const repositoryId = board.target?.repositoryId;
+
+    if (!repositoryId) return undefined;
+
+    try {
+      return this.repositoryGroup(this.repositoryPath(repositoryId))
+        ?.label.split("/")
+        .join(" / ");
+    } catch {
+      return undefined;
+    }
+  }
+
   /** A version's outgoing links and the board's current backlinks. Links to a
    * deleted board or block are marked missing. */
   links(id: string, version?: number) {
@@ -2276,8 +2331,13 @@ export class ReviewStore {
           to,
           ...(target && {
             title: target.title,
+            icon: boardIconKind(target.target),
+            ...(this.repositoryLabel(target) && {
+              repository: this.repositoryLabel(target),
+            }),
             ...(target.origin?.pullRequestNumber && {
               pullRequestNumber: target.origin.pullRequestNumber,
+              pullRequestUrl: target.origin.pullRequestUrl,
             }),
             updatedAt: target.createdAt,
           }),
@@ -2308,8 +2368,10 @@ export class ReviewStore {
               ? { board: id }
               : { board: id, block: String(row.to_block) },
           title: from?.title ?? "",
+          ...(from && { icon: boardIconKind(from.target) }),
           ...(from?.origin?.pullRequestNumber && {
             pullRequestNumber: from.origin.pullRequestNumber,
+            pullRequestUrl: from.origin.pullRequestUrl,
           }),
         };
       });
@@ -2317,10 +2379,13 @@ export class ReviewStore {
     return { outgoing, backlinks };
   }
   /** Boards edited by an Ask thread, most recent first. */
-  boardsChangedBy(threadId: string): { reviewId: string; title: string }[] {
+  boardsChangedBy(
+    threadId: string,
+  ): { reviewId: string; title: string; icon: BoardIconKind }[] {
     return this.db
       .prepare(
-        `SELECT edits.review_id, json_extract(current.snapshot,'$.title') AS title
+        `SELECT edits.review_id, json_extract(current.snapshot,'$.title') AS title,
+          json_extract(current.snapshot,'$.target') AS target
         FROM versions edits
         JOIN reviews ON reviews.id=edits.review_id
         JOIN versions current ON current.review_id=reviews.id AND current.version=reviews.version
@@ -2331,6 +2396,12 @@ export class ReviewStore {
       .map((row) => ({
         reviewId: String(row.review_id),
         title: String(row.title),
+        // SAFETY: the target was validated when the version was saved.
+        icon: boardIconKind(
+          row.target
+            ? (JSON.parse(String(row.target)) as ReviewTarget)
+            : undefined,
+        ),
       }));
   }
   /** Resolve a target-less PR create before it queues, when it will need it. */

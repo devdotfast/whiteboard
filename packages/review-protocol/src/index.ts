@@ -56,6 +56,8 @@ export * from "./review-api-client.js";
 
 export * from "./review-host-status.js";
 
+export * from "./board-icons.js";
+
 export {
   type ByCommitEntry,
   type ReviewAgentTraceEvent,

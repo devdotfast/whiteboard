@@ -2,12 +2,19 @@ import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 import { z } from "zod";
 
+import { BoardIcon } from "./board-icons";
 import { useReviewSession } from "./host/review-session";
 import { fontSize } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 const boardsSchema = z.object({
-  boards: z.array(z.object({ reviewId: z.string(), title: z.string() })),
+  boards: z.array(
+    z.object({
+      reviewId: z.string(),
+      title: z.string(),
+      icon: z.enum(["board", "code"]).optional().catch(undefined),
+    }),
+  ),
 });
 
 /** Boards this thread's agent has edited, newest first. Refetched after each turn. */
@@ -66,6 +73,7 @@ export function AskChangedBoards({
             })
           }
         >
+          <BoardIcon icon={board.icon} xstyle={styles.icon} />
           {board.title}
         </button>
       ))}
@@ -96,4 +104,5 @@ const styles = stylex.create({
     font: "inherit",
     cursor: "pointer",
   },
+  icon: { width: "12px", height: "12px" },
 });

@@ -19,7 +19,7 @@ const lockOptions = {
 
 export async function openReviewProfile(
   home: string,
-  options: { manageWorkspaces: boolean },
+  options: { manageWorkspaces: boolean; pullRequestStates?: boolean },
 ) {
   await mkdir(home, { recursive: true, mode: 0o700 });
 

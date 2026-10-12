@@ -19,6 +19,7 @@ import "./browser/parts/canvas/reviewFind.contribution.js";
 import "./browser/parts/canvas/reviewNewWhiteboard.contribution.js";
 import "./browser/reviewCommunity.contribution.js";
 import "./browser/reviewTheme.contribution.js";
+import "./contrib/boardTabs/reviewBoardTabs.contribution.js";
 import "./contrib/explorer/reviewFileTree.contribution.js";
 import "./contrib/extensions/reviewCuratedExtensions.contribution.js";
 import "./contrib/install/reviewCliInstall.contribution.js";

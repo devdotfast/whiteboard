@@ -61,6 +61,7 @@ export const tokens = stylex.defineConsts({
   mapStorageBorder: "var(--map-storage-border)",
   markerGlow: "var(--marker-glow)",
   markerTint: "var(--marker-tint)",
+  merged: "var(--merged)",
   minimapMask: "var(--minimap-mask)",
   minimapNode: "var(--minimap-node)",
   minimapNodeSelected: "var(--minimap-node-selected)",

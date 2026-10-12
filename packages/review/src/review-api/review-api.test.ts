@@ -2152,6 +2152,191 @@ describe("snapshot authoring", () => {
     }
   });
 
+  it("redraws a link's icon when the board it links to is retargeted", async () => {
+    const plan = await create();
+    const pr = await create();
+
+    await edit(pr.reviewId, {
+      type: "insert",
+      content: {
+        type: "markdown",
+        markdown: `See [the plan](whiteboard:board/${plan.reviewId}).`,
+      },
+    });
+
+    const api = createReviewApi(store);
+
+    const icon = async () =>
+      (
+        (await (await api.request(`/${pr.reviewId}/links`)).json()) as {
+          outgoing: { icon?: string }[];
+        }
+      ).outgoing[0]!.icon;
+
+    expect(await icon()).toBe("code");
+
+    const checkout = path.join(directory, "checkout");
+    mkdirSync(checkout);
+    const { id: repositoryId } = store.registerRepository(checkout);
+
+    const watch = await api.request(
+      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId: pr.reviewId, mode: "textual" }]))}`,
+    );
+
+    const reader = watch.body!.pipeThrough(new TextDecoderStream()).getReader();
+
+    try {
+      await reader.read();
+      await store.execute(
+        request({
+          type: "set_target",
+          reviewId: plan.reviewId,
+          target: { kind: "project", repositoryId },
+        }),
+      );
+      // The linking board is sent again, so it reads its links again.
+      expect((await reader.read()).value).toContain('"linksRevision":1');
+      expect(await icon()).toBe("board");
+    } finally {
+      await reader.cancel();
+    }
+  });
+
+  it("sends a board again for a PR state its links show, and not for any other", async () => {
+    const pr = (number: number) =>
+      `https://github.com/acme/widget/pull/${number}`;
+
+    const prBoard = async (number: number) => {
+      const { reviewId } = await create();
+
+      await store.execute(
+        request({
+          type: "set_target",
+          reviewId,
+          target: { kind: "commits", ...pins },
+          pullRequestUrl: pr(number),
+        }),
+      );
+
+      return reviewId;
+    };
+
+    const linked = await prBoard(7);
+    // A PR board nothing here links to.
+    await prBoard(8);
+    const { reviewId } = await create();
+
+    await edit(reviewId, {
+      type: "insert",
+      content: {
+        type: "markdown",
+        markdown: `See [the PR](whiteboard:board/${linked}).`,
+      },
+    });
+
+    const data = new LocalReviewData(store, {
+      manageWorkspaces: false,
+      pullRequestStates: true,
+      pullRequests: {
+        run: async (_file, args) => {
+          const number = Number(
+            JSON.stringify(args).match(/"value":"(\d+)"/)![1],
+          );
+
+          return JSON.stringify({
+            number,
+            title: "Widgets",
+            baseRefName: "main",
+            headRefName: "widgets",
+            isCrossRepository: false,
+            state: "MERGED",
+          });
+        },
+        fetch: async () => new Response("{}", { status: 500 }),
+      },
+    });
+
+    const watch = await createReviewApi(store, data).request(
+      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId, mode: "textual" }]))}`,
+    );
+
+    const reader = watch.body!.pipeThrough(new TextDecoderStream()).getReader();
+
+    let buffered = "";
+
+    const next = async () => {
+      while (!buffered.includes("\n")) buffered += (await reader.read()).value;
+      const line = buffered.slice(0, buffered.indexOf("\n"));
+      buffered = buffered.slice(line.length + 1);
+
+      return JSON.parse(line).value;
+    };
+
+    try {
+      expect(await next()).toMatchObject({ linksRevision: 0 });
+
+      // GitHub answers for a PR none of its links show, then for the one it
+      // links to; only the second sends the board again.
+      for (const number of [8, 7]) {
+        data.pullRequestState(pr(number));
+        await vi.waitFor(() =>
+          expect(data.pullRequestState(pr(number))).toBe("merged"),
+        );
+      }
+
+      const { version } = await edit(reviewId, {
+        type: "insert",
+        content: { type: "markdown", markdown: "Done." },
+      });
+
+      const sent: number[] = [];
+
+      for (let line = await next(); ; line = await next()) {
+        sent.push(line.linksRevision);
+
+        if (line.version === version) break;
+      }
+
+      expect(sent).toEqual([1, 1]);
+    } finally {
+      await reader.cancel();
+      await data.close();
+    }
+  });
+  it("sends a link's hover card only when it is asked for, and only for a link the board has", async () => {
+    const target = await create();
+
+    await edit(target.reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "Opening words." },
+    });
+
+    const { reviewId } = await create();
+
+    await edit(reviewId, {
+      type: "insert",
+      content: {
+        type: "markdown",
+        markdown: `See [the plan](whiteboard:board/${target.reviewId}).`,
+      },
+    });
+
+    const api = createReviewApi(store);
+    const links = await (await api.request(`/${reviewId}/links`)).json();
+
+    expect(links.outgoing).toEqual([
+      expect.not.objectContaining({ preview: expect.anything() }),
+    ]);
+
+    const peek = (board: string) =>
+      api.request(`/${reviewId}/links/peek?board=${board}`);
+
+    expect(await (await peek(target.reviewId)).json()).toEqual({
+      prose: ["Opening words."],
+    });
+    expect((await peek(reviewId)).status).toBe(404);
+  });
+
   it("links boards to existing boards and blocks, and indexes the links both ways", async () => {
     const plan = await create();
 

@@ -165,6 +165,19 @@ describe("Home interactions", () => {
     expect(findHost.showFind()).toBe(false);
   });
   const read = { viewedAt: "2026-10-11T12:00:00Z" };
+  it("marks a PR's row by its state", async () => {
+    await render([
+      summary("Stack", {
+        origin: { pullRequestNumber: 320 },
+        pullRequestState: "merged",
+      }),
+      summary("Plan"),
+    ]);
+    expect(
+      container.querySelector('[aria-label="PR #320, merged"]'),
+    ).not.toBeNull();
+    expect(container.querySelectorAll('[role="img"]')).toHaveLength(1);
+  });
   it("uses unread precedence, persists collapse, and sorts within fixed groups", async () => {
     const reviews = [
       summary("Zulu"),
