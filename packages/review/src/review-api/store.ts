@@ -2,8 +2,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { isDeepStrictEqual } from "node:util";
 
-import type { JsonValue } from "@dev.fast/json";
+import { type JsonValue, isJsonObject } from "@dev.fast/json";
 import { runVcs } from "@dev.fast/local-vcs";
 import {
   type BoardIconKind,
@@ -49,9 +50,11 @@ import {
   type ReviewTarget,
   type SourcePins,
   type WrittenComponent,
+  adoptFlowUnits,
   anchorPins,
   applyEdit,
   assignFreshIds,
+  assignMissingIds,
   boardLinks,
   boardRepositoryId,
   checkReferences,
@@ -84,6 +87,9 @@ const reviewId = z.string().min(1);
 
 /** The key older hosts read and write. */
 const statsKey = (pins: Pins) => JSON.stringify([pins, "structural"]);
+
+/** How long a board stays in Trash before it is deleted. */
+const TRASH_DAYS = 30;
 
 const activityId = z
   .string()
@@ -180,6 +186,48 @@ export const commandSchema = z.strictObject({
     }),
   ]),
 });
+
+/** A person's save of a whole board from the canvas. A block they added
+ * has no id and may carry a clientKey, which the response maps to its id. */
+export const personEditSchema = z.strictObject({
+  baseVersion: z.number().int().nonnegative(),
+  title: z.string().trim().min(1),
+  document: z.array(z.json()),
+});
+
+/** The block a person's canvas has focus in; null clears it. */
+export const focusLeaseSchema = z.strictObject({
+  clientId: z.string().min(1),
+  blockId: z.string().min(1).nullable(),
+  /** false when the canvas closes the board. */
+  open: z.boolean().optional(),
+});
+
+/** A focus lease lasts this long unless renewed. The canvas renews it every
+ * few seconds, so a closed or crashed app releases its block on its own. */
+export const FOCUS_LEASE_TTL_MS = 15_000;
+
+/** How often a discard looks again for a canvas letting go of the board. */
+const DISCARD_POLL_MS = 100;
+
+/** What a person's save wrote: the version, and the id each new block got
+ * by its clientKey. */
+export interface PersonEditResult {
+  reviewId: string;
+  version: number;
+  ids: Record<string, string>;
+}
+
+/** One row of a board's history. */
+export interface HistoryEntry {
+  version: number;
+  title: string;
+  createdAt: string;
+  /** "you" for a version a person saved from the canvas. */
+  author: "you" | "agent";
+  /** The Ask thread whose edit made this version, if any. */
+  threadId?: string;
+}
 
 /** Source identity displayed in the review header and Home, alongside immutable pins. */
 export interface SnapshotOrigin {
@@ -282,6 +330,9 @@ export interface Snapshot {
   /** The Ask thread that caused this version when it made no edit to
    * name it on: a create, rename, retarget or restore. */
   threadId?: string;
+  /** A person saved this version from the canvas: the blocks they added,
+   * removed or changed. Absent on every other version. */
+  personEdit?: { changed: string[]; ids?: Record<string, string> };
 }
 
 /** The Ask thread a version names, on its edit or on itself; stored in
@@ -1131,33 +1182,26 @@ export class ReviewStore {
     this.db.prepare("DELETE FROM reviews WHERE id=?").run(id);
     this.liveSources.delete(id);
   }
+  /** Deletes the boards 30 days in Trash, each as Delete… would. */
   private purgeExpired() {
-    const cutoff = new Date(Date.now() - 30 * 86400000).toISOString();
-    const expired: Result[] = [];
-    this.db.exec("BEGIN IMMEDIATE");
+    const cutoff = new Date(Date.now() - TRASH_DAYS * 86400000).toISOString();
 
-    try {
-      for (const row of this.db
+    const expired = () =>
+      this.db
         .prepare(
-          "SELECT review_id,version FROM review_attention JOIN reviews ON reviews.id=review_id WHERE deleted_at <= ?",
+          "SELECT review_id FROM review_attention JOIN reviews ON reviews.id=review_id WHERE deleted_at <= ?",
         )
-        .all(cutoff)) {
-        const reviewId = String(row.review_id);
-        expired.push({ reviewId, version: Number(row.version), deleted: true });
-        this.removePermanently(reviewId);
-      }
+        .all(cutoff)
+        .map((row) => String(row.review_id));
 
-      this.db.exec("COMMIT");
-    } catch (error) {
-      this.db.exec("ROLLBACK");
-      throw error;
-    }
-
-    for (const result of expired) {
-      this.activity.deleted(result.reviewId);
-      this.notify(result);
-    }
+    for (const reviewId of expired())
+      // Restored meanwhile, by another host on this home: it stays.
+      this.deleteBoard(this.read(reviewId), () => {
+        if (!expired().includes(reviewId))
+          throw new ReviewInputError("Restored from Trash.", 409);
+      });
   }
+
   read(id: string, version?: number): Snapshot {
     const row =
       version === undefined
@@ -1313,7 +1357,7 @@ export class ReviewStore {
           },
           repositoryName: row.repository_name
             ? String(row.repository_name)
-            : (summary.pins?.repositoryId ?? ""),
+            : "(unknown repository)",
           viewedAt: row.viewed_at ? String(row.viewed_at) : null,
           trashedAt: row.deleted_at ? String(row.deleted_at) : null,
           // Any unseen version counts, whoever saved it.
@@ -1384,17 +1428,31 @@ export class ReviewStore {
     return Number(row?.pairs) >= 2;
   }
 
-  history(id: string) {
+  history(id: string): HistoryEntry[] {
     return this.db
       .prepare(
-        "SELECT version,json_extract(snapshot,'$.title') AS title,json_extract(snapshot,'$.createdAt') AS created_at FROM versions WHERE review_id=? ORDER BY version",
+        `SELECT version,
+          CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.title') END AS title,
+          CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.createdAt') END AS created_at,
+          json_valid(snapshot) AND json_type(snapshot,'$.personEdit') IS NOT NULL AS person,
+          thread_id
+        FROM versions WHERE review_id=? ORDER BY version`,
       )
       .all(id)
-      .map((row) => ({
-        version: Number(row.version),
-        title: String(row.title),
-        createdAt: String(row.created_at),
-      }));
+      .map((row) => {
+        const entry: HistoryEntry = {
+          version: Number(row.version),
+          // A version that won't parse still has its place in history.
+          title: String(row.title ?? ""),
+          createdAt: String(row.created_at ?? ""),
+          author: row.person ? "you" : "agent",
+        };
+
+        if (!row.person && row.thread_id !== null)
+          entry.threadId = String(row.thread_id);
+
+        return entry;
+      });
   }
   inspect(id: string, targetId?: string, version?: number) {
     const snapshot = this.read(id, version);
@@ -1407,7 +1465,7 @@ export class ReviewStore {
     input: unknown,
     initial?: { document: Block[]; origin: SnapshotOrigin },
     /** The Ask thread that sent this command, if known. */
-    from: { threadId?: string } = {},
+    from: { threadId?: string; person?: boolean } = {},
   ): Promise<Result> {
     if (this.closing)
       return Promise.reject(new Error("Review store is closing."));
@@ -1428,7 +1486,7 @@ export class ReviewStore {
         )
       : this.startPullRequestTitle(command);
 
-    const run = this.pending.then(async () => {
+    return this.enqueue(async () => {
       const op = command.operation;
       this.purgeExpired();
 
@@ -1521,20 +1579,16 @@ export class ReviewStore {
             409,
           );
 
-        const result: Result = {
-          reviewId: op.reviewId,
-          version: this.read(op.reviewId).version,
-          deleted: true,
-        };
+        // An agent can't delete a board out from under a person's hands.
+        if (!from.person) this.assertUnheld(op.reviewId);
 
-        this.commitCommand(
-          result,
-          () => this.removePermanently(op.reviewId),
-          () => this.assertMutation(op.reviewId, result.version),
-        );
-
-        return result;
+        return this.deleteBoard(this.read(op.reviewId));
       }
+
+      // Trash makes a board read-only, so an agent can't put one there
+      // out from under a person's hands.
+      if (op.type === "lifecycle" && op.state === "trash" && !from.person)
+        this.assertUnheld(op.reviewId);
 
       if (op.type === "attention" || op.type === "lifecycle") {
         const result: Result = {
@@ -1597,6 +1651,7 @@ export class ReviewStore {
       // Each version describes only its own edit.
       delete snapshot.lastEdit;
       delete snapshot.threadId;
+      delete snapshot.personEdit;
 
       let nextId = previous
         ? Number(
@@ -1606,6 +1661,8 @@ export class ReviewStore {
         : 0;
 
       let applied: Applied | undefined;
+      /** The blocks an agent's document edit changed. */
+      let touched: string[] = [];
       let lensTarget: { targetId: string; type: "lens" } | undefined;
       /** The head a worktree board read at, when it becomes a plan. */
       let unpinnedWorktree: string | undefined;
@@ -1708,6 +1765,7 @@ export class ReviewStore {
           snapshot = this.read(id, op.version);
           delete snapshot.lastEdit;
           delete snapshot.threadId;
+          delete snapshot.personEdit;
           break;
         case "lens_edit": {
           const lenses = snapshot.lenses ?? [];
@@ -1739,6 +1797,10 @@ export class ReviewStore {
             (prefix) => `${prefix}-${++nextId}`,
           );
 
+          // Refused before any slow check, and again as it commits.
+          touched = changedBlocks(previous!.document, snapshot.document);
+          this.assertUnleased(id, touched);
+
           snapshot.lastEdit = summarizeEdit(
             edit,
             applied,
@@ -1746,33 +1808,24 @@ export class ReviewStore {
             snapshot.document,
           );
 
-          snapshot.document = await this.resolveCommitLinks(
-            respellDocumentLinks(snapshot.document),
-            snapshot,
-          );
-
-          if (snapshot.staleSources?.length) {
-            const oldSources = new Map(
-              sourceReferences(previous!.document, {
-                repositoryId: boardRepositoryId(previous!),
-              }).map((item) => [item.id, JSON.stringify(item.source)]),
-            );
-
-            const newSources = new Map(
-              sourceReferences(snapshot.document, {
-                repositoryId: boardRepositoryId(snapshot),
-              }).map((item) => [item.id, JSON.stringify(item.source)]),
-            );
-
-            snapshot.staleSources = snapshot.staleSources.filter(
-              (id) =>
-                oldSources.get(id) === newSources.get(id) && newSources.has(id),
-            );
-          }
-
+          await this.normalizeDocument(snapshot, previous!);
           break;
         }
       }
+
+      // A restore, or a retarget that repins references, rewrites blocks as
+      // an edit does: an agent's may not touch one a person holds.
+      if ((op.type === "restore" || op.type === "set_target") && !from.person) {
+        touched = changedBlocks(previous!.document, snapshot.document);
+        this.assertUnleased(id, touched);
+      }
+
+      // A board, name or version a person chose is theirs in History.
+      if (
+        from.person &&
+        (op.type === "create" || op.type === "rename" || op.type === "restore")
+      )
+        snapshot.personEdit = { changed: [] };
 
       // Every version a thread causes names it: on its edit, or, for a
       // create, rename, retarget or restore, on the version itself.
@@ -1781,49 +1834,18 @@ export class ReviewStore {
         else snapshot.threadId = from.threadId;
       }
 
-      if (
-        snapshot.target?.kind === "worktree" &&
-        op.type !== "restore" &&
-        !resolvedTarget
-      ) {
-        snapshot = await this.projectLiveSource(snapshot);
-      }
+      let warnings: string[];
 
-      // Component shapes were checked at entry (or when merging a field patch).
-      // Check cross-references here; do not reparse the whole stored document.
-      checkReferences(snapshot.document);
-
-      // A restore may bring back links to deleted boards, so skip the check.
-      if (op.type !== "restore") this.checkBoardLinks(snapshot, previous);
-
-      if (
-        snapshot.pins &&
-        (!previous ||
-          JSON.stringify(previous.pins) !== JSON.stringify(snapshot.pins))
-      )
-        await this.providers.validatePins(snapshot.pins);
-
-      // Advice is about what this command wrote; earlier advice stays said.
-      const advised = new Set(documentAdvice(previous?.document ?? []));
-
-      const warnings = [
-        ...documentAdvice(snapshot.document).filter(
-          (advice) => !advised.has(advice),
-        ),
-        ...(await this.validateExternal(
-          snapshot,
-          previous,
-          op.type === "set_target",
-        )),
-      ];
+      ({ snapshot, warnings } = await this.prepareVersion(snapshot, previous, {
+        restore: op.type === "restore",
+        repin: op.type === "set_target",
+        projectLive: op.type !== "restore" && !resolvedTarget,
+      }));
 
       if (unpinnedWorktree)
         warnings.push(
           `Its references now read at ${unpinnedWorktree.slice(0, 7)}, the checkout's last commit, which lacks any uncommitted lines they quoted. Check them.`,
         );
-
-      snapshot.version = previous ? previous.version + 1 : 0;
-      snapshot.createdAt = new Date().toISOString();
 
       const result: Result = {
         ...(op.type === "create" && { created: true }),
@@ -1868,22 +1890,7 @@ export class ReviewStore {
       this.commitCommand(
         result,
         () => {
-          this.db
-            .prepare(
-              "INSERT INTO reviews(id,version,next_id,project_id) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,next_id=excluded.next_id,project_id=excluded.project_id",
-            )
-            .run(id, snapshot.version, nextId, projectId);
-          this.db
-            .prepare(
-              "INSERT INTO versions(review_id,version,snapshot,thread_id) VALUES(?,?,?,?)",
-            )
-            .run(
-              id,
-              snapshot.version,
-              JSON.stringify(snapshot),
-              versionThread(snapshot),
-            );
-          this.indexBoardLinks(id, snapshot.document);
+          this.saveVersion(snapshot, nextId, projectId);
 
           if (op.type === "create" && op.parentId)
             this.setParent(id, op.parentId);
@@ -1906,6 +1913,7 @@ export class ReviewStore {
           ? () => {
               this.assertWritable(id);
               this.assertMutation(id, previous.version);
+              this.assertUnleased(id, touched);
             }
           : undefined,
         op.type === "edit" || op.type === "lens_edit"
@@ -1922,10 +1930,322 @@ export class ReviewStore {
 
       return result;
     });
+  }
+  /** Runs one write after every write queued before it. */
+  private enqueue<T>(work: () => Promise<T>): Promise<T> {
+    if (this.closing)
+      return Promise.reject(new Error("Review store is closing."));
+
+    const run = this.pending.then(work);
 
     this.pending = run.catch(() => {});
 
     return run;
+  }
+  /** Respells a document's links and resolves its commit links, as every
+   * save does. A changed reference is no longer stale. */
+  private async normalizeDocument(snapshot: Snapshot, previous: Snapshot) {
+    snapshot.document = await this.resolveCommitLinks(
+      respellDocumentLinks(snapshot.document),
+      snapshot,
+    );
+
+    if (snapshot.staleSources?.length) {
+      const oldSources = new Map(
+        sourceReferences(previous.document, {
+          repositoryId: boardRepositoryId(previous),
+        }).map((item) => [item.id, JSON.stringify(item.source)]),
+      );
+
+      const newSources = new Map(
+        sourceReferences(snapshot.document, {
+          repositoryId: boardRepositoryId(snapshot),
+        }).map((item) => [item.id, JSON.stringify(item.source)]),
+      );
+
+      snapshot.staleSources = snapshot.staleSources.filter(
+        (id) => oldSources.get(id) === newSources.get(id) && newSources.has(id),
+      );
+    }
+  }
+  /** Checks a candidate version and numbers it. A worktree board's version
+   * may come back with its live source projected. */
+  private async prepareVersion(
+    candidate: Snapshot,
+    previous: Snapshot | undefined,
+    options: {
+      restore?: boolean;
+      repin?: boolean;
+      projectLive: boolean;
+      /** A person's save: links may name boards deleted since. */
+      person?: boolean;
+    },
+  ): Promise<{ snapshot: Snapshot; warnings: string[] }> {
+    const snapshot =
+      candidate.target?.kind === "worktree" && options.projectLive
+        ? await this.projectLiveSource(candidate)
+        : candidate;
+
+    // Component shapes were checked at entry (or when merging a field patch).
+    // Check cross-references here; do not reparse the whole stored document.
+    checkReferences(snapshot.document);
+
+    // A restore may bring back links to deleted boards, so skip the check.
+    if (!options.restore)
+      this.checkBoardLinks(snapshot, previous, options.person);
+
+    if (
+      snapshot.pins &&
+      (!previous ||
+        JSON.stringify(previous.pins) !== JSON.stringify(snapshot.pins))
+    )
+      await this.providers.validatePins(snapshot.pins);
+
+    // Advice is about what this command wrote; earlier advice stays said.
+    const advised = new Set(documentAdvice(previous?.document ?? []));
+
+    const warnings = [
+      ...documentAdvice(snapshot.document).filter(
+        (advice) => !advised.has(advice),
+      ),
+      ...(await this.validateExternal(snapshot, previous, options.repin)),
+    ];
+
+    snapshot.version = previous ? previous.version + 1 : 0;
+    snapshot.createdAt = new Date().toISOString();
+
+    return { snapshot, warnings };
+  }
+  /** Writes a version; call inside commitCommand. */
+  private saveVersion(snapshot: Snapshot, nextId: number, projectId: string) {
+    const id = snapshot.reviewId;
+
+    this.db
+      .prepare(
+        "INSERT INTO reviews(id,version,next_id,project_id) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version,next_id=excluded.next_id,project_id=excluded.project_id",
+      )
+      .run(id, snapshot.version, nextId, projectId);
+    this.db
+      .prepare(
+        "INSERT INTO versions(review_id,version,snapshot,thread_id) VALUES(?,?,?,?)",
+      )
+      .run(
+        id,
+        snapshot.version,
+        JSON.stringify(snapshot),
+        versionThread(snapshot),
+      );
+    this.indexBoardLinks(id, snapshot.document);
+  }
+  /** Deletes a board and its history, if it is still at the version read
+   * and passes `guard`: Delete… from Trash, Trash's purge, and a discarded
+   * empty board all end here. */
+  private deleteBoard(
+    { reviewId, version }: Snapshot,
+    guard?: () => void,
+  ): Result {
+    const result: Result = { reviewId, version, deleted: true };
+
+    this.commitCommand(
+      result,
+      () => this.removePermanently(reviewId),
+      () => {
+        guard?.();
+        this.assertMutation(reviewId, version);
+      },
+    );
+    this.leases.delete(reviewId);
+
+    return result;
+  }
+  /** Deletes a board the person made and left as it was: titled "Untitled",
+   * with no blocks and no child boards. A board still open on a canvas, or
+   * one an agent is working on, is kept. A closing canvas saves, then lets
+   * go of the board, so the discard waits for that first. */
+  async discard(reviewId: string): Promise<{ deleted: boolean }> {
+    const deadline = Date.now() + FOCUS_LEASE_TTL_MS;
+
+    while (this.leased(reviewId) && Date.now() < deadline)
+      await new Promise((resolve) => setTimeout(resolve, DISCARD_POLL_MS));
+
+    return this.enqueue(async () => {
+      if (!this.has(reviewId)) return { deleted: false };
+      const snapshot = this.read(reviewId);
+
+      if (
+        this.leased(reviewId) ||
+        this.activity.isWorking(reviewId) ||
+        snapshot.title !== UNTITLED ||
+        snapshot.document.length ||
+        this.relations(reviewId).children.length
+      )
+        return { deleted: false };
+
+      this.deleteBoard(snapshot);
+
+      return { deleted: true };
+    });
+  }
+  /** Each board's canvas leases by client: the board is open there, and
+   * `blockId` is the block the person is in, if any. In memory: a lease
+   * outlives neither its renewals nor the host. */
+  private readonly leases = new Map<
+    string,
+    Map<string, { blockId: string | null; expiresAt: number }>
+  >();
+
+  /** Whether a canvas still holds the board open. */
+  private leased(reviewId: string) {
+    const now = Date.now();
+
+    return [...(this.leases.get(reviewId)?.values() ?? [])].some(
+      (lease) => lease.expiresAt > now,
+    );
+  }
+
+  /** Records the block a person's canvas has focus in (null for none), or
+   * with `open: false` that the canvas closed the board. */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Lease boundary: focusLeaseSchema.parse below validates incoming JSON.
+  focus(reviewId: string, input: unknown) {
+    const { clientId, blockId, open } = focusLeaseSchema.parse(input);
+
+    this.assertExists(reviewId);
+    const leases = this.leases.get(reviewId) ?? new Map();
+
+    if (open === false) leases.delete(clientId);
+    else
+      leases.set(clientId, {
+        blockId,
+        expiresAt: Date.now() + FOCUS_LEASE_TTL_MS,
+      });
+
+    if (leases.size) this.leases.set(reviewId, leases);
+    else this.leases.delete(reviewId);
+
+    return { ok: true as const };
+  }
+  /** Refuses an agent's change to a board while a person holds any block
+   * in it. */
+  private assertUnheld(reviewId: string) {
+    const now = Date.now();
+
+    for (const lease of this.leases.get(reviewId)?.values() ?? [])
+      if (lease.expiresAt > now && lease.blockId)
+        throw new ReviewInputError(
+          `The user is editing this block (${lease.blockId}). Edit another block, or try again after they move on.`,
+          409,
+        );
+  }
+
+  /** Refuses an agent's edit to a block a person is editing. */
+  private assertUnleased(reviewId: string, changed: readonly string[]) {
+    const leases = this.leases.get(reviewId);
+
+    if (!leases || !changed.length) return;
+    const now = Date.now();
+
+    for (const [clientId, lease] of leases)
+      if (lease.expiresAt <= now) leases.delete(clientId);
+      else if (lease.blockId && changed.includes(lease.blockId))
+        throw new ReviewInputError(
+          `The user is editing this block (${lease.blockId}). Edit another block, or try again after they move on.`,
+          409,
+        );
+  }
+  /** Saves a person's whole board as their own version, against the version
+   * they started from. Blocks without ids get fresh ones. */
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Save boundary: personEditSchema and documentSchema parse below validate incoming JSON.
+  personEdit(reviewId: string, input: unknown): Promise<PersonEditResult> {
+    const body = personEditSchema.parse(input);
+
+    return this.enqueue(async () => {
+      const previous = this.read(reviewId);
+
+      assertBaseVersion(body.baseVersion, previous.version);
+      const keys = takeClientKeys(body.document);
+      const document = documentSchema.parse(body.document);
+      const bare = keys.bare > 0;
+
+      if (
+        !bare &&
+        body.title === previous.title &&
+        isDeepStrictEqual(document, previous.document)
+      )
+        return { reviewId, version: previous.version, ids: {} };
+
+      let nextId = Number(
+        this.db.prepare("SELECT next_id FROM reviews WHERE id=?").get(reviewId)!
+          .next_id,
+      );
+
+      const allocate = (prefix: string) => `${prefix}-${++nextId}`;
+
+      adoptFlowUnits(document, allocate);
+
+      for (const block of document) assignMissingIds(block, allocate);
+      assertUniqueIds(document);
+      // An id ⌘Z brought back stays; the counter moves past it, so an agent's
+      // next insert can't be given it again.
+      nextId = Math.max(nextId, highestIdNumber(document));
+
+      const ids = Object.fromEntries(
+        [...keys.byPath].map(([path, key]) => [
+          key,
+          blockAt(document, path).id!,
+        ]),
+      );
+
+      let snapshot = structuredClone(previous);
+
+      delete snapshot.sourceUnavailable;
+      delete snapshot.lastEdit;
+      // The person's, not the thread's whose change came before.
+      delete snapshot.threadId;
+      snapshot.title = body.title;
+      snapshot.document = document;
+      await this.normalizeDocument(snapshot, previous);
+
+      if (
+        !bare &&
+        snapshot.title === previous.title &&
+        isDeepStrictEqual(snapshot.document, previous.document)
+      )
+        return { reviewId, version: previous.version, ids: {} };
+
+      // The person's own version: no thread, and no courier draws it.
+      // `ids` lets the canvas recognise its own save on the stream, even
+      // when the save's response was lost.
+      snapshot.personEdit = {
+        changed: changedBlocks(previous.document, snapshot.document),
+        ids,
+      };
+
+      ({ snapshot } = await this.prepareVersion(snapshot, previous, {
+        projectLive: true,
+        person: true,
+      }));
+
+      const result: Result = { reviewId, version: snapshot.version };
+      const projectId = this.projectOf(reviewId);
+
+      this.commitCommand(
+        result,
+        () => this.saveVersion(snapshot, nextId, projectId),
+        () => {
+          this.assertWritable(reviewId);
+          assertBaseVersion(
+            body.baseVersion,
+            Number(
+              this.db
+                .prepare("SELECT version FROM reviews WHERE id=?")
+                .get(reviewId)!.version,
+            ),
+          );
+        },
+      );
+
+      return { reviewId, version: snapshot.version, ids };
+    });
   }
   /** Where a board sits: its parent, and the parent's children in order,
    * each with what its header shows. */
@@ -2249,7 +2569,13 @@ export class ReviewStore {
   }
   /** New links must point at a board and block that exist. Saved links are
    * not rechecked, since their target may have been deleted. */
-  private checkBoardLinks(snapshot: Snapshot, previous?: Snapshot) {
+  private checkBoardLinks(
+    snapshot: Snapshot,
+    previous?: Snapshot,
+    /** ⌘Z can bring back a link to a board or block deleted since; it
+     * shows as deleted, like any link whose target went away. */
+    person = false,
+  ) {
     const key = ({ to }: BoardLinkRef) => `${to.board}#${to.block ?? ""}`;
 
     const kept = new Set(
@@ -2267,12 +2593,15 @@ export class ReviewStore {
             ? this.read(to.board).document
             : undefined;
 
+      if (!document && person && this.wasDeleted(to.board)) continue;
+
       if (!document)
         throw new ReviewInputError(
           `Block ${from.block} links to board ${to.board}, which does not exist. Link a board by its sessionId from session_list.`,
         );
 
       if (
+        !person &&
         to.block !== undefined &&
         !elements(document).some((element) => element.id === to.block)
       )
@@ -2280,6 +2609,12 @@ export class ReviewStore {
           `Block ${from.block} links to block ${to.block}, which is not on board ${to.board}. Read the board with session_get for its block ids.`,
         );
     }
+  }
+  private wasDeleted(id: string) {
+    return (
+      this.db.prepare("SELECT 1 FROM deleted_boards WHERE id=?").get(id) !==
+      undefined
+    );
   }
   /** The boards that link to a board or its blocks. */
   linkingBoards(id: string): string[] {
@@ -2918,6 +3253,121 @@ export class ReviewStore {
 
     return warnings.sort();
   }
+}
+
+/** The highest number in a document's `prefix-N` ids, units included. */
+function highestIdNumber(document: Block[]): number {
+  let highest = 0;
+
+  for (const [, number] of JSON.stringify(document).matchAll(
+    /"id":"[^"]*?-(\d+)"/g,
+  ))
+    highest = Math.max(highest, Number(number));
+
+  return highest;
+}
+
+/** The title of a board a person made and has not named. */
+const UNTITLED = "Untitled";
+
+/** A person's save must start from the board's current version. */
+function assertBaseVersion(base: number, current: number) {
+  if (base !== current)
+    throw new ReviewInputError(
+      `The board changed since version ${base}; it is now at version ${current}. Merge the latest version and save again.`,
+      409,
+    );
+}
+
+const clientKeySchema = z.string().min(1).optional();
+
+/** Removes each block's clientKey from a person's raw document, keeping it
+ * by the block's path when the block has no id. Counts the bare blocks. */
+function takeClientKeys(document: JsonValue[]) {
+  const byPath = new Map<string, string>();
+  const seen = new Set<string>();
+  let bare = 0;
+
+  const visit = (list: JsonValue[], prefix: string) =>
+    list.forEach((block, index) => {
+      if (!isJsonObject(block)) return;
+      const path = `${prefix}${index}`;
+      const clientKey = clientKeySchema.parse(block.clientKey);
+
+      delete block.clientKey;
+
+      if (block.id === undefined) {
+        bare++;
+
+        if (clientKey !== undefined) {
+          if (seen.has(clientKey))
+            throw new ReviewInputError(
+              `clientKey ${clientKey} names more than one block. Give each new block its own clientKey.`,
+            );
+          seen.add(clientKey);
+          byPath.set(path, clientKey);
+        }
+      }
+
+      if (Array.isArray(block.children)) visit(block.children, `${path}/`);
+    });
+
+  visit(document, "");
+
+  return { byPath, bare };
+}
+
+/** The block at a path takeClientKeys recorded. */
+function blockAt(document: Block[], path: string): Block {
+  const [first, ...rest] = path.split("/").map(Number);
+  let block = document[first!]!;
+
+  for (const index of rest)
+    if ("children" in block) block = block.children[index]!;
+
+  return block;
+}
+
+/** Ids name one component each across the whole document. */
+function assertUniqueIds(document: Block[]) {
+  const seen = new Set<string>();
+
+  for (const { id } of elements(document)) {
+    if (id === undefined) continue;
+
+    if (seen.has(id))
+      throw new ReviewInputError(
+        `Id ${id} names more than one component. Give each block its own id, or leave a new block's id out.`,
+      );
+    seen.add(id);
+  }
+}
+
+/** Each block's own content by id, nested blocks included. A section or
+ * callout is kept without its children, so a change to a child is only the
+ * child's. */
+function ownBlocks(document: Block[], into = new Map<string, unknown>()) {
+  for (const block of document) {
+    if ("children" in block) {
+      const { children, ...own } = block;
+
+      if (block.id !== undefined) into.set(block.id, own);
+      ownBlocks(children, into);
+    } else if (block.id !== undefined) into.set(block.id, block);
+  }
+
+  return into;
+}
+
+/** The blocks added, removed or changed from one document to the next. A
+ * block moved with its content unchanged did not change. */
+function changedBlocks(before: Block[], after: Block[]): string[] {
+  const old = ownBlocks(before);
+  const now = ownBlocks(after);
+
+  return [...new Set([...old.keys(), ...now.keys()])].filter(
+    (id) => !isDeepStrictEqual(old.get(id), now.get(id)),
+  );
 }
 
 /** Whether a reference's own pins read the commit the board's previous
