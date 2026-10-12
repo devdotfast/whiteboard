@@ -433,7 +433,10 @@ export function ReviewDiffView({
                     <ViewedButton
                       progress={stats}
                       disabled={
-                        lenses.busy || !!item.unavailable || !!item.pending
+                        lenses.readOnly ||
+                        lenses.busy ||
+                        !!item.unavailable ||
+                        !!item.pending
                       }
                       label={item.title}
                       onClick={() =>
@@ -526,8 +529,14 @@ export function ReviewDiffView({
           <NativeDiffView
             treeContainer={fullTree}
             progress={fullProgress}
-            onToggleViewed={(path) => markFile(path, false)}
-            onSetViewed={(ranges, viewed) => lenses.mark(ranges, viewed)}
+            onToggleViewed={
+              lenses.readOnly ? undefined : (path) => markFile(path, false)
+            }
+            onSetViewed={
+              lenses.readOnly
+                ? undefined
+                : (ranges, viewed) => lenses.mark(ranges, viewed)
+            }
             hidden={!!lens}
             inWorkspace
           />
@@ -537,8 +546,14 @@ export function ReviewDiffView({
             lens={lens}
             treeContainer={lensTree}
             progress={lensProgress}
-            onToggleViewed={(path) => markFile(path, true)}
-            onSetViewed={(ranges, viewed) => lenses.mark(ranges, viewed)}
+            onToggleViewed={
+              lenses.readOnly ? undefined : (path) => markFile(path, true)
+            }
+            onSetViewed={
+              lenses.readOnly
+                ? undefined
+                : (ranges, viewed) => lenses.mark(ranges, viewed)
+            }
             inWorkspace
           />
         )}

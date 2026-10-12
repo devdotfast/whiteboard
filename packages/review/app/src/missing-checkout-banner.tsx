@@ -2,6 +2,7 @@ import { Button } from "@canvas/ui/button";
 import { StatusBanner } from "@canvas/ui/status-banner";
 import { type ReactElement, useState } from "react";
 
+import { useReviewSession } from "./host/review-session";
 import { useReviewActions, useReviewState } from "./review-context";
 
 export function MissingCheckoutBanner({
@@ -9,6 +10,7 @@ export function MissingCheckoutBanner({
 }: {
   worktree: boolean;
 }): ReactElement {
+  const session = useReviewSession();
   const { dismissReview } = useReviewActions();
   const { submissionOutcome } = useReviewState();
   const [busy, setBusy] = useState(false);
@@ -16,7 +18,8 @@ export function MissingCheckoutBanner({
   return (
     <StatusBanner
       action={
-        !submissionOutcome && (
+        !submissionOutcome &&
+        !session.review?.deletedAt && (
           <Button
             disabled={busy}
             onClick={async () => {
@@ -30,7 +33,7 @@ export function MissingCheckoutBanner({
               }
             }}
           >
-            Dismiss review
+            Delete whiteboard
           </Button>
         )
       }

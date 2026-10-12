@@ -7,6 +7,30 @@
    things are crisp vector, anything the agent is still thinking about is
    marker ink trailing one blue dot, and erased history lingers as ghost ink. */
 .review-canvas-root {
+  --home-expiring: #e8c76a;
+  --home-text-filter: #5b7cff1a;
+  --home-filter-active: #5b7cff29;
+  --home-filter-active-ink: #afc0ff;
+  --home-hover: #ffffff0d;
+  --home-chip-border: #39404d;
+  --home-chip: #1a1f29;
+  --home-picker: #1f2530;
+  --home-tooltip: #2a313d;
+  --home-tooltip-border: #39404d;
+  --home-tooltip-ink: #eef0f4;
+  --home-tooltip-muted: #9199a8;
+  --home-tooltip-hint: #5f6776;
+  --home-tooltip-shadow: #00000080;
+  --home-selected: #5b7cff29;
+  --home-check-border: #6b7383;
+  --home-group: #151a23;
+  --home-bar: #1f2530;
+  --home-bar-border: #39404d;
+  --home-bar-ink: #eef0f4;
+  --home-bar-muted: #9199a8;
+  --home-bar-divider: #39404d;
+  --home-bar-shadow: 0 16px 40px #000000a6;
+
   --ghost: #343a46;
   --well: #1a1f29;
   --raised: #1a1f29;
@@ -25,6 +49,7 @@
   --agent-2-glow: rgba(43, 179, 173, 0.3);
   --board-grid: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='1' cy='1' r='0.8' fill='%231A1F2A'/></svg>");
   --review-header-height: 35px;
+  --font-sans: "Geist", system-ui, -apple-system, sans-serif;
   --font-serif: "Newsreader", Georgia, serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
   --font-display: var(--font-mono);

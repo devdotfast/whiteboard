@@ -42,7 +42,8 @@ function ReviewCanvas({
       </div>
     );
 
-  if (content.kind === "home") return <Home content={content} />;
+  if (content.kind === "home")
+    return <Home content={content} findHost={findHost} />;
 
   if (content.kind === "source") {
     if (content.error) {
@@ -93,22 +94,29 @@ function ReviewCanvas({
 
 function Home({
   content,
+  findHost,
 }: {
   content: Extract<ReviewCanvasContent, { kind: "home" }>;
+  findHost: ReviewFindHost;
 }) {
   const deleteReview = content.deleteReview;
-  const dismissReview = content.dismissReview;
+  const deletePermanently = content.deletePermanently;
   const restoreReview = content.restoreReview;
 
   return (
     <ReviewHome
+      findHost={findHost}
+      view={content.view}
+      onViewChange={content.navigate}
       reviews={content.reviews}
       onOpen={(review) => content.openReview(review.reviewId)}
       onDelete={
         deleteReview ? (review) => deleteReview(review.reviewId) : undefined
       }
-      onDismiss={
-        dismissReview ? (review) => dismissReview(review.reviewId) : undefined
+      onDeletePermanently={
+        deletePermanently
+          ? (review) => deletePermanently(review.reviewId)
+          : undefined
       }
       onRestore={
         restoreReview ? (review) => restoreReview(review.reviewId) : undefined
@@ -117,6 +125,8 @@ function Home({
       setupActions={content.setupActions}
       onboarding={content.onboarding}
       onOpenTutorial={content.openTutorial}
+      onOpenSettings={content.openSettings}
+      onOpenSetup={content.openSetup}
     />
   );
 }
@@ -240,7 +250,10 @@ export function mountReviewCanvas(
       container.focus();
     },
     showFind(seed) {
-      return content.kind === "api" && findHost.showFind(seed);
+      return (
+        (content.kind === "api" || content.kind === "home") &&
+        findHost.showFind(seed)
+      );
     },
     dispose() {
       if (disposed) return;

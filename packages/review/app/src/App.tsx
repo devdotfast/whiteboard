@@ -924,7 +924,7 @@ function ReviewBatonChip({
 }: {
   outcome: ReviewSubmissionOutcome | null;
 }): ReactElement | null {
-  const tooltip = useTooltip<HTMLSpanElement>("Dismissed");
+  const tooltip = useTooltip<HTMLSpanElement>("Deleted");
 
   if (!outcome) return null;
 
@@ -943,7 +943,7 @@ function ReviewBatonChip({
         <rect x="1.6" y="2.6" width="12.8" height="3.4" rx="1" />
         <path d="M3 6v6.2a1.2 1.2 0 0 0 1.2 1.2h7.6A1.2 1.2 0 0 0 13 12.2V6" />
       </svg>
-      <span>dismissed</span>
+      <span>deleted</span>
     </span>
   );
 }

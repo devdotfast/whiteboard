@@ -1,6 +1,7 @@
 import type { ReviewTooltipOptions } from "@dev.fast/review-protocol";
-import { useCallback } from "react";
+import { useCallback, useContext } from "react";
 
+import { CanvasUiContext } from "./host/canvas-ui";
 import { useOptionalReviewSession } from "./host/review-session";
 
 /**
@@ -13,7 +14,9 @@ export function useTooltip<T extends HTMLElement = HTMLButtonElement>(
   text: string,
   { instant, quick, detail }: ReviewTooltipOptions = {},
 ) {
-  const setupTooltip = useOptionalReviewSession()?.bridge.setupTooltip;
+  const session = useOptionalReviewSession();
+  const ui = useContext(CanvasUiContext);
+  const setupTooltip = session ? session.bridge.setupTooltip : ui?.setupTooltip;
 
   return useCallback(
     (target: T | null) => {

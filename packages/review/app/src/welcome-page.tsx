@@ -295,7 +295,7 @@ export function WelcomePage({
           disabled={setupBusy || !canDismiss}
           onClick={dismissUpdate}
         >
-          Dismiss
+          Done
         </Button>
       ),
     });
@@ -396,7 +396,7 @@ export function WelcomePage({
                   disabled={setupBusy || !canDismiss}
                   onClick={dismissUpdate}
                 >
-                  Dismiss
+                  Done
                 </Button>
               ) : onClose ? (
                 <Button

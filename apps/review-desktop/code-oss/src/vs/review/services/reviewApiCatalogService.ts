@@ -8,9 +8,12 @@ import { REVIEW_STRUCTURAL_DIFF_SETTING } from "../common/reviewConfigurationDef
 import { Emitter, type Event } from "../../base/common/event.js";
 import { Disposable, toDisposable } from "../../base/common/lifecycle.js";
 import { createDecorator } from "../../platform/instantiation/common/instantiation.js";
+import { IStorageService, StorageScope, StorageTarget } from "../../platform/storage/common/storage.js";
 import { ILogService } from "../../platform/log/common/log.js";
 import { ReviewApiClient, type ReviewApiSummary } from "../common/reviewProtocol.js";
 import { IReviewDesktopConnectionService } from "./reviewDesktopConnectionService.js";
+
+export const REVIEW_HAS_PUBLISHED_BOARD = "review.hasPublishedBoard";
 
 export const IReviewApiCatalogService = createDecorator<IReviewApiCatalogService>("reviewApiCatalogService");
 export interface IReviewApiCatalogService {
@@ -21,8 +24,9 @@ export interface IReviewApiCatalogService {
 	readonly onDidChange: Event<void>;
 	readonly onDidCloseReview: Event<string>;
 	initialize(): Promise<void>;
-	attention(reviewId: string, action: "view" | "dismiss" | "restore"): Promise<void>;
+	attention(reviewId: string, action: "view" | "delete" | "restore"): Promise<void>;
 	deleteReview(reviewId: string): Promise<void>;
+	deletePermanently(reviewId: string): Promise<void>;
 }
 
 /** A live API list for Home and tab restoration; no legacy review sessions. */
@@ -42,6 +46,7 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 		@IReviewDesktopConnectionService private readonly session: IReviewDesktopConnectionService,
 		@ILogService private readonly log: ILogService,
 		@IConfigurationService private readonly configuration: IConfigurationService,
+		@IStorageService private readonly storage: IStorageService,
 	) {
 		super();
 		this._register(configuration.onDidChangeConfiguration(event => {
@@ -76,11 +81,14 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 			if (abort.signal.aborted) return;
 			const previous = this.reviews;
 			this.reviews = reviews;
+			if (reviews.some(review => review.kind !== "scratchpad")) {
+				this.storage.store(REVIEW_HAS_PUBLISHED_BOARD, true, StorageScope.APPLICATION, StorageTarget.USER);
+			}
 			this.loaded = true;
 			this.changed.fire();
 			for (const review of previous) {
 				const next = this.reviews.find((next) => next.reviewId === review.reviewId);
-				if (!next || (!review.dismissedAt && next.dismissedAt)) this.closed.fire(review.reviewId);
+				if (!next || (!review.deletedAt && next.deletedAt)) this.closed.fire(review.reviewId);
 			}
 		};
 		// Surface a failed first list instead of reporting an empty catalog:
@@ -93,7 +101,7 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 		);
 	}
 
-	async attention(reviewId: string, action: "view" | "dismiss" | "restore"): Promise<void> {
+	async attention(reviewId: string, action: "view" | "delete" | "restore"): Promise<void> {
 		await this.initialize();
 		await this.client!.post("/commands", {
 			operation: { type: "attention", reviewId, action },
@@ -106,4 +114,9 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 			operation: { type: "delete", reviewId },
 		});
 	}
+	async deletePermanently(reviewId: string): Promise<void> {
+		await this.initialize();
+		await this.client!.post("/commands", { operation: { type: "delete_permanently", reviewId } });
+	}
+
 }

@@ -4,7 +4,8 @@ import { surfaceStyles } from "@canvas/ui/surface";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useRef, useState } from "react";
 
-import type { IconProps } from "./icons";
+import { useReviewSession } from "./host/review-session";
+import { type IconProps, TrashIcon } from "./icons";
 import { useReviewActions, useReviewState } from "./review-context";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
@@ -16,6 +17,7 @@ export function ReviewCornerAction(): ReactElement | null {
   const { dismissReview } = useReviewActions();
   const { submissionOutcome } = useReviewState();
   const tutorial = useTutorial();
+  const session = useReviewSession();
 
   const closeTooltip = useTooltip("Close tutorial");
   const [busy, setBusy] = useState(false);
@@ -24,7 +26,8 @@ export function ReviewCornerAction(): ReactElement | null {
   const errorPopover = useAnchoredPopover<HTMLSpanElement>(failed, control);
 
   // A finished review has nothing left to submit or dismiss.
-  if (submissionOutcome === "dismissed") return null;
+  if (submissionOutcome === "dismissed" || session.review?.deletedAt)
+    return null;
 
   /* The tutorial is not in the review store, so there is no list to leave.
      Closing the tab is the whole action, and it needs no
@@ -58,8 +61,8 @@ export function ReviewCornerAction(): ReactElement | null {
   return (
     <div ref={control} {...stylex.props(shellStyles.topbarItem, styles.action)}>
       <Button disabled={busy} onClick={() => void dismiss()}>
-        <ArchiveIcon xstyle={styles.icon} />
-        <span>Dismiss</span>
+        <TrashIcon xstyle={styles.icon} />
+        <span>Delete</span>
       </Button>
       {failed && (
         <span
@@ -72,7 +75,7 @@ export function ReviewCornerAction(): ReactElement | null {
           )}
           role="alert"
         >
-          Could not dismiss the review. Try again.
+          Could not delete the whiteboard. Try again.
         </span>
       )}
     </div>

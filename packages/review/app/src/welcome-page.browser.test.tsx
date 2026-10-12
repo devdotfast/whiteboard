@@ -288,7 +288,7 @@ describe("WelcomePage", () => {
     writeText.mockRestore();
   });
 
-  it("advances to Dismiss after copying an upgrade prompt", async () => {
+  it("advances to Done after copying an upgrade prompt", async () => {
     const writeText = vi
       .spyOn(navigator.clipboard, "writeText")
       .mockResolvedValue();
@@ -308,7 +308,7 @@ describe("WelcomePage", () => {
     await waitForStepAdvance();
     expect(stepOpen(1)).toBe("false");
     expect(stepOpen(2)).toBe("true");
-    expect(buttons("Dismiss").at(-1)?.disabled).toBe(false);
+    expect(buttons("Done").at(-1)?.disabled).toBe(false);
     writeText.mockRestore();
   });
 
@@ -361,22 +361,27 @@ describe("WelcomePage", () => {
     expect(buttons("Close")[0]?.disabled).toBe(true);
   });
 
-  it("dismisses an upgrade from empty Home with PATH ready and the agent card open", async () => {
-    const install = content({
-      ...fresh,
-      updateNeeded: true,
-      shim: { ...fresh.shim, installed: true, onPath: true },
-    });
-
+  it("opens setup from empty Home without hiding help and settings", async () => {
+    const onOpenSetup = vi.fn<() => void>();
     await act(async () =>
       root.render(
-        <ReviewHome reviews={[]} onOpen={() => {}} install={install} />,
+        <ReviewHome
+          reviews={[]}
+          onOpen={() => {}}
+          onboarding={{
+            installed: false,
+            tutorialChecked: 0,
+            tutorialTotal: 10,
+            published: false,
+          }}
+          onOpenSetup={onOpenSetup}
+        />,
       ),
     );
-    await act(async () => buttons("Dismiss")[0]?.click());
-    expect(install.finishUpdate).toHaveBeenCalledOnce();
-    expect(container.querySelector("ol")).toBeNull();
-    expect(container.querySelector("h1")?.textContent).toBe("Sessions");
+    await act(async () => buttons("Continue setup")[0]?.click());
+    expect(onOpenSetup).toHaveBeenCalledOnce();
+    expect(container.querySelector("h1")?.textContent).toBe("Whiteboards");
+    expect(container.querySelector('[aria-label="Help"]')).not.toBeNull();
   });
 
   it("requires skill removal, PATH readiness, and opening the agent card before dismissal", async () => {
@@ -409,21 +414,21 @@ describe("WelcomePage", () => {
         />,
       ),
     );
-    expect(buttons("Dismiss")[0]?.disabled).toBe(true);
+    expect(buttons("Done")[0]?.disabled).toBe(true);
     await act(async () => buttons("Remove deprecated skills")[0]?.click());
     await waitForStepAdvance();
     expect(stepOpen(1)).toBe("true");
     expect(container.textContent).toContain(
       "Deprecated skills removed successfully",
     );
-    expect(buttons("Dismiss")[0]?.disabled).toBe(true);
-    await act(async () => buttons("Dismiss")[0]?.click());
+    expect(buttons("Done")[0]?.disabled).toBe(true);
+    await act(async () => buttons("Done")[0]?.click());
     expect(onClose).not.toHaveBeenCalled();
     await act(async () => buttons("Install whiteboard in PATH")[0]?.click());
     await waitForStepAdvance();
     expect(stepOpen(2)).toBe("true");
-    expect(buttons("Dismiss")[0]?.disabled).toBe(false);
-    await act(async () => buttons("Dismiss")[0]?.click());
+    expect(buttons("Done")[0]?.disabled).toBe(false);
+    await act(async () => buttons("Done")[0]?.click());
     expect(ready.finishUpdate).toHaveBeenCalledOnce();
     expect(onClose).toHaveBeenCalledOnce();
   });

@@ -62,6 +62,7 @@ interface Lenses {
   changedPaths: string[];
   unfoldRanges: readonly FileLineRange[];
   busy: boolean;
+  readOnly: boolean;
   error: string | null;
   structuralDiffEnabled: boolean;
 }
@@ -306,6 +307,7 @@ export function ReviewLensesProvider({
       changedPaths,
       unfoldRanges,
       busy,
+      readOnly: Boolean(snapshot.deletedAt),
       error,
       structuralDiffEnabled,
       select: (id) => {
@@ -365,6 +367,7 @@ export function ReviewLensesProvider({
       changedPaths,
       unfoldRanges,
       busy,
+      snapshot.deletedAt,
       error,
       structuralDiffEnabled,
       client,

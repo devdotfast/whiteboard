@@ -708,22 +708,23 @@ export type ReviewCanvasContent =
   | { kind: "source"; error?: string }
   | {
       kind: "home";
+      view?: "live" | "deleted";
+      navigate?(view: "live" | "deleted"): void;
+      openSettings?(): void;
+      openSetup?(): void;
       reviews: readonly ReviewApiSummary[];
       openReview(uuid: string): void;
       // Deletes the review and closes its canvas. Absent when the host does
       // not support deletion.
       deleteReview?(uuid: string): Promise<void>;
-      // Dismissal is reversible: it stamps the review and frees its pinned
-      // checkouts. Deletion is immediate and permanent. Absent when the host does
-      // not support them.
-      dismissReview?(uuid: string): Promise<void>;
+      // Deleted boards can be restored for 30 days or removed permanently.
+      deletePermanently?(uuid: string): Promise<void>;
       restoreReview?(uuid: string): Promise<void>;
       // Opens the review and pins its read-only source tree open. Absent when
       // the host cannot show the tree.
       openSourceTree?(uuid: string): void;
-      // With no reviews, Home renders the Welcome rail instead of a zero
-      // state of its own, so it needs what Welcome needs. Both absent when
-      // the install status endpoint is unavailable.
+      // Setup status is available for small catalogs so Home can show
+      // progress. Absent when the install status endpoint is unavailable.
       install?: ReviewCanvasInstallContent;
       setupActions?: ReviewCanvasSetupActions;
       onboarding?: ReviewCanvasOnboarding;
@@ -783,6 +784,7 @@ export interface ReviewMenuRequest {
 }
 
 export interface ReviewCanvasUi {
+  setupTooltip?: ReviewCanvasBridge["setupTooltip"];
   confirmDelete?(title: string): Promise<boolean>;
   showMenu(request: ReviewMenuRequest): ReviewDisposable;
 }

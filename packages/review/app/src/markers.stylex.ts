@@ -70,3 +70,11 @@ export const scopedDiffMarker = stylex.defineMarker();
 
 /** The software map's code inspector; a code peek unclips inside it. */
 export const codeInspectorMarker = stylex.defineMarker();
+
+/** Home group and row hover targets. */
+export const homeGroupMarker = stylex.defineMarker();
+
+export const homeRowMarker = stylex.defineMarker();
+
+/** A filter option reveals its empty checkbox only while hovered or keyboard focused. */
+export const filterRowMarker = stylex.defineMarker();

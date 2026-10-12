@@ -231,7 +231,10 @@ export function AskPanelContent({
   const answering =
     thread?.status === "running" || thread?.status === "waiting";
 
-  const canAsk = Boolean(agent) && (!busy || (answering && !sending));
+  const canAsk =
+    !session.review?.deletedAt &&
+    Boolean(agent) &&
+    (!busy || (answering && !sending));
 
   const post = useCallback(
     async (endpoint: `/${string}`, body: AskRequest = {}) => {

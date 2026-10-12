@@ -54,6 +54,7 @@ import { readReviewNavigationRestore } from "./review-view-state";
 import { SharingContext } from "./share-control";
 import { tokens } from "./tokens.stylex";
 import { TutorialProvider } from "./tutorial-context";
+import { Button } from "./ui/button";
 
 type ApiContent = Extract<ReviewCanvasContent, { kind: "api" }>;
 
@@ -103,6 +104,7 @@ export function ApiCanvas({
   const [lensCursor, setLensCursor] = useState<AuthoringCursor | null>(null);
   useEffect(() => setVersion(content.version), [content.version]);
   const [data, setData] = useState<ApiDocumentData>();
+  const [deletedAt, setDeletedAt] = useState<string | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
   const sourceRef = useRef<{ key: string; version: number }>(undefined);
@@ -112,6 +114,7 @@ export function ApiCanvas({
     const abort = new AbortController();
     const loader = createDocumentLoader(client);
     setData(undefined);
+    setDeletedAt(null);
     setActivity(undefined);
     setCursor(null);
     setLensCursor(null);
@@ -120,6 +123,7 @@ export function ApiCanvas({
     const lensMemory: CursorMemory = {};
 
     const show = async (snapshot: Snapshot) => {
+      setDeletedAt(snapshot.deletedAt ?? null);
       const next = await loader.load(snapshot);
 
       if (abort.signal.aborted) return;
@@ -180,7 +184,7 @@ export function ApiCanvas({
 
           if (
             shownVersion ===
-            `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}`
+            `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}:${snapshot.deletedAt ?? ""}`
           ) {
             setError(undefined);
 
@@ -189,7 +193,7 @@ export function ApiCanvas({
 
           try {
             await show(snapshot);
-            shownVersion = `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}`;
+            shownVersion = `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}:${snapshot.deletedAt ?? ""}`;
           } catch (cause) {
             // A failed resource or source fetch is a document problem. The
             // stream and the activity signal are still healthy, so do not
@@ -293,6 +297,7 @@ export function ApiCanvas({
       ...baseSession,
       review: {
         kind: snapshot.kind,
+        deletedAt: snapshot.deletedAt,
         pins: snapshot.pins
           ? { base: snapshot.pins.base, head: snapshot.pins.head }
           : undefined,
@@ -317,7 +322,7 @@ export function ApiCanvas({
             operation: {
               type: "attention",
               reviewId: content.reviewId,
-              action: "dismiss",
+              action: "delete",
             },
           });
         },
@@ -327,7 +332,10 @@ export function ApiCanvas({
 
   // Only the latest version of a review this machine owns takes edits.
   const editable =
-    version === undefined && data !== undefined && !data.snapshot.shared;
+    version === undefined &&
+    data !== undefined &&
+    !data.snapshot.shared &&
+    !data.snapshot.deletedAt;
 
   const saveMarkdown = useMemo(
     () =>
@@ -360,7 +368,7 @@ export function ApiCanvas({
 
   const sharing = useMemo(
     () =>
-      data
+      data && !data.snapshot.deletedAt
         ? {
             client,
             reviewId: content.reviewId,
@@ -371,11 +379,48 @@ export function ApiCanvas({
     [client, content.reviewId, data],
   );
 
+  const deletedBanner = deletedAt && (
+    <div role="status" {...stylex.props(styles.deletedBanner)}>
+      Deleted ·{" "}
+      {Math.min(
+        30,
+        Math.max(
+          0,
+          Math.ceil(
+            (Date.parse(deletedAt) + 30 * 86400000 - Date.now()) / 86400000,
+          ),
+        ),
+      )}{" "}
+      days left
+      <Button
+        onClick={() =>
+          void client
+            .post("/commands", {
+              operation: {
+                type: "attention",
+                action: "restore",
+                reviewId: content.reviewId,
+              },
+            })
+            .then(() => client.read<Snapshot>(`/${content.reviewId}?full=true`))
+            .then((snapshot) => {
+              setDeletedAt(snapshot.deletedAt ?? null);
+              setData((current) => current && { ...current, snapshot });
+            })
+            .catch((cause) => setError(message(cause)))
+        }
+      >
+        Restore
+      </Button>
+    </div>
+  );
+
   // Loads are near-instant, so stay blank until there is data or an error.
   // Both branches root the same query provider, so its cache outlives a load.
   if (!data)
     return (
       <CanvasQueryProvider client={client} reviewId={content.reviewId}>
+        {deletedBanner}
         {error !== undefined && (
           <>
             <p {...stylex.props(styles.error)} role="status">
@@ -392,78 +437,85 @@ export function ApiCanvas({
     );
 
   return (
-    <CanvasQueryProvider client={client} reviewId={content.reviewId}>
-      <SharingContext.Provider value={sharing}>
-        <ReviewSessionProvider session={session}>
-          <ReviewPanelProvider
-            restore={() => ({
-              asks: readOpenAsks(session.config),
-              ...readReviewNavigationRestore(session.config, {
-                softwareMapEnabled:
-                  content.softwareMapEnabled === true && data.maps.size > 0,
-                hasChangeRange:
-                  (data.snapshot.pins?.base ?? "") !==
-                  (data.snapshot.pins?.head ?? ""),
-                version: data.snapshot.version,
-                lensMode:
-                  content.structuralDiffEnabled === false
-                    ? "textual"
-                    : "structural",
-                commits: data.commits,
-              }),
-            })}
-          >
-            <DocumentData.Provider value={data}>
-              <ReviewLensesProvider
-                client={client}
-                snapshot={data.snapshot}
-                coverageRevision={coverageRevision}
-                structuralDiffEnabled={content.structuralDiffEnabled}
-              >
-                <TutorialProvider tutorial={content.tutorial}>
-                  {error && (
-                    <p {...stylex.props(styles.error)} role="status">
-                      {error}
-                    </p>
-                  )}
-                  <AuthoringActivityContext.Provider
-                    value={version === undefined ? activity : undefined}
-                  >
-                    <DrawQueueProvider
-                      cursor={version === undefined ? cursor : undefined}
+    <div {...stylex.props(styles.canvasSurface)}>
+      <CanvasQueryProvider client={client} reviewId={content.reviewId}>
+        <SharingContext.Provider value={sharing}>
+          <ReviewSessionProvider session={session}>
+            <ReviewPanelProvider
+              restore={() => ({
+                asks: readOpenAsks(session.config),
+                ...readReviewNavigationRestore(session.config, {
+                  softwareMapEnabled:
+                    content.softwareMapEnabled === true && data.maps.size > 0,
+                  hasChangeRange:
+                    (data.snapshot.pins?.base ?? "") !==
+                    (data.snapshot.pins?.head ?? ""),
+                  version: data.snapshot.version,
+                  lensMode:
+                    content.structuralDiffEnabled === false
+                      ? "textual"
+                      : "structural",
+                  commits: data.commits,
+                }),
+              })}
+            >
+              <DocumentData.Provider value={data}>
+                <ReviewLensesProvider
+                  client={client}
+                  snapshot={data.snapshot}
+                  coverageRevision={coverageRevision}
+                  structuralDiffEnabled={content.structuralDiffEnabled}
+                >
+                  <TutorialProvider tutorial={content.tutorial}>
+                    {error && (
+                      <p {...stylex.props(styles.error)} role="status">
+                        {error}
+                      </p>
+                    )}
+                    {deletedBanner}
+                    <AuthoringActivityContext.Provider
+                      value={version === undefined ? activity : undefined}
                     >
                       <DrawQueueProvider
-                        scope="lenses"
-                        cursor={version === undefined ? lensCursor : undefined}
+                        cursor={version === undefined ? cursor : undefined}
                       >
-                        <DisplayedReviewVersionContext.Provider
-                          value={data.snapshot.version}
+                        <DrawQueueProvider
+                          scope="lenses"
+                          cursor={
+                            version === undefined ? lensCursor : undefined
+                          }
                         >
-                          <MapEnabled.Provider
-                            value={content.softwareMapEnabled === true}
+                          <DisplayedReviewVersionContext.Provider
+                            value={data.snapshot.version}
                           >
-                            <SaveMarkdown.Provider value={saveMarkdown}>
-                              <CanvasDocument
-                                data={data}
-                                findHost={findHost}
-                                softwareMapEnabled={
-                                  content.softwareMapEnabled === true
-                                }
-                                documentWidth={content.documentWidth}
-                              />
-                            </SaveMarkdown.Provider>
-                          </MapEnabled.Provider>
-                        </DisplayedReviewVersionContext.Provider>
+                            <MapEnabled.Provider
+                              value={content.softwareMapEnabled === true}
+                            >
+                              <SaveMarkdown.Provider value={saveMarkdown}>
+                                <div {...stylex.props(styles.canvasFrame)}>
+                                  <CanvasDocument
+                                    data={data}
+                                    findHost={findHost}
+                                    softwareMapEnabled={
+                                      content.softwareMapEnabled === true
+                                    }
+                                    documentWidth={content.documentWidth}
+                                  />
+                                </div>
+                              </SaveMarkdown.Provider>
+                            </MapEnabled.Provider>
+                          </DisplayedReviewVersionContext.Provider>
+                        </DrawQueueProvider>
                       </DrawQueueProvider>
-                    </DrawQueueProvider>
-                  </AuthoringActivityContext.Provider>
-                </TutorialProvider>
-              </ReviewLensesProvider>
-            </DocumentData.Provider>
-          </ReviewPanelProvider>
-        </ReviewSessionProvider>
-      </SharingContext.Provider>
-    </CanvasQueryProvider>
+                    </AuthoringActivityContext.Provider>
+                  </TutorialProvider>
+                </ReviewLensesProvider>
+              </DocumentData.Provider>
+            </ReviewPanelProvider>
+          </ReviewSessionProvider>
+        </SharingContext.Provider>
+      </CanvasQueryProvider>
+    </div>
   );
 }
 
@@ -531,6 +583,24 @@ const CanvasDocument = memo(function CanvasDocument({
 });
 
 const styles = stylex.create({
+  canvasSurface: {
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+    minHeight: 0,
+  },
+  canvasFrame: { flex: "1 1 0", minHeight: 0 },
+  deletedBanner: {
+    display: "flex",
+    gap: "12px",
+    alignItems: "center",
+    padding: "10px 24px",
+    backgroundColor: tokens.tray,
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.body,
+    flexShrink: 0,
+  },
   error: {
     maxWidth: "72ch",
     margin: "32px auto",

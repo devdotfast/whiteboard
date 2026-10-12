@@ -3,6 +3,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -60,6 +61,10 @@ export function ReviewProvider({
   // the canvas can show that state instead of a live-looking document.
   const [submissionOutcome, setSubmissionOutcome] =
     useState<ReviewSubmissionOutcome | null>(null);
+
+  useEffect(() => {
+    if (!review.deletedAt) setSubmissionOutcome(null);
+  }, [review.deletedAt]);
 
   const panelStore = useOptionalReviewPanelStore();
 
