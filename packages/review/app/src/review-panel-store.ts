@@ -128,6 +128,9 @@ export interface AskOpenOptions {
   /** That Ask leaves the screen even while its agent works, as when its
    * conversation was deleted. */
   replace?: boolean;
+  /** Leaves the caret where it is, as a click on a passage's words in the
+   * board's editor does. */
+  keepFocus?: boolean;
 }
 
 export interface ReviewNavigationActions {
@@ -210,13 +213,16 @@ export function createReviewPanelStore({
   const showAsk = (
     state: ReviewPanelStoreState,
     view: AskView,
-    { from, replace = false }: AskOpenOptions,
+    { from, replace = false, keepFocus = false }: AskOpenOptions,
   ): Partial<ReviewPanelState> => {
     // The Ask asking for its own view wants it afresh, as to reconnect.
     if (state.asks.some((ask) => ask.key !== from && showsView(ask, view)))
       return { motion: "live" };
 
-    const ask = newAsk(nextAskKey++, view);
+    const ask: AskPanel = {
+      ...newAsk(nextAskKey++, view),
+      ...(keepFocus && { unfocused: true }),
+    };
 
     if (from !== undefined && from === state.askWindow) {
       // A working thread floats on, and what it asked for takes the column;

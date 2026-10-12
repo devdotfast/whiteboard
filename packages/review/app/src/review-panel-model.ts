@@ -95,6 +95,9 @@ export interface AskPanel {
    * window. */
   busy: boolean;
   presence: AskPresence;
+  /** Opened where the reader is editing, which keeps the caret: its
+   * composer waits to be clicked into. */
+  unfocused?: true;
 }
 
 /** What an open Ask says about itself as its conversation goes. */

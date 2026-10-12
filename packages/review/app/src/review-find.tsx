@@ -167,7 +167,9 @@ function createFindController(
     const target = priorFocus;
     priorFocus = null;
 
-    if (restoreFocus && target?.isConnected) target.focus();
+    // Back where it was, without scrolling the board to it.
+    if (restoreFocus && target?.isConnected)
+      target.focus({ preventScroll: true });
   };
 
   const reveal = (index: number) => {

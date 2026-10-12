@@ -66,7 +66,11 @@ import { formatRelativeTime } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { ArrowUpIcon, ImageIcon, LockIcon } from "./icons";
 import { useReviewHostDown } from "./remote-host-state";
-import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
+import {
+  useAskKey,
+  useOptionalReviewPanel,
+  useOptionalReviewPanelStore,
+} from "./review-panel";
 import type { AskReport } from "./review-panel-model";
 import { fontSize, radius } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
@@ -220,7 +224,14 @@ export function AskPanelContent({
     };
   }, [latestSession, savedThreadId, requestedAgent, closeLate]);
 
-  useEffect(() => composer.current?.focus(), [agent, loadingConversation]);
+  // Unless it opened where the reader is editing.
+  const unfocused = useOptionalReviewPanel(
+    (state) => state.asks.find((ask) => ask.key === askKey)?.unfocused,
+  );
+
+  useEffect(() => {
+    if (!unfocused) composer.current?.focus();
+  }, [agent, loadingConversation, unfocused]);
 
   // The server saves a conversation once the agent starts it and dates it
   // by its last turn, so the document's marks and the history follow.

@@ -1,6 +1,7 @@
-import { type ReactNode, act, useRef } from "react";
+import { EditorView } from "@tiptap/pm/view";
+import { type ReactNode, act, useLayoutEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 
 import { MarkdownContent } from "./agent-markdown";
@@ -8,11 +9,19 @@ import { type AskAnchor, askAnchor } from "./ask-anchor";
 import { AskHistoryProvider, useAskHistory } from "./ask-history";
 import { AskHistoryList } from "./ask-history-list";
 import { AskThreadMarks } from "./ask-marks";
+import type { Board } from "./board-editor/board-doc";
+import { createBoardState } from "./board-editor/editor-state";
 import { documentStyles } from "./document-styles";
 import { drawStyles } from "./draw-styles";
 import { ReviewSessionProvider } from "./host/review-session";
 import { documentMarker } from "./markers.stylex";
-import { ReviewPanelProvider, useReviewPanel } from "./review-panel";
+import {
+  ReviewPanelProvider,
+  useReviewPanel,
+  useReviewPanelStore,
+} from "./review-panel";
+import type { PeekAnchor } from "./review-panel-model";
+import type { ReviewPanelStore } from "./review-panel-store";
 import { ReviewRootsProvider } from "./review-root-context";
 import { testReviewSession } from "./review-session-test-utils";
 import { withClass } from "./stylex-props";
@@ -952,4 +961,298 @@ it("scrolls to a history passage on hover, keyboard focus, and activation", asyn
   } finally {
     await act(async () => root.unmount());
   }
+});
+
+let editor: EditorView | undefined;
+
+/** A board in its editor, which owns the blocks it draws. */
+function BoardInEditor({ board }: { board: Board }) {
+  const host = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    editor = new EditorView(host.current!, { state: createBoardState(board) });
+
+    return () => editor?.destroy();
+  }, [board]);
+
+  return <div ref={host} />;
+}
+
+it("pins and washes a passage in a board's editor, and keeps both as the board is edited", async () => {
+  const session = testReviewSession();
+
+  const board: Board = {
+    title: "Plan",
+    document: [
+      {
+        id: "block-1",
+        type: "markdown",
+        markdown:
+          "Retries are cheap.\n\nStripe redelivers a webhook whenever our handler times out.",
+      },
+      { id: "block-2", type: "markdown", markdown: "The index is safe." },
+    ],
+  };
+
+  const quote = "redelivers a webhook";
+
+  const [stripe] = await anchorsIn(<BoardInEditor board={board} />, [
+    { words: quote },
+  ]);
+
+  vi.spyOn(session, "fetch").mockImplementation(async () =>
+    Response.json({ threads: [saved("stripe", quote, stripe)] }),
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () =>
+    root.render(
+      <ReviewSessionProvider session={session}>
+        <ReviewPanelProvider>
+          <AskHistoryProvider>
+            <Document revision="1">
+              <BoardInEditor board={board} />
+            </Document>
+          </AskHistoryProvider>
+        </ReviewPanelProvider>
+      </ReviewSessionProvider>,
+    ),
+  );
+
+  const pin = () => container.querySelector<HTMLElement>(".ask-mark-pin");
+
+  const paragraph = () =>
+    [...container.querySelectorAll("p")].find((element) =>
+      element.textContent?.includes(quote),
+    )!;
+
+  // Beside its passage's line, washed; still so once the editor has seen
+  // whatever was done to its blocks.
+  const marked = async () => {
+    await vi.waitFor(async () => {
+      await frame();
+      expect(pin()).toBeTruthy();
+    });
+
+    for (let settle = 0; settle < 3; settle++) await frame();
+    const line = paragraph().getBoundingClientRect();
+    const at = pin()!.getBoundingClientRect();
+
+    expect(at.left).toBeGreaterThan(line.right);
+    expect(at.top).toBeGreaterThanOrEqual(line.top - 4);
+    expect(at.bottom).toBeLessThanOrEqual(line.bottom + 4);
+    expect([...CSS.highlights.get("ask-thread")!][0]?.toString()).toBe(quote);
+  };
+
+  try {
+    await marked();
+
+    // A line typed in another block.
+    await act(async () => {
+      const end = editor!.state.doc.content.size - 1;
+      editor!.dispatch(editor!.state.tr.insertText(" It always was.", end));
+    });
+    await marked();
+
+    // And a paragraph above it in its own block.
+    await act(async () => {
+      let at = 0;
+      editor!.state.doc.descendants((node, pos) => {
+        if (node.isText && node.text === "Retries are cheap.") at = pos;
+      });
+      editor!.dispatch(
+        editor!.state.tr.insertText(
+          "They also keep the handler honest when the network drops a reply. ",
+          at,
+        ),
+      );
+    });
+    await marked();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+describe("a click on a passage's words in a board's editor", () => {
+  let store: ReviewPanelStore | undefined;
+
+  function StoreProbe() {
+    store = useReviewPanelStore();
+
+    return null;
+  }
+
+  const board: Board = {
+    title: "Plan",
+    document: [
+      {
+        id: "block-1",
+        type: "markdown",
+        markdown:
+          "Stripe redelivers a webhook whenever our handler times out, so the handler must be idempotent.",
+      },
+    ],
+  };
+
+  /** The board in its editor with these conversations, washed and pinned. */
+  async function mount(
+    threads: (anchor: (words: string) => AskAnchor) => unknown[],
+    words: string[],
+  ) {
+    const session = testReviewSession();
+
+    const anchors = await anchorsIn(
+      <BoardInEditor board={board} />,
+      words.map((each) => ({ words: each })),
+    );
+
+    vi.spyOn(session, "fetch").mockImplementation(async () =>
+      Response.json({
+        threads: threads((each) => anchors[words.indexOf(each)]!),
+      }),
+    );
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () =>
+      root.render(
+        <ReviewSessionProvider session={session}>
+          <ReviewPanelProvider>
+            <AskHistoryProvider>
+              <Document revision="1">
+                <BoardInEditor board={board} />
+              </Document>
+              <Probe />
+              <StoreProbe />
+            </AskHistoryProvider>
+          </ReviewPanelProvider>
+        </ReviewSessionProvider>,
+      ),
+    );
+
+    await vi.waitFor(async () => {
+      await frame();
+      expect(container.querySelector(".ask-mark-pin")).toBeTruthy();
+    });
+
+    const paragraph = container.querySelector("p")!;
+
+    /** A point on these words, from the paragraph's top left. */
+    const on = (words: string, at = 0.5) => {
+      const rect = rangeOf(paragraph, words).getClientRects()[0]!;
+      const box = paragraph.getBoundingClientRect();
+
+      return {
+        x: rect.left - box.left + rect.width * at,
+        y: rect.top - box.top + rect.height / 2,
+      };
+    };
+
+    return { root, paragraph, on };
+  }
+
+  it("opens the conversation and puts the caret where it was clicked", async () => {
+    const quote = "redelivers a webhook";
+
+    const { root, paragraph, on } = await mount(
+      (anchor) => [saved("stripe", quote, anchor(quote))],
+      [quote],
+    );
+
+    try {
+      await userEvent.click(paragraph, { position: on("webhook") });
+      expect(view).toMatchObject({ type: "saved", threadId: "stripe" });
+
+      // Inside the word clicked.
+      const word = rangeOf(paragraph, "webhook");
+      const start = editor!.posAtDOM(word.startContainer, word.startOffset);
+
+      expect(editor!.state.selection.empty).toBe(true);
+      expect(editor!.state.selection.from).toBeGreaterThan(start);
+      expect(editor!.state.selection.from).toBeLessThan(
+        start + "webhook".length,
+      );
+      expect(
+        document.querySelector(".ask-mark-pin")?.hasAttribute("data-active"),
+      ).toBe(true);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
+  it("opens nothing for a selection dragged across the passage", async () => {
+    const quote = "redelivers a webhook";
+
+    const { root, paragraph, on } = await mount(
+      (anchor) => [saved("stripe", quote, anchor(quote))],
+      [quote],
+    );
+
+    try {
+      await userEvent.dragAndDrop(paragraph, paragraph, {
+        sourcePosition: on("Stripe", 0.1),
+        targetPosition: on(quote, 0.9),
+      });
+
+      expect(editor!.state.selection.empty).toBe(false);
+      expect(view).toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
+  it("puts the conversation in place of an open peek", async () => {
+    const quote = "redelivers a webhook";
+
+    const { root, paragraph, on } = await mount(
+      (anchor) => [saved("stripe", quote, anchor(quote))],
+      [quote],
+    );
+
+    try {
+      await act(async () =>
+        store!.getState().openPeek({
+          kind: "peek",
+          anchor: { id: "peek", title: "Handler" } as PeekAnchor,
+          content: { kind: "inline-code", text: "handle();" },
+        }),
+      );
+      expect(store!.getState().active).not.toBeNull();
+
+      await userEvent.click(paragraph, { position: on(quote) });
+      expect(store!.getState().active).toBeNull();
+      expect(view).toMatchObject({ type: "saved", threadId: "stripe" });
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
+  it("lists the conversations of passages that overlap where it was clicked", async () => {
+    const { root, paragraph, on } = await mount(
+      (anchor) => [
+        saved(
+          "webhook",
+          "redelivers a webhook",
+          anchor("redelivers a webhook"),
+        ),
+        saved("handler", "a webhook whenever", anchor("a webhook whenever")),
+      ],
+      ["redelivers a webhook", "a webhook whenever"],
+    );
+
+    try {
+      await userEvent.click(paragraph, { position: on("webhook") });
+      expect(view).toMatchObject({
+        type: "history",
+        passage: { threadIds: ["webhook", "handler"], several: true },
+      });
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
 });

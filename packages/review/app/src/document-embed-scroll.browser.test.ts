@@ -207,3 +207,22 @@ it("continues scrolling the document when the embed fits and removes the handler
   expect(wheel.defaultPrevented).toBe(false);
   expect(region.scrollTop).toBe(80);
 });
+
+it.each(["sequence-diagram", "flow-diagram", "database-lens", "code-peek"])(
+  "leaves vertical gestures to a %s in the board block a click selected",
+  (embedClass) => {
+    const { region, embed, content } = mount(embedClass);
+
+    embed.parentElement!.setAttribute("data-board-selected", "true");
+
+    const wheel = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: 120,
+    });
+
+    content.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(false);
+    expect(region.scrollTop).toBe(0);
+  },
+);

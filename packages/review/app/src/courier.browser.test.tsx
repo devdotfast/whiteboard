@@ -168,6 +168,21 @@ it("jumps when clicked, goes grey when the stream drops, and leaves when the lea
   standsOn("b1");
 });
 
+it("stays when a new lease begins while he is leaving", async () => {
+  await render(working(), at("b1", "focus", 1));
+  await vi.waitFor(() => expect(courier()).toBeTruthy());
+
+  // An agent that ends its activity and at once begins another.
+  await render(ended, at("b1", "focus", 1));
+  await vi.waitFor(() => expect(courier()!.dataset.motion).toBe("leaving"));
+  await render(working(), at("b1", "focus", 1));
+
+  await new Promise((done) => setTimeout(done, 600));
+  expect(courier()).toBeTruthy();
+  expect(courier()!.dataset.motion).toBeUndefined();
+  standsOn("b1");
+});
+
 it("stays off the board while no activity is known and while viewing history", async () => {
   await render(undefined, at("b1", "focus", 1));
   expect(courier()).toBeNull();

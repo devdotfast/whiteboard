@@ -20,7 +20,7 @@ import { useAskHistory } from "./ask-history";
 import { setCssHighlight } from "./css-highlights";
 import { useOptionalReviewPanelStore } from "./review-panel";
 import type { AskPassage } from "./review-panel-model";
-import type { ReviewPanelStore } from "./review-panel-store";
+import type { AskOpenOptions, ReviewPanelStore } from "./review-panel-store";
 import { fontSize, radius } from "./scale.stylex";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -45,14 +45,19 @@ interface AskMark {
   block: HTMLElement;
   /** The outermost list or table, which its pin stays clear of. */
   lane: HTMLElement;
+  /** The review block holding it, by its id: what its pin is anchored to. */
+  anchor: { id: string; element: HTMLElement };
 }
 
 /** The pins level with one line, side by side in reading order. */
 interface PinRow {
   key: string;
   marks: AskMark[];
-  /** From the block's top to the pins, level with their line. */
+  /** From the top of the review block they are anchored to, to the pins,
+   * level with their line. */
   offset: number;
+  /** From that review block's left to the right of their lane. */
+  laneEnd: number;
 }
 
 /** A pin's height: its line, padding and border. */
@@ -100,12 +105,17 @@ function overflows(
 
 /** Opens a pin's conversations: the one, or the list of them. Passages
  * folded together open as one list. */
-function openMarks(panels: ReviewPanelStore | null, marks: readonly AskMark[]) {
+function openMarks(
+  panels: ReviewPanelStore | null,
+  marks: readonly AskMark[],
+  options: AskOpenOptions = {},
+) {
   openAskConversations(
     panels,
     marks.flatMap((mark) => mark.entries),
     marks.map((mark) => mark.quote).join(" · "),
     marks.length > 1,
+    options,
   );
 }
 
@@ -115,6 +125,7 @@ export function openAskConversations(
   entries: readonly AskHistoryEntry[],
   quote: string,
   several = false,
+  options: AskOpenOptions = {},
 ) {
   const [newest] = entries;
 
@@ -136,6 +147,7 @@ export function openAskConversations(
           agent: newest.agent,
         }
       : { type: "history", passage },
+    options,
   );
 }
 
@@ -159,6 +171,39 @@ function outermost(block: HTMLElement, article: HTMLElement): HTMLElement {
 }
 
 const CONTAINER_BLOCKS = "ul, ol, dl, table";
+
+/** Names review blocks as CSS anchors, `id → name`, from a stylesheet of
+ * its own. Pins are anchored only through here, and never by writing onto
+ * the document's elements: a board's blocks belong to its editor, which
+ * takes any change to them for an edit and draws the block afresh, losing
+ * the name and the words a wash was drawn over. */
+function useAnchorNames(
+  article: HTMLElement | null,
+  names: ReadonlyMap<string, string>,
+) {
+  useLayoutEffect(() => {
+    if (!article || !names.size) return;
+    // SAFETY: an element's root node is its document or a shadow root.
+    const root = article.getRootNode() as Document | ShadowRoot;
+    const sheet = new CSSStyleSheet();
+
+    sheet.replaceSync(
+      [...names]
+        .map(
+          ([id, name]) =>
+            `[data-review-node-id="${CSS.escape(id)}"] { anchor-name: ${name}; }`,
+        )
+        .join("\n"),
+    );
+    root.adoptedStyleSheets = [...root.adoptedStyleSheets, sheet];
+
+    return () => {
+      root.adoptedStyleSheets = root.adoptedStyleSheets.filter(
+        (adopted) => adopted !== sheet,
+      );
+    };
+  }, [article, names]);
+}
 
 interface FoundMarks {
   marks: AskMark[];
@@ -184,10 +229,10 @@ function firstLineOffset(block: HTMLElement) {
   );
 }
 
-/** From a mark's block's top to its pin, centred on the passage's first
- * line. */
+/** From the top of a mark's review block to its pin, centred on the
+ * passage's first line. */
 function offsetOf(mark: AskMark): number {
-  const top = mark.block.getBoundingClientRect().top;
+  const top = mark.anchor.element.getBoundingClientRect().top;
   const rects = [...mark.range.getClientRects()];
 
   // A passage starting where a line wraps has an empty box at the end of
@@ -202,7 +247,9 @@ function offsetOf(mark: AskMark): number {
   // A hidden block draws no lines.
   return line
     ? line.top - top + line.height / 2 - PIN_HEIGHT / 2
-    : firstLineOffset(mark.block);
+    : mark.block.getBoundingClientRect().top -
+        top +
+        firstLineOffset(mark.block);
 }
 
 /** Lays out the pins as the document is drawn now: in reading order, which
@@ -212,6 +259,10 @@ function layOutRows(marks: readonly AskMark[]): PinRow[] {
   const placed = marks.map((mark) => ({
     mark,
     offset: Math.round(offsetOf(mark)),
+    laneEnd: Math.round(
+      mark.lane.getBoundingClientRect().right -
+        mark.anchor.element.getBoundingClientRect().left,
+    ),
   }));
 
   placed.sort(
@@ -230,7 +281,7 @@ function layOutRows(marks: readonly AskMark[]): PinRow[] {
 
   const rows: PinRow[] = [];
 
-  for (const { mark, offset } of placed) {
+  for (const { mark, offset, laneEnd } of placed) {
     const row = rows.at(-1);
 
     // Lines are further apart than half a pin; words in a smaller font on
@@ -240,7 +291,7 @@ function layOutRows(marks: readonly AskMark[]): PinRow[] {
       Math.abs(row.offset - offset) < PIN_HEIGHT / 2
     )
       row.marks.push(mark);
-    else rows.push({ key: mark.key, marks: [mark], offset });
+    else rows.push({ key: mark.key, marks: [mark], offset, laneEnd });
   }
 
   return rows;
@@ -252,6 +303,7 @@ function sameRows(before: readonly PinRow[], after: readonly PinRow[]) {
     before.every(
       (row, index) =>
         row.offset === after[index]!.offset &&
+        row.laneEnd === after[index]!.laneEnd &&
         row.marks.length === after[index]!.marks.length &&
         row.marks.every((mark, at) => mark === after[index]!.marks[at]),
     )
@@ -267,7 +319,10 @@ function findMarks(
   board: string | null,
 ): FoundMarks {
   // Conversations about the same words share a mark.
-  const found = new Map<string, { range: Range; entries: AskHistoryEntry[] }>();
+  const found = new Map<
+    string,
+    { range: Range; anchor: AskMark["anchor"]; entries: AskHistoryEntry[] }
+  >();
 
   const outdated = new Set<string>();
 
@@ -293,12 +348,17 @@ function findMarks(
     const mark = found.get(key);
 
     if (mark) mark.entries.push(entry);
-    else found.set(key, { range, entries: [entry] });
+    else
+      found.set(key, {
+        range,
+        anchor: { id: target.anchor.blockId, element: at.block },
+        entries: [entry],
+      });
   }
 
   const marks: AskMark[] = [];
 
-  for (const [key, { range, entries: asked }] of found) {
+  for (const [key, { range, anchor, entries: asked }] of found) {
     const start =
       range.startContainer instanceof Element
         ? range.startContainer
@@ -317,6 +377,7 @@ function findMarks(
       // Pins run in one lane for every kind of block: level with a table
       // narrower than the prose, and outside a block wider than it.
       lane: outermost(block, article),
+      anchor,
     });
   }
 
@@ -332,7 +393,7 @@ function findMarks(
 function rowStyle(
   prefix: string,
   index: number,
-  names: ReadonlyMap<HTMLElement, string>,
+  names: ReadonlyMap<string, string>,
   row: PinRow,
 ): CSSProperties {
   const [lead] = row.marks;
@@ -342,12 +403,20 @@ function rowStyle(
   // names.
   return {
     "--ask-pin-row": `${prefix}-row-${index}`,
-    "--ask-pin-block": names.get(lead!.block),
-    "--ask-pin-lane": names.get(lead!.lane),
+    "--ask-pin-block": names.get(lead!.anchor.id),
     "--ask-pin-offset": `${row.offset}px`,
+    "--ask-pin-lane-end": `${row.laneEnd}px`,
     "--ask-pin-above": `${prefix}-row-${index - 1}`,
   } as CSSProperties;
 }
+
+/** How far a press may move and still be a click rather than a drag. */
+const CLICK_SLOP = 4;
+
+/** What a click inside the article does itself, rather than open a pin's
+ * conversations: the pins, links and controls. */
+const CLICKABLE =
+  "[data-ask-pins], a, button, input, textarea, select, [role=button]";
 
 /** Whether the pointer is on a mark's words. */
 function under(mark: AskMark, x: number, y: number) {
@@ -379,6 +448,10 @@ export function AskThreadMarks({
   const [rows, setRows] = useState<PinRow[]>([]);
 
   const [active, setActive] = useState<string | null>(null);
+  // The passages a click on their words opened, which stay paired with
+  // their pins until a click elsewhere.
+  const [chosen, choose] = useState<readonly string[]>([]);
+  const panels = useOptionalReviewPanelStore();
 
   // When the gutter is too narrow for any row, every row rests as a tick;
   // the pointer or focus on one opens it.
@@ -419,9 +492,10 @@ export function AskThreadMarks({
     };
   }, [article, entries, board, revision, reportOutdated]);
 
-  // A narrower column can wrap a passage onto another line of its block, so
-  // its pin's offset is measured again when the block resizes. Across the
-  // page the pins track the text without this, by their anchors.
+  // A narrower column can wrap a passage onto another line of its block,
+  // and an edit above it in its review block moves it down, so its pin's
+  // offset is measured again when either resizes, as is its lane's end.
+  // Across the page the pins track the text without this, by their anchors.
   useLayoutEffect(() => {
     if (!article || !marks.length) {
       setRows((before) => (before.length ? [] : before));
@@ -444,8 +518,10 @@ export function AskThreadMarks({
 
     const resized = new ResizeObserver(layOut);
 
-    for (const block of new Set(marks.map((mark) => mark.block)))
-      resized.observe(block);
+    for (const element of new Set(
+      marks.flatMap((mark) => [mark.block, mark.lane, mark.anchor.element]),
+    ))
+      resized.observe(element);
 
     return () => resized.disconnect();
   }, [article, marks]);
@@ -487,6 +563,63 @@ export function AskThreadMarks({
     };
   }, [article, marks]);
 
+  // A plain click on a passage's words opens its conversations, as its pin
+  // does, while an editor places its caret there as usual; a click on no
+  // passage lets go of the one opened. A drag, a selection, a modifier, a
+  // second click or the keyboard never opens one, so editing a passage's
+  // words leaves its conversations be. Only listened to: the article's
+  // blocks may belong to an editor.
+  useEffect(() => {
+    if (!article) return;
+    let pressed: { x: number; y: number } | null = null;
+
+    const press = (event: PointerEvent) => {
+      pressed =
+        event.isPrimary && event.button === 0
+          ? { x: event.clientX, y: event.clientY }
+          : null;
+    };
+
+    const click = (event: MouseEvent) => {
+      const from = pressed;
+
+      pressed = null;
+
+      if (
+        !from ||
+        event.button !== 0 ||
+        event.detail !== 1 ||
+        event.shiftKey ||
+        event.altKey ||
+        event.metaKey ||
+        event.ctrlKey ||
+        Math.hypot(event.clientX - from.x, event.clientY - from.y) >
+          CLICK_SLOP ||
+        (event.target instanceof Element && event.target.closest(CLICKABLE)) ||
+        article.ownerDocument.getSelection()?.isCollapsed === false
+      )
+        return;
+
+      const hit = marks.filter((mark) =>
+        under(mark, event.clientX, event.clientY),
+      );
+
+      choose((before) =>
+        before.length || hit.length ? hit.map((mark) => mark.key) : before,
+      );
+      // The caret stays where the click put it.
+      openMarks(panels, hit, { keepFocus: true });
+    };
+
+    article.addEventListener("pointerdown", press);
+    article.addEventListener("click", click);
+
+    return () => {
+      article.removeEventListener("pointerdown", press);
+      article.removeEventListener("click", click);
+    };
+  }, [article, marks, panels]);
+
   const revealRequest = history?.revealRequest;
 
   useEffect(() => {
@@ -508,7 +641,13 @@ export function AskThreadMarks({
     return () => cancelAnimationFrame(frame);
   }, [article, revealRequest, revision]);
 
-  const historyId = history?.previewId ?? (active ? null : revealRequest?.id);
+  const historyId =
+    history?.previewId ?? (active || chosen.length ? null : revealRequest?.id);
+
+  const isActive = useCallback(
+    (mark: AskMark) => mark.key === active || chosen.includes(mark.key),
+    [active, chosen],
+  );
 
   const activeMarks = useMemo(() => {
     if (historyId)
@@ -518,10 +657,13 @@ export function AskThreadMarks({
 
     const more = rows.find((row) => moreKey(row) === active);
 
-    return more
-      ? fold(more).folded
-      : marks.filter((mark) => mark.key === active);
-  }, [active, historyId, marks, rows]);
+    if (more) return fold(more).folded;
+
+    // The pointer's passage, else the one a click opened.
+    return marks.filter((mark) =>
+      active ? mark.key === active : chosen.includes(mark.key),
+    );
+  }, [active, chosen, historyId, marks, rows]);
 
   useEffect(() => {
     const ranges = activeMarks.flatMap(({ range }) => (range ? [range] : []));
@@ -536,24 +678,16 @@ export function AskThreadMarks({
   const prefix = `--ask-${useId().replace(/[^a-zA-Z0-9-]/g, "")}`;
 
   const names = useMemo(() => {
-    const named = new Map<HTMLElement, string>();
+    const named = new Map<string, string>();
 
-    for (const mark of marks)
-      for (const element of [mark.block, mark.lane])
-        if (!named.has(element)) named.set(element, `${prefix}-${named.size}`);
+    for (const { anchor } of marks)
+      if (!named.has(anchor.id))
+        named.set(anchor.id, `${prefix}-${named.size}`);
 
     return named;
   }, [marks, prefix]);
 
-  useLayoutEffect(() => {
-    for (const [element, name] of names)
-      element.style.setProperty("anchor-name", name);
-
-    return () => {
-      for (const element of names.keys())
-        element.style.removeProperty("anchor-name");
-    };
-  }, [names]);
+  useAnchorNames(article, names);
 
   // A row with no room in the gutter moves inside, where it would cover the
   // line's end. Then every row rests as a tick in the article's padding, so
@@ -671,24 +805,21 @@ export function AskThreadMarks({
             <AskPin
               key={mark.key}
               mark={mark}
-              active={mark.key === active}
+              active={isActive(mark)}
               onActive={setActive}
             />
           ))}
           {folded.length ? (
             <AskMore
               marks={folded}
-              active={
-                active === moreKey(row) ||
-                folded.some((mark) => mark.key === active)
-              }
+              active={active === moreKey(row) || folded.some(isActive)}
               onActive={(on) => setActive(on ? moreKey(row) : null)}
             />
           ) : null}
         </div>,
       ];
     });
-  }, [active, names, opened, prefix, rows, ticked]);
+  }, [active, isActive, names, opened, prefix, rows, ticked]);
 
   if (!article || !marks.length) return null;
 
@@ -816,7 +947,7 @@ const GUTTER_GAP = 10;
 const PROSE_END = `50% + min(100% - 2 * ${tokens.reviewDocumentPaddingInline}, ${tokens.reviewProseMaxWidth}) / 2`;
 
 /** Past the prose, or past a wider block beside it. */
-const GUTTER = `calc(max(${PROSE_END}, anchor(var(--ask-pin-lane) right)) + ${GUTTER_GAP}px)`;
+const GUTTER = `calc(max(${PROSE_END}, anchor(left) + var(--ask-pin-lane-end)) + ${GUTTER_GAP}px)`;
 
 const styles = stylex.create({
   layer: {
