@@ -460,7 +460,10 @@ window.addEventListener("popstate", route);
 
 mobileViewport.addEventListener("change", () => {
   narrow.set(mobileViewport.matches, undefined);
-  renderHeader();
+
+  // Each view is drawn for one kind of screen; diffr's results are cached, so reopening is quick.
+  if (comparison && comparison.mobile !== mobileViewport.matches) route();
+  else renderHeader();
 });
 
 /** A `z` waiting for its fold command. */

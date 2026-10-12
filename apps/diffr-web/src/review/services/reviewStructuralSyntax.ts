@@ -19,79 +19,8 @@ import {
   utf16Column,
   type StructuralSyntaxSpan,
 } from "../common/reviewStructuralDiff.js";
+import { syntaxRole, SYNTAX_SCOPES } from "../common/reviewSyntaxRoles.js";
 import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
-
-type Role =
-  | "comment"
-  | "keyword"
-  | "type"
-  | "function"
-  | "variable"
-  | "string"
-  | "number"
-  | "constant"
-  | "operator"
-  | "heading";
-
-/** Most specific first: a capture takes the first rule its dotted name starts with. */
-const RULES: readonly (readonly [string, Role])[] = [
-  ["comment", "comment"],
-  ["string.special.symbol", "constant"],
-  ["string", "string"],
-  ["character", "string"],
-  ["escape", "number"],
-  ["number", "number"],
-  ["float", "number"],
-  ["boolean", "constant"],
-  ["constant.builtin", "constant"],
-  ["constant", "constant"],
-  ["keyword.operator", "operator"],
-  ["keyword", "keyword"],
-  ["conditional", "keyword"],
-  ["repeat", "keyword"],
-  ["include", "keyword"],
-  ["exception", "keyword"],
-  ["storageclass", "keyword"],
-  ["preproc", "keyword"],
-  ["define", "keyword"],
-  ["operator", "operator"],
-  ["punctuation", "operator"],
-  ["variable.builtin", "keyword"],
-  ["variable", "variable"],
-  ["property", "variable"],
-  ["field", "variable"],
-  ["label", "variable"],
-  ["function", "function"],
-  ["method", "function"],
-  ["attribute", "type"],
-  ["constructor", "type"],
-  ["type", "type"],
-  ["module", "type"],
-  ["namespace", "type"],
-  ["tag", "type"],
-  ["markup.heading", "heading"],
-  ["text.title", "heading"],
-];
-
-function role(capture: string): Role | undefined {
-  for (const [prefix, role] of RULES) {
-    if (capture === prefix || capture.startsWith(prefix + ".")) return role;
-  }
-  return undefined;
-}
-
-const SCOPES: Record<Role, string> = {
-  comment: "comment",
-  keyword: "keyword",
-  type: "entity.name.type",
-  function: "entity.name.function",
-  variable: "variable.other",
-  string: "string",
-  number: "constant.numeric",
-  constant: "constant.language",
-  operator: "keyword.operator",
-  heading: "markup.heading",
-};
 
 /** Model tokens also reach unified mode's removed-code view zones and copied HTML. */
 export class StructuralSyntax extends Disposable {
@@ -150,10 +79,10 @@ export class StructuralSyntax extends Disposable {
     const tokens: number[] = [];
     // The protocol supplies sorted, non-overlapping spans, with inner captures taking precedence.
     for (const span of spans) {
-      const kind = role(span.capture);
+      const kind = syntaxRole(span.capture);
       if (!kind || span.line >= model.getLineCount()) continue;
       const text = model.getLineContent(span.line + 1);
-      const metadata = theme.match(0, SCOPES[kind]);
+      const metadata = theme.match(0, SYNTAX_SCOPES[kind]);
       tokens.push(
         span.line,
         utf16Column(text, span.start_column) - 1,

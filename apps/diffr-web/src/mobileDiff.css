@@ -1,0 +1,504 @@
+/* The phone's diff (mobileDiff.ts): plain rows the browser scrolls and selects. Every fold control
+   is at least a row tall and the gutter wide; bands and file headers are 44px, a thumb's width. */
+
+.mdiff {
+  --mdiff-line: 22px;
+  --mdiff-font: "Geist Mono", ui-monospace, Menlo, monospace;
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  /* mobileDiff.ts keeps the reader's row in place itself, in every browser. */
+  overflow-anchor: none;
+  -webkit-text-size-adjust: 100%;
+  outline: none;
+  background: var(--vscode-editor-background);
+  padding-bottom: calc(40dvh + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.mdiff-status {
+  padding: 12px 16px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.mdiff-status[hidden],
+.mdiff-file[hidden] {
+  display: none;
+}
+
+.mdiff-file {
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+
+.mdiff-header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: 4px 4px 4px 12px;
+  background: var(--vscode-sideBar-background);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.mdiff-header::before {
+  content: "";
+  flex: none;
+  width: 12px;
+  height: 12px;
+  background: var(--vscode-descriptionForeground);
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M4.25 2.5 8 6l-3.75 3.5' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+    center / 12px 12px no-repeat;
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+
+.mdiff-header.is-collapsed::before {
+  transform: none;
+}
+
+.mdiff-header:active {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.mdiff-header:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.mdiff-header-title {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.mdiff-header-path {
+  display: flex;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* The directory gives way first, so the file's own name stays readable. */
+.mdiff-header-dir {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--vscode-descriptionForeground);
+}
+
+.mdiff-header-name {
+  flex: none;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.mdiff-header-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.mdiff-header-note[hidden] {
+  display: none;
+}
+
+.mdiff-header-counts {
+  flex: none;
+  display: flex;
+  gap: 6px;
+  font-family: var(--mdiff-font);
+  font-size: 12px;
+}
+
+.mdiff-added {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.mdiff-removed {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+.mdiff-header .review-viewed-check {
+  margin: 0 15px;
+}
+
+.mdiff-header .review-viewed-check[hidden] {
+  display: none;
+}
+
+/* The 14px box keeps its look; the 44px around it takes the tap. */
+.mdiff-header .review-viewed-check::before {
+  content: "";
+  position: absolute;
+  inset: -15px;
+}
+
+.mdiff-body {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+}
+
+.mdiff-body.is-message {
+  padding: 12px 16px;
+  color: var(--vscode-descriptionForeground);
+  overflow-wrap: anywhere;
+}
+
+.mdiff-rows {
+  display: inline-block;
+  min-width: 100%;
+  vertical-align: top;
+  font-family: var(--mdiff-font);
+  font-size: 13px;
+  line-height: var(--mdiff-line);
+  color: var(--vscode-editor-foreground);
+}
+
+.mdiff-chunk {
+  content-visibility: auto;
+}
+
+.mdiff-empty {
+  padding: 12px 16px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: var(--vscode-descriptionForeground);
+}
+
+.mdiff-row {
+  display: flex;
+  min-height: var(--mdiff-line);
+  white-space: pre;
+}
+
+.mdiff-row.is-added.is-tinted {
+  background: var(--vscode-diffEditor-insertedLineBackground);
+}
+
+.mdiff-row.is-removed.is-tinted {
+  background: var(--vscode-diffEditor-removedLineBackground);
+}
+
+.mdiff-row.is-revealed {
+  animation: mdiff-reveal 1.4s ease-out;
+}
+
+@keyframes mdiff-reveal {
+  from {
+    box-shadow: inset 3px 0 0 var(--vscode-focusBorder);
+    background-color: var(--vscode-editor-findMatchHighlightBackground);
+  }
+}
+
+/* The gutter stays put while the code scrolls sideways under it. */
+.mdiff-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  box-sizing: border-box;
+  width: calc(var(--mdiff-digits, 3) * 1ch + 36px);
+  padding-right: 8px;
+  background: var(--vscode-editor-background);
+  color: var(--vscode-editorLineNumber-foreground);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.no-numbers .mdiff-gutter {
+  width: 28px;
+}
+
+.no-numbers .mdiff-lineno {
+  display: none;
+}
+
+.is-added.is-tinted > .mdiff-gutter {
+  background:
+    linear-gradient(
+      var(--vscode-diffEditor-insertedLineBackground),
+      var(--vscode-diffEditor-insertedLineBackground)
+    ),
+    var(--vscode-editor-background);
+  box-shadow: inset 3px 0 0 var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.is-removed.is-tinted > .mdiff-gutter {
+  background:
+    linear-gradient(
+      var(--vscode-diffEditor-removedLineBackground),
+      var(--vscode-diffEditor-removedLineBackground)
+    ),
+    var(--vscode-editor-background);
+  box-shadow: inset 3px 0 0
+    var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+/* A line that heads a fold is one control from edge to edge: tap anywhere on it. */
+.mdiff-row.has-fold {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.mdiff-row.has-fold:active {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.mdiff-chevron {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 100%;
+  margin: 0;
+  padding: 0 0 0 8px;
+  border: 0;
+  background: none;
+  color: var(--vscode-descriptionForeground);
+  text-align: left;
+  cursor: pointer;
+}
+
+.mdiff-chevron::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  vertical-align: middle;
+  background: currentColor;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M4.25 2.5 8 6l-3.75 3.5' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+    center / 12px 12px no-repeat;
+  transform: rotate(90deg);
+}
+
+.mdiff-chevron[aria-expanded="false"]::before {
+  transform: none;
+}
+
+.mdiff-chevron:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.mdiff-code {
+  flex: 1;
+  padding: 0 16px 0 8px;
+}
+
+.is-wrapped .mdiff-body {
+  overflow-x: hidden;
+}
+
+.is-wrapped .mdiff-rows {
+  display: block;
+}
+
+.is-wrapped .mdiff-row {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.mdiff-changed {
+  border-radius: 2px;
+}
+
+.is-added .mdiff-changed {
+  background: var(--vscode-diffEditor-insertedTextBackground);
+}
+
+.is-removed .mdiff-changed {
+  background: var(--vscode-diffEditor-removedTextBackground);
+}
+
+.mdiff-comment {
+  color: var(--mdiff-comment);
+  font-style: var(--mdiff-comment-style);
+}
+.mdiff-keyword {
+  color: var(--mdiff-keyword);
+  font-style: var(--mdiff-keyword-style);
+}
+.mdiff-type {
+  color: var(--mdiff-type);
+  font-style: var(--mdiff-type-style);
+}
+.mdiff-function {
+  color: var(--mdiff-function);
+  font-style: var(--mdiff-function-style);
+}
+.mdiff-variable {
+  color: var(--mdiff-variable);
+  font-style: var(--mdiff-variable-style);
+}
+.mdiff-string {
+  color: var(--mdiff-string);
+  font-style: var(--mdiff-string-style);
+}
+.mdiff-lineno {
+  font-variant-numeric: tabular-nums;
+}
+.mdiff-number {
+  color: var(--mdiff-number);
+  font-style: var(--mdiff-number-style);
+}
+.mdiff-constant {
+  color: var(--mdiff-constant);
+  font-style: var(--mdiff-constant-style);
+}
+.mdiff-operator {
+  color: var(--mdiff-operator);
+  font-style: var(--mdiff-operator-style);
+}
+.mdiff-heading {
+  color: var(--mdiff-heading);
+  font-style: var(--mdiff-heading-style);
+}
+
+/* A fold folded into its header line: `opener ⋯ 12 lines closer`. */
+.mdiff-pill {
+  display: inline-block;
+  margin: 0 4px;
+  padding: 0 8px;
+  border-radius: 10px;
+  line-height: calc(var(--mdiff-line) - 4px);
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  background: var(--vscode-badge-background);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* What a collapsed region leaves: as wide as the screen, whatever the code's width. */
+.mdiff-band {
+  position: sticky;
+  left: 0;
+  box-sizing: border-box;
+  width: var(--mdiff-width, 100vw);
+  min-height: 44px;
+  padding: 0 12px 0 0;
+  border-block: 1px solid var(--vscode-panel-border);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--vscode-descriptionForeground);
+  background: color-mix(
+    in srgb,
+    var(--vscode-sideBar-background) 60%,
+    var(--vscode-editor-background)
+  );
+  white-space: normal;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.mdiff-band + .mdiff-band,
+.mdiff-chunk + .mdiff-chunk > .mdiff-band:first-child {
+  border-top: 0;
+}
+
+.mdiff-band:active {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.mdiff-band:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.mdiff-band.kind-inserted {
+  box-shadow: inset 3px 0 0 var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.mdiff-band.kind-removed {
+  box-shadow: inset 3px 0 0
+    var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+.mdiff-band.kind-modified {
+  box-shadow: inset 3px 0 0
+    var(--vscode-gitDecoration-modifiedResourceForeground);
+}
+
+.mdiff-band-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding-left: calc(8px + min(var(--mdiff-indent, 0), 8) * 0.5ch);
+}
+
+.mdiff-band-chevron {
+  flex: none;
+  width: 28px;
+  height: 12px;
+  background: currentColor;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M4.25 2.5 8 6l-3.75 3.5' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")
+    center / 12px 12px no-repeat;
+}
+
+.mdiff-band-caption {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--mdiff-comment, var(--vscode-descriptionForeground));
+  background: var(--vscode-badge-background);
+}
+
+.mdiff-band-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* A summary reads as prose at the screen's width: wrapped, with each line hanging from its own
+   indent, at a size meant for reading rather than scanning. */
+.mdiff-pseudocode {
+  margin: 0 0 12px calc(44px + min(var(--mdiff-indent, 0), 8) * 0.5ch);
+  padding: 8px 12px;
+  border-left: 2px solid
+    var(--mdiff-comment, var(--vscode-descriptionForeground));
+  border-radius: 0 6px 6px 0;
+  font-family: var(--mdiff-font);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.mdiff-pseudocode-line {
+  padding-left: calc(min(var(--mdiff-indent, 0), 16) * 0.75ch + 2ch);
+  text-indent: -2ch;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+::highlight(diffr-find) {
+  background-color: var(--vscode-editor-findMatchHighlightBackground);
+}
+
+::highlight(diffr-find-current) {
+  background-color: var(--vscode-editor-findMatchBackground);
+}

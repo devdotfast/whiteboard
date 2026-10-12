@@ -286,6 +286,8 @@ export class FindBar {
   /** Mark the matches in the files on screen, once their editors exist. */
   private decorate(): void {
     cancelAnimationFrame(this.frame);
+
+    if (this.comparison()?.showFindMatches(this.matches, this.current)) return;
     const current = this.matches[this.current];
     const groups = new Map<string, Match[]>();
 
@@ -335,6 +337,8 @@ export class FindBar {
   }
 
   private clearDecorations(): void {
+    this.comparison()?.showFindMatches([], -1);
+
     for (const collection of this.decorations.values()) collection.clear();
     this.decorations.clear();
   }

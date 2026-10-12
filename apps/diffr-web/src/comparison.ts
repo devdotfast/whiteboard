@@ -1,6 +1,7 @@
 /**
  * One pull request or comparison on the page: its files listed from GitHub, each diffed by diffr in
- * a worker once its text is fetched, nearest the reader first, into Review Desktop's multi-diff view.
+ * a worker once its text is fetched, nearest the reader first, into Review Desktop's multi-diff view
+ * (on a phone, plain rows: mobileDiff.ts).
  * A file joins the list once diffed; the list keeps the reader's place as files arrive above.
  */
 import { Emitter } from "vs/base/common/event.js";
@@ -29,6 +30,8 @@ import {
   targetPath,
 } from "./github.js";
 import type { Lens } from "./lenses.js";
+import { MobileDiffView, type MobileFindMatch } from "./mobileDiff.js";
+import { mobileViewport } from "./nativeDiffScroll.js";
 import type { ReviewDiffFileWire, StructuralLineCounts } from "./protocol.js";
 import { orderReviewDiffFiles } from "./review/common/reviewChangedFilesModel.js";
 import {
@@ -108,12 +111,14 @@ export class Comparison extends Disposable {
     summaryErrors: [],
     pluginErrors: [],
   };
+  /** Whether it draws the phone's view, as the viewport was when it opened. */
+  readonly mobile = mobileViewport.matches;
   preview: Preview | undefined;
   change: Change | undefined;
   error: string | undefined;
   private readonly files = new Map<string, File>();
   private order: string[] = [];
-  private view: ReviewFilesDiffView | undefined;
+  private view: ReviewFilesDiffView | MobileDiffView | undefined;
   private session: StructuralDiffSession | undefined;
   private viewed: ViewedProgress | undefined;
   /** Files the reader asked for, most recent first. */
@@ -426,7 +431,17 @@ export class Comparison extends Disposable {
 
   /** The editor showing one side of a file, while it is on screen. */
   codeEditor(path: string, side: "original" | "modified") {
-    return this.view?.codeEditor(path, side);
+    return this.view instanceof ReviewFilesDiffView
+      ? this.view.codeEditor(path, side)
+      : undefined;
+  }
+
+  /** Marks find's matches where the view draws its own text; false where editors draw it. */
+  showFindMatches(matches: MobileFindMatch[], current: number): boolean {
+    if (!(this.view instanceof MobileDiffView)) return false;
+    this.view.showFindMatches(matches, current);
+
+    return true;
   }
 
   goToChange(direction: "next" | "previous"): void {
@@ -583,35 +598,52 @@ export class Comparison extends Disposable {
       ),
     );
 
-    const structural = createStructuralDiffEditors(
-      this.instantiation,
-      entries,
-      store,
-      session,
-      viewedState,
-    );
+    // A phone draws plain rows the browser scrolls and selects; the desktop draws diff editors.
+    let input: ReviewFilesEditorInput | undefined;
+    let view: ReviewFilesDiffView | MobileDiffView;
 
-    const input = store.add(
-      structural.instantiation.createInstance(
-        ReviewFilesEditorInput,
+    if (this.mobile)
+      view = store.add(
+        new MobileDiffView(
+          this.container,
+          session,
+          (path) => void viewed.toggleFile(path),
+          this.wordWrap,
+        ),
+      );
+    else {
+      const structural = createStructuralDiffEditors(
+        this.instantiation,
         entries,
+        store,
         session,
-        this.wordWrap,
-      ),
-    );
+        viewedState,
+      );
 
-    const view = (this.view = store.add(
-      structural.instantiation.createInstance(
-        ReviewFilesDiffView,
-        this.container,
-        this.overflow,
-        this.layout,
-        undefined,
-        (path: string) => void viewed.toggleFile(path),
-        undefined,
-        undefined,
-      ),
-    ));
+      input = store.add(
+        structural.instantiation.createInstance(
+          ReviewFilesEditorInput,
+          entries,
+          session,
+          this.wordWrap,
+        ),
+      );
+
+      view = store.add(
+        structural.instantiation.createInstance(
+          ReviewFilesDiffView,
+          this.container,
+          this.overflow,
+          this.layout,
+          undefined,
+          (path: string) => void viewed.toggleFile(path),
+          undefined,
+          undefined,
+        ),
+      );
+    }
+
+    this.view = view;
 
     view.setProgress(viewed.progress);
     store.add(viewed.onDidChange(() => view.setProgress(viewed.progress)));
@@ -624,7 +656,9 @@ export class Comparison extends Disposable {
     );
     store.add(view.onDidScroll(() => this.pump()));
     this.observe(session, entries, view, store);
-    await view.setInput(input, undefined);
+
+    if (input && view instanceof ReviewFilesDiffView)
+      await view.setInput(input, undefined);
 
     if (this._store.isDisposed) return;
 
@@ -910,7 +944,7 @@ export class Comparison extends Disposable {
   private observe(
     session: StructuralDiffSession,
     entries: readonly ReviewFilesEditorEntry[],
-    view: ReviewFilesDiffView,
+    view: ReviewFilesDiffView | MobileDiffView,
     store: DisposableStore,
   ): void {
     const rendered = new Set<string>();
