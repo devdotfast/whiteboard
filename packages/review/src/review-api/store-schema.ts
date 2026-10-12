@@ -17,7 +17,7 @@ export function initializeReviewStoreSchema(db: DatabaseSync): void {
     PRAGMA journal_mode=WAL;
     PRAGMA foreign_keys=ON;
     CREATE TABLE IF NOT EXISTS reviews(id TEXT PRIMARY KEY, version INTEGER NOT NULL, next_id INTEGER NOT NULL,
-      project_id TEXT NOT NULL REFERENCES projects(id));
+      project_id TEXT NOT NULL REFERENCES projects(id), parent_id TEXT REFERENCES reviews(id) ON DELETE SET NULL);
     CREATE TABLE IF NOT EXISTS versions(review_id TEXT REFERENCES reviews(id), version INTEGER, snapshot TEXT NOT NULL,
       PRIMARY KEY(review_id,version));
     CREATE TABLE IF NOT EXISTS review_attention(review_id TEXT PRIMARY KEY REFERENCES reviews(id), viewed_at TEXT, deleted_at TEXT);
@@ -30,5 +30,8 @@ export function initializeReviewStoreSchema(db: DatabaseSync): void {
       PRIMARY KEY(review_id,file));
     CREATE TABLE IF NOT EXISTS comparison_stats(identity TEXT PRIMARY KEY, stats TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS server_identity(one INTEGER PRIMARY KEY CHECK(one=1), id TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS board_dependencies(review_id TEXT NOT NULL REFERENCES reviews(id) ON DELETE CASCADE,
+      depends_on TEXT NOT NULL REFERENCES reviews(id) ON DELETE CASCADE, PRIMARY KEY(review_id,depends_on));
+    CREATE INDEX IF NOT EXISTS board_dependencies_depends_on ON board_dependencies(depends_on);
   `);
 }

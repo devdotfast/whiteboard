@@ -1,12 +1,14 @@
-import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import type { JsonValue } from "@dev.fast/json";
-import { gitCommonDirSync, resolveRepoContextSync } from "@dev.fast/local-vcs";
-import type { ReviewApiSummary } from "@dev.fast/review-protocol";
+import { runVcs } from "@dev.fast/local-vcs";
+import type {
+  ReviewApiSummary,
+  ReviewBoardPlace,
+} from "@dev.fast/review-protocol";
 import { sourceAnchors } from "@review/lens-selection.js";
 import {
   liftFileLenses,
@@ -23,6 +25,11 @@ import { z } from "zod";
 
 import { type ActivitySurface, ReviewActivity } from "./activity.js";
 import { AskHistory } from "./ask-history.js";
+import {
+  type SiblingFacts,
+  dependencyCycle,
+  orderSiblings,
+} from "./board-order.js";
 import { CheckoutGroups } from "./checkout-groups.js";
 import {
   type Lens,
@@ -76,6 +83,16 @@ const activityId = z
     "The activityId from review_activity_begin: your courier draws this edit. Never rejects a write.",
   );
 
+const parentId = reviewId.describe(
+  "The reviewId of a top-level review in the same project to nest this one under.",
+);
+
+const dependsOn = z
+  .array(reviewId)
+  .describe(
+    "The reviewIds of reviews in the same project this one builds on. Siblings list after what they depend on.",
+  );
+
 export const commandSchema = z.strictObject({
   operation: z.discriminatedUnion("type", [
     z.strictObject({ type: z.literal("delete"), reviewId }),
@@ -110,6 +127,18 @@ export const commandSchema = z.strictObject({
         .describe(
           "Default true: return the existing review for pullRequestUrl. false creates a separate review.",
         ),
+      parentId: parentId.optional(),
+      dependsOn: dependsOn.optional(),
+    }),
+    z.strictObject({
+      type: z.literal("set_parent"),
+      reviewId,
+      parentId: parentId.nullable(),
+    }),
+    z.strictObject({
+      type: z.literal("set_dependencies"),
+      reviewId,
+      dependsOn,
     }),
     z.strictObject({
       type: z.literal("set_target"),
@@ -265,7 +294,17 @@ export interface Result {
   attention?: true;
   lifecycle?: true;
   deleted?: true;
+  /** After set_parent or set_dependencies: the board's relations. */
+  relations?: BoardRelations;
   warnings?: string[];
+}
+
+/** Where a board sits among its project's boards. Kept outside its versions. */
+export interface BoardRelations {
+  parentId: string | null;
+  /** In sibling order. */
+  children: string[];
+  dependsOn: string[];
 }
 
 /** A PR's current comparison: GitHub's head and diff base, fetched locally. */
@@ -310,6 +349,8 @@ export interface ReviewProviders {
     options: { peek: boolean },
   ): Promise<void>;
   validateResource(pins: Pins | undefined, block: Block): Promise<void>;
+  /** A PR's base branch, as last read from GitHub; undefined until read. */
+  pullRequestBaseBranch?(url: string): string | undefined;
 }
 
 /** One instance owned by the desktop server. All writers go through execute().
@@ -859,16 +900,33 @@ export class ReviewStore {
 
     return { id: String(row.id), name: String(row.name) };
   }
-  unregisterRepository(id: string) {
-    const used = this.db
-      // Document pins and per-reference pins both spell the id in the snapshot.
-      .prepare(`SELECT EXISTS (SELECT 1 FROM versions WHERE instr(snapshot, ?) > 0)
-      OR EXISTS (SELECT 1 FROM resources WHERE repository_id=?) AS used`)
-      .get(`"repositoryId":${JSON.stringify(id)}`, id)!.used;
+  /** Forgets a checkout no board uses, after every write queued before it,
+   * so a board being made with it keeps it. */
+  unregisterRepository(id: string): Promise<void> {
+    const run = this.pending.then(async () => {
+      this.db.exec("BEGIN IMMEDIATE");
 
-    // Its project stays, with any boards in it.
-    if (used) return;
-    this.db.prepare("DELETE FROM repositories WHERE id=?").run(id);
+      try {
+        const used = this.db
+          // Document pins and per-reference pins both spell the id in the snapshot.
+          .prepare(`SELECT EXISTS (SELECT 1 FROM versions WHERE instr(snapshot, ?) > 0)
+          OR EXISTS (SELECT 1 FROM resources WHERE repository_id=?) AS used`)
+          .get(`"repositoryId":${JSON.stringify(id)}`, id)!.used;
+
+        // Its project stays, with any boards in it.
+        if (!used)
+          this.db.prepare("DELETE FROM repositories WHERE id=?").run(id);
+
+        this.db.exec("COMMIT");
+      } catch (error) {
+        if (this.db.isTransaction) this.db.exec("ROLLBACK");
+        throw error;
+      }
+    });
+
+    this.pending = run.catch(() => {});
+
+    return run;
   }
   /** Checkouts whose remote is cloneUrl, most recently used first. */
   checkoutsOf(cloneUrl: string): string[] {
@@ -1025,6 +1083,8 @@ export class ReviewStore {
       "versions",
     ])
       this.db.prepare(`DELETE FROM ${table} WHERE review_id=?`).run(id);
+    // Its children move up to top level, and its dependencies go, by the
+    // schema's foreign keys.
     this.db.prepare("DELETE FROM reviews WHERE id=?").run(id);
     this.liveSources.delete(id);
   }
@@ -1221,6 +1281,20 @@ export class ReviewStore {
         return listed;
       });
 
+    const graph = this.relationGraph();
+
+    for (const listed of reviews) {
+      const parentId = graph.parents.get(listed.reviewId);
+      const children = graph.children.get(listed.reviewId);
+      const dependsOn = graph.dependsOn.get(listed.reviewId);
+
+      if (parentId) listed.parentId = parentId;
+
+      if (children) listed.children = this.orderChildren(children, graph);
+
+      if (dependsOn) listed.dependsOn = dependsOn;
+    }
+
     return this.withDiffStats(reviews);
   }
 
@@ -1350,8 +1424,27 @@ export class ReviewStore {
             resolvedTarget!.pins!,
           );
 
+          if (op.parentId || op.dependsOn)
+            result.note += ` Its parent and dependencies were not changed either: set them with session_set_parent and session_set_dependencies.`;
+
           return result;
         }
+      }
+
+      if (op.type === "set_parent" || op.type === "set_dependencies") {
+        const result: Result = {
+          reviewId: op.reviewId,
+          version: this.read(op.reviewId).version,
+        };
+
+        this.commitCommand(result, () => {
+          if (op.type === "set_parent")
+            this.setParent(op.reviewId, op.parentId);
+          else this.setDependencies(op.reviewId, op.dependsOn);
+          result.relations = this.relations(op.reviewId);
+        });
+
+        return result;
       }
 
       if (op.type === "delete") {
@@ -1632,12 +1725,33 @@ export class ReviewStore {
 
       if (warnings.length) result.warnings = warnings;
 
-      // A board belongs to its repository's project.
-      const projectId = snapshot.target
-        ? this.projectOfRepository(snapshot.target.repositoryId)
-        : previous
+      const previousProject = previous ? this.projectOf(id) : undefined;
+
+      // A board belongs to its repository's project, settled when it is made
+      // or retargeted; any other change keeps the project it has. An
+      // existing board whose repository isn't registered stays put.
+      const retargeted =
+        op.type === "create" ||
+        op.type === "set_target" ||
+        (op.type === "restore" &&
+          snapshot.target?.repositoryId !== previous?.target?.repositoryId);
+
+      const registered = (repositoryId: string) =>
+        Boolean(
+          this.db
+            .prepare("SELECT 1 FROM repositories WHERE id=?")
+            .get(repositoryId),
+        );
+
+      const projectId =
+        previous &&
+        (!retargeted ||
+          !snapshot.target ||
+          !registered(snapshot.target.repositoryId))
           ? this.projectOf(id)
-          : this.fallbackProject();
+          : snapshot.target
+            ? this.projectOfRepository(snapshot.target.repositoryId)
+            : this.fallbackProject();
 
       this.commitCommand(
         result,
@@ -1652,6 +1766,23 @@ export class ReviewStore {
               "INSERT INTO versions(review_id,version,snapshot) VALUES(?,?,?)",
             )
             .run(id, snapshot.version, JSON.stringify(snapshot));
+
+          if (op.type === "create" && op.parentId)
+            this.setParent(id, op.parentId);
+
+          if (op.type === "create" && op.dependsOn)
+            this.setDependencies(id, op.dependsOn);
+
+          // Relations stay inside a project: a retarget out of it drops them.
+          if (
+            previous &&
+            projectId !== previousProject &&
+            this.dropRelationsOutside(id, projectId)
+          )
+            result.warnings = [
+              ...(result.warnings ?? []),
+              "Its parent, children and dependencies were in its old project, so they were dropped: whiteboards relate only within a project.",
+            ];
         },
         previous
           ? () => {
@@ -1677,6 +1808,300 @@ export class ReviewStore {
     this.pending = run.catch(() => {});
 
     return run;
+  }
+  /** Where a board sits: its parent, and the parent's children in order,
+   * each with its title. */
+  place(id: string): ReviewBoardPlace {
+    const graph = this.relationGraph();
+    const parentId = graph.parents.get(id);
+
+    if (!parentId) return { siblings: [] };
+
+    const titled = (reviewId: string) => ({
+      reviewId,
+      title: String(
+        this.db
+          .prepare(
+            `SELECT json_extract(versions.snapshot,'$.title') AS title
+            FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+            WHERE reviews.id=?`,
+          )
+          .get(reviewId)!.title,
+      ),
+    });
+
+    return {
+      parent: titled(parentId),
+      siblings: this.orderChildren(graph.children.get(parentId)!, graph).map(
+        titled,
+      ),
+    };
+  }
+  /** A board's parent, its children in sibling order, and what it depends on. */
+  relations(id: string): BoardRelations {
+    const graph = this.relationGraph();
+
+    return {
+      parentId: graph.parents.get(id) ?? null,
+      children: this.orderChildren(graph.children.get(id) ?? [], graph),
+      dependsOn: graph.dependsOn.get(id) ?? [],
+    };
+  }
+  private relationGraph() {
+    const parents = new Map<string, string>();
+    const children = new Map<string, string[]>();
+    const dependsOn = new Map<string, string[]>();
+
+    for (const row of this.db
+      .prepare(
+        "SELECT id, parent_id FROM reviews WHERE parent_id IS NOT NULL ORDER BY rowid",
+      )
+      .all()) {
+      const board = String(row.id);
+      const parent = String(row.parent_id);
+
+      parents.set(board, parent);
+      children.set(parent, [...(children.get(parent) ?? []), board]);
+    }
+
+    for (const row of this.db
+      .prepare(
+        "SELECT review_id, depends_on FROM board_dependencies ORDER BY rowid",
+      )
+      .all()) {
+      const board = String(row.review_id);
+
+      dependsOn.set(board, [
+        ...(dependsOn.get(board) ?? []),
+        String(row.depends_on),
+      ]);
+    }
+
+    return { parents, children, dependsOn };
+  }
+  /** Drops a board's parent, children and dependencies in other projects,
+   * after it moved to `projectId`. Whether it dropped any. */
+  private dropRelationsOutside(id: string, projectId: string): boolean {
+    const outside = "SELECT id FROM reviews WHERE project_id!=?";
+
+    const parents = this.db
+      .prepare(
+        `UPDATE reviews SET parent_id=NULL WHERE (id=? AND parent_id IN (${outside})) OR (parent_id=? AND project_id!=?)`,
+      )
+      .run(id, projectId, id, projectId).changes;
+
+    const dependencies = this.db
+      .prepare(
+        `DELETE FROM board_dependencies WHERE (review_id=? AND depends_on IN (${outside})) OR (depends_on=? AND review_id IN (${outside}))`,
+      )
+      .run(id, projectId, id, projectId).changes;
+
+    return Number(parents) + Number(dependencies) > 0;
+  }
+  private orderChildren(
+    children: readonly string[],
+    graph: ReturnType<ReviewStore["relationGraph"]>,
+  ): string[] {
+    if (children.length < 2) return [...children];
+
+    return orderSiblings(
+      this.siblingFacts(children),
+      (id) => graph.dependsOn.get(id) ?? [],
+      (repositoryId, ancestor, of) =>
+        this.isAncestor(repositoryId, ancestor, of),
+    );
+  }
+  private siblingFacts(ids: readonly string[]): SiblingFacts[] {
+    return this.db
+      .prepare(
+        `SELECT reviews.id,
+          (SELECT json_extract(first.snapshot,'$.createdAt') FROM versions AS first
+            WHERE first.review_id=reviews.id ORDER BY first.version LIMIT 1) AS created_at,
+          json_extract(versions.snapshot,'$.pins') AS pins,
+          json_extract(versions.snapshot,'$.origin.branch') AS branch,
+          json_extract(versions.snapshot,'$.origin.pullRequestUrl') AS url
+        FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+        WHERE reviews.id IN (${ids.map(() => "?").join(",")})`,
+      )
+      .all(...ids)
+      .map((row) => {
+        const id = String(row.id);
+
+        // SAFETY: pins were validated when the version was saved.
+        const saved = row.pins
+          ? (JSON.parse(String(row.pins)) as Pins)
+          : undefined;
+
+        // A worktree's pins follow its checkout.
+        const pins = this.liveSources.get(id)?.pins ?? saved;
+        const url = row.url ? String(row.url) : undefined;
+        const baseBranch = url && this.providers.pullRequestBaseBranch?.(url);
+
+        return {
+          id,
+          createdAt: String(row.created_at),
+          ...(pins && {
+            repositoryId: pins.repositoryId,
+            base: pins.base,
+            head: pins.head,
+          }),
+          ...(url && row.branch && { headBranch: String(row.branch) }),
+          ...(baseBranch && { baseBranch }),
+        };
+      });
+  }
+  /** Commits never change, so a definite answer is kept. */
+  private readonly ancestry = new Map<string, boolean>();
+
+  /** When git was last asked, for questions with no answer yet. */
+  private readonly ancestryAsked = new Map<string, number>();
+
+  /** Whether `ancestor` is an ancestor of `of`, as far as is known. git is
+   * asked in the background, never on the server thread: until it answers,
+   * or when it fails, the answer is no, and a yes re-sorts the catalog. */
+  private isAncestor(repositoryId: string, ancestor: string, of: string) {
+    const key = `${repositoryId}:${ancestor}:${of}`;
+    const known = this.ancestry.get(key);
+
+    if (known !== undefined) return known;
+
+    const asked = this.ancestryAsked.get(key);
+
+    // A commit not fetched yet may arrive: ask again, but not on every read.
+    if (asked !== undefined && Date.now() - asked < 60_000) return false;
+
+    this.ancestryAsked.set(key, Date.now());
+    let root: string;
+
+    try {
+      root = this.repositoryPath(repositoryId);
+    } catch {
+      return false;
+    }
+
+    // At most a few at once: a parent with many children asks many pairs.
+    this.ancestryQueue.push(() =>
+      runVcs(
+        "git",
+        [
+          "-C",
+          root,
+          "merge-base",
+          "--is-ancestor",
+          { rev: ancestor },
+          { rev: of },
+        ],
+        { timeout: 10_000 },
+      ).then(
+        () => this.knowAncestry(key, true),
+        (error: { code?: unknown }) => {
+          // Exit 1 means no; anything else (a missing commit, a timeout, a
+          // refused operand) is no answer.
+          if (error.code === 1) this.knowAncestry(key, false);
+        },
+      ),
+    );
+    this.askNextAncestry();
+
+    return false;
+  }
+  private readonly ancestryQueue: (() => Promise<void>)[] = [];
+  private ancestryRunning = 0;
+  private askNextAncestry() {
+    while (
+      this.ancestryRunning < ANCESTRY_CONCURRENCY &&
+      this.ancestryQueue.length
+    ) {
+      this.ancestryRunning++;
+      void this.ancestryQueue.shift()!().finally(() => {
+        this.ancestryRunning--;
+        this.askNextAncestry();
+      });
+    }
+  }
+  private knowAncestry(key: string, ancestor: boolean) {
+    this.ancestry.set(key, ancestor);
+    this.ancestryAsked.delete(key);
+
+    if (ancestor && !this.closing) this.catalogChanged();
+  }
+  private catalogChanged() {
+    for (const listener of this.catalogListeners)
+      try {
+        listener();
+      } catch {
+        // A disconnected viewer must not block other catalog subscribers.
+      }
+  }
+  private boardName(id: string) {
+    return `"${this.read(id).title}" (${id})`;
+  }
+  /** The other board exists and is in the same project. */
+  private checkRelated(id: string, other: string) {
+    if (!this.has(other))
+      throw new ReviewInputError(
+        `Whiteboard ${other} does not exist. Name a whiteboard by its sessionId from session_list.`,
+      );
+
+    if (this.projectOf(id) !== this.projectOf(other))
+      throw new ReviewInputError(
+        `${this.boardName(other)} is in another project than ${this.boardName(id)}. A whiteboard's parent and dependencies are in its own project.`,
+      );
+  }
+  /** One parent, one level: a parent is top-level and a child has no
+   * children. Null makes the board top-level. */
+  private setParent(id: string, parentId: string | null) {
+    if (parentId !== null) {
+      if (parentId === id)
+        throw new ReviewInputError("A whiteboard can't be its own parent.");
+      this.checkRelated(id, parentId);
+      const { parents, children } = this.relationGraph();
+      const grandparent = parents.get(parentId);
+
+      if (grandparent)
+        throw new ReviewInputError(
+          `${this.boardName(parentId)} is a child of ${this.boardName(grandparent)}, and whiteboards nest one level deep. Use ${grandparent} as the parent instead.`,
+        );
+      const own = children.get(id) ?? [];
+
+      if (own.length)
+        throw new ReviewInputError(
+          `${this.boardName(id)} has children (${own.map((child) => this.boardName(child)).join(", ")}), and whiteboards nest one level deep, so it can't become a child. Move its children first with session_set_parent.`,
+        );
+    }
+
+    this.db
+      .prepare("UPDATE reviews SET parent_id=? WHERE id=?")
+      .run(parentId, id);
+  }
+  private setDependencies(id: string, dependsOn: readonly string[]) {
+    const unique = [...new Set(dependsOn)];
+    const graph = this.relationGraph();
+
+    for (const dependency of unique) {
+      if (dependency === id)
+        throw new ReviewInputError("A whiteboard can't depend on itself.");
+
+      const cycle = dependencyCycle(
+        id,
+        dependency,
+        (board) => graph.dependsOn.get(board) ?? [],
+      );
+
+      if (cycle)
+        throw new ReviewInputError(
+          `Depending on ${this.boardName(dependency)} would close a cycle: ${cycle.map((board) => this.boardName(board)).join(" → ")}. Drop one of those dependencies first.`,
+        );
+      this.checkRelated(id, dependency);
+    }
+
+    this.db.prepare("DELETE FROM board_dependencies WHERE review_id=?").run(id);
+
+    const insert = this.db.prepare(
+      "INSERT INTO board_dependencies(review_id,depends_on) VALUES(?,?)",
+    );
+
+    for (const dependency of unique) insert.run(id, dependency);
   }
   /** Resolve a target-less PR create before it queues, when it will need it. */
   private startPullRequest(
@@ -1851,7 +2276,7 @@ export class ReviewStore {
     else if (!result.attention)
       this.observedVersions.set(result.reviewId, result.version);
 
-    if (!result.attention || result.lifecycle)
+    if ((!result.attention || result.lifecycle) && !result.relations)
       for (const listener of this.listeners)
         try {
           listener(result);
@@ -2075,3 +2500,6 @@ export function inspectSnapshot(snapshot: Snapshot, targetId?: string) {
             : undefined,
   }));
 }
+
+/** How many ancestry questions git answers at once. */
+const ANCESTRY_CONCURRENCY = 8;

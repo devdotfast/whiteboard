@@ -1124,6 +1124,20 @@ export const ReviewStackResponseSchema = z.strictObject({
 
 export type ReviewStackResponse = z.infer<typeof ReviewStackResponseSchema>;
 
+const ReviewPlaceBoardSchema = z.strictObject({
+  reviewId: requiredString,
+  title: stringAllowEmpty,
+});
+
+/** Where a board sits: its parent and the parent's children in order. */
+export const ReviewBoardPlaceSchema = z.strictObject({
+  parent: ReviewPlaceBoardSchema.optional(),
+  /** Empty for a top-level board. */
+  siblings: z.array(ReviewPlaceBoardSchema),
+});
+
+export type ReviewBoardPlace = z.infer<typeof ReviewBoardPlaceSchema>;
+
 export const ReviewCliInstallTargetSchema = z.enum(
   ["claude", "codex", "cursor", "opencode", "pi", "omp", "copilot"],
   { error: "must be claude, codex, cursor, opencode, pi, omp, or copilot" },
