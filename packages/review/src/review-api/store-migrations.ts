@@ -102,8 +102,14 @@ export const STORE_UPGRADES: readonly StoreUpgrade[] = [
       projectOfRepository,
       firstRepositoryProject,
     }) => {
-      // A new store has the column from the start.
-      if (columnsOf(db, "reviews").has("project_id")) return;
+      // A child's parent is found by it.
+      const parents = () =>
+        db.exec(
+          "CREATE INDEX IF NOT EXISTS reviews_parent ON reviews(parent_id)",
+        );
+
+      // A new store has the columns from the start.
+      if (columnsOf(db, "reviews").has("project_id")) return parents();
 
       // A checkout names its project; stores from before projects lack
       // the column.
@@ -147,11 +153,14 @@ export const STORE_UPGRADES: readonly StoreUpgrade[] = [
       // Only references this rebuild breaks; older dangling rows stay.
       const broken = brokenReferences();
 
+      // A child names its parent; deleting the parent moves it to top
+      // level. No board had one before projects.
       db.exec(`CREATE TABLE reviews_with_projects(id TEXT PRIMARY KEY, version INTEGER NOT NULL, next_id INTEGER NOT NULL,
-        project_id TEXT NOT NULL REFERENCES projects(id))`);
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        parent_id TEXT REFERENCES reviews(id) ON DELETE SET NULL)`);
 
       const insert = db.prepare(
-        "INSERT INTO reviews_with_projects SELECT id,version,next_id,? FROM reviews WHERE id=?",
+        "INSERT INTO reviews_with_projects(id,version,next_id,project_id) SELECT id,version,next_id,? FROM reviews WHERE id=?",
       );
 
       for (const { id } of boards)
@@ -161,6 +170,7 @@ export const STORE_UPGRADES: readonly StoreUpgrade[] = [
         );
       db.exec(`DROP TABLE reviews;
         ALTER TABLE reviews_with_projects RENAME TO reviews;`);
+      parents();
 
       if (brokenReferences() > broken)
         throw new Error("Giving boards projects broke a reference.");

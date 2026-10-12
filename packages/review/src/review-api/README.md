@@ -17,6 +17,7 @@ catalog. Tests inject the native store and source-data provider.
 - `repositories`: server-only local paths; clients receive an ID and display name.
 - `resources`: immutable image, trace and software-map bytes, scoped to a repository.
 - `review_attention`: viewed/trashed timestamps, separate from document history.
+- `board_relations`: where a board sits in its project, outside its versions: a child's `parent` (one per board) and a board's `depends_on` edges.
 
 One host-owned store serializes writes, including asynchronous validation.
 Presences show who is working across database connections and never block a
@@ -93,6 +94,13 @@ Commands: `create {title?,target,reuseExisting?,open?}`, `set_target {reviewId,t
 `restore {reviewId,version}`. A target names its checkout by `repositoryPath` (see Review targets). A PR is a `pullRequest` target. A review's pins are its target resolved to immutable commits. Agents write pins as `{head,base?}`, and the host adds the board's repository.
 `/commands` registers the path and passes its id to the store. Agent tools never show repository ids, and `/commands` sets every pins object in an edit to the board's own repository. Retargeting preserves content and component IDs. Restore restores title, target, PR identity, and content. Live targets still read the current checkout.
 PR URLs must be canonical `https://github.com/owner/repository/pull/123` URLs. The PR number is derived from the URL; identity is metadata alongside immutable pins, not a moving source reference. A `pullRequest` target names the PR by URL or by number (a number is looked up on the checkout's GitHub remote) and resolves it when accepted: it reads the PR with `gh pr view` (falling back to the public GitHub API) and fetches `refs/pull/N/head` and the base branch from the checkout named by `repositoryPath` into `refs/review/github/owner/repository/pull/N/*`, never moving branches or bookmarks (a jj repository indexes the commits through a transient tag). It pins that head and its merge base with the base branch; for a PR absorbed by a merge commit it uses the merge base with GitHub's frozen base commit instead. The title defaults to the PR title. A repeat resolves the PR again, so `headMoved` compares the existing review with the PR's current head. `set_target` preserves the document and component IDs, including when source commits change. Its response reports retained source ranges to verify, those in files the new commits changed, and resources that no longer match the pins; agents repair these with `edit`. Existing versions keep their original pins and content. It preserves omitted PR identity within one repository, clears it when switching repositories, and accepts an explicit URL or null.
+
+`set_parent {reviewId,parentId}` nests a board one level under a top-level
+board of its project; `null` makes it top-level. `set_dependencies
+{reviewId,dependsOn}` replaces what it builds on, and refuses a cycle.
+`create` takes both. Neither saves a version. Summaries list `parentId`,
+`children` (in sibling order) and `dependsOn`. Deleting a parent moves its
+children to top level.
 
 `attention {reviewId,action:"view"}` records viewing without changing lifecycle or document history.
 `lifecycle {reviewId,state:"active"|"trash"}` moves a whiteboard to Trash or restores it.
