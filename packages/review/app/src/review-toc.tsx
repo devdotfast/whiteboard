@@ -498,8 +498,6 @@ const styles = stylex.create({
   body: {
     maxHeight: "min(488px, calc(100dvh - 196px))",
     overflow: "auto",
-    // Same scrollbar as the review document.
-    scrollbarWidth: "thin",
     opacity: 0,
     pointerEvents: "none",
     transition: {
