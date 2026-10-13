@@ -419,6 +419,15 @@ export function SettingsPage({
             ) : null}
           </Section>
 
+          <Section label="Uninstall">
+            <Row
+              label="Uninstall Whiteboard"
+              description="Removes the whiteboard command, trace setup, and tutorial. Your sessions stay on disk."
+            >
+              <Button onClick={settings.uninstallApp}>Uninstall…</Button>
+            </Row>
+          </Section>
+
           {error ? <p {...stylex.props(styles.error)}>{error}</p> : null}
         </div>
       </div>

@@ -927,6 +927,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			},
 			manageExtensions: () => void this.commandService.executeCommand("review.manageExtensions"),
 			importVsCodeSettings: () => void this.commandService.executeCommand("review.importUserConfig"),
+			uninstallApp: () => void this.commandService.executeCommand("review.uninstallApp"),
 		};
 	}
 

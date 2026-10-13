@@ -226,16 +226,6 @@ export class ReviewMenubarMainService
         click: () => this.runActionInFocusedWindow("review.openWelcome"),
       }),
     );
-    preferences.append(new MenuItem({ type: "separator" }));
-    preferences.append(
-      new MenuItem({
-        label: localize(
-          "review.menu.uninstall",
-          "Uninstall Whiteboard...",
-        ),
-        click: () => this.runActionInFocusedWindow("review.uninstallApp"),
-      }),
-    );
 
     menu.append(new MenuItem({ type: "separator" }));
     menu.append(
