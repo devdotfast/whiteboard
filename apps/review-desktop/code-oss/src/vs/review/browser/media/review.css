@@ -1453,27 +1453,6 @@ body
   color: inherit;
 }
 
-.review-workbench .monaco-editor .review-scope-viewed-control {
-  display: flex;
-  align-items: center;
-  box-sizing: border-box;
-  gap: 8px;
-  padding: 0 8px;
-  border: 1px solid var(--vscode-widget-border, var(--vscode-editorWidget-border));
-  border-radius: 5px;
-  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
-  font: 11px/20px var(--monaco-monospace-font);
-  z-index: 8;
-}
-.review-workbench .monaco-editor .review-scope-viewed-control > span:empty { display: none; }
-.review-workbench .monaco-editor .review-scope-viewed-status { color: var(--vscode-descriptionForeground); }
-.review-workbench .monaco-editor .review-scope-viewed-control .review-viewed-check { margin-left: 4px; }
-/* Keep the shared 14px glyph while making the padded space around it clickable. */
-.review-workbench .monaco-editor .review-scope-viewed-control .review-viewed-check::before {
-  content: '';
-  position: absolute;
-  inset: -5px;
-}
 .review-workbench .monaco-editor .review-scope-viewed-ink,
 .review-workbench .monaco-editor .review-scope-viewed-ink span,
 .review-workbench .monaco-editor .review-fold-pill.is-viewed {

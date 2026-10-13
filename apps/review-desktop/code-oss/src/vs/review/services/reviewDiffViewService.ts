@@ -1,4 +1,3 @@
-import { IHoverService } from "../../platform/hover/browser/hover.js";
 import { ContentHoverController } from "../../editor/contrib/hover/browser/contentHoverController.js";
 import { orderReviewDiffFiles } from "../common/reviewChangedFilesModel.js";
 import { CancellationToken } from "../../base/common/cancellation.js";
@@ -40,7 +39,6 @@ import { ReviewEmbeddedEditors } from "./reviewEmbeddedEditors.js";
 
 import { createStructuralDiffEditors } from "./reviewStructuralDiff.js";
 import { StructuralViewedState } from "./reviewStructuralViewed.js";
-import { ScopeViewedControl } from "./reviewStructuralViewedControl.js";
 import { StructuralDiffSession, type StructuralSessionChange } from "./reviewStructuralDiffSession.js";
 import type { StructuralDiffStream } from "./reviewStructuralDiffClient.js";
 
@@ -306,7 +304,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 			if (this.disposed) return;
 			const store = this._register(new DisposableStore());
 			const viewed = session && structuralEnabled && this.spec.onSetViewed
-				? store.add(new StructuralViewedState(session, entries, () => this.progress, this.progressChanged.event, this.spec.onSetViewed, (editor, onToggle) => new ScopeViewedControl(editor, this.instantiationService.invokeFunction(a => a.get(IHoverService)), onToggle))) : undefined;
+				? store.add(new StructuralViewedState(session, entries, () => this.progress, this.progressChanged.event)) : undefined;
 			const structural = session && structuralEnabled ? createStructuralDiffEditors(this.instantiationService, entries, store, session, viewed)
 				: { instantiation: this.instantiationService, entries };
 

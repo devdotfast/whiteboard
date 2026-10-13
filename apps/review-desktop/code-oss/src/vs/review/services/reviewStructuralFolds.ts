@@ -15,7 +15,6 @@ import { InjectedTextCursorStops, type IModelDeltaDecoration, type ITextModel } 
 import { bandDetail, structuralFoldables, type StructuralFoldable, type StructuralTextDiff } from "../common/reviewStructuralDiff.js";
 import type { UnchangedRegion } from "../../editor/browser/widget/diffEditor/diffEditorViewModel.js";
 import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
-import type { ScopeViewedControl } from "./reviewStructuralViewedControl.js";
 import type { StructuralViewedState } from "./reviewStructuralViewed.js";
 
 /** The scope under the pointer. */
@@ -38,8 +37,6 @@ export class StructuralFoldHover {
 	} | undefined>("structuralFoldHover", undefined);
 }
 
-type ViewedCandidate = { readonly active: boolean; readonly target: FoldTarget; readonly progress: ReturnType<StructuralViewedState['get']> };
-
 const CHEVRON = "review-fold-chevron";
 const RAIL_CURSOR = "review-fold-rail";
 /** Marks the text after a folded header, so that a click on it unfolds the scope. */
@@ -56,10 +53,9 @@ export class StructuralFoldControls extends Disposable {
 	private readonly sourceLineCounts = new WeakMap<StructuralTextDiff, number>();
 	private readonly rails = new ScopeRails(this.editor);
 	private hovered: FoldTarget | undefined;
-	private view: { model: ITextModel; target: FoldTarget | undefined; visibleScopes: readonly StructuralFoldable[]; controls: readonly ViewedCandidate[] } | undefined;
+	private view: { model: ITextModel; target: FoldTarget | undefined; visibleScopes: readonly StructuralFoldable[] } | undefined;
 	private overChevronColumn = false;
 	private pressed: { target: FoldTarget; x: number; y: number } | undefined;
-	private readonly viewedControls = new Map<number, ScopeViewedControl>();
 
 	constructor(
 		private readonly editor: ICodeEditor,
@@ -72,10 +68,6 @@ export class StructuralFoldControls extends Disposable {
 		private readonly viewed?: StructuralViewedState,
 	) {
 		super();
-		this._register({ dispose: () => {
-			for (const control of this.viewedControls.values()) control.dispose();
-			this.viewedControls.clear();
-		} });
 		if (viewed) this._register(viewed.onDidChange(() => this.render()));
 		this._register({ dispose: () => {
 			if (this.sharedHover.state.get()?.owner === this) { this.sharedHover.state.set(undefined, undefined); }
@@ -84,9 +76,8 @@ export class StructuralFoldControls extends Disposable {
 		this._register(editor.onMouseMove(e => {
 			this.hover(this.targetAt(e), this.inChevronColumn(e));
 		}));
-		// Monaco can report a mouse leave while crossing an overlay layer on
-		// the way from a scope header to its viewed control. Keep the scope if
-		// the pointer is still over this editor's code area.
+		// Monaco can report a mouse leave while crossing an overlay layer.
+		// Keep the scope if the pointer is still over this editor's code area.
 		this._register(editor.onMouseLeave(e => this.hover(this.targetAt({ event: e.event, target: null }))));
 		this._register(editor.onMouseDown(e => {
 			const target = e.event.leftButton ? this.targetAt(e) : undefined;
@@ -187,7 +178,6 @@ export class StructuralFoldControls extends Disposable {
 			this.view = undefined;
 			this.decorations.clear();
 			this.rails.hide();
-			for (const control of this.viewedControls.values()) control.hide();
 			return;
 		}
 		const decorations: IModelDeltaDecoration[] = [];
@@ -217,54 +207,12 @@ export class StructuralFoldControls extends Disposable {
 			&& !this.isFolded(foldable, folded)
 			&& !hidden.some(range => range.contains(foldable.line + 1)));
 		this.decorations.set(decorations);
-		// Completed scopes remain discoverable after the pointer leaves. Only
-		// visible headers get widgets, so folded descendants never float over code.
-		const controls: ViewedCandidate[] = [];
-		const completed = this.foldablesOf(diff).filter(scope => scope.rail && this.viewed?.get(path, scope.foldStateId).state === 'viewed');
-		for (const scope of this.foldablesOf(diff)) {
-			if (!scope.rail || hidden.some(range => range.contains(scope.line + 1))) continue;
-			const active = scope.foldStateId === target?.foldable.foldStateId;
-			const progress = this.viewed?.get(path, scope.foldStateId);
-			if (!progress || progress.total.additions + progress.total.deletions === 0) continue;
-			if (!active && progress.state !== 'viewed') continue;
-			// A viewed function already accounts for its viewed return/body folds.
-			// Keep their actions on hover, but don't stack persistent completion badges.
-			if (!active && completed.some(outer => outer.line < scope.line && outer.rail!.end >= scope.rail!.end)) continue;
-			controls.push({ active, progress, target: { foldable: scope, collapsed: this.isFolded(scope, folded), rail: false, control: false } });
-		}
-		this.view = { model, target, visibleScopes, controls };
+		this.view = { model, target, visibleScopes };
 		this.layoutViewport();
 	}
 
 	private layoutViewport(): void {
-		const view = this.view;
-		if (!view) return;
-		this.rails.show(view.model, view.visibleScopes, view.target);
-		const height = this.editor.getLayoutInfo().height;
-		const wanted = new Map<number, ViewedCandidate>();
-		for (const entry of view.controls) {
-			const line = entry.target.foldable.line;
-			const top = this.editor.getTopForLineNumber(line + 1) - this.editor.getScrollTop();
-			if (top < 0 || top >= height) continue;
-			if (entry.active || !wanted.has(line)) wanted.set(line, entry);
-		}
-		for (const [line, control] of this.viewedControls) {
-			if (!wanted.has(line)) { control.dispose(); this.viewedControls.delete(line); }
-		}
-		for (const [line, entry] of wanted) {
-			let control = this.viewedControls.get(line);
-			if (!control) {
-				control = this.viewed!.createControl(this.editor, target => {
-					const path = this.path();
-					if (!path) return;
-					// Keep the caret out of the body that the viewed mark will fold.
-					this.editor.setPosition({ lineNumber: target.foldable.line + 1, column: 1 });
-					void this.viewed!.toggle(path, target.foldable.foldStateId);
-				});
-				this.viewedControls.set(line, control);
-			}
-			control.show(entry.target, entry.progress);
-		}
+		if (this.view) this.rails.show(this.view.model, this.view.visibleScopes, this.view.target);
 	}
 
 	/** A folded scope on its header line: a chevron to unfold it, then `⋯ N lines` and the closer. */
@@ -335,10 +283,6 @@ export class StructuralFoldControls extends Disposable {
 	}
 
 	private targetAt(e: IPartialEditorMouseEvent): FoldTarget | undefined {
-		for (const control of this.viewedControls.values()) {
-			const viewed = control.targetOf(e.event.browserEvent.target as HTMLElement | null);
-			if (viewed) return { ...viewed, rail: false, control: false };
-		}
 		const model = this.editor.getModel();
 		const path = this.path();
 		const diff = path ? this.session.getTextDiff(path) : undefined;
@@ -347,9 +291,9 @@ export class StructuralFoldControls extends Disposable {
 			const foldable = this.foldablesOf(diff).find(f => f.rail && f.foldStateId === Number(summary.getAttribute("data-summary-fold-state-id")));
 			if (foldable) return { foldable, rail: true, control: false, collapsed: true };
 		}
-		// Overlay layers can turn the blank space between code and the viewed
-		// control into UNKNOWN/OVERLAY_WIDGET with no position. Resolve the
-		// point without its DOM target so the same header or rail remains armed.
+		// Overlay layers can turn blank code space into UNKNOWN/OVERLAY_WIDGET
+		// with no position. Resolve the point without its DOM target so the
+		// same header or rail remains armed.
 		const direct = e.target;
 		const usable = direct?.type === MouseTargetType.CONTENT_TEXT || direct?.type === MouseTargetType.CONTENT_EMPTY
 			|| direct?.type === MouseTargetType.GUTTER_GLYPH_MARGIN || direct?.type === MouseTargetType.GUTTER_LINE_NUMBERS
@@ -360,8 +304,8 @@ export class StructuralFoldControls extends Disposable {
 			const bounds = node?.getBoundingClientRect();
 			const { clientX, clientY } = e.event.browserEvent;
 			if (node && bounds && clientX >= bounds.left && clientX < bounds.right && clientY >= bounds.top && clientY < bounds.bottom) {
-				// Re-hit the same row in the text column: a viewed overlay can
-				// otherwise occlude Monaco's target for the space leading to it.
+				// Re-hit the same row in the text column: an overlay can
+				// otherwise occlude Monaco's target.
 				const x = bounds.left + (this.editor.getLayoutInfo().contentLeft + 16) * bounds.width / node.offsetWidth;
 				hit = this.editor.getTargetAtClientPoint(x, clientY);
 			}

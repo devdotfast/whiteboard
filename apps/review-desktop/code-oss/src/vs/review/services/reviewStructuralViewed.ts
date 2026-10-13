@@ -2,12 +2,9 @@
  * Copyright (c) dev.fast. All rights reserved.
  * Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ICodeEditor } from '../../editor/browser/editorBrowser.js';
-import type { ScopeViewedControl } from './reviewStructuralViewedControl.js';
-import type { FoldTarget } from './reviewStructuralFolds.js';
 import { Emitter, type Event } from '../../base/common/event.js';
 import { Disposable } from '../../base/common/lifecycle.js';
-import type { ReviewDiffProgress, ReviewDiffProgressFile, ReviewDiffViewSpec } from '../common/reviewProtocol.js';
+import type { ReviewDiffProgress, ReviewDiffProgressFile } from '../common/reviewProtocol.js';
 import { structuralViewedProgress, structuralViewedRanges, structuralViewedScopes } from '../common/reviewStructuralViewed.js';
 import type { ReviewFilesEditorEntry } from './reviewFilesDiffView.js';
 import type { StructuralDiffSession } from './reviewStructuralDiffSession.js';
@@ -22,8 +19,6 @@ export class StructuralViewedState extends Disposable {
 	readonly onDidChange = this.changed.event;
 	private readonly scopes = new Map<string, ReturnType<typeof structuralViewedScopes>>();
 	private readonly states = new Map<string, string>();
-	private pending = false;
-	private requestedFold: { path: string; id: number; viewed: boolean } | undefined;
 	private memo: { files: Map<string, ReviewDiffProgressFile>; values: Map<string, ReturnType<typeof structuralViewedProgress>> } | undefined;
 
 	constructor(
@@ -31,8 +26,6 @@ export class StructuralViewedState extends Disposable {
 		private readonly entries: readonly ReviewFilesEditorEntry[],
 		private readonly progress: () => ReviewDiffProgress | undefined,
 		onProgress: Event<void>,
-		private readonly onSetViewed: NonNullable<ReviewDiffViewSpec['onSetViewed']>,
-		readonly createControl: (editor: ICodeEditor, onToggle: (target: FoldTarget) => void) => ScopeViewedControl,
 	) {
 		super();
 		const reset = () => { this.memo = undefined; this.sync(); };
@@ -67,22 +60,6 @@ export class StructuralViewedState extends Disposable {
 		return this.memo ??= { files: new Map(this.progress()?.files.map(file => [file.path, file])), values: new Map() };
 	}
 
-	async toggle(path: string, id: number): Promise<void> {
-		const ranges = this.getScopes(path)?.get(id);
-		if (!ranges || this.pending) return;
-		const viewed = this.get(path, id).state !== 'viewed';
-		this.pending = true;
-		this.requestedFold = { path, id, viewed };
-		try {
-			await this.onSetViewed(ranges, viewed);
-			// Fold only the box the reader checked, not every newly covered
-			// descendant. Reopening should recover the body's previous folds.
-			this.applyRequestedFold();
-		}
-		catch (error) { this.requestedFold = undefined; throw error; }
-		finally { this.pending = false; }
-	}
-
 	private sync(): void {
 		const initialized = initializedScopes.get(this.session) ?? new Set<string>();
 		initializedScopes.set(this.session, initialized);
@@ -105,17 +82,6 @@ export class StructuralViewedState extends Disposable {
 				initialized.add(key);
 			}
 		}
-		this.applyRequestedFold();
 		this.changed.fire();
-	}
-
-	private applyRequestedFold(): void {
-		const request = this.requestedFold;
-		// React may deliver the new coverage after the mutation promise resolves.
-		// Wait for that coverage, rather than folding optimistically on a failed save.
-		if (request && (this.get(request.path, request.id).state === 'viewed') === request.viewed) {
-			this.requestedFold = undefined;
-			this.session.setRegionCollapsed(request.path, request.id, request.viewed);
-		}
 	}
 }
