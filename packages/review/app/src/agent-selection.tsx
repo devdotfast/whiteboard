@@ -278,6 +278,19 @@ export function AgentSelectionProvider({
     return () => window.removeEventListener("keydown", keydown, true);
   }, [selection, copy, select, askAgent, ask]);
 
+  useEffect(() => {
+    if (!selection) return;
+
+    const dismiss = (event: PointerEvent) => {
+      if (!actions.current || !event.composedPath().includes(actions.current))
+        select(null);
+    };
+
+    window.addEventListener("pointerdown", dismiss, true);
+
+    return () => window.removeEventListener("pointerdown", dismiss, true);
+  }, [selection, select]);
+
   return (
     <SelectionContext.Provider value={select}>
       {children}

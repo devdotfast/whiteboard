@@ -89,7 +89,8 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 		const fromLine = start.lineNumber;
 		const toLine = Math.max(fromLine, end.lineNumber - (end.column === 1 && end.lineNumber > fromLine ? 1 : 0));
 		const rect = editor.getDomNode()?.getBoundingClientRect();
-		const position = editor.getScrolledVisiblePosition(selection.getPosition());
+		const cursor = selection.getPosition();
+		const position = editor.getScrolledVisiblePosition(cursor.lineNumber > toLine ? { lineNumber: toLine, column: model.getLineMaxColumn(toLine) } : cursor);
 		const anchor = rect && position ? { x: rect.left + position.left, y: rect.top + position.top } : undefined;
 		const apiSelection = apiSelectionEvent(model.uri, selection, anchor);
 		if (apiSelection) {
