@@ -1,55 +1,81 @@
 import {
   REVIEW_DISCORD_URL,
   type ReviewApiSummary,
-  type ReviewCanvasInstallContent,
   type ReviewCanvasOnboarding,
-  type ReviewCanvasSetupActions,
   homeSessions,
 } from "@dev.fast/review-protocol";
 import { fuzzySegments } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
 import {
-  Fragment,
   type ReactNode,
-  useCallback,
+  useContext,
   useEffect,
-  useId,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 
-import { CopyIcon, copyText } from "./copy-text";
+import { copyText } from "./copy-text";
+import { countLabel, formatRelativeTime } from "./format";
 import { homeStyles } from "./home-styles";
-import { CheckIcon } from "./icons";
+import { CanvasUiContext } from "./host/canvas-ui";
+import {
+  BoardIcon,
+  BranchIcon,
+  ClearFiltersIcon,
+  CloseIcon,
+  CodeIcon,
+  CopyIcon,
+  DisclosureChevron,
+  FilterIcon,
+  FolderIcon,
+  GearIcon,
+  HelpIcon,
+  SearchIcon,
+  SortIcon,
+} from "./icons";
 import { homeGroupMarker, homeRowMarker } from "./markers.stylex";
-import { MenuSurface, menuSurfaceStyles } from "./menu-surface";
 import { OptionMenu } from "./option-menu";
 import type { ReviewFindHost } from "./review-find";
 import {
   HomeFilterPicker,
   type HomeFilterSection,
+  filterPickerAnchor,
 } from "./review-home-filter-picker";
 import {
+  type HomeFacet,
   type HomeFilters,
   type HomeGroup,
   type HomeSort,
   activeHomeChips,
   defaultHomeFilters,
   groupFor,
+  homeFacetLabels,
+  homeFacetValues,
   homeGroups,
+  isHomeFacet,
   matchesHomeFilters,
-  repositoryIdentity,
+  mergeChipOrder,
+  removeHomeChip,
   reviewMetadataPills,
   reviewTitle,
   sortHomeReviews,
-  worktreeKey,
-  worktreeLabel,
+  trashDaysLeft,
+  trashRetentionDays,
 } from "./review-home-model";
 import { styles } from "./review-home-styles";
 import { withClass } from "./stylex-props";
+import { useToast } from "./toast";
+import { Button, IconButton, buttonStyles } from "./ui/button";
+import { checkboxStyles } from "./ui/checkbox";
+import { EmptyState } from "./ui/empty-state";
 import { Shortcut } from "./ui/kbd";
+import { menuStyles, moveMenuFocus } from "./ui/menu";
+import { StatusBanner } from "./ui/status-banner";
+import { surfaceStyles } from "./ui/surface";
+import { useAnchoredPopover } from "./use-anchored-popover";
 import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
 
@@ -62,21 +88,27 @@ interface ReviewHomeProps {
   onDelete?(review: ReviewApiSummary): Promise<void>;
   onTrash?(review: ReviewApiSummary): Promise<void>;
   onRestore?(review: ReviewApiSummary): Promise<void>;
-  install?: ReviewCanvasInstallContent;
-  setupActions?: ReviewCanvasSetupActions;
   onboarding?: ReviewCanvasOnboarding;
   onOpenTutorial?(): void;
   onOpenSettings?(): void;
   onOpenSetup?(): void;
 }
 
+type PickerTrigger = "filter" | "unread" | HomeFacet;
+
+type Notice = {
+  kind: "trash" | "restored" | "permanent";
+  targets: ReviewApiSummary[];
+};
+
 const collapseKey = "review.home.collapsed.v1";
 
 const visitKey = "review.home.lastVisit.v1";
 
+const week = 7 * 86_400_000;
+
 function readCollapsed(): Record<HomeGroup, boolean> {
   const defaults = { unread: false, week: false, earlier: true };
-
   const saved = JSON.parse(localStorage.getItem(collapseKey) ?? "{}");
 
   for (const { id } of homeGroups)
@@ -85,8 +117,15 @@ function readCollapsed(): Record<HomeGroup, boolean> {
   return defaults;
 }
 
-function readLastVisit(): number {
-  return Number(localStorage.getItem(visitKey)) || 0;
+function withEntries<V>(
+  map: Map<string, V>,
+  entries: Iterable<[string, V]>,
+): Map<string, V> {
+  const next = new Map(map);
+
+  for (const [key, value] of entries) next.set(key, value);
+
+  return next;
 }
 
 export function ReviewHome({
@@ -108,6 +147,9 @@ export function ReviewHome({
   const clearTooltip = useTooltip("Clear filters", { instant: true });
   const filterTooltip = useTooltip("Filter", { instant: true });
   const sortTooltip = useTooltip("Sort", { instant: true });
+  const ui = useContext(CanvasUiContext);
+  const { showToast, toast: copyToast } = useToast(3000);
+  const { showToast: showNotice, toast: noticeToast } = useToast(8000);
 
   const [filterState, setFilterState] = useState({
     filters: defaultHomeFilters,
@@ -116,46 +158,21 @@ export function ReviewHome({
 
   const { filters, order: chipOrder } = filterState;
 
-  const setFilters = useCallback(
-    (update: (filters: HomeFilters) => HomeFilters) => {
-      setFilterState((current) => {
-        const next = update(current.filters);
+  const setFilters = (update: (filters: HomeFilters) => HomeFilters) =>
+    setFilterState((current) => {
+      const next = update(current.filters);
 
-        const active = activeHomeChips(next);
-
-        return {
-          filters: next,
-          order: [
-            ...current.order.filter((id) => active.includes(id)),
-            ...active.filter((id) => !current.order.includes(id)),
-          ],
-        };
-      });
-    },
-    [],
-  );
+      return { filters: next, order: mergeChipOrder(current.order, next) };
+    });
 
   const [query, setQuery] = useState("");
   const [editingSearch, setEditingSearch] = useState<string | null>(null);
 
   const [picker, setPicker] = useState<{
-    anchor: HTMLButtonElement;
-    alignment: "start" | "end";
+    trigger: PickerTrigger;
     section: HomeFilterSection;
   } | null>(null);
 
-  const addFilter = useRef<HTMLButtonElement>(null);
-
-  const setAddFilter = useCallback(
-    (element: HTMLButtonElement | null) => {
-      addFilter.current = element;
-
-      return filterTooltip(element);
-    },
-    [filterTooltip],
-  );
-
-  const chipRow = useRef<HTMLDivElement>(null);
   const [sort, setSort] = useState<HomeSort>("updated");
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [selected, setSelected] = useState(new Set<string>());
@@ -164,56 +181,30 @@ export function ReviewHome({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState("");
-
-  const [toast, setToast] = useState<{
-    kind: "trash" | "restored" | "permanent";
-    targets: ReviewApiSummary[];
-  } | null>(null);
-
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [localView, setLocalView] = useState<"active" | "trash">("active");
   const inTrash = (view ?? localView) === "trash";
+  const published = onboarding?.published || homeSessions(reviews).length > 0;
+  const [hasPublished, setHasPublished] = useState(published);
 
-  const hasPublished = useRef(
-    onboarding?.published || homeSessions(reviews).length > 0,
-  );
+  if (published && !hasPublished) setHasPublished(true);
 
-  if (onboarding?.published || homeSessions(reviews).length > 0)
-    hasPublished.current = true;
-
-  const [confirmation, setConfirmation] = useState<ReviewApiSummary[] | null>(
-    null,
-  );
-
-  const confirmDialog = useRef<HTMLDialogElement>(null);
-  const cancelDelete = useRef<HTMLButtonElement>(null);
   const [now, setNow] = useState(Date.now);
-  const [lastVisit] = useState(readLastVisit);
+  const [lastVisit] = useState(() => Number(localStorage.getItem(visitKey)));
   const [nudgeClosed, setNudgeClosed] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-
-  const [copyNotice, setCopyNotice] = useState<{ copied: boolean } | null>(
-    null,
-  );
-
   const [refresherOpen, setRefresherOpen] = useState(false);
-
   const homeRef = useRef<HTMLElement>(null);
+  const filterRegion = useRef<HTMLElement>(null);
   const helpRef = useRef<HTMLDivElement>(null);
+  const helpButton = useRef<HTMLButtonElement>(null);
+  const helpMenu = useAnchoredPopover(helpOpen, helpButton);
+  const addFilter = useRef<HTMLButtonElement>(null);
+  const chipRow = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
-
   const lastSelected = useRef<string | null>(null);
-  const dialog = useRef<HTMLDialogElement>(null);
-  const selectionBar = useRef<HTMLDivElement>(null);
-  const [barHeight, setBarHeight] = useState(44);
-  useDismissOnOutside(helpRef, helpOpen, () => setHelpOpen(false));
-
-  useEffect(() => {
-    if (!copyNotice) return;
-
-    const timer = setTimeout(() => setCopyNotice(null), 3000);
-
-    return () => clearTimeout(timer);
-  }, [copyNotice]);
+  useDismissOnOutside(helpRef, helpOpen, setHelpOpen);
+  useDismissOnOutside(filterRegion, picker !== null, () => setPicker(null));
 
   useEffect(() => {
     localStorage.setItem(visitKey, String(Date.now()));
@@ -221,10 +212,13 @@ export function ReviewHome({
 
     return () => clearInterval(timer);
   }, []);
+
+  const showFind = useEffectEvent((seed?: string) => startTextFilter(seed));
+
   useEffect(() => {
     findHost?.attach({
       showFind(seed) {
-        startTextFilter(seed);
+        showFind(seed);
 
         return true;
       },
@@ -234,36 +228,47 @@ export function ReviewHome({
     });
 
     return () => findHost?.attach(null);
-  });
+  }, [findHost]);
+
+  const describeNotice = useEffectEvent((shown: Notice) => ({
+    kind: "success" as const,
+    text:
+      shown.kind === "trash"
+        ? `Moved ${countLabel(shown.targets.length, "whiteboard")} to Trash. You can restore ${shown.targets.length === 1 ? "it" : "them"} for ${trashRetentionDays} days.`
+        : `${shown.kind === "permanent" ? "Permanently deleted" : "Restored"} ${countLabel(shown.targets.length, "whiteboard")}.`,
+    actions:
+      shown.kind === "permanent"
+        ? undefined
+        : [
+            { label: "Undo", run: () => undo(shown) },
+            ...(shown.kind === "trash"
+              ? [{ label: "View Trash", run: openTrash }]
+              : []),
+          ],
+    onClose: () => setNotice((current) => (current === shown ? null : current)),
+  }));
 
   useEffect(() => {
-    if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 8000);
-
-    return () => clearTimeout(timer);
-  }, [toast]);
-  useEffect(() => {
-    if (refresherOpen) dialog.current?.showModal();
-  }, [refresherOpen]);
+    if (notice) return showNotice(describeNotice(notice));
+  }, [notice, showNotice]);
 
   // Hold successful changes until the catalog acknowledges them; allow later reimports.
   useEffect(() => {
+    const ids = new Set(reviews.map((review) => review.reviewId));
+
     setDeleted((current) => {
-      const next = new Set(
-        [...current].filter((id) => reviews.some((r) => r.reviewId === id)),
-      );
+      const next = new Set([...current].filter((id) => ids.has(id)));
 
       return next.size === current.size ? current : next;
     });
     setLifecycle((current) => {
-      const next = new Map(current);
+      const next = new Map(
+        [...current].filter(([id, value]) => {
+          const review = reviews.find((r) => r.reviewId === id);
 
-      for (const [id, value] of current) {
-        const review = reviews.find((r) => r.reviewId === id);
-
-        if (!review || Boolean(review.trashedAt) === Boolean(value))
-          next.delete(id);
-      }
+          return review && Boolean(review.trashedAt) !== Boolean(value);
+        }),
+      );
 
       return next.size === current.size ? current : next;
     });
@@ -286,13 +291,6 @@ export function ReviewHome({
   const listed = catalog.filter(
     (review) => Boolean(review.trashedAt) === inTrash,
   );
-
-  useEffect(() => {
-    if (confirmation) {
-      confirmDialog.current?.showModal();
-      cancelDelete.current?.focus();
-    }
-  }, [confirmation]);
 
   useLayoutEffect(() => {
     if (editingSearch !== null) input.current?.focus();
@@ -320,23 +318,6 @@ export function ReviewHome({
     ) {
       setPicker(null);
       addFilter.current?.focus();
-
-      return;
-    }
-
-    if (picker && !picker.anchor.isConnected) {
-      if (picker.section !== "all") {
-        const anchor = homeRef.current?.querySelector<HTMLButtonElement>(
-          `[data-home-facet="${picker.section}"]`,
-        );
-
-        if (anchor) setPicker({ ...picker, anchor });
-
-        return;
-      }
-
-      if (addFilter.current)
-        setPicker({ ...picker, anchor: addFilter.current, alignment: "end" });
     }
   }, [picker, renderedChips]);
 
@@ -364,23 +345,10 @@ export function ReviewHome({
   const ordered = groups.flatMap((group) => group.reviews);
   const selectedReviews = ordered.filter((r) => selected.has(r.reviewId));
   const selectionMode = selectedReviews.length > 0;
-
   const searching = searchTerms.length > 0;
 
   const isCollapsed = (id: HomeGroup) =>
     !inTrash && !searching && collapsed[id];
-
-  useEffect(() => {
-    const bar = selectionBar.current;
-
-    if (!selectionMode || !bar) return;
-    const measure = () => setBarHeight(bar.getBoundingClientRect().height);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(bar);
-
-    return () => observer.disconnect();
-  }, [selectionMode]);
 
   // A filter change must never leave invisible destructive targets selected.
   const visibleIds = visible
@@ -397,6 +365,12 @@ export function ReviewHome({
     });
   }, [visibleIds]);
 
+  useEffect(() => {
+    clearSelection();
+    clearFilters();
+    setSort(inTrash ? "trash" : "updated");
+  }, [inTrash]);
+
   function startTextFilter(seed = "", id = "") {
     setPicker(null);
 
@@ -406,31 +380,23 @@ export function ReviewHome({
     setQuery(seed);
   }
 
-  function openPicker(
-    anchor: HTMLButtonElement,
-    alignment: "start" | "end",
-    section: HomeFilterSection = "all",
-  ) {
+  function openPicker(trigger: PickerTrigger, section: HomeFilterSection) {
     setPicker((current) =>
-      current?.anchor === anchor && current.section === section
+      current?.trigger === trigger && current.section === section
         ? null
-        : { anchor, alignment, section },
+        : { trigger, section },
     );
   }
 
-  function removeChip(id: string) {
-    setFilters((current) => {
-      if (id.startsWith("search:"))
-        return {
-          ...current,
-          searches: current.searches.filter((term) => term !== id.slice(7)),
-        };
+  function closePicker() {
+    const trigger = picker?.trigger;
+    setPicker(null);
 
-      if (id === "repositories" || id === "worktrees" || id === "branches")
-        return { ...current, [id]: [] };
-
-      return { ...current, [id]: false };
-    });
+    if (trigger === "filter") addFilter.current?.focus();
+    else
+      homeRef.current
+        ?.querySelector<HTMLElement>(`[data-home-facet="${trigger}"]`)
+        ?.focus();
   }
 
   function finishTextFilter(discard = false) {
@@ -440,6 +406,7 @@ export function ReviewHome({
     setQuery("");
   }
 
+  /** Replaces the search chip `previous` (or adds one, for "") with `term`. */
   function applySearch(previous: string, term: string) {
     setFilterState((current) => {
       const searches = current.filters.searches.filter(
@@ -448,35 +415,33 @@ export function ReviewHome({
 
       if (term && !searches.includes(term)) searches.push(term);
       const next = { ...current.filters, searches };
-      const active = activeHomeChips(next);
-
-      const order = current.order.map((id) =>
-        id === previous ? `search:${term}` : id,
-      );
 
       return {
         filters: next,
-        order: [
-          ...new Set([
-            ...order.filter((id) => active.includes(id)),
-            ...active.filter((id) => !order.includes(id)),
-          ]),
-        ],
+        order: mergeChipOrder(
+          current.order.map((id) => (id === previous ? `search:${term}` : id)),
+          next,
+        ),
       };
     });
+  }
+
+  function clearFilters() {
+    setPicker(null);
+    setFilters(() => defaultHomeFilters);
+    setQuery("");
+    setEditingSearch(null);
   }
 
   function clearSelection() {
     const focused = document.activeElement;
 
-    // Escape makes a mouse-focused checkbox :focus-visible in Chromium.
-    // Relinquish that focus when dismissing selection so it can hide again.
+    // Escape makes a mouse-focused checkbox :focus-visible in Chromium; let it hide again.
     if (
       focused instanceof HTMLInputElement &&
       focused.matches('[data-home-row] input[type="checkbox"]')
-    ) {
+    )
       focused.blur();
-    }
 
     setSelected(new Set());
   }
@@ -529,44 +494,27 @@ export function ReviewHome({
     lastSelected.current = id;
   }
 
-  function openDeletedView(value: boolean) {
-    clearSelection();
-    clearFilters();
-    const next = value ? "trash" : "active";
+  function showView(next: "active" | "trash") {
     setLocalView(next);
     onViewChange?.(next);
   }
 
-  useEffect(() => {
-    clearSelection();
-    clearFilters();
-    setSort(inTrash ? "trash" : "updated");
-  }, [inTrash]);
+  const openTrash = () => showView("trash");
 
-  async function changeLifecycle(
-    targets = selectedReviews,
-    restore = false,
-    undoing = false,
+  /** Runs `action` per target; failures stay selected and are rolled back. */
+  async function runBatch(
+    targets: ReviewApiSummary[],
+    action: (review: ReviewApiSummary) => Promise<void>,
+    failure: (count: number) => string,
+    rollback: (failed: Set<string>) => void,
   ) {
-    const action = restore ? onRestore : onTrash;
-
-    if (!action || busyRef.current || !targets.length) return;
     busyRef.current = true;
     setBusy(true);
     setError("");
+    clearSelection();
     const succeeded: ReviewApiSummary[] = [];
     const failed = new Set<string>();
     const messages: string[] = [];
-
-    const timestamp = restore ? null : new Date().toISOString();
-    setLifecycle((current) => {
-      const next = new Map(current);
-
-      for (const review of targets) next.set(review.reviewId, timestamp);
-
-      return next;
-    });
-    clearSelection();
 
     for (const review of targets) {
       try {
@@ -578,25 +526,55 @@ export function ReviewHome({
       }
     }
 
-    if (failed.size)
-      setLifecycle((current) => {
-        const next = new Map(current);
+    if (failed.size) {
+      rollback(failed);
+      setError(`Could not ${failure(failed.size)}. ${messages.join(" ")}`);
+    }
 
-        for (const review of targets)
-          if (failed.has(review.reviewId))
-            next.set(review.reviewId, review.trashedAt);
-
-        return next;
-      });
     setSelected(failed);
+    busyRef.current = false;
+    setBusy(false);
 
-    if (failed.size)
-      setError(
-        `Could not ${restore ? "restore" : "move"} ${countLabel(failed.size, "whiteboard")}${restore ? "" : " to Trash"}. ${messages.join(" ")}`,
-      );
+    return { succeeded, failed };
+  }
+
+  async function changeLifecycle(
+    targets = selectedReviews,
+    restore = false,
+    undoing = false,
+  ) {
+    const action = restore ? onRestore : onTrash;
+
+    if (!action || busyRef.current || !targets.length) return;
+    const timestamp = restore ? null : new Date().toISOString();
+
+    setLifecycle((current) =>
+      withEntries(
+        current,
+        targets.map((review) => [review.reviewId, timestamp]),
+      ),
+    );
+
+    const { succeeded, failed } = await runBatch(
+      targets,
+      action,
+      (count) =>
+        restore
+          ? `restore ${countLabel(count, "whiteboard")}`
+          : `move ${countLabel(count, "whiteboard")} to Trash`,
+      (failed) =>
+        setLifecycle((current) =>
+          withEntries(
+            current,
+            targets
+              .filter((review) => failed.has(review.reviewId))
+              .map((review) => [review.reviewId, review.trashedAt]),
+          ),
+        ),
+    );
 
     if (undoing)
-      setToast(
+      setNotice(
         failed.size
           ? {
               kind: restore ? "trash" : "restored",
@@ -605,181 +583,158 @@ export function ReviewHome({
           : null,
       );
     else if (succeeded.length)
-      setToast({ kind: restore ? "restored" : "trash", targets: succeeded });
-    busyRef.current = false;
-    setBusy(false);
+      setNotice({ kind: restore ? "restored" : "trash", targets: succeeded });
   }
 
-  function undoToast() {
-    if (toast && toast.kind !== "permanent")
-      void changeLifecycle(toast.targets, toast.kind === "trash", true);
+  async function deletePermanently(targets: ReviewApiSummary[]) {
+    if (
+      !onDelete ||
+      busyRef.current ||
+      !(await ui?.confirmDelete?.(targets.map(reviewTitle)))
+    )
+      return;
+
+    setDeleted(
+      (current) => new Set([...current, ...targets.map((r) => r.reviewId)]),
+    );
+
+    const { succeeded } = await runBatch(
+      targets,
+      onDelete,
+      (count) => `permanently delete ${countLabel(count, "whiteboard")}`,
+      (failed) =>
+        setDeleted(
+          (current) => new Set([...current].filter((id) => !failed.has(id))),
+        ),
+    );
+
+    if (succeeded.length) setNotice({ kind: "permanent", targets: succeeded });
+  }
+
+  function undo(shown: Notice) {
+    if (shown.kind !== "permanent")
+      void changeLifecycle(shown.targets, shown.kind === "trash", true);
   }
 
   function deleteSelection(targets = selectedReviews) {
     if (!targets.length) return;
 
-    if (inTrash) setConfirmation([...targets]);
+    if (inTrash) void deletePermanently([...targets]);
     else void changeLifecycle(targets);
   }
 
-  async function deletePermanently() {
-    if (!onDelete || !confirmation || busyRef.current) return;
-    const targets = confirmation;
-    setConfirmation(null);
-    busyRef.current = true;
-    setBusy(true);
-    setError("");
-    const succeeded: ReviewApiSummary[] = [];
-    const failed = new Set<string>();
-    const messages: string[] = [];
+  const keydown = useEffectEvent((event: KeyboardEvent) => {
+    // An open menu owns keyboard input until it closes; its Escape must not
+    // also clear the selection below it.
+    if (
+      event.defaultPrevented ||
+      refresherOpen ||
+      helpOpen ||
+      homeRef.current?.querySelector(
+        '[aria-haspopup="menu"][aria-expanded="true"]',
+      )
+    )
+      return;
+    const target = event.target;
 
-    setDeleted(
-      (current) =>
-        new Set([...current, ...targets.map((review) => review.reviewId)]),
-    );
-    clearSelection();
+    const editing =
+      target instanceof HTMLElement &&
+      Boolean(
+        target.closest(
+          'input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]',
+        ),
+      );
 
-    for (const review of targets) {
-      try {
-        await onDelete(review);
-        succeeded.push(review);
-      } catch (cause) {
-        failed.add(review.reviewId);
-        messages.push(cause instanceof Error ? cause.message : String(cause));
-      }
+    const command = /Mac|iPhone|iPad/.test(navigator.platform)
+      ? event.metaKey
+      : event.ctrlKey;
+
+    const key = event.key.toLowerCase();
+
+    if (command && key === "f") {
+      event.preventDefault();
+      event.stopPropagation();
+      startTextFilter();
+
+      return;
     }
 
-    if (failed.size)
-      setDeleted(
-        (current) => new Set([...current].filter((id) => !failed.has(id))),
-      );
-    setSelected(failed);
+    if (picker !== null) return;
 
-    if (failed.size)
-      setError(
-        `Could not permanently delete ${countLabel(failed.size, "whiteboard")}. ${messages.join(" ")}`,
-      );
-
-    if (succeeded.length) setToast({ kind: "permanent", targets: succeeded });
-    busyRef.current = false;
-    setBusy(false);
-  }
-
-  useEffect(() => {
-    const keydown = (event: KeyboardEvent) => {
-      // An open menu owns keyboard input until it closes. In particular, its
-      // Escape must not also clear the selection below it.
-      if (
-        event.defaultPrevented ||
-        confirmation ||
-        refresherOpen ||
-        helpOpen ||
-        homeRef.current?.querySelector(
-          '[aria-haspopup="menu"][aria-expanded="true"]',
-        )
-      )
-        return;
-      const target = event.target;
-
-      const editing =
-        target instanceof HTMLElement &&
-        Boolean(
-          target.closest(
-            'input:not([type="checkbox"]):not([type="radio"]), textarea, select, [contenteditable="true"]',
-          ),
-        );
-
-      const command = /Mac|iPhone|iPad/.test(navigator.platform)
-        ? event.metaKey
-        : event.ctrlKey;
-
-      const key = event.key.toLowerCase();
-
-      if (command && key === "f") {
+    if (
+      !editing &&
+      command &&
+      key === "z" &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.repeat &&
+      notice &&
+      notice.kind !== "permanent" &&
+      !busyRef.current
+    ) {
+      event.preventDefault();
+      event.stopPropagation();
+      undo(notice);
+    } else if (!editing && !command && !event.altKey && key === "f") {
+      event.preventDefault();
+      openPicker("filter", "all");
+    } else if (command && key === "," && onOpenSettings) {
+      event.preventDefault();
+      event.stopPropagation();
+      onOpenSettings();
+    } else if (key === "escape") {
+      if (document.activeElement === input.current) {
         event.preventDefault();
-        event.stopPropagation();
-        startTextFilter();
-
-        return;
+        finishTextFilter(true);
+      } else if (selectionMode) {
+        event.preventDefault();
+        clearSelection();
       }
+    } else if (!editing && command && key === "a") {
+      event.preventDefault();
+      event.stopPropagation();
+      setSelected(new Set(visible.map((r) => r.reviewId)));
+    } else if (!editing && command && key === "backspace" && !event.repeat) {
+      const rowId =
+        target instanceof HTMLElement
+          ? target.closest<HTMLElement>("[data-home-row]")?.dataset.homeRow
+          : undefined;
 
-      if (picker !== null) return;
+      const focused = visible.find((review) => review.reviewId === rowId);
 
-      if (
-        !editing &&
-        command &&
-        key === "z" &&
-        !event.shiftKey &&
-        !event.altKey &&
-        !event.repeat &&
-        toast &&
-        toast.kind !== "permanent" &&
-        !busyRef.current
-      ) {
+      if (selectionMode || focused) {
         event.preventDefault();
-        event.stopPropagation();
-        undoToast();
-      } else if (!editing && !command && !event.altKey && key === "f") {
-        event.preventDefault();
-
-        if (addFilter.current) openPicker(addFilter.current, "end");
-      } else if (command && key === "," && onOpenSettings) {
-        event.preventDefault();
-        event.stopPropagation();
-        onOpenSettings();
-      } else if (key === "escape") {
-        if (document.activeElement === input.current) {
-          event.preventDefault();
-          finishTextFilter(true);
-        } else if (copyNotice) {
-          event.preventDefault();
-          event.stopPropagation();
-          setCopyNotice(null);
-        } else if (selectionMode) {
-          event.preventDefault();
-          clearSelection();
-        }
-      } else if (!editing && command && key === "a") {
-        event.preventDefault();
-        event.stopPropagation();
-        setSelected(new Set(visible.map((r) => r.reviewId)));
-      } else if (!editing && command && key === "backspace" && !event.repeat) {
-        const rowId =
-          target instanceof HTMLElement
-            ? target.closest<HTMLElement>("[data-home-row]")?.dataset.homeRow
-            : undefined;
-
-        const focused = visible.find((review) => review.reviewId === rowId);
-
-        if (selectionMode || focused) {
-          event.preventDefault();
-          deleteSelection(selectionMode ? selectedReviews : [focused!]);
-        }
-      } else if (!editing && selectionMode && !event.repeat) {
-        if (inTrash && !command && !event.altKey && key === "r") {
-          event.preventDefault();
-          void changeLifecycle(selectedReviews, true);
-        }
+        deleteSelection(selectionMode ? selectedReviews : [focused!]);
       }
-    };
-
-    window.addEventListener("keydown", keydown, true);
-
-    return () => window.removeEventListener("keydown", keydown, true);
+    } else if (
+      !editing &&
+      selectionMode &&
+      !event.repeat &&
+      inTrash &&
+      !command &&
+      !event.altKey &&
+      key === "r"
+    ) {
+      event.preventDefault();
+      void changeLifecycle(selectedReviews, true);
+    }
   });
 
-  const text = searchTerms.join("” and “");
+  useEffect(() => {
+    const listener = (event: KeyboardEvent) => keydown(event);
+    window.addEventListener("keydown", listener, true);
 
-  const filterCount =
-    Number(filters.unread) +
-    Number(filters.repositories.length > 0) +
-    Number(filters.worktrees.length > 0) +
-    Number(filters.branches.length > 0);
+    return () => window.removeEventListener("keydown", listener, true);
+  }, []);
+
+  const filterCount = activeHomeChips(filters).filter(
+    (id) => !id.startsWith("search:"),
+  ).length;
 
   const hidden = listed.length - visible.length;
 
   const cause = [
-    text ? `“${text}”` : "",
+    searching ? `“${searchTerms.join("” and “")}”` : "",
     filterCount ? countLabel(filterCount, "filter") : "",
   ]
     .filter(Boolean)
@@ -794,30 +749,29 @@ export function ReviewHome({
       Number(onboarding.published)
     : 3;
 
-  const setupIncomplete = !inTrash && !hasPublished.current && completed < 3;
+  const setupIncomplete = !inTrash && !hasPublished && completed < 3;
+  const weeksAway = lastVisit > 0 ? Math.floor((now - lastVisit) / week) : 0;
 
-  const weeksAway =
-    lastVisit > 0 ? Math.floor((now - lastVisit) / (7 * 86400000)) : 0;
+  const sortOptions = [
+    ...(inTrash ? [{ value: "trash" as const, label: "Trashed" }] : []),
+    { value: "updated" as const, label: "Updated" },
+    { value: "created" as const, label: "Created" },
+    { value: "title" as const, label: "Title" },
+  ];
 
-  function clearFilters() {
-    setPicker(null);
-    setFilters(() => ({ ...defaultHomeFilters }));
-    setQuery("");
-    setEditingSearch(null);
-  }
+  const anchored = (trigger: PickerTrigger) =>
+    picker?.trigger === trigger && filterPickerAnchor.anchor;
 
-  function showHelp() {
+  const closeHelp = () => {
     setHelpOpen(false);
-    setRefresherOpen(true);
-  }
+    helpButton.current?.focus();
+  };
 
   const renderChip = (id: string) => {
     if (id === "draft" || id === editingSearch) {
       return (
         <span key={id} {...stylex.props(styles.chip, styles.editingChip)}>
-          <span {...stylex.props(styles.editingIcon)}>
-            <HomeIcon kind="search" size="small" />
-          </span>
+          <SearchIcon xstyle={[styles.smallIcon, styles.editingIcon]} />
           <input
             ref={input}
             aria-label="Search whiteboards"
@@ -852,7 +806,7 @@ export function ReviewHome({
           <span
             role="status"
             aria-label="Matching whiteboards"
-            {...stylex.props(styles.textChipCount)}
+            {...stylex.props(styles.faint)}
           >
             {visible.length}
           </span>
@@ -861,91 +815,52 @@ export function ReviewHome({
     }
 
     if (id.startsWith("search:")) {
-      const term = id.slice(7);
+      const term = id.slice("search:".length);
 
       return (
-        <Chip
+        <FilterChip
           key={id}
           label={term}
-          content={
-            <>
-              <span {...stylex.props(styles.textChipIcon)}>
-                <HomeIcon kind="search" size="small" />
-              </span>
-              <span data-chip-value {...stylex.props(styles.chipValue)}>
-                {term}
-              </span>
-            </>
-          }
           onOpen={() => startTextFilter(term, id)}
-          onRemove={() => removeChip(id)}
-        />
+          onRemove={() => setFilters((current) => removeHomeChip(current, id))}
+        >
+          <SearchIcon xstyle={[styles.smallIcon, styles.muted]} />
+          <span {...stylex.props(styles.chipValue)}>{term}</span>
+        </FilterChip>
       );
     }
 
-    const facet =
-      id === "repositories" || id === "worktrees" || id === "branches"
-        ? id
-        : null;
+    const facet = isHomeFacet(id) ? id : null;
+    const values = facet ? homeFacetValues(filters, facet, listed) : [];
+    const name = facet && homeFacetLabels[facet];
 
-    const name =
-      facet === "repositories"
-        ? "Repo"
-        : facet === "branches"
-          ? "Branch"
-          : "Worktree";
-
-    const values = facet
-      ? filters[facet].map((key) => {
-          if (facet === "branches") return key;
-
-          const review = listed.find((r) =>
-            facet === "repositories"
-              ? repositoryIdentity(r)?.key === key
-              : worktreeKey(r) === key,
-          );
-
-          return review
-            ? facet === "repositories"
-              ? repositoryIdentity(review)!.label
-              : worktreeLabel(review)
-            : key;
-        })
-      : [];
-
-    const valueLabel =
-      values.length > 1 ? `${values[0]} +${values.length - 1}` : values[0];
-
-    const label = facet ? `${name} ${valueLabel}` : "Unread only";
+    const label = facet
+      ? `${name} ${values.length > 1 ? `${values[0]} +${values.length - 1}` : values[0]}`
+      : "Unread only";
 
     return (
-      <Chip
+      <FilterChip
         key={id}
         label={label}
-        facet={facet ? name : undefined}
-        values={values}
-        content={
-          facet ? (
-            <>
-              <span {...stylex.props(styles.chipFacet)}>{name}</span>
-              <span data-chip-value {...stylex.props(styles.chipValue)}>
-                {values[0]}
-              </span>
-              {values.length > 1 && (
-                <span {...stylex.props(styles.chipFacet)}>
-                  +{values.length - 1}
-                </span>
-              )}
-            </>
-          ) : undefined
-        }
-        facetId={id}
+        tooltip={values.length ? values.join("\n") : undefined}
+        facet={id}
         open={picker?.section === id}
-        onOpen={(event) =>
-          openPicker(event.currentTarget, "start", facet ?? "unread")
-        }
-        onRemove={() => removeChip(id)}
-      />
+        xstyle={anchored(facet ?? "unread")}
+        onOpen={() => openPicker(facet ?? "unread", facet ?? "unread")}
+        onRemove={() => setFilters((current) => removeHomeChip(current, id))}
+      >
+        {facet ? (
+          <>
+            <span {...stylex.props(styles.muted)}>{name}</span>
+            <span {...stylex.props(styles.chipValue)}>{values[0]}</span>
+            {values.length > 1 && (
+              <span {...stylex.props(styles.muted)}>+{values.length - 1}</span>
+            )}
+          </>
+        ) : (
+          <span {...stylex.props(styles.chipValue)}>{label}</span>
+        )}
+      </FilterChip>
     );
   };
 
@@ -956,30 +871,31 @@ export function ReviewHome({
         {...stylex.props(
           homeStyles.scroll,
           styles.scroll,
-          selectionMode && styles.selectionSpace(barHeight),
+          selectionMode && styles.selectionSpace,
         )}
       >
         <div {...stylex.props(homeStyles.content, styles.content)}>
-          <header {...stylex.props(styles.header)}>
+          <header
+            ref={filterRegion}
+            {...stylex.props(homeStyles.header, styles.header)}
+          >
             {inTrash ? (
-              <div {...stylex.props(styles.deletedHeading)}>
+              <h1 {...stylex.props(homeStyles.heading, styles.trail)}>
                 <button
                   type="button"
                   {...stylex.props(styles.crumb)}
-                  onClick={() => openDeletedView(false)}
+                  onClick={() => showView("active")}
                 >
                   Whiteboards
                 </button>
-                <span aria-hidden="true" {...stylex.props(styles.muted)}>
+                <span aria-hidden="true" {...stylex.props(styles.faint)}>
                   ›
                 </span>
-                <h1 {...stylex.props(styles.deletedTitle)}>Trash</h1>
-                <span {...stylex.props(styles.deletedSeparator)}>
-                  {trashed.length}
-                </span>
-              </div>
+                Trash
+                <span {...stylex.props(styles.faint)}>{trashed.length}</span>
+              </h1>
             ) : (
-              <h1 {...stylex.props(styles.heading)}>Whiteboards</h1>
+              <h1 {...stylex.props(homeStyles.heading)}>Whiteboards</h1>
             )}
             {renderedChips.length > 0 && (
               <div
@@ -990,133 +906,123 @@ export function ReviewHome({
                 {renderedChips.map(renderChip)}
               </div>
             )}
-            <div {...stylex.props(styles.controls, styles.headerFilters)}>
+            <div {...stylex.props(styles.controls, styles.headerControls)}>
               {renderedChips.length > 0 && (
-                <button
-                  type="button"
+                <IconButton
                   aria-label="Clear filters"
+                  size="large"
                   ref={clearTooltip}
-                  {...stylex.props(styles.iconButton, styles.headerIconButton)}
                   onClick={clearFilters}
                 >
-                  <HomeIcon kind="clearFilters" />
-                </button>
+                  <ClearFiltersIcon />
+                </IconButton>
               )}
-              <button
-                ref={setAddFilter}
+              <IconButton
                 aria-label="Add filters"
+                size="large"
+                ref={(element) => {
+                  addFilter.current = element;
+                  filterTooltip(element);
+                }}
                 aria-haspopup="dialog"
-                aria-expanded={picker?.anchor === addFilter.current}
-                {...stylex.props(
-                  styles.control,
-                  styles.toolbarControl,
-                  styles.filterButton,
-                  picker?.anchor === addFilter.current &&
-                    styles.addFilterActive,
-                )}
-                onClick={(event) => openPicker(event.currentTarget, "end")}
+                aria-expanded={picker?.trigger === "filter"}
+                xstyle={anchored("filter")}
+                onClick={() => openPicker("filter", "all")}
               >
-                <HomeIcon kind="filter" />
-              </button>
+                <FilterIcon />
+              </IconButton>
               <OptionMenu<HomeSort>
                 ariaLabel="Sort whiteboards"
                 value={sort}
-                options={[
-                  ...(inTrash
-                    ? [{ value: "trash" as const, label: "Trashed" }]
-                    : []),
-                  { value: "updated", label: "Updated" },
-                  { value: "created", label: "Created" },
-                  { value: "title", label: "Title" },
-                ]}
+                options={sortOptions}
                 onChange={setSort}
-                triggerStyle={[styles.control, styles.toolbarControl]}
+                triggerStyle={[buttonStyles.base, buttonStyles.ghost]}
                 triggerRef={sortTooltip}
               >
-                <HomeIcon kind="sort" size="small" />
-                {sort[0].toUpperCase() + sort.slice(1)}
+                <SortIcon />
+                {sortOptions.find((option) => option.value === sort)?.label}
               </OptionMenu>
             </div>
+            {picker !== null && (
+              <HomeFilterPicker
+                key={picker.section}
+                alignment={picker.trigger === "filter" ? "end" : "start"}
+                section={picker.section}
+                reviews={listed}
+                filters={appliedFilters}
+                query={query}
+                onChange={setFilters}
+                onSearch={(term) => {
+                  setPicker(null);
+                  applySearch("", term);
+                }}
+                count={visible.length}
+                onClose={closePicker}
+              />
+            )}
           </header>
           {inTrash && (
-            <p {...stylex.props(styles.retentionNote)}>
-              Trash is deleted after 30 days.
+            <p {...stylex.props(styles.muted, styles.retentionNote)}>
+              Trash is deleted after {trashRetentionDays} days.
             </p>
           )}
           {setupIncomplete ? (
-            <div {...stylex.props(styles.notice)}>
-              <span {...stylex.props(styles.noticeText)}>
-                Finish setting up Whiteboard · {completed} of 3 done · next:{" "}
-                {!onboarding?.installed
-                  ? "connect your agent"
-                  : onboarding.tutorialChecked < onboarding.tutorialTotal
-                    ? "take the tour"
-                    : "create your first whiteboard"}
-              </span>
-              <button
-                {...stylex.props(styles.control)}
-                onClick={onOpenSetup ?? onOpenTutorial}
-              >
-                Continue setup
-              </button>
-            </div>
+            <StatusBanner
+              xstyle={styles.notice}
+              action={
+                <Button size="large" onClick={onOpenSetup ?? onOpenTutorial}>
+                  Continue setup
+                </Button>
+              }
+            >
+              Finish setting up Whiteboard · {completed} of 3 done · next:{" "}
+              {!onboarding?.installed
+                ? "connect your agent"
+                : onboarding.tutorialChecked < onboarding.tutorialTotal
+                  ? "take the tour"
+                  : "create your first whiteboard"}
+            </StatusBanner>
           ) : !inTrash && weeksAway >= 2 && !nudgeClosed ? (
-            <div {...stylex.props(styles.notice)}>
-              <span {...stylex.props(styles.noticeText)}>
-                Welcome back. It’s been {weeksAway} weeks — boards, lenses and
-                Ask in a 3-minute refresher.
-              </span>
-              <button
-                {...stylex.props(styles.control)}
-                onClick={() => showHelp()}
-              >
-                Refresh me
-              </button>
-              <button
-                aria-label="Close welcome back"
-                {...stylex.props(styles.iconButton)}
-                onClick={() => setNudgeClosed(true)}
-              >
-                ×
-              </button>
-            </div>
+            <StatusBanner
+              xstyle={styles.notice}
+              action={
+                <>
+                  <Button size="large" onClick={() => setRefresherOpen(true)}>
+                    Refresh me
+                  </Button>
+                  <IconButton
+                    aria-label="Close welcome back"
+                    onClick={() => setNudgeClosed(true)}
+                  >
+                    <CloseIcon />
+                  </IconButton>
+                </>
+              }
+            >
+              Welcome back. It’s been {weeksAway} weeks — boards, lenses and Ask
+              in a 3-minute refresher.
+            </StatusBanner>
           ) : null}
           {error && <p role="alert">{error}</p>}
-          {picker !== null && (
-            <HomeFilterPicker
-              key={picker.section}
-              anchor={picker.anchor}
-              alignment={picker.alignment}
-              section={picker.section}
-              reviews={listed}
-              filters={appliedFilters}
-              query={query}
-              onChange={setFilters}
-              onSearch={(term) => {
-                setPicker(null);
-                applySearch("", term);
-              }}
-              count={visible.length}
-              onClose={() => {
-                setPicker(null);
-                picker.anchor.focus();
-              }}
-            />
-          )}
           {!visible.length && (
-            <p {...stylex.props(styles.muted)}>
-              {hidden
-                ? "No matching whiteboards."
-                : inTrash
-                  ? "Trash is empty."
-                  : "No whiteboards yet."}
-            </p>
+            <EmptyState
+              message={
+                hidden
+                  ? "No matching whiteboards."
+                  : inTrash
+                    ? "Trash is empty."
+                    : "No whiteboards yet."
+              }
+            />
           )}
           <div {...stylex.props(styles.list)}>
             {groups.map((group) => {
               const count = group.reviews.filter((r) =>
                 selected.has(r.reviewId),
               ).length;
+
+              const isSelected = (index: number) =>
+                selected.has(group.reviews[index]?.reviewId);
 
               return (
                 <section
@@ -1127,25 +1033,19 @@ export function ReviewHome({
                   {!inTrash && (
                     <div {...stylex.props(styles.groupHeader)}>
                       <button
+                        type="button"
                         aria-expanded={!isCollapsed(group.id)}
                         {...stylex.props(styles.groupToggle)}
                         onClick={() => toggleGroup(group.id)}
                       >
-                        <span {...stylex.props(styles.caret)}>
-                          <HomeIcon
-                            kind={isCollapsed(group.id) ? "right" : "down"}
-                            size="caret"
-                          />
-                        </span>
-                        <span {...stylex.props(styles.caret)}>
+                        <DisclosureChevron expanded={!isCollapsed(group.id)} />
+                        <span {...stylex.props(styles.slot)}>
                           {group.id === "unread" && (
                             <span {...stylex.props(styles.dot)} />
                           )}
                         </span>
-                        <span data-home-group-label="">{group.label}</span>
-                        <span
-                          {...stylex.props(styles.muted, styles.groupCount)}
-                        >
+                        <span>{group.label}</span>
+                        <span {...stylex.props(styles.faint, styles.regular)}>
                           {group.reviews.length}
                         </span>
                       </button>
@@ -1157,17 +1057,21 @@ export function ReviewHome({
                               : `${count} of ${group.reviews.length} selected`}
                           </span>
                         )}
-                        <SelectionCheckbox
-                          label={`Select ${group.label}`}
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${group.label}`}
                           title="Select group"
-                          checked={
-                            count === group.reviews.length
-                              ? true
-                              : count > 0 && "mixed"
-                          }
-                          hidden={count === 0}
-                          group
-                          onToggle={() => selectGroup(group.reviews)}
+                          checked={count === group.reviews.length}
+                          ref={(element) => {
+                            if (element)
+                              element.indeterminate =
+                                count > 0 && count < group.reviews.length;
+                          }}
+                          {...stylex.props(
+                            checkboxStyles.box,
+                            count === 0 && styles.hiddenGroupCheck,
+                          )}
+                          onChange={() => selectGroup(group.reviews)}
                         />
                       </div>
                     </div>
@@ -1180,15 +1084,13 @@ export function ReviewHome({
                         {...stylex.props(
                           homeRowMarker,
                           styles.row,
-                          styles.waterfallRow(index),
-                          selected.has(review.reviewId) && styles.selected,
-                          selected.has(review.reviewId) &&
-                            index > 0 &&
-                            selected.has(group.reviews[index - 1].reviewId) &&
+                          styles.waterfall(index),
+                          isSelected(index) && styles.selected,
+                          isSelected(index) &&
+                            isSelected(index - 1) &&
                             styles.selectedAfter,
-                          selected.has(review.reviewId) &&
-                            index < group.reviews.length - 1 &&
-                            selected.has(group.reviews[index + 1].reviewId) &&
+                          isSelected(index) &&
+                            isSelected(index + 1) &&
                             styles.selectedBefore,
                         )}
                         onClick={() =>
@@ -1206,24 +1108,28 @@ export function ReviewHome({
                           }
                         }}
                       >
-                        <SelectionCheckbox
-                          label={`Select ${reviewTitle(review)}`}
-                          checked={selected.has(review.reviewId)}
-                          hidden={!selected.has(review.reviewId)}
-                          onToggle={(range) =>
-                            toggleRow(review.reviewId, range)
-                          }
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${reviewTitle(review)}`}
+                          title="Select  x"
+                          checked={isSelected(index)}
+                          {...stylex.props(
+                            checkboxStyles.box,
+                            !isSelected(index) && styles.hiddenCheck,
+                          )}
+                          onChange={() => {}}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            toggleRow(review.reviewId, event.shiftKey);
+                          }}
                         />
-                        <span {...stylex.props(styles.kindIcon)}>
-                          <HomeIcon
-                            kind={
-                              review.origin?.pullRequestNumber
-                                ? "code"
-                                : "board"
-                            }
-                          />
-                        </span>
+                        {review.origin?.pullRequestNumber ? (
+                          <CodeIcon xstyle={styles.kindIcon} />
+                        ) : (
+                          <BoardIcon xstyle={styles.kindIcon} />
+                        )}
                         <button
+                          type="button"
                           aria-label={`${inTrash ? "Select" : "Open"} ${reviewTitle(review)}`}
                           {...stylex.props(styles.rowOpen)}
                           onClick={(event) => {
@@ -1237,7 +1143,7 @@ export function ReviewHome({
                             title={reviewTitle(review)}
                             {...stylex.props(
                               styles.title,
-                              Boolean(review.trashedAt) && styles.archived,
+                              inTrash && styles.muted,
                             )}
                           >
                             <MatchedText
@@ -1246,10 +1152,7 @@ export function ReviewHome({
                             />
                           </span>
                         </button>
-                        <span
-                          data-home-metadata=""
-                          {...stylex.props(styles.metadata)}
-                        >
+                        <span {...stylex.props(styles.metadata)}>
                           {reviewMetadataPills(review, appliedFilters)
                             .filter(
                               (pill) => !inTrash || pill.facet === "worktrees",
@@ -1274,64 +1177,29 @@ export function ReviewHome({
                                   }));
                                 }}
                               >
-                                <HomeIcon
-                                  kind={
-                                    pill.facet === "branches"
-                                      ? "branch"
-                                      : "folder"
-                                  }
-                                  size="small"
-                                />
                                 {pill.facet === "branches" ? (
-                                  <MiddleTruncatedText
-                                    text={pill.label}
-                                    queries={searchTerms}
-                                  />
-                                ) : (
-                                  <span {...stylex.props(styles.pillText)}>
-                                    <MatchedText
+                                  <>
+                                    <BranchIcon xstyle={styles.smallIcon} />
+                                    <MiddleTruncatedText
                                       text={pill.label}
                                       queries={searchTerms}
                                     />
-                                  </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <FolderIcon xstyle={styles.smallIcon} />
+                                    <span {...stylex.props(styles.ellipsis)}>
+                                      <MatchedText
+                                        text={pill.label}
+                                        queries={searchTerms}
+                                      />
+                                    </span>
+                                  </>
                                 )}
                               </button>
                             ))}
                         </span>
-                        <span
-                          {...stylex.props(
-                            styles.time,
-                            review.working && styles.writing,
-                            inTrash &&
-                              !review.working &&
-                              Date.parse(review.trashedAt!) +
-                                30 * 86400000 -
-                                now <
-                                3 * 86400000 &&
-                              styles.expiring,
-                          )}
-                          title={
-                            review.working
-                              ? "Agent writing"
-                              : inTrash
-                                ? review.trashedAt!
-                                : review.createdAt
-                          }
-                        >
-                          {review.working ? (
-                            <>
-                              <span
-                                aria-hidden="true"
-                                {...stylex.props(styles.writingDot)}
-                              />
-                              writing
-                            </>
-                          ) : inTrash ? (
-                            `${Math.min(30, Math.max(0, Math.ceil((Date.parse(review.trashedAt!) + 30 * 86400000 - now) / 86400000)))} days left`
-                          ) : (
-                            formatRelativeTime(review.createdAt, now)
-                          )}
-                        </span>
+                        <RowTime review={review} now={now} inTrash={inTrash} />
                       </div>
                     ))}
                 </section>
@@ -1340,549 +1208,331 @@ export function ReviewHome({
           </div>
           {hidden > 0 && (
             <footer {...stylex.props(styles.footer)}>
-              {hidden > 0 && (
-                <div>
-                  {countLabel(hidden, "whiteboard")} hidden by {cause} ·{" "}
-                  <button
-                    {...stylex.props(styles.link, styles.footerAction)}
-                    onClick={clearFilters}
-                  >
-                    Clear filters ×
-                  </button>
-                </div>
-              )}
+              <div>
+                {countLabel(hidden, "whiteboard")} hidden by {cause} ·{" "}
+                <Button variant="ghost" onClick={clearFilters}>
+                  Clear filters ×
+                </Button>
+              </div>
             </footer>
           )}
           {!inTrash && trashed.length > 0 && (
             <footer {...stylex.props(styles.footer)}>
-              <button
-                {...stylex.props(styles.link)}
-                onClick={() => openDeletedView(true)}
-              >
+              <Button variant="ghost" onClick={openTrash}>
                 {trashed.length} in Trash ›
-              </button>
+              </Button>
             </footer>
           )}
         </div>
       </div>
-      <div
-        hidden={inTrash}
-        {...stylex.props(
-          styles.controls,
-          styles.headerControls,
-          styles.corner,
-          inTrash && styles.hidden,
-        )}
-      >
-        <div ref={helpRef} {...stylex.props(styles.helpWrap)}>
-          <button
-            type="button"
-            aria-label="Help"
-            ref={helpTooltip}
-            aria-haspopup="menu"
-            aria-expanded={helpOpen}
-            {...stylex.props(
-              styles.iconButton,
-              styles.headerIconButton,
-              styles.cornerButton,
-              helpOpen && styles.headerIconOpen,
-            )}
-            onClick={() => setHelpOpen(!helpOpen)}
-          >
-            <HomeIcon kind="help" size="corner" />
-          </button>
-          {helpOpen && (
-            <MenuSurface
-              role="menu"
-              tabIndex={-1}
+      {!inTrash && (
+        <div {...stylex.props(styles.controls, styles.corner)}>
+          <div ref={helpRef}>
+            <IconButton
               aria-label="Help"
-              xstyle={[styles.menu, styles.cornerMenu]}
-              onClose={() => {
-                setHelpOpen(false);
-                helpRef.current?.querySelector("button")?.focus();
+              size="large"
+              xstyle={styles.cornerButton}
+              ref={(element) => {
+                helpButton.current = element;
+                helpTooltip(element);
               }}
+              aria-haspopup="menu"
+              aria-expanded={helpOpen}
+              onClick={() => setHelpOpen(!helpOpen)}
             >
-              <button
-                role="menuitem"
-                {...stylex.props(menuSurfaceStyles.item)}
-                disabled={!onOpenTutorial}
-                onClick={() => {
-                  setHelpOpen(false);
-                  onOpenTutorial?.();
-                }}
-              >
-                Need a refresher? Take the tour
-              </button>
-              <hr {...stylex.props(styles.divider)} />
-              <a
-                role="menuitem"
-                {...stylex.props(menuSurfaceStyles.item)}
-                href={REVIEW_DISCORD_URL}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Ask on Discord ↗
-              </a>
-              <button
-                role="menuitem"
-                {...stylex.props(menuSurfaceStyles.item, styles.copyEmail)}
-                onClick={async () => {
-                  const copied = await copyText("founders@dev.fast");
-                  setCopyNotice({ copied });
-                }}
-              >
-                Need help? Send us an email
-                <CopyIcon />
-              </button>
-            </MenuSurface>
-          )}
-        </div>
-        <button
-          type="button"
-          aria-label="Settings"
-          ref={settingsTooltip}
-          disabled={!onOpenSettings}
-          {...stylex.props(
-            styles.iconButton,
-            styles.headerIconButton,
-            styles.cornerButton,
-          )}
-          onClick={onOpenSettings}
-        >
-          <HomeIcon kind="settings" size="corner" />
-        </button>
-      </div>
-      {toast && (
-        <div
-          role="status"
-          {...stylex.props(
-            styles.copyNotice,
-            styles.actionNotice,
-            toast.kind !== "trash" && styles.compactNotice,
-          )}
-        >
-          <CheckIcon xstyle={styles.actionNoticeIcon} />
-          <div
-            {...stylex.props(
-              styles.actionNoticeContent,
-              toast.kind !== "trash" && styles.compactNoticeContent,
-            )}
-          >
-            <span {...stylex.props(styles.actionNoticeText)}>
-              {toast.kind === "permanent"
-                ? "Permanently deleted"
-                : toast.kind === "trash"
-                  ? "Moved"
-                  : "Restored"}{" "}
-              {countLabel(toast.targets.length, "whiteboard")}
-              {toast.kind === "trash" ? " to Trash." : "."}
-            </span>
-            {toast.kind === "trash" && (
-              <span {...stylex.props(styles.toastSubtitle)}>
-                You can restore them for 30 days.
-              </span>
-            )}
-            {toast.kind !== "permanent" && (
+              <HelpIcon xstyle={styles.cornerIcon} />
+            </IconButton>
+            {helpOpen && (
               <div
+                ref={helpMenu}
+                popover="manual"
+                role="menu"
+                tabIndex={-1}
+                aria-label="Help"
                 {...stylex.props(
-                  styles.toastActions,
-                  toast.kind === "restored" && styles.compactNoticeActions,
+                  surfaceStyles.popover,
+                  menuStyles.popover,
+                  menuStyles.above,
+                  menuStyles.end,
+                  styles.helpMenu,
                 )}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    closeHelp();
+                  } else moveMenuFocus(event);
+                }}
               >
                 <button
-                  aria-label="Undo"
-                  aria-keyshortcuts="Meta+Z Control+Z"
-                  disabled={busy}
-                  {...stylex.props(styles.barButton, styles.toastButton)}
-                  onClick={undoToast}
+                  type="button"
+                  role="menuitem"
+                  disabled={!onOpenTutorial}
+                  {...stylex.props(menuStyles.item)}
+                  onClick={() => {
+                    setHelpOpen(false);
+                    onOpenTutorial?.();
+                  }}
                 >
-                  Undo <Shortcut xstyle={styles.toastShortcut}>⌘Z</Shortcut>
+                  Need a refresher? Take the tour
                 </button>
-                {toast.kind === "trash" && (
-                  <button
-                    {...stylex.props(styles.barButton, styles.toastButton)}
-                    onClick={() => {
-                      openDeletedView(true);
-                      setToast(null);
-                    }}
-                  >
-                    View Trash
-                  </button>
-                )}
+                <hr {...stylex.props(styles.divider)} />
+                <a
+                  role="menuitem"
+                  href={REVIEW_DISCORD_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  {...stylex.props(menuStyles.item)}
+                >
+                  Ask on Discord ↗
+                </a>
+                <button
+                  type="button"
+                  role="menuitem"
+                  {...stylex.props(menuStyles.item)}
+                  onClick={async () => {
+                    const copied = await copyText("founders@dev.fast");
+
+                    showToast(
+                      copied
+                        ? {
+                            kind: "success",
+                            text: "Copied 'founders@dev.fast' to clipboard",
+                          }
+                        : {
+                            kind: "error",
+                            text: "Couldn't copy email. Please try again.",
+                          },
+                    );
+                  }}
+                >
+                  Need help? Send us an email
+                  <CopyIcon xstyle={[menuStyles.check, styles.muted]} />
+                </button>
               </div>
             )}
           </div>
-          <button
-            aria-label="Dismiss notification"
-            {...stylex.props(styles.copyNoticeDismiss)}
-            onClick={() => setToast(null)}
+          <IconButton
+            aria-label="Settings"
+            size="large"
+            xstyle={styles.cornerButton}
+            ref={settingsTooltip}
+            disabled={!onOpenSettings}
+            onClick={onOpenSettings}
           >
-            ×
-          </button>
+            <GearIcon xstyle={styles.cornerIcon} />
+          </IconButton>
         </div>
-      )}
-      {confirmation && (
-        <dialog
-          ref={confirmDialog}
-          aria-labelledby="permanent-delete-title"
-          {...stylex.props(styles.dialog, styles.permanentDialog)}
-          onCancel={() => setConfirmation(null)}
-          onClose={() => setConfirmation(null)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") event.preventDefault();
-          }}
-        >
-          <h2
-            id="permanent-delete-title"
-            {...stylex.props(styles.confirmHeading)}
-          >
-            Delete {countLabel(confirmation.length, "whiteboard")}?
-          </h2>
-          <p {...stylex.props(styles.confirmBody)}>
-            “{reviewTitle(confirmation[0])}”
-            {confirmation.length > 1
-              ? ` and ${countLabel(confirmation.length - 1, "other")}`
-              : ""}{" "}
-            will be removed for good, along with their versions and threads.
-            This can't be undone.
-          </p>
-          <div {...stylex.props(styles.controls, styles.confirmActions)}>
-            <button
-              ref={cancelDelete}
-              {...stylex.props(styles.control)}
-              onClick={() => setConfirmation(null)}
-            >
-              Cancel
-            </button>
-            <button
-              {...stylex.props(styles.control, styles.confirmDanger)}
-              onClick={() => void deletePermanently()}
-            >
-              Delete
-            </button>
-          </div>
-        </dialog>
       )}
       {selectionMode && (
         <div
-          ref={selectionBar}
           role="toolbar"
           aria-label="Selected whiteboards"
-          {...stylex.props(styles.bar)}
+          {...stylex.props(surfaceStyles.popover, styles.bar)}
         >
           <span {...stylex.props(styles.barCount)}>
             {selectedReviews.length} selected
           </span>
           {inTrash && (
-            <button
+            <Button
+              variant="ghost"
               disabled={busy || !onRestore}
-              {...stylex.props(styles.barButton)}
               onClick={() => void changeLifecycle(selectedReviews, true)}
             >
-              Restore <Shortcut xstyle={styles.barShortcut}>R</Shortcut>
-            </button>
+              Restore <Shortcut>R</Shortcut>
+            </Button>
           )}
-          <button
+          <Button
+            variant="ghost"
             disabled={busy || !(inTrash ? onDelete : onTrash)}
-            {...stylex.props(styles.barButton, inTrash && styles.danger)}
+            xstyle={inTrash && styles.danger}
             onClick={() => deleteSelection()}
           >
-            {inTrash ? "Delete…" : "Move to Trash"}{" "}
-            <Shortcut xstyle={styles.barShortcut}>⌘⌫</Shortcut>
-          </button>
+            {inTrash ? "Delete…" : "Move to Trash"} <Shortcut>⌘⌫</Shortcut>
+          </Button>
           <span aria-hidden="true" {...stylex.props(styles.barDivider)} />
-          <button
-            aria-label="Clear selection"
-            {...stylex.props(styles.barButton, styles.barClose)}
-            onClick={clearSelection}
-          >
-            <HomeIcon kind="close" size="small" />
-          </button>
+          <IconButton aria-label="Clear selection" onClick={clearSelection}>
+            <CloseIcon />
+          </IconButton>
         </div>
       )}
       {refresherOpen && (
-        <dialog
-          ref={dialog}
-          aria-labelledby="home-help-title"
-          {...stylex.props(styles.dialog)}
+        <Dialog
+          labelledBy="home-help-title"
           onClose={() => setRefresherOpen(false)}
-          onCancel={(event) => {
-            event.preventDefault();
-            setRefresherOpen(false);
-          }}
         >
           <div {...stylex.props(styles.header)}>
-            <h2 id="home-help-title">How Whiteboard works</h2>
-            <button
+            <h2 id="home-help-title" {...stylex.props(styles.dialogTitle)}>
+              How Whiteboard works
+            </h2>
+            <IconButton
               aria-label="Close help"
-              {...stylex.props(styles.iconButton)}
               onClick={() => setRefresherOpen(false)}
             >
-              ×
-            </button>
+              <CloseIcon />
+            </IconButton>
           </div>
-          <>
-            <p>A 3-minute refresher</p>
-            <h3>Boards hold the work</h3>
-            <p>
-              Your agent publishes a whiteboard to explain a change, explore a
-              design, or share a plan. Open a board to read it alongside its
-              code and diagrams. Home collects those boards across your
-              repositories.
-            </p>
-            <h3>Lenses give you a path</h3>
-            <p>
-              A lens focuses the board on a particular question. Follow its
-              steps to move between explanations, source, and diagrams without
-              losing your place.
-            </p>
-            <h3>Ask where you are</h3>
-            <p>
-              Select the part you want to understand and use Ask to discuss it
-              with your agent. Keep the conversation beside the work, then
-              follow the agent’s updates on the board.
-            </p>
-            <h3>Find your way back</h3>
-            <p>
-              Unread contains new boards and updates since your last visit to a
-              board. Search titles, worktrees, branches or repositories, or add
-              filters with the filter icon; Sort orders each group. Delete keeps
-              completed work out of the way until you need it again.
-            </p>
-            <button
-              {...stylex.props(styles.control)}
-              disabled={!onOpenTutorial}
-              onClick={() => {
-                setRefresherOpen(false);
-                onOpenTutorial?.();
-              }}
-            >
-              Take the tour
-            </button>
-          </>
-        </dialog>
-      )}
-      {copyNotice && (
-        <div {...stylex.props(styles.copyNotice)}>
-          <span role="status" {...stylex.props(styles.copyNoticeMessage)}>
-            {copyNotice.copied && <CheckIcon />}
-            {copyNotice.copied
-              ? "Copied 'founders@dev.fast' to clipboard"
-              : "Couldn't copy email. Please try again."}
-          </span>
-          <button
-            aria-label="Dismiss clipboard notification"
-            {...stylex.props(styles.copyNoticeDismiss)}
-            onClick={() => setCopyNotice(null)}
+          <p>A 3-minute refresher</p>
+          <h3>Boards hold the work</h3>
+          <p>
+            Your agent publishes a whiteboard to explain a change, explore a
+            design, or share a plan. Open a board to read it alongside its code
+            and diagrams. Home collects those boards across your repositories.
+          </p>
+          <h3>Lenses give you a path</h3>
+          <p>
+            A lens focuses the board on a particular question. Follow its steps
+            to move between explanations, source, and diagrams without losing
+            your place.
+          </p>
+          <h3>Ask where you are</h3>
+          <p>
+            Select the part you want to understand and use Ask to discuss it
+            with your agent. Keep the conversation beside the work, then follow
+            the agent’s updates on the board.
+          </p>
+          <h3>Find your way back</h3>
+          <p>
+            Unread contains new boards and updates since your last visit to a
+            board. Search titles, worktrees, branches or repositories, or add
+            filters with the filter icon; Sort orders each group. Delete keeps
+            completed work out of the way until you need it again.
+          </p>
+          <Button
+            size="large"
+            disabled={!onOpenTutorial}
+            onClick={() => {
+              setRefresherOpen(false);
+              onOpenTutorial?.();
+            }}
           >
-            ×
-          </button>
-        </div>
+            Take the tour
+          </Button>
+        </Dialog>
       )}
+      {copyToast}
+      {noticeToast}
     </main>
   );
 }
 
-function Chip({
-  label,
-  content,
-  facet,
-  values = [],
-  facetId,
-  open = false,
-  onOpen,
-  onRemove,
+/** A modal shown as soon as it mounts; Enter never submits it. */
+function Dialog({
+  labelledBy,
+  onClose,
+  children,
 }: {
-  label: string;
-  content?: ReactNode;
-  facet?: string;
-  values?: string[];
-  facetId?: string;
-  open?: boolean;
-  onOpen(event: React.MouseEvent<HTMLButtonElement>): void;
-  onRemove(): void;
+  labelledBy: string;
+  onClose(): void;
+  children: ReactNode;
 }) {
-  const tooltipId = useId();
-  const tooltip = useRef<HTMLSpanElement>(null);
-  const tooltipAnchor = useRef<HTMLButtonElement>(null);
-  const [showValues, setShowValues] = useState(false);
-  const [tooltipPosition, setTooltipPosition] = useState({ left: 0, top: 0 });
+  const dialog = useRef<HTMLDialogElement>(null);
 
-  const openTooltip = (target: HTMLButtonElement) => {
-    if (open) return;
-    const value = target.querySelector<HTMLElement>("[data-chip-value]");
-
-    if (values.length > 1 || (value && value.scrollWidth > value.clientWidth)) {
-      setShowValues(true);
-    }
-  };
-
-  useLayoutEffect(() => {
-    if (!showValues || !tooltip.current || !tooltipAnchor.current) return;
-    const rect = tooltip.current.getBoundingClientRect();
-    const anchor = tooltipAnchor.current.getBoundingClientRect();
-
-    const bounds = tooltip.current
-      .closest(".review-canvas-root")
-      ?.getBoundingClientRect();
-
-    const left = bounds?.left ?? 0;
-    const top = bounds?.top ?? 0;
-    setTooltipPosition({
-      left:
-        Math.max(
-          left + 12,
-          Math.min(
-            anchor.left,
-            (bounds?.right ?? window.innerWidth) - rect.width - 12,
-          ),
-        ) - left,
-      top:
-        Math.max(
-          top + 12,
-          Math.min(
-            anchor.bottom,
-            (bounds?.bottom ?? window.innerHeight) - rect.height - 12,
-          ),
-        ) - top,
-    });
-  }, [showValues]);
-  useEffect(() => {
-    if (!showValues) return;
-    const close = () => setShowValues(false);
-    document.addEventListener("scroll", close, true);
-    window.addEventListener("resize", close);
-
-    return () => {
-      document.removeEventListener("scroll", close, true);
-      window.removeEventListener("resize", close);
-    };
-  }, [showValues]);
+  useLayoutEffect(() => dialog.current?.showModal(), []);
 
   return (
-    <span
-      {...stylex.props(styles.chip, styles.chipAnchor, open && styles.pressed)}
-      onPointerLeave={() => setShowValues(false)}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget))
-          setShowValues(false);
+    <dialog
+      ref={dialog}
+      aria-labelledby={labelledBy}
+      {...stylex.props(surfaceStyles.dialog, styles.dialog)}
+      onClose={onClose}
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
       }}
       onKeyDown={(event) => {
-        if (event.key === "Escape") setShowValues(false);
+        if (event.key === "Enter") event.preventDefault();
       }}
     >
+      {children}
+    </dialog>
+  );
+}
+
+function FilterChip({
+  label,
+  tooltip,
+  facet,
+  open = false,
+  xstyle,
+  onOpen,
+  onRemove,
+  children,
+}: {
+  label: string;
+  tooltip?: string;
+  facet?: string;
+  open?: boolean;
+  xstyle?: stylex.StyleXStyles | false;
+  onOpen(): void;
+  onRemove(): void;
+  children: ReactNode;
+}) {
+  const tip = useTooltip(tooltip ?? label, { detail: "Click to edit" });
+
+  return (
+    <span {...stylex.props(styles.chip, open && styles.chipOpen)}>
       <button
-        ref={tooltipAnchor}
-        data-home-facet={facetId}
-        aria-haspopup={facetId ? "dialog" : undefined}
-        aria-expanded={facetId ? open : undefined}
-        {...stylex.props(styles.chipText)}
+        type="button"
+        ref={tip}
+        data-home-facet={facet}
+        aria-haspopup={facet ? "dialog" : undefined}
+        aria-expanded={facet ? open : undefined}
         aria-label={label}
-        aria-describedby={showValues ? tooltipId : undefined}
-        onPointerEnter={(event) => openTooltip(event.currentTarget)}
-        onFocus={(event) => {
-          if (event.currentTarget.matches(":focus-visible"))
-            openTooltip(event.currentTarget);
-        }}
-        onClick={(event) => {
-          setShowValues(false);
-          onOpen(event);
-        }}
+        {...stylex.props(styles.chipText, xstyle)}
+        onClick={onOpen}
       >
-        {content ?? (
-          <span data-chip-value {...stylex.props(styles.chipValue)}>
-            {label}
-          </span>
-        )}
+        {children}
       </button>
-      {showValues && !open && (
-        <span
-          ref={tooltip}
-          id={tooltipId}
-          role="dialog"
-          aria-label={`${facet ?? "Search"} filter details`}
-          {...stylex.props(
-            styles.facetTooltipBridge,
-            styles.tooltipPosition(tooltipPosition.left, tooltipPosition.top),
-          )}
-        >
-          <span {...stylex.props(styles.facetTooltip)}>
-            {values.length > 1 && (
-              <span {...stylex.props(styles.tooltipHeading)}>
-                {facet} is any of {values.length}
-              </span>
-            )}
-            <span {...stylex.props(styles.tooltipValues)}>
-              {values.length ? values.join("\n") : label}
-            </span>
-            <button
-              {...stylex.props(styles.tooltipHint)}
-              onClick={() => tooltipAnchor.current?.click()}
-            >
-              Click to edit
-            </button>
-          </span>
-        </span>
-      )}
       <button
-        onMouseDown={(event) => event.preventDefault()}
+        type="button"
         aria-label={`Remove ${label}`}
         {...stylex.props(styles.chipClose)}
+        onMouseDown={(event) => event.preventDefault()}
         onClick={onRemove}
       >
-        ×
+        <CloseIcon xstyle={styles.smallIcon} />
       </button>
     </span>
   );
 }
 
-function SelectionCheckbox({
-  label,
-  title = "Select  x",
-  checked,
-  hidden,
-  group,
-  onToggle,
+function RowTime({
+  review,
+  now,
+  inTrash,
 }: {
-  label: string;
-  title?: string;
-  checked: boolean | "mixed";
-  hidden: boolean;
-  group?: boolean;
-  onToggle(range: boolean): void;
+  review: ReviewApiSummary;
+  now: number;
+  inTrash: boolean;
 }) {
-  return (
-    <span
-      {...stylex.props(
-        styles.checkboxSlot,
-        hidden && (group ? styles.hiddenGroupCheck : styles.hiddenCheck),
-      )}
-      title={title}
-    >
-      <input
-        type="checkbox"
-        aria-label={label}
-        aria-checked={checked}
-        checked={checked === true}
-        {...stylex.props(styles.checkbox)}
-        onChange={() => {}}
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggle(event.shiftKey);
-        }}
-      />
+  if (review.working)
+    return (
       <span
-        aria-hidden="true"
-        {...stylex.props(styles.checkboxBox, checked && styles.checkboxChecked)}
+        title="Agent writing"
+        {...stylex.props(styles.time, styles.writing)}
       >
-        {checked && (
-          <svg viewBox="0 0 10 10" {...stylex.props(styles.checkGlyph)}>
-            <path
-              d={checked === "mixed" ? "M2 5 H8" : "M2 5.2 4.2 7.4 8 3.2"}
-            />
-          </svg>
-        )}
+        <span aria-hidden="true" {...stylex.props(styles.writingDot)} />
+        writing
       </span>
+    );
+
+  if (inTrash) {
+    const days = trashDaysLeft(review, now);
+
+    return (
+      <span
+        title={review.trashedAt!}
+        {...stylex.props(styles.time, days < 3 && styles.expiring)}
+      >
+        {days} days left
+      </span>
+    );
+  }
+
+  return (
+    <span title={review.createdAt} {...stylex.props(styles.time)}>
+      {formatRelativeTime(review.createdAt, now)}
     </span>
   );
 }
@@ -1894,17 +1544,17 @@ function MiddleTruncatedText({
   text: string;
   queries: string[];
 }) {
-  // Let the prefix elide first while retaining the branch's final path component.
+  // The prefix elides first so the branch keeps its last path component.
   const split = text.includes("/")
     ? text.lastIndexOf("/") + 1
     : Math.ceil(text.length * 0.75);
 
   return (
-    <span {...stylex.props(styles.metadataPart)}>
-      <span {...stylex.props(styles.metadataPrefix)}>
+    <span {...stylex.props(styles.middle)}>
+      <span {...stylex.props(styles.ellipsis)}>
         <MatchedText text={text} queries={queries} to={split} />
       </span>
-      <span {...stylex.props(styles.metadataSuffix)}>
+      <span {...stylex.props(styles.middleSuffix)}>
         <bdi>
           <MatchedText text={text} queries={queries} from={split} />
         </bdi>
@@ -1937,165 +1587,25 @@ function MatchedText({
     }
   }
 
-  const segments: { text: string; matched: boolean }[] = [];
+  const segments: ReactNode[] = [];
 
   for (let start = from; start < to; ) {
     let end = start + 1;
 
     while (end < to && matched.has(end) === matched.has(start)) end++;
-    segments.push({
-      text: text.slice(start, end),
-      matched: matched.has(start),
-    });
+    const part = text.slice(start, end);
+
+    segments.push(
+      matched.has(start) ? (
+        <mark key={start} {...stylex.props(styles.mark)}>
+          {part}
+        </mark>
+      ) : (
+        part
+      ),
+    );
     start = end;
   }
 
-  return (
-    <>
-      {segments.map((segment, index) => (
-        <Fragment key={index}>
-          {segment.matched ? (
-            <mark {...stylex.props(styles.mark)}>{segment.text}</mark>
-          ) : (
-            segment.text
-          )}
-        </Fragment>
-      ))}
-    </>
-  );
-}
-
-function HomeIcon({
-  kind,
-  size,
-}: {
-  kind:
-    | "help"
-    | "settings"
-    | "search"
-    | "filter"
-    | "clearFilters"
-    | "branch"
-    | "folder"
-    | "board"
-    | "code"
-    | "pr"
-    | "sort"
-    | "right"
-    | "down"
-    | "close";
-  size?: "small" | "caret" | "corner";
-}) {
-  return (
-    <svg
-      {...stylex.props(
-        styles.icon,
-        (kind === "board" ||
-          kind === "code" ||
-          kind === "pr" ||
-          kind === "filter" ||
-          kind === "clearFilters") &&
-          styles.rowIcon,
-        size === "small" && styles.smallIcon,
-        size === "caret" && styles.caretIcon,
-        size === "corner" && styles.cornerIcon,
-      )}
-      aria-hidden="true"
-      viewBox={
-        size === "caret"
-          ? "0 0 10 10"
-          : kind === "close"
-            ? "0 0 12 12"
-            : "0 0 16 16"
-      }
-    >
-      {kind === "down" ? (
-        <path d="m2.5 4 2.5 2.5L7.5 4" />
-      ) : kind === "right" ? (
-        <path d="m4 2.5 2.5 2.5L4 7.5" />
-      ) : kind === "sort" ? (
-        <path d="M5 2v12m-3-3 3 3 3-3M11 14V2m-3 3 3-3 3 3" />
-      ) : kind === "close" ? (
-        <path d="m3 3 6 6m0-6-6 6" strokeWidth="1.4" />
-      ) : kind === "help" ? (
-        <>
-          <circle cx="8" cy="8" r="6.25" />
-          <path d="M6.2 6.3Q6.3 4.7 8 4.7Q9.8 4.7 9.8 6.2Q9.8 7.2 8.6 7.7Q8 8 8 8.9M8 11.2h.01" />
-        </>
-      ) : kind === "settings" ? (
-        <>
-          <circle cx="8" cy="8" r="2.2" />
-          <circle cx="8" cy="8" r="4.6" />
-          <path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.6 3.6l1.15 1.15M11.25 11.25l1.15 1.15M3.6 12.4l1.15-1.15M11.25 4.75l1.15-1.15" />
-        </>
-      ) : kind === "search" ? (
-        <>
-          <circle cx="7" cy="7" r="4.25" />
-          <path d="m10.2 10.2 3.3 3.3" />
-        </>
-      ) : kind === "filter" ? (
-        <path d="M2 4h12M4 8h8M6 12h4" />
-      ) : kind === "clearFilters" ? (
-        <path d="M2 4h12M4 8h3.5M6 12h1.5M10 8.5l4 4m0-4-4 4" />
-      ) : kind === "folder" ? (
-        <path d="M2 4.5v7.5h12V6H8l-1.5-1.5z" />
-      ) : kind === "branch" ? (
-        <>
-          <circle cx="4" cy="3" r="1.7" />
-          <circle cx="4" cy="13" r="1.7" />
-          <circle cx="12" cy="5" r="1.7" />
-          <path d="M4 4.7v6.6M12 6.7c0 2.6-4 2.6-8 3.8" />
-        </>
-      ) : kind === "pr" ? (
-        <>
-          <circle cx="4" cy="3" r="1.5" />
-          <circle cx="4" cy="13" r="1.5" />
-          <circle cx="12" cy="13" r="1.5" />
-          <path d="M4 4.5v7M12 11.5V7q0-4-5-4m2-2L7 3l2 2" />
-        </>
-      ) : (
-        <>
-          <rect x="2" y="3" width="12" height="10" rx="1.5" />
-          <path
-            d={kind === "code" ? "m6 6-2 2 2 2m4-4 2 2-2 2" : "M5 6h6M5 9h4"}
-          />
-        </>
-      )}
-    </svg>
-  );
-}
-
-export function reviewUpdatedAt(review: ReviewApiSummary): string {
-  return review.createdAt;
-}
-
-export function countLabel(count: number, singular: string): string {
-  return `${count} ${singular}${count === 1 ? "" : "s"}`;
-}
-
-export function formatRelativeTime(
-  timestamp: string | null | undefined,
-  now = Date.now(),
-): string {
-  if (!timestamp) return "unknown";
-  const then = Date.parse(timestamp);
-
-  if (!Number.isFinite(then)) return "unknown";
-  const elapsed = Math.max(0, now - then);
-
-  if (elapsed < 60_000) return "just now";
-  const minutes = Math.floor(elapsed / 60_000);
-
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-
-  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
-  const days = Math.floor(hours / 24);
-
-  if (days < 7) return `${days} ${days === 1 ? "day" : "days"} ago`;
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-  }).format(then);
+  return segments;
 }

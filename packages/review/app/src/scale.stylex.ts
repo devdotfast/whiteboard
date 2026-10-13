@@ -11,9 +11,6 @@ export const fontSize = stylex.defineConsts({
   body: "12px",
   ui: "13px",
   reading: "15px",
-  label: "14px",
-  editorial: "16px",
-  pageTitle: "34px",
   heading: "18px",
   display: "22px",
 });
@@ -31,12 +28,9 @@ export const radius = stylex.defineConsts({
   // Tags, inputs and inline marks.
   small: "4px",
   // Buttons and controls; matches --chrome-control-radius.
-  compact: "5px",
   control: "6px",
-  input: "7px",
   // Popovers, cards and dialogs.
   surface: "8px",
-  panel: "10px",
   pill: "999px",
   round: "50%",
 });
@@ -49,7 +43,6 @@ export const layer = stylex.defineConsts({
   // A side panel docked over the canvas as a sheet on narrow screens.
   sheet: "50",
   popover: "120",
-  submenu: 121,
   // A modal and its backdrop, over everything in the canvas but toasts.
   dialog: "10000",
   toast: "10001",
@@ -60,7 +53,6 @@ export const motion = stylex.defineConsts({
   // Reduced motion, and a change that should not animate.
   instant: "0s",
   fast: "120ms",
-  selection: "150ms",
   medium: "200ms",
   slow: "300ms",
   // One breath of a looping attention pulse.
@@ -73,7 +65,6 @@ export const elevation = stylex.defineConsts({
   raised: "0 1px 2px var(--shadow-color)",
   // Menus, popovers and floating panels.
   popover: "0 8px 24px var(--shadow-color-strong)",
-  homeTooltip: "0 8px 24px var(--home-tooltip-shadow)",
   dialog: "0 18px 60px var(--shadow-color-strong)",
 });
 
@@ -86,5 +77,4 @@ export const tracking = stylex.defineConsts({
   chrome: "0.04em",
   // Large headings.
   tight: "-0.015em",
-  editorial: "-0.005em",
 });

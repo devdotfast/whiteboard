@@ -819,24 +819,23 @@ describe("Home interactions", () => {
     expect(onRestore).toHaveBeenCalledOnce();
     expect(titles()).toEqual([]);
   });
-  it("confirms permanent deletion with Cancel focused, ignores Enter, and has no Undo afterwards", async () => {
+  it("confirms permanent deletion through the host and offers no Undo", async () => {
     const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       async () => {},
     );
 
+    const confirmDelete = vi.mocked(host.ui.confirmDelete!);
+
+    confirmDelete.mockResolvedValueOnce(false);
     await render([summary("Gone", { trashedAt: "2026-10-10" })], {
       onDelete,
     });
     await click("1 in Trash ›");
     await select("Gone");
     await key("Backspace", { metaKey: true });
-    expect(document.activeElement).toBe(button("Cancel"));
-    await key("Enter", {}, document.activeElement!);
+    expect(confirmDelete).toHaveBeenLastCalledWith(["Gone"]);
     expect(onDelete).not.toHaveBeenCalled();
-    await click("Cancel");
-    expect(container.querySelector("dialog")).toBeNull();
     await key("Backspace", { metaKey: true });
-    await click("Delete");
     expect(onDelete).toHaveBeenCalledOnce();
     expect(titles()).toEqual([]);
     expect(container.querySelector('[aria-label="Undo"]')).toBeNull();

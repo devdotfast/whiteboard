@@ -9,8 +9,8 @@ import {
 } from "react";
 
 import { CheckIcon } from "./icons";
-import { MenuSurface, menuSurfaceStyles } from "./menu-surface";
-import { menuStyles } from "./ui/menu";
+import { menuStyles, moveMenuFocus } from "./ui/menu";
+import { surfaceStyles } from "./ui/surface";
 import { useAnchoredPopover } from "./use-anchored-popover";
 import { useDismissOnOutside } from "./use-dismiss-on-outside";
 
@@ -94,19 +94,27 @@ export function OptionMenu<T extends string>({
         </svg>
       </button>
       {open && (
-        <MenuSurface
+        <div
           ref={popup}
           popover="manual"
           role="menu"
           tabIndex={-1}
           aria-label={ariaLabel}
-          xstyle={[menuStyles.popover, menuStyles.end, styles.options]}
-          onClose={close}
+          {...stylex.props(
+            surfaceStyles.popover,
+            menuStyles.popover,
+            menuStyles.end,
+            styles.options,
+          )}
           onKeyDown={(event) => {
-            if (event.key === "Tab") {
+            if (event.key === "Escape") {
+              event.preventDefault();
+              event.stopPropagation();
+              close();
+            } else if (event.key === "Tab") {
               // Restore the trigger before the browser advances to the next control.
               close();
-            }
+            } else moveMenuFocus(event);
           }}
         >
           {options.map((option) => (
@@ -116,20 +124,23 @@ export function OptionMenu<T extends string>({
               role="menuitemradio"
               aria-checked={option.value === value}
               tabIndex={option.value === value ? 0 : -1}
-              {...stylex.props(menuSurfaceStyles.item)}
+              {...stylex.props(
+                menuStyles.item,
+                option.value === value && menuStyles.itemCurrent,
+              )}
               onClick={() => {
                 onChange(option.value);
                 close();
               }}
             >
-              <span {...stylex.props(styles.check)}>
-                {option.value === value && <CheckIcon />}
-              </span>
               {option.icon}
               {option.label}
+              {option.value === value && (
+                <CheckIcon xstyle={menuStyles.check} />
+              )}
             </button>
           ))}
-        </MenuSurface>
+        </div>
       )}
     </div>
   );
@@ -139,8 +150,7 @@ const styles = stylex.create({
   menu: {
     position: "relative",
   },
-  options: { minWidth: "160px", padding: "6px", gap: 0 },
-  check: { width: "14px", display: "flex", flexShrink: 0 },
+  options: { minWidth: "160px" },
   chevron: {
     width: "12px",
     height: "12px",

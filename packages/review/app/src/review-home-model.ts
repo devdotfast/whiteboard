@@ -5,6 +5,22 @@ export type HomeSort = "updated" | "created" | "title" | "trash";
 
 export type HomeGroup = "unread" | "week" | "earlier";
 
+export type HomeFacet = "repositories" | "worktrees" | "branches";
+
+export const homeFacetLabels: Record<HomeFacet, string> = {
+  repositories: "Repo",
+  worktrees: "Worktree",
+  branches: "Branch",
+};
+
+export function isHomeFacet(id: string): id is HomeFacet {
+  return id in homeFacetLabels;
+}
+
+const day = 86_400_000;
+
+export const trashRetentionDays = 30;
+
 export interface HomeFilters {
   unread: boolean;
   repositories: string[];
@@ -51,6 +67,55 @@ export function activeHomeChips(filters: HomeFilters): string[] {
     ...(filters.branches.length ? ["branches"] : []),
     ...filters.searches.map((term) => `search:${term}`),
   ];
+}
+
+/** Keep chips where they were; new ones join the end. */
+export function mergeChipOrder(
+  order: readonly string[],
+  filters: HomeFilters,
+): string[] {
+  const active = activeHomeChips(filters);
+
+  return [
+    ...new Set([
+      ...order.filter((id) => active.includes(id)),
+      ...active.filter((id) => !order.includes(id)),
+    ]),
+  ];
+}
+
+export function removeHomeChip(filters: HomeFilters, id: string): HomeFilters {
+  if (id.startsWith("search:"))
+    return {
+      ...filters,
+      searches: filters.searches.filter((term) => `search:${term}` !== id),
+    };
+
+  return { ...filters, [id]: isHomeFacet(id) ? [] : false };
+}
+
+export function homeFacetValues(
+  filters: HomeFilters,
+  facet: HomeFacet,
+  reviews: readonly ReviewApiSummary[],
+): string[] {
+  if (facet === "branches") return filters.branches;
+
+  const labels = new Map(
+    facet === "repositories"
+      ? homeRepositories(reviews).map((repo) => [repo.key, repo.label])
+      : homeRepositories(reviews).flatMap((repo) =>
+          repo.trees.map((tree) => [tree.key, tree.label] as const),
+        ),
+  );
+
+  return filters[facet].map((key) => labels.get(key) ?? key);
+}
+
+export function trashDaysLeft(review: ReviewApiSummary, now: number): number {
+  const left = Date.parse(review.trashedAt!) + trashRetentionDays * day - now;
+
+  return Math.min(trashRetentionDays, Math.max(0, Math.ceil(left / day)));
 }
 
 export function repositoryIdentity(
@@ -116,9 +181,7 @@ export function isUnread(review: ReviewApiSummary): boolean {
 export function groupFor(review: ReviewApiSummary, now: number): HomeGroup {
   if (isUnread(review)) return "unread";
 
-  return Date.parse(review.createdAt) >= now - 7 * 86400000
-    ? "week"
-    : "earlier";
+  return Date.parse(review.createdAt) >= now - 7 * day ? "week" : "earlier";
 }
 
 export function matchesHomeFilters(

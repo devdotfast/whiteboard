@@ -2,8 +2,11 @@ import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { fuzzyMatches } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
 import {
-  Fragment,
+  type KeyboardEvent,
+  type PointerEvent,
+  type ReactNode,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -11,35 +14,38 @@ import {
 } from "react";
 
 import { filterRowMarker } from "./markers.stylex";
-import { MenuSurface } from "./menu-surface";
 import {
+  type HomeFacet,
   type HomeFilters,
   type HomeRepository,
+  homeFacetLabels,
   homeRepositories,
+  isHomeFacet,
   matchesHomeFilters,
   toggleHomeRepository,
   toggleHomeWorktree,
 } from "./review-home-model";
-import { styles as home } from "./review-home-styles";
-import { fontSize, layer, radius } from "./scale.stylex";
+import { fontSize } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
+import { checkboxStyles } from "./ui/checkbox";
 import { Shortcut } from "./ui/kbd";
+import { menuStyles, moveMenuFocus } from "./ui/menu";
+import { surfaceStyles } from "./ui/surface";
+import { textStyles } from "./ui/text";
 
-export type HomeFilterSection =
-  | "all"
-  | "repositories"
-  | "worktrees"
-  | "branches"
-  | "unread";
+export type HomeFilterSection = "all" | "unread" | HomeFacet;
 
-type Tree = { key: string; label: string };
-
-type Repository = HomeRepository;
+type Tree = HomeRepository["trees"][number];
 
 type Choice = { checked: boolean | "mixed"; count?: string; show: boolean };
 
+const rows = "[data-picker-row]";
+
+export const filterPickerAnchor = stylex.create({
+  anchor: { anchorName: "--home-filter" },
+});
+
 export function HomeFilterPicker({
-  anchor,
   alignment,
   section,
   reviews,
@@ -50,7 +56,6 @@ export function HomeFilterPicker({
   onSearch,
   onClose,
 }: {
-  anchor: HTMLButtonElement;
   alignment: "start" | "end";
   section: HomeFilterSection;
   reviews: ReviewApiSummary[];
@@ -66,58 +71,26 @@ export function HomeFilterPicker({
   const mainInput = useRef<HTMLInputElement>(null);
   const subInput = useRef<HTMLInputElement>(null);
   const parentRow = useRef<HTMLButtonElement | null>(null);
-  const pending = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pending = useRef<ReturnType<typeof setTimeout>>(undefined);
   const focusSubmenu = useRef(false);
   const [search, setSearch] = useState("");
   const [subSearch, setSubSearch] = useState("");
   const [repository, setRepository] = useState<string | null>(null);
-  const [position, setPosition] = useState({ left: 0, top: 0, height: 420 });
-
-  const [subPosition, setSubPosition] = useState({
-    left: 0,
-    top: 0,
-    height: 320,
-  });
-
   const scoped = section !== "all";
-
-  const facetName =
-    section === "repositories"
-      ? "Repo"
-      : section === "branches"
-        ? "Branch"
-        : section === "worktrees"
-          ? "Worktree"
-          : "Show";
-
-  const menuWidth = scoped ? 250 : 260;
-
+  const facetName = isHomeFacet(section) ? homeFacetLabels[section] : "Show";
   const repositories = useMemo(() => homeRepositories(reviews), [reviews]);
-
   const activeRepo = repositories.find((repo) => repo.key === repository);
 
   const total = (next: HomeFilters) =>
     reviews.filter((review) => matchesHomeFilters(review, next, query)).length;
 
-  function treeChoice(tree: Tree): Choice {
-    const repo = repositories.find((repo) =>
-      repo.trees.some((value) => value.key === tree.key),
-    );
-
-    const checked =
-      filters.worktrees.includes(tree.key) ||
-      Boolean(repo && filters.repositories.includes(repo.key));
-
-    const ownCount = total({
-      ...filters,
-      repositories: [],
-      worktrees: [tree.key],
-    });
-
-    const nextCount = total({
-      ...filters,
-      worktrees: [...filters.worktrees, tree.key],
-    });
+  function choice(
+    checked: boolean | "mixed",
+    own: HomeFilters,
+    next: HomeFilters,
+  ): Choice {
+    const ownCount = total(own);
+    const nextCount = total(next);
 
     const sibling =
       filters.worktrees.length > 0 || filters.repositories.length > 0;
@@ -130,51 +103,45 @@ export function HomeFilterPicker({
         !checked && sibling
           ? `+${added}`
           : String(checked ? ownCount : nextCount),
-      show: checked || (ownCount > 0 && (!sibling || added > 0)),
+      show: Boolean(checked) || (ownCount > 0 && (!sibling || added > 0)),
     };
   }
 
-  function repoChoice(repo: Repository): Choice {
-    const checked =
-      Boolean(repo.key) && filters.repositories.includes(repo.key);
+  function treeChoice(tree: Tree): Choice {
+    const repo = repositories.find((repo) => repo.trees.includes(tree));
 
-    const partial = repo.trees.some((tree) =>
-      filters.worktrees.includes(tree.key),
+    return choice(
+      filters.worktrees.includes(tree.key) ||
+        Boolean(repo && filters.repositories.includes(repo.key)),
+      { ...filters, repositories: [], worktrees: [tree.key] },
+      { ...filters, worktrees: [...filters.worktrees, tree.key] },
     );
+  }
 
-    const next = repo.key
-      ? { ...filters, repositories: [...filters.repositories, repo.key] }
-      : {
-          ...filters,
-          worktrees: [
-            ...new Set([
-              ...filters.worktrees,
-              ...repo.trees.map((tree) => tree.key),
-            ]),
-          ],
-        };
+  function repoChoice(repo: HomeRepository): Choice {
+    const trees = repo.trees.map((tree) => tree.key);
 
-    const ownCount = total({
-      ...filters,
-      repositories: repo.key ? [repo.key] : [],
-      worktrees: repo.key ? [] : repo.trees.map((tree) => tree.key),
-    });
+    const checked =
+      Boolean(repo.key) && filters.repositories.includes(repo.key)
+        ? true
+        : trees.some((key) => filters.worktrees.includes(key))
+          ? "mixed"
+          : false;
 
-    const nextCount = total(next);
-
-    const sibling =
-      filters.repositories.length > 0 || filters.worktrees.length > 0;
-
-    const added = nextCount - count;
-
-    return {
-      checked: checked ? true : partial ? "mixed" : false,
-      count:
-        !checked && sibling
-          ? `+${added}`
-          : String(checked ? ownCount : nextCount),
-      show: checked || partial || (ownCount > 0 && (!sibling || added > 0)),
-    };
+    return choice(
+      checked,
+      {
+        ...filters,
+        repositories: repo.key ? [repo.key] : [],
+        worktrees: repo.key ? [] : trees,
+      },
+      repo.key
+        ? { ...filters, repositories: [...filters.repositories, repo.key] }
+        : {
+            ...filters,
+            worktrees: [...new Set([...filters.worktrees, ...trees])],
+          },
+    );
   }
 
   const cancelPending = () => {
@@ -183,7 +150,7 @@ export function HomeFilterPicker({
   };
 
   function openSubmenu(
-    repo: Repository,
+    repo: HomeRepository,
     row: HTMLButtonElement,
     moveFocus: boolean,
   ) {
@@ -198,220 +165,89 @@ export function HomeFilterPicker({
       subInput.current?.focus({ preventScroll: true });
   }
 
-  function hoverRepository(repo: Repository, row: HTMLButtonElement) {
+  function hoverRepository(repo: HomeRepository, row: HTMLButtonElement) {
     cancelPending();
 
     if (repository === repo.key) return;
-    // Resting for 100ms switches rows. Continuous diagonal motion toward the
-    // overlapping submenu keeps resetting this intent timer instead of switching.
+    // Diagonal motion toward the submenu keeps resetting this intent timer.
     pending.current = setTimeout(() => openSubmenu(repo, row, false), 100);
   }
 
-  function canvasBounds() {
-    // The desktop canvas uses layout containment, so it is the containing
-    // block for fixed menus even when it starts below the workbench tabs.
-    return (
-      anchor?.closest(".review-canvas-root")?.getBoundingClientRect() ?? {
-        left: 0,
-        top: 0,
-        right: window.innerWidth,
-        bottom: window.innerHeight,
-        height: window.innerHeight,
-      }
-    );
+  function closeSubmenu(focus: HTMLElement | null | undefined) {
+    cancelPending();
+    setRepository(null);
+    focus?.focus();
   }
 
   useLayoutEffect(() => {
-    const rect = anchor?.getBoundingClientRect();
-
-    if (!rect) return;
-    const bounds = canvasBounds();
-    const height = Math.min(420, bounds.height - 24);
-
-    const visibleHeight =
-      scoped && main.current
-        ? Math.min(height, main.current.scrollHeight + 2)
-        : height;
-
-    const top =
-      rect.bottom + 6 + visibleHeight <= bounds.bottom
-        ? rect.bottom + 6
-        : Math.max(bounds.top + 12, bounds.bottom - visibleHeight - 12);
-
-    setPosition({
-      left:
-        Math.max(
-          bounds.left + 12,
-          Math.min(
-            alignment === "end" ? rect.right - menuWidth : rect.left,
-            bounds.right - menuWidth - 12,
-          ),
-        ) - bounds.left,
-      top: top - bounds.top,
-      height: Math.min(height, bounds.bottom - top - 12),
-    });
-  }, [anchor, alignment, filters, count, menuWidth, scoped, search]);
-  useLayoutEffect(() => {
+    main.current?.showPopover?.();
     mainInput.current?.focus();
-  }, [anchor]);
+  }, []);
+
   useLayoutEffect(() => {
-    if (
-      repository === null ||
-      !main.current ||
-      !parentRow.current ||
-      !sub.current
-    )
-      return;
-    const parent = main.current.getBoundingClientRect();
-    const row = parentRow.current.getBoundingClientRect();
-    const width = sub.current.getBoundingClientRect().width;
-    const bounds = canvasBounds();
+    if (repository === null) return;
+    sub.current?.showPopover?.();
 
-    const roomLeft = parent.left - width + 4 >= bounds.left + 12;
-    const roomRight = parent.right - 4 + width <= bounds.right - 12;
-
-    const left =
-      (alignment === "end" && roomLeft) || !roomRight
-        ? Math.max(bounds.left + 12, parent.left - width + 4)
-        : parent.right - 4;
-
-    // Border + padding + filter header put the first option 39px below the top.
-    // Measure relative to the menu so its entrance transform cannot shift the
-    // submenu's final anchor when it is opened during the animation.
-    const rowTop = bounds.top + position.top + row.top - parent.top;
-
-    const top = Math.max(
-      bounds.top + 12,
-      Math.min(rowTop - 39, bounds.bottom - 100),
-    );
-
-    setSubPosition({
-      left: left - bounds.left,
-      top: top - bounds.top,
-      height: Math.min(320, bounds.bottom - top - 12),
-    });
-  }, [repository, position, filters, count, search, alignment]);
-  useLayoutEffect(() => {
-    // Hover opens the submenu without moving the caret out of the parent.
-    // Keyboard navigation and opening a Worktree chip explicitly enter it.
-    if (repository !== null && focusSubmenu.current)
-      subInput.current?.focus({ preventScroll: true });
+    // Hover keeps the caret in the parent; keyboard explicitly enters.
+    if (focusSubmenu.current) subInput.current?.focus({ preventScroll: true });
     focusSubmenu.current = false;
   }, [repository]);
+
+  // Escape backs out of the submenu first, wherever focus is.
+  const escape = useEffectEvent((event: globalThis.KeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+
+      if (repository !== null) closeSubmenu(mainInput.current);
+      else onClose();
+    } else if (
+      event.key === "ArrowLeft" &&
+      event.target instanceof Node &&
+      sub.current?.contains(event.target)
+    ) {
+      event.preventDefault();
+      closeSubmenu(parentRow.current);
+    }
+  });
+
   useEffect(() => {
-    const outside = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        !main.current?.contains(event.target) &&
-        !sub.current?.contains(event.target) &&
-        !anchor?.contains(event.target) &&
-        !(
-          event.target instanceof Element &&
-          event.target.closest('[aria-label="Active filters"]')
-        )
-      )
-        onClose();
-    };
-
-    const keydown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        cancelPending();
-
-        if (repository !== null) {
-          setRepository(null);
-          mainInput.current?.focus();
-        } else onClose();
-      } else if (
-        event.key === "ArrowLeft" &&
-        repository !== null &&
-        event.target instanceof Node &&
-        sub.current?.contains(event.target)
-      ) {
-        event.preventDefault();
-        setRepository(null);
-        parentRow.current?.focus();
-      }
-    };
-
-    document.addEventListener("pointerdown", outside);
-    window.addEventListener("keydown", keydown, true);
+    const listener = (event: globalThis.KeyboardEvent) => escape(event);
+    window.addEventListener("keydown", listener, true);
 
     return () => {
-      document.removeEventListener("pointerdown", outside);
-      window.removeEventListener("keydown", keydown, true);
+      window.removeEventListener("keydown", listener, true);
       cancelPending();
     };
-  }, [repository, onClose, anchor]);
+  }, []);
 
-  function navigate(
-    event: React.KeyboardEvent<HTMLDivElement>,
-    root: HTMLDivElement | null,
-  ) {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
-    event.preventDefault();
+  const navigate = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp")
+      moveMenuFocus(event, rows);
+  };
 
-    const rows = [
-      ...(root?.querySelectorAll<HTMLButtonElement>("[data-picker-row]") ?? []),
-    ];
-
-    const index = rows.findIndex((row) => row === document.activeElement);
-    rows[
-      (index + (event.key === "ArrowDown" ? 1 : rows.length - 1)) % rows.length
-    ]?.focus();
-  }
-
-  function focusPointerMenu(
-    event: React.PointerEvent,
+  function focusUnderPointer(
+    event: PointerEvent,
     input: HTMLInputElement | null,
   ) {
-    if (
-      event.pointerType === "mouse" &&
-      input &&
-      document.activeElement !== input
-    )
-      input.focus({ preventScroll: true });
+    if (event.pointerType === "mouse" && document.activeElement !== input)
+      input?.focus({ preventScroll: true });
   }
 
-  const shows = ([["unread", "Unread only"]] as const).flatMap(
-    ([key, label]) => {
-      const n = total({ ...filters, [key]: true });
+  const toggleTree = (tree: Tree) =>
+    onChange((current) => toggleHomeWorktree(current, tree.key, repositories));
 
-      return fuzzyMatches(search, label) && (filters[key] || n > 0)
-        ? [{ key, label, n }]
-        : [];
-    },
-  );
-
-  const repoRows = repositories.filter(
-    (repo) => repoChoice(repo).show && fuzzyMatches(search, repo.label),
-  );
-
-  const treeRows = search
-    ? repositories.flatMap((repo) =>
-        repo.trees
-          .filter(
-            (tree) => treeChoice(tree).show && fuzzyMatches(search, tree.label),
-          )
-          .map((tree) => ({ repo, tree })),
-      )
-    : [];
-
-  const renderTree = (tree: Tree) => (
+  const treeRow = (tree: Tree, label = tree.label) => (
     <PickerRow
       key={tree.key}
-      label={tree.label}
+      label={label}
       {...treeChoice(tree)}
-      onClick={() =>
-        onChange((current) =>
-          toggleHomeWorktree(current, tree.key, repositories),
-        )
-      }
+      onClick={() => toggleTree(tree)}
     />
   );
 
-  const renderRepo = (repo: Repository) => {
+  const repoRow = (repo: HomeRepository) => {
+    // A repository with one worktree toggles directly.
     const nested = repo.trees.length > 1;
 
     return (
@@ -419,7 +255,6 @@ export function HomeFilterPicker({
         key={repo.key}
         label={repo.label}
         {...repoChoice(repo)}
-        repository={repo.key}
         expanded={repository === repo.key}
         onClick={() =>
           onChange((current) =>
@@ -433,41 +268,54 @@ export function HomeFilterPicker({
     );
   };
 
-  const renderShow = ({ key, label, n }: (typeof shows)[number]) => (
-    <PickerRow
-      key={key}
-      label={label}
-      checked={filters[key]}
-      count={String(n)}
-      onClick={() =>
-        onChange((current) => ({
-          ...current,
-          [key]: !current[key],
-        }))
-      }
-    />
+  const unreadCount = total({ ...filters, unread: true });
+
+  const unreadRow =
+    fuzzyMatches(search, "Unread only") &&
+    (filters.unread || unreadCount > 0) ? (
+      <PickerRow
+        key="unread"
+        label="Unread only"
+        checked={filters.unread}
+        count={String(unreadCount)}
+        onClick={() =>
+          onChange((current) => ({ ...current, unread: !current.unread }))
+        }
+      />
+    ) : null;
+
+  const repoRows = repositories.filter(
+    (repo) => repoChoice(repo).show && fuzzyMatches(search, repo.label),
   );
 
-  const branchRows = [
-    ...new Set(
-      reviews
-        .map((review) => review.origin?.branch)
-        .filter((branch): branch is string => Boolean(branch)),
-    ),
-  ]
-    .sort((a, b) => a.localeCompare(b))
-    .filter((branch) => fuzzyMatches(search, branch))
-    .map((branch) => {
-      const checked = filters.branches.includes(branch);
-      const n = total({ ...filters, branches: [branch] });
+  const treeRows = search
+    ? repositories.flatMap((repo) =>
+        repo.trees
+          .filter(
+            (tree) => treeChoice(tree).show && fuzzyMatches(search, tree.label),
+          )
+          .map((tree) => treeRow(tree, `${repo.label} › ${tree.label}`)),
+      )
+    : [];
 
-      return { key: branch, checked, n };
-    })
-    .filter((row) => row.checked || row.n > 0);
-
-  const facetRows =
-    section === "branches"
-      ? branchRows.map(({ key, checked, n }) => ({
+  function facetRows(): {
+    key: string;
+    checked: boolean | "mixed";
+    node: ReactNode;
+  }[] {
+    if (section === "branches")
+      return [
+        ...new Set(reviews.flatMap((review) => review.origin?.branch || [])),
+      ]
+        .sort((a, b) => a.localeCompare(b))
+        .filter((branch) => fuzzyMatches(search, branch))
+        .map((branch) => ({
+          key: branch,
+          checked: filters.branches.includes(branch),
+          n: total({ ...filters, branches: [branch] }),
+        }))
+        .filter((row) => row.checked || row.n > 0)
+        .map(({ key, checked, n }) => ({
           key,
           checked,
           node: (
@@ -486,63 +334,74 @@ export function HomeFilterPicker({
               }
             />
           ),
-        }))
-      : section === "worktrees"
-        ? repositories
-            .flatMap((repo) => repo.trees)
-            .sort((a, b) => a.label.localeCompare(b.label))
-            .filter(
-              (tree) =>
-                treeChoice(tree).show && fuzzyMatches(search, tree.label),
-            )
-            .map((tree) => ({
-              key: tree.key,
-              checked: treeChoice(tree).checked,
-              node: renderTree(tree),
-            }))
-        : section === "repositories"
-          ? repoRows.map((repo) => ({
-              key: repo.key,
-              checked: repoChoice(repo).checked,
-              node: renderRepo(repo),
-            }))
-          : shows.map((show) => ({
-              key: show.key,
-              checked: filters[show.key],
-              node: renderShow(show),
-            }));
+        }));
 
-  const selectedOrder =
-    section === "branches"
-      ? filters.branches
-      : section === "worktrees"
-        ? filters.worktrees
-        : filters.repositories;
+    if (section === "worktrees")
+      return repositories
+        .flatMap((repo) => repo.trees)
+        .sort((a, b) => a.label.localeCompare(b.label))
+        .map((tree) => ({ tree, state: treeChoice(tree) }))
+        .filter(
+          ({ tree, state }) => state.show && fuzzyMatches(search, tree.label),
+        )
+        .map(({ tree, state }) => ({
+          key: tree.key,
+          checked: state.checked,
+          node: treeRow(tree),
+        }));
 
-  const selectedRows = facetRows
-    .filter((row) => row.checked !== false)
-    .sort(
-      (a, b) => selectedOrder.indexOf(a.key) - selectedOrder.indexOf(b.key),
+    if (section === "repositories")
+      return repoRows.map((repo) => ({
+        key: repo.key,
+        checked: repoChoice(repo).checked,
+        node: repoRow(repo),
+      }));
+
+    return unreadRow
+      ? [{ key: "unread", checked: filters.unread, node: unreadRow }]
+      : [];
+  }
+
+  function scopedBody() {
+    const all = facetRows();
+    const order = isHomeFacet(section) ? filters[section] : [];
+
+    const selected = all
+      .filter((row) => row.checked !== false)
+      .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+
+    const rest = all.filter((row) => row.checked === false);
+
+    return (
+      <>
+        {selected.map((row) => row.node)}
+        {selected.length > 0 && rest.length > 0 && (
+          <div role="separator" {...stylex.props(styles.divider)} />
+        )}
+        {rest.map((row) => row.node)}
+        {all.length === 0 && <Empty />}
+      </>
     );
-
-  const remainingRows = facetRows.filter((row) => row.checked === false);
+  }
 
   return (
     <>
-      <MenuSurface
+      <div
         ref={main}
+        popover="manual"
         role="dialog"
         aria-label={scoped ? `${facetName} filters` : "Add filters"}
         tabIndex={-1}
         data-home-picker
-        xstyle={[
+        {...stylex.props(
+          surfaceStyles.popover,
+          menuStyles.popover,
+          alignment === "end" && menuStyles.end,
           styles.popup,
-          scoped && styles.facetPopup,
-          styles.position(position.left, position.top, position.height),
-        ]}
-        onPointerEnter={(event) => focusPointerMenu(event, mainInput.current)}
-        onPointerMove={(event) => focusPointerMenu(event, mainInput.current)}
-        onKeyDown={(event) => navigate(event, main.current)}
+        )}
+        onPointerEnter={(event) => focusUnderPointer(event, mainInput.current)}
+        onPointerMove={(event) => focusUnderPointer(event, mainInput.current)}
+        onKeyDown={navigate}
       >
         <input
           ref={mainInput}
@@ -559,63 +418,28 @@ export function HomeFilterPicker({
               onSearch(search.trim());
           }}
         />
-        <div
-          {...stylex.props(styles.body)}
-          onScroll={() => {
-            cancelPending();
-            setRepository(null);
-          }}
-        >
+        <div {...stylex.props(styles.body)}>
           {scoped ? (
-            <>
-              {selectedRows.map((row) => (
-                <Fragment key={row.key}>{row.node}</Fragment>
-              ))}
-              {selectedRows.length > 0 && remainingRows.length > 0 && (
-                <div role="separator" {...stylex.props(styles.divider)} />
-              )}
-              {remainingRows.map((row) => (
-                <Fragment key={row.key}>{row.node}</Fragment>
-              ))}
-              {facetRows.length === 0 && (
-                <div {...stylex.props(styles.empty)}>No matching filters</div>
-              )}
-            </>
+            scopedBody()
           ) : (
             <>
               <div {...stylex.props(styles.hint)}>
                 <Shortcut>enter</Shortcut> to keyword filter
               </div>
-              {shows.length > 0 && (
+              {unreadRow && (
                 <section aria-label="Show filters">
-                  <div {...stylex.props(styles.section)}>Show</div>
-                  {shows.map(renderShow)}
+                  <Label>Show</Label>
+                  {unreadRow}
                 </section>
               )}
               {(repoRows.length > 0 || treeRows.length > 0) && (
-                <section
-                  aria-label="Repository filters"
-                  data-picker-section="repositories"
-                >
-                  <div {...stylex.props(styles.section)}>Repository</div>
-                  {repoRows.map(renderRepo)}
-                  {treeRows.map(({ repo, tree }) => (
-                    <PickerRow
-                      key={tree.key}
-                      label={`${repo.label} › ${tree.label}`}
-                      {...treeChoice(tree)}
-                      onClick={() =>
-                        onChange((current) =>
-                          toggleHomeWorktree(current, tree.key, repositories),
-                        )
-                      }
-                    />
-                  ))}
+                <section aria-label="Repository filters">
+                  <Label>Repository</Label>
+                  {repoRows.map(repoRow)}
+                  {treeRows}
                 </section>
               )}
-              {!shows.length && !repoRows.length && !treeRows.length && (
-                <div {...stylex.props(styles.empty)}>No matching filters</div>
-              )}
+              {!unreadRow && !repoRows.length && !treeRows.length && <Empty />}
             </>
           )}
         </div>
@@ -623,36 +447,34 @@ export function HomeFilterPicker({
           <span>
             Showing {count} {count === 1 ? "board" : "boards"}
           </span>
-          <span {...stylex.props(styles.muted)}>
+          <span {...stylex.props(styles.faint)}>
             <Shortcut>esc</Shortcut> done
           </span>
         </div>
-      </MenuSurface>
+      </div>
       {activeRepo && (
-        <MenuSurface
+        <div
           ref={sub}
+          popover="manual"
           role="dialog"
           aria-label={`${activeRepo.label} worktrees`}
           tabIndex={-1}
           data-home-submenu
-          xstyle={[
-            styles.popup,
+          {...stylex.props(
+            surfaceStyles.popover,
+            menuStyles.popover,
             styles.submenu,
-            styles.position(
-              subPosition.left,
-              subPosition.top,
-              subPosition.height,
-            ),
-          ]}
+            alignment === "end" && styles.submenuStart,
+          )}
           onPointerEnter={(event) => {
             cancelPending();
-            focusPointerMenu(event, subInput.current);
+            focusUnderPointer(event, subInput.current);
           }}
           onPointerMove={(event) => {
             cancelPending();
-            focusPointerMenu(event, subInput.current);
+            focusUnderPointer(event, subInput.current);
           }}
-          onKeyDown={(event) => navigate(event, sub.current)}
+          onKeyDown={navigate}
         >
           <input
             ref={subInput}
@@ -668,30 +490,30 @@ export function HomeFilterPicker({
                 (tree) =>
                   treeChoice(tree).show && fuzzyMatches(subSearch, tree.label),
               )
-              .map((tree) => (
-                <PickerRow
-                  key={tree.key}
-                  label={tree.label}
-                  {...treeChoice(tree)}
-                  onClick={() =>
-                    onChange((current) =>
-                      toggleHomeWorktree(current, tree.key, repositories),
-                    )
-                  }
-                />
-              ))}
+              .map((tree) => treeRow(tree))}
           </div>
-        </MenuSurface>
+        </div>
       )}
     </>
   );
+}
+
+function Label({ children }: { children: ReactNode }) {
+  return (
+    <div {...stylex.props(textStyles.eyebrow, menuStyles.label)}>
+      {children}
+    </div>
+  );
+}
+
+function Empty() {
+  return <div {...stylex.props(styles.empty)}>No matching filters</div>;
 }
 
 function PickerRow({
   label,
   checked,
   count,
-  repository,
   expanded,
   onClick,
   onHover,
@@ -701,7 +523,6 @@ function PickerRow({
   label: string;
   checked: boolean | "mixed";
   count?: string;
-  repository?: string;
   expanded?: boolean;
   onClick(): void;
   onHover?(row: HTMLButtonElement): void;
@@ -715,12 +536,11 @@ function PickerRow({
       aria-label={label}
       aria-checked={checked}
       data-picker-row
-      data-repository={repository}
       aria-expanded={onRight ? expanded : undefined}
       {...stylex.props(
         filterRowMarker,
-        styles.row,
-        expanded && styles.activeRow,
+        menuStyles.item,
+        expanded && styles.expanded,
       )}
       onMouseDown={(event) => event.preventDefault()}
       onClick={(event) => {
@@ -755,101 +575,74 @@ function PickerRow({
       >
         <span
           {...stylex.props(
-            home.checkboxBox,
+            checkboxStyles.box,
+            checked === true && checkboxStyles.checked,
+            checked === "mixed" && checkboxStyles.mixed,
             checked === false && styles.emptyCheck,
-            checked !== false && home.checkboxChecked,
           )}
-        >
-          {checked !== false && (
-            <svg viewBox="0 0 10 10" {...stylex.props(home.checkGlyph)}>
-              <path
-                d={checked === "mixed" ? "M2 5 H8" : "M2 5.2 4.2 7.4 8 3.2"}
-              />
-            </svg>
-          )}
-        </span>
+        />
       </span>
       <span {...stylex.props(styles.label)}>{label}</span>
-      <span {...stylex.props(styles.count)}>{count}</span>
+      <span {...stylex.props(styles.faint, textStyles.count)}>{count}</span>
       {onRight && <span aria-hidden="true">›</span>}
     </button>
   );
 }
 
 const styles = stylex.create({
-  popup: {
-    position: "fixed",
-    width: "260px",
+  popup: { width: "260px", gap: 0, positionAnchor: "--home-filter" },
+  submenu: {
+    width: "224px",
+    gap: 0,
+    positionAnchor: "--home-filter-row",
+    top: "anchor(top)",
+    left: "anchor(right)",
   },
-  position: (left: number, top: number, maxHeight: number) => ({
-    left,
-    top,
-    maxHeight,
-  }),
-  facetPopup: { width: "250px" },
+  submenuStart: { left: "auto", right: "anchor(left)" },
   divider: {
+    flexShrink: 0,
     height: "1px",
     marginBlock: "4px",
-    flexShrink: 0,
     backgroundColor: tokens.rule,
   },
-  submenu: { zIndex: layer.submenu, width: "224px" },
   filter: {
-    height: "32px",
-    minHeight: "32px",
     flexShrink: 0,
-    width: "100%",
     boxSizing: "border-box",
+    width: "100%",
+    height: "32px",
+    padding: "0 8px",
     borderWidth: 0,
     borderBottomWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
     outlineStyle: "none",
-    backgroundColor: "transparent",
+    backgroundColor: tokens.transparent,
     color: tokens.ink,
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.body,
-    padding: "0 8px",
-    marginBottom: "0px",
-  },
-  body: { overflowY: "auto", minHeight: 0, overscrollBehavior: "contain" },
-  section: {
-    padding: "10px 8px 4px",
-    color: tokens.inkFaint,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "14px",
   },
-  row: {
+  body: {
+    flex: "1 1 auto",
     display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    width: "100%",
-    minHeight: "28px",
-    padding: "5px 8px",
-    boxSizing: "border-box",
-    borderWidth: 0,
-    borderRadius: radius.control,
-    backgroundColor: {
-      default: "transparent",
-      ":hover": tokens.homeHover,
-      ":focus-visible": tokens.homeHover,
-    },
-    outlineStyle: "none",
-    color: tokens.ink,
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.body,
-    lineHeight: "18px",
-    textAlign: "left",
-    cursor: "pointer",
+    flexDirection: "column",
+    gap: "2px",
+    minHeight: 0,
+    paddingBlock: "4px",
+    overflowY: "auto",
+    overscrollBehavior: "contain",
+  },
+  expanded: {
+    anchorName: "--home-filter-row",
+    backgroundColor: tokens.tray,
   },
   checkHit: {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
     width: "24px",
     height: "24px",
-    flexShrink: 0,
-    margin: "-3px -5px",
+    margin: "-5px",
   },
   emptyCheck: {
     opacity: {
@@ -858,30 +651,27 @@ const styles = stylex.create({
       [stylex.when.ancestor(":focus-visible", filterRowMarker)]: 1,
     },
   },
-  activeRow: { backgroundColor: tokens.homeHover },
   label: { flex: 1, minWidth: 0, overflowWrap: "anywhere" },
-  count: { flexShrink: 0, color: tokens.inkFaint, fontSize: fontSize.small },
+  faint: { flexShrink: 0, color: tokens.inkFaint },
   footer: {
     display: "flex",
+    flexShrink: 0,
     justifyContent: "space-between",
     gap: "8px",
-    padding: "10px 8px 4px",
+    padding: "8px 8px 4px",
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
     fontSize: fontSize.small,
-    lineHeight: "14px",
-    flexShrink: 0,
   },
-  muted: { color: tokens.inkFaint },
   hint: {
     padding: "5px 8px",
-    fontSize: fontSize.small,
     color: tokens.inkFaint,
+    fontSize: fontSize.small,
   },
   empty: {
     padding: "12px 8px",
-    fontSize: fontSize.body,
     color: tokens.inkMuted,
+    fontSize: fontSize.small,
   },
 });
