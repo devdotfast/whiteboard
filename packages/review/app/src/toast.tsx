@@ -1,40 +1,71 @@
+import type { ReviewNotification } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useContext, useEffect, useRef, useState } from "react";
 
+import { CanvasUiContext } from "./host/canvas-ui";
 import { useOptionalReviewSession } from "./host/review-session";
+import { CloseIcon } from "./icons";
 import { appMarker } from "./markers.stylex";
 import { elevation, fontSize, layer, radius } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
+import { Button, IconButton } from "./ui/button";
 
-type ToastMessage = { kind: "success" | "error"; text: string };
-
+/** Prefers host notifications; `showToast` returns a function that closes it. */
 export function useToast(durationMs = 6_000) {
   const session = useOptionalReviewSession();
-  const [message, setMessage] = useState<ToastMessage | null>(null);
+  const ui = useContext(CanvasUiContext);
+  const notify = session ? session.bridge.notify : ui?.notify;
+
+  const [message, setMessage] = useState<ReviewNotification | null>(null);
+  const current = useRef<ReviewNotification | null>(null);
+
+  const close = useCallback((notification: ReviewNotification) => {
+    if (current.current !== notification) return;
+    current.current = null;
+    setMessage(null);
+    notification.onClose?.();
+  }, []);
 
   const showToast = useCallback(
-    (message: ToastMessage) => {
-      if (session?.bridge.notify) session.bridge.notify(message);
-      else setMessage(message);
+    (notification: ReviewNotification) => {
+      if (notify) {
+        const handle = notify(notification);
+
+        return () => handle.dispose();
+      }
+
+      if (current.current) close(current.current);
+      current.current = notification;
+      setMessage(notification);
+
+      return () => close(notification);
     },
-    [session],
+    [notify, close],
   );
 
   useEffect(() => {
     if (!message) return;
-    const timeout = window.setTimeout(() => setMessage(null), durationMs);
+    const timeout = window.setTimeout(() => close(message), durationMs);
 
     return () => window.clearTimeout(timeout);
-  }, [message, durationMs]);
+  }, [message, durationMs, close]);
 
   return {
     showToast,
-    toast: message ? <Toast message={message} /> : null,
+    toast: message ? (
+      <Toast message={message} onClose={() => close(message)} />
+    ) : null,
   };
 }
 
-function Toast({ message }: { message: ToastMessage }) {
+function Toast({
+  message,
+  onClose,
+}: {
+  message: ReviewNotification;
+  onClose(): void;
+}) {
   return (
     <div
       {...stylex.props(
@@ -44,7 +75,27 @@ function Toast({ message }: { message: ToastMessage }) {
       )}
       role="status"
     >
-      {message.text}
+      <span {...stylex.props(styles.text)}>{message.text}</span>
+      {message.actions?.map((action) => (
+        <Button
+          key={action.label}
+          onClick={() => {
+            onClose();
+            action.run();
+          }}
+        >
+          {action.label}
+        </Button>
+      ))}
+      {message.actions?.length ? (
+        <IconButton
+          aria-label="Dismiss notification"
+          size="small"
+          onClick={onClose}
+        >
+          <CloseIcon />
+        </IconButton>
+      ) : null}
     </div>
   );
 }
@@ -58,6 +109,10 @@ const styles = stylex.create({
     zIndex: layer.toast,
     right: "18px",
     bottom: "18px",
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: "8px",
     maxWidth: "380px",
     // Only the app root defines --chrome-border, and the border came from a
     // shorthand that drops out without it: a toast portaled outside the app
@@ -71,6 +126,7 @@ const styles = stylex.create({
     color: "var(--vscode-notifications-foreground, var(--ink))",
     font: `${fontSize.small}/1.4 ${tokens.fontMono}`,
   },
+  text: { flex: "1 1 200px" },
   success: { borderColor: tokens.diffAdded },
   error: { borderColor: tokens.diffModified },
 });

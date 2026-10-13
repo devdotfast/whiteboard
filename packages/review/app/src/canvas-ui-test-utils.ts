@@ -8,7 +8,9 @@ export function testCanvasUi() {
   let menu: ReviewMenuRequest;
 
   const ui: ReviewCanvasUi = {
-    confirmDelete: vi.fn<(title: string) => Promise<boolean>>(async () => true),
+    confirmDelete: vi.fn<(titles: readonly string[]) => Promise<boolean>>(
+      async () => true,
+    ),
     showMenu: vi.fn<ReviewCanvasUi["showMenu"]>((request) => {
       menu = request;
 

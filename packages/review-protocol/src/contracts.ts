@@ -315,6 +315,14 @@ export interface ReviewTooltipOptions {
   detail?: string;
 }
 
+/** A host notification; running an action closes it, and onClose fires however it closes. */
+export interface ReviewNotification {
+  kind: "success" | "error";
+  text: string;
+  actions?: readonly { label: string; run(): void }[];
+  onClose?(): void;
+}
+
 export interface ReviewCanvasBridge {
   readonly appSessionId?: string;
   readonly config: ReviewRuntimeConfig;
@@ -332,7 +340,7 @@ export interface ReviewCanvasBridge {
   onDidChangeDiffLayout(
     listener: (layout: ReviewDiffLayout) => void,
   ): ReviewDisposable;
-  notify?(message: { kind: "success" | "error"; text: string }): void;
+  notify?(notification: ReviewNotification): ReviewDisposable;
   setupTooltip?(
     target: HTMLElement,
     text: string,
@@ -786,7 +794,8 @@ export interface ReviewMenuRequest {
 
 export interface ReviewCanvasUi {
   setupTooltip?: ReviewCanvasBridge["setupTooltip"];
-  confirmDelete?(title: string): Promise<boolean>;
+  confirmDelete?(titles: readonly string[]): Promise<boolean>;
+  notify?: ReviewCanvasBridge["notify"];
   showMenu(request: ReviewMenuRequest): ReviewDisposable;
 }
 

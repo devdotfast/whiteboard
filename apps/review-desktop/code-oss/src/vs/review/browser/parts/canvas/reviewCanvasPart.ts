@@ -87,6 +87,7 @@ import {
 import { IReviewVerbsService } from "../../../contrib/verbs/reviewVerbs.js";
 import { vetoStoppingAskAgents } from "../../reviewAskShutdown.js";
 import { confirmReviewDeletion } from "../../reviewDeleteConfirmation.js";
+import { showReviewNotification } from "../../reviewNotification.js";
 import { showReviewCanvasMenu } from "../../reviewCanvasMenu.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
 import { IReviewApiCatalogService, REVIEW_HAS_PUBLISHED_BOARD } from "../../../services/reviewApiCatalogService.js";
@@ -1116,9 +1117,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		} else {
 			this.canvas.value = assets.mountReviewCanvas(this.canvasMount, content, {
 				setupTooltip: this.setupTooltip,
-				confirmDelete: title => {
+				notify: (notification) => showReviewNotification(this.notificationService, notification),
+				confirmDelete: titles => {
 					const openedGeneration = this.loadGeneration;
-					return confirmReviewDeletion(this.dialogService, title,
+					return confirmReviewDeletion(this.dialogService, titles,
 						() => openedGeneration === this.loadGeneration && this.isVisible());
 				},
 				showMenu: request => {
@@ -1219,10 +1221,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			currentDiffLayout: () => this.diffViews.diffLayout.get(),
 			setDiffLayout: (layout) => this.diffViews.diffLayout.set(layout),
 			onDidChangeDiffLayout: (listener) => this.diffViews.diffLayout.onDidChange(listener),
-			notify: ({ kind, text }) => {
-				if (kind === "error") this.notificationService.error(text);
-				else this.notificationService.info(text);
-			},
+			notify: (notification) => showReviewNotification(this.notificationService, notification),
 			setupTooltip: this.setupTooltip,
 			ready: () => {
 				if (generation !== this.loadGeneration || !this.targetDocument) return;
