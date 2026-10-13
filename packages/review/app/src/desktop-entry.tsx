@@ -501,7 +501,7 @@ const styles = stylex.create({
     margin: "0 auto",
     padding: "32px",
     color: tokens.ink,
-    font: `${fontSize.ui}/1.55 ${tokens.fontDisplay}`,
+    font: `${fontSize.ui}/1.55 ${tokens.chromeFont}`,
   },
   shellTitle: {
     margin: "10px 0 6px",

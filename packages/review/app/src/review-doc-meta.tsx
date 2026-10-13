@@ -268,7 +268,7 @@ const styles = stylex.create({
     flexDirection: "column",
     gap: "12px",
     paddingBottom: "28px",
-    font: `${fontSize.ui}/18px ${tokens.fontMono}`,
+    font: `${fontSize.ui}/18px ${tokens.chromeFont}`,
     color: tokens.inkFaint,
   },
   row: {

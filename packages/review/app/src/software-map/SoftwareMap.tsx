@@ -2728,8 +2728,6 @@ const stacked = "@media (max-width: 900px)";
 
 const narrow = "@media (max-width: 720px)";
 
-const geistMono = '"Geist Mono", ui-monospace, monospace';
-
 const settle = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 
 const groupBloom = stylex.keyframes({
@@ -2778,7 +2776,7 @@ const styles = stylex.create({
     borderRadius: radius.control,
     backgroundColor: tokens.surface,
     boxShadow: "none",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   frameExpanded: {
     ...noBorder,
@@ -2813,7 +2811,7 @@ const styles = stylex.create({
     padding: "0 12px",
     backgroundColor: tokens.transparent,
     boxShadow: "none",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   titleBlock: {
     position: "relative",
@@ -3216,7 +3214,7 @@ const styles = stylex.create({
     boxShadow: "none",
     outline: { default: null, ":hover": "none", ":focus-visible": "none" },
     cursor: "pointer",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     animationName: groupBloom,
     animationDuration: motion.medium,
     animationTimingFunction: settle,
@@ -3450,7 +3448,7 @@ const styles = stylex.create({
     borderRadius: 0,
     backgroundColor: tokens.transparent,
     color: tokens.inkFaint,
-    fontFamily: geistMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     fontWeight: fontWeight.regular,
     lineHeight: "15px",
@@ -3475,7 +3473,7 @@ const styles = stylex.create({
     borderRadius: { default: null, [inDocument()]: radius.small },
     backgroundColor: { default: null, [inDocument()]: tokens.well },
     color: tokens.ink,
-    fontFamily: { default: geistMono, [inDocument()]: tokens.fontMono },
+    fontFamily: tokens.fontMono,
     fontSize: fontSize.reading,
     fontWeight: fontWeight.semibold,
     lineHeight: "18px",
@@ -3496,7 +3494,7 @@ const styles = stylex.create({
     overflow: "hidden",
     padding: 0,
     backgroundColor: tokens.transparent,
-    fontFamily: geistMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     fontWeight: fontWeight.medium,
     lineHeight: "15px",
@@ -3650,7 +3648,7 @@ const styles = stylex.create({
   },
   schemaKind: {
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
     fontWeight: fontWeight.bold,
     lineHeight: "12px",
@@ -3661,7 +3659,7 @@ const styles = stylex.create({
     minWidth: 0,
     overflow: "hidden",
     color: tokens.ink,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
     lineHeight: "15px",
     textOverflow: "ellipsis",

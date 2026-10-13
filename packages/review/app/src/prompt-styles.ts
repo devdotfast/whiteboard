@@ -43,7 +43,7 @@ export const promptStyles = stylex.create({
     borderRadius: radius.control,
     color: tokens.onAccent,
     backgroundColor: tokens.accent,
-    font: `${fontWeight.medium} ${fontSize.body}/16px ${tokens.fontMono}`,
+    font: `${fontWeight.medium} ${fontSize.body}/16px ${tokens.chromeFont}`,
     textDecoration: "none",
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "2px" },

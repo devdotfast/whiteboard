@@ -704,7 +704,7 @@ const styles = stylex.create({
     padding: "10px 24px",
     backgroundColor: tokens.tray,
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
     flexShrink: 0,
   },
@@ -712,6 +712,6 @@ const styles = stylex.create({
     maxWidth: "72ch",
     margin: "32px auto",
     padding: "0 24px",
-    font: `${fontSize.reading}/1.6 ${tokens.fontDisplay}`,
+    font: `${fontSize.reading}/1.6 ${tokens.chromeFont}`,
   },
 });

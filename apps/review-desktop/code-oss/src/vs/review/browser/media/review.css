@@ -196,6 +196,9 @@
 .monaco-workbench .part.review-explorer {
   display: flex;
   flex-direction: column;
+  /* Review's own chrome font; the workbench's default is the system
+     font. */
+  font-family: var(--review-chrome-font);
   height: 100%;
   background-color: var(--vscode-editor-background);
   /* An inset shadow rather than a border, so the tree keeps the full part width
@@ -352,8 +355,8 @@
     var(--vscode-editorGroupHeader-tabsBackground)
   );
   --review-tab-separator: var(--vscode-panel-border);
-  --review-chrome-font: "Geist Mono", ui-monospace, SFMono-Regular, Menlo,
-    monospace;
+  --review-chrome-font: "Inter", system-ui, sans-serif;
+  --review-mono-font: "Geist Mono", ui-monospace, monospace;
 }
 
 /* Light themes: a board-colored pill. */
@@ -759,6 +762,7 @@ body
   align-items: center;
   gap: 6px;
   padding: 0 4px;
+  font-family: var(--review-mono-font);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -843,7 +847,7 @@ body
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  font-family: var(--review-chrome-font, system-ui, sans-serif);
+  font-family: var(--review-mono-font);
 }
 
 .review-changed-files-tree {
@@ -1000,6 +1004,8 @@ body
   padding: 8px 12px;
   border-bottom: 1px solid var(--vscode-sideBar-border, transparent);
   color: var(--vscode-descriptionForeground);
+  /* Words in Inter, the +/− totals in mono. */
+  font-family: var(--review-chrome-font);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -1060,7 +1066,7 @@ body
   border-radius: 4px;
   background-color: var(--vscode-editor-background);
   color: var(--vscode-descriptionForeground);
-  font: 10px/1 var(--monaco-monospace-font);
+  font: 10px/1 var(--review-mono-font);
 }
 
 .review-multidiff-commit > svg {
@@ -1210,7 +1216,7 @@ body
   border-right: 1px solid var(--review-tooltip-border);
   border-bottom: 1px solid var(--review-tooltip-border);
 }
-.review-tree-counts { display:inline-flex; flex-shrink:0; gap:6px; margin-left:auto; padding-left:8px; padding-right:8px; font:11px/22px var(--review-chrome-font, monospace); font-variant-numeric:tabular-nums; }
+.review-tree-counts { display:inline-flex; flex-shrink:0; gap:6px; margin-left:auto; padding-left:8px; padding-right:8px; font:11px/24px var(--review-mono-font); font-variant-numeric:tabular-nums; }
 .review-tree-added { color:var(--vscode-gitDecoration-addedResourceForeground); }
 .review-tree-removed { color:var(--vscode-gitDecoration-deletedResourceForeground); }
 
@@ -1303,7 +1309,7 @@ body
    shadow. The row keeps Monaco's 24px height: its view zone and the handle
    transforms assume it, and a shorter row rides up over the previous line. */
 .review-workbench .monaco-editor .diff-hidden-lines .center {
-  font: 11px/24px var(--review-chrome-font, monospace);
+  font: 11px/24px var(--review-mono-font);
 }
 .review-workbench .monaco-editor .diff-hidden-lines .center:hover {
   color: var(--vscode-descriptionForeground);
@@ -1454,8 +1460,8 @@ body
    section chevron and the file chevron sit on one vertical line. */
 .review-diff-group { height:48px; min-height:48px; box-sizing:border-box; display:flex; align-items:center; gap:12px; padding:12px 16px 4px 10px; border-top:1px solid var(--vscode-panel-border); background:var(--vscode-editor-background); color:var(--vscode-editor-foreground); }
 .review-diff-group[hidden] { display:none; }
-.review-diff-group-title { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.review-diff-group-counts { margin-left:auto; font:11px var(--vscode-editor-font-family, monospace); color:var(--vscode-descriptionForeground); white-space:nowrap; }
+.review-diff-group-title { font-family:var(--review-chrome-font); font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.review-diff-group-counts { margin-left:auto; font:11px var(--review-mono-font); color:var(--vscode-descriptionForeground); white-space:nowrap; }
 .review-diff-group.is-viewed > span { opacity:.45; }
 
 .review-diff-group-toggle { display:flex; align-items:center; gap:5px; min-width:0; border:0; padding:0; color:inherit; background:transparent; cursor:pointer; text-align:left; }

@@ -30,7 +30,7 @@ export const askPanelStyles = stylex.create({
     overflowY: "auto",
   },
   caps: {
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     lineHeight: "14px",
   },
   selection: {
@@ -63,7 +63,7 @@ export const askPanelStyles = stylex.create({
   error: {
     margin: 0,
     color: tokens.changeRemoved,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
     lineHeight: "18px",
     whiteSpace: "pre-wrap",

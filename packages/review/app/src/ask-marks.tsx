@@ -909,7 +909,7 @@ const styles = stylex.create({
       ":focus-visible": tokens.accentSoft,
     },
     color: tokens.ink,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
     lineHeight: "14px",
     whiteSpace: "nowrap",

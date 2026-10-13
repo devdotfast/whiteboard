@@ -26,7 +26,7 @@ export function softwareMapRootProps(className?: string, variant?: "view") {
 const styles = stylex.create({
   root: {
     margin: "24px 0",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     // In a document the map centers on the prose column, never narrower than
     // the prose measure.
     width: {

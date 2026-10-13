@@ -970,7 +970,7 @@ const styles = stylex.create({
     minHeight: 0,
     height: "100%",
     color: tokens.ink,
-    font: `${fontSize.small}/1.5 ${tokens.fontMono}`,
+    font: `${fontSize.small}/1.5 ${tokens.chromeFont}`,
   },
   // The sidebar is the tray; its right padding holds the divider.
   sidebar: {
@@ -1136,7 +1136,7 @@ const styles = stylex.create({
   hint: {
     padding: "0 14px 6px 16px",
     color: tokens.inkFaint,
-    font: `${fontSize.small}/16px ${tokens.fontMono}`,
+    font: `${fontSize.small}/16px ${tokens.chromeFont}`,
   },
   untracked: {
     flexShrink: 0,
@@ -1313,7 +1313,7 @@ const styles = stylex.create({
     padding: "0 10px",
     backgroundColor: tokens.surface,
     color: tokens.inkFaint,
-    font: `${fontSize.small}/1 ${tokens.fontMono}`,
+    font: `${fontSize.small}/1 ${tokens.chromeFont}`,
   },
   error: {
     padding: "8px 12px",

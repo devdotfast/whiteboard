@@ -763,7 +763,7 @@ const chat = stylex.create({
     overflow: "hidden",
     borderCollapse: "collapse",
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.fontSerif,
     fontSize: fontSize.body,
     tableLayout: "fixed",
   },

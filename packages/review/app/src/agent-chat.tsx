@@ -56,7 +56,7 @@ const styles = stylex.create({
     maxWidth: "100%",
   },
   caption: {
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
     color: tokens.inkFaint,
   },

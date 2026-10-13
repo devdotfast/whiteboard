@@ -718,7 +718,7 @@ const styles = stylex.create({
     alignItems: "stretch",
     gap: "2px",
     flex: "none",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   optionLabel: {
     overflow: "hidden",
