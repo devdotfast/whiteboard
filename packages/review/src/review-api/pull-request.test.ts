@@ -73,6 +73,7 @@ describe("reading a pull request", () => {
     await expect(readPullRequest(url, using)).resolves.toEqual({
       host: "github.com",
       slug: "acme/widget",
+      headRef: "refs/pull/7/head",
       ...record,
     });
     expect(using.calls.at(-1)).toEqual([
@@ -88,6 +89,7 @@ describe("reading a pull request", () => {
     await expect(readPullRequest(enterprise, using)).resolves.toEqual({
       host: "ghe.example.com",
       slug: "acme/widget",
+      headRef: "refs/pull/7/head",
       ...record,
     });
     expect(using.calls[0]).toContain("ghe.example.com/acme/widget");
@@ -136,7 +138,7 @@ describe("creating a review from a pull request URL alone", () => {
   let local: ReturnType<typeof openLocalReviewStore>;
 
   /** What gh reports; the tests move the base as GitHub would. */
-  let pr: Omit<PullRequestRecord, "host" | "slug">;
+  let pr: Omit<PullRequestRecord, "host" | "slug" | "headRef">;
 
   let ghCalls: number;
 

@@ -28,6 +28,8 @@ function unreadable(url: string, ghFailure: string, fallback: string) {
 }
 
 export const githubProvider: PullRequestProvider = {
+  id: "github",
+
   parseUrl(url) {
     const match = GITHUB_PR_REGEX.exec(url);
     const number = Number(match?.[4]);
@@ -41,6 +43,7 @@ export const githubProvider: PullRequestProvider = {
    * public REST API: Enterprise hosts require gh. */
   async readPullRequest({ host, slug, number }, deps) {
     const url = `https://${host}/${slug}/pull/${number}`;
+    const headRef = `refs/pull/${number}/head`;
     let ghFailure: string;
 
     try {
@@ -61,6 +64,7 @@ export const githubProvider: PullRequestProvider = {
       return {
         host,
         slug,
+        headRef,
         ...metadataSchema.parse(JSON.parse(stdout)),
       };
     } catch (error) {
@@ -131,6 +135,7 @@ export const githubProvider: PullRequestProvider = {
     return {
       host,
       slug,
+      headRef,
       number: parsed.data.number,
       title: parsed.data.title,
       baseRefName: parsed.data.base.ref,

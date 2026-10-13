@@ -1087,7 +1087,7 @@ export class LocalReviewData {
     const pullRequest = await provider.readPullRequest(address, deps);
 
     const { head, base } = await fetchPullRequest(
-      { ...checkout, pullRequest },
+      { ...checkout, provider: provider.id, pullRequest },
       deps,
     );
 

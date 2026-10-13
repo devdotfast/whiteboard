@@ -9,9 +9,11 @@ export interface PullRequestAddress {
 }
 
 export interface PullRequestProvider {
+  /** Names Review's ref namespace: refs/review/<id>/... */
+  id: string;
   /** Recognizes this forge's PR URLs and extracts host, repo and number. */
   parseUrl(url: string): PullRequestAddress | undefined;
-  /** Asks the forge for the PR's title and base branch. */
+  /** Asks the forge for the PR's title, base branch and head ref. */
   readPullRequest(
     address: PullRequestAddress,
     deps: PullRequestDeps,

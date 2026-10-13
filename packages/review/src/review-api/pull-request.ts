@@ -24,6 +24,8 @@ export interface PullRequestRecord {
   slug: string;
   number: number;
   title: string;
+  /** e.g. refs/pull/7/head */
+  headRef: string;
   baseRefName: string;
   /** GitHub's base commit, frozen at the PR's last update. */
   baseRefOid?: string;
@@ -94,10 +96,10 @@ export async function remoteUrls(
 }
 
 /** Refs Review owns for one PR; the user's branches and bookmarks never move. */
-function pullRequestRefs(pr: PullRequestRecord) {
+function pullRequestRefs(provider: string, pr: PullRequestRecord) {
   // github.com keeps the host-less namespace existing checkouts already hold.
   const repository = `${pr.host === "github.com" ? "" : `${pr.host}/`}${pr.slug}`;
-  const prefix = `refs/review/github/${repository.toLowerCase()}/pull/${pr.number}`;
+  const prefix = `refs/review/${provider}/${repository.toLowerCase()}/pull/${pr.number}`;
 
   return {
     head: `${prefix}/head`,
@@ -123,12 +125,13 @@ export async function fetchPullRequest(
     gitDir: string;
     kind: LocalVcsKind;
     remote: string;
+    provider: string;
     pullRequest: PullRequestRecord;
   },
   deps: PullRequestDeps,
 ): Promise<{ head: string; base: string }> {
   const { pullRequest: pr } = input;
-  const refs = pullRequestRefs(pr);
+  const refs = pullRequestRefs(input.provider, pr);
 
   const git = (args: string[], timeoutMs = LOCAL_TIMEOUT_MS) =>
     deps
@@ -171,14 +174,14 @@ export async function fetchPullRequest(
 
   try {
     await fetchRefs(
-      `+refs/pull/${pr.number}/head:${refs.head}`,
+      `+${pr.headRef}:${refs.head}`,
       `+refs/heads/${pr.baseRefName}:${refs.base}`,
     );
     baseTip = await commit(refs.base);
   } catch (error) {
     // The base branch may be gone; the head and the frozen base suffice.
     try {
-      await fetchRefs(`+refs/pull/${pr.number}/head:${refs.head}`);
+      await fetchRefs(`+${pr.headRef}:${refs.head}`);
     } catch {
       throw new ReviewInputError(
         `Could not fetch PR #${pr.number} from remote "${input.remote}" (${pr.slug}). Check \`git fetch ${input.remote}\` works with your Git credentials, then retry. Git said: ${firstLine(errorMessage(error))}`,
