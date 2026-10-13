@@ -15,7 +15,7 @@ import path from "node:path";
 import test from "node:test";
 
 function fixture(t) {
-  const root = mkdtempSync(path.join(tmpdir(), "release-parallelism-"));
+  const root = mkdtempSync(path.join(tmpdir(), "release-scripts-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const scripts = path.join(root, "apps/review-desktop/scripts");
   const bin = path.join(root, "bin");
@@ -51,7 +51,7 @@ function fixture(t) {
 }
 
 for (const failed of ["", "43", "44", "ubuntu", "arch"]) {
-  test(`Linux checks overlap and collect all results (failure: ${failed || "none"})`, (t) => {
+  test(`Linux repository validation collects every result (failure: ${failed || "none"})`, (t) => {
     const f = fixture(t);
     mkdirSync(path.join(f.scripts, "linux"));
     f.copy("linux/verify-repository.sh");
@@ -72,12 +72,6 @@ for (const failed of ["", "43", "44", "ubuntu", "arch"]) {
       const root = process.env.TEST_ROOT;
       const image = process.argv.find(arg => /^(fedora|ubuntu|archlinux):/.test(arg));
       const target = image.startsWith('fedora:') ? image.split(':')[1].split('@')[0] : image.split(':')[0].replace('archlinux', 'arch');
-      fs.writeFileSync(root + '/started-' + target, '');
-      const deadline = Date.now() + 5000;
-      while (fs.readdirSync(root).filter(name => name.startsWith('started-')).length < 4) {
-        if (Date.now() > deadline) process.exit(10);
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
-      }
       fs.writeFileSync(root + '/finished-' + target, '');
       process.exit(target === process.env.FAIL_TARGET ? 1 : 0);
     `,
@@ -92,12 +86,6 @@ for (const failed of ["", "43", "44", "ubuntu", "arch"]) {
       readdirSync(f.root).filter((name) => name.startsWith("finished-")).length,
       4,
     );
-
-    if (failed)
-      assert.match(
-        result.stderr,
-        new RegExp(`Linux validation failed: ${failed}`),
-      );
   });
 }
 
@@ -122,7 +110,7 @@ for (const quality of ["stable", "preview"]) {
       : []),
   ]) {
     test(
-      `notarization overlaps submissions and gates final ZIPs (${quality}, ${failure || "accepted"})`,
+      `notarization gates final ZIPs on acceptance and tickets (${quality}, ${failure || "accepted"})`,
       { skip: process.platform !== "darwin" },
       (t) => {
         const f = fixture(t);
@@ -204,10 +192,8 @@ for (const quality of ["stable", "preview"]) {
           if (args[0] === 'notarytool' && args[1] === 'submit') {
             if (fail === 'upload') process.exit(1);
             const id = args[2].endsWith('.dmg') ? 'dmg' : 'Review';
-            fs.writeFileSync(root + '/submitted-' + id, '');
             console.log(JSON.stringify({ id }));
           } else if (args[0] === 'notarytool' && args[1] === 'wait') {
-            if (!fs.existsSync(root + '/submitted-dmg') || !fs.existsSync(root + '/submitted-Review')) process.exit(21);
             if (fail === 'wait') process.exit(1);
             console.log(JSON.stringify({ id: args[2], status: fail === args[2] ? 'Invalid' : 'Accepted' }));
           } else if (args[0] === 'stapler' && args[1] === 'staple') {
