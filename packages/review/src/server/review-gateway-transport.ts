@@ -17,7 +17,7 @@ export const MAX_RETRY_MS = 30_000;
 
 export const FIRST_BYTE_TIMEOUT_MS = 10_000;
 
-export const NO_ANSWER = `it did not answer within ${FIRST_BYTE_TIMEOUT_MS / 1_000} seconds`;
+const NO_ANSWER = `it did not answer within ${FIRST_BYTE_TIMEOUT_MS / 1_000} seconds`;
 
 export const jitter = (ms: number) => ms * (0.75 + Math.random() * 0.5);
 

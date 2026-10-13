@@ -3,7 +3,7 @@ import type {
   ReviewGatewayHostState,
 } from "@dev.fast/review-protocol";
 
-import { LIST_MODES, type ListMode, UUID } from "./review-gateway-memory.js";
+import { LIST_MODES, type ListMode } from "./review-gateway-memory.js";
 
 export interface ListSource {
   states: readonly ReviewGatewayHostState[];
@@ -81,7 +81,7 @@ export function mergeLists(
     const hostState = hostStateOf(state, source.serving(serverId));
 
     for (const entry of source.list(serverId, mode) ?? [])
-      if (UUID.test(entry.reviewId) && !ids.has(entry.reviewId)) {
+      if (!ids.has(entry.reviewId)) {
         ids.add(entry.reviewId);
         merged.push(decorate(entry, state.alias, hostState));
       }

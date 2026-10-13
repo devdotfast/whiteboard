@@ -12,7 +12,6 @@ import {
   type GatewayMemory,
   LIST_MODES,
   type ListMode,
-  UUID,
   listEntriesSchema,
 } from "./review-gateway-memory.js";
 import {
@@ -88,9 +87,7 @@ export function createGatewayStreams(input: {
       remote.serverId,
       remote.alias,
       line.mode,
-      listEntriesSchema
-        .parse(line.reviews)
-        .filter((entry) => UUID.test(entry.reviewId)),
+      listEntriesSchema.parse(line.reviews),
     );
 
     input.listed();
@@ -410,5 +407,3 @@ export function createGatewayStreams(input: {
     },
   };
 }
-
-export type GatewayStreams = ReturnType<typeof createGatewayStreams>;

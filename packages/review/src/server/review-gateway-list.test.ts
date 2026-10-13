@@ -84,26 +84,6 @@ it("lists a server two aliases share once, under the first, offline", () => {
   expect(summary(merged)).toEqual([["on a", "first", "offline"]]);
 });
 
-it("drops entries whose id is not a UUID", () => {
-  const merged = mergeLists(
-    "structural",
-    [],
-    source(
-      [{ alias: "a", serverId: "A", state: "online" }],
-      {
-        A: [
-          entry("pad", { reviewId: "scratchpad" }),
-          entry("shared", { reviewId: `shared-${"a".repeat(64)}` }),
-          entry("kept"),
-        ],
-      },
-      ["A"],
-    ),
-  );
-
-  expect(summary(merged)).toEqual([["kept", "a", "online"]]);
-});
-
 it("puts the alias in front of the group key and keeps the label", () => {
   const [merged] = mergeLists(
     "structural",

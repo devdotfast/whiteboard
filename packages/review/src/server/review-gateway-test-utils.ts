@@ -97,7 +97,7 @@ export async function startRemote(stateDir: string, port?: number) {
   };
 }
 
-export type FakeHandler = (
+type FakeHandler = (
   request: IncomingMessage,
   response: ServerResponse,
 ) => boolean | void;

@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -20,7 +21,7 @@ afterEach(async () => {
 });
 
 const entry = {
-  reviewId: "review-1",
+  reviewId: randomUUID(),
   version: 1,
   title: "Listed",
   createdAt: "2026-09-30T00:00:00.000Z",

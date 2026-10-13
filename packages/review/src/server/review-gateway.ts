@@ -371,7 +371,7 @@ export function createReviewGateway(input: {
     log,
   });
 
-  const stopWatchingWindows = input.relay.onAttachedChange?.(() => {
+  const stopWatchingWindows = input.relay.onAttachedChange(() => {
     if (!closed) pushes.changed();
   });
 
@@ -381,7 +381,7 @@ export function createReviewGateway(input: {
     hosts: () => hosts.states(),
     async close() {
       closed = true;
-      stopWatchingWindows?.();
+      stopWatchingWindows();
       streams.close();
       pushes.close();
       hosts.close();
@@ -389,5 +389,3 @@ export function createReviewGateway(input: {
     },
   };
 }
-
-export type ReviewGateway = ReturnType<typeof createReviewGateway>;

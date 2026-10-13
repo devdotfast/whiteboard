@@ -13,7 +13,7 @@ export const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const listEntrySchema = z.looseObject({
-  reviewId: z.string(),
+  reviewId: z.string().regex(UUID),
   version: z.number(),
   title: z.string(),
   createdAt: z.string(),

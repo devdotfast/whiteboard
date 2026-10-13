@@ -430,7 +430,7 @@ function createWriter() {
 it("says when the first client attaches and when the last one goes", () => {
   const relay = new GlobalReviewDesktopVerbRelay();
   const heard: boolean[] = [];
-  const stop = relay.onAttachedChange((attached) => heard.push(attached));
+  const stop = relay.onAttachedChange(() => heard.push(relay.attached));
   const first = new AbortController();
   const second = new AbortController();
 
