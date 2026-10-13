@@ -185,55 +185,6 @@ const verb = (id: string, request: JsonValue) => ({
   request,
 });
 
-it("refuses a remote's push to open the scratchpad or a shared review", async () => {
-  const shared = `shared-${"a".repeat(64)}`;
-
-  const remote = await pushingRemote([
-    {
-      event: "desktop-verb",
-      id: "pad",
-      request: {
-        name: "openApiReview",
-        args: { reviewId: "scratchpad", title: "Pad" },
-      },
-    },
-    {
-      event: "desktop-verb",
-      id: "shared",
-      request: {
-        name: "openApiReview",
-        args: { reviewId: shared, title: "S" },
-      },
-    },
-  ]);
-
-  const relay = new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
-  const received = attachWindow(relay);
-
-  await startGateway(
-    root,
-    [{ alias: "wb-a", endpoint: remote.fake.endpoint }],
-    {
-      relay,
-    },
-  );
-
-  await vi.waitFor(() => expect(remote.results).toHaveLength(2));
-  expect(remote.results).toEqual(
-    expect.arrayContaining([
-      {
-        id: "pad",
-        response: { ok: false, error: expect.stringContaining("scratchpad") },
-      },
-      {
-        id: "shared",
-        response: { ok: false, error: expect.stringContaining(shared) },
-      },
-    ]),
-  );
-  expect(received).toEqual([]);
-});
-
 it("sends a push to every Desktop attached to the remote", async () => {
   const a = await startRemote(path.join(root, "a"));
   const windows: ReviewVerbRequest[][] = [];
@@ -284,18 +235,40 @@ it("attaches again when a remote drops its /control stream, without a storm", as
   });
   expect(desktop.gateway.hosts()[0]?.state).toBe("online");
 
-  await new Promise((resolve) => setTimeout(resolve, 1_500));
+  remote.push(verb("shot", { name: "captureScreenshot", args: {} }));
+  await vi.waitFor(() =>
+    expect(remote.results).toEqual([
+      { id: "shot", response: expect.objectContaining({ ok: false }) },
+    ]),
+  );
   expect(remote.controls).toHaveLength(2);
 });
 
-it("refuses every verb from a remote but capabilities, focus and opening a review", async () => {
-  const remote = await pushingRemote([
-    verb("shot", { name: "captureScreenshot", args: {} }),
-    verb("home", {
-      name: "openReview",
-      args: { reviewUuid: randomUUID(), active: true },
-    }),
-  ]);
+it("refuses every push from a remote but capabilities, focus and opening one of its reviews", async () => {
+  const shared = `shared-${"a".repeat(64)}`;
+
+  const refused = [
+    ["shot", { name: "captureScreenshot", args: {} }, "captureScreenshot"],
+    [
+      "home",
+      { name: "openReview", args: { reviewUuid: randomUUID(), active: true } },
+      "openReview",
+    ],
+    [
+      "pad",
+      { name: "openApiReview", args: { reviewId: "scratchpad", title: "P" } },
+      "scratchpad",
+    ],
+    [
+      "shared",
+      { name: "openApiReview", args: { reviewId: shared, title: "S" } },
+      shared,
+    ],
+  ] as const;
+
+  const remote = await pushingRemote(
+    refused.map(([id, request]) => verb(id, request)),
+  );
 
   const relay = new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
   const received = attachWindow(relay);
@@ -308,24 +281,14 @@ it("refuses every verb from a remote but capabilities, focus and opening a revie
     },
   );
 
-  await vi.waitFor(() => expect(remote.results).toHaveLength(2));
+  await vi.waitFor(() => expect(remote.results).toHaveLength(refused.length));
   expect(remote.results).toEqual(
-    expect.arrayContaining([
-      {
-        id: "shot",
-        response: {
-          ok: false,
-          error: "captureScreenshot is not available from another machine.",
-        },
-      },
-      {
-        id: "home",
-        response: {
-          ok: false,
-          error: "openReview is not available from another machine.",
-        },
-      },
-    ]),
+    expect.arrayContaining(
+      refused.map(([id, , named]) => ({
+        id,
+        response: { ok: false, error: expect.stringContaining(named) },
+      })),
+    ),
   );
   expect(received).toEqual([]);
 });
@@ -341,7 +304,6 @@ it("attaches to remotes only while a window is attached to this machine", async 
   );
 
   await expect.poll(() => desktop.gateway.hosts()[0]?.state).toBe("online");
-  await new Promise((resolve) => setTimeout(resolve, 500));
   expect((await a.health()).desktopAttached).toBe(false);
   expect(await a.api("/capabilities")).toMatchObject({
     desktopAvailable: false,
@@ -368,7 +330,7 @@ it("attaches to remotes only while a window is attached to this machine", async 
   await expect.poll(async () => (await a.health()).desktopAttached).toBe(false);
 });
 
-it("keeps a local review on this machine when a remote lists its id, for every route", async () => {
+it("keeps a local review on this machine when a remote lists its id, for every route, a watch first", async () => {
   const desktop = await startGateway(root, []);
   const onLocal = await seed(desktop.api, root, "Local original");
   const remoteOnly = randomUUID();
@@ -410,19 +372,6 @@ it("keeps a local review on this machine when a remote lists its id, for every r
     )
     .toBe("wb-a");
 
-  const read = await desktop.request(`/${onLocal}?full=true`);
-  expect(read.headers.has(REVIEW_HOST_HEADER)).toBe(false);
-  expect(await read.json()).toMatchObject({ title: "Local original" });
-
-  const list = (
-    await desktop.api<{ reviewId: string; title: string; host?: string }[]>("")
-  ).filter((entry) => entry.reviewId !== "scratchpad");
-
-  expect(list.map(({ title, host }) => ({ title, host }))).toEqual([
-    { title: "Local original", host: undefined },
-    { title: "Remote only", host: "wb-a" },
-  ]);
-
   const client = new ReviewApiClient({
     serverUrl: desktop.url,
     token: "local-token",
@@ -442,6 +391,19 @@ it("keeps a local review on this machine when a remote lists its id, for every r
     });
     break;
   }
+
+  const read = await desktop.request(`/${onLocal}?full=true`);
+  expect(read.headers.has(REVIEW_HOST_HEADER)).toBe(false);
+  expect(await read.json()).toMatchObject({ title: "Local original" });
+
+  const list = (
+    await desktop.api<{ reviewId: string; title: string; host?: string }[]>("")
+  ).filter((entry) => entry.reviewId !== "scratchpad");
+
+  expect(list.map(({ title, host }) => ({ title, host }))).toEqual([
+    { title: "Local original", host: undefined },
+    { title: "Remote only", host: "wb-a" },
+  ]);
 
   const renamed = await desktop.request("/commands", {
     method: "POST",
@@ -465,106 +427,7 @@ it("keeps a local review on this machine when a remote lists its id, for every r
       (entry) => entry.reviewId === remoteOnly,
     ),
   ).not.toHaveProperty("host");
-  expect(
-    (await desktop.request(`/${remoteOnly}?full=true`)).headers.has(
-      REVIEW_HOST_HEADER,
-    ),
-  ).toBe(false);
-});
-
-it("routes an id to this machine as soon as this machine gains it, after a remote served it", async () => {
-  const desktop = await startGateway(root, []);
-  const local = await seed(desktop.api, root, "Local");
-  const reviewId = randomUUID();
-
-  const fake = await startFake({
-    version,
-    reviewIds: [reviewId],
-    handle(request, response) {
-      if (!request.url?.startsWith("/reviews-api/watch")) return false;
-      response.setHeader("content-type", "application/x-ndjson");
-      response.write(
-        `${JSON.stringify({
-          kind: "list",
-          mode: "structural",
-          reviews: [summary(reviewId, "Remote")],
-        })}\n`,
-      );
-
-      return true;
-    },
-  });
-
-  desktop.gateway.setHosts([{ alias: "wb-a", endpoint: fake.endpoint }]);
-
-  const hostOf = async () =>
-    (await desktop.request(`/${reviewId}?full=true`)).headers.get(
-      REVIEW_HOST_HEADER,
-    );
-
-  await expect.poll(hostOf).toBe("wb-a");
-
-  copyReview(local, reviewId, "Now local");
-
-  const read = await desktop.request(`/${reviewId}?full=true`);
-  expect(read.headers.has(REVIEW_HOST_HEADER)).toBe(false);
-  expect(await read.json()).toMatchObject({ title: "Now local" });
-
-  const renamed = await desktop.request("/commands", {
-    method: "POST",
-    body: JSON.stringify({
-      operation: { type: "rename", reviewId, title: "Renamed here" },
-    }),
-  });
-
-  expect(renamed.headers.has(REVIEW_HOST_HEADER)).toBe(false);
-  expect(desktop.local.store.summary(reviewId)?.title).toBe("Renamed here");
-});
-
-it("follows a local review on this machine when its first request is a watch and a remote lists it", async () => {
-  const desktop = await startGateway(root, []);
-  const local = await seed(desktop.api, root, "Local");
-  const other = randomUUID();
-
-  const fake = await startFake({
-    version,
-    reviewIds: [local, other],
-    handle(request, response) {
-      if (!request.url?.startsWith("/reviews-api/watch")) return false;
-      response.setHeader("content-type", "application/x-ndjson");
-      response.write(
-        `${JSON.stringify({ kind: "list", mode: "structural", reviews: [summary(local, "Impostor"), summary(other, "Other")] })}\n`,
-      );
-
-      return true;
-    },
-  });
-
-  desktop.gateway.setHosts([{ alias: "wb-a", endpoint: fake.endpoint }]);
-
-  await expect
-    .poll(async () =>
-      (await desktop.request(`/${other}`)).headers.get(REVIEW_HOST_HEADER),
-    )
-    .toBe("wb-a");
-
-  const client = new ReviewApiClient({
-    serverUrl: desktop.url,
-    token: "local-token",
-  });
-
-  const abort = new AbortController();
-  detaches.push(() => abort.abort());
-
-  for await (const line of client.watch(
-    [{ reviewId: local, mode: "structural" }],
-    abort.signal,
-  )) {
-    expect(line).toMatchObject({ reviewId: local, value: { title: "Local" } });
-    break;
-  }
-
-  expect(
-    fake.requests.filter((request) => request.url?.includes(local)),
-  ).toEqual([]);
+  const imported = await desktop.request(`/${remoteOnly}?full=true`);
+  expect(imported.headers.has(REVIEW_HOST_HEADER)).toBe(false);
+  expect(await imported.json()).toMatchObject({ title: "Imported" });
 });

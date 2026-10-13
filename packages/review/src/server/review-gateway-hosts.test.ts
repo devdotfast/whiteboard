@@ -44,6 +44,7 @@ function hosts(localVersion = version) {
 
 it("never contacts a host that arrives with a problem", async () => {
   const fake = await startFake({ version });
+  const answering = await startFake({ version });
   const gateway = hosts();
 
   gateway.set([
@@ -53,10 +54,11 @@ it("never contacts a host that arrives with a problem", async () => {
       problem: { state: "auth-failed", detail: "Permission denied." },
     },
     { alias: "later" },
+    { alias: "up", endpoint: answering.endpoint },
   ]);
-  await new Promise((resolve) => setTimeout(resolve, 200));
+  await expect.poll(() => gateway.states()[2]?.state).toBe("online");
 
-  expect(gateway.states()).toEqual([
+  expect(gateway.states().slice(0, 2)).toEqual([
     { alias: "devbox", state: "auth-failed", detail: "Permission denied." },
     { alias: "later", state: "connecting", detail: expect.any(String) },
   ]);
@@ -86,24 +88,6 @@ it("refuses a host whose version could not be read", async () => {
   gateway.set([{ alias: "devbox", endpoint: fake.endpoint }]);
 
   await expect.poll(() => gateway.states()[0]?.state).toBe("incompatible");
-});
-
-it("uses neither of two aliases for one server", async () => {
-  const remote = await startRemote(path.join(root, "a"));
-  const gateway = hosts();
-
-  gateway.set([
-    { alias: "first", endpoint: remote.endpoint },
-    { alias: "second", endpoint: remote.endpoint },
-  ]);
-
-  const { serverId } = await remote.health();
-  await expect
-    .poll(() => gateway.states().map((host) => host.state))
-    .toEqual(["duplicate", "duplicate"]);
-  expect(gateway.states()[1]?.detail).toContain("first, second");
-  expect(gateway.serving(serverId)).toBeUndefined();
-  expect(gateway.online()).toEqual([]);
 });
 
 it("retries an offline host until it answers", async () => {
@@ -140,6 +124,7 @@ it("uses neither of two machines with a copied id, until one leaves the setting"
   expect(gateway.states()[0]?.detail).toContain("wb-a, wb-c");
   expect(gateway.states()[0]?.detail).toContain("whiteboard server reset-id");
   expect(gateway.serving(serverId)).toBeUndefined();
+  expect(gateway.online()).toEqual([]);
 
   await c.stop();
   gateway.set([{ alias: "wb-a", endpoint: a.endpoint }]);

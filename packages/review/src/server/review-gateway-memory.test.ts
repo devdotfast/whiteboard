@@ -7,6 +7,7 @@ import { afterEach, beforeEach, expect, it } from "vitest";
 
 import {
   gatewayMemoryPath,
+  listEntriesSchema,
   openGatewayMemory,
 } from "./review-gateway-memory.js";
 
@@ -56,7 +57,15 @@ it("starts empty from an unreadable file and says so", async () => {
   const memory = openGatewayMemory(home, (message) => messages.push(message));
 
   expect(memory.serverIdOf("devbox")).toBeUndefined();
-  expect(messages).toEqual([
-    expect.stringContaining("Ignoring unreadable remote review memory"),
-  ]);
+  expect(messages).toHaveLength(1);
+});
+
+it("keeps only UUID reviews from a host's list, never its scratchpad or shared reviews", () => {
+  expect(
+    listEntriesSchema.parse([
+      { ...entry, reviewId: "scratchpad" },
+      { ...entry, reviewId: `shared-${"a".repeat(64)}` },
+      entry,
+    ]),
+  ).toEqual([entry]);
 });

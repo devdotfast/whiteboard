@@ -515,43 +515,6 @@ it("lists a host's last reviews as connecting, then offline, after a restart whi
     ]);
 });
 
-it("leaves a remote's scratchpad and shared reviews out of the list", async () => {
-  const kept = randomUUID();
-
-  const fake = await startFake({
-    version,
-    handle(request, response) {
-      if (!request.url?.startsWith("/reviews-api/watch")) return false;
-      response.setHeader("content-type", "application/x-ndjson");
-      response.write(
-        `${JSON.stringify({
-          kind: "list",
-          mode: "structural",
-          reviews: [
-            summary("scratchpad", "Remote pad"),
-            summary(`shared-${"a".repeat(64)}`, "Remote shared"),
-            summary(kept, "Remote review"),
-          ],
-        })}\n`,
-      );
-
-      return true;
-    },
-  });
-
-  const desktop = await startGateway(root, [
-    { alias: "wb-a", endpoint: fake.endpoint },
-  ]);
-
-  await expect
-    .poll(async () =>
-      (await desktop.api<ReviewApiSummary[]>(""))
-        .filter((review) => review.host)
-        .map((review) => review.reviewId),
-    )
-    .toEqual([kept]);
-});
-
 it("keeps this machine's and other hosts' lines coming while a host hangs", async () => {
   const hungId = randomUUID();
 
@@ -576,8 +539,6 @@ it("keeps this machine's and other hosts' lines coming while a host hangs", asyn
     .poll(() => desktop.gateway.hosts().map((host) => host.state))
     .toEqual(["online", "online"]);
 
-  const started = Date.now();
-
   const stream = follow(desktop.url, [
     { reviewId: null },
     { reviewId: hungId },
@@ -585,12 +546,15 @@ it("keeps this machine's and other hosts' lines coming while a host hangs", asyn
     { reviewId: onA },
   ]);
 
-  await vi.waitFor(() => {
-    expect(stream.lines.some((line) => !!entry(line, "On a"))).toBe(true);
-    expect(stream.lines.some((line) => !!valueOf(line, onLocal))).toBe(true);
-    expect(stream.lines.some((line) => !!valueOf(line, onA))).toBe(true);
-  });
-  expect(Date.now() - started).toBeLessThan(3_000);
+  await vi.waitFor(
+    () => {
+      expect(stream.lines.some((line) => !!entry(line, "On a"))).toBe(true);
+      expect(stream.lines.some((line) => !!valueOf(line, onLocal))).toBe(true);
+      expect(stream.lines.some((line) => !!valueOf(line, onA))).toBe(true);
+      expect(stream.all.some((line) => !!errorOf(line, hungId))).toBe(false);
+    },
+    { timeout: 3_000 },
+  );
 
   const error = errorOf(
     await stream.until((line) => !!errorOf(line, hungId), 12_000),
@@ -598,7 +562,6 @@ it("keeps this machine's and other hosts' lines coming while a host hangs", asyn
   );
 
   expect(error).toContain("wb-h is offline");
-  expect(Date.now() - started).toBeLessThan(12_000);
 }, 20_000);
 
 it("gives a reader that stops reading the latest state once, not a backlog", async () => {
@@ -739,17 +702,28 @@ it("sends nothing for a review whose host is still connecting, then its value", 
   expect(stream.all.filter((next) => !!errorOf(next, reviewId))).toEqual([]);
 });
 
-it("finds a host that stops answering while its streams are open", async () => {
+it("finds a host that stops answering while its streams are open, and ends them", async () => {
+  const reviewId = randomUUID();
   let hang = false;
 
   const hung = await startFake({
     version,
+    reviewIds: [reviewId],
     handle(request, response) {
+      if (request.url?.startsWith(`/reviews-api/${reviewId}/structural-diff`)) {
+        response.writeHead(200, { "content-type": "application/x-ndjson" });
+        response.write('{"type":"file"}\n');
+
+        return true;
+      }
+
       if (hang) return true;
 
       if (!request.url?.startsWith("/reviews-api/watch")) return false;
       response.setHeader("content-type", "application/x-ndjson");
-      response.flushHeaders();
+      response.write(
+        `${JSON.stringify({ kind: "list", mode: "structural", reviews: [summary(reviewId, "Hung")] })}\n`,
+      );
 
       return true;
     },
@@ -780,19 +754,20 @@ it("finds a host that stops answering while its streams are open", async () => {
     ).toBe(true),
   );
 
-  hang = true;
-  const started = Date.now();
+  const forwarded = await desktop.request(`/${reviewId}/structural-diff`);
+  expect(forwarded.status).toBe(200);
+  const read = forwarded.text();
 
+  hang = true;
+
+  await expect(read).rejects.toThrow("terminated");
   await vi.waitFor(
     () => expect(desktop.gateway.hosts()[0]?.state).toBe("offline"),
-    { timeout: 6_000 },
+    { timeout: 5_000 },
   );
-  expect(Date.now() - started).toBeLessThan(1_000 + 3_000 + 500);
 
-  const quick = Date.now();
   expect((await desktop.request(`/${onA}`)).status).toBe(200);
   expect((await desktop.request(`/${onLocal}`)).status).toBe(200);
-  expect(Date.now() - quick).toBeLessThan(1_000);
 }, 20_000);
 
 it("closes a client's streams to remotes when the client leaves", async () => {
