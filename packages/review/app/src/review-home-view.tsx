@@ -1290,21 +1290,14 @@ export function ReviewHome({
                             toggleRow(review.reviewId, range)
                           }
                         />
-                        <span
-                          {...stylex.props(styles.kindIcon)}
-                          title={review.working ? "Agent writing" : undefined}
-                        >
-                          {review.working ? (
-                            <span {...stylex.props(styles.writingDot)} />
-                          ) : (
-                            <HomeIcon
-                              kind={
-                                review.origin?.pullRequestNumber
-                                  ? "code"
-                                  : "board"
-                              }
-                            />
-                          )}
+                        <span {...stylex.props(styles.kindIcon)}>
+                          <HomeIcon
+                            kind={
+                              review.origin?.pullRequestNumber
+                                ? "code"
+                                : "board"
+                            }
+                          />
                         </span>
                         <button
                           aria-label={`Open ${reviewTitle(review)}`}

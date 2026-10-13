@@ -646,13 +646,6 @@ export const styles = stylex.create({
     textAlign: "left",
   },
   archived: { color: tokens.inkMuted },
-  writingDot: {
-    backgroundColor: tokens.diffAdded,
-    boxShadow: `0 0 0 3px color-mix(in srgb, ${tokens.diffAdded} 14%, transparent)`,
-    width: "6px",
-    height: "6px",
-    borderRadius: radius.round,
-  },
   time: {
     gridColumn: "5",
     width: "84px",
