@@ -59,7 +59,6 @@ const REMOTE_ROUTES: readonly { method: string; path: string }[] = [
   { method: "GET", path: "file" },
   { method: "GET", path: "resources/:name" },
   { method: "GET", path: "maps/:name" },
-  { method: "POST", path: "navigator" },
   { method: "POST", path: "copy-context" },
 ];
 

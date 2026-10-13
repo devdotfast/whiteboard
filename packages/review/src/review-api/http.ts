@@ -1,7 +1,5 @@
 import { type JsonObject, isJsonObject } from "@dev.fast/json";
 import {
-  REVIEW_CLIENT_HEADER,
-  REVIEW_CLIENT_REMOTE,
   type ReviewStreamLine,
   type ReviewStructuralDiffEvent,
 } from "@dev.fast/review-protocol";
@@ -153,10 +151,6 @@ export interface ReviewApiHooks {
   }) => void;
   sharing?: SharingHostEvents;
 }
-
-/** A gateway forwarding from another machine; it gets no local paths. */
-const remoteCaller = (context: Context) =>
-  context.req.header(REVIEW_CLIENT_HEADER) === REVIEW_CLIENT_REMOTE;
 
 /** Both hosts mount this behind their token authentication. */
 export function createReviewApi(
@@ -734,12 +728,6 @@ export function createReviewApi(
       return context.json(result);
     });
     app.post("/:id/navigator", reviewAccess("edit"), async (context) => {
-      if (remoteCaller(context))
-        throw new ReviewInputError(
-          "Source windows are not available for a review on another machine.",
-          409,
-        );
-
       const input = readQuerySchemas.file
         .extend({
           side: z.enum(["base", "head"]).default("head"),
@@ -924,7 +912,6 @@ export function createReviewApi(
       }
 
       const local =
-        !remoteCaller(context) &&
         !input.commit &&
         !anchor &&
         input.side === "head" &&

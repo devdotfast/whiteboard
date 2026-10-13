@@ -12,7 +12,6 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -21,8 +20,6 @@ import { PassThrough } from "node:stream";
 import * as diffr from "@dev.fast/diffr";
 import {
   type JsonValue,
-  REVIEW_CLIENT_HEADER,
-  REVIEW_CLIENT_REMOTE,
   type ReviewStreamLine,
   STRUCTURAL_DIFF_WIRE_VERSION,
   parseReviewDesktopVerbFrame,
@@ -800,7 +797,7 @@ const workspaceFiles = async () =>
     entry.endsWith(".code-workspace"),
   );
 
-it("gives a remote caller no local paths and no source window", async () => {
+it("gives a worktree file its local path and opens a source window", async () => {
   const server = await start();
   const desktop = await attachDesktop(server.discovery);
 
@@ -812,103 +809,43 @@ it("gives a remote caller no local paths and no source window", async () => {
       commits,
     } = await reviewsOfBothKinds(server.client);
 
-    const call = (
-      reviewId: string,
-      route: string,
-      remote: boolean,
-      method = "GET",
-    ) =>
+    const call = (reviewId: string, route: string, method = "GET") =>
       fetch(`${server.discovery.url}/reviews-api/${reviewId}${route}`, {
         method,
-        headers: {
-          "x-review-token": server.discovery.token,
-          ...(remote && { [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE }),
-        },
+        headers: { "x-review-token": server.discovery.token },
       });
 
-    const read = async (reviewId: string, route: string, remote: boolean) => {
-      const response = await call(reviewId, route, remote);
+    const read = async (reviewId: string, route: string) => {
+      const response = await call(reviewId, route);
       expect(response.status).toBe(200);
 
       return response.json();
     };
 
     const file = "/file?side=head&file=example.ts";
-    const home = await realpath(root);
 
-    expect(await read(worktree, file, false)).toMatchObject({
+    expect(await read(worktree, file)).toMatchObject({
       text: "export const value = 3;\n",
       localPath: path.join(checkout, "example.ts"),
       localRoot: checkout,
     });
-    expect(await read(commits, file, false)).toEqual({
+    expect(await read(commits, file)).toEqual({
       file: "example.ts",
       side: "head",
       commit: repo.head,
       text: "export const value = 2;\n",
     });
 
-    for (const reviewId of [worktree, commits]) {
-      const remoteFile = await read(reviewId, file, true);
-      expect(remoteFile).toMatchObject({ text: expect.any(String) });
-      expect(JSON.stringify(remoteFile)).not.toContain(home);
-
-      const navigator = await call(reviewId, "/navigator", true, "POST");
-      expect(navigator.status).toBe(409);
-      expect(await navigator.json()).toEqual({
-        error:
-          "Source windows are not available for a review on another machine.",
-      });
-    }
-
     expect(await workspaceFiles()).toEqual([]);
     expect(desktop.verbs).toEqual([]);
 
-    // The same search finds the file an unmarked call writes.
-    const navigator = await call(worktree, "/navigator", false, "POST");
+    const navigator = await call(worktree, "/navigator", "POST");
     expect(navigator.status).toBe(200);
     expect(await navigator.json()).toHaveProperty("workspacePath");
     expect(await workspaceFiles()).toHaveLength(1);
   } finally {
     desktop.detach();
   }
-});
-
-it("treats a near-miss client header as a local caller", async () => {
-  const server = await start();
-  const { root: checkout, worktree } = await reviewsOfBothKinds(server.client);
-  const url = `${server.discovery.url}/reviews-api/${worktree}/file?side=head&file=example.ts`;
-
-  // Sent as two header lines; the server joins them as "remote, remote".
-  const twice = await new Promise<string>((resolve, reject) => {
-    const request = httpRequest(url, (response) => {
-      let body = "";
-      response.setEncoding("utf8");
-      response.on("data", (chunk) => (body += chunk));
-      response.on("end", () => resolve(body));
-    });
-
-    request.setHeader("x-review-token", server.discovery.token);
-    request.setHeader(REVIEW_CLIENT_HEADER, [
-      REVIEW_CLIENT_REMOTE,
-      REVIEW_CLIENT_REMOTE,
-    ]);
-    request.on("error", reject);
-    request.end();
-  });
-
-  const capitalized = await fetch(url, {
-    headers: {
-      "x-review-token": server.discovery.token,
-      [REVIEW_CLIENT_HEADER]: "Remote",
-    },
-  });
-
-  for (const answer of [JSON.parse(twice), await capitalized.json()])
-    expect(answer).toMatchObject({
-      localPath: path.join(checkout, "example.ts"),
-      localRoot: checkout,
-    });
 });
 
 it("rejects a second owner and keeps separate CI job stores independent", async () => {
