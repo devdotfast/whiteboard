@@ -89,7 +89,7 @@ const styles = stylex.create({
     gap: "4px 8px",
     margin: 0,
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "16px",
   },

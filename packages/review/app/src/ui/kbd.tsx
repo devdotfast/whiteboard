@@ -21,7 +21,7 @@ export function Shortcut({ xstyle, ...props }: KbdProps) {
 
 const styles = stylex.create({
   shortcut: {
-    fontFamily: tokens.fontSans,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
     fontWeight: fontWeight.regular,
     lineHeight: "16px",

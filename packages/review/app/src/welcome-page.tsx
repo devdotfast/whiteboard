@@ -567,7 +567,7 @@ const styles = stylex.create({
   headline: {
     margin: 0,
     color: tokens.ink,
-    font: `${fontWeight.medium} ${welcomeType.headline}/46px ${tokens.fontSerif}`,
+    font: `${fontWeight.medium} ${welcomeType.headline}/46px ${tokens.chromeFont}`,
   },
   sub: {
     margin: 0,
@@ -695,7 +695,7 @@ const styles = stylex.create({
     margin: "0 0 14px",
     maxWidth: "560px",
     color: tokens.inkMuted,
-    font: `${fontSize.ui}/20px ${tokens.fontMono}`,
+    font: `${fontSize.ui}/20px ${tokens.chromeFont}`,
   },
   hintCode: {
     padding: "1px 5px",

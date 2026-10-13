@@ -684,6 +684,7 @@ const styles = stylex.create({
     padding: "0 3px",
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
+    fontVariantNumeric: "tabular-nums",
     fontSize: fontSize.body,
     lineHeight: "16px",
     textAlign: "center",

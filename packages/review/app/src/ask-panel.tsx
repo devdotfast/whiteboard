@@ -1045,7 +1045,7 @@ const styles = stylex.create({
     overflow: "hidden",
     textOverflow: "ellipsis",
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "14px",
     whiteSpace: "nowrap",

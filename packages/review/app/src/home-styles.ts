@@ -19,7 +19,7 @@ export const homeStyles = stylex.create({
     overflow: "hidden",
     color: tokens.ink,
     backgroundColor: tokens.reviewHomeBg,
-    font: `${fontSize.body}/16px ${tokens.fontMono}`,
+    font: `${fontSize.body}/16px ${tokens.chromeFont}`,
   },
   scroll: {
     flex: "1 1 auto",
@@ -49,7 +49,7 @@ export const homeStyles = stylex.create({
   heading: {
     margin: 0,
     color: tokens.ink,
-    font: `${fontWeight.semibold} ${documentType.title}/42px ${tokens.fontMono}`,
+    font: `${fontWeight.semibold} ${documentType.title}/42px ${tokens.chromeFont}`,
     letterSpacing: tracking.tight,
   },
 });

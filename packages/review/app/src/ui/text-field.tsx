@@ -52,7 +52,7 @@ export const fieldStyles = stylex.create({
     height: "32px",
     padding: "0 10px",
     borderRadius: radius.control,
-    fontFamily: tokens.fontSans,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.ui,
     lineHeight: 1.5,
     "::placeholder": { color: tokens.inkMuted, opacity: 1 },

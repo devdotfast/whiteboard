@@ -299,7 +299,8 @@ const styles = stylex.create({
   rangeCount: {
     color: tokens.ink,
     flexShrink: 0,
-    font: `${fontWeight.semibold} ${fontSize.reading}/20px ${tokens.fontMono}`,
+    font: `${fontWeight.semibold} ${fontSize.reading}/20px ${tokens.chromeFont}`,
+    fontVariantNumeric: "tabular-nums",
     whiteSpace: "nowrap",
   },
   rangeRefs: {
@@ -420,7 +421,7 @@ const styles = stylex.create({
     fontVariantNumeric: "tabular-nums",
   },
   meta: {
-    font: `${fontSize.small} ${tokens.fontMono}`,
+    font: `${fontSize.small} ${tokens.chromeFont}`,
     fontVariantNumeric: "tabular-nums",
     paddingLeft: "26px",
     color: tokens.inkMuted,

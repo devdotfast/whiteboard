@@ -459,7 +459,7 @@ const styles = stylex.create({
   badge: {
     flexShrink: 0,
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "14px",
     textTransform: "uppercase",
@@ -496,7 +496,7 @@ const styles = stylex.create({
   footer: {
     paddingTop: "6px",
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "14px",
   },
@@ -543,7 +543,7 @@ const styles = stylex.create({
   figureTitle: {
     overflow: "hidden",
     color: tokens.ink,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
     fontWeight: fontWeight.semibold,
     textOverflow: "ellipsis",

@@ -332,7 +332,7 @@ const styles = stylex.create({
   allConversations: {
     alignSelf: "flex-start",
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
   },
   // Showing the list it opens: pressed, not dimmed as disabled.
@@ -410,7 +410,7 @@ const styles = stylex.create({
   },
   historyMeta: {
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
     lineHeight: "14px",
   },
@@ -431,7 +431,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: tokens.warningOutline,
     backgroundColor: tokens.warningWash,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   outdatedInline: {
     marginLeft: "6px",
@@ -443,7 +443,7 @@ const styles = stylex.create({
     gap: "4px 8px",
     margin: 0,
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "16px",
   },

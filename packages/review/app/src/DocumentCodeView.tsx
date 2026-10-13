@@ -389,6 +389,6 @@ const styles = stylex.create({
     borderColor: tokens.ruleSoft,
     backgroundColor: tokens.surface,
     color: tokens.inkFaint,
-    font: `${fontSize.small}/1 ${tokens.fontMono}`,
+    font: `${fontSize.small}/1 ${tokens.chromeFont}`,
   },
 });

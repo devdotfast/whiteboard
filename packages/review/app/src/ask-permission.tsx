@@ -162,7 +162,7 @@ const permissionStyles = stylex.create({
   heading: {
     margin: 0,
     color: tokens.changeModified,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     lineHeight: "14px",
   },
   text: {
