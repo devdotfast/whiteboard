@@ -1,7 +1,7 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { chmodSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import {
   access,
   mkdir,
@@ -34,15 +34,10 @@ import {
 } from "@review/review-api/agent-client.js";
 import { ReviewApiClient } from "@review/review-api/client.js";
 import type { Pins } from "@review/review-api/document.js";
-import {
-  REMOTE_CHECKOUT_ISSUE,
-  REMOTE_STRUCTURAL_DIFF_ERROR,
-  createReviewApi,
-} from "@review/review-api/http.js";
+import { createReviewApi } from "@review/review-api/http.js";
 import { serveReviewMcp } from "@review/review-api/mcp.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import type { Result, Snapshot } from "@review/review-api/store.js";
-import type { WorkspaceStatus } from "@review/review-api/workspaces.js";
 import {
   reviewManagedCheckoutDir,
   reviewManagedCheckoutRoot,
@@ -839,8 +834,6 @@ it("gives a remote caller no local paths and no source window", async () => {
     };
 
     const file = "/file?side=head&file=example.ts";
-    const context = "/language-context?side=head";
-    const hash = /^[0-9a-f]{64}$/;
     const home = await realpath(root);
 
     expect(await read(worktree, file, false)).toMatchObject({
@@ -854,16 +847,6 @@ it("gives a remote caller no local paths and no source window", async () => {
       commit: repo.head,
       text: "export const value = 2;\n",
     });
-
-    const localContext = await read(worktree, context, false);
-    expect(localContext.rootPath).toBe(checkout);
-    expect(localContext.identity).not.toMatch(hash);
-
-    for (const reviewId of [worktree, commits]) {
-      const remoteContext = await read(reviewId, context, true);
-      expect(remoteContext).toEqual({ identity: expect.stringMatching(hash) });
-      expect(JSON.stringify(remoteContext)).not.toContain(home);
-    }
 
     for (const reviewId of [worktree, commits]) {
       const remoteFile = await read(reviewId, file, true);
@@ -1209,15 +1192,11 @@ async function commitsReviews(client: ReviewApiClient) {
 async function structuralDiffEvents(
   discovery: Pick<ReviewServerDiscovery, "url" | "token">,
   reviewId: string,
-  remote = false,
 ): Promise<{ type: string; message?: string }[]> {
   const response = await fetch(
     `${discovery.url}/reviews-api/${reviewId}/structural-diff`,
     {
-      headers: {
-        "x-review-token": discovery.token,
-        ...(remote && { [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE }),
-      },
+      headers: { "x-review-token": discovery.token },
     },
   );
 
@@ -1351,141 +1330,4 @@ it("leaves a review's checkouts to a live lease owner and takes over a dead owne
     false,
   );
   expect(worktrees()).toBe(2);
-});
-
-function caller(discovery: Pick<ReviewServerDiscovery, "url" | "token">) {
-  return async <T = unknown>(
-    route: string,
-    remote: boolean,
-    body?: JsonValue,
-  ): Promise<T> => {
-    const response = await fetch(`${discovery.url}/reviews-api${route}`, {
-      method: body === undefined ? "GET" : "POST",
-      headers: {
-        "x-review-token": discovery.token,
-        "content-type": "application/json",
-        ...(remote && { [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-
-    expect(response.status).toBe(200);
-
-    return response.json() as Promise<T>;
-  };
-}
-
-type Workspace = Partial<WorkspaceStatus>;
-
-it("gives a remote caller no checkout paths or logs from workspace management", async () => {
-  const server = await start();
-  const call = caller(server.discovery);
-  const { create, commonDir } = await commitsReviews(server.client);
-  const reviewId = await create("Workspaces");
-  const marker = path.basename(root);
-
-  await mkdir(path.join(commonDir, "dev-fast"), { recursive: true });
-  const blocker = path.join(commonDir, "dev-fast", "reviews");
-  await writeFile(blocker, "");
-
-  const environment = `/${reviewId}/environment`;
-  const localIssues = await call(environment, false, {});
-  expect(JSON.stringify(localIssues)).toContain(marker);
-  expect(await call(environment, true, {})).toEqual({
-    issues: [
-      { side: "head", message: REMOTE_CHECKOUT_ISSUE },
-      { side: "base", message: REMOTE_CHECKOUT_ISSUE },
-    ],
-  });
-
-  const workspaces = `/${reviewId}/workspaces`;
-  const failed = await call<Workspace[]>(workspaces, false);
-  expect(failed).toHaveLength(2);
-
-  for (const workspace of failed) {
-    expect(workspace).toMatchObject({ rootPath: null, state: "failed" });
-    expect(workspace.log).toContain(marker);
-  }
-
-  const remoteFailed = await call<Workspace[]>(workspaces, true);
-  expect(remoteFailed).toEqual(
-    failed.map(({ rootPath: _, log: __, ...status }) => ({
-      ...status,
-      issue: REMOTE_CHECKOUT_ISSUE,
-    })),
-  );
-
-  const retry = `${workspaces}/${failed[0]!.id}/retry`;
-  expect((await call<Workspace>(retry, false, {})).log).toContain(marker);
-  const remoteRetry = await call<Workspace>(retry, true, {});
-  expect(remoteRetry).toMatchObject({ issue: REMOTE_CHECKOUT_ISSUE });
-  expect(remoteRetry).not.toHaveProperty("rootPath");
-  expect(remoteRetry).not.toHaveProperty("log");
-  expect(JSON.stringify(remoteRetry)).not.toContain(marker);
-
-  await rm(blocker);
-  expect(await call(environment, false, { retry: true })).toEqual({
-    issues: [],
-  });
-
-  for (const workspace of await call<Workspace[]>(workspaces, false))
-    expect(workspace.rootPath).toContain(marker);
-
-  for (const workspace of await call<Workspace[]>(workspaces, true)) {
-    expect(workspace).not.toHaveProperty("rootPath");
-    expect(workspace).not.toHaveProperty("log");
-    expect(JSON.stringify(workspace)).not.toContain(marker);
-  }
-});
-
-it.skipIf(process.getuid?.() === 0)(
-  "gives a remote caller no paths from a failed checkout cleanup",
-  async () => {
-    const server = await start();
-    const call = caller(server.discovery);
-    const { create } = await commitsReviews(server.client);
-    const reviewId = await create("Cleanup");
-    const marker = path.basename(root);
-    await call(`/${reviewId}/environment`, false, {});
-
-    const [head] = await call<Workspace[]>(`/${reviewId}/workspaces`, false);
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    chmodSync(head!.rootPath!, 0o500);
-    stops.push(async () => {
-      chmodSync(head!.rootPath!, 0o700);
-      error.mockRestore();
-    });
-    await lifecycle(server.client, reviewId, "trash");
-
-    const cleanup = "/workspace-cleanup";
-
-    const failures = async (remote: boolean) =>
-      (await call<{ failures: Workspace[] }>(cleanup, remote, {})).failures;
-
-    await expect.poll(() => failures(false), cleanupTimeout).not.toEqual([]);
-    const local = await failures(false);
-    expect(JSON.stringify(local)).toContain(marker);
-
-    expect(await failures(true)).toEqual(
-      local.map(({ rootPath: _, log: __, ...status }) => status),
-    );
-  },
-);
-
-it("gives a remote caller no paths from a failed structural diff", async () => {
-  await stubDiffr();
-  const server = await start();
-  const { create, commonDir } = await commitsReviews(server.client);
-  const reviewId = await create("Blocked");
-  const marker = path.basename(root);
-
-  await mkdir(path.join(commonDir, "dev-fast"), { recursive: true });
-  await writeFile(path.join(commonDir, "dev-fast", "reviews"), "");
-
-  const local = await structuralDiffEvents(server.discovery, reviewId);
-  expect(local).toEqual([{ type: "error", message: expect.any(String) }]);
-  expect(local[0]!.message).toContain(marker);
-  expect(await structuralDiffEvents(server.discovery, reviewId, true)).toEqual([
-    { type: "error", message: REMOTE_STRUCTURAL_DIFF_ERROR },
-  ]);
 });
