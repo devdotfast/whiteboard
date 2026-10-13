@@ -1572,6 +1572,25 @@ body
   padding: 0 10px;
 }
 
+/* Which commits the diff shows, between the Changes header and its
+   Lenses and Files; empty for a board without commits. */
+.monaco-workbench .review-sidebar-commit-picker {
+  flex-shrink: 0;
+}
+
+/* Sized by the picker, not as a canvas root's full height; its menu opens
+   over the panes. */
+.monaco-workbench .review-sidebar-commit-picker.review-canvas-root {
+  height: auto;
+  min-height: 0;
+  container-type: normal;
+  background-color: transparent;
+}
+
+.monaco-workbench .review-sidebar-commit-picker:empty {
+  display: none;
+}
+
 /* A hidden copy of the tabs that measures their labels. */
 .monaco-workbench .review-sidebar-tabs-probe {
   position: absolute;

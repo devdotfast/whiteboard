@@ -62,12 +62,16 @@ export function ReviewDiffView({
   scope,
   revealFile,
   restoreFile,
+  picker,
 }: {
+  /** One commit of the board's, picked in the commit picker; else all. */
   scope?: ReviewCommitScope;
   /** The path of a file to scroll to once the diff loads. */
   revealFile?: string;
   /** A saved diff position wins over `revealFile`. */
   restoreFile?: boolean;
+  /** The commit picker, over the lenses in this view's own sidebar. */
+  picker?: ReactNode;
 }) {
   const workspaceRef = useRef<HTMLDivElement>(null);
   const cabinetsRef = useRef<HTMLDivElement>(null);
@@ -117,6 +121,7 @@ export function ReviewDiffView({
   const lensesLive = scopeLive(useContext(AuthoringActivityContext), "lenses");
   const [fullTree, setFullTree] = useState<HTMLDivElement | null>(null);
   const [lensTree, setLensTree] = useState<HTMLDivElement | null>(null);
+  const [scopeTree, setScopeTree] = useState<HTMLDivElement | null>(null);
 
   const fullProgress = useMemo(
     () =>
@@ -182,7 +187,9 @@ export function ReviewDiffView({
     void lenses.mark(sources, lenses.stats(sources).state !== "viewed");
   };
 
-  const panel = lenses && !scope ? lensPanel(lenses, rows, lens) : undefined;
+  // The lenses stay listed under a picked commit; picking one returns to
+  // all commits, since a lens reads the whole range.
+  const panel = lenses ? lensPanel(lenses, rows, lens) : undefined;
 
   const selectLens = (lensId: string | null) => {
     if (lensId === null) lenses?.clear();
@@ -221,7 +228,7 @@ export function ReviewDiffView({
 
   if (diffFiles.status === "unavailable") return null;
 
-  if (scope || !lenses || !panel)
+  if (!lenses || !panel)
     return (
       <NativeDiffView
         scope={scope}
@@ -246,12 +253,17 @@ export function ReviewDiffView({
       <div
         {...withClass("diff-native-tree", styles.nativeTree)}
         ref={setFullTree}
-        style={lens ? { display: "none" } : undefined}
+        style={lens || scope ? { display: "none" } : undefined}
       />
       <div
         {...withClass("diff-native-tree", styles.nativeTree)}
         ref={setLensTree}
-        style={!lens ? { display: "none" } : undefined}
+        style={!lens || scope ? { display: "none" } : undefined}
+      />
+      <div
+        {...withClass("diff-native-tree", styles.nativeTree)}
+        ref={setScopeTree}
+        style={!scope ? { display: "none" } : undefined}
       />
       {untracked}
     </>
@@ -273,13 +285,26 @@ export function ReviewDiffView({
               ? undefined
               : (ranges, viewed) => lenses.mark(ranges, viewed)
           }
-          hidden={!!lens}
-          revealFile={lens ? undefined : picked?.path}
-          revealRequest={lens ? undefined : picked?.request}
+          hidden={!!lens || !!scope}
+          revealFile={lens || scope ? undefined : picked?.path}
+          revealRequest={lens || scope ? undefined : picked?.request}
           inWorkspace
         />
       )}
-      {lens && (sidebar || lensTree) && (
+      {/* A picked commit's own diff, its tree in Files; its lines can't be
+          marked viewed against the board's range, so it has no marks. */}
+      {scope && (sidebar || scopeTree) && (
+        <NativeDiffView
+          scope={scope}
+          revealFile={picked?.path ?? revealFile}
+          revealRequest={picked?.request}
+          restoreFile={!picked && restoreFile}
+          treeContainer={sidebar ? undefined : (scopeTree ?? undefined)}
+          sidebarFileTree={sidebar}
+          inWorkspace
+        />
+      )}
+      {lens && !scope && (sidebar || lensTree) && (
         <NativeDiffView
           lens={lens}
           revealFile={picked?.path}
@@ -352,6 +377,7 @@ export function ReviewDiffView({
         style={{ width: sidebarResize.width }}
       >
         <DiffSidebarFolds />
+        {picker}
         <LensProgress lenses={panel} />
         <div {...stylex.props(styles.cabinets)} ref={cabinetsRef}>
           <div

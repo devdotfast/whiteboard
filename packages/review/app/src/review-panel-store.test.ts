@@ -160,7 +160,7 @@ describe("Ask", () => {
 });
 
 describe("Review navigation", () => {
-  it("scopes a commit diff until the reader leaves the diff", () => {
+  it("keeps a commit filter across views until all commits are picked", () => {
     const store = createReviewPanelStore();
     store.getState().openPeek({ kind: "peek", anchor, content });
 
@@ -173,7 +173,11 @@ describe("Review navigation", () => {
 
     store.getState().showView("commits");
     store.getState().showView("diff");
-    expect(store.getState().diffScope).toBeNull();
+    expect(store.getState().diffScope).toMatchObject({ commit });
+
+    // Picked in the sidebar's Commits, the filter changes in place.
+    store.getState().pickCommit(null);
+    expect(store.getState()).toMatchObject({ view: "diff", diffScope: null });
   });
 
   it("keeps a peek open beside a diff a lens opened", () => {
