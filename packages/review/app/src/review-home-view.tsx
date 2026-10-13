@@ -20,14 +20,14 @@ import {
 import { copyText } from "./copy-text";
 import { countLabel, formatRelativeTime } from "./format";
 import { homeStyles } from "./home-styles";
-import { CanvasUiContext } from "./host/canvas-ui";
+import { CanvasUiContext, useCanvasMenu } from "./host/canvas-ui";
 import {
   BoardIcon,
   BranchIcon,
+  ChevronDownIcon,
   ClearFiltersIcon,
   CloseIcon,
   CodeIcon,
-  CopyIcon,
   DisclosureChevron,
   FilterIcon,
   FolderIcon,
@@ -38,7 +38,6 @@ import {
 } from "./icons";
 import { homeGroupMarker, homeRowMarker } from "./markers.stylex";
 import { useNotify } from "./notify";
-import { OptionMenu } from "./option-menu";
 import type { ReviewFindHost } from "./review-find";
 import {
   HomeFilterPicker,
@@ -68,14 +67,12 @@ import {
 } from "./review-home-model";
 import { styles } from "./review-home-styles";
 import { withClass } from "./stylex-props";
-import { Button, IconButton, buttonStyles } from "./ui/button";
+import { Button, IconButton } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { EmptyState } from "./ui/empty-state";
 import { Shortcut } from "./ui/kbd";
-import { menuStyles, moveMenuFocus } from "./ui/menu";
 import { StatusBanner } from "./ui/status-banner";
 import { surfaceStyles } from "./ui/surface";
-import { useAnchoredPopover } from "./use-anchored-popover";
 import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
 
@@ -191,18 +188,13 @@ export function ReviewHome({
   const [now, setNow] = useState(Date.now);
   const [lastVisit] = useState(() => Number(localStorage.getItem(visitKey)));
   const [nudgeClosed, setNudgeClosed] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
   const [refresherOpen, setRefresherOpen] = useState(false);
   const homeRef = useRef<HTMLElement>(null);
   const filterRegion = useRef<HTMLElement>(null);
-  const helpRef = useRef<HTMLDivElement>(null);
-  const helpButton = useRef<HTMLButtonElement>(null);
-  const helpMenu = useAnchoredPopover(helpOpen, helpButton);
   const addFilter = useRef<HTMLButtonElement>(null);
   const chipRow = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const lastSelected = useRef<string | null>(null);
-  useDismissOnOutside(helpRef, helpOpen, setHelpOpen);
   useDismissOnOutside(filterRegion, picker !== null, () => setPicker(null));
 
   useEffect(() => {
@@ -628,7 +620,6 @@ export function ReviewHome({
     if (
       event.defaultPrevented ||
       refresherOpen ||
-      helpOpen ||
       homeRef.current?.querySelector(
         '[aria-haspopup="menu"][aria-expanded="true"]',
       )
@@ -761,10 +752,47 @@ export function ReviewHome({
   const anchored = (trigger: PickerTrigger) =>
     picker?.trigger === trigger && filterPickerAnchor.anchor;
 
-  const closeHelp = () => {
-    setHelpOpen(false);
-    helpButton.current?.focus();
-  };
+  const sortMenu = useCanvasMenu({
+    items: sortOptions.map((option) => ({
+      id: option.value,
+      label: option.label,
+      checked: option.value === sort,
+    })),
+    onSelect: (id) => {
+      const option = sortOptions.find((item) => item.value === id);
+
+      if (option) setSort(option.value);
+    },
+  });
+
+  const helpMenu = useCanvasMenu({
+    items: [
+      {
+        id: "tour",
+        label: "Need a refresher? Take the tour",
+        enabled: !!onOpenTutorial,
+      },
+      { id: "discord", label: "Ask on Discord ↗" },
+      { id: "email", label: "Need help? Copy our email" },
+    ],
+    onSelect: async (id) => {
+      if (id === "tour") onOpenTutorial?.();
+      else if (id === "discord")
+        window.open(REVIEW_DISCORD_URL, "_blank", "noopener,noreferrer");
+      else if (id === "email") {
+        const copied = await copyText("founders@dev.fast");
+
+        notify(
+          copied
+            ? {
+                kind: "success",
+                text: "Copied 'founders@dev.fast' to clipboard",
+              }
+            : { kind: "error", text: "Couldn't copy email. Please try again." },
+        );
+      }
+    },
+  });
 
   const renderChip = (id: string) => {
     if (id === "draft" || id === editingSearch) {
@@ -930,17 +958,16 @@ export function ReviewHome({
               >
                 <FilterIcon />
               </IconButton>
-              <OptionMenu<HomeSort>
-                ariaLabel="Sort whiteboards"
-                value={sort}
-                options={sortOptions}
-                onChange={setSort}
-                triggerStyle={[buttonStyles.base, buttonStyles.ghost]}
-                triggerRef={sortTooltip}
+              <Button
+                variant="ghost"
+                aria-label="Sort whiteboards"
+                ref={sortTooltip}
+                {...sortMenu.triggerProps}
               >
                 <SortIcon />
                 {sortOptions.find((option) => option.value === sort)?.label}
-              </OptionMenu>
+                <ChevronDownIcon />
+              </Button>
             </div>
             {picker !== null && (
               <HomeFilterPicker
@@ -1216,91 +1243,15 @@ export function ReviewHome({
       </div>
       {!inTrash && (
         <div {...stylex.props(styles.controls, styles.corner)}>
-          <div ref={helpRef}>
-            <IconButton
-              aria-label="Help"
-              size="large"
-              xstyle={styles.cornerButton}
-              ref={(element) => {
-                helpButton.current = element;
-                helpTooltip(element);
-              }}
-              aria-haspopup="menu"
-              aria-expanded={helpOpen}
-              onClick={() => setHelpOpen(!helpOpen)}
-            >
-              <HelpIcon xstyle={styles.cornerIcon} />
-            </IconButton>
-            {helpOpen && (
-              <div
-                ref={helpMenu}
-                popover="manual"
-                role="menu"
-                tabIndex={-1}
-                aria-label="Help"
-                {...stylex.props(
-                  surfaceStyles.popover,
-                  menuStyles.popover,
-                  menuStyles.above,
-                  menuStyles.end,
-                  styles.helpMenu,
-                )}
-                onKeyDown={(event) => {
-                  if (event.key === "Escape") {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    closeHelp();
-                  } else moveMenuFocus(event);
-                }}
-              >
-                <button
-                  type="button"
-                  role="menuitem"
-                  disabled={!onOpenTutorial}
-                  {...stylex.props(menuStyles.item)}
-                  onClick={() => {
-                    setHelpOpen(false);
-                    onOpenTutorial?.();
-                  }}
-                >
-                  Need a refresher? Take the tour
-                </button>
-                <hr {...stylex.props(styles.divider)} />
-                <a
-                  role="menuitem"
-                  href={REVIEW_DISCORD_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  {...stylex.props(menuStyles.item)}
-                >
-                  Ask on Discord ↗
-                </a>
-                <button
-                  type="button"
-                  role="menuitem"
-                  {...stylex.props(menuStyles.item)}
-                  onClick={async () => {
-                    const copied = await copyText("founders@dev.fast");
-
-                    notify(
-                      copied
-                        ? {
-                            kind: "success",
-                            text: "Copied 'founders@dev.fast' to clipboard",
-                          }
-                        : {
-                            kind: "error",
-                            text: "Couldn't copy email. Please try again.",
-                          },
-                    );
-                  }}
-                >
-                  Need help? Send us an email
-                  <CopyIcon xstyle={[menuStyles.check, styles.muted]} />
-                </button>
-              </div>
-            )}
-          </div>
+          <IconButton
+            aria-label="Help"
+            size="large"
+            xstyle={styles.cornerButton}
+            ref={helpTooltip}
+            {...helpMenu.triggerProps}
+          >
+            <HelpIcon xstyle={styles.cornerIcon} />
+          </IconButton>
           <IconButton
             aria-label="Settings"
             size="large"

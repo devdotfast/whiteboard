@@ -175,7 +175,7 @@ describe("Home interactions", () => {
     expect(titles("Last 7 days")).toEqual(["Read"]);
     expect(titles("Older than 7 days")).toEqual([]);
     await click("Sort whiteboards");
-    await click("Title");
+    await act(async () => host.select("title"));
     expect(titles("Unread")).toEqual(["Alpha", "Zulu"]);
 
     const earlier = container.querySelector<HTMLButtonElement>(
@@ -574,15 +574,13 @@ describe("Home interactions", () => {
     await key("a", { metaKey: true });
     expect(container.textContent).toContain("4 selected");
   });
-  it("lets the Sort menu consume Escape before clearing the selection", async () => {
+  it("keeps the selection while the Sort menu is open", async () => {
     await render([summary("One"), summary("Two")]);
     await select("One");
     await click("Sort whiteboards");
 
-    await key("Escape", {}, document.activeElement!);
-    expect(button("Sort whiteboards").getAttribute("aria-expanded")).toBe(
-      "false",
-    );
+    await key("Escape");
+    await act(async () => host.menu.onHide());
     expect(
       container.querySelector<HTMLInputElement>(
         'input[aria-label="Select One"]',

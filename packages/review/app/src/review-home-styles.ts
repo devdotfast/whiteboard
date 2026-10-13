@@ -60,15 +60,6 @@ export const styles = stylex.create({
   regular: { fontWeight: fontWeight.regular },
   smallIcon: { width: "12px", height: "12px", flexShrink: 0 },
   ellipsis: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" },
-  helpMenu: { width: "280px" },
-  divider: {
-    width: "100%",
-    margin: "2px 0",
-    borderWidth: 0,
-    borderTopWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-  },
   notice: {
     justifyContent: "space-between",
     flexWrap: "wrap",
