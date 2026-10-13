@@ -6,7 +6,11 @@ import type {
 } from "@dev.fast/review-protocol";
 import { expect, it } from "vitest";
 
-import { type ListSource, mergeLists } from "./review-gateway-list.js";
+import {
+  type ListSource,
+  listedBy,
+  mergeLists,
+} from "./review-gateway-list.js";
 
 const entry = (
   title: string,
@@ -154,21 +158,28 @@ it("keeps the last list of a host that is connecting, offline, incompatible or u
   ]);
 });
 
-it("keeps an id with the machine that lists it first", () => {
+it("gives an id to this machine, then to the first host in the setting's order that lists it", () => {
   const shared = entry("mine");
-  const conflicts: string[] = [];
+  const onBoth = entry("on both");
 
-  const merged = mergeLists(
-    "structural",
-    [shared],
-    source(
-      [{ alias: "a", serverId: "A", state: "online" }],
-      { A: [{ ...shared, title: "theirs" }] },
-      ["A"],
-    ),
-    (conflict) => conflicts.push(`${conflict.host}:${conflict.reviewId}`),
+  const lists = source(
+    [
+      { alias: "b", serverId: "B", state: "offline" },
+      { alias: "a", serverId: "A", state: "online" },
+    ],
+    {
+      A: [
+        { ...shared, title: "a's" },
+        { ...onBoth, title: "a's" },
+      ],
+      B: [{ ...onBoth, title: "b's" }],
+    },
+    ["A"],
   );
 
-  expect(summary(merged)).toEqual([["mine", undefined, undefined]]);
-  expect(conflicts).toEqual([`a:${shared.reviewId}`]);
+  expect(summary(mergeLists("structural", [shared], lists))).toEqual([
+    ["mine", undefined, undefined],
+    ["b's", "b", "offline"],
+  ]);
+  expect(listedBy(onBoth.reviewId, lists)?.state.alias).toBe("b");
 });

@@ -22,6 +22,7 @@ import {
   startGateway,
   startRemote,
   stopAll,
+  summary,
 } from "./review-gateway-test-utils.js";
 
 const version = readReviewPackageVersion(import.meta.url);
@@ -134,11 +135,6 @@ it("opens a review a remote creates with open: true, and knows its owner before 
 
   expect(opened(received)).toEqual([reviewId]);
   expect(first).toEqual([{ status: 200, host: "wb-a" }]);
-  expect(
-    desktop.localPaths.filter(
-      (entry) => entry === `/reviews-api/${reviewId}/activity`,
-    ),
-  ).toHaveLength(2);
 });
 
 async function pushingRemote(frames: JsonValue[] = []) {
@@ -430,16 +426,6 @@ it("keeps a local review on this machine when a remote lists its id, for every r
   const onLocal = await seed(desktop.api, root, "Local original");
   const remoteOnly = randomUUID();
 
-  const summary = (reviewId: string, title: string) => ({
-    reviewId,
-    version: 1,
-    title,
-    createdAt: new Date(0).toISOString(),
-    repositoryName: "project",
-    viewedAt: null,
-    trashedAt: null,
-  });
-
   const impostor = { ...summary(onLocal, "Remote impostor"), document: [] };
   const results: JsonValue[] = [];
   let control: ServerResponse | undefined;
@@ -560,9 +546,6 @@ it("keeps a local review on this machine when a remote lists its id, for every r
   expect(
     fake.requests.filter((request) => request.url?.includes(onLocal)),
   ).toEqual([]);
-  expect(
-    desktop.logged.filter((line) => line.includes(`${onLocal} is also listed`)),
-  ).toHaveLength(1);
 
   copyReview(onLocal, remoteOnly, "Imported");
 
@@ -593,17 +576,7 @@ it("routes an id to this machine as soon as this machine gains it, after a remot
         `${JSON.stringify({
           kind: "list",
           mode: "structural",
-          reviews: [
-            {
-              reviewId,
-              version: 1,
-              title: "Remote",
-              createdAt: new Date(0).toISOString(),
-              repositoryName: "project",
-              viewedAt: null,
-              trashedAt: null,
-            },
-          ],
+          reviews: [summary(reviewId, "Remote")],
         })}\n`,
       );
 
@@ -641,16 +614,6 @@ it("follows a local review on this machine when its first request is a watch and
   const desktop = await startGateway(root, []);
   const local = await seed(desktop.api, root, "Local");
   const other = randomUUID();
-
-  const summary = (reviewId: string, title: string) => ({
-    reviewId,
-    version: 1,
-    title,
-    createdAt: new Date(0).toISOString(),
-    repositoryName: "project",
-    viewedAt: null,
-    trashedAt: null,
-  });
 
   const fake = await startFake({
     version,

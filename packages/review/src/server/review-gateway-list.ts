@@ -4,7 +4,7 @@ import type {
 } from "@dev.fast/review-protocol";
 
 import { UUID } from "./review-gateway-hosts.js";
-import type { ListMode } from "./review-gateway-memory.js";
+import { LIST_MODES, type ListMode } from "./review-gateway-memory.js";
 
 export interface ListSource {
   states: readonly ReviewGatewayHostState[];
@@ -43,8 +43,8 @@ const hostStateOf = (
     : state.state;
 };
 
-function remoteEntries(mode: ListMode, source: ListSource) {
-  const entries: ReviewApiSummary[] = [];
+// Settings order, one entry per server: the first to list an id owns it.
+function* servers(source: ListSource) {
   const seen = new Set<string>();
 
   for (const state of source.states) {
@@ -52,33 +52,40 @@ function remoteEntries(mode: ListMode, source: ListSource) {
 
     if (serverId === undefined || seen.has(serverId)) continue;
     seen.add(serverId);
-    const hostState = hostStateOf(state, source.serving(serverId));
-
-    for (const entry of source.list(serverId, mode) ?? [])
-      if (UUID.test(entry.reviewId))
-        entries.push(decorate(entry, state.alias, hostState));
+    yield { state, serverId };
   }
+}
 
-  return entries;
+export function listedBy(reviewId: string, source: ListSource) {
+  for (const server of servers(source))
+    if (
+      LIST_MODES.some((mode) =>
+        source
+          .list(server.serverId, mode)
+          ?.some((entry) => entry.reviewId === reviewId),
+      )
+    )
+      return server;
+
+  return undefined;
 }
 
 export function mergeLists(
   mode: ListMode,
   local: readonly ReviewApiSummary[],
   source: ListSource,
-  conflict: (entry: ReviewApiSummary) => void = () => {},
 ) {
   const ids = new Set(local.map((entry) => entry.reviewId));
   const merged = [...local];
 
-  for (const entry of remoteEntries(mode, source)) {
-    if (ids.has(entry.reviewId)) {
-      conflict(entry);
-      continue;
-    }
+  for (const { state, serverId } of servers(source)) {
+    const hostState = hostStateOf(state, source.serving(serverId));
 
-    ids.add(entry.reviewId);
-    merged.push(entry);
+    for (const entry of source.list(serverId, mode) ?? [])
+      if (UUID.test(entry.reviewId) && !ids.has(entry.reviewId)) {
+        ids.add(entry.reviewId);
+        merged.push(decorate(entry, state.alias, hostState));
+      }
   }
 
   return merged;

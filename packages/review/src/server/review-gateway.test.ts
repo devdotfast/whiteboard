@@ -1,11 +1,13 @@
 import { randomUUID } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import type { ServerResponse } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
   type JsonObject,
   REVIEW_HOST_HEADER,
+  ReviewApiClient,
   type ReviewGatewayHost,
 } from "@dev.fast/review-protocol";
 import {
@@ -24,6 +26,7 @@ import {
   startGateway as startLocalGateway,
   startRemote,
   stopAll,
+  summary,
 } from "./review-gateway-test-utils.js";
 
 const version = readReviewPackageVersion(import.meta.url);
@@ -213,10 +216,8 @@ it("answers per-review telemetry for a remote review itself and refuses local-on
   }
 
   expect(
-    fake.requests.filter(
-      (entry) =>
-        entry.url?.startsWith(`/reviews-api/${reviewId}/`) &&
-        !entry.url.endsWith("/activity"),
+    fake.requests.filter((entry) =>
+      entry.url?.startsWith(`/reviews-api/${reviewId}/`),
     ),
   ).toEqual([]);
 });
@@ -480,17 +481,18 @@ it("mounts the gateway in the Desktop server, with host states behind the token"
   expect(await unknown.json()).toEqual({ ok: false, error: "Not found." });
 });
 
-async function rememberOwner(
-  serverId: string,
-  alias: string,
-  reviewId: string,
-) {
+async function rememberList(serverId: string, alias: string, reviewId: string) {
   const home = path.join(root, "local");
 
   await mkdir(home, { recursive: true });
   await writeFile(
     gatewayMemoryPath(home),
-    JSON.stringify({ [serverId]: { alias, reviewIds: [reviewId] } }),
+    JSON.stringify({
+      [serverId]: {
+        alias,
+        lastList: { structural: [summary(reviewId, "Remembered")] },
+      },
+    }),
   );
 }
 
@@ -500,7 +502,7 @@ it("refuses a review on a server two aliases share", async () => {
   const { serverId } = await first.health();
   await first.stop();
   await cp(path.join(root, "a"), path.join(root, "c"), { recursive: true });
-  await rememberOwner(serverId, "wb-a", onA);
+  await rememberList(serverId, "wb-a", onA);
   const a = await startRemote(path.join(root, "a"));
   const c = await startRemote(path.join(root, "c"));
 
@@ -566,7 +568,7 @@ it("refuses a redirect from a remote and drops its cookies", async () => {
   expect(commits.headers.has("set-cookie")).toBe(false);
 });
 
-it("forgets a review its owner no longer has", async () => {
+it("keeps routing a review its host trashed, and stops once the host's list drops it", async () => {
   const a = await startRemote(path.join(root, "a"));
   const onA = await seed(a, "On a");
 
@@ -577,63 +579,141 @@ it("forgets a review its owner no longer has", async () => {
   const memoryFile = gatewayMemoryPath(path.join(root, "local"));
 
   await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
-  expect((await request(`/${onA}?full=true`)).status).toBe(200);
   await expect.poll(() => readFile(memoryFile, "utf8")).toContain(onA);
 
   await a.api("/commands", {
     method: "POST",
     body: command({ type: "lifecycle", reviewId: onA, state: "trash" }),
   });
+
+  const trashed = await request(`/${onA}?full=true`);
+  expect(trashed.status).toBe(200);
+  expect(trashed.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+
   await a.api("/commands", {
     method: "POST",
     body: command({ type: "delete", reviewId: onA }),
   });
+  await expect.poll(() => readFile(memoryFile, "utf8")).not.toContain(onA);
 
   const gone = await request(`/${onA}?full=true`);
   expect(gone.status).toBe(404);
-  expect(gone.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
-  await expect.poll(() => readFile(memoryFile, "utf8")).not.toContain(onA);
+  expect(gone.headers.has(REVIEW_HOST_HEADER)).toBe(false);
 });
 
-it("refuses a remote's snapshot of another review, and passes its own byte for byte", async () => {
+it("gives an id two hosts list to the first in the setting's order, in the list and in routing", async () => {
   const reviewId = randomUUID();
-  const own = `{"reviewId":"${reviewId}",  "title":"Own"}`;
+  const a = await startFake({ version, reviewIds: [reviewId] });
+  const b = await startFake({ version, reviewIds: [reviewId] });
+
+  const desktop = await startGateway([
+    { alias: "wb-b", endpoint: b.endpoint },
+    { alias: "wb-a", endpoint: a.endpoint },
+  ]);
+
+  const hosts = async () => ({
+    listed: (await desktop.api<{ reviewId: string; host?: string }[]>(""))
+      .filter((entry) => entry.reviewId === reviewId)
+      .map((entry) => entry.host),
+    routed: (await desktop.request(`/${reviewId}/progress`)).headers.get(
+      REVIEW_HOST_HEADER,
+    ),
+  });
+
+  await expect.poll(hosts).toEqual({ listed: ["wb-b"], routed: "wb-b" });
+
+  desktop.gateway.setHosts([
+    { alias: "wb-a", endpoint: a.endpoint },
+    { alias: "wb-b", endpoint: b.endpoint },
+  ]);
+
+  await expect.poll(hosts).toEqual({ listed: ["wb-a"], routed: "wb-a" });
+});
+
+it("routes a review a host just created once its list line arrives, and an unknown id here after a short wait", async () => {
+  const reviewId = randomUUID();
+  const feeds: ServerResponse[] = [];
 
   const fake = await startFake({
     version,
     reviewIds: [reviewId],
     handle(request, response) {
-      if (!request.url?.startsWith(`/reviews-api/${reviewId}?`)) return false;
-      response.setHeader("content-type", "application/json");
-      response.end(
-        request.url.includes("version=")
-          ? own
-          : JSON.stringify({ reviewId: "scratchpad", title: "Other" }),
-      );
+      if (!request.url?.startsWith("/reviews-api/watch")) return false;
+      response.setHeader("content-type", "application/x-ndjson");
+
+      if (request.url.includes(reviewId))
+        response.write(
+          `${JSON.stringify({ kind: "review", reviewId, value: { reviewId } })}\n`,
+        );
+      else {
+        response.write('{"kind":"list","mode":"structural","reviews":[]}\n');
+        feeds.push(response);
+      }
 
       return true;
     },
   });
 
-  const { request, gateway, logged } = await startGateway([
+  const desktop = await startGateway([
     { alias: "wb-a", endpoint: fake.endpoint },
   ]);
 
-  await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+  await expect.poll(() => feeds.length).toBe(1);
 
-  const other = await request(`/${reviewId}?full=true`);
-  expect(other.status).toBe(502);
-  expect(await other.json()).toEqual({
-    ok: false,
-    error: "wb-a answered with another review, so the answer was refused.",
-  });
-  expect(logged).toContain(
-    `Refused wb-a's answer for ${reviewId}: it carried another review.`,
+  const watched = (async () => {
+    for await (const line of new ReviewApiClient({
+      serverUrl: desktop.url,
+      token: LOCAL_TOKEN,
+    }).watch([{ reviewId, mode: "structural" }], AbortSignal.timeout(5_000)))
+      if (line.kind === "review" && "value" in line) return line.value;
+
+    return undefined;
+  })();
+
+  const started = Date.now();
+  const read = desktop.request(`/${reviewId}/progress`);
+
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  feeds[0]!.write(
+    `${JSON.stringify({ kind: "list", mode: "structural", reviews: [summary(reviewId, "New")] })}\n`,
   );
 
-  const mine = await request(`/${reviewId}?full=true&version=1`);
-  expect(mine.status).toBe(200);
-  expect(await mine.text()).toBe(own);
+  const routed = await read;
+  expect(routed.status).toBe(200);
+  expect(routed.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  expect(Date.now() - started).toBeLessThan(1_000);
+
+  expect(await watched).toEqual({ reviewId });
+
+  const waited = Date.now();
+  const unknown = await desktop.request(`/${randomUUID()}`);
+  expect(unknown.status).toBe(404);
+  expect(unknown.headers.has(REVIEW_HOST_HEADER)).toBe(false);
+  expect(Date.now() - waited).toBeGreaterThanOrEqual(1_900);
+  expect(Date.now() - waited).toBeLessThan(3_000);
+});
+
+it("answers 503 with an offline host's reason for a review on its last list, after a restart", async () => {
+  const a = await startRemote(path.join(root, "a"));
+  const onA = await seed(a, "On a");
+
+  const first = await startGateway([{ alias: "wb-a", endpoint: a.endpoint }]);
+  await expect
+    .poll(async () => (await first.request(`/${onA}`)).status)
+    .toBe(200);
+  await first.close();
+  await a.stop();
+
+  const second = await startGateway([{ alias: "wb-a", endpoint: a.endpoint }]);
+  await expect.poll(() => second.gateway.hosts()[0]?.state).toBe("offline");
+
+  const response = await second.request(`/${onA}`);
+  expect(response.status).toBe(503);
+  expect(response.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  expect(await response.json()).toEqual({
+    ok: false,
+    error: "wb-a is offline: it refused the connection.",
+  });
 });
 
 it("answers 504 for an answer that stalls after its headers, and keeps the host online", async () => {

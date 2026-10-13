@@ -257,15 +257,6 @@ export function createGatewayHosts(input: {
     serving: (serverId: string): GatewayRemote | undefined => serving(serverId),
     online: (): GatewayRemote[] =>
       hosts.filter((host) => serving(host.serverId) === host),
-    unavailable(serverId: string, alias: string) {
-      const host = hosts.find(
-        (candidate) =>
-          candidate.serverId === serverId ||
-          (candidate.serverId === undefined && candidate.alias === alias),
-      );
-
-      return host && serving(serverId) !== host ? stateOf(host) : undefined;
-    },
     failed(remote: GatewayRemote, reason: string) {
       const host = hosts.find((candidate) => candidate === remote);
 

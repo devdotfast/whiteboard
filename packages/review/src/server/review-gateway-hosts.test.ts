@@ -139,10 +139,6 @@ it("uses neither of two machines with a copied id, until one leaves the setting"
   expect(gateway.states()[0]?.detail).toContain("wb-a, wb-c");
   expect(gateway.states()[0]?.detail).toContain("whiteboard server reset-id");
   expect(gateway.serving(serverId)).toBeUndefined();
-  expect(gateway.unavailable(serverId, "wb-a")).toMatchObject({
-    alias: "wb-a",
-    state: "duplicate",
-  });
 
   await c.stop();
   gateway.set([{ alias: "wb-a", endpoint: a.endpoint }]);

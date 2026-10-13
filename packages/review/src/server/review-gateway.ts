@@ -3,7 +3,6 @@ import { Readable } from "node:stream";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 
 import {
-  type JsonValue,
   REVIEW_CLIENT_HEADER,
   REVIEW_HOST_HEADER,
   type ReviewGatewayHost,
@@ -27,14 +26,13 @@ import {
   remoteHeaders,
   send,
 } from "./review-gateway-hosts.js";
+import { type ListSource, listedBy } from "./review-gateway-list.js";
 import { openGatewayMemory } from "./review-gateway-memory.js";
 import { createGatewayPushes } from "./review-gateway-pushes.js";
 import {
   type Located,
   createGatewayStreams,
   downDetail,
-  isSnapshotOf,
-  withoutTutorial,
 } from "./review-gateway-streams.js";
 import { serverJson } from "./review-server-core.js";
 
@@ -78,6 +76,8 @@ const PATH_FIELDS = new Set([
 
 const PATH_ROUTE_MAX_BYTES = 64 * 1024 * 1024;
 
+const LIST_WAIT_MS = 2_000;
+
 const BODY_IDLE_MS = 10_000;
 
 const BODY_MAX_MS = 120_000;
@@ -114,13 +114,9 @@ const commandTarget = z.object({
   operation: z.object({ reviewId: z.string().optional() }).optional(),
 });
 
-type Owner =
-  | { remote: GatewayRemote }
-  | { down: ReviewGatewayHostState }
-  | undefined;
-
 export function createReviewGateway(input: {
   local(request: Request): Response | Promise<Response>;
+  isLocal(reviewId: string): boolean;
   version: string;
   home: string;
   relay: ReviewDesktopVerbRelay;
@@ -154,124 +150,49 @@ export function createReviewGateway(input: {
     },
   });
 
-  const localIds = new Set<string>();
-  const lookups = new Map<string, Promise<Owner>>();
   const streaming = new Map<AbortController, GatewayRemote>();
+  const waiting = new Set<() => void>();
 
-  async function ownership(remote: GatewayRemote, reviewId: string) {
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), FIRST_BYTE_TIMEOUT_MS);
-
-    try {
-      const response = await send(remote, {
-        method: "GET",
-        path: `/reviews-api/${encodeURIComponent(reviewId)}/activity`,
-        headers: remoteHeaders(remote),
-        signal: abort.signal,
-      });
-
-      response.resume();
-
-      return response.statusCode;
-    } catch (error) {
-      hosts.failed(remote, abort.signal.aborted ? NO_ANSWER : errorText(error));
-
-      return undefined;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-
-  async function onLocal(reviewId: string) {
-    if (localIds.has(reviewId)) return true;
-
-    const local = await input.local(
-      new Request(
-        `http://gateway/reviews-api/${encodeURIComponent(reviewId)}/activity`,
-      ),
-    );
-
-    await local.body?.cancel();
-
-    if (local.ok) localIds.add(reviewId);
-
-    return local.ok;
-  }
-
-  const order = () =>
-    hosts
-      .states()
-      .flatMap(
-        (state) => state.serverId ?? memory.serverIdOf(state.alias) ?? [],
-      );
-
-  async function lookup(reviewId: string): Promise<Owner> {
-    const online = hosts.online();
-    const found = Promise.withResolvers<Owner>();
-    let owner: GatewayRemote | undefined;
-    let left = online.length;
-
-    if (!left) found.resolve(undefined);
-
-    for (const remote of online)
-      void ownership(remote, reviewId).then((status) => {
-        left -= 1;
-
-        if (status === 200 && remote.serverId !== undefined) {
-          if (owner)
-            log(
-              `Review ${reviewId} is on ${owner.alias} and ${remote.alias}; ${owner.alias} keeps it.`,
-            );
-          else {
-            owner = remote;
-            memory.remember(remote.serverId, remote.alias, reviewId);
-            found.resolve({ remote });
-          }
-        }
-
-        if (!left) found.resolve(undefined);
-      });
-
-    return found.promise;
-  }
+  const lists = (): ListSource => ({
+    states: hosts.states(),
+    serving: (serverId) => hosts.serving(serverId) !== undefined,
+    serverIdOf: memory.serverIdOf,
+    list: memory.list,
+  });
 
   function locate(reviewId: string): Located {
-    if (!UUID.test(reviewId) || localIds.has(reviewId)) return "local";
-    const known = memory.owner(reviewId, order());
+    if (!UUID.test(reviewId) || input.isLocal(reviewId)) return "local";
+    const listed = listedBy(reviewId, lists());
 
-    if (!known) return undefined;
-    const remote = hosts.serving(known.serverId);
+    if (!listed) return undefined;
+    const remote = hosts.serving(listed.serverId);
 
-    if (remote) return { remote };
-    const down = hosts.unavailable(known.serverId, known.alias);
-
-    return down && { down };
+    return remote ? { remote } : { down: listed.state };
   }
 
-  async function ownerOf(reviewId: string): Promise<Owner> {
-    if (UUID.test(reviewId)) await onLocal(reviewId);
+  // A review just created on a host may not be on its list yet.
+  function ownerOf(reviewId: string): Located | Promise<Located> {
     const located = locate(reviewId);
 
-    if (located === "local") return undefined;
+    if (located !== undefined || !hosts.online().length) return located;
+    const found = Promise.withResolvers<Located>();
 
-    if (located && "remote" in located) {
-      const { remote } = located;
+    const settle = (owner: Located) => {
+      clearTimeout(timer);
+      waiting.delete(check);
+      found.resolve(owner);
+    };
 
-      if (remote.serverId !== undefined)
-        memory.remember(remote.serverId, remote.alias, reviewId);
+    const check = () => {
+      const owner = locate(reviewId);
 
-      return located;
-    }
+      if (owner !== undefined) settle(owner);
+    };
 
-    if (located) return located;
-    let pending = lookups.get(reviewId);
+    const timer = setTimeout(() => settle(undefined), LIST_WAIT_MS);
+    waiting.add(check);
 
-    if (!pending) {
-      pending = lookup(reviewId).finally(() => lookups.delete(reviewId));
-      lookups.set(reviewId, pending);
-    }
-
-    return pending;
+    return found.promise;
   }
 
   function answer(
@@ -292,7 +213,7 @@ export function createReviewGateway(input: {
   async function forward(
     remote: GatewayRemote,
     request: Request,
-    options: { reviewId: string; route?: string; body?: Buffer },
+    options: { route?: string; body?: Buffer },
   ): Promise<Response> {
     const url = new URL(request.url);
 
@@ -361,8 +282,6 @@ export function createReviewGateway(input: {
       });
     }
 
-    if (status === 404) void confirmOwner(remote, options.reviewId);
-
     const out = new Headers();
 
     for (const [key, value] of Object.entries(response.headers))
@@ -376,12 +295,7 @@ export function createReviewGateway(input: {
 
     out.set(REVIEW_HOST_HEADER, remote.alias);
 
-    const snapshot =
-      options.route === "" &&
-      status === 200 &&
-      url.searchParams.get("full") === "true";
-
-    if (snapshot || (options.route && PATH_ROUTES.has(options.route))) {
+    if (options.route && PATH_ROUTES.has(options.route)) {
       let cut: string | undefined;
 
       const cutAfter = (ms: number, reason: string) =>
@@ -407,28 +321,6 @@ export function createReviewGateway(input: {
       } finally {
         clearTimeout(idle);
         clearTimeout(whole);
-      }
-
-      if (snapshot) {
-        const value = parseBody(body);
-
-        if (isSnapshotOf(value, options.reviewId)) {
-          const stripped = withoutTutorial(value);
-
-          return new Response(
-            stripped ? JSON.stringify(stripped) : new Uint8Array(body),
-            { status, headers: out },
-          );
-        }
-
-        log(
-          `Refused ${remote.alias}'s answer for ${options.reviewId}: it carried another review.`,
-        );
-
-        return answer(remote.alias, 502, {
-          ok: false,
-          error: `${remote.alias} answered with another review, so the answer was refused.`,
-        });
       }
 
       const field = pathField(body);
@@ -463,10 +355,6 @@ export function createReviewGateway(input: {
     return new Response(body, { status, headers: out });
   }
 
-  async function confirmOwner(remote: GatewayRemote, reviewId: string) {
-    if ((await ownership(remote, reviewId)) === 404) memory.forget(reviewId);
-  }
-
   async function command(request: Request): Promise<Response> {
     if (!request.body) return input.local(request);
     let body: Buffer;
@@ -491,7 +379,7 @@ export function createReviewGateway(input: {
 
     const owner = reviewId === undefined ? undefined : await ownerOf(reviewId);
 
-    if (!owner || reviewId === undefined)
+    if (owner === undefined || owner === "local")
       return input.local(
         new Request(request.url, {
           method: request.method,
@@ -503,7 +391,7 @@ export function createReviewGateway(input: {
 
     if ("down" in owner) return unavailable(owner.down);
 
-    return forward(owner.remote, request, { reviewId, body });
+    return forward(owner.remote, request, { body });
   }
 
   async function handle(request: Request): Promise<Response> {
@@ -533,13 +421,7 @@ export function createReviewGateway(input: {
     if (!reviewId || LOCAL_ROUTES.has(reviewId)) return input.local(request);
     const owner = await ownerOf(reviewId);
 
-    if (!owner) {
-      const response = await input.local(request);
-
-      if (response.status === 404) localIds.delete(reviewId);
-
-      return response;
-    }
+    if (owner === undefined || owner === "local") return input.local(request);
 
     const route = rest.join("/");
     const alias = "remote" in owner ? owner.remote.alias : owner.down.alias;
@@ -562,33 +444,33 @@ export function createReviewGateway(input: {
 
     if ("down" in owner) return unavailable(owner.down);
 
-    return forward(owner.remote, request, { reviewId, route });
+    return forward(owner.remote, request, { route });
   }
 
   const streams = createGatewayStreams({
     hosts,
     memory,
     local: input.local,
+    lists,
     locate,
-    lookup: ownerOf,
-    onLocal: (reviewId) => localIds.add(reviewId),
-    log,
+    listed() {
+      for (const check of waiting) check();
+    },
   });
 
   async function claim(remote: GatewayRemote, reviewId: string) {
-    if (await onLocal(reviewId))
-      return `${reviewId} belongs to the local machine.`;
-    const known = memory.owner(reviewId, order());
+    const owner = await ownerOf(reviewId);
 
-    if (known && known.serverId !== remote.serverId)
-      return `${reviewId} belongs to ${known.alias}.`;
+    if (owner === "local") return `${reviewId} belongs to the local machine.`;
 
-    if (remote.serverId === undefined)
-      return `${remote.alias} has not reported its server id.`;
+    if (owner === undefined)
+      return `${reviewId} is not on ${remote.alias}'s list.`;
 
-    memory.remember(remote.serverId, remote.alias, reviewId);
+    if ("down" in owner) return `${reviewId} belongs to ${owner.down.alias}.`;
 
-    return undefined;
+    return owner.remote === remote
+      ? undefined
+      : `${reviewId} belongs to ${owner.remote.alias}.`;
   }
 
   const pushes = createGatewayPushes({
@@ -620,9 +502,14 @@ export function createReviewGateway(input: {
 export type ReviewGateway = ReturnType<typeof createReviewGateway>;
 
 function pathField(body: Buffer): string | undefined {
-  const value = parseBody(body);
+  let value;
 
-  if (value === undefined) return "an unreadable body";
+  try {
+    value = parseJsonText(body.toString());
+  } catch {
+    return "an unreadable body";
+  }
+
   const pending = [value];
 
   for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
@@ -635,12 +522,4 @@ function pathField(body: Buffer): string | undefined {
   }
 
   return undefined;
-}
-
-function parseBody(body: Buffer): JsonValue | undefined {
-  try {
-    return parseJsonText(body.toString());
-  } catch {
-    return undefined;
-  }
 }

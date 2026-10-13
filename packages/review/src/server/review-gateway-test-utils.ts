@@ -102,6 +102,16 @@ export type FakeHandler = (
   response: ServerResponse,
 ) => boolean | void;
 
+export const summary = (reviewId: string, title: string) => ({
+  reviewId,
+  version: 1,
+  title,
+  createdAt: new Date(0).toISOString(),
+  repositoryName: "project",
+  viewedAt: null,
+  trashedAt: null,
+});
+
 export async function startFake(
   options: {
     version: string;
@@ -141,6 +151,17 @@ export async function startFake(
             : { ok, instanceId, desktopAttached, version },
         ),
       );
+
+      return;
+    }
+
+    if (request.url?.startsWith("/reviews-api/watch")) {
+      response.setHeader("content-type", "application/x-ndjson");
+
+      for (const mode of ["structural", "textual"])
+        response.write(
+          `${JSON.stringify({ kind: "list", mode, reviews: (options.reviewIds ?? []).map((reviewId) => summary(reviewId, reviewId)) })}\n`,
+        );
 
       return;
     }
@@ -217,6 +238,7 @@ export async function startGateway(
 
       return desktop.fetch(request);
     },
+    isLocal: (reviewId) => local.store.has(reviewId),
     version: options.version ?? version,
     home,
     relay,

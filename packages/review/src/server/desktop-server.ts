@@ -285,6 +285,7 @@ export function createGlobalReviewServer(
 
   const gateway = createReviewGateway({
     local: (request) => localApi.fetch(request),
+    isLocal: (reviewId) => reviewStore.has(reviewId),
     version: readReviewPackageVersion(import.meta.url),
     home: devReviewHome(),
     relay,
