@@ -14,6 +14,7 @@ import type { ReviewRemoteInstallConsent } from "./reviewRemoteInstallConsent.js
 import type { ReviewRemoteInstallInput, ReviewRemoteInstallResult } from "./reviewRemoteInstaller.js";
 import { reviewRemoteVersionDir } from "./reviewRemoteInstallScript.js";
 import { judgeRemote, missingInstallTools, probeRemote, type ReviewRemoteProbe, type ReviewRemoteTarget } from "./reviewRemoteProbe.js";
+import { socksAnswers, socksForward, type ReviewSocksForward } from "./reviewSocksForward.js";
 import {
 	sshCancelForwardArgs,
 	sshCheckArgs,
@@ -301,6 +302,8 @@ export class ReviewRemoteHost {
 	private master: SshChildProcess | undefined;
 	private readonly closing = new Map<SshChildProcess, Promise<void>>();
 	private forwarded: { local: number; remote: number } | undefined;
+	private socksPort: number | undefined;
+	private readonly socks = new Map<number, ReviewSocksForward>();
 	private language: { local: number; remote: number; connectionToken: string; commit: string } | undefined;
 	private pendingAttaches = 0;
 	private cancelPending: (() => void) | undefined;
@@ -329,6 +332,10 @@ export class ReviewRemoteHost {
 		this.clock = options.clock ?? systemClock;
 		this.timeouts = { ...REVIEW_REMOTE_TIMEOUTS, ...options.timeouts };
 		this.reported = { alias: this.alias };
+	}
+
+	private get direct(): boolean {
+		return !this.options.session.controlPath;
 	}
 
 	get state(): ReviewGatewayHost {
@@ -390,9 +397,9 @@ export class ReviewRemoteHost {
 		this.reattaching = true;
 		this.options.log(`${this.alias}: ${reason}; attaching again.`);
 		try {
-			const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
+			const check = await this.masterAnswers(env);
 			if (stale()) return;
-			if (check.code !== 0) throw unreachable(`The SSH connection to ${this.alias} did not answer. ${firstLines(check.stderr)}`.trim());
+			if (!check.ok) throw unreachable(`The SSH connection to ${this.alias} did not answer. ${firstLines(check.stderr)}`.trim());
 			await this.establish(env, stale, { script: this.attachScript, cli: this.cli }, reuse);
 		} catch (error) {
 			if (stale()) return;
@@ -447,6 +454,7 @@ export class ReviewRemoteHost {
 		this.installing?.abort();
 		const master = this.master;
 		this.master = undefined;
+		this.closeForwards();
 		await this.close(master);
 	}
 
@@ -509,9 +517,10 @@ export class ReviewRemoteHost {
 			this.env = env;
 			await Promise.all(this.closing.values());
 			// None of this host's masters runs now, but one killed by a signal left its socket, and ssh does not multiplex on a path that exists.
-			await rm(this.options.session.controlPath, { force: true });
+			if (this.options.session.controlPath) await rm(this.options.session.controlPath, { force: true });
+			const socksPort = this.direct ? await this.options.freePort() : undefined;
 			if (stale()) return;
-			const master = this.startMaster(env);
+			const master = this.startMaster(env, socksPort);
 			await this.waitForMaster(master, env, stale);
 			const prepared = await this.prepareAttach(env, stale);
 			if (prepared === undefined) return;
@@ -537,7 +546,7 @@ export class ReviewRemoteHost {
 		const language = await this.forwardLanguage(env, attach, stale);
 		if (stale()) return;
 		for (const forward of [kept ? undefined : old, oldLanguage]) {
-			if (forward) await this.run(sshCancelForwardArgs(this.options.session, forward.local, forward.remote, env), this.timeouts.operation);
+			if (forward) await this.cancelForward(env, forward);
 			if (stale()) return;
 		}
 		this.attachScript = prepared.script;
@@ -554,10 +563,10 @@ export class ReviewRemoteHost {
 		return this.failures++;
 	}
 
-	private startMaster(env: NodeJS.ProcessEnv): SshChildProcess {
+	private startMaster(env: NodeJS.ProcessEnv, socksPort: number | undefined): SshChildProcess {
 		let master: SshChildProcess;
 		try {
-			master = this.options.spawn(sshMasterArgs(this.options.session, env), {
+			master = this.options.spawn(sshMasterArgs(this.options.session, env, socksPort), {
 				env,
 				detached: true,
 				stdio: ["ignore", "ignore", "pipe"],
@@ -566,6 +575,7 @@ export class ReviewRemoteHost {
 			throw (error as NodeJS.ErrnoException).code === "ENOENT" ? unreachable(OPENSSH_NEEDED) : error;
 		}
 		this.master = master;
+		this.socksPort = socksPort;
 		this.masterStderr = "";
 		master.stderr?.setEncoding("utf8");
 		master.stderr?.on("data", (chunk: string) => (this.masterStderr = (this.masterStderr + chunk).slice(-OUTPUT_LIMIT)));
@@ -601,15 +611,21 @@ export class ReviewRemoteHost {
 		let since = Date.now();
 		for (;;) {
 			if (stale() || gone(master)) throw unreachable("The SSH connection ended.");
-			const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
+			const check = await this.masterAnswers(env);
 			if (stale()) throw unreachable("The SSH connection ended.");
-			if (check.code === 0) return;
+			if (check.ok) return;
 			if (this.prompts > 0) since = Date.now();
 			if (Date.now() - since > this.timeouts.connect) {
 				throw unreachable(`${this.alias} did not connect within ${this.timeouts.connect / 1000} seconds. ${firstLines(this.masterStderr)}`.trim());
 			}
 			await sleep(this.timeouts.poll);
 		}
+	}
+
+	private async masterAnswers(env: NodeJS.ProcessEnv): Promise<{ ok: boolean; stderr: string }> {
+		if (this.direct) return { ok: this.socksPort !== undefined && (await socksAnswers(this.socksPort)), stderr: "" };
+		const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
+		return { ok: check.code === 0, stderr: check.stderr };
 	}
 
 	private async prepareAttach(env: NodeJS.ProcessEnv, stale: () => boolean): Promise<PreparedAttach | undefined> {
@@ -799,10 +815,8 @@ export class ReviewRemoteHost {
 
 	private async forward(env: NodeJS.ProcessEnv, attach: ReviewRemoteAttach, stale: () => boolean): Promise<string> {
 		this.forwarded = undefined;
-		const port = await this.options.freePort();
-		if (stale()) throw unreachable("The SSH connection ended.");
-		const forward = await this.run(sshForwardArgs(this.options.session, port, attach.port, env), this.timeouts.operation);
-		if (forward.code !== 0) throw unreachable(`Could not forward a local port to ${this.alias}: ${firstLines(forward.stderr) || `ssh exited with code ${forward.code}`}`);
+		const port = await this.openForward(env, attach.port, stale);
+		if (typeof port !== "number") throw unreachable(`Could not forward a local port to ${this.alias}: ${port.error}`);
 		try {
 			await probeHealth(port, this.timeouts.operation);
 		} catch (error) {
@@ -820,19 +834,46 @@ export class ReviewRemoteHost {
 		if (!server) return unavailable(attach.languageServerDetail ?? "This host has no VS Code server.");
 		const mismatch = languageCommitMismatch(this.alias, server.commit, this.options.desktopCommit);
 		if (mismatch) return unavailable(mismatch);
-		const port = await this.options.freePort();
-		if (stale()) throw unreachable("The SSH connection ended.");
-		const forward = await this.run(sshForwardArgs(this.options.session, port, server.port, env), this.timeouts.operation);
-		if (forward.code !== 0) return unavailable(`Could not forward a local port to the VS Code server on ${this.alias}: ${firstLines(forward.stderr) || `ssh exited with code ${forward.code}`}`);
+		const port = await this.openForward(env, server.port, stale);
+		if (typeof port !== "number") return unavailable(`Could not forward a local port to the VS Code server on ${this.alias}: ${port.error}`);
 		try {
 			const commit = await probeVersion(port, this.timeouts.operation);
 			if (commit !== server.commit) throw new Error(`it reports ${commit}, not ${server.commit}`);
 		} catch (error) {
-			await this.run(sshCancelForwardArgs(this.options.session, port, server.port, env), this.timeouts.operation);
+			await this.cancelForward(env, { local: port, remote: server.port });
 			return unavailable(`The VS Code server on ${this.alias} did not answer through the forward: ${(error as Error).message}.`);
 		}
 		this.language = { local: port, remote: server.port, connectionToken: server.connectionToken, commit: server.commit };
 		return { languageFeatures: true };
+	}
+
+	/** A loopback port that reaches `remote` on the host. */
+	private async openForward(env: NodeJS.ProcessEnv, remote: number, stale: () => boolean): Promise<number | { error: string }> {
+		if (this.direct) {
+			const socksPort = this.socksPort;
+			if (socksPort === undefined) throw unreachable("The SSH connection ended.");
+			const forward = await socksForward(socksPort, remote);
+			this.socks.set(forward.port, forward);
+			if (stale()) throw unreachable("The SSH connection ended.");
+			return forward.port;
+		}
+		const port = await this.options.freePort();
+		if (stale()) throw unreachable("The SSH connection ended.");
+		const forward = await this.run(sshForwardArgs(this.options.session, port, remote, env), this.timeouts.operation);
+		return forward.code === 0 ? port : { error: firstLines(forward.stderr) || `ssh exited with code ${forward.code}` };
+	}
+
+	private async cancelForward(env: NodeJS.ProcessEnv, { local, remote }: { local: number; remote: number }): Promise<void> {
+		const socks = this.socks.get(local);
+		this.socks.delete(local);
+		if (socks) await socks.close();
+		else if (!this.direct) await this.run(sshCancelForwardArgs(this.options.session, local, remote, env), this.timeouts.operation);
+	}
+
+	private closeForwards(): void {
+		for (const forward of this.socks.values()) void forward.close();
+		this.socks.clear();
+		this.socksPort = undefined;
 	}
 
 	private facts(): Pick<ReviewGatewayHost, "declined" | "installFailure"> {
@@ -863,6 +904,7 @@ export class ReviewRemoteHost {
 		this.master = undefined;
 		this.forwarded = undefined;
 		this.language = undefined;
+		this.closeForwards();
 		this.installing?.abort();
 		void this.close(master);
 	}
@@ -873,7 +915,7 @@ export class ReviewRemoteHost {
 		if (pending) return pending;
 		const closed = (async () => {
 			// A master still connecting has no socket to take -O exit.
-			const asked = this.env && (await this.run(sshCloseArgs(this.options.session, this.env), this.timeouts.close)).code === 0;
+			const asked = !this.direct && this.env && (await this.run(sshCloseArgs(this.options.session, this.env), this.timeouts.close)).code === 0;
 			if (!asked || !(await exitedWithin(master, this.timeouts.close))) master.kill("SIGTERM");
 			await exitedWithin(master, this.timeouts.close);
 		})().finally(() => this.closing.delete(master));

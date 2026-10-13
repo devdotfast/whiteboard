@@ -685,6 +685,7 @@ const desktopSsh = async () =>
 
 export async function masterPid() {
   return (await desktopSshProcesses()).find(
-    ([, args]) => args.includes(" -M -N ") && args.endsWith(`-- ${alias}`),
+    ([, args]) =>
+      / -M -N | -N -T -D /.test(args) && args.endsWith(`-- ${alias}`),
   )?.[0];
 }

@@ -190,7 +190,8 @@ async function desktopSsh() {
 
 const masterPid = async (host) =>
   (await desktopSsh()).find(
-    ([, args]) => args.includes(" -M -N ") && args.endsWith(`-- ${host}`),
+    ([, args]) =>
+      / -M -N | -N -T -D /.test(args) && args.endsWith(`-- ${host}`),
   )?.[0];
 
 function watcher(ctx) {
