@@ -43,6 +43,8 @@ describe("ReviewStackSelector", () => {
         relation: "current",
         pullRequestNumber: 20,
         pullRequestUrl: "https://github.com/o/r/pull/20",
+        base: null,
+        subject: null,
         reviewUuid: "22222222-2222-4222-8222-222222222222",
         reviewTitle: "Review B",
       },
@@ -51,6 +53,8 @@ describe("ReviewStackSelector", () => {
         relation: "later",
         pullRequestNumber: 30,
         pullRequestUrl: "https://github.com/o/r/pull/30",
+        base: null,
+        subject: null,
         reviewUuid: "11111111-1111-4111-8111-111111111111",
         reviewTitle: "Review C",
       },
@@ -59,6 +63,8 @@ describe("ReviewStackSelector", () => {
         relation: "later",
         pullRequestNumber: 40,
         pullRequestUrl: "https://github.com/o/r/pull/40",
+        base: null,
+        subject: null,
         reviewUuid: null,
         reviewTitle: null,
       },
@@ -114,6 +120,57 @@ describe("ReviewStackSelector", () => {
     });
     expect(post).toHaveBeenCalledTimes(1);
   });
+  it("creates an empty review for a local branch without one, against the branch below", async () => {
+    const post = vi.fn<ReviewCanvasBridge["post"]>(async () => ({ ok: true }));
+    const created = "33333333-3333-4333-8333-333333333333";
+    const session = testReviewSession({}, { post });
+
+    const createBranchReview = vi.fn<
+      (branch: string, base: string, title: string) => Promise<string>
+    >(async () => created);
+
+    session.review!.headBranch = "a";
+    session.review!.createBranchReview = createBranchReview;
+    session.review!.stack = async () =>
+      ["a", "b"].map((branch, index) => ({
+        branch,
+        relation: index === 0 ? "current" : "later",
+        pullRequestNumber: null,
+        pullRequestUrl: null,
+        base: index === 0 ? "fork" : "a",
+        subject: `Add ${branch}`,
+        reviewUuid: null,
+        reviewTitle: null,
+      }));
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewStackSelector />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
+      );
+    });
+
+    await vi.waitFor(() => expect(container.textContent).toContain("1/2"));
+    await openMenu(container);
+    await act(async () => {
+      container
+        .querySelector<HTMLButtonElement>(
+          '[role=menu] button[data-relation="later"]',
+        )
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    expect(createBranchReview).toHaveBeenCalledWith("b", "a", "Add b");
+    expect(post).toHaveBeenCalledWith({
+      name: "openReview",
+      args: { reviewUuid: created, active: true },
+    });
+  });
   it("never shows a slower stack read from a version left behind", async () => {
     const reads: ((layers: ReviewStackLayer[]) => void)[] = [];
     const session = testReviewSession();
@@ -129,6 +186,8 @@ describe("ReviewStackSelector", () => {
         relation: index === 0 ? "current" : "later",
         pullRequestNumber,
         pullRequestUrl: `https://github.com/o/r/pull/${pullRequestNumber}`,
+        base: null,
+        subject: null,
         reviewUuid: null,
         reviewTitle: `${title} ${pullRequestNumber}`,
       }));

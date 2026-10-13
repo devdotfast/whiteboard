@@ -58,20 +58,28 @@ export function ReviewStackSelector(): ReactElement | null {
     layers.findIndex((layer) => layer.relation === "current"),
   );
 
-  const openLayer = (layer: ReviewStackLayer, event: OpenEvent) => {
-    if (!layer.reviewUuid) return;
+  const openLayer = async (layer: ReviewStackLayer, event: OpenEvent) => {
+    if (!openable(layer)) return;
     setOpen(false);
+
+    const active = !(
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.button === 1
+    );
+
+    const reviewUuid =
+      layer.reviewUuid ??
+      (await review.createBranchReview(
+        layer.branch,
+        layer.base!,
+        layer.subject ?? layer.branch,
+      ));
+
     void session.surface.post({
       name: "openReview",
-      args: {
-        reviewUuid: layer.reviewUuid,
-        active: !(
-          event.metaKey ||
-          event.ctrlKey ||
-          event.shiftKey ||
-          event.button === 1
-        ),
-      },
+      args: { reviewUuid, active },
     });
   };
 
@@ -115,7 +123,11 @@ export function ReviewStackSelector(): ReactElement | null {
             <span {...stylex.props(styles.branch)}>main</span>
           </div>
           {layers.map((layer) => (
-            <LayerRow key={layer.branch} layer={layer} onOpen={openLayer} />
+            <LayerRow
+              key={layer.branch}
+              layer={layer}
+              onOpen={(layer, event) => void openLayer(layer, event)}
+            />
           ))}
         </div>
       )}
@@ -126,6 +138,10 @@ export function ReviewStackSelector(): ReactElement | null {
 const label = (layer: ReviewStackLayer) =>
   layer.pullRequestNumber ? `PR #${layer.pullRequestNumber}` : layer.branch;
 
+/** A pull request opens only its existing review; a local branch can get one. */
+const openable = (layer: ReviewStackLayer) =>
+  Boolean(layer.reviewUuid || layer.base);
+
 function LayerRow({
   layer,
   onOpen,
@@ -134,16 +150,14 @@ function LayerRow({
   onOpen: (layer: ReviewStackLayer, event: OpenEvent) => void;
 }): ReactElement {
   const current = layer.relation === "current";
-  const disabled = !current && !layer.reviewUuid;
+  const disabled = !current && !openable(layer);
+  const empty = !current && !layer.reviewUuid;
 
   const title = layer.pullRequestNumber
     ? `PR #${layer.pullRequestNumber}${layer.reviewTitle ? ` · ${layer.reviewTitle}` : ""}`
-    : (layer.reviewTitle ?? layer.branch);
+    : (layer.reviewTitle ?? layer.subject ?? layer.branch);
 
-  const detail = [
-    title !== layer.branch && layer.branch,
-    disabled && "No session",
-  ]
+  const detail = [title !== layer.branch && layer.branch, empty && "No session"]
     .filter(Boolean)
     .join(" · ");
 
@@ -192,7 +206,9 @@ function LayerRow({
       title={
         disabled
           ? "No generated session exists for this pull request"
-          : "Open session (Cmd/Ctrl-click to open in the background)"
+          : empty
+            ? "Create a session for this branch (Cmd/Ctrl-click to open in the background)"
+            : "Open session (Cmd/Ctrl-click to open in the background)"
       }
       onClick={(event) => onOpen(layer, event)}
       onAuxClick={(event) => {

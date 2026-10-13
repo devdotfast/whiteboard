@@ -69,6 +69,8 @@ describe("resolveReviewStackLayers", () => {
         branch: "a",
         pullRequestNumber: 10,
         pullRequestUrl: "https://github.com/o/r/pull/10",
+        base: null,
+        subject: null,
         reviewUuid: reviewA.reviewId,
         reviewTitle: "Review A",
         relation: "earlier",
@@ -77,6 +79,8 @@ describe("resolveReviewStackLayers", () => {
         branch: "b",
         pullRequestNumber: 20,
         pullRequestUrl: "https://github.com/o/r/pull/20",
+        base: null,
+        subject: null,
         reviewUuid: reviewB.reviewId,
         reviewTitle: "Review B",
         relation: "current",
@@ -85,6 +89,8 @@ describe("resolveReviewStackLayers", () => {
         branch: "c",
         pullRequestNumber: 30,
         pullRequestUrl: "https://github.com/o/r/pull/30",
+        base: null,
+        subject: null,
         reviewUuid: null,
         reviewTitle: null,
         relation: "later",
@@ -93,6 +99,8 @@ describe("resolveReviewStackLayers", () => {
         branch: "d",
         pullRequestNumber: 40,
         pullRequestUrl: "https://github.com/o/r/pull/40",
+        base: null,
+        subject: null,
         reviewUuid: null,
         reviewTitle: null,
         relation: "later",
@@ -181,6 +189,8 @@ describe("resolveReviewStackLayers", () => {
         branch: "feature",
         pullRequestNumber: 20,
         pullRequestUrl: "https://github.com/o/r/pull/20",
+        base: null,
+        subject: null,
         reviewUuid: null,
         reviewTitle: null,
         relation: "current",
@@ -319,7 +329,13 @@ describe("local stacks", () => {
   });
 
   const rows = (layers: ReviewStackLayer[]) =>
-    layers.map((layer) => [layer.branch, layer.relation, layer.reviewUuid]);
+    layers.map((layer) => [
+      layer.branch,
+      layer.relation,
+      layer.reviewUuid,
+      layer.base,
+      layer.subject,
+    ]);
 
   it("chains reviews through the bases they name, following the newest above", async () => {
     const root = await repository();
@@ -342,9 +358,27 @@ describe("local stacks", () => {
     );
 
     expect(rows(layers)).toEqual([
-      ["a", "earlier", "a"],
-      ["b", "current", "b"],
-      ["c", "later", "c"],
+      ["a", "earlier", "a", null, null],
+      ["b", "current", "b", null, null],
+      ["c", "later", "c", null, null],
+    ]);
+  });
+
+  it("offers an unreviewed base branch from its fork point", async () => {
+    const root = await repository();
+
+    const main = execFileSync("git", ["rev-parse", "main"], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim();
+
+    const b = review("b", "b", "a");
+
+    expect(
+      rows(await resolveReviewStackLayers(b, [b], { repositoryPath: root })),
+    ).toEqual([
+      ["a", "earlier", null, main, "Start a"],
+      ["b", "current", "b", null, null],
     ]);
   });
 });

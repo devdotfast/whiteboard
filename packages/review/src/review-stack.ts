@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { defaultBranch } from "@dev.fast/local-vcs";
+import { defaultBranch, git } from "@dev.fast/local-vcs";
 import type {
   ReviewApiSummary,
   ReviewStackLayer,
@@ -34,6 +34,8 @@ interface StackEntry {
   branch: string;
   pullRequestNumber: number | null;
   pullRequestUrl: string | null;
+  base: string | null;
+  subject: string | null;
   current: boolean;
   reviews: readonly Candidate[];
 }
@@ -67,6 +69,8 @@ export async function resolveReviewStackLayers(
       branch: entry.branch,
       pullRequestNumber: entry.pullRequestNumber,
       pullRequestUrl: entry.pullRequestUrl,
+      base: entry.base,
+      subject: entry.subject,
       reviewUuid: review?.reviewId ?? null,
       reviewTitle: review?.title ?? null,
       relation:
@@ -117,6 +121,8 @@ async function gitHubStack(
     branch: pr.head.ref,
     pullRequestNumber: pr.number,
     pullRequestUrl: `${repoKey}/pull/${pr.number}`,
+    base: null,
+    subject: null,
     current: pr.number === pullRequestNumber,
     reviews: reviews.filter(
       (candidate) =>
@@ -174,7 +180,15 @@ async function localStack(
   )
     branches.push(child);
 
-  if (!latest("branch", branches[0]!)) branches.shift();
+  const bottom = branches[0]!;
+
+  // A base nobody reviewed gets a row; a new review of it starts at its fork.
+  const start =
+    latest("branch", bottom) || !main
+      ? null
+      : await forkPoint(repositoryPath, main.commit, bottom);
+
+  if (!latest("branch", bottom) && !start) branches.shift();
 
   if (branches.length < 2) return [];
 
@@ -182,9 +196,32 @@ async function localStack(
     branch,
     pullRequestNumber: null,
     pullRequestUrl: null,
+    base: (branch === bottom && start?.base) || null,
+    subject: (branch === bottom && start?.subject) || null,
     current: branch === current,
     reviews: inGroup.filter((review) => review.origin?.branch === branch),
   }));
+}
+
+/** Where a local branch left `main`, and its oldest commit's subject. */
+async function forkPoint(repositoryPath: string, main: string, branch: string) {
+  const ref = `refs/heads/${branch}`;
+
+  const fork = await git(repositoryPath, ["merge-base", main, ref], {
+    allowFailure: true,
+  });
+
+  if (!fork.ok) return null;
+
+  const base = fork.stdout.trim();
+
+  const log = await git(
+    repositoryPath,
+    ["log", "--reverse", "--format=%s", `${base}..${ref}`],
+    { allowFailure: true },
+  );
+
+  return { base, subject: log.stdout.split("\n")[0] || null };
 }
 
 async function defaultRunGitHubApi(

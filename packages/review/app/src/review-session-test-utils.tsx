@@ -74,6 +74,7 @@ export function testReviewSession(
       updatedAtMs: Date.now(),
       traces: new Map(),
       stack: async () => [],
+      createBranchReview: async () => "",
       dismiss: async () => {},
     },
   };

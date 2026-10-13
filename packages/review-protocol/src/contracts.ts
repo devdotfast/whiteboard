@@ -931,6 +931,10 @@ export const ReviewStackLayerSchema = z.strictObject({
   branch: requiredString,
   pullRequestNumber: positiveInteger.nullable(),
   pullRequestUrl: absoluteUrlSchema.nullable(),
+  /** Where a new review of an unreviewed local branch starts. */
+  base: requiredString.nullable(),
+  /** A local branch's oldest commit subject. */
+  subject: requiredString.nullable(),
   reviewUuid: z.uuid({ error: "must be a UUID" }).nullable(),
   reviewTitle: stringAllowEmpty.nullable(),
   relation: z.enum(["earlier", "current", "later"]),

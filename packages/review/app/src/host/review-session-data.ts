@@ -18,5 +18,11 @@ export interface ReviewSessionData {
   pullRequestUrl?: string;
   traces: ReadonlyMap<string, LoadedAgentTrace>;
   stack(signal: AbortSignal): Promise<ReviewStackLayer[]>;
+  /** Creates an empty review of `branch` against `base` and returns its id. */
+  createBranchReview(
+    branch: string,
+    base: string,
+    title: string,
+  ): Promise<string>;
   dismiss(): Promise<void>;
 }

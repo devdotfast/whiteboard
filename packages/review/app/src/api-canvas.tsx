@@ -317,6 +317,25 @@ export function ApiCanvas({
               signal,
             ),
           ).layers,
+        createBranchReview: async (
+          branch: string,
+          base: string,
+          title: string,
+        ) =>
+          (
+            await client.post<{ reviewId: string }>("/commands", {
+              operation: {
+                type: "create",
+                title,
+                target: {
+                  kind: "commits",
+                  repositoryId: snapshot.pins!.repositoryId,
+                  head: branch,
+                  base,
+                },
+              },
+            })
+          ).reviewId,
         dismiss: async () => {
           await client.post("/commands", {
             operation: {
