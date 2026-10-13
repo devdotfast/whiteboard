@@ -54,7 +54,8 @@ async function expand(pattern: string, includeDir: string): Promise<string[]> {
 	const path = pattern.startsWith("~/") ? join(homedir(), pattern.slice(2)) : isAbsolute(pattern) ? pattern : join(includeDir, pattern);
 	const files: string[] = [];
 	try {
-		for await (const file of glob(path)) files.push(file);
+		// A glob pattern escapes with backslashes; Windows paths take forward slashes too.
+		for await (const file of glob(process.platform === "win32" ? path.replaceAll("\\", "/") : path)) files.push(file);
 	} catch {
 		return [];
 	}

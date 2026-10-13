@@ -63,6 +63,7 @@ import { installRemote } from "./remote/reviewRemoteInstaller.js";
 import { readRemoteInstallScript } from "./remote/reviewRemoteInstallScript.js";
 import { createSshAskpass } from "./remote/reviewSshAskpass.js";
 import {
+  reviewSshBinary,
   reviewSshConfigPath,
   reviewSshControlDirectory,
   reviewSshSharesConnections,
@@ -357,11 +358,19 @@ export class ReviewDesktopHost extends Disposable {
   private startRemoteHosts(
     shellEnvironment: () => Promise<NodeJS.ProcessEnv>,
   ): void {
-    // SSH hosts need ControlMaster sockets, which Windows OpenSSH lacks.
-    if (this.disposed || process.platform === "win32") return;
+    if (this.disposed) return;
     let version: Promise<string> | undefined;
+    const ssh = reviewSshBinary();
     const manager = new ReviewRemoteHosts({
-      spawn: (args, options) => spawn("ssh", args, options),
+      // A detached ssh gets a console window on Windows; direct sessions never prompt there.
+      spawn: (args, options) =>
+        spawn(
+          ssh,
+          args,
+          process.platform === "win32"
+            ? { ...options, detached: false, windowsHide: true }
+            : options,
+        ),
       controlDirectory: reviewSshSharesConnections()
         ? reviewSshControlDirectory()
         : undefined,

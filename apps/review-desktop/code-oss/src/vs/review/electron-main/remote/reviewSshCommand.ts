@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { chmod, lstat, mkdir } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, win32 } from "node:path";
 
 import { validateSshAlias } from "../../common/reviewSshAlias.js";
 
@@ -30,6 +31,13 @@ export interface ReviewSshSession {
 
 export function reviewSshSharesConnections(env: NodeJS.ProcessEnv = process.env, platform = process.platform): boolean {
 	return platform !== "win32" && !(env.VSCODE_DEV && env[REVIEW_SSH_DIRECT_ENV] === "1");
+}
+
+/** On Windows, the inbox Win32-OpenSSH rather than an MSYS ssh, such as Git for Windows', earlier on PATH. */
+export function reviewSshBinary(env: NodeJS.ProcessEnv = process.env, platform = process.platform, exists = existsSync): string {
+	if (platform !== "win32") return "ssh";
+	const inbox = win32.join(env.SystemRoot ?? "C:\\Windows", "System32", "OpenSSH", "ssh.exe");
+	return exists(inbox) ? inbox : "ssh";
 }
 
 /** Connection sharing needs Unix sockets and a uid; Windows has neither. */

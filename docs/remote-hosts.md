@@ -27,8 +27,20 @@ config apply to Whiteboard's connections too.
 - An OpenSSH server that allows TCP forwarding. See
   [TCP forwarding](#tcp-forwarding).
 
-Your laptop needs macOS or Linux with the OpenSSH client. A Windows laptop is
-not supported yet.
+Your laptop needs the OpenSSH client. On Windows, that is the built-in
+OpenSSH Client, with two limits:
+
+- Whiteboard cannot show SSH prompts there. Use a key without a passphrase, or
+  load it into the `ssh-agent` service:
+
+  ```powershell
+  Get-Service ssh-agent | Set-Service -StartupType Automatic -PassThru | Start-Service
+  ssh-add
+  ```
+
+- Run `ssh <alias>` once in a terminal to verify and accept the host's key.
+
+Each command Desktop runs on a Windows laptop opens its own SSH connection.
 
 ## Add a host
 
@@ -50,8 +62,8 @@ remote is deleted unless you check
 The hosts are kept in the setting `review.remote.hosts`, a list of aliases.
 Only you can change it: a repository or a remote never adds a host.
 
-If `ssh` asks for a password, a passphrase or a host key confirmation,
-Whiteboard shows the prompt in its window. Your answer goes to `ssh` and is
+On macOS and Linux, if `ssh` asks for a password, a passphrase or a host key
+confirmation, Whiteboard shows the prompt in its window. Your answer goes to `ssh` and is
 never stored.
 
 ## How Desktop installs Whiteboard
