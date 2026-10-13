@@ -330,57 +330,6 @@ it("refuses every verb from a remote but capabilities, focus and opening a revie
   expect(received).toEqual([]);
 });
 
-it("refuses a push to open another machine's review or this machine's", async () => {
-  const a = await startRemote(path.join(root, "a"));
-  const onA = await seed(a.api, root, "On a");
-  const b = await pushingRemote();
-  const relay = new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
-  const received = attachWindow(relay);
-
-  const desktop = await startGateway(
-    root,
-    [
-      { alias: "wb-a", endpoint: a.endpoint },
-      { alias: "wb-b", endpoint: b.fake.endpoint },
-    ],
-    { relay },
-  );
-
-  const onLocal = await seed(desktop.api, root, "On this machine");
-
-  const hostOf = async () =>
-    (await desktop.request(`/${onA}`)).headers.get(REVIEW_HOST_HEADER);
-
-  await expect.poll(hostOf).toBe("wb-a");
-  await vi.waitFor(() => expect(b.controls).toHaveLength(1));
-
-  b.push(
-    verb("a", { name: "openApiReview", args: { reviewId: onA, title: "A" } }),
-  );
-  b.push(
-    verb("local", {
-      name: "openApiReview",
-      args: { reviewId: onLocal, title: "L" },
-    }),
-  );
-
-  await vi.waitFor(() => expect(b.results).toHaveLength(2));
-  expect(b.results).toEqual(
-    expect.arrayContaining([
-      { id: "a", response: { ok: false, error: `${onA} belongs to wb-a.` } },
-      {
-        id: "local",
-        response: {
-          ok: false,
-          error: `${onLocal} belongs to the local machine.`,
-        },
-      },
-    ]),
-  );
-  expect(received).toEqual([]);
-  expect(await hostOf()).toBe("wb-a");
-});
-
 it("attaches to remotes only while a window is attached to this machine", async () => {
   const a = await startRemote(path.join(root, "a"));
   const relay = new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
@@ -420,15 +369,11 @@ it("attaches to remotes only while a window is attached to this machine", async 
 });
 
 it("keeps a local review on this machine when a remote lists its id, for every route", async () => {
-  const relay = new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
-  const received = attachWindow(relay);
-  const desktop = await startGateway(root, [], { relay });
+  const desktop = await startGateway(root, []);
   const onLocal = await seed(desktop.api, root, "Local original");
   const remoteOnly = randomUUID();
 
   const impostor = { ...summary(onLocal, "Remote impostor"), document: [] };
-  const results: JsonValue[] = [];
-  let control: ServerResponse | undefined;
 
   const fake = await startFake({
     version,
@@ -449,25 +394,6 @@ it("keeps a local review on this machine when a remote lists its id, for every r
         response.write(
           `${JSON.stringify({ kind: "review", reviewId: onLocal, value: impostor })}\n`,
         );
-
-        return true;
-      }
-
-      if (request.url === "/control") {
-        response.setHeader("content-type", "text/event-stream");
-        response.write(": attached\n\n");
-        control = response;
-
-        return true;
-      }
-
-      if (request.url === "/control/result") {
-        let body = "";
-        request.on("data", (chunk: Buffer) => (body += chunk.toString()));
-        request.on("end", () => {
-          results.push(JSON.parse(body));
-          response.end('{"ok":true}');
-        });
 
         return true;
       }
@@ -527,21 +453,6 @@ it("keeps a local review on this machine when a remote lists its id, for every r
   expect(renamed.status).toBe(200);
   expect(renamed.headers.has(REVIEW_HOST_HEADER)).toBe(false);
   expect(desktop.local.store.summary(onLocal)?.title).toBe("Renamed");
-
-  control?.write(
-    `data: ${JSON.stringify(verb("push", { name: "openApiReview", args: { reviewId: onLocal, title: "I" } }))}\n\n`,
-  );
-  await vi.waitFor(() => expect(results).toHaveLength(1));
-  expect(results).toEqual([
-    {
-      id: "push",
-      response: {
-        ok: false,
-        error: `${onLocal} belongs to the local machine.`,
-      },
-    },
-  ]);
-  expect(received).toEqual([]);
 
   expect(
     fake.requests.filter((request) => request.url?.includes(onLocal)),

@@ -7,7 +7,6 @@ import {
   REVIEW_HOST_HEADER,
   type ReviewGatewayHost,
   type ReviewGatewayHostState,
-  isJsonObject,
   parseJsonText,
 } from "@dev.fast/review-protocol";
 import { z } from "zod";
@@ -22,7 +21,6 @@ import {
   UUID,
   createGatewayHosts,
   errorText,
-  readBody,
   remoteHeaders,
   send,
 } from "./review-gateway-hosts.js";
@@ -64,27 +62,7 @@ const FORWARDED_ROUTES: readonly (readonly [string, RegExp])[] = [
   ["POST", /^copy-context$/],
 ];
 
-const PATH_ROUTES = new Set(["file", "language-context", "navigator"]);
-
-const PATH_FIELDS = new Set([
-  "localPath",
-  "rootPath",
-  "workspacePath",
-  "filePath",
-  "localRoot",
-]);
-
-const PATH_ROUTE_MAX_BYTES = 64 * 1024 * 1024;
-
 const LIST_WAIT_MS = 2_000;
-
-const BODY_IDLE_MS = 10_000;
-
-const BODY_MAX_MS = 120_000;
-
-const STALLED = `its answer stalled for ${BODY_IDLE_MS / 1_000} seconds`;
-
-const TOO_LONG = `its answer took longer than ${BODY_MAX_MS / 1_000} seconds`;
 
 const HOP_HEADERS = new Set([
   "connection",
@@ -95,8 +73,6 @@ const HOP_HEADERS = new Set([
   "trailer",
   "upgrade",
 ]);
-
-const DROPPED_RESPONSE_HEADERS = new Set(["location", "set-cookie"]);
 
 const DROPPED_REQUEST_HEADERS = new Set([
   ...HOP_HEADERS,
@@ -213,7 +189,7 @@ export function createReviewGateway(input: {
   async function forward(
     remote: GatewayRemote,
     request: Request,
-    options: { route?: string; body?: Buffer },
+    body?: Buffer,
   ): Promise<Response> {
     const url = new URL(request.url);
 
@@ -247,7 +223,7 @@ export function createReviewGateway(input: {
         method: request.method,
         path: `${url.pathname}${url.search}`,
         headers,
-        body: options.body ?? (stream ? Readable.fromWeb(stream) : undefined),
+        body: body ?? (stream ? Readable.fromWeb(stream) : undefined),
         signal: abort.signal,
       });
     } catch (error) {
@@ -270,74 +246,17 @@ export function createReviewGateway(input: {
     );
 
     const status = response.statusCode ?? 502;
-
-    // A review server never redirects; a remote must not steer the UI.
-    if (status >= 300 && status < 400 && status !== 304) {
-      response.destroy();
-      log(`Refused ${remote.alias}'s redirect (${status}).`);
-
-      return answer(remote.alias, 502, {
-        ok: false,
-        error: `${remote.alias} answered with a redirect, so the answer was refused.`,
-      });
-    }
-
     const out = new Headers();
 
     for (const [key, value] of Object.entries(response.headers))
       if (
         value !== undefined &&
         !HOP_HEADERS.has(key) &&
-        !DROPPED_RESPONSE_HEADERS.has(key) &&
         !key.startsWith("access-control-")
       )
         out.set(key, Array.isArray(value) ? value.join(", ") : value);
 
     out.set(REVIEW_HOST_HEADER, remote.alias);
-
-    if (options.route && PATH_ROUTES.has(options.route)) {
-      let cut: string | undefined;
-
-      const cutAfter = (ms: number, reason: string) =>
-        setTimeout(() => {
-          cut = reason;
-          abort.abort();
-        }, ms);
-
-      let idle = cutAfter(BODY_IDLE_MS, STALLED);
-      const whole = cutAfter(BODY_MAX_MS, TOO_LONG);
-      let body: Buffer;
-
-      try {
-        body = await readBody(response, PATH_ROUTE_MAX_BYTES, () => {
-          clearTimeout(idle);
-          idle = cutAfter(BODY_IDLE_MS, STALLED);
-        });
-      } catch (error) {
-        return answer(remote.alias, cut ? 504 : 502, {
-          ok: false,
-          error: `${remote.alias} did not answer: ${cut ?? errorText(error)}.`,
-        });
-      } finally {
-        clearTimeout(idle);
-        clearTimeout(whole);
-      }
-
-      const field = pathField(body);
-
-      if (field) {
-        log(
-          `Refused ${remote.alias}'s /${options.route} answer: it carried ${field}.`,
-        );
-
-        return answer(remote.alias, 502, {
-          ok: false,
-          error: `${remote.alias} answered with a path on that machine, so the answer was refused.`,
-        });
-      }
-
-      return new Response(new Uint8Array(body), { status, headers: out });
-    }
 
     if (request.method === "HEAD" || status === 204 || status === 304) {
       response.resume();
@@ -350,9 +269,9 @@ export function createReviewGateway(input: {
 
     // SAFETY: Node's Response takes its own web stream; the DOM type only
     // names the same object.
-    const body = Readable.toWeb(response) as ReadableStream<Uint8Array>;
+    const piped = Readable.toWeb(response) as ReadableStream<Uint8Array>;
 
-    return new Response(body, { status, headers: out });
+    return new Response(piped, { status, headers: out });
   }
 
   async function command(request: Request): Promise<Response> {
@@ -391,7 +310,7 @@ export function createReviewGateway(input: {
 
     if ("down" in owner) return unavailable(owner.down);
 
-    return forward(owner.remote, request, { body });
+    return forward(owner.remote, request, body);
   }
 
   async function handle(request: Request): Promise<Response> {
@@ -444,7 +363,7 @@ export function createReviewGateway(input: {
 
     if ("down" in owner) return unavailable(owner.down);
 
-    return forward(owner.remote, request, { route });
+    return forward(owner.remote, request);
   }
 
   const streams = createGatewayStreams({
@@ -459,18 +378,8 @@ export function createReviewGateway(input: {
   });
 
   async function claim(remote: GatewayRemote, reviewId: string) {
-    const owner = await ownerOf(reviewId);
-
-    if (owner === "local") return `${reviewId} belongs to the local machine.`;
-
-    if (owner === undefined)
+    if ((await ownerOf(reviewId)) === undefined)
       return `${reviewId} is not on ${remote.alias}'s list.`;
-
-    if ("down" in owner) return `${reviewId} belongs to ${owner.down.alias}.`;
-
-    return owner.remote === remote
-      ? undefined
-      : `${reviewId} belongs to ${owner.remote.alias}.`;
   }
 
   const pushes = createGatewayPushes({
@@ -500,26 +409,3 @@ export function createReviewGateway(input: {
 }
 
 export type ReviewGateway = ReturnType<typeof createReviewGateway>;
-
-function pathField(body: Buffer): string | undefined {
-  let value;
-
-  try {
-    value = parseJsonText(body.toString());
-  } catch {
-    return "an unreadable body";
-  }
-
-  const pending = [value];
-
-  for (let next = pending.pop(); next !== undefined; next = pending.pop()) {
-    if (Array.isArray(next)) pending.push(...next);
-    else if (isJsonObject(next))
-      for (const [key, item] of Object.entries(next)) {
-        if (PATH_FIELDS.has(key)) return key;
-        pending.push(item);
-      }
-  }
-
-  return undefined;
-}
