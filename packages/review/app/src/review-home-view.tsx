@@ -37,6 +37,7 @@ import {
   SortIcon,
 } from "./icons";
 import { homeGroupMarker, homeRowMarker } from "./markers.stylex";
+import { useNotify } from "./notify";
 import { OptionMenu } from "./option-menu";
 import type { ReviewFindHost } from "./review-find";
 import {
@@ -67,7 +68,6 @@ import {
 } from "./review-home-model";
 import { styles } from "./review-home-styles";
 import { withClass } from "./stylex-props";
-import { useToast } from "./toast";
 import { Button, IconButton, buttonStyles } from "./ui/button";
 import { checkboxStyles } from "./ui/checkbox";
 import { EmptyState } from "./ui/empty-state";
@@ -148,8 +148,7 @@ export function ReviewHome({
   const filterTooltip = useTooltip("Filter", { instant: true });
   const sortTooltip = useTooltip("Sort", { instant: true });
   const ui = useContext(CanvasUiContext);
-  const { showToast, toast: copyToast } = useToast(3000);
-  const { showToast: showNotice, toast: noticeToast } = useToast(8000);
+  const notify = useNotify();
 
   const [filterState, setFilterState] = useState({
     filters: defaultHomeFilters,
@@ -249,8 +248,8 @@ export function ReviewHome({
   }));
 
   useEffect(() => {
-    if (notice) return showNotice(describeNotice(notice));
-  }, [notice, showNotice]);
+    if (notice) return notify(describeNotice(notice));
+  }, [notice, notify]);
 
   // Hold successful changes until the catalog acknowledges them; allow later reimports.
   useEffect(() => {
@@ -1293,7 +1292,7 @@ export function ReviewHome({
                   onClick={async () => {
                     const copied = await copyText("founders@dev.fast");
 
-                    showToast(
+                    notify(
                       copied
                         ? {
                             kind: "success",
@@ -1410,8 +1409,6 @@ export function ReviewHome({
           </Button>
         </Dialog>
       )}
-      {copyToast}
-      {noticeToast}
     </main>
   );
 }

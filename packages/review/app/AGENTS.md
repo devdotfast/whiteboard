@@ -3,7 +3,7 @@
 Read `README.md` here and "UI controls" in `apps/review-desktop/README.md` first.
 
 - Look for an existing piece before writing one: `ui/`, `icons.tsx`,
-  `format.ts`, `option-menu.tsx`, `use-anchored-popover.ts`, `toast.tsx`.
+  `format.ts`, `option-menu.tsx`, `use-anchored-popover.ts`, `notify.ts`.
   Extend it with a variant rather than forking a local copy. In-page popovers
   use `useAnchoredPopover` with `surfaceStyles.popover` and `menuStyles.popover`.
 - Menus, confirmations, notifications and tooltips go through the host. Reach

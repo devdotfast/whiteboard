@@ -722,7 +722,7 @@ describe("Home interactions", () => {
     await key("Backspace", { metaKey: true });
     expect(onTrash).toHaveBeenCalledTimes(2);
     expect(titles()).toEqual([]);
-    await click("Undo");
+    await act(async () => host.runAction("Undo"));
     expect(onRestore).toHaveBeenCalledTimes(2);
     expect(titles()).toHaveLength(2);
     await render([summary("Old", { trashedAt: "2026-10-01" })], {
@@ -838,9 +838,9 @@ describe("Home interactions", () => {
     await key("Backspace", { metaKey: true });
     expect(onDelete).toHaveBeenCalledOnce();
     expect(titles()).toEqual([]);
-    expect(container.querySelector('[aria-label="Undo"]')).toBeNull();
+    expect(host.notification?.actions).toBeUndefined();
   });
-  it("undoes only the toast batch with Cmd+Z, including Restore, and stops after dismissal", async () => {
+  it("undoes only the notified batch with Cmd+Z, including Restore, and stops after dismissal", async () => {
     const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
         async () => {},
       ),
@@ -862,7 +862,7 @@ describe("Home interactions", () => {
     expect(titles()).toEqual(["One", "Two"]);
     await select("One");
     await key("Backspace", { metaKey: true });
-    await click("View Trash");
+    await act(async () => host.runAction("View Trash"));
     await select("One");
     await key("r");
     expect(titles()).toEqual([]);
@@ -870,35 +870,10 @@ describe("Home interactions", () => {
     expect(titles()).toEqual(["One"]);
     await key("a", { metaKey: true });
     await key("r");
-    await click("Dismiss notification");
+    await act(async () => host.dismiss());
     const count = onTrash.mock.calls.length;
     await key("z", { metaKey: true });
     expect(onTrash).toHaveBeenCalledTimes(count);
-  });
-  it("stops intercepting Cmd+Z when the toast expires", async () => {
-    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-
-    try {
-      const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
-        async () => {},
-      );
-
-      const onRestore = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
-        async () => {},
-      );
-
-      await render([summary("One")], { onTrash, onRestore });
-      await key("Backspace", { metaKey: true }, button("Open One"));
-      expect(onTrash).toHaveBeenCalledOnce();
-      await act(async () => {
-        await vi.advanceTimersByTimeAsync(8001);
-      });
-      expect(container.querySelector('[aria-label="Undo"]')).toBeNull();
-      await key("z", { metaKey: true });
-      expect(onRestore).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
   });
   it("restores failed deletions and keeps successful ones hidden until catalog acknowledgement", async () => {
     const deletion = Promise.withResolvers<void>();

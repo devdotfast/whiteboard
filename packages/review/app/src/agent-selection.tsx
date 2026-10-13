@@ -23,11 +23,11 @@ import { controlStyles } from "./controls-styles";
 import { copyAgentContext } from "./copy-agent-context";
 import { useReviewSession } from "./host/review-session";
 import { ChatIcon, ChevronDownIcon, CopyIcon } from "./icons";
+import { useNotify } from "./notify";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useOptionalReviewPanelStore } from "./review-panel";
 import { fontSize, layer } from "./scale.stylex";
 import { themeStyles } from "./theme-styles";
-import { useToast } from "./toast";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { Shortcut } from "./ui/kbd";
@@ -91,7 +91,7 @@ export function AgentSelectionProvider({
     return () => window.removeEventListener("pointerdown", remember, true);
   }, []);
 
-  const { toast, showToast: setToast } = useToast(4_000);
+  const notify = useNotify();
 
   const select = useCallback<Select>(
     (value) => {
@@ -193,13 +193,13 @@ export function AgentSelectionProvider({
 
     try {
       await copyAgentContext(session, { ...payload, revision });
-      setToast({
+      notify({
         kind: "success",
         text: "Selection copied to clipboard. Paste into your agent to chat about it.",
       });
     } catch {
       setCopiedSelection(null);
-      setToast({
+      notify({
         kind: "error",
         text: "Could not copy selection. Please try again.",
       });
@@ -363,7 +363,6 @@ export function AgentSelectionProvider({
                 </div>,
                 selection.anchorContainer ?? overlayHost,
               )}
-            {toast}
           </>,
           overlayHost,
         )}

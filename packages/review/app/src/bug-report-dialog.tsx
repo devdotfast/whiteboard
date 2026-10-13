@@ -24,9 +24,9 @@ import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { BugIcon } from "./icons";
 import { appMarker } from "./markers.stylex";
+import { useNotify } from "./notify";
 import { fontSize, fontWeight, layer, radius } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
-import { useToast } from "./toast";
 import { tokens } from "./tokens.stylex";
 import { useTutorial } from "./tutorial-context";
 import { captureUiEvent, clientErrorName } from "./ui-telemetry";
@@ -50,7 +50,7 @@ export function BugReportControl({
   const [dropActive, setDropActive] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [sending, setSending] = useState(false);
-  const { toast, showToast: setToast } = useToast();
+  const notify = useNotify();
   const tooltip = useTooltip("Report a bug");
   const capturePending = useRef(false);
   const descriptionBytes = new TextEncoder().encode(description).byteLength;
@@ -106,7 +106,7 @@ export function BugReportControl({
         captureUiEvent(session, "bug_report_send_failed", {
           error_name: clientErrorName(new Error()),
         });
-        setToast({
+        notify({
           kind: "error",
           text:
             response.status === 429
@@ -122,7 +122,7 @@ export function BugReportControl({
       const result = parseReviewBugReportResponse(body);
 
       if (!result.ok) throw new Error(result.error);
-      setToast({
+      notify({
         kind: "success",
         text: "Bug report was sent.",
       });
@@ -132,7 +132,7 @@ export function BugReportControl({
       captureUiEvent(session, "bug_report_send_failed", {
         error_name: clientErrorName(error),
       });
-      setToast({
+      notify({
         kind: "error",
         text: "The report could not be sent. Try again.",
       });
@@ -148,7 +148,7 @@ export function BugReportControl({
       if (!normalized) throw new Error("Screenshot could not be decoded.");
       setScreenshot(normalized);
     } catch (error) {
-      setToast({
+      notify({
         kind: "error",
         text:
           error instanceof ScreenshotTooLargeError
@@ -172,7 +172,7 @@ export function BugReportControl({
     const image = imageFileFromDataTransfer(event.dataTransfer);
 
     if (!image) {
-      setToast({
+      notify({
         kind: "error",
         text: "That image could not be attached. Use a PNG, JPEG, or WebP image.",
       });
@@ -345,7 +345,6 @@ export function BugReportControl({
           </section>
         </div>
       )}
-      {toast}
     </>
   );
 }

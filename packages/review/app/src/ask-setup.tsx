@@ -10,8 +10,8 @@ import { copyAgentContext } from "./copy-agent-context";
 import { CopyButton } from "./copy-text";
 import { useReviewSession } from "./host/review-session";
 import { CopyIcon } from "./icons";
+import { useNotify } from "./notify";
 import { fontSize, radius } from "./scale.stylex";
-import { useToast } from "./toast";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { EmptyState } from "./ui/empty-state";
@@ -24,17 +24,17 @@ export function AskSetup({
   selection: AgentSelection;
 }): ReactElement {
   const session = useReviewSession();
-  const { toast, showToast } = useToast(4_000);
+  const notify = useNotify();
 
   const copy = async () => {
     try {
       await copyAgentContext(session, selection);
-      showToast({
+      notify({
         kind: "success",
         text: "Selection copied to clipboard. Paste into your agent to chat about it.",
       });
     } catch {
-      showToast({
+      notify({
         kind: "error",
         text: "Could not copy selection. Please try again.",
       });
@@ -78,7 +78,6 @@ export function AskSetup({
           Copy selection for your agent
         </Button>
       </div>
-      {toast}
     </div>
   );
 }
