@@ -229,15 +229,10 @@ export async function startGateway(
   );
 
   const logged: string[] = [];
-  const localPaths: string[] = [];
   const relay = options.relay ?? new GlobalReviewDesktopVerbRelay();
 
   const gateway = createReviewGateway({
-    local: (request) => {
-      localPaths.push(new URL(request.url).pathname);
-
-      return desktop.fetch(request);
-    },
+    local: (request) => desktop.fetch(request),
     isLocal: (reviewId) => local.store.has(reviewId),
     version: options.version ?? version,
     home,
@@ -300,7 +295,6 @@ export async function startGateway(
     api,
     close,
     logged,
-    localPaths,
     url,
     relay,
   };
