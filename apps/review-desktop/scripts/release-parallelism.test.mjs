@@ -102,7 +102,25 @@ for (const failed of ["", "43", "44", "ubuntu", "arch"]) {
 }
 
 for (const quality of ["stable", "preview"]) {
-  for (const failure of ["", "dmg", "Review", "upload", "wait"]) {
+  for (const failure of [
+    "",
+    "dmg",
+    "Review",
+    "upload",
+    "wait",
+    ...(quality === "preview"
+      ? [
+          "submit-network-retry",
+          "submit-tempfail-retry",
+          "wait-http-retry",
+          "staple-network-retry",
+          "validate-network-retry",
+          "network-exhausted",
+          "auth",
+          "ticket-invalid",
+        ]
+      : []),
+  ]) {
     test(
       `notarization overlaps submissions and gates final ZIPs (${quality}, ${failure || "accepted"})`,
       { skip: process.platform !== "darwin" },
@@ -141,7 +159,7 @@ for (const quality of ["stable", "preview"]) {
         );
         writeFileSync(path.join(appDir, "package.json"), '{"version":"1.2.3"}');
         f.mock(
-          ["xcrun", "codesign", "spctl", "ditto", "hdiutil"],
+          ["xcrun", "codesign", "spctl", "ditto", "hdiutil", "sleep"],
           `
         const fs = require('node:fs');
         const path = require('node:path');
@@ -149,6 +167,10 @@ for (const quality of ["stable", "preview"]) {
         const tool = path.basename(process.argv[1]);
         const root = process.env.TEST_ROOT;
         const fail = process.env.FAIL_NOTARY;
+        if (tool === 'sleep') {
+          fs.appendFileSync(root + '/sleeps', args[0] + '\\n');
+          process.exit(0);
+        }
         if (tool === 'ditto') {
           const [src, dest] = args.slice(-2);
           if (args.includes('-c')) {
@@ -157,6 +179,28 @@ for (const quality of ["stable", "preview"]) {
           } else fs.cpSync(src, dest, { recursive: true });
         } else if (tool === 'hdiutil') fs.writeFileSync(args.at(-1), 'dmg');
         else if (tool === 'xcrun') {
+          const network = 'Error Domain=NSURLErrorDomain Code=-1005 "The network connection was lost."';
+          const faults = {
+            'submit-network-retry': ['notarytool submit', 1, network, 1],
+            'submit-tempfail-retry': ['notarytool submit', 75, 'Temporary service failure', 1],
+            'wait-http-retry': ['notarytool wait', 1, 'Error: internalError(statusCode: Optional(503))', 1],
+            'staple-network-retry': ['stapler staple', 68, network, 1],
+            'validate-network-retry': ['stapler validate', 68, network, 1],
+            'network-exhausted': ['stapler validate', 68, network, Infinity],
+            'auth': ['notarytool submit', 1, 'HTTP status code: 401. Unauthorized.', Infinity],
+            'ticket-invalid': ['stapler staple', 68, 'The path has not been previously notarized.', Infinity],
+          };
+          const fault = faults[fail];
+          if (fault && args.slice(0, 2).join(' ') === fault[0]) {
+            const counter = root + '/fault-attempts';
+            const attempts = fs.existsSync(counter) ? Number(fs.readFileSync(counter, 'utf8')) : 0;
+            fs.writeFileSync(counter, String(attempts + 1));
+            if (attempts < fault[3]) {
+              console.log('Incomplete Apple response');
+              console.error(fault[2]);
+              process.exit(fault[1]);
+            }
+          }
           if (args[0] === 'notarytool' && args[1] === 'submit') {
             if (fail === 'upload') process.exit(1);
             const id = args[2].endsWith('.dmg') ? 'dmg' : 'Review';
@@ -185,7 +229,7 @@ for (const quality of ["stable", "preview"]) {
           name.endsWith(".zip"),
         );
 
-        if (failure) {
+        if (failure && !failure.endsWith("-retry")) {
           assert.notEqual(result.status, 0, result.stdout);
           assert.deepEqual(zips, []);
         } else {
@@ -195,6 +239,19 @@ for (const quality of ["stable", "preview"]) {
             `Whiteboard-${target}-1.2.3.zip`,
           ]);
           assert.equal(readFileSync(path.join(bundle, "ticket"), "utf8"), "");
+        }
+
+        if (failure.endsWith("-retry") || failure === "network-exhausted") {
+          const delays = readFileSync(path.join(f.root, "sleeps"), "utf8")
+            .trim()
+            .split("\n")
+            .map(Number);
+
+          assert.equal(delays.length, failure === "network-exhausted" ? 4 : 1);
+          assert.ok(delays.every((delay) => delay > 0));
+          assert.equal(result.status, failure === "network-exhausted" ? 68 : 0);
+        } else {
+          assert.ok(!readdirSync(f.root).includes("sleeps"));
         }
       },
     );
