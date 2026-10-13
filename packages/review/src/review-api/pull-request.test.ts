@@ -7,11 +7,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ReviewInputError } from "./document.js";
 import { openLocalReviewStore } from "./local-data.js";
+import { resolvePullRequest } from "./provider.js";
 import {
   type PullRequestDeps,
   type PullRequestRecord,
   defaultPullRequestDeps,
-  readPullRequest,
 } from "./pull-request.js";
 
 const url = "https://github.com/acme/widget/pull/7";
@@ -23,6 +23,12 @@ const command = <Operation>(operation: Operation) => ({
 });
 
 describe("reading a pull request", () => {
+  const readPullRequest = (prUrl: string, deps: PullRequestDeps) => {
+    const { provider, address } = resolvePullRequest(prUrl);
+
+    return provider.readPullRequest(address, deps);
+  };
+
   const record = {
     number: 7,
     title: "Add widgets",
