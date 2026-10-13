@@ -78,6 +78,7 @@ export const elevation = stylex.defineConsts({
 });
 
 export const tracking = stylex.defineConsts({
+  // Key hints set in Inter, which has the ⌘ glyph.
   shortcut: "0.14em",
   // Uppercase micro labels.
   caps: "0.08em",

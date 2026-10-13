@@ -21,7 +21,7 @@ export function Shortcut({ xstyle, ...props }: KbdProps) {
 
 const styles = stylex.create({
   shortcut: {
-    fontFamily: "Inter, system-ui, sans-serif",
+    fontFamily: tokens.fontSans,
     fontSize: fontSize.body,
     fontWeight: fontWeight.regular,
     lineHeight: "16px",
