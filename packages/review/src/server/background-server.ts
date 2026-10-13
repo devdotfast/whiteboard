@@ -4,11 +4,15 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { liveLockOwner, processIsAlive } from "@dev.fast/trace-core";
-import type { ReviewInstanceSelection } from "@review/desktop-discovery.js";
+import {
+  type ReviewInstanceSelection,
+  desktopUsesHome,
+} from "@review/desktop-discovery.js";
 import { findReviewPackageRoot } from "@review/package-paths.js";
 import { desktopApplicationInstalled } from "@review/review-app-launcher.js";
 import {
   type ReviewServerDiscovery,
+  desktopOwnsHome,
   headlessServerLockPath,
   readReviewServerDiscovery,
   readReviewServerHealth,
@@ -35,6 +39,9 @@ export async function ensureBackgroundServer(
   const running = await healthyDiscovery(stateDir);
 
   if (running) return { discovery: running, started: false };
+
+  if (await desktopUsesHome(stateDir, input.env))
+    throw new Error(desktopOwnsHome(stateDir));
 
   const logPath = backgroundServerLogPath(stateDir);
   await mkdir(path.dirname(logPath), { recursive: true, mode: 0o700 });
@@ -103,11 +110,12 @@ export async function headlessServerOwner(stateDir: string) {
 
 export async function stopBackgroundServer(
   discovery: Pick<ReviewServerDiscovery, "serverPid">,
+  first: NodeJS.Signals = "SIGTERM",
 ) {
   const { serverPid } = discovery;
 
   for (const [signal, waitMs] of [
-    ["SIGTERM", 10_000],
+    [first, 10_000],
     ["SIGKILL", 2_000],
   ] as const) {
     try {

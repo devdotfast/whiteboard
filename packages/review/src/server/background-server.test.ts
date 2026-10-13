@@ -1,4 +1,9 @@
-import { type ChildProcess, spawn, spawnSync } from "node:child_process";
+import {
+  type ChildProcess,
+  execFileSync,
+  spawn,
+  spawnSync,
+} from "node:child_process";
 import { once } from "node:events";
 import {
   mkdir,
@@ -17,13 +22,15 @@ import {
   REVIEW_REMOTE_ATTACH_END,
 } from "@dev.fast/review-protocol";
 import { processStartIdentity } from "@dev.fast/trace-core";
+import { ReviewApiClient } from "@review/review-api/client.js";
+import { openReviewProfile } from "@review/review-api/profile.js";
 import {
   headlessServerLockPath,
   readReviewServerDiscovery,
   readReviewServerHealth,
   reviewServerDiscoveryPath,
 } from "@review/server-discovery.js";
-import { afterEach, beforeEach, expect, it } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
   isolatedEnv,
@@ -35,6 +42,8 @@ import {
   backgroundServerLogPath,
   ensureBackgroundServer,
 } from "./background-server.js";
+import { createGlobalReviewServer } from "./desktop-server.js";
+import { takeOverServerHome } from "./headless-host.js";
 
 let root: string;
 
@@ -49,6 +58,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
   await stopServersUnder(root);
   await rm(root, { recursive: true, force: true });
 });
@@ -394,6 +404,114 @@ it("reports a server command that cannot be spawned", async () => {
     }),
   ).rejects.toThrow(/Could not start the Whiteboard server: .*ENOENT/);
 });
+
+it("stops a server on Desktop's home when Desktop starts, freeing its workspaces, and refuses new ones", async () => {
+  const home = env.DEV_REVIEW_HOME!;
+  vi.stubEnv("DEV_REVIEW_HOME", home);
+  const repo = path.join(root, "repo");
+  await mkdir(repo);
+
+  const git = (...args: string[]) =>
+    execFileSync(
+      "git",
+      ["-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", ...args],
+      { encoding: "utf8" },
+    ).trim();
+
+  git("init", "-q");
+  git("commit", "-q", "--allow-empty", "-m", "base");
+  const base = git("rev-parse", "HEAD");
+  git("commit", "-q", "--allow-empty", "-m", "head");
+  const head = git("rev-parse", "HEAD");
+
+  const { discovery } = await ensureBackgroundServer({
+    stateDir: home,
+    env,
+    cli: sourceCli,
+  });
+
+  const headless = new ReviewApiClient({
+    serverUrl: discovery.url,
+    token: discovery.token,
+  });
+
+  const { id: repositoryId } = await headless.post<{ id: string }>(
+    "/repositories",
+    { path: repo },
+  );
+
+  const { reviewId } = await headless.post<{ reviewId: string }>("/commands", {
+    operation: {
+      type: "create",
+      title: "Leased",
+      target: { kind: "commits", repositoryId, base, head },
+      open: false,
+    },
+  });
+
+  expect(await headless.post(`/${reviewId}/environment`, {})).toEqual({
+    issues: [],
+  });
+
+  const desktop = await takeOverServerHome(home, async () => {
+    const local = await openReviewProfile(home, { manageWorkspaces: true });
+
+    const server = createGlobalReviewServer({
+      reviewStore: local.store,
+      reviewData: local.data,
+      appPid: process.pid,
+      packageRoot: root,
+      toolingRoot: root,
+      port: 0,
+      token: "desktop-token",
+      identity: { key: "stable", channel: "stable" },
+    });
+
+    await server.listen();
+
+    return { local, server };
+  });
+
+  try {
+    expect(alive(discovery.serverPid)).toBe(false);
+    expect(await readFile(backgroundServerLogPath(home), "utf8")).toContain(
+      `Whiteboard Desktop took over ${home}`,
+    );
+
+    const call = (route: string, method = "GET") =>
+      fetch(`${desktop.server.url}/reviews-api/${reviewId}${route}`, {
+        method,
+        headers: { "x-review-token": "desktop-token" },
+      });
+
+    const [workspace] = await (await call("/workspaces")).json();
+    const retry = await call(`/workspaces/${workspace.id}/retry`, "POST");
+
+    expect(retry.status).toBe(200);
+
+    const refused = `Whiteboard Desktop is serving ${home}`;
+    const start = await cli(["server", "start", "--json"], {}, home);
+
+    expect(start.code).toBe(1);
+    expect(start.stdout).toContain(refused);
+
+    const detached = await cli(["server", "start", "--detach"], {}, home);
+    expect(detached).toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining(refused),
+    });
+
+    const attach = await cli(["remote", "attach", "--json"], {}, home);
+    expect(attach).toMatchObject({
+      code: 1,
+      stdout: expect.stringContaining(refused),
+    });
+  } finally {
+    await desktop.server.close();
+    await desktop.local.data.close();
+    await desktop.local.store.close();
+  }
+}, 90_000);
 
 async function cli(
   args: string[],

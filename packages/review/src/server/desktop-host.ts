@@ -19,6 +19,7 @@ import { reviewTelemetryChannel } from "@review/telemetry-config";
 
 import { listenForDesktopHostShutdown } from "./desktop-host-shutdown";
 import { createGlobalReviewServer } from "./desktop-server";
+import { takeOverServerHome } from "./headless-host";
 import {
   drainServerCrashReport,
   installProcessErrorTelemetry,
@@ -79,37 +80,41 @@ export async function runDesktopHost(
   const home = devReviewHome(env);
   await mkdir(home, { recursive: true });
 
-  const local = await openReviewProfile(home, {
-    manageWorkspaces: true,
-  });
-
-  // JSON is the sole user-review store. A failure is surfaced, never replaced
-  // by a second catalog or an old document renderer.
-
-  const shared = new SharedReviewStore(path.join(home, "shared-reviews"));
-  shared.connect(local.store, local.data);
-  await shared.load();
-
   const log = (message: string) =>
     process.stdout.write(`[Whiteboard gateway] ${message}\n`);
 
-  const server = createGlobalReviewServer({
-    ...serverInput,
-    log,
-    sharedReviews: shared,
-    reviewStore: local.store,
-    reviewData: local.data,
-    cliRuntimePath: env.DEV_FAST_REVIEW_CLI_RUNTIME,
-    crashDumpsDir: env.DEV_FAST_REVIEW_CRASH_DUMPS_DIR,
-  });
+  const { local, shared, server } = await takeOverServerHome(home, async () => {
+    const local = await openReviewProfile(home, {
+      manageWorkspaces: true,
+    });
 
-  try {
-    await server.listen();
-  } catch (error) {
-    await local?.data.close();
-    await local?.store.close();
-    throw error;
-  }
+    // JSON is the sole user-review store. A failure is surfaced, never replaced
+    // by a second catalog or an old document renderer.
+
+    const shared = new SharedReviewStore(path.join(home, "shared-reviews"));
+    shared.connect(local.store, local.data);
+    await shared.load();
+
+    const server = createGlobalReviewServer({
+      ...serverInput,
+      log,
+      sharedReviews: shared,
+      reviewStore: local.store,
+      reviewData: local.data,
+      cliRuntimePath: env.DEV_FAST_REVIEW_CLI_RUNTIME,
+      crashDumpsDir: env.DEV_FAST_REVIEW_CRASH_DUMPS_DIR,
+    });
+
+    try {
+      await server.listen();
+    } catch (error) {
+      await local?.data.close();
+      await local?.store.close();
+      throw error;
+    }
+
+    return { local, shared, server };
+  });
 
   process.stdout.write(
     `${JSON.stringify({ event: "ready", ...server.discovery, installationId })}\n`,

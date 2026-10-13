@@ -2,16 +2,25 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import { createServer } from "node:http";
+import { setTimeout as delay } from "node:timers/promises";
 
 import { isObjectValue } from "@dev.fast/json";
 import { withFileLock, writePrivateJsonAtomic } from "@dev.fast/trace-core";
+import { desktopUsesHome } from "@review/desktop-discovery.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
 import {
+  DESKTOP_TAKEOVER_SIGNAL,
   type ReviewServerDiscovery,
+  desktopOwnsHome,
   headlessServerLockPath,
+  readReviewServerDiscovery,
   reviewServerDiscoveryPath,
 } from "@review/server-discovery.js";
 
+import {
+  headlessServerOwner,
+  stopBackgroundServer,
+} from "./background-server.js";
 import { migrateDiffrConfig } from "./diffr-config.js";
 import { GlobalReviewDesktopVerbRelay } from "./global-verb-relay.js";
 import { createNodeRequestListener } from "./hono-http.js";
@@ -73,8 +82,43 @@ export function withHeadlessServerLock<T>(
   );
 }
 
+/**
+ * Desktop owns its home: it stops any server there, then starts under that
+ * server's lock, so none can start until Desktop has published its discovery.
+ */
+export async function takeOverServerHome<T>(
+  home: string,
+  start: () => Promise<T>,
+): Promise<T> {
+  const stateDir = await realpath(home);
+  const deadline = Date.now() + 30_000;
+
+  while (true) {
+    const outcome = await withHeadlessServerLock(stateDir, start);
+
+    if (outcome.acquired) return outcome.result;
+
+    const owner = await headlessServerOwner(stateDir);
+
+    const discovery = await readReviewServerDiscovery(stateDir).catch(
+      () => null,
+    );
+
+    if (owner !== undefined && discovery?.serverPid === owner)
+      await stopBackgroundServer(discovery, DESKTOP_TAKEOVER_SIGNAL);
+    else if (Date.now() > deadline)
+      throw new Error(
+        `Process ${owner} holds the Whiteboard server's lock in ${stateDir} without serving it.`,
+      );
+    else await delay(100);
+  }
+}
+
 async function serve(input: HeadlessServerInput) {
   if (input.signal.aborted) return;
+
+  if (await desktopUsesHome(input.stateDir))
+    throw new HeadlessServerBusyError(desktopOwnsHome(input.stateDir));
 
   await migrateDiffrConfig(input.signal);
 

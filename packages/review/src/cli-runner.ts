@@ -11,14 +11,12 @@ import {
 } from "@dev.fast/review-protocol";
 import {
   StoreApiError,
-  processIsAlive,
   readStoreAuth,
   withStoreAuthorization,
 } from "@dev.fast/trace-core";
 import {
   type CliInputStream,
   DEFAULT_STORE_ORIGIN,
-  DEV_REVIEW_HOME_ENV,
   emitJsonEvent,
   humanStream,
   jsonRequestedInArgv,
@@ -49,7 +47,7 @@ import { cliRuntimeInfo, describeCliRuntime } from "./cli-runtime-info";
 import { connectPrompts } from "./connect-prompts";
 import {
   ReviewInstanceUnavailableError,
-  readReviewInstances,
+  desktopUsesHome,
   selectReviewInstance,
 } from "./desktop-discovery";
 import {
@@ -90,6 +88,7 @@ import {
   type ReviewTelemetryErrorName,
 } from "./review-telemetry";
 import {
+  DESKTOP_TAKEOVER_SIGNAL,
   type ReviewServerDiscovery,
   readReviewServerDiscovery,
   readReviewServerHealth,
@@ -363,8 +362,17 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
 
     const controller = new AbortController();
     const stop = () => controller.abort();
+
+    const takeover = () => {
+      input.stderr.write(
+        `Whiteboard Desktop took over ${stateDir}; stopping this server.\n`,
+      );
+      stop();
+    };
+
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);
+    process.once(DESKTOP_TAKEOVER_SIGNAL, takeover);
 
     const { HeadlessServerBusyError, runHeadlessServer } =
       await import("./server/headless-host.js");
@@ -391,6 +399,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     } finally {
       process.off("SIGINT", stop);
       process.off("SIGTERM", stop);
+      process.off(DESKTOP_TAKEOVER_SIGNAL, takeover);
     }
   });
 
@@ -496,28 +505,9 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
         `No saved reviews in ${stateDir}, so there is no server id to reset. Check --state-dir.`,
       );
 
-    // Any live Desktop holds the store, attached window or not. Only a gone
-    // process counts as stopped: a paused or busy one may not answer /health.
-    const desktops = await readReviewInstances({
-      env: { ...env, [DEV_REVIEW_HOME_ENV]: stateDir },
-    });
-
-    const [problem] = desktops.broken.values();
-
-    if (problem)
-      throw new Error(
-        `Cannot tell whether a Whiteboard Desktop is using ${stateDir}: ${problem.message}`,
-      );
-
     const inUse = `A Whiteboard server is using ${stateDir}. Stop it first, then run whiteboard server reset-id again.`;
 
-    if (
-      desktops.instances.some(({ discovery }) =>
-        [discovery.appPid, discovery.serverPid].some((pid) =>
-          processIsAlive(pid),
-        ),
-      )
-    )
+    if (await desktopUsesHome(stateDir, env))
       return refuse(inUse, options.json);
 
     const [{ openReviewProfile }, { withHeadlessServerLock }] =

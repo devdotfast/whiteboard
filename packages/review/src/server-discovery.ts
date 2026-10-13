@@ -31,6 +31,9 @@ export function reviewServerDiscoveryPath(stateDir: string) {
   return path.join(stateDir, "review-server", "server.json");
 }
 
+/** Sent by a Desktop taking over the server's state directory. */
+export const DESKTOP_TAKEOVER_SIGNAL = "SIGUSR2";
+
 export function headlessServerLockPath(stateDir: string) {
   return path.join(stateDir, "headless-server.lock");
 }
@@ -90,6 +93,10 @@ export async function readReviewServerHealth(
   } catch {
     return null;
   }
+}
+
+export function desktopOwnsHome(stateDir: string) {
+  return `Whiteboard Desktop is serving ${stateDir}, so no other Whiteboard server can start there. Quit Desktop, or choose another --state-dir.`;
 }
 
 export function serverNotReady(stateDir: string) {

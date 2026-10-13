@@ -11,8 +11,10 @@ import {
   parseJsonText,
   parseReviewDesktopDiscovery,
 } from "@dev.fast/review-protocol";
+import { processIsAlive } from "@dev.fast/trace-core";
 
 import {
+  DEV_REVIEW_HOME_ENV,
   reviewDefaultInstancePath,
   reviewDevInstanceKey,
   reviewInstancesDir,
@@ -181,6 +183,28 @@ export interface ReviewInstanceDependencies {
   env?: NodeJS.ProcessEnv;
   fetch?: typeof globalThis.fetch;
   warn?: (message: string) => void;
+}
+
+/** Any live Desktop holds the store, attached window or not. Only a gone
+ * process counts as stopped: a paused or busy one may not answer /health. */
+export async function desktopUsesHome(
+  home: string,
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  const desktops = await readReviewInstances({
+    env: { ...env, [DEV_REVIEW_HOME_ENV]: home },
+  });
+
+  const [problem] = desktops.broken.values();
+
+  if (problem)
+    throw new Error(
+      `Cannot tell whether a Whiteboard Desktop is using ${home}: ${problem.message}`,
+    );
+
+  return desktops.instances.some(({ discovery }) =>
+    [discovery.appPid, discovery.serverPid].some((pid) => processIsAlive(pid)),
+  );
 }
 
 /** Records by key, plus the files that could not be read, by key. */
