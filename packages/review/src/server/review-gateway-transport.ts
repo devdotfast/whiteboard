@@ -66,34 +66,6 @@ export async function readLines(
   }
 }
 
-export function chunks(
-  body: ReadableStream<Uint8Array>,
-  signal: AbortSignal,
-): AsyncIterable<Uint8Array> {
-  const reader = body.getReader();
-  const cancel = () => void reader.cancel().catch(() => undefined);
-
-  return {
-    async *[Symbol.asyncIterator]() {
-      signal.addEventListener("abort", cancel, { once: true });
-
-      if (signal.aborted) cancel();
-
-      try {
-        for (;;) {
-          const { value, done } = await reader.read();
-
-          if (done) return;
-          yield value;
-        }
-      } finally {
-        signal.removeEventListener("abort", cancel);
-        cancel();
-      }
-    },
-  };
-}
-
 export function keepOpen(input: {
   hosts: GatewayHosts;
   remote: GatewayRemote;

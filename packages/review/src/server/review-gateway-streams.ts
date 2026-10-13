@@ -1,3 +1,6 @@
+import { Readable } from "node:stream";
+import type { ReadableStream as WebReadableStream } from "node:stream/web";
+
 import {
   type ReviewApiSummary,
   type ReviewGatewayHostState,
@@ -14,12 +17,7 @@ import {
   type ListMode,
   listEntriesSchema,
 } from "./review-gateway-memory.js";
-import {
-  chunks,
-  keepOpen,
-  readLines,
-  reconnect,
-} from "./review-gateway-transport.js";
+import { keepOpen, readLines, reconnect } from "./review-gateway-transport.js";
 import { serverJson } from "./review-server-core.js";
 
 const subscriptionsSchema = z.array(
@@ -218,16 +216,23 @@ export function createGatewayStreams(input: {
           );
 
           if (response.body)
-            await readLines(chunks(response.body, abort), (text) => {
-              const line = parseLine(text);
+            await readLines(
+              // SAFETY: Node's Response body is its own web stream; the DOM
+              // type only names the same object.
+              Readable.fromWeb(response.body as WebReadableStream, {
+                signal: abort,
+              }),
+              (text) => {
+                const line = parseLine(text);
 
-              if (line?.kind === "list" && modes.has(line.mode)) {
-                // SAFETY: the local server writes ReviewApiSummary entries.
-                localLists.set(line.mode, line.reviews as ReviewApiSummary[]);
-                emitList(line.mode);
-              } else if (line?.kind === "review" && ids.has(line.reviewId))
-                emitReview(line.reviewId, text);
-            });
+                if (line?.kind === "list" && modes.has(line.mode)) {
+                  // SAFETY: the local server writes ReviewApiSummary entries.
+                  localLists.set(line.mode, line.reviews as ReviewApiSummary[]);
+                  emitList(line.mode);
+                } else if (line?.kind === "review" && ids.has(line.reviewId))
+                  emitReview(line.reviewId, text);
+              },
+            );
         } catch {}
       });
     };
