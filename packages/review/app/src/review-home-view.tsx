@@ -424,8 +424,12 @@ export function ReviewHome({
 
   function finishTextFilter(discard = false) {
     if (editingSearch === null) return;
-    const term = discard ? "" : query.trim();
-    const previous = editingSearch;
+    applySearch(editingSearch, discard ? "" : query.trim());
+    setEditingSearch(null);
+    setQuery("");
+  }
+
+  function applySearch(previous: string, term: string) {
     setFilterState((current) => {
       const searches = current.filters.searches.filter(
         (value) => `search:${value}` !== previous,
@@ -449,8 +453,6 @@ export function ReviewHome({
         ],
       };
     });
-    setEditingSearch(null);
-    setQuery("");
   }
 
   function clearSelection() {
@@ -1174,7 +1176,10 @@ export function ReviewHome({
                 filters={appliedFilters}
                 query={query}
                 onChange={setFilters}
-                onSearch={() => startTextFilter()}
+                onSearch={(term) => {
+                  setPicker(null);
+                  applySearch("", term);
+                }}
                 count={visible.length}
                 onClose={() => {
                   setPicker(null);

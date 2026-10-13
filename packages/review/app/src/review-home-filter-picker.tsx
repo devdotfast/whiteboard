@@ -58,7 +58,7 @@ export function HomeFilterPicker({
   query: string;
   count: number;
   onChange(update: (filters: HomeFilters) => HomeFilters): void;
-  onSearch(): void;
+  onSearch(term: string): void;
   onClose(): void;
 }) {
   const main = useRef<HTMLDivElement>(null);
@@ -411,21 +411,27 @@ export function HomeFilterPicker({
     />
   );
 
-  const renderRepo = (repo: Repository) => (
-    <PickerRow
-      key={repo.key}
-      label={repo.label}
-      {...repoChoice(repo)}
-      repository={repo.key}
-      expanded={repository === repo.key}
-      onClick={() =>
-        onChange((current) => toggleHomeRepository(current, repo, repositories))
-      }
-      onHover={(row) => hoverRepository(repo, row)}
-      onLeave={cancelPending}
-      onRight={(row) => openSubmenu(repo, row, true)}
-    />
-  );
+  const renderRepo = (repo: Repository) => {
+    const nested = repo.trees.length > 1;
+
+    return (
+      <PickerRow
+        key={repo.key}
+        label={repo.label}
+        {...repoChoice(repo)}
+        repository={repo.key}
+        expanded={repository === repo.key}
+        onClick={() =>
+          onChange((current) =>
+            toggleHomeRepository(current, repo, repositories),
+          )
+        }
+        onHover={nested ? (row) => hoverRepository(repo, row) : undefined}
+        onLeave={cancelPending}
+        onRight={nested ? (row) => openSubmenu(repo, row, true) : undefined}
+      />
+    );
+  };
 
   const renderShow = ({ key, label, n }: (typeof shows)[number]) => (
     <PickerRow
@@ -548,6 +554,10 @@ export function HomeFilterPicker({
             setSearch(event.target.value);
             setRepository(null);
           }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !scoped && search.trim())
+              onSearch(search.trim());
+          }}
         />
         <div
           {...stylex.props(styles.body)}
@@ -573,13 +583,9 @@ export function HomeFilterPicker({
             </>
           ) : (
             <>
-              <button
-                data-picker-row
-                {...stylex.props(styles.row)}
-                onClick={onSearch}
-              >
-                Search…
-              </button>
+              <div {...stylex.props(styles.hint)}>
+                <Shortcut>enter</Shortcut> to keyword filter
+              </div>
               {shows.length > 0 && (
                 <section aria-label="Show filters">
                   <div {...stylex.props(styles.section)}>Show</div>
@@ -736,7 +742,7 @@ function PickerRow({
         if ((event.key === "ArrowRight" || event.key === "Enter") && onRight) {
           event.preventDefault();
           onRight(event.currentTarget);
-        } else if (event.key === " " && onRight) {
+        } else if (event.key === " ") {
           event.preventDefault();
           onClick();
         }
@@ -868,6 +874,11 @@ const styles = stylex.create({
     flexShrink: 0,
   },
   muted: { color: tokens.inkFaint },
+  hint: {
+    padding: "5px 8px",
+    fontSize: fontSize.small,
+    color: tokens.inkFaint,
+  },
   empty: {
     padding: "12px 8px",
     fontSize: fontSize.body,

@@ -295,11 +295,9 @@ describe("Home interactions", () => {
     ]);
     expect(searchField()).toBeNull();
     await openFilters();
-    await click("Search…");
+    await optionSearch("fold");
+    await key("Enter", {}, document.activeElement!);
     expect(container.querySelector("[data-home-picker]")).toBeNull();
-    expect(document.activeElement).toBe(searchField());
-    await search("fold");
-    await act(async () => searchField().blur());
     expect(searchField()).toBeNull();
     expect(button("fold")).toBeTruthy();
     await openFilters();
@@ -459,10 +457,16 @@ describe("Home interactions", () => {
     expect(titles()).toHaveLength(2);
   });
   it("keeps the caret in the menu under the pointer when hover opens or switches submenus", async () => {
-    await render([
-      summary("One", { repositoryName: "alpha" }),
-      summary("Two", { repositoryName: "beta" }),
-    ]);
+    await render(
+      ["alpha", "beta"].flatMap((repositoryName) =>
+        ["main", "feature"].map((tree) =>
+          summary(`${repositoryName} ${tree}`, {
+            repositoryName,
+            repositoryPath: `/${repositoryName}/${tree}`,
+          }),
+        ),
+      ),
+    );
     await openFilters();
 
     const mainInput = container.querySelector<HTMLInputElement>(
