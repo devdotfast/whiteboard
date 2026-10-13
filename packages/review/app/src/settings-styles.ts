@@ -26,6 +26,9 @@ export const settingsStyles = stylex.create({
     borderBottomColor: tokens.reviewHomeRule,
     color: tokens.reviewHomeMeta,
   },
+  connect: {
+    paddingBlock: "14px",
+  },
   row: {
     display: "grid",
     // Wide segmented controls grow the lane instead of overlapping the text.

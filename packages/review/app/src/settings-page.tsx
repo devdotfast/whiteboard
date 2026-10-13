@@ -152,7 +152,9 @@ export function SettingsPage({
                 install={install}
                 onStatusChange={setInstallStatus}
               />
-              <ConnectCard install={install} />
+              <div {...stylex.props(styles.connect)}>
+                <ConnectCard install={install} />
+              </div>
             </Section>
           ) : null}
 
