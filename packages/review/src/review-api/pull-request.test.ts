@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { azureDevOpsProvider } from "./azure-devops-provider.js";
 import { ReviewInputError } from "./document.js";
 import { openLocalReviewStore } from "./local-data.js";
 import { resolvePullRequest } from "./provider.js";
@@ -460,4 +461,408 @@ describe("creating a review from a pull request URL alone", () => {
       );
     },
   );
+});
+
+describe("reading an Azure DevOps pull request", () => {
+  const modernUrl =
+    "https://dev.azure.com/acme/project/_git/widget/pullrequest/7";
+
+  const legacyUrl =
+    "https://acme.visualstudio.com/project/_git/widget/pullrequest/7";
+
+  const legacyCollectionUrl =
+    "https://acme.visualstudio.com/DefaultCollection/project/_git/widget/pullrequest/7";
+
+  const readPullRequest = (prUrl: string, deps: PullRequestDeps) => {
+    const { provider, address } = resolvePullRequest(prUrl);
+
+    return provider.readPullRequest(address, deps);
+  };
+
+  const adoRecord = {
+    title: "Add ADO widgets",
+    sourceRefName: "refs/heads/feature-branch",
+    targetRefName: "refs/heads/main",
+    lastMergeTargetCommit: { commitId: "b".repeat(40) },
+  };
+
+  const deps = (
+    az: (args: string[]) => Promise<string>,
+  ): PullRequestDeps & { calls: string[][] } => {
+    const calls: string[][] = [];
+
+    return {
+      calls,
+      run: async (file, args) => {
+        calls.push([file, ...args]);
+
+        return az(args);
+      },
+      fetch: () => Promise.reject(new Error("no network in tests")),
+    };
+  };
+
+  it("reads a modern Azure DevOps PR through az", async () => {
+    const using = deps(async () => JSON.stringify(adoRecord));
+
+    await expect(readPullRequest(modernUrl, using)).resolves.toEqual({
+      host: "dev.azure.com",
+      slug: "acme/project/widget",
+      number: 7,
+      title: "Add ADO widgets",
+      headRef: "refs/heads/feature-branch",
+      baseRefName: "main",
+      baseRefOid: "b".repeat(40),
+    });
+
+    expect(using.calls[0]).toEqual([
+      "az",
+      "repos",
+      "pr",
+      "show",
+      "--id",
+      "7",
+      "--detect",
+      "false",
+      "--organization",
+      "https://dev.azure.com/acme",
+      "--project",
+      "project",
+      "--output",
+      "json",
+    ]);
+  });
+
+  it("reads a legacy visualstudio.com PR, normalizing to canonical dev.azure.com coordinates", async () => {
+    const using = deps(async () => JSON.stringify(adoRecord));
+
+    await expect(readPullRequest(legacyUrl, using)).resolves.toEqual({
+      host: "dev.azure.com",
+      slug: "acme/project/widget",
+      number: 7,
+      title: "Add ADO widgets",
+      headRef: "refs/heads/feature-branch",
+      baseRefName: "main",
+      baseRefOid: "b".repeat(40),
+    });
+
+    await expect(readPullRequest(legacyCollectionUrl, using)).resolves.toEqual({
+      host: "dev.azure.com",
+      slug: "acme/project/widget",
+      number: 7,
+      title: "Add ADO widgets",
+      headRef: "refs/heads/feature-branch",
+      baseRefName: "main",
+      baseRefOid: "b".repeat(40),
+    });
+  });
+
+  it("decodes URL-encoded project and repository names before invoking az", async () => {
+    const encodedUrl =
+      "https://dev.azure.com/acme/My%20Project/_git/My%20Widget/pullrequest/42";
+
+    const using = deps(async () => JSON.stringify(adoRecord));
+
+    await expect(readPullRequest(encodedUrl, using)).resolves.toEqual({
+      host: "dev.azure.com",
+      slug: "acme/My Project/My Widget",
+      number: 42,
+      title: "Add ADO widgets",
+      headRef: "refs/heads/feature-branch",
+      baseRefName: "main",
+      baseRefOid: "b".repeat(40),
+    });
+
+    expect(using.calls[0]).toContain("My Project");
+  });
+
+  it("suggests installing the azure-devops extension when az fails with extension error", async () => {
+    const failing = deps(async () => {
+      throw new Error(
+        "az repos pr: 'repos' is not in the 'az' command group. See 'az --help'.",
+      );
+    });
+
+    await expect(readPullRequest(modernUrl, failing)).rejects.toThrow(
+      /az extension add --name azure-devops/,
+    );
+  });
+
+  it("suggests az login when az fails with authentication error", async () => {
+    const failing = deps(async () => {
+      throw new Error("az repos pr: Please run 'az login' to setup account.");
+    });
+
+    await expect(readPullRequest(modernUrl, failing)).rejects.toThrow(
+      /Run `az login` to sign in/,
+    );
+  });
+
+  it("says a missing or deleted ADO PR was not found", async () => {
+    const failing = deps(async () => {
+      throw new Error(
+        "az repos pr: TF401027: The pull request does not exist or you do not have permission.",
+      );
+    });
+
+    const error = await readPullRequest(modernUrl, failing).catch(
+      (cause: unknown) => cause,
+    );
+
+    expect(error).toBeInstanceOf(ReviewInputError);
+    expect(error).toMatchObject({ status: 404 });
+    expect(String(error)).toMatch(/was not found.*does not exist/);
+  });
+
+  it("suggests installing the Azure CLI when az is not found", async () => {
+    const failing = deps(async () => {
+      throw new Error("spawn az ENOENT");
+    });
+
+    await expect(readPullRequest(modernUrl, failing)).rejects.toThrow(
+      /Install the Azure CLI and the azure-devops extension/,
+    );
+  });
+
+  it("rejects invalid or non-PR Azure DevOps URLs", () => {
+    expect(
+      azureDevOpsProvider.parseUrl(
+        "https://dev.azure.com/acme/project/_git/widget",
+      ),
+    ).toBeUndefined();
+    expect(
+      azureDevOpsProvider.parseUrl(
+        "https://dev.azure.com/acme/project/_git/widget/pullrequest/0",
+      ),
+    ).toBeUndefined();
+    expect(
+      azureDevOpsProvider.parseUrl(
+        "https://dev.azure.com/acme/project/_git/widget/pullrequest/abc",
+      ),
+    ).toBeUndefined();
+    expect(
+      azureDevOpsProvider.parseUrl(
+        "https://dev.azure.com/acme/project/_git/widget/pullrequest/999999999999999999999999999999",
+      ),
+    ).toBeUndefined();
+  });
+});
+
+describe("matching Azure DevOps remotes", () => {
+  const address = {
+    host: "dev.azure.com",
+    slug: "acme/project/widget",
+    number: 7,
+  };
+
+  it("matches modern HTTPS remotes", () => {
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "https://dev.azure.com/acme/project/_git/widget",
+        address,
+      ),
+    ).toBe(true);
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "https://dev.azure.com/acme/project/_git/widget.git",
+        address,
+      ),
+    ).toBe(true);
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "https://user@dev.azure.com/acme/project/_git/widget",
+        address,
+      ),
+    ).toBe(true);
+  });
+
+  it("matches legacy visualstudio.com HTTPS remotes", () => {
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "https://acme.visualstudio.com/project/_git/widget",
+        address,
+      ),
+    ).toBe(true);
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "https://acme.visualstudio.com/DefaultCollection/project/_git/widget.git",
+        address,
+      ),
+    ).toBe(true);
+  });
+
+  it("matches modern SSH remotes", () => {
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "git@ssh.dev.azure.com:v3/acme/project/widget",
+        address,
+      ),
+    ).toBe(true);
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "git@ssh.dev.azure.com:v3/acme/project/widget.git",
+        address,
+      ),
+    ).toBe(true);
+  });
+
+  it("matches legacy visualstudio.com SSH remotes", () => {
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "acme@vs-ssh.visualstudio.com:v3/acme/project/widget",
+        address,
+      ),
+    ).toBe(true);
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "acme@vs-ssh.visualstudio.com:v3/acme/project/widget.git",
+        address,
+      ),
+    ).toBe(true);
+  });
+
+  it("matches case-insensitively", () => {
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "https://dev.azure.com/ACME/PROJECT/_git/WIDGET",
+        address,
+      ),
+    ).toBe(true);
+  });
+
+  it("rejects mismatched repos, projects, or non-ADO remotes", () => {
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "https://dev.azure.com/acme/project/_git/other",
+        address,
+      ),
+    ).toBe(false);
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "https://dev.azure.com/acme/other/_git/widget",
+        address,
+      ),
+    ).toBe(false);
+    expect(
+      azureDevOpsProvider.matchesRemote(
+        "https://github.com/acme/widget.git",
+        address,
+      ),
+    ).toBe(false);
+  });
+});
+
+describe("creating a review from an Azure DevOps pull request URL", () => {
+  let directory: string, upstream: string, checkout: string;
+  let local: ReturnType<typeof openLocalReviewStore>;
+
+  const adoUrl = "https://dev.azure.com/acme/project/_git/widget/pullrequest/7";
+
+  interface AdoPullRequestPayload {
+    title: string;
+    sourceRefName: string;
+    targetRefName: string;
+    lastMergeTargetCommit?: { commitId: string };
+  }
+
+  let adoPr: AdoPullRequestPayload;
+
+  const gitIn =
+    (cwd: string) =>
+    (...args: string[]) =>
+      execFileSync("git", ["-c", "commit.gpgsign=false", ...args], {
+        cwd,
+        encoding: "utf8",
+      }).trim();
+
+  const commit = (cwd: string, file: string, text: string) => {
+    writeFileSync(path.join(cwd, file), text);
+    gitIn(cwd)("add", ".");
+    gitIn(cwd)("commit", "-qm", `Write ${file}`);
+
+    return gitIn(cwd)("rev-parse", "HEAD");
+  };
+
+  const pointAtAdoUpstream = (gitDir: string) => {
+    const config = (...args: string[]) =>
+      execFileSync("git", ["--git-dir", gitDir, "config", ...args]);
+
+    const remote = "https://dev.azure.com/acme/project/_git/widget";
+
+    config("remote.origin.url", remote);
+    config(`url.${upstream}.insteadOf`, remote);
+  };
+
+  let fork: string;
+
+  beforeEach(async () => {
+    directory = mkdtempSync(path.join(tmpdir(), "review-ado-pr-create-"));
+    upstream = path.join(directory, "upstream");
+    mkdirSync(upstream);
+    const up = gitIn(upstream);
+    up("init", "-q", "-b", "main");
+    up("config", "user.name", "Review Test");
+    up("config", "user.email", "review-test@example.invalid");
+    fork = commit(upstream, "base.ts", "export const base = 1;\n");
+    up("checkout", "-q", "-b", "feature-branch");
+    commit(upstream, "feature.ts", "export const feature = 1;\n");
+    up("checkout", "-q", "main");
+
+    checkout = path.join(directory, "checkout");
+    gitIn(directory)("clone", "-q", upstream, checkout);
+    pointAtAdoUpstream(path.join(checkout, ".git"));
+
+    adoPr = {
+      title: "Add ADO widgets",
+      sourceRefName: "refs/heads/feature-branch",
+      targetRefName: "refs/heads/main",
+      lastMergeTargetCommit: { commitId: fork },
+    };
+
+    local = openLocalReviewStore(path.join(directory, "reviews.db"), {
+      manageWorkspaces: false,
+      pullRequests: {
+        ...defaultPullRequestDeps,
+        run: async (file, args, options) => {
+          if (file === "az") {
+            return JSON.stringify(adoPr);
+          }
+
+          return defaultPullRequestDeps.run(file, args, options);
+        },
+        fetch: () => Promise.reject(new Error("no network in tests")),
+      },
+    });
+  });
+
+  afterEach(async () => {
+    await local.store.close();
+    await local.data.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+
+  it("fetches an ADO PR and creates review with title and comparisons", async () => {
+    const { id: repositoryId } = await local.data.register(checkout);
+
+    const featureHead = gitIn(upstream)(
+      "rev-parse",
+      "refs/heads/feature-branch",
+    );
+
+    const created = await local.store.execute(
+      command({ type: "create", pullRequestUrl: adoUrl }),
+    );
+
+    const snapshot = local.store.read(created.reviewId);
+
+    expect(created).toMatchObject({ created: true });
+    expect(snapshot).toMatchObject({
+      title: "Add ADO widgets",
+      pins: { repositoryId, base: fork, head: featureHead },
+      origin: { pullRequestUrl: adoUrl, pullRequestNumber: 7 },
+    });
+    expect(await local.data.changes(snapshot.pins!, "feature.ts")).toContain(
+      "+export const feature = 1;",
+    );
+  });
 });

@@ -1241,8 +1241,8 @@ export class LocalReviewData {
 
     throw new ReviewInputError(
       repository.id
-        ? `That checkout has no GitHub remote for ${name}. Add one, or omit repositoryId.`
-        : `No registered checkout has a GitHub remote for ${name}. Register a checkout of ${name} with review_register_repository first, or pass a target.`,
+        ? `That checkout has no remote for ${name}. Add one, or omit repositoryId.`
+        : `No registered checkout has a remote for ${name}. Register a checkout of ${name} with review_register_repository first, or pass a target.`,
       404,
     );
   }
