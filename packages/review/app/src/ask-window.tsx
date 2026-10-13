@@ -1084,7 +1084,7 @@ const styles = stylex.create({
     maxWidth: "100%",
     padding: "6px 6px 6px 12px",
     borderRadius: radius.pill,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     cursor: "pointer",
     touchAction: "none",
     userSelect: "none",

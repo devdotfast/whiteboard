@@ -51,7 +51,13 @@ export function DiffCount({
   large?: boolean;
 }): ReactElement {
   return (
-    <span {...stylex.props(diffCountStyles.counts, large && styles.large)}>
+    <span
+      {...stylex.props(
+        diffCountStyles.counts,
+        binary && diffCountStyles.words,
+        large && styles.large,
+      )}
+    >
       {binary ? (
         "Binary"
       ) : (
@@ -70,6 +76,8 @@ export const diffCountStyles = stylex.create({
     whiteSpace: "nowrap",
     fontSize: fontSize.small,
   },
+  // A word in a count's place, "Viewed" or "0 files": Inter, not mono.
+  words: { fontFamily: tokens.chromeFont },
   added: {
     color: tokens.changeAdded,
   },

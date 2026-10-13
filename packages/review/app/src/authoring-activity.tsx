@@ -229,7 +229,7 @@ const styles = stylex.create({
     borderRadius: radius.pill,
     backgroundColor: tokens.transparent,
     color: tokens.inkMuted,
-    font: `${fontWeight.medium} ${fontSize.small} ${tokens.fontMono}`,
+    font: `${fontWeight.medium} ${fontSize.small} ${tokens.chromeFont}`,
     whiteSpace: "nowrap",
   },
   // While an agent works the badge is a button that locates the courier.

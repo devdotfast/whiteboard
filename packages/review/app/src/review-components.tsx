@@ -1414,7 +1414,7 @@ const sectionStyles = stylex.create({
   meta: {
     flex: "0 0 auto",
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     whiteSpace: "nowrap",
   },

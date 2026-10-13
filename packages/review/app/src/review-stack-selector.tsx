@@ -224,7 +224,7 @@ const styles = stylex.create({
   trigger: {
     gap: "7px",
     padding: "0 8px",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
   },
   triggerIcon: {
@@ -259,7 +259,7 @@ const styles = stylex.create({
     flexDirection: "column",
     minWidth: "280px",
     padding: "4px",
-    font: `${fontSize.ui}/18px ${tokens.fontMono}`,
+    font: `${fontSize.ui}/18px ${tokens.chromeFont}`,
   },
   row: {
     display: "flex",

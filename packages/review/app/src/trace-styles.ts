@@ -37,7 +37,7 @@ export const traceStyles = stylex.create({
     flexDirection: "column",
   },
   kicker: {
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   header: {
     display: "flex",
@@ -61,7 +61,7 @@ export const traceStyles = stylex.create({
     alignItems: "center",
     flexWrap: "wrap",
     gap: "8px",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     color: tokens.inkFaint,
   },
@@ -90,7 +90,7 @@ export const traceStyles = stylex.create({
     boxShadow: `0 0 0 2px ${tokens.accentWash}`,
   },
   pickerHarness: {
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     color: tokens.accent,
     flexShrink: 0,
   },
@@ -161,7 +161,7 @@ export const traceStyles = stylex.create({
     flex: "1",
   },
   pickerItemHarness: {
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     color: tokens.inkMuted,
     flexShrink: 0,
     minWidth: "52px",
@@ -326,7 +326,7 @@ export const traceStyles = stylex.create({
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
     backgroundColor: tokens.tray,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   figureBody: {
     display: "flex",
@@ -367,7 +367,7 @@ export const traceStyles = stylex.create({
     alignItems: "center",
     gap: "8px",
     margin: "6px 0 0",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     color: { default: tokens.inkFaint, ":hover": tokens.inkMuted },
   },
   inlineCentered: {
@@ -405,7 +405,7 @@ export const traceStyles = stylex.create({
     alignItems: "center",
     gap: "8px",
     minHeight: "24px",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
     color: tokens.inkMuted,
   },
@@ -437,7 +437,7 @@ export const traceStyles = stylex.create({
   },
 
   note: {
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
     lineHeight: "19px",
     color: tokens.inkFaint,
@@ -491,7 +491,7 @@ export const traceStyles = stylex.create({
       [stylex.when.ancestor(":hover", traceRowMarker)]: tokens.inkFaint,
     },
     backgroundColor: tokens.surface,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     color: {
       default: tokens.inkFaint,
       [stylex.when.ancestor(":hover", traceRowMarker)]: tokens.inkMuted,
@@ -534,7 +534,7 @@ export const traceStyles = stylex.create({
     borderStyle: "dashed",
     borderColor: { default: tokens.ruleSoft, ":hover": tokens.inkFaint },
     backgroundColor: tokens.surface,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     color: { default: tokens.inkFaint, ":hover": tokens.inkMuted },
     cursor: "pointer",
     verticalAlign: "baseline",
@@ -551,7 +551,7 @@ export const traceStyles = stylex.create({
     borderColor: tokens.ruleSoft,
     backgroundColor: { default: tokens.surface, ":hover": tokens.accentWash },
     color: tokens.accent,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     cursor: "pointer",
     whiteSpace: "nowrap",

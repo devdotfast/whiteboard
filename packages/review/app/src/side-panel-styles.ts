@@ -108,13 +108,13 @@ export const panelStyles = stylex.create({
   },
   kicker: {
     flex: "0 0 auto",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   heading: {
     overflow: "hidden",
     margin: 0,
     color: tokens.ink,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.semibold,
     lineHeight: 1.3,
@@ -363,7 +363,7 @@ export const tourStyles = stylex.create({
   detail: {
     margin: "6px 0 0",
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "15px",
   },

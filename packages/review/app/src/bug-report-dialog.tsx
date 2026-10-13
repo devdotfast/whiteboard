@@ -413,7 +413,7 @@ const styles = stylex.create({
     padding: "10px 12px 12px",
   },
   small: {
-    font: `${fontSize.small}/1.45 ${tokens.fontMono}`,
+    font: `${fontSize.small}/1.45 ${tokens.chromeFont}`,
   },
   option: {
     display: "flex",
