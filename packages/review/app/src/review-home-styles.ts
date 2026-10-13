@@ -117,8 +117,16 @@ export const styles = stylex.create({
     right: "16px",
     bottom: "16px",
     zIndex: layer.overlay,
+    borderRadius: radius.pill,
+    backgroundColor: tokens.tray,
   },
-  cornerMenu: { top: "auto", bottom: "36px" },
+  cornerButton: {
+    width: "36px",
+    height: "36px",
+    backgroundColor: { default: "transparent", ":hover": tokens.trayRaised },
+  },
+  cornerIcon: { width: "18px", height: "18px" },
+  cornerMenu: { top: "auto", bottom: "40px" },
   headerFilters: { marginInlineStart: "auto" },
   chips: {
     display: "flex",
@@ -325,7 +333,7 @@ export const styles = stylex.create({
     },
     transitionTimingFunction: "ease-out",
   },
-  headerIconOpen: { backgroundColor: tokens.tray, color: tokens.ink },
+  headerIconOpen: { backgroundColor: tokens.trayRaised, color: tokens.ink },
   icon: {
     width: "16px",
     height: "16px",

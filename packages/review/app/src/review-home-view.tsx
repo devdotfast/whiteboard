@@ -1384,11 +1384,12 @@ export function ReviewHome({
             {...stylex.props(
               styles.iconButton,
               styles.headerIconButton,
+              styles.cornerButton,
               helpOpen && styles.headerIconOpen,
             )}
             onClick={() => setHelpOpen(!helpOpen)}
           >
-            <HomeIcon kind="help" />
+            <HomeIcon kind="help" size="corner" />
           </button>
           {helpOpen && (
             <MenuSurface
@@ -1441,10 +1442,14 @@ export function ReviewHome({
           aria-label="Settings"
           ref={settingsTooltip}
           disabled={!onOpenSettings}
-          {...stylex.props(styles.iconButton, styles.headerIconButton)}
+          {...stylex.props(
+            styles.iconButton,
+            styles.headerIconButton,
+            styles.cornerButton,
+          )}
           onClick={onOpenSettings}
         >
-          <HomeIcon kind="settings" />
+          <HomeIcon kind="settings" size="corner" />
         </button>
       </div>
       {toast && (
@@ -1979,7 +1984,7 @@ function HomeIcon({
     | "right"
     | "down"
     | "close";
-  size?: "small" | "caret";
+  size?: "small" | "caret" | "corner";
 }) {
   return (
     <svg
@@ -1993,6 +1998,7 @@ function HomeIcon({
           styles.rowIcon,
         size === "small" && styles.smallIcon,
         size === "caret" && styles.caretIcon,
+        size === "corner" && styles.cornerIcon,
       )}
       aria-hidden="true"
       viewBox={
