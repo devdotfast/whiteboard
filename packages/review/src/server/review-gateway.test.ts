@@ -18,7 +18,6 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createGlobalReviewServer } from "./desktop-server.js";
 import { gatewayMemoryPath } from "./review-gateway-memory.js";
 import {
-  type FakeHandler,
   repository as createRepository,
   seed as seedReview,
   startFake,
@@ -481,11 +480,27 @@ it("mounts the gateway in the Desktop server, with host states behind the token"
   expect(await unknown.json()).toEqual({ ok: false, error: "Not found." });
 });
 
-it("never serves a review from a copied store while its machine is down", async () => {
+async function rememberOwner(
+  serverId: string,
+  alias: string,
+  reviewId: string,
+) {
+  const home = path.join(root, "local");
+
+  await mkdir(home, { recursive: true });
+  await writeFile(
+    gatewayMemoryPath(home),
+    JSON.stringify({ [serverId]: { alias, reviewIds: [reviewId] } }),
+  );
+}
+
+it("refuses a review on a server two aliases share", async () => {
   const first = await startRemote(path.join(root, "a"));
   const onA = await seed(first, "On a");
+  const { serverId } = await first.health();
   await first.stop();
   await cp(path.join(root, "a"), path.join(root, "c"), { recursive: true });
+  await rememberOwner(serverId, "wb-a", onA);
   const a = await startRemote(path.join(root, "a"));
   const c = await startRemote(path.join(root, "c"));
 
@@ -496,36 +511,13 @@ it("never serves a review from a copied store while its machine is down", async 
 
   await expect
     .poll(() => gateway.hosts().map((host) => host.state))
-    .toEqual(["online", "duplicate"]);
-  expect(
-    (await request(`/${onA}?full=true`)).headers.get(REVIEW_HOST_HEADER),
-  ).toBe("wb-a");
-
-  await a.stop();
-  const statuses: number[] = [];
-
-  await expect
-    .poll(async () => {
-      const { status } = await request(`/${onA}?full=true`);
-      statuses.push(status);
-
-      return status;
-    })
-    .toBe(503);
-  expect(statuses.every((status) => status === 502 || status === 503)).toBe(
-    true,
-  );
-
+    .toEqual(["duplicate", "duplicate"]);
   const refused = await request(`/${onA}?full=true`);
   expect(refused.status).toBe(503);
   expect(refused.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
   expect(await refused.json()).toMatchObject({
-    error: expect.stringContaining("wb-a is offline"),
+    error: expect.stringContaining("wb-a, wb-c report the same server id"),
   });
-  expect(gateway.hosts().map((host) => host.state)).toEqual([
-    "offline",
-    "duplicate",
-  ]);
 });
 
 it("refuses a redirect from a remote and drops its cookies", async () => {
@@ -601,345 +593,6 @@ it("forgets a review its owner no longer has", async () => {
   expect(gone.status).toBe(404);
   expect(gone.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
   await expect.poll(() => readFile(memoryFile, "utf8")).not.toContain(onA);
-});
-
-async function freePort() {
-  const probe = await startFake({ version });
-
-  await probe.stop();
-
-  return probe.port;
-}
-
-async function rememberOwner(
-  serverId: string,
-  alias: string,
-  reviewId: string,
-) {
-  const home = path.join(root, "local");
-
-  await mkdir(home, { recursive: true });
-  await writeFile(
-    gatewayMemoryPath(home),
-    JSON.stringify({ [serverId]: { alias, reviewIds: [reviewId] } }),
-  );
-}
-
-const states = (gateway: { hosts(): { state: string }[] }) =>
-  gateway.hosts().map((host) => host.state);
-
-it.each([
-  ["another instance: a is the machine, c the duplicate", false, "duplicate"],
-  ["the same instance: one machine under two aliases", true, "online"],
-])(
-  "holds a copy as duplicate until the remembered alias reports (%s)",
-  async (_name, sameInstance, cState) => {
-    const serverId = randomUUID();
-    const reviewId = randomUUID();
-    await rememberOwner(serverId, "wb-a", reviewId);
-    const port = await freePort();
-    const c = await startFake({ version, serverId, reviewIds: [reviewId] });
-
-    const { request, gateway } = await startGateway([
-      {
-        alias: "wb-a",
-        endpoint: { url: `http://127.0.0.1:${port}`, token: "a" },
-      },
-      { alias: "wb-c", endpoint: c.endpoint },
-    ]);
-
-    await expect.poll(() => states(gateway)).toEqual(["offline", "duplicate"]);
-    const detail = gateway.hosts()[1]?.detail;
-    expect(detail).toContain("wb-a");
-    expect(detail).toContain("wb-c");
-    expect(detail).toContain("whiteboard server reset-id");
-    expect(detail).toContain("wb-c is waiting for wb-a");
-
-    const refused = await request(`/${reviewId}`);
-    expect(refused.status).toBe(503);
-    expect(refused.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
-    expect(await refused.json()).toMatchObject({
-      error: expect.stringContaining("wb-a is offline"),
-    });
-    expect(c.requests.some((entry) => entry.url?.includes(reviewId))).toBe(
-      false,
-    );
-
-    await startFake(
-      {
-        version,
-        serverId,
-        token: "a",
-        reviewIds: [reviewId],
-        ...(sameInstance && { instanceId: c.health.instanceId }),
-      },
-      port,
-    );
-
-    await expect
-      .poll(() => states(gateway), { timeout: 5_000 })
-      .toEqual(["online", cState]);
-    const served = await request(`/${reviewId}`);
-    expect(served.status).toBe(200);
-    expect(served.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
-  },
-);
-
-it("takes a reporting alias as the machine when the remembered alias left the setting", async () => {
-  const serverId = randomUUID();
-  const reviewId = randomUUID();
-  await rememberOwner(serverId, "wb-a", reviewId);
-  const c = await startFake({ version, serverId, reviewIds: [reviewId] });
-
-  const { request, gateway } = await startGateway([
-    { alias: "wb-c", endpoint: c.endpoint },
-  ]);
-
-  await expect.poll(() => states(gateway)).toEqual(["online"]);
-  const served = await request(`/${reviewId}`);
-  expect(served.status).toBe(200);
-  expect(served.headers.get(REVIEW_HOST_HEADER)).toBe("wb-c");
-  await expect
-    .poll(async () =>
-      JSON.parse(
-        await readFile(gatewayMemoryPath(path.join(root, "local")), "utf8"),
-      ),
-    )
-    .toEqual({ [serverId]: { alias: "wb-c", reviewIds: [reviewId] } });
-});
-
-function slowHealth(
-  delayMs: number | undefined,
-  serverId: string,
-  instanceId: string,
-): FakeHandler {
-  return (request, response) => {
-    if (request.url !== "/health") return false;
-
-    if (delayMs !== undefined)
-      setTimeout(
-        () =>
-          response.writeHead(200, { "content-type": "application/json" }).end(
-            JSON.stringify({
-              ok: true,
-              serverId,
-              instanceId,
-              serverPid: process.pid,
-              desktopAttached: false,
-              version,
-              commit: null,
-            }),
-          ),
-        delayMs,
-      );
-
-    return true;
-  };
-}
-
-const memoryOf = async () =>
-  JSON.parse(
-    await readFile(gatewayMemoryPath(path.join(root, "local")), "utf8"),
-  );
-
-it("holds a later alias until an earlier one answers, then setting order decides", async () => {
-  const serverId = randomUUID();
-  const reviewId = randomUUID();
-
-  const a = await startFake({
-    version,
-    serverId,
-    reviewIds: [reviewId],
-    handle: slowHealth(1_000, serverId, randomUUID()),
-  });
-
-  const c = await startFake({ version, serverId, reviewIds: [reviewId] });
-
-  const { request, gateway } = await startGateway([
-    { alias: "wb-a", endpoint: a.endpoint },
-    { alias: "wb-c", endpoint: c.endpoint },
-  ]);
-
-  await expect.poll(() => gateway.hosts()[1]?.serverId).toBe(serverId);
-  expect(gateway.hosts()[1]).toMatchObject({
-    state: "connecting",
-    detail: expect.stringContaining("wb-a"),
-  });
-
-  await expect.poll(() => states(gateway)).toEqual(["online", "duplicate"]);
-  const served = await request(`/${reviewId}`);
-  expect(served.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
-  await expect
-    .poll(memoryOf)
-    .toEqual({ [serverId]: { alias: "wb-a", reviewIds: [reviewId] } });
-  expect(c.requests.map((entry) => entry.url)).toEqual(["/health"]);
-});
-
-it("takes a later alias as the machine once an earlier one fails its first check", async () => {
-  const serverId = randomUUID();
-  const reviewId = randomUUID();
-
-  const a = await startFake({
-    version,
-    serverId,
-    handle: slowHealth(undefined, serverId, randomUUID()),
-  });
-
-  const c = await startFake({ version, serverId, reviewIds: [reviewId] });
-
-  const { request, gateway } = await startGateway([
-    { alias: "wb-a", endpoint: a.endpoint },
-    { alias: "wb-c", endpoint: c.endpoint },
-  ]);
-
-  await expect.poll(() => gateway.hosts()[1]?.serverId).toBe(serverId);
-  expect(states(gateway)).toEqual(["connecting", "connecting"]);
-  await expect
-    .poll(() => states(gateway), { timeout: 5_000 })
-    .toEqual(["offline", "online"]);
-  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
-    "wb-c",
-  );
-  await expect
-    .poll(memoryOf)
-    .toEqual({ [serverId]: { alias: "wb-c", reviewIds: [reviewId] } });
-});
-
-it("holds a second alias of the same machine until the first answers", async () => {
-  const serverId = randomUUID();
-  const instanceId = randomUUID();
-  const reviewId = randomUUID();
-
-  const a = await startFake({
-    version,
-    serverId,
-    instanceId,
-    reviewIds: [reviewId],
-    handle: slowHealth(1_000, serverId, instanceId),
-  });
-
-  const b = await startFake({
-    version,
-    serverId,
-    instanceId,
-    reviewIds: [reviewId],
-  });
-
-  const { request, gateway } = await startGateway([
-    { alias: "wb-a", endpoint: a.endpoint },
-    { alias: "wb-b", endpoint: b.endpoint },
-  ]);
-
-  await expect.poll(() => gateway.hosts()[1]?.serverId).toBe(serverId);
-  expect(gateway.hosts()[1]?.state).toBe("connecting");
-  await expect.poll(() => states(gateway)).toEqual(["online", "online"]);
-  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
-    "wb-a",
-  );
-});
-
-it("without memory, uses a later alias while an earlier one is down, then setting order", async () => {
-  const serverId = randomUUID();
-  const reviewId = randomUUID();
-  const port = await freePort();
-  const c = await startFake({ version, serverId, reviewIds: [reviewId] });
-
-  const { request, gateway } = await startGateway([
-    {
-      alias: "wb-a",
-      endpoint: { url: `http://127.0.0.1:${port}`, token: "a" },
-    },
-    { alias: "wb-c", endpoint: c.endpoint },
-  ]);
-
-  await expect.poll(() => states(gateway)).toEqual(["offline", "online"]);
-  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
-    "wb-c",
-  );
-  await expect
-    .poll(memoryOf)
-    .toEqual({ [serverId]: { alias: "wb-c", reviewIds: [reviewId] } });
-
-  await startFake(
-    { version, serverId, token: "a", reviewIds: [reviewId] },
-    port,
-  );
-
-  await expect
-    .poll(() => states(gateway), { timeout: 5_000 })
-    .toEqual(["online", "duplicate"]);
-  await expect
-    .poll(memoryOf)
-    .toEqual({ [serverId]: { alias: "wb-a", reviewIds: [reviewId] } });
-  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
-    "wb-a",
-  );
-});
-
-it("does not hold the first alias behind a later remembered one", async () => {
-  const serverId = randomUUID();
-  const reviewId = randomUUID();
-  await rememberOwner(serverId, "wb-c", reviewId);
-  const a = await startFake({ version, serverId, reviewIds: [reviewId] });
-
-  const c = await startFake({
-    version,
-    serverId,
-    handle: slowHealth(1_000, serverId, randomUUID()),
-  });
-
-  const { request, gateway } = await startGateway([
-    { alias: "wb-a", endpoint: a.endpoint },
-    { alias: "wb-c", endpoint: c.endpoint },
-  ]);
-
-  await expect.poll(() => states(gateway)).toEqual(["online", "connecting"]);
-  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
-    "wb-a",
-  );
-
-  await expect.poll(() => states(gateway)).toEqual(["online", "duplicate"]);
-  await expect
-    .poll(memoryOf)
-    .toEqual({ [serverId]: { alias: "wb-a", reviewIds: [reviewId] } });
-});
-
-it("holds a later remembered alias until the first alias answers", async () => {
-  const serverId = randomUUID();
-  const reviewId = randomUUID();
-  await rememberOwner(serverId, "wb-c", reviewId);
-
-  const a = await startFake({
-    version,
-    serverId,
-    reviewIds: [reviewId],
-    handle: slowHealth(1_000, serverId, randomUUID()),
-  });
-
-  const c = await startFake({ version, serverId, reviewIds: [reviewId] });
-
-  const { request, gateway } = await startGateway([
-    { alias: "wb-a", endpoint: a.endpoint },
-    { alias: "wb-c", endpoint: c.endpoint },
-  ]);
-
-  await expect.poll(() => gateway.hosts()[1]?.serverId).toBe(serverId);
-  expect(states(gateway)).toEqual(["connecting", "connecting"]);
-  const held = await request(`/${reviewId}`);
-  expect(held.status).toBe(503);
-  expect(held.headers.get(REVIEW_HOST_HEADER)).toBe("wb-c");
-  expect(await held.json()).toMatchObject({
-    error: expect.stringContaining("Waiting for wb-a"),
-  });
-
-  await expect.poll(() => states(gateway)).toEqual(["online", "duplicate"]);
-  expect((await request(`/${reviewId}`)).headers.get(REVIEW_HOST_HEADER)).toBe(
-    "wb-a",
-  );
-  await expect
-    .poll(memoryOf)
-    .toEqual({ [serverId]: { alias: "wb-a", reviewIds: [reviewId] } });
-  expect(c.requests.some((entry) => entry.url?.includes(reviewId))).toBe(false);
 });
 
 it("refuses a remote's snapshot of another review, and passes its own byte for byte", async () => {

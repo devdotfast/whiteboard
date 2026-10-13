@@ -135,7 +135,6 @@ export function createReviewGateway(input: {
   const hosts = createGatewayHosts({
     version: input.version,
     log,
-    remembered: (serverId) => memory.alias(serverId),
     machine: (serverId, alias) => memory.rename(serverId, alias),
     ...(input.heartbeatMs !== undefined && { heartbeatMs: input.heartbeatMs }),
     changed() {
@@ -225,11 +224,7 @@ export function createReviewGateway(input: {
             );
           else {
             owner = remote;
-            memory.remember(
-              remote.serverId,
-              hosts.machineAlias(remote.serverId) ?? remote.alias,
-              reviewId,
-            );
+            memory.remember(remote.serverId, remote.alias, reviewId);
             found.resolve({ remote });
           }
         }
@@ -263,11 +258,7 @@ export function createReviewGateway(input: {
       const { remote } = located;
 
       if (remote.serverId !== undefined)
-        memory.remember(
-          remote.serverId,
-          hosts.machineAlias(remote.serverId) ?? remote.alias,
-          reviewId,
-        );
+        memory.remember(remote.serverId, remote.alias, reviewId);
 
       return located;
     }
@@ -595,11 +586,7 @@ export function createReviewGateway(input: {
     if (remote.serverId === undefined)
       return `${remote.alias} has not reported its server id.`;
 
-    memory.remember(
-      remote.serverId,
-      hosts.machineAlias(remote.serverId) ?? remote.alias,
-      reviewId,
-    );
+    memory.remember(remote.serverId, remote.alias, reviewId);
 
     return undefined;
   }

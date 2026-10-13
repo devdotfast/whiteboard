@@ -87,7 +87,7 @@ it("refuses a host whose version could not be read", async () => {
   await expect.poll(() => gateway.states()[0]?.state).toBe("incompatible");
 });
 
-it("treats one server under two aliases as one machine", async () => {
+it("uses neither of two aliases for one server", async () => {
   const remote = await startRemote(path.join(root, "a"));
   const gateway = hosts();
 
@@ -98,37 +98,11 @@ it("treats one server under two aliases as one machine", async () => {
 
   const { serverId } = await remote.health();
   await expect
-    .poll(() => gateway.states())
-    .toEqual([
-      { alias: "first", serverId, state: "online" },
-      { alias: "second", serverId, state: "online" },
-    ]);
-  expect(gateway.serving(serverId)?.alias).toBe("first");
-  expect(gateway.online().map((host) => host.alias)).toEqual(["first"]);
-});
-
-it("marks the second of two machines with a copied id as a duplicate", async () => {
-  const first = await startRemote(path.join(root, "a"));
-  await first.stop();
-  await cp(path.join(root, "a"), path.join(root, "c"), { recursive: true });
-  const a = await startRemote(path.join(root, "a"));
-  const c = await startRemote(path.join(root, "c"));
-  const { serverId } = await a.health();
-  expect((await c.health()).serverId).toBe(serverId);
-
-  const gateway = hosts();
-  gateway.set([
-    { alias: "wb-a", endpoint: a.endpoint },
-    { alias: "wb-c", endpoint: c.endpoint },
-  ]);
-
-  await expect.poll(() => gateway.states()[1]?.state).toBe("duplicate");
-  const [online, duplicate] = gateway.states();
-  expect(online).toEqual({ alias: "wb-a", serverId, state: "online" });
-  expect(duplicate?.detail).toContain("wb-a");
-  expect(duplicate?.detail).toContain("wb-c");
-  expect(duplicate?.detail).toContain("whiteboard server reset-id");
-  expect(gateway.online().map((host) => host.alias)).toEqual(["wb-a"]);
+    .poll(() => gateway.states().map((host) => host.state))
+    .toEqual(["duplicate", "duplicate"]);
+  expect(gateway.states()[1]?.detail).toContain("first, second");
+  expect(gateway.serving(serverId)).toBeUndefined();
+  expect(gateway.online()).toEqual([]);
 });
 
 it("retries an offline host until it answers", async () => {
@@ -145,66 +119,37 @@ it("retries an offline host until it answers", async () => {
     .toBe("online");
 });
 
-async function copiedStore() {
+it("uses neither of two machines with a copied id, until one leaves the setting", async () => {
   const first = await startRemote(path.join(root, "a"));
   await first.stop();
   await cp(path.join(root, "a"), path.join(root, "c"), { recursive: true });
   const a = await startRemote(path.join(root, "a"));
   const c = await startRemote(path.join(root, "c"));
-
-  return { a, c, serverId: (await a.health()).serverId };
-}
-
-it("keeps a copied store a duplicate while the first alias is down", async () => {
-  const { a, c, serverId } = await copiedStore();
-  const port = Number(new URL(a.endpoint.url).port);
+  const { serverId } = await a.health();
   const gateway = hosts();
 
   gateway.set([
     { alias: "wb-a", endpoint: a.endpoint },
     { alias: "wb-c", endpoint: c.endpoint },
-  ]);
-  await expect.poll(() => gateway.states()[1]?.state).toBe("duplicate");
-
-  await a.stop();
-  gateway.failed(gateway.serving(serverId)!, "test");
-  await expect.poll(() => gateway.states()[0]?.state).toBe("offline");
-
-  expect(gateway.states()[1]?.state).toBe("duplicate");
-  expect(gateway.serving(serverId)).toBeUndefined();
-  expect(gateway.online()).toEqual([]);
-  expect(gateway.unavailable(serverId, "wb-a")).toMatchObject({
-    alias: "wb-a",
-    state: "offline",
-  });
-
-  const restarted = await startRemote(path.join(root, "a"), port);
-
-  gateway.set([
-    { alias: "wb-a", endpoint: restarted.endpoint },
-    { alias: "wb-c", endpoint: c.endpoint },
-  ]);
-  await expect
-    .poll(() => gateway.states()[0]?.state, { timeout: 5_000 })
-    .toBe("online");
-  expect(gateway.states()[1]?.state).toBe("duplicate");
-  expect(gateway.serving(serverId)?.alias).toBe("wb-a");
-});
-
-it("decides the duplicate by the order of the setting", async () => {
-  const { a, c, serverId } = await copiedStore();
-  const gateway = hosts();
-
-  gateway.set([
-    { alias: "wb-c", endpoint: c.endpoint },
-    { alias: "wb-a", endpoint: a.endpoint },
   ]);
 
   await expect
     .poll(() => gateway.states().map((host) => host.state))
-    .toEqual(["online", "duplicate"]);
-  expect(gateway.states()[1]?.detail).toContain("wb-c");
-  expect(gateway.serving(serverId)?.alias).toBe("wb-c");
+    .toEqual(["duplicate", "duplicate"]);
+  expect(gateway.states()[0]?.detail).toContain("wb-a, wb-c");
+  expect(gateway.states()[0]?.detail).toContain("whiteboard server reset-id");
+  expect(gateway.serving(serverId)).toBeUndefined();
+  expect(gateway.unavailable(serverId, "wb-a")).toMatchObject({
+    alias: "wb-a",
+    state: "duplicate",
+  });
+
+  await c.stop();
+  gateway.set([{ alias: "wb-a", endpoint: a.endpoint }]);
+  expect(gateway.states()).toEqual([
+    { alias: "wb-a", serverId, state: "online" },
+  ]);
+  expect(gateway.serving(serverId)?.alias).toBe("wb-a");
 });
 
 it("leaves a host in backoff alone when only another host changes, and checks it at once when its own entry does", async () => {

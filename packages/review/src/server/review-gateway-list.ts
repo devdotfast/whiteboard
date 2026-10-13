@@ -48,7 +48,6 @@ function remoteEntries(mode: ListMode, source: ListSource) {
   const seen = new Set<string>();
 
   for (const state of source.states) {
-    if (state.state === "duplicate") continue;
     const serverId = state.serverId ?? source.serverIdOf(state.alias);
 
     if (serverId === undefined || seen.has(serverId)) continue;

@@ -47,19 +47,16 @@ interface Host extends GatewayRemote {
   agent?: http.Agent;
   problem?: ReviewGatewayHost["problem"];
   serverId?: string;
-  instanceId?: string;
   status: ReviewGatewayHostState["state"];
   detail?: string;
   retryMs: number;
   retry?: NodeJS.Timeout;
   checking?: AbortController;
-  checked?: boolean;
 }
 
 export function createGatewayHosts(input: {
   version: string;
   log?(message: string): void;
-  remembered?(serverId: string): string | undefined;
   machine?(serverId: string, alias: string): void;
   changed?(): void;
   heartbeatMs?: number;
@@ -69,42 +66,10 @@ export function createGatewayHosts(input: {
   let closed = false;
   const reported = new Map<string, string>();
 
-  const machine = (serverId: string | undefined) =>
-    serverId === undefined
-      ? undefined
-      : hosts.find((host) => host.serverId === serverId);
-
-  const pending = (host: Host) => {
-    if (host.serverId === undefined) return undefined;
-    const alias = input.remembered?.(host.serverId);
-    const index = hosts.findIndex((candidate) => candidate.alias === alias);
-    const remembered = hosts[index];
-
-    return remembered &&
-      index < hosts.indexOf(host) &&
-      remembered.serverId === undefined
-      ? remembered
-      : undefined;
-  };
-
-  const unsettledBefore = (host: Host) =>
+  const sharing = (host: Host) =>
     host.serverId === undefined
-      ? []
-      : hosts
-          .slice(0, hosts.indexOf(host))
-          .filter((earlier) => !earlier.problem && !earlier.checked);
-
-  const held = (host: Host) =>
-    host.status === "online" && unsettledBefore(host).length > 0;
-
-  const isDuplicate = (host: Host) => {
-    const first = machine(host.serverId);
-
-    if (first !== undefined && first.instanceId !== host.instanceId)
-      return true;
-
-    return pending(host) !== undefined;
-  };
+      ? [host]
+      : hosts.filter((other) => other.serverId === host.serverId);
 
   const serving = (serverId: string | undefined) =>
     serverId === undefined
@@ -113,8 +78,7 @@ export function createGatewayHosts(input: {
           (host) =>
             host.status === "online" &&
             host.serverId === serverId &&
-            !held(host) &&
-            !isDuplicate(host),
+            sharing(host).length === 1,
         );
 
   function stateOf(host: Host): ReviewGatewayHostState {
@@ -123,31 +87,13 @@ export function createGatewayHosts(input: {
       ...(host.serverId !== undefined && { serverId: host.serverId }),
     };
 
-    if (held(host))
-      return {
-        ...known,
-        state: "connecting",
-        detail: `Waiting for ${unsettledBefore(host)
-          .map((earlier) => earlier.alias)
-          .join(", ")} to answer before using ${host.alias}.`,
-      };
+    const aliases = sharing(host).map((other) => other.alias);
 
-    const waitingFor = pending(host);
-
-    if (waitingFor)
+    if (aliases.length > 1)
       return {
         ...known,
         state: "duplicate",
-        detail: `${host.alias} is waiting for ${waitingFor.alias}, which last served this server id and has not answered yet. If they are one machine, remove one of the aliases. If they are two machines, run \`whiteboard server reset-id\` on ${host.alias}.`,
-      };
-
-    const first = machine(host.serverId);
-
-    if (isDuplicate(host))
-      return {
-        ...known,
-        state: "duplicate",
-        detail: `${first?.alias} and ${host.alias} report the same server id. If they are one machine, remove one of the aliases. If they are two machines, run \`whiteboard server reset-id\` on ${host.alias}.`,
+        detail: `${aliases.join(", ")} report the same server id, so Whiteboard uses none of them. If they are one machine, keep one alias. If they are separate machines, run \`whiteboard server stop\` and then \`whiteboard server reset-id\` on all but one.`,
       };
 
     return {
@@ -161,11 +107,7 @@ export function createGatewayHosts(input: {
     const states = hosts.map(stateOf);
 
     for (const host of hosts)
-      if (
-        host.serverId !== undefined &&
-        serving(host.serverId) === host &&
-        machine(host.serverId) === host
-      )
+      if (host.serverId !== undefined && serving(host.serverId) === host)
         input.machine?.(host.serverId, host.alias);
 
     for (const state of states) {
@@ -210,11 +152,14 @@ export function createGatewayHosts(input: {
     return host;
   }
 
-  function retryLater(host: Host) {
-    const delay = jitter(host.retryMs);
-    host.retryMs = Math.min(host.retryMs * 2, MAX_RETRY_MS);
-    host.retry = setTimeout(() => void check(host), delay);
+  function schedule(host: Host, ms: number) {
+    host.retry = setTimeout(() => void check(host), ms);
     host.retry.unref();
+  }
+
+  function retryLater(host: Host) {
+    schedule(host, jitter(host.retryMs));
+    host.retryMs = Math.min(host.retryMs * 2, MAX_RETRY_MS);
   }
 
   async function check(host: Host) {
@@ -226,13 +171,12 @@ export function createGatewayHosts(input: {
     const timer = setTimeout(() => abort.abort(), HEALTH_TIMEOUT_MS);
     let health: z.infer<typeof healthSchema> | undefined;
     let reason = "it did not answer";
-    let code: string | undefined;
 
     try {
       const response = await send(host, {
         method: "GET",
         path: "/health",
-        headers: { "x-review-token": host.endpoint?.token ?? "" },
+        headers: { "x-review-token": host.endpoint.token },
         signal: abort.signal,
       });
 
@@ -243,10 +187,8 @@ export function createGatewayHosts(input: {
       if (parsed.success) health = parsed.data;
       else reason = "it did not answer as a Whiteboard server";
     } catch (error) {
-      if (!abort.signal.aborted) {
-        code = errorCode(error);
-        reason = errorText(error);
-      } else if (host.checking === abort)
+      if (!abort.signal.aborted) reason = errorText(error);
+      else if (host.checking === abort)
         reason = `it did not answer within ${HEALTH_TIMEOUT_MS / 1_000} seconds`;
     } finally {
       clearTimeout(timer);
@@ -254,29 +196,17 @@ export function createGatewayHosts(input: {
 
     if (host.checking !== abort) return;
     host.checking = undefined;
-    host.checked = true;
 
     if (!health) {
       host.status = "offline";
       host.detail = `${host.alias} is offline: ${reason}.`;
       retryLater(host);
     } else if (health.serverId === undefined) {
-      host.instanceId = health.instanceId;
       host.status = "offline";
       host.detail = `${host.alias} is offline: it did not accept the token.`;
       retryLater(host);
     } else {
-      const restarted =
-        host.serverId === health.serverId &&
-        host.instanceId !== health.instanceId;
-
       host.serverId = health.serverId;
-      host.instanceId = health.instanceId;
-
-      if (restarted)
-        for (const other of hosts)
-          if (other !== host && other.serverId === health.serverId)
-            void check(other);
       host.retryMs = FIRST_RETRY_MS;
 
       if (health.version === "unknown" || health.version !== input.version) {
@@ -287,11 +217,7 @@ export function createGatewayHosts(input: {
         host.detail = undefined;
       }
 
-      host.retry = setTimeout(
-        () => void check(host),
-        input.heartbeatMs ?? HEARTBEAT_MS,
-      );
-      host.retry.unref();
+      schedule(host, input.heartbeatMs ?? HEARTBEAT_MS);
     }
 
     report();
@@ -329,21 +255,16 @@ export function createGatewayHosts(input: {
     },
     states: () => hosts.map(stateOf),
     serving: (serverId: string): GatewayRemote | undefined => serving(serverId),
-    machineAlias: (serverId: string) => machine(serverId)?.alias,
     online: (): GatewayRemote[] =>
-      hosts.filter(
-        (host) => host.status === "online" && serving(host.serverId) === host,
-      ),
+      hosts.filter((host) => serving(host.serverId) === host),
     unavailable(serverId: string, alias: string) {
       const host = hosts.find(
         (candidate) =>
-          (candidate.status !== "online" || held(candidate)) &&
-          !isDuplicate(candidate) &&
-          (candidate.serverId === serverId ||
-            (candidate.serverId === undefined && candidate.alias === alias)),
+          candidate.serverId === serverId ||
+          (candidate.serverId === undefined && candidate.alias === alias),
       );
 
-      return host && stateOf(host);
+      return host && serving(serverId) !== host ? stateOf(host) : undefined;
     },
     failed(remote: GatewayRemote, reason: string) {
       const host = hosts.find((candidate) => candidate === remote);

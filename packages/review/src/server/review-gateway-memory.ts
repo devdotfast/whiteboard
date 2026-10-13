@@ -168,7 +168,6 @@ export function openGatewayMemory(
       index();
       save();
     },
-    alias: (serverId: string) => servers.get(serverId)?.alias,
     rename(serverId: string, alias: string) {
       const server = servers.get(serverId);
 

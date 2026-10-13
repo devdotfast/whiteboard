@@ -64,33 +64,20 @@ it("lists this machine first, then each machine in the setting's order", () => {
   });
 });
 
-it("lists one machine under two aliases once, under the first", () => {
+it("lists a server two aliases share once, under the first, offline", () => {
   const merged = mergeLists(
     "structural",
     [],
     source(
       [
-        { alias: "first", serverId: "A", state: "online" },
-        { alias: "second", serverId: "A", state: "online" },
+        { alias: "first", serverId: "A", state: "duplicate" },
+        { alias: "second", serverId: "A", state: "duplicate" },
       ],
       { A: [entry("on a")] },
-      ["A"],
     ),
   );
 
-  expect(summary(merged)).toEqual([["on a", "first", "online"]]);
-});
-
-it("leaves a duplicate out", () => {
-  const merged = mergeLists(
-    "structural",
-    [],
-    source([{ alias: "copy", serverId: "C", state: "duplicate" }], {
-      C: [entry("copied")],
-    }),
-  );
-
-  expect(merged).toEqual([]);
+  expect(summary(merged)).toEqual([["on a", "first", "offline"]]);
 });
 
 it("drops entries whose id is not a UUID", () => {

@@ -131,7 +131,7 @@ export function createGatewayStreams(input: {
 
     memory.setList(
       remote.serverId,
-      hosts.machineAlias(remote.serverId) ?? remote.alias,
+      remote.alias,
       line.mode,
       listEntriesSchema
         .parse(line.reviews)

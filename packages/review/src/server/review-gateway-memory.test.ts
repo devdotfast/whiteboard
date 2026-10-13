@@ -131,5 +131,5 @@ it("gives an id two lists hold to the server first in the given order, and follo
   );
 
   memory.setList("server-2", "renamed", "structural", [entry]);
-  expect(memory.alias("server-2")).toBe("renamed");
+  expect(memory.owner("review-1", ["server-2"])?.alias).toBe("renamed");
 });
