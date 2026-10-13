@@ -100,30 +100,25 @@ export class ReviewWorkspaces {
       throw error;
     }
 
-    this.stop = store.subscribeCatalog(() => {
+    const stopCatalog = store.subscribeCatalog(() => {
       this.collect();
       this.releaseTrashed();
-      this.releaseDeleted();
     });
+
+    const stopDeleted = store.subscribe(({ reviewId, deleted }) => {
+      if (!deleted) return;
+      const repositories = this.repositoryDirs();
+      repositories.catch(() => undefined);
+      this.release(reviewId, repositories, () => !this.hasReview(reviewId));
+    });
+
+    this.stop = () => {
+      stopCatalog();
+      stopDeleted();
+    };
+
     this.collect();
     this.releaseTrashed();
-    this.releaseDeleted();
-  }
-
-  private saved?: Set<string>;
-
-  private releaseDeleted() {
-    const saved = new Set(this.store.reviewIds());
-    const deleted = [...(this.saved ?? [])].filter((id) => !saved.has(id));
-    this.saved = saved;
-
-    if (!deleted.length) return;
-
-    const repositories = this.repositoryDirs();
-    repositories.catch(() => undefined);
-
-    for (const reviewId of deleted)
-      this.release(reviewId, repositories, () => !this.hasReview(reviewId));
   }
 
   // Unset until the first scan, so startup also frees reviews trashed
