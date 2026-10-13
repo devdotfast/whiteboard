@@ -356,7 +356,8 @@ export class ReviewDesktopHost extends Disposable {
   private startRemoteHosts(
     shellEnvironment: () => Promise<NodeJS.ProcessEnv>,
   ): void {
-    if (this.disposed) return;
+    // SSH hosts need ControlMaster sockets, which Windows OpenSSH lacks.
+    if (this.disposed || process.platform === "win32") return;
     let version: Promise<string> | undefined;
     const manager = new ReviewRemoteHosts({
       spawn: (args, options) => spawn("ssh", args, options),
