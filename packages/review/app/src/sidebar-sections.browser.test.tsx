@@ -179,6 +179,150 @@ it("shows a top-level board with its children, and starts a new whiteboard from 
   await view.dispose();
 });
 
+it("picks one of the board's commits for the diff, in ancestry order, and steps through them", async () => {
+  const onPickCommit = vi.fn<(commit: string | null) => void>();
+
+  // Newest first, as git lists them; a rebase left the dates out of order.
+  const commit = (sha: string, subject: string, authored: number) => ({
+    commit: sha.repeat(40),
+    subject,
+    author: "ketan",
+    authoredAt: day(authored),
+    additions: 2,
+    deletions: 1,
+  });
+
+  const list = [
+    commit("c", "Third", 5),
+    commit("b", "Second", 9),
+    commit("a", "First", 7),
+  ];
+
+  const picker = (selected?: string) =>
+    props({
+      section: "commitPicker",
+      commits: { list, ...(selected && { selected: selected.repeat(40) }) },
+      onPickCommit,
+    });
+
+  const view = await mount(picker());
+
+  const menuRows = () =>
+    [...document.querySelectorAll("[role=menuitemradio]")].map(
+      (row) => row.textContent,
+    );
+
+  await vi.waitFor(() =>
+    expect(document.body.textContent).toContain("Commits3"),
+  );
+  expect(document.body.textContent).not.toContain("All commits");
+
+  // Oldest first by ancestry, whatever the dates say.
+  await view.click('[aria-haspopup="menu"]');
+  expect(menuRows()).toEqual([
+    expect.stringContaining("All commits3 commits"),
+    expect.stringContaining("First"),
+    expect.stringContaining("Second"),
+    expect.stringContaining("Third"),
+  ]);
+  expect(document.activeElement?.getAttribute("aria-checked")).toBe("true");
+
+  // Arrows move through the menu.
+  await act(async () => {
+    document.activeElement?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+    );
+  });
+  expect(document.activeElement?.textContent).toContain("First");
+
+  // A pointer down anywhere outside closes it, and so does the window
+  // losing focus to another frame.
+  const menuOpen = () => document.querySelector('[role="menu"]') !== null;
+
+  await act(async () => {
+    document.body.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true }),
+    );
+  });
+  expect(menuOpen()).toBe(false);
+  await view.click('[aria-haspopup="menu"]');
+  expect(menuOpen()).toBe(true);
+  await act(async () => {
+    window.dispatchEvent(new Event("blur"));
+  });
+  expect(menuOpen()).toBe(false);
+  await view.click('[aria-haspopup="menu"]');
+
+  // Flipped, newest first.
+  await view.click('[aria-label="Oldest first"]');
+  expect(menuRows().slice(1)).toEqual([
+    expect.stringContaining("Third"),
+    expect.stringContaining("Second"),
+    expect.stringContaining("First"),
+  ]);
+  await view.click("[role=menuitemradio]:nth-child(1)");
+  expect(onPickCommit).toHaveBeenLastCalledWith(null);
+
+  // One picked: its id, and steps to the older and the newer.
+  await act(async () => view.update(picker("b")));
+  expect(document.body.textContent).toContain("Commitbbbbbbb");
+  await view.click('[aria-label="Older commit"]');
+  expect(onPickCommit).toHaveBeenLastCalledWith("a".repeat(40));
+  await view.click('[aria-label="Newer commit"]');
+  expect(onPickCommit).toHaveBeenLastCalledWith("c".repeat(40));
+  await view.click('[aria-label="Show all commits"]');
+  expect(onPickCommit).toHaveBeenLastCalledWith(null);
+
+  // At the oldest, there is no older one.
+  await act(async () => view.update(picker("a")));
+  expect(
+    document.querySelector<HTMLButtonElement>('[aria-label="Older commit"]')
+      ?.disabled,
+  ).toBe(true);
+
+  // One commit: the same pill and menu, and nothing to step to.
+  await act(async () =>
+    view.update(
+      props({
+        section: "commitPicker",
+        commits: { list: [list[2]!], selected: "a".repeat(40) },
+        onPickCommit,
+      }),
+    ),
+  );
+  expect(
+    document.querySelector<HTMLButtonElement>('[aria-label="Older commit"]')
+      ?.disabled,
+  ).toBe(true);
+  expect(
+    document.querySelector<HTMLButtonElement>('[aria-label="Newer commit"]')
+      ?.disabled,
+  ).toBe(true);
+  await act(async () =>
+    view.update(
+      props({
+        section: "commitPicker",
+        commits: { list: [list[2]!] },
+        onPickCommit,
+      }),
+    ),
+  );
+  expect(document.body.textContent).toContain("Commits1");
+  await view.click('[aria-label="All 1 commit. Choose commits"]');
+  expect(menuRows()).toEqual([
+    expect.stringContaining("All commits1 commit"),
+    expect.stringContaining("First"),
+  ]);
+  // Picking the one commit works as it does among many.
+  await view.click('[role=menuitemradio][aria-checked="false"]');
+  expect(onPickCommit).toHaveBeenLastCalledWith("a".repeat(40));
+
+  // Its own changes stand where the board's remaining count goes.
+  await act(async () => view.update({ ...picker("a"), section: "remaining" }));
+  expect(document.body.textContent).toContain("This commit+2−1");
+  await view.dispose();
+});
+
 it("lists the board's threads, the project's, or every project's", async () => {
   const ref = (reviewId: string, title: string) => ({
     reviewId,

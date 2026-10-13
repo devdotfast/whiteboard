@@ -35,6 +35,7 @@ import {
   ReviewSurfaceLabel,
 } from "./authoring-activity";
 import { BugReportControl } from "./bug-report-dialog";
+import { CommitPicker } from "./commit-picker";
 import { LanguageServerChip } from "./connection-chip";
 import { controlStyles } from "./controls-styles";
 import {
@@ -55,7 +56,6 @@ import {
   appMarker,
   detailHostMarker,
   documentMarker,
-  scopedDiffMarker,
   segmentMarker,
   topbarActionsMarker,
   topbarTabsMarker,
@@ -63,6 +63,7 @@ import {
 import { MissingCheckoutBanner } from "./missing-checkout-banner";
 import { usePageBarFold } from "./page-bar-fold";
 import { type PageMoreFolded, PageMoreMenu } from "./page-more-menu";
+import { shortRef } from "./review-branch-range";
 import { ReviewBreadcrumb } from "./review-breadcrumb";
 import { ReviewPanelHost } from "./review-components";
 import {
@@ -100,7 +101,6 @@ import {
 import { ReviewRootsProvider, useReviewContainer } from "./review-root-context";
 import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
 import { useReviewViewStateSync } from "./review-view-state";
-import { ReviewCommitsView } from "./ReviewCommitsView";
 import { ReviewTraceView } from "./ReviewTraceView";
 import {
   elevation,
@@ -366,7 +366,7 @@ function ReviewLayoutContent({
   // resize would lay out every editor in it on each step. Shown, it fills the
   // column again and lays out once.
   const diffHostRef = useRef<HTMLDivElement | null>(null);
-  const diffPreloaded = activeView !== "diff" || diffScope !== null;
+  const diffPreloaded = activeView !== "diff";
   // Built the first time it is shown, then kept for instant returns.
   const [diffOpened, setDiffOpened] = useState(!diffPreloaded);
 
@@ -520,12 +520,11 @@ function ReviewLayoutContent({
   const reviewViews = useMemo(
     () =>
       offeredReviewViews({
-        hasCommits,
         hasDiff,
         softwareMapEnabled,
         hasTraceSessions,
       }),
-    [hasCommits, hasDiff, hasTraceSessions, softwareMapEnabled],
+    [hasDiff, hasTraceSessions, softwareMapEnabled],
   );
 
   useLayoutEffect(() => {
@@ -580,6 +579,20 @@ function ReviewLayoutContent({
       contents: tocEntries,
       view: activeView,
       ...(countsPending && { countsPending }),
+      ...(hasCommits && {
+        commits: commits.map(
+          ({ commit, subject, author, authoredAt, additions, deletions }) => ({
+            commit,
+            subject,
+            author,
+            authoredAt,
+            additions,
+            deletions,
+          }),
+        ),
+        compare: `${shortRef(range.baseRef || range.baseCommit)} ← ${shortRef(range.headRef || range.headCommit)}`,
+      }),
+      ...(diffScope && { commit: diffScope.commit.commit }),
       ...(activeHeading && { activeHeading }),
       ...(hasChangeRange && lenses && { lenses: lenses.authored.length }),
       ...(hasChangeRange &&
@@ -587,8 +600,13 @@ function ReviewLayoutContent({
         lensStats && {
           files: {
             count: filesTabFileCount,
-            additions: lensStats.total.additions,
-            deletions: lensStats.total.deletions,
+            // A picked commit's own changes; else the board's.
+            additions: diffScope
+              ? diffScope.commit.additions
+              : lensStats.total.additions,
+            deletions: diffScope
+              ? diffScope.commit.deletions
+              : lensStats.total.deletions,
             ...(lenses?.progress?.untrackedFiles && {
               untracked: lenses.progress.untrackedFiles,
             }),
@@ -607,7 +625,26 @@ function ReviewLayoutContent({
     lensStats?.total.additions,
     lensStats?.total.deletions,
     lenses?.progress?.untrackedFiles,
+    hasCommits,
+    commits,
+    range.baseRef,
+    range.baseCommit,
+    range.headRef,
+    range.headCommit,
+    diffScope,
   ]);
+
+  const commitsRef = useRef(commits);
+  commitsRef.current = commits;
+
+  // A picked commit holds for the session, until the board's commits change.
+  const commitKey = commits.map(({ commit }) => commit).join(" ");
+  const seenCommits = useRef(commitKey);
+  useEffect(() => {
+    if (seenCommits.current === commitKey) return;
+    seenCommits.current = commitKey;
+    panelStore.getState().pickCommit(null);
+  }, [commitKey, panelStore]);
 
   // Subscribe before the canvas signals ready so a reveal immediately after
   // mounting cannot outrun the listener.
@@ -643,6 +680,16 @@ function ReviewLayoutContent({
         return;
       }
 
+      if (event.event === "pickCommit") {
+        const commit = commitsRef.current.find(
+          (each) => each.commit === event.commit,
+        );
+
+        panelStore.getState().pickCommit(commit ? { commit } : null);
+
+        return;
+      }
+
       if (event.event !== "showReviewView") return;
 
       const {
@@ -651,15 +698,18 @@ function ReviewLayoutContent({
         diffScope: scope,
       } = panelStore.getState();
 
-      if (!availableViews.includes(event.view)) return;
+      // Commits became a picker in Diff: an older caller's "commits" opens it.
+      const view = event.view === "commits" ? "diff" : event.view;
+
+      if (!availableViews.includes(view)) return;
 
       // Desktop's sidebar tabs open the diff in place of the strip.
-      if (event.view === "diff" && event.reviewId)
+      if (view === "diff" && event.reviewId)
         captureUiEvent(session, "diff_opened", {
           kind: scope ? "commit" : "structural",
           via: "sidebar",
         });
-      showView(event.view);
+      showView(view);
     });
 
     return () => {
@@ -804,17 +854,6 @@ function ReviewLayoutContent({
                         {filesTabFileCount}
                       </span>
                     )}
-                    {view === "commits" && (
-                      <span
-                        {...stylex.props(
-                          segmentStyles.segmentCount,
-                          activeView === view &&
-                            segmentStyles.segmentCountActive,
-                        )}
-                      >
-                        {commits.length}
-                      </span>
-                    )}
                     <MarkerUnderline active={activeView === view} />
                   </button>
                 ))}
@@ -923,7 +962,6 @@ function ReviewLayoutContent({
           {...withClass(
             `review-view-region review-view-region--${activeView}`,
             shellStyles.viewRegion,
-            activeView === "commits" && shellStyles.commitsRegion,
             activeView === "review" && shellStyles.reviewRegion,
             activeView === "trace" && traceStyles.region,
           )}
@@ -1001,16 +1039,6 @@ function ReviewLayoutContent({
               </div>
             </div>
           )}
-          {activeView === "commits" && (
-            <ReviewCommitsView
-              commits={commits}
-              range={range}
-              onOpenDiff={(commit, via, file) => {
-                captureUiEvent(session, "commit_diff_opened", { via });
-                panelStore.getState().openCommitDiff({ commit, file });
-              }}
-            />
-          )}
           <div
             ref={diffHostRef}
             aria-hidden={diffPreloaded}
@@ -1022,30 +1050,34 @@ function ReviewLayoutContent({
           >
             {diffOpened && (
               <DocumentContentsContext.Provider value={documentContents}>
-                <ReviewDiffView />
+                <ReviewDiffView
+                  scope={
+                    diffScope ? { commit: diffScope.commit.commit } : undefined
+                  }
+                  revealFile={diffScope?.file}
+                  restoreFile={diffScope?.restoreFile}
+                  picker={
+                    // Desktop's sidebar has its own, over its Lenses.
+                    sidebarLeads ? undefined : (
+                      <CommitPicker
+                        commits={commits}
+                        selected={diffScope?.commit.commit}
+                        onPick={(sha) => {
+                          const commit = commits.find(
+                            (each) => each.commit === sha,
+                          );
+
+                          panelStore
+                            .getState()
+                            .pickCommit(commit ? { commit } : null);
+                        }}
+                      />
+                    )
+                  }
+                />
               </DocumentContentsContext.Provider>
             )}
           </div>
-          {activeView === "diff" && diffScope !== null && (
-            <div
-              {...withClass(
-                "review-diff-view--scoped",
-                shellStyles.diffView,
-                shellStyles.diffViewScoped,
-                scopedDiffMarker,
-              )}
-            >
-              <CommitDiffScopeBar
-                commit={diffScope.commit}
-                onBack={() => showView("commits")}
-              />
-              <ReviewDiffView
-                scope={{ commit: diffScope.commit.commit }}
-                revealFile={diffScope.file}
-                restoreFile={diffScope.restoreFile}
-              />
-            </div>
-          )}
           {activeView === "trace" && (
             <ReviewTraceView
               selection={traceSelection}
@@ -1075,70 +1107,6 @@ function ReviewLayoutContent({
     </div>
   );
 }
-
-function CommitDiffScopeBar({
-  commit,
-  onBack,
-}: {
-  commit: ReviewCommitSummary;
-  onBack: () => void;
-}) {
-  return (
-    <div {...stylex.props(scopeBarStyles.bar)}>
-      <button
-        type="button"
-        {...stylex.props(scopeBarStyles.back)}
-        onClick={onBack}
-      >
-        <span aria-hidden="true">←</span> Commits
-      </button>
-      <code {...stylex.props(scopeBarStyles.sha)} title={commit.commit}>
-        {commit.commit.slice(0, 8)}
-      </code>
-      <span {...stylex.props(scopeBarStyles.subject)} title={commit.subject}>
-        {commit.subject}
-      </span>
-    </div>
-  );
-}
-
-const scopeBarStyles = stylex.create({
-  bar: {
-    display: "flex",
-    height: "30px",
-    flex: "0 0 30px",
-    alignItems: "center",
-    gap: "12px",
-    padding: "0 12px",
-    borderBottomWidth: "1px",
-    borderBottomStyle: "solid",
-    borderBottomColor: tokens.ruleSoft,
-    backgroundColor: tokens.surface,
-  },
-  back: {
-    height: "20px",
-    flex: "0 0 auto",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: "transparent",
-    color: tokens.accent,
-    fontSize: fontSize.micro,
-  },
-  sha: {
-    color: tokens.inkMuted,
-    font: `${fontSize.micro} ${tokens.fontMono}`,
-  },
-  subject: {
-    minWidth: 0,
-    overflow: "hidden",
-    color: tokens.ink,
-    fontSize: fontSize.small,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-});
 
 /**
  * Reports where the baton sits after the reader acts. It renders nothing while

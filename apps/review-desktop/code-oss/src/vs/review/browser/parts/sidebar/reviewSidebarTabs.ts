@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 /** The tabs under the window controls. Whiteboard and Diff pick the main
- * view too; Threads only the pane. */
+ * view too; Threads only the pane. Diff picks its commits itself. */
 export type ReviewSidebarPaneId = "whiteboard" | "diff" | "threads";
 
 /** The view each tab shows, for the two that own one. */
