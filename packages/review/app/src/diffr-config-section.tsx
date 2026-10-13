@@ -11,8 +11,8 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
-import { Choice } from "./settings-choice";
 import { settingsStyles as styles } from "./settings-styles";
+import { SegmentedControl } from "./ui/segmented";
 
 const hideKey = "plugins.classify.bundled.hide";
 
@@ -274,15 +274,13 @@ export function DiffrConfigSection({
                     </SettingRow>
                     {!!config.providers?.length && (
                       <SettingRow label="Provider">
-                        <Choice
+                        <SegmentedControl
                           label="Provider"
                           value={draft.provider}
-                          labels={Object.fromEntries(
-                            config.providers.map((known) => [
-                              known.id,
-                              known.title,
-                            ]),
-                          )}
+                          options={config.providers.map((known) => ({
+                            value: known.id,
+                            label: known.title,
+                          }))}
                           disabled={busy || unavailable}
                           onChange={(choice) =>
                             setDraft({

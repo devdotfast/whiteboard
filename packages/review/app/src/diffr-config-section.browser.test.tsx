@@ -348,13 +348,13 @@ test("defaults to Gemini and switching provider resets the model and key", async
   const { actions } = await mount();
   await open();
   await expect
-    .element(page.getByRole("radio", { name: "Gemini" }))
-    .toHaveAttribute("aria-checked", "true");
+    .element(page.getByRole("button", { name: "Gemini" }))
+    .toHaveAttribute("aria-pressed", "true");
   await act(async () => {
     await page.getByLabelText("API key", { exact: true }).fill("typed-secret");
   });
   await act(async () => {
-    await page.getByRole("radio", { name: "Anthropic" }).click();
+    await page.getByRole("button", { name: "Anthropic" }).click();
   });
   await expect
     .element(page.getByLabelText("Model", { exact: true }))
@@ -417,7 +417,7 @@ test("switching provider without a saved key does not promise to clear one", asy
   await mount({ credentialSource: "missing" });
   await open();
   await act(async () => {
-    await page.getByRole("radio", { name: "OpenAI" }).click();
+    await page.getByRole("button", { name: "OpenAI" }).click();
   });
   await expect
     .element(
@@ -465,7 +465,7 @@ test("switching provider clears a custom endpoint, and a new endpoint warns abou
     )
     .toBeVisible();
   await act(async () => {
-    await page.getByRole("radio", { name: "Anthropic" }).click();
+    await page.getByRole("button", { name: "Anthropic" }).click();
   });
   await expect.element(endpoint).toHaveValue("");
 });
@@ -474,7 +474,7 @@ test("offers whatever providers diffr describes, with their defaults", async () 
   await mount();
   await open();
   await act(async () => {
-    await page.getByRole("radio", { name: "Mistral" }).click();
+    await page.getByRole("button", { name: "Mistral" }).click();
   });
   await expect
     .element(page.getByLabelText("Model", { exact: true }))

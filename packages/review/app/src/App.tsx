@@ -109,6 +109,7 @@ import { tokens } from "./tokens.stylex";
 import { traceStyles } from "./trace-styles";
 import { TutorialExperienceProvider } from "./tutorial-experience";
 import { captureUiEvent } from "./ui-telemetry";
+import { segmentStyles } from "./ui/segmented";
 import { useReviewTabTelemetry } from "./use-review-tab-telemetry";
 import { useTooltip } from "./use-tooltip";
 import { useTraceList } from "./use-trace-list";
@@ -529,8 +530,8 @@ function ReviewLayoutContent({
             <div {...stylex.props(shellStyles.topbarLeft, topbarTabsMarker)}>
               <div
                 {...stylex.props(
-                  controlStyles.segmented,
-                  controlStyles.segmentedTopbar,
+                  segmentStyles.segmented,
+                  segmentStyles.segmentedTopbar,
                 )}
                 role="group"
                 aria-label="Session views"
@@ -550,10 +551,10 @@ function ReviewLayoutContent({
                     {...withClass(
                       "review-segment",
                       segmentMarker,
-                      controlStyles.segment,
-                      controlStyles.segmentTopbar,
-                      activeView === view && controlStyles.segmentActive,
-                      activeView === view && controlStyles.segmentTopbarActive,
+                      segmentStyles.segment,
+                      segmentStyles.segmentTopbar,
+                      activeView === view && segmentStyles.segmentActive,
+                      activeView === view && segmentStyles.segmentTopbarActive,
                     )}
                     onClick={() => {
                       if (view === "diff")
@@ -579,9 +580,9 @@ function ReviewLayoutContent({
                     {view === "diff" && filesTabFileCount !== null && (
                       <span
                         {...stylex.props(
-                          controlStyles.segmentCount,
+                          segmentStyles.segmentCount,
                           activeView === view &&
-                            controlStyles.segmentCountActive,
+                            segmentStyles.segmentCountActive,
                         )}
                       >
                         {filesTabFileCount}
@@ -590,9 +591,9 @@ function ReviewLayoutContent({
                     {view === "commits" && (
                       <span
                         {...stylex.props(
-                          controlStyles.segmentCount,
+                          segmentStyles.segmentCount,
                           activeView === view &&
-                            controlStyles.segmentCountActive,
+                            segmentStyles.segmentCountActive,
                         )}
                       >
                         {commits.length}

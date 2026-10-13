@@ -15,10 +15,10 @@ import { type ReactNode, useEffect, useState } from "react";
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { DiffrConfigSection } from "./diffr-config-section";
 import { homeStyles } from "./home-styles";
-import { Choice } from "./settings-choice";
 import { settingsStyles as styles } from "./settings-styles";
 import { withClass } from "./stylex-props";
 import { TraceCaptureSection } from "./trace-capture-section";
+import { SegmentedControl, labeledOptions } from "./ui/segmented";
 
 const THEME_LABELS: Record<ReviewThemeChoice, string> = {
   light: "Light",
@@ -218,10 +218,10 @@ export function SettingsPage({
 
           <Section label="Editor">
             <Row label="Theme" description="How Whiteboard looks.">
-              <Choice
+              <SegmentedControl
                 label="Theme"
                 value={theme}
-                labels={THEME_LABELS}
+                options={labeledOptions(THEME_LABELS)}
                 disabled={busy !== null}
                 onChange={(choice) =>
                   void run("theme", () => settings.setTheme(choice), setTheme)
@@ -232,10 +232,10 @@ export function SettingsPage({
               label="Document width"
               description="Wide and Full give diagrams and code more room. Text keeps a reading width."
             >
-              <Choice
+              <SegmentedControl
                 label="Document width"
                 value={documentWidth}
-                labels={DOCUMENT_WIDTH_LABELS}
+                options={labeledOptions(DOCUMENT_WIDTH_LABELS)}
                 disabled={busy !== null}
                 onChange={(choice) =>
                   void run(
@@ -250,10 +250,10 @@ export function SettingsPage({
               label="Code font size"
               description="Text size in diffs, code peeks, and source tabs."
             >
-              <Choice
+              <SegmentedControl
                 label="Code font size"
                 value={String(codeFontSize)}
-                labels={codeFontSizeLabels(codeFontSize)}
+                options={labeledOptions(codeFontSizeLabels(codeFontSize))}
                 disabled={busy !== null}
                 onChange={(choice) =>
                   void run(
@@ -268,10 +268,10 @@ export function SettingsPage({
               label="Keymap"
               description="Vim, Emacs, and Sublime Text keys come from a bundled extension. A change needs a reload."
             >
-              <Choice
+              <SegmentedControl
                 label="Keymap"
                 value={keymap}
-                labels={KEYMAP_LABELS}
+                options={labeledOptions(KEYMAP_LABELS)}
                 disabled={busy !== null}
                 onChange={(choice) => {
                   void run(
@@ -286,10 +286,10 @@ export function SettingsPage({
               label="Ctrl+Tab"
               description="Jump back to the last used tab, or step through the tab bar."
             >
-              <Choice
+              <SegmentedControl
                 label="Ctrl+Tab"
                 value={ctrlTab}
-                labels={CTRL_TAB_LABELS}
+                options={labeledOptions(CTRL_TAB_LABELS)}
                 disabled={busy !== null}
                 onChange={(choice) =>
                   void run(
@@ -307,10 +307,10 @@ export function SettingsPage({
               label="Review ready"
               description="When an agent finishes a review you aren't looking at."
             >
-              <Choice
+              <SegmentedControl
                 label="Review ready"
                 value={readyNotification}
-                labels={READY_NOTIFICATION_LABELS}
+                options={labeledOptions(READY_NOTIFICATION_LABELS)}
                 disabled={busy !== null}
                 onChange={(choice) =>
                   void run(

@@ -6,7 +6,6 @@ import { type ReactElement, act, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { controlStyles } from "./controls-styles";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import {
   type ReviewSession,
@@ -22,6 +21,7 @@ import { shellStyles } from "./shell-styles";
 import { withClass } from "./stylex-props";
 import { TutorialProvider } from "./tutorial-context";
 import { TutorialExperienceProvider } from "./tutorial-experience";
+import { segmentStyles } from "./ui/segmented";
 
 const CHAPTER_TITLES = [
   "Welcome",
@@ -86,7 +86,7 @@ function Shell(): ReactElement {
       >
         <button
           type="button"
-          {...withClass("review-segment", controlStyles.segment)}
+          {...withClass("review-segment", segmentStyles.segment)}
           aria-label="Diff"
           data-tour-target="diff-tab"
         >

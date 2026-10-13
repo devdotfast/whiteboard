@@ -1,9 +1,9 @@
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useRef, useState } from "react";
 
-import { controlStyles } from "./controls-styles";
 import { CopyIcon, copyText } from "./copy-text";
 import { promptStyles } from "./prompt-styles";
+import { SegmentedControl } from "./ui/segmented";
 
 /** What the review covers. This is the only choice the reader makes. */
 export type PromptKind = "change" | "architecture";
@@ -74,27 +74,17 @@ export function PromptCard() {
 
   return (
     <section {...stylex.props(styles.card)} aria-label="Whiteboard prompt">
-      <div
-        {...stylex.props(controlStyles.segmented, promptStyles.tabs)}
-        role="group"
-        aria-label="What to review"
-      >
-        {PROMPT_KINDS.map(({ kind: tab, label }) => (
-          <button
-            key={tab}
-            type="button"
-            {...stylex.props(
-              controlStyles.segment,
-              controlStyles.segmentLarge,
-              kind === tab && controlStyles.segmentActive,
-            )}
-            aria-pressed={kind === tab}
-            onClick={() => selectKind(tab)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      <SegmentedControl
+        label="What to review"
+        value={kind}
+        options={PROMPT_KINDS.map(({ kind: tab, label }) => ({
+          value: tab,
+          label,
+        }))}
+        onChange={selectKind}
+        size="large"
+        xstyle={promptStyles.tabs}
+      />
       <pre {...stylex.props(promptStyles.body)}>{PROMPTS[kind]}</pre>
       <div {...stylex.props(promptStyles.actions)}>
         <button

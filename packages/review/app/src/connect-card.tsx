@@ -11,13 +11,13 @@ import { useEffect, useRef, useState } from "react";
 
 import { AGENT_LOGOS } from "./agent-logos";
 import { cliInstallReady } from "./cli-install-status";
-import { controlStyles } from "./controls-styles";
 import { CopyIcon, copyText } from "./copy-text";
 import { DrawnCheckIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { OptionMenu } from "./option-menu";
 import { promptStyles } from "./prompt-styles";
 import { tokens } from "./tokens.stylex";
+import { SegmentedControl, segmentStyles } from "./ui/segmented";
 
 export const TARGET_LABELS: Record<ReviewCliInstallTarget, string> = {
   claude: "Claude Code",
@@ -141,60 +141,38 @@ export function ConnectCard({
 
   return (
     <section aria-label="Connect your agents">
-      <div
-        {...stylex.props(
-          controlStyles.segmented,
-          promptStyles.tabs,
-          styles.agentTabs,
-        )}
-        role="group"
-        aria-label="Agent"
-      >
-        {TAB_TARGETS.map((tab) => {
+      <SegmentedControl
+        label="Agent"
+        value={target}
+        options={TAB_TARGETS.map((tab) => {
           const Logo = AGENT_LOGOS[tab];
 
-          return (
-            <button
-              key={tab}
-              type="button"
-              {...stylex.props(
-                controlStyles.segment,
-                controlStyles.segmentLarge,
-                target === tab && controlStyles.segmentActive,
-              )}
-              aria-pressed={target === tab}
-              onClick={() => selectTarget(tab)}
-            >
-              <Logo xstyle={styles.logo} />
-              {TARGET_LABELS[tab]}
-            </button>
-          );
+          return {
+            value: tab,
+            label: (
+              <>
+                <Logo xstyle={styles.logo} />
+                {TARGET_LABELS[tab]}
+              </>
+            ),
+          };
         })}
+        onChange={selectTarget}
+        size="large"
+        xstyle={[promptStyles.tabs, styles.agentTabs]}
+      >
         <OtherAgentMenu
           selected={OTHER_TARGETS.includes(target) ? target : undefined}
           onSelect={selectTarget}
         />
-      </div>
-      <div
-        {...stylex.props(controlStyles.segmented, promptStyles.tabs)}
-        role="group"
-        aria-label="Setup method"
-      >
-        {MODES.map(({ mode: tab, label }) => (
-          <button
-            key={tab}
-            type="button"
-            {...stylex.props(
-              controlStyles.segment,
-              mode === tab && controlStyles.segmentActive,
-            )}
-            aria-pressed={mode === tab}
-            onClick={() => selectMode(tab)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      </SegmentedControl>
+      <SegmentedControl
+        label="Setup method"
+        value={mode}
+        options={MODES.map(({ mode: tab, label }) => ({ value: tab, label }))}
+        onChange={selectMode}
+        xstyle={promptStyles.tabs}
+      />
       {text ? (
         <>
           <div {...stylex.props(styles.bodyWrap)}>
@@ -302,10 +280,10 @@ function OtherAgentMenu({
       })}
       onChange={onSelect}
       triggerStyle={[
-        controlStyles.segment,
-        controlStyles.segmentLarge,
+        segmentStyles.segment,
+        segmentStyles.segmentLarge,
         styles.otherTrigger,
-        selected !== undefined && controlStyles.segmentActive,
+        selected !== undefined && segmentStyles.segmentActive,
       ]}
       triggerProps={{ "aria-pressed": selected !== undefined }}
     >
