@@ -42,6 +42,12 @@ import { useReviewSession } from "./host/review-session";
 import { appMarker, documentMarker } from "./markers.stylex";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { GuidedTour, PeekAnchor } from "./review-panel-model";
+import {
+  SEQUENCE_LABEL_LIFT,
+  SEQUENCE_SELF_LOOP,
+  type SequenceRow,
+  sequenceRows,
+} from "./sequence-layout";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
@@ -50,8 +56,7 @@ type SequenceParticipantNodeData = {
   participant: SequenceParticipant;
   height: number;
   messages: SequenceMessage[];
-  messageGap: number;
-  messageTop: number;
+  rows: SequenceRow[];
 };
 
 type SequenceParticipantFlowNode = ReactFlowNode<
@@ -63,6 +68,7 @@ type SequenceMessageEdgeData = {
   message: SequenceMessage;
   index: number;
   width: number;
+  labelWidth: number;
   active: boolean;
   openTour: (anchor?: string) => void;
   stepNumber: number | null;
@@ -397,10 +403,21 @@ function SequenceDiagramFigure({
     Math.floor(availableWidth / Math.max(1, sequence.participants.length)),
   );
 
-  const messageTop = 112;
-  const messageGap = 76;
   const width = Math.max(320, sequence.participants.length * laneWidth);
-  const height = messageTop + sequence.messages.length * messageGap + 42;
+
+  const { rows, height } = useMemo(() => {
+    const lane = (id: string) =>
+      sequence.participants.findIndex((participant) => participant.id === id);
+
+    return sequenceRows(
+      sequence.messages.map((message) => ({
+        label: message.label,
+        from: lane(message.from.id),
+        to: lane(message.to.id),
+      })),
+      laneWidth,
+    );
+  }, [laneWidth, sequence]);
 
   const reactFlowNodes: SequenceParticipantFlowNode[] = useMemo(
     () =>
@@ -425,13 +442,12 @@ function SequenceDiagramFigure({
           participant,
           height,
           messages: sequence.messages,
-          messageGap,
-          messageTop,
+          rows,
         },
         draggable: false,
         selectable: false,
       })),
-    [height, laneWidth, sequence],
+    [height, laneWidth, rows, sequence],
   );
 
   const reactFlowEdges: SequenceMessageFlowEdge[] = useMemo(
@@ -462,6 +478,7 @@ function SequenceDiagramFigure({
             message,
             index,
             width,
+            labelWidth: rows[index]!.labelWidth,
             active: isActive,
             openTour,
             stepNumber: onCloseTour ? index + 1 : null,
@@ -473,7 +490,7 @@ function SequenceDiagramFigure({
           zIndex: isActive ? 2 : 1,
         };
       }),
-    [activeTourAnchor, onCloseTour, openTour, sequence, width],
+    [activeTourAnchor, onCloseTour, openTour, rows, sequence, width],
   );
 
   const onEdgeClick: EdgeMouseHandler<SequenceMessageFlowEdge> = (
@@ -530,8 +547,7 @@ function SequenceDiagramFigure({
     const nextScrollTop = sequenceActiveMessageScrollTopTarget({
       sequence,
       activeAnchor: activeTourAnchor,
-      messageTop,
-      messageGap,
+      rows,
       viewportHeight: scroll.clientHeight,
       scrollHeight: scroll.scrollHeight,
       currentScrollTop: scroll.scrollTop,
@@ -554,7 +570,7 @@ function SequenceDiagramFigure({
       top,
       behavior: panelMotion === "restored" ? "auto" : "smooth",
     });
-  }, [activeTourAnchor, laneWidth, panelMotion, sequence]);
+  }, [activeTourAnchor, laneWidth, panelMotion, rows, sequence]);
 
   // SAFETY: the `--sequence-*` keys are CSS custom properties, which React
   // forwards to style.setProperty; the CSSProperties typings only omit custom
@@ -637,7 +653,7 @@ function SequenceDiagramFigure({
 function SequenceParticipantNode({
   data,
 }: ReactFlowNodeProps<SequenceParticipantFlowNode>) {
-  const { participant, height, messages, messageGap, messageTop } = data;
+  const { participant, height, messages, rows } = data;
 
   const activeMessages = messages.filter(
     (message) =>
@@ -660,7 +676,7 @@ function SequenceParticipantNode({
           (item) => item.id === message.id,
         );
 
-        const top = messageTop + messageIndex * messageGap;
+        const top = rows[messageIndex]!.arrow;
         const isSelfLoop = message.from.id === message.to.id;
 
         const handles: Array<{
@@ -709,7 +725,7 @@ export function sequenceMessageHandleTop(
   messageTop: number,
 ): number {
   return message.from.id === message.to.id && handleType === "target"
-    ? messageTop + 24
+    ? messageTop + SEQUENCE_SELF_LOOP
     : messageTop;
 }
 
@@ -755,7 +771,7 @@ function SequenceMessageEdge(
     ? (props.sourceX + loopX) / 2
     : (props.sourceX + props.targetX) / 2;
 
-  const labelY = props.sourceY - 12;
+  const labelY = props.sourceY - SEQUENCE_LABEL_LIFT;
 
   const stepMotion = useMotionPhase(data.message.id);
   const stage = data.stepNumber !== null;
@@ -839,6 +855,8 @@ function SequenceMessageEdge(
             role="button"
             tabIndex={0}
             {...stylex.props(styles.label, data.active && styles.labelActive)}
+            // The width its row was laid out for.
+            style={{ maxWidth: data.labelWidth }}
             data-review-anchor-id={data.message.id}
             onClick={(event) => {
               event.stopPropagation();
@@ -959,8 +977,7 @@ export function sequenceActiveMessageScrollTarget({
 interface SequenceActiveMessageScrollTopInput {
   sequence: SequenceView;
   activeAnchor: string | null;
-  messageTop: number;
-  messageGap: number;
+  rows: readonly Pick<SequenceRow, "labelTop" | "bottom">[];
   viewportHeight: number;
   scrollHeight: number;
   currentScrollTop: number;
@@ -969,13 +986,12 @@ interface SequenceActiveMessageScrollTopInput {
 
 // Vertical counterpart of sequenceActiveMessageScrollTarget: long diagrams
 // scroll inside a viewport-capped body, so stepping the tour must also bring
-// the active message's row into view. Row y derives from the same layout
-// constants that position the message edges.
+// the active message's row, label to lowest mark, into view: the same rows
+// that position the message edges.
 export function sequenceActiveMessageScrollTopTarget({
   sequence,
   activeAnchor,
-  messageTop,
-  messageGap,
+  rows,
   viewportHeight,
   scrollHeight,
   currentScrollTop,
@@ -991,9 +1007,11 @@ export function sequenceActiveMessageScrollTopTarget({
 
   if (messageIndex < 0) return null;
 
-  const rowTop = messageTop + messageIndex * messageGap;
-  const targetTop = Math.max(0, rowTop - padding);
-  const targetBottom = Math.min(scrollHeight, rowTop + messageGap + padding);
+  const row = rows[messageIndex];
+
+  if (!row) return null;
+  const targetTop = Math.max(0, row.labelTop - padding);
+  const targetBottom = Math.min(scrollHeight, row.bottom + padding);
   const visibleTop = currentScrollTop;
   const visibleBottom = currentScrollTop + viewportHeight;
 
