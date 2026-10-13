@@ -1,5 +1,3 @@
-import type http from "node:http";
-
 import {
   type ReviewApiSummary,
   type ReviewGatewayHostState,
@@ -8,16 +6,13 @@ import {
 import { coverageModeSchema } from "@review/review-api/review-progress.js";
 import { z } from "zod";
 
-import {
-  type GatewayHosts,
-  type GatewayRemote,
-  UUID,
-} from "./review-gateway-hosts.js";
+import type { GatewayHosts, GatewayRemote } from "./review-gateway-hosts.js";
 import { type ListSource, mergeLists } from "./review-gateway-list.js";
 import {
   type GatewayMemory,
   LIST_MODES,
   type ListMode,
+  UUID,
   listEntriesSchema,
 } from "./review-gateway-memory.js";
 import {

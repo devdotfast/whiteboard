@@ -289,6 +289,9 @@ importers:
       smol-toml:
         specifier: 1.9.0
         version: 1.9.0
+      undici:
+        specifier: 7.29.1
+        version: 7.29.1
       zod:
         specifier: 'catalog:'
         version: 4.6.5

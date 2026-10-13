@@ -9,6 +9,9 @@ export const LIST_MODES = ["structural", "textual"] as const;
 
 export type ListMode = (typeof LIST_MODES)[number];
 
+export const UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const listEntrySchema = z.looseObject({
   reviewId: z.string(),
   version: z.number(),

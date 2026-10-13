@@ -1,32 +1,22 @@
-import http from "node:http";
-import { Readable } from "node:stream";
-
-import {
-  REVIEW_CLIENT_HEADER,
-  REVIEW_CLIENT_REMOTE,
-  type ReviewGatewayHost,
-  type ReviewGatewayHostState,
+import type {
+  ReviewGatewayHost,
+  ReviewGatewayHostState,
 } from "@dev.fast/review-protocol";
+import { Agent } from "undici";
 import { z } from "zod";
 
-import { StreamLimitError } from "./bounded-stream.js";
+import {
+  FIRST_RETRY_MS,
+  MAX_RETRY_MS,
+  errorText,
+  jitter,
+  readBody,
+  send,
+} from "./review-gateway-transport.js";
 
 const HEALTH_TIMEOUT_MS = 3_000;
 
 const HEARTBEAT_MS = 30_000;
-
-export const FIRST_RETRY_MS = 500;
-
-export const MAX_RETRY_MS = 30_000;
-
-export const FIRST_BYTE_TIMEOUT_MS = 10_000;
-
-export const NO_ANSWER = `it did not answer within ${FIRST_BYTE_TIMEOUT_MS / 1_000} seconds`;
-
-export const UUID =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-export const jitter = (ms: number) => ms * (0.75 + Math.random() * 0.5);
 
 const healthSchema = z.object({
   ok: z.literal(true),
@@ -38,13 +28,13 @@ const healthSchema = z.object({
 export interface GatewayRemote {
   readonly alias: string;
   readonly endpoint?: { url: string; token: string };
-  readonly agent?: http.Agent;
+  readonly dispatcher?: Agent;
   readonly serverId?: string;
 }
 
 interface Host extends GatewayRemote {
   endpoint?: { url: string; token: string };
-  agent?: http.Agent;
+  dispatcher?: Agent;
   problem?: ReviewGatewayHost["problem"];
   serverId?: string;
   status: ReviewGatewayHostState["state"];
@@ -129,7 +119,7 @@ export function createGatewayHosts(input: {
     clearTimeout(host.retry);
     host.checking?.abort();
     host.checking = undefined;
-    host.agent?.destroy();
+    void host.dispatcher?.destroy();
   }
 
   function create(given: ReviewGatewayHost): Host {
@@ -147,7 +137,7 @@ export function createGatewayHosts(input: {
       host.detail = given.problem.detail;
     } else if (!given.endpoint)
       host.detail = `Waiting for a connection to ${given.alias}.`;
-    else host.agent = new http.Agent({ keepAlive: true, timeout: 60_000 });
+    else host.dispatcher = new Agent();
 
     return host;
   }
@@ -168,7 +158,7 @@ export function createGatewayHosts(input: {
     host.checking?.abort();
     const abort = new AbortController();
     host.checking = abort;
-    const timer = setTimeout(() => abort.abort(), HEALTH_TIMEOUT_MS);
+    const timeout = AbortSignal.timeout(HEALTH_TIMEOUT_MS);
     let health: z.infer<typeof healthSchema> | undefined;
     let reason = "it did not answer";
 
@@ -177,21 +167,19 @@ export function createGatewayHosts(input: {
         method: "GET",
         path: "/health",
         headers: { "x-review-token": host.endpoint.token },
-        signal: abort.signal,
+        signal: AbortSignal.any([abort.signal, timeout]),
       });
 
       const parsed = healthSchema.safeParse(
-        JSON.parse((await readBody(response, 64 * 1024)).toString()),
+        JSON.parse((await readBody(response.body, 64 * 1024)).toString()),
       );
 
       if (parsed.success) health = parsed.data;
       else reason = "it did not answer as a Whiteboard server";
     } catch (error) {
-      if (!abort.signal.aborted) reason = errorText(error);
-      else if (host.checking === abort)
+      if (timeout.aborted)
         reason = `it did not answer within ${HEALTH_TIMEOUT_MS / 1_000} seconds`;
-    } finally {
-      clearTimeout(timer);
+      else if (!abort.signal.aborted) reason = errorText(error);
     }
 
     if (host.checking !== abort) return;
@@ -280,110 +268,3 @@ export function createGatewayHosts(input: {
 }
 
 export type GatewayHosts = ReturnType<typeof createGatewayHosts>;
-
-export const remoteHeaders = (remote: GatewayRemote) => ({
-  "x-review-token": remote.endpoint?.token ?? "",
-  [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE,
-});
-
-export function send(
-  remote: GatewayRemote,
-  request: {
-    method: string;
-    path: string;
-    headers?: http.OutgoingHttpHeaders;
-    body?: Buffer | Readable;
-    signal: AbortSignal;
-  },
-  retry = true,
-): Promise<http.IncomingMessage> {
-  return new Promise((resolve, reject) => {
-    if (!remote.endpoint) {
-      reject(new Error(`${remote.alias} has no endpoint.`));
-
-      return;
-    }
-
-    const outgoing = http.request(new URL(request.path, remote.endpoint.url), {
-      method: request.method,
-      headers: request.headers,
-      agent: remote.agent,
-    });
-
-    const abort = () => outgoing.destroy(new Error("The request was aborted."));
-    const release = () => request.signal.removeEventListener("abort", abort);
-
-    if (request.signal.aborted) abort();
-    else request.signal.addEventListener("abort", abort, { once: true });
-
-    outgoing.on("response", (response) => {
-      response.on("close", release);
-      resolve(response);
-    });
-    outgoing.on("error", (error) => {
-      release();
-
-      if (
-        retry &&
-        outgoing.reusedSocket &&
-        !request.signal.aborted &&
-        !(request.body instanceof Readable) &&
-        errorCode(error) === "ECONNRESET"
-      )
-        resolve(send(remote, request, false));
-      else reject(error);
-    });
-
-    if (request.body instanceof Readable) request.body.pipe(outgoing);
-    else outgoing.end(request.body);
-  });
-}
-
-export async function readBody(
-  response: http.IncomingMessage,
-  limit: number,
-  received?: () => void,
-) {
-  const parts: Buffer[] = [];
-  let size = 0;
-
-  for await (const part of response) {
-    // SAFETY: an IncomingMessage without an encoding yields Buffers.
-    const chunk = part as Buffer;
-    received?.();
-    size += chunk.byteLength;
-
-    if (size > limit) {
-      response.destroy();
-      throw new StreamLimitError();
-    }
-
-    parts.push(chunk);
-  }
-
-  return Buffer.concat(parts, size);
-}
-
-const codedError = z.object({ code: z.string() });
-
-const ERROR_WORDS = new Map([
-  ["ECONNREFUSED", "it refused the connection"],
-  ["ECONNRESET", "it closed the connection"],
-  ["ETIMEDOUT", "it did not answer"],
-]);
-
-function errorCode(cause: unknown): string {
-  if (!(cause instanceof Error)) return String(cause);
-
-  return (
-    codedError.safeParse(cause).data?.code ??
-    codedError.safeParse(cause.cause).data?.code ??
-    cause.message
-  );
-}
-
-export function errorText(cause: unknown): string {
-  const code = errorCode(cause);
-
-  return ERROR_WORDS.get(code) ?? code;
-}

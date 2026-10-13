@@ -1,4 +1,3 @@
-import type http from "node:http";
 import { Readable } from "node:stream";
 import type { ReadableStream as WebReadableStream } from "node:stream/web";
 
@@ -9,29 +8,31 @@ import {
   type ReviewGatewayHostState,
   parseJsonText,
 } from "@dev.fast/review-protocol";
+import { Hono } from "hono";
+import type { Dispatcher } from "undici";
 import { z } from "zod";
 
 import { StreamLimitError, readBoundedStream } from "./bounded-stream.js";
 import type { ReviewDesktopVerbRelay } from "./global-verb-relay.js";
 import { DEFAULT_MAX_REQUEST_BYTES } from "./http-json.js";
 import {
-  FIRST_BYTE_TIMEOUT_MS,
   type GatewayRemote,
-  NO_ANSWER,
-  UUID,
   createGatewayHosts,
-  errorText,
-  remoteHeaders,
-  send,
 } from "./review-gateway-hosts.js";
 import { type ListSource, listedBy } from "./review-gateway-list.js";
-import { openGatewayMemory } from "./review-gateway-memory.js";
+import { UUID, openGatewayMemory } from "./review-gateway-memory.js";
 import { createGatewayPushes } from "./review-gateway-pushes.js";
 import {
   type Located,
   createGatewayStreams,
   downDetail,
 } from "./review-gateway-streams.js";
+import {
+  errorCode,
+  errorText,
+  remoteHeaders,
+  send,
+} from "./review-gateway-transport.js";
 import { serverJson } from "./review-server-core.js";
 
 const LOCAL_ROUTES = new Set([
@@ -46,20 +47,20 @@ const LOCAL_ROUTES = new Set([
   "commands",
 ]);
 
-const FORWARDED_ROUTES: readonly (readonly [string, RegExp])[] = [
-  ["GET", /^$/],
-  ["GET", /^progress$/],
-  ["POST", /^progress$/],
-  ["GET", /^commits$/],
-  ["GET", /^diff$/],
-  ["GET", /^structural-diff$/],
-  ["GET", /^stack$/],
-  ["GET", /^tree$/],
-  ["GET", /^file$/],
-  ["GET", /^resources\/[^/]+$/],
-  ["GET", /^maps\/[^/]+$/],
-  ["POST", /^navigator$/],
-  ["POST", /^copy-context$/],
+const REMOTE_ROUTES: readonly { method: string; path: string }[] = [
+  { method: "GET", path: "" },
+  { method: "GET", path: "progress" },
+  { method: "POST", path: "progress" },
+  { method: "GET", path: "commits" },
+  { method: "GET", path: "diff" },
+  { method: "GET", path: "structural-diff" },
+  { method: "GET", path: "stack" },
+  { method: "GET", path: "tree" },
+  { method: "GET", path: "file" },
+  { method: "GET", path: "resources/:name" },
+  { method: "GET", path: "maps/:name" },
+  { method: "POST", path: "navigator" },
+  { method: "POST", path: "copy-context" },
 ];
 
 const LIST_WAIT_MS = 2_000;
@@ -196,27 +197,18 @@ export function createReviewGateway(input: {
     // The local token never leaves this machine, in a header or the query.
     if (url.searchParams.has("token")) url.searchParams.delete("token");
 
-    const headers: http.OutgoingHttpHeaders = remoteHeaders(remote);
+    const headers: Record<string, string> = remoteHeaders(remote);
 
     request.headers.forEach((value, key) => {
       if (!DROPPED_REQUEST_HEADERS.has(key)) headers[key] = value;
     });
 
     const abort = new AbortController();
-    const leave = () => abort.abort();
-    request.signal.addEventListener("abort", leave, { once: true });
-
-    let timedOut = false;
-
-    const firstByte = setTimeout(() => {
-      timedOut = true;
-      abort.abort();
-    }, FIRST_BYTE_TIMEOUT_MS);
 
     // SAFETY: Node's Request body is its own web stream; the DOM type only
     // names the same object.
     const stream = request.body as WebReadableStream | null;
-    let response: http.IncomingMessage;
+    let response: Dispatcher.ResponseData;
 
     try {
       response = await send(remote, {
@@ -224,12 +216,11 @@ export function createReviewGateway(input: {
         path: `${url.pathname}${url.search}`,
         headers,
         body: body ?? (stream ? Readable.fromWeb(stream) : undefined),
-        signal: abort.signal,
+        signal: AbortSignal.any([request.signal, abort.signal]),
       });
     } catch (error) {
-      request.signal.removeEventListener("abort", leave);
-
-      const reason = timedOut ? NO_ANSWER : errorText(error);
+      const timedOut = errorCode(error) === "UND_ERR_HEADERS_TIMEOUT";
+      const reason = errorText(error);
 
       if (!request.signal.aborted) hosts.failed(remote, reason);
 
@@ -237,15 +228,9 @@ export function createReviewGateway(input: {
         ok: false,
         error: `${remote.alias} did not answer: ${reason}.`,
       });
-    } finally {
-      clearTimeout(firstByte);
     }
 
-    response.on("close", () =>
-      request.signal.removeEventListener("abort", leave),
-    );
-
-    const status = response.statusCode ?? 502;
+    const { statusCode: status } = response;
     const out = new Headers();
 
     for (const [key, value] of Object.entries(response.headers))
@@ -259,17 +244,17 @@ export function createReviewGateway(input: {
     out.set(REVIEW_HOST_HEADER, remote.alias);
 
     if (request.method === "HEAD" || status === 204 || status === 304) {
-      response.resume();
+      await response.body.dump();
 
       return new Response(null, { status, headers: out });
     }
 
     streaming.set(abort, remote);
-    response.on("close", () => streaming.delete(abort));
+    response.body.on("close", () => streaming.delete(abort));
 
     // SAFETY: Node's Response takes its own web stream; the DOM type only
     // names the same object.
-    const piped = Readable.toWeb(response) as ReadableStream<Uint8Array>;
+    const piped = Readable.toWeb(response.body) as ReadableStream<Uint8Array>;
 
     return new Response(piped, { status, headers: out });
   }
@@ -313,49 +298,25 @@ export function createReviewGateway(input: {
     return forward(owner.remote, request, body);
   }
 
-  async function handle(request: Request): Promise<Response> {
-    const url = new URL(request.url);
-
-    const [first = "", ...rest] = url.pathname
-      .slice("/reviews-api/".length)
-      .split("/");
-
-    if (first === "commands" && !rest.length && request.method === "POST")
-      return command(request);
-
-    if (request.method === "GET" && !rest.length) {
-      if (first === "") return streams.list(request);
-
-      if (first === "watch") return streams.watch(request);
-    }
-
-    let reviewId: string;
-
-    try {
-      reviewId = decodeURIComponent(first);
-    } catch {
-      return input.local(request);
-    }
-
+  async function review(
+    request: Request,
+    reviewId: string,
+    route?: "forward" | "telemetry",
+  ): Promise<Response> {
     if (!reviewId || LOCAL_ROUTES.has(reviewId)) return input.local(request);
     const owner = await ownerOf(reviewId);
 
     if (owner === undefined || owner === "local") return input.local(request);
 
-    const route = rest.join("/");
     const alias = "remote" in owner ? owner.remote.alias : owner.down.alias;
 
-    if (route.startsWith("telemetry/")) {
+    if (route === "telemetry") {
       await request.body?.cancel();
 
       return answer(alias, 200, { ok: true });
     }
 
-    if (
-      !FORWARDED_ROUTES.some(
-        ([method, pattern]) => method === request.method && pattern.test(route),
-      )
-    )
+    if (!route)
       return answer(alias, 404, {
         ok: false,
         error: "This route is not available for a review on another machine.",
@@ -365,6 +326,27 @@ export function createReviewGateway(input: {
 
     return forward(owner.remote, request);
   }
+
+  const app = new Hono({ strict: false }).basePath("/reviews-api");
+
+  app.post("/commands", (context) => command(context.req.raw));
+  app.get("/", (context) => streams.list(context.req.raw));
+  app.get("/watch", (context) => streams.watch(context.req.raw));
+  app.all("/:id/telemetry/*", (context) =>
+    review(context.req.raw, context.req.param("id"), "telemetry"),
+  );
+
+  for (const route of REMOTE_ROUTES)
+    app.on(route.method, `/:id${route.path && `/${route.path}`}`, (context) =>
+      review(context.req.raw, context.req.param("id") ?? "", "forward"),
+    );
+
+  for (const path of ["/:id", "/:id/*"])
+    app.all(path, (context) =>
+      review(context.req.raw, context.req.param("id") ?? ""),
+    );
+
+  app.all("*", (context) => input.local(context.req.raw));
 
   const streams = createGatewayStreams({
     hosts,
@@ -394,7 +376,7 @@ export function createReviewGateway(input: {
   });
 
   return {
-    fetch: handle,
+    fetch: (request: Request) => app.fetch(request),
     setHosts: (list: ReviewGatewayHost[]) => hosts.set(list),
     hosts: () => hosts.states(),
     async close() {

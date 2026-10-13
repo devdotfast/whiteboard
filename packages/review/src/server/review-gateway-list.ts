@@ -3,8 +3,7 @@ import type {
   ReviewGatewayHostState,
 } from "@dev.fast/review-protocol";
 
-import { UUID } from "./review-gateway-hosts.js";
-import { LIST_MODES, type ListMode } from "./review-gateway-memory.js";
+import { LIST_MODES, type ListMode, UUID } from "./review-gateway-memory.js";
 
 export interface ListSource {
   states: readonly ReviewGatewayHostState[];

@@ -6,16 +6,16 @@ import {
 } from "@dev.fast/review-protocol";
 
 import type { ReviewDesktopVerbRelay } from "./global-verb-relay.js";
+import type { GatewayHosts, GatewayRemote } from "./review-gateway-hosts.js";
+import { UUID } from "./review-gateway-memory.js";
 import {
   FIRST_BYTE_TIMEOUT_MS,
-  type GatewayHosts,
-  type GatewayRemote,
-  UUID,
   errorText,
+  keepOpen,
+  readLines,
   remoteHeaders,
   send,
-} from "./review-gateway-hosts.js";
-import { keepOpen, readLines } from "./review-gateway-transport.js";
+} from "./review-gateway-transport.js";
 
 const REMOTE_VERBS = new Set<ReviewVerbRequest["name"]>([
   "authoringCapabilities",
@@ -64,9 +64,6 @@ export function createGatewayPushes(input: {
     id: string,
     response: ReviewVerbResponse,
   ) {
-    const abort = new AbortController();
-    const timer = setTimeout(() => abort.abort(), FIRST_BYTE_TIMEOUT_MS);
-
     try {
       const answered = await send(remote, {
         method: "POST",
@@ -76,16 +73,14 @@ export function createGatewayPushes(input: {
           "content-type": "application/json",
         },
         body: Buffer.from(JSON.stringify({ id, response })),
-        signal: abort.signal,
+        signal: AbortSignal.timeout(FIRST_BYTE_TIMEOUT_MS),
       });
 
-      answered.resume();
+      await answered.body.dump();
     } catch (error) {
       input.log(
         `Could not answer ${remote.alias}'s push: ${errorText(error)}.`,
       );
-    } finally {
-      clearTimeout(timer);
     }
   }
 
