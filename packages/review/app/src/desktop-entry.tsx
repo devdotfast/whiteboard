@@ -103,6 +103,16 @@ function Home({
   const deleteReview = content.deleteReview;
   const restoreReview = content.restoreReview;
 
+  if (content.view !== "trash" && content.onboarding?.published === false)
+    return (
+      <WelcomePage
+        install={content.install}
+        setupActions={content.setupActions}
+        onboarding={content.onboarding}
+        onOpenTutorial={content.openTutorial}
+      />
+    );
+
   return (
     <ReviewHome
       findHost={findHost}

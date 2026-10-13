@@ -180,39 +180,38 @@ export function WelcomePage({
             </>
           )}
         </p>
-        {installDone ? <StepDoneButton label="Installed" primary /> : null}
-        {installOffered ? (
-          <Button
-            variant="primary"
-            size="large"
-            xstyle={[styles.stepButton, installDone && styles.stepButtonNext]}
-            disabled={setupBusy}
-            onClick={() =>
-              void runSetup(async () => {
-                await setupActions.installCli();
-                await refreshInstall();
-              })
-            }
-          >
-            Install whiteboard in PATH
-          </Button>
-        ) : null}
-        {setupActions &&
-        (!install ||
-          cliBuildMissing ||
-          (status?.shim.installed && !installed)) ? (
-          <Button
-            size="large"
-            xstyle={[
-              styles.stepButton,
-              (installDone || installOffered) && styles.stepButtonNext,
-            ]}
-            disabled={setupBusy}
-            onClick={() => void runSetup(refreshInstall)}
-          >
-            {setupBusy ? "Refreshing…" : "Refresh"}
-          </Button>
-        ) : null}
+        <div {...stylex.props(styles.stepActions)}>
+          {installDone ? <StepDoneButton label="Installed" primary /> : null}
+          {installOffered ? (
+            <Button
+              variant="primary"
+              size="large"
+              xstyle={styles.stepButton}
+              disabled={setupBusy}
+              onClick={() =>
+                void runSetup(async () => {
+                  await setupActions.installCli();
+                  await refreshInstall();
+                })
+              }
+            >
+              Install whiteboard in PATH
+            </Button>
+          ) : null}
+          {setupActions &&
+          (!install ||
+            cliBuildMissing ||
+            (status?.shim.installed && !installed)) ? (
+            <Button
+              size="large"
+              xstyle={styles.stepButton}
+              disabled={setupBusy}
+              onClick={() => void runSetup(refreshInstall)}
+            >
+              {setupBusy ? "Refreshing…" : "Refresh"}
+            </Button>
+          ) : null}
+        </div>
         {setupError ? (
           <p role="alert" {...stylex.props(promptStyles.error)}>
             {setupError}
@@ -711,8 +710,11 @@ const styles = stylex.create({
   stepButton: {
     alignSelf: "flex-start",
   },
-  stepButtonNext: {
-    marginLeft: "8px",
+  stepActions: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: "8px",
   },
   // A finished step's button stays at full strength.
   stepDone: {

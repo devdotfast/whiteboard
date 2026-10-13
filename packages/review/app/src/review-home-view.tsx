@@ -718,6 +718,10 @@ export function ReviewHome({
         if (document.activeElement === input.current) {
           event.preventDefault();
           finishTextFilter(true);
+        } else if (copyNotice) {
+          event.preventDefault();
+          event.stopPropagation();
+          setCopyNotice(null);
         } else if (selectionMode) {
           event.preventDefault();
           clearSelection();
