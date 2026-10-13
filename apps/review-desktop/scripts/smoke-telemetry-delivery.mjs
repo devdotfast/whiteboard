@@ -100,8 +100,11 @@ export async function smokeTelemetryDelivery({
   const debugPort = 9500 + Math.floor(process.pid % 300);
   const thrown = `ENOENT: no such file or directory, open '${home}/work/acme-repo/plan.md'`;
 
+  const expectedMessage =
+    "ENOENT: no such file or directory, open '<REDACTED: user-file-path>'";
+
   const digest = createHash("sha256")
-    .update(thrown, "utf8")
+    .update(expectedMessage, "utf8")
     .digest("hex")
     .slice(0, 16);
 
@@ -281,10 +284,7 @@ export async function smokeTelemetryDelivery({
       failures.push("the event carried no installation identifier");
     }
 
-    if (
-      event.properties?.message !==
-      "ENOENT: no such file or directory, open '<REDACTED: user-file-path>'"
-    ) {
+    if (event.properties?.message !== expectedMessage) {
       failures.push(
         `the delivered message was ${JSON.stringify(event.properties?.message)}`,
       );
