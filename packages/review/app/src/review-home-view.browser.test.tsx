@@ -227,6 +227,9 @@ describe("Home interactions", () => {
     const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
     const review = summary("Board", { working: true });
     await render([review], { onOpen });
+    expect(
+      container.querySelector('[title="Agent writing"]')?.textContent,
+    ).toBe("writing");
     await select("Board");
     expect(onOpen).not.toHaveBeenCalled();
     await click("Open Board");
@@ -234,6 +237,12 @@ describe("Home interactions", () => {
     await render([{ ...review, ...read }], { onOpen });
     expect(container.querySelector('section[aria-label="Unread"]')).toBeNull();
     expect(titles("Last 7 days")).toEqual(["Board"]);
+    await render([{ ...review, ...read, working: false }], { onOpen });
+    expect(titles("Last 7 days")).toEqual(["Board"]);
+    expect(container.querySelector('[title="Agent writing"]')).toBeNull();
+    expect(
+      container.querySelector(`[title="${review.createdAt}"]`)?.textContent,
+    ).toBe(formatRelativeTime(review.createdAt, now));
     await render([
       { ...review, ...read, createdAt: "2026-10-11T12:01:00Z", working: false },
     ]);

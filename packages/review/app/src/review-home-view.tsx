@@ -1375,18 +1375,36 @@ export function ReviewHome({
                         <span
                           {...stylex.props(
                             styles.time,
+                            review.working && styles.writing,
                             inTrash &&
+                              !review.working &&
                               Date.parse(review.trashedAt!) +
                                 30 * 86400000 -
                                 now <
                                 3 * 86400000 &&
                               styles.expiring,
                           )}
-                          title={inTrash ? review.trashedAt! : review.createdAt}
+                          title={
+                            review.working
+                              ? "Agent writing"
+                              : inTrash
+                                ? review.trashedAt!
+                                : review.createdAt
+                          }
                         >
-                          {inTrash
-                            ? `${Math.min(30, Math.max(0, Math.ceil((Date.parse(review.trashedAt!) + 30 * 86400000 - now) / 86400000)))} days left`
-                            : formatRelativeTime(review.createdAt, now)}
+                          {review.working ? (
+                            <>
+                              <span
+                                aria-hidden="true"
+                                {...stylex.props(styles.writingDot)}
+                              />
+                              writing
+                            </>
+                          ) : inTrash ? (
+                            `${Math.min(30, Math.max(0, Math.ceil((Date.parse(review.trashedAt!) + 30 * 86400000 - now) / 86400000)))} days left`
+                          ) : (
+                            formatRelativeTime(review.createdAt, now)
+                          )}
                         </span>
                       </div>
                     ))}

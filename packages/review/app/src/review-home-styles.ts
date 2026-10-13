@@ -26,6 +26,11 @@ const noticeSlideIn = stylex.keyframes({
   to: { opacity: 1, transform: "translateY(0)" },
 });
 
+const writingPulse = stylex.keyframes({
+  "0%, 100%": { opacity: 1 },
+  "50%": { opacity: 0.4 },
+});
+
 export const styles = stylex.create({
   scroll: { paddingTop: "56px", paddingBottom: "120px" },
   selectionSpace: (height: number) => ({ paddingBottom: `${height + 48}px` }),
@@ -463,7 +468,7 @@ export const styles = stylex.create({
     isolation: "isolate",
     display: "grid",
     gridTemplateColumns:
-      "16px 16px minmax(80px, 1fr) minmax(0, max-content) 84px",
+      "16px 16px minmax(80px, 1fr) minmax(0, max-content) 72px",
     alignItems: "center",
     gap: "12px",
     padding: "8px 24px",
@@ -648,13 +653,34 @@ export const styles = stylex.create({
   archived: { color: tokens.inkMuted },
   time: {
     gridColumn: "5",
-    width: "84px",
+    width: "72px",
     whiteSpace: "nowrap",
     flexShrink: 0,
     textAlign: "right",
     color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
+    fontVariantNumeric: "tabular-nums",
+  },
+  writing: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: "7px",
+    color: tokens.inkMuted,
+    lineHeight: "16px",
+  },
+  writingDot: {
+    flexShrink: 0,
+    width: "6px",
+    height: "6px",
+    borderRadius: radius.round,
+    backgroundColor: "currentColor",
+    boxShadow: "0 0 0 3px color-mix(in srgb, currentColor 20%, transparent)",
+    animationName: { default: writingPulse, [reducedMotion]: "none" },
+    animationDuration: motion.pulse,
+    animationTimingFunction: "ease-in-out",
+    animationIterationCount: "infinite",
   },
   mark: { color: tokens.ink, backgroundColor: tokens.markerTint },
   footer: {
