@@ -1,5 +1,12 @@
 import * as stylex from "@stylexjs/stylex";
-import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefCallback,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { CheckIcon } from "./icons";
 import { MenuSurface, menuSurfaceStyles } from "./menu-surface";
@@ -15,6 +22,7 @@ export function OptionMenu<T extends string>({
   onChange,
   triggerStyle,
   triggerProps,
+  triggerRef,
   children,
 }: {
   ariaLabel: string;
@@ -23,11 +31,22 @@ export function OptionMenu<T extends string>({
   onChange(value: T): void;
   triggerStyle?: stylex.StyleXStyles;
   triggerProps?: { "aria-pressed"?: boolean };
+  triggerRef?: RefCallback<HTMLButtonElement>;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
+
+  const setTrigger = useCallback(
+    (element: HTMLButtonElement | null) => {
+      trigger.current = element;
+
+      return triggerRef?.(element);
+    },
+    [triggerRef],
+  );
+
   const popup = useAnchoredPopover(open, trigger);
   const selectedIndex = options.findIndex((option) => option.value === value);
   useDismissOnOutside(container, open, () => setOpen(false));
@@ -53,7 +72,7 @@ export function OptionMenu<T extends string>({
         {...stylex.props(triggerStyle)}
         type="button"
         aria-label={ariaLabel}
-        ref={trigger}
+        ref={setTrigger}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen(!open)}

@@ -205,20 +205,9 @@ export const styles = stylex.create({
     lineHeight: "14px",
   },
   filterButton: {
+    width: "34px",
     height: "34px",
-    padding: "0 10px",
-    justifyContent: "center",
-  },
-  clearAll: {
-    borderWidth: 0,
-    padding: "0 8px",
-    height: "34px",
-    color: { default: tokens.inkMuted, ":hover": tokens.ink },
-    backgroundColor: "transparent",
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.body,
-    whiteSpace: "nowrap",
-    cursor: "pointer",
+    padding: 0,
   },
   editingChip: {
     paddingInline: "8px",

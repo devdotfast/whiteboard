@@ -105,6 +105,9 @@ export function ReviewHome({
 }: ReviewHomeProps) {
   const helpTooltip = useTooltip("Help", { instant: true });
   const settingsTooltip = useTooltip("Settings", { instant: true });
+  const clearTooltip = useTooltip("Clear filters", { instant: true });
+  const filterTooltip = useTooltip("Filter", { instant: true });
+  const sortTooltip = useTooltip("Sort", { instant: true });
 
   const [filterState, setFilterState] = useState({
     filters: defaultHomeFilters,
@@ -142,6 +145,16 @@ export function ReviewHome({
   } | null>(null);
 
   const addFilter = useRef<HTMLButtonElement>(null);
+
+  const setAddFilter = useCallback(
+    (element: HTMLButtonElement | null) => {
+      addFilter.current = element;
+
+      return filterTooltip(element);
+    },
+    [filterTooltip],
+  );
+
   const chipRow = useRef<HTMLDivElement>(null);
   const [sort, setSort] = useState<HomeSort>("updated");
   const [collapsed, setCollapsed] = useState(readCollapsed);
@@ -975,16 +988,18 @@ export function ReviewHome({
             <div {...stylex.props(styles.controls, styles.headerFilters)}>
               {renderedChips.length > 0 && (
                 <button
-                  {...stylex.props(styles.clearAll)}
+                  type="button"
+                  aria-label="Clear filters"
+                  ref={clearTooltip}
+                  {...stylex.props(styles.iconButton, styles.headerIconButton)}
                   onClick={clearFilters}
                 >
-                  Clear all
+                  <HomeIcon kind="clearFilters" />
                 </button>
               )}
               <button
-                ref={addFilter}
+                ref={setAddFilter}
                 aria-label="Add filters"
-                title="Add filter  F"
                 aria-haspopup="dialog"
                 aria-expanded={picker?.anchor === addFilter.current}
                 {...stylex.props(
@@ -997,7 +1012,6 @@ export function ReviewHome({
                 onClick={(event) => openPicker(event.currentTarget, "end")}
               >
                 <HomeIcon kind="filter" />
-                Filter
               </button>
               <OptionMenu<HomeSort>
                 ariaLabel="Sort whiteboards"
@@ -1012,9 +1026,9 @@ export function ReviewHome({
                 ]}
                 onChange={setSort}
                 triggerStyle={[styles.control, styles.toolbarControl]}
+                triggerRef={sortTooltip}
               >
                 <HomeIcon kind="sort" size="small" />
-                <span {...stylex.props(styles.muted)}>Sort</span>
                 {sort[0].toUpperCase() + sort.slice(1)}
               </OptionMenu>
             </div>
@@ -1945,6 +1959,7 @@ function HomeIcon({
     | "settings"
     | "search"
     | "filter"
+    | "clearFilters"
     | "branch"
     | "folder"
     | "board"
@@ -1963,7 +1978,8 @@ function HomeIcon({
         (kind === "board" ||
           kind === "code" ||
           kind === "pr" ||
-          kind === "filter") &&
+          kind === "filter" ||
+          kind === "clearFilters") &&
           styles.rowIcon,
         size === "small" && styles.smallIcon,
         size === "caret" && styles.caretIcon,
@@ -2003,6 +2019,8 @@ function HomeIcon({
         </>
       ) : kind === "filter" ? (
         <path d="M2 4h12M4 8h8M6 12h4" />
+      ) : kind === "clearFilters" ? (
+        <path d="M2 4h12M4 8h3.5M6 12h1.5M10 8.5l4 4m0-4-4 4" />
       ) : kind === "folder" ? (
         <path d="M2 4.5v7.5h12V6H8l-1.5-1.5z" />
       ) : kind === "branch" ? (

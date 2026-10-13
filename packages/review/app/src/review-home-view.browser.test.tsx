@@ -321,12 +321,8 @@ describe("Home interactions", () => {
     await key("f", { metaKey: true });
     await key("Backspace", {}, searchField());
     expect(searchField()).toBeNull();
-    await click("Clear all");
-    expect(
-      [...container.querySelectorAll("button")].some(
-        (el) => el.textContent === "Clear all",
-      ),
-    ).toBe(false);
+    await click("Clear filters");
+    expect(container.querySelector('[aria-label="Clear filters"]')).toBeNull();
   });
 
   async function optionSearch(text: string, label = "Filter options") {
