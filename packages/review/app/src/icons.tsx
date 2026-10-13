@@ -414,6 +414,118 @@ export function DockIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+export function HelpIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="12" cy="12" r="9.4" />
+      <path d="M9.3 9.4q.2-2.4 2.7-2.4 2.7 0 2.7 2.3 0 1.5-1.8 2.2-.9.4-.9 1.8M12 16.8h.01" />
+    </svg>
+  );
+}
+
+export function GearIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="12" cy="12" r="3.3" />
+      <circle cx="12" cy="12" r="6.9" />
+      <path d="M12 2.7v2.4M12 18.9v2.4M2.7 12h2.4M18.9 12h2.4M5.4 5.4l1.7 1.7M16.9 16.9l1.7 1.7M5.4 18.6l1.7-1.7M16.9 7.1l1.7-1.7" />
+    </svg>
+  );
+}
+
+export function FilterIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <path d="M3 6h18M6 12h12M9 18h6" />
+    </svg>
+  );
+}
+
+export function ClearFiltersIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <path d="M3 6h18M6 12h5.25M9 18h2.25M15 12.75l6 6m0-6-6 6" />
+    </svg>
+  );
+}
+
+export function SortIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <path d="M7.5 3v18m-4.5-4.5 4.5 4.5 4.5-4.5M16.5 21V3M12 7.5 16.5 3 21 7.5" />
+    </svg>
+  );
+}
+
+export function BranchIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="6" cy="4.5" r="2.5" />
+      <circle cx="6" cy="19.5" r="2.5" />
+      <circle cx="18" cy="7.5" r="2.5" />
+      <path d="M6 7v10M18 10c0 3.9-6 3.9-12 5.7" />
+    </svg>
+  );
+}
+
+export function FolderIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <path d="M3 6.75V18h18V9h-9l-2.25-2.25z" />
+    </svg>
+  );
+}
+
+/** A whiteboard: a framed page of lines. */
+export function BoardIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <rect x="3" y="4.5" width="18" height="15" rx="2.25" />
+      <path d="M7.5 9h9M7.5 13.5h6" />
+    </svg>
+  );
+}
+
 /** A select's closed-state chevron, the same glyph as `tokens.chevronDown`. */
 export function ChevronDownIcon({ xstyle }: IconProps = {}): ReactElement {
   return (

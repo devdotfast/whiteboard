@@ -1,6 +1,42 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
+import type { KeyboardEvent } from "react";
+
+const steps = ["ArrowDown", "ArrowUp", "Home", "End"];
+
+/** Arrow, Home and End move focus among a menu's enabled items. */
+export function moveMenuFocus(
+  event: KeyboardEvent<HTMLElement>,
+  items = '[role^="menuitem"]',
+) {
+  if (!steps.includes(event.key)) return;
+  event.preventDefault();
+
+  const enabled = [
+    ...event.currentTarget.querySelectorAll<HTMLElement>(
+      `:is(${items}):not(:disabled)`,
+    ),
+  ];
+
+  const current = enabled.findIndex((item) => item === document.activeElement);
+  const last = enabled.length - 1;
+
+  const index =
+    event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? last
+        : event.key === "ArrowDown"
+          ? current === last
+            ? 0
+            : current + 1
+          : current <= 0
+            ? last
+            : current - 1;
+
+  enabled[index]?.focus();
+}
 
 // An in-page menu: a manual popover that useAnchoredPopover puts in the top
 // layer under its trigger, so no clipping ancestor cuts it off. Pair with

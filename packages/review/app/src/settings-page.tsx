@@ -1,4 +1,5 @@
 import { Button } from "@canvas/ui/button";
+import { checkboxStyles } from "@canvas/ui/checkbox";
 import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCanvasSettingsContent,
@@ -199,7 +200,7 @@ export function SettingsPage({
                 aria-label="Share anonymous usage data"
               >
                 <input
-                  {...stylex.props(styles.checkbox)}
+                  {...stylex.props(checkboxStyles.box)}
                   type="checkbox"
                   checked={telemetryEnabled}
                   disabled={busy !== null}
@@ -345,7 +346,7 @@ export function SettingsPage({
             >
               <label {...stylex.props(styles.toggle)}>
                 <input
-                  {...stylex.props(styles.checkbox)}
+                  {...stylex.props(checkboxStyles.box)}
                   type="checkbox"
                   aria-label="Structural Diffs"
                   checked={structuralDiffEnabled}
@@ -373,7 +374,7 @@ export function SettingsPage({
             >
               <label {...stylex.props(styles.toggle)}>
                 <input
-                  {...stylex.props(styles.checkbox)}
+                  {...stylex.props(checkboxStyles.box)}
                   type="checkbox"
                   aria-label="Software Map"
                   checked={softwareMapEnabled}
@@ -395,7 +396,7 @@ export function SettingsPage({
             >
               <label {...stylex.props(styles.toggle)}>
                 <input
-                  {...stylex.props(styles.checkbox)}
+                  {...stylex.props(checkboxStyles.box)}
                   type="checkbox"
                   aria-label="Scratchpad"
                   checked={scratchpadEnabled}

@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -65,24 +65,6 @@ export const settingsStyles = stylex.create({
     gap: "8px",
     color: tokens.reviewHomeMeta,
     fontSize: fontSize.body,
-    cursor: "pointer",
-  },
-  // A box is the state of a thing (viewed, enabled); it is the same 14px
-  // hairline box everywhere, filled with the accent when checked.
-  checkbox: {
-    width: "14px",
-    height: "14px",
-    margin: 0,
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: { default: tokens.ruleSoft, ":checked": tokens.accent },
-    borderRadius: radius.small,
-    backgroundColor: { default: tokens.surface, ":checked": tokens.accent },
-    backgroundImage: { default: "none", ":checked": tokens.checkMark },
-    backgroundPosition: "center",
-    backgroundSize: "10px 10px",
-    backgroundRepeat: "no-repeat",
-    appearance: "none",
     cursor: "pointer",
   },
   input: {
