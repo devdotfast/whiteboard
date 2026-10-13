@@ -1,13 +1,10 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
+import { runVcs } from "@dev.fast/local-vcs";
 
 /** The checkout's files relative to its root: tracked ones, and new ones git
  * does not ignore. None where git cannot list them. */
 export async function checkoutFiles(root: string): Promise<string[]> {
   try {
-    const { stdout } = await execFileAsync(
+    const { stdout } = await runVcs(
       "git",
       [
         "-C",

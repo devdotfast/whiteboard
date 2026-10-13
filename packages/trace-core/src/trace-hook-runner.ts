@@ -1,9 +1,8 @@
-import { execFile, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import { jsonObject, jsonString, parseJsonText } from "@dev.fast/json";
-import { git } from "@dev.fast/local-vcs";
+import { git, runVcs } from "@dev.fast/local-vcs";
 
 import type { CliInputStream } from "./cli-output";
 import { readStoreAuth } from "./store-auth";
@@ -34,8 +33,6 @@ import {
   selectTraceStorage,
   traceStorageExpectation,
 } from "./trace-storage/resolve";
-
-const execFileAsync = promisify(execFile);
 
 const SESSION_ID_REGEX = /^[A-Za-z0-9][A-Za-z0-9._-]{7,127}$/;
 
@@ -192,7 +189,7 @@ export async function runTraceHook(input: RunTraceHookInput): Promise<number> {
     sessionFilePath = gitPathResult.stdout.trim();
   }
 
-  const jjRootResult = await execFileAsync("jj", ["root"], {
+  const jjRootResult = await runVcs("jj", ["root"], {
     cwd: input.cwd,
   }).catch(() => null);
 
@@ -229,21 +226,33 @@ export async function runTraceHook(input: RunTraceHookInput): Promise<number> {
   if (jjRootResult?.stdout.trim()) {
     if ((isStart || isHeartbeat) && remainingSessions.length > 0) {
       const templateVal = jjCommitTrailersConfigValue(remainingSessions);
-      await execFileAsync(
+      await runVcs(
         "jj",
-        ["config", "set", "--repo", "templates.commit_trailers", templateVal],
+        [
+          "config",
+          "set",
+          "--repo",
+          "templates.commit_trailers",
+          { value: templateVal },
+        ],
         { cwd: input.cwd },
       ).catch(() => undefined);
     } else if (isEnd) {
       if (remainingSessions.length > 0) {
         const templateVal = jjCommitTrailersConfigValue(remainingSessions);
-        await execFileAsync(
+        await runVcs(
           "jj",
-          ["config", "set", "--repo", "templates.commit_trailers", templateVal],
+          [
+            "config",
+            "set",
+            "--repo",
+            "templates.commit_trailers",
+            { value: templateVal },
+          ],
           { cwd: input.cwd },
         ).catch(() => undefined);
       } else {
-        await execFileAsync(
+        await runVcs(
           "jj",
           ["config", "unset", "--repo", "templates.commit_trailers"],
           { cwd: input.cwd },
