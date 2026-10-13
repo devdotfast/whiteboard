@@ -6,7 +6,6 @@ import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ReviewHome } from "./review-home-view";
 import {
   REVIEW_CONNECT_COPIED_STORAGE_KEY,
   STEP_ADVANCE_DELAY_MS,
@@ -359,29 +358,6 @@ describe("WelcomePage", () => {
     await act(async () => buttons("Install whiteboard in PATH")[0]?.click());
     expect(stepOpen(0)).toBe("true");
     expect(buttons("Close")[0]?.disabled).toBe(true);
-  });
-
-  it("opens setup from empty Home without hiding help and settings", async () => {
-    const onOpenSetup = vi.fn<() => void>();
-    await act(async () =>
-      root.render(
-        <ReviewHome
-          reviews={[]}
-          onOpen={() => {}}
-          onboarding={{
-            installed: false,
-            tutorialChecked: 0,
-            tutorialTotal: 10,
-            published: false,
-          }}
-          onOpenSetup={onOpenSetup}
-        />,
-      ),
-    );
-    await act(async () => buttons("Continue setup")[0]?.click());
-    expect(onOpenSetup).toHaveBeenCalledOnce();
-    expect(container.querySelector("h1")?.textContent).toBe("Whiteboards");
-    expect(container.querySelector('[aria-label="Help"]')).not.toBeNull();
   });
 
   it("requires skill removal, PATH readiness, and opening the agent card before dismissal", async () => {

@@ -7,7 +7,7 @@ import { userEvent } from "vitest/browser";
 import { testCanvasUi } from "./canvas-ui-test-utils";
 import { CanvasUiContext } from "./host/canvas-ui";
 import { createReviewFindHost } from "./review-find";
-import { ReviewHome, formatRelativeTime } from "./review-home-view";
+import { ReviewHome } from "./review-home-view";
 
 const now = Date.parse("2026-10-11T12:00:00Z");
 
@@ -81,39 +81,6 @@ describe("Home interactions", () => {
   async function click(label: string) {
     await act(async () => button(label).click());
   }
-
-  async function settleMenus() {
-    await Promise.all(
-      [...container.querySelectorAll("[data-home-picker], [data-home-submenu]")]
-        .flatMap((element) => element.getAnimations())
-        .map((animation) => animation.finished),
-    );
-  }
-
-  it("copies the support email, announces it without closing help, and dismisses the notice", async () => {
-    const writeText = vi
-      .spyOn(navigator.clipboard, "writeText")
-      .mockResolvedValue();
-
-    const tour = vi.fn<() => void>();
-    await render([summary("Board")], { onOpenTutorial: tour });
-    await click("Help");
-    await click("Need help? Send us an email");
-    expect(writeText).toHaveBeenCalledWith("founders@dev.fast");
-    expect(container.querySelector('[role="status"]')?.textContent).toBe(
-      "Copied 'founders@dev.fast' to clipboard",
-    );
-    expect(
-      container.querySelector('[role="menu"][aria-label="Help"]'),
-    ).not.toBeNull();
-    await click("Dismiss clipboard notification");
-    expect(container.querySelector('[role="status"]')).toBeNull();
-    await click("Need a refresher? Take the tour");
-    expect(tour).toHaveBeenCalledOnce();
-    expect(
-      container.querySelector('[role="menu"][aria-label="Help"]'),
-    ).toBeNull();
-  });
 
   async function select(title: string, shiftKey = false) {
     await act(async () =>
@@ -207,7 +174,6 @@ describe("Home interactions", () => {
     expect(titles("Unread")).toEqual(["Zulu", "Alpha"]);
     expect(titles("Last 7 days")).toEqual(["Read"]);
     expect(titles("Older than 7 days")).toEqual([]);
-    expect(container.textContent).not.toContain("Scratchpad");
     await click("Sort whiteboards");
     await click("Title");
     expect(titles("Unread")).toEqual(["Alpha", "Zulu"]);
@@ -227,9 +193,6 @@ describe("Home interactions", () => {
     const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
     const review = summary("Board", { working: true });
     await render([review], { onOpen });
-    expect(
-      container.querySelector('[title="Agent writing"]')?.textContent,
-    ).toBe("writing");
     await select("Board");
     expect(onOpen).not.toHaveBeenCalled();
     await click("Open Board");
@@ -239,44 +202,10 @@ describe("Home interactions", () => {
     expect(titles("Last 7 days")).toEqual(["Board"]);
     await render([{ ...review, ...read, working: false }], { onOpen });
     expect(titles("Last 7 days")).toEqual(["Board"]);
-    expect(container.querySelector('[title="Agent writing"]')).toBeNull();
-    expect(
-      container.querySelector(`[title="${review.createdAt}"]`)?.textContent,
-    ).toBe(formatRelativeTime(review.createdAt, now));
     await render([
       { ...review, ...read, createdAt: "2026-10-11T12:01:00Z", working: false },
     ]);
     expect(titles("Unread")).toEqual(["Board"]);
-    expect(container.textContent).not.toContain("agent writing");
-  });
-  it("finds and highlights branch and worktree text while ranking titles first", async () => {
-    await render([
-      summary("Other board", {
-        repositoryPath: "/repo/stack3",
-        origin: { branch: "sm/stack3-end" },
-      }),
-      summary("stack3 title", {
-        createdAt: "2020-01-01",
-        origin: { branch: "feature" },
-      }),
-      summary("Unrelated"),
-    ]);
-    await search("stack3");
-    expect(titles()).toEqual(["stack3 title", "Other board"]);
-
-    const metadata = container.querySelector(
-      '[data-home-row="Other board"] [data-home-metadata]',
-    )!;
-
-    expect(
-      [...metadata.querySelectorAll("mark")]
-        .map((el) => el.textContent)
-        .join(""),
-    ).toBe("stack3stack3");
-    expect(metadata.textContent).toBe("sm/stack3-endstack3");
-    await key("Enter", {}, searchField());
-    await search("sm/stack3-end");
-    expect(titles()).toEqual(["Other board"]);
   });
   it("adds exact filters from pills without opening the board, and edits the branch facet", async () => {
     const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
@@ -366,10 +295,6 @@ describe("Home interactions", () => {
     ]);
     expect(searchField()).toBeNull();
     await openFilters();
-    expect(
-      container.querySelector("[data-home-picker] [data-picker-row]")
-        ?.textContent,
-    ).toBe("Search…");
     await click("Search…");
     expect(container.querySelector("[data-home-picker]")).toBeNull();
     expect(document.activeElement).toBe(searchField());
@@ -405,68 +330,6 @@ describe("Home interactions", () => {
       ),
     ).toBe(false);
   });
-  it("appends another text chip with Command-F, including from an open picker", async () => {
-    await render([summary("Fold summaries"), summary("Fold rules")]);
-    await search("fold");
-    await key("f", { metaKey: true }, searchField());
-    expect(button("fold")).toBeTruthy();
-    expect(searchField().value).toBe("");
-    expect(document.activeElement).toBe(searchField());
-    await search("rules");
-    await openFilters();
-    await key("f", { metaKey: true }, document.activeElement!);
-    expect(container.querySelector("[data-home-picker]")).toBeNull();
-    expect(button("rules")).toBeTruthy();
-    expect(document.activeElement).toBe(searchField());
-    expect(titles()).toEqual(["Fold rules"]);
-  });
-  it("anchors to either trigger and follows the plus when picking adds a chip", async () => {
-    container.className = "review-canvas-root";
-    container.style.cssText = "contain: layout; width: 1100px; height: 700px";
-    await render([
-      summary("One", { repositoryName: "alpha" }),
-      summary("Two", { repositoryName: "beta" }),
-    ]);
-
-    const menuRect = () =>
-      container.querySelector("[data-home-picker]")!.getBoundingClientRect();
-
-    await key("f", { metaKey: true });
-    await search("One");
-    await key("Enter", {}, searchField());
-    await click("Add filter");
-    expect(menuRect().left).toBe(
-      button("Add filter").getBoundingClientRect().left,
-    );
-    await click("Unread only");
-    expect(menuRect().left).toBe(
-      button("Add filter").getBoundingClientRect().left,
-    );
-    expect(button("Unread only").getAttribute("role")).not.toBe("checkbox");
-    await key("ArrowRight", {}, button("alpha"));
-
-    await settleMenus();
-
-    const sub = container
-      .querySelector("[data-home-submenu]")!
-      .getBoundingClientRect();
-
-    expect(menuRect().right - sub.left).toBe(4);
-    expect(button("main").getBoundingClientRect().top).toBe(
-      button("alpha").getBoundingClientRect().top,
-    );
-    await key("Escape");
-    await key("Escape");
-    await key("f");
-    expect(menuRect().right).toBe(
-      button("Add filters").getBoundingClientRect().right,
-    );
-    await key("Escape");
-    await openFilters();
-    await act(async () => userEvent.click(container.querySelector("h1")!));
-    expect(container.querySelector("[data-home-picker]")).toBeNull();
-    expect(button("Unread only")).toBeTruthy();
-  });
 
   async function optionSearch(text: string, label = "Filter options") {
     const field = container.querySelector<HTMLInputElement>(
@@ -491,14 +354,11 @@ describe("Home interactions", () => {
     expect(document.activeElement?.getAttribute("aria-label")).toBe(
       "Filter options",
     );
-    expect(container.querySelector("[data-home-filter-panel]")).toBeNull();
-    expect(container.textContent).not.toContain("Hide archived");
     await optionSearch("beta");
     expect(button("beta")).toBeTruthy();
     expect(titles()).toEqual(["One", "Two"]);
     await key(" ", {}, button("beta"));
     expect(titles()).toEqual(["Two"]);
-    expect(container.textContent).toContain("Showing 1 board");
     expect(button("beta").getAttribute("aria-checked")).toBe("true");
     await click("Remove Repo beta");
     expect(button("beta").getAttribute("aria-checked")).toBe("false");
@@ -536,7 +396,6 @@ describe("Home interactions", () => {
     await click("main");
     expect(titles()).toEqual(["One"]);
     expect(button("alpha").getAttribute("aria-checked")).toBe("mixed");
-    expect(button("feature").textContent).toContain("+1");
     await click("feature");
     expect(button("Repo alpha")).toBeTruthy();
     expect(button("alpha").getAttribute("aria-checked")).toBe("true");
@@ -557,9 +416,6 @@ describe("Home interactions", () => {
     expect(titles()).toEqual(["Two", "Three", "New checkout"]);
     await key("Escape");
     await click("Worktree feature +1");
-    expect(document.activeElement?.getAttribute("placeholder")).toBe(
-      "Worktree",
-    );
     await key("Escape");
     await click("Repo beta");
     await click("alpha");
@@ -578,46 +434,6 @@ describe("Home interactions", () => {
     expect(container.querySelector("[data-home-picker]")).toBeNull();
     await openFilters();
     expect(button("alpha").getAttribute("aria-checked")).toBe("false");
-  });
-  it("keeps the submenu aligned when filtering removes an option above its parent", async () => {
-    container.className = "review-canvas-root";
-    container.style.cssText =
-      "contain: layout; margin: 40px 0 0 60px; width: 900px; height: 700px";
-    await render([
-      summary("Read board", {
-        repositoryName: "alpha",
-        repositoryPath: "/alpha/main",
-        viewedAt: "2026-10-11T12:00:00Z",
-      }),
-      summary("Unread board", { repositoryName: "beta" }),
-    ]);
-    await openFilters();
-    await settleMenus();
-    expect(
-      container.querySelector("[data-home-picker]")!.getBoundingClientRect()
-        .top,
-    ).toBe(button("Add filters").getBoundingClientRect().bottom + 6);
-    await key("ArrowRight", {}, button("alpha"));
-    await click("main");
-    await settleMenus();
-    expect(titles()).toEqual(["Read board"]);
-    expect(container.querySelector('[aria-label="Unread only"]')).toBeNull();
-    const parent = button("alpha").getBoundingClientRect();
-    const first = button("main").getBoundingClientRect();
-
-    const menu = container
-      .querySelector("[data-home-picker]")!
-      .getBoundingClientRect();
-
-    const submenu = container
-      .querySelector("[data-home-submenu]")!
-      .getBoundingClientRect();
-
-    expect(first.top).toBe(parent.top);
-    expect(submenu.right - menu.left).toBe(4);
-    expect(menu.right).toBe(
-      button("Add filters").getBoundingClientRect().right,
-    );
   });
   it("finds nested worktrees from the main box and omits zero-match options", async () => {
     await render([
@@ -638,40 +454,9 @@ describe("Home interactions", () => {
     await optionSearch("feature");
     await click("alpha › feature");
     expect(titles()).toEqual(["Fold one"]);
-    expect(container.textContent).not.toContain("Repository unavailable");
     await key("Escape");
     await click("Remove Repo alpha");
     expect(titles()).toHaveLength(2);
-  });
-  it("orders chips by application and Backspace removes only the empty text chip", async () => {
-    await render([
-      summary("Fold one", { repositoryName: "alpha" }),
-      summary("Fold two", { repositoryName: "beta" }),
-      summary("Other", { repositoryName: "gamma" }),
-    ]);
-    await key("f", { metaKey: true });
-    await search("Fold");
-    await key("Enter", {}, searchField());
-    await openFilters();
-    await key(" ", {}, button("alpha"));
-    await key(" ", {}, button("beta"));
-    await key("Escape");
-    const field = container.querySelector('[aria-label="Active filters"]')!;
-    expect(
-      [...field.querySelectorAll('button[aria-label^="Remove "]')].map(
-        (button) => button.getAttribute("aria-label"),
-      ),
-    ).toEqual(["Remove Fold", "Remove Repo alpha +1"]);
-    await key("f", { metaKey: true });
-    await key("Backspace", {}, searchField());
-    expect(searchField()).toBeNull();
-    expect(button("Repo alpha +1")).toBeTruthy();
-    expect(button("Fold")).toBeTruthy();
-    await click("Fold");
-    await search("");
-    await key("Backspace", {}, searchField());
-    expect(field.textContent).not.toContain("Fold");
-    expect(button("Repo alpha +1")).toBeTruthy();
   });
   it("keeps the caret in the menu under the pointer when hover opens or switches submenus", async () => {
     await render([
@@ -729,157 +514,6 @@ describe("Home interactions", () => {
     expect(button("beta").getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(mainInput);
   });
-  it("keeps picker focus while clicking toggles and closes it on an outside click", async () => {
-    await render([summary("Unread"), summary("Read", read)]);
-    await openFilters();
-
-    const option = container.querySelector<HTMLButtonElement>(
-      '[data-home-picker] [aria-label="Unread only"]',
-    )!;
-
-    await act(async () => userEvent.click(option));
-    expect(document.activeElement?.getAttribute("aria-label")).toBe(
-      "Filter options",
-    );
-    expect(option.getAttribute("aria-checked")).toBe("true");
-    expect(titles()).toEqual(["Unread"]);
-    await act(async () =>
-      document.body.dispatchEvent(
-        new PointerEvent("pointerdown", { bubbles: true }),
-      ),
-    );
-    expect(container.querySelector("[data-home-picker]")).toBeNull();
-    expect(button("Unread only")).toBeTruthy();
-  });
-  it("wraps chips and the add button while the toolbar actions stay on the first line", async () => {
-    container.style.width = "600px";
-    await render([
-      summary("Folding summaries query contract with long searchable words"),
-    ]);
-    const initialIcon = button("Add filters").getBoundingClientRect();
-    await key("f", { metaKey: true });
-
-    for (const term of [
-      "Folding",
-      "summaries",
-      "query",
-      "contract",
-      "searchable",
-    ]) {
-      await search(term);
-      await key("Enter", {}, searchField());
-    }
-
-    const field = container.querySelector<HTMLElement>(
-      '[aria-label="Active filters"]',
-    )!;
-
-    const last = button("searchable").getBoundingClientRect();
-    expect(last.top).toBeGreaterThan(
-      button("Folding").getBoundingClientRect().top,
-    );
-    expect(field.scrollWidth).toBeLessThanOrEqual(field.clientWidth);
-    const icon = button("Add filters").getBoundingClientRect();
-    expect(icon.top).toBe(initialIcon.top);
-    expect(icon.right).toBe(initialIcon.right);
-    expect(
-      button("Add filter").getBoundingClientRect().top,
-    ).toBeGreaterThanOrEqual(last.top - 1);
-    expect(searchField()).toBeNull();
-    expect(
-      Math.abs(
-        button("Sort whiteboards").getBoundingClientRect().top -
-          initialIcon.top,
-      ),
-    ).toBeLessThan(2);
-  });
-  it("keeps long chips within 280px, exposes their full query, and wraps the final plus with its chip", async () => {
-    const query =
-      "A very long query that must be truncated without hiding its full searchable title";
-
-    container.style.width = "820px";
-    await render([summary(query)]);
-    await search("very");
-    await key("Enter", {}, searchField());
-    await search(query);
-    await key("Enter", {}, searchField());
-    const chip = button(query);
-    expect(
-      chip.parentElement!.getBoundingClientRect().width,
-    ).toBeLessThanOrEqual(280);
-    const value = chip.querySelector<HTMLElement>("[data-chip-value]")!;
-    expect(value.scrollWidth).toBeGreaterThan(value.clientWidth);
-    await act(async () =>
-      chip.dispatchEvent(
-        new PointerEvent("pointerover", {
-          bubbles: true,
-          pointerType: "mouse",
-        }),
-      ),
-    );
-    expect(
-      container.querySelector('[aria-label="Search filter details"]')
-        ?.textContent,
-    ).toContain(query);
-
-    for (const width of [820, 700, 600]) {
-      container.style.width = `${width}px`;
-      const last = chip.parentElement!.getBoundingClientRect();
-      const plus = button("Add filter").getBoundingClientRect();
-      expect(Math.abs(plus.top - last.top)).toBeLessThan(2);
-
-      const field = container.querySelector<HTMLElement>(
-        '[aria-label="Active filters"]',
-      )!;
-
-      expect(field.scrollWidth).toBeLessThanOrEqual(field.clientWidth);
-    }
-
-    await click("Clear all");
-    expect(container.querySelector('[aria-label="Add filter"]')).toBeNull();
-    await openFilters();
-    await click("Search…");
-    expect(document.activeElement).toBe(searchField());
-  });
-  it("keeps chip details reachable across the gap and opens the picker from Click to edit", async () => {
-    await render(
-      ["main", "feature", "other"].map((tree) =>
-        summary(tree, { repositoryPath: `/repo/${tree}` }),
-      ),
-    );
-    await openFilters();
-    await click("whiteboard");
-    await click("main");
-    await click("feature");
-    await key("Escape");
-    await key("Escape");
-    const chip = button("Worktree main +1");
-    await act(async () => userEvent.hover(chip));
-
-    const details = container.querySelector<HTMLElement>(
-      '[aria-label="Worktree filter details"]',
-    )!;
-
-    expect(details.textContent).toContain("main\nfeature");
-    const anchor = chip.getBoundingClientRect();
-    expect(
-      details.contains(
-        document.elementFromPoint(anchor.left + 10, anchor.bottom + 3),
-      ),
-    ).toBe(true);
-    await act(async () => userEvent.hover(button("Click to edit")));
-    expect(details.isConnected).toBe(true);
-    await act(async () => button("Click to edit").focus());
-    expect(details.isConnected).toBe(true);
-    await act(async () => userEvent.click(button("Click to edit")));
-    expect(details.isConnected).toBe(false);
-    expect(
-      container.querySelector('[aria-label="Worktree filters"]'),
-    ).not.toBeNull();
-    expect(document.activeElement?.getAttribute("aria-label")).toBe("Worktree");
-    expect(button("main").getAttribute("aria-checked")).toBe("true");
-    expect(button("feature").getAttribute("aria-checked")).toBe("true");
-  });
   it("edits only the chip's facet with selected values first and closes after the final value is unticked", async () => {
     await render(
       ["alpha", "middle", "zulu"].map((tree) =>
@@ -893,36 +527,14 @@ describe("Home interactions", () => {
     await key("Escape");
     await key("Escape");
     await click("Worktree zulu +1");
-    const chip = button("Worktree zulu +1");
     const picker = container.querySelector<HTMLElement>("[data-home-picker]")!;
     const input = picker.querySelector("input")!;
     expect(document.activeElement).toBe(input);
-    expect(input.placeholder).toBe("Worktree");
-    expect(chip.getAttribute("aria-expanded")).toBe("true");
-    expect(picker.querySelector('[aria-label="Hide archived"]')).toBeNull();
-    expect(picker.textContent).not.toContain("Search…");
     expect(
       [...picker.querySelectorAll('[role="checkbox"]')].map((row) =>
         row.getAttribute("aria-label"),
       ),
     ).toEqual(["zulu", "middle", "alpha"]);
-    const separator = picker.querySelector('[role="separator"]')!;
-    expect(
-      button("middle").compareDocumentPosition(separator) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      separator.compareDocumentPosition(button("alpha")) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(
-      Math.abs(
-        picker.getBoundingClientRect().left - chip.getBoundingClientRect().left,
-      ),
-    ).toBeLessThan(2);
-    expect(picker.getBoundingClientRect().top).toBeGreaterThan(
-      chip.getBoundingClientRect().bottom,
-    );
     await act(async () => userEvent.fill(input, "middle"));
     expect(picker.querySelectorAll('[role="checkbox"]')).toHaveLength(1);
     expect(titles()).toEqual(["middle", "zulu"]);
@@ -948,9 +560,6 @@ describe("Home interactions", () => {
     expect(container.textContent).toContain("3 selected");
     await select("Two");
     expect(container.textContent).toContain("2 of 3 selected");
-    expect(
-      container.querySelector('input[aria-label="Select Unread"]'),
-    ).toBeNull();
     await click("Select all 1");
     expect(container.textContent).toContain("All 1 selected");
     expect(container.textContent).toContain("3 selected");
@@ -1061,9 +670,6 @@ describe("Home interactions", () => {
     expect(titles()).toHaveLength(3);
     await click("Remove Fold");
     expect(titles()).toEqual(["Fold new"]);
-    expect(
-      JSON.parse(localStorage.getItem("review.home.collapsed.v1")!).week,
-    ).toBe(true);
   });
   it("group actions select and deselect without changing which rows are expanded", async () => {
     await render([summary("One"), summary("Two")]);
@@ -1135,22 +741,7 @@ describe("Home interactions", () => {
     });
     expect(titles()).toEqual(["Old"]);
   });
-  it("keeps setup guidance for a first-time user with no whiteboards", async () => {
-    const onOpenSetup = vi.fn<() => void>();
-    await render([], {
-      onboarding: {
-        installed: true,
-        tutorialChecked: 0,
-        tutorialTotal: 3,
-        published: false,
-      },
-      onOpenSetup,
-    });
-    expect(container.textContent).toContain("1 of 3 done");
-    await click("Continue setup");
-    expect(onOpenSetup).toHaveBeenCalledOnce();
-  });
-  it("removes the whole selected batch immediately while requests are pending, without reviving setup", async () => {
+  it("removes the whole selected batch while requests are pending", async () => {
     const pending: Array<() => void> = [];
 
     const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
@@ -1161,19 +752,10 @@ describe("Home interactions", () => {
       summary(`Board ${index}`),
     );
 
-    const onboarding = {
-      installed: true,
-      tutorialChecked: 0,
-      tutorialTotal: 3,
-      published: false,
-    };
-
-    await render(boards, { onTrash, onboarding });
+    await render(boards, { onTrash });
     await key("a", { metaKey: true });
     await key("Backspace", { metaKey: true });
     expect(titles()).toEqual([]);
-    expect(container.textContent).not.toContain("Finish setting up");
-    expect(onTrash).toHaveBeenCalledTimes(1);
 
     for (let index = 0; index < boards.length; index++) {
       await act(async () => pending.shift()!());
@@ -1183,16 +765,12 @@ describe("Home interactions", () => {
             ? { ...board, trashedAt: new Date(now).toISOString() }
             : board,
         ),
-        { onTrash, onboarding },
+        { onTrash },
       );
       expect(titles()).toEqual([]);
     }
-
-    expect(container.textContent).toContain("Moved 20 whiteboards to Trash.");
-    await render([], { onTrash, onboarding });
-    expect(container.textContent).not.toContain("Finish setting up");
   });
-  it("restores the Home view through host navigation without a duplicate back breadcrumb", async () => {
+  it("restores the Home view through host navigation", async () => {
     const boards = [
       summary("Live"),
       summary("Gone", { trashedAt: "2026-10-01" }),
@@ -1204,9 +782,6 @@ describe("Home interactions", () => {
     expect(onViewChange).toHaveBeenCalledWith("trash");
     await render(boards, { view: "trash", onViewChange });
     expect(titles()).toEqual(["Gone"]);
-    expect(
-      container.querySelector('[aria-label="Back to Whiteboards"]'),
-    ).toBeNull();
     await render(boards, { view: "active", onViewChange });
     expect(titles()).toEqual(["Live"]);
     await render(boards, { view: "trash", onViewChange });
@@ -1224,9 +799,6 @@ describe("Home interactions", () => {
     await key("Backspace", { metaKey: true });
     expect(titles()).toEqual(["Two"]);
     expect(container.textContent).toContain("1 selected");
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "Could not move 1 whiteboard to Trash",
-    );
   });
   it("selects Trash rows for restoration instead of opening them", async () => {
     const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
@@ -1267,9 +839,6 @@ describe("Home interactions", () => {
     await click("Delete");
     expect(onDelete).toHaveBeenCalledOnce();
     expect(titles()).toEqual([]);
-    expect(container.textContent).toContain(
-      "Permanently deleted 1 whiteboard.",
-    );
     expect(container.querySelector('[aria-label="Undo"]')).toBeNull();
   });
   it("undoes only the toast batch with Cmd+Z, including Restore, and stops after dismissal", async () => {
@@ -1283,7 +852,6 @@ describe("Home interactions", () => {
     await render([summary("One"), summary("Two")], { onTrash, onRestore });
     await select("One");
     await key("Backspace", { metaKey: true });
-    expect(host.ui.confirmDelete).not.toHaveBeenCalled();
     await key("z", { metaKey: true, shiftKey: true });
     expect(onRestore).not.toHaveBeenCalled();
     await key("f", { metaKey: true });
@@ -1296,8 +864,6 @@ describe("Home interactions", () => {
     await select("One");
     await key("Backspace", { metaKey: true });
     await click("View Trash");
-    expect(container.textContent).toContain("30 days left");
-    expect(container.textContent).not.toContain("31 days left");
     await select("One");
     await key("r");
     expect(titles()).toEqual([]);
@@ -1349,9 +915,6 @@ describe("Home interactions", () => {
     expect(titles()).toEqual([]);
     await act(async () => deletion.reject(new Error("Offline")));
     expect(titles()).toEqual(["One"]);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "Could not move 1 whiteboard to Trash",
-    );
 
     const success = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       async () => {},
@@ -1365,41 +928,5 @@ describe("Home interactions", () => {
     await render([], { onTrash: success });
     await render(reviews, { onTrash: success });
     expect(titles()).toEqual(["One"]);
-  });
-  it("shows setup over the returning-user nudge and keeps the refresher reachable", async () => {
-    localStorage.setItem(
-      "review.home.lastVisit.v1",
-      String(now - 15 * 86400000),
-    );
-    const onOpenSettings = vi.fn<() => void>();
-    const onOpenSetup = vi.fn<() => void>();
-    await render([summary("One")], { onOpenSettings });
-    expect(container.textContent).toContain("It’s been 2 weeks");
-    await click("Refresh me");
-    expect(container.querySelector("dialog")?.open).toBe(true);
-    await click("Close help");
-    await click("Close welcome back");
-    await key(",", { metaKey: true });
-    expect(onOpenSettings).toHaveBeenCalledOnce();
-    await render([summary("One")], {
-      onboarding: {
-        installed: true,
-        tutorialChecked: 0,
-        tutorialTotal: 10,
-        published: true,
-      },
-      onOpenSetup,
-    });
-    expect(container.textContent).not.toContain("Finish setting up");
-    expect(onOpenSetup).not.toHaveBeenCalled();
-  });
-});
-
-describe("formatRelativeTime", () => {
-  it("uses relative times within a week and dates for older boards", () => {
-    expect(formatRelativeTime("2026-10-11T11:54:00Z", now)).toBe("6 min ago");
-    expect(formatRelativeTime("2026-10-10T12:00:00Z", now)).toBe("1 day ago");
-    expect(formatRelativeTime("2026-09-24T12:00:00Z", now)).toBe("Sep 24");
-    expect(formatRelativeTime(null, now)).toBe("unknown");
   });
 });

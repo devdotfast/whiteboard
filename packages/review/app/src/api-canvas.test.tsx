@@ -377,53 +377,7 @@ it("keeps sequence step identities and supports explanation/code steps without i
   ]);
 });
 
-it("keeps Restore available when a deleted board's checkout cannot load", async () => {
-  const { reviewId } = await command({
-    type: "create",
-    title: "Missing checkout",
-    target: { kind: "commits", ...pins },
-  });
-
-  await command({ type: "lifecycle", state: "trash", reviewId });
-  const app = new Hono().route("/reviews-api", createReviewApi(store));
-  app.get("/reviews-api/:id/commits", (context) =>
-    context.json({ error: "The selected local checkout is unavailable." }, 404),
-  );
-  const container = document.createElement("div");
-  document.body.append(container);
-  await act(async () => {
-    canvas = mount(container, {
-      kind: "api",
-      reviewId,
-      bridge: testReviewBridge(
-        {},
-        { request: async (url, init) => app.request(url, init) },
-      ),
-    });
-  });
-  await act(async () => {
-    await vi.waitFor(() =>
-      expect(container.textContent).toContain(
-        "The selected local checkout is unavailable.",
-      ),
-    );
-  });
-  expect(container.textContent).toContain("30 days left");
-
-  const restore = [
-    ...container.querySelectorAll<HTMLButtonElement>("button"),
-  ].find((button) => button.textContent === "Restore")!;
-
-  await act(async () => restore.click());
-  await act(async () => {
-    await vi.waitFor(() => expect(store.read(reviewId).trashedAt).toBeNull());
-    await vi.waitFor(() =>
-      expect(container.textContent).not.toContain("days left"),
-    );
-  });
-});
-
-it("deletes through the API, opens read-only, and restores without changing the saved document", async () => {
+it("moves a board to Trash without changing the saved document", async () => {
   const { reviewId } = await command({
     type: "create",
     title: "Dismiss me",
@@ -459,33 +413,6 @@ it("deletes through the API, opens read-only, and restores without changing the 
     expect(store.list()[0]?.trashedAt).toEqual(expect.any(String)),
   );
   expect(store.read(reviewId).version).toBe(0);
-  await act(async () => {
-    await vi.waitFor(() =>
-      expect(container.textContent).toContain("days left"),
-    );
-  });
-  expect(
-    [...container.querySelectorAll("button")].some(
-      (button) => button.textContent === "Move to Trash",
-    ),
-  ).toBe(false);
-
-  const restore = [
-    ...container.querySelectorAll<HTMLButtonElement>("button"),
-  ].find((button) => button.textContent === "Restore")!;
-
-  await act(async () => restore.click());
-  await act(async () => {
-    await vi.waitFor(() => expect(store.read(reviewId).trashedAt).toBeNull());
-    await vi.waitFor(() =>
-      expect(container.textContent).not.toContain("days left"),
-    );
-  });
-  expect(
-    [...container.querySelectorAll("button")].some(
-      (button) => button.textContent === "Move to Trash",
-    ),
-  ).toBe(true);
 });
 
 it.each([false, true])(

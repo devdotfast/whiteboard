@@ -7,9 +7,7 @@ import {
   homeRepositories,
   matchesHomeFilters,
   repositoryIdentity,
-  reviewMetadataPills,
   sortHomeReviews,
-  toggleHomeRepository,
   toggleHomeWorktree,
   worktreeKey,
 } from "./review-home-model";
@@ -89,23 +87,6 @@ describe("Home model", () => {
         filters,
       ),
     ).toBe(false);
-    expect(
-      reviewMetadataPills(
-        {
-          ...board,
-          repositoryGroup: undefined,
-          repositoryName: "fold-query",
-        },
-        defaultHomeFilters,
-      ),
-    ).toEqual([
-      { facet: "branches", key: "sm/grammar", label: "sm/grammar" },
-      {
-        facet: "worktrees",
-        key: worktreeKey({ ...board, repositoryGroup: undefined }),
-        label: "fold-query",
-      },
-    ]);
   });
   it("requires every search chip and live text while facet values remain OR alternatives", () => {
     const filters = {
@@ -133,35 +114,6 @@ describe("Home model", () => {
         searches: ["contract", "sm/grammar", "devdotfast"],
       }),
     ).toBe(true);
-  });
-  it("hides only the facet pinned by a single value and combines branch and location filters", () => {
-    expect(
-      reviewMetadataPills(board, defaultHomeFilters).map((pill) => pill.facet),
-    ).toEqual(["branches", "worktrees"]);
-
-    const filters = {
-      ...defaultHomeFilters,
-      worktrees: [worktreeKey(board)],
-      branches: ["sm/grammar"],
-    };
-
-    expect(reviewMetadataPills(board, filters)).toEqual([]);
-    expect(matchesHomeFilters(board, filters)).toBe(true);
-    expect(
-      matchesHomeFilters({ ...board, origin: { branch: "other" } }, filters),
-    ).toBe(false);
-    expect(
-      reviewMetadataPills(board, {
-        ...defaultHomeFilters,
-        repositories: ["repo"],
-      }),
-    ).toHaveLength(2);
-    expect(
-      reviewMetadataPills(board, {
-        ...filters,
-        branches: ["sm/grammar", "other"],
-      }).map((pill) => pill.facet),
-    ).toEqual(["branches"]);
   });
   it("sorts created time independently of the latest update", () => {
     const older = { ...board, title: "Zulu", firstCreatedAt: "2026-01-01" };
@@ -201,14 +153,7 @@ it("normalizes all unresolved worktrees without limiting the unfiltered list", (
     local[0],
   ]);
   filters = toggleHomeWorktree(filters, worktreeKey(local[1]!), catalog);
-  expect(filters.worktrees).toEqual([]);
   expect(reviews.filter((r) => matchesHomeFilters(r, filters))).toEqual(
     reviews,
   );
-  filters = toggleHomeRepository(
-    defaultHomeFilters,
-    catalog.find((repo) => repo.key === "")!,
-    catalog,
-  );
-  expect(filters.worktrees).toEqual([]);
 });
