@@ -26,7 +26,7 @@ type OpenEvent = Pick<
   "metaKey" | "ctrlKey" | "shiftKey" | "button"
 >;
 
-/** The pull request stack this review belongs to, shown in every view. */
+/** The stack this review belongs to, shown in every view. */
 export function ReviewStackSelector(): ReactElement | null {
   const session = useReviewSession();
   const displayedVersion = useContext(DisplayedReviewVersionContext);
@@ -37,16 +37,17 @@ export function ReviewStackSelector(): ReactElement | null {
 
   useDismissOnOutside(container, open, setOpen);
 
-  // The pull request stack is optional context; a failed read is not shown.
+  // The stack is optional context; a failed read is not shown.
   const layers =
     useQuery({
       queryKey: canvasQueryKeys.reviewStack(
         displayedVersion,
         review.pullRequestNumber ?? null,
         review.pullRequestUrl ?? null,
+        review.headBranch ?? null,
       ),
       queryFn: ({ signal }) => review.stack(signal),
-      enabled: Boolean(review.pullRequestNumber),
+      enabled: Boolean(review.pullRequestNumber || review.headBranch),
       staleTime: 0,
     }).data ?? [];
 
@@ -80,12 +81,12 @@ export function ReviewStackSelector(): ReactElement | null {
         xstyle={styles.trigger}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Pull request stack, ${index + 1} of ${layers.length}`}
+        aria-label={`Stack, ${index + 1} of ${layers.length}`}
         onClick={() => setOpen(!open)}
       >
         <StackIcon xstyle={styles.triggerIcon} />
-        <span {...stylex.props(styles.triggerNumber)}>
-          PR #{layers[index]!.pullRequestNumber}
+        <span {...stylex.props(styles.triggerNumber, styles.ellipsis)}>
+          {label(layers[index]!)}
         </span>
         <span {...stylex.props(styles.triggerPosition)}>
           {index + 1}/{layers.length}
@@ -103,7 +104,7 @@ export function ReviewStackSelector(): ReactElement | null {
           ref={popoverRef}
           popover="manual"
           role="menu"
-          aria-label="Pull request stack"
+          aria-label="Stack"
           {...stylex.props(
             shellStyles.topbarPopover,
             surfaceStyles.popover,
@@ -114,17 +115,16 @@ export function ReviewStackSelector(): ReactElement | null {
             <span {...stylex.props(styles.branch)}>main</span>
           </div>
           {layers.map((layer) => (
-            <LayerRow
-              key={layer.pullRequestNumber}
-              layer={layer}
-              onOpen={openLayer}
-            />
+            <LayerRow key={layer.branch} layer={layer} onOpen={openLayer} />
           ))}
         </div>
       )}
     </div>
   );
 }
+
+const label = (layer: ReviewStackLayer) =>
+  layer.pullRequestNumber ? `PR #${layer.pullRequestNumber}` : layer.branch;
 
 function LayerRow({
   layer,
@@ -135,6 +135,17 @@ function LayerRow({
 }): ReactElement {
   const current = layer.relation === "current";
   const disabled = !current && !layer.reviewUuid;
+
+  const title = layer.pullRequestNumber
+    ? `PR #${layer.pullRequestNumber}${layer.reviewTitle ? ` · ${layer.reviewTitle}` : ""}`
+    : (layer.reviewTitle ?? layer.branch);
+
+  const detail = [
+    title !== layer.branch && layer.branch,
+    disabled && "No session",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   const content = (
     <>
@@ -147,19 +158,19 @@ function LayerRow({
             disabled && styles.faint,
           )}
         >
-          PR #{layer.pullRequestNumber}
-          {layer.reviewTitle ? ` · ${layer.reviewTitle}` : ""}
+          {title}
         </span>
-        <span
-          {...stylex.props(
-            styles.ellipsis,
-            styles.branch,
-            current && styles.branchCurrent,
-          )}
-        >
-          {layer.branch}
-          {disabled ? " · No session" : ""}
-        </span>
+        {detail && (
+          <span
+            {...stylex.props(
+              styles.ellipsis,
+              styles.branch,
+              current && styles.branchCurrent,
+            )}
+          >
+            {detail}
+          </span>
+        )}
       </span>
     </>
   );
@@ -206,6 +217,7 @@ const styles = stylex.create({
     color: tokens.inkMuted,
   },
   triggerNumber: {
+    maxWidth: "200px",
     fontWeight: fontWeight.semibold,
   },
   triggerPosition: {

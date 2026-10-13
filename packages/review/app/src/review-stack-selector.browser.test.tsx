@@ -80,7 +80,7 @@ describe("ReviewStackSelector", () => {
 
     await vi.waitFor(() => {
       expect(container.querySelector("button[aria-haspopup]")?.ariaLabel).toBe(
-        "Pull request stack, 1 of 3",
+        "Stack, 1 of 3",
       );
     });
     await openMenu(container);

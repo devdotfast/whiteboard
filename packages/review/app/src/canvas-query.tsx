@@ -51,7 +51,15 @@ export const canvasQueryKeys = {
     version: number | undefined,
     pullRequestNumber: number | null,
     pullRequestUrl: string | null,
-  ) => ["review-stack", version, pullRequestNumber, pullRequestUrl] as const,
+    branch: string | null,
+  ) =>
+    [
+      "review-stack",
+      version,
+      pullRequestNumber,
+      pullRequestUrl,
+      branch,
+    ] as const,
   lensProgress: (version: number, mode: "structural" | "textual") =>
     ["lens-progress", version, mode] as const,
   allLensProgress: () => ["lens-progress"] as const,

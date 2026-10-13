@@ -929,7 +929,7 @@ export type ReviewTutorialOpenResponse = z.infer<
 
 export const ReviewStackLayerSchema = z.strictObject({
   branch: requiredString,
-  pullRequestNumber: positiveInteger,
+  pullRequestNumber: positiveInteger.nullable(),
   pullRequestUrl: absoluteUrlSchema.nullable(),
   reviewUuid: z.uuid({ error: "must be a UUID" }).nullable(),
   reviewTitle: stringAllowEmpty.nullable(),

@@ -1670,7 +1670,13 @@ export function createReviewApi(
     const snapshot = readReview(id, query.version);
 
     if (isShared(id) || !snapshot.pins) return context.json({ layers: [] });
-    const layers = await resolveReviewStackLayers(snapshot, store.list());
+
+    const layers = await resolveReviewStackLayers(snapshot, store.list(), {
+      repositoryPath: store
+        .repositories()
+        .find((repository) => repository.id === snapshot.pins!.repositoryId)
+        ?.path,
+    });
 
     return context.json({ layers });
   });
