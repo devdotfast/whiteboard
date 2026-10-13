@@ -1,5 +1,6 @@
-import { spawn } from "node:child_process";
 import path from "node:path";
+
+import { runVcs } from "@dev.fast/local-vcs";
 
 export async function resolveReviewRoot(
   cwd: string,
@@ -39,36 +40,9 @@ export async function resolveReviewRoot(
 }
 
 function execFilePromise(
-  file: string,
+  file: "git" | "jj",
   args: string[],
   options: { cwd?: string } = {},
 ): Promise<{ stdout: string }> {
-  return execFileUntraced(file, args, options);
-}
-
-function execFileUntraced(
-  file: string,
-  args: string[],
-  options: { cwd?: string } = {},
-): Promise<{ stdout: string }> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(file, args, {
-      cwd: options.cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    let stderr = "";
-    child.stdout?.on("data", (chunk) => {
-      stdout += String(chunk);
-    });
-    child.stderr?.on("data", (chunk) => {
-      stderr += String(chunk);
-    });
-    child.on("error", reject);
-    child.on("exit", (code) => {
-      if (code === 0) resolve({ stdout });
-      else reject(new Error(stderr.trim() || `${file} exited with ${code}`));
-    });
-  });
+  return runVcs(file, args, options);
 }

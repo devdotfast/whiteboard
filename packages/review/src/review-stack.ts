@@ -1,14 +1,9 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-import { defaultBranch, git } from "@dev.fast/local-vcs";
+import { defaultBranch, git, runVcs } from "@dev.fast/local-vcs";
 import type {
   ReviewApiSummary,
   ReviewStackLayer,
 } from "@dev.fast/review-protocol";
 import { z } from "zod";
-
-const execFileAsync = promisify(execFile);
 
 const GitHubStacksSchema = z.array(
   z.object({
@@ -208,9 +203,13 @@ async function localStack(
 async function forkPoint(repositoryPath: string, main: string, branch: string) {
   const ref = `refs/heads/${branch}`;
 
-  const fork = await git(repositoryPath, ["merge-base", main, ref], {
-    allowFailure: true,
-  });
+  const fork = await git(
+    repositoryPath,
+    ["merge-base", { rev: main }, { rev: ref }],
+    {
+      allowFailure: true,
+    },
+  );
 
   if (!fork.ok) return null;
 
@@ -218,7 +217,7 @@ async function forkPoint(repositoryPath: string, main: string, branch: string) {
 
   const log = await git(
     repositoryPath,
-    ["log", "--reverse", "--format=%s", `${base}..${ref}`],
+    ["log", "--reverse", "--format=%s", { rev: `${base}..${ref}` }],
     { allowFailure: true },
   );
 
@@ -229,15 +228,10 @@ async function defaultRunGitHubApi(
   host: string,
   endpoint: string,
 ): Promise<string> {
-  const { stdout } = await execFileAsync(
+  const { stdout } = await runVcs(
     "gh",
-    ["api", "--hostname", host, endpoint],
-    {
-      env: { ...process.env, GH_PROMPT_DISABLED: "1" },
-      encoding: "utf8",
-      timeout: 10_000,
-      maxBuffer: 2 * 1024 * 1024,
-    },
+    ["api", "--hostname", { value: host }, { value: endpoint }],
+    { timeout: 10_000, maxBuffer: 2 * 1024 * 1024 },
   );
 
   return stdout;

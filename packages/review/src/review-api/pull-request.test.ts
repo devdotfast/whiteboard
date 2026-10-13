@@ -50,8 +50,8 @@ describe("reading a pull request", () => {
   const deps = (
     gh: () => Promise<string>,
     api?: () => Promise<Response>,
-  ): PullRequestDeps & { calls: string[][] } => {
-    const calls: string[][] = [];
+  ): PullRequestDeps & { calls: unknown[][] } => {
+    const calls: unknown[][] = [];
 
     return {
       calls,
@@ -104,7 +104,9 @@ describe("reading a pull request", () => {
       headRef: "refs/pull/7/head",
       ...record,
     });
-    expect(using.calls[0]).toContain("ghe.example.com/acme/widget");
+    expect(using.calls[0]).toContainEqual({
+      value: "ghe.example.com/acme/widget",
+    });
 
     const failing = deps(ghFails);
 

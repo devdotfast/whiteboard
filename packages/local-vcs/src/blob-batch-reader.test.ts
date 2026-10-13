@@ -24,8 +24,8 @@ const spawns: string[][] = [];
 const recordSpawns = () => {
   spawns.length = 0;
   setLocalVcsCommandObserver({
-    start: ({ file, args }) => {
-      spawns.push([file, ...args]);
+    start: ({ tool, args }) => {
+      spawns.push([tool, ...args]);
 
       return () => {};
     },
