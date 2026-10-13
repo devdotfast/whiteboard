@@ -462,6 +462,10 @@ const styles = stylex.create({
   // card's inner layout but never grows or shrinks.
   tocRail: {
     top: `calc(48px + ${tokens.reviewPageTop} + 40px)`,
+    bottom: 0,
+    display: "flex",
+    flexDirection: "column",
+    pointerEvents: "none",
     left: { default: "24px", [narrow]: "8px" },
     zIndex: tocLayer.rail,
     width: { default: "248px", [narrow]: "min(248px, calc(100cqi - 16px))" },
@@ -514,7 +518,8 @@ const styles = stylex.create({
     },
   },
   bodyRail: {
-    maxHeight: "min(520px, calc(100dvh - 164px))",
+    minHeight: 0,
+    maxHeight: "none",
     transition: "none",
   },
   // The card's first row is the pill's row: 32px tall, the label set in from
