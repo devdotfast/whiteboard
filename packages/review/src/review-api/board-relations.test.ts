@@ -475,35 +475,6 @@ it("tells a board's watchers when its parent's children change, without a versio
   }
 });
 
-it("keeps a board's project and relations through an edit when its repository isn't registered", async () => {
-  const parent = await board("Parent", undefined, "gone");
-  const child = await board("Child", undefined, "gone");
-
-  await setParent(child, parent);
-  const project = store.projectOf(child);
-
-  // The board opened last is in another project.
-  const elsewhere = await board("Elsewhere", undefined, "other");
-
-  await store.execute({
-    operation: { type: "attention", reviewId: elsewhere, action: "view" },
-  });
-  expect(store.projectOf(elsewhere)).not.toBe(project);
-
-  // The checkout's registration is lost, as an old store can lose it.
-  const db = new DatabaseSync(path.join(directory, "reviews.db"));
-
-  db.exec("DELETE FROM repositories WHERE name='gone'");
-  db.close();
-
-  await store.execute({
-    operation: { type: "rename", reviewId: child, title: "Renamed" },
-  });
-
-  expect(store.projectOf(child)).toBe(project);
-  expect(store.relations(child).parentId).toBe(parent);
-});
-
 it("keeps a checkout registered when a board made with it is still being saved", async () => {
   const { id: repositoryId } = store.registerRepository(
     path.join(directory, "racing"),

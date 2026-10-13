@@ -418,12 +418,10 @@ export function ApiCanvas({
           )
             return false;
 
-          await client.post("/commands", {
-            operation: {
-              type: "lifecycle",
-              reviewId: content.reviewId,
-              state: "trash",
-            },
+          await client.personCommand({
+            type: "lifecycle",
+            reviewId: content.reviewId,
+            state: "trash",
           });
 
           return true;
@@ -456,16 +454,15 @@ export function ApiCanvas({
     () =>
       editable
         ? (blockId: string, markdown: string) =>
+            // The person's own edit, credited to them.
             void client
-              .post("/commands", {
-                operation: {
-                  type: "edit",
-                  reviewId: content.reviewId,
-                  edit: {
-                    type: "update",
-                    targetId: blockId,
-                    changes: { markdown },
-                  },
+              .personCommand({
+                type: "edit",
+                reviewId: content.reviewId,
+                edit: {
+                  type: "update",
+                  targetId: blockId,
+                  changes: { markdown },
                 },
               })
               .catch((cause) => setError(message(cause)))
@@ -513,12 +510,10 @@ export function ApiCanvas({
       <Button
         onClick={() =>
           void client
-            .post("/commands", {
-              operation: {
-                type: "lifecycle",
-                state: "active",
-                reviewId: content.reviewId,
-              },
+            .personCommand({
+              type: "lifecycle",
+              state: "active",
+              reviewId: content.reviewId,
             })
             .then(() => client.read<Snapshot>(`/${content.reviewId}?full=true`))
             .then((snapshot) => {

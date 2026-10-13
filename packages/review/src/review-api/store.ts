@@ -223,8 +223,9 @@ export interface HistoryEntry {
   version: number;
   title: string;
   createdAt: string;
-  /** "you" for a version a person saved from the canvas. */
-  author: "you" | "agent";
+  /** "you" for a version a person saved from the canvas; absent for one
+   * saved before Whiteboard recorded who wrote it. */
+  author?: "you" | "agent";
   /** The Ask thread whose edit made this version, if any. */
   threadId?: string;
 }
@@ -339,6 +340,14 @@ export interface Snapshot {
  * `versions.thread_id` so a thread's boards are one index away. */
 const versionThread = (snapshot: Snapshot) =>
   snapshot.lastEdit?.threadId ?? snapshot.threadId ?? null;
+
+/** Who is writing: the rules a write keeps depend on it. */
+export type Author =
+  /** An agent, through the API; a thread's agent stamps its versions
+   * with the thread. */
+  | { kind: "agent"; threadId?: string }
+  /** A person, from Desktop or the canvas. */
+  | { kind: "person" };
 
 export interface Result {
   /** Create only: false when an existing review for the same PR came back. */
@@ -702,12 +711,16 @@ export class ReviewStore {
       projectOfRepository: (repositoryId) =>
         this.projectOfRepository(repositoryId),
       fallbackProject: () => this.fallbackProject(),
+      rewriteVersion: (reviewId, version, snapshot) =>
+        this.rewriteVersion(reviewId, version, snapshot),
       firstRepositoryProject: () => this.firstRepositoryProject(),
     });
     this.activity = new ReviewActivity(this.db, (id) =>
       this.assertWritable(id),
     );
-    this.askHistory = new AskHistory(this.db);
+    this.askHistory = new AskHistory(this.db, (id) =>
+      this.assertOutOfTrash(id),
+    );
 
     this.purgeExpired();
     this.purgeTimer = setInterval(() => this.purgeExpired(), 60_000);
@@ -721,6 +734,26 @@ export class ReviewStore {
       250,
     );
     this.externalChanges.unref();
+  }
+
+  /** Saves a version over what it was; the current one re-indexes its
+   * board's links, as every written version does. */
+  private rewriteVersion(
+    reviewId: string,
+    version: number,
+    snapshot: JsonValue,
+  ) {
+    this.db
+      .prepare("UPDATE versions SET snapshot=? WHERE review_id=? AND version=?")
+      .run(JSON.stringify(snapshot), reviewId, version);
+
+    if (version !== this.currentVersion(reviewId)) return;
+
+    try {
+      this.indexBoardLinks(reviewId, this.read(reviewId).document);
+    } catch {
+      // A version that no longer reads indexes nothing.
+    }
   }
 
   /** The project of a registered checkout, made on first use. Checkouts of
@@ -1139,8 +1172,14 @@ export class ReviewStore {
         404,
       );
   }
+  /** A board that exists and isn't in Trash: the one rule every write
+   * about a board keeps. */
   assertWritable(id: string) {
     this.assertExists(id);
+    this.assertOutOfTrash(id);
+  }
+  /** Refuses a board in Trash, which is read-only until it is restored. */
+  assertOutOfTrash(id: string) {
     const trashedAt = this.trashTime(id);
 
     if (trashedAt)
@@ -1168,9 +1207,7 @@ export class ReviewStore {
       "versions",
     ])
       this.db.prepare(`DELETE FROM ${table} WHERE review_id=?`).run(id);
-    this.db
-      .prepare("DELETE FROM ask_conversations WHERE anchor_board=?")
-      .run(id);
+    this.askHistory.removeReview(id);
     // Its children move up to top level, its dependencies and the links
     // on it go, by the schema's foreign keys. Links into it stay, and the
     // tombstone shows it as deleted, in the project it was in.
@@ -1196,10 +1233,17 @@ export class ReviewStore {
 
     for (const reviewId of expired())
       // Restored meanwhile, by another host on this home: it stays.
-      this.deleteBoard(this.read(reviewId), () => {
-        if (!expired().includes(reviewId))
-          throw new ReviewInputError("Restored from Trash.", 409);
-      });
+      // Trash's own deadline, which no hold or thread stops.
+      this.deleteBoard(
+        this.read(reviewId),
+        { kind: "person" },
+        {
+          guard: () => {
+            if (!expired().includes(reviewId))
+              throw new ReviewInputError("Restored from Trash.", 409);
+          },
+        },
+      );
   }
 
   read(id: string, version?: number): Snapshot {
@@ -1434,7 +1478,7 @@ export class ReviewStore {
         `SELECT version,
           CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.title') END AS title,
           CASE WHEN json_valid(snapshot) THEN json_extract(snapshot,'$.createdAt') END AS created_at,
-          json_valid(snapshot) AND json_type(snapshot,'$.personEdit') IS NOT NULL AS person,
+          author_kind,
           thread_id
         FROM versions WHERE review_id=? ORDER BY version`,
       )
@@ -1445,10 +1489,12 @@ export class ReviewStore {
           // A version that won't parse still has its place in history.
           title: String(row.title ?? ""),
           createdAt: String(row.created_at ?? ""),
-          author: row.person ? "you" : "agent",
         };
 
-        if (!row.person && row.thread_id !== null)
+        if (row.author_kind !== null)
+          entry.author = row.author_kind === "person" ? "you" : "agent";
+
+        if (row.author_kind !== "person" && row.thread_id !== null)
           entry.threadId = String(row.thread_id);
 
         return entry;
@@ -1464,8 +1510,7 @@ export class ReviewStore {
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Command boundary: commandSchema.parse below rejects malformed input before mutation.
     input: unknown,
     initial?: { document: Block[]; origin: SnapshotOrigin },
-    /** The Ask thread that sent this command, if known. */
-    from: { threadId?: string; person?: boolean } = {},
+    author: Author = { kind: "agent" },
   ): Promise<Result> {
     if (this.closing)
       return Promise.reject(new Error("Review store is closing."));
@@ -1489,13 +1534,6 @@ export class ReviewStore {
     return this.enqueue(async () => {
       const op = command.operation;
       this.purgeExpired();
-
-      if (
-        op.type !== "create" &&
-        op.type !== "delete" &&
-        op.type !== "lifecycle"
-      )
-        this.assertWritable(op.reviewId);
 
       if (op.type === "create") {
         if (!op.target && !op.pullRequestUrl)
@@ -1554,79 +1592,27 @@ export class ReviewStore {
         }
       }
 
-      if (op.type === "set_parent" || op.type === "set_dependencies") {
-        const result: Result = {
-          reviewId: op.reviewId,
-          version: this.read(op.reviewId).version,
-        };
-
-        this.commitCommand(result, () => {
-          if (op.type === "set_parent")
-            this.setParent(op.reviewId, op.parentId);
-          else this.setDependencies(op.reviewId, op.dependsOn);
-          result.relations = this.relations(op.reviewId);
+      // What a board is outside its versions.
+      if (op.type === "set_parent")
+        return this.commitBoardFacts(op.reviewId, author, {
+          parentId: op.parentId,
         });
 
-        return result;
-      }
-
-      if (op.type === "delete") {
-        this.assertExists(op.reviewId);
-
-        if (!this.trashTime(op.reviewId))
-          throw new ReviewInputError(
-            "Move this whiteboard to Trash before deleting it.",
-            409,
-          );
-
-        // An agent can't delete a board out from under a person's hands.
-        if (!from.person) this.assertUnheld(op.reviewId);
-
-        return this.deleteBoard(this.read(op.reviewId));
-      }
-
-      // Trash makes a board read-only, so an agent can't put one there
-      // out from under a person's hands.
-      if (op.type === "lifecycle" && op.state === "trash" && !from.person)
-        this.assertUnheld(op.reviewId);
-
-      if (op.type === "attention" || op.type === "lifecycle") {
-        const result: Result = {
-          reviewId: op.reviewId,
-          version: this.read(op.reviewId).version,
-          attention: true,
-          ...(op.type === "lifecycle" && {
-            lifecycle: true as const,
-          }),
-        };
-
-        this.commitCommand(result, () => {
-          this.db
-            .prepare(
-              "INSERT OR IGNORE INTO review_attention(review_id) VALUES(?)",
-            )
-            .run(op.reviewId);
-
-          if (op.type === "attention")
-            this.db
-              .prepare(
-                "UPDATE review_attention SET viewed_at=? WHERE review_id=?",
-              )
-              .run(new Date().toISOString(), op.reviewId);
-          else {
-            const timestamp =
-              op.state === "trash" ? new Date().toISOString() : null;
-
-            this.db
-              .prepare(
-                "UPDATE review_attention SET deleted_at=CASE WHEN ? IS NULL THEN NULL ELSE COALESCE(deleted_at, ?) END WHERE review_id=?",
-              )
-              .run(timestamp, timestamp, op.reviewId);
-          }
+      if (op.type === "set_dependencies")
+        return this.commitBoardFacts(op.reviewId, author, {
+          dependsOn: op.dependsOn,
         });
 
-        return result;
-      }
+      if (op.type === "lifecycle")
+        return this.commitBoardFacts(op.reviewId, author, { state: op.state });
+
+      if (op.type === "attention")
+        return this.commitBoardFacts(op.reviewId, author, { viewed: true });
+
+      if (op.type === "delete")
+        return this.deleteBoard(this.read(op.reviewId), author, {
+          fromTrash: true,
+        });
 
       const id = op.type === "create" ? randomUUID() : op.reviewId;
 
@@ -1650,8 +1636,6 @@ export class ReviewStore {
       delete snapshot.sourceUnavailable;
       // Each version describes only its own edit.
       delete snapshot.lastEdit;
-      delete snapshot.threadId;
-      delete snapshot.personEdit;
 
       let nextId = previous
         ? Number(
@@ -1661,8 +1645,6 @@ export class ReviewStore {
         : 0;
 
       let applied: Applied | undefined;
-      /** The blocks an agent's document edit changed. */
-      let touched: string[] = [];
       let lensTarget: { targetId: string; type: "lens" } | undefined;
       /** The head a worktree board read at, when it becomes a plan. */
       let unpinnedWorktree: string | undefined;
@@ -1764,8 +1746,6 @@ export class ReviewStore {
         case "restore":
           snapshot = this.read(id, op.version);
           delete snapshot.lastEdit;
-          delete snapshot.threadId;
-          delete snapshot.personEdit;
           break;
         case "lens_edit": {
           const lenses = snapshot.lenses ?? [];
@@ -1797,10 +1777,6 @@ export class ReviewStore {
             (prefix) => `${prefix}-${++nextId}`,
           );
 
-          // Refused before any slow check, and again as it commits.
-          touched = changedBlocks(previous!.document, snapshot.document);
-          this.assertUnleased(id, touched);
-
           snapshot.lastEdit = summarizeEdit(
             edit,
             applied,
@@ -1808,128 +1784,211 @@ export class ReviewStore {
             snapshot.document,
           );
 
-          await this.normalizeDocument(snapshot, previous!);
+          // commitVersion normalizes it, as it does every version.
           break;
         }
       }
 
-      // A restore, or a retarget that repins references, rewrites blocks as
-      // an edit does: an agent's may not touch one a person holds.
-      if ((op.type === "restore" || op.type === "set_target") && !from.person) {
-        touched = changedBlocks(previous!.document, snapshot.document);
-        this.assertUnleased(id, touched);
-      }
+      const warnings = unpinnedWorktree
+        ? [
+            `Its references now read at ${unpinnedWorktree.slice(0, 7)}, the checkout's last commit, which lacks any uncommitted lines they quoted. Check them.`,
+          ]
+        : [];
 
-      // A board, name or version a person chose is theirs in History.
-      if (
-        from.person &&
-        (op.type === "create" || op.type === "rename" || op.type === "restore")
-      )
-        snapshot.personEdit = { changed: [] };
-
-      // Every version a thread causes names it: on its edit, or, for a
-      // create, rename, retarget or restore, on the version itself.
-      if (from.threadId) {
-        if (snapshot.lastEdit) snapshot.lastEdit.threadId = from.threadId;
-        else snapshot.threadId = from.threadId;
-      }
-
-      let warnings: string[];
-
-      ({ snapshot, warnings } = await this.prepareVersion(snapshot, previous, {
+      return this.commitVersion({
+        snapshot,
+        previous,
+        nextId,
+        author,
+        warnings,
         restore: op.type === "restore",
         repin: op.type === "set_target",
         projectLive: op.type !== "restore" && !resolvedTarget,
-      }));
-
-      if (unpinnedWorktree)
-        warnings.push(
-          `Its references now read at ${unpinnedWorktree.slice(0, 7)}, the checkout's last commit, which lacks any uncommitted lines they quoted. Check them.`,
-        );
-
-      const result: Result = {
-        ...(op.type === "create" && { created: true }),
-        reviewId: id,
-        version: snapshot.version,
-        targetId: applied?.targetId ?? lensTarget?.targetId,
-        ...(applied && { type: applied.type }),
-        ...(lensTarget && { type: lensTarget.type }),
-        ...(applied?.children && { children: applied.children }),
-      };
-
-      if (warnings.length) result.warnings = warnings;
-
-      const previousProject = previous ? this.projectOf(id) : undefined;
-
-      // A board belongs to its repository's project, settled when it is made
-      // or retargeted; any other change keeps the project it has. An
-      // existing board whose repository isn't registered stays put.
-      const retargeted =
-        op.type === "create" ||
-        op.type === "set_target" ||
-        (op.type === "restore" &&
-          snapshot.target?.repositoryId !== previous?.target?.repositoryId);
-
-      const registered = (repositoryId: string) =>
-        Boolean(
-          this.db
-            .prepare("SELECT 1 FROM repositories WHERE id=?")
-            .get(repositoryId),
-        );
-
-      const projectId =
-        previous &&
-        (!retargeted ||
-          !snapshot.target ||
-          !registered(snapshot.target.repositoryId))
-          ? this.projectOf(id)
-          : snapshot.target
-            ? this.projectOfRepository(snapshot.target.repositoryId)
-            : this.fallbackProject();
-
-      this.commitCommand(
-        result,
-        () => {
-          this.saveVersion(snapshot, nextId, projectId);
-
-          if (op.type === "create" && op.parentId)
-            this.setParent(id, op.parentId);
-
-          if (op.type === "create" && op.dependsOn)
-            this.setDependencies(id, op.dependsOn);
-
-          // Relations stay inside a project: a retarget out of it drops them.
-          if (
-            previous &&
-            projectId !== previousProject &&
-            this.dropRelationsOutside(id, projectId)
-          )
-            result.warnings = [
-              ...(result.warnings ?? []),
-              "Its parent, children and dependencies were in its old project, so they were dropped: whiteboards relate only within a project.",
-            ];
+        result: {
+          ...(op.type === "create" && { created: true }),
+          targetId: applied?.targetId ?? lensTarget?.targetId,
+          ...(applied && { type: applied.type }),
+          ...(lensTarget && { type: lensTarget.type }),
+          ...(applied?.children && { children: applied.children }),
         },
-        previous
-          ? () => {
-              this.assertWritable(id);
-              this.assertMutation(id, previous.version);
-              this.assertUnleased(id, touched);
-            }
-          : undefined,
-        op.type === "edit" || op.type === "lens_edit"
-          ? {
-              surface: op.type === "edit" ? "document" : "lenses",
-              activityId: op.activityId,
-              // The version names the agent whose courier draws it.
-              owned: (owner) => {
-                if (snapshot.lastEdit) snapshot.lastEdit.activityId = owner;
-              },
-            }
-          : undefined,
-      );
-
-      return result;
+        ...(op.type === "create" && {
+          relations: { parentId: op.parentId, dependsOn: op.dependsOn },
+        }),
+        ...((op.type === "edit" || op.type === "lens_edit") && {
+          courier: {
+            surface: op.type === "edit" ? "document" : "lenses",
+            activityId: op.activityId,
+          },
+        }),
+      });
     });
+  }
+  /**
+   * Commits a board's next version: the one place a version is written.
+   * Whoever writes it, it keeps the same rules:
+   *  - an agent may not change a block a person holds;
+   *  - the version names its author: a thread's names the thread, a
+   *    person's is theirs and never inherits a thread;
+   *  - only a change of repository moves a board to another project, and an
+   *    existing board never takes the project of the board opened last;
+   *  - only links the change adds are checked;
+   *  - the version, its link index, the board's project and its relations
+   *    are written together, and only if the board is still at the version
+   *    read and the rules still hold.
+   * Runs inside the write queue.
+   */
+  private async commitVersion(change: {
+    snapshot: Snapshot;
+    previous: Snapshot | undefined;
+    nextId: number;
+    author: Author;
+    warnings?: string[];
+    restore?: boolean;
+    repin?: boolean;
+    projectLive: boolean;
+    /** The ids a person's save gave new blocks, by client key. */
+    personIds?: Record<string, string>;
+    /** Base version a person's save was made against. */
+    baseVersion?: number;
+    /** A save that, normalized, changes nothing saves no version. */
+    unchangedSavesNothing?: boolean;
+    result?: Omit<Result, "reviewId" | "version">;
+    relations?: { parentId?: string | null; dependsOn?: readonly string[] };
+    courier?: { surface: ActivitySurface; activityId?: string };
+  }): Promise<Result> {
+    const { previous, author } = change;
+    const id = change.snapshot.reviewId;
+    let snapshot = change.snapshot;
+
+    // Attribution: stripped, then stamped for this author alone.
+    delete snapshot.threadId;
+    delete snapshot.personEdit;
+
+    if (snapshot.lastEdit) delete snapshot.lastEdit.threadId;
+
+    if (previous && !change.restore)
+      await this.normalizeDocument(snapshot, previous);
+
+    if (
+      change.unchangedSavesNothing &&
+      previous &&
+      snapshot.title === previous.title &&
+      isDeepStrictEqual(snapshot.document, previous.document)
+    )
+      return { reviewId: id, version: previous.version };
+
+    const touched = previous
+      ? changedBlocks(previous.document, snapshot.document)
+      : [];
+
+    // Refused before any slow check, and again as it commits.
+    const holds = () => {
+      if (author.kind !== "person") this.assertUnleased(id, touched);
+    };
+
+    holds();
+
+    if (author.kind === "person")
+      snapshot.personEdit = {
+        changed: touched,
+        ...(change.personIds && { ids: change.personIds }),
+      };
+    else if (author.threadId) {
+      if (snapshot.lastEdit) snapshot.lastEdit.threadId = author.threadId;
+      else snapshot.threadId = author.threadId;
+    }
+
+    let warnings: string[];
+
+    ({ snapshot, warnings } = await this.prepareVersion(snapshot, previous, {
+      restore: change.restore,
+      repin: change.repin,
+      projectLive: change.projectLive,
+      person: author.kind === "person",
+    }));
+    warnings = [...(change.warnings ?? []), ...warnings];
+
+    const result: Result = {
+      ...change.result,
+      reviewId: id,
+      version: snapshot.version,
+    };
+
+    if (warnings.length) result.warnings = warnings;
+
+    const projectId = this.projectFor(snapshot, previous);
+
+    const previousProject = previous ? this.projectOf(id) : undefined;
+
+    this.commitCommand(
+      result,
+      () => {
+        this.saveVersion(snapshot, change.nextId, projectId, change.author);
+
+        if (change.relations?.parentId)
+          this.setParent(id, change.relations.parentId);
+
+        if (change.relations?.dependsOn)
+          this.setDependencies(id, change.relations.dependsOn);
+
+        // Relations stay inside a project: a retarget out of it drops them.
+        if (
+          previous &&
+          projectId !== previousProject &&
+          this.dropRelationsOutside(id, projectId)
+        )
+          result.warnings = [
+            ...(result.warnings ?? []),
+            "Its parent, children and dependencies were in its old project, so they were dropped: whiteboards relate only within a project.",
+          ];
+      },
+      previous
+        ? () => {
+            // A board in Trash is read-only, whoever writes.
+            this.assertWritable(id);
+
+            if (change.baseVersion !== undefined)
+              assertBaseVersion(change.baseVersion, this.currentVersion(id));
+            else this.assertMutation(id, previous.version);
+            holds();
+          }
+        : undefined,
+      change.courier && {
+        ...change.courier,
+        // The version names the agent whose courier draws it.
+        owned: (owner) => {
+          if (snapshot.lastEdit) snapshot.lastEdit.activityId = owner;
+        },
+      },
+    );
+
+    return result;
+  }
+  /** The project a version puts its board in: a new board's repository's,
+   * or, for a board that has one, its own unless the version moves it to
+   * another registered repository. */
+  private projectFor(snapshot: Snapshot, previous: Snapshot | undefined) {
+    const repository = snapshot.target?.repositoryId;
+
+    if (
+      previous &&
+      (!repository ||
+        repository === previous.target?.repositoryId ||
+        !this.db
+          .prepare("SELECT 1 FROM repositories WHERE id=?")
+          .get(repository))
+    )
+      return this.projectOf(snapshot.reviewId);
+
+    return repository
+      ? this.projectOfRepository(repository)
+      : this.fallbackProject();
+  }
+  private currentVersion(reviewId: string) {
+    return Number(
+      this.db.prepare("SELECT version FROM reviews WHERE id=?").get(reviewId)!
+        .version,
+    );
   }
   /** Runs one write after every write queued before it. */
   private enqueue<T>(work: () => Promise<T>): Promise<T> {
@@ -1948,6 +2007,7 @@ export class ReviewStore {
     snapshot.document = await this.resolveCommitLinks(
       respellDocumentLinks(snapshot.document),
       snapshot,
+      previous.document,
     );
 
     if (snapshot.staleSources?.length) {
@@ -2017,7 +2077,12 @@ export class ReviewStore {
     return { snapshot, warnings };
   }
   /** Writes a version; call inside commitCommand. */
-  private saveVersion(snapshot: Snapshot, nextId: number, projectId: string) {
+  private saveVersion(
+    snapshot: Snapshot,
+    nextId: number,
+    projectId: string,
+    author: Author,
+  ) {
     const id = snapshot.reviewId;
 
     this.db
@@ -2027,34 +2092,123 @@ export class ReviewStore {
       .run(id, snapshot.version, nextId, projectId);
     this.db
       .prepare(
-        "INSERT INTO versions(review_id,version,snapshot,thread_id) VALUES(?,?,?,?)",
+        "INSERT INTO versions(review_id,version,snapshot,thread_id,author_kind) VALUES(?,?,?,?,?)",
       )
       .run(
         id,
         snapshot.version,
         JSON.stringify(snapshot),
         versionThread(snapshot),
+        author.kind,
       );
     this.indexBoardLinks(id, snapshot.document);
   }
   /** Deletes a board and its history, if it is still at the version read
-   * and passes `guard`: Delete… from Trash, Trash's purge, and a discarded
-   * empty board all end here. */
+   * and passes `guard`: Delete… from Trash, Trash's purge and a discarded
+   * empty board all end here. An agent can't delete a board while a person
+   * holds a block in it. */
   private deleteBoard(
     { reviewId, version }: Snapshot,
-    guard?: () => void,
+    author: Author,
+    {
+      guard,
+      fromTrash = false,
+    }: {
+      guard?: () => void;
+      /** Delete…, which is only for a board in Trash. */
+      fromTrash?: boolean;
+    } = {},
   ): Result {
     const result: Result = { reviewId, version, deleted: true };
 
+    const rules = () => {
+      guard?.();
+
+      if (fromTrash && !this.trashTime(reviewId))
+        throw new ReviewInputError(
+          "Move this whiteboard to Trash before deleting it.",
+          409,
+        );
+      this.assertMutation(reviewId, version);
+
+      if (author.kind !== "person") this.assertUnheld(reviewId);
+    };
+
+    rules();
+
+    this.commitCommand(result, () => this.removePermanently(reviewId), rules);
+    this.leases.delete(reviewId);
+
+    return result;
+  }
+  /** Writes what a board is outside its versions: its parent or what it
+   * depends on, Trash or back, or that it was viewed. No version is saved,
+   * but the rules are a version's: a board in Trash takes nothing but a
+   * restore, and an agent can't put a board a person is in to Trash. */
+  private commitBoardFacts(
+    reviewId: string,
+    author: Author,
+    fact:
+      | { parentId: string | null }
+      | { dependsOn: readonly string[] }
+      | { state: "active" | "trash" }
+      | { viewed: true },
+  ): Result {
+    const lifecycle = "state" in fact;
+
+    const rules = () => {
+      this.assertExists(reviewId);
+
+      if (!lifecycle) this.assertOutOfTrash(reviewId);
+      else if (fact.state === "trash" && author.kind !== "person")
+        this.assertUnheld(reviewId);
+    };
+
+    rules();
+
+    const result: Result = { reviewId, version: this.read(reviewId).version };
+
+    if (lifecycle || "viewed" in fact) result.attention = true;
+
+    if (lifecycle) result.lifecycle = true;
+
     this.commitCommand(
       result,
-      () => this.removePermanently(reviewId),
       () => {
-        guard?.();
-        this.assertMutation(reviewId, version);
+        if ("parentId" in fact) this.setParent(reviewId, fact.parentId);
+        else if ("dependsOn" in fact)
+          this.setDependencies(reviewId, fact.dependsOn);
+        else {
+          this.db
+            .prepare(
+              "INSERT OR IGNORE INTO review_attention(review_id) VALUES(?)",
+            )
+            .run(reviewId);
+
+          if ("viewed" in fact)
+            this.db
+              .prepare(
+                "UPDATE review_attention SET viewed_at=? WHERE review_id=?",
+              )
+              .run(new Date().toISOString(), reviewId);
+          else {
+            // A second move to Trash keeps the first deadline.
+            const timestamp =
+              fact.state === "trash" ? new Date().toISOString() : null;
+
+            this.db
+              .prepare(
+                "UPDATE review_attention SET deleted_at=CASE WHEN ? IS NULL THEN NULL ELSE COALESCE(deleted_at, ?) END WHERE review_id=?",
+              )
+              .run(timestamp, timestamp, reviewId);
+          }
+        }
+
+        if ("parentId" in fact || "dependsOn" in fact)
+          result.relations = this.relations(reviewId);
       },
+      rules,
     );
-    this.leases.delete(reviewId);
 
     return result;
   }
@@ -2081,7 +2235,7 @@ export class ReviewStore {
       )
         return { deleted: false };
 
-      this.deleteBoard(snapshot);
+      this.deleteBoard(snapshot, { kind: "person" });
 
       return { deleted: true };
     });
@@ -2164,14 +2318,6 @@ export class ReviewStore {
       assertBaseVersion(body.baseVersion, previous.version);
       const keys = takeClientKeys(body.document);
       const document = documentSchema.parse(body.document);
-      const bare = keys.bare > 0;
-
-      if (
-        !bare &&
-        body.title === previous.title &&
-        isDeepStrictEqual(document, previous.document)
-      )
-        return { reviewId, version: previous.version, ids: {} };
 
       let nextId = Number(
         this.db.prepare("SELECT next_id FROM reviews WHERE id=?").get(reviewId)!
@@ -2195,56 +2341,27 @@ export class ReviewStore {
         ]),
       );
 
-      let snapshot = structuredClone(previous);
+      const snapshot = structuredClone(previous);
 
       delete snapshot.sourceUnavailable;
       delete snapshot.lastEdit;
-      // The person's, not the thread's whose change came before.
-      delete snapshot.threadId;
       snapshot.title = body.title;
       snapshot.document = document;
-      await this.normalizeDocument(snapshot, previous);
 
-      if (
-        !bare &&
-        snapshot.title === previous.title &&
-        isDeepStrictEqual(snapshot.document, previous.document)
-      )
-        return { reviewId, version: previous.version, ids: {} };
-
-      // The person's own version: no thread, and no courier draws it.
       // `ids` lets the canvas recognise its own save on the stream, even
       // when the save's response was lost.
-      snapshot.personEdit = {
-        changed: changedBlocks(previous.document, snapshot.document),
-        ids,
-      };
-
-      ({ snapshot } = await this.prepareVersion(snapshot, previous, {
+      const { version } = await this.commitVersion({
+        snapshot,
+        previous,
+        nextId,
+        author: { kind: "person" },
         projectLive: true,
-        person: true,
-      }));
+        personIds: ids,
+        baseVersion: body.baseVersion,
+        unchangedSavesNothing: true,
+      });
 
-      const result: Result = { reviewId, version: snapshot.version };
-      const projectId = this.projectOf(reviewId);
-
-      this.commitCommand(
-        result,
-        () => this.saveVersion(snapshot, nextId, projectId),
-        () => {
-          this.assertWritable(reviewId);
-          assertBaseVersion(
-            body.baseVersion,
-            Number(
-              this.db
-                .prepare("SELECT version FROM reviews WHERE id=?")
-                .get(reviewId)!.version,
-            ),
-          );
-        },
-      );
-
-      return { reviewId, version: snapshot.version, ids };
+      return { reviewId, version, ids };
     });
   }
   /** Where a board sits: its parent, and the parent's children in order,
@@ -3092,13 +3209,20 @@ export class ReviewStore {
       undefined
     );
   }
-  /** Saves each commit link's commit in full, resolved in the board's
-   * repository; one it does not have rejects the edit, as pins do. */
+  /** Saves each new commit link's commit in full, resolved in the board's
+   * repository; one it does not have rejects the edit, as pins do. A link the
+   * board already had stays as it was saved, even if its commit is gone. */
   private async resolveCommitLinks(
     document: Block[],
     board: Pick<Snapshot, "target" | "pins">,
+    previous?: Block[],
   ): Promise<Block[]> {
-    const commits = commitLinkCommits(document);
+    const saved = new Set(previous ? commitLinkCommits(previous) : []);
+
+    const commits = commitLinkCommits(document).filter(
+      (commit) => !saved.has(commit),
+    );
+
     const repositoryId = boardRepositoryId(board);
 
     // Without a repository the links are rejected as references.

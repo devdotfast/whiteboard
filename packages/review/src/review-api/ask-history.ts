@@ -98,7 +98,12 @@ export class AskHistory {
   setExternalWriteGuard(guard: (reviewId: string) => void) {
     this.externalWriteGuard = guard;
   }
-  constructor(private readonly db: DatabaseSync) {
+  constructor(
+    private readonly db: DatabaseSync,
+    /** The store's rule for writing about a board: one in Trash is
+     * read-only. */
+    private readonly writable: (reviewId: string) => void = () => {},
+  ) {
     db.exec(`CREATE TABLE IF NOT EXISTS ask_conversations(
       id TEXT PRIMARY KEY,
       anchor_board TEXT NOT NULL,
@@ -148,17 +153,9 @@ export class AskHistory {
 
   private assertWritable(reviewId: string) {
     if (reviewId.startsWith("shared-")) this.externalWriteGuard?.(reviewId);
-
-    const row = this.db
-      .prepare("SELECT deleted_at FROM review_attention WHERE review_id=?")
-      .get(reviewId);
-
-    if (row?.deleted_at)
-      throw new ReviewInputError(
-        `This whiteboard was moved to Trash on ${new Date(String(row.deleted_at)).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it with session_lifecycle({"sessionId":"${reviewId}","state":"active"}) to continue.`,
-        409,
-      );
+    else this.writable(reviewId);
   }
+
   private assertThreadWritable(id: string) {
     const record = this.get(id);
 

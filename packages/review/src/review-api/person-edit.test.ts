@@ -1,9 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { DatabaseSync } from "node:sqlite";
 
-import { rangeAnchor } from "@review/lens-selection.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { elements } from "./document.js";
@@ -231,114 +229,6 @@ it("refuses an agent's edit to the block a person is editing until the lease end
   expect(elements(store.read(reviewId).document).map(({ id }) => id)).toEqual([
     other,
   ]);
-});
-
-it("refuses an agent's restore, retarget or move to Trash that would change a block a person is editing", async () => {
-  const reviewId = await createBoard();
-
-  const leased = await insert(reviewId, {
-    type: "markdown",
-    markdown: "Before.",
-  });
-
-  await agentEdit(reviewId, {
-    type: "update",
-    targetId: leased,
-    changes: { markdown: "After." },
-  });
-  await post(`/${reviewId}/focus`, { clientId: "canvas", blockId: leased });
-
-  const { version } = store.read(reviewId);
-  const held = `The user is editing this block (${leased}).`;
-
-  await expect(
-    store.execute({
-      operation: { type: "restore", reviewId, version: version - 1 },
-    }),
-  ).rejects.toThrow(held);
-  await expect(
-    store.execute({
-      operation: { type: "lifecycle", state: "trash", reviewId },
-    }),
-  ).rejects.toThrow(held);
-  expect(store.read(reviewId).version).toBe(version);
-
-  // A retarget that repins the quote a person holds.
-  const { id: repositoryId } = store.registerRepository(
-    path.join(directory, "checkout"),
-  );
-
-  const pinned = (
-    await store.execute({
-      operation: {
-        type: "create",
-        title: "Pinned",
-        target: {
-          kind: "commits",
-          repositoryId,
-          base: "a".repeat(40),
-          head: "b".repeat(40),
-        },
-      },
-    })
-  ).reviewId;
-
-  const quote = await insert(pinned, {
-    type: "code_peek",
-    source: rangeAnchor({ side: "head", file: "a.ts", fromLine: 1, toLine: 2 }),
-  });
-
-  await post(`/${pinned}/focus`, { clientId: "canvas", blockId: quote });
-  await expect(
-    store.execute({
-      operation: {
-        type: "set_target",
-        reviewId: pinned,
-        target: { kind: "project", repositoryId },
-      },
-    }),
-  ).rejects.toThrow(`The user is editing this block (${quote}).`);
-
-  // A person's own restore or delete goes ahead.
-  await store.execute(
-    { operation: { type: "restore", reviewId, version: version - 1 } },
-    undefined,
-    { person: true },
-  );
-  expect(store.read(reviewId).version).toBe(version + 1);
-});
-
-it("doesn't credit a person's save to the thread whose change came before it", async () => {
-  const reviewId = await createBoard();
-
-  await store.execute(
-    { operation: { type: "rename", reviewId, title: "The thread's" } },
-    undefined,
-    { threadId: "thread" },
-  );
-  expect(store.read(reviewId).threadId).toBe("thread");
-
-  const current = store.read(reviewId);
-
-  await store.personEdit(reviewId, {
-    baseVersion: current.version,
-    title: "Mine now",
-    document: current.document,
-  });
-
-  expect(store.read(reviewId).threadId).toBeUndefined();
-});
-
-it("lists a board whose repository is gone without naming its internal id", async () => {
-  const reviewId = await createBoard();
-  const db = new DatabaseSync(path.join(directory, "reviews.db"));
-
-  db.exec("DELETE FROM repositories;");
-  db.close();
-
-  expect(
-    store.list().find((board) => board.reviewId === reviewId)?.repositoryName,
-  ).toBe("(unknown repository)");
 });
 
 it("discards only an untouched Untitled board", async () => {

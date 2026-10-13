@@ -167,7 +167,9 @@ While a person edits a block, the canvas posts `POST /:id/focus` about every
 removes or changes a leased block fails with 409: "The user is editing this
 block (ID). Edit another block, or try again after they move on." Nothing is
 saved. A section or callout changes only when its own fields do, and a block
-moved unchanged does not change. Person edits and restores are never refused.
+moved unchanged does not change. A lease never refuses a person's edit or
+restore, only an agent's. A board in Trash refuses every change, a person's
+included, until it is restored.
 
 ## Validation and remaining work
 
