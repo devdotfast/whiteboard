@@ -141,7 +141,7 @@ export function register(on: On, options: PluginOptions): void {
     await $.command.register({
       name: "diffr",
       description: "Review a diff with diffr",
-      argumentHint: "[revisions or paths, as for diffr]",
+      argumentHint: "[revisions or paths, as for 'git diff <args>']",
     });
     await $.tool.register({
       name: "open",
