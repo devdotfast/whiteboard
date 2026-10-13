@@ -962,17 +962,22 @@ export function ReviewHome({
         <div {...stylex.props(homeStyles.content, styles.content)}>
           <header {...stylex.props(styles.header)}>
             {inTrash ? (
-              <>
-                <div {...stylex.props(styles.deletedHeading)}>
-                  <h1 {...stylex.props(styles.deletedTitle)}>Trash</h1>
-                  <span {...stylex.props(styles.deletedSeparator)}>
-                    {trashed.length}
-                  </span>
-                </div>
-                <p {...stylex.props(styles.retentionNote)}>
-                  Whiteboards in Trash are permanently deleted after 30 days.
-                </p>
-              </>
+              <div {...stylex.props(styles.deletedHeading)}>
+                <button
+                  type="button"
+                  {...stylex.props(styles.crumb)}
+                  onClick={() => openDeletedView(false)}
+                >
+                  Whiteboards
+                </button>
+                <span aria-hidden="true" {...stylex.props(styles.muted)}>
+                  ›
+                </span>
+                <h1 {...stylex.props(styles.deletedTitle)}>Trash</h1>
+                <span {...stylex.props(styles.deletedSeparator)}>
+                  {trashed.length}
+                </span>
+              </div>
             ) : (
               <h1 {...stylex.props(styles.heading)}>Whiteboards</h1>
             )}
@@ -1033,6 +1038,11 @@ export function ReviewHome({
               </OptionMenu>
             </div>
           </header>
+          {inTrash && (
+            <p {...stylex.props(styles.retentionNote)}>
+              Trash is deleted after 30 days.
+            </p>
+          )}
           {setupIncomplete ? (
             <div {...stylex.props(styles.notice)}>
               <span {...stylex.props(styles.noticeText)}>

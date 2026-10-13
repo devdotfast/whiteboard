@@ -58,7 +58,7 @@ export const styles = stylex.create({
   hidden: { display: "none" },
   deletedHeading: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "baseline",
     gap: "10px",
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.display,
@@ -66,6 +66,14 @@ export const styles = stylex.create({
     flexShrink: 0,
   },
   deletedTitle: { font: "inherit", margin: 0 },
+  crumb: {
+    padding: 0,
+    borderWidth: 0,
+    backgroundColor: "transparent",
+    color: { default: tokens.inkMuted, ":hover": tokens.ink },
+    font: "inherit",
+    cursor: "pointer",
+  },
   deletedSeparator: {
     color: tokens.inkFaint,
     fontFamily: tokens.fontSans,
@@ -76,8 +84,7 @@ export const styles = stylex.create({
     fontSize: fontSize.ui,
     lineHeight: "18px",
     color: tokens.inkMuted,
-    margin: 0,
-    textAlign: "right",
+    margin: "-14px 0 0",
   },
   permanentDialog: {
     width: "min(420px, calc(100% - 48px))",
