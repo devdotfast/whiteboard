@@ -18,6 +18,7 @@ import {
 
 import { BoardIcon, PullRequestStateIcon } from "./board-icons";
 import { ChangedBadge } from "./changed-badge";
+import { CommitChanges, CommitPicker } from "./commit-picker";
 import { FolderLabel } from "./folder-label";
 import { countLabel } from "./format";
 import { reviewPreferenceKey } from "./host/review-client";
@@ -407,6 +408,19 @@ export function ReviewSidebarSection(
 }
 
 function SectionBody(props: ReviewSidebarSectionProps): ReactElement | null {
+  // A picked commit's own changes: its lines can't count as viewed against
+  // the board's range, so there is nothing to show as remaining.
+  const picked = props.commits?.list.find(
+    ({ commit }) => commit === props.commits?.selected,
+  );
+
+  if (props.section === "remaining" && picked)
+    return (
+      <div {...stylex.props(styles.lenses, styles.remaining)}>
+        <CommitChanges commit={picked} />
+      </div>
+    );
+
   if (props.section === "remaining")
     return props.lenses ? (
       <div {...stylex.props(styles.lenses, styles.remaining)}>
@@ -427,6 +441,15 @@ function SectionBody(props: ReviewSidebarSectionProps): ReactElement | null {
     ) : null;
 
   if (props.section === "threads") return <ThreadsSectionBody {...props} />;
+
+  if (props.section === "commitPicker")
+    return props.commits ? (
+      <CommitPicker
+        commits={props.commits.list}
+        selected={props.commits.selected}
+        onPick={(commit) => props.onPickCommit?.(commit)}
+      />
+    ) : null;
 
   if (props.section === "recent")
     return (
@@ -956,6 +979,8 @@ const styles = stylex.create({
   pathLeaf: { flex: "0 0 auto", maxWidth: "80%" },
   moreIcon: { marginLeft: "2px" },
   metaBeforeFolder: { width: "auto" },
+  // What a terminal would print: a commit id, a branch, a folder.
+  code: { fontFamily: tokens.fontMono },
   groupHeader: {
     display: "flex",
     alignItems: "center",

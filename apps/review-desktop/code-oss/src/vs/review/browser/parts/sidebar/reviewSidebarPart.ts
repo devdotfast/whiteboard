@@ -193,6 +193,7 @@ export class ReviewSidebarPart extends Part {
 	private recentBody: HTMLElement | undefined;
 	private whiteboardsBody: HTMLElement | undefined;
 	private familyBody: HTMLElement | undefined;
+	private commitPicker: HTMLElement | undefined;
 	private threadsBody: HTMLElement | undefined;
 	private threadsFilter: ReviewThreadsFilter;
 	/** Each board's project threads, as the server last sent them. */
@@ -412,6 +413,9 @@ export class ReviewSidebarPart extends Part {
 		const changesHeader = header(changes, localize("review.sidebar.changes", "Changes"));
 		this.remaining = $(".review-sidebar-remaining");
 		changesHeader.append($("span.review-sidebar-section-spacer"), this.remaining);
+		// Which commits the diff shows, over its Lenses and Files.
+		this.commitPicker = $(".review-sidebar-commit-picker");
+		changes.appendChild(this.commitPicker);
 		const groups = $(".review-sidebar-pane-body.review-sidebar-groups");
 		changes.appendChild(groups);
 		this.lenses = this.group(groups, "lenses", localize("review.sidebar.lenses", "Lenses"));
@@ -739,6 +743,14 @@ export class ReviewSidebarPart extends Part {
 			},
 			onFilterThreads: (filter) => this.setThreadsFilter(filter),
 			onOpenThread: (threadId) => this.emitSurfaceEvent({ event: "openAskThread", reviewId, threadId }),
+			...(this.state.commits?.length && {
+				commits: {
+					list: this.state.commits,
+					...(this.state.commit && { selected: this.state.commit }),
+					...(this.state.compare && { compare: this.state.compare }),
+				},
+			}),
+			onPickCommit: (commit) => this.emitSurfaceEvent({ event: "pickCommit", reviewId, commit }),
 			onNewWhiteboard: () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID),
 			...(newWhiteboardShortcut && { newWhiteboardShortcut }),
 		};
@@ -748,6 +760,7 @@ export class ReviewSidebarPart extends Part {
 			["family", this.familyBody],
 			["recent", this.recentBody],
 			["whiteboards", this.whiteboardsBody],
+			["commitPicker", this.commitPicker],
 			["threads", this.threadsBody],
 			["remaining", this.remaining],
 			["lenses", this.lenses?.body],
@@ -893,7 +906,7 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 			const tooltip = this._register(new ReviewTooltip(hoverService, button, { label: title }, "right"));
 			this.railButtons.set(id, { button, tooltip, badge });
 			// Whiteboard switches the view and keeps the rail; Diff and Threads
-			// open the sidebar, for Files and Lenses or the list.
+			// open the sidebar, for its commits, Files and Lenses, or the list.
 			this._register(addDisposableListener(button, "click", () => this.showTab(id)));
 		}
 		this.layoutService.mainContainer.appendChild(this.rail);
@@ -948,8 +961,8 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 
 	showTab(id: ReviewSidebarPaneId): void {
 		if (!this.available) return;
-		// A rail stays a rail for Whiteboard. Diff's Files and Lenses and
-		// the Threads list live in the sidebar, so those open it;
+		// A rail stays a rail for Whiteboard. Diff's commits, Files and
+		// Lenses and the Threads list live in the sidebar, so those open it;
 		// only this pick does, and a later close sticks.
 		if (id === "diff" || id === "threads") this.show();
 		this.part.pick(id);

@@ -202,7 +202,11 @@ function reviewDiffStats(diff: {
   return summarizeReviewDiffFiles(diff.files);
 }
 
-function relativeTimeLabel(timeMs: number, nowMs: number): string | null {
+/** "6d ago": a time not long past, else its date. */
+export function relativeTimeLabel(
+  timeMs: number,
+  nowMs: number,
+): string | null {
   if (!Number.isFinite(timeMs)) return null;
   const minutes = Math.floor(Math.max(0, nowMs - timeMs) / 60_000);
 
