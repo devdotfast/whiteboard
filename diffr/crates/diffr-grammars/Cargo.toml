@@ -21,7 +21,10 @@ include = [
 
 [dependencies]
 tree-sitter-language = "0.1.7"
-# The grammars' C code calls ZSTD_decompress.
+
+# The grammars' C code calls ZSTD_decompress, except on wasm32, where the
+# tables are not packed.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 zstd-sys = { version = "2.1.0", default-features = false }
 
 [build-dependencies]

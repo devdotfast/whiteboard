@@ -6,6 +6,11 @@
 //! as zstd bytes, and leaves an empty array in its place. A generated C
 //! function, `diffr_unpack_<symbol>`, fills the arrays, and `src/lib.rs` runs it
 //! once before the grammar's first use.
+//!
+//! A wasm32 build compiles each grammar as generated, with an empty unpack
+//! function: a page is served compressed, so packing would only cost the
+//! decompressor, and wasm object files hold their tables in a form this
+//! script does not read.
 use object::{Object, ObjectSection, ObjectSymbol};
 use rayon::prelude::*;
 use std::collections::BTreeMap;
@@ -185,6 +190,21 @@ fn package_roots() -> BTreeMap<String, PathBuf> {
 /// fills them, and the grammar's constructor renamed to `diffr_<symbol>`, then compile it.
 fn pack(symbol: &str, source: &Path, out: &Path) {
     std::fs::create_dir_all(out).unwrap();
+    if std::env::var("CARGO_CFG_TARGET_ARCH").unwrap() == "wasm32" {
+        let grammar = format!(
+            "#define {symbol} diffr_{symbol}\n\
+             #include \"parser.c\"\n\
+             void diffr_unpack_{symbol}(void) {{}}\n"
+        );
+        std::fs::write(out.join("grammar.c"), grammar).unwrap();
+        let mut build = compiler(source, out);
+        build.file(out.join("grammar.c"));
+        if source.join("scanner.c").is_file() {
+            build.file(source.join("scanner.c"));
+        }
+        build.compile(symbol);
+        return;
+    }
     let parser = std::fs::read_to_string(source.join("parser.c")).unwrap();
     let header = std::fs::read_to_string(source.join("tree_sitter/parser.h")).unwrap();
     let tables = tables(&parser, &header);

@@ -4,7 +4,8 @@
 //! The first call unpacks that grammar's tables.
 use std::sync::Once;
 use tree_sitter_language::LanguageFn;
-// Links libzstd for the grammars' C code.
+// Links libzstd for the grammars' C code; wasm32 grammars are not packed.
+#[cfg(not(target_arch = "wasm32"))]
 use zstd_sys as _;
 
 macro_rules! grammar {

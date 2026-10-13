@@ -1,0 +1,38 @@
+{
+  "compilerOptions": {
+    "target": "ES2024",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": [
+      "ES2024",
+      "ESNext.Disposable",
+      "DOM",
+      "DOM.Iterable",
+      "WebWorker.ImportScripts"
+    ],
+    "strict": true,
+    "noImplicitOverride": true,
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "allowImportingTsExtensions": true,
+    "useUnknownInCatchVariables": false,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": [
+      "vite/client",
+      "@webgpu/types",
+      "trusted-types",
+      "wicg-file-system-access"
+    ],
+    "paths": {
+      "vs/*": ["../review-desktop/code-oss/src/vs/*"],
+      "@dev.fast/diffr": ["../../diffr/diffr-ts/src/index.ts"]
+    }
+  },
+  "include": [
+    "src",
+    "vite.config.ts",
+    "../review-desktop/code-oss/src/typings/*.d.ts",
+    "../review-desktop/code-oss/src/vs/monaco.d.ts"
+  ]
+}

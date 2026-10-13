@@ -1,0 +1,32 @@
+{
+  "name": "@dev.fast/diffr-web",
+  "version": "0.0.0",
+  "private": true,
+  "description": "diffr in the browser: GitHub pull requests and comparisons diffed on the reader's machine",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "wasm": "cd ../../diffr && cargo xtask build-web --out-dir ../apps/diffr-web/src/wasm",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "pnpm -w exec tsc --noEmit -p apps/diffr-web"
+  },
+  "dependencies": {
+    "@dev.fast/diffr": "workspace:*",
+    "@dev.fast/review-protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/trusted-types": "2.0.7",
+    "@types/wicg-file-system-access": "2023.10.7",
+    "@vscode/codicons": "0.0.46-21",
+    "@vscode/diff": "0.0.2-7",
+    "@vscode/tree-sitter-wasm": "0.3.1",
+    "@webgpu/types": "0.1.66",
+    "typescript": "6.0.3",
+    "vite": "8.0.16"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  }
+}

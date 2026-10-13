@@ -72,7 +72,7 @@ tokio = { version = "1", features = ["macros", "net", "process"] }
 version_check = "0.9.4"
 
 [workspace]
-members = ["xtask", "crates/diffr-core", "crates/diffr-grammars", "crates/diffr-plugin-sdk"]
+members = ["xtask", "crates/diffr-core", "crates/diffr-grammars", "crates/diffr-plugin-sdk", "crates/diffr-web"]
 default-members = [".", "crates/diffr-core", "crates/diffr-grammars", "crates/diffr-plugin-sdk"]
 exclude = ["plugins", "tests/fixtures/concurrent-guest"]
 

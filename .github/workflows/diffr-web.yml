@@ -1,0 +1,116 @@
+on:
+  push:
+    branches: [main]
+    paths:
+      - "diffr/**"
+      - "apps/diffr-web/**"
+      # The page is built from Review Desktop's editor and review sources.
+      - "apps/review-desktop/code-oss/src/vs/**"
+      - "apps/review-desktop/code-oss/extensions/review-themes/**"
+      - "packages/review-protocol/**"
+      - ".github/workflows/diffr-web.yml"
+  pull_request:
+    paths:
+      - "diffr/**"
+      - "apps/diffr-web/**"
+      # The page is built from Review Desktop's editor and review sources.
+      - "apps/review-desktop/code-oss/src/vs/**"
+      - "apps/review-desktop/code-oss/extensions/review-themes/**"
+      - "packages/review-protocol/**"
+      - ".github/workflows/diffr-web.yml"
+  workflow_dispatch:
+
+name: Diffr Web
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diffr-web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: ubuntu-24.04
+    env:
+      WRANGLER: npx --yes wrangler@4.135.0
+      # A fork's pull request gets no secrets, so it builds without deploying.
+      DEPLOY: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          targets: wasm32-unknown-unknown
+          # llvm-ar archives the grammars' wasm objects; clang comes with the runner.
+          components: llvm-tools
+
+      - name: Install wasm-bindgen
+        uses: taiki-e/install-action@1329c298aa20c3257846c9b2e0e55967df3e3c37 # v2
+        with:
+          tool: wasm-bindgen@0.2.129
+
+      - name: Restore diffr build
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            diffr/target
+          key: diffr-web-${{ hashFiles('diffr/Cargo.lock', 'diffr/rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: diffr-web-${{ hashFiles('diffr/Cargo.lock', 'diffr/rust-toolchain.toml') }}-
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - name: Setup Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --filter @dev.fast/diffr-web...
+
+      - name: Build the engine
+        run: pnpm --filter @dev.fast/diffr-web wasm
+
+      - name: Save diffr build
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            diffr/target
+          key: diffr-web-${{ hashFiles('diffr/Cargo.lock', 'diffr/rust-toolchain.toml') }}-${{ github.sha }}
+
+      # Not the repo's typecheck: it needs the engine's bindings, built above.
+      - name: Typecheck
+        run: pnpm --filter @dev.fast/diffr-web check
+
+      - name: Build the page
+        run: pnpm --filter @dev.fast/diffr-web build
+
+      - name: Deploy
+        if: env.DEPLOY == 'true' && github.event_name != 'pull_request'
+        working-directory: apps/diffr-web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: $WRANGLER deploy
+
+      - name: Upload a preview
+        if: env.DEPLOY == 'true' && github.event_name == 'pull_request'
+        working-directory: apps/diffr-web
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ALIAS: pr-${{ github.event.pull_request.number }}
+        run: |
+          $WRANGLER versions upload --preview-alias "$ALIAS" | tee upload.log
+          url=$(grep -o "https://$ALIAS-[^ ]*workers.dev" upload.log | head -1)
+          echo "Preview: ${url:-see the log above}" >> "$GITHUB_STEP_SUMMARY"

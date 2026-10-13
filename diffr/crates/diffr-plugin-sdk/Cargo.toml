@@ -10,3 +10,7 @@ license = "MIT"
 # Component bindings and the records used by the host.
 # Async exports share the runtime used by WASIp3 HTTP.
 wit-bindgen = "0.62.0"
+
+[features]
+# The contract as plain Rust, for a host that links plugins into itself.
+native = []
