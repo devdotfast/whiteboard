@@ -189,6 +189,44 @@ describe.each([
     expect(versionOf(database)).toBe(STORE_VERSION);
   });
 
+  it("names who wrote each version from now on, and no one for one a release saved", async () => {
+    const { database } = home(fixture, ["alpha", "beta"]);
+    const store = open(database);
+
+    const reader = new DatabaseSync(database, { readOnly: true });
+
+    const reviewId = String(
+      reader
+        .prepare(
+          `SELECT reviews.id FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+          WHERE json_extract(snapshot,'$.target.kind')='commits' ORDER BY reviews.id LIMIT 1`,
+        )
+        .get()!.id,
+    );
+
+    reader.close();
+
+    // Releases saved an agent's command and a person's edit alike.
+    for (const entry of store.history(reviewId)) {
+      expect(entry.author).toBeUndefined();
+      expect(entry.threadId).toBeUndefined();
+    }
+
+    await store.execute({
+      operation: { type: "rename", reviewId, title: "Renamed" },
+    });
+    expect(store.history(reviewId).at(-1)?.author).toBe("agent");
+
+    const db = new DatabaseSync(database);
+
+    expect(() =>
+      db
+        .prepare("UPDATE versions SET author_kind='robot' WHERE review_id=?")
+        .run(reviewId),
+    ).toThrow(/author_kind/);
+    db.close();
+  });
+
   it("ends with the tables, columns and indexes of a new store", async () => {
     const { database } = home(fixture, ["alpha", "beta"]);
 
@@ -438,7 +476,7 @@ it("gives a deleted checkout inside another repository's folder the project of t
   db.exec(`INSERT INTO projects VALUES('project','Project');
     INSERT INTO reviews(id,version,next_id,project_id) VALUES('board',0,1,'project');`);
   db.prepare(
-    "INSERT INTO versions(review_id,version,snapshot) VALUES('board',0,?)",
+    "INSERT INTO versions(review_id,version,snapshot,author_kind) VALUES('board',0,?,'agent')",
   ).run(
     JSON.stringify({
       pins: { repositoryId: "vendored", head: pinned },

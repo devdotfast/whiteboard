@@ -65,6 +65,7 @@ import { documentText } from "./document-text.js";
 import {
   ReviewInputError,
   type ReviewTarget,
+  boardLinks,
   boardRepositoryId,
 } from "./document.js";
 import { instructionsQuerySchema, renderInstructions } from "./instructions.js";
@@ -90,6 +91,7 @@ import {
   uncategorizedReport,
 } from "./review-progress.js";
 import {
+  type Author,
   type PlacedBoard,
   type ReviewStore,
   type Snapshot,
@@ -2015,7 +2017,15 @@ export function createReviewApi(
   app.get("/:id/links", (context) => {
     const id = context.req.param("id");
 
-    if (isShared(id)) return context.json({ outgoing: [], backlinks: [] });
+    // A shared board's links name boards on the sender's machine: shown,
+    // but not followed.
+    if (isShared(id))
+      return context.json({
+        outgoing: boardLinks(id, readReview(id).document).map(
+          ({ from, to }) => ({ from, to, missing: true, elsewhere: true }),
+        ),
+        backlinks: [],
+      });
 
     const { version } = readQuerySchemas.get
       .pick({ version: true })
@@ -2250,17 +2260,23 @@ export function createReviewApi(
       throw new ReviewInputError("Shared reviews are read-only.", 409);
     }
 
-    // Trust the thread header only from local callers.
+    // Who is writing, trusted only from local callers: a person from
+    // Desktop or the canvas, or an agent, perhaps a thread's. The store
+    // keeps each author's rules.
     const threadId = remoteCaller(context)
       ? undefined
       : context.req.header(REVIEW_THREAD_HEADER)?.trim() || undefined;
 
-    // A person's command from Desktop or the canvas, trusted only locally.
-    const person =
+    const author: Author =
       !remoteCaller(context) &&
-      context.req.header(REVIEW_PERSON_HEADER) !== undefined;
+      context.req.header(REVIEW_PERSON_HEADER) !== undefined
+        ? { kind: "person" }
+        : {
+            kind: "agent",
+            ...(threadId && { threadId }),
+          };
 
-    const result = await store.execute(input, undefined, { threadId, person });
+    const result = await store.execute(input, undefined, author);
 
     if (
       result.deleted ||

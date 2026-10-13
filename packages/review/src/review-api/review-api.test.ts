@@ -1518,7 +1518,7 @@ describe("snapshot authoring", () => {
         "INSERT INTO reviews(id,version,next_id,project_id) VALUES('scratchpad',0,1,?)",
       ).run(projectId);
       db.prepare(
-        "INSERT INTO versions(review_id,version,snapshot) VALUES('scratchpad',0,?)",
+        "INSERT INTO versions(review_id,version,snapshot,author_kind) VALUES('scratchpad',0,?,'agent')",
       ).run(
         JSON.stringify({
           reviewId: "scratchpad",
@@ -1585,7 +1585,7 @@ describe("snapshot authoring", () => {
 
     for (const version of [0, 1])
       db.prepare(
-        "INSERT INTO versions(review_id,version,snapshot) VALUES('scratchpad',?,?)",
+        "INSERT INTO versions(review_id,version,snapshot,author_kind) VALUES('scratchpad',?,?,'agent')",
       ).run(
         version,
         JSON.stringify({
@@ -1667,7 +1667,7 @@ describe("snapshot authoring", () => {
       "INSERT INTO reviews(id,version,next_id,project_id) SELECT 'scratchpad',0,9,id FROM projects LIMIT 1",
     ).run();
     db.prepare(
-      "INSERT INTO versions(review_id,version,snapshot) VALUES('scratchpad',0,?)",
+      "INSERT INTO versions(review_id,version,snapshot,author_kind) VALUES('scratchpad',0,?,'agent')",
     ).run(
       JSON.stringify({
         reviewId: "scratchpad",
