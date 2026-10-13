@@ -9,12 +9,7 @@
 //     [--artifact-dir dist]
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  lstatSync,
-  readFileSync,
-  readdirSync,
-  writeFileSync,
-} from "node:fs";
+import { lstatSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { parseArgs } from "node:util";
 
@@ -290,9 +285,19 @@ async function main() {
     }
   }
 
-  run("xcrun", ["stapler", "validate", app]);
+  run("bash", [
+    path.join(APP_DIR, "scripts/apple-notary.sh"),
+    "stapler",
+    "validate",
+    app,
+  ]);
   run("spctl", ["-a", "-vv", "--type", "exec", app]);
-  run("xcrun", ["stapler", "validate", dmg]);
+  run("bash", [
+    path.join(APP_DIR, "scripts/apple-notary.sh"),
+    "stapler",
+    "validate",
+    dmg,
+  ]);
 
   for (const { bundle, file } of zips) {
     assertZipBundle(file, bundle);

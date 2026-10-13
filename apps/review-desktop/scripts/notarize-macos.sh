@@ -110,40 +110,12 @@ DMG_STAGE="$TEMP_ROOT/dmg"
 
 NOTARY_IDS=()
 
-apple_notary() {
-  local attempt status delay
-  local stdout="$TEMP_ROOT/apple-stdout"
-  local stderr="$TEMP_ROOT/apple-stderr"
-  # EX_NOHOST (68) also means "not notarized"; require a network diagnostic.
-  local transient='NSURLErrorDomain Code=-(1001|1003|1004|1005|1006|1009)([^0-9]|$)|HTTP status code: (408|429|500|502|503|504)([^0-9]|$)|statusCode: Optional\((408|429|500|502|503|504)\)'
-
-  for attempt in 1 2 3 4 5; do
-    if xcrun "$@" >"$stdout" 2>"$stderr"; then
-      cat "$stderr" >&2
-      cat "$stdout"
-      return 0
-    else
-      status=$?
-    fi
-    # Keep failed diagnostics out of the successful notarytool JSON response.
-    cat "$stdout" "$stderr" >&2
-    if [[ "$attempt" == 5 ]] || ! {
-      [[ "$status" == 75 ]] || grep -Eq "$transient" "$stdout" "$stderr"
-    }; then
-      return "$status"
-    fi
-    delay=$((5 * (1 << (attempt - 1))))
-    echo "Apple $1 $2 failed transiently (exit $status); retrying in ${delay}s ($attempt/5)." >&2
-    sleep "$delay"
-  done
-}
-
 submit_notarization() {
   local artifact="$1"
   local label="$2"
   local response="$TEMP_ROOT/$label-notary-response.json"
 
-  if ! apple_notary notarytool submit "$artifact" \
+  if ! bash "$APP_DIR/scripts/apple-notary.sh" notarytool submit "$artifact" \
     "${NOTARY_ARGS[@]}" \
     --output-format json | tee "$response"; then
     echo "Apple notarization failed for $artifact" >&2
@@ -163,7 +135,7 @@ submit_notarization() {
 wait_for_notarization() {
   local submission="$1"
   local response="$TEMP_ROOT/$submission-notary-result.json"
-  apple_notary notarytool wait "$submission" "${NOTARY_ARGS[@]}" \
+  bash "$APP_DIR/scripts/apple-notary.sh" notarytool wait "$submission" "${NOTARY_ARGS[@]}" \
     --output-format json | tee "$response"
   node --input-type=module -e '
     import fs from "node:fs";
@@ -232,17 +204,17 @@ done < <(node "$APP_DIR/scripts/release-channel.mjs" "$QUALITY")
 for submission in "${NOTARY_IDS[@]}"; do
   wait_for_notarization "$submission"
 done
-apple_notary stapler staple "$DMG"
-apple_notary stapler validate "$DMG"
-apple_notary stapler staple "$PACKAGED_APP"
-apple_notary stapler validate "$PACKAGED_APP"
+bash "$APP_DIR/scripts/apple-notary.sh" stapler staple "$DMG"
+bash "$APP_DIR/scripts/apple-notary.sh" stapler validate "$DMG"
+bash "$APP_DIR/scripts/apple-notary.sh" stapler staple "$PACKAGED_APP"
+bash "$APP_DIR/scripts/apple-notary.sh" stapler validate "$PACKAGED_APP"
 spctl -a -vv --type exec "$PACKAGED_APP"
 spctl -a -vv --type open --context context:primary-signature "$DMG"
 
 while IFS=$'\t' read -r bundle artifact; do
   staged="$TEMP_ROOT/zips/$artifact/$bundle.app"
-  apple_notary stapler staple "$staged"
-  apple_notary stapler validate "$staged"
+  bash "$APP_DIR/scripts/apple-notary.sh" stapler staple "$staged"
+  bash "$APP_DIR/scripts/apple-notary.sh" stapler validate "$staged"
   spctl -a -vv --type exec "$staged"
   ditto -c -k --keepParent "$staged" "$ARTIFACT_DIR/$artifact-$DARWIN_TARGET-$VERSION.zip"
 done < <(node "$APP_DIR/scripts/release-channel.mjs" "$QUALITY")
