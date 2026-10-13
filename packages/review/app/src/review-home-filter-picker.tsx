@@ -27,7 +27,7 @@ import {
 } from "./review-home-model";
 import { fontSize } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
-import { checkboxStyles } from "./ui/checkbox";
+import { CheckboxMark } from "./ui/checkbox";
 import { Shortcut } from "./ui/kbd";
 import { menuStyles, moveMenuFocus } from "./ui/menu";
 import { surfaceStyles } from "./ui/surface";
@@ -573,13 +573,9 @@ function PickerRow({
         aria-hidden="true"
         {...stylex.props(styles.checkHit)}
       >
-        <span
-          {...stylex.props(
-            checkboxStyles.box,
-            checked === true && checkboxStyles.checked,
-            checked === "mixed" && checkboxStyles.mixed,
-            checked === false && styles.emptyCheck,
-          )}
+        <CheckboxMark
+          state={checked}
+          xstyle={checked === false && styles.emptyCheck}
         />
       </span>
       <span {...stylex.props(styles.label)}>{label}</span>

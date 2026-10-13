@@ -69,7 +69,7 @@ import {
 import { styles } from "./review-home-styles";
 import { withClass } from "./stylex-props";
 import { Button, IconButton, buttonStyles } from "./ui/button";
-import { checkboxStyles } from "./ui/checkbox";
+import { Checkbox } from "./ui/checkbox";
 import { EmptyState } from "./ui/empty-state";
 import { Shortcut } from "./ui/kbd";
 import { menuStyles, moveMenuFocus } from "./ui/menu";
@@ -1056,20 +1056,14 @@ export function ReviewHome({
                               : `${count} of ${group.reviews.length} selected`}
                           </span>
                         )}
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           aria-label={`Select ${group.label}`}
                           title="Select group"
                           checked={count === group.reviews.length}
-                          ref={(element) => {
-                            if (element)
-                              element.indeterminate =
-                                count > 0 && count < group.reviews.length;
-                          }}
-                          {...stylex.props(
-                            checkboxStyles.box,
-                            count === 0 && styles.hiddenGroupCheck,
-                          )}
+                          indeterminate={
+                            count > 0 && count < group.reviews.length
+                          }
+                          xstyle={count === 0 && styles.hiddenGroupCheck}
                           onChange={() => selectGroup(group.reviews)}
                         />
                       </div>
@@ -1107,15 +1101,11 @@ export function ReviewHome({
                           }
                         }}
                       >
-                        <input
-                          type="checkbox"
+                        <Checkbox
                           aria-label={`Select ${reviewTitle(review)}`}
                           title="Select  x"
                           checked={isSelected(index)}
-                          {...stylex.props(
-                            checkboxStyles.box,
-                            !isSelected(index) && styles.hiddenCheck,
-                          )}
+                          xstyle={!isSelected(index) && styles.hiddenCheck}
                           onChange={() => {}}
                           onClick={(event) => {
                             event.stopPropagation();

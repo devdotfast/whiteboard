@@ -1,5 +1,5 @@
 import { Button } from "@canvas/ui/button";
-import { checkboxStyles } from "@canvas/ui/checkbox";
+import { Checkbox } from "@canvas/ui/checkbox";
 import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCanvasSettingsContent,
@@ -199,9 +199,7 @@ export function SettingsPage({
                 {...stylex.props(styles.toggle)}
                 aria-label="Share anonymous usage data"
               >
-                <input
-                  {...stylex.props(checkboxStyles.box)}
-                  type="checkbox"
+                <Checkbox
                   checked={telemetryEnabled}
                   disabled={busy !== null}
                   onChange={(event) => {
@@ -345,9 +343,7 @@ export function SettingsPage({
               description="Replace the standard diff view with syntax-aware diffs and linked folds."
             >
               <label {...stylex.props(styles.toggle)}>
-                <input
-                  {...stylex.props(checkboxStyles.box)}
-                  type="checkbox"
+                <Checkbox
                   aria-label="Structural Diffs"
                   checked={structuralDiffEnabled}
                   disabled={busy !== null}
@@ -373,9 +369,7 @@ export function SettingsPage({
               description="Show the experimental Software Map view in sessions."
             >
               <label {...stylex.props(styles.toggle)}>
-                <input
-                  {...stylex.props(checkboxStyles.box)}
-                  type="checkbox"
+                <Checkbox
                   aria-label="Software Map"
                   checked={softwareMapEnabled}
                   disabled={busy !== null}
@@ -395,9 +389,7 @@ export function SettingsPage({
               description="Show the experimental scratchpad on Home. Agents draw on it through Whiteboard's MCP tools."
             >
               <label {...stylex.props(styles.toggle)}>
-                <input
-                  {...stylex.props(checkboxStyles.box)}
-                  type="checkbox"
+                <Checkbox
                   aria-label="Scratchpad"
                   checked={scratchpadEnabled}
                   disabled={busy !== null}

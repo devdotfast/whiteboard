@@ -1,11 +1,60 @@
 import { radius } from "@canvas/scale.stylex";
+import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
+import type { ComponentProps } from "react";
 
 const mixedBar = `linear-gradient(${tokens.onAccent}, ${tokens.onAccent})`;
 
-// Native inputs use the pseudo-classes; ARIA checkboxes pass `checked` or `mixed`.
-export const checkboxStyles = stylex.create({
+type CheckboxProps = Omit<
+  ComponentProps<"input">,
+  "type" | "ref" | "className" | "style"
+> & {
+  indeterminate?: boolean;
+  className?: string;
+  xstyle?: StyleArg;
+};
+
+export function Checkbox({
+  indeterminate = false,
+  className,
+  xstyle,
+  ...props
+}: CheckboxProps) {
+  return (
+    <input
+      type="checkbox"
+      ref={(element) => {
+        if (element) element.indeterminate = indeterminate;
+      }}
+      {...props}
+      {...withClass(className, styles.box, xstyle)}
+    />
+  );
+}
+
+/** The box alone, for a row that is itself the checkbox (a menuitemcheckbox). */
+export function CheckboxMark({
+  state,
+  xstyle,
+}: {
+  state: boolean | "mixed";
+  xstyle?: StyleArg;
+}) {
+  return (
+    <span
+      aria-hidden="true"
+      {...stylex.props(
+        styles.box,
+        state === true && styles.checked,
+        state === "mixed" && styles.mixed,
+        xstyle,
+      )}
+    />
+  );
+}
+
+const styles = stylex.create({
   box: {
     flex: "none",
     boxSizing: "border-box",

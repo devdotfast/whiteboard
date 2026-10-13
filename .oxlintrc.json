@@ -48,6 +48,10 @@
         "memberSyntaxSortOrder": ["none", "all", "multiple", "single"]
       }
     ],
+    "jsx-a11y/label-has-associated-control": [
+      "error",
+      { "controlComponents": ["Checkbox"] }
+    ],
     "typescript/no-explicit-any": "off",
     "typescript/no-non-null-assertion": "off",
     "typescript/array-type": "off",
