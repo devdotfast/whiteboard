@@ -254,7 +254,7 @@
     "children": [
       {
         "type": "markdown",
-        "markdown": "## Get help\n\nTo manage the Review skills installed for your agents, open **Preferences →\nSettings**. To revisit setup or take this tour again, open **Preferences →\nGetting Started**.\n"
+        "markdown": "## Get help\n\nTo manage the Review skills installed for your agents, open **Settings**.\nTo revisit setup or take this tour again, open **Getting Started**.\n"
       }
     ]
   }
