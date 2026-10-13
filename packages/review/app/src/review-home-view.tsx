@@ -142,7 +142,7 @@ export function ReviewHome({
   } | null>(null);
 
   const addFilter = useRef<HTMLButtonElement>(null);
-  const addChip = useRef<HTMLButtonElement>(null);
+  const chipRow = useRef<HTMLDivElement>(null);
   const [sort, setSort] = useState<HomeSort>("updated");
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [selected, setSelected] = useState(new Set<string>());
@@ -296,6 +296,10 @@ export function ReviewHome({
     editingSearch === "" ? [...chipOrder, "draft"] : chipOrder;
 
   useLayoutEffect(() => {
+    chipRow.current?.scrollTo({ left: chipRow.current.scrollWidth });
+  }, [renderedChips.length]);
+
+  useLayoutEffect(() => {
     if (
       picker &&
       picker.section !== "all" &&
@@ -318,14 +322,8 @@ export function ReviewHome({
         return;
       }
 
-      const anchor = addChip.current ?? addFilter.current;
-
-      if (anchor)
-        setPicker({
-          ...picker,
-          anchor,
-          alignment: addChip.current ? "start" : "end",
-        });
+      if (addFilter.current)
+        setPicker({ ...picker, anchor: addFilter.current, alignment: "end" });
     }
   }, [picker, renderedChips]);
 
@@ -965,6 +963,61 @@ export function ReviewHome({
             ) : (
               <h1 {...stylex.props(styles.heading)}>Whiteboards</h1>
             )}
+            {renderedChips.length > 0 && (
+              <div
+                ref={chipRow}
+                aria-label="Active filters"
+                {...stylex.props(styles.chips)}
+              >
+                {renderedChips.map(renderChip)}
+              </div>
+            )}
+            <div {...stylex.props(styles.controls, styles.headerFilters)}>
+              {renderedChips.length > 0 && (
+                <button
+                  {...stylex.props(styles.clearAll)}
+                  onClick={clearFilters}
+                >
+                  Clear all
+                </button>
+              )}
+              <button
+                ref={addFilter}
+                aria-label="Add filters"
+                title="Add filter  F"
+                aria-haspopup="dialog"
+                aria-expanded={picker?.anchor === addFilter.current}
+                {...stylex.props(
+                  styles.control,
+                  styles.toolbarControl,
+                  styles.filterButton,
+                  picker?.anchor === addFilter.current &&
+                    styles.addFilterActive,
+                )}
+                onClick={(event) => openPicker(event.currentTarget, "end")}
+              >
+                <HomeIcon kind="filter" />
+                Filter
+              </button>
+              <OptionMenu<HomeSort>
+                ariaLabel="Sort whiteboards"
+                value={sort}
+                options={[
+                  ...(inTrash
+                    ? [{ value: "trash" as const, label: "Trashed" }]
+                    : []),
+                  { value: "updated", label: "Updated" },
+                  { value: "created", label: "Created" },
+                  { value: "title", label: "Title" },
+                ]}
+                onChange={setSort}
+                triggerStyle={[styles.control, styles.toolbarControl]}
+              >
+                <HomeIcon kind="sort" size="small" />
+                <span {...stylex.props(styles.muted)}>Sort</span>
+                {sort[0].toUpperCase() + sort.slice(1)}
+              </OptionMenu>
+            </div>
             <div
               hidden={inTrash}
               {...stylex.props(
@@ -1089,105 +1142,27 @@ export function ReviewHome({
             </div>
           ) : null}
           {error && <p role="alert">{error}</p>}
-          <div {...stylex.props(styles.filterRegion)}>
-            <div {...stylex.props(styles.toolbar)}>
-              <div aria-label="Active filters" {...stylex.props(styles.chips)}>
-                {renderedChips.map((id, index) =>
-                  index === renderedChips.length - 1 ? (
-                    <span
-                      key={id}
-                      data-chip-tail
-                      {...stylex.props(styles.chipTail)}
-                    >
-                      {renderChip(id)}
-                      <button
-                        ref={addChip}
-                        aria-label="Add filter"
-                        title="Add filter  F"
-                        aria-haspopup="dialog"
-                        aria-expanded={picker?.anchor === addChip.current}
-                        {...stylex.props(styles.addFilter)}
-                        onClick={(event) =>
-                          openPicker(event.currentTarget, "start")
-                        }
-                      >
-                        +
-                      </button>
-                    </span>
-                  ) : (
-                    renderChip(id)
-                  ),
-                )}
-              </div>
-              <div {...stylex.props(styles.controls)}>
-                {renderedChips.length > 0 && (
-                  <button
-                    {...stylex.props(styles.clearAll)}
-                    onClick={clearFilters}
-                  >
-                    Clear all
-                  </button>
-                )}
-                <button
-                  ref={addFilter}
-                  aria-label="Add filters"
-                  title="Add filter  F"
-                  aria-haspopup="dialog"
-                  aria-expanded={picker?.anchor === addFilter.current}
-                  {...stylex.props(
-                    styles.control,
-                    styles.toolbarControl,
-                    styles.filterButton,
-                    picker?.anchor === addFilter.current &&
-                      styles.addFilterActive,
-                  )}
-                  onClick={(event) => openPicker(event.currentTarget, "end")}
-                >
-                  <HomeIcon kind="filter" />
-                  Filter
-                </button>
-                <OptionMenu<HomeSort>
-                  ariaLabel="Sort whiteboards"
-                  value={sort}
-                  options={[
-                    ...(inTrash
-                      ? [{ value: "trash" as const, label: "Trashed" }]
-                      : []),
-                    { value: "updated", label: "Updated" },
-                    { value: "created", label: "Created" },
-                    { value: "title", label: "Title" },
-                  ]}
-                  onChange={setSort}
-                  triggerStyle={[styles.control, styles.toolbarControl]}
-                >
-                  <HomeIcon kind="sort" size="small" />
-                  <span {...stylex.props(styles.muted)}>Sort</span>
-                  {sort[0].toUpperCase() + sort.slice(1)}
-                </OptionMenu>
-              </div>
-            </div>
-            {picker !== null && (
-              <HomeFilterPicker
-                key={picker.section}
-                anchor={picker.anchor}
-                alignment={picker.alignment}
-                section={picker.section}
-                reviews={listed}
-                filters={appliedFilters}
-                query={query}
-                onChange={setFilters}
-                onSearch={(term) => {
-                  setPicker(null);
-                  applySearch("", term);
-                }}
-                count={visible.length}
-                onClose={() => {
-                  setPicker(null);
-                  picker.anchor.focus();
-                }}
-              />
-            )}
-          </div>
+          {picker !== null && (
+            <HomeFilterPicker
+              key={picker.section}
+              anchor={picker.anchor}
+              alignment={picker.alignment}
+              section={picker.section}
+              reviews={listed}
+              filters={appliedFilters}
+              query={query}
+              onChange={setFilters}
+              onSearch={(term) => {
+                setPicker(null);
+                applySearch("", term);
+              }}
+              count={visible.length}
+              onClose={() => {
+                setPicker(null);
+                picker.anchor.focus();
+              }}
+            />
+          )}
           {!visible.length && (
             <p {...stylex.props(styles.muted)}>
               {hidden
