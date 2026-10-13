@@ -105,6 +105,13 @@ export const styles = stylex.create({
     borderColor: "transparent",
   },
   headerControls: { gap: "2px" },
+  corner: {
+    position: "fixed",
+    right: "16px",
+    bottom: "16px",
+    zIndex: layer.overlay,
+  },
+  cornerMenu: { top: "auto", bottom: "36px" },
   headerFilters: { marginInlineStart: "auto" },
   chips: {
     display: "flex",

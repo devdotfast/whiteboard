@@ -1018,90 +1018,6 @@ export function ReviewHome({
                 {sort[0].toUpperCase() + sort.slice(1)}
               </OptionMenu>
             </div>
-            <div
-              hidden={inTrash}
-              {...stylex.props(
-                styles.controls,
-                styles.headerControls,
-                inTrash && styles.hidden,
-              )}
-            >
-              <div ref={helpRef} {...stylex.props(styles.helpWrap)}>
-                <button
-                  type="button"
-                  aria-label="Help"
-                  ref={helpTooltip}
-                  aria-haspopup="menu"
-                  aria-expanded={helpOpen}
-                  {...stylex.props(
-                    styles.iconButton,
-                    styles.headerIconButton,
-                    helpOpen && styles.headerIconOpen,
-                  )}
-                  onClick={() => setHelpOpen(!helpOpen)}
-                >
-                  <HomeIcon kind="help" />
-                </button>
-                {helpOpen && (
-                  <MenuSurface
-                    role="menu"
-                    tabIndex={-1}
-                    aria-label="Help"
-                    xstyle={styles.menu}
-                    onClose={() => {
-                      setHelpOpen(false);
-                      helpRef.current?.querySelector("button")?.focus();
-                    }}
-                  >
-                    <button
-                      role="menuitem"
-                      {...stylex.props(menuSurfaceStyles.item)}
-                      disabled={!onOpenTutorial}
-                      onClick={() => {
-                        setHelpOpen(false);
-                        onOpenTutorial?.();
-                      }}
-                    >
-                      Need a refresher? Take the tour
-                    </button>
-                    <hr {...stylex.props(styles.divider)} />
-                    <a
-                      role="menuitem"
-                      {...stylex.props(menuSurfaceStyles.item)}
-                      href={REVIEW_DISCORD_URL}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Ask on Discord ↗
-                    </a>
-                    <button
-                      role="menuitem"
-                      {...stylex.props(
-                        menuSurfaceStyles.item,
-                        styles.copyEmail,
-                      )}
-                      onClick={async () => {
-                        const copied = await copyText("founders@dev.fast");
-                        setCopyNotice({ copied });
-                      }}
-                    >
-                      Need help? Send us an email
-                      <CopyIcon />
-                    </button>
-                  </MenuSurface>
-                )}
-              </div>
-              <button
-                type="button"
-                aria-label="Settings"
-                ref={settingsTooltip}
-                disabled={!onOpenSettings}
-                {...stylex.props(styles.iconButton, styles.headerIconButton)}
-                onClick={onOpenSettings}
-              >
-                <HomeIcon kind="settings" />
-              </button>
-            </div>
           </header>
           {setupIncomplete ? (
             <div {...stylex.props(styles.notice)}>
@@ -1424,6 +1340,88 @@ export function ReviewHome({
             </footer>
           )}
         </div>
+      </div>
+      <div
+        hidden={inTrash}
+        {...stylex.props(
+          styles.controls,
+          styles.headerControls,
+          styles.corner,
+          inTrash && styles.hidden,
+        )}
+      >
+        <div ref={helpRef} {...stylex.props(styles.helpWrap)}>
+          <button
+            type="button"
+            aria-label="Help"
+            ref={helpTooltip}
+            aria-haspopup="menu"
+            aria-expanded={helpOpen}
+            {...stylex.props(
+              styles.iconButton,
+              styles.headerIconButton,
+              helpOpen && styles.headerIconOpen,
+            )}
+            onClick={() => setHelpOpen(!helpOpen)}
+          >
+            <HomeIcon kind="help" />
+          </button>
+          {helpOpen && (
+            <MenuSurface
+              role="menu"
+              tabIndex={-1}
+              aria-label="Help"
+              xstyle={[styles.menu, styles.cornerMenu]}
+              onClose={() => {
+                setHelpOpen(false);
+                helpRef.current?.querySelector("button")?.focus();
+              }}
+            >
+              <button
+                role="menuitem"
+                {...stylex.props(menuSurfaceStyles.item)}
+                disabled={!onOpenTutorial}
+                onClick={() => {
+                  setHelpOpen(false);
+                  onOpenTutorial?.();
+                }}
+              >
+                Need a refresher? Take the tour
+              </button>
+              <hr {...stylex.props(styles.divider)} />
+              <a
+                role="menuitem"
+                {...stylex.props(menuSurfaceStyles.item)}
+                href={REVIEW_DISCORD_URL}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Ask on Discord ↗
+              </a>
+              <button
+                role="menuitem"
+                {...stylex.props(menuSurfaceStyles.item, styles.copyEmail)}
+                onClick={async () => {
+                  const copied = await copyText("founders@dev.fast");
+                  setCopyNotice({ copied });
+                }}
+              >
+                Need help? Send us an email
+                <CopyIcon />
+              </button>
+            </MenuSurface>
+          )}
+        </div>
+        <button
+          type="button"
+          aria-label="Settings"
+          ref={settingsTooltip}
+          disabled={!onOpenSettings}
+          {...stylex.props(styles.iconButton, styles.headerIconButton)}
+          onClick={onOpenSettings}
+        >
+          <HomeIcon kind="settings" />
+        </button>
       </div>
       {toast && (
         <div
