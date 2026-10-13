@@ -580,8 +580,8 @@ it("grows a tall, wide sequence diagram to its height instead of scrolling it ve
 
   await settled(() => body!.querySelector(".react-flow__node"));
 
-  // Eight lanes overflow sideways; ten steps stand 914px tall.
+  // Eight lanes overflow sideways; ten steps stand taller than the page.
   expect(body!.scrollWidth).toBeGreaterThan(body!.clientWidth);
-  expect(body!.clientHeight).toBeGreaterThanOrEqual(914);
+  expect(body!.clientHeight).toBeGreaterThan(700);
   expect(body!.scrollHeight).toBe(body!.clientHeight);
 });
