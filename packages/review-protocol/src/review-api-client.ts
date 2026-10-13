@@ -26,6 +26,7 @@ export interface ReviewApiSummary {
   origin?: {
     branch?: string;
     baseRef?: string;
+    baseBranch?: string;
     pullRequestNumber?: number;
     pullRequestUrl?: string;
     revision?: string;

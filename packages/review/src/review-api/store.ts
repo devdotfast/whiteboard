@@ -154,6 +154,8 @@ export interface SnapshotOrigin {
   tutorial?: boolean;
   branch?: string;
   baseRef?: string;
+  /** The base the review's target names, such as the branch below it. */
+  baseBranch?: string;
   pullRequestNumber?: number;
   pullRequestUrl?: string;
   /** The legacy review revision this version was imported from. */
@@ -1209,6 +1211,17 @@ export class ReviewStore {
           snapshot.origin = { ...snapshot.origin, branch };
         }
       }
+
+      // A base named rather than given as a commit; a stacked review names
+      // the branch below it.
+      if (requestedTarget)
+        snapshot.origin = {
+          ...snapshot.origin,
+          baseBranch:
+            requestedTarget.base === resolvedTarget?.pins.base
+              ? undefined
+              : requestedTarget.base,
+        };
 
       switch (op.type) {
         case "create":
