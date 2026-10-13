@@ -54,9 +54,9 @@ export const githubProvider: PullRequestProvider = {
         [
           "pr",
           "view",
-          String(number),
+          { value: String(number) },
           "--repo",
-          `${host}/${slug}`,
+          { value: `${host}/${slug}` },
           "--json",
           "number,title,baseRefName,baseRefOid,headRefName,isCrossRepository",
         ],

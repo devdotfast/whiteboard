@@ -403,8 +403,8 @@ describe("local vcs", () => {
     const spawns: string[][] = [];
 
     setLocalVcsCommandObserver({
-      start: ({ file, args }) => {
-        spawns.push([file, ...args]);
+      start: ({ tool, args }) => {
+        spawns.push([tool, ...args]);
 
         return () => {};
       },

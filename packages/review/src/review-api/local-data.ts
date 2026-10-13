@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import {
   type BlobBatchReader,
@@ -22,6 +20,7 @@ import {
   listTrackedFilesAtCommit,
   readFileAtCommit,
   resolveRepoContext,
+  runVcs,
 } from "@dev.fast/local-vcs";
 import { structuralChangeCounts } from "@dev.fast/review-protocol";
 import type {
@@ -419,7 +418,7 @@ export class LocalReviewData {
       );
 
     if (!live) {
-      const { stdout } = await promisify(execFile)("git", [
+      const { stdout } = await runVcs("git", [
         "-C",
         rootPath,
         "status",
@@ -1004,18 +1003,15 @@ export class LocalReviewData {
     if (!vcs || vcs.kind !== "git") return undefined;
 
     try {
-      const run = promisify(execFile);
-
-      const { stdout } = await run("git", [
+      const { stdout } = await runVcs("git", [
         "-C",
         vcs.rootPath,
         "rev-parse",
         "--symbolic-full-name",
         "--verify",
-        "--end-of-options",
         !headRef || /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(headRef)
           ? "HEAD"
-          : headRef,
+          : { rev: headRef },
       ]);
 
       const ref = stdout.trim();
