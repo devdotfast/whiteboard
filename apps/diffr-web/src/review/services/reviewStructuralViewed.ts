@@ -1,21 +1,21 @@
-import { Emitter, type Event } from "vs/base/common/event.js";
-import { Disposable } from "vs/base/common/lifecycle.js";
 /*---------------------------------------------------------------------------------------------
  * Copyright (c) dev.fast. All rights reserved.
  * Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
-import type { ICodeEditor } from "vs/editor/browser/editorBrowser.js";
+import { Emitter, type Event } from "vs/base/common/event.js";
+import { Disposable } from "vs/base/common/lifecycle.js";
 
-import type { ReviewDiffProgress, ReviewDiffViewSpec } from "../../protocol.js";
+import type {
+  ReviewDiffFileWire,
+  ReviewDiffProgress,
+  ReviewDiffViewSpec,
+} from "../../protocol.js";
 import {
   structuralViewedProgress,
   structuralViewedRanges,
   structuralViewedScopes,
 } from "../common/reviewStructuralViewed.js";
-import type { ReviewFilesEditorEntry } from "./reviewFilesDiffView.js";
 import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
-import type { FoldTarget } from "./reviewStructuralFolds.js";
-import type { ScopeViewedControl } from "./reviewStructuralViewedControl.js";
 
 // Several peeks can mount on one comparison. Only its first coverage snapshot
 // restores viewed folds; mounting another peek must not close a reopened fold.
@@ -37,16 +37,12 @@ export class StructuralViewedState extends Disposable {
 
   constructor(
     private readonly session: StructuralDiffSession,
-    private readonly entries: readonly ReviewFilesEditorEntry[],
+    private readonly entries: readonly { readonly file: ReviewDiffFileWire }[],
     private readonly progress: () => ReviewDiffProgress | undefined,
     onProgress: Event<void>,
     private readonly onSetViewed: NonNullable<
       ReviewDiffViewSpec["onSetViewed"]
     >,
-    readonly createControl: (
-      editor: ICodeEditor,
-      onToggle: (target: FoldTarget) => void,
-    ) => ScopeViewedControl,
   ) {
     super();
     this._register(onProgress(() => this.sync()));

@@ -122,12 +122,6 @@ body {
   inset: 0;
 }
 
-.app-overflow {
-  position: fixed;
-  inset: 0 auto auto 0;
-  z-index: 50;
-}
-
 .app-landing {
   max-width: 520px;
   margin: 18vh auto 0;
@@ -144,6 +138,10 @@ body {
 .app-landing p {
   margin: 0 0 20px;
   color: var(--vscode-descriptionForeground);
+}
+
+.app-landing p a {
+  color: inherit;
 }
 
 .app-landing input,
@@ -724,90 +722,6 @@ body {
   font-size: 12px;
 }
 
-/* Find in all files (find.ts): the editor's own find styles, which the page does not load. */
-.app .monaco-editor .findMatch {
-  background-color: var(
-    --vscode-editor-findMatchHighlightBackground,
-    rgba(234, 92, 0, 0.33)
-  );
-}
-
-.app .monaco-editor .currentFindMatch {
-  background-color: var(
-    --vscode-editor-findMatchBackground,
-    rgba(234, 92, 0, 0.6)
-  );
-  border: 2px solid var(--vscode-editor-findMatchBorder, transparent);
-  box-sizing: border-box;
-}
-
-/*
- * A summary stands in for the code it folds, so it reads like code: the editor's own colour, upright,
- * with an accent rule that marks it as written by a model. Click it for the code.
- */
-.app
-  .monaco-editor
-  .diff-hidden-lines.summary-fold
-  .detail
-  pre.diff-hidden-lines-detail {
-  color: color-mix(
-    in srgb,
-    var(--vscode-editor-foreground) 85%,
-    transparent
-  ) !important;
-  font-style: normal;
-  padding-left: 10px;
-  border-left: 2px solid
-    color-mix(in srgb, var(--vscode-textLink-foreground) 60%, transparent);
-}
-
-.app
-  .monaco-editor
-  .diff-hidden-lines.summary-fold
-  .detail:hover
-  pre.diff-hidden-lines-detail {
-  border-left-color: var(--vscode-textLink-foreground);
-}
-
-/* Read-only diffs keep selection and copy, without an editing caret. */
-.app .monaco-editor .cursors-layer {
-  display: none;
-}
-.app-native-scroll,
-.app-native-scroll-extent,
-.app-diff-viewport {
-  height: 100%;
-  width: 100%;
-}
-.app-native-scroll {
-  overflow: hidden;
-}
-.app-native-scroll.is-native {
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  overflow-anchor: none;
-}
-.is-native .app-diff-viewport {
-  position: sticky;
-  top: 0;
-  touch-action: pan-y;
-}
-.is-native .monaco-editor .view-lines,
-.is-native .monaco-editor .view-line,
-.is-native .monaco-editor .lines-content {
-  user-select: text !important;
-  -webkit-user-select: text !important;
-}
-.is-native .monaco-editor .inputarea {
-  pointer-events: none;
-}
-.is-native
-  .multiDiffEditor
-  > div
-  > .monaco-scrollable-element
-  > .scrollbar.vertical {
-  display: none !important;
-}
 .app-mobile-files-host:not([hidden]) {
   display: contents;
 }
@@ -889,8 +803,31 @@ body {
   outline: 1px solid var(--vscode-focusBorder);
 }
 @media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  /* A phone scrolls the page, header and diff together (diffView.css). */
+  html,
+  body {
+    height: auto;
+  }
+  body {
+    overflow: visible;
+  }
   .app {
-    height: 100dvh;
+    position: static;
+    min-height: 100dvh;
+  }
+  .app-body {
+    flex: 1 0 auto;
+  }
+  .app-header {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+  }
+  .app-comparison {
+    position: static;
+  }
+  .app-find {
+    position: fixed;
   }
   .app-header {
     display: grid;
@@ -953,51 +890,7 @@ body {
     font-size: 16px;
   }
 }
-.is-native .monaco-editor .inputarea {
-  font-size: 16px !important;
-}
-.app-touch-folds {
-  position: absolute;
-  pointer-events: none;
-  z-index: 10;
-  overflow: hidden;
-}
-.app-touch-fold {
-  position: absolute;
-  left: 0;
-  pointer-events: auto;
-  border: 0;
-  background: transparent;
-  color: var(--vscode-descriptionForeground);
-  padding: 0;
-  touch-action: manipulation;
-}
-.app-touch-fold::before,
-.app .monaco-editor .diff-fold-chevron.codicon::before,
-.app .monaco-editor .diff-fold-chevron .codicon::before {
-  content: "";
-  display: block;
-  width: 12px;
-  height: 12px;
-  background: currentColor;
-  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M4.25 2.5 8 6l-3.75 3.5' fill='none' stroke='black' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>")
-    center / 12px 12px no-repeat;
-}
-.app-touch-fold::before {
-  position: absolute;
-  right: 6px;
-  top: calc(50% - 6px);
-}
-.app-touch-fold[aria-expanded="true"]::before {
-  transform: rotate(90deg);
-}
-.app-touch-fold:active {
-  background: var(--vscode-toolbar-hoverBackground);
-}
-.app-touch-fold:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-  outline-offset: -2px;
-}
+
 .app-mobile-fold-actions {
   display: flex;
   gap: 8px;
@@ -1005,16 +898,7 @@ body {
 }
 .app-mobile-fold-actions > button {
   flex: 1;
-}
-@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
-  .review-workbench .monaco-editor .review-fold-chevron {
-    visibility: hidden;
-  }
-  .app.review-workbench .monaco-editor .review-scope-viewed-control,
-  .app .review-multidiff-note,
-  .app .review-multidiff-open-container {
-    display: none;
-  }
+  min-height: 44px;
 }
 
 /* Mobile navigation uses the desktop tree's status marks and line-count colors. */
@@ -1024,7 +908,8 @@ body {
 .app-mobile-files-heading .app-mobile-files-close {
   border: 0;
   background: transparent;
-  width: 40px;
+  width: 44px;
+  height: 44px;
   padding: 0;
   font: 24px/1 sans-serif;
 }
@@ -1056,8 +941,8 @@ body {
 .app-mobile-files-heading .app-mobile-tree-tool {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border: 0;
   border-radius: 5px;
   background: transparent;
@@ -1106,7 +991,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 32px;
+  min-height: 44px;
   padding: 0 4px;
   white-space: nowrap;
   overflow: hidden;
@@ -1136,8 +1021,8 @@ body {
 }
 .app-mobile-file-row {
   width: 100%;
-  min-height: 28px;
-  height: 28px;
+  min-height: 44px;
+  height: 44px;
   padding: 0 4px;
   border: 0;
   border-radius: 4px;
@@ -1250,26 +1135,7 @@ body {
     color: var(--vscode-foreground);
     background: var(--vscode-toolbar-hoverBackground);
   }
-  .app .multiDiffEntry > .header > .header-content {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  }
-  .app
-    .monaco-component.multiDiffEditor
-    .multiDiffEntry.active
-    > .header
-    .header-content {
-    border-top-color: var(--vscode-multiDiffEditor-border);
-  }
-  .app
-    .monaco-component.multiDiffEditor
-    .multiDiffEntry.active
-    > .editorParent {
-    border-bottom-color: var(--vscode-multiDiffEditor-border);
-  }
-  .app .review-multidiff-counts {
-    font-size: 11px;
-    gap: 5px;
-  }
+
   .app-mobile-files {
     background: var(--vscode-editor-background);
     box-shadow: 0 -12px 48px rgb(0 0 0 / 0.12);
@@ -1287,7 +1153,7 @@ body {
   .app-mobile-folder-label {
     color: var(--vscode-foreground);
     font-weight: 400;
-    min-height: 28px;
+    min-height: 44px;
   }
   .app-mobile-file-row {
     gap: 4px;
@@ -1315,7 +1181,7 @@ body {
     gap: 4px;
   }
   .app-mobile-fold-actions .app-button {
-    min-height: 32px;
+    min-height: 44px;
     border: 0;
     font-size: 12px;
     color: var(--vscode-descriptionForeground);
@@ -1415,8 +1281,7 @@ body {
   .app-mobile-file-search:not([hidden]) {
     animation: app-control-enter 160ms ease-out;
   }
-  .app-mobile-folder-label::before,
-  .app-touch-fold::before {
+  .app-mobile-folder-label::before {
     transition: transform 160ms ease;
   }
   .app-icon-button,
@@ -1443,21 +1308,4 @@ body {
     opacity: 1;
     transform: translateY(0);
   }
-}
-
-.app .monaco-editor .diff-hidden-lines .detail pre.diff-hidden-lines-detail {
-  overflow-x: auto;
-  text-overflow: clip;
-  scrollbar-width: thin;
-  user-select: text;
-  -webkit-user-select: text;
-}
-.app .multiDiffEditor > div > .monaco-scrollable-element > .scrollbar {
-  z-index: 2000;
-}
-
-/* Monaco translates this virtual content itself. A hidden overflow container can still be
-   scrolled by browser focus, which makes Safari shift the whole diff after a resize. */
-.is-native .multiDiffEditor .scrollContent > div:first-child {
-  overflow: clip !important;
 }

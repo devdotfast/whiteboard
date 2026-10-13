@@ -65,7 +65,7 @@ export function setToken(value: string | null) {
 export function parseTarget(input: string): Target | null {
   const path = input
     .trim()
-    .replace(/^https?:\/\/(www\.)?github\.com\//, "")
+    .replace(/^(https?:\/\/)?(www\.)?github\.com\//, "")
     .replace(/^\/+/, "")
     .replace(/[?#].*$/, "");
 

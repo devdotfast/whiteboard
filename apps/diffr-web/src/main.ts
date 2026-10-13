@@ -17,7 +17,6 @@ import { FindBar } from "./find.js";
 import { parseTarget, targetPath } from "./github.js";
 import { renderLensBar } from "./lenses.js";
 import { MobileFiles } from "./mobileFiles.js";
-import { mobileViewport } from "./nativeDiffScroll.js";
 import { Panels } from "./panels.js";
 import { agentPluginsSection } from "./pluginsSection.js";
 import { quickOpen } from "./quickOpen.js";
@@ -31,6 +30,7 @@ import {
 import { StandaloneServices } from "./standalone/browser/standaloneServices.js";
 import { applyTheme } from "./theme.js";
 import { actionButton, element } from "./ui.js";
+import { mobileViewport } from "./viewport.js";
 
 const instantiation = StandaloneServices.initialize({});
 
@@ -52,6 +52,11 @@ root.className = "app monaco-workbench review-workbench monaco-component";
 const setTheme = applyTheme(root);
 
 const header = root.appendChild(element("header", "app-header"));
+
+// A phone's file headers stick below the page's own, which stays as the page scrolls.
+new ResizeObserver(() =>
+  root.style.setProperty("--dv-top", `${header.offsetHeight}px`),
+).observe(header);
 
 let headerUpdatePending = false;
 
@@ -86,8 +91,6 @@ lensBar.setAttribute("aria-label", "Lenses");
 let summaryNoticeDismissed = false;
 
 const body = root.appendChild(element("main", "app-body"));
-
-const overflow = root.appendChild(element("div", "monaco-editor app-overflow"));
 
 let engine: Engine | undefined;
 
@@ -180,7 +183,6 @@ function route(): void {
 
   const current = (comparison = new Comparison(
     container,
-    overflow,
     target,
     currentEngine(),
     layout,
@@ -427,12 +429,13 @@ function togglePanel(panel: "stats" | "engine"): void {
 function renderLanding(): void {
   const landing = body.appendChild(element("form", "app-landing"));
   landing.appendChild(element("h1", undefined, "diffr"));
-  landing.appendChild(
-    element(
-      "p",
-      undefined,
-      "Structural diffs of GitHub pull requests, worked out in your browser.",
-    ),
+  const blurb = landing.appendChild(element("p"));
+  const repo = element("a", undefined, "diffr");
+  repo.href = "https://github.com/devdotfast/whiteboard";
+  blurb.append(
+    "Structural diffs powered by ",
+    repo,
+    ", computed in your browser with WASM.",
   );
   const input = landing.appendChild(element("input"));
   input.placeholder = "github.com/owner/repo/pull/123";
@@ -460,10 +463,7 @@ window.addEventListener("popstate", route);
 
 mobileViewport.addEventListener("change", () => {
   narrow.set(mobileViewport.matches, undefined);
-
-  // Each view is drawn for one kind of screen; diffr's results are cached, so reopening is quick.
-  if (comparison && comparison.mobile !== mobileViewport.matches) route();
-  else renderHeader();
+  renderHeader();
 });
 
 /** A `z` waiting for its fold command. */

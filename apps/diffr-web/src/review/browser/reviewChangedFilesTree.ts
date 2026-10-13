@@ -253,12 +253,31 @@ export class ChangedFilesTreeRenderer implements ICompressibleTreeRenderer<
     const state = isFile ? this.states.get(element.file.path) : undefined;
     if (state)
       template.icon.className = `review-changed-files-icon codicon codicon-${state.status === "loading" ? "loading codicon-modifier-spin" : "error"}`;
+    // A cut-off name keeps its extension, and its full path shows on hover.
     template.row.title =
-      state?.message ?? (state?.status === "loading" ? "Loading diff…" : "");
+      state?.message ??
+      (state?.status === "loading"
+        ? "Loading diff…"
+        : isFile
+          ? element.file.path
+          : "");
     template.row.setAttribute("aria-busy", String(state?.status === "loading"));
-    template.label.textContent = isFile
-      ? element.name
-      : elements.map((item) => item.name).join("/");
+
+    if (isFile) {
+      const dot = element.name.lastIndexOf(".");
+      const stem = $("span.review-changed-files-stem");
+      stem.textContent = dot > 0 ? element.name.slice(0, dot) : element.name;
+      template.label.replaceChildren(stem);
+
+      if (dot > 0) {
+        const extension = append(
+          template.label,
+          $("span.review-changed-files-extension"),
+        );
+        extension.textContent = element.name.slice(dot);
+      }
+    } else
+      template.label.textContent = elements.map((item) => item.name).join("/");
   }
 }
 

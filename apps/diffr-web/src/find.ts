@@ -1,10 +1,7 @@
-import { Range } from "vs/editor/common/core/range.js";
 /**
  * ⌘/Ctrl+F: find text in every diffed file, not only the lines on screen, which is all the
- * browser's own find can see of a virtualized list. A match opens the folds around it.
+ * browser's own find can see of files not drawn yet. A match opens the folds around it.
  */
-import type { IEditorDecorationsCollection } from "vs/editor/common/editorCommon.js";
-
 import type { Comparison } from "./comparison.js";
 
 type Side = "original" | "modified";
@@ -73,8 +70,6 @@ export class FindBar {
   private current = -1;
   private searched: Comparison | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
-  private decorations = new Map<object, IEditorDecorationsCollection>();
-  private frame = 0;
 
   constructor(private readonly comparison: () => Comparison | undefined) {
     this.element = document.createElement("div");
@@ -283,66 +278,12 @@ export class FindBar {
     this.decorate();
   }
 
-  /** Mark the matches in the files on screen, once their editors exist. */
+  /** Mark the matches in the files drawn; the view marks the rest as it draws them. */
   private decorate(): void {
-    cancelAnimationFrame(this.frame);
-
-    if (this.comparison()?.showFindMatches(this.matches, this.current)) return;
-    const current = this.matches[this.current];
-    const groups = new Map<string, Match[]>();
-
-    for (const match of this.matches) {
-      const key = `${match.side}\0${match.path}`;
-      const group = groups.get(key);
-
-      if (group) group.push(match);
-      else groups.set(key, [match]);
-    }
-
-    let frames = 0;
-
-    const apply = () => {
-      const comparison = this.comparison();
-      this.clearDecorations();
-
-      if (!comparison || this.element.hidden) return;
-
-      for (const group of groups.values()) {
-        const { path, side } = group[0]!;
-        const editor = comparison.codeEditor(path, side);
-
-        // Unified, a removed line is drawn outside the editor's model.
-        if (!editor || editor.getModel()?.uri.authority !== sideAuthority(side))
-          continue;
-        this.decorations.set(
-          editor,
-          editor.createDecorationsCollection(
-            group.map((m) => ({
-              range: new Range(m.line, m.column, m.line, m.column + m.length),
-              options: {
-                description: "diffr-find",
-                className: m === current ? "currentFindMatch" : "findMatch",
-                stickiness: 1,
-              },
-            })),
-          ),
-        );
-      }
-
-      // Files render, and a reveal settles, over the next frames.
-      if (++frames < 20) this.frame = requestAnimationFrame(apply);
-    };
-
-    this.frame = requestAnimationFrame(apply);
+    this.comparison()?.showFindMatches(this.matches, this.current);
   }
 
   private clearDecorations(): void {
     this.comparison()?.showFindMatches([], -1);
-
-    for (const collection of this.decorations.values()) collection.clear();
-    this.decorations.clear();
   }
 }
-
-/** The authority of each side's model URIs (comparison.ts). */
-const sideAuthority = (side: Side) => (side === "original" ? "base" : "head");

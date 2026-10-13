@@ -740,71 +740,8 @@ body
   unicode-bidi: plaintext;
 }
 
-.review-multidiff-counts {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 4px;
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-
-.review-multidiff-counts[hidden] {
-  display: none;
-}
-
-.review-multidiff-additions {
-  color: var(--vscode-gitDecoration-addedResourceForeground);
-}
-
-.review-multidiff-deletions {
-  color: var(--vscode-gitDecoration-deletedResourceForeground);
-}
-
-.review-counts-folded .review-multidiff-additions {
-  color: var(--vscode-descriptionForeground);
-}
-
-.review-multidiff-open-container {
-  display: inline-flex;
-  align-items: center;
-  margin: 0 3px;
-}
-
-.review-multidiff-open-container[hidden] {
-  display: none;
-}
-
-.review-multidiff-open.monaco-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  width: auto;
-  min-width: 0;
-  height: 24px;
-  line-height: 22px;
-  padding: 0 9px;
-  border: 1px solid
-    color-mix(in srgb, var(--vscode-icon-foreground) 20%, transparent);
-  border-radius: 5px;
-  background: color-mix(in srgb, var(--vscode-icon-foreground) 5%, transparent);
-  color: var(--vscode-icon-foreground);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.review-multidiff-open.monaco-button .codicon[class*="codicon-"] {
-  margin: 0;
-  font-size: 13px;
-}
-
-.review-multidiff-open.monaco-button:hover {
-  background: var(--vscode-toolbar-hoverBackground);
-}
-
 .review-files-editor,
-.review-files-editor-tree,
-.review-files-editor-diffs {
+.review-files-editor-tree {
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -868,47 +805,20 @@ body
   font-weight: 600;
 }
 
-.review-files-editor-diffs {
-  position: relative;
+/* A file's name gives way before its extension. */
+.review-changed-files-row:not(.review-changed-files-folder)
+  .review-changed-files-label {
+  display: flex;
+}
+
+.review-changed-files-stem {
   min-width: 0;
-  min-height: 0;
   overflow: hidden;
-  background: var(--vscode-multiDiffEditor-background);
+  text-overflow: ellipsis;
 }
 
-.review-files-editor-diffs
-  .monaco-component.multiDiffEditor
-  .multiDiffEntry
-  > .header
-  > .header-content {
-  margin-top: 0;
-}
-
-.review-files-editor-diffs
-  .monaco-component.multiDiffEditor
-  .multiDiffEntry
-  > .header
-  > .header-content
-  .file-path
-  .title {
-  font-size: 12px;
-}
-
-.review-files-editor-diffs
-  .monaco-component.multiDiffEditor
-  .multiDiffEntry
-  > .header
-  > .header-content
-  > .actions {
-  padding: 0;
-}
-
-.review-files-editor-diffs
-  .multiDiffEntry
-  > .header
-  > .header-content
-  > .actions.has-no-actions {
-  display: none;
+.review-changed-files-extension {
+  flex: none;
 }
 
 .review-canvas-part > .review-canvas-container {
@@ -926,19 +836,6 @@ body
   user-select: text;
 }
 
-/* Hosts fixedOverflowWidgets (hover, definition) for the inline peek editors.
-   Lives in the workbench container — inside .monaco-workbench so theme
-   variables apply, outside .review-canvas-root whose container-query
-   containment would re-anchor and clip position: fixed widgets. The widgets
-   position themselves against the viewport; z-index matches the workbench's
-   other overflow-widget hosts (scm, keybindings editor). */
-.review-overflow-widgets {
-  position: fixed;
-  top: 0;
-  left: 0;
-  z-index: 5000;
-}
-
 /* The host carries tabindex="-1" so the canvas app can focus it programmatically
    (desktop-entry's mount handle calls container.focus()). It is a document
    surface rather than a control, and it is not tab-reachable, so suppress the
@@ -948,28 +845,6 @@ body
   outline: none;
 }
 
-.review-reveal-line {
-  background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent);
-  border-left: 2px solid var(--vscode-panel-border);
-}
-
-/* Give commenting and folding separate hit targets in the Files view. */
-.review-files-editor
-  .monaco-editor
-  .margin-view-overlays
-  .cldr:is(
-    .codicon-folding-expanded,
-    .codicon-folding-collapsed,
-    .codicon-folding-manual-expanded,
-    .codicon-folding-manual-collapsed
-  ) {
-  margin-left: 30px;
-  width: 20px !important;
-}
-
-.review-files-editor-diffs {
-  position: relative;
-}
 .review-files-editor-summary {
   display: flex;
   align-items: center;
@@ -1012,33 +887,6 @@ body
   background: var(--vscode-gitDecoration-deletedResourceForeground);
 }
 
-.review-multidiff-note {
-  padding: 0 6px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 12px;
-}
-
-.review-multidiff-note[hidden] {
-  display: none;
-}
-
-.review-structural-label-inline {
-  color: var(--vscode-editor-foldPlaceholderForeground);
-  font-style: italic;
-}
-
-.review-structural-label-zone {
-  background-color: var(--vscode-editor-foldBackground);
-  color: var(--vscode-editor-foldPlaceholderForeground);
-}
-
-.review-structural-label-zone pre {
-  margin: 0;
-  padding-left: 4ch;
-  font: inherit;
-  white-space: pre;
-}
-
 .review-structural-stream-status:not([hidden]) {
   position: absolute;
   inset: 0;
@@ -1071,9 +919,6 @@ body
     animation: none;
   }
 }
-.review-counts-viewed {
-  opacity: 0.45;
-}
 
 /* The viewed box: one look for the canvas lens rows and the diff headers.
    The canvas mounts into this document, so inside it the canvas tokens win;
@@ -1103,11 +948,7 @@ body
   background: var(--review-check-board);
   cursor: pointer;
 }
-/* The headers give the box the 32px column their old 16px box had. */
-.review-multidiff-open-container + .review-viewed-check,
-.review-diff-group > .review-viewed-check {
-  margin: 0 9px;
-}
+
 .review-viewed-check:hover:not(:disabled) {
   border-color: var(--review-check-ink);
 }
@@ -1123,10 +964,7 @@ body
 .review-viewed-check.is-empty {
   visibility: hidden;
 }
-/* File headers without a viewed action leave Open file at the trailing edge. */
-.review-multidiff-open-container + .review-viewed-check.is-empty {
-  display: none;
-}
+
 .review-viewed-check[aria-checked="mixed"]::after {
   content: "";
   position: absolute;
@@ -1230,9 +1068,7 @@ body
 }
 .review-workbench .monaco-tl-twistie.codicon-tree-item-expanded::before,
 .review-workbench .collapse-button .codicon-chevron-down::before,
-.review-workbench .collapse-button .codicon-chevron-right::before,
-.review-workbench .review-diff-group-toggle .codicon-chevron-down::before,
-.review-workbench .review-diff-group-toggle .codicon-chevron-right::before {
+.review-workbench .collapse-button .codicon-chevron-right::before {
   content: "";
   display: block;
   flex: none;
@@ -1246,8 +1082,7 @@ body
 }
 .review-workbench
   .monaco-tl-twistie.collapsed.codicon-tree-item-expanded::before,
-.review-workbench .collapse-button .codicon-chevron-right::before,
-.review-workbench .review-diff-group-toggle .codicon-chevron-right::before {
+.review-workbench .collapse-button .codicon-chevron-right::before {
   transform: rotate(0deg);
 }
 
@@ -1332,322 +1167,9 @@ body
   --review-mark-color: var(--vscode-disabledForeground);
 }
 
-/* Folds get out of the way: ghost ink on the code's own background, in the
-   chrome font. The theme sets the unchangedRegion background, foreground and
-   shadow. The row keeps Monaco's 24px height: its view zone and the handle
-   transforms assume it, and a shorter row rides up over the previous line. */
-.review-workbench .monaco-editor .diff-hidden-lines .center {
-  font: 11px/24px var(--review-chrome-font, monospace);
-}
-.review-workbench .monaco-editor .diff-hidden-lines .center:hover {
-  color: var(--vscode-descriptionForeground);
-}
-
-/* Scope chevrons, rails and braces in structural diffs. The marker blue is
-   fixed because some themes make focusBorder transparent. */
-.review-workbench .monaco-editor {
-  --review-scope-marker: #2b55e6;
-}
-.review-workbench .monaco-editor:is(.vs-dark, .hc-black) {
-  --review-scope-marker: #5b7cff;
-}
-.review-workbench .monaco-editor .review-fold-chevron {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  opacity: 0.45;
-}
-.review-workbench .monaco-editor .review-fold-chevron.is-collapsed {
-  opacity: 0.7;
-}
-.review-workbench .monaco-editor .review-fold-chevron.is-target {
-  opacity: 1;
-  color: var(--review-scope-marker);
-}
-/* Keep the full gutter hit target; only the glyph needs less visual weight. */
-.review-workbench .monaco-editor .review-fold-chevron.codicon,
-.review-workbench .monaco-editor .diff-fold-chevron.codicon,
-.review-workbench .monaco-editor .diff-fold-chevron .codicon {
-  font-size: 12px;
-}
-.review-workbench .monaco-editor.review-fold-rail .view-lines {
-  cursor: pointer;
-}
-.review-workbench .monaco-editor .review-scope-rails {
-  z-index: 1;
-  overflow: hidden;
-  pointer-events: none;
-}
-.review-workbench .monaco-editor .review-scope-rail {
-  position: absolute;
-  width: 7px;
-  transform: translateX(-3px);
-  pointer-events: auto;
-  cursor: pointer;
-}
-.review-workbench .monaco-editor .review-scope-rail::before {
-  content: "";
-  position: absolute;
-  left: 3px;
-  height: 100%;
-  border-left: 1px solid var(--vscode-editorIndentGuide-background1);
-}
-.review-workbench .monaco-editor .review-scope-rail.is-active::before {
-  border-left-color: var(--review-scope-marker);
-}
-.review-workbench .monaco-editor .review-scope-rail.is-target::before {
-  border-left-width: 2px;
-}
-.review-workbench .monaco-editor .review-scope-brace {
-  color: var(--review-scope-marker) !important;
-}
-.review-workbench .monaco-editor .review-scope-brace.is-target {
-  color: var(--vscode-editor-foreground) !important;
-  background: color-mix(in srgb, var(--review-scope-marker) 30%, transparent);
-  outline: 1px solid var(--review-scope-marker);
-  border-radius: 2px;
-}
-.review-workbench .monaco-editor .review-fold-hint {
-  margin-left: 2ch;
-  color: var(--review-scope-marker);
-  font-family: var(--review-chrome-font, inherit);
-  font-size: 11px;
-}
-
-/* A scope folded into its header line: `opener { ⋯ N lines }`. */
-.review-workbench .monaco-editor .review-fold-pill {
-  margin: 0 0.5ch;
-  padding: 0 0.6ch;
-  border: 1px solid var(--vscode-editorIndentGuide-activeBackground1);
-  border-radius: 3px;
-  color: var(--vscode-descriptionForeground);
-  font-size: 0.92em;
-  cursor: pointer;
-}
-.review-workbench .monaco-editor .review-fold-pill.is-target {
-  border-color: var(--review-scope-marker);
-  color: var(--vscode-editor-foreground);
-}
-.review-workbench .monaco-editor .review-fold-closer {
-  color: var(--vscode-editor-foreground);
-  cursor: pointer;
-}
-
-/* A fold inside removed code, drawn as a row of the removed block. */
-.review-workbench .monaco-editor .diff-fold-placeholder {
-  color: var(--vscode-descriptionForeground) !important;
-  opacity: 0.8;
-}
-.review-workbench .monaco-editor .diff-fold-placeholder-hit:hover {
-  background: color-mix(
-    in srgb,
-    var(--vscode-editor-foreground) 4%,
-    transparent
-  );
-}
-
-/* Align fold labels with the hidden code's indent. */
-.review-workbench
-  .review-files-editor
-  .monaco-editor
-  .diff-hidden-lines:not(.kind-inserted):not(.kind-removed)
-  .center {
-  background: transparent;
-  box-shadow: none;
-}
-.review-workbench
-  .review-files-editor
-  .monaco-editor
-  .diff-hidden-lines
-  .diff-hidden-lines-label {
-  flex: 1;
-  justify-content: flex-start !important;
-  color: var(--vscode-descriptionForeground);
-}
-.review-workbench .monaco-editor .diff-hidden-lines .diff-fold-reveal {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  padding: 0;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.review-workbench .monaco-editor .diff-hidden-lines .diff-fold-reveal::before {
-  content: "\22EF\00a0";
-}
-.review-workbench .monaco-editor .diff-hidden-lines .diff-fold-reveal:hover {
-  color: var(--review-scope-marker);
-}
-.review-workbench
-  .monaco-editor
-  .diff-hidden-lines
-  .diff-fold-reveal:focus-visible {
-  outline: 1px solid var(--review-scope-marker);
-  outline-offset: 2px;
-}
-
-/* The canvas stylesheet resets every element to border-box, and the Diff
-   view's editors live inside the canvas. Monaco sizes the fold's drag
-   handles as content-box (4px tall plus 6px of transparent borders) and
-   offsets the whole widget by that sum, so a border-box handle is 4px short
-   and the fold row rides up over the previous line. */
-.monaco-editor .diff-hidden-lines .top,
-.monaco-editor .diff-hidden-lines .bottom {
-  box-sizing: content-box;
-}
 .review-changed-files-label {
   flex: 1;
   min-width: 0;
-}
-/* Left inset 10px and title gap 5px mirror the file header below it (5px
-   padding + 5px collapse-button margin, then 5px to the path), so the
-   section chevron and the file chevron sit on one vertical line. */
-.review-diff-group {
-  height: 48px;
-  min-height: 48px;
-  box-sizing: border-box;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px 4px 10px;
-  border-top: 1px solid var(--vscode-panel-border);
-  background: var(--vscode-editor-background);
-  color: var(--vscode-editor-foreground);
-}
-.review-diff-group[hidden] {
-  display: none;
-}
-.review-diff-group-title {
-  font-size: 13px;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.review-diff-group-counts {
-  margin-left: auto;
-  font: 11px var(--vscode-editor-font-family, monospace);
-  color: var(--vscode-descriptionForeground);
-  white-space: nowrap;
-}
-.review-diff-group.is-viewed > span {
-  opacity: 0.45;
-}
-
-.review-diff-group-toggle {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  border: 0;
-  padding: 0;
-  color: inherit;
-  background: transparent;
-  cursor: pointer;
-  text-align: left;
-}
-.review-diff-group-toggle:focus-visible {
-  outline: 1px solid var(--vscode-focusBorder);
-}
-
-/* The surrounding navigation owns the top edge of the diff pane. */
-.multi-diff-sticky-section .review-diff-group,
-.review-files-editor-diffs .multiDiffEntry:first-child > .review-diff-group {
-  border-top: 0;
-}
-
-/* Placeholder rows share the scope chevron lane after the line numbers. */
-.review-workbench .monaco-editor .diff-fold-chevron {
-  appearance: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  height: 100%;
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: var(--vscode-descriptionForeground);
-  opacity: 0.7;
-  cursor: pointer;
-}
-.review-workbench .monaco-editor .structural-fold.is-target .diff-fold-chevron,
-.review-workbench .monaco-editor .structural-fold.is-target .diff-fold-reveal,
-.review-workbench .monaco-editor .diff-fold-chevron.is-target {
-  color: var(--review-scope-marker);
-  opacity: 1;
-}
-.review-workbench .monaco-editor .diff-fold-chevron:focus-visible {
-  outline: 1px solid var(--review-scope-marker);
-  outline-offset: -2px;
-}
-.review-workbench .monaco-editor .diff-fold-placeholder.is-target {
-  color: var(--review-scope-marker) !important;
-  opacity: 1;
-}
-
-.review-workbench
-  .monaco-editor
-  .diff-hidden-lines
-  .diff-fold-chevron
-  .codicon {
-  color: inherit;
-}
-
-.review-workbench .monaco-editor .review-scope-viewed-control {
-  display: flex;
-  align-items: center;
-  box-sizing: border-box;
-  gap: 8px;
-  padding: 0 8px;
-  border: 1px solid
-    var(--vscode-widget-border, var(--vscode-editorWidget-border));
-  border-radius: 5px;
-  background: var(
-    --vscode-editorWidget-background,
-    var(--vscode-editor-background)
-  );
-  font: 11px/20px var(--monaco-monospace-font);
-  z-index: 8;
-}
-.review-workbench .monaco-editor .review-scope-viewed-control > span:empty {
-  display: none;
-}
-.review-workbench .monaco-editor .review-scope-viewed-status {
-  color: var(--vscode-descriptionForeground);
-}
-.review-workbench
-  .monaco-editor
-  .review-scope-viewed-control
-  .review-viewed-check {
-  margin-left: 4px;
-}
-/* Keep the shared 14px glyph while making the padded space around it clickable. */
-.review-workbench
-  .monaco-editor
-  .review-scope-viewed-control
-  .review-viewed-check::before {
-  content: "";
-  position: absolute;
-  inset: -5px;
-}
-.review-workbench .monaco-editor .review-scope-viewed-ink,
-.review-workbench .monaco-editor .review-scope-viewed-ink span,
-.review-workbench .monaco-editor .review-fold-pill.is-viewed {
-  color: var(--vscode-descriptionForeground) !important;
-}
-.review-workbench .monaco-editor .review-scope-viewed-tint {
-  background: color-mix(
-    in srgb,
-    var(--vscode-editor-background) 70%,
-    transparent
-  );
-}
-.review-workbench .monaco-editor .review-fold-pill.is-viewed:not(.is-target) {
-  opacity: 0.65;
 }
 
 .review-files-editor-summary {

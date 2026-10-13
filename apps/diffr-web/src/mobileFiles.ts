@@ -1,8 +1,8 @@
 import { Disposable } from "vs/base/common/lifecycle.js";
 
 import type { Comparison } from "./comparison.js";
-import { mobileViewport } from "./nativeDiffScroll.js";
 import { actionButton, element } from "./ui.js";
+import { mobileViewport } from "./viewport.js";
 
 /** A native, searchable bottom sheet; navigating still goes through the existing diff view. */
 export class MobileFiles extends Disposable {
