@@ -739,6 +739,8 @@ export class SharedReviewStore {
       );
     }
 
+    if (action === "view") this.assertWritable(id);
+
     const state = this.attention.get(id) ?? {
       viewedAt: null,
       trashedAt: null,

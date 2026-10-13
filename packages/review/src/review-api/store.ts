@@ -1028,7 +1028,6 @@ export class ReviewStore {
       if (
         op.type !== "create" &&
         op.type !== "delete" &&
-        op.type !== "attention" &&
         op.type !== "lifecycle"
       )
         this.assertWritable(op.reviewId);

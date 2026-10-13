@@ -172,9 +172,9 @@ describe("Home interactions", () => {
       ? container.querySelector(`section[aria-label="${group}"]`)!
       : container;
 
-    return [...parent.querySelectorAll('[aria-label^="Open "]')].map((el) =>
-      el.getAttribute("aria-label")!.slice(5),
-    );
+    return [
+      ...parent.querySelectorAll("[data-home-row] button span[title]"),
+    ].map((el) => el.getAttribute("title"));
   }
 
   it("focuses title search through the native host Find command and releases the controller", async () => {
@@ -1227,6 +1227,25 @@ describe("Home interactions", () => {
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
       "Could not move 1 whiteboard to Trash",
     );
+  });
+  it("selects Trash rows for restoration instead of opening them", async () => {
+    const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
+
+    const onRestore = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      async () => {},
+    );
+
+    await render([summary("Gone", { trashedAt: "2026-10-10" })], {
+      onOpen,
+      onRestore,
+    });
+    await click("1 in Trash ›");
+    await click("Select Gone");
+    expect(container.textContent).toContain("1 selected");
+    expect(onOpen).not.toHaveBeenCalled();
+    await click("Restore R");
+    expect(onRestore).toHaveBeenCalledOnce();
+    expect(titles()).toEqual([]);
   });
   it("confirms permanent deletion with Cancel focused, ignores Enter, and has no Undo afterwards", async () => {
     const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(

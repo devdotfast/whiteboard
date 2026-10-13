@@ -184,16 +184,26 @@ it("moves an imported board through Trash without losing its content, then permi
   expect(shared.get(id).snapshot.trashedAt).toBe(timestamp);
   expect(
     (await post({ type: "attention", reviewId: id, action: "view" })).status,
-  ).toBe(200);
+  ).toBe(409);
+  const opening = await api.request(`/${id}/open`, { method: "POST" });
+  expect(opening.status).toBe(409);
+  expect(await opening.json()).toMatchObject({
+    error: expect.stringContaining("session_lifecycle"),
+  });
+  expect(shared.list()[0].viewedAt).toBeNull();
   expect(shared.get(id).snapshot.trashedAt).toBe(timestamp);
   const restarted = new SharedReviewStore(shared.root);
   await restarted.load();
   expect(restarted.get(id).snapshot.trashedAt).toBe(timestamp);
+  expect(restarted.list()[0].viewedAt).toBeNull();
   expect(
     (await post({ type: "lifecycle", reviewId: id, state: "active" })).status,
   ).toBe(200);
   expect(shared.get(id).snapshot.trashedAt).toBeNull();
   expect(shared.get(id).snapshot.document).toEqual(document);
+  expect(
+    (await post({ type: "attention", reviewId: id, action: "view" })).status,
+  ).toBe(200);
   expect(
     (await post({ type: "lifecycle", reviewId: id, state: "trash" })).status,
   ).toBe(200);

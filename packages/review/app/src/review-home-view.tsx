@@ -1269,7 +1269,9 @@ export function ReviewHome({
                             selected.has(group.reviews[index + 1].reviewId) &&
                             styles.selectedBefore,
                         )}
-                        onClick={() => onOpen(review)}
+                        onClick={() =>
+                          inTrash ? toggleRow(review.reviewId) : onOpen(review)
+                        }
                         onKeyDown={(event) => {
                           if (
                             event.key.toLowerCase() === "x" &&
@@ -1300,11 +1302,13 @@ export function ReviewHome({
                           />
                         </span>
                         <button
-                          aria-label={`Open ${reviewTitle(review)}`}
+                          aria-label={`${inTrash ? "Select" : "Open"} ${reviewTitle(review)}`}
                           {...stylex.props(styles.rowOpen)}
                           onClick={(event) => {
                             event.stopPropagation();
-                            onOpen(review);
+
+                            if (inTrash) toggleRow(review.reviewId);
+                            else onOpen(review);
                           }}
                         >
                           <span

@@ -300,10 +300,15 @@ describe("snapshot authoring", () => {
     store.subscribe(documents);
     store.subscribeCatalog(catalog);
     const dismiss = request({ type: "lifecycle", reviewId, state: "trash" });
-    const result = await store.execute(dismiss);
     await store.execute(
       request({ type: "attention", reviewId, action: "view" }),
     );
+    const viewedAt = store.summary(reviewId)!.viewedAt;
+    const result = await store.execute(dismiss);
+    await expect(
+      store.execute(request({ type: "attention", reviewId, action: "view" })),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(store.summary(reviewId)!.viewedAt).toBe(viewedAt);
     expect(result).toMatchObject({ version: 0, attention: true });
     expect(documents).toHaveBeenCalledOnce();
     expect(catalog).toHaveBeenCalledTimes(2);
@@ -332,6 +337,7 @@ describe("snapshot authoring", () => {
     expect(
       store.list().find((review) => review.reviewId === reviewId)?.trashedAt,
     ).toBeNull();
+    expect(store.summary(reviewId)!.viewedAt).toBe(viewedAt);
   });
 
   it("keeps deleted boards and history read-only until restored, across restart", async () => {

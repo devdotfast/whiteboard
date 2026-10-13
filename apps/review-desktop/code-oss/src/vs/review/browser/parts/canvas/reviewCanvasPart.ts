@@ -79,6 +79,7 @@ import type {
 } from "../../../common/reviewProtocol.js";
 import {
 	parseReviewVerbRequest,
+	SCRATCHPAD_REVIEW_ID,
 	REVIEW_CANVAS_RESUME_EVENT,
 	REVIEW_TUTORIAL_PROGRESS_STORAGE_KEY,
 	REVIEW_TUTORIAL_STEP_IDS
@@ -370,6 +371,15 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		this.restoreEmbeddedSelection(options);
 		try {
 			await this.desktopConnection.initialize();
+			if (input.target.kind === "api" && input.target.reviewId !== SCRATCHPAD_REVIEW_ID) {
+				const { reviewId } = input.target;
+				await this.apiCatalog.initialize();
+				if (generation !== this.loadGeneration || token.isCancellationRequested) return;
+				if (this.apiCatalog.reviews.find(review => review.reviewId === reviewId)?.trashedAt) {
+					throw new Error("This whiteboard is in Trash. Restore it from Home before opening it.");
+				}
+				await this.apiCatalog.attention(reviewId, "view");
+			}
 		} catch (error) {
 			if (generation === this.loadGeneration && !token.isCancellationRequested) {
 				await this.renderError(error, generation);
@@ -407,9 +417,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				this.renderedInput = input;
 				this.setCanvasState("active", reviewId);
 				this.sessionTelemetry.start(reviewId);
-				void this.apiCatalog
-					.attention(reviewId, "view")
-					.catch((error) => this.logService.warn("[Whiteboard] Could not mark session viewed:", error));
 				let sourceSelection: ReviewSourceSelection = { reviewId, kind: "current" };
 				let sourceView: ReviewSourceView = resolveReviewSourceView({ reviewId, version: 0, pins: {} });
 				const source = this.apiSource.canvas(() => sourceView, this.inlineEditors, this.diffViews);

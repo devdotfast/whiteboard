@@ -470,15 +470,14 @@ const attentionWhileClosed = async (
   await local.data.workspaces.idle();
 };
 
-it("frees the checkouts of a dismissed review that was only peeked at", async () => {
+it("frees the checkouts of a viewed review moved to Trash", async () => {
   const { rootPath } = await local.data.workspaces.source(
     reviewId,
     pins,
     "head",
   );
 
-  // Opening a review from Home's Trash list records a view, not a restore.
-  await attentionWhileClosed("trash", "view");
+  await attentionWhileClosed("view", "trash");
   expect(local.store.summary(reviewId)?.trashedAt).toBeTruthy();
   expect(existsSync(rootPath!)).toBe(false);
 });

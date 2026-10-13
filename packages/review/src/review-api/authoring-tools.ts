@@ -52,7 +52,7 @@ export function authoringTools(
     restore:
       "Restore title, source pins, PR identity and content from a saved version.",
     attention:
-      "Mark a review viewed without changing its content or lifecycle.",
+      "Mark an active review viewed without changing its content or lifecycle. Restore a review from Trash before marking it viewed.",
     lifecycle:
       "Move a review between active and trash. Trash retains the review for 30 days before automatic deletion. Moving it back to active restores it; moving it to trash again does not restart that period.",
     delete:
@@ -177,7 +177,7 @@ export function authoringTools(
     ),
     tool(
       "open",
-      "Show an existing review immediately and prepare current pinned checkouts in the background. Returns softwareMapEnabled and any already-recorded environmentIssues. Missing optional setup is not an issue; use review_environment to recheck.",
+      "Show an active review immediately; restore it from Trash before opening it. Prepare current pinned checkouts in the background. Returns softwareMapEnabled and any already-recorded environmentIssues. Missing optional setup is not an issue; use review_environment to recheck.",
       z.strictObject(review),
       "POST",
       "/:reviewId/open",
