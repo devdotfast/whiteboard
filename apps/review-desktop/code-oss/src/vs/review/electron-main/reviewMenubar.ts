@@ -210,8 +210,8 @@ export class ReviewMenubarMainService
     // command palette entry. Electron consumes the accelerator before the web
     // contents, so the workbench keybinding on review.openSettings and this
     // item cannot both fire.
-    const preferences = new Menu();
-    preferences.append(
+    menu.append(new MenuItem({ type: "separator" }));
+    menu.append(
       new MenuItem({
         label: localize("review.menu.settings", "Settings..."),
         accelerator: "Command+,",
@@ -220,18 +220,10 @@ export class ReviewMenubarMainService
     );
     // The Welcome pane stays reachable after Home fills with reviews: first
     // run opens no tab of its own, so this is the durable path back.
-    preferences.append(
+    menu.append(
       new MenuItem({
         label: localize("review.menu.gettingStarted", "Getting Started..."),
         click: () => this.runActionInFocusedWindow("review.openWelcome"),
-      }),
-    );
-
-    menu.append(new MenuItem({ type: "separator" }));
-    menu.append(
-      new MenuItem({
-        label: localize("review.menu.preferences", "Preferences"),
-        submenu: preferences,
       }),
     );
 

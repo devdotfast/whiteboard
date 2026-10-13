@@ -253,7 +253,7 @@ registerAction2(UninstallReviewDesktopAction);
  * storage, so the CLI and the app read one source of truth:
  * - legacy skills: open Welcome regardless of the stamp or update marker;
  * - otherwise, no stamp: open no tab; empty Home renders the Welcome rail, and
- *   Preferences > Getting Started reaches the same pane when Home has
+ *   Getting Started in the app menu reaches the same pane when Home has
  *   reviews to list instead;
  * - granted + stamp without the update marker: open Welcome, which shows the
  *   update screen, unless empty Home already renders the Welcome rail;

@@ -34,7 +34,7 @@ location during ingestion; our project discards the source IP.
 
 ## Turn telemetry off
 
-In Whiteboard, open **Preferences → Settings** and disable **Share anonymous
+In Whiteboard, open **Settings** and disable **Share anonymous
 usage data**. The setting controls both the app and the `whiteboard` CLI on
 that installation. Disabling it also clears any queued events that have
 not been sent.

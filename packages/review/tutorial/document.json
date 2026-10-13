@@ -208,7 +208,7 @@
       "children": [
         {
           "type": "markdown",
-          "markdown": "To connect Whiteboard to your agents, open **Preferences → Settings**. To\nrevisit setup or take this tour again, open **Preferences → Getting Started**.\n"
+          "markdown": "To connect Whiteboard to your agents, open **Settings**. To revisit\nsetup or take this tour again, open **Getting Started**.\n"
         }
       ]
     }

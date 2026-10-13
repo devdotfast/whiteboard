@@ -388,13 +388,13 @@ Review updates installed optional groups to the catalog pins in the background.
 The update does not reload the window. A new pin takes effect on the next reload.
 
 Install, enable, or disable them with **Manage Extensions...** from the command palette,
-or from **Preferences ▸ Settings...** (⌘,). The choice persists per profile and
+or from **Settings...** (⌘,). The choice persists per profile and
 reloads the window, since extension enablement only applies when the extension
 host restarts.
 
 ## Settings
 
-**Preferences ▸ Settings...** (⌘,) opens the Settings tab. It is a canvas tab
+**Settings...** (⌘,) opens the Settings tab. It is a canvas tab
 like Home and Agent Setup, not the stock VS Code settings editor. It holds:
 
 | Section               | Setting                                                                       |

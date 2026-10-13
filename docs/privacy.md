@@ -167,7 +167,7 @@ S3/R2 bucket storage sends nothing to /dev/fast.
 
 ## Turn telemetry off
 
-In Whiteboard, open **Preferences → Settings** and disable **Share anonymous
+In Whiteboard, open **Settings** and disable **Share anonymous
 usage data**. That setting controls both the app and CLI on the same
 installation.
 
