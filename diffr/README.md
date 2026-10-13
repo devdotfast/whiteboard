@@ -97,12 +97,17 @@ We forked these projects because of the following 3 technical reasons:
 
 We hope in the future that we can find some way to upstream some / all of these features. Obviously everyone works differently and this is quite an opinionated stance on things, so we imagine this may take time.
 
+## Known Limitations
+
+diffr still needs serious work in a few dimensions:
+
+1. right now, due to some limits in how we're rendering labels on folded content (this is how we're doing pseudocode), it's not easy to do things like render big algorithmic changes as pseudocode (e.g. a unified style-diff between two different changes in pseudocode). you could write your own plugin for this but it's probably going to be quite hairy.
+2. diffr doesn't provide great primitives for clients around reactivity. Our dream with this is to enable great experiences for you to interactively shape the diff to your understanding -- see the example GIFs above & our [blog post](https://dev.fast/blog/diffr).
+3. The plugin API is a bit awkward and will be simplified radically in the coming releases. It is still not stable!
 
 ### Plugin API
 
 `diffr` has a powerful, wasm-based plugin API which customizes how it presents changed files. For more details, read the [docs](./docs/plugin.md).
-
-> Note: The plugin API is a bit awkward and will be simplified radically in the coming releases. It is still not stable!
 
 ## License
 
