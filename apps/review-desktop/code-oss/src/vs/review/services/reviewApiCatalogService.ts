@@ -94,20 +94,18 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 		});
 	}
 
-  async lifecycle(reviewId: string, state: "active" | "trash"): Promise<void> {
-    await this.initialize();
-    await this.client!.post("/commands", { operation: { type: "lifecycle", reviewId, state } });
-  }
+	async lifecycle(reviewId: string, state: "active" | "trash"): Promise<void> {
+		await this.initialize();
+		await this.client!.personCommand({ type: "lifecycle", reviewId, state });
+	}
 
 	async trashReview(reviewId: string): Promise<void> {
 		await this.initialize();
-		await this.client!.post("/commands", {
-			operation: { type: "lifecycle", state: "trash", reviewId },
-		});
+		await this.client!.personCommand({ type: "lifecycle", state: "trash", reviewId });
 	}
 	async deleteReview(reviewId: string): Promise<void> {
 		await this.initialize();
-		await this.client!.post("/commands", { operation: { type: "delete", reviewId } });
+		await this.client!.personCommand({ type: "delete", reviewId });
 	}
 
 }

@@ -81,6 +81,15 @@ it("lets two hosts open an old store at once, the second finding the first's upg
   expect(await Promise.all(hosts)).toEqual([0, 0]);
 }, 20_000);
 
+/** Ask with no thread running. */
+const noThreads = () => {
+  const threads = {} as AskThreads;
+
+  threads.get = () => undefined;
+
+  return threads;
+};
+
 const record = (
   reviewId: string,
   id: string,
@@ -252,7 +261,7 @@ it("serves a saved conversation without its agent or its checkout", async () => 
     undefined,
     undefined,
     undefined,
-    { threads: {} as AskThreads, agents: async () => [] },
+    { threads: noThreads(), agents: async () => [] },
   );
 
   const response = await api.request(`/${reviewId}/ask/thread`);
@@ -300,7 +309,7 @@ it("lists a project's conversations on every board in it, each with the board it
     undefined,
     undefined,
     undefined,
-    { threads: {} as AskThreads, agents: async () => [] },
+    { threads: noThreads(), agents: async () => [] },
   );
 
   // Any board in the project opens the thread.
@@ -351,7 +360,7 @@ it("lets a thread change boards in any project, and lists the boards it changed"
     undefined,
     undefined,
     undefined,
-    { threads: {} as AskThreads, agents: async () => [] },
+    { threads: noThreads(), agents: async () => [] },
   );
 
   const edit = (reviewId: string) =>
@@ -567,7 +576,7 @@ it("streams every project's threads with where each lives and the boards it chan
       edit: { type: "insert", content: { type: "markdown", markdown: "Ok." } },
     }),
     undefined,
-    { threadId: "thread" },
+    { kind: "agent", threadId: "thread" },
   );
 
   expect(await next()).toMatchObject({

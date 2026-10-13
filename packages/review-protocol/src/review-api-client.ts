@@ -1,7 +1,6 @@
 import type { JsonObject } from "@dev.fast/json";
 
 import type { ReviewGatewayHostState } from "./contracts.js";
-
 import type { PullRequestState } from "./contracts.js";
 
 /** List metadata for the authenticated local catalog; document contents stay in snapshots. */
@@ -157,6 +156,21 @@ export class ReviewApiClient {
         method: "POST",
         body: JSON.stringify(input),
         signal,
+      })
+    ).json();
+  }
+  /** A command the person gave from the app, not an agent: its version is
+   * credited to them, and a block they hold never stops it. The header is
+   * the one request-origin.ts names. */
+  async personCommand<T>(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- JSON transport boundary; /commands parses its input schema.
+    operation: unknown,
+  ): Promise<T> {
+    return (
+      await this.response("/commands", {
+        method: "POST",
+        headers: { "x-review-person": "1" },
+        body: JSON.stringify({ operation }),
       })
     ).json();
   }

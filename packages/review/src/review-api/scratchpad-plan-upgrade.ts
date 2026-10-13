@@ -198,14 +198,14 @@ export function planFromScratchpad(context: StoreUpgradeContext) {
   // The run changes the snapshots it took; nothing parses them again.
   parsedPads.delete(context);
 
+  // Every version moves over; one that no longer parses, as it is.
+  db.prepare("UPDATE versions SET review_id=? WHERE review_id=?").run(
+    id,
+    OLD_SCRATCHPAD_ID,
+  );
+
   for (const { version, snapshot } of old) {
-    // One that no longer parses moves over as it is.
-    if (!snapshot) {
-      db.prepare(
-        "UPDATE versions SET review_id=? WHERE review_id=? AND version=?",
-      ).run(id, OLD_SCRATCHPAD_ID, version);
-      continue;
-    }
+    if (!snapshot) continue;
 
     delete snapshot.kind;
 
@@ -222,9 +222,7 @@ export function planFromScratchpad(context: StoreUpgradeContext) {
       );
     }
 
-    db.prepare(
-      "UPDATE versions SET review_id=?, snapshot=? WHERE review_id=? AND version=?",
-    ).run(id, JSON.stringify(snapshot), OLD_SCRATCHPAD_ID, version);
+    context.rewriteVersion(id, version, snapshot);
   }
 
   db.prepare("UPDATE reviews SET next_id=? WHERE id=?").run(nextId, id);

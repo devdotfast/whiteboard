@@ -423,6 +423,43 @@ it("uses normal source and workspace routes but rejects authoring mutations", as
   expect(imported.get(id).snapshot.title).toBe("A shared review");
 });
 
+it("shows a shared board's links to the sender's boards as not on this machine", async () => {
+  const { app, id } = await importFixture(async ({ local, reviewId }) => {
+    const { reviewId: other } = await local.store.execute({
+      operation: {
+        type: "create",
+        title: "The sender's other board",
+        target: {
+          kind: "project",
+          repositoryId: local.store.read(reviewId).target!.repositoryId,
+        },
+      },
+    });
+
+    await local.store.execute({
+      operation: {
+        type: "edit",
+        reviewId,
+        edit: {
+          type: "insert",
+          content: {
+            type: "markdown",
+            markdown: `See [the other board](whiteboard:board/${other}).`,
+          },
+        },
+      },
+    });
+
+    return exportShare({ ...local, reviewId, repository });
+  });
+
+  const links = await (await app.request(`/${id}/links`)).json();
+
+  expect(links.outgoing).toEqual([
+    expect.objectContaining({ missing: true, elsewhere: true }),
+  ]);
+});
+
 it("rejects tampered bytes and keeps resource IDs isolated across shares", async () => {
   const { bundle, imported, id, app } = await importFixture();
 
