@@ -4,7 +4,7 @@ use crate::git::{self, Comparison, FileParams, Operand, Result};
 use crate::options::DebugArgs;
 use crate::plugin::{Classifier, Pipeline};
 use crate::run;
-use clap::{ArgGroup, Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, ArgGroup, Args, Parser, Subcommand, ValueEnum};
 use gix::{revision::plumbing::Spec, ObjectId, Repository};
 use std::{
     ffi::OsString,
@@ -33,8 +33,8 @@ macro_rules! examples {
     group(ArgGroup::new("names").args(["name_only", "name_status"])),
     // A command name is a command only as the first argument.
     args_conflicts_with_subcommands = true,
-    after_help = examples!(),
-    // `--help`, not `-h`, adds the agents guide.
+    disable_help_flag = true,
+    after_help = concat!(examples!(), "\n\nAgents: run `diffr --agent-help` for a guide on authoring plugins to customize diffr."),
     after_long_help = concat!(examples!(), "\n\n", include_str!("../docs/agents.md"))
 )]
 struct Cli {
@@ -112,6 +112,12 @@ struct Cli {
     /// Files with more parse errors than this get a line diff; defaults to diff.parse_error_limit
     #[arg(long)]
     parse_error_limit: Option<usize>,
+    /// Print help
+    #[arg(short, long, action = ArgAction::HelpShort, global = true)]
+    help: (),
+    /// Print agent-facing help with how to use diffr (flags, writing plugins, etc.). Not for human readers.
+    #[arg(long, action = ArgAction::HelpLong)]
+    agent_help: (),
     /// Revisions, then paths
     items: Vec<OsString>,
     /// Paths
@@ -135,8 +141,10 @@ enum Command {
     /// Print saved NDJSON without a repository or terminal frontend
     Pprint(PprintArgs),
     /// Show, edit, or open the settings screen for diffr's configuration
-    // `--help`, not `-h`, adds the plugins guide.
-    #[command(after_long_help = include_str!("../docs/plugin.md"))]
+    #[command(
+        after_help = "Agents: run `diffr config --agent-help` for a guide on authoring plugins to customize diffr.",
+        after_long_help = include_str!("../docs/plugin.md")
+    )]
     Config(ConfigArgs),
     /// Install the newest diffr over this one, and update its agent plugins
     Upgrade,
@@ -165,6 +173,9 @@ struct PprintArgs {
 
 #[derive(Args)]
 struct ConfigArgs {
+    /// Print agent-facing help with how to use diffr (flags, writing plugins, etc.). Not for human readers.
+    #[arg(long, action = ArgAction::HelpLong)]
+    agent_help: (),
     /// Initial search in the settings screen
     query: Option<String>,
     #[command(subcommand)]
