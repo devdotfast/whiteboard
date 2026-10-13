@@ -212,7 +212,11 @@ it("merges preview headless history and resources without changing review IDs or
     );
     expect(source.read(created.reviewId)).toEqual(before);
     await profile.store.execute(
-      command({ type: "delete", reviewId: created.reviewId }),
+      command({
+        type: "lifecycle",
+        state: "trash",
+        reviewId: created.reviewId,
+      }),
     );
   } finally {
     await profile.data.close();
@@ -220,8 +224,8 @@ it("merges preview headless history and resources without changing review IDs or
   }
 
   const reopened = await openReviewProfile(home, { manageWorkspaces: false });
-  expect(reopened.store.summary(created.reviewId)?.deletedAt).toBeTruthy();
-  expect(target.summary(created.reviewId)?.deletedAt).toBeTruthy();
+  expect(reopened.store.summary(created.reviewId)?.trashedAt).toBeTruthy();
+  expect(target.summary(created.reviewId)?.trashedAt).toBeTruthy();
   await reopened.data.close();
   await reopened.store.close();
 });

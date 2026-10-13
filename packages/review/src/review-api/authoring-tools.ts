@@ -36,7 +36,7 @@ export function authoringTools(
 
   const descriptions = {
     create:
-      'Create a review of saved working files, immutable commits or a GitHub PR. Revisions are resolved on acceptance. A worktree target reviews the saved files in its checkout, uncommitted ones included and untracked ones left out (git add -N a new file to include it), against base: the branch to compare against, by default the default branch of the repository. The diff starts at the merge base of base and HEAD, which follows rebases. Omitted commits base means source at head with no diff; supply the parent to review introduced changes. For a GitHub PR, pullRequestUrl alone is enough: target and title become optional, and the host fetches the PR into a registered checkout of its repository and pins the current PR head and GitHub diff base, titled from the PR. When the existing review for that PR is archived, creation reports its ID; restore it with review_attention action:"restore" before continuing. When a live review for that PR exists, it is returned instead, reporting whether its head moved and whether an agent is working on it; update it in place, move its target with review_set_target, or create a separate review with reuseExisting. kind:"scratchpad" names the one scratchpad, which the host creates itself. The result carries review, the review as review_list shows it: its target with resolved commits, origin (its PR), repositoryName and repositoryPath, so no follow-up read is needed before diffing. When Desktop is available the review opens there and the result reports opened, softwareMapEnabled and environmentIssues, as review_open does; set open:false to author in the background without taking over Desktop.',
+      'Create a review of saved working files, immutable commits or a GitHub PR. Revisions are resolved on acceptance. A worktree target reviews the saved files in its checkout, uncommitted ones included and untracked ones left out (git add -N a new file to include it), against base: the branch to compare against, by default the default branch of the repository. The diff starts at the merge base of base and HEAD, which follows rebases. Omitted commits base means source at head with no diff; supply the parent to review introduced changes. For a GitHub PR, pullRequestUrl alone is enough: target and title become optional, and the host fetches the PR into a registered checkout of its repository and pins the current PR head and GitHub diff base, titled from the PR. When the existing review for that PR is in Trash, creation reports its ID; restore it with review_lifecycle state:"active" before continuing. When an active review for that PR exists, it is returned instead, reporting whether its head moved and whether an agent is working on it; update it in place, move its target with review_set_target, or create a separate review with reuseExisting. kind:"scratchpad" names the one scratchpad, which the host creates itself. The result carries review, the review as review_list shows it: its target with resolved commits, origin (its PR), repositoryName and repositoryPath, so no follow-up read is needed before diffing. When Desktop is available the review opens there and the result reports opened, softwareMapEnabled and environmentIssues, as review_open does; set open:false to author in the background without taking over Desktop.',
     set_target:
       "Move the review to a new target, such as the commits after a rebase or amend, preserving the document and component IDs. Revisions are resolved on acceptance. Returns warnings for retained source ranges in files the new commits changed, to verify, and resources that no longer match; fix them with review_edit. Earlier versions keep their source. Omitted pullRequestUrl keeps the PR within the same repository; changing repositories clears it. Supply a URL to replace it or null to detach.",
     edit: [
@@ -52,11 +52,11 @@ export function authoringTools(
     restore:
       "Restore title, source pins, PR identity and content from a saved version.",
     attention:
-      "Mark a review viewed, archive it, or restore it without changing its content.",
+      "Mark a review viewed without changing its content or lifecycle.",
+    lifecycle:
+      "Move a review between active and trash. Trash retains the review for 30 days before automatic deletion. Moving it back to active restores it; moving it to trash again does not restart that period.",
     delete:
-      "Archive this review. It can be restored for 30 days, then it is permanently deleted.",
-    delete_permanently:
-      "Permanently delete an archived review and its history. This cannot be undone.",
+      "Permanently delete a review and its history. The review must be in Trash. This cannot be undone.",
   };
 
   const tool = (
@@ -67,7 +67,7 @@ export function authoringTools(
     path: string,
     commandType?: string,
   ) => ({
-    name: `review_${name}`,
+    name: `review_${name === "restore" ? "restore_version" : name}`,
     description,
     inputSchema: {
       ...z.toJSONSchema(schema, { io: "input" }),

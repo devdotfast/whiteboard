@@ -384,7 +384,7 @@ it("keeps Restore available when a deleted board's checkout cannot load", async 
     target: { kind: "commits", ...pins },
   });
 
-  await command({ type: "delete", reviewId });
+  await command({ type: "lifecycle", state: "trash", reviewId });
   const app = new Hono().route("/reviews-api", createReviewApi(store));
   app.get("/reviews-api/:id/commits", (context) =>
     context.json({ error: "The selected local checkout is unavailable." }, 404),
@@ -416,7 +416,7 @@ it("keeps Restore available when a deleted board's checkout cannot load", async 
 
   await act(async () => restore.click());
   await act(async () => {
-    await vi.waitFor(() => expect(store.read(reviewId).deletedAt).toBeNull());
+    await vi.waitFor(() => expect(store.read(reviewId).trashedAt).toBeNull());
     await vi.waitFor(() =>
       expect(container.textContent).not.toContain("days left"),
     );
@@ -451,12 +451,12 @@ it("deletes through the API, opens read-only, and restores without changing the 
 
   const dismiss = [
     ...container.querySelectorAll<HTMLButtonElement>("button"),
-  ].find((button) => button.textContent === "Delete")!;
+  ].find((button) => button.textContent === "Move to Trash")!;
 
   await act(async () => dismiss.click());
 
   await vi.waitFor(() =>
-    expect(store.list()[0]?.deletedAt).toEqual(expect.any(String)),
+    expect(store.list()[0]?.trashedAt).toEqual(expect.any(String)),
   );
   expect(store.read(reviewId).version).toBe(0);
   await act(async () => {
@@ -466,7 +466,7 @@ it("deletes through the API, opens read-only, and restores without changing the 
   });
   expect(
     [...container.querySelectorAll("button")].some(
-      (button) => button.textContent === "Delete",
+      (button) => button.textContent === "Move to Trash",
     ),
   ).toBe(false);
 
@@ -476,14 +476,14 @@ it("deletes through the API, opens read-only, and restores without changing the 
 
   await act(async () => restore.click());
   await act(async () => {
-    await vi.waitFor(() => expect(store.read(reviewId).deletedAt).toBeNull());
+    await vi.waitFor(() => expect(store.read(reviewId).trashedAt).toBeNull());
     await vi.waitFor(() =>
       expect(container.textContent).not.toContain("days left"),
     );
   });
   expect(
     [...container.querySelectorAll("button")].some(
-      (button) => button.textContent === "Delete",
+      (button) => button.textContent === "Move to Trash",
     ),
   ).toBe(true);
 });
@@ -1068,12 +1068,12 @@ it("offers to dismiss a review whose worktree is gone, without reading its diff"
 
     const dismiss = () =>
       [...container.querySelectorAll<HTMLButtonElement>("button")].find(
-        (button) => button.textContent === "Delete whiteboard",
+        (button) => button.textContent === "Move to Trash",
       );
 
     await act(async () => dismiss()!.click());
     await vi.waitFor(() =>
-      expect(gone.list()[0]?.deletedAt).toEqual(expect.any(String)),
+      expect(gone.list()[0]?.trashedAt).toEqual(expect.any(String)),
     );
     expect(dismiss()).toBeUndefined();
   } finally {

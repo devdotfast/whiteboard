@@ -104,7 +104,7 @@ export function ApiCanvas({
   const [lensCursor, setLensCursor] = useState<AuthoringCursor | null>(null);
   useEffect(() => setVersion(content.version), [content.version]);
   const [data, setData] = useState<ApiDocumentData>();
-  const [deletedAt, setDeletedAt] = useState<string | null>(null);
+  const [trashedAt, setTrashedAt] = useState<string | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
   const sourceRef = useRef<{ key: string; version: number }>(undefined);
@@ -114,7 +114,7 @@ export function ApiCanvas({
     const abort = new AbortController();
     const loader = createDocumentLoader(client);
     setData(undefined);
-    setDeletedAt(null);
+    setTrashedAt(null);
     setActivity(undefined);
     setCursor(null);
     setLensCursor(null);
@@ -123,7 +123,7 @@ export function ApiCanvas({
     const lensMemory: CursorMemory = {};
 
     const show = async (snapshot: Snapshot) => {
-      setDeletedAt(snapshot.deletedAt ?? null);
+      setTrashedAt(snapshot.trashedAt ?? null);
       const next = await loader.load(snapshot);
 
       if (abort.signal.aborted) return;
@@ -184,7 +184,7 @@ export function ApiCanvas({
 
           if (
             shownVersion ===
-            `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}:${snapshot.deletedAt ?? ""}`
+            `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}:${snapshot.trashedAt ?? ""}`
           ) {
             setError(undefined);
 
@@ -193,7 +193,7 @@ export function ApiCanvas({
 
           try {
             await show(snapshot);
-            shownVersion = `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}:${snapshot.deletedAt ?? ""}`;
+            shownVersion = `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}:${snapshot.trashedAt ?? ""}`;
           } catch (cause) {
             // A failed resource or source fetch is a document problem. The
             // stream and the activity signal are still healthy, so do not
@@ -297,7 +297,7 @@ export function ApiCanvas({
       ...baseSession,
       review: {
         kind: snapshot.kind,
-        deletedAt: snapshot.deletedAt,
+        trashedAt: snapshot.trashedAt,
         pins: snapshot.pins
           ? { base: snapshot.pins.base, head: snapshot.pins.head }
           : undefined,
@@ -320,9 +320,9 @@ export function ApiCanvas({
         dismiss: async () => {
           await client.post("/commands", {
             operation: {
-              type: "attention",
+              type: "lifecycle",
               reviewId: content.reviewId,
-              action: "delete",
+              state: "trash",
             },
           });
         },
@@ -335,7 +335,7 @@ export function ApiCanvas({
     version === undefined &&
     data !== undefined &&
     !data.snapshot.shared &&
-    !data.snapshot.deletedAt;
+    !data.snapshot.trashedAt;
 
   const saveMarkdown = useMemo(
     () =>
@@ -368,7 +368,7 @@ export function ApiCanvas({
 
   const sharing = useMemo(
     () =>
-      data && !data.snapshot.deletedAt
+      data && !data.snapshot.trashedAt
         ? {
             client,
             reviewId: content.reviewId,
@@ -379,15 +379,15 @@ export function ApiCanvas({
     [client, content.reviewId, data],
   );
 
-  const deletedBanner = deletedAt && (
-    <div role="status" {...stylex.props(styles.deletedBanner)}>
-      Deleted ·{" "}
+  const trashBanner = trashedAt && (
+    <div role="status" {...stylex.props(styles.trashBanner)}>
+      In Trash ·{" "}
       {Math.min(
         30,
         Math.max(
           0,
           Math.ceil(
-            (Date.parse(deletedAt) + 30 * 86400000 - Date.now()) / 86400000,
+            (Date.parse(trashedAt) + 30 * 86400000 - Date.now()) / 86400000,
           ),
         ),
       )}{" "}
@@ -397,14 +397,14 @@ export function ApiCanvas({
           void client
             .post("/commands", {
               operation: {
-                type: "attention",
-                action: "restore",
+                type: "lifecycle",
+                state: "active",
                 reviewId: content.reviewId,
               },
             })
             .then(() => client.read<Snapshot>(`/${content.reviewId}?full=true`))
             .then((snapshot) => {
-              setDeletedAt(snapshot.deletedAt ?? null);
+              setTrashedAt(snapshot.trashedAt ?? null);
               setData((current) => current && { ...current, snapshot });
             })
             .catch((cause) => setError(message(cause)))
@@ -420,7 +420,7 @@ export function ApiCanvas({
   if (!data)
     return (
       <CanvasQueryProvider client={client} reviewId={content.reviewId}>
-        {deletedBanner}
+        {trashBanner}
         {error !== undefined && (
           <>
             <p {...stylex.props(styles.error)} role="status">
@@ -472,7 +472,7 @@ export function ApiCanvas({
                         {error}
                       </p>
                     )}
-                    {deletedBanner}
+                    {trashBanner}
                     <AuthoringActivityContext.Provider
                       value={version === undefined ? activity : undefined}
                     >
@@ -590,7 +590,7 @@ const styles = stylex.create({
     minHeight: 0,
   },
   canvasFrame: { flex: "1 1 auto", minHeight: 0 },
-  deletedBanner: {
+  trashBanner: {
     display: "flex",
     gap: "12px",
     alignItems: "center",

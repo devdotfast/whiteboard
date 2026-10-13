@@ -232,7 +232,7 @@ export function AskPanelContent({
     thread?.status === "running" || thread?.status === "waiting";
 
   const canAsk =
-    !session.review?.deletedAt &&
+    !session.review?.trashedAt &&
     Boolean(agent) &&
     (!busy || (answering && !sending));
 

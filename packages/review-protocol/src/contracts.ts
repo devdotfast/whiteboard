@@ -708,17 +708,17 @@ export type ReviewCanvasContent =
   | { kind: "source"; error?: string }
   | {
       kind: "home";
-      view?: "live" | "deleted";
-      navigate?(view: "live" | "deleted"): void;
+      view?: "active" | "trash";
+      navigate?(view: "active" | "trash"): void;
       openSettings?(): void;
       openSetup?(): void;
       reviews: readonly ReviewApiSummary[];
       openReview(uuid: string): void;
-      // Deletes the review and closes its canvas. Absent when the host does
+      // Moves the review to Trash and closes its canvas. Absent when the host does
       // not support deletion.
+      trashReview?(uuid: string): Promise<void>;
+      // Boards in Trash can be restored for 30 days or deleted.
       deleteReview?(uuid: string): Promise<void>;
-      // Deleted boards can be restored for 30 days or removed permanently.
-      deletePermanently?(uuid: string): Promise<void>;
       restoreReview?(uuid: string): Promise<void>;
       // Opens the review and pins its read-only source tree open. Absent when
       // the host cannot show the tree.

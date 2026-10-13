@@ -63,8 +63,8 @@ export function ReviewProvider({
     useState<ReviewSubmissionOutcome | null>(null);
 
   useEffect(() => {
-    if (!review.deletedAt) setSubmissionOutcome(null);
-  }, [review.deletedAt]);
+    if (!review.trashedAt) setSubmissionOutcome(null);
+  }, [review.trashedAt]);
 
   const panelStore = useOptionalReviewPanelStore();
 

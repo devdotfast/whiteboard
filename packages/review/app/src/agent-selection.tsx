@@ -22,13 +22,7 @@ import { askAnchor } from "./ask-anchor";
 import { controlStyles } from "./controls-styles";
 import { copyAgentContext } from "./copy-agent-context";
 import { useReviewSession } from "./host/review-session";
-import {
-  ChatIcon,
-  ChevronDownIcon,
-  CommandKeyIcon,
-  CopyIcon,
-  ShiftKeyIcon,
-} from "./icons";
+import { ChatIcon, ChevronDownIcon, CopyIcon } from "./icons";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useOptionalReviewPanelStore } from "./review-panel";
 import { fontSize, layer } from "./scale.stylex";
@@ -36,6 +30,7 @@ import { themeStyles } from "./theme-styles";
 import { useToast } from "./toast";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
+import { Shortcut } from "./ui/kbd";
 import { surfaceStyles } from "./ui/surface";
 
 type Selection = Omit<AgentSelection, "revision"> & {
@@ -324,12 +319,9 @@ export function AgentSelectionProvider({
                           >
                             <ChatIcon xstyle={controlStyles.inlineIcon} />
                             <span>Ask {askAgent.name}</span>
-                            <kbd
-                              aria-hidden="true"
-                              {...stylex.props(styles.key)}
-                            >
-                              <CommandKeyIcon />L
-                            </kbd>
+                            <Shortcut aria-hidden="true" xstyle={styles.key}>
+                              ⌘L
+                            </Shortcut>
                           </Button>
                           {canChooseAgent ? (
                             <Button
@@ -363,10 +355,9 @@ export function AgentSelectionProvider({
                     >
                       <CopyIcon xstyle={controlStyles.inlineIcon} />
                       <span>Copy ref</span>
-                      <kbd aria-hidden="true" {...stylex.props(styles.key)}>
-                        <ShiftKeyIcon />
-                        <CommandKeyIcon />C
-                      </kbd>
+                      <Shortcut aria-hidden="true" xstyle={styles.key}>
+                        ⇧⌘C
+                      </Shortcut>
                     </Button>
                   </div>
                 </div>,
@@ -425,12 +416,6 @@ const styles = stylex.create({
     boxShadow: `inset 1px 0 0 color-mix(in srgb, ${tokens.onAccent} 28%, transparent)`,
   },
   key: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "1px",
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.micro,
-    lineHeight: "14px",
     opacity: 0.65,
   },
 });

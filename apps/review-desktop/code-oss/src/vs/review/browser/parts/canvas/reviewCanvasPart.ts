@@ -148,7 +148,7 @@ function embeddedSelectionChangeReason(event: ICursorPositionChangedEvent): Edit
 }
 
 export class ReviewCanvasEditorPane extends EditorPane {
-	private homeView: "live" | "deleted" = "live";
+	private homeView: "active" | "trash" = "active";
 	private renderHome: (() => Promise<void>) | undefined;
 	static readonly ID = ReviewCanvasEditorInput.EDITOR_ID;
 
@@ -545,17 +545,17 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						openSetup: () => { void this.tabsService.openWelcome(true); },
 						reviews,
 						openReview: (uuid) => void openReview(uuid),
+						trashReview: (uuid) => {
+							this.reviewTelemetryService.capture("review_deleted", { via: "home" });
+							return this.apiCatalog.trashReview(uuid);
+						},
 						deleteReview: (uuid) => {
 							this.reviewTelemetryService.capture("review_deleted", { via: "home" });
 							return this.apiCatalog.deleteReview(uuid);
 						},
-						deletePermanently: (uuid) => {
-							this.reviewTelemetryService.capture("review_deleted", { via: "home" });
-							return this.apiCatalog.deletePermanently(uuid);
-						},
 						restoreReview: (uuid) => {
 							this.reviewTelemetryService.capture("review_restored", { via: "home" });
-							return this.apiCatalog.attention(uuid, "restore");
+							return this.apiCatalog.lifecycle(uuid, "active");
 						},
 						openSourceTree: (uuid) => {
 							const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);

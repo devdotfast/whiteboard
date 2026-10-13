@@ -135,10 +135,12 @@ export function createTutorialService(input: {
 
   async function cleanup() {
     for (const reviewId of input.store.tutorialIds()) {
-      if (!input.store.read(reviewId).deletedAt)
-        await input.store.execute({ operation: { type: "delete", reviewId } });
+      if (!input.store.read(reviewId).trashedAt)
+        await input.store.execute({
+          operation: { type: "lifecycle", state: "trash", reviewId },
+        });
       await input.store.execute({
-        operation: { type: "delete_permanently", reviewId },
+        operation: { type: "delete", reviewId },
       });
     }
 

@@ -1,7 +1,7 @@
 import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { fuzzyMatches } from "@review/fuzzy-match";
 
-export type HomeSort = "updated" | "created" | "title" | "deleted";
+export type HomeSort = "updated" | "created" | "title" | "trash";
 
 export type HomeGroup = "unread" | "week" | "earlier";
 
@@ -177,8 +177,8 @@ export function sortHomeReviews(
     const updated =
       (Date.parse(b.createdAt) || 0) - (Date.parse(a.createdAt) || 0);
 
-    if (sort === "deleted")
-      return Date.parse(b.deletedAt!) - Date.parse(a.deletedAt!);
+    if (sort === "trash")
+      return Date.parse(b.trashedAt!) - Date.parse(a.trashedAt!);
 
     if (sort === "title")
       return reviewTitle(a).localeCompare(reviewTitle(b)) || updated;

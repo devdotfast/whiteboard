@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, radius, tracking } from "@canvas/scale.stylex";
 import type { StyleArg } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
@@ -10,10 +10,25 @@ type KbdProps = Omit<ComponentProps<"kbd">, "className" | "style"> & {
 
 /** One key of a hotkey hint on the canvas. */
 export function Kbd({ xstyle, ...props }: KbdProps) {
-  return <kbd {...props} {...stylex.props(styles.key, xstyle)} />;
+  return (
+    <kbd {...props} {...stylex.props(styles.shortcut, styles.key, xstyle)} />
+  );
+}
+
+export function Shortcut({ xstyle, ...props }: KbdProps) {
+  return <kbd {...props} {...stylex.props(styles.shortcut, xstyle)} />;
 }
 
 const styles = stylex.create({
+  shortcut: {
+    fontFamily: "Inter, system-ui, sans-serif",
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.regular,
+    lineHeight: "16px",
+    letterSpacing: tracking.shortcut,
+    whiteSpace: "nowrap",
+    flexShrink: 0,
+  },
   key: {
     display: "inline-grid",
     placeItems: "center",
@@ -26,8 +41,5 @@ const styles = stylex.create({
     borderRadius: radius.small,
     backgroundColor: tokens.bg,
     color: tokens.ink,
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.micro,
-    lineHeight: 1,
   },
 });

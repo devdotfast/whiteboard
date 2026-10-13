@@ -103,27 +103,27 @@ export class ReviewWorkspaces {
 
     this.stop = store.subscribeCatalog(() => {
       this.collect();
-      this.releaseDismissed();
+      this.releaseTrashed();
     });
     this.collect();
-    this.releaseDismissed();
+    this.releaseTrashed();
   }
 
-  // Unset until the first scan, so startup also frees reviews dismissed
+  // Unset until the first scan, so startup also frees reviews trashed
   // while no Desktop was running.
-  private dismissed?: Set<string>;
+  private trashed?: Set<string>;
   private readonly releasing = new Map<string, Promise<void>>();
 
   /**
-   * Frees a newly dismissed review's checkouts to save disk. The review itself
+   * Frees a newly trashed review's checkouts to save disk. The review itself
    * stays; reopening it rebuilds them. Checkouts rebuilt by peeking at a
-   * dismissed review are kept until the next startup or dismissal, since
+   * trashed review are kept until the next startup or move to Trash, since
    * the Desktop's canvas tabs and source windows may still show them.
    */
-  private releaseDismissed() {
-    const dismissed = new Set(this.store.deletedIds());
-    const released = [...dismissed].filter((id) => !this.dismissed?.has(id));
-    this.dismissed = dismissed;
+  private releaseTrashed() {
+    const trashed = new Set(this.store.trashedIds());
+    const released = [...trashed].filter((id) => !this.trashed?.has(id));
+    this.trashed = trashed;
 
     if (!released.length) return;
 
@@ -162,7 +162,7 @@ export class ReviewWorkspaces {
       })
       .catch((error) => {
         console.error(
-          `Could not free the pinned checkouts of dismissed review ${reviewId}:`,
+          `Could not free the pinned checkouts of trashed review ${reviewId}:`,
           error,
         );
       })
@@ -176,8 +176,8 @@ export class ReviewWorkspaces {
   }
 
   private async releaseCheckouts(reviewId: string, repositories: string[]) {
-    // Restored since the dismissal: its checkouts may be in use.
-    if (!this.store.deletedIds().includes(reviewId)) return;
+    // Restored since the move to Trash: its checkouts may be in use.
+    if (!this.store.trashedIds().includes(reviewId)) return;
 
     const environments = this.all().filter(
       (item) => item.reviewId === reviewId,
@@ -363,7 +363,7 @@ export class ReviewWorkspaces {
     if (!environment || environment.state !== "cleanup-failed")
       throw new ReviewInputError("Cleanup failure not found.", 404);
 
-    // A dismissed review keeps its record, so collection would skip it.
+    // A trashed review keeps its record, so collection would skip it.
     if (this.store.has(environment.reviewId))
       this.release(environment.reviewId);
     else this.collect(id);

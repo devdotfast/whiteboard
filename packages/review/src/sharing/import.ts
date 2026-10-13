@@ -251,7 +251,7 @@ export class SharedReviewStore {
   >();
   private readonly attention = new Map<
     string,
-    { viewedAt: string | null; deletedAt: string | null }
+    { viewedAt: string | null; trashedAt: string | null }
   >();
   private readonly listeners = new Set<() => void>();
   private catalogLoaded = false;
@@ -298,8 +298,8 @@ export class SharedReviewStore {
 
     const expired = [...this.attention].filter(
       ([, state]) =>
-        state.deletedAt &&
-        Date.parse(state.deletedAt) <= Date.now() - 30 * 86400000,
+        state.trashedAt &&
+        Date.parse(state.trashedAt) <= Date.now() - 30 * 86400000,
     );
 
     const pending = (async () => {
@@ -553,18 +553,24 @@ export class SharedReviewStore {
 
       if (existsSync(attentionPath)) {
         const raw = JSON.parse(await readFile(attentionPath, "utf8"));
-        const migrated = Object.hasOwn(raw, "dismissedAt");
+
+        const migrated =
+          Object.hasOwn(raw, "dismissedAt") || Object.hasOwn(raw, "deletedAt");
 
         const state = z
           .strictObject({
             viewedAt: z.string().nullable(),
-            deletedAt: z.string().nullable(),
+            trashedAt: z.string().nullable(),
           })
           .parse(
             migrated
               ? {
                   viewedAt: raw.viewedAt,
-                  deletedAt: raw.dismissedAt ? new Date().toISOString() : null,
+                  trashedAt: Object.hasOwn(raw, "deletedAt")
+                    ? raw.deletedAt
+                    : raw.dismissedAt
+                      ? new Date().toISOString()
+                      : null,
                 }
               : raw,
           );
@@ -586,11 +592,11 @@ export class SharedReviewStore {
   }
 
   assertWritable(id: string) {
-    const deletedAt = this.attention.get(id)?.deletedAt;
+    const trashedAt = this.attention.get(id)?.trashedAt;
 
-    if (deletedAt)
+    if (trashedAt)
       throw new ReviewInputError(
-        `This whiteboard was archived on ${new Date(deletedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it to continue.`,
+        `This whiteboard was moved to Trash on ${new Date(trashedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it with session_lifecycle({"sessionId":"${id}","state":"active"}) to continue.`,
         409,
       );
   }
@@ -620,7 +626,7 @@ export class SharedReviewStore {
       snapshot: {
         ...validated.snapshot,
         reviewId: id,
-        deletedAt: this.attention.get(id)?.deletedAt ?? null,
+        trashedAt: this.attention.get(id)?.trashedAt ?? null,
         pins: validated.snapshot.pins
           ? { ...validated.snapshot.pins, repositoryId: repositoryId! }
           : undefined,
@@ -657,7 +663,7 @@ export class SharedReviewStore {
             snapshot.version === 0 ? snapshot.createdAt : undefined,
           repositoryName: "Shared review",
           viewedAt: this.attention.get(id)?.viewedAt ?? null,
-          deletedAt: this.attention.get(id)?.deletedAt ?? null,
+          trashedAt: this.attention.get(id)?.trashedAt ?? null,
         };
       })
       .toArray();
@@ -709,13 +715,23 @@ export class SharedReviewStore {
     for (const listener of this.listeners) listener();
   }
 
-  async setAttention(id: string, action: "view" | "delete" | "restore") {
+  async setAttention(id: string) {
+    await this.updateAttention(id, "view");
+  }
+
+  async setLifecycle(id: string, state: "active" | "trash") {
+    await this.updateAttention(id, state);
+  }
+
+  private async updateAttention(
+    id: string,
+    action: "view" | "active" | "trash",
+  ) {
     this.get(id);
 
-    if (action === "delete") this.assertWritable(id);
-    const deletedAt = this.attention.get(id)?.deletedAt;
+    const trashedAt = this.attention.get(id)?.trashedAt;
 
-    if (deletedAt && Date.parse(deletedAt) <= Date.now() - 30 * 86400000) {
+    if (trashedAt && Date.parse(trashedAt) <= Date.now() - 30 * 86400000) {
       await this.removeLocal(id);
       throw new ReviewInputError(
         "The 30-day recovery period has ended. This whiteboard was permanently deleted.",
@@ -725,12 +741,15 @@ export class SharedReviewStore {
 
     const state = this.attention.get(id) ?? {
       viewedAt: null,
-      deletedAt: null,
+      trashedAt: null,
     };
 
     if (action === "view") state.viewedAt = new Date().toISOString();
     else
-      state.deletedAt = action === "delete" ? new Date().toISOString() : null;
+      state.trashedAt =
+        action === "trash"
+          ? (state.trashedAt ?? new Date().toISOString())
+          : null;
     await writeFile(
       path.join(this.root, id, "attention.json"),
       JSON.stringify(state),

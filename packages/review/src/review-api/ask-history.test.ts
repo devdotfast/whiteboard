@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { AskThreads } from "@review/ask/threads.js";
 import { AskHistory, type AskRecord } from "@review/review-api/ask-history.js";
+import { ReviewInputError } from "@review/review-api/document.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
 import { ReviewStore } from "@review/review-api/store.js";
@@ -83,12 +84,10 @@ it("keeps each review's conversations, newest first, until the review is deleted
   history.delete("newer");
   expect(history.get("newer")).toBeUndefined();
 
-  await store.execute(command({ type: "delete", reviewId }));
+  await store.execute(command({ type: "lifecycle", state: "trash", reviewId }));
   expect(history.list(reviewId)).toHaveLength(1);
-  expect(() => history.rename("older", "Changed")).toThrow(
-    /Restore it to continue/,
-  );
-  await store.execute(command({ type: "delete_permanently", reviewId }));
+  expect(() => history.rename("older", "Changed")).toThrow(ReviewInputError);
+  await store.execute(command({ type: "delete", reviewId }));
   expect(history.list(reviewId)).toEqual([]);
   expect(history.list("shared-review").map(({ id }) => id)).toEqual(["shared"]);
 });
@@ -312,7 +311,7 @@ it("deleting a board ends its Ask threads and blocks reopening while saved histo
   try {
     const response = await request(
       "/commands",
-      command({ type: "delete", reviewId }),
+      command({ type: "lifecycle", state: "trash", reviewId }),
     );
 
     expect(response.status).toBe(200);

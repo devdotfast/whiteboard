@@ -99,8 +99,8 @@ function Home({
   content: Extract<ReviewCanvasContent, { kind: "home" }>;
   findHost: ReviewFindHost;
 }) {
+  const trashReview = content.trashReview;
   const deleteReview = content.deleteReview;
-  const deletePermanently = content.deletePermanently;
   const restoreReview = content.restoreReview;
 
   return (
@@ -110,13 +110,11 @@ function Home({
       onViewChange={content.navigate}
       reviews={content.reviews}
       onOpen={(review) => content.openReview(review.reviewId)}
+      onTrash={
+        trashReview ? (review) => trashReview(review.reviewId) : undefined
+      }
       onDelete={
         deleteReview ? (review) => deleteReview(review.reviewId) : undefined
-      }
-      onDeletePermanently={
-        deletePermanently
-          ? (review) => deletePermanently(review.reviewId)
-          : undefined
       }
       onRestore={
         restoreReview ? (review) => restoreReview(review.reviewId) : undefined

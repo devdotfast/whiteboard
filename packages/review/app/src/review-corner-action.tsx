@@ -26,7 +26,7 @@ export function ReviewCornerAction(): ReactElement | null {
   const errorPopover = useAnchoredPopover<HTMLSpanElement>(failed, control);
 
   // A finished review has nothing left to submit or dismiss.
-  if (submissionOutcome === "dismissed" || session.review?.deletedAt)
+  if (submissionOutcome === "dismissed" || session.review?.trashedAt)
     return null;
 
   /* The tutorial is not in the review store, so there is no list to leave.
@@ -62,7 +62,7 @@ export function ReviewCornerAction(): ReactElement | null {
     <div ref={control} {...stylex.props(shellStyles.topbarItem, styles.action)}>
       <Button disabled={busy} onClick={() => void dismiss()}>
         <TrashIcon xstyle={styles.icon} />
-        <span>Delete</span>
+        <span>Move to Trash</span>
       </Button>
       {failed && (
         <span
@@ -75,7 +75,7 @@ export function ReviewCornerAction(): ReactElement | null {
           )}
           role="alert"
         >
-          Could not delete the whiteboard. Try again.
+          Could not move the whiteboard to Trash. Try again.
         </span>
       )}
     </div>

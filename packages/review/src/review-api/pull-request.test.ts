@@ -287,7 +287,11 @@ describe("creating a review from a pull request URL alone", () => {
     await local.data.register(checkout);
     const created = await createFromUrl();
     await local.store.execute(
-      command({ type: "delete", reviewId: created.reviewId }),
+      command({
+        type: "lifecycle",
+        state: "trash",
+        reviewId: created.reviewId,
+      }),
     );
     const calls = ghCalls;
 
@@ -297,12 +301,12 @@ describe("creating a review from a pull request URL alone", () => {
     });
     expect(ghCalls).toBe(calls);
     expect(local.store.list()).toHaveLength(1);
-    expect(local.store.read(created.reviewId).deletedAt).toBeTruthy();
+    expect(local.store.read(created.reviewId).trashedAt).toBeTruthy();
 
     await local.store.execute(
       command({
-        type: "attention",
-        action: "restore",
+        type: "lifecycle",
+        state: "active",
         reviewId: created.reviewId,
       }),
     );

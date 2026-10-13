@@ -26,7 +26,7 @@ const board: ReviewApiSummary = {
   origin: { branch: "sm/grammar", pullRequestNumber: 1091 },
   createdAt: new Date(now).toISOString(),
   viewedAt: null,
-  deletedAt: null,
+  trashedAt: null,
 };
 
 describe("Home model", () => {

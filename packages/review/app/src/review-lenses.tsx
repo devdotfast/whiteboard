@@ -307,7 +307,7 @@ export function ReviewLensesProvider({
       changedPaths,
       unfoldRanges,
       busy,
-      readOnly: Boolean(snapshot.deletedAt),
+      readOnly: Boolean(snapshot.trashedAt),
       error,
       structuralDiffEnabled,
       select: (id) => {
@@ -367,7 +367,7 @@ export function ReviewLensesProvider({
       changedPaths,
       unfoldRanges,
       busy,
-      snapshot.deletedAt,
+      snapshot.trashedAt,
       error,
       structuralDiffEnabled,
       client,

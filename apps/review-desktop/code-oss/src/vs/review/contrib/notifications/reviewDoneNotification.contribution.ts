@@ -43,7 +43,7 @@ class ReviewDoneNotification extends Disposable {
 		const client = new ReviewApiClient(await this.connection.getConnection());
 		const snapshot = await client.read<FinishedReview>(`/${encodeURIComponent(review.reviewId)}/inspect?full=true&format=json`, this.abort.signal);
 		const current = this.catalog.reviews.find(item => item.reviewId === review.reviewId);
-		if (this.abort.signal.aborted || !current || current.deletedAt || current.working !== false) return;
+		if (this.abort.signal.aborted || !current || current.trashedAt || current.working !== false) return;
 		await notifyReviewDone(snapshot, {
 			isViewing: () => this.host.hasFocus && this.tabs.isActiveReview(review.reviewId),
 			// Notify badges the Dock icon until the window is focused.

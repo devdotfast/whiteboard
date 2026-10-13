@@ -53,7 +53,7 @@ export async function runReviewInfo(
     event: "info",
     reviews: reviews.filter(
       (review) =>
-        review.repositoryPath === root && (input.all || !review.deletedAt),
+        review.repositoryPath === root && (input.all || !review.trashedAt),
     ),
   };
 }

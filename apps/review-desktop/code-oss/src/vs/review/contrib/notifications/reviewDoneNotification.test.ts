@@ -5,7 +5,7 @@ import { completionBody, notifyReviewDone, ReviewCompletionTracker } from "./rev
 
 const review = (working: boolean, extra: Partial<ReviewApiSummary> = {}): ReviewApiSummary => ({
 	reviewId: "review", title: "Auth refactor", version: 1, createdAt: "", repositoryName: "repo",
-	viewedAt: null, deletedAt: null, working, ...extra,
+	viewedAt: null, trashedAt: null, working, ...extra,
 });
 
 test("notifies once when a review stops being authored", () => {
@@ -24,7 +24,7 @@ test("deleted reviews, dismissed reviews and scratchpads stay quiet", () => {
 	assert.deepEqual(tracker.update([]), []);
 	assert.deepEqual(tracker.update([review(false)]), []);
 	tracker.update([review(true)]);
-	assert.deepEqual(tracker.update([review(false, { deletedAt: "today" })]), []);
+	assert.deepEqual(tracker.update([review(false, { trashedAt: "today" })]), []);
 	tracker.update([review(true, { kind: "scratchpad" })]);
 	assert.deepEqual(tracker.update([review(false, { kind: "scratchpad" })]), []);
 });

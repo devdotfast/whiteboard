@@ -83,11 +83,15 @@ const activityId = z
 export const commandSchema = z.strictObject({
   operation: z.discriminatedUnion("type", [
     z.strictObject({ type: z.literal("delete"), reviewId }),
-    z.strictObject({ type: z.literal("delete_permanently"), reviewId }),
+    z.strictObject({
+      type: z.literal("lifecycle"),
+      reviewId,
+      state: z.enum(["active", "trash"]),
+    }),
     z.strictObject({
       type: z.literal("attention"),
       reviewId,
-      action: z.enum(["view", "delete", "restore"]),
+      action: z.literal("view"),
     }),
     z.strictObject({
       type: z.literal("create"),
@@ -158,7 +162,7 @@ export interface SnapshotOrigin {
 
 export interface Snapshot {
   /** Current lifecycle state, projected onto every version when read. */
-  deletedAt?: string | null;
+  trashedAt?: string | null;
   shared?: { login?: string; sharedAt?: number; cloneUrl?: string };
   reviewId: string;
   version: number;
@@ -331,7 +335,7 @@ export class ReviewStore {
 
     const run = this.pending.then(async () => {
       for (const summary of this.list()) {
-        if (summary.deletedAt) continue;
+        if (summary.trashedAt) continue;
         const snapshot = this.read(summary.reviewId, summary.version);
 
         try {
@@ -708,15 +712,15 @@ export class ReviewStore {
   }
   assertWritable(id: string) {
     this.assertExists(id);
-    const deletedAt = this.deletionTime(id);
+    const trashedAt = this.trashTime(id);
 
-    if (deletedAt)
+    if (trashedAt)
       throw new ReviewInputError(
-        `This whiteboard was archived on ${new Date(deletedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it to continue.`,
+        `This whiteboard was moved to Trash on ${new Date(trashedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it with session_lifecycle({"sessionId":"${id}","state":"active"}) to continue.`,
         409,
       );
   }
-  private deletionTime(id: string): string | null {
+  private trashTime(id: string): string | null {
     const row = this.db
       .prepare("SELECT deleted_at FROM review_attention WHERE review_id=?")
       .get(id);
@@ -813,9 +817,9 @@ export class ReviewStore {
     const live = version === undefined ? this.liveSources.get(id) : undefined;
 
     if (live?.version === snapshot.version)
-      return { ...structuredClone(live), deletedAt: this.deletionTime(id) };
+      return { ...structuredClone(live), trashedAt: this.trashTime(id) };
 
-    snapshot.deletedAt = this.deletionTime(id);
+    snapshot.trashedAt = this.trashTime(id);
 
     return snapshot;
   }
@@ -916,7 +920,7 @@ export class ReviewStore {
             ? String(row.repository_name)
             : (summary.pins?.repositoryId ?? ""),
           viewedAt: row.viewed_at ? String(row.viewed_at) : null,
-          deletedAt: row.deleted_at ? String(row.deleted_at) : null,
+          trashedAt: row.deleted_at ? String(row.deleted_at) : null,
           working: this.activity.isWorking(summary.reviewId),
         };
 
@@ -1023,11 +1027,9 @@ export class ReviewStore {
 
       if (
         op.type !== "create" &&
-        op.type !== "delete_permanently" &&
-        !(
-          op.type === "attention" &&
-          (op.action === "view" || op.action === "restore")
-        )
+        op.type !== "delete" &&
+        op.type !== "attention" &&
+        op.type !== "lifecycle"
       )
         this.assertWritable(op.reviewId);
 
@@ -1098,12 +1100,12 @@ export class ReviewStore {
         }
       }
 
-      if (op.type === "delete_permanently") {
+      if (op.type === "delete") {
         this.assertExists(op.reviewId);
 
-        if (!this.deletionTime(op.reviewId))
+        if (!this.trashTime(op.reviewId))
           throw new ReviewInputError(
-            "This whiteboard is active. Archive it before permanently deleting it.",
+            "Move this whiteboard to Trash before deleting it.",
             409,
           );
 
@@ -1122,12 +1124,12 @@ export class ReviewStore {
         return result;
       }
 
-      if (op.type === "attention" || op.type === "delete") {
+      if (op.type === "attention" || op.type === "lifecycle") {
         const result: Result = {
           reviewId: op.reviewId,
           version: this.read(op.reviewId).version,
           attention: true,
-          ...((op.type === "delete" || op.action !== "view") && {
+          ...(op.type === "lifecycle" && {
             lifecycle: true as const,
           }),
         };
@@ -1139,23 +1141,22 @@ export class ReviewStore {
             )
             .run(op.reviewId);
 
-          if (op.type === "attention" && op.action === "view")
+          if (op.type === "attention")
             this.db
               .prepare(
                 "UPDATE review_attention SET viewed_at=? WHERE review_id=?",
               )
               .run(new Date().toISOString(), op.reviewId);
-          else
+          else {
+            const timestamp =
+              op.state === "trash" ? new Date().toISOString() : null;
+
             this.db
               .prepare(
-                "UPDATE review_attention SET deleted_at=? WHERE review_id=?",
+                "UPDATE review_attention SET deleted_at=CASE WHEN ? IS NULL THEN NULL ELSE COALESCE(deleted_at, ?) END WHERE review_id=?",
               )
-              .run(
-                op.type === "delete" || op.action === "delete"
-                  ? new Date().toISOString()
-                  : null,
-                op.reviewId,
-              );
+              .run(timestamp, timestamp, op.reviewId);
+          }
         });
 
         return result;
@@ -1175,7 +1176,7 @@ export class ReviewStore {
           ? createdSnapshot(id, op, resolvedTarget, fromPullRequest?.title)
           : structuredClone(previous!);
 
-      delete snapshot.deletedAt;
+      delete snapshot.trashedAt;
 
       // Overlay state: a degraded read must not persist unavailability.
       delete snapshot.sourceUnavailable;
@@ -1439,9 +1440,9 @@ export class ReviewStore {
       .map((row) => String(row.id));
   }
   private assertReusableReview(reviewId: string) {
-    if (this.deletionTime(reviewId))
+    if (this.trashTime(reviewId))
       throw new ReviewInputError(
-        `This PR's whiteboard is archived. Restore it to continue:\n\nsession_attention({"sessionId":"${reviewId}","action":"restore"})`,
+        `This PR's whiteboard is in Trash. Restore it to continue:\n\nsession_lifecycle({"sessionId":"${reviewId}","state":"active"})`,
         409,
       );
   }
@@ -1560,8 +1561,8 @@ export class ReviewStore {
         // The saved command must remain successful if a viewer disconnects.
       }
   }
-  /** Deleted reviews remain deleted when viewed; only Restore clears the state. */
-  deletedIds(): string[] {
+  /** Viewing a review in Trash does not restore it. */
+  trashedIds(): string[] {
     return this.db
       .prepare(
         "SELECT review_id FROM review_attention WHERE deleted_at IS NOT NULL",

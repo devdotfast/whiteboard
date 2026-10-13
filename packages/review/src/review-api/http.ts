@@ -1622,7 +1622,7 @@ export function createReviewApi(
       readThread(context.req.param("id"), context.req.param("threadId"));
       ask.threads.close(
         context.req.param("threadId"),
-        !readReview(context.req.param("id")).deletedAt,
+        !readReview(context.req.param("id")).trashedAt,
       );
 
       return context.json({ ok: true });
@@ -1768,10 +1768,10 @@ export function createReviewApi(
     ) {
       const parsed = commandSchema.parse(input);
 
-      if (shared && parsed.operation.type === "delete_permanently") {
-        if (!shared.get(parsed.operation.reviewId).snapshot.deletedAt)
+      if (shared && parsed.operation.type === "delete") {
+        if (!shared.get(parsed.operation.reviewId).snapshot.trashedAt)
           throw new ReviewInputError(
-            "This whiteboard is active. Archive it before permanently deleting it.",
+            "Move this whiteboard to Trash before deleting it.",
             409,
           );
         await shared.removeLocal(parsed.operation.reviewId);
@@ -1786,18 +1786,18 @@ export function createReviewApi(
       if (
         shared &&
         (parsed.operation.type === "attention" ||
-          parsed.operation.type === "delete")
+          parsed.operation.type === "lifecycle")
       ) {
-        await shared.setAttention(
-          parsed.operation.reviewId,
-          parsed.operation.type === "delete"
-            ? "delete"
-            : parsed.operation.action,
-        );
+        if (parsed.operation.type === "lifecycle")
+          await shared.setLifecycle(
+            parsed.operation.reviewId,
+            parsed.operation.state,
+          );
+        else await shared.setAttention(parsed.operation.reviewId);
 
         const reviewId = parsed.operation.reviewId;
 
-        if (shared.get(reviewId).snapshot.deletedAt)
+        if (shared.get(reviewId).snapshot.trashedAt)
           ask?.threads.closeDeletedReviews((id) => id === reviewId);
 
         return context.json({
@@ -1814,7 +1814,7 @@ export function createReviewApi(
 
     if (
       result.deleted ||
-      (result.lifecycle && store.read(result.reviewId).deletedAt)
+      (result.lifecycle && store.read(result.reviewId).trashedAt)
     )
       ask?.threads.closeDeletedReviews((id) => id === result.reviewId);
 

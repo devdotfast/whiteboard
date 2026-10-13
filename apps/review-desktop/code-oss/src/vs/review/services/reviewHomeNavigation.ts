@@ -2,15 +2,15 @@ import type { IEditorOptions } from "../../platform/editor/common/editor.js";
 import { EditorPaneSelectionCompareResult, type IEditorPaneSelection } from "../../workbench/common/editor.js";
 
 interface HomeNavigationOptions extends IEditorOptions {
-  reviewHomeView?: "live" | "deleted";
+  reviewHomeView?: "active" | "trash";
 }
 
-export function homeViewFromOptions(options: IEditorOptions | undefined): "live" | "deleted" | undefined {
+export function homeViewFromOptions(options: IEditorOptions | undefined): "active" | "trash" | undefined {
   return (options as HomeNavigationOptions | undefined)?.reviewHomeView;
 }
 
 export class ReviewHomeSelection implements IEditorPaneSelection {
-  constructor(readonly view: "live" | "deleted") {}
+  constructor(readonly view: "active" | "trash") {}
 
   compare(other: IEditorPaneSelection): EditorPaneSelectionCompareResult {
     return other instanceof ReviewHomeSelection && other.view === this.view

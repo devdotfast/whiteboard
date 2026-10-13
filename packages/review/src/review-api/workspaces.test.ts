@@ -87,7 +87,7 @@ it("keeps Desktop preparation owned while a headless connection edits and delete
     expect(() => headless.data.workspaces).toThrow(/Desktop/);
     expect(local.data.workspaces.list(reviewId)).toContainEqual(preparing);
     await headless.store.execute({
-      operation: { type: "delete", reviewId },
+      operation: { type: "lifecycle", state: "trash", reviewId },
     });
     await vi.waitFor(
       () => expect(local.data.workspaces.list(reviewId)).toEqual([]),
@@ -217,7 +217,7 @@ it("keeps historical and equal-side environments until review deletion and leave
     target: { kind: "commits", ...pins, base: pins.head },
   });
   expect(existsSync(old.rootPath!)).toBe(true);
-  await command({ type: "delete", reviewId });
+  await command({ type: "lifecycle", state: "trash", reviewId });
   await local.data.workspaces.idle();
   expect(existsSync(old.rootPath!)).toBe(false);
   expect(
@@ -259,7 +259,7 @@ it("persists failed cleanup and retries it without deleting an unrelated checkou
   );
 
   git("worktree", "lock", environment.rootPath!);
-  await command({ type: "delete", reviewId });
+  await command({ type: "lifecycle", state: "trash", reviewId });
   await local.data.workspaces.idle();
   const app = createReviewApi(local.store, local.data);
 
@@ -335,7 +335,7 @@ it("removes a dismissed review's checkouts and rebuilds them on demand", async (
   const dismissed = await local.data.workspaces.source(reviewId, pins, "head");
   const kept = await local.data.workspaces.source(other, pins, "head");
 
-  await command({ type: "attention", reviewId, action: "delete" });
+  await command({ type: "lifecycle", reviewId, state: "trash" });
   await local.data.workspaces.idle();
 
   expect(existsSync(dismissed.rootPath!)).toBe(false);
@@ -373,7 +373,7 @@ it("dismissing a review frees only its own managed checkout, leaving a user's si
     git("worktree", "list", "--porcelain").match(/^worktree /gm) ?? []
   ).length;
 
-  await command({ type: "attention", reviewId, action: "delete" });
+  await command({ type: "lifecycle", reviewId, state: "trash" });
   await local.data.workspaces.idle();
 
   expect(existsSync(managedRoot)).toBe(false);
@@ -409,7 +409,7 @@ it("removes checkouts left by reviews dismissed while Desktop was closed", async
   await local.store.close();
   const headless = openLocalReviewStore(database, { manageWorkspaces: false });
   await headless.store.execute({
-    operation: { type: "attention", reviewId, action: "delete" },
+    operation: { type: "lifecycle", reviewId, state: "trash" },
   });
   await headless.data.close();
   await headless.store.close();
@@ -432,9 +432,9 @@ it.skipIf(process.getuid?.() === 0)(
     chmodSync(rootPath!, 0o500);
 
     try {
-      await command({ type: "attention", reviewId, action: "delete" });
+      await command({ type: "lifecycle", reviewId, state: "trash" });
       await local.data.workspaces.idle();
-      expect(local.store.summary(reviewId)?.deletedAt).toBeTruthy();
+      expect(local.store.summary(reviewId)?.trashedAt).toBeTruthy();
       expect(existsSync(path.join(rootPath!, "value.ts"))).toBe(true);
     } finally {
       chmodSync(rootPath!, 0o700);
@@ -448,7 +448,7 @@ it.skipIf(process.getuid?.() === 0)(
 );
 
 const attentionWhileClosed = async (
-  ...actions: ("view" | "delete" | "restore")[]
+  ...actions: ("view" | "trash" | "active")[]
 ) => {
   await local.data.close();
   await local.store.close();
@@ -456,7 +456,10 @@ const attentionWhileClosed = async (
 
   for (const action of actions) {
     await headless.store.execute({
-      operation: { type: "attention", reviewId, action },
+      operation:
+        action === "view"
+          ? { type: "attention", reviewId, action }
+          : { type: "lifecycle", reviewId, state: action },
     });
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
@@ -474,9 +477,9 @@ it("frees the checkouts of a dismissed review that was only peeked at", async ()
     "head",
   );
 
-  // Opening a review from Home's Dismissed list records a view, not a restore.
-  await attentionWhileClosed("delete", "view");
-  expect(local.store.summary(reviewId)?.deletedAt).toBeTruthy();
+  // Opening a review from Home's Trash list records a view, not a restore.
+  await attentionWhileClosed("trash", "view");
+  expect(local.store.summary(reviewId)?.trashedAt).toBeTruthy();
   expect(existsSync(rootPath!)).toBe(false);
 });
 
@@ -487,8 +490,8 @@ it("keeps the checkouts of a restored review", async () => {
     "head",
   );
 
-  await attentionWhileClosed("delete", "restore");
-  expect(local.store.summary(reviewId)?.deletedAt).toBeNull();
+  await attentionWhileClosed("trash", "active");
+  expect(local.store.summary(reviewId)?.trashedAt).toBeNull();
   expect(existsSync(path.join(rootPath!, "value.ts"))).toBe(true);
 });
 
@@ -505,7 +508,7 @@ it.skipIf(process.getuid?.() === 0)(
     chmodSync(head.rootPath!, 0o500);
 
     try {
-      await command({ type: "attention", reviewId, action: "delete" });
+      await command({ type: "lifecycle", reviewId, state: "trash" });
       await local.data.workspaces.idle();
       expect(error).toHaveBeenCalled();
       expect(local.data.workspaces.failures()).toMatchObject([
@@ -542,7 +545,7 @@ it("never follows a symlink out of the managed root when freeing a dismissed rev
   symlinkSync(outside, path.join(root, "base"));
   symlinkSync(outside, path.join(path.dirname(rootPath!), "link"));
 
-  await command({ type: "attention", reviewId, action: "delete" });
+  await command({ type: "lifecycle", reviewId, state: "trash" });
   await local.data.workspaces.idle();
 
   expect(existsSync(root)).toBe(false);
@@ -559,7 +562,7 @@ it("rebuilds a checkout requested while its release is running", async () => {
   }
 
   await local.data.workspaces.source(reviewId, pins, "head");
-  await command({ type: "attention", reviewId, action: "delete" });
+  await command({ type: "lifecycle", reviewId, state: "trash" });
   const requested = await local.data.workspaces.source(reviewId, pins, "head");
   await local.data.workspaces.idle();
 

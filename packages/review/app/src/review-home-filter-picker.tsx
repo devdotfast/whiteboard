@@ -23,6 +23,7 @@ import {
 import { styles as home } from "./review-home-styles";
 import { fontSize, layer, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
+import { Shortcut } from "./ui/kbd";
 
 export type HomeFilterSection =
   | "all"
@@ -616,7 +617,9 @@ export function HomeFilterPicker({
           <span>
             Showing {count} {count === 1 ? "board" : "boards"}
           </span>
-          <span {...stylex.props(styles.muted)}>esc done</span>
+          <span {...stylex.props(styles.muted)}>
+            <Shortcut>esc</Shortcut> done
+          </span>
         </div>
       </MenuSurface>
       {activeRepo && (

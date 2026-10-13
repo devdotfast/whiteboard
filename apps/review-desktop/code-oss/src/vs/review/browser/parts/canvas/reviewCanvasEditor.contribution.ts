@@ -91,7 +91,7 @@ class ReviewCanvasEditorContribution extends Disposable implements IWorkbenchCon
 		await this.apiCatalog.initialize();
 		// Windows restored for a review dismissed at quit, or while closed, show checkouts the host frees at startup.
 		await this.desktopConnection.closeSourceWindows(
-			this.apiCatalog.reviews.filter((review) => review.deletedAt).map((review) => review.reviewId),
+			this.apiCatalog.reviews.filter((review) => review.trashedAt).map((review) => review.reviewId),
 		);
 	}
 
@@ -114,7 +114,7 @@ class ReviewCanvasEditorContribution extends Disposable implements IWorkbenchCon
 			for (const reviewId of restored) {
 				if (reviewId === tutorial?.reviewUuid) continue;
 				const review = this.apiCatalog.reviews.find((review) => review.reviewId === reviewId);
-				if (!review || review.deletedAt) void this.tabsService.closeReview(reviewId);
+				if (!review || review.trashedAt) void this.tabsService.closeReview(reviewId);
 			}
 		};
 		if (this.apiCatalog.loaded) void reconcile();

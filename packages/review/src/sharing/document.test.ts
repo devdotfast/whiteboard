@@ -6,8 +6,10 @@ import path from "node:path";
 import { ReviewInputError } from "@review/review-api/document.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
+import type { commandSchema } from "@review/review-api/store.js";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
+import type { z } from "zod";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
 import { type ShareBundle, digestBytes, exportShare } from "./export.js";
@@ -153,6 +155,50 @@ it("uploads and opens a document without registering or fetching a repository, i
   expect(fetchRepository).not.toHaveBeenCalled();
   await restarted.removeLocal(id);
   expect(restarted.list()).toEqual([]);
+});
+
+it("moves an imported board through Trash without losing its content, then permits permanent deletion", async () => {
+  const local = await fixture();
+  const shared = new SharedReviewStore(path.join(local.root, "shared"));
+  const bundle = await exportShare(local);
+  const id = await shared.import("https://sharing.test", randomUUID(), bundle);
+  const api = createReviewApi(local.store, local.data, undefined, shared);
+
+  const post = (operation: z.input<typeof commandSchema>["operation"]) =>
+    api.request("/commands", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ operation }),
+    });
+
+  const document = shared.get(id).snapshot.document;
+  expect((await post({ type: "delete", reviewId: id })).status).toBe(409);
+  expect(
+    (await post({ type: "lifecycle", reviewId: id, state: "trash" })).status,
+  ).toBe(200);
+  const timestamp = shared.get(id).snapshot.trashedAt;
+  expect(timestamp).toBeTruthy();
+  expect(
+    (await post({ type: "lifecycle", reviewId: id, state: "trash" })).status,
+  ).toBe(200);
+  expect(shared.get(id).snapshot.trashedAt).toBe(timestamp);
+  expect(
+    (await post({ type: "attention", reviewId: id, action: "view" })).status,
+  ).toBe(200);
+  expect(shared.get(id).snapshot.trashedAt).toBe(timestamp);
+  const restarted = new SharedReviewStore(shared.root);
+  await restarted.load();
+  expect(restarted.get(id).snapshot.trashedAt).toBe(timestamp);
+  expect(
+    (await post({ type: "lifecycle", reviewId: id, state: "active" })).status,
+  ).toBe(200);
+  expect(shared.get(id).snapshot.trashedAt).toBeNull();
+  expect(shared.get(id).snapshot.document).toEqual(document);
+  expect(
+    (await post({ type: "lifecycle", reviewId: id, state: "trash" })).status,
+  ).toBe(200);
+  expect((await post({ type: "delete", reviewId: id })).status).toBe(200);
+  expect(shared.list()).toEqual([]);
 });
 
 it("retains image and trace resources on a document without source pins", async () => {

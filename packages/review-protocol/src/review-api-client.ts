@@ -42,7 +42,7 @@ export interface ReviewApiSummary {
     deletions: number;
   } | null;
   viewedAt: string | null;
-  deletedAt: string | null;
+  trashedAt: string | null;
   /** An agent holds a live lease; absent on shared reviews. */
   working?: boolean;
 }

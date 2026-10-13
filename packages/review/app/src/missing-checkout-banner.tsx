@@ -19,7 +19,7 @@ export function MissingCheckoutBanner({
     <StatusBanner
       action={
         !submissionOutcome &&
-        !session.review?.deletedAt && (
+        !session.review?.trashedAt && (
           <Button
             disabled={busy}
             onClick={async () => {
@@ -33,7 +33,7 @@ export function MissingCheckoutBanner({
               }
             }}
           >
-            Delete whiteboard
+            Move to Trash
           </Button>
         )
       }

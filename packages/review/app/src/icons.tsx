@@ -414,34 +414,6 @@ export function DockIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
-/** The Command key, drawn: the canvas's mono font has no ⌘. */
-export function CommandKeyIcon({ xstyle }: IconProps = {}): ReactElement {
-  return (
-    <svg
-      aria-hidden="true"
-      {...stylex.props(styles.icon, styles.key, xstyle)}
-      focusable="false"
-      viewBox="0 0 24 24"
-    >
-      <path d="M9 9h6v6H9zM9 9V6.5A2.5 2.5 0 1 0 6.5 9H9m6 0V6.5A2.5 2.5 0 1 1 17.5 9H15m-6 6v2.5A2.5 2.5 0 1 1 6.5 15H9m6 0v2.5a2.5 2.5 0 1 0 2.5-2.5H15" />
-    </svg>
-  );
-}
-
-/** The Shift key, drawn: the canvas's mono font has no ⇧. */
-export function ShiftKeyIcon({ xstyle }: IconProps = {}): ReactElement {
-  return (
-    <svg
-      aria-hidden="true"
-      {...stylex.props(styles.icon, styles.key, xstyle)}
-      focusable="false"
-      viewBox="0 0 24 24"
-    >
-      <path d="M12 4.5 5 12.5h4v7h6v-7h4z" />
-    </svg>
-  );
-}
-
 /** A select's closed-state chevron, the same glyph as `tokens.chevronDown`. */
 export function ChevronDownIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
@@ -499,12 +471,6 @@ const styles = stylex.create({
     strokeLinecap: "round",
     strokeLinejoin: "round",
     strokeWidth: "1.5px",
-  },
-  // As tall as a shortcut's letter.
-  key: {
-    width: "10px",
-    height: "10px",
-    strokeWidth: "2.2px",
   },
   chevronDown: {
     flex: "none",

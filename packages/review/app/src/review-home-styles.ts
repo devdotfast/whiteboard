@@ -701,8 +701,6 @@ export const styles = stylex.create({
   barCount: { paddingRight: "6px", whiteSpace: "nowrap" },
   barShortcut: {
     color: tokens.homeBarMuted,
-    fontSize: fontSize.small,
-    lineHeight: "14px",
   },
   barDivider: {
     width: "1px",
@@ -854,8 +852,6 @@ export const styles = stylex.create({
   },
   toastShortcut: {
     color: tokens.inkMuted,
-    fontSize: fontSize.small,
-    lineHeight: "14px",
   },
   copyNoticeDismiss: {
     display: "grid",

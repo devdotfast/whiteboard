@@ -145,8 +145,8 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
   const closeDeletedThreads = () =>
     askThreads?.closeDeletedReviews((id) =>
       id.startsWith("shared-")
-        ? !shared?.has(id) || Boolean(shared.get(id).snapshot.deletedAt)
-        : !store.has(id) || Boolean(store.read(id).deletedAt),
+        ? !shared?.has(id) || Boolean(shared.get(id).snapshot.trashedAt)
+        : !store.has(id) || Boolean(store.read(id).trashedAt),
     );
 
   const stopLocal =

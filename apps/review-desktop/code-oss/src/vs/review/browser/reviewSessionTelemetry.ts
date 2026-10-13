@@ -13,7 +13,7 @@ export interface ReviewSessionTelemetryContext {
 /** The part of a catalog entry that says whether a review is still open. */
 export interface ReviewSessionCatalogEntry {
 	readonly reviewId: string;
-	readonly deletedAt: string | null;
+	readonly trashedAt: string | null;
 }
 
 export type ReviewSessionOutcome = "closed" | "dismissed" | "deleted" | "app_quit" | "abnormal";
@@ -71,7 +71,7 @@ export class ReviewSessionTelemetry {
 		const after = current.find(review => review.reviewId === reviewUuid);
 		if (!after) {
 			this.end("deleted");
-		} else if (!before.deletedAt && after.deletedAt) {
+		} else if (!before.trashedAt && after.trashedAt) {
 			this.end("dismissed");
 		}
 	}

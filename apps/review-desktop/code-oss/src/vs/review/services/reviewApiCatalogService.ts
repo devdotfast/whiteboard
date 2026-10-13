@@ -24,9 +24,10 @@ export interface IReviewApiCatalogService {
 	readonly onDidChange: Event<void>;
 	readonly onDidCloseReview: Event<string>;
 	initialize(): Promise<void>;
-	attention(reviewId: string, action: "view" | "delete" | "restore"): Promise<void>;
+	attention(reviewId: string, action: "view"): Promise<void>;
+	lifecycle(reviewId: string, state: "active" | "trash"): Promise<void>;
+	trashReview(reviewId: string): Promise<void>;
 	deleteReview(reviewId: string): Promise<void>;
-	deletePermanently(reviewId: string): Promise<void>;
 }
 
 /** A live API list for Home and tab restoration; no legacy review sessions. */
@@ -88,7 +89,7 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 			this.changed.fire();
 			for (const review of previous) {
 				const next = this.reviews.find((next) => next.reviewId === review.reviewId);
-				if (!next || (!review.deletedAt && next.deletedAt)) this.closed.fire(review.reviewId);
+				if (!next || (!review.trashedAt && next.trashedAt)) this.closed.fire(review.reviewId);
 			}
 		};
 		// Surface a failed first list instead of reporting an empty catalog:
@@ -101,22 +102,27 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 		);
 	}
 
-	async attention(reviewId: string, action: "view" | "delete" | "restore"): Promise<void> {
+	async attention(reviewId: string, action: "view"): Promise<void> {
 		await this.initialize();
 		await this.client!.post("/commands", {
 			operation: { type: "attention", reviewId, action },
 		});
 	}
 
-	async deleteReview(reviewId: string): Promise<void> {
+  async lifecycle(reviewId: string, state: "active" | "trash"): Promise<void> {
+    await this.initialize();
+    await this.client!.post("/commands", { operation: { type: "lifecycle", reviewId, state } });
+  }
+
+	async trashReview(reviewId: string): Promise<void> {
 		await this.initialize();
 		await this.client!.post("/commands", {
-			operation: { type: "delete", reviewId },
+			operation: { type: "lifecycle", state: "trash", reviewId },
 		});
 	}
-	async deletePermanently(reviewId: string): Promise<void> {
+	async deleteReview(reviewId: string): Promise<void> {
 		await this.initialize();
-		await this.client!.post("/commands", { operation: { type: "delete_permanently", reviewId } });
+		await this.client!.post("/commands", { operation: { type: "delete", reviewId } });
 	}
 
 }

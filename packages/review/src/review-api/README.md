@@ -16,7 +16,7 @@ catalog. Tests inject the native store and source-data provider.
 - `authoring_presences`: one row per agent working on a review (focus, color slot, where it last wrote, expiry).
 - `repositories`: server-only local paths; clients receive an ID and display name.
 - `resources`: immutable image, trace and software-map bytes, scoped to a repository.
-- `review_attention`: viewed/dismissed timestamps, separate from document history.
+- `review_attention`: viewed/trashed timestamps, separate from document history.
 
 One host-owned store serializes writes, including asynchronous validation.
 Presences show who is working across database connections and never block a
@@ -96,12 +96,15 @@ Commands: `create {title,target,pullRequestUrl?,reuseExisting?}` or `create {pul
 Agents name the checkout by `repositoryPath` in a target, or on a create from a PR alone; `/commands` registers the path and passes the store its id. Retargeting preserves content and component IDs. Restore restores title, target, PR identity, and content. Live targets still read the current checkout.
 PR URLs must be canonical `https://github.com/owner/repository/pull/123` URLs. The PR number is derived from the URL; identity is metadata alongside immutable pins, not a moving source reference. A `create` with a target keeps that target and treats the URL as identity only. A `create` with the URL and no target resolves the PR when accepted: it reads the PR with `gh pr view` (falling back to the public GitHub API), picks the registered checkout named by `repositoryId`, else the checkout of the PR's existing review, else the first registered checkout with a remote whose configured URL is `github.com/owner/repository`, and fetches `refs/pull/N/head` and the base branch from that remote into `refs/review/github/owner/repository/pull/N/*`, never moving branches or bookmarks (a jj repository indexes the commits through a transient tag). It pins that head and its merge base with the base branch; for a PR absorbed by a merge commit it uses the merge base with GitHub's frozen base commit instead. The title defaults to the PR title. A repeat resolves the PR again, so `headMoved` compares the existing review with the PR's current head. `set_target` preserves the document and component IDs, including when source commits change. Its response reports retained source ranges to verify, those in files the new commits changed, and resources that no longer match the pins; agents repair these with `edit`. Existing versions keep their original pins and content. It preserves omitted PR identity within one repository, clears it when switching repositories, and accepts an explicit URL or null.
 
-`attention {reviewId,action:"view"|"dismiss"|"restore"}` records viewing or
-reversible dismissal without creating a document version. Home summaries include
-the repository name and attention timestamps.
-The list stream is separate from document streams. Dismissal closes
-the native tab and can be undone from Home. Dismissed API reviews stay saved;
-`delete {reviewId}` permanently removes their versions. Old command
+`attention {reviewId,action:"view"}` records viewing without changing lifecycle or document history.
+`lifecycle {reviewId,state:"active"|"trash"}` moves a whiteboard to Trash or restores it.
+Trash retains whiteboards for 30 days; repeated moves to Trash keep the original deadline.
+`delete {reviewId}` permanently removes a whiteboard and its history, but only from Trash.
+The agent tools are `session_attention`, `session_lifecycle`, and `session_delete`.
+`session_restore_version` restores saved content; it does not move a whiteboard out of Trash.
+Home summaries include the repository name, `viewedAt`, and `trashedAt`.
+The list stream is separate from document streams; moving to Trash closes the native tab.
+Old command
 inputs are erased but their IDs remain, so delayed retries cannot resurrect content.
 Repository resources remain shared. Home and the canvas open a pinned, read-only
 source tree. Each source tab names its review version; files opened from it use

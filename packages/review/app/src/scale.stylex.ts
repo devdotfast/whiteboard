@@ -78,6 +78,7 @@ export const elevation = stylex.defineConsts({
 });
 
 export const tracking = stylex.defineConsts({
+  shortcut: "0.14em",
   // Uppercase micro labels.
   caps: "0.08em",
   // Uppercase chrome labels; matches --chrome-tracking.

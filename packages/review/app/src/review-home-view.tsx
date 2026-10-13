@@ -49,17 +49,18 @@ import {
 } from "./review-home-model";
 import { styles } from "./review-home-styles";
 import { withClass } from "./stylex-props";
+import { Shortcut } from "./ui/kbd";
 import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
 
 interface ReviewHomeProps {
   findHost?: ReviewFindHost;
-  view?: "live" | "deleted";
-  onViewChange?(view: "live" | "deleted"): void;
+  view?: "active" | "trash";
+  onViewChange?(view: "active" | "trash"): void;
   reviews: readonly ReviewApiSummary[];
   onOpen(review: ReviewApiSummary): void;
-  onDeletePermanently?(review: ReviewApiSummary): Promise<void>;
   onDelete?(review: ReviewApiSummary): Promise<void>;
+  onTrash?(review: ReviewApiSummary): Promise<void>;
   onRestore?(review: ReviewApiSummary): Promise<void>;
   install?: ReviewCanvasInstallContent;
   setupActions?: ReviewCanvasSetupActions;
@@ -94,8 +95,8 @@ export function ReviewHome({
   onViewChange,
   reviews,
   onOpen,
-  onDeletePermanently,
   onDelete,
+  onTrash,
   onRestore,
   onboarding,
   onOpenTutorial,
@@ -152,12 +153,12 @@ export function ReviewHome({
   const [error, setError] = useState("");
 
   const [toast, setToast] = useState<{
-    kind: "deleted" | "restored" | "permanent";
+    kind: "trash" | "restored" | "permanent";
     targets: ReviewApiSummary[];
   } | null>(null);
 
-  const [localView, setLocalView] = useState<"live" | "deleted">("live");
-  const recentlyDeleted = (view ?? localView) === "deleted";
+  const [localView, setLocalView] = useState<"active" | "trash">("active");
+  const inTrash = (view ?? localView) === "trash";
 
   const hasPublished = useRef(
     onboarding?.published || homeSessions(reviews).length > 0,
@@ -247,7 +248,7 @@ export function ReviewHome({
       for (const [id, value] of current) {
         const review = reviews.find((r) => r.reviewId === id);
 
-        if (!review || Boolean(review.deletedAt) === Boolean(value))
+        if (!review || Boolean(review.trashedAt) === Boolean(value))
           next.delete(id);
       }
 
@@ -261,16 +262,16 @@ export function ReviewHome({
         .filter((r) => !deleted.has(r.reviewId))
         .map((r) =>
           lifecycle.has(r.reviewId)
-            ? { ...r, deletedAt: lifecycle.get(r.reviewId)! }
+            ? { ...r, trashedAt: lifecycle.get(r.reviewId)! }
             : r,
         ),
     [reviews, deleted, lifecycle],
   );
 
-  const trashed = catalog.filter((review) => review.deletedAt);
+  const trashed = catalog.filter((review) => review.trashedAt);
 
   const listed = catalog.filter(
-    (review) => Boolean(review.deletedAt) === recentlyDeleted,
+    (review) => Boolean(review.trashedAt) === inTrash,
   );
 
   useEffect(() => {
@@ -339,13 +340,11 @@ export function ReviewHome({
   );
 
   const groups = (
-    recentlyDeleted
-      ? [{ id: "earlier" as const, label: "Recently deleted" }]
-      : homeGroups
+    inTrash ? [{ id: "earlier" as const, label: "Trash" }] : homeGroups
   )
     .map((group) => ({
       ...group,
-      reviews: recentlyDeleted
+      reviews: inTrash
         ? visible
         : visible.filter((r) => groupFor(r, now) === group.id),
     }))
@@ -358,7 +357,7 @@ export function ReviewHome({
   const searching = searchTerms.length > 0;
 
   const isCollapsed = (id: HomeGroup) =>
-    !recentlyDeleted && !searching && collapsed[id];
+    !inTrash && !searching && collapsed[id];
 
   useEffect(() => {
     const bar = selectionBar.current;
@@ -520,7 +519,7 @@ export function ReviewHome({
   function openDeletedView(value: boolean) {
     clearSelection();
     clearFilters();
-    const next = value ? "deleted" : "live";
+    const next = value ? "trash" : "active";
     setLocalView(next);
     onViewChange?.(next);
   }
@@ -528,15 +527,15 @@ export function ReviewHome({
   useEffect(() => {
     clearSelection();
     clearFilters();
-    setSort(recentlyDeleted ? "deleted" : "updated");
-  }, [recentlyDeleted]);
+    setSort(inTrash ? "trash" : "updated");
+  }, [inTrash]);
 
   async function changeLifecycle(
     targets = selectedReviews,
     restore = false,
     undoing = false,
   ) {
-    const action = restore ? onRestore : onDelete;
+    const action = restore ? onRestore : onTrash;
 
     if (!action || busyRef.current || !targets.length) return;
     busyRef.current = true;
@@ -572,7 +571,7 @@ export function ReviewHome({
 
         for (const review of targets)
           if (failed.has(review.reviewId))
-            next.set(review.reviewId, review.deletedAt);
+            next.set(review.reviewId, review.trashedAt);
 
         return next;
       });
@@ -580,38 +579,38 @@ export function ReviewHome({
 
     if (failed.size)
       setError(
-        `Could not ${restore ? "restore" : "delete"} ${countLabel(failed.size, "whiteboard")}. ${messages.join(" ")}`,
+        `Could not ${restore ? "restore" : "move"} ${countLabel(failed.size, "whiteboard")}${restore ? "" : " to Trash"}. ${messages.join(" ")}`,
       );
 
     if (undoing)
       setToast(
         failed.size
           ? {
-              kind: restore ? "deleted" : "restored",
+              kind: restore ? "trash" : "restored",
               targets: targets.filter((review) => failed.has(review.reviewId)),
             }
           : null,
       );
     else if (succeeded.length)
-      setToast({ kind: restore ? "restored" : "deleted", targets: succeeded });
+      setToast({ kind: restore ? "restored" : "trash", targets: succeeded });
     busyRef.current = false;
     setBusy(false);
   }
 
   function undoToast() {
     if (toast && toast.kind !== "permanent")
-      void changeLifecycle(toast.targets, toast.kind === "deleted", true);
+      void changeLifecycle(toast.targets, toast.kind === "trash", true);
   }
 
   function deleteSelection(targets = selectedReviews) {
     if (!targets.length) return;
 
-    if (recentlyDeleted) setConfirmation([...targets]);
+    if (inTrash) setConfirmation([...targets]);
     else void changeLifecycle(targets);
   }
 
   async function deletePermanently() {
-    if (!onDeletePermanently || !confirmation || busyRef.current) return;
+    if (!onDelete || !confirmation || busyRef.current) return;
     const targets = confirmation;
     setConfirmation(null);
     busyRef.current = true;
@@ -629,7 +628,7 @@ export function ReviewHome({
 
     for (const review of targets) {
       try {
-        await onDeletePermanently(review);
+        await onDelete(review);
         succeeded.push(review);
       } catch (cause) {
         failed.add(review.reviewId);
@@ -740,7 +739,7 @@ export function ReviewHome({
           deleteSelection(selectionMode ? selectedReviews : [focused!]);
         }
       } else if (!editing && selectionMode && !event.repeat) {
-        if (recentlyDeleted && !command && !event.altKey && key === "r") {
+        if (inTrash && !command && !event.altKey && key === "r") {
           event.preventDefault();
           void changeLifecycle(selectedReviews, true);
         }
@@ -778,8 +777,7 @@ export function ReviewHome({
       Number(onboarding.published)
     : 3;
 
-  const setupIncomplete =
-    !recentlyDeleted && !hasPublished.current && completed < 3;
+  const setupIncomplete = !inTrash && !hasPublished.current && completed < 3;
 
   const weeksAway =
     lastVisit > 0 ? Math.floor((now - lastVisit) / (7 * 86400000)) : 0;
@@ -946,29 +944,27 @@ export function ReviewHome({
       >
         <div {...stylex.props(homeStyles.content, styles.content)}>
           <header {...stylex.props(styles.header)}>
-            {recentlyDeleted ? (
+            {inTrash ? (
               <>
                 <div {...stylex.props(styles.deletedHeading)}>
-                  <h1 {...stylex.props(styles.deletedTitle)}>
-                    Recently deleted
-                  </h1>
+                  <h1 {...stylex.props(styles.deletedTitle)}>Trash</h1>
                   <span {...stylex.props(styles.deletedSeparator)}>
                     {trashed.length}
                   </span>
                 </div>
                 <p {...stylex.props(styles.retentionNote)}>
-                  Deleted whiteboards are removed for good after 30 days.
+                  Whiteboards in Trash are permanently deleted after 30 days.
                 </p>
               </>
             ) : (
               <h1 {...stylex.props(styles.heading)}>Whiteboards</h1>
             )}
             <div
-              hidden={recentlyDeleted}
+              hidden={inTrash}
               {...stylex.props(
                 styles.controls,
                 styles.headerControls,
-                recentlyDeleted && styles.hidden,
+                inTrash && styles.hidden,
               )}
             >
               <div ref={helpRef} {...stylex.props(styles.helpWrap)}>
@@ -1065,7 +1061,7 @@ export function ReviewHome({
                 Continue setup
               </button>
             </div>
-          ) : !recentlyDeleted && weeksAway >= 2 && !nudgeClosed ? (
+          ) : !inTrash && weeksAway >= 2 && !nudgeClosed ? (
             <div {...stylex.props(styles.notice)}>
               <span {...stylex.props(styles.noticeText)}>
                 Welcome back. It’s been {weeksAway} weeks — boards, lenses and
@@ -1148,8 +1144,8 @@ export function ReviewHome({
                   ariaLabel="Sort whiteboards"
                   value={sort}
                   options={[
-                    ...(recentlyDeleted
-                      ? [{ value: "deleted" as const, label: "Deleted" }]
+                    ...(inTrash
+                      ? [{ value: "trash" as const, label: "Trashed" }]
                       : []),
                     { value: "updated", label: "Updated" },
                     { value: "created", label: "Created" },
@@ -1187,8 +1183,8 @@ export function ReviewHome({
             <p {...stylex.props(styles.muted)}>
               {hidden
                 ? "No matching whiteboards."
-                : recentlyDeleted
-                  ? "No recently deleted whiteboards."
+                : inTrash
+                  ? "Trash is empty."
                   : "No whiteboards yet."}
             </p>
           )}
@@ -1204,7 +1200,7 @@ export function ReviewHome({
                   aria-label={group.label}
                   {...stylex.props(homeGroupMarker, styles.group)}
                 >
-                  {!recentlyDeleted && (
+                  {!inTrash && (
                     <div {...stylex.props(styles.groupHeader)}>
                       <button
                         aria-expanded={!isCollapsed(group.id)}
@@ -1322,7 +1318,7 @@ export function ReviewHome({
                             title={reviewTitle(review)}
                             {...stylex.props(
                               styles.title,
-                              Boolean(review.deletedAt) && styles.archived,
+                              Boolean(review.trashedAt) && styles.archived,
                             )}
                           >
                             <MatchedText
@@ -1337,8 +1333,7 @@ export function ReviewHome({
                         >
                           {reviewMetadataPills(review, appliedFilters)
                             .filter(
-                              (pill) =>
-                                !recentlyDeleted || pill.facet === "worktrees",
+                              (pill) => !inTrash || pill.facet === "worktrees",
                             )
                             .map((pill) => (
                               <button
@@ -1387,21 +1382,17 @@ export function ReviewHome({
                         <span
                           {...stylex.props(
                             styles.time,
-                            recentlyDeleted &&
-                              Date.parse(review.deletedAt!) +
+                            inTrash &&
+                              Date.parse(review.trashedAt!) +
                                 30 * 86400000 -
                                 now <
                                 3 * 86400000 &&
                               styles.expiring,
                           )}
-                          title={
-                            recentlyDeleted
-                              ? review.deletedAt!
-                              : review.createdAt
-                          }
+                          title={inTrash ? review.trashedAt! : review.createdAt}
                         >
-                          {recentlyDeleted
-                            ? `${Math.min(30, Math.max(0, Math.ceil((Date.parse(review.deletedAt!) + 30 * 86400000 - now) / 86400000)))} days left`
+                          {inTrash
+                            ? `${Math.min(30, Math.max(0, Math.ceil((Date.parse(review.trashedAt!) + 30 * 86400000 - now) / 86400000)))} days left`
                             : formatRelativeTime(review.createdAt, now)}
                         </span>
                       </div>
@@ -1425,13 +1416,13 @@ export function ReviewHome({
               )}
             </footer>
           )}
-          {!recentlyDeleted && trashed.length > 0 && (
+          {!inTrash && trashed.length > 0 && (
             <footer {...stylex.props(styles.footer)}>
               <button
                 {...stylex.props(styles.link)}
                 onClick={() => openDeletedView(true)}
               >
-                {trashed.length} recently deleted ›
+                {trashed.length} in Trash ›
               </button>
             </footer>
           )}
@@ -1443,25 +1434,26 @@ export function ReviewHome({
           {...stylex.props(
             styles.copyNotice,
             styles.actionNotice,
-            toast.kind !== "deleted" && styles.compactNotice,
+            toast.kind !== "trash" && styles.compactNotice,
           )}
         >
           <CheckIcon xstyle={styles.actionNoticeIcon} />
           <div
             {...stylex.props(
               styles.actionNoticeContent,
-              toast.kind !== "deleted" && styles.compactNoticeContent,
+              toast.kind !== "trash" && styles.compactNoticeContent,
             )}
           >
             <span {...stylex.props(styles.actionNoticeText)}>
               {toast.kind === "permanent"
                 ? "Permanently deleted"
-                : toast.kind === "deleted"
-                  ? "Deleted"
+                : toast.kind === "trash"
+                  ? "Moved"
                   : "Restored"}{" "}
-              {countLabel(toast.targets.length, "whiteboard")}.
+              {countLabel(toast.targets.length, "whiteboard")}
+              {toast.kind === "trash" ? " to Trash." : "."}
             </span>
-            {toast.kind === "deleted" && (
+            {toast.kind === "trash" && (
               <span {...stylex.props(styles.toastSubtitle)}>
                 You can restore them for 30 days.
               </span>
@@ -1480,9 +1472,9 @@ export function ReviewHome({
                   {...stylex.props(styles.barButton, styles.toastButton)}
                   onClick={undoToast}
                 >
-                  Undo <span {...stylex.props(styles.toastShortcut)}>⌘Z</span>
+                  Undo <Shortcut xstyle={styles.toastShortcut}>⌘Z</Shortcut>
                 </button>
-                {toast.kind === "deleted" && (
+                {toast.kind === "trash" && (
                   <button
                     {...stylex.props(styles.barButton, styles.toastButton)}
                     onClick={() => {
@@ -1490,7 +1482,7 @@ export function ReviewHome({
                       setToast(null);
                     }}
                   >
-                    View recently deleted
+                    View Trash
                   </button>
                 )}
               </div>
@@ -1520,7 +1512,7 @@ export function ReviewHome({
             id="permanent-delete-title"
             {...stylex.props(styles.confirmHeading)}
           >
-            Permanently delete {countLabel(confirmation.length, "whiteboard")}?
+            Delete {countLabel(confirmation.length, "whiteboard")}?
           </h2>
           <p {...stylex.props(styles.confirmBody)}>
             “{reviewTitle(confirmation[0])}”
@@ -1542,7 +1534,7 @@ export function ReviewHome({
               {...stylex.props(styles.control, styles.confirmDanger)}
               onClick={() => void deletePermanently()}
             >
-              Delete permanently
+              Delete
             </button>
           </div>
         </dialog>
@@ -1563,26 +1555,24 @@ export function ReviewHome({
             onClick={() => setSelected(new Set(visible.map((r) => r.reviewId)))}
           >
             Select all {visible.length}{" "}
-            <span {...stylex.props(styles.barShortcut)}>⌘A</span>
+            <Shortcut xstyle={styles.barShortcut}>⌘A</Shortcut>
           </button>
-          {recentlyDeleted && (
+          {inTrash && (
             <button
               disabled={busy || !onRestore}
               {...stylex.props(styles.barButton)}
               onClick={() => void changeLifecycle(selectedReviews, true)}
             >
-              Restore <span {...stylex.props(styles.barShortcut)}>R</span>
+              Restore <Shortcut xstyle={styles.barShortcut}>R</Shortcut>
             </button>
           )}
           <button
-            disabled={
-              busy || !(recentlyDeleted ? onDeletePermanently : onDelete)
-            }
-            {...stylex.props(styles.barButton, styles.danger)}
+            disabled={busy || !(inTrash ? onDelete : onTrash)}
+            {...stylex.props(styles.barButton, inTrash && styles.danger)}
             onClick={() => deleteSelection()}
           >
-            {recentlyDeleted ? "Delete permanently…" : "Delete"}{" "}
-            <span {...stylex.props(styles.barShortcut)}>⌘⌫</span>
+            {inTrash ? "Delete…" : "Move to Trash"}{" "}
+            <Shortcut xstyle={styles.barShortcut}>⌘⌫</Shortcut>
           </button>
           <span aria-hidden="true" {...stylex.props(styles.barDivider)} />
           <button

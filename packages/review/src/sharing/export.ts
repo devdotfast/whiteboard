@@ -68,7 +68,7 @@ export async function exportShare(input: {
     staleSources: _staleSources,
     sourceUnavailable: _sourceUnavailable,
     lastEdit: _lastEdit,
-    deletedAt: _deletedAt,
+    trashedAt: _trashedAt,
     ...snapshot
   } = structuredClone(input.store.read(input.reviewId, input.version));
 

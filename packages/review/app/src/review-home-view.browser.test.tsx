@@ -27,7 +27,7 @@ function summary(
     repositoryPath: "/repo/main",
     createdAt: "2026-10-10T12:00:00Z",
     viewedAt: null,
-    deletedAt: null,
+    trashedAt: null,
     ...extra,
   };
 }
@@ -990,7 +990,7 @@ describe("Home interactions", () => {
         summary("One"),
         summary("Two"),
         summary("Old", { ...read, createdAt: "2026-09-01" }),
-        summary("Archived", { deletedAt: "2026-10-01" }),
+        summary("Archived", { trashedAt: "2026-10-01" }),
       ]);
 
       const checkbox = container.querySelector<HTMLInputElement>(
@@ -1077,24 +1077,24 @@ describe("Home interactions", () => {
     expect(titles()).toEqual([]);
   });
   it("does not select all or delete while editing text, and removes hidden selections", async () => {
-    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+    const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       async () => {},
     );
 
-    await render([summary("One"), summary("Two")], { onDelete });
+    await render([summary("One"), summary("Two")], { onTrash });
     await select("One");
     await key("f", { metaKey: true });
     await key("a", { metaKey: true }, document.activeElement!);
     await key("Backspace", { metaKey: true }, document.activeElement!);
     expect(container.textContent).toContain("1 selected");
-    expect(onDelete).not.toHaveBeenCalled();
+    expect(onTrash).not.toHaveBeenCalled();
     await search("Two");
     expect(
       container.querySelector('[aria-label="Selected whiteboards"]'),
     ).toBeNull();
   });
   it("deletes in a batch with Undo, and restores a deleted selection", async () => {
-    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+    const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       async () => {},
     );
 
@@ -1102,27 +1102,27 @@ describe("Home interactions", () => {
       async () => {},
     );
 
-    await render([summary("One"), summary("Two")], { onDelete, onRestore });
+    await render([summary("One"), summary("Two")], { onTrash, onRestore });
     await key("a", { metaKey: true });
     await key("Backspace", { metaKey: true });
-    expect(onDelete).toHaveBeenCalledTimes(2);
+    expect(onTrash).toHaveBeenCalledTimes(2);
     expect(titles()).toEqual([]);
     await click("Undo");
     expect(onRestore).toHaveBeenCalledTimes(2);
     expect(titles()).toHaveLength(2);
-    await render([summary("Old", { deletedAt: "2026-10-01" })], {
-      onDelete,
+    await render([summary("Old", { trashedAt: "2026-10-01" })], {
+      onTrash,
       onRestore,
     });
-    await click("1 recently deleted ›");
+    await click("1 in Trash ›");
     await select("Old");
     await key("r");
     expect(onRestore).toHaveBeenCalledTimes(3);
     expect(titles()).toEqual([]);
-    await render([summary("Old", { deletedAt: "2026-10-01" })], {
-      onDelete,
+    await render([summary("Old", { trashedAt: "2026-10-01" })], {
+      onTrash,
       onRestore,
-      view: "live",
+      view: "active",
     });
     expect(titles()).toEqual(["Old"]);
   });
@@ -1144,7 +1144,7 @@ describe("Home interactions", () => {
   it("removes the whole selected batch immediately while requests are pending, without reviving setup", async () => {
     const pending: Array<() => void> = [];
 
-    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+    const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       () => new Promise<void>((resolve) => pending.push(resolve)),
     );
 
@@ -1159,85 +1159,85 @@ describe("Home interactions", () => {
       published: false,
     };
 
-    await render(boards, { onDelete, onboarding });
+    await render(boards, { onTrash, onboarding });
     await key("a", { metaKey: true });
     await key("Backspace", { metaKey: true });
     expect(titles()).toEqual([]);
     expect(container.textContent).not.toContain("Finish setting up");
-    expect(onDelete).toHaveBeenCalledTimes(1);
+    expect(onTrash).toHaveBeenCalledTimes(1);
 
     for (let index = 0; index < boards.length; index++) {
       await act(async () => pending.shift()!());
       await render(
         boards.map((board, row) =>
           row <= index
-            ? { ...board, deletedAt: new Date(now).toISOString() }
+            ? { ...board, trashedAt: new Date(now).toISOString() }
             : board,
         ),
-        { onDelete, onboarding },
+        { onTrash, onboarding },
       );
       expect(titles()).toEqual([]);
     }
 
-    expect(container.textContent).toContain("Deleted 20 whiteboards.");
-    await render([], { onDelete, onboarding });
+    expect(container.textContent).toContain("Moved 20 whiteboards to Trash.");
+    await render([], { onTrash, onboarding });
     expect(container.textContent).not.toContain("Finish setting up");
   });
   it("restores the Home view through host navigation without a duplicate back breadcrumb", async () => {
     const boards = [
       summary("Live"),
-      summary("Gone", { deletedAt: "2026-10-01" }),
+      summary("Gone", { trashedAt: "2026-10-01" }),
     ];
 
-    const onViewChange = vi.fn<(view: "live" | "deleted") => void>();
-    await render(boards, { view: "live", onViewChange });
-    await click("1 recently deleted ›");
-    expect(onViewChange).toHaveBeenCalledWith("deleted");
-    await render(boards, { view: "deleted", onViewChange });
+    const onViewChange = vi.fn<(view: "active" | "trash") => void>();
+    await render(boards, { view: "active", onViewChange });
+    await click("1 in Trash ›");
+    expect(onViewChange).toHaveBeenCalledWith("trash");
+    await render(boards, { view: "trash", onViewChange });
     expect(titles()).toEqual(["Gone"]);
     expect(
       container.querySelector('[aria-label="Back to Whiteboards"]'),
     ).toBeNull();
-    await render(boards, { view: "live", onViewChange });
+    await render(boards, { view: "active", onViewChange });
     expect(titles()).toEqual(["Live"]);
-    await render(boards, { view: "deleted", onViewChange });
+    await render(boards, { view: "trash", onViewChange });
     expect(titles()).toEqual(["Gone"]);
   });
   it("retains failed delete targets and reports partial failures", async () => {
-    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+    const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       async (r: ReviewApiSummary) => {
         if (r.title === "Two") throw new Error("Offline");
       },
     );
 
-    await render([summary("One"), summary("Two")], { onDelete });
+    await render([summary("One"), summary("Two")], { onTrash });
     await key("a", { metaKey: true });
     await key("Backspace", { metaKey: true });
     expect(titles()).toEqual(["Two"]);
     expect(container.textContent).toContain("1 selected");
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "Could not delete 1 whiteboard",
+      "Could not move 1 whiteboard to Trash",
     );
   });
   it("confirms permanent deletion with Cancel focused, ignores Enter, and has no Undo afterwards", async () => {
-    const onDeletePermanently = vi.fn<
-      (review: ReviewApiSummary) => Promise<void>
-    >(async () => {});
+    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      async () => {},
+    );
 
-    await render([summary("Gone", { deletedAt: "2026-10-10" })], {
-      onDeletePermanently,
+    await render([summary("Gone", { trashedAt: "2026-10-10" })], {
+      onDelete,
     });
-    await click("1 recently deleted ›");
+    await click("1 in Trash ›");
     await select("Gone");
     await key("Backspace", { metaKey: true });
     expect(document.activeElement).toBe(button("Cancel"));
     await key("Enter", {}, document.activeElement!);
-    expect(onDeletePermanently).not.toHaveBeenCalled();
+    expect(onDelete).not.toHaveBeenCalled();
     await click("Cancel");
     expect(container.querySelector("dialog")).toBeNull();
     await key("Backspace", { metaKey: true });
-    await click("Delete permanently");
-    expect(onDeletePermanently).toHaveBeenCalledOnce();
+    await click("Delete");
+    expect(onDelete).toHaveBeenCalledOnce();
     expect(titles()).toEqual([]);
     expect(container.textContent).toContain(
       "Permanently deleted 1 whiteboard.",
@@ -1245,14 +1245,14 @@ describe("Home interactions", () => {
     expect(container.querySelector('[aria-label="Undo"]')).toBeNull();
   });
   it("undoes only the toast batch with Cmd+Z, including Restore, and stops after dismissal", async () => {
-    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+    const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
         async () => {},
       ),
       onRestore = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
         async () => {},
       );
 
-    await render([summary("One"), summary("Two")], { onDelete, onRestore });
+    await render([summary("One"), summary("Two")], { onTrash, onRestore });
     await select("One");
     await key("Backspace", { metaKey: true });
     expect(host.ui.confirmDelete).not.toHaveBeenCalled();
@@ -1267,7 +1267,7 @@ describe("Home interactions", () => {
     expect(titles()).toEqual(["One", "Two"]);
     await select("One");
     await key("Backspace", { metaKey: true });
-    await click("View recently deleted");
+    await click("View Trash");
     expect(container.textContent).toContain("30 days left");
     expect(container.textContent).not.toContain("31 days left");
     await select("One");
@@ -1278,15 +1278,15 @@ describe("Home interactions", () => {
     await key("a", { metaKey: true });
     await key("r");
     await click("Dismiss notification");
-    const count = onDelete.mock.calls.length;
+    const count = onTrash.mock.calls.length;
     await key("z", { metaKey: true });
-    expect(onDelete).toHaveBeenCalledTimes(count);
+    expect(onTrash).toHaveBeenCalledTimes(count);
   });
   it("stops intercepting Cmd+Z when the toast expires", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
 
     try {
-      const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
         async () => {},
       );
 
@@ -1294,9 +1294,9 @@ describe("Home interactions", () => {
         async () => {},
       );
 
-      await render([summary("One")], { onDelete, onRestore });
+      await render([summary("One")], { onTrash, onRestore });
       await key("Backspace", { metaKey: true }, button("Open One"));
-      expect(onDelete).toHaveBeenCalledOnce();
+      expect(onTrash).toHaveBeenCalledOnce();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(8001);
       });
@@ -1310,32 +1310,32 @@ describe("Home interactions", () => {
   it("restores failed deletions and keeps successful ones hidden until catalog acknowledgement", async () => {
     const deletion = Promise.withResolvers<void>();
 
-    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+    const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       () => deletion.promise,
     );
 
     const reviews = [summary("One")];
-    await render(reviews, { onDelete });
+    await render(reviews, { onTrash });
     await select("One");
     await key("Backspace", { metaKey: true });
     expect(titles()).toEqual([]);
     await act(async () => deletion.reject(new Error("Offline")));
     expect(titles()).toEqual(["One"]);
     expect(container.querySelector('[role="alert"]')?.textContent).toContain(
-      "Could not delete",
+      "Could not move 1 whiteboard to Trash",
     );
 
     const success = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       async () => {},
     );
 
-    await render(reviews, { onDelete: success });
+    await render(reviews, { onTrash: success });
     await key("Backspace", { metaKey: true });
     expect(titles()).toEqual([]);
-    await render([...reviews], { onDelete: success });
+    await render([...reviews], { onTrash: success });
     expect(titles()).toEqual([]);
-    await render([], { onDelete: success });
-    await render(reviews, { onDelete: success });
+    await render([], { onTrash: success });
+    await render(reviews, { onTrash: success });
     expect(titles()).toEqual(["One"]);
   });
   it("shows setup over the returning-user nudge and keeps the refresher reachable", async () => {

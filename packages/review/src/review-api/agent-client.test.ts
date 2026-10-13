@@ -36,13 +36,15 @@ const client = new ReviewApiClient(
 
 afterEach(async () => {
   // The scratchpad cannot be deleted; every review can.
-  for (const { reviewId, kind, deletedAt } of store.list()) {
+  for (const { reviewId, kind, trashedAt } of store.list()) {
     if (kind === "scratchpad") continue;
 
-    if (!deletedAt)
-      await store.execute({ operation: { type: "delete", reviewId } });
+    if (!trashedAt)
+      await store.execute({
+        operation: { type: "lifecycle", state: "trash", reviewId },
+      });
     await store.execute({
-      operation: { type: "delete_permanently", reviewId },
+      operation: { type: "delete", reviewId },
     });
   }
 });
