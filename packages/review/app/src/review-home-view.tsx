@@ -1242,20 +1242,18 @@ export function ReviewHome({
                               : `${count} of ${group.reviews.length} selected`}
                           </span>
                         )}
-                        <button
-                          {...stylex.props(
-                            styles.control,
-                            styles.compactControl,
-                            styles.groupSelect,
-                          )}
-                          onClick={() => selectGroup(group.reviews)}
-                        >
-                          {count === group.reviews.length
-                            ? "Deselect"
-                            : count > 0
-                              ? "Select all"
-                              : `Select all ${group.reviews.length}`}
-                        </button>
+                        <SelectionCheckbox
+                          label={`Select ${group.label}`}
+                          title="Select group"
+                          checked={
+                            count === group.reviews.length
+                              ? true
+                              : count > 0 && "mixed"
+                          }
+                          hidden={count === 0}
+                          group
+                          onToggle={() => selectGroup(group.reviews)}
+                        />
                       </div>
                     </div>
                   )}
@@ -1573,14 +1571,6 @@ export function ReviewHome({
           <span {...stylex.props(styles.barCount)}>
             {selectedReviews.length} selected
           </span>
-          <button
-            disabled={busy}
-            {...stylex.props(styles.barButton)}
-            onClick={() => setSelected(new Set(visible.map((r) => r.reviewId)))}
-          >
-            Select all {visible.length}{" "}
-            <Shortcut xstyle={styles.barShortcut}>⌘A</Shortcut>
-          </button>
           {inTrash && (
             <button
               disabled={busy || !onRestore}
@@ -1846,24 +1836,32 @@ function Chip({
 
 function SelectionCheckbox({
   label,
+  title = "Select  x",
   checked,
   hidden,
+  group,
   onToggle,
 }: {
   label: string;
-  checked: boolean;
+  title?: string;
+  checked: boolean | "mixed";
   hidden: boolean;
+  group?: boolean;
   onToggle(range: boolean): void;
 }) {
   return (
     <span
-      {...stylex.props(styles.checkboxSlot, hidden && styles.hiddenCheck)}
-      title="Select  x"
+      {...stylex.props(
+        styles.checkboxSlot,
+        hidden && (group ? styles.hiddenGroupCheck : styles.hiddenCheck),
+      )}
+      title={title}
     >
       <input
         type="checkbox"
         aria-label={label}
-        checked={checked}
+        aria-checked={checked}
+        checked={checked === true}
         {...stylex.props(styles.checkbox)}
         onChange={() => {}}
         onClick={(event) => {
@@ -1877,7 +1875,9 @@ function SelectionCheckbox({
       >
         {checked && (
           <svg viewBox="0 0 10 10" {...stylex.props(styles.checkGlyph)}>
-            <path d="M2 5.2 4.2 7.4 8 3.2" />
+            <path
+              d={checked === "mixed" ? "M2 5 H8" : "M2 5.2 4.2 7.4 8 3.2"}
+            />
           </svg>
         )}
       </span>

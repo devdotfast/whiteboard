@@ -564,7 +564,7 @@ describe("Home interactions", () => {
     expect(container.textContent).toContain("3 selected");
     await select("Two");
     expect(container.textContent).toContain("2 of 3 selected");
-    await click("Select all 1");
+    await select("Older than 7 days");
     expect(container.textContent).toContain("All 1 selected");
     expect(container.textContent).toContain("3 selected");
     await openFilters();
@@ -679,7 +679,7 @@ describe("Home interactions", () => {
     await render([summary("One"), summary("Two")]);
     await select("One");
     expect(container.textContent).toContain("1 of 2 selected");
-    await click("Select all");
+    await select("Unread");
     expect(container.textContent).toContain("All 2 selected");
     await act(async () =>
       container
@@ -689,7 +689,7 @@ describe("Home interactions", () => {
         .click(),
     );
     expect(titles()).toEqual([]);
-    await click("Deselect");
+    await select("Unread");
     expect(
       container.querySelector('[aria-label="Selected whiteboards"]'),
     ).toBeNull();

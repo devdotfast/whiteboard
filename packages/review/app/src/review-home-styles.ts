@@ -449,13 +449,6 @@ export const styles = stylex.create({
     fontSize: fontSize.small,
     color: tokens.inkMuted,
   },
-  groupSelect: {
-    opacity: {
-      default: 0,
-      [stylex.when.ancestor(":hover", homeGroupMarker)]: 1,
-      [stylex.when.ancestor(":focus-within", homeGroupMarker)]: 1,
-    },
-  },
   dot: {
     width: "7px",
     height: "7px",
@@ -574,6 +567,13 @@ export const styles = stylex.create({
     opacity: {
       default: 0,
       [stylex.when.ancestor(":hover", homeRowMarker)]: 1,
+      ":has(input:focus-visible)": 1,
+    },
+  },
+  hiddenGroupCheck: {
+    opacity: {
+      default: 0,
+      [stylex.when.ancestor(":hover", homeGroupMarker)]: 1,
       ":has(input:focus-visible)": 1,
     },
   },
