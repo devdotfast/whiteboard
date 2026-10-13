@@ -46,6 +46,9 @@ compare their trees. A...B compares merge-base(A,B) to B; A..B compares A to B.
 **--help**
 : List the supported options. Unsupported Git flags are rejected.
 
+**--agent-help**
+: Print agent-facing help with how to use diffr (flags, writing plugins, etc.). Not for human readers.
+
 # STREAMING
 
 --format ndjson emits start, file, file_error and complete records to stdout.

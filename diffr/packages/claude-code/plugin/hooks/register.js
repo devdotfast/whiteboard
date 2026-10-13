@@ -25343,7 +25343,7 @@ function register(on, options) {
     });
     await $.tool.register({
       name: "open",
-      description: `Open diffr's review pane for the user, showing a high-quality diff viewer based on 'diffr'. Use it to show them changes you made or want them to review, rather than describing the diff. The user can send you snippets of code that they're looking at via 'highlight + pressing enter'. Args are the same as you would pass to the 'git diff' CLI command, as a list (e.g. ["HEAD~1"], ["main..HEAD", "--", "src"]). For more information on using and customizing diffr, run \`diffr --help\` in the shell.`,
+      description: `Open diffr's review pane for the user, showing a high-quality diff viewer based on 'diffr'. Use it to show them changes you made or want them to review, rather than describing the diff. The user can send you snippets of code that they're looking at via 'highlight + pressing enter'. Args are the same as you would pass to the 'git diff' CLI command, as a list (e.g. ["HEAD~1"], ["main..HEAD", "--", "src"]). For more information on using and customizing diffr, run \`diffr --agent-help\` in the shell.`,
       inputSchema: {
         type: "object",
         properties: { args: { type: "array", items: { type: "string" }, description: "diffr's arguments, one per item" } }

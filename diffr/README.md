@@ -69,7 +69,7 @@ Windows x64: download `diffr-<version>-<target>.tar.gz` from [Whiteboard Release
 
 ## Configuration
 
-`diffr`'s config page is accessible via `diffr config`. Your agent can also customize it for you; just ask it to do so (there are instructions for your agent under `diffr --help`).
+`diffr`'s config page is accessible via `diffr config`. Your agent can also customize it for you; just ask it to do so (there are instructions for your agent under `diffr --agent-help`).
 
 To set up pseudocode summarization (or any other customization), you can:
 

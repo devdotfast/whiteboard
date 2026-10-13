@@ -50,6 +50,9 @@ Ordinary context padding (default 3).
 .TP
 .B --help
 List supported options. Unsupported Git flags are rejected.
+.TP
+.B --agent-help
+Print agent-facing help with how to use diffr (flags, writing plugins, etc.). Not for human readers.
 .SH COMMANDS
 A command is a command only as the first argument; anywhere else the word is a
 revision or a path.
@@ -111,4 +114,4 @@ When a person asks you to change how diffr shows their diffs, first set a
 field on a bundled plugin (diffr config schema lists them); only otherwise,
 write a WASM plugin. The full guide, with both approaches, prints at the end
 of
-.BR "diffr --help" .
+.BR "diffr --agent-help" .
