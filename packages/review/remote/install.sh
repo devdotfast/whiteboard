@@ -351,7 +351,7 @@ install() {
 		fail cannot unpack the tarball
 	}
 	rm -f "$f"
-	[ -x "$p/bin/node" ] && [ -f "$p/dist/cli.js" ] && [ -x "$p/whiteboard" ] || {
+	{ [ -x "$p/bin/node" ] && [ -f "$p/dist/cli.js" ] && [ -x "$p/whiteboard" ]; } || {
 		rm -rf "$p"
 		fail the tarball holds no whiteboard
 	}
@@ -435,7 +435,7 @@ case "${1-}" in
 probe) shift && probe "$@" ;;
 uninstall) uninstall ;;
 release)
-	[ "${2-}" = --token ] && [ -n "${3-}" ] || fail "release needs --token HEX"
+	{ [ "${2-}" = --token ] && [ -n "${3-}" ]; } || fail "release needs --token HEX"
 	token=$3
 	release
 	;;
