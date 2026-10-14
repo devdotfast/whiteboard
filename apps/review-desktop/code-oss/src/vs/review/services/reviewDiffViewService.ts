@@ -24,7 +24,7 @@ import { IStorageService } from "../../platform/storage/common/storage.js";
 import { ReviewDiffViewStateStorage } from "./reviewDiffViewState.js";
 import { IConfigurationService } from "../../platform/configuration/common/configuration.js";
 import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
-import { REVIEW_STRUCTURAL_DIFF_SETTING } from "../common/reviewConfigurationDefaults.js";
+import { REVIEW_PEEK_SIDE_BY_SIDE_SETTING, REVIEW_STRUCTURAL_DIFF_SETTING } from "../common/reviewConfigurationDefaults.js";
 import type {
 	ReviewCommitScope,
 	ReviewDiffLens,
@@ -61,6 +61,7 @@ export class ReviewDiffViewService extends Disposable {
 	comparisonGeneration = 0;
 	private readonly sessions = new Map<string, { session: StructuralDiffSession; revision?: string }>();
 	readonly diffLayout: ReviewDiffLayoutSetting;
+	private readonly peekLayout: ReviewDiffLayoutSetting;
 	/**
 	 * Scroll and expansion state per session document. The Diff view is a
 	 * conditionally rendered React sibling: a toggle away disposes the widget,
@@ -80,6 +81,7 @@ export class ReviewDiffViewService extends Disposable {
 			for (const handle of this.handles) handle.captureViewState();
 		}));
 		this.diffLayout = this._register(instantiationService.createInstance(ReviewDiffLayoutSetting, "diffEditor.renderSideBySide"));
+		this.peekLayout = this._register(instantiationService.createInstance(ReviewDiffLayoutSetting, REVIEW_PEEK_SIDE_BY_SIDE_SETTING));
 	}
 
 	get structuralRenderingEnabled(): boolean {
@@ -110,7 +112,7 @@ export class ReviewDiffViewService extends Disposable {
 			this.instantiationService,
 			this.inlineEditors,
 			this.overflowWidgetsDomNode,
-			this.diffLayout,
+			spec.document ? this.peekLayout : this.diffLayout,
 			this.viewStates,
 			() => this.handles.delete(handle),
 			source,

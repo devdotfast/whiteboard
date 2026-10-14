@@ -37,6 +37,7 @@ export const REVIEW_CTRL_TAB_CHOICES = ['recent', 'next'] as const;
 export const REVIEW_READY_NOTIFICATION_SETTING = 'review.notifications.reviewReady';
 export const REVIEW_READY_NOTIFICATION_CHOICES = ['notificationAndBadge', 'notification', 'off'] as const;
 export const REVIEW_DOCUMENT_WIDTH_SETTING = 'review.documentWidth';
+export const REVIEW_PEEK_SIDE_BY_SIDE_SETTING = 'review.peeks.renderSideBySide';
 export const REVIEW_DOCUMENT_WIDTH_CHOICES = ['standard', 'wide', 'full'] as const;
 export const EDITOR_FONT_SIZE_SETTING = 'editor.fontSize';
 
