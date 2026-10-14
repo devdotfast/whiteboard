@@ -9,6 +9,7 @@ import {
 } from "@review/review-api/document";
 import type { LocalReviewData } from "@review/review-api/local-data";
 import type { Snapshot } from "@review/review-api/store";
+import { VersionCache } from "@review/review-api/version-cache";
 import type { NormalizedSoftwareModel } from "@review/software-map-model";
 import * as stylex from "@stylexjs/stylex";
 import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -61,6 +62,28 @@ export interface ApiDocumentData {
   >;
 }
 
+// Reopening a board parses its Markdown again only if the document changed.
+// The key includes a hash of the document: serializing and hashing it takes
+// 1–2 ms on a 300 KB board.
+const derivations = new VersionCache(
+  (snapshot: Snapshot) => ({
+    headings: apiHeadingIds(snapshot.document),
+    references: selectionReferences(snapshot.document, { tolerant: true }),
+    resources: resourceReferences(snapshot.document),
+  }),
+  { capacity: 32, key: documentKey },
+);
+
+function documentKey(snapshot: Snapshot): string {
+  const text = JSON.stringify(snapshot.document);
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < text.length; index++)
+    hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193);
+
+  return `${snapshot.reviewId}\0${snapshot.version}\0${text.length}\0${hash >>> 0}`;
+}
+
 /** Cache only immutable resources and commit-addressed quotes, for this canvas. */
 export function createDocumentLoader(client: ReviewApiClient) {
   const cache = new Map<string, Promise<unknown>>();
@@ -89,9 +112,11 @@ export function createDocumentLoader(client: ReviewApiClient) {
       cache.clear();
     },
     async load(snapshot: Snapshot): Promise<ApiDocumentData> {
+      const { headings, references, resources } = derivations.get(snapshot);
+
       const data: ApiDocumentData = {
         snapshot,
-        headings: apiHeadingIds(snapshot.document),
+        headings,
         commits:
           snapshot.sourceUnavailable || !snapshot.pins
             ? []
@@ -106,10 +131,7 @@ export function createDocumentLoader(client: ReviewApiClient) {
         maps: new Map(),
       };
 
-      for (const { id, source, label } of selectionReferences(
-        snapshot.document,
-        { tolerant: true },
-      )) {
+      for (const { id, source, label } of references) {
         if (snapshot.staleSources?.includes(id)) continue;
         data.anchors.set(
           id,
@@ -122,7 +144,7 @@ export function createDocumentLoader(client: ReviewApiClient) {
       }
 
       await Promise.all(
-        resourceReferences(snapshot.document).map(async (node) => {
+        resources.map(async (node) => {
           if (node.type === "image") {
             const url = await once(`image:${node.assetId}`, async () => {
               const blob = await (
