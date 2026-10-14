@@ -49,6 +49,7 @@ import {
   elements,
   explicitPins,
   isUnit,
+  pinnedRepositoryIds,
   resourceReferences,
   reviewTargetSchema,
   sourceReferences,
@@ -332,6 +333,87 @@ export class ReviewStore {
 
   private refreshPending: Promise<void> | undefined;
 
+  /** What the last refresh saw of each review. A live worktree's snapshot is
+   * kept, since every pass projects it again. */
+  private readonly refreshed = new Map<
+    string,
+    {
+      state: string;
+      repositories: Set<string>;
+      live?: Snapshot;
+    }
+  >();
+  private availableRepositories?: Set<string>;
+
+  /** Reviews whose source may have moved since the last pass: every live
+   * worktree, and any other review that is new, edited, restored from trash or
+   * reads from a repository that appeared or went away. */
+  private *reviewsToRefresh(): Generator<Snapshot> {
+    const available = new Set(
+      this.repositories()
+        .filter((repository) => existsSync(repository.path))
+        .map((repository) => repository.id),
+    );
+
+    const previous = this.availableRepositories;
+    this.availableRepositories = available;
+
+    const flipped = (id: string) =>
+      !previous || previous.has(id) !== available.has(id);
+
+    const rows = this.db
+      .prepare(
+        "SELECT reviews.id, reviews.version, review_attention.deleted_at FROM reviews LEFT JOIN review_attention ON review_attention.review_id=reviews.id",
+      )
+      .all();
+
+    const present = new Set<string>();
+
+    for (const row of rows) {
+      const reviewId = String(row.id);
+      const version = Number(row.version);
+      const state = `${version}\0${row.deleted_at ?? ""}`;
+      present.add(reviewId);
+
+      let seen = this.refreshed.get(reviewId);
+
+      if (seen?.state === state) {
+        if (seen.live) yield seen.live;
+        else if ([...seen.repositories].some(flipped))
+          yield this.read(reviewId, version);
+        continue;
+      }
+
+      const snapshot = row.deleted_at
+        ? undefined
+        : this.read(reviewId, version);
+
+      // Trash stays as it was stored.
+      if (!snapshot) {
+        this.refreshed.set(reviewId, { state, repositories: new Set() });
+        continue;
+      }
+
+      const live = snapshot.target?.kind === "worktree";
+
+      seen = {
+        state,
+        repositories: live
+          ? new Set()
+          : new Set([
+              ...(snapshot.pins ? [snapshot.pins.repositoryId] : []),
+              ...pinnedRepositoryIds(snapshot.document),
+            ]),
+        live: live ? snapshot : undefined,
+      };
+      this.refreshed.set(reviewId, seen);
+      yield snapshot;
+    }
+
+    for (const reviewId of this.refreshed.keys())
+      if (!present.has(reviewId)) this.refreshed.delete(reviewId);
+  }
+
   /** Refresh source state without writing authored document versions. Serialized with edits. */
   refreshWorktrees(): Promise<void> {
     if (this.closing || !this.providers.resolveTarget) return Promise.resolve();
@@ -339,12 +421,17 @@ export class ReviewStore {
     if (this.refreshPending) return this.refreshPending;
 
     const run = this.pending.then(async () => {
-      for (const summary of this.list()) {
-        if (summary.trashedAt) continue;
-        const snapshot = this.read(summary.reviewId, summary.version);
+      let slice = performance.now();
+
+      for (const snapshot of this.reviewsToRefresh()) {
+        // The first pass reads every review; let requests in between.
+        if (performance.now() - slice > 16) {
+          await new Promise((resolve) => setImmediate(resolve));
+          slice = performance.now();
+        }
 
         try {
-          const live = this.liveSources.get(summary.reviewId);
+          const live = this.liveSources.get(snapshot.reviewId);
           const last = live?.version === snapshot.version ? live : snapshot;
           const previous = last.pins;
           const projected = await this.projectLiveSource(snapshot, last);

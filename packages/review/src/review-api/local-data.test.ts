@@ -3686,6 +3686,53 @@ it("answers a source read with 404 while the checkout is gone", async () => {
   );
 });
 
+it("refreshes a commit-pinned review only once it changes or a repository it reads comes or goes", async () => {
+  const pinned = await local.store.execute(
+    command({
+      type: "create",
+      title: "Pinned",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  const live = await local.store.execute(
+    command({
+      type: "create",
+      title: "Live",
+      target: { kind: "worktree", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  await local.store.refreshWorktrees();
+  const checked = vi.spyOn(local.data, "sourcePins");
+  const resolved = vi.spyOn(local.data, "resolveTarget");
+
+  const visits = (reviewId: string) =>
+    checked.mock.calls.filter(([snapshot]) => snapshot.reviewId === reviewId)
+      .length;
+
+  for (let pass = 0; pass < 3; pass++) await local.store.refreshWorktrees();
+  expect(visits(pinned.reviewId)).toBe(0);
+  // Every pass still follows the live checkout.
+  expect(resolved).toHaveBeenCalledTimes(3);
+
+  await insert(pinned.reviewId, { type: "markdown", markdown: "Edited." });
+  await local.store.refreshWorktrees();
+  await local.store.refreshWorktrees();
+  expect(visits(pinned.reviewId)).toBe(1);
+
+  const moved = `${repository}-moved`;
+  renameSync(repository, moved);
+  await local.store.refreshWorktrees();
+  expect(visits(pinned.reviewId)).toBe(2);
+  expect(local.store.read(pinned.reviewId).sourceUnavailable).toBe(true);
+  expect(local.store.read(live.reviewId).sourceUnavailable).toBe(true);
+
+  renameSync(moved, repository);
+  await local.store.refreshWorktrees();
+  expect(local.store.read(pinned.reviewId).sourceUnavailable).toBeUndefined();
+});
+
 it("marks a worktree review unavailable while its checkout is gone", async () => {
   const review = await local.store.execute(
     command({
