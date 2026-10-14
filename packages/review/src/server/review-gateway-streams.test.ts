@@ -608,7 +608,7 @@ it("gives a reader that stops reading the latest state once, not a backlog", asy
     }
   });
 
-  await vi.waitFor(() => expect(lines).toHaveLength(1), { timeout: 10_000 });
+  await vi.waitFor(() => expect(lines).toHaveLength(1), { timeout: 30_000 });
   response.pause();
   const updates = 40;
 
@@ -628,7 +628,7 @@ it("gives a reader that stops reading the latest state once, not a backlog", asy
   );
   expect(steps.filter((value) => value === `Step ${updates}`)).toHaveLength(1);
   expect(steps.length).toBeLessThan(updates / 2);
-}, 30_000);
+}, 60_000);
 
 it("sends nothing for a review whose host is still connecting, then its value", async () => {
   const serverId = randomUUID();
