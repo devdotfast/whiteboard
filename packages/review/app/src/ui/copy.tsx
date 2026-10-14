@@ -1,9 +1,7 @@
 import { IconButton } from "@canvas/ui/button";
+import { useUiTooltip } from "@canvas/ui/host";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, type ReactNode, useEffect, useState } from "react";
-
-import { CheckIcon, CopyIcon as CopyGlyph } from "./icons";
-import { useTooltip } from "./use-tooltip";
 
 export async function copyText(text: string): Promise<boolean> {
   try {
@@ -50,26 +48,6 @@ export async function copyText(text: string): Promise<boolean> {
   return copied;
 }
 
-/** The prompt cards' copy glyph. */
-export function CopyIcon() {
-  return (
-    <svg {...stylex.props(styles.icon)} viewBox="0 0 12 12" aria-hidden="true">
-      <rect
-        {...stylex.props(styles.stroke)}
-        x="3.5"
-        y="3.5"
-        width="7"
-        height="7"
-        rx="1"
-      />
-      <path
-        {...stylex.props(styles.stroke)}
-        d="M8.5 3.5v-1a1 1 0 0 0-1-1h-5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1"
-      />
-    </svg>
-  );
-}
-
 const COPIED_FOR_MS = 1200;
 
 function useCopy(text: string) {
@@ -91,6 +69,35 @@ function useCopy(text: string) {
   return [copied, copy] as const;
 }
 
+export function CopyIcon({
+  xstyle,
+}: { xstyle?: stylex.StyleXStyles } = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <rect x="9" y="9" width="11" height="11" rx="2" />
+      <path d="M5 15V6a2 2 0 0 1 2-2h9" />
+    </svg>
+  );
+}
+
+function CheckGlyph({ xstyle }: { xstyle: stylex.StyleXStyles }) {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <path d="M5 12.5l4.5 4.5L19 7" />
+    </svg>
+  );
+}
+
 export function CopyableText({
   text,
   children = text,
@@ -100,7 +107,7 @@ export function CopyableText({
 }): ReactElement {
   const [copied, copy] = useCopy(text);
 
-  const tooltip = useTooltip<HTMLSpanElement>(
+  const tooltip = useUiTooltip<HTMLSpanElement>(
     copied ? "Copied" : "Click to copy",
     { instant: true },
   );
@@ -141,7 +148,7 @@ export function CopyButton({
   iconStyle: stylex.StyleXStyles;
 }): ReactElement {
   const [copied, copy] = useCopy(text);
-  const tooltip = useTooltip(label);
+  const tooltip = useUiTooltip(label);
 
   return (
     <IconButton
@@ -153,9 +160,9 @@ export function CopyButton({
       onClick={copy}
     >
       {copied ? (
-        <CheckIcon xstyle={iconStyle} />
+        <CheckGlyph xstyle={iconStyle} />
       ) : (
-        <CopyGlyph xstyle={iconStyle} />
+        <CopyIcon xstyle={iconStyle} />
       )}
     </IconButton>
   );
@@ -168,14 +175,12 @@ const styles = stylex.create({
     textUnderlineOffset: "2px",
   },
   icon: {
-    width: "12px",
-    height: "12px",
-  },
-  stroke: {
+    width: "15px",
+    height: "15px",
     fill: "none",
     stroke: "currentColor",
     strokeLinecap: "round",
     strokeLinejoin: "round",
-    strokeWidth: "1.2",
+    strokeWidth: "1.7px",
   },
 });

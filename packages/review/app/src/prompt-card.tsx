@@ -1,7 +1,7 @@
+import { CopyIcon, copyText } from "@canvas/ui/copy";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useRef, useState } from "react";
 
-import { CopyIcon, copyText } from "./copy-text";
 import { promptStyles } from "./prompt-styles";
 import { SegmentedControl } from "./ui/segmented";
 
@@ -94,7 +94,7 @@ export function PromptCard() {
           aria-label={copied ? "Prompt copied" : "Copy prompt"}
           onClick={copyPrompt}
         >
-          <CopyIcon />
+          <CopyIcon xstyle={promptStyles.copyIcon} />
           {copied ? "Copied" : "Copy prompt"}
         </button>
       </div>

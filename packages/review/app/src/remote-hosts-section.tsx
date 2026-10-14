@@ -1,5 +1,6 @@
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
+import { CopyableText } from "@canvas/ui/copy";
 import { TextField } from "@canvas/ui/text-field";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
@@ -10,7 +11,6 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useRef, useState } from "react";
 
-import { CopyableText } from "./copy-text";
 import {
   ACTION_WORDS,
   useHostAction,

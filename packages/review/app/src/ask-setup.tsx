@@ -1,3 +1,4 @@
+import { CopyButton, CopyIcon } from "@canvas/ui/copy";
 import type { AgentSelection } from "@review/agent-selection";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
@@ -7,9 +8,7 @@ import { AskSelectionQuote } from "./ask-panel-shared";
 import { askPanelStyles } from "./ask-styles";
 import { controlStyles } from "./controls-styles";
 import { copyAgentContext } from "./copy-agent-context";
-import { CopyButton } from "./copy-text";
 import { useReviewSession } from "./host/review-session";
-import { CopyIcon } from "./icons";
 import { useNotify } from "./notify";
 import { fontSize, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";

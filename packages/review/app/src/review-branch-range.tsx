@@ -1,8 +1,8 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
+import { copyText } from "@canvas/ui/copy";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 
-import { copyText } from "./copy-text";
 import { tokens } from "./tokens.stylex";
 import { useTooltip } from "./use-tooltip";
 

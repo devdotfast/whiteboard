@@ -1,5 +1,6 @@
 import { fontSize } from "@canvas/scale.stylex";
 import { EmptyState } from "@canvas/ui/empty-state";
+import { UiHostProvider } from "@canvas/ui/host";
 import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCanvasContent,
@@ -21,6 +22,7 @@ import { SettingsPage } from "./settings-page";
 import { shellStyles } from "./shell-styles";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
+import { useTooltip } from "./use-tooltip";
 
 import "./styles.css";
 
@@ -272,7 +274,9 @@ export function mountReviewCanvas(
     root.render(
       <ReviewContainerProvider container={container}>
         <CanvasUiContext.Provider value={ui}>
-          <ReviewCanvas content={content} findHost={findHost} />
+          <UiHostProvider useTooltip={useTooltip}>
+            <ReviewCanvas content={content} findHost={findHost} />
+          </UiHostProvider>
         </CanvasUiContext.Provider>
       </ReviewContainerProvider>,
     );

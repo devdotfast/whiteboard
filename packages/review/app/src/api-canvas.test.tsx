@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import * as clipboard from "@canvas/ui/copy";
 import type {
   JsonObject,
   ReviewApiSummary,
@@ -23,7 +24,6 @@ import { Hono } from "hono";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import * as clipboard from "./copy-text";
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { createSequenceTourEntry, sequenceView } from "./diagrams";
 import { testReviewBridge } from "./review-session-test-utils";

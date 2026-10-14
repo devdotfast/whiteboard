@@ -1,5 +1,6 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
+import { CopyIcon, copyText } from "@canvas/ui/copy";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
   type ReviewCanvasInstallContent,
@@ -12,7 +13,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { AGENT_LOGOS } from "./agent-logos";
 import { cliInstallReady } from "./cli-install-status";
-import { CopyIcon, copyText } from "./copy-text";
 import { DrawnCheckIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { OptionMenu } from "./option-menu";
@@ -213,7 +213,11 @@ export function ConnectCard({
               aria-label={`${copied ? "Copied" : "Copy"} ${noun} for ${agent}`}
               onClick={() => copy(text)}
             >
-              {copied ? <DrawnCheckIcon /> : <CopyIcon />}
+              {copied ? (
+                <DrawnCheckIcon />
+              ) : (
+                <CopyIcon xstyle={promptStyles.copyIcon} />
+              )}
               {copied
                 ? "Copied"
                 : `Copy ${mode === "prompt" ? "prompt" : "command"}`}

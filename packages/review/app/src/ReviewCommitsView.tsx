@@ -1,5 +1,6 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
+import { CopyButton } from "@canvas/ui/copy";
 import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCommitSummary,
@@ -11,7 +12,6 @@ import { useMemo, useState } from "react";
 
 import { canvasQueryKeys } from "./canvas-query";
 import { controlStyles } from "./controls-styles";
-import { CopyButton } from "./copy-text";
 import { DiffCount } from "./diff-count";
 import { FileMark } from "./file-mark";
 import { countLabel } from "./format";

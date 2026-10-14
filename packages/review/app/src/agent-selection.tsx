@@ -1,3 +1,4 @@
+import { CopyIcon } from "@canvas/ui/copy";
 import type { AgentSelection } from "@review/agent-selection";
 import type { AskAgentId } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
@@ -22,7 +23,7 @@ import { askAnchor } from "./ask-anchor";
 import { controlStyles } from "./controls-styles";
 import { copyAgentContext } from "./copy-agent-context";
 import { useReviewSession } from "./host/review-session";
-import { ChatIcon, ChevronDownIcon, CopyIcon } from "./icons";
+import { ChatIcon, ChevronDownIcon } from "./icons";
 import { useNotify } from "./notify";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useOptionalReviewPanelStore } from "./review-panel";

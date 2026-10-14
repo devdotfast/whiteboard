@@ -1,5 +1,6 @@
 import { layer } from "@canvas/scale.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
+import { copyText } from "@canvas/ui/copy";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { TextField } from "@canvas/ui/text-field";
 import {
@@ -17,7 +18,6 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 import { canvasQueryKeys } from "./canvas-query";
 import { controlStyles } from "./controls-styles";
-import { copyText } from "./copy-text";
 import { useOptionalReviewSession } from "./host/review-session";
 import { ShareIcon } from "./icons";
 import { topbarActionsMarker } from "./markers.stylex";

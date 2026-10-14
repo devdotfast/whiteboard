@@ -1,4 +1,5 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { CopyButton } from "@canvas/ui/copy";
 import {
   type ShjLanguage,
   type ShjToken,
@@ -12,7 +13,6 @@ import {
   useState,
 } from "react";
 
-import { CopyButton } from "./copy-text";
 import { DiagramHeader } from "./diagram-header";
 import { drawStyles } from "./draw-styles";
 import { documentMarker } from "./markers.stylex";

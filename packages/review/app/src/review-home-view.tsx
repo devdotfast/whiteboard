@@ -1,3 +1,4 @@
+import { CopyableText, copyText } from "@canvas/ui/copy";
 import {
   REVIEW_DISCORD_URL,
   type ReviewApiSummary,
@@ -21,7 +22,6 @@ import {
 } from "react";
 
 import { useHostActionButton } from "./connection-chip";
-import { CopyableText, copyText } from "./copy-text";
 import { countLabel, formatRelativeTime } from "./format";
 import { homeStyles } from "./home-styles";
 import { CanvasUiContext, useCanvasMenu } from "./host/canvas-ui";

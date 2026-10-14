@@ -48,6 +48,11 @@ export const promptStyles = stylex.create({
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "2px" },
   },
+  copyIcon: {
+    width: "12px",
+    height: "12px",
+    strokeWidth: "2.4px",
+  },
   error: {
     margin: "10px 0 0",
     color: tokens.changeRemoved,

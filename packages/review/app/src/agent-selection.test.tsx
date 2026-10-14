@@ -1,10 +1,10 @@
+import * as clipboard from "@canvas/ui/copy";
 // @vitest-environment jsdom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 
 import { AgentSelectionProvider, useAgentSelection } from "./agent-selection";
-import * as clipboard from "./copy-text";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
 
