@@ -16,9 +16,6 @@ const VERSION_TIMEOUT_MS = 3_000;
 
 const INSTALL_TIMEOUT_MS = 35_000;
 
-const SHUTDOWN_WITHOUT_DELAY_ENV =
-  "DEV_FAST_REVIEW_REMOTE_SHUTDOWN_WITHOUT_DELAY";
-
 const GRACE_ENV = "DEV_FAST_REVIEW_REMOTE_RECONNECTION_GRACE_SECONDS";
 
 const PENDING = {
@@ -376,9 +373,6 @@ async function startServer(
       extensionsDir,
       "--accept-server-license-terms",
       ...idleArgs(env),
-      ...(env[SHUTDOWN_WITHOUT_DELAY_ENV] === "1"
-        ? ["--remote-auto-shutdown-without-delay"]
-        : []),
     ],
     cwd: serverDataDir,
     env,
