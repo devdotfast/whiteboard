@@ -10,6 +10,7 @@ import { ThemeIcon } from "../../base/common/themables.js";
 import { MouseTargetType, type ICodeEditor, type IOverlayWidget, type IOverlayWidgetPosition, type IPartialEditorMouseEvent } from "../../editor/browser/editorBrowser.js";
 import { EditorOption } from "../../editor/common/config/editorOptions.js";
 import { CursorColumns } from "../../editor/common/core/cursorColumns.js";
+import { OffsetRange } from "../../editor/common/core/ranges/offsetRange.js";
 import { Range } from "../../editor/common/core/range.js";
 import { InjectedTextCursorStops, type IModelDeltaDecoration, type ITextModel } from "../../editor/common/model.js";
 import { bandDetail, structuralFoldables, type StructuralFoldable, type StructuralTextDiff } from "../common/reviewStructuralDiff.js";
@@ -98,6 +99,7 @@ export class StructuralFoldControls extends Disposable {
 			}
 		}));
 		this._register(editor.onDidChangeModel(() => { this.hovered = undefined; this.render(); }));
+		this._register(editor.onDidChangeModelTokens(() => this.render()));
 		// These move lines without changing scope state.
 		this._register(editor.onDidContentSizeChange(() => this.layoutViewport()));
 		this._register(editor.onDidScrollChange(() => this.layoutViewport()));
@@ -220,6 +222,9 @@ export class StructuralFoldControls extends Disposable {
 		const line = foldable.line + 1;
 		const end = model.getLineMaxColumn(line);
 		const inline = foldable.inline!;
+		const closer = foldable.braces!.closer;
+		const offset = closer.column - 1;
+		const tokens = model.tokenization.getLineTokens(closer.line).getTokensInRange(new OffsetRange(offset, offset + inline.closer.length));
 		const viewed = this.viewed?.get(this.path()!, foldable.foldStateId).state === 'viewed';
 		return [
 			this.chevron(foldable, true, targeted),
@@ -237,7 +242,7 @@ export class StructuralFoldControls extends Disposable {
 				options: {
 					description: "review-fold-closer",
 					showIfCollapsed: true,
-					after: { content: inline.closer, inlineClassName: "review-fold-closer", cursorStops: InjectedTextCursorStops.None, attachedData: PILL },
+					after: { content: inline.closer, tokens, inlineClassName: "review-fold-closer", cursorStops: InjectedTextCursorStops.None, attachedData: PILL },
 				},
 			},
 		];

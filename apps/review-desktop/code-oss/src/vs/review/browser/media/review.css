@@ -1347,7 +1347,6 @@ body
   color: var(--vscode-editor-foreground);
 }
 .review-workbench .monaco-editor .review-fold-closer {
-  color: var(--vscode-editor-foreground);
   cursor: pointer;
 }
 
