@@ -54,20 +54,26 @@ export function selectionMarkdown(
 ): string {
   const target = selection.target;
 
+  // Labelled where it starts: agents otherwise take the nearest labelled
+  // line, the board's name, for the selection.
   if (selection.selectedDiff)
-    return selectedDiffMarkdown(selection.selectedDiff, diffPaths);
+    return `Selected diff:\n${selectedDiffMarkdown(selection.selectedDiff, diffPaths)}`;
 
   if (target.kind === "review") return "";
 
   if (target.kind === "text")
-    return target.quote
+    return `Selected text:\n${target.quote
       .split(/\r?\n/)
       .map((line) => `> ${line}`)
-      .join("\n");
+      .join("\n")}`;
 
-  return [`## ${selection.title}`, selection.detail ?? "", sourceExcerpt]
+  return `Selected code:\n${[
+    `## ${selection.title}`,
+    selection.detail ?? "",
+    sourceExcerpt,
+  ]
     .filter(Boolean)
-    .join("\n\n");
+    .join("\n\n")}`;
 }
 
 export function selectedDiffMarkdown(
