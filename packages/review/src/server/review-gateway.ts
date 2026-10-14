@@ -126,6 +126,7 @@ export function createReviewGateway(input: {
   home: string;
   relay: ReviewDesktopVerbRelay;
   heartbeatMs?: number;
+  firstByteMs?: number;
   slowRouteMs?: number;
   restarted?(alias: string): void;
   log?(message: string): void;
@@ -237,7 +238,7 @@ export function createReviewGateway(input: {
 
     const limit = route?.slow
       ? (input.slowRouteMs ?? SLOW_ROUTE_TIMEOUT_MS)
-      : FIRST_BYTE_TIMEOUT_MS;
+      : (input.firstByteMs ?? FIRST_BYTE_TIMEOUT_MS);
 
     const abort = new AbortController();
 

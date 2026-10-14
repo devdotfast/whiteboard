@@ -5,9 +5,10 @@
 
 import assert from 'node:assert/strict';
 import { ChildProcess, execFileSync, spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { after, before, test } from 'node:test';
 import { Schemas } from '../../base/common/network.js';
 import { URI } from '../../base/common/uri.js';
@@ -54,8 +55,8 @@ function connectionOptions(target: Target, overrides: { commit?: string; token?:
 	};
 }
 
-async function handshake(target: Target, commit = COMMIT) {
-	const options = connectionOptions(target, { commit });
+async function handshake(target: Target) {
+	const options = connectionOptions(target);
 	const management = await connectRemoteAgentManagement(options, AUTHORITY, 'renderer');
 	const environment = await RemoteExtensionEnvironmentChannelClient.getEnvironmentData(management.client.getChannel('remoteextensionsenvironment'), AUTHORITY, undefined);
 	const extensionHost = await connectRemoteAgentExtensionHost(options, { language: 'en' });
@@ -86,122 +87,120 @@ async function version(target: Target): Promise<string> {
 	return response.text();
 }
 
-const external = process.env['REVIEW_SERVER_HANDSHAKE_TARGET'];
-if (external) {
-	test('completes the handshake with a server started elsewhere, which survives the client leaving', async () => {
-		const [host, port] = external.split(':');
-		const tokenFile = process.env['REVIEW_SERVER_HANDSHAKE_TOKEN_FILE'];
-		assert.ok(tokenFile, 'REVIEW_SERVER_HANDSHAKE_TOKEN_FILE is required');
-		const target = { host, port: Number(port), token: readFileSync(tokenFile, 'utf8').trim() };
-		const started = Date.now();
-		const connection = await handshake(target, await version(target));
-		console.log(`extension host Ready after ${Date.now() - started} ms; server pid ${connection.environment.pid}, ${connection.environment.arch}`);
-		await new Promise(resolve => setTimeout(resolve, Number(process.env['REVIEW_SERVER_HANDSHAKE_HOLD_MS'] ?? 0)));
-		close(connection);
-		await new Promise(resolve => setTimeout(resolve, 2_000));
-		assert.match(await version(target), /^[0-9a-f]{40}$/);
-	});
-} else {
-	let root: string;
-	let server: ChildProcess;
-	let output = '';
-	let target: Target;
-	const servers: ChildProcess[] = [];
+let root: string;
+let server: ChildProcess;
+let output = '';
+let target: Target;
+const servers: ChildProcess[] = [];
 
-	async function startServer(extraArgs: string[] = []) {
-		const tokenFile = join(root, 'token');
-		writeFileSync(tokenFile, 'test-token', { mode: 0o600 });
-		const child = spawn(process.execPath, [
-			join(root, 'remote-runtime', 'out/server-main.js'),
-			'--host', '127.0.0.1',
-			'--port', '0',
-			'--connection-token-file', tokenFile,
-			'--server-data-dir', join(root, 'data'),
-			'--extensions-dir', join(root, 'extensions'),
-			...extraArgs,
-		], { stdio: ['ignore', 'pipe', 'pipe'] });
-		servers.push(child);
-		let text = '';
-		child.stdout!.on('data', chunk => { text += chunk; output += chunk; });
-		child.stderr!.on('data', chunk => output += chunk);
-		const port = await new Promise<number>((resolve, reject) => {
-			const timer = setTimeout(() => reject(new Error(`the server did not start:\n${output}`)), 30_000);
-			child.stdout!.on('data', () => {
-				const match = /Extension host agent listening on (\d+)/.exec(text);
-				if (match) {
-					clearTimeout(timer);
-					resolve(Number(match[1]));
-				}
-			});
-		});
-		return { child, target: { host: '127.0.0.1', port, token: 'test-token' } };
-	}
-
-	before(async () => {
-		root = mkdtempSync(join(tmpdir(), 'wb-server-'));
-		execFileSync(process.execPath, [join(scripts, 'build-remote-runtime.mjs'), '--out', join(root, 'remote-runtime'), '--commit', COMMIT], { stdio: 'pipe' });
-		({ child: server, target } = await startServer());
-	});
-
-	after(async () => {
-		for (const child of servers) {
-			child.kill();
-		}
-		for (const match of output.matchAll(/<(\d+)> Launched Extension Host Process/g)) {
-			try {
-				process.kill(Number(match[1]));
-			} catch {
-			}
-		}
-		rmSync(root, { recursive: true, force: true });
-	});
-
-	test('completes a Management then an ExtensionHost connection, and the extension host sends Ready', async () => {
-		const connection = await handshake(target);
-		assert.equal(connection.environment.pid, server.pid);
-		assert.match(output, /Launched Extension Host Process/);
-		const extensions = connection.management.client.getChannel('extensions');
-		assert.deepEqual(await extensions.call('getInstalled', []), []);
-		await assert.rejects(extensions.call('installFromGallery', []), /not managed from a Source window \(installFromGallery\)/);
-		await connection.management.client.getChannel('extensionGalleryManifest').call('setExtensionGalleryManifest', [null]);
-		close(connection);
-	});
-
-	test('a client that disconnects cleanly leaves the server running', async () => {
-		const connection = await handshake(target);
-		const files = connection.management.client.getChannel('remoteFilesystem');
-		const session = 'handshake-test';
-		const listener = files.listen('fileChange', [session])(() => { });
-		await files.call('watch', [session, 1, URI.from({ scheme: Schemas.vscodeRemote, authority: AUTHORITY, path: root }), { recursive: true, excludes: [] }]);
-		listener.dispose();
-		close(connection);
-		await new Promise(resolve => setTimeout(resolve, 1_500));
-		assert.equal(server.exitCode, null, output);
-		assert.equal(await version(target), COMMIT);
-		close(await handshake(target));
-	});
-
-	test('with auto-shutdown, the server exits once the last extension host leaves', async () => {
-		const idle = await startServer(['--enable-remote-auto-shutdown', '--reconnection-grace-time', '600', '--remote-auto-shutdown-without-delay']);
-		const connection = await handshake(idle.target);
-		await new Promise(resolve => setTimeout(resolve, 500));
-		assert.equal(idle.child.exitCode, null, 'it runs while a client is connected');
-		close(connection);
-		const exited = await new Promise<boolean>(resolve => {
-			const timer = setTimeout(() => resolve(false), 10_000);
-			idle.child.once('exit', () => {
+async function startServer(extraArgs: string[] = []) {
+	const tokenFile = join(root, 'token');
+	writeFileSync(tokenFile, 'test-token', { mode: 0o600 });
+	const child = spawn(process.execPath, [
+		join(root, 'remote-runtime', 'out/server-main.js'),
+		'--host', '127.0.0.1',
+		'--port', '0',
+		'--connection-token-file', tokenFile,
+		'--server-data-dir', join(root, 'data'),
+		'--extensions-dir', join(root, 'extensions'),
+		...extraArgs,
+	], { stdio: ['ignore', 'pipe', 'pipe'] });
+	servers.push(child);
+	let text = '';
+	child.stdout!.on('data', chunk => { text += chunk; output += chunk; });
+	child.stderr!.on('data', chunk => output += chunk);
+	const port = await new Promise<number>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error(`the server did not start:\n${output}`)), 30_000);
+		child.stdout!.on('data', () => {
+			const match = /Extension host agent listening on (\d+)/.exec(text);
+			if (match) {
 				clearTimeout(timer);
-				resolve(true);
-			});
+				resolve(Number(match[1]));
+			}
 		});
-		assert.ok(exited, output);
 	});
-
-	test('refuses a wrong connection token', async () => {
-		await assert.rejects(connectRemoteAgentManagement(connectionOptions(target, { token: 'wrong' }), AUTHORITY, 'renderer'), /Unauthorized client refused: auth mismatch/);
-	});
-
-	test('refuses a client built from another commit', async () => {
-		await assert.rejects(connectRemoteAgentManagement(connectionOptions(target, { commit: 'f'.repeat(40) }), AUTHORITY, 'renderer'), /Client refused: version mismatch/);
-	});
+	return { child, target: { host: '127.0.0.1', port, token: 'test-token' } };
 }
+
+before(async () => {
+	root = mkdtempSync(join(tmpdir(), 'wb-server-'));
+	execFileSync(process.execPath, [join(scripts, 'build-remote-runtime.mjs'), '--out', join(root, 'remote-runtime'), '--commit', COMMIT], { stdio: 'pipe' });
+	({ child: server, target } = await startServer());
+});
+
+after(async () => {
+	for (const child of servers) {
+		child.kill();
+	}
+	for (const match of output.matchAll(/<(\d+)> Launched Extension Host Process/g)) {
+		try {
+			process.kill(Number(match[1]));
+		} catch {
+		}
+	}
+	rmSync(root, { recursive: true, force: true });
+});
+
+test('builds every runtime entry, and built-in extensions without their own node_modules', async () => {
+	const { REMOTE_RUNTIME_ENTRIES, REMOTE_BUILTIN_EXTENSIONS }: { REMOTE_RUNTIME_ENTRIES: string[]; REMOTE_BUILTIN_EXTENSIONS: string[] } = await import(pathToFileURL(join(scripts, 'build-remote-runtime.mjs')).href);
+	const runtime = join(root, 'remote-runtime');
+	for (const entry of REMOTE_RUNTIME_ENTRIES) {
+		assert.ok(existsSync(join(runtime, 'out', `${entry}.js`)), entry);
+	}
+	for (const name of REMOTE_BUILTIN_EXTENSIONS) {
+		const extension = join(runtime, 'extensions', name);
+		const { main } = JSON.parse(readFileSync(join(extension, 'package.json'), 'utf8'));
+		assert.ok(existsSync(join(extension, `${main}.js`)), `${name} ${main}`);
+		assert.ok(!existsSync(join(extension, 'node_modules')), name);
+	}
+	assert.ok(existsSync(join(runtime, 'extensions/node_modules/typescript/lib/tsserver.js')));
+});
+
+test('completes a Management then an ExtensionHost connection, and the extension host sends Ready', async () => {
+	const connection = await handshake(target);
+	assert.equal(connection.environment.pid, server.pid);
+	assert.match(output, /Launched Extension Host Process/);
+	const extensions = connection.management.client.getChannel('extensions');
+	assert.deepEqual(await extensions.call('getInstalled', []), []);
+	await assert.rejects(extensions.call('installFromGallery', []), /not managed from a Source window \(installFromGallery\)/);
+	await connection.management.client.getChannel('extensionGalleryManifest').call('setExtensionGalleryManifest', [null]);
+	close(connection);
+});
+
+test('a client that disconnects cleanly leaves the server running', async () => {
+	const connection = await handshake(target);
+	const files = connection.management.client.getChannel('remoteFilesystem');
+	const session = 'handshake-test';
+	const listener = files.listen('fileChange', [session])(() => { });
+	await files.call('watch', [session, 1, URI.from({ scheme: Schemas.vscodeRemote, authority: AUTHORITY, path: root }), { recursive: true, excludes: [] }]);
+	listener.dispose();
+	close(connection);
+	await new Promise(resolve => setTimeout(resolve, 1_500));
+	assert.equal(server.exitCode, null, output);
+	assert.equal(await version(target), COMMIT);
+	close(await handshake(target));
+});
+
+test('with auto-shutdown, the server exits once the last extension host leaves', async () => {
+	const idle = await startServer(['--enable-remote-auto-shutdown', '--reconnection-grace-time', '600', '--remote-auto-shutdown-without-delay']);
+	const connection = await handshake(idle.target);
+	await new Promise(resolve => setTimeout(resolve, 500));
+	assert.equal(idle.child.exitCode, null, 'it runs while a client is connected');
+	close(connection);
+	const exited = await new Promise<boolean>(resolve => {
+		const timer = setTimeout(() => resolve(false), 10_000);
+		idle.child.once('exit', () => {
+			clearTimeout(timer);
+			resolve(true);
+		});
+	});
+	assert.ok(exited, output);
+});
+
+test('refuses a wrong connection token', async () => {
+	await assert.rejects(connectRemoteAgentManagement(connectionOptions(target, { token: 'wrong' }), AUTHORITY, 'renderer'), /Unauthorized client refused: auth mismatch/);
+});
+
+test('refuses a client built from another commit', async () => {
+	await assert.rejects(connectRemoteAgentManagement(connectionOptions(target, { commit: 'f'.repeat(40) }), AUTHORITY, 'renderer'), /Client refused: version mismatch/);
+});

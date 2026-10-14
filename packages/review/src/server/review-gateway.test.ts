@@ -254,7 +254,7 @@ it("gives a remote review's language context with its path on that machine and i
   ).toBe("export const a = 2;\n");
 });
 
-it("waits past the 10 s limit for a slow language context and keeps the host online when it never answers", async () => {
+it("waits past the first-byte limit for a slow language context and keeps the host online when it never answers", async () => {
   const slow = randomUUID();
   const hung = randomUUID();
   const serverId = randomUUID();
@@ -279,7 +279,7 @@ it("waits past the 10 s limit for a slow language context and keeps the host onl
             serverId,
           }),
         );
-      }, 11_000);
+      }, 300);
 
       return true;
     },
@@ -288,7 +288,7 @@ it("waits past the 10 s limit for a slow language context and keeps the host onl
   const { request, gateway } = await startLocalGateway(
     root,
     [{ alias: "wb-a", endpoint: fake.endpoint }],
-    { slowRouteMs: 14_000 },
+    { firstByteMs: 100, slowRouteMs: 1_000 },
   );
 
   await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
@@ -306,7 +306,7 @@ it("waits past the 10 s limit for a slow language context and keeps the host onl
   expect(unanswered.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
   expect(gateway.hosts()[0]?.state).toBe("online");
   expect((await request(`/${slow}/progress`)).status).toBe(200);
-}, 30_000);
+});
 
 it("streams a remote answer line by line and closes the remote connection when the client leaves", async () => {
   const reviewId = randomUUID();

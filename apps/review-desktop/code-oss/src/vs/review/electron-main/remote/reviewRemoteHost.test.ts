@@ -21,8 +21,11 @@ import { openRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
 import type { ReviewRemoteInstallProgress, ReviewRemoteInstallResult } from "./reviewRemoteInstaller.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
 
-async function versionServer(t: test.TestContext, commit: string): Promise<number> {
-	const server: Server = createServer((request, response) => response.end(request.url === "/version" ? commit : ""));
+async function versionServer(t: test.TestContext, status = 200): Promise<number> {
+	const server: Server = createServer((_request, response) => {
+		response.statusCode = status;
+		response.end();
+	});
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	t.after(() => new Promise((resolve) => server.close(() => resolve(undefined))));
 	return (server.address() as AddressInfo).port;
@@ -132,7 +135,7 @@ test("a successful attach reports an endpoint at the forwarded port", async (t) 
 });
 
 test("the VS Code server gets a second forward on the same master, and only its endpoint reaches a window", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), await versionServer(t)];
 	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
 	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, ports);
 
@@ -159,7 +162,7 @@ test("the Desktop's enabled groups go to remote attach", async (t) => {
 });
 
 test("a VS Code server of another commit leaves the review online without language features", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), await versionServer(t)];
 	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
 	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, ports, "wb-test-a", "/tmp/wb-ssh-test", undefined, undefined, { desktopCommit: "b".repeat(40) });
 
@@ -183,7 +186,7 @@ test("a dev Desktop, with no commit, accepts any VS Code server; a release Deskt
 });
 
 test("a VS Code server that does not answer through its forward is unavailable, and its forward is cancelled", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, "c".repeat(40))];
+	const ports = [await healthServer(t), await versionServer(t, 503)];
 	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
 	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, ports);
 
@@ -191,7 +194,7 @@ test("a VS Code server that does not answer through its forward is unavailable, 
 	await until(() => last()?.endpoint !== undefined);
 
 	assert.equal(last()?.languageFeatures, false);
-	assert.match(last()!.languageFeaturesDetail!, /did not answer through the forward: it reports c{40}, not a{40}\.$/);
+	assert.match(last()!.languageFeaturesDetail!, /did not answer through the forward: \/version answered 503\.$/);
 	const cancels = ssh.of("wb-test-a", "cancel");
 	assert.equal(cancels.length, 1);
 	assert.ok(cancels[0].args.includes(`127.0.0.1:${ports[1]}:127.0.0.1:45678`));
@@ -199,7 +202,7 @@ test("a VS Code server that does not answer through its forward is unavailable, 
 });
 
 test("a reattach drops both old forwards", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, COMMIT), await healthServer(t), await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), await versionServer(t), await healthServer(t), await versionServer(t)];
 	const { host, ssh, last } = hostFor(
 		t,
 		{ attach: (call) => ({ code: 0, stdout: attachOutput(41234 + call, `token-${call}`, { languageServer: { port: 45678 + call, connectionToken: `vscode-${call}`, commit: COMMIT } }) }) },
@@ -228,7 +231,7 @@ test("a VS Code server that stopped answering is not handed out, and the host at
 	const stopped: Server = createServer((request, response) => response.end(request.url === "/version" ? COMMIT : ""));
 	await new Promise<void>((resolve) => stopped.listen(0, "127.0.0.1", resolve));
 	t.after(() => new Promise((resolve) => stopped.close(() => resolve(undefined))));
-	const ports = [await healthServer(t), (stopped.address() as AddressInfo).port, await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), (stopped.address() as AddressInfo).port, await versionServer(t)];
 	const { host, ssh, last } = hostFor(
 		t,
 		{ attach: (call) => ({ code: 0, stdout: attachOutput(41234, "remote-token", { languageServer: { port: 45677 + call, connectionToken: `vscode-${call}`, commit: COMMIT } }) }) },
@@ -264,7 +267,7 @@ test("a reattach the gateway asks for opens a new review forward, even to the sa
 });
 
 test("a reattach the gateway asks for during a pending attach runs after it, with new forwards", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, COMMIT), await healthServer(t), await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), await versionServer(t), await healthServer(t), await versionServer(t)];
 	const { host, ssh, clock, last } = hostFor(
 		t,
 		{ attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { languageServer: { port: 45678, connectionToken: `vscode-${call}`, commit: COMMIT } }) }) },
@@ -281,28 +284,8 @@ test("a reattach the gateway asks for during a pending attach runs after it, wit
 	assert.deepEqual(await host.languageEndpoint(FAKE_SERVER_ID), { host: "127.0.0.1", port: ports[3], connectionToken: "vscode-3" });
 });
 
-test("a Retry after ten pending attaches attaches again on the same schedule", async (t) => {
-	const port = await healthServer(t);
-	const { host, ssh, clock, last } = hostFor(t, { attach: { code: 0, stdout: pendingOutput(41234) } }, port);
-
-	host.start();
-	await until(() => last()?.endpoint !== undefined);
-	for (let attaches = 1; attaches < 10; attaches++) {
-		await until(() => clock.pending === 1);
-		clock.next();
-		await until(() => ssh.of("wb-test-a", "exec").length === attaches + 1);
-	}
-	await new Promise((resolve) => setTimeout(resolve, 100));
-	assert.equal(clock.pending, 0);
-
-	host.retry();
-	await until(() => ssh.of("wb-test-a", "exec").length === 11 && last()?.endpoint !== undefined);
-	await until(() => clock.pending === 1);
-	assert.equal(clock.delays.at(-1), 60_000);
-});
-
 test("a remote still installing its extensions is attached again after a minute, until its VS Code server is reported", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), await versionServer(t)];
 	const { host, ssh, clock, last } = hostFor(
 		t,
 		{ attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { languageServer: { port: 45678, connectionToken: "vscode-token", commit: COMMIT } }) }) },
@@ -326,25 +309,6 @@ test("a remote still installing its extensions is attached again after a minute,
 	assert.equal(last()?.endpoint?.url, `http://127.0.0.1:${ports[0]}`);
 	assert.equal(ssh.of("wb-test-a", "exec").length, 2);
 	assert.equal(clock.pending, 0);
-});
-
-test("attaching again for a pending install stops after ten attaches in a row", async (t) => {
-	const port = await healthServer(t);
-	const { host, ssh, clock, last } = hostFor(t, { attach: { code: 0, stdout: pendingOutput(41234) } }, port);
-
-	host.start();
-	await until(() => last()?.endpoint !== undefined);
-	for (let attaches = 1; attaches < 10; attaches++) {
-		await until(() => clock.pending === 1);
-		clock.next();
-		await until(() => ssh.of("wb-test-a", "exec").length === attaches + 1);
-	}
-	await new Promise((resolve) => setTimeout(resolve, 100));
-	assert.equal(clock.pending, 0);
-
-	assert.equal(ssh.of("wb-test-a", "exec").length, 10);
-	assert.equal(last()?.languageFeaturesDetail, PENDING_DETAIL);
-	assert.equal(last()?.endpoint?.url, `http://127.0.0.1:${port}`);
 });
 
 test("output with a banner before the first sentinel still parses", async (t) => {

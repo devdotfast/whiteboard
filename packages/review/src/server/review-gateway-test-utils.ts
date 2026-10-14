@@ -210,6 +210,7 @@ export async function startGateway(
     home?: string;
     relay?: ReviewDesktopVerbRelay;
     heartbeatMs?: number;
+    firstByteMs?: number;
     slowRouteMs?: number;
   } = {},
 ) {
@@ -240,6 +241,9 @@ export async function startGateway(
     relay,
     ...(options.heartbeatMs !== undefined && {
       heartbeatMs: options.heartbeatMs,
+    }),
+    ...(options.firstByteMs !== undefined && {
+      firstByteMs: options.firstByteMs,
     }),
     ...(options.slowRouteMs !== undefined && {
       slowRouteMs: options.slowRouteMs,

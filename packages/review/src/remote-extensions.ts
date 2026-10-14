@@ -28,7 +28,6 @@ const curatedDownloadSchema = z.object({
   universal: z.boolean(),
   url: z.string(),
   sha256: z.string(),
-  size: z.number(),
 });
 
 type CuratedDownload = z.infer<typeof curatedDownloadSchema>;
@@ -296,7 +295,7 @@ async function install(
   try {
     await downloadPinned(download, part, { timeoutMs, signal });
     await rm(staging, { recursive: true, force: true });
-    await extractVsix(part, staging, download.size * 8);
+    await extractVsix(part, staging);
     await sanitizeVsixManifest(staging, extension);
 
     await checkExecutables(staging, extension);

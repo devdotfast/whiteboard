@@ -15,13 +15,7 @@ const manifestSchema = z.looseObject({
 });
 
 /** Unpacks a VSIX's `extension/` payload into `destination`. */
-export async function extractVsix(
-  vsix: string,
-  destination: string,
-  maxBytes = Number.POSITIVE_INFINITY,
-) {
-  let unpacked = 0;
-
+export async function extractVsix(vsix: string, destination: string) {
   const zip = await new Promise<yauzl.ZipFile>((resolve, reject) =>
     yauzl.open(vsix, { lazyEntries: true }, (error, opened) =>
       error ? reject(error) : resolve(opened),
@@ -63,11 +57,6 @@ export async function extractVsix(
 
           if ((mode & 0o170000) === 0o120000)
             throw new Error(`VSIX contains a symlink: ${name}`);
-
-          unpacked += entry.uncompressedSize;
-
-          if (unpacked > maxBytes)
-            throw new Error(`VSIX unpacks to more than ${maxBytes} bytes`);
 
           const output = path.join(destination, ...parts);
           await mkdir(path.dirname(output), { recursive: true });
