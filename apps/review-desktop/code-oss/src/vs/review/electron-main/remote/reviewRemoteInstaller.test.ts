@@ -4,13 +4,14 @@
  *--------------------------------------------------------------------------------------------*/
 
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 
+import { REVIEW_REMOTE_INSTALL_LOCK, REVIEW_REMOTE_LOCK_STALE_SECONDS } from "../../common/reviewProtocol.js";
 import type { SpawnSsh } from "./reviewRemoteHost.js";
 import { probeRemote } from "./reviewRemoteProbe.js";
 import { uninstallRemote } from "./reviewRemoteUninstall.js";
@@ -551,4 +552,85 @@ test("a lock whose start time cannot be read counts as fresh", async (t) => {
 
 	assert.match(await sh(f.home, busyInstall(f.home)), /BUSY busy-laptop/);
 	assert.equal(await readFile(join(lock, "token"), "utf8"), "0123456789abcdef\n");
+});
+
+/** Runs the script by hand under `shell`, as a hand install or a second laptop would. */
+function script(home: string, args: string[], env: NodeJS.ProcessEnv = {}, onStdout?: (chunk: string, child: ChildProcess) => void, shell = "/bin/sh") {
+	return new Promise<{ stdout: string; stderr: string; code: number | null }>((resolve, reject) => {
+		const child = spawn(shell, ["-s"], { env: { HOME: home, PATH, ...env }, stdio: ["pipe", "pipe", "pipe"] });
+		let stdout = "";
+		let stderr = "";
+		child.stdout.setEncoding("utf8").on("data", (chunk: string) => {
+			stdout += chunk;
+			onStdout?.(chunk, child);
+		});
+		child.stderr.setEncoding("utf8").on("data", (chunk: string) => (stderr += chunk));
+		child.once("error", reject);
+		child.once("close", (code) => resolve({ stdout, stderr, code }));
+		child.stdin.end(remoteInstallScriptInput(INSTALL_SCRIPT, args));
+	});
+}
+
+test("an install waiting for the lock stops as soon as Desktop is gone", async (t) => {
+	const f = await fixture(t);
+	const lock = join(f.remoteRoot, "install.lock");
+	await mkdir(lock, { recursive: true });
+	await writeFile(join(lock, "token"), "0123456789abcdef\n");
+	await writeFile(join(lock, "owner"), "busy-laptop\n");
+	await writeFile(join(lock, "started"), `${Math.floor(Date.now() / 1000)}\n`);
+	const began = Date.now();
+
+	const ran = await script(f.home, ["install", "--version", VERSION, "--sha256", "0".repeat(64), "--url", RELEASE_URL, "--token", "00112233aabbccdd", "--lock-wait", "5", "--lock-poll", "0.1"], {}, (chunk, child) => {
+		if (chunk.includes("STEP waiting-for-lock")) child.stdout!.destroy();
+	});
+
+	assert.ok(Date.now() - began < 3000, `the orphan polled for ${Date.now() - began} ms`);
+	assert.equal(ran.code, 3);
+	assert.equal(await readFile(join(lock, "token"), "utf8"), "0123456789abcdef\n");
+});
+
+test("an option without a value fails with a reason, under sh and bash", async (t) => {
+	const f = await fixture(t);
+	for (const shell of ["/bin/sh", ...(spawnText("which", ["bash"]) ? ["bash"] : [])]) {
+		const ran = await script(f.home, ["install", "--version"], {}, undefined, shell);
+		assert.equal(ran.code, 3, shell);
+		assert.match(ran.stderr, /--version needs a value/, shell);
+	}
+	const ran = await script(f.home, ["install", "--bogus", "1"]);
+	assert.equal(ran.code, 3);
+	assert.match(ran.stderr, /unknown option --bogus/);
+});
+
+test("a hand install talks on stderr only and lands in Desktop's layout", async (t) => {
+	const f = await fixture(t);
+	const env = await onPath(f.root, "curl", `while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; url=$1; shift; done
+case "$url" in *.sha256) printf '%s  tarball\\n' ${f.pack.sha256}; exit 0 ;; esac
+exec cp ${shellQuote(f.pack.file)} "$out"
+`);
+
+	const ran = await script(f.home, ["--version", VERSION], { ...env, WHITEBOARD_RELEASES: "https://releases.test" });
+
+	assert.equal(ran.code, 0, ran.stderr);
+	assert.equal(ran.stdout, "");
+	assert.match(ran.stderr, new RegExp(`Whiteboard ${VERSION} is installed`));
+	assert.equal(run(join(f.home, ".local/bin/whiteboard"), "version", "--json"), `{"event":"version","version":"${VERSION}"}`);
+	assert.deepEqual(await installRemote(f.input()), { nodePath: join(f.remoteRoot, "versions", VERSION, "bin/node"), cliPath: join(f.remoteRoot, "versions", VERSION, "dist/cli.js") });
+	assert.deepEqual(f.progress, [{ step: "done" }]);
+});
+
+test("release without a token refuses, so a lock whose token was never written stays", async (t) => {
+	const f = await fixture(t);
+	await mkdir(join(f.remoteRoot, "install.lock"), { recursive: true });
+
+	const ran = await script(f.home, ["release"]);
+
+	assert.equal(ran.code, 3);
+	assert.match(ran.stderr, /release needs --token/);
+	assert.ok((await readdir(f.remoteRoot)).includes("install.lock"));
+});
+
+test("the script's layout constants are the protocol's", () => {
+	for (const line of [`MARKER=${REVIEW_REMOTE_INSTALL_MARKER}`, `MARK='${REVIEW_REMOTE_WRAPPER_MARK}'`, `lock=$root/${REVIEW_REMOTE_INSTALL_LOCK}`, `lockStale=${REVIEW_REMOTE_LOCK_STALE_SECONDS}`]) {
+		assert.ok(INSTALL_SCRIPT.split("\n").map((l) => l.trim()).includes(line), line);
+	}
 });

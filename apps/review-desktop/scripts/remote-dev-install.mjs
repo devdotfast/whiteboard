@@ -12,8 +12,6 @@ import {
   buildDevRemoteTarball,
 } from "./build-remote-tarball.mjs";
 
-const ROOT = "~/.dev/whiteboard-remote";
-
 const INSTALL_SCRIPT = fileURLToPath(
   new URL("../../../packages/review/remote/install.sh", import.meta.url),
 );
@@ -48,6 +46,14 @@ function hostTarget(alias, { sshConfig } = {}) {
   return target;
 }
 
+/** The version directory the script's DONE line names. */
+export function installedFrom(said) {
+  const done = /^WHITEBOARD-INSTALL DONE (.*)$/m.exec(said);
+  const cli = done && JSON.parse(done[1]).cli;
+
+  return cli ? path.posix.dirname(path.posix.dirname(cli)) : undefined;
+}
+
 /** Installs this checkout's tarball with install.sh, as Desktop does; `commit` rewrites its VS Code server's commit. */
 export async function remoteDevInstall(
   alias,
@@ -57,7 +63,6 @@ export async function remoteDevInstall(
 
   const built = await buildDevRemoteTarball({ target, version, stdio });
   const copy = `/tmp/whiteboard-remote-${randomBytes(4).toString("hex")}.tar.xz`;
-  const installed = `${ROOT}/versions/${built.version}`;
 
   try {
     execFileSync(
@@ -68,13 +73,21 @@ export async function remoteDevInstall(
 
     const args = ["install", "--version", built.version, "--sha256", built.sha256, "--file", copy];
 
-    const said = execFileSync("ssh", [...sshArgs(sshConfig), alias, "sh", "-s"], {
-      encoding: "utf8",
-      input: `set -- ${args.map((arg) => `'${arg}'`).join(" ")}\n${await readFile(INSTALL_SCRIPT, "utf8")}`,
-      stdio: ["pipe", "pipe", "inherit"],
-    });
+    let said;
 
-    if (!/^WHITEBOARD-INSTALL DONE /m.test(said))
+    try {
+      said = execFileSync("ssh", [...sshArgs(sshConfig), alias, "sh", "-s"], {
+        encoding: "utf8",
+        input: `set -- ${args.map((arg) => `'${arg}'`).join(" ")}\n${await readFile(INSTALL_SCRIPT, "utf8")}`,
+        stdio: ["pipe", "pipe", "inherit"],
+      });
+    } catch (error) {
+      said = error.stdout ?? "";
+    }
+
+    const installed = installedFrom(said);
+
+    if (!installed)
       throw new Error(`install.sh did not install on ${alias}:\n${said.trim()}`);
 
     return ssh(

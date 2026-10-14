@@ -32,9 +32,11 @@ hand=
 
 say() { [ -n "$hand" ] || printf '\n%s %s\n' WHITEBOARD-INSTALL "$*" >&3; }
 tell() { [ -z "$hand" ] || printf '%s\n' "$*" >&2; }
+# Fails once Desktop stops reading, so an install it abandoned stops too.
+beat() { [ -n "$hand" ] || printf '.\n' >&3 2>/dev/null; }
 fail() {
 	say FAIL "$*"
-	tell "Whiteboard was not installed: $*"
+	printf 'Whiteboard was not installed: %s\n' "$*" >&2
 	exit 3
 }
 q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
@@ -88,7 +90,7 @@ probe() {
 	releases=
 	while [ $# -gt 0 ]; do
 		case "$1" in
-		--releases) releases=$2; shift 2 ;;
+		--releases) [ $# -ge 2 ] || fail "$1 needs a value"; releases=$2; shift 2 ;;
 		*) shift ;;
 		esac
 	done
@@ -173,7 +175,7 @@ guard() {
 	if command -v setsid >/dev/null 2>&1; then setsid "$@" & else "$@" & fi
 	pid=$!
 	while kill -0 "$pid" 2>/dev/null; do
-		printf '.\n' >&3 2>/dev/null || {
+		beat || {
 			kill -TERM -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null
 			exit 3
 		}
@@ -250,6 +252,7 @@ install() {
 		--lock-stale) lockStale=$2 ;;
 		*) fail "unknown option $1" ;;
 		esac
+		[ $# -ge 2 ] || fail "$1 needs a value"
 		shift 2
 	done
 	[ -n "$url$file" ] || hand=1
@@ -298,6 +301,7 @@ install() {
 		[ -n "$told" ] || say STEP waiting-for-lock
 		told=1
 		polls=$((polls - 1))
+		beat || exit 3
 		sleep "$lockPoll"
 	done
 	trap release EXIT
@@ -423,7 +427,7 @@ uninstall() {
 	newest=$(for dir in "$root"/versions/*; do [ -n "$(completeSha256 "$dir/$MARKER")" ] && printf '%s\n' "${dir##*/}"; done |
 		grep -Ex '[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?' | newestFirst | head -n 1)
 	[ -n "$newest" ] || fail Whiteboard Desktop installed nothing there
-	completeSha256 "$root/versions/$newest/$MARKER" >/dev/null
+	completeSha256 "$root/versions/$newest/$MARKER" >/dev/null # for its cn and cc
 	DEV_FAST_REVIEW_CLI_NO_DELEGATE=1 exec "$cn" "$cc" remote uninstall --keep-reviews --json </dev/null
 }
 
@@ -431,7 +435,8 @@ case "${1-}" in
 probe) shift && probe "$@" ;;
 uninstall) uninstall ;;
 release)
-	token=${3-}
+	[ "${2-}" = --token ] && [ -n "${3-}" ] || fail "release needs --token HEX"
+	token=$3
 	release
 	;;
 install) shift && install "$@" ;;
