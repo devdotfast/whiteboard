@@ -603,6 +603,7 @@ test("an option without a value fails with a reason, under sh and bash", async (
 
 test("a hand install talks on stderr only and lands in Desktop's layout", async (t) => {
 	const f = await fixture(t);
+	await onPath(f.root, "uname", `case "$1" in -s) echo Linux ;; -m) echo aarch64 ;; esac\n`);
 	const env = await onPath(f.root, "curl", `while [ $# -gt 0 ]; do [ "$1" = -o ] && out=$2; url=$1; shift; done
 case "$url" in *.sha256) printf '%s  tarball\\n' ${f.pack.sha256}; exit 0 ;; esac
 exec cp ${shellQuote(f.pack.file)} "$out"
