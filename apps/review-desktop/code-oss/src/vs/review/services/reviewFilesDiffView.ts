@@ -699,8 +699,7 @@ export class ReviewFilesDiffView extends Disposable {
 			(entry) => sameResource(entry.original, resource.original) && sameResource(entry.modified, resource.modified),
 		);
 		if (index === -1) return;
-		// Passive editor updates must not move a sidebar the reader scrolled independently.
-		this.changedFilesTree?.setActiveFile(input.entries[index].file.path, false);
+		this.changedFilesTree?.setActiveFile(input.entries[index].file.path);
 	}
 }
 function sameResource(left: URI | undefined, right: URI | undefined): boolean {

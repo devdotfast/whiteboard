@@ -315,11 +315,14 @@ export class ReviewChangedFilesTree extends Disposable {
 		if (element) this.tree.rerender(element);
 	}
 
-	setActiveFile(path: string | undefined, reveal = true): void {
-		if (!reveal && this.activePath === path) return;
-    this.activePath = path;
-		this.syncSelection(path, reveal);
-  }
+	setActiveFile(path: string | undefined): void {
+		if (this.activePath === path) return;
+		// Keep a tree the reader scrolled away in place.
+		const previous = this.activePath ? this.fileElements.get(this.activePath) : undefined;
+		const following = !previous || this.tree.getRelativeTop(previous) !== null;
+		this.activePath = path;
+		this.syncSelection(path, following);
+	}
 
   layout(height: number, width: number): void {
     this.tree.layout(Math.max(0, height), width);
