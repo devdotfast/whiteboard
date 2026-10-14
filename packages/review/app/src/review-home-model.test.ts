@@ -7,6 +7,7 @@ import {
   homeRepositories,
   matchesHomeFilters,
   repositoryIdentity,
+  reviewMetadataPills,
   sortHomeReviews,
   toggleHomeWorktree,
   worktreeKey,
@@ -76,6 +77,14 @@ describe("Home model", () => {
 
     for (const query of ["1091", "#1091"])
       expect(matchesHomeFilters(board, defaultHomeFilters, query)).toBe(false);
+  });
+  it("shows no worktree for a shared import", () => {
+    expect(
+      reviewMetadataPills(
+        { ...board, origin: {}, shared: {} },
+        defaultHomeFilters,
+      ),
+    ).toEqual([]);
   });
   it("groups remote worktrees together without conflating same-name local repositories", () => {
     const imported = {

@@ -47,7 +47,10 @@ export function reviewTitle(review: ReviewApiSummary): string {
   return review.title.trim() || "Untitled whiteboard";
 }
 
+/** Empty for shared imports, whose pinned checkouts aren't the user's worktrees. */
 export function worktreeLabel(review: ReviewApiSummary): string {
+  if (review.shared) return "";
+
   return review.repositoryPath?.split(/[\\/]/).filter(Boolean).at(-1) ?? "";
 }
 
