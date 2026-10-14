@@ -924,6 +924,21 @@ body
   display: none;
 }
 
+/* An embed that runs edge to edge sets --review-code-inset to move its header
+   and code in from the column edge. The editor is laid out 18px narrower than
+   its entry, so the code's inset fits without clipping. */
+.review-files-editor-diffs
+  .monaco-component.multiDiffEditor
+  .multiDiffEntry
+  > .header
+  > .header-content {
+  padding-inline: calc(5px + var(--review-code-inset, 0px));
+}
+
+.review-files-editor-diffs .multiDiffEntry .editorContainer {
+  padding-left: var(--review-code-inset, 0px);
+}
+
 .review-canvas-part > .review-canvas-container {
   display: grid;
   grid-template-rows: minmax(0, 1fr);

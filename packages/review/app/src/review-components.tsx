@@ -885,9 +885,9 @@ function CodeReviewPeekPanel({
       onClose={onClose}
       closeLabel="Close side peek"
     >
-      <div {...stylex.props(panelStyles.peekBody)}>
+      <div {...stylex.props(panelStyles.peekContent)}>
         {softwareMapEnabled && anchor.softwareMapPath ? (
-          <div {...stylex.props(panelStyles.peekActions)}>
+          <div {...stylex.props(panelStyles.peekActions, panelStyles.inset)}>
             <IconButton
               size="large"
               onClick={() => {
@@ -1319,7 +1319,9 @@ function ReviewPeekContentView({
   reportOutcome?: boolean;
 }) {
   if (content.kind === "explanation")
-    return content.text ? <p>{content.text}</p> : null;
+    return content.text ? (
+      <p {...stylex.props(panelStyles.peekText)}>{content.text}</p>
+    ) : null;
 
   if (content.kind === "source") {
     return (
@@ -1327,6 +1329,7 @@ function ReviewPeekContentView({
         source={content.source}
         active={active}
         heightMode="content"
+        edgeToEdge
         onNativeFocus={onNativeFocus}
         reportOutcome={reportOutcome}
       />

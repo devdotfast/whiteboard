@@ -133,10 +133,10 @@ export const shellStyles = stylex.create({
       content: "''",
     },
   },
-  // Rule flush left; grabs rightward over the panel's padding, never the
-  // scrollbar.
+  // Rule flush right, on the panel's edge, so content that runs edge to edge
+  // meets it; grabs rightward into the panel, never the scrollbar.
   resizerGrabPanel: {
-    "::before": { left: 0, transform: "none" },
+    "::before": { left: "auto", right: 0, transform: "none" },
     "::after": {
       position: "absolute",
       top: 0,

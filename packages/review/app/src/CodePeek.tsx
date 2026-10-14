@@ -129,6 +129,7 @@ export function CodePeekCard({
   onNativeFocus,
   lenses: lensesOverride,
   reportOutcome = false,
+  edgeToEdge = false,
 }: {
   source: DiffSelection;
   active?: boolean;
@@ -138,6 +139,8 @@ export function CodePeekCard({
   /** Report resolution telemetry. Only the panel the user opened sets this,
    * so an authored document with many inline peeks sends one event, not N. */
   reportOutcome?: boolean;
+  /** Run across its column like the Diff panel, not as an inset card. */
+  edgeToEdge?: boolean;
 }) {
   const session = useReviewSession();
   const contextLenses = useReviewLenses();
@@ -176,7 +179,12 @@ export function CodePeekCard({
   if (!ranges.length)
     return (
       <section
-        {...withClass("code-peek", styles.peek, drawStyles.blockChild)}
+        {...withClass(
+          "code-peek",
+          styles.peek,
+          edgeToEdge && styles.edgeToEdge,
+          drawStyles.blockChild,
+        )}
         role="status"
       >
         {outcome === "failed" ? "Code unavailable" : "Loading code…"}
@@ -185,7 +193,12 @@ export function CodePeekCard({
 
   return (
     <section
-      {...withClass("code-peek", styles.peek, drawStyles.blockChild)}
+      {...withClass(
+        "code-peek",
+        styles.peek,
+        edgeToEdge && styles.edgeToEdge,
+        drawStyles.blockChild,
+      )}
       data-code-rendering="inline-editor"
     >
       <DocumentCodeView
@@ -205,6 +218,7 @@ export function CodePeekCard({
         countRanges={ranges}
         heightMode={heightMode}
         active={active}
+        edgeToEdge={edgeToEdge}
         onFocus={onNativeFocus}
         onOpen={() =>
           session.surface.revealAnchor(
@@ -401,5 +415,8 @@ const styles = stylex.create({
     },
     color: tokens.ink,
     fontFamily: tokens.fontMono,
+  },
+  edgeToEdge: {
+    marginBlock: 0,
   },
 });

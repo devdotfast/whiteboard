@@ -41,6 +41,7 @@ export function DocumentCodeView({
   onOpen,
   collapsed = false,
   lenses: lensesOverride,
+  edgeToEdge = false,
 }: {
   path: string;
   title: string;
@@ -57,6 +58,8 @@ export function DocumentCodeView({
   onOpen?: () => void;
   collapsed?: boolean;
   lenses?: ReviewLensView;
+  /** Run across its column like the Diff panel, not as an inset card. */
+  edgeToEdge?: boolean;
 }) {
   const session = useReviewSession();
 
@@ -311,7 +314,7 @@ export function DocumentCodeView({
     <>
       <div
         ref={setContainer}
-        {...stylex.props(styles.editor)}
+        {...stylex.props(styles.editor, edgeToEdge && styles.edgeToEdge)}
         data-review-inline-editor={path}
         data-tour-target="code-editor"
         data-review-inline-editor-active={active ? "true" : "false"}
@@ -356,6 +359,13 @@ const styles = stylex.create({
     borderColor: tokens.rule,
     borderRadius: radius.control,
     backgroundColor: tokens.bg,
+  },
+  // Square, with rules above and below. The editor's header and code read
+  // --review-code-inset to sit 16px in from the column edge.
+  edgeToEdge: {
+    borderWidth: "1px 0",
+    borderRadius: 0,
+    "--review-code-inset": "6px",
   },
   error: {
     display: "flex",

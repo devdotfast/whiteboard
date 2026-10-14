@@ -173,6 +173,14 @@ export const panelStyles = stylex.create({
   peekContent: {
     minWidth: 0,
   },
+  // Peek content runs to the column's edges; text and actions keep the
+  // panel's inset.
+  peekText: {
+    paddingInline: { default: "16px", [narrow]: "8px" },
+  },
+  inset: {
+    padding: { default: "12px 12px 0", [narrow]: "8px 8px 0" },
+  },
 });
 
 // The guided tour: a numbered rail of stops in the panel body, and a pager
@@ -244,7 +252,7 @@ export const tourStyles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: "12px",
-    margin: { default: "8px 16px 16px 52px", [narrow]: "8px 8px 16px 38px" },
+    margin: { default: "16px 16px 16px 52px", [narrow]: "16px 8px 16px 38px" },
     padding: "12px 16px",
     borderWidth: "1px",
     borderStyle: "dashed",
@@ -317,21 +325,19 @@ export const tourStyles = stylex.create({
     minWidth: 0,
     paddingTop: "16px",
     paddingRight: 0,
-    paddingBottom: "22px",
+    paddingBottom: 0,
     paddingLeft: { default: "4px", [narrow]: 0 },
   },
   mainActive: {
     borderRadius: radius.surface,
   },
-  // The stop's content breaks out over the rail to the panel's inner edge.
+  // The stop's content breaks out over the rail and the stop's right padding
+  // to run edge to edge; the rail stops where it starts.
   content: {
     position: "relative",
     zIndex: 2,
-    width: { default: "calc(100% + 50px)", [narrow]: "calc(100% + 30px)" },
-    marginLeft: {
-      default: "calc(-1 * 50px)",
-      [narrow]: "calc(-1 * 30px)",
-    },
+    width: { default: "calc(100% + 76px)", [narrow]: "calc(100% + 46px)" },
+    marginLeft: { default: "-60px", [narrow]: "-38px" },
     backgroundColor: tokens.bg,
   },
   header: {
