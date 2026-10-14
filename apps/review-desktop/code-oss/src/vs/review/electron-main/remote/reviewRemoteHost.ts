@@ -194,7 +194,7 @@ export interface RunResult {
 	readonly timedOut: boolean;
 }
 
-export function runSsh(spawn: SpawnSsh, env: NodeJS.ProcessEnv, args: string[], timeout: number, input?: string): Promise<RunResult> {
+export function runSsh(spawn: SpawnSsh, env: NodeJS.ProcessEnv, args: string[], timeout: number, input?: string, onStdout?: (chunk: string) => void): Promise<RunResult> {
 	return new Promise((resolve) => {
 		let child: SshChildProcess;
 		try {
@@ -215,7 +215,10 @@ export function runSsh(spawn: SpawnSsh, env: NodeJS.ProcessEnv, args: string[], 
 			done({ code: null });
 		}, timeout);
 		child.stdout?.setEncoding("utf8");
-		child.stdout?.on("data", (chunk: string) => (stdout = (stdout + chunk).slice(-OUTPUT_LIMIT)));
+		child.stdout?.on("data", (chunk: string) => {
+			stdout = (stdout + chunk).slice(-OUTPUT_LIMIT);
+			onStdout?.(chunk);
+		});
 		child.stderr?.setEncoding("utf8");
 		child.stderr?.on("data", (chunk: string) => (stderr = (stderr + chunk).slice(0, OUTPUT_LIMIT)));
 		child.once("error", (error: NodeJS.ErrnoException) => done({ code: null, error }));
@@ -229,7 +232,7 @@ export function runSsh(spawn: SpawnSsh, env: NodeJS.ProcessEnv, args: string[], 
 
 export type ReviewRemoteInstallMode = "ask" | "always" | "never";
 
-export type ReviewRemoteInstallRunInput = Pick<ReviewRemoteInstallInput, "session" | "probe" | "target" | "version" | "onProgress" | "signal" | "spawn" | "env" | "artifact">;
+export type ReviewRemoteInstallRunInput = Pick<ReviewRemoteInstallInput, "session" | "probe" | "target" | "version" | "onProgress" | "signal" | "spawn" | "env" | "artifact" | "script">;
 
 export interface ReviewRemoteInstallFlow {
 	mode(): ReviewRemoteInstallMode;
@@ -239,6 +242,8 @@ export interface ReviewRemoteInstallFlow {
 	run(input: ReviewRemoteInstallRunInput): Promise<ReviewRemoteInstallResult>;
 	origin(): string | undefined;
 	artifact(target: ReviewRemoteTarget, version: string): Promise<ReviewRemoteArtifact>;
+	/** packages/review/remote/install.sh, which probes and installs. */
+	script(): Promise<string>;
 }
 
 type InstallStep = NonNullable<ReviewGatewayHost["installing"]>["step"];
@@ -315,7 +320,6 @@ export class ReviewRemoteHost {
 	private detecting: Promise<ReviewRemoteAgent[] | undefined> | undefined;
 	private declined = false;
 	private installFailure: string | undefined;
-	private target: ReviewRemoteTarget | undefined;
 	private installing: AbortController | undefined;
 	private removing = false;
 	serverId: string | undefined;
@@ -614,13 +618,13 @@ export class ReviewRemoteHost {
 		const mode = flow?.mode() ?? "never";
 		if (!flow || mode === "never") return onPath;
 		const origin = flow.origin();
-		const probed = await probeRemote({ session: this.options.session, spawn: this.options.spawn, env, releases: origin && `${origin}/` });
+		const script = await flow.script();
+		const probed = await probeRemote({ session: this.options.session, spawn: this.options.spawn, env, script, releases: origin && `${origin}/` });
 		if (stale()) return;
 		if ("error" in probed) throw unreachable(probed.error);
 		const { probe } = probed;
 		const support = judgeRemote(probe);
 		if (!support.supported) throw new HostFailure({ state: "unsupported", detail: support.reason });
-		this.target = support.target;
 		const version = await this.options.desktopVersion();
 		const artifact = await flow.artifact(support.target, version).catch((error: Error) => error);
 		if (stale()) return;
@@ -691,6 +695,7 @@ export class ReviewRemoteHost {
 				target,
 				version,
 				artifact,
+				script: await flow.script(),
 				spawn: this.options.spawn,
 				env,
 				signal: abort.signal,
@@ -828,8 +833,8 @@ export class ReviewRemoteHost {
 		return { languageFeatures: true };
 	}
 
-	private facts(): Pick<ReviewGatewayHost, "declined" | "installFailure" | "target"> {
-		return { ...(this.declined && { declined: true as const }), ...(this.installFailure && { installFailure: this.installFailure }), ...(this.target && { target: this.target }) };
+	private facts(): Pick<ReviewGatewayHost, "declined" | "installFailure"> {
+		return { ...(this.declined && { declined: true as const }), ...(this.installFailure && { installFailure: this.installFailure }) };
 	}
 
 	private fail(problem: Problem): void {
@@ -842,7 +847,7 @@ export class ReviewRemoteHost {
 		this.cancelPending = undefined;
 		this.connectedAt = undefined;
 		this.dropMaster();
-		this.set({ alias: this.alias, problem, ...(this.declined && { declined: true as const }), ...(this.target && { target: this.target }) });
+		this.set({ alias: this.alias, problem, ...(this.declined && { declined: true as const }) });
 		if (problem.state !== "unreachable" || this.disposed) return;
 		const delay = reconnectDelay(attempt);
 		this.cancelTimer = this.clock.schedule(delay, () => {

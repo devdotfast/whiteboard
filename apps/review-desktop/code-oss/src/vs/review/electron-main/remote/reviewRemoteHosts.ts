@@ -195,8 +195,10 @@ export class ReviewRemoteHosts {
 		const host = this.hosts.get(alias);
 		host?.quiesce();
 		try {
+			if (!this.options.install) throw new Error("This Desktop cannot install or remove Whiteboard on hosts.");
 			const env = { ...(await this.options.environment()), ...(await this.askpass()).env(alias) };
-			await uninstallRemote({ session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance), spawn: this.options.spawn, env });
+			const script = await this.options.install.script();
+			await uninstallRemote({ session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance), spawn: this.options.spawn, env, script });
 		} catch (error) {
 			this.options.log(`${alias}: Whiteboard was not removed; the host waits for the setting.`);
 			throw error;

@@ -205,6 +205,7 @@ jobs:
           for t in linux-x64 linux-arm64; do
             node apps/review-desktop/scripts/build-remote-tarball.mjs --target "$t" --out remote-artifacts --version "$VERSION" --commit "$COMMIT"
           done
+          cp packages/review/remote/install.sh remote-artifacts/install.sh
       # Payloads before the pin: no Desktop build may pin a tarball R2 lacks.
       - name: Upload the remote tarballs to R2
         if: ${{ !inputs.dry_run && steps.existing.outputs.published != 'true' }}
@@ -218,6 +219,7 @@ jobs:
           PREFIX="s3://${R2_BUCKET}/releases/${VERSION}/remote/"
           aws s3 cp remote-artifacts/ "$PREFIX" --recursive --exclude "*" --include "*.tar.xz" --content-type application/x-xz
           aws s3 cp remote-artifacts/ "$PREFIX" --recursive --exclude "*" --include "*.sha256" --content-type text/plain
+          aws s3 cp remote-artifacts/install.sh "${PREFIX}install.sh" --content-type text/plain
       - name: Pin the remote tarballs
         id: remote
         run: |

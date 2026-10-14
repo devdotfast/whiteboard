@@ -17,11 +17,13 @@ import type { SpawnSsh } from "./reviewRemoteHost.js";
 import { installRemote, type ReviewRemoteInstallInput, type ReviewRemoteInstallProgress } from "./reviewRemoteInstaller.js";
 import { judgeRemote, probeRemote, type ReviewRemoteProbe, type ReviewRemoteTarget } from "./reviewRemoteProbe.js";
 import { REVIEW_SSH_CONFIG_ENV, reviewSshSession, sshCheckArgs, sshCloseArgs, sshMasterArgs, type ReviewSshSession } from "./reviewSshCommand.js";
+import { INSTALL_SCRIPT } from "./test/installScript.js";
 
 const run = promisify(execFile);
 const checkout = resolve(import.meta.dirname, "../../../../../../../..");
 const harness = join(checkout, "apps/review-desktop/scripts/e2e/remote/remote.mjs");
 const VERSION: string = JSON.parse(await readFile(join(checkout, "packages/review/package.json"), "utf8")).version;
+const NEXT = VERSION.replace(/^(\d+)\.(\d+)\.(\d+).*$/, (_, major, minor, patch) => `${major}.${minor}.${Number(patch) + 1}`);
 
 function skipReason(): string | undefined {
 	if (process.env.WB_TEST_CONTAINERS !== "1") return "set WB_TEST_CONTAINERS=1 to install into containers";
@@ -43,7 +45,7 @@ const realSsh: SpawnSsh = (args, options) => spawn("ssh", args, options);
 
 let started = false;
 let controlDirectory = "";
-let releases: { url: string; stage(target: ReviewRemoteTarget): Promise<void>; close(): Promise<void> } | undefined;
+let releases: { url: string; stage(target: ReviewRemoteTarget, version?: string): Promise<void>; close(): Promise<void> } | undefined;
 const masters: ReviewSshSession[] = [];
 const found = new Map<Host, { session: ReviewSshSession; probe: ReviewRemoteProbe; target: ReviewRemoteTarget }>();
 const artifacts = new Map<ReviewRemoteTarget, ReviewRemoteArtifact>();
@@ -71,7 +73,7 @@ before(
 		for (const [host, flags] of Object.entries(hosts)) await remote("up", host, ...flags);
 		for (const host of Object.keys(hosts) as Host[]) {
 			const session = await connect(host);
-			const probed = await probeRemote({ session, spawn: realSsh, env: sshEnv });
+			const probed = await probeRemote({ session, spawn: realSsh, env: sshEnv, script: INSTALL_SCRIPT });
 			assert.ok("probe" in probed, "error" in probed ? probed.error : "");
 			const judged = judgeRemote(probed.probe);
 			assert.ok(judged.supported);
@@ -110,6 +112,7 @@ function input(host: Host, change: Partial<ReviewRemoteInstallInput> = {}) {
 		onProgress: (step) => progress.push(step),
 		signal: new AbortController().signal,
 		artifact: artifacts.get(target)!,
+		script: INSTALL_SCRIPT,
 		spawn: realSsh,
 		env: sshEnv,
 		...change,
@@ -232,4 +235,65 @@ test("with three versions installed and one running, an install leaves the runni
 	await installRemote(input("fresh").value);
 
 	assert.equal(await inContainer("fresh", "ls ~/.dev/whiteboard-remote/versions | tr '\\n' ' '"), `${VERSION} ${VERSION}-old.1`);
+});
+
+/** NEXT's tarball for the host, built and served once. */
+async function nextArtifact(host: Host): Promise<ReviewRemoteArtifact> {
+	const { target } = found.get(host)!;
+	await releases!.stage(target, NEXT);
+	return remoteArtifact(target, NEXT, { pin: undefined, releases: releases!.url });
+}
+
+const launcherTarget = (host: Host) => inContainer(host, "sed -n 's/^exec .\\(.*\\)\\/whiteboard. .*/\\1/p' ~/.local/bin/whiteboard");
+
+test("an update installs the new version beside the old one, and the launcher moves to it", { skip, timeout: 30 * 60_000 }, async () => {
+	await reset("fresh");
+	await installRemote(input("fresh").value);
+	const next = await nextArtifact("fresh");
+
+	const { value, progress } = input("fresh", { version: NEXT, artifact: next });
+	const result = await installRemote(value);
+
+	const updated = `/home/dev/.dev/whiteboard-remote/versions/${NEXT}`;
+	assert.deepEqual(result, { nodePath: `${updated}/bin/node`, cliPath: `${updated}/dist/cli.js` });
+	assert.deepEqual(progress.map((p) => p.step), ["package", "done"]);
+	assert.equal(await version("fresh"), NEXT);
+	assert.equal(await launcherTarget("fresh"), updated);
+	assert.equal(await inContainer("fresh", "ls ~/.dev/whiteboard-remote/versions | tr '\\n' ' '"), `${VERSION} ${NEXT}`);
+
+	const probed = await probeRemote({ session: found.get("fresh")!.session, spawn: realSsh, env: sshEnv, script: INSTALL_SCRIPT });
+	assert.ok("probe" in probed);
+	assert.deepEqual(probed.probe.installed.map((entry) => entry.version).sort(), [VERSION, NEXT].sort());
+});
+
+test("a hand install through the published install.sh is one Desktop recognises and updates", { skip, timeout: 30 * 60_000 }, async () => {
+	await reset("fresh");
+	const base = releases!.url.replace(/\/$/, "");
+
+	await inContainer("fresh", `curl -fsSL ${base}/${VERSION}/remote/install.sh | WHITEBOARD_RELEASES=${base} sh -s -- --version ${VERSION}`);
+
+	assert.equal(await version("fresh"), VERSION);
+	const probed = await probeRemote({ session: found.get("fresh")!.session, spawn: realSsh, env: sshEnv, script: INSTALL_SCRIPT });
+	assert.ok("probe" in probed);
+	assert.deepEqual(probed.probe.installed.map((entry) => entry.version), [VERSION]);
+	assert.equal(probed.probe.pathCli, null);
+
+	await installRemote(input("fresh", { version: NEXT, artifact: await nextArtifact("fresh") }).value);
+	assert.equal(await version("fresh"), NEXT);
+});
+
+test("the old hand-install layout is adopted: its link moves to the install and its tree goes", { skip, timeout: 10 * 60_000 }, async () => {
+	await reset("fresh");
+	const { target } = found.get("fresh")!;
+	const tarball = `${releases!.url}whiteboard-remote-${VERSION}-${target}.tar.xz`;
+	await inContainer(
+		"fresh",
+		`mkdir -p ~/.dev/whiteboard-remote ~/.local/bin && curl -fsSL ${tarball} | tar -xJ -C ~/.dev/whiteboard-remote && ln -sf ~/.dev/whiteboard-remote/whiteboard-remote/whiteboard ~/.local/bin/whiteboard`,
+	);
+
+	await installRemote(input("fresh").value);
+
+	assert.equal(await launcherTarget("fresh"), installed);
+	assert.equal(await inContainer("fresh", "test -e ~/.dev/whiteboard-remote/whiteboard-remote && echo kept || echo gone"), "gone");
+	assert.equal(await version("fresh"), VERSION);
 });

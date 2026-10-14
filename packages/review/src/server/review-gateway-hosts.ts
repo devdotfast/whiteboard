@@ -60,7 +60,6 @@ interface Host extends GatewayRemote {
   declined?: true;
   asking?: string;
   installFailure?: string;
-  target?: ReviewGatewayHost["target"];
   serverId?: string;
   status: ReviewGatewayHostState["state"];
   detail?: string;
@@ -123,10 +122,7 @@ export function createGatewayHosts(input: {
       ...(detail !== undefined && { detail }),
       ...(INSTALLS.has(host.status) &&
         host.problem?.state !== "incompatible" && {
-          installCommand: [
-            `mkdir -p ~/.dev/whiteboard-remote && rm -rf ~/.dev/whiteboard-remote/whiteboard-remote && curl -fsSL https://install.dev.fast/releases/${input.version}/remote/whiteboard-remote-${input.version}-${host.target ?? "linux-x64"}.tar.xz | tar -xJ -C ~/.dev/whiteboard-remote`,
-            "mkdir -p ~/.local/bin && ln -sf ~/.dev/whiteboard-remote/whiteboard-remote/whiteboard ~/.local/bin/whiteboard",
-          ].join("\n"),
+          installCommand: `curl -fsSL https://install.dev.fast/releases/${input.version}/remote/install.sh | sh -s -- --version ${input.version}`,
         }),
       ...(host.declined &&
         host.status !== "online" &&
@@ -185,7 +181,6 @@ export function createGatewayHosts(input: {
       status: "connecting",
       retryMs: FIRST_RETRY_MS,
       ...languageOf(given),
-      ...(given.target && { target: given.target }),
     };
 
     if (given.endpoint) host.endpoint = given.endpoint;
@@ -322,7 +317,6 @@ export function createGatewayHosts(input: {
           current.languageFeatures = given.languageFeatures;
           current.languageFeaturesDetail = given.languageFeaturesDetail;
           current.languageGroups = given.languageGroups;
-          current.target = given.target;
           next.push(current);
         } else {
           const host = create(given);

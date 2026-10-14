@@ -912,7 +912,6 @@ export const ReviewGatewayHostSchema = z.strictObject({
   declined: z.literal(true).optional(),
   asking: requiredString.optional(),
   installFailure: stringAllowEmpty.optional(),
-  target: z.enum(["linux-x64", "linux-arm64"]).optional(),
   installing: z
     .strictObject({
       step: z.enum(REVIEW_REMOTE_INSTALL_STEPS),

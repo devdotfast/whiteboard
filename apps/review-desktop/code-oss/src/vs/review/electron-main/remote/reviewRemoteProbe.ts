@@ -4,8 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { lastLine, runSsh, type SpawnSsh } from "./reviewRemoteHost.js";
-import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_PATH_CLI, reviewRemoteProbeScript } from "./reviewRemoteProbeScript.js";
+import { remoteInstallScriptInput } from "./reviewRemoteInstallScript.js";
 import { sshExecArgs, type ReviewSshSession } from "./reviewSshCommand.js";
+
+export const REVIEW_REMOTE_PROBE_BEGIN = "WHITEBOARD-PROBE-BEGIN";
+export const REVIEW_REMOTE_PROBE_END = "WHITEBOARD-PROBE-END";
+export const REVIEW_REMOTE_PROBE_PATH_CLI = "WHITEBOARD-PROBE-PATH-CLI";
 
 export interface ReviewRemoteProbe {
 	os: string;
@@ -66,12 +70,14 @@ export async function probeRemote(input: {
 	session: ReviewSshSession;
 	spawn: SpawnSsh;
 	env: NodeJS.ProcessEnv;
+	/** packages/review/remote/install.sh. */
+	script: string;
 	releases?: string;
 	timeout?: number;
 }): Promise<ReviewRemoteProbeResult> {
 	const timeout = input.timeout ?? REVIEW_REMOTE_PROBE_TIMEOUT;
 	const alias = input.session.alias;
-	const result = await runSsh(input.spawn, input.env, sshExecArgs(input.session, input.env), timeout, reviewRemoteProbeScript(input.releases));
+	const result = await runSsh(input.spawn, input.env, sshExecArgs(input.session, input.env), timeout, remoteInstallScriptInput(input.script, ["probe", ...(input.releases ? ["--releases", input.releases] : [])]));
 	if (result.error) return { error: `The probe of ${alias} could not start: ${result.error.message}` };
 	const parsed = parseRemoteProbe(result.stdout);
 	if ("probe" in parsed) return parsed;

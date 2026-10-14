@@ -59,6 +59,7 @@ const PACKAGE_DATA = [
   "THIRD_PARTY_NOTICES.md",
   "onboarding.md",
   "instructions",
+  "remote",
 ];
 
 const reviewRequire = createRequire(path.join(reviewPackage, "package.json"));

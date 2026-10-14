@@ -11,6 +11,7 @@ import test from "node:test";
 
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
 import { attachOutput, COMMIT, detectOutput, FAKE_SERVER_ID, fakeClock, fakeSsh, flush, healthServer, until, type FakeRemote } from "./test/fakeSsh.js";
+import { INSTALL_SCRIPT } from "./test/installScript.js";
 import type { ReviewRemoteInstallFlow } from "./reviewRemoteHost.js";
 import { closeRemoteHostWindows, ReviewRemoteHosts, type ReviewRemoteHostsOptions } from "./reviewRemoteHosts.js";
 import { openRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
@@ -271,6 +272,7 @@ test("Install on a declined host stores the agreement, installs and attaches", a
 			runs.push(input.version);
 			return INSTALLED;
 		},
+		script: async () => INSTALL_SCRIPT,
 		origin: () => "https://install.dev.fast",
 		artifact: async (target, version) => ({ name: `whiteboard-remote-${version}-${target}.tar.xz`, url: "https://install.dev.fast/x", sha256: INSTALLED_SHA256 }),
 	};
@@ -307,6 +309,7 @@ test("two hosts asking at once are asked one after the other", async (t) => {
 			return true;
 		},
 		run: async () => INSTALLED,
+		script: async () => INSTALL_SCRIPT,
 		origin: () => "https://install.dev.fast",
 		artifact: async (target, version) => ({ name: `whiteboard-remote-${version}-${target}.tar.xz`, url: "https://install.dev.fast/x", sha256: INSTALLED_SHA256 }),
 	};
@@ -339,6 +342,7 @@ async function promptingFlow(t: test.TestContext) {
 			runs.push(input.version);
 			return INSTALLED;
 		},
+		script: async () => INSTALL_SCRIPT,
 		origin: () => "https://install.dev.fast",
 		artifact: async (target, version) => ({ name: `whiteboard-remote-${version}-${target}.tar.xz`, url: "https://install.dev.fast/x", sha256: INSTALLED_SHA256 }),
 	};
@@ -449,13 +453,13 @@ test("removing Whiteboard runs while nothing reconnects, then forgets the answer
 	const before = ssh.calls.length;
 	const removed = manager.uninstall("wb-test-a");
 	assert.equal(manager.uninstall("wb-test-a"), removed);
-	await until(() => ssh.of("wb-test-a", "uninstall").length === 2);
+	await until(() => ssh.of("wb-test-a", "uninstall").length === 1);
 	manager.reattach("wb-test-a");
 	manager.resume();
 	manager.retry("wb-test-a");
 	while (clock.next());
 	await new Promise((resolve) => setTimeout(resolve, 50));
-	assert.deepEqual(ssh.calls.slice(before).map((call) => call.kind), ["uninstall", "uninstall"]);
+	assert.deepEqual(ssh.calls.slice(before).map((call) => call.kind), ["uninstall"]);
 	assert.ok(ssh.master("wb-test-a")!.alive);
 	finish();
 	await removed;
@@ -508,7 +512,7 @@ test("a setting change that keeps the alias during an uninstall changes nothing 
 	asked[0].answer(true);
 	await sentUntil((hosts) => hosts[0]?.endpoint !== undefined);
 	const removed = manager.uninstall("wb-test-a");
-	await until(() => ssh.of("wb-test-a", "uninstall").length === 2);
+	await until(() => ssh.of("wb-test-a", "uninstall").length === 1);
 	manager.update(true, ["wb-test-a"]);
 	await new Promise((resolve) => setTimeout(resolve, 20));
 
@@ -534,7 +538,7 @@ test("an alias removed during a successful uninstall is closed once", async (t) 
 	asked[0].answer(true);
 	await sentUntil((hosts) => hosts[0]?.endpoint !== undefined);
 	const removed = manager.uninstall("wb-test-a");
-	await until(() => ssh.of("wb-test-a", "uninstall").length === 2);
+	await until(() => ssh.of("wb-test-a", "uninstall").length === 1);
 	manager.update(true, []);
 	finish();
 	await removed;

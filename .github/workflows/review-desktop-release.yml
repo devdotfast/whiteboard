@@ -378,6 +378,7 @@ jobs:
           for t in linux-x64 linux-arm64; do
             node apps/review-desktop/scripts/build-remote-tarball.mjs --target "$t" --out remote-artifacts --version "$VERSION" --commit "$COMMIT"
           done
+          cp packages/review/remote/install.sh remote-artifacts/install.sh
       # Release assets, then R2, then the pin: a rerun that finds the tarballs on
       # R2 skips both uploads, and no Desktop build may pin a tarball R2 lacks.
       - name: Attach the remote tarballs to the GitHub Release
@@ -385,7 +386,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.version.outputs.tag }}
-        run: gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber remote-artifacts/*.tar.xz remote-artifacts/*.sha256
+        run: gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber remote-artifacts/*.tar.xz remote-artifacts/*.sha256 remote-artifacts/install.sh
       - name: Upload the remote tarballs to R2
         if: ${{ !inputs.dry_run && steps.existing.outputs.published != 'true' }}
         env:
@@ -398,6 +399,7 @@ jobs:
           PREFIX="s3://${R2_BUCKET}/releases/${VERSION}/remote/"
           aws s3 cp remote-artifacts/ "$PREFIX" --recursive --exclude "*" --include "*.tar.xz" --content-type application/x-xz
           aws s3 cp remote-artifacts/ "$PREFIX" --recursive --exclude "*" --include "*.sha256" --content-type text/plain
+          aws s3 cp remote-artifacts/install.sh "${PREFIX}install.sh" --content-type text/plain
       - name: Pin the remote tarballs
         id: remote
         run: |

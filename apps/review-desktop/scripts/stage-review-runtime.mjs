@@ -49,6 +49,7 @@ export const REQUIRED_RUNTIME_ENTRIES = [
   // The build's commit; without it the server reports `commit: null`.
   "dist/build-info.json",
   "instructions/authoring.md",
+  "remote/install.sh",
   "node_modules",
 ];
 

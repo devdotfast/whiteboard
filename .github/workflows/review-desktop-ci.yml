@@ -96,6 +96,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Check the remote install script
+        run: shellcheck -s sh packages/review/remote/install.sh
+
       - name: Check formatting
         run: pnpm format:check
 

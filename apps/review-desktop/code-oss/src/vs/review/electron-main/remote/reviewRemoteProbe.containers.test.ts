@@ -14,7 +14,8 @@ import { promisify } from "node:util";
 
 import type { SpawnSsh } from "./reviewRemoteHost.js";
 import { judgeRemote, parseRemoteProbe, probeRemote, REVIEW_REMOTE_PROBE_TIMEOUT } from "./reviewRemoteProbe.js";
-import { reviewRemoteProbeScript } from "./reviewRemoteProbeScript.js";
+import { remoteInstallScriptInput } from "./reviewRemoteInstallScript.js";
+import { INSTALL_SCRIPT } from "./test/installScript.js";
 import { REVIEW_SSH_CONFIG_ENV, reviewSshSession } from "./reviewSshCommand.js";
 
 const run = promisify(execFile);
@@ -58,7 +59,7 @@ const RELEASES = "https://install.dev.fast/";
 
 async function probe(host: Host, releases = RELEASES) {
 	const began = Date.now();
-	const result = await probeRemote({ session: reviewSshSession(aliasOf(host), controlDirectory, "test"), spawn: realSsh, env: sshEnv(host), releases });
+	const result = await probeRemote({ session: reviewSshSession(aliasOf(host), controlDirectory, "test"), spawn: realSsh, env: sshEnv(host), script: INSTALL_SCRIPT, releases });
 	const elapsed = Date.now() - began;
 	assert.ok("probe" in result, "error" in result ? result.error : "");
 	assert.ok(elapsed < REVIEW_REMOTE_PROBE_TIMEOUT);
@@ -114,7 +115,7 @@ test("the script also runs under bash", { skip }, async () => {
 			{ timeout: REVIEW_REMOTE_PROBE_TIMEOUT },
 			(error, out) => (error ? reject(error) : resolvePromise({ stdout: out })),
 		);
-		child.stdin?.end(reviewRemoteProbeScript(RELEASES));
+		child.stdin?.end(remoteInstallScriptInput(INSTALL_SCRIPT, ["probe", "--releases", RELEASES]));
 	});
 	const parsed = parseRemoteProbe(stdout);
 

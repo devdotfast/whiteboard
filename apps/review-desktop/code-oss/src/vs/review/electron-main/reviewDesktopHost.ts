@@ -22,7 +22,7 @@ import { NullTelemetryService } from "../../platform/telemetry/common/telemetryU
 import { IUpdateService } from "../../platform/update/common/update.js";
 import { UtilityProcess } from "../../platform/utilityProcess/electron-main/utilityProcess.js";
 import { IWindowsMainService } from "../../platform/windows/electron-main/windows.js";
-import type { ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
+import { resolveReviewServerEntry, type ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
 import type {
   ReviewGatewayHostState,
   ReviewRemoteAgent,
@@ -60,6 +60,7 @@ import {
   reviewRemoteInstallConsentPath,
 } from "./remote/reviewRemoteInstallConsent.js";
 import { installRemote } from "./remote/reviewRemoteInstaller.js";
+import { readRemoteInstallScript } from "./remote/reviewRemoteInstallScript.js";
 import { createSshAskpass } from "./remote/reviewSshAskpass.js";
 import {
   reviewSshConfigPath,
@@ -305,7 +306,8 @@ export class ReviewDesktopHost extends Disposable {
   }
 
   private remoteInstallFlow(): ReviewRemoteInstallFlow {
-    const { userDataPath } = this.environmentMainService;
+    const { userDataPath, appRoot, isBuilt } = this.environmentMainService;
+    let script: Promise<string> | undefined;
     const artifactsOptions = {
       pin: this.productService.whiteboardRemote,
       releases: process.env[REVIEW_REMOTE_RELEASES_ENV],
@@ -339,6 +341,15 @@ export class ReviewDesktopHost extends Disposable {
       origin: () => remoteReleasesOrigin(artifactsOptions),
       artifact: (target, version) =>
         remoteArtifact(target, version, artifactsOptions),
+      script: () =>
+        (script ??= readRemoteInstallScript(
+          resolveReviewServerEntry({
+            isBuilt,
+            appRoot,
+            serverEntryOverride: process.env["DEV_FAST_REVIEW_SERVER_ENTRY"],
+            join,
+          }),
+        )),
     };
   }
 

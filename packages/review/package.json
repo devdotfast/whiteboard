@@ -18,6 +18,7 @@
     "onboarding.md",
     "dist",
     "instructions",
+    "remote",
     "src",
     "!src/**/*.test.ts",
     "!src/**/*test-utils*",

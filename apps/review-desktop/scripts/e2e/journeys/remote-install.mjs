@@ -662,16 +662,9 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   assert.equal(declined.state, "not-installed", declined.detail);
   assert.equal(declined.declined, true);
 
-  const denyTarget = { x86_64: "linux-x64", aarch64: "linux-arm64" }[
-    await onRemote(deny, "uname -m")
-  ];
-
   assert.equal(
     declined.installCommand,
-    [
-      `mkdir -p ${ROOT} && rm -rf ${ROOT}/whiteboard-remote && curl -fsSL https://install.dev.fast/releases/${version}/remote/whiteboard-remote-${version}-${denyTarget}.tar.xz | tar -xJ -C ${ROOT}`,
-      "mkdir -p ~/.local/bin && ln -sf ~/.dev/whiteboard-remote/whiteboard-remote/whiteboard ~/.local/bin/whiteboard",
-    ].join("\n"),
+    `curl -fsSL https://install.dev.fast/releases/${version}/remote/install.sh | sh -s -- --version ${version}`,
   );
   await denySection
     .getByRole("button", { name: `Install ${deny}` })
@@ -894,18 +887,14 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   );
 
   const hand = alias("hand");
-  const [unpack, link] = declined.installCommand.split("\n");
-  const served = `${releases.url}whiteboard-remote-${next}-linux-x64.tar.xz`;
+  const base = releases.url.replace(/\/$/, "");
 
-  await onRemote(
-    hand,
-    [
-      "set -e",
-      unpack.replace(/curl -fsSL \S+/, `curl -fsSL ${served}`),
-      link,
-    ].join("\n"),
-    { timeout: 5 * MINUTE },
-  );
+  const handCommand = declined.installCommand
+    .replaceAll(version, next)
+    .replace("https://install.dev.fast/releases", base)
+    .replace("| sh ", `| WHITEBOARD_RELEASES=${base} sh `);
+
+  await onRemote(hand, handCommand, { timeout: 5 * MINUTE });
   assert.equal(await onRemote(hand, "bash -lc 'whiteboard --version'"), next);
 
   const handAdded = Date.now();
@@ -935,12 +924,12 @@ async function steps(ctx, until, watch, timings, manifestPath) {
 
   assert.equal(handSettled.state, "online", handSettled.detail);
   assert.equal(
-    await onRemote(hand, `ls -d ${ROOT}/versions 2>/dev/null || true`),
-    "",
+    await onRemote(hand, `ls ${ROOT}/versions`),
+    next,
   );
   assert.match(
-    await onRemote(hand, `readlink ${WHITEBOARD}`),
-    /\/\.dev\/whiteboard-remote\/whiteboard-remote\/whiteboard$/,
+    await onRemote(hand, `cat ${WHITEBOARD}`),
+    new RegExp(`/versions/${next.replaceAll(".", "\\.")}/whiteboard`),
   );
 
   const handServer = JSON.parse(
@@ -953,11 +942,11 @@ async function steps(ctx, until, watch, timings, manifestPath) {
       hand,
       `cat /proc/${handServer.serverPid}/cmdline | tr '\\0' ' '`,
     ),
-    /\/\.dev\/whiteboard-remote\/whiteboard-remote\//,
+    new RegExp(`/versions/${next.replaceAll(".", "\\.")}/`),
   );
   assert.deepEqual(await promptsFor(ctx, hand), []);
   ctx.check(
-    `11. ${hand}: ${served} unpacked and linked by Settings' two lines; online without a question, its server runs from the unpacked tree, no versions/ was written and ${WHITEBOARD} is still the hand symlink`,
+    `11. ${hand}: Settings' install.sh line installed ${next}; online without a question, as Desktop's own install, and its server runs from versions/${next}`,
   );
 
   ctx.check(
