@@ -48,7 +48,7 @@ function hostTarget(alias, { sshConfig } = {}) {
   return target;
 }
 
-/** Installs this checkout's tarball with packages/review/remote/install.sh, as Desktop does, and returns its `whiteboard version --json`; `commit` rewrites its VS Code server's commit. */
+/** Installs this checkout's tarball with install.sh, as Desktop does; `commit` rewrites its VS Code server's commit. */
 export async function remoteDevInstall(
   alias,
   { target, sshConfig, version, commit, stdio = "inherit" } = {},

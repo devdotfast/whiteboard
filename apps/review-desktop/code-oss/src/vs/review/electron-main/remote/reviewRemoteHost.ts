@@ -242,7 +242,7 @@ export interface ReviewRemoteInstallFlow {
 	run(input: ReviewRemoteInstallRunInput): Promise<ReviewRemoteInstallResult>;
 	origin(): string | undefined;
 	artifact(target: ReviewRemoteTarget, version: string): Promise<ReviewRemoteArtifact>;
-	/** packages/review/remote/install.sh, which probes and installs. */
+	/** packages/review/remote/install.sh. */
 	script(): Promise<string>;
 }
 

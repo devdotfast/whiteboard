@@ -1,4 +1,4 @@
-/** This checkout's remote tarballs and install.sh, served over plain HTTP as install.dev.fast serves a release's: flat for DEV_FAST_REVIEW_REMOTE_RELEASES, and under <version>/remote/ for a hand install's WHITEBOARD_RELEASES. */
+/** This checkout's remote tarballs and install.sh over plain HTTP, as install.dev.fast serves a release's; any path resolves by file name. */
 import { createReadStream } from "node:fs";
 import { copyFile, mkdtemp, rm, stat } from "node:fs/promises";
 import { createServer } from "node:http";

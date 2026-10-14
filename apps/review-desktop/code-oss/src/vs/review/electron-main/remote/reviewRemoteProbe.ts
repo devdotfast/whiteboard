@@ -70,7 +70,6 @@ export async function probeRemote(input: {
 	session: ReviewSshSession;
 	spawn: SpawnSsh;
 	env: NodeJS.ProcessEnv;
-	/** packages/review/remote/install.sh. */
 	script: string;
 	releases?: string;
 	timeout?: number;

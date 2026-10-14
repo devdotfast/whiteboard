@@ -32,7 +32,6 @@ export interface ReviewRemoteInstallInput {
 	onProgress(progress: ReviewRemoteInstallProgress): void;
 	readonly signal: AbortSignal;
 	readonly artifact: ReviewRemoteArtifact;
-	/** packages/review/remote/install.sh. */
 	readonly script: string;
 	readonly spawn: SpawnSsh;
 	readonly env: NodeJS.ProcessEnv;

@@ -1,6 +1,6 @@
 #!/bin/sh
-# Installs Whiteboard's remote CLI on a Linux host. Desktop pipes this file over ssh;
-# the same file is published next to each release's tarballs for hand installs:
+# Installs Whiteboard on a Linux host. Desktop pipes this file over ssh; releases publish it
+# beside their tarballs for hand installs:
 #   curl -fsSL https://install.dev.fast/releases/<version>/remote/install.sh | sh -s -- --version <version>
 #
 #   install --version V [--sha256 H (--url U | --file F)] [--downloader curl|wget] [--owner NAME] [--token HEX]
@@ -168,8 +168,7 @@ release() {
 		rm -rf "$lock.$token.done"
 	fi
 }
-# Runs a long step, keeping the lock fresh; a heartbeat that cannot be written means Desktop
-# went away, so the step is stopped.
+# Runs a long step and keeps the lock fresh; a heartbeat Desktop no longer reads stops it.
 guard() {
 	if command -v setsid >/dev/null 2>&1; then setsid "$@" & else "$@" & fi
 	pid=$!

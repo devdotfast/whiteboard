@@ -15,7 +15,6 @@ export async function uninstallRemote(input: {
 	session: ReviewSshSession;
 	spawn: SpawnSsh;
 	env: NodeJS.ProcessEnv;
-	/** packages/review/remote/install.sh. */
 	script: string;
 	timeout?: number;
 }): Promise<void> {
