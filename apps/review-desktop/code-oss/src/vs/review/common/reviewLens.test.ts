@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { lensContextGaps } from './reviewLens.js';
+import { LineRange } from '../../editor/common/core/ranges/lineRange.js';
+import { DetailedLineRangeMapping } from '../../editor/common/diff/rangeMapping.js';
 import type { IDocumentContextGap, IDocumentDiff } from '../../editor/common/diff/documentDiffProvider.js';
 
 const plain: IDocumentDiff = { changes: [], moves: [], identical: false, quitEarly: false };
@@ -75,6 +77,27 @@ test('in a modified file a lens shows the whole run between collapsed bands', ()
 		],
 	};
 	assert.deepEqual(shownLines(lensContextGaps(modified, 30, 30, head(15, 15)), 30), [[5, 20]]);
+});
+
+test('a lens inside a method added to an existing class shows the scope boundaries, not the whole method', () => {
+	// A class on lines 1-60 of both sides. Head adds a method on lines 21-40; the
+	// class body around it is unchanged, with lines 2-16 and 45-59 collapsed.
+	const rows = [
+		...Array.from({ length: 20 }, (_, i) => [i, i] as const),
+		...Array.from({ length: 20 }, (_, i) => [null, 20 + i] as const),
+		...Array.from({ length: 20 }, (_, i) => [20 + i, 40 + i] as const),
+	];
+	const diff: IDocumentDiff = {
+		...plain,
+		changes: [new DetailedLineRangeMapping(new LineRange(21, 21), new LineRange(21, 41), undefined)],
+		sourceLineAlignment: rows,
+		contextScopes: { original: [[0, 40]], modified: [[0, 60], [20, 40]] },
+		contextGaps: [
+			{ originalStart: 2, originalCount: 15, modifiedStart: 2, modifiedCount: 15, collapsed: true },
+			{ originalStart: 25, originalCount: 15, modifiedStart: 45, modifiedCount: 15, collapsed: true },
+		],
+	};
+	assert.deepEqual(shownLines(lensContextGaps(diff, 40, 60, head(30, 31)), 60), [[1, 1], [17, 21], [27, 34], [40, 44], [60, 60]]);
 });
 
 test('viewed folds never hide an unread counterpart, and do not overlap structural folds', async () => {

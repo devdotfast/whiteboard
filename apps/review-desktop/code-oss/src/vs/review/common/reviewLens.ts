@@ -16,8 +16,10 @@ export function lensContextGaps(diff: IDocumentDiff, originalCount: number, modi
 	const context = visible.map((_, index) => visible.slice(Math.max(0, index - 3), index + 4).some(Boolean));
 	if (diff.contextScopes) {
 		// A lens must not clip context that diffr kept around its selected code.
-		// Seed enclosing scope boundaries, then retain each visible context run
-		// touching a seed. Never expand through a collapsed provider band.
+		// Seed enclosing scope boundaries, then retain the unchanged lines of each
+		// visible context run touching a seed. Never expand through a collapsed
+		// provider band, and never into changed lines: diffr never folds those,
+		// so a run that holds them is not context diffr chose to keep.
 		const scopes = [diff.contextScopes.original, diff.contextScopes.modified];
 		const enclosing = scopes.map((sideScopes, side) => sideScopes.filter(([start, end]) =>
 			rows.some((row, index) => visible[index] && row[side] !== null && row[side]! >= start && row[side]! < end)));
@@ -31,14 +33,17 @@ export function lensContextGaps(diff: IDocumentDiff, originalCount: number, modi
 		})));
 		const seeds = rows.map((row, index) => visible[index] || row.some((line, side) =>
 			line !== null && enclosing[side].some(([start, end]) => line === start || line === end - 1)));
+		const edited = [new Uint8Array(originalCount), new Uint8Array(modifiedCount)];
+		for (const change of diff.changes) {
+			edited[0].fill(1, change.original.startLineNumber - 1, change.original.endLineNumberExclusive - 1);
+			edited[1].fill(1, change.modified.startLineNumber - 1, change.modified.endLineNumberExclusive - 1);
+		}
+		const unchanged = rows.map(row => row.every((line, side) => line !== null && !edited[side][line]));
 		for (let start = 0; start < rows.length;) {
 			if (!open[start]) { start++; continue; }
 			let end = start + 1;
 			while (end < rows.length && open[end]) end++;
-			// diffr never collapses inside added code, so no band bounds a run of
-			// only added lines (as in an added file). Keep only its seeds.
-			if (rows.slice(start, end).every(row => row[0] === null)) for (let index = start; index < end; index++) context[index] ||= seeds[index];
-			else if (seeds.slice(start, end).some(Boolean)) context.fill(true, start, end);
+			if (seeds.slice(start, end).some(Boolean)) for (let index = start; index < end; index++) context[index] ||= seeds[index] || unchanged[index];
 			start = end;
 		}
 	}
