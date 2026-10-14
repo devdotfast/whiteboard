@@ -85,8 +85,23 @@ export function applyCorsHeaders(
   return response;
 }
 
+/** The allowed origin, headers and methods hold for the server's lifetime, so
+ * the client may reuse a preflight. Chromium otherwise keeps one for 5 s, and
+ * nearly every request paid a second round trip. Two hours is Chromium's cap. */
+const PREFLIGHT_MAX_AGE_SECONDS = 7200;
+
 export function corsPreflightResponse(request: Request): Response {
-  return applyCorsHeaders(request, new Response(null, { status: 204 }));
+  const response = applyCorsHeaders(
+    request,
+    new Response(null, { status: 204 }),
+  );
+
+  response.headers.set(
+    "access-control-max-age",
+    String(PREFLIGHT_MAX_AGE_SECONDS),
+  );
+
+  return response;
 }
 
 export function isAuthorizedRequest(
