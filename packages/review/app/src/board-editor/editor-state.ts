@@ -10,6 +10,7 @@ import {
   Plugin,
   TextSelection,
 } from "@tiptap/pm/state";
+import { tableEditing } from "@tiptap/pm/tables";
 
 import { type Board, boardToDoc } from "./board-doc";
 import {
@@ -24,6 +25,12 @@ import { boardSchema, nodes } from "./schema";
 import { shortcuts } from "./shortcuts";
 import { slashMenu } from "./slash";
 import { placeholders, structure, withoutId } from "./structure";
+import {
+  nextCell,
+  previousCell,
+  stayAtCellEnd,
+  stayAtCellStart,
+} from "./tables";
 
 // The editor state for one board: the document and every plugin that
 // makes it edit like a Markdown file.
@@ -151,16 +158,28 @@ const boardKeys = () =>
   keymap({
     Enter: enter,
     "Shift-Enter": chainCommands(hardBreak),
-    Backspace: chainCommands(deleteSelectedBlock, backspaceAtLineStart),
-    Delete: chainCommands(deleteSelectedBlock, deleteAtLineEnd),
+    Backspace: chainCommands(
+      deleteSelectedBlock,
+      stayAtCellStart,
+      backspaceAtLineStart,
+    ),
+    Delete: chainCommands(deleteSelectedBlock, stayAtCellEnd, deleteAtLineEnd),
     "Mod-z": chainCommands(undoShortcut, undo),
     "Shift-Mod-z": redo,
     "Mod-y": redo,
     "Mod-b": toggleMark(boardSchema.marks.strong),
     "Mod-i": toggleMark(boardSchema.marks.em),
     "Mod-e": toggleMark(boardSchema.marks.code),
-    Tab: sinkListItem(nodes.list_item),
-    "Shift-Tab": liftListItem(nodes.list_item),
+    Tab: chainCommands(
+      nextCell,
+      sinkListItem(nodes.list_item),
+      sinkListItem(nodes.task_item),
+    ),
+    "Shift-Tab": chainCommands(
+      previousCell,
+      liftListItem(nodes.list_item),
+      liftListItem(nodes.task_item),
+    ),
     Escape: leaveEditing,
   });
 
@@ -186,6 +205,8 @@ export function boardPlugins(extra: Plugin[] = []): Plugin[] {
     richBlocks(),
     shortcuts(),
     boardKeymap(),
+    // Cell selections, and arrows and typing across cells.
+    tableEditing({ allowTableNodeSelection: true }),
     keymap(baseKeymap),
     history(),
     structure(),

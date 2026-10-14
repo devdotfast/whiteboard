@@ -1,8 +1,10 @@
 import type { Attrs, NodeType } from "@tiptap/pm/model";
 import {
-  type EditorState,
+  type Command,
+  EditorState,
   Plugin,
   PluginKey,
+  Selection,
   TextSelection,
   type Transaction,
 } from "@tiptap/pm/state";
@@ -12,17 +14,45 @@ import type { EditorView } from "@tiptap/pm/view";
 import { paragraphToSection } from "./commands";
 import { nodes } from "./schema";
 import { isTopLine } from "./shortcuts";
+import {
+  addColumnLeft,
+  addColumnRight,
+  addRowAbove,
+  addRowBelow,
+  deleteBodyRow,
+  deleteTableColumn,
+  insertTable,
+} from "./tables";
 
 // The "/" menu: typed on an empty line, it lists the kinds of text block,
-// filtered by what follows the slash. ↑↓ move, Enter applies, Esc closes and
-// leaves the "/" as text. A "/" anywhere else is just a slash.
+// filtered by what follows the slash; in an empty table cell, it lists the
+// table's rows and columns to add or delete. ↑↓ move, Enter applies, Esc
+// closes and leaves the "/" as text. A "/" anywhere else is just a slash.
 
 export interface SlashItem {
   label: string;
   /** The Markdown shortcut that makes the same block. */
   shortcut: string;
+  /** Listed in a table cell rather than on a line of its own. */
+  inCell?: true;
   apply(tr: Transaction, start: number): void;
 }
+
+/** The empty line at `pos` is a table cell's. */
+const inCell = (state: EditorState, pos: number) =>
+  state.doc.resolve(pos).node(-1).type.spec.tableRole !== undefined;
+
+/** An item that runs a command where the "/" was, once it is gone. */
+const command =
+  (run: Command) =>
+  (tr: Transaction): void => {
+    const state = EditorState.create({ doc: tr.doc, selection: tr.selection });
+
+    run(state, (inner) => {
+      inner.steps.forEach((step) => tr.step(step));
+      tr.setSelection(Selection.fromJSON(tr.doc, inner.selection.toJSON()));
+    });
+  };
 
 const wrapper =
   (type: NodeType, attrs?: Attrs) => (tr: Transaction, start: number) => {
@@ -53,6 +83,11 @@ export const slashItems: SlashItem[] = [
     shortcut: "1.",
     apply: wrapper(nodes.ordered_list, { markup: markup(".") }),
   },
+  {
+    label: "To-do list",
+    shortcut: "- [ ]",
+    apply: wrapper(nodes.task_list, { markup: markup("-") }),
+  },
   { label: "Quote", shortcut: ">", apply: wrapper(nodes.blockquote) },
   {
     label: "Code",
@@ -60,6 +95,43 @@ export const slashItems: SlashItem[] = [
     apply: (tr, start) => {
       tr.setBlockType(start, start, nodes.code_block, { markup: "`" });
     },
+  },
+  { label: "Table", shortcut: "|", apply: insertTable },
+  {
+    label: "Row below",
+    shortcut: "",
+    inCell: true,
+    apply: command(addRowBelow),
+  },
+  {
+    label: "Row above",
+    shortcut: "",
+    inCell: true,
+    apply: command(addRowAbove),
+  },
+  {
+    label: "Column right",
+    shortcut: "",
+    inCell: true,
+    apply: command(addColumnRight),
+  },
+  {
+    label: "Column left",
+    shortcut: "",
+    inCell: true,
+    apply: command(addColumnLeft),
+  },
+  {
+    label: "Delete row",
+    shortcut: "",
+    inCell: true,
+    apply: command(deleteBodyRow),
+  },
+  {
+    label: "Delete column",
+    shortcut: "",
+    inCell: true,
+    apply: command(deleteTableColumn),
   },
 ];
 
@@ -77,9 +149,11 @@ export const slashKey = new PluginKey<SlashState>("boardSlash");
 
 const closed: SlashState = { open: false };
 
-const matching = (query: string) =>
-  slashItems.filter((item) =>
-    item.label.toLowerCase().includes(query.toLowerCase()),
+const matching = (query: string, cell: boolean) =>
+  slashItems.filter(
+    (item) =>
+      Boolean(item.inCell) === cell &&
+      item.label.toLowerCase().includes(query.toLowerCase()),
   );
 
 /** Where the open menu stands: its "/" still starts the caret's line. */
@@ -96,7 +170,7 @@ function follow(state: EditorState, from: number, index: number): SlashState {
   )
     return closed;
   const query = doc.textBetween(from + 1, selection.from);
-  const items = matching(query);
+  const items = matching(query, inCell(state, from));
 
   if (!items.length) return closed;
 
@@ -152,7 +226,7 @@ export const slashMenu = () =>
           text !== "/" ||
           from !== to ||
           $from.parent.content.size ||
-          !isTopLine(state, from)
+          !(isTopLine(state, from) || inCell(state, from))
         )
           return false;
         view.dispatch(

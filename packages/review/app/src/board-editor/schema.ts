@@ -101,6 +101,24 @@ function shownHref(href: string) {
 /** Blank lines before a node in its Markdown source, when not the default. */
 const gap = { gap: { default: null } };
 
+// A cell's column alignment, and the spans prosemirror-tables reads: a GFM
+// cell always spans one row and one column.
+const cellAttrs = {
+  align: { default: null },
+  colspan: { default: 1 },
+  rowspan: { default: 1 },
+  colwidth: { default: null },
+};
+
+const cellAlign = (dom: HTMLElement) => ({
+  align: dom.style.textAlign || null,
+});
+
+const cellDOM = (node: Node, cls: string) => ({
+  class: cls,
+  ...(node.attrs.align && { style: `text-align: ${node.attrs.align}` }),
+});
+
 export const boardSchema = new Schema({
   nodes: {
     doc: { content: "title block*" },
@@ -254,6 +272,89 @@ export const boardSchema = new Schema({
         0,
       ],
     },
+    // A bulleted list of nothing but tasks, `- [ ]` and `- [x]`: its items
+    // tick. A task in a numbered or mixed list is a list_item whose
+    // `checked` keeps its `[x]`.
+    task_list: {
+      group: "md",
+      content: "task_item+",
+      attrs: { ...gap, spread: { default: false }, markup: { default: null } },
+      parseDOM: [{ tag: "ul[data-board-tasks]" }],
+      toDOM: () => ["ul", { class: column, "data-board-tasks": "" }, 0],
+    },
+    task_item: {
+      content: "md+",
+      defining: true,
+      attrs: {
+        ...gap,
+        spread: { default: false },
+        checked: { default: false },
+      },
+      parseDOM: [
+        {
+          tag: "li[data-checked]",
+          getAttrs: (dom) => ({
+            checked: dom.getAttribute("data-checked") === "true",
+          }),
+        },
+      ],
+      toDOM: (node): DOMOutputSpec => [
+        "li",
+        {
+          class: `${className(doc.item)} review-board-task`,
+          "data-checked": String(node.attrs.checked),
+        },
+        0,
+      ],
+    },
+    // A GFM table. A cell holds one line of inline text and knows its
+    // column's alignment; `markup` records whether the source padded its
+    // cells and lined up its pipes. The first row is the header.
+    table: {
+      group: "md",
+      content: "table_row+",
+      tableRole: "table",
+      isolating: true,
+      attrs: { ...gap, markup: { default: null } },
+      parseDOM: [{ tag: "table" }],
+      toDOM: (): DOMOutputSpec => [
+        "table",
+        {
+          class: `${className(doc.table, drawStyles.blockChild)} review-board-table`,
+        },
+        ["tbody", 0],
+      ],
+    },
+    table_row: {
+      content: "(table_header | table_cell)+",
+      tableRole: "row",
+      parseDOM: [{ tag: "tr" }],
+      toDOM: () => ["tr", 0],
+    },
+    table_header: {
+      content: "paragraph",
+      tableRole: "header_cell",
+      isolating: true,
+      attrs: cellAttrs,
+      parseDOM: [{ tag: "th", getAttrs: cellAlign }],
+      toDOM: (node): DOMOutputSpec => [
+        "th",
+        cellDOM(node, className(doc.cell, doc.headerCell)),
+        0,
+      ],
+    },
+    table_cell: {
+      content: "paragraph",
+      tableRole: "cell",
+      isolating: true,
+      attrs: cellAttrs,
+      parseDOM: [{ tag: "td", getAttrs: cellAlign }],
+      toDOM: (node): DOMOutputSpec => [
+        "td",
+        cellDOM(node, className(doc.cell)),
+        0,
+      ],
+    },
     code_block: {
       group: "md",
       content: "text*",
@@ -280,7 +381,7 @@ export const boardSchema = new Schema({
       parseDOM: [{ tag: "hr" }],
       toDOM: () => ["hr", { class: block }],
     },
-    // Display math, tables, HTML, definitions, footnotes: kept as their source.
+    // Display math, HTML, definitions, footnotes: kept as their source.
     md_raw: {
       group: "md",
       atom: true,
