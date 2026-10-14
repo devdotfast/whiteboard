@@ -1170,8 +1170,22 @@ export class LocalReviewData {
     return {
       target: { kind: "commits", repositoryId, head, base },
       pins: { repositoryId, base, head },
-      title: pullRequest.title.trim() || `PR #${address.number}`,
+      title: pullRequest.title.trim(),
     };
+  }
+  async pullRequestTitle(url: string) {
+    const { provider, address } = resolvePullRequest(url);
+
+    try {
+      const { title } = await provider.readPullRequest(
+        address,
+        this.options.pullRequests ?? defaultPullRequestDeps,
+      );
+
+      return title.trim() || undefined;
+    } catch {
+      return undefined;
+    }
   }
   /** A registered checkout with a remote for host/owner/repo, and that remote. */
   private async pullRequestCheckout(
@@ -1914,6 +1928,7 @@ export function openLocalReviewStore(
     resolveTarget: (target, pinned) => data.resolveTarget(target, pinned),
     resolvePullRequest: (url, repository) =>
       data.resolvePullRequest(url, repository),
+    pullRequestTitle: (url) => data.pullRequestTitle(url),
     headBranch: (pins, headRef) => data.headBranch(pins, headRef),
     sourcePins: (snapshot) => data.sourcePins(snapshot),
     unavailableAnchors: (snapshot) => data.unavailableAnchors(snapshot),

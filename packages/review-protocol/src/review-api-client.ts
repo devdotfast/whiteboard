@@ -31,6 +31,7 @@ export interface ReviewApiSummary {
     baseBranch?: string;
     pullRequestNumber?: number;
     pullRequestUrl?: string;
+    pullRequestTitle?: string;
     revision?: string;
   };
   /** Shared imports have separate local checkouts but retain their remote identity. */

@@ -20,6 +20,7 @@ export function pullRequestKey(url: string): string {
 export function setPullRequest(
   snapshot: Pick<Snapshot, "origin">,
   url: string | null | undefined,
+  title?: string,
 ) {
   if (url === undefined) return;
 
@@ -27,6 +28,7 @@ export function setPullRequest(
     if (snapshot.origin) {
       delete snapshot.origin.pullRequestUrl;
       delete snapshot.origin.pullRequestNumber;
+      delete snapshot.origin.pullRequestTitle;
     }
 
     return;
@@ -36,5 +38,10 @@ export function setPullRequest(
     ...snapshot.origin,
     pullRequestUrl: url,
     pullRequestNumber: Number(url.split("/").at(-1)),
+    pullRequestTitle:
+      title ??
+      (snapshot.origin?.pullRequestUrl === url
+        ? snapshot.origin.pullRequestTitle
+        : undefined),
   };
 }

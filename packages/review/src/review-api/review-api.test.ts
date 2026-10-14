@@ -1780,7 +1780,7 @@ describe("create for a pull request", () => {
     expect(store.read(untitled.reviewId)).toMatchObject({
       title: "From GitHub",
       pins,
-      origin: { pullRequestUrl: url },
+      origin: { pullRequestUrl: url, pullRequestTitle: "From GitHub" },
     });
     expect(store.read(titled.reviewId).title).toBe("Mine");
     expect(resolvePullRequest.mock.calls).toEqual([

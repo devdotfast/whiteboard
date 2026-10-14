@@ -409,7 +409,7 @@ describe("creating a review from a pull request URL alone", () => {
     });
   });
 
-  it("uses an explicit target instead of asking GitHub", async () => {
+  it("uses an explicit target, asking GitHub only for the PR's title", async () => {
     const { id: repositoryId } = await local.data.register(checkout);
     const head = gitIn(checkout)("rev-parse", "HEAD");
 
@@ -418,10 +418,11 @@ describe("creating a review from a pull request URL alone", () => {
       target: { kind: "commits", repositoryId, head },
     });
 
-    expect(ghCalls).toBe(0);
+    expect(ghCalls).toBe(1);
     expect(local.store.read(reviewId)).toMatchObject({
       title: "Mine",
       pins: { base: head, head },
+      origin: { pullRequestTitle: "Add widgets" },
     });
   });
 

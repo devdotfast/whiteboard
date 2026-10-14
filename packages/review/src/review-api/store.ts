@@ -158,6 +158,8 @@ export interface SnapshotOrigin {
   baseBranch?: string;
   pullRequestNumber?: number;
   pullRequestUrl?: string;
+  /** As the forge reported it when the PR was attached. */
+  pullRequestTitle?: string;
   /** The legacy review revision this version was imported from. */
   revision?: string;
 }
@@ -218,6 +220,7 @@ export interface Result {
 export interface ResolvedPullRequest {
   target: ReviewTarget;
   pins: Pins;
+  /** Empty when the PR has none. */
   title: string;
 }
 
@@ -230,6 +233,8 @@ export interface ReviewProviders {
     url: string,
     repository: { id?: string; preferred?: string },
   ): Promise<ResolvedPullRequest>;
+  /** Undefined when the forge can't be read. */
+  pullRequestTitle?(url: string): Promise<string | undefined>;
   resolveTarget?(
     target: ReviewTarget,
     pinned?: Pins,
@@ -1023,6 +1028,13 @@ export class ReviewStore {
 
     pullRequest?.catch(() => {});
 
+    const pullRequestTitle = pullRequest
+      ? pullRequest.then(
+          ({ title }) => title || undefined,
+          () => undefined,
+        )
+      : this.startPullRequestTitle(command);
+
     const run = this.pending.then(async () => {
       const op = command.operation;
       this.purgeExpired();
@@ -1174,7 +1186,14 @@ export class ReviewStore {
 
       let snapshot: Snapshot =
         op.type === "create"
-          ? createdSnapshot(id, op, resolvedTarget, fromPullRequest?.title)
+          ? createdSnapshot(
+              id,
+              op,
+              resolvedTarget,
+              fromPullRequest &&
+                (fromPullRequest.title ||
+                  `PR #${op.pullRequestUrl!.split("/").at(-1)}`),
+            )
           : structuredClone(previous!);
 
       delete snapshot.trashedAt;
@@ -1236,7 +1255,7 @@ export class ReviewStore {
               assignFreshIds(block, (prefix) => `${prefix}-${++nextId}`);
           }
 
-          setPullRequest(snapshot, op.pullRequestUrl);
+          setPullRequest(snapshot, op.pullRequestUrl, await pullRequestTitle);
           break;
         case "rename":
           snapshot.title = op.title;
@@ -1249,6 +1268,7 @@ export class ReviewStore {
               snapshot.pins?.repositoryId !== resolvedTarget!.pins.repositoryId
                 ? null
                 : undefined),
+            await pullRequestTitle,
           );
           snapshot.staleSources = [];
           snapshot.target = resolvedTarget!.target;
@@ -1437,6 +1457,22 @@ export class ReviewStore {
       id: op.repositoryId,
       preferred: existing && this.read(existing).pins?.repositoryId,
     });
+  }
+  private startPullRequestTitle(
+    command: z.infer<typeof commandSchema>,
+  ): Promise<string | undefined> {
+    const op = command.operation;
+
+    if (
+      (op.type !== "create" && op.type !== "set_target") ||
+      !op.pullRequestUrl
+    )
+      return Promise.resolve(undefined);
+
+    return (
+      this.providers.pullRequestTitle?.(op.pullRequestUrl) ??
+      Promise.resolve(undefined)
+    );
   }
   /** Reviews whose PR is this one, newest version first. Summaries only. */
   private reviewsForPullRequest(url: string): string[] {
