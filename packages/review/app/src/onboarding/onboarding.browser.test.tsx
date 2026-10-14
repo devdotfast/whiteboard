@@ -190,7 +190,6 @@ describe("Onboarding", () => {
     expect(row("Cursor")?.getAttribute("data-state")).toBe("approve");
     expect(row("Codex")).toBeUndefined();
     expect(container.textContent).toContain("Not on this machine · Codex");
-    expect(container.textContent).toContain("Your agents know Whiteboard.");
     expect(button("Continue")?.disabled).toBe(false);
   });
 

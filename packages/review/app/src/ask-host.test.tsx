@@ -396,7 +396,7 @@ it("leaves an agent working when its canvas goes, and carries on with it when th
   expect(canvas.closed()).toEqual([]);
 });
 
-it("opens the conversation a review took over as its agent created it, and follows that agent", async () => {
+it("opens the conversation a review took over as its agent created it minimized, and follows that agent", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   await using canvas = askCanvas({ handedOff: ["thread-run"] });
 
@@ -414,10 +414,12 @@ it("opens the conversation a review took over as its agent created it, and follo
       },
     }),
   );
+  // Out of the way of the whiteboard it draws, until the reader opens it.
+  expect(document.querySelector('[aria-label="Ask"]')).toBeNull();
+  await act(async () => button(/^Open Ask: /)!.click());
   expect(
-    document.querySelector('aside[aria-label="Ask"]')?.textContent,
+    document.querySelector('[role="dialog"][aria-label="Ask"]')?.textContent,
   ).toContain("Adding the sequence diagram.");
-  expect(button(/^Close Ask$/)).not.toBeNull();
 
   // Only once: the next time the review opens, it is a saved conversation.
   await canvas.unmount();
