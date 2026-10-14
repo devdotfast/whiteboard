@@ -433,42 +433,49 @@ const inlines = fc
     (content) => content[0]!.type === "text" && content.at(-1)!.type === "text",
   );
 
-const tableCell = fc
-  .array(
-    fc.constantFrom("a", "b", "1", " ", "\\|", "*x*", "`c`", "é", "\\\\"),
-    {
-      minLength: 1,
-      maxLength: 4,
-    },
-  )
-  .map((parts) => parts.join("").trim() || "x");
+/** A cell's one line: text with marks, no line break. GFM can't write a
+ * backslash before a pipe in code in a cell: the pipe's escape takes it. */
+const cellInlines = fc.array(
+  fc
+    .record({
+      type: fc.constant("text"),
+      text,
+      marks: fc.uniqueArray(mark, { maxLength: 2, selector: (m) => m.type }),
+    })
+    .filter(
+      (leaf) =>
+        !leaf.text.includes("\\|") ||
+        !leaf.marks.some((m) => m.type === "code"),
+    ),
+  { minLength: 1, maxLength: 3 },
+);
 
-/** A GFM table, which the editor keeps as its source. */
+/** A GFM table, as the editor holds it: a header row and body rows, every
+ * row as wide, each column with its alignment. */
 const table = fc
   .tuple(fc.integer({ min: 1, max: 3 }), fc.integer({ min: 0, max: 3 }))
   .chain(([columns, rows]) =>
     fc.tuple(
-      fc.array(tableCell, { minLength: columns, maxLength: columns }),
-      fc.array(fc.constantFrom("---", ":--", ":-:", "--:"), {
+      fc.array(fc.constantFrom(null, "left", "center", "right"), {
         minLength: columns,
         maxLength: columns,
       }),
       fc.array(
-        fc.array(tableCell, { minLength: columns, maxLength: columns }),
-        {
-          maxLength: rows,
-        },
+        fc.array(cellInlines, { minLength: columns, maxLength: columns }),
+        { minLength: rows + 1, maxLength: rows + 1 },
       ),
     ),
   )
-  .map(([head, align, body]) => ({
-    type: "md_raw",
-    attrs: {
-      kind: "table",
-      source: [head, align, ...body]
-        .map((row) => `| ${row.join(" | ")} |`)
-        .join("\n"),
-    },
+  .map(([align, rows]) => ({
+    type: "table",
+    content: rows.map((row, index) => ({
+      type: "table_row",
+      content: row.map((content, column) => ({
+        type: index === 0 ? "table_header" : "table_cell",
+        attrs: { align: align[column] },
+        content: [{ type: "paragraph", content }],
+      })),
+    })),
   }));
 
 const code = fc
@@ -490,39 +497,57 @@ const code = fc
     ...(value && { content: [{ type: "text", text: value }] }),
   }));
 
-const { block: mdBlock } = fc.letrec<{ block: object; item: object }>(
-  (tie) => ({
-    block: fc.oneof(
-      { depthSize: "small", withCrossShrink: true },
-      fc.record({ type: fc.constant("paragraph"), content: inlines }),
-      fc.record({
-        type: fc.constant("heading"),
-        attrs: fc.record({ depth: fc.integer({ min: 1, max: 6 }) }),
-        content: inlines,
-      }),
-      code,
-      table,
-      fc.constant({ type: "thematic_break", attrs: { markup: "---" } }),
-      fc.record({
-        type: fc.constant("blockquote"),
-        content: fc.array(tie("block"), { minLength: 1, maxLength: 3 }),
-      }),
-      fc.record({
-        type: fc.constantFrom("bullet_list", "ordered_list"),
-        content: fc.array(tie("item"), { minLength: 1, maxLength: 3 }),
-      }),
-    ),
-    item: fc.record({
-      type: fc.constant("list_item"),
-      content: fc
-        .tuple(
-          fc.record({ type: fc.constant("paragraph"), content: inlines }),
-          fc.array(tie("block"), { maxLength: 2 }),
-        )
-        .map(([first, rest]) => [first, ...rest]),
+const { block: mdBlock } = fc.letrec<{
+  block: object;
+  item: object;
+  task: object;
+}>((tie) => ({
+  block: fc.oneof(
+    { depthSize: "small", withCrossShrink: true },
+    fc.record({ type: fc.constant("paragraph"), content: inlines }),
+    fc.record({
+      type: fc.constant("heading"),
+      attrs: fc.record({ depth: fc.integer({ min: 1, max: 6 }) }),
+      content: inlines,
     }),
+    code,
+    table,
+    fc.constant({ type: "thematic_break", attrs: { markup: "---" } }),
+    fc.record({
+      type: fc.constant("blockquote"),
+      content: fc.array(tie("block"), { minLength: 1, maxLength: 3 }),
+    }),
+    fc.record({
+      type: fc.constantFrom("bullet_list", "ordered_list"),
+      content: fc.array(tie("item"), { minLength: 1, maxLength: 3 }),
+    }),
+    fc.record({
+      type: fc.constant("task_list"),
+      content: fc.array(tie("task"), { minLength: 1, maxLength: 3 }),
+    }),
+  ),
+  item: fc.record({
+    type: fc.constant("list_item"),
+    content: fc
+      .tuple(
+        fc.record({ type: fc.constant("paragraph"), content: inlines }),
+        fc.array(tie("block"), { maxLength: 2 }),
+      )
+      .map(([first, rest]) => [first, ...rest]),
   }),
-);
+  // A task is one only with text after its box: `- [ ]` alone is a
+  // bullet whose text is `[ ]`.
+  task: fc.record({
+    type: fc.constant("task_item"),
+    attrs: fc.record({ checked: fc.boolean() }),
+    content: fc
+      .tuple(
+        fc.record({ type: fc.constant("paragraph"), content: inlines }),
+        fc.array(tie("block"), { maxLength: 2 }),
+      )
+      .map(([first, rest]) => [first, ...rest]),
+  }),
+}));
 
 /** A Markdown container's content, as the editor's document JSON. */
 const markdownContent = fc.array(mdBlock, { minLength: 1, maxLength: 5 });
@@ -663,12 +688,15 @@ function meaning(node: PMNode): PMNode {
   const endsInParagraph = (block: PMNode | undefined): boolean =>
     block?.type === nodes.paragraph ||
     block?.type === nodes.md_raw ||
+    block?.type === nodes.table ||
     (block !== undefined &&
       [
         nodes.blockquote,
         nodes.bullet_list,
         nodes.ordered_list,
+        nodes.task_list,
         nodes.list_item,
+        nodes.task_item,
       ].includes(block.type) &&
       endsInParagraph(block.lastChild ?? undefined));
 
@@ -687,12 +715,12 @@ function meaning(node: PMNode): PMNode {
   const apart = (left: PMNode, right: PMNode | undefined) =>
     (endsInParagraph(left) &&
       ((right !== undefined &&
-        [nodes.paragraph, nodes.md_raw].includes(right.type)) ||
+        [nodes.paragraph, nodes.md_raw, nodes.table].includes(right.type)) ||
         underlined(right) ||
         emptyFirst(right))) ||
     (left.type === nodes.blockquote && right?.type === nodes.blockquote);
 
-  if (node.type === nodes.list_item)
+  if (node.type === nodes.list_item || node.type === nodes.task_item)
     attrs.spread =
       node.attrs.spread ||
       children.some((child, index) => apart(child, children[index + 1]));
@@ -700,7 +728,11 @@ function meaning(node: PMNode): PMNode {
   // A list is loose when an item is, or a blank line parts two items:
   // the item's own gap when it was read with one, else the list's
   // looseness, which writes its items apart.
-  if (node.type === nodes.bullet_list || node.type === nodes.ordered_list)
+  if (
+    node.type === nodes.bullet_list ||
+    node.type === nodes.ordered_list ||
+    node.type === nodes.task_list
+  )
     attrs.spread =
       children.some((item) => item.attrs.spread) ||
       node.content.content
@@ -788,7 +820,15 @@ const multiBlockSource = fc
   )
   .filter((source) => parseBlockMarkdown(source).nodes.length > 1);
 
-type Edit = "text" | "mark" | "item" | "split" | "join";
+type Edit =
+  | "text"
+  | "mark"
+  | "item"
+  | "split"
+  | "join"
+  | "cell"
+  | "row"
+  | "tick";
 
 /** `content` with its child at `at` edited, and where each child before
  * the edit is now (undefined for the edited ones). */
@@ -840,7 +880,11 @@ function edited(
     }
 
     case "item": {
-      if (child.type !== nodes.bullet_list && child.type !== nodes.ordered_list)
+      if (
+        child.type !== nodes.bullet_list &&
+        child.type !== nodes.ordered_list &&
+        child.type !== nodes.task_list
+      )
         return undefined;
       const items: PMNode[] = [];
 
@@ -848,6 +892,71 @@ function edited(
 
       if (items.length > 1) items.pop();
       else items.push(items[0]!);
+      next[at] = child.type.create(child.attrs, items);
+
+      return { content: next, moved: same };
+    }
+
+    // A table's last cell takes the text, without its line breaks: a
+    // cell is one line.
+    case "cell": {
+      if (child.type !== nodes.table) return undefined;
+      const rows: PMNode[] = [];
+
+      child.forEach((row) => rows.push(row));
+      const last = rows.at(-1)!;
+      const cells: PMNode[] = [];
+
+      last.forEach((cell) => cells.push(cell));
+      cells[cells.length - 1] = cells.at(-1)!.type.create(
+        cells.at(-1)!.attrs,
+        nodes.paragraph.create(
+          null,
+          text.filter((inline) => inline.type !== nodes.hard_break),
+        ),
+      );
+      rows[rows.length - 1] = last.type.create(last.attrs, cells);
+      next[at] = child.type.create(child.attrs, rows);
+
+      return { content: next, moved: same };
+    }
+
+    // A row after the last, its cells empty but the first.
+    case "row": {
+      if (child.type !== nodes.table) return undefined;
+      const rows: PMNode[] = [];
+
+      child.forEach((row) => rows.push(row));
+      const cells: PMNode[] = [];
+
+      rows[0]!.forEach((head, _offset, index) =>
+        cells.push(
+          nodes.table_cell.create(
+            { align: head.attrs.align },
+            nodes.paragraph.create(
+              null,
+              index === 0
+                ? text.filter((inline) => inline.type !== nodes.hard_break)
+                : [],
+            ),
+          ),
+        ),
+      );
+      rows.push(nodes.table_row.create(null, cells));
+      next[at] = child.type.create(child.attrs, rows);
+
+      return { content: next, moved: same };
+    }
+
+    case "tick": {
+      if (child.type !== nodes.task_list) return undefined;
+      const items: PMNode[] = [];
+
+      child.forEach((item) => items.push(item));
+      items[0] = items[0]!.type.create(
+        { ...items[0]!.attrs, checked: !items[0]!.attrs.checked },
+        items[0]!.content,
+      );
       next[at] = child.type.create(child.attrs, items);
 
       return { content: next, moved: same };
@@ -908,7 +1017,16 @@ describe("a partial edit", () => {
       fc.property(
         multiBlockSource,
         fc.nat(),
-        fc.constantFrom<Edit>("text", "mark", "item", "split", "join"),
+        fc.constantFrom<Edit>(
+          "text",
+          "mark",
+          "item",
+          "split",
+          "join",
+          "cell",
+          "row",
+          "tick",
+        ),
         inlines,
         (source, pick, edit, json) => {
           const original = parseBlockMarkdown(source);
