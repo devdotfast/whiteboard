@@ -35,6 +35,9 @@ interface ListMarkup {
 /** Source syntax a node was read with, carried to the to-markdown handlers. */
 interface MdastData {
   gap?: number | null;
+  /** A table's: whether its cells were padded and its pipes lined up. */
+  padding?: boolean;
+  aligned?: boolean;
   setext?: boolean;
   style?: string;
   markup?: string | CodeMarkup | ListMarkup | null;
@@ -163,11 +166,19 @@ class MdastToPM {
       case "blockquote":
         return nodes.blockquote!.create(null, this.blocks(node.children!));
       case "list": {
+        // A bulleted list of nothing but tasks is a task list, whose items
+        // tick; any other list keeps an item's `[x]` as it was.
+        const tasks =
+          !node.ordered &&
+          node.children!.every(
+            (item) => item.checked !== null && item.checked !== undefined,
+          );
+
         const items = node.children!.map((item, index) =>
-          nodes.list_item!.create(
+          (tasks ? nodes.task_item! : nodes.list_item!).create(
             {
               spread: item.spread ?? false,
-              checked: item.checked ?? null,
+              checked: tasks ? item.checked : (item.checked ?? null),
               gap: this.gap(node.children!, index),
             },
             item.children?.length
@@ -182,6 +193,12 @@ class MdastToPM {
         const spread = items.some(
           (item, index) => item.attrs.spread || (index > 0 && item.attrs.gap),
         );
+
+        if (tasks)
+          return nodes.task_list!.create(
+            { spread, markup: this.listMarkup(node) },
+            items,
+          );
 
         return node.ordered
           ? nodes.ordered_list!.create(
@@ -213,13 +230,52 @@ class MdastToPM {
 
       case "thematicBreak":
         return nodes.thematic_break!.create({ markup: this.slice(node) });
+      case "table":
+        return this.table(node);
       default:
-        // math, table, html, definition, footnoteDefinition, …
+        // math, html, definition, footnoteDefinition, …
         return nodes.md_raw!.create({
           kind: node.type,
           source: this.rawBlock(node),
         });
     }
+  }
+
+  /** A GFM table, every row as wide as its header, as GFM reads it. */
+  private table(node: Mdast): PMNode {
+    const { nodes } = this.schema;
+    const rows = node.children!;
+    const width = rows[0]!.children!.length;
+    const align = node.align ?? [];
+    const lines = this.slice(node).split("\n");
+    const padding = /^\|? +\S/.test(lines[0]!.trimStart());
+
+    return nodes.table!.create(
+      {
+        markup: {
+          padding,
+          // Lined up: padded cells whose pipes stand in columns. A table
+          // without padding is never lined up, even when its cells happen
+          // to be as wide as each other.
+          aligned:
+            padding && lines.every((line) => line.length === lines[0]!.length),
+        },
+      },
+      rows.map((row, index) =>
+        nodes.table_row!.create(
+          null,
+          Array.from({ length: width }, (_, column) =>
+            (index === 0 ? nodes.table_header! : nodes.table_cell!).create(
+              { align: align[column] ?? null },
+              nodes.paragraph!.create(
+                null,
+                this.inlines(row.children![column]?.children, []),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   private listMarkup(list: Mdast) {
@@ -393,7 +449,8 @@ function blockToMdastBare(node: PMNode): Mdast {
     case "blockquote":
       return { type: "blockquote", children: blocksToMdast(node.content) };
     case "bullet_list":
-    case "ordered_list": {
+    case "ordered_list":
+    case "task_list": {
       const children: Mdast[] = [];
       node.forEach((item) =>
         children.push({
@@ -425,6 +482,31 @@ function blockToMdastBare(node: PMNode): Mdast {
       };
     case "thematic_break":
       return { type: "thematicBreak", data: { markup: a.markup } };
+    case "table": {
+      const rows: Mdast[] = [];
+      const align: (string | null)[] = [];
+
+      node.forEach((row, _offset, index) => {
+        const cells: Mdast[] = [];
+
+        row.forEach((cell) => {
+          if (index === 0) align.push(cell.attrs.align);
+          cells.push({
+            type: "tableCell",
+            children: inlinesToMdast(cell.firstChild!, true),
+          });
+        });
+        rows.push({ type: "tableRow", children: cells });
+      });
+
+      return {
+        type: "table",
+        align,
+        children: rows,
+        data: { padding: a.markup?.padding, aligned: a.markup?.aligned },
+      };
+    }
+
     case "md_raw":
       return { type: "raw", value: a.source };
     default:
@@ -435,7 +517,8 @@ function blockToMdastBare(node: PMNode): Mdast {
 /** A leaf of inline content: text or an inline atom, with its marks. */
 type Leaf = { node: Mdast; marks: readonly Mark[] };
 
-function inlinesToMdast(block: PMNode): Mdast[] {
+/** `inCell`: a table cell is one line, so a line break in it is a space. */
+function inlinesToMdast(block: PMNode, inCell = false): Mdast[] {
   const leaves: Leaf[] = [];
 
   block.forEach((child) => {
@@ -453,7 +536,9 @@ function inlinesToMdast(block: PMNode): Mdast[] {
           }
         : { type: "text", value: child.text! };
     else if (child.type.name === "hard_break")
-      node = { type: "break", data: { markup: child.attrs.markup } };
+      node = inCell
+        ? { type: "text", value: " " }
+        : { type: "break", data: { markup: child.attrs.markup } };
     else node = { type: "raw", value: child.attrs.source };
 
     // Adjacent plain text merges, as mdast would have it, and so does
@@ -784,12 +869,51 @@ const plainText: Handle = (node, parent, state, info) => {
     : written;
 };
 
+/** The GFM table extension's handlers, for a table written with its cells
+ * padded or not and its pipes lined up or not. */
+const tableExtension = (padding: boolean, aligned: boolean) =>
+  // SAFETY: mdast-util-gfm's to-markdown extensions include the table's.
+  gfmToMarkdown({
+    tableCellPadding: padding,
+    tablePipeAlign: aligned,
+  }).extensions!.find((extension) => extension.handlers?.table)!.handlers!;
+
+const tableHandlers = new Map(
+  [true, false].flatMap((padding) =>
+    [true, false].map(
+      (aligned) =>
+        [`${padding}:${aligned}`, tableExtension(padding, aligned)] as const,
+    ),
+  ),
+);
+
+/** A table as its source wrote it: cells padded with a space or not, and
+ * pipes lined up or not. A new table is padded and lined up. An untouched
+ * table keeps its source; an edited one is written whole, and its
+ * delimiter row is written again from the alignment: dashes as wide as
+ * the column when lined up, `:` at the side it aligns to, so `|---|` may
+ * come back as `| ----- |`. */
+const table: Handle = (node, parent, state, info) => {
+  // SAFETY: tables reach this handler as blockToMdast built them.
+  const data = (node as Mdast).data;
+
+  return tableHandlers.get(`${data?.padding ?? true}:${data?.aligned ?? true}`)!
+    .table!(node, parent, state, info);
+};
+
+// SAFETY: the table extension's inline code escapes a `|` in a cell.
+const inlineCodeInTable = tableExtension(true, true).inlineCode as Handle;
+
 const handlers = {
   raw: (node: Mdast) => node.value!,
   text: plainText,
   delete: struck,
+  table,
   inlineCode: Object.assign(
     (node: Mdast, parent: MdastParent, state: State, info: Info) => {
+      // In a cell, a `|` must be escaped even inside code.
+      if (state.stack.includes("tableCell") && node.value!.includes("|"))
+        return inlineCodeInTable(node, parent, state, info);
       // SAFETY: inline code records its code mark's fence and padding.
       const m = node.data?.markup as CodeMarkup | null | undefined;
       const value = node.value!;
@@ -923,7 +1047,7 @@ const aggressiveText = (
  * paragraph's, or a block kept as source's (a table takes the next line as
  * a row, HTML runs to a blank line), in a quote or list item too. */
 const endsInParagraph = (node: Mdast): boolean =>
-  ["paragraph", "raw"].includes(node.type) ||
+  ["paragraph", "raw", "table"].includes(node.type) ||
   (["blockquote", "list", "listItem"].includes(node.type) &&
     endsInParagraph(node.children?.at(-1) ?? { type: "root" }));
 
@@ -953,7 +1077,7 @@ const wholeCharacters = (markdown: string) =>
 
 /** Whether a block right under a line that runs on would continue it. */
 const continues = (node: Mdast): boolean =>
-  ["paragraph", "raw"].includes(node.type) ||
+  ["paragraph", "raw", "table"].includes(node.type) ||
   (node.type === "heading" &&
     node.depth! < 3 &&
     (Boolean(node.data?.setext) ||

@@ -19,6 +19,7 @@ import { replaceStep } from "@tiptap/pm/transform";
 
 import { nodes } from "./schema";
 import { deepestLevel } from "./structure";
+import { enterInCell } from "./tables";
 
 // Keys that make a board edit like one plain Markdown file: block
 // boundaries are invisible, Enter splits a line and Backspace joins two,
@@ -26,8 +27,14 @@ import { deepestLevel } from "./structure";
 // style at Backspace; a rich block is selected by the first Backspace and
 // deleted by the second.
 
-/** A node a line can't enter: a rich block, a rule, a table kept as source. */
+/** A node a line can't enter: a rich block, a rule, a block kept as
+ * source. */
 export const isSolid = (node: PMNode) => node.isAtom && node.isBlock;
+
+/** A node Backspace and Delete never join a line into: a solid one, or a
+ * table, whose cells are lines of their own. The first key selects it, the
+ * second deletes it. */
+const isWhole = (node: PMNode) => isSolid(node) || node.type === nodes.table;
 
 /** The textblock the caret is in, when the selection is a caret. */
 const caret = (state: EditorState) =>
@@ -45,7 +52,7 @@ export function lineBefore(doc: PMNode, start: number) {
       let node = before;
       let pos = $pos.pos - before.nodeSize;
 
-      while (!node.isTextblock && !isSolid(node) && node.childCount) {
+      while (!node.isTextblock && !isWhole(node) && node.childCount) {
         pos += node.nodeSize - node.lastChild!.nodeSize - 1;
         node = node.lastChild!;
       }
@@ -69,7 +76,7 @@ export function lineAfter(doc: PMNode, end: number) {
       let node = after;
       let pos = $pos.pos;
 
-      while (!node.isTextblock && !isSolid(node) && node.childCount) {
+      while (!node.isTextblock && !isWhole(node) && node.childCount) {
         pos += 1;
         node = node.firstChild!;
       }
@@ -343,12 +350,14 @@ const liftEmptyNested: Command = (state, dispatch) => {
 };
 
 export const enter: Command = chainCommands(
+  enterInCell,
   enterInTitle,
   enterInSection,
   exitCodeBlock,
   newlineInCode,
   enterCodeFence,
   splitListItem(nodes.list_item),
+  splitListItem(nodes.task_item, { checked: false }),
   liftEmptyNested,
   splitBlock,
 );
@@ -362,7 +371,7 @@ const selectSolid = (tr: Transaction, pos: number) =>
 export const deleteSelectedBlock: Command = (state, dispatch) => {
   const { selection } = state;
 
-  if (!(selection instanceof NodeSelection) || !isSolid(selection.node))
+  if (!(selection instanceof NodeSelection) || !isWhole(selection.node))
     return false;
 
   if (dispatch) {
@@ -406,8 +415,11 @@ export const backspaceAtLineStart: Command = (state, dispatch) => {
 
   const parent = $cursor.node(-1);
 
-  if (parent.type === nodes.list_item && $cursor.index(-1) === 0)
-    return liftListItem(nodes.list_item)(state, dispatch);
+  if (
+    (parent.type === nodes.list_item || parent.type === nodes.task_item) &&
+    $cursor.index(-1) === 0
+  )
+    return liftListItem(parent.type)(state, dispatch);
 
   if (parent.type === nodes.blockquote && $cursor.index(-1) === 0)
     return lift(state, dispatch);
@@ -416,7 +428,7 @@ export const backspaceAtLineStart: Command = (state, dispatch) => {
 
   if (!before) return true;
 
-  if (isSolid(before.node)) {
+  if (isWhole(before.node)) {
     dispatch?.(selectSolid(tr, before.pos).scrollIntoView());
 
     return true;
@@ -454,7 +466,7 @@ export const deleteAtLineEnd: Command = (state, dispatch) => {
   if (!after) return true;
   const tr = state.tr;
 
-  if (isSolid(after.node)) {
+  if (isWhole(after.node)) {
     dispatch?.(selectSolid(tr, after.pos).scrollIntoView());
 
     return true;
@@ -471,7 +483,7 @@ export const deleteAtLineEnd: Command = (state, dispatch) => {
 export function leaveSelectedBlock(state: EditorState): Transaction | null {
   const { selection } = state;
 
-  if (!(selection instanceof NodeSelection) || !isSolid(selection.node))
+  if (!(selection instanceof NodeSelection) || !isWhole(selection.node))
     return null;
   const $after = state.doc.resolve(selection.to);
   const next = Selection.findFrom($after, 1, true);

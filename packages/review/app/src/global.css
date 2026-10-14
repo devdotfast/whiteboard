@@ -433,6 +433,63 @@ button {
   margin-bottom: 0 !important;
 }
 
+/* A task item, as the read-only page draws it: its checkbox in place of
+   the bullet, beside the item's first line. The node view draws
+   li > label > input, and the item's blocks in a div. */
+.review-board-editor li.review-board-task {
+  display: flex;
+  gap: 0.5em;
+  list-style: none;
+}
+
+.review-board-editor li.review-board-task > label {
+  flex: none;
+  display: flex;
+}
+
+.review-board-editor li.review-board-task input {
+  width: 1em;
+  height: 1em;
+  margin: calc((1lh - 1em) / 2) 0 0;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.review-board-editor li.review-board-task > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.review-board-editor li.review-board-task > div > p:first-child {
+  margin-top: 0 !important;
+}
+
+.review-board-editor li.review-board-task > div > p:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* A table cell holds one line, set in the table's own type, as the
+   read-only page's cells hold inline text. */
+.review-board-editor .review-board-table p {
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  font: inherit !important;
+  color: inherit !important;
+  text-align: inherit !important;
+}
+
+.review-board-editor .review-board-table .selectedCell {
+  background: var(--link-open-wash);
+}
+
+/* A table selected whole, to delete it. */
+.review-board-editor .review-board-table.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* The link whose target the side column shows. Its code chips wash whole. */
 .review-board-editor .review-board-link-open,
 .review-board-editor code:has(> .review-board-link-open) {

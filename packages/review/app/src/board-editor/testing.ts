@@ -163,6 +163,19 @@ function lineText(node: PMNode): string {
       return node.content.content
         .map((item) => `- ${item.textContent}`)
         .join("\n");
+    case "task_list":
+      return node.content.content
+        .map(
+          (item) => `- [${item.attrs.checked ? "x" : " "}] ${item.textContent}`,
+        )
+        .join("\n");
+    case "table":
+      return node.content.content
+        .map(
+          (row) =>
+            `| ${row.content.content.map((cell) => cell.textContent).join(" | ")} |`,
+        )
+        .join("\n");
     case "ordered_list":
       return node.content.content
         .map((item, i) => `${i + node.attrs.start}. ${item.textContent}`)

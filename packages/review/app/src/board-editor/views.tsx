@@ -30,6 +30,7 @@ import {
 import { createPortal } from "react-dom";
 
 import type { BlockJSON } from "./board-doc";
+import { TaskItemView } from "./task-view";
 
 // The parts of a board ProseMirror doesn't draw itself: the title's header,
 // rich blocks through their own components, and Markdown it keeps as
@@ -315,6 +316,7 @@ export function nodeViews(store: PortalStore) {
     atom: (node, view, getPos) => new RichBlockView(node, store, view, getPos),
     md_raw: (node) => new RawBlockView(node, store),
     inline_raw: (node) => new RawInlineView(node, store),
+    task_item: (node, view, getPos) => new TaskItemView(node, view, getPos),
   } satisfies Record<string, NodeViewConstructor>;
 }
 
