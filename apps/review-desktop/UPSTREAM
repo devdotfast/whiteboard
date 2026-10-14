@@ -325,6 +325,9 @@ described below.
 
 ## Intentional fork divergence
 
+- `src/vs/editor/browser/controller/editContext/native/nativeEditContextUtils.ts`:
+  prevent browser scrolling when the native editor input gains focus.
+
 Compare a fresh checkout of the upstream commit with `code-oss/`, ignoring the
 vendor-time exclusions above. Every remaining difference must be covered by
 one of these entries:

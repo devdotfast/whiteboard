@@ -61,7 +61,7 @@ export class FocusTracker extends Disposable {
 	}
 
 	public focus(): void {
-		this._domNode.focus();
+		this._domNode.focus({ preventScroll: true });
 		this.refreshFocusState();
 	}
 
