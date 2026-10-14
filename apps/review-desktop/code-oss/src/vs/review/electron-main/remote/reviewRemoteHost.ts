@@ -464,7 +464,7 @@ export class ReviewRemoteHost {
 		const live = await probeVersion(language.local, this.timeouts.operation).then(() => true, () => false);
 		if (live) return { host: "127.0.0.1", port: language.local, connectionToken: language.connectionToken };
 		if (language === this.language) {
-			void this.attachAgain("its VS Code server did not answer", true);
+			void this.attachAgain("its language server did not answer", true);
 		}
 		return undefined;
 	}
@@ -829,16 +829,16 @@ export class ReviewRemoteHost {
 		this.language = undefined;
 		const server = attach.languageServer;
 		const unavailable = (detail: string): LanguageFeatures => ({ languageFeatures: false, languageFeaturesDetail: detail });
-		if (!server) return unavailable(attach.languageServerDetail ?? "This host has no VS Code server.");
+		if (!server) return unavailable(attach.languageServerDetail ?? "This host has no language server.");
 		const mismatch = languageCommitMismatch(this.alias, server.commit, this.options.desktopCommit);
 		if (mismatch) return unavailable(mismatch);
 		const port = await this.openForward(env, server.port, stale);
-		if (typeof port !== "number") return unavailable(`Could not forward a local port to the VS Code server on ${this.alias}: ${port.error}`);
+		if (typeof port !== "number") return unavailable(`Could not forward a local port to the language server on ${this.alias}: ${port.error}`);
 		try {
 			await probeVersion(port, this.timeouts.operation);
 		} catch (error) {
 			await this.cancelForward(env, { local: port, remote: server.port });
-			return unavailable(`The VS Code server on ${this.alias} did not answer through the forward: ${(error as Error).message}.`);
+			return unavailable(`The language server on ${this.alias} did not answer through the forward: ${(error as Error).message}.`);
 		}
 		this.language = { local: port, remote: server.port, connectionToken: server.connectionToken };
 		return { languageFeatures: true };

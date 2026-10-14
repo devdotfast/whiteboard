@@ -263,7 +263,7 @@ it("attaches with one JSON line between the sentinels, and its token reaches the
     token: expect.any(String),
     startedServer: true,
     languageServer: null,
-    languageServerDetail: expect.stringContaining("has no VS Code server"),
+    languageServerDetail: expect.stringContaining("has no language server"),
     languageGroups: [],
   });
 

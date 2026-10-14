@@ -623,17 +623,17 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     input.stdout.write(
       options.json
         ? `${REVIEW_REMOTE_ATTACH_BEGIN}\n${JSON.stringify(attach)}\n${REVIEW_REMOTE_ATTACH_END}\n`
-        : `Whiteboard server ${attach.startedServer ? "started" : "already running"} at ${attach.url}\nLanguage features: ${attach.languageServer ? `VS Code server on port ${attach.languageServer.port}` : `unavailable (${attach.languageServerDetail})`}\n`,
+        : `Whiteboard server ${attach.startedServer ? "started" : "already running"} at ${attach.url}\nLanguage features: ${attach.languageServer ? `language server on port ${attach.languageServer.port}` : `unavailable (${attach.languageServerDetail})`}\n`,
     );
   });
 
   configureJsonOutput(
     remote
       .command("extensions")
-      .description("Language extensions for the VS Code server on a remote")
+      .description("Language extensions for the language server on a remote")
       .command("ensure")
       .description(
-        "Download the curated extensions for this machine and list them for the VS Code server",
+        "Download the curated extensions for this machine and list them for the language server",
       )
       .option(
         "--groups <groups>",

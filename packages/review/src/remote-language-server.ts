@@ -181,7 +181,7 @@ export async function ensureRemoteLanguageServer(
     );
 
     if (!outcome.acquired)
-      throw new Error("Another start of the VS Code server did not finish.");
+      throw new Error("Another start of the language server did not finish.");
 
     return { languageServer: outcome.result, languageGroups };
   } catch (error) {
@@ -289,7 +289,7 @@ async function readCommit(root: string) {
 
   const text = await readFile(file, "utf8").catch(() => {
     throw new Error(
-      `This Whiteboard install has no VS Code server (${file} is missing).`,
+      `This Whiteboard install has no language server (${file} is missing).`,
     );
   });
 
@@ -417,6 +417,6 @@ async function startServer(
     .join("\n");
 
   throw new Error(
-    `The VS Code server did not start${child.error ? `: ${child.error.message}` : child.exited ? "" : ` within ${timeoutMs / 1_000} s`}. The end of ${files.logFile}:\n${tail}`,
+    `The language server did not start${child.error ? `: ${child.error.message}` : child.exited ? "" : ` within ${timeoutMs / 1_000} s`}. The end of ${files.logFile}:\n${tail}`,
   );
 }

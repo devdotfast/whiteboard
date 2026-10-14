@@ -255,7 +255,9 @@ async function readPackagedCurated(): Promise<CuratedRemoteExtension[]> {
   );
 
   const text = await readFile(file, "utf8").catch(() => {
-    throw new Error(`This package has no VS Code server (${file} is missing).`);
+    throw new Error(
+      `This package has no language server (${file} is missing).`,
+    );
   });
 
   return z

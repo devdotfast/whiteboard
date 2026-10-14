@@ -31,7 +31,7 @@ async function versionServer(t: test.TestContext, status = 200): Promise<number>
 	return (server.address() as AddressInfo).port;
 }
 
-const NO_SERVER = { languageFeatures: false, languageFeaturesDetail: "The Whiteboard on this host has no VS Code server." };
+const NO_SERVER = { languageFeatures: false, languageFeaturesDetail: "The Whiteboard on this host has no language server." };
 
 function hostFor(
 	t: test.TestContext,
