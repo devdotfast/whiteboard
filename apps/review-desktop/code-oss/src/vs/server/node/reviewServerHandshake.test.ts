@@ -153,7 +153,10 @@ test('builds every runtime entry, and built-in extensions without their own node
 		assert.ok(existsSync(join(extension, `${main}.js`)), `${name} ${main}`);
 		assert.ok(!existsSync(join(extension, 'node_modules')), name);
 	}
-	assert.ok(existsSync(join(runtime, 'extensions/node_modules/typescript/lib/tsserver.js')));
+	const typescript = join(runtime, 'extensions/node_modules/typescript/lib');
+	assert.ok(existsSync(join(typescript, 'tsserver.js')));
+	assert.ok(existsSync(join(typescript, 'lib.es5.d.ts')), 'keeps the stdlib d.ts, as Desktop does');
+	assert.ok(!existsSync(join(typescript, 'ja')), 'drops what build/.moduleignore drops');
 });
 
 test('completes a Management then an ExtensionHost connection, and the extension host sends Ready', async () => {
