@@ -31,7 +31,7 @@ async function versionServer(t: test.TestContext, status = 200): Promise<number>
 	return (server.address() as AddressInfo).port;
 }
 
-const NO_SERVER = { languageFeatures: false, languageFeaturesDetail: "The Whiteboard on this host has no language server." };
+const NO_SERVER = { languageFeatures: false, languageFeaturesDetail: "The Whiteboard server on this host has no language server." };
 
 function hostFor(
 	t: test.TestContext,
@@ -173,7 +173,7 @@ test("a VS Code server of another commit leaves the review online without langua
 		alias: "wb-test-a",
 		endpoint: { url: `http://127.0.0.1:${ports[0]}`, token: "remote-token" },
 		languageFeatures: false,
-		languageFeaturesDetail: "language features need the same Whiteboard version on wb-test-a: it runs aaaaaaa, this Desktop bbbbbbb",
+		languageFeaturesDetail: "language features need the same Whiteboard version on wb-test-a: its Whiteboard server runs aaaaaaa, this Desktop bbbbbbb",
 	});
 	assert.equal(ssh.of("wb-test-a", "forward").length, 1);
 	assert.equal(await host.languageEndpoint(FAKE_SERVER_ID), undefined);
@@ -182,7 +182,7 @@ test("a VS Code server of another commit leaves the review online without langua
 test("a dev Desktop, with no commit, accepts any VS Code server; a release Desktop only its own", () => {
 	assert.equal(languageCommitMismatch("a", COMMIT, undefined), undefined);
 	assert.equal(languageCommitMismatch("a", COMMIT, COMMIT), undefined);
-	assert.match(languageCommitMismatch("a", COMMIT, "b".repeat(40))!, /on a: it runs aaaaaaa, this Desktop bbbbbbb$/);
+	assert.match(languageCommitMismatch("a", COMMIT, "b".repeat(40))!, /on a: its Whiteboard server runs aaaaaaa, this Desktop bbbbbbb$/);
 });
 
 test("a VS Code server that does not answer through its forward is unavailable, and its forward is cancelled", async (t) => {

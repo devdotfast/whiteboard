@@ -181,7 +181,7 @@ function probeVersion(port: number, timeout: number): Promise<void> {
 
 export function languageCommitMismatch(alias: string, serverCommit: string, desktopCommit: string | undefined): string | undefined {
 	if (!desktopCommit || desktopCommit === serverCommit) return undefined;
-	return `language features need the same Whiteboard version on ${alias}: it runs ${serverCommit.slice(0, 7)}, this Desktop ${desktopCommit.slice(0, 7)}`;
+	return `language features need the same Whiteboard version on ${alias}: its Whiteboard server runs ${serverCommit.slice(0, 7)}, this Desktop ${desktopCommit.slice(0, 7)}`;
 }
 
 type LanguageFeatures = Pick<ReviewGatewayHost, "languageFeatures" | "languageFeaturesDetail">;
@@ -379,12 +379,12 @@ export class ReviewRemoteHost {
 			return Promise.resolve();
 		}
 		const attempt = this.nextAttempt();
-		if (attempt === 0) return this.attachAgain("its server restarted", false);
+		if (attempt === 0) return this.attachAgain("its Whiteboard server restarted", false);
 		const delay = reconnectDelay(attempt - 1);
-		this.options.log(`${this.alias}: its server restarted again; attaching again in ${Math.round(delay / 1000)} s.`);
+		this.options.log(`${this.alias}: its Whiteboard server restarted again; attaching again in ${Math.round(delay / 1000)} s.`);
 		this.cancelTimer = this.clock.schedule(delay, () => {
 			this.cancelTimer = undefined;
-			void this.attachAgain("its server restarted", false);
+			void this.attachAgain("its Whiteboard server restarted", false);
 		});
 		return Promise.resolve();
 	}

@@ -206,7 +206,7 @@ it("shows Desktop's language features on an online host, and keeps the host onli
   const gateway = hosts();
 
   const detail =
-    "language features need the same Whiteboard version on devbox: it runs 1111111, this Desktop 2222222";
+    "language features need the same Whiteboard version on devbox: its Whiteboard server runs 1111111, this Desktop 2222222";
 
   gateway.set([
     {

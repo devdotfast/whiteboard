@@ -256,7 +256,7 @@ async function readPackagedCurated(): Promise<CuratedRemoteExtension[]> {
 
   const text = await readFile(file, "utf8").catch(() => {
     throw new Error(
-      `This package has no language server (${file} is missing).`,
+      `This Whiteboard server has no language server (${file} is missing).`,
     );
   });
 

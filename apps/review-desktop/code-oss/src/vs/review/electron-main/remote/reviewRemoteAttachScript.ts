@@ -114,7 +114,7 @@ function languageServerOf(record: Record<string, unknown>): Pick<ReviewRemoteAtt
 	}
 	return {
 		languageServer: null,
-		languageServerDetail: typeof record.languageServerDetail === "string" ? record.languageServerDetail : "The Whiteboard on this host has no language server.",
+		languageServerDetail: typeof record.languageServerDetail === "string" ? record.languageServerDetail : "The Whiteboard server on this host has no language server.",
 		...(record.languageServerPending === true && { languageServerPending: true as const }),
 	};
 }
