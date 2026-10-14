@@ -41,7 +41,7 @@ const running = (id: string): AskThreadState => ({
   agentName: "Codex",
   status: "running",
   readOnly: true,
-  bypass: false,
+  permissions: "read-only",
   head: "7fd03b8e2",
   cwd: "/checkouts/payments-service",
   selection: { title: "Paragraph 3" },
@@ -69,7 +69,12 @@ function watchedThreads(init: RequestInit | undefined): string[] {
 
 /** A canvas with Ask: an agent named Codex that answers each question in a
  * thread of its own, which the test drives. */
-function askCanvas() {
+function askCanvas({
+  handedOff = [],
+}: {
+  /** Conversations the review took over as it was created. */
+  handedOff?: string[];
+} = {}) {
   const session = testReviewSession();
   const streams = new Map<string, (update: AskUpdate) => void>();
   let asked = 0;
@@ -77,6 +82,16 @@ function askCanvas() {
   const fetch = vi
     .spyOn(session, "fetch")
     .mockImplementation(async (endpoint, init) => {
+      // Each is handed over once.
+      if (endpoint === "/ask/handoff")
+        return Response.json({
+          threads: handedOff.splice(0).map((id) => ({
+            id,
+            agent: "codex",
+            selection: { title: "Whole review", target: { kind: "review" } },
+          })),
+        });
+
       if (endpoint === "/ask/agents")
         return Response.json({
           agents: [{ id: "codex", name: "Codex", available: true }],
@@ -185,6 +200,11 @@ function askCanvas() {
         )
         .map(([, init]) => watchedThreads(init)),
     requested,
+    /** What each request to `endpoint` sent. */
+    sent: (endpoint: string): unknown[] =>
+      fetch.mock.calls
+        .filter(([called]) => called === endpoint)
+        .map(([, init]) => JSON.parse(String(init?.body))),
     mount,
     unmount,
     askQuestion,
@@ -374,4 +394,53 @@ it("leaves an agent working when its canvas goes, and carries on with it when th
   ).toContain("Replicas replay the build.");
   expect(button(/^Close Ask$/)).not.toBeNull();
   expect(canvas.closed()).toEqual([]);
+});
+
+it("opens the conversation a review took over as its agent created it, and follows that agent", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await using canvas = askCanvas({ handedOff: ["thread-run"] });
+
+  await canvas.mount();
+  expect(canvas.requested("/ask/thread-run/open")).toHaveLength(1);
+  await act(async () =>
+    canvas.streams.get("thread-run")!({
+      seq: 1,
+      snapshot: {
+        ...running("thread-run"),
+        entries: [
+          { kind: "user", id: "u", text: "Draw this branch.", at: 0 },
+          { kind: "agent", id: "a", text: "Adding the sequence diagram." },
+        ],
+      },
+    }),
+  );
+  expect(
+    document.querySelector('aside[aria-label="Ask"]')?.textContent,
+  ).toContain("Adding the sequence diagram.");
+  expect(button(/^Close Ask$/)).not.toBeNull();
+
+  // Only once: the next time the review opens, it is a saved conversation.
+  await canvas.unmount();
+  await canvas.mount();
+  expect(canvas.requested("/ask/handoff")).toHaveLength(2);
+  expect(canvas.store().getState().asks).toHaveLength(1);
+});
+
+it("starts a conversation about the whole review from its saved conversations", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await using canvas = askCanvas();
+
+  await canvas.mount();
+  await act(async () =>
+    canvas.store().getState().openAskView({ type: "history" }),
+  );
+  await act(async () => button(/^New conversation$/)!.click());
+  await canvas.askQuestion("What does this review cover?");
+
+  expect(canvas.sent("/ask")).toMatchObject([
+    {
+      selection: { title: "Whole review", target: { kind: "review" } },
+      question: { text: "What does this review cover?" },
+    },
+  ]);
 });

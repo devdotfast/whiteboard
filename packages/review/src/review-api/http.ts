@@ -13,7 +13,11 @@ import {
   AgentSelectionSchema,
   selectionMarkdown,
 } from "@review/agent-selection.js";
-import { type AskAgentStatus, askAgents } from "@review/ask/agents.js";
+import {
+  type AskAgentStatus,
+  askAgents,
+  defaultAskPermissions,
+} from "@review/ask/agents.js";
 import { checkoutFiles, mentionableFiles } from "@review/ask/checkout-files.js";
 import { parseFileRef, resolveFileRefs } from "@review/ask/file-refs.js";
 import {
@@ -21,9 +25,11 @@ import {
   type AskThreadState,
   askAgentIds,
   askChoiceKinds,
+  askPermissionsSchema,
   askPicksSchema,
   askQuestionSchema,
 } from "@review/ask/thread-state.js";
+import type { AskThreadHooks } from "@review/ask/thread.js";
 import type { AskThreads } from "@review/ask/threads.js";
 import { watchAskThreads } from "@review/ask/watch.js";
 import { fuzzyRank } from "@review/fuzzy-match.js";
@@ -42,6 +48,7 @@ import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import { anchorQuotes } from "./anchor-quotes.js";
+import type { AskRecord } from "./ask-history.js";
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
 import { ReviewInputError } from "./document.js";
@@ -51,6 +58,7 @@ import {
   scratchpadAvailable,
 } from "./instructions.js";
 import type { LocalReviewData } from "./local-data.js";
+import { registerOnboardingRoutes } from "./onboarding.js";
 import {
   inspectQuerySchema,
   queryAnchor,
@@ -87,10 +95,10 @@ const askStartSchema = z.strictObject({
   question: askQuestionSchema,
   selection: AgentSelectionSchema,
   picks: askPicksSchema.optional(),
-  bypass: z.boolean().optional(),
+  permissions: askPermissionsSchema.optional(),
 });
 
-const askPermitSchema = z.strictObject({ bypass: z.boolean() });
+const askPermitSchema = z.strictObject({ permissions: askPermissionsSchema });
 
 /** The threads one watch follows: those of a review's open Asks. A body,
  * not the query, so there can be as many as are open. */
@@ -1092,7 +1100,9 @@ export function createReviewApi(
     );
 
     return [
-      `Selected ${target.kind === "text" ? "text" : "code"} from Whiteboard: ${snapshot.title}`,
+      target.kind === "review"
+        ? `Whiteboard: ${snapshot.title}`
+        : `Selected ${target.kind === "text" ? "text" : "code"} from Whiteboard: ${snapshot.title}`,
       `Session ID: ${snapshot.reviewId}`,
       `Version: ${snapshot.version}`,
       ...(selection.apiSource?.commit
@@ -1132,20 +1142,80 @@ export function createReviewApi(
       return thread;
     };
 
+    /** Where a thread in a review saves itself: its Ask history, recorded
+     * once the agent has a session to reopen. */
+    const historyHooks = (
+      record: Omit<AskRecord, "sessionId">,
+    ): AskThreadHooks => ({
+      onSession: (sessionId) =>
+        store.askHistory.get(record.id)
+          ? store.askHistory.updateSession(record.id, sessionId)
+          : store.askHistory.save({ ...record, sessionId }),
+      onTurn: () => store.askHistory.touch(record.id),
+      onSave: (entries) => store.askHistory.saveEntries(record.id, entries),
+      onPermissions: (permissions) =>
+        store.askHistory.setPermissions(record.id, permissions),
+      onOffer: (offer) => store.askHistory.saveOffer(record.agent, offer),
+      onTitle: (title) => store.askHistory.rename(record.id, title),
+    });
+
+    /** Threads started for a review before its canvas opened, for it to
+     * show once it does. */
+    const handedOff = new Map<string, string[]>();
+
+    const handOff = (reviewId: string, threadId: string) =>
+      handedOff.set(reviewId, [...(handedOff.get(reviewId) ?? []), threadId]);
+
+    // The conversations started for this review since its canvas last asked,
+    // to open in its Ask panel.
+    app.post("/:id/ask/handoff", (context) => {
+      const reviewId = context.req.param("id");
+      const ids = handedOff.get(reviewId) ?? [];
+
+      handedOff.delete(reviewId);
+
+      return context.json({
+        threads: ids.flatMap((id) => {
+          const record = store.askHistory.get(id);
+
+          if (record)
+            return [{ id, agent: record.agent, selection: record.selection }];
+
+          // Its agent has no session to save yet, but the thread is live.
+          const live = ask.threads.get(id);
+
+          if (live?.reviewId !== reviewId) return [];
+          const state = live.read();
+
+          return [
+            {
+              id,
+              agent: state.agent,
+              selection: {
+                target: { kind: "review" as const },
+                title: state.selection.title,
+              },
+            },
+          ];
+        }),
+      });
+    });
+
     /** What an agent reads before a session's first question: the review,
      * the checkout, and the selection. */
     const askContext = async (
+      threadId: string,
       agent: AskAgentId,
       snapshot: Snapshot,
       checkout: { head: string; live: boolean },
       selection: AgentSelection,
       version: number | undefined,
     ) => {
-      const reach = await ask.threads.reach(agent);
+      const reach = await ask.threads.reach(agent, threadId);
       const { reviewId } = snapshot;
 
       return [
-        `A reviewer is reading "${snapshot.title}" in Whiteboard and has a question about a selection.`,
+        `A reviewer is reading "${snapshot.title}" in Whiteboard and has a question about ${selection.target.kind === "review" ? "it" : "a selection"}.`,
         checkout.live
           ? "Your working directory is the repository the review describes."
           : `Your working directory is a checkout of the review's head commit, ${checkout.head}. Answer from this code, not from other branches.`,
@@ -1164,6 +1234,13 @@ export function createReviewApi(
         await selectionContext(reviewId, selection, version),
       ].join("\n");
     };
+
+    registerOnboardingRoutes(app, store, ask, {
+      register: (root) => data.register(root),
+      historyHooks,
+      handOff,
+      open: openCreated,
+    });
 
     // The agents answering in any review, which quitting the app would stop.
     app.get("/ask/working", (context) =>
@@ -1252,7 +1329,11 @@ export function createReviewApi(
       const id = crypto.randomUUID();
       const createdAt = new Date().toISOString();
 
+      const permissions =
+        input.permissions ?? defaultAskPermissions(input.agent);
+
       const initialContext = await askContext(
+        id,
         input.agent,
         snapshot,
         checkout,
@@ -1268,30 +1349,21 @@ export function createReviewApi(
         agent: input.agent,
         // Saved once the agent has a session to reopen; a later one
         // replaces a session the agent could not reopen.
-        onSession: (sessionId) =>
-          store.askHistory.get(id)
-            ? store.askHistory.updateSession(id, sessionId)
-            : store.askHistory.save({
-                id,
-                reviewId,
-                agent: input.agent,
-                sessionId,
-                version: snapshot.version,
-                head: checkout.head,
-                cwd: checkout.rootPath,
-                selection: input.selection,
-                title: input.question.text.slice(0, 200),
-                createdAt,
-                updatedAt: createdAt,
-                bypass: input.bypass,
-              }),
-        onTurn: () => store.askHistory.touch(id),
-        onSave: (entries) => store.askHistory.saveEntries(id, entries),
+        ...historyHooks({
+          id,
+          reviewId,
+          agent: input.agent,
+          version: snapshot.version,
+          head: checkout.head,
+          cwd: checkout.rootPath,
+          selection: input.selection,
+          title: input.question.text.slice(0, 200),
+          createdAt,
+          updatedAt: createdAt,
+          permissions,
+        }),
         picks: input.picks,
-        bypass: input.bypass,
-        onBypass: (bypass) => store.askHistory.setBypass(id, bypass),
-        onOffer: (offer) => store.askHistory.saveOffer(input.agent, offer),
-        onTitle: (title) => store.askHistory.rename(id, title),
+        permissions,
         cwd: checkout.rootPath,
         head: checkout.head,
         selection: {
@@ -1352,7 +1424,7 @@ export function createReviewApi(
         agentName: askAgents[record.agent].name,
         status: "idle",
         readOnly: true,
-        bypass: false,
+        permissions: record.permissions ?? "read-only",
         head: record.head,
         cwd: record.cwd,
         title: record.title,
@@ -1389,6 +1461,7 @@ export function createReviewApi(
         const target = record.selection.target;
 
         const initialContext = await askContext(
+          record.id,
           record.agent,
           snapshot,
           checkout,
@@ -1410,15 +1483,9 @@ export function createReviewApi(
           resume: { sessionId: record.sessionId, entries: record.entries },
           // For a new session, should the agent no longer have this one.
           context: initialContext,
-          onSession: (sessionId) =>
-            store.askHistory.updateSession(record.id, sessionId),
-          onTurn: () => store.askHistory.touch(record.id),
-          onSave: (entries) => store.askHistory.saveEntries(record.id, entries),
+          ...historyHooks(record),
           picks,
-          bypass: record.bypass,
-          onBypass: (bypass) => store.askHistory.setBypass(record.id, bypass),
-          onOffer: (offer) => store.askHistory.saveOffer(record.agent, offer),
-          onTitle: (title) => store.askHistory.rename(record.id, title),
+          permissions: record.permissions,
         });
 
         return context.json({ threadId: record.id });
@@ -1536,7 +1603,7 @@ export function createReviewApi(
       },
     );
 
-    // Bypasses permissions from the next answer, or stops.
+    // Changes what the agent may do from the next answer.
     app.post(
       "/:id/ask/:threadId/permissions",
       reviewAccess("edit"),
@@ -1546,7 +1613,7 @@ export function createReviewApi(
           context.req.param("threadId"),
         );
 
-        const { bypass } = askPermitSchema.parse(
+        const { permissions } = askPermitSchema.parse(
           await readBoundedRequestJson(context.req.raw),
         );
 
@@ -1557,7 +1624,7 @@ export function createReviewApi(
           );
 
         try {
-          await thread.permit(bypass);
+          await thread.permit(permissions);
         } catch (error) {
           throw new ReviewInputError(errorMessage(error), 409);
         }

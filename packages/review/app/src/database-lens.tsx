@@ -471,7 +471,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
 
   const { portalTarget } = useDiagramTourShell(tourOpen, closeTour);
 
-  // database-lens is a marker: the tutorial and document-embed-scroll.ts find it.
+  // database-lens is a marker: document-embed-scroll.ts finds it.
   const renderLensFigure = (stage: boolean) => (
     <figure
       {...withClass(

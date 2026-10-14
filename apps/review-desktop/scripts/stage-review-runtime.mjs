@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import {
   access,
-  chmod,
   cp,
   open,
   readFile,
@@ -50,7 +49,6 @@ export const REQUIRED_RUNTIME_ENTRIES = [
   // The build's commit; without it the server reports `commit: null`.
   "dist/build-info.json",
   "instructions/authoring.md",
-  "tutorial/runtime-manifest.json",
   "node_modules",
 ];
 
@@ -142,7 +140,6 @@ export async function stageReviewRuntime(packagedRoot) {
   );
 
   await stageReviewDocs(runtimeRoot);
-  await makeTreeOwnerWritable(path.join(runtimeRoot, "tutorial", "git-stub"));
   console.log("[runtime pruning]", await pruneReviewRuntime(runtimeRoot));
   await assertRuntimeClosure(runtimeRoot);
 
@@ -220,25 +217,6 @@ async function listRelativeFiles(root) {
   return files;
 }
 
-async function makeTreeOwnerWritable(directory) {
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const absolute = path.join(directory, entry.name);
-
-    if (entry.isDirectory()) {
-      await makeTreeOwnerWritable(absolute);
-      continue;
-    }
-
-    if (!entry.isFile()) continue;
-
-    const current = await stat(absolute);
-
-    if ((current.mode & 0o200) === 0) {
-      await chmod(absolute, current.mode | 0o200);
-    }
-  }
-}
-
 export async function assertRuntimeClosure(runtimeRoot) {
   for (const entry of REQUIRED_RUNTIME_ENTRIES) {
     const target = path.join(runtimeRoot, entry);
@@ -250,57 +228,7 @@ export async function assertRuntimeClosure(runtimeRoot) {
     }
   }
 
-  const tutorialRoot = path.join(runtimeRoot, "tutorial");
-  const tutorialManifest = await readTutorialRuntimeManifest(tutorialRoot);
-
-  for (const entry of tutorialManifest.requiredPaths) {
-    try {
-      await access(path.join(tutorialRoot, entry));
-    } catch {
-      throw new Error(
-        `The staged Review runtime is missing tutorial/${entry}.`,
-      );
-    }
-  }
-
   await assertRuntimeContents(runtimeRoot);
-}
-
-export async function readTutorialRuntimeManifest(tutorialRoot) {
-  const value = JSON.parse(
-    await readFile(path.join(tutorialRoot, "runtime-manifest.json"), "utf8"),
-  );
-
-  const validEntries = (entries) =>
-    Array.isArray(entries) &&
-    entries.length > 0 &&
-    entries.every(isSafeManifestPath);
-
-  if (
-    value?.version !== 1 ||
-    !validEntries(value.reviewFiles) ||
-    !validEntries(value.requiredPaths) ||
-    value.reviewFiles.some((entry) => !value.requiredPaths.includes(entry))
-  ) {
-    throw new Error("Tutorial runtime manifest is invalid.");
-  }
-
-  return {
-    version: 1,
-    reviewFiles: [...new Set(value.reviewFiles)],
-    requiredPaths: [...new Set(value.requiredPaths)],
-  };
-}
-
-/** A manifest entry that names a file inside the tutorial tree. */
-function isSafeManifestPath(entry) {
-  // Only a JSON string equals its own String() rendering by identity.
-  return (
-    String(entry) === entry &&
-    entry.length > 0 &&
-    !path.isAbsolute(entry) &&
-    !entry.split(/[\\/]/u).includes("..")
-  );
 }
 
 /** Final package verification includes files outside the staged runtime, such

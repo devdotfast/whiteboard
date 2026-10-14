@@ -30,7 +30,6 @@ test("desktop pruning retains runnable variants, licenses, maps, native and runt
     "node_modules/sharp/lib/index.d.ts",
     "node_modules/@img/sharp-wasm32/lib/sharp.node",
     "node_modules/unknown/fixtures/schema.json",
-    "tutorial/runtime-manifest.json",
     "node_modules/thread-stream/lib/worker.js",
   ];
 

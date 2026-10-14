@@ -12,7 +12,7 @@ type SegmentedControlProps<T extends string> = Omit<
   value: T | undefined;
   options: readonly { value: T; label: ReactNode }[];
   onChange(value: T): void;
-  // Large segments stand in prose (the welcome and tutorial pages).
+  // Large segments stand in prose (the welcome page).
   size?: "default" | "large";
   disabled?: boolean;
   className?: string;
@@ -120,7 +120,7 @@ export const segmentStyles = stylex.create({
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "-1px" },
   },
-  // Segments set in prose (the welcome and tutorial pages) grow a step.
+  // Segments set in prose (the welcome page) grow a step.
   segmentLarge: {
     height: "26px",
     padding: "0 12px",

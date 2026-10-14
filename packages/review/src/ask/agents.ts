@@ -14,7 +14,11 @@ import {
   ndJsonStream,
 } from "@agentclientprotocol/sdk";
 import { piTakesMcp, piWithMcp } from "@review/ask/pi-mcp.js";
-import { type AskAgentId, askAgentIds } from "@review/ask/thread-state.js";
+import {
+  type AskAgentId,
+  type AskPermissions,
+  askAgentIds,
+} from "@review/ask/thread-state.js";
 
 /** How Whiteboard runs an agent that speaks ACP on stdio. */
 type AskAgentLaunch =
@@ -48,10 +52,13 @@ interface AskAgentSpec {
   /** How its model gets the MCP servers a session is given, where its
    * adapter keeps them; without it, the adapter passes them on. */
   mcp?: AskAgentMcp;
+  /** How it decides for itself what is safe to run, in place of its
+   * read-only mode and settings: the default where it has one. */
+  auto?: AskAgentModeSettings;
   /** How it edits and runs commands without asking, in place of its
    * read-only mode and settings, when the reviewer bypasses permissions.
    * Whiteboard also allows whatever it still asks. */
-  bypass?: AskAgentBypass;
+  bypass?: AskAgentModeSettings;
   /** A follow-up asked while it answers joins that turn, when it says it
    * takes one. Only for an adapter that leaves a follow-up arriving as the
    * turn ends to Whiteboard: Codex's starts a turn of its own instead,
@@ -71,10 +78,35 @@ interface AskAgentMcp {
   ): Promise<string>;
 }
 
-export interface AskAgentBypass {
+export interface AskAgentModeSettings {
   mode?: string;
   sessionMeta?: NewSessionRequest["_meta"];
   env?: Record<string, string>;
+}
+
+/** The mode, session settings and process settings an agent runs with. */
+export function askAgentSettings(
+  agent: AskAgentId,
+  permissions: AskPermissions,
+): AskAgentModeSettings {
+  const spec = askAgents[agent];
+
+  const own =
+    permissions === "read-only"
+      ? { mode: spec.readOnlyMode }
+      : spec[permissions];
+
+  return {
+    mode: own?.mode,
+    sessionMeta: own?.sessionMeta ?? spec.sessionMeta,
+    env: own?.env ?? spec.env,
+  };
+}
+
+/** What a new conversation may do: decide for itself where the agent can,
+ * else read only. */
+export function defaultAskPermissions(agent: AskAgentId): AskPermissions {
+  return askAgents[agent].auto ? "auto" : "read-only";
 }
 
 export const askAgents: Record<AskAgentId, AskAgentSpec> = {
@@ -107,6 +139,9 @@ export const askAgents: Record<AskAgentId, AskAgentSpec> = {
         },
       },
     },
+    // Claude's classifier allows what it judges safe and asks about the rest;
+    // its file tools stay off, as read-only's are.
+    auto: { mode: "auto" },
     // Its file tools back, and its own bypass, where its settings allow it.
     bypass: {
       mode: "bypassPermissions",
@@ -126,6 +161,8 @@ export const askAgents: Record<AskAgentId, AskAgentSpec> = {
     },
     signIn: "codex login",
     readOnlyMode: "read-only",
+    // Codex reviews each action and asks only about ones it finds unsafe.
+    auto: { mode: "agent" },
     bypass: { mode: "agent-full-access" },
   },
   cursor: {
@@ -187,6 +224,8 @@ export interface AskAgentStatus {
   available: boolean;
   /** Whether it has a mode that keeps the checkout as it is. */
   readOnly: boolean;
+  /** Whether it can decide for itself what is safe to run. */
+  auto: boolean;
   /** Whether Whiteboard can have it edit and run commands without asking. */
   bypass: boolean;
 }
@@ -203,7 +242,7 @@ export type AskAgentLauncher = (
   agent: AskAgentId,
   cwd: string,
   options?: {
-    bypass?: boolean;
+    permissions?: AskPermissions;
     /** The MCP servers its sessions are given. */
     mcpServers?: McpServer[];
     env?: NodeJS.ProcessEnv;
@@ -278,6 +317,7 @@ export async function detectAskAgents(
       name: askAgents[id].name,
       available: (await findAgent(askAgents[id], env)) !== undefined,
       readOnly: askAgents[id].readOnlyMode !== undefined,
+      auto: askAgents[id].auto !== undefined,
       bypass: askAgents[id].bypass !== undefined,
     })),
   );
@@ -290,7 +330,7 @@ const STDERR_LIMIT = 8_000;
 export const launchAskAgent: AskAgentLauncher = async (
   agent,
   cwd,
-  { bypass = false, mcpServers = [], env: base = process.env } = {},
+  { permissions = "read-only", mcpServers = [], env: base = process.env } = {},
 ) => {
   const spec = askAgents[agent];
   const executable = await findAgent(spec, base);
@@ -299,7 +339,7 @@ export const launchAskAgent: AskAgentLauncher = async (
 
   const env: NodeJS.ProcessEnv = {
     ...base,
-    ...((bypass && spec.bypass?.env) || spec.env),
+    ...askAgentSettings(agent, permissions).env,
   };
 
   // A server started from inside a Claude Code session must not look nested.

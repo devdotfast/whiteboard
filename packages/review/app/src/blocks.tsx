@@ -32,8 +32,6 @@ import { ReviewDocumentTitle } from "./review-document-surface";
 import { SoftwareMap } from "./software-map/SoftwareMap";
 import { tokens } from "./tokens.stylex";
 import { TraceQuote } from "./trace-quote";
-import { TutorialViewButton } from "./tutorial-dynamic-content";
-import { TutorialKeymapPicker } from "./tutorial-keymap-picker";
 
 /** A block the store has written: ids are assigned before any write. */
 export type StoredBlock = Block & { id: string };
@@ -257,25 +255,7 @@ function SoftwareMapBlock({ node, data }: BlockProps<"software_map">) {
 type Components = { [K in BlockType]: BlockComponent<K> };
 
 /** Every block kind's component, keyed by type. A kind without a component is a compile error. */
-function TutorialBlock({ node }: BlockProps<"tutorial">) {
-  switch (node.kind) {
-    case "keymap":
-      return (
-        <div {...stylex.props(documentStyles.column, drawStyles.blockChild)}>
-          <TutorialKeymapPicker />
-        </div>
-      );
-    case "view":
-      return (
-        <div {...stylex.props(documentStyles.column, drawStyles.blockChild)}>
-          <TutorialViewButton view={node.view}>{node.label}</TutorialViewButton>
-        </div>
-      );
-  }
-}
-
 export const blockComponents = {
-  tutorial: TutorialBlock,
   markdown: MarkdownBlock,
   code: CodeBlock,
   divider: DividerBlock,

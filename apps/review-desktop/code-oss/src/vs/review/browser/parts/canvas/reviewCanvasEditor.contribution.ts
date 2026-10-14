@@ -108,11 +108,8 @@ class ReviewCanvasEditorContribution extends Disposable implements IWorkbenchCon
 			),
 		);
 		if (restored.size === 0) return;
-		const reconcile = async () => {
-			// The managed tutorial is intentionally absent from the Home catalog.
-			const tutorial = await this.desktopConnection.getTutorialStatus().catch(() => undefined);
+		const reconcile = () => {
 			for (const reviewId of restored) {
-				if (reviewId === tutorial?.reviewUuid) continue;
 				const review = this.apiCatalog.reviews.find((review) => review.reviewId === reviewId);
 				if (!review || review.trashedAt) void this.tabsService.closeReview(reviewId);
 			}

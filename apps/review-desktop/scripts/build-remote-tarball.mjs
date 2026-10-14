@@ -59,7 +59,6 @@ const PACKAGE_DATA = [
   "THIRD_PARTY_NOTICES.md",
   "onboarding.md",
   "instructions",
-  "tutorial",
 ];
 
 const reviewRequire = createRequire(path.join(reviewPackage, "package.json"));
@@ -277,27 +276,10 @@ async function stageNode(stage, target, cacheDir) {
   await chmod(path.join(bin, "node"), 0o755);
 }
 
-async function stagePackageData(stage, stdio) {
-  execFileSync(
-    "pnpm",
-    ["--filter", "@dev.fast/whiteboard", "ensure:tutorial-assets"],
-    {
-      cwd: monorepoRoot,
-      stdio,
-      env: Object.fromEntries(
-        Object.entries(process.env).filter(
-          ([key]) => key !== "TSX_TSCONFIG_PATH",
-        ),
-      ),
-    },
-  );
-
+async function stagePackageData(stage) {
   for (const name of PACKAGE_DATA)
     await cp(path.join(reviewPackage, name), path.join(stage, name), {
       recursive: true,
-      filter: (source) =>
-        path.relative(reviewPackage, source) !==
-        path.join("tutorial", ".bundle"),
     });
 
   await stageReviewDocs(stage);
@@ -368,7 +350,7 @@ export async function buildRemoteTarball({
     await pruneVscodeServerArch(stage, target);
 
     await stageNode(stage, target, cacheDir);
-    await stagePackageData(stage, stdio);
+    await stagePackageData(stage);
 
     await writeFile(
       path.join(stage, "package.json"),

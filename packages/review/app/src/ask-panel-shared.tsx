@@ -9,8 +9,11 @@ export function AskSelectionQuote({
   selection,
 }: {
   selection: AgentSelection;
-}): ReactElement {
+}): ReactElement | null {
   const target = selection.target;
+
+  // A question about the whole review quotes nothing.
+  if (target.kind === "review") return null;
 
   return (
     <figure {...stylex.props(askPanelStyles.selection)}>

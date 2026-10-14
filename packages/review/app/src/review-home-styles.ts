@@ -21,8 +21,17 @@ export const styles = stylex.create({
   // Room for the selection bar over the last row.
   selectionSpace: { paddingBottom: "160px" },
   content: { width: "min(1040px, 100%)", gap: "20px" },
+  // Drawing in place: the composer under the header fills the window.
+  fillScroll: {
+    display: "flex",
+    flexDirection: "column",
+    paddingBottom: "36px",
+  },
+  fillContent: { flex: "1 1 auto", minHeight: 0 },
   header: { alignItems: "center", gap: "16px" },
   headerControls: { flexShrink: 0, gap: "2px", marginInlineStart: "auto" },
+  // Set apart from the list's own controls: it adds to the list.
+  newWhiteboard: { marginInlineStart: "8px" },
   trail: { display: "flex", alignItems: "baseline", gap: "12px" },
   crumb: {
     padding: 0,

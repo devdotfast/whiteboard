@@ -338,7 +338,7 @@ function findMarks(
     }
 
     // Only a selection in a review block has a place to mark.
-    if (!target.anchor) continue;
+    if (target.kind !== "text" || !target.anchor) continue;
     const at = resolveAskAnchor(article, target.anchor);
 
     if (!at) {

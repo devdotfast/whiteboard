@@ -37,6 +37,7 @@ import {
   FolderIcon,
   GearIcon,
   HelpIcon,
+  PlusIcon,
   PullRequestIcon,
   SearchIcon,
   SortIcon,
@@ -93,9 +94,12 @@ interface ReviewHomeProps {
   onRestore?(review: ReviewApiSummary): Promise<void>;
   remoteHosts?: ReviewRemoteHostActions;
   onboarding?: ReviewCanvasOnboarding;
-  onOpenTutorial?(): void;
   onOpenSettings?(): void;
   onOpenSetup?(): void;
+  /** Opens New whiteboard; absent where Home cannot draw one. */
+  onNewWhiteboard?(): void;
+  /** Shown in place of "No whiteboards yet" while there is nothing to list. */
+  emptyState?: ReactNode;
 }
 
 type PickerTrigger = "filter" | "unread" | HomeFacet;
@@ -143,9 +147,10 @@ export function ReviewHome({
   onRestore,
   remoteHosts,
   onboarding,
-  onOpenTutorial,
   onOpenSettings,
   onOpenSetup,
+  onNewWhiteboard,
+  emptyState,
 }: ReviewHomeProps) {
   const helpTooltip = useTooltip("Help", { instant: true });
   const settingsTooltip = useTooltip("Settings", { instant: true });
@@ -764,15 +769,20 @@ export function ReviewHome({
     .join(" and ");
 
   const completed = onboarding
-    ? Number(onboarding.installed) +
-      Number(
-        onboarding.tutorialTotal > 0 &&
-          onboarding.tutorialChecked >= onboarding.tutorialTotal,
-      ) +
-      Number(onboarding.published)
-    : 3;
+    ? Number(onboarding.installed) + Number(onboarding.published)
+    : 2;
 
-  const setupIncomplete = !inTrash && !hasPublished && completed < 3;
+  // Nothing to list, nor filtered away: Home offers to draw one in place.
+  const drawInPlace =
+    emptyState !== undefined && !inTrash && listed.length === 0;
+
+  // Drawing in place is the next step itself, so the banner would repeat it.
+  const setupIncomplete =
+    !inTrash &&
+    !hasPublished &&
+    completed < 2 &&
+    !(drawInPlace && onboarding?.installed);
+
   const weeksAway = lastVisit > 0 ? Math.floor((now - lastVisit) / week) : 0;
 
   const sortOptions = [
@@ -800,17 +810,11 @@ export function ReviewHome({
 
   const helpMenu = useCanvasMenu({
     items: [
-      {
-        id: "tour",
-        label: "Need a refresher? Take the tour",
-        enabled: !!onOpenTutorial,
-      },
       { id: "discord", label: "Ask on Discord ↗" },
       { id: "email", label: "Need help? Copy our email" },
     ],
     onSelect: async (id) => {
-      if (id === "tour") onOpenTutorial?.();
-      else if (id === "discord")
+      if (id === "discord")
         window.open(REVIEW_DISCORD_URL, "_blank", "noopener,noreferrer");
       else if (id === "email") {
         const copied = await copyText("founders@dev.fast");
@@ -932,9 +936,16 @@ export function ReviewHome({
           homeStyles.scroll,
           styles.scroll,
           selectionMode && styles.selectionSpace,
+          drawInPlace && styles.fillScroll,
         )}
       >
-        <div {...stylex.props(homeStyles.content, styles.content)}>
+        <div
+          {...stylex.props(
+            homeStyles.content,
+            styles.content,
+            drawInPlace && styles.fillContent,
+          )}
+        >
           <header
             ref={filterRegion}
             {...stylex.props(homeStyles.header, styles.header)}
@@ -1001,6 +1012,16 @@ export function ReviewHome({
                 {sortOptions.find((option) => option.value === sort)?.label}
                 <ChevronDownIcon />
               </Button>
+              {onNewWhiteboard && !inTrash && !drawInPlace ? (
+                <Button
+                  variant="primary"
+                  xstyle={styles.newWhiteboard}
+                  onClick={onNewWhiteboard}
+                >
+                  <PlusIcon />
+                  New whiteboard
+                </Button>
+              ) : null}
             </div>
             {picker !== null && (
               <HomeFilterPicker
@@ -1029,17 +1050,15 @@ export function ReviewHome({
             <StatusBanner
               xstyle={styles.notice}
               action={
-                <Button size="large" onClick={onOpenSetup ?? onOpenTutorial}>
+                <Button size="large" onClick={onOpenSetup}>
                   Continue setup
                 </Button>
               }
             >
-              Finish setting up Whiteboard · {completed} of 3 done · next:{" "}
+              Finish setting up Whiteboard · {completed} of 2 done · next:{" "}
               {!onboarding?.installed
                 ? "connect your agent"
-                : onboarding.tutorialChecked < onboarding.tutorialTotal
-                  ? "take the tour"
-                  : "create your first whiteboard"}
+                : "create your first whiteboard"}
             </StatusBanner>
           ) : !inTrash && weeksAway >= 2 && !nudgeClosed ? (
             <StatusBanner
@@ -1064,17 +1083,19 @@ export function ReviewHome({
           ) : null}
           {error && <p role="alert">{error}</p>}
           {waiting ? <HostNotice review={waiting} hosts={remoteHosts} /> : null}
-          {!visible.length && (
-            <EmptyState
-              message={
-                hidden
-                  ? "No matching whiteboards."
-                  : inTrash
-                    ? "Trash is empty."
-                    : "No whiteboards yet."
-              }
-            />
-          )}
+          {drawInPlace
+            ? emptyState
+            : !visible.length && (
+                <EmptyState
+                  message={
+                    hidden
+                      ? "No matching whiteboards."
+                      : inTrash
+                        ? "Trash is empty."
+                        : "No whiteboards yet."
+                  }
+                />
+              )}
           <div {...stylex.props(styles.list)}>
             {groups.map((group) => {
               const count = group.reviews.filter((r) =>
@@ -1389,16 +1410,6 @@ export function ReviewHome({
             filters with the filter icon; Sort orders each group. Delete keeps
             completed work out of the way until you need it again.
           </p>
-          <Button
-            size="large"
-            disabled={!onOpenTutorial}
-            onClick={() => {
-              setRefresherOpen(false);
-              onOpenTutorial?.();
-            }}
-          >
-            Take the tour
-          </Button>
         </Dialog>
       )}
     </main>

@@ -25,7 +25,7 @@ import { useShallow } from "zustand/react/shallow";
 import { AskCloseWarning } from "./ask-close";
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
-import { syncOpenAsks } from "./ask-open-state";
+import { openHandedOffAsks, syncOpenAsks } from "./ask-open-state";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
 import {
   AskThreadsWatchContext,
@@ -83,7 +83,6 @@ import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { TraceDocument } from "./trace-document";
 import { traceStyles } from "./trace-styles";
-import { useTutorialSection } from "./tutorial-section-context";
 import { captureUiEvent } from "./ui-telemetry";
 import { useAgentTrace } from "./use-agent-trace";
 import { useTooltip } from "./use-tooltip";
@@ -244,14 +243,6 @@ export function ReviewSection({
   );
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  const tutorialSection = useTutorialSection(title);
-
-  // The active tutorial chapter opens itself. Other chapters keep the
-  // reader's own collapse state.
-  useEffect(() => {
-    if (tutorialSection.state === "active") setCollapsed(false);
-  }, [setCollapsed, tutorialSection.state]);
-
   const toggleCollapsed = () => setCollapsed((current) => !current);
 
   // The table of contents (and anchor navigation) expands a collapsed
@@ -270,7 +261,7 @@ export function ReviewSection({
   }, []);
 
   // The classes are markers: find, the code view and the section ring look
-  // for a (collapsed) section, and the tutorial targets a section's body.
+  // for a (collapsed) section.
   return (
     <section
       {...withClass(
@@ -282,14 +273,8 @@ export function ReviewSection({
         drawStyles.sectionRing,
       )}
       data-review-section={title}
-      data-tutorial-chapter-state={tutorialSection.state ?? undefined}
     >
-      <div
-        {...stylex.props(
-          sectionStyles.header,
-          tutorialSection.state === "complete" && sectionStyles.complete,
-        )}
-      >
+      <div {...stylex.props(sectionStyles.header)}>
         <IconButton
           size="small"
           xstyle={[chevronMarker, sectionStyles.toggle]}
@@ -305,7 +290,6 @@ export function ReviewSection({
             data-review-copy-prose
             {...stylex.props(
               sectionStyles.title,
-              tutorialSection.state === "active" && sectionStyles.titleActive,
               collapsed && sectionStyles.titleCollapsed,
               drawStyles.retitledHeading,
             )}
@@ -531,6 +515,12 @@ function AskHost() {
       ),
     [store, session],
   );
+
+  useEffect(() => {
+    void openHandedOffAsks(store, (endpoint, init) =>
+      session.current.fetch(endpoint, init),
+    ).catch(() => {});
+  }, [store, session]);
 
   const keys = useReviewPanel(
     useShallow((state) => state.asks.map((ask) => ask.key)),
@@ -1373,15 +1363,6 @@ const sectionStyles = stylex.create({
     marginBlock: "40px 12px",
     marginInline: "auto",
   },
-  // A finished tutorial chapter says so at the end of its heading row.
-  complete: {
-    "::after": {
-      content: "'Complete ✓'",
-      marginLeft: "auto",
-      color: tokens.tutorialRing,
-      font: `${fontSize.micro}/16px ${tokens.fontMono}`,
-    },
-  },
   // Expanded sections keep a faint chevron so "this collapses" is legible
   // without hovering the header first.
   toggle: {
@@ -1400,9 +1381,6 @@ const sectionStyles = stylex.create({
     fontSize: { default: null, [inDocument()]: documentType.h2 },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
     lineHeight: { default: null, [inDocument()]: "32px" },
-  },
-  titleActive: {
-    color: tokens.ink,
   },
   titleCollapsed: {
     color: tokens.ghost,

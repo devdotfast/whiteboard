@@ -177,9 +177,6 @@ test("builds a self-contained tarball for this machine's Linux arch", async () =
     "THIRD_PARTY_NOTICES.md",
     "onboarding.md",
     "instructions/authoring.md",
-    "tutorial/document.json",
-    "tutorial/pins.json",
-    "tutorial/git-stub",
     "docs/remote-hosts.md",
   ])
     assert.ok(listed.has(`whiteboard-remote/${file}`), file);
@@ -195,10 +192,6 @@ test("builds a self-contained tarball for this machine's Linux arch", async () =
   assert.ok(
     !entries.some((entry) => /\/@img\/sharp-(linux|libvips)-/.test(entry)),
     "the tarball holds native sharp",
-  );
-  assert.ok(
-    !entries.some((entry) => entry.includes("/tutorial/.bundle")),
-    "the tarball holds tutorial/.bundle",
   );
 
   if (!hasDocker) return;

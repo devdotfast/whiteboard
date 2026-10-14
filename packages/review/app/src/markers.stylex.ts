@@ -78,3 +78,6 @@ export const homeRowMarker = stylex.defineMarker();
 
 /** A filter option reveals its empty checkbox only while hovered or keyboard focused. */
 export const filterRowMarker = stylex.defineMarker();
+
+/** A first-run install row; its copy chip shows while it is hovered. */
+export const installRowMarker = stylex.defineMarker();

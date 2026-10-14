@@ -28,7 +28,6 @@ import { useNotify } from "./notify";
 import { fontSize, fontWeight, layer, radius } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
-import { useTutorial } from "./tutorial-context";
 import { captureUiEvent, clientErrorName } from "./ui-telemetry";
 import { useTooltip } from "./use-tooltip";
 
@@ -41,7 +40,6 @@ export function BugReportControl({
   captureScreenshot?: typeof captureWindowScreenshot;
 } = {}) {
   const session = useReviewSession();
-  const tutorial = useTutorial();
   const [open, setOpen] = useState(false);
   const [description, setDescription] = useState("");
   const [includeContext, setIncludeContext] = useState(true);
@@ -184,7 +182,7 @@ export function BugReportControl({
   };
 
   const openDialog = async () => {
-    if (tutorial || capturePending.current) return;
+    if (capturePending.current) return;
     capturePending.current = true;
     setCapturing(true);
     captureUiEvent(session, "bug_report_dialog_opened");
@@ -206,7 +204,7 @@ export function BugReportControl({
         xstyle={shellStyles.topbarItem}
         aria-label="Report a bug"
         ref={tooltip}
-        disabled={Boolean(tutorial) || capturing}
+        disabled={capturing}
         onClick={() => void openDialog()}
       >
         <BugIcon xstyle={controlStyles.chromeIcon} />

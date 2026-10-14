@@ -63,10 +63,10 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
     if (extra.length || (mode === "mcp" && name))
       throw new Error("Unexpected arguments. Use whiteboard api --help.");
 
-    const headers = {
-      [REVIEW_VIA_HEADER]: mode === "mcp" ? "mcp" : "api",
-      [REVIEW_AGENT_HEADER]: reviewSessionAgent(env),
-    };
+    const headers = Object.fromEntries([
+      [REVIEW_VIA_HEADER, mode === "mcp" ? "mcp" : "api"],
+      [REVIEW_AGENT_HEADER, reviewSessionAgent(env)],
+    ]);
 
     if (mode === "mcp") {
       const { serveReviewMcp } = await import("./mcp.js");

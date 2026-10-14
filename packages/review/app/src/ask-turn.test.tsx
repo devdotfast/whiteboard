@@ -14,7 +14,7 @@ const thread = (entries: AskEntry[]): AskThreadState => ({
   agentName: "Claude Code",
   status: "running",
   readOnly: true,
-  bypass: false,
+  permissions: "read-only",
   head: "7fd03b8e2",
   cwd: "/checkouts/payments",
   selection: { title: "Paragraph 3" },

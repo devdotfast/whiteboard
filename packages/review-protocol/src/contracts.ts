@@ -362,6 +362,11 @@ export interface ReviewCanvasBridge {
 export interface ReviewCanvasSetupActions {
   load(): Promise<ReviewCanvasInstallContent>;
   installCli(): Promise<void>;
+  /** The desktop server, which first run calls directly to connect agents
+   * and to run one. */
+  connection(): Promise<{ serverUrl: string; token: string }>;
+  /** A native folder picker; undefined when the user cancels. */
+  pickFolder(): Promise<string | undefined>;
 }
 
 /**
@@ -394,17 +399,11 @@ export interface ReviewCanvasInstallContent {
   enablePrompts(): Promise<ReviewCliInstallStatus>;
 }
 
-/**
- * Onboarding progress for the Welcome pane: which of the three steps the user
- * finished. `tutorialChecked` counts the checklist steps the tutorial
- * recorded, out of `tutorialTotal`.
- */
+/** Onboarding progress for the Welcome pane: which steps the user finished. */
 export interface ReviewCanvasOnboarding {
   installed: boolean;
-  tutorialChecked: number;
-  tutorialTotal: number;
-  // At least one published review exists. Drafts and the tutorial are not in
-  // the review list, so this only counts a real published review.
+  // At least one published review exists. Drafts are not in the review
+  // list, so this only counts a real published review.
   published: boolean;
 }
 
@@ -433,46 +432,6 @@ export type ReviewReadyNotificationChoice =
   | "notificationAndBadge"
   | "notification"
   | "off";
-
-export const REVIEW_TUTORIAL_STEP_IDS = [
-  "chooseKeymap",
-  "showHover",
-  "openDiff",
-  "selectLens",
-  "expandFold",
-  "backToWhiteboard",
-  "openSequence",
-  "closeSequence",
-  "openDatabase",
-  "getHelp",
-] as const;
-
-export type TutorialStepId = (typeof REVIEW_TUTORIAL_STEP_IDS)[number];
-
-export const REVIEW_TUTORIAL_PROGRESS_STORAGE_KEY =
-  "review.tutorial.progress.v1";
-
-export interface TutorialProgressV1 {
-  version: 1;
-  checked: TutorialStepId[];
-  dismissed: boolean;
-}
-
-export interface ReviewCanvasTutorialContent {
-  reviewUuid: string;
-  progress: TutorialProgressV1;
-  keymap: ReviewKeymapChoice;
-}
-
-export interface ReviewCanvasTutorialBridge {
-  content: ReviewCanvasTutorialContent;
-  setStep(step: TutorialStepId, checked: boolean): void;
-  dismiss(): void;
-  reopen(): void;
-  selectKeymap(keymap: ReviewKeymapChoice): Promise<void>;
-  // Closes the managed tutorial tab without dismissing it from a user catalog.
-  close(): void;
-}
 
 /**
  * Settings state and actions the workbench hands to the Settings canvas. Every
@@ -763,8 +722,6 @@ export type ReviewCanvasContent =
   | { kind: "loading" }
   | {
       kind: "api";
-      tutorial?: ReviewCanvasTutorialBridge;
-      setTutorial?(enabled: boolean): void;
       structuralDiffEnabled?: boolean;
       softwareMapEnabled?: boolean;
       documentWidth?: ReviewDocumentWidthChoice;
@@ -817,9 +774,6 @@ export type ReviewCanvasContent =
       install?: ReviewCanvasInstallContent;
       setupActions?: ReviewCanvasSetupActions;
       onboarding?: ReviewCanvasOnboarding;
-      // Opens the tutorial tab. Never gated on install status: the tutorial
-      // needs no agent.
-      openTutorial(): void;
     }
   | {
       kind: "welcome";
@@ -830,9 +784,6 @@ export type ReviewCanvasContent =
       close?(): void;
       // Drives the step rail. Absent when the install status is unavailable.
       onboarding?: ReviewCanvasOnboarding;
-      // Opens the tutorial tab. Never gated on install status: the tutorial
-      // needs no agent.
-      openTutorial(): void;
     }
   | {
       kind: "settings";
@@ -1084,17 +1035,6 @@ export const ReviewErrorResponseSchema = z.strictObject({
   retryable: z.boolean().optional(),
 });
 
-/** Managed tutorials use the native JSON canvas and stay out of Home. */
-export const ReviewTutorialOpenResponseSchema = z.strictObject({
-  kind: z.literal("api"),
-  reviewUuid: z.uuid({ error: "must be a UUID" }),
-  title: stringAllowEmpty,
-});
-
-export type ReviewTutorialOpenResponse = z.infer<
-  typeof ReviewTutorialOpenResponseSchema
->;
-
 export const ReviewStackLayerSchema = z.strictObject({
   branch: requiredString,
   pullRequestNumber: positiveInteger.nullable(),
@@ -1253,6 +1193,95 @@ export const ReviewCliInstallApplyResponseSchema = z.strictObject({
 export type ReviewCliInstallApplyResponse = z.infer<
   typeof ReviewCliInstallApplyResponseSchema
 >;
+
+/** An agent harness Whiteboard can connect to, and whether this machine has it. */
+export const ReviewConnectAgentSchema = z.strictObject({
+  target: ReviewCliInstallTargetSchema,
+  name: requiredString,
+  found: z.boolean(),
+  /** Whether it already has Whiteboard's plugin or MCP server. */
+  connected: z.boolean(),
+});
+
+export type ReviewConnectAgent = z.infer<typeof ReviewConnectAgentSchema>;
+
+export const ReviewConnectAgentsResponseSchema = z.strictObject({
+  agents: z.array(ReviewConnectAgentSchema),
+});
+
+export const ReviewConnectRequestSchema = z.strictObject({
+  target: ReviewCliInstallTargetSchema,
+});
+
+/** `approve`: the harness asks the user to confirm the server itself (Cursor's
+ * install link), so Whiteboard opened it and cannot tell when it is done. */
+export const ReviewConnectResultSchema = z.strictObject({
+  target: ReviewCliInstallTargetSchema,
+  state: z.enum(["connected", "approve", "failed"]),
+  output: stringAllowEmpty,
+});
+
+export type ReviewConnectResult = z.infer<typeof ReviewConnectResultSchema>;
+
+/** A repository the first-run Run step can draw from. */
+export const ReviewOnboardingProjectSchema = z.strictObject({
+  path: requiredString,
+  name: requiredString,
+});
+
+export type ReviewOnboardingProject = z.infer<
+  typeof ReviewOnboardingProjectSchema
+>;
+
+/** Something in a repository to draw: the checkout's branch, another
+ * worktree, or an open pull request. */
+export const ReviewOnboardingTargetSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("branch"),
+    path: requiredString,
+    branch: requiredString,
+  }),
+  z.strictObject({
+    kind: z.literal("worktree"),
+    path: requiredString,
+    branch: requiredString,
+  }),
+  z.strictObject({
+    kind: z.literal("pr"),
+    number: z.number().int().positive(),
+    title: requiredString,
+    url: requiredString,
+    author: stringAllowEmpty,
+    branch: stringAllowEmpty,
+    additions: z.number().int().nonnegative(),
+    deletions: z.number().int().nonnegative(),
+  }),
+]);
+
+export type ReviewOnboardingTarget = z.infer<
+  typeof ReviewOnboardingTargetSchema
+>;
+
+export const ReviewOnboardingTargetsResponseSchema = z.strictObject({
+  project: ReviewOnboardingProjectSchema,
+  base: stringAllowEmpty,
+  targets: z.array(ReviewOnboardingTargetSchema),
+});
+
+export type ReviewOnboardingTargetsResponse = z.infer<
+  typeof ReviewOnboardingTargetsResponseSchema
+>;
+
+/** Make a whiteboard of `target`, open it, and start `agent` drawing it. */
+export const ReviewOnboardingRunRequestSchema = z.strictObject({
+  /** The repository the target came from. */
+  projectPath: requiredString,
+  /** What a branch is compared to, when it has no pull request. */
+  base: stringAllowEmpty,
+  target: ReviewOnboardingTargetSchema,
+  agent: requiredString,
+  prompt: z.string().trim().min(1).max(8000),
+});
 
 export const ReviewDiffFileSchema = z.strictObject({
   path: requiredString,

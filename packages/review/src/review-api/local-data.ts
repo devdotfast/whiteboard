@@ -949,8 +949,8 @@ export class LocalReviewData {
       await realpath(vcs.rootPath),
     );
 
-    // Registration may follow replacement of a managed repository at the same
-    // path (for example resetting the tutorial). Reopen its Git reader too.
+    // Registration may follow replacement of a repository at the same path.
+    // Reopen its Git reader too.
     await this.closeReader(repository.id);
     this.repositories.delete(repository.id);
 

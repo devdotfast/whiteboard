@@ -1,8 +1,6 @@
 # Node
 node_modules/
 dist/
-packages/review/tutorial/.bundle/
-packages/review/tutorial/git-stub/
 *.tsbuildinfo
 
 # pnpm
@@ -89,5 +87,3 @@ backend.hcl
 .dev/evidence/
 artifacts/devbox/
 scripts/acceptance/evidence/
-
-packages/review/tutorial/pins.json

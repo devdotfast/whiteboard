@@ -1,9 +1,0 @@
-{
-  "name": "@dev.fast/review-tutorial-order-service",
-  "version": "1.0.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "check": "tsc --noEmit"
-  }
-}

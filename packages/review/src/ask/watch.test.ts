@@ -12,7 +12,7 @@ const state: AskThreadState = {
   agentName: "Claude Code",
   status: "running",
   readOnly: true,
-  bypass: false,
+  permissions: "read-only",
   head: "abc123",
   cwd: "/checkout",
   selection: { title: "Paragraph 3" },

@@ -2,11 +2,13 @@ import {
   type AskAgentId,
   type AskChoiceKind,
   type AskOffer,
+  type AskPermissions,
   type AskPicks,
   type AskSelect,
   askAgentIds,
   askChoiceKinds,
   askOfferSchema,
+  askPermissionsSchema,
 } from "@review/ask/thread-state";
 import { fuzzyRank } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
@@ -47,6 +49,8 @@ const agentsSchema = z.object({
       available: z.boolean(),
       /** Whether it has a mode that keeps the checkout as it is. */
       readOnly: z.boolean().default(true),
+      /** Whether it can decide for itself what is safe to run. */
+      auto: z.boolean().default(false),
       /** Whether it can edit and run commands without asking. */
       bypass: z.boolean().default(false),
     }),
@@ -213,47 +217,57 @@ export function rememberAskAgent(session: ReviewSession, agent: AskAgentId) {
 const choiceKey = (
   session: ReviewSession,
   agent: AskAgentId,
-  kind: AskChoiceKind | "bypass",
+  kind: AskChoiceKind | "permissions",
 ) => session.storageKey(`ask-${kind}-${agent}`);
 
-/** Whether the reviewer last had this agent bypass permissions. */
-export function storedBypass(session: ReviewSession, agent: AskAgentId) {
+/** What the reviewer last let this agent do, when they chose. */
+export function storedPermissions(
+  session: ReviewSession,
+  agent: AskAgentId,
+): AskPermissions | undefined {
   try {
-    return localStorage.getItem(choiceKey(session, agent, "bypass")) === "on";
+    const stored = askPermissionsSchema.safeParse(
+      localStorage.getItem(choiceKey(session, agent, "permissions")),
+    );
+
+    return stored.success ? stored.data : undefined;
   } catch {
-    /* Storage can be unavailable; the agent asks first. */
-    return false;
+    /* Storage can be unavailable; the agent's default applies. */
+    return undefined;
   }
 }
 
-export function rememberBypass(
+export function rememberPermissions(
   session: ReviewSession,
   agent: AskAgentId,
-  bypass: boolean,
+  permissions: AskPermissions,
 ) {
   try {
-    localStorage.setItem(
-      choiceKey(session, agent, "bypass"),
-      bypass ? "on" : "off",
-    );
+    localStorage.setItem(choiceKey(session, agent, "permissions"), permissions);
   } catch {
     /* The choice is a convenience; forgetting it is harmless. */
   }
 }
 
+const permissionNames: Record<AskPermissions, string> = {
+  "read-only": "Read-only",
+  auto: "Auto",
+  bypass: "Bypass permissions",
+};
+
+/** What an agent can be let do, in the order the reviewer cycles them. */
+export const permissionsOffered = (agent: AskAgent | undefined) =>
+  askPermissionsSchema.options.filter(
+    (permissions) => permissions === "read-only" || agent?.[permissions],
+  );
+
 /** The permissions a conversation can have. */
-export const permissionsSelect = (bypass: boolean): AskSelect => ({
-  current: bypass ? "bypass" : "ask",
-  options: [
-    {
-      value: "ask",
-      name: "Read-only",
-    },
-    {
-      value: "bypass",
-      name: "Bypass permissions",
-    },
-  ],
+export const permissionsSelect = (
+  offered: AskPermissions[],
+  current: AskPermissions,
+): AskSelect => ({
+  current,
+  options: offered.map((value) => ({ value, name: permissionNames[value] })),
 });
 
 /** The model or effort the reviewer chose last for this agent. */

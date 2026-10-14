@@ -44,26 +44,6 @@ function getKeychain(): string | undefined {
 	return tempDir ? path.join(tempDir, 'buildagent.keychain') : undefined;
 }
 
-export function isTutorialGitObjectPath(appPath: string, filePath: string): boolean {
-	const objectsPath = path.resolve(
-		appPath,
-		'Contents',
-		'Resources',
-		'app',
-		'review-runtime',
-		'tutorial',
-		'git-stub',
-		'objects'
-	);
-	const relativePath = path.relative(objectsPath, path.resolve(filePath));
-	return (
-		relativePath.length > 0 &&
-		relativePath !== '..' &&
-		!relativePath.startsWith(`..${path.sep}`) &&
-		!path.isAbsolute(relativePath)
-	);
-}
-
 async function retrySignOnKeychainError<T>(fn: () => Promise<T>, maxRetries: number = 3): Promise<T> {
 	let lastError: Error | undefined;
 
@@ -117,10 +97,6 @@ async function main(buildDir?: string): Promise<void> {
 
 	const appOpts: SignOptions = {
 		app: appPath,
-		// Loose Git objects are compressed resources. osx-sign identifies them as
-		// binaries and asks codesign to modify their read-only files. The app bundle
-		// signature still seals these resources when it signs the containing app.
-		ignore: filePath => isTutorialGitObjectPath(appPath, filePath),
 		platform: 'darwin',
 		optionsForFile: (filePath) => ({
 			entitlements: getEntitlementsForFile(filePath),

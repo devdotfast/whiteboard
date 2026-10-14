@@ -16,7 +16,7 @@ import { useReviewRoots } from "./review-root-context";
 import { fontSize } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
-import { IconButton } from "./ui/button";
+import { Button, IconButton } from "./ui/button";
 import { Chip } from "./ui/chip";
 import { EmptyState } from "./ui/empty-state";
 import { textStyles } from "./ui/text";
@@ -145,19 +145,37 @@ export function AskHistoryList({
   return (
     <div {...stylex.props(askPanelStyles.body)}>
       <div {...stylex.props(askPanelStyles.page)}>
-        <h3
-          {...stylex.props(
-            textStyles.eyebrow,
-            askPanelStyles.caps,
-            styles.historyHeading,
+        <div {...stylex.props(styles.historyHeader)}>
+          <h3
+            {...stylex.props(
+              textStyles.eyebrow,
+              askPanelStyles.caps,
+              styles.historyHeading,
+            )}
+          >
+            {passage?.several
+              ? "About these passages"
+              : passage
+                ? "About this passage"
+                : "Saved conversations"}
+          </h3>
+          {/* A question needs no selection: one about the whole review. */}
+          {passage || !panels ? null : (
+            <Button
+              onClick={() =>
+                panels
+                  .getState()
+                  .openAsk(
+                    { target: { kind: "review" }, title: "Whole review" },
+                    undefined,
+                    { from },
+                  )
+              }
+            >
+              New conversation
+            </Button>
           )}
-        >
-          {passage?.several
-            ? "About these passages"
-            : passage
-              ? "About this passage"
-              : "Saved conversations"}
-        </h3>
+        </div>
         {passage ? (
           <figure {...stylex.props(askPanelStyles.selection)}>
             <blockquote {...stylex.props(askPanelStyles.selectionQuote)}>
@@ -178,7 +196,7 @@ export function AskHistoryList({
             message={
               passage
                 ? "No saved conversations about this passage."
-                : "Nothing yet. Select text or code in the review and choose Ask; the conversation is saved here."
+                : "Nothing yet. Start a new conversation, or select text or code in the review and choose Ask; conversations are saved here."
             }
           />
         ) : entries?.length ? (
@@ -321,6 +339,12 @@ const styles = stylex.create({
   historyButtonOn: {
     color: tokens.ink,
     opacity: 1,
+  },
+  historyHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: "8px",
   },
   historyHeading: {
     margin: 0,

@@ -35,6 +35,8 @@ export const AgentSelectionSchema = z.strictObject({
       startLine: z.number().int().positive(),
       endLine: z.number().int().positive(),
     }),
+    /** Nothing in particular: a question about the whole review. */
+    z.strictObject({ kind: z.literal("review") }),
   ]),
   title: z.string().max(500),
   detail: z.string().max(24000).optional(),
@@ -54,6 +56,8 @@ export function selectionMarkdown(
 
   if (selection.selectedDiff)
     return selectedDiffMarkdown(selection.selectedDiff, diffPaths);
+
+  if (target.kind === "review") return "";
 
   if (target.kind === "text")
     return target.quote

@@ -1,5 +1,6 @@
 import type {
   ReviewCanvasInstallContent,
+  ReviewCanvasSetupActions,
   ReviewCliInstallStatus,
 } from "@dev.fast/review-protocol";
 import { act } from "react";
@@ -115,6 +116,13 @@ describe("WelcomePage", () => {
           shim: { ...fresh.shim, installed: true, profileConfigured: true },
         }),
       ),
+      connection: vi.fn<ReviewCanvasSetupActions["connection"]>(async () => ({
+        serverUrl: "",
+        token: "",
+      })),
+      pickFolder: vi.fn<ReviewCanvasSetupActions["pickFolder"]>(
+        async () => undefined,
+      ),
       installCli: vi.fn<() => Promise<void>>(async () => {}),
     };
 
@@ -133,7 +141,7 @@ describe("WelcomePage", () => {
     expect(stepState(1)).toBe("todo");
     expect(buttons("Install whiteboard in PATH")).toHaveLength(1);
 
-    for (const index of [1, 2, 3]) {
+    for (const index of [1, 2]) {
       const header = step(index)?.querySelector("button") as HTMLButtonElement;
       expect(header.disabled).toBe(true);
       await act(async () => header.click());
@@ -187,6 +195,13 @@ describe("WelcomePage", () => {
     const setupActions = {
       load: vi.fn<() => Promise<ReviewCanvasInstallContent>>(async () =>
         content(fresh),
+      ),
+      connection: vi.fn<ReviewCanvasSetupActions["connection"]>(async () => ({
+        serverUrl: "",
+        token: "",
+      })),
+      pickFolder: vi.fn<ReviewCanvasSetupActions["pickFolder"]>(
+        async () => undefined,
       ),
       installCli: vi.fn<() => Promise<void>>(async () => {}),
     };
@@ -336,6 +351,13 @@ describe("WelcomePage", () => {
       load: vi.fn<() => Promise<ReviewCanvasInstallContent>>(async () =>
         content(fresh),
       ),
+      connection: vi.fn<ReviewCanvasSetupActions["connection"]>(async () => ({
+        serverUrl: "",
+        token: "",
+      })),
+      pickFolder: vi.fn<ReviewCanvasSetupActions["pickFolder"]>(
+        async () => undefined,
+      ),
       installCli: vi.fn<() => Promise<void>>(async () => {
         throw new Error("Installation failed");
       }),
@@ -377,6 +399,13 @@ describe("WelcomePage", () => {
 
     const setupActions = {
       load: vi.fn<() => Promise<ReviewCanvasInstallContent>>(async () => ready),
+      connection: vi.fn<ReviewCanvasSetupActions["connection"]>(async () => ({
+        serverUrl: "",
+        token: "",
+      })),
+      pickFolder: vi.fn<ReviewCanvasSetupActions["pickFolder"]>(
+        async () => undefined,
+      ),
       installCli: vi.fn<() => Promise<void>>(async () => {}),
     };
 
@@ -423,6 +452,13 @@ describe("WelcomePage", () => {
           shim: { ...status.shim, installed: true, profileConfigured: true },
           legacySkills: [],
         }),
+      ),
+      connection: vi.fn<ReviewCanvasSetupActions["connection"]>(async () => ({
+        serverUrl: "",
+        token: "",
+      })),
+      pickFolder: vi.fn<ReviewCanvasSetupActions["pickFolder"]>(
+        async () => undefined,
       ),
       installCli: vi.fn<() => Promise<void>>(async () => {}),
     };

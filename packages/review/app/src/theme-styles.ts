@@ -9,13 +9,6 @@ export const themeStyles = stylex.create({
   // light class can sit on the same element: .review-app and the Desktop
   // entry host that renders home, settings and welcome.
   vars: {
-    "--tutorial-ring": "color-mix(in srgb, var(--accent) 82%, white)",
-    "--tutorial-ring-glow":
-      "color-mix(in srgb, var(--accent) 44%, transparent)",
-    "--tutorial-guide-bg":
-      "color-mix(in srgb, var(--surface-raised) 96%, transparent)",
-    "--tutorial-guide-border":
-      "color-mix(in srgb, var(--tutorial-ring) 48%, var(--rule-soft))",
     // Workbench chrome bridge. The canvas mounts straight into the Code OSS DOM
     // (no iframe), so the workbench's --vscode-* theme variables are in scope and
     // the topbar can dress itself as native chrome. Each token falls back to the
@@ -133,13 +126,6 @@ export const themeStyles = stylex.create({
     "--rule-soft": "var(--vscode-editorWidget-border, #b9bec7)",
     "--selection": "var(--accent)",
     "--selection-shadow": "color-mix(in srgb, var(--accent) 40%, transparent)",
-    "--tutorial-ring": "color-mix(in srgb, var(--accent) 86%, #14213d)",
-    "--tutorial-ring-glow":
-      "color-mix(in srgb, var(--accent) 34%, transparent)",
-    "--tutorial-guide-bg":
-      "color-mix(in srgb, var(--surface-raised) 98%, white)",
-    "--tutorial-guide-border":
-      "color-mix(in srgb, var(--tutorial-ring) 42%, var(--rule-soft))",
     "--map-storage-border": "#4a7685",
     "--vscode-focusBorder": "transparent",
     "--vscode-list-focusOutline": "transparent",

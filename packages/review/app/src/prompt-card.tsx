@@ -22,7 +22,7 @@ const PROMPT_KINDS: ReadonlyArray<{ kind: PromptKind; label: string }> = [
  */
 export const PROMPTS: Record<PromptKind, string> = {
   change:
-    "Create a Whiteboard of my current branch against up to date main, then open it in Whiteboard.",
+    "Draw a whiteboard that walks me through my current branch: what it changes compared to the branch it merges into, and why.",
   architecture:
     "Create a Whiteboard that sketches out the main data flows, access patterns, and code paths in this repo, so I can do a full architecture review of it. Open it in Whiteboard when you're done.",
 };

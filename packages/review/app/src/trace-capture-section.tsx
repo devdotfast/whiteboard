@@ -45,8 +45,7 @@ function traceDestinationCopy(trace: ReviewCliInstallStatus["trace"]): string {
 
 /**
  * Experimental trace capture controls. Lives under Settings ▸ Experimental
- * Features. The tutorial demonstrates a bundled trace without requiring
- * capture to be enabled.
+ * Features.
  *
  * The on/off state is the machine-level trace setting the review server owns,
  * read back through the install status.

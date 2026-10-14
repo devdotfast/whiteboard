@@ -31,7 +31,7 @@ The RPM tasks package the assembled application. They retain ELF dependency
 discovery but exclude system Node requirements for scripts run by bundled
 Electron. Both the desktop app and CLI live under `/usr/share/whiteboard`.
 `/usr/bin/whiteboard-desktop` starts the app; `/usr/bin/whiteboard` runs the bundled CLI.
-The package includes Whiteboard's desktop entry, icon, tutorial, and curated extensions.
+The package includes Whiteboard's desktop entry, icon, and curated extensions.
 
 Package hooks refresh desktop/icon caches. They do not enroll a repository,
 install agent skills, change editor alternatives, or edit user profiles. The
@@ -101,7 +101,7 @@ Before the first public Fedora release, record these additional results:
 - GNOME/Wayland on the latest Fedora Workstation release (44) with SELinux enforcing and Chromium
   sandboxing enabled. Check native/custom controls, F10/Escape, drag regions,
   fullscreen, narrow widths, light/dark themes, and fractional scaling.
-- Onboarding, tutorial, review publication, language tools, and `whiteboard app launch`
+- Onboarding, review publication, language tools, and `whiteboard app launch`
   on a clean machine without the source checkout or system Node.
 - Real N to N+1 through the hosted DNF repository, including interrupted downloads
   and metadata/signature requests that straddle publication.

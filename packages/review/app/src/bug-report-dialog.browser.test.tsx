@@ -1,6 +1,5 @@
 import {
   type JsonObject,
-  type ReviewCanvasTutorialBridge,
   isJsonObject,
   parseJsonText,
 } from "@dev.fast/review-protocol";
@@ -23,7 +22,6 @@ import {
   ReviewSessionProvider,
 } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
-import { TutorialProvider } from "./tutorial-context";
 
 const captureScreenshotMock = vi.fn<typeof captureWindowScreenshot>();
 
@@ -135,27 +133,11 @@ describe("BugReportControl", () => {
     expect(reportBody()).not.toHaveProperty("screenshot");
   });
 
-  it("disables reporting in the tutorial", async () => {
-    await renderControl(tutorialBridge());
-
-    expect(reportButton().disabled).toBe(true);
-    await act(async () => reportButton().click());
-
-    expect(captureScreenshotMock).not.toHaveBeenCalled();
-    expect(container.querySelector('[role="dialog"]')).toBeNull();
-    expect(request).not.toHaveBeenCalledWith(
-      expect.stringContaining("/telemetry/event"),
-      expect.anything(),
-    );
-  });
-
-  async function renderControl(tutorial?: ReviewCanvasTutorialBridge) {
+  async function renderControl() {
     await act(async () => {
       root.render(
         <ReviewSessionProvider session={session}>
-          <TutorialProvider tutorial={tutorial}>
-            <BugReportControl captureScreenshot={captureScreenshotMock} />
-          </TutorialProvider>
+          <BugReportControl captureScreenshot={captureScreenshotMock} />
         </ReviewSessionProvider>,
       );
     });
@@ -225,21 +207,6 @@ describe("BugReportControl", () => {
     return body;
   }
 });
-
-function tutorialBridge(): ReviewCanvasTutorialBridge {
-  return {
-    content: {
-      reviewUuid: "tutorial-review",
-      progress: { version: 1, checked: [], dismissed: false },
-      keymap: "none",
-    },
-    setStep() {},
-    dismiss() {},
-    reopen() {},
-    async selectKeymap() {},
-    close() {},
-  };
-}
 
 function jsonResponse(body: JsonObject, status = 200): Response {
   return new Response(JSON.stringify(body), {

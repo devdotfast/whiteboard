@@ -9,17 +9,12 @@ import { type IconProps, TrashIcon } from "./icons";
 import { useReviewActions, useReviewState } from "./review-context";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
-import { useTutorial } from "./tutorial-context";
 import { useAnchoredPopover } from "./use-anchored-popover";
-import { useTooltip } from "./use-tooltip";
 
 export function ReviewCornerAction(): ReactElement | null {
   const { dismissReview } = useReviewActions();
   const { submissionOutcome } = useReviewState();
-  const tutorial = useTutorial();
   const session = useReviewSession();
-
-  const closeTooltip = useTooltip("Close tutorial");
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const control = useRef<HTMLDivElement>(null);
@@ -28,20 +23,6 @@ export function ReviewCornerAction(): ReactElement | null {
   // A finished review has nothing left to submit or dismiss.
   if (submissionOutcome === "dismissed" || session.review?.trashedAt)
     return null;
-
-  /* The tutorial is not in the review store, so there is no list to leave.
-     Closing the tab is the whole action, and it needs no
-     confirmation. */
-  if (tutorial) {
-    return (
-      <div {...stylex.props(shellStyles.topbarItem, styles.action)}>
-        <Button ref={closeTooltip} onClick={tutorial.close}>
-          <ArchiveIcon xstyle={styles.icon} />
-          <span>Close</span>
-        </Button>
-      </div>
-    );
-  }
 
   const dismiss = async () => {
     if (busy) return;

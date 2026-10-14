@@ -37,14 +37,12 @@ export function WelcomePage({
   onClose,
   onDismissUpdate,
   onboarding,
-  onOpenTutorial,
 }: {
   install?: ReviewCanvasInstallContent;
   setupActions?: ReviewCanvasSetupActions;
   onClose?: () => void;
   onDismissUpdate?: () => void;
   onboarding?: ReviewCanvasOnboarding;
-  onOpenTutorial?: () => void;
 }) {
   const [loadedInstall, setLoadedInstall] =
     useState<ReviewCanvasInstallContent>();
@@ -135,7 +133,9 @@ export function WelcomePage({
     setConnectCopied(true);
     setFinishing({
       from: "Connect your agents",
-      to: updating ? "Continue shipping thoughtful code" : "Take the tour",
+      to: updating
+        ? "Continue shipping thoughtful code"
+        : "Create your first session",
     });
 
     try {
@@ -144,9 +144,6 @@ export function WelcomePage({
       // The desktop can disable DOM storage; the in-memory flag still works.
     }
   };
-
-  const tourChecked = onboarding?.tutorialChecked ?? 0;
-  const tourTotal = onboarding?.tutorialTotal ?? 0;
 
   const installDone = finishing?.from === "Install the whiteboard command";
 
@@ -300,39 +297,13 @@ export function WelcomePage({
     });
 
   if (!updating && !showLegacyStep)
-    steps.push(
-      {
-        title: "Take the tour",
-        disabled: !setupReady,
-        done: tourTotal > 0 && tourChecked >= tourTotal,
-        note: onboarding
-          ? `${tourChecked} of ${tourTotal} checks`
-          : "a three-minute sample session",
-        body: (
-          <>
-            <p {...stylex.props(styles.hint)}>
-              Explore a sample session in three minutes.
-            </p>
-            {onOpenTutorial ? (
-              <Button
-                size="large"
-                xstyle={styles.stepButton}
-                onClick={onOpenTutorial}
-              >
-                {tourChecked > 0 ? "Reopen the tutorial" : "Open the tutorial"}
-              </Button>
-            ) : null}
-          </>
-        ),
-      },
-      {
-        title: "Create your first session",
-        disabled: !setupReady,
-        done: onboarding?.published ?? false,
-        note: onboarding?.published ? "published" : "your agent writes it",
-        body: <PromptCard />,
-      },
-    );
+    steps.push({
+      title: "Create your first session",
+      disabled: !setupReady,
+      done: onboarding?.published ?? false,
+      note: onboarding?.published ? "published" : "your agent writes it",
+      body: <PromptCard />,
+    });
 
   // Keep step identity stable as status and completion labels change.
   const [openStep, setOpenStep] = useState(() =>

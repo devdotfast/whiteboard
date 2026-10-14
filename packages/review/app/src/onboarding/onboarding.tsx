@@ -1,0 +1,147 @@
+import { fontSize, radius } from "@canvas/scale.stylex";
+import { withClass } from "@canvas/stylex-props";
+import { tokens } from "@canvas/tokens.stylex";
+import { Button } from "@canvas/ui/button";
+import type { ReviewCanvasSetupActions } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
+import { useEffect, useState } from "react";
+
+import { DrawFlow, useOnboardingClient } from "./draw-flow";
+import { InstallStep } from "./install-step";
+import { onboardingStyles as styles } from "./onboarding-styles";
+import { WelcomeStep } from "./welcome-step";
+
+type Step = "welcome" | "install" | "run";
+
+const RAIL = ["Welcome", "Install", "Run"] as const;
+
+const railIndex: Record<Step, number> = {
+  welcome: 0,
+  install: 1,
+  run: 2,
+};
+
+/**
+ * First run, full window: welcome, connect every agent on the machine, then
+ * draw a first whiteboard with one of them in the app. A published
+ * whiteboard opens in its own tab and Home lists it, which ends first run.
+ */
+export function Onboarding({
+  setupActions,
+  onSkip,
+}: {
+  setupActions: ReviewCanvasSetupActions;
+  /** Leaves first run for an empty Home. */
+  onSkip(): void;
+}) {
+  const [step, setStep] = useState<Step>("welcome");
+  const { client, unavailable } = useOnboardingClient(setupActions);
+  const [installProgress, setInstallProgress] = useState(0);
+  // Escape leaves for Home, unless a field or menu has it.
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+
+      if (
+        event.key !== "Escape" ||
+        event.defaultPrevented ||
+        target?.closest(
+          "textarea, input, select, [contenteditable], [role=menu]",
+        )
+      )
+        return;
+      onSkip();
+    };
+
+    window.addEventListener("keydown", keydown);
+
+    return () => window.removeEventListener("keydown", keydown);
+  }, [onSkip]);
+
+  const fill = (index: number) => {
+    const current = railIndex[step];
+
+    if (index < current) return 1;
+
+    if (index > current) return 0;
+
+    return step === "install" ? installProgress : 0.2;
+  };
+
+  return (
+    <main {...withClass("review-onboarding", styles.page)}>
+      <nav {...stylex.props(styles.rail)} aria-label="Setup">
+        <span {...stylex.props(styles.railSide)} />
+        <ol {...stylex.props(styles.railSteps)}>
+          {RAIL.map((label, index) => (
+            <li
+              key={label}
+              {...stylex.props(styles.railStep)}
+              aria-current={index === railIndex[step] ? "step" : undefined}
+            >
+              <span {...stylex.props(styles.railTrack)}>
+                <span
+                  {...stylex.props(styles.railFill)}
+                  style={{ transform: `scaleX(${fill(index)})` }}
+                />
+              </span>
+              <span
+                {...stylex.props(
+                  styles.railLabel,
+                  index === railIndex[step] && styles.railLabelCurrent,
+                )}
+              >
+                {label}
+              </span>
+            </li>
+          ))}
+        </ol>
+        <span {...stylex.props(styles.railSide)}>
+          <Button xstyle={railStyles.skip} onClick={onSkip}>
+            Skip to Home
+            <kbd {...stylex.props(railStyles.key)}>esc</kbd>
+          </Button>
+        </span>
+      </nav>
+
+      {unavailable ? (
+        <p role="alert" {...stylex.props(styles.error, styles.stage)}>
+          Whiteboard could not reach its server: {unavailable}
+        </p>
+      ) : step === "welcome" ? (
+        <WelcomeStep key="welcome" onStart={() => setStep("install")} />
+      ) : !client ? null : step === "install" ? (
+        <InstallStep
+          key="install"
+          client={client}
+          setupActions={setupActions}
+          onProgress={setInstallProgress}
+          onContinue={() => setStep("run")}
+        />
+      ) : (
+        <DrawFlow
+          client={client}
+          setupActions={setupActions}
+          intro={{
+            eyebrow: "Step 3 of 3 · Run",
+            heading: "Draw your first whiteboard.",
+            lead: "Pick a branch, worktree or pull request. Draw it with an agent right here, or copy the prompt into your own.",
+          }}
+        />
+      )}
+    </main>
+  );
+}
+
+const railStyles = stylex.create({
+  skip: { gap: "10px", paddingInlineEnd: "8px" },
+  key: {
+    paddingInline: "5px",
+    borderRadius: radius.hairline,
+    backgroundColor: tokens.chromeHoverBg,
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    lineHeight: "16px",
+  },
+});

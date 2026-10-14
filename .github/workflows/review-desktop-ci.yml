@@ -180,16 +180,12 @@ jobs:
             ~/.cache/node-gyp
           key: ${{ runner.os }}-${{ runner.arch }}-code-oss-deps-v3-${{ steps.code-oss-dependency-digest.outputs.digest }}
 
-      - name: Check the tutorial assets
-        run: pnpm --filter @dev.fast/whiteboard check:tutorial
-
       # The build already built workspace dependencies and typechecked Code OSS.
       # Diffr Test checks diffr's packages, with the Bun and Claude Code types they need.
       - name: Typecheck
         run: |
           pnpm -r --filter '!@dev.fast/review-desktop' --filter '!./diffr/**' --workspace-concurrency=1 --if-present typecheck
 
-      # Typecheck prepared the shared tutorial assets before concurrent pretests.
       # Desktop's tests build a remote tarball, which starves concurrent browser
       # tests of CPU until Chromium drops their module fetches; run them last.
       - name: Test

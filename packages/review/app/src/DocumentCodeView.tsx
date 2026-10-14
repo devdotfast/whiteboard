@@ -13,7 +13,6 @@ import * as stylex from "@stylexjs/stylex";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { useReviewSession } from "./host/review-session";
-import { INLINE_HOVER_EVENT } from "./inline-hover-event";
 import { useReviewFindRegistration } from "./review-find";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
 import { useOptionalReviewPanel } from "./review-panel";
@@ -91,10 +90,6 @@ export function DocumentCodeView({
   const progressRef = useRef(progress);
   progressRef.current = progress;
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
-
-  const handleHover = useCallback(() => {
-    container?.dispatchEvent(new Event(INLINE_HOVER_EVENT, { bubbles: true }));
-  }, [container]);
 
   const [shouldMount, setShouldMount] = useState(active);
 
@@ -243,7 +238,6 @@ export function DocumentCodeView({
         countRanges,
         onDidFocus: handleFocus,
         onDidOpen: handleOpen,
-        onDidShowHover: handleHover,
       });
     } catch (caught) {
       creationFailedRef.current = true;
@@ -278,7 +272,6 @@ export function DocumentCodeView({
     description,
     countRangesKey,
     handleFocus,
-    handleHover,
     handleOpen,
     heightMode,
     inlineEditorFactory,

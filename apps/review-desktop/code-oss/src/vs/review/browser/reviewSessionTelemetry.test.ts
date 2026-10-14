@@ -83,9 +83,9 @@ test('ends the session as dismissed or deleted when its review leaves the catalo
 	}
 });
 
-test('a review the catalog never listed, like the tutorial, is not ended by it', () => {
+test('a review the catalog never listed is not ended by it', () => {
 	const { events, telemetry } = setup();
-	telemetry.start('tutorial');
+	telemetry.start('unlisted');
 	telemetry.catalogChanged([], []);
 	telemetry.catalogChanged([{ reviewId: 'review-b', trashedAt: null }], []);
 	assert.deepEqual(events.map(event => event.name), ['session_started']);

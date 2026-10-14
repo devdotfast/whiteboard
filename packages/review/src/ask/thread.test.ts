@@ -16,6 +16,7 @@ import {
   type AskAgentId,
   type AskEntry,
   type AskOffer,
+  type AskPermissions,
   type AskPicks,
   type AskQuestion,
   type AskThreadState,
@@ -291,6 +292,7 @@ function openThread(
     onOffer?: (offer: AskOffer) => void;
     onSave?: (entries: AskEntry[]) => void;
     limits?: AskThreadLimits;
+    permissions?: AskPermissions;
   } = {},
 ) {
   const { limits, ...start } = options;
@@ -363,7 +365,7 @@ it("asks in read-only mode and streams the answer and tool activity", async () =
     await say(client, "because 0042 opts out.");
   });
 
-  const thread = openThread(launch);
+  const thread = openThread(launch, undefined, { permissions: "read-only" });
   const state = await until(thread, ({ status }) => status === "idle");
 
   expect(modes).toEqual(["default"]);

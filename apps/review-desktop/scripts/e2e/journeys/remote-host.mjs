@@ -170,7 +170,7 @@ export function sourcePages(ctx) {
 }
 
 const DESKTOP_ROUTE =
-  /^\/(app|control|crash-reports|diffr-config|install|preferences|remote-hosts|telemetry|tutorial)(\/|$)|^\/reviews-api\/[^/]+\/telemetry\//;
+  /^\/(app|control|crash-reports|diffr-config|install|preferences|remote-hosts|telemetry)(\/|$)|^\/reviews-api\/[^/]+\/telemetry\//;
 
 export async function run(ctx) {
   const { page, until } = ctx;

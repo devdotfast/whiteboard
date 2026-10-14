@@ -2,7 +2,7 @@
 
 Target: Ubuntu 24.04 LTS, x86-64. Stable and preview install separately as
 `whiteboard` and `whiteboard-preview`. Each includes the desktop app,
-agent CLI, extensions, tutorial, and runtime. System Node is not required.
+agent CLI, extensions, and runtime. System Node is not required.
 
 ## Build and check
 

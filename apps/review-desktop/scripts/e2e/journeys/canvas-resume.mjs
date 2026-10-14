@@ -4,7 +4,12 @@ import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { createDiagramReview, createReview, sleep } from "../harness.mjs";
+import {
+  DIAGRAM_REVIEW_TITLE,
+  createDiagramReview,
+  createReview,
+  sleep,
+} from "../harness.mjs";
 
 export const name = "canvas-resume";
 
@@ -13,8 +18,6 @@ export const phase = 1;
 export const options = {};
 
 const TITLE = "Canvas resume review";
-
-const DIAGRAMS = "Canvas resume diagrams";
 
 const trace = (label) => ({
   label,
@@ -221,8 +224,8 @@ export async function run(ctx) {
   );
   ctx.check("a picked trace resumes after a reload");
 
-  await createDiagramReview(ctx, DIAGRAMS);
-  page = await ctx.apiCanvasFor(DIAGRAMS);
+  await createDiagramReview(ctx);
+  page = await ctx.apiCanvasFor(DIAGRAM_REVIEW_TITLE);
   await ctx.watchPage(page);
 
   const canvas = page.locator(".review-canvas-root [data-review-api]");

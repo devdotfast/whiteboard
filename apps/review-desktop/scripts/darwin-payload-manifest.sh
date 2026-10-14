@@ -14,7 +14,6 @@ DARWIN_PAYLOAD_REQUIRED_PATHS=(
   "$DARWIN_PAYLOAD_CURATED_EXTENSIONS_ROOT/darwin-x64"
   "packages/review/app/dist/desktop"
   "packages/review/dist"
-  "packages/review/tutorial"
   "packages/local-vcs/dist"
 )
 

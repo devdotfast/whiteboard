@@ -7,10 +7,13 @@ import type {
   ReviewCanvasUi,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
+import { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { ApiCanvas } from "./api-canvas";
 import { CanvasUiContext } from "./host/canvas-ui";
+import { FirstRun, readOnboardingSkipped } from "./onboarding/first-run";
+import { NewWhiteboard } from "./onboarding/new-whiteboard";
 import { type ReviewFindHost, createReviewFindHost } from "./review-find";
 import { ReviewHome } from "./review-home-view";
 import { ReviewContainerProvider } from "./review-root-context";
@@ -18,7 +21,6 @@ import { SettingsPage } from "./settings-page";
 import { shellStyles } from "./shell-styles";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
-import { WelcomePage } from "./welcome-page";
 
 import "./styles.css";
 
@@ -67,12 +69,12 @@ function ReviewCanvas({
 
   if (content.kind === "welcome") {
     return (
-      <WelcomePage
+      <FirstRun
         install={content.install}
         setupActions={content.setupActions}
+        onSkip={() => content.close?.()}
         onClose={content.close}
         onboarding={content.onboarding}
-        onOpenTutorial={content.openTutorial}
       />
     );
   }
@@ -102,14 +104,40 @@ function Home({
   const trashReview = content.trashReview;
   const deleteReview = content.deleteReview;
   const restoreReview = content.restoreReview;
+  const [skipped, setSkipped] = useState(readOnboardingSkipped);
+  const [creating, setCreating] = useState(false);
+  const setupActions = content.setupActions;
 
-  if (content.view !== "trash" && content.onboarding?.published === false)
+  // A new whiteboard opens in its own tab; Home is back to its list after.
+  const listed = useRef(content.reviews.length);
+
+  useEffect(() => {
+    if (content.reviews.length > listed.current) setCreating(false);
+    listed.current = content.reviews.length;
+  }, [content.reviews.length]);
+
+  // Until the first whiteboard is published, Home is first run, unless the
+  // reader skipped it.
+  if (
+    content.view !== "trash" &&
+    content.onboarding?.published === false &&
+    !skipped
+  )
     return (
-      <WelcomePage
+      <FirstRun
         install={content.install}
         setupActions={content.setupActions}
         onboarding={content.onboarding}
-        onOpenTutorial={content.openTutorial}
+        onSkip={() => setSkipped(true)}
+        onDismissUpdate={() => setSkipped(true)}
+      />
+    );
+
+  if (creating && setupActions)
+    return (
+      <NewWhiteboard
+        setupActions={setupActions}
+        onClose={() => setCreating(false)}
       />
     );
 
@@ -131,9 +159,14 @@ function Home({
       }
       remoteHosts={content.remoteHosts}
       onboarding={content.onboarding}
-      onOpenTutorial={content.openTutorial}
       onOpenSettings={content.openSettings}
       onOpenSetup={content.openSetup}
+      onNewWhiteboard={setupActions ? () => setCreating(true) : undefined}
+      emptyState={
+        setupActions ? (
+          <NewWhiteboard setupActions={setupActions} embedded />
+        ) : undefined
+      }
     />
   );
 }

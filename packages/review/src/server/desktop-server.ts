@@ -12,20 +12,22 @@ import {
   type JsonValue,
   REVIEW_DESKTOP_DISCOVERY_VERSION,
   type ReviewCliInstallApplyResponse,
+  ReviewConnectRequestSchema,
   type ReviewDesktopDiscovery,
   type ReviewGatewayHost,
-  type ReviewTutorialOpenResponse,
   isJsonObject,
   isObjectValue,
   parseReviewCliInstallApplyRequest,
   reviewDiffrSummarizerInputSchema,
 } from "@dev.fast/review-protocol";
-import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
-import { cliAskTools } from "@review/ask/threads.js";
+import { shellQuote, writePrivateJsonAtomic } from "@dev.fast/trace-core";
+import { connectAgent, detectConnectAgents } from "@review/agent-connect";
+import { type AskTools, cliAskTools } from "@review/ask/threads.js";
 import {
   applyCliInstall,
   declineCliInstall,
   finishCliInstallUpdate,
+  pathShimPath,
   removeCliInstall,
   removeLegacyReviewSkills,
   resetCliInstall,
@@ -76,6 +78,7 @@ import {
 } from "./hono-http";
 import { ReviewServerError } from "./http-json";
 import { createJsonReviewReporting } from "./json-review-reporting";
+import { removeLegacyTutorial } from "./legacy-tutorial-cleanup";
 import { createReviewGateway } from "./review-gateway";
 import { reviewLifecycleTelemetry } from "./review-lifecycle-telemetry";
 import { ReviewOpenWatchdog } from "./review-open-watchdog";
@@ -85,10 +88,7 @@ import {
   serverJson,
 } from "./review-server-core";
 import { invalidateStructuralComparisons } from "./structural-comparisons.js";
-import { createTutorialService } from "./tutorial-service";
 import { captureSanitizedUiTelemetry } from "./ui-telemetry";
-
-const TUTORIAL_LIFECYCLE_LOCK_KEY = "tutorial-lifecycle";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -156,8 +156,6 @@ export function createGlobalReviewServer(
 
   const reviewStore = input.reviewStore;
 
-  const reviewLocks = new Map<string, Promise<void>>();
-
   // A reload or a second window starts the workbench again, but the launch
   // this server belongs to became ready once.
   let appReadyReported = false;
@@ -169,12 +167,6 @@ export function createGlobalReviewServer(
         { elapsed_ms: elapsedMs },
         context,
       ),
-  });
-
-  const tutorial = createTutorialService({
-    packageRoot: input.packageRoot,
-    store: reviewStore,
-    data: input.reviewData,
   });
 
   let closing = false;
@@ -373,32 +365,6 @@ export function createGlobalReviewServer(
 
     return serverJson(result.status, result.body);
   });
-  app.get("/tutorial/status", async () =>
-    serverJson(200, await tutorial.status()),
-  );
-  app.post("/tutorial/prepare", async () => {
-    const prepared = await withReviewLock(
-      TUTORIAL_LIFECYCLE_LOCK_KEY,
-      prepareTutorialLocked,
-    );
-
-    return serverJson(200, {
-      ok: true,
-      reviewUuid: prepared.reviewId,
-    });
-  });
-  app.post("/tutorial/open", async () => {
-    return serverJson(
-      200,
-      await withReviewLock(TUTORIAL_LIFECYCLE_LOCK_KEY, openTutorialLocked),
-    );
-  });
-  app.delete("/tutorial", async () => {
-    await withReviewLock(TUTORIAL_LIFECYCLE_LOCK_KEY, deleteTutorialLocked);
-
-    return serverJson(200, { ok: true });
-  });
-
   app.get("/diffr-config", async () =>
     serverJson(200, await readDiffrConfig()),
   );
@@ -518,50 +484,27 @@ export function createGlobalReviewServer(
 
     return serverJson(200, { ok: true });
   });
+  // The harnesses first run connects for the user, instead of asking them
+  // to paste a prompt into each one.
+  app.get("/install/agents", async () =>
+    serverJson(200, { agents: await detectConnectAgents() }),
+  );
+  app.post("/install/connect", async (context) => {
+    const request = ReviewConnectRequestSchema.safeParse(
+      await readBoundedRequestJson(context.req.raw),
+    );
+
+    if (!request.success) throw new ReviewServerError("Invalid agent.", 400);
+
+    return serverJson(
+      200,
+      await connectAgent(request.data.target, {
+        hasShim: existsSync(pathShimPath()),
+      }),
+    );
+  });
 
   const httpServer = createServer(createNodeRequestListener(app));
-
-  async function prepareTutorialLocked() {
-    return tutorial.prepare();
-  }
-
-  async function openTutorialLocked(): Promise<ReviewTutorialOpenResponse> {
-    const snapshot = await prepareTutorialLocked();
-
-    return {
-      kind: "api",
-      reviewUuid: snapshot.reviewId,
-      title: snapshot.title,
-    };
-  }
-
-  async function deleteTutorialLocked(): Promise<void> {
-    await tutorial.cleanup();
-  }
-
-  async function withReviewLock<T>(
-    reviewUuid: string,
-    operation: () => Promise<T>,
-  ): Promise<T> {
-    const previous = reviewLocks.get(reviewUuid) ?? Promise.resolve();
-    let release: () => void = () => {};
-
-    const current = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-
-    const chain = previous.then(() => current);
-    reviewLocks.set(reviewUuid, chain);
-    await previous;
-
-    try {
-      return await operation();
-    } finally {
-      release();
-
-      if (reviewLocks.get(reviewUuid) === chain) reviewLocks.delete(reviewUuid);
-    }
-  }
 
   return {
     discovery,
@@ -570,6 +513,10 @@ export function createGlobalReviewServer(
     },
     listen: async () => {
       await migrateDiffrConfig();
+      await removeLegacyTutorial({
+        store: reviewStore,
+        data: input.reviewData,
+      });
       scratchpadEnabled = await readScratchpadEnabled();
       boundPort = await listen(httpServer, input.port);
       discovery.url = urlForBoundPort();

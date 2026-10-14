@@ -126,6 +126,8 @@ export interface AskOpenOptions {
   /** Takes that Ask's place even while its agent works, as when its
    * conversation was deleted. */
   replace?: boolean;
+  /** Opens it as a pill, out of the way, unless it is already open. */
+  minimized?: boolean;
 }
 
 export interface ReviewNavigationActions {
@@ -269,7 +271,13 @@ export function createReviewPanelStore({
         motion: "live",
       })),
     openAskView: (view, options = {}) =>
-      set((state) => showAsk(state, view, options)),
+      set((state) =>
+        options.minimized
+          ? state.asks.some((ask) => showsView(ask, view))
+            ? state
+            : { asks: [...state.asks, newAsk(nextAskKey++, view)] }
+          : showAsk(state, view, options),
+      ),
     reportAsk: (key, report) =>
       set((state) => {
         const reporting = state.asks.find((ask) => ask.key === key);

@@ -7,10 +7,12 @@ import {
   type AskAgentId,
   type AskChoiceKind,
   type AskEntry,
+  type AskPermissions,
   type AskPicks,
   type AskQuestion,
   type AskThreadState,
   askChoiceKinds,
+  askPermissionsSchema,
   askThreadStateSchema,
 } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
@@ -32,13 +34,14 @@ import {
   AskAgentPicker,
   AskChoicePicker,
   choiceLabels,
+  permissionsOffered,
   permissionsSelect,
   preferredAskAgent,
   rememberAskAgent,
-  rememberBypass,
   rememberChoice,
-  storedBypass,
+  rememberPermissions,
   storedChoice,
+  storedPermissions,
   storedPicks,
   useAskAgents,
   useOffer,
@@ -80,10 +83,10 @@ type AskRequest =
       question: AskQuestion;
       selection: AgentSelection;
       picks: AskPicks;
-      bypass: boolean;
+      permissions: AskPermissions;
     }
   | { question: AskQuestion }
-  | { bypass: boolean }
+  | { permissions: AskPermissions }
   | { kind: AskChoiceKind; value: string }
   | { permissionId: string; optionId: string }
   | Record<string, never>;
@@ -120,7 +123,7 @@ export function AskPanelContent({
   const down = useReviewHostDown(session.review);
   // Choices for a question not yet asked; a thread says its own.
   const [picks, setPicks] = useState<AskPicks>({});
-  const [bypassPick, setBypassPick] = useState<boolean>();
+  const [permissionsPick, setPermissionsPick] = useState<AskPermissions>();
   const { thread, lost } = useThread(session, threadId);
 
   const loadingConversation =
@@ -283,7 +286,7 @@ export function AskPanelContent({
           question,
           selection,
           picks: currentPicks(),
-          bypass,
+          permissions: access,
         });
 
         const { threadId: id } = z
@@ -398,25 +401,34 @@ export function AskPanelContent({
     );
   };
 
-  // A thread says its own; before a new one, what was chosen last for the
-  // agent. A saved one says once it is open.
-  const bypass =
-    thread?.bypass ??
-    (savedThreadId === undefined &&
-      chosen?.bypass === true &&
-      (bypassPick ?? (agent ? storedBypass(session, agent) : false)));
+  const offeredPermissions = permissionsOffered(chosen);
 
-  const permit = (value: boolean) => {
+  // A thread says its own; before a new one, what was chosen last for the
+  // agent, else auto where it has it. A saved one says once it is open.
+  const picked =
+    permissionsPick ?? (agent ? storedPermissions(session, agent) : undefined);
+
+  const access: AskPermissions =
+    thread?.permissions ??
+    (savedThreadId !== undefined
+      ? "read-only"
+      : picked && offeredPermissions.includes(picked)
+        ? picked
+        : chosen?.auto
+          ? "auto"
+          : "read-only");
+
+  const permit = (value: AskPermissions) => {
     if (!agent) return;
-    rememberBypass(session, agent, value);
+    rememberPermissions(session, agent, value);
 
     if (!threadId) {
-      setBypassPick(value);
+      setPermissionsPick(value);
 
       return;
     }
 
-    void post(`/ask/${threadId}/permissions`, { bypass: value }).catch(
+    void post(`/ask/${threadId}/permissions`, { permissions: value }).catch(
       (error: Error) => fail(error.message, () => permit(value)),
     );
   };
@@ -562,30 +574,37 @@ export function AskPanelContent({
   const readOnly =
     thread && thread.status !== "starting"
       ? thread.readOnly
-      : !bypass && (chosen?.readOnly ?? true);
+      : access === "read-only" && (chosen?.readOnly ?? true);
 
   const modeTitle = readOnly
     ? "The agent cannot change files in the checkout, and asks before running commands. It can edit this review."
-    : bypass
+    : access === "bypass"
       ? `${agentName} bypasses permissions: it may change files in the checkout and run commands without asking.`
-      : `${agentName} is not in a read-only mode, so it may change files in the checkout.`;
+      : access === "auto"
+        ? `${agentName} runs what it judges safe and asks you about the rest.`
+        : `${agentName} is not in a read-only mode, so it may change files in the checkout.`;
 
   const settingsDisabled =
     (busy && threadId !== null) || thread?.status === "failed";
 
   // Below the composer, as in the agents' own apps: what the agent may do,
   // then its model and effort.
-  const canBypass = chosen?.bypass && (thread || savedThreadId === undefined);
+  const canChoosePermissions =
+    offeredPermissions.length > 1 && (thread || savedThreadId === undefined);
 
-  const permissions = canBypass ? (
+  const permissions = canChoosePermissions ? (
     <AskChoicePicker
       label="Permissions"
-      select={permissionsSelect(bypass)}
-      current={bypass ? "bypass" : "ask"}
+      select={permissionsSelect(offeredPermissions, access)}
+      current={access}
       disabled={settingsDisabled}
       quiet
       icon={readOnly ? <LockIcon xstyle={controlStyles.inlineIcon} /> : null}
-      onPick={(value) => permit(value === "bypass")}
+      onPick={(value) => {
+        const parsed = askPermissionsSchema.safeParse(value);
+
+        if (parsed.success) permit(parsed.data);
+      }}
     />
   ) : (
     <TooltipLabel
@@ -634,7 +653,7 @@ export function AskPanelContent({
       onPick={(picked) => {
         setAgent(picked);
         setPicks({});
-        setBypassPick(undefined);
+        setPermissionsPick(undefined);
       }}
     />
   );
@@ -720,6 +739,9 @@ export function AskPanelContent({
         inputRef={composer}
         placeholders={askPlaceholders(
           Boolean(threadId || savedThreadId),
+          selection.target.kind === "review"
+            ? "this whiteboard"
+            : "this selection",
           chosen?.name ?? "an agent",
           (thread?.commands ?? offered?.commands)?.length
             ? "/ for commands, @ for files"
@@ -745,7 +767,15 @@ export function AskPanelContent({
         findFiles={findFiles}
         permissions={permissions}
         onCyclePermissions={
-          canBypass && !settingsDisabled ? () => permit(!bypass) : undefined
+          canChoosePermissions && !settingsDisabled
+            ? () =>
+                permit(
+                  offeredPermissions[
+                    (offeredPermissions.indexOf(access) + 1) %
+                      offeredPermissions.length
+                  ] ?? "read-only",
+                )
+            : undefined
         }
         settings={settings}
         onAsk={ask}
@@ -874,14 +904,15 @@ function TooltipLabel({
  * panel or window drops the hint, then shortens the question. */
 function askPlaceholders(
   followUp: boolean,
+  subject: string,
   agentName: string,
   hint: string,
 ): string[] {
   if (followUp) return [`Ask a follow-up · ${hint}`, "Ask a follow-up…"];
 
-  const lead = `Ask ${agentName} about this selection`;
+  const lead = `Ask ${agentName} about ${subject}`;
 
-  return [`${lead} · ${hint}`, `${lead}…`, "Ask about this selection…"];
+  return [`${lead} · ${hint}`, `${lead}…`, `Ask about ${subject}…`];
 }
 
 /** What a busy agent is doing, for where the thread is out of sight. */

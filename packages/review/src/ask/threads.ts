@@ -139,9 +139,9 @@ async function offeredBy(
 export interface AskTools {
   /** Its MCP server, for agents whose model gets it. */
   mcpServers?: AskMcpServers;
-  /** A shell command that runs Whiteboard's CLI against this server, for
-   * the agents that don't. */
-  cli?: () => string | undefined;
+  /** A shell command that runs Whiteboard's CLI against this server for a
+   * thread, for the agents that don't. */
+  cli?: (threadId: string) => string | undefined;
   /** Whether an agent's model gets the MCP servers it is given. */
   takesMcp?: (agent: AskAgentId) => Promise<boolean>;
 }
@@ -229,13 +229,13 @@ export class AskThreads {
 
   /** How the agent's sessions reach Whiteboard's tools: the MCP tools they
    * are given where its model gets them, else the CLI from its shell. */
-  async reach(agent: AskAgentId): Promise<AskToolsReach> {
+  async reach(agent: AskAgentId, threadId: string): Promise<AskToolsReach> {
     if (
-      this.mcpServers().length &&
+      this.mcpServers(threadId).length &&
       (await (this.tools.takesMcp ?? askAgentTakesMcp)(agent))
     )
       return { kind: "mcp" };
-    const command = this.tools.cli?.();
+    const command = this.tools.cli?.(threadId);
 
     return command ? { kind: "cli", command } : undefined;
   }

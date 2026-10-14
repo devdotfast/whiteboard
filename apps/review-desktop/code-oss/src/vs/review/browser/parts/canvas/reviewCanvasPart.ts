@@ -16,7 +16,7 @@ import type { ICursorPositionChangedEvent } from "../../../../editor/common/curs
 import { ICommandService } from "../../../../platform/commands/common/commands.js";
 import { ConfigurationTarget, IConfigurationService } from "../../../../platform/configuration/common/configuration.js";
 import { TextEditorSelectionSource, type IEditorOptions } from "../../../../platform/editor/common/editor.js";
-import { IDialogService } from "../../../../platform/dialogs/common/dialogs.js";
+import { IDialogService, IFileDialogService } from "../../../../platform/dialogs/common/dialogs.js";
 import { IContextMenuService, IContextViewService } from "../../../../platform/contextview/browser/contextView.js";
 import { IHoverService } from "../../../../platform/hover/browser/hover.js";
 import { createDecorator, IInstantiationService } from "../../../../platform/instantiation/common/instantiation.js";
@@ -25,7 +25,7 @@ import { FocusMode } from "../../../../platform/native/common/native.js";
 import { INotificationService } from "../../../../platform/notification/common/notification.js";
 import { IProductService } from "../../../../platform/product/common/productService.js";
 import { IEditorProgressService, LongRunningOperation } from "../../../../platform/progress/common/progress.js";
-import { IStorageService, StorageScope, StorageTarget } from "../../../../platform/storage/common/storage.js";
+import { IStorageService, StorageScope } from "../../../../platform/storage/common/storage.js";
 import { ITelemetryService } from "../../../../platform/telemetry/common/telemetry.js";
 import { ColorScheme } from "../../../../platform/theme/common/theme.js";
 import { IThemeService } from "../../../../platform/theme/common/themeService.js";
@@ -48,7 +48,6 @@ import {
 	REVIEW_CTRL_TAB_SETTING,
 	REVIEW_DOCUMENT_WIDTH_SETTING,
 	REVIEW_KEYMAP_SETTING,
-	REVIEW_KEYMAPS,
 	REVIEW_READY_NOTIFICATION_SETTING,
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_STRUCTURAL_DIFF_SETTING,
@@ -65,7 +64,6 @@ import type {
 	ReviewCanvasOnboarding,
 	ReviewCanvasSettingsContent,
 	ReviewCanvasSetupActions,
-	ReviewCanvasTutorialBridge,
 	ReviewCliInstallStatus,
 	ReviewCtrlTabChoice,
 	ReviewDocumentWidthChoice,
@@ -76,15 +74,11 @@ import type {
 	ReviewSurfaceEvent,
 	ReviewTheme,
 	ReviewVerbResponse,
-	TutorialProgressV1,
-	TutorialStepId,
 } from "../../../common/reviewProtocol.js";
 import {
 	parseReviewVerbRequest,
 	SCRATCHPAD_REVIEW_ID,
 	REVIEW_CANVAS_RESUME_EVENT,
-	REVIEW_TUTORIAL_PROGRESS_STORAGE_KEY,
-	REVIEW_TUTORIAL_STEP_IDS
 } from "../../../common/reviewProtocol.js";
 import { IReviewVerbsService } from "../../../contrib/verbs/reviewVerbs.js";
 import { vetoStoppingAskAgents } from "../../reviewAskShutdown.js";
@@ -138,9 +132,6 @@ const reviewCanvasPolicy = createTrustedTypesPolicy("reviewCanvas", {
 
 const requestReviewApi: typeof fetch = (url, init) => fetch(url, init);
 
-function isTutorialStepId(step: unknown): step is TutorialStepId {
-	return typeof step === "string" && REVIEW_TUTORIAL_STEP_IDS.includes(step as TutorialStepId);
-}
 function embeddedSelectionChangeReason(event: ICursorPositionChangedEvent): EditorPaneSelectionChangeReason {
 	switch (event.source) {
 		case TextEditorSelectionSource.PROGRAMMATIC:
@@ -209,6 +200,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 		@IContextViewService private readonly contextViewService: IContextViewService,
 		@IDialogService private readonly dialogService: IDialogService,
+		@IFileDialogService private readonly fileDialogService: IFileDialogService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IEditorProgressService editorProgressService: IEditorProgressService,
 		@ILifecycleService lifecycleService: ILifecycleService,
@@ -432,33 +424,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				let sourceSelection: ReviewSourceSelection = { reviewId, kind: "current" };
 				let sourceView: ReviewSourceView = resolveReviewSourceView({ reviewId, version: 0, pins: {} });
 				const source = this.apiSource.canvas(() => sourceView, this.inlineEditors, this.diffViews);
-				const closeTutorial = () => void this.group.closeEditor(input);
-				const updateTutorial = (progress: TutorialProgressV1) => {
-					this.writeTutorialProgress(progress);
-					if (!this.apiContent) return;
-					this.apiContent = {
-						...this.apiContent,
-						tutorial: this.createTutorialBridge(reviewId, progress, updateTutorial, closeTutorial),
-					};
-					this.canvas.value?.update(this.apiContent);
-				};
 				await this.render(
 					{
-						setTutorial: (enabled) => {
-							if (
-								!this.apiContent ||
-								generation !== this.loadGeneration ||
-								enabled === Boolean(this.apiContent.tutorial)
-							)
-								return;
-							this.apiContent = {
-								...this.apiContent,
-								tutorial: enabled
-									? this.createTutorialBridge(reviewId, this.readTutorialProgress(), updateTutorial, closeTutorial)
-									: undefined,
-							};
-							this.canvas.value?.update(this.apiContent);
-						},
 						kind: "api",
 						reviewId,
 						...remoteEntry(this.apiCatalog.reviews.find((review) => review.reviewId === reviewId)),
@@ -588,7 +555,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						install,
 						setupActions: this.setupActions(),
 						onboarding: install ? this.resolveOnboarding(install.status) : undefined,
-						openTutorial: () => this.openTutorial(),
 					},
 					generation,
 				);
@@ -605,9 +571,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			return;
 		}
 		if (input.target.kind === "welcome") {
-			void this.desktopConnection
-				.prepareTutorial()
-				.catch((error) => this.logService.warn("[Whiteboard] Tutorial preparation did not complete:", error));
 			this.renderedInput = input;
 			this.setCanvasState("home");
 			/* Same stale-resume guard as Home: the install fetch suspends, and
@@ -624,7 +587,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						setupActions: this.setupActions(),
 						close: () => void this.group.closeEditor(input),
 						onboarding: install ? this.resolveOnboarding(install.status) : undefined,
-						openTutorial: () => this.openTutorial(),
 					},
 					generation,
 				);
@@ -791,6 +753,20 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return {
 			load: () => this.loadInstallContent(),
 			installCli: async () => { await this.commandService.executeCommand("review.installCliInPath"); },
+			connection: async () => {
+				const { serverUrl, token } = await this.desktopConnection.getConnection();
+				return { serverUrl, token };
+			},
+			pickFolder: async () => {
+				const picked = await this.fileDialogService.showOpenDialog({
+					title: "Choose a project",
+					openLabel: "Choose",
+					canSelectFiles: false,
+					canSelectFolders: true,
+					canSelectMany: false,
+				});
+				return picked?.[0]?.fsPath;
+			},
 		};
 	}
 
@@ -836,13 +812,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				return this.desktopConnection.getCliInstallStatus();
 			},
 		};
-	}
-
-	private openTutorial(): void {
-		// The command opens and focuses the tutorial tab itself, and reports
-		// its own failures. Welcome stays open behind it: it is a hub the
-		// reader comes back to, not a one-shot wizard.
-		void this.commandService.executeCommand("review.openTutorial");
 	}
 
 	/**
@@ -1016,114 +985,15 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	/**
 	 * Step state for the Welcome rail, derived from the install status the
 	 * caller already fetched, so one render costs one status round-trip. The
-	 * rest is local: stored tutorial progress and the review list.
+	 * rest is the review list.
 	 */
 	private resolveOnboarding(status: ReviewCliInstallStatus): ReviewCanvasOnboarding {
-		const checked = new Set(this.readTutorialProgress().checked);
 		return {
 			installed: !status.cli || status.shim.installed,
-			tutorialChecked: REVIEW_TUTORIAL_STEP_IDS.filter((step) => checked.has(step)).length,
-			tutorialTotal: REVIEW_TUTORIAL_STEP_IDS.length,
-			// Drafts are filtered out of this list, the tutorial never joins
-			// it and the scratchpad is set aside, so this counts only a real
-			// published review.
+			// Drafts are filtered out of this list and the scratchpad is set
+			// aside, so this counts only a real published review.
 			published: this.storageService.getBoolean(REVIEW_HAS_PUBLISHED_BOARD, StorageScope.APPLICATION, false) || homeSessions(this.apiCatalog.reviews).length > 0,
 		};
-	}
-
-	private createTutorialBridge(
-		reviewUuid: string,
-		progress: TutorialProgressV1,
-		onChange: (progress: TutorialProgressV1) => void,
-		close: () => void,
-	): ReviewCanvasTutorialBridge {
-		/* Mutations re-read stored progress instead of using the captured
-		   snapshot: two events arriving before the re-rendered bridge lands
-		   (hover then goto-definition) must not clobber each other. */
-		const setStep = (step: TutorialStepId, checked: boolean) => {
-			if (!REVIEW_TUTORIAL_STEP_IDS.includes(step)) return;
-			const current = this.readTutorialProgress();
-			if (current.checked.includes(step) === checked) return;
-			const values = new Set(current.checked);
-			if (checked) values.add(step);
-			else values.delete(step);
-			onChange({ ...current, checked: [...values] });
-		};
-		return {
-			content: { reviewUuid, progress, keymap: this.currentKeymap() },
-			setStep,
-			dismiss: () => onChange({ ...this.readTutorialProgress(), dismissed: true }),
-			reopen: () => onChange({ ...this.readTutorialProgress(), dismissed: false }),
-			selectKeymap: async (keymap) => {
-				if (!REVIEW_KEYMAPS.includes(keymap)) {
-					throw new Error("Unsupported tutorial keymap choice.");
-				}
-				setStep("chooseKeymap", true);
-				try {
-					/* The keymap command may reload the window before its promise can
-					   settle. Persist the completed step first so the restored tutorial
-					   advances from the choice the user already made. */
-					await this.commandService.executeCommand("review.setKeymap", keymap);
-				} catch (error) {
-					setStep("chooseKeymap", false);
-					throw error;
-				}
-			},
-			close,
-		};
-	}
-
-	private readTutorialProgress(): TutorialProgressV1 {
-		const empty: TutorialProgressV1 = {
-			version: 1,
-			checked: [],
-			dismissed: false,
-		};
-		const raw = this.storageService.get(REVIEW_TUTORIAL_PROGRESS_STORAGE_KEY, StorageScope.APPLICATION);
-		if (!raw) return empty;
-		try {
-			const value = JSON.parse(raw) as {
-				version?: unknown;
-				checked?: unknown;
-				dismissed?: unknown;
-				steps?: unknown;
-			};
-			if (
-				value.version !== 1 ||
-				!Array.isArray(value.steps) ||
-				!Array.isArray(value.checked) ||
-				!value.checked.every(isTutorialStepId) ||
-				typeof value.dismissed !== "boolean"
-			) {
-				throw new Error("Invalid tutorial progress.");
-			}
-			const checked = new Set(value.checked);
-			const known = value.steps.filter(isTutorialStepId);
-			if (known.length > 0 && known.every((step) => checked.has(step))) {
-				for (const step of REVIEW_TUTORIAL_STEP_IDS) {
-					checked.add(step);
-				}
-			}
-			return {
-				version: 1,
-				checked: [...checked],
-				dismissed: value.dismissed,
-			};
-		} catch {
-			this.writeTutorialProgress(empty);
-			return empty;
-		}
-	}
-
-	private writeTutorialProgress(progress: TutorialProgressV1): void {
-		this.storageService.store(
-			REVIEW_TUTORIAL_PROGRESS_STORAGE_KEY,
-			// `steps` marks which step ids existed at write time, so a later
-			// release can tell a finished tour from one its new steps reopened.
-			JSON.stringify({ ...progress, steps: REVIEW_TUTORIAL_STEP_IDS }),
-			StorageScope.APPLICATION,
-			StorageTarget.MACHINE,
-		);
 	}
 
 	private async renderFailure(error: Error): Promise<void> {

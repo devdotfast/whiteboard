@@ -47,7 +47,7 @@ const record = (
   },
   createdAt: "2026-09-01T10:00:00.000Z",
   updatedAt,
-  bypass: false,
+  permissions: "read-only",
 });
 
 it("keeps each review's conversations, newest first, until the review is deleted", async () => {

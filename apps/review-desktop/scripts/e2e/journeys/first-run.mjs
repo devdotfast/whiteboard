@@ -59,7 +59,10 @@ export async function run(ctx) {
   );
 
   // Sticky, so it outlives both the seeding reload and the 10 s a plain Info toast gets.
-  assert.ok(await appears(notice, 30000), "the telemetry notice never appeared");
+  assert.ok(
+    await appears(notice, 30000),
+    "the telemetry notice never appeared",
+  );
   await page.getByRole("button", { name: "Open Settings" }).click();
   await page
     .locator("main.review-home")
@@ -75,15 +78,20 @@ export async function run(ctx) {
 
   await tab.click();
 
-  const welcome = page.locator("main.review-home");
+  const onboarding = page.locator("main.review-onboarding");
 
-  await welcome.getByText("Install the whiteboard command").waitFor();
-  await welcome.getByText("Connect your agents").waitFor();
-  await welcome.getByText("Take the tour").waitFor();
-  await welcome.getByText("Create your first session").waitFor();
-  // Later steps stay shut until the command is installed, so the install step is the one open.
-  await welcome.getByRole("button", { name: "Install whiteboard in PATH" }).waitFor();
-  ctx.check("empty Home renders the onboarding rail");
+  await onboarding
+    .getByRole("heading", { name: "Your codebase, explained by your agent." })
+    .waitFor();
+
+  for (const step of ["Welcome", "Install", "Run"])
+    await onboarding
+      .getByRole("navigation", { name: "Setup" })
+      .getByText(step, { exact: true })
+      .waitFor();
+  // Nothing installs until the reader asks: Welcome has one button.
+  await onboarding.getByRole("button", { name: "Get started" }).waitFor();
+  ctx.check("empty Home renders first-run onboarding");
 
   // The invitation waits for a reader with two reviews, so a fresh profile never sees it.
   assert.equal(

@@ -56,7 +56,6 @@ jobs:
         run: |
           node --test scripts/review-cli-release.test.mjs scripts/review-cli-dependencies.test.mjs
           pnpm --filter @dev.fast/trace-core test
-          pnpm --filter @dev.fast/whiteboard ensure:tutorial-assets
           pnpm --filter @dev.fast/whiteboard exec vitest run --config vitest.config.ts --project shared-module-graph src/server/headless-host.test.ts src/server/headless-sharing.test.ts src/cli-install.test.ts
       - name: Build release tarball
         if: steps.release.outputs.published != 'true'

@@ -6,15 +6,11 @@
   "type": "module",
   "scripts": {
     "build": "vite build --config desktop.vite.config.ts",
-    "pretest": "pnpm --filter @dev.fast/whiteboard ensure:tutorial-assets",
     "test": "vitest run --config vitest.config.ts",
     "test:node": "vitest run --config vitest.config.ts --project canvas-node",
     "test:browser": "vitest run --config vitest.config.ts --project browser",
     "test:browser:watch": "vitest --config vitest.config.ts --project browser --browser.headless=false",
-    "typecheck": "pnpm -w exec tsc --noEmit -p packages/review/app",
-    "pretest:node": "pnpm --filter @dev.fast/whiteboard ensure:tutorial-assets",
-    "pretest:browser": "pnpm --filter @dev.fast/whiteboard ensure:tutorial-assets",
-    "pretypecheck": "pnpm --filter @dev.fast/whiteboard ensure:tutorial-assets"
+    "typecheck": "pnpm -w exec tsc --noEmit -p packages/review/app"
   },
   "dependencies": {
     "@dev.fast/review-protocol": "workspace:*",

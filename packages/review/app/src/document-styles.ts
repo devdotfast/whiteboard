@@ -179,7 +179,7 @@ export const documentStyles = stylex.create({
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
     lineHeight: { default: null, [inDocument()]: "23px" },
   },
-  // A block in the prose column: lists, quotes, images, tutorial controls.
+  // A block in the prose column: lists, quotes, images.
   column: {
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },

@@ -22,7 +22,9 @@ import { errorMessage } from "@dev.fast/trace-core";
 import {
   type AskAgentLauncher,
   type AskAgentProcess,
+  askAgentSettings,
   askAgents,
+  defaultAskPermissions,
 } from "@review/ask/agents.js";
 import {
   attachmentsOf,
@@ -44,6 +46,7 @@ import {
   type AskChoices,
   type AskEntry,
   type AskOffer,
+  type AskPermissions,
   type AskPicks,
   type AskQuestion,
   type AskThreadState,
@@ -92,11 +95,32 @@ const READ_ONLY_MCP_SERVERS = new Set([
   "fff",
 ]);
 
-/** MCP servers Whiteboard gives every Ask session. Their tool calls are
- * Whiteboard's own, so they run without asking the reviewer. */
-export type AskMcpServers = () => McpServer[];
+/** MCP servers Whiteboard gives every Ask session, for the thread they
+ * serve. Their tool calls are Whiteboard's own, so they run without asking
+ * the reviewer. */
+export type AskMcpServers = (threadId: string) => McpServer[];
 
-interface AskThreadBase {
+/** Where a thread saves what happens to it, which moves with the thread
+ * when another review adopts it. */
+export interface AskThreadHooks {
+  /** The agent created a session: the id a later reopen loads. A new one
+   * replaces a session the agent could not reopen. */
+  onSession?: (sessionId: string) => void;
+  /** A turn ended. */
+  onTurn?: () => void;
+  /** What the panel shows, after each turn and on close, so a reopen can
+   * show it without waiting for the agent to replay it. */
+  onSave?: (entries: AskEntry[]) => void;
+  /** The reviewer changed what the agent may do. */
+  onPermissions?: (permissions: AskPermissions) => void;
+  /** The agent said what it offers: choices, commands, or what a question
+   * may carry. */
+  onOffer?: (offer: AskOffer) => void;
+  /** The agent named the conversation. */
+  onTitle?: (title: string) => void;
+}
+
+interface AskThreadBase extends AskThreadHooks {
   /** Stable across reopening; a new conversation gets a fresh one. */
   id?: string;
   reviewId: string;
@@ -107,25 +131,10 @@ interface AskThreadBase {
   /** What the agent reads before a session's first question: the selection
    * and how to find the review. */
   context: string;
-  /** The agent created a session: the id a later reopen loads. A new one
-   * replaces a session the agent could not reopen. */
-  onSession?: (sessionId: string) => void;
-  /** A turn ended. */
-  onTurn?: () => void;
-  /** What the panel shows, after each turn and on close, so a reopen can
-   * show it without waiting for the agent to replay it. */
-  onSave?: (entries: AskEntry[]) => void;
   /** The model and effort to answer with, when the agent offers them. */
   picks?: AskPicks;
-  /** Edit and run commands without asking. */
-  bypass?: boolean;
-  /** The reviewer started or stopped bypassing permissions. */
-  onBypass?: (bypass: boolean) => void;
-  /** The agent said what it offers: choices, commands, or what a question
-   * may carry. */
-  onOffer?: (offer: AskOffer) => void;
-  /** The agent named the conversation. */
-  onTitle?: (title: string) => void;
+  /** What the agent may do without asking; the agent's default without. */
+  permissions?: AskPermissions;
 }
 
 /** A new conversation, or an earlier one to load from the agent. */
@@ -218,6 +227,9 @@ export class AskThread {
   private steerable = false;
   /** Follow-ups waiting for the turn under way to end, oldest first. */
   private queue: { id: string; question: AskQuestion }[] = [];
+  /** The review the thread answers in, and where it saves; adopting moves
+   * both. */
+  private home: AskThreadHooks & { reviewId: string };
 
   constructor(
     private readonly launch: AskAgentLauncher,
@@ -226,15 +238,24 @@ export class AskThread {
     private readonly limits: AskThreadLimits = askThreadLimits,
   ) {
     this.id = start.id ?? randomUUID();
-    this.mcpServers = mcpServers();
+    this.mcpServers = mcpServers(this.id);
     this.picks = { ...start.picks };
+    this.home = {
+      reviewId: start.reviewId,
+      onSession: start.onSession,
+      onTurn: start.onTurn,
+      onSave: start.onSave,
+      onPermissions: start.onPermissions,
+      onOffer: start.onOffer,
+      onTitle: start.onTitle,
+    };
     this.state = {
       id: this.id,
       agent: start.agent,
       agentName: askAgents[start.agent].name,
       status: "starting",
       readOnly: false,
-      bypass: start.bypass ?? false,
+      permissions: start.permissions ?? defaultAskPermissions(start.agent),
       head: start.head,
       cwd: start.cwd,
       selection: start.selection,
@@ -247,7 +268,16 @@ export class AskThread {
   }
 
   get reviewId() {
-    return this.start.reviewId;
+    return this.home.reviewId;
+  }
+
+  /** Moves the thread to another review, as when its agent creates the
+   * review it was asked for, and saves it there as it stands. */
+  adopt(reviewId: string, hooks: AskThreadHooks) {
+    this.home = { reviewId, ...hooks };
+
+    if (this.sessionId) hooks.onSession?.(this.sessionId);
+    hooks.onSave?.(this.state.entries);
   }
 
   read(): AskThreadState {
@@ -468,14 +498,15 @@ export class AskThread {
     this.closed = true;
 
     try {
-      // Starting and failed conversations must not replace saved history.
+      // A conversation still starting may be half replayed, and one that
+      // failed has nothing new; neither replaces what was saved.
       if (
         save &&
         this.sessionId &&
         this.state.status !== "starting" &&
         this.state.status !== "failed"
       )
-        this.start.onSave?.(settled(this.state.entries));
+        this.home.onSave?.(settled(this.state.entries));
     } finally {
       for (const resolve of this.decisions.values())
         resolve({ outcome: { outcome: "cancelled" } });
@@ -597,7 +628,7 @@ export class AskThread {
     const generation = ++this.generation;
 
     const launched = await this.launch(this.start.agent, this.start.cwd, {
-      bypass: this.state.bypass,
+      permissions: this.state.permissions,
       mcpServers: this.mcpServers,
     });
 
@@ -659,9 +690,8 @@ export class AskThread {
       initialized.agentCapabilities?.loadSession === true,
     );
 
-    const { bypass } = this.state;
-    const spec = askAgents[this.start.agent];
-    const mode = bypass ? spec.bypass?.mode : spec.readOnlyMode;
+    const { permissions } = this.state;
+    const { mode } = askAgentSettings(this.start.agent, permissions);
 
     // An agent without a read-only mode still answers, as it is.
     const configurable =
@@ -703,7 +733,8 @@ export class AskThread {
 
     this.emit({
       type: "set",
-      readOnly: !bypass && Boolean(configurable || selectable),
+      readOnly:
+        permissions === "read-only" && Boolean(configurable || selectable),
     });
     this.useConfig(config);
 
@@ -820,23 +851,30 @@ export class AskThread {
     if (commands) offer.commands = commands;
 
     if (accepts) offer.accepts = accepts;
-    this.start.onOffer?.(offer);
+    this.home.onOffer?.(offer);
   }
 
-  /** Edits and runs commands without asking from the next answer, or stops:
-   * the agent starts again in that mode and reopens the conversation. */
-  async permit(bypass: boolean) {
+  /** Changes what the agent may do from the next answer: it starts again
+   * in that mode and reopens the conversation. */
+  async permit(permissions: AskPermissions) {
     if (this.state.status !== "idle")
       throw new Error("Settings can change between answers.");
 
-    if (bypass === this.state.bypass) return;
+    if (permissions === this.state.permissions) return;
 
-    if (bypass && !askAgents[this.start.agent].bypass)
-      throw new Error(`${this.state.agentName} cannot bypass permissions.`);
+    if (
+      permissions !== "read-only" &&
+      !askAgents[this.start.agent][permissions]
+    )
+      throw new Error(
+        permissions === "auto"
+          ? `${this.state.agentName} has no auto mode.`
+          : `${this.state.agentName} cannot bypass permissions.`,
+      );
 
-    this.emit({ type: "set", bypass });
+    this.emit({ type: "set", permissions });
     this.permitted = true;
-    this.start.onBypass?.(bypass);
+    this.home.onPermissions?.(permissions);
     this.disconnect();
     // Its mode is Whiteboard's change, not one to announce as the agent's.
     this.settings.clear();
@@ -847,18 +885,18 @@ export class AskThread {
     });
   }
 
-  /** What the session starts with: read-only, or bypassing permissions. */
+  /** What the session starts with, for what the agent may do. */
   private sessionMeta() {
-    const spec = askAgents[this.start.agent];
-
-    return (this.state.bypass && spec.bypass?.sessionMeta) || spec.sessionMeta;
+    return askAgentSettings(this.start.agent, this.state.permissions)
+      .sessionMeta;
   }
 
   /** The agent says which mode it is in now; only its read-only one keeps
    * the checkout as it is. */
   private useMode(mode: string) {
     const readOnly =
-      !this.state.bypass && mode === askAgents[this.start.agent].readOnlyMode;
+      this.state.permissions === "read-only" &&
+      mode === askAgents[this.start.agent].readOnlyMode;
 
     if (readOnly !== this.state.readOnly) this.emit({ type: "set", readOnly });
   }
@@ -885,7 +923,7 @@ export class AskThread {
       if (this.closed) throw new Error("This conversation has ended.");
 
       this.sessionId = response.sessionId;
-      start.onSession?.(response.sessionId);
+      this.home.onSession?.(response.sessionId);
 
       this.greeting = piGreetingSchema.safeParse(
         response._meta,
@@ -954,7 +992,7 @@ export class AskThread {
       ...(withSelection ? [this.start.context] : []),
       ...(withPermission
         ? [
-            this.state.bypass
+            this.state.permissions === "bypass"
               ? "The reviewer lets you change files in the checkout and run commands without asking."
               : "Do not change files in the checkout.",
           ]
@@ -1027,8 +1065,8 @@ export class AskThread {
             ? `${this.state.agentName} stopped before finishing.`
             : null,
     });
-    this.start.onTurn?.();
-    this.start.onSave?.(this.state.entries);
+    this.home.onTurn?.();
+    this.home.onSave?.(this.state.entries);
     this.askQueued();
   }
 
@@ -1050,7 +1088,7 @@ export class AskThread {
     // may save an "always" rule into the checkout's settings.
     if (
       allowOnce &&
-      (this.state.bypass ||
+      (this.state.permissions === "bypass" ||
         (server &&
           (READ_ONLY_MCP_SERVERS.has(server) ||
             this.mcpServers.some((provided) => provided.name === server))))
@@ -1302,7 +1340,7 @@ export class AskThread {
 
         if (title && title !== this.state.title) {
           this.emit({ type: "set", title });
-          this.start.onTitle?.(title);
+          this.home.onTitle?.(title);
         }
 
         return true;

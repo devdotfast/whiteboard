@@ -150,8 +150,6 @@ export const commandSchema = z.strictObject({
 
 /** Source identity displayed in the review header and Home, alongside immutable pins. */
 export interface SnapshotOrigin {
-  /** Managed tutorial; readable by ID but excluded from the user catalog. */
-  tutorial?: boolean;
   branch?: string;
   baseRef?: string;
   /** The base the review's target names, such as the branch below it. */
@@ -851,8 +849,8 @@ export class ReviewStore {
     }
   }
 
-  /** Managed records are discoverable even if their preparation stamp was lost. */
-  tutorialIds(): string[] {
+  /** Reviews of the tutorial earlier versions shipped, for their removal. */
+  legacyTutorialIds(): string[] {
     return this.db
       .prepare(
         `SELECT reviews.id FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version WHERE json_extract(versions.snapshot,'$.origin.tutorial') = 1`,
@@ -884,8 +882,7 @@ export class ReviewStore {
         JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
         LEFT JOIN review_attention ON review_attention.review_id=reviews.id
         LEFT JOIN repositories ON repositories.id=json_extract(versions.snapshot,'$.pins.repositoryId')
-        WHERE COALESCE(json_extract(versions.snapshot,'$.origin.tutorial'), 0) = 0
-        ${id === undefined ? "" : "AND reviews.id=?"}
+        ${id === undefined ? "" : "WHERE reviews.id=?"}
         ORDER BY reviews.rowid`,
       )
       .all(...(id === undefined ? [] : [id]))
@@ -1011,7 +1008,7 @@ export class ReviewStore {
 
     return inspectSnapshot(snapshot, targetId);
   }
-  /** The host can seed a managed document; transport callers only supply a command. */
+  /** The host can seed a document; transport callers only supply a command. */
   execute(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Command boundary: commandSchema.parse below rejects malformed input before mutation.
     input: unknown,
@@ -1023,6 +1020,7 @@ export class ReviewStore {
 
     if (initial && command.operation.type !== "create")
       throw new ReviewInputError("Initial content requires a create command.");
+
     // Network and fetch time stay out of the write queue.
     const pullRequest = this.startPullRequest(command);
 
@@ -1481,7 +1479,6 @@ export class ReviewStore {
         `SELECT reviews.id FROM reviews
         JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
         WHERE lower(json_extract(versions.snapshot,'$.origin.pullRequestUrl'))=?
-          AND COALESCE(json_extract(versions.snapshot,'$.origin.tutorial'), 0) = 0
         ORDER BY json_extract(versions.snapshot,'$.createdAt') DESC, reviews.rowid DESC`,
       )
       .all(pullRequestKey(url))

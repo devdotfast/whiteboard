@@ -5,9 +5,11 @@ import {
   type AskEntry,
   type AskHistoryEntry,
   type AskOffer,
+  type AskPermissions,
   askEntrySchema,
   askHistoryEntrySchema,
   askOfferSchema,
+  askPermissionsSchema,
 } from "@review/ask/thread-state.js";
 import { z } from "zod";
 
@@ -23,8 +25,8 @@ export const askRecordSchema = askHistoryEntrySchema.extend({
   cwd: z.string(),
   /** What the panel showed last; absent until a turn ends or it closes. */
   entries: z.array(askEntrySchema).optional(),
-  /** The agent edits and runs commands without asking. */
-  bypass: z.boolean().optional(),
+  /** What the agent may do without asking, when it reopens. */
+  permissions: askPermissionsSchema.optional(),
 });
 
 export type AskRecord = z.infer<typeof askRecordSchema>;
@@ -44,6 +46,7 @@ const rowSchema = z
     updated_at: z.string(),
     entries: z.string().nullable(),
     bypass: z.number(),
+    permissions: z.string().nullable(),
   })
   .transform((row) =>
     askRecordSchema.parse({
@@ -59,7 +62,9 @@ const rowSchema = z
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       entries: row.entries === null ? undefined : JSON.parse(row.entries),
-      bypass: row.bypass === 1,
+      // Saved before auto mode: bypassing permissions, or read-only.
+      permissions:
+        row.permissions ?? (row.bypass === 1 ? "bypass" : "read-only"),
     }),
   );
 
@@ -85,19 +90,26 @@ export class AskHistory {
       updated_at TEXT NOT NULL,
       entries TEXT,
       bypass INTEGER NOT NULL DEFAULT 0,
+      permissions TEXT,
       UNIQUE(agent, session_id));
     CREATE INDEX IF NOT EXISTS ask_conversations_review ON ask_conversations(review_id, updated_at);`);
 
-    // Conversations saved before bypassing permissions lack the column.
-    if (
-      !db
+    // Conversations saved before bypassing permissions, or before auto mode,
+    // lack its column.
+    const columns = new Set(
+      db
         .prepare("PRAGMA table_info(ask_conversations)")
         .all()
-        .some((column) => String(column.name) === "bypass")
-    )
+        .map((column) => String(column.name)),
+    );
+
+    if (!columns.has("bypass"))
       db.exec(
         "ALTER TABLE ask_conversations ADD COLUMN bypass INTEGER NOT NULL DEFAULT 0",
       );
+
+    if (!columns.has("permissions"))
+      db.exec("ALTER TABLE ask_conversations ADD COLUMN permissions TEXT");
 
     // What each agent offered last, so a new question can pick a model and
     // effort, and a command, before its agent starts.
@@ -132,8 +144,8 @@ export class AskHistory {
     this.assertWritable(record.reviewId);
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO ask_conversations(id,review_id,agent,session_id,version,head,cwd,selection,title,created_at,updated_at,bypass)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+        `INSERT OR REPLACE INTO ask_conversations(id,review_id,agent,session_id,version,head,cwd,selection,title,created_at,updated_at,bypass,permissions)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .run(
         record.id,
@@ -147,16 +159,19 @@ export class AskHistory {
         record.title,
         record.createdAt,
         record.updatedAt,
-        record.bypass ? 1 : 0,
+        record.permissions === "bypass" ? 1 : 0,
+        record.permissions ?? null,
       );
   }
 
-  /** Whether reopening the conversation bypasses permissions. */
-  setBypass(id: string, bypass: boolean) {
+  /** What the agent may do without asking when the conversation reopens. */
+  setPermissions(id: string, permissions: AskPermissions) {
     this.assertThreadWritable(id);
     this.db
-      .prepare("UPDATE ask_conversations SET bypass=? WHERE id=?")
-      .run(bypass ? 1 : 0, id);
+      .prepare(
+        "UPDATE ask_conversations SET bypass=?, permissions=? WHERE id=?",
+      )
+      .run(permissions === "bypass" ? 1 : 0, permissions, id);
   }
 
   /** Points a conversation at a new session, when its agent could not
@@ -246,7 +261,7 @@ export class AskHistory {
           version: _version,
           cwd: _cwd,
           entries,
-          bypass: _bypass,
+          permissions: _permissions,
           ...entry
         } = rowSchema.parse(row);
 

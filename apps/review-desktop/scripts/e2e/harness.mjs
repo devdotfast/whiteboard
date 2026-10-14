@@ -672,81 +672,107 @@ export async function createReview(ctx, spec) {
   };
 }
 
-/** A review with a sequence, a database lens, a trace quote and a software map. */
-export async function createDiagramReview(ctx, title) {
-  const repoPath = path.join(ctx.root, "diagram-service");
-  const fixtures = path.join(import.meta.dirname, "fixtures/diagram-review");
+export const DIAGRAM_REVIEW_TITLE = "Diagram review";
+
+/**
+ * A review with every interactive diagram: a sequence and a database lens with
+ * guided tours, a trace, and a software map on both sides. Its prose links into
+ * the order service's source, so it gets a repository of its own holding that
+ * source; the trace and map upload against its commits.
+ */
+export async function createDiagramReview(ctx) {
+  const fixture = async (name) =>
+    JSON.parse(
+      await readFile(
+        path.join(import.meta.dirname, "fixtures/diagram-review", name),
+        "utf8",
+      ),
+    );
+
+  const [authored, trace, model, source] = await Promise.all([
+    fixture("document.json"),
+    fixture("trace.json"),
+    fixture("software-map.json"),
+    fixture("source.json"),
+  ]);
+
+  const repo = path.join(ctx.root, "diagram-repo");
 
   const git = async (...args) =>
     (
       await exec(
         "git",
-        ["-c", "user.name=Review E2E", "-c", "user.email=e2e@example.invalid"]
-          .concat(args),
-        { cwd: repoPath },
+        [
+          "-c",
+          "user.name=Review E2E",
+          "-c",
+          "user.email=review-e2e@example.invalid",
+          "-c",
+          "commit.gpgsign=false",
+          ...args,
+        ],
+        { cwd: repo },
       )
     ).stdout.trim();
 
-  await cp(path.join(sourcePackage, "tutorial/sample-service"), repoPath, {
-    recursive: true,
-  });
+  for (const [file, text] of Object.entries(source)) {
+    await mkdir(path.dirname(path.join(repo, file)), { recursive: true });
+    await writeFile(path.join(repo, file), text);
+  }
+
   await git("init", "-q", "-b", "main");
   await git("add", ".");
-  await git("commit", "-qm", "Sample service");
+  await git("commit", "-qm", "Create the order service");
+
   const base = await git("rev-parse", "HEAD");
-  await writeFile(path.join(repoPath, "CHANGELOG.md"), "Ship orders.\n");
+
+  await writeFile(path.join(repo, "README.md"), "# Order service\n");
   await git("add", ".");
-  await git("commit", "-qm", "Ship orders");
+  await git("commit", "-qm", "Describe the order service");
+
   const head = await git("rev-parse", "HEAD");
 
   const repositoryId = (
-    await ctx.apiOk("/reviews-api/repositories", "POST", { path: repoPath })
+    await ctx.apiOk("/reviews-api/repositories", "POST", { path: repo })
   ).id;
 
-  const ids = new Map([
-    ["trace", randomUUID()],
-    ["map-base", randomUUID()],
-    ["map-head", randomUUID()],
-  ]);
+  const ids = new Map([["fixture-trace", randomUUID()]]);
 
   await ctx.apiOk("/reviews-api/resources", "POST", {
-    id: ids.get("trace"),
+    id: ids.get("fixture-trace"),
     repositoryId,
     kind: "trace",
-    trace: {
-      label: "Sample session",
-      events: [
-        { id: "0", role: "user", text: "Order one, then ship it." },
-        { id: "1", role: "assistant", text: "The order ships." },
-      ],
-    },
+    trace,
   });
 
-  const model = JSON.parse(
-    await readFile(path.join(fixtures, "software-map.json"), "utf8"),
-  );
+  for (const side of ["base", "head"]) {
+    const id = randomUUID();
 
-  for (const side of ["base", "head"])
+    ids.set(`fixture-map-${side}`, id);
     await ctx.apiOk("/reviews-api/resources", "POST", {
-      id: ids.get(`map-${side}`),
+      id,
       repositoryId,
       kind: "map",
       pins: { repositoryId, base, head },
       side,
       model,
     });
+  }
 
   const blocks = JSON.parse(
-    await readFile(path.join(fixtures, "blocks.json"), "utf8"),
-  ).map((block) =>
-    block.type === "trace_quote"
-      ? { ...block, traceId: ids.get(block.traceId) }
-      : block.type === "software_map"
-        ? { ...block, mapVersionId: ids.get(block.mapVersionId) }
-        : block,
+    JSON.stringify(authored.document).replace(
+      /"(fixture-(?:trace|map-base|map-head))"/g,
+      (_, alias) => JSON.stringify(ids.get(alias)),
+    ),
   );
 
-  return createReview(ctx, { title, repoPath, base, head, blocks });
+  return createReview(ctx, {
+    title: DIAGRAM_REVIEW_TITLE,
+    blocks,
+    repoPath: repo,
+    base,
+    head,
+  });
 }
 
 /** The standard two-block order review used by several journeys. */

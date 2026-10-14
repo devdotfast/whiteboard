@@ -7,7 +7,6 @@ import { Emitter,Event } from "../../base/common/event.js";
 import { Disposable } from "../../base/common/lifecycle.js";
 import { createDecorator } from "../../platform/instantiation/common/instantiation.js";
 import { IMainProcessService } from "../../platform/ipc/common/mainProcessService.js";
-import { IStorageService,StorageScope,StorageTarget } from "../../platform/storage/common/storage.js";
 import {
 REVIEW_DESKTOP_CHANNEL,
 REVIEW_DESKTOP_CONNECTION_VERSION,
@@ -23,22 +22,18 @@ type JsonValue,
 parseReviewCliInstallApplyResponse,
 parseReviewCliInstallStatus,
 parseReviewDesktopVerbFrame,
-parseReviewTutorialOpenResponse,
 type ReviewCliInstallApplyResponse,
 type ReviewCliInstallStatus,
 type ReviewGatewayHostState,
 type ReviewRemoteAgent,
 type ReviewRemoteAgentId,
 type ReviewRemoteAgentResult,
-type ReviewTutorialOpenResponse,
 type ReviewVerbResponse
 } from "../common/reviewProtocol.js";
 import {
 	REVIEW_SERVER_STARTUP_TIMEOUT_MS,
 	reconnectUntilAborted,
 } from "../common/reviewReconnect.js";
-
-const REVIEW_TUTORIAL_AUTOPREPARE_SUPPRESSED_KEY = "review.tutorial.autoPrepareSuppressed.v1";
 
 export interface ReviewServerConnection {
 	readonly serverUrl: string;
@@ -85,10 +80,6 @@ export interface IReviewDesktopConnectionService {
 	detectRemoteAgents(alias: string): Promise<ReviewRemoteAgent[] | null>;
 	connectRemoteAgents(alias: string, agents: ReviewRemoteAgentId[]): Promise<ReviewRemoteAgentResult[]>;
 	uninstallRemoteHost(alias: string): Promise<void>;
-	getTutorialStatus(): Promise<{ version: 1; reviewUuid: string | null }>;
-	prepareTutorial(): Promise<void>;
-	openTutorial(): Promise<ReviewTutorialOpenResponse>;
-	deleteTutorial(): Promise<void>;
 	getCliInstallStatus(): Promise<ReviewCliInstallStatus>;
 	applyCliInstall(request: {
 		autoUpdate?: boolean;
@@ -115,8 +106,6 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 	readonly onDidChangeConnection = this.connectionChanged.event;
 
 	private initializePromise: Promise<void> | null = null;
-	private tutorialPreparePromise: Promise<void> | undefined;
-	private tutorialPrepareAttempted = false;
 	private cliInstallStatusPromise: Promise<ReviewCliInstallStatus> | undefined;
 	private readonly controller = new AbortController();
 	private controlAttached = false;
@@ -139,7 +128,6 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 	constructor(
 		@IMainProcessService
 		private readonly mainProcessService: IMainProcessService,
-		@IStorageService private readonly storageService: IStorageService,
 	) {
 		super();
 	}
@@ -302,84 +290,6 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		const result: unknown = await response.json();
 		if (!isJsonObject(result) || typeof result.summary !== "string") throw new Error("Malformed summary test response.");
 		return result.summary;
-	}
-
-	async getTutorialStatus(): Promise<{ version: 1; reviewUuid: string | null }> {
-		await this.initialize();
-		const response = await fetch(`${this.serverUrl}/tutorial/status`, {
-			headers: this.authHeaders(),
-			signal: AbortSignal.timeout(5_000),
-		});
-		await this.requireOk(response, "Whiteboard tutorial status");
-		const payload = (await response.json()) as {
-			version?: unknown;
-			reviewUuid?: unknown;
-		};
-		if (payload.version !== 1 || (payload.reviewUuid !== null && typeof payload.reviewUuid !== "string")) {
-			throw new Error("Whiteboard tutorial status is invalid.");
-		}
-		return { version: 1, reviewUuid: payload.reviewUuid as string | null };
-	}
-
-	prepareTutorial(): Promise<void> {
-		if (this.storageService.getBoolean(REVIEW_TUTORIAL_AUTOPREPARE_SUPPRESSED_KEY, StorageScope.APPLICATION, false)) {
-			return Promise.resolve();
-		}
-		if (this.tutorialPreparePromise) return this.tutorialPreparePromise;
-		if (this.tutorialPrepareAttempted) return Promise.resolve();
-		this.tutorialPrepareAttempted = true;
-		const operation = this.requestTutorialPreparation();
-		this.tutorialPreparePromise = operation;
-		const clearOperation = () => {
-			if (this.tutorialPreparePromise === operation) {
-				this.tutorialPreparePromise = undefined;
-			}
-		};
-		void operation.then(clearOperation, clearOperation);
-		return operation;
-	}
-
-	private async requestTutorialPreparation(): Promise<void> {
-		await this.initialize();
-		const response = await fetch(`${this.serverUrl}/tutorial/prepare`, {
-			method: "POST",
-			headers: this.authHeaders(),
-			signal: AbortSignal.timeout(120_000),
-		});
-		await this.requireOk(response, "Whiteboard tutorial preparation");
-	}
-
-	async openTutorial(): Promise<ReviewTutorialOpenResponse> {
-		await this.initialize();
-		const response = await fetch(`${this.serverUrl}/tutorial/open`, {
-			method: "POST",
-			headers: this.authHeaders(),
-			signal: AbortSignal.timeout(120_000),
-		});
-		await this.requireOk(response, "Whiteboard tutorial open");
-		const payload = parseReviewTutorialOpenResponse(await response.json());
-		this.tutorialPrepareAttempted = true;
-		this.storageService.remove(REVIEW_TUTORIAL_AUTOPREPARE_SUPPRESSED_KEY, StorageScope.APPLICATION);
-		return payload;
-	}
-
-	async deleteTutorial(): Promise<void> {
-		await this.initialize();
-		const response = await fetch(`${this.serverUrl}/tutorial`, {
-			method: "DELETE",
-			headers: this.authHeaders(),
-			signal: AbortSignal.timeout(30_000),
-		});
-		await this.requireOk(response, "Whiteboard tutorial delete");
-		this.tutorialPreparePromise = undefined;
-		this.tutorialPrepareAttempted = true;
-		this.storageService.store(
-			REVIEW_TUTORIAL_AUTOPREPARE_SUPPRESSED_KEY,
-			true,
-			StorageScope.APPLICATION,
-			StorageTarget.MACHINE,
-		);
-		this._onDidChangeLists.fire();
 	}
 
 	/** Raises the server's own error message when it sends one. */

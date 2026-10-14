@@ -135,7 +135,6 @@
                   "../**",
                   "!**/test/fixtures/**",
                   "!**/test-config*",
-                  "!**/tutorial/*.json",
                   "!**/desktop-css-scope",
                   "!**/agent-plugins/**"
                 ],

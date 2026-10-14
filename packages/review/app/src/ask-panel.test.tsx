@@ -45,7 +45,7 @@ const state = (change: Partial<AskThreadState>): AskThreadState => ({
   agentName: "Claude Code",
   status: "running",
   readOnly: true,
-  bypass: false,
+  permissions: "read-only",
   head: "7fd03b8e2",
   cwd: "/checkouts/payments-service",
   selection: { title: "Paragraph 3" },
@@ -170,7 +170,7 @@ it("asks the chosen agent, streams its answer, relays a decision, and leaves the
         question: { text: "Is this safe on replicas?" },
         selection,
         picks: {},
-        bypass: false,
+        permissions: "read-only",
       },
     ]);
 

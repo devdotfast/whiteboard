@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 
-import { createDiagramReview } from "../harness.mjs";
+import { DIAGRAM_REVIEW_TITLE, createDiagramReview } from "../harness.mjs";
 
 export const name = "diagram-persistence";
 
@@ -18,8 +18,8 @@ export async function run(ctx) {
     check(...items);
   };
 
-  await createDiagramReview(ctx, TITLE);
-  let page = await ctx.apiCanvasFor(TITLE);
+  await createDiagramReview(ctx);
+  let page = await ctx.apiCanvasFor(DIAGRAM_REVIEW_TITLE);
 
   const tab = (label) =>
     page.locator(`[aria-label="Session views"] button[aria-label="${label}"]`);
@@ -79,7 +79,7 @@ export async function run(ctx) {
     .locator("option")
     .evaluateAll((options) => options.map((option) => option.value));
 
-  assert.ok(values.length > 1, "the review needs multiple database use cases");
+  assert.ok(values.length > 1, "the diagram review needs multiple database use cases");
   await useCase().selectOption(values.at(-1));
   await reload();
   assert.equal(await useCase().inputValue(), values.at(-1));

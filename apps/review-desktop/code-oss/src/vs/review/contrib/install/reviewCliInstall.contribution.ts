@@ -22,7 +22,6 @@ import {
 import { INativeWorkbenchEnvironmentService } from "../../../workbench/services/environment/electron-browser/environmentService.js";
 import { LifecyclePhase } from "../../../workbench/services/lifecycle/common/lifecycle.js";
 import { reviewCliInstallStartupAction } from "../../common/reviewCliInstallStartup.js";
-import { REVIEW_TUTORIAL_PROGRESS_STORAGE_KEY } from "../../common/reviewProtocol.js";
 import { IReviewApiCatalogService } from "../../services/reviewApiCatalogService.js";
 import { IReviewCanvasEditorTabsService } from "../../services/reviewCanvasEditorTabsService.js";
 import { IReviewDesktopConnectionService } from "../../services/reviewDesktopConnectionService.js";
@@ -51,32 +50,6 @@ class OpenWelcomeAction extends Action2 {
 }
 
 registerAction2(OpenWelcomeAction);
-
-class OpenTutorialAction extends Action2 {
-	constructor() {
-		super({
-			id: "review.openTutorial",
-			title: localize2("review.openTutorial", "Whiteboard: Open Tutorial..."),
-			f1: true,
-		});
-	}
-
-	override async run(accessor: ServicesAccessor): Promise<void> {
-		const notificationService = accessor.get(INotificationService);
-		const desktopConnection = accessor.get(IReviewDesktopConnectionService);
-		const tabsService = accessor.get(IReviewCanvasEditorTabsService);
-		try {
-			const opened = await desktopConnection.openTutorial();
-			await tabsService.openApiReview(opened.reviewUuid, opened.title);
-		} catch (error) {
-			notificationService.error(
-				localize("review.tutorial.failed", "Whiteboard could not open the tutorial: {0}", String(error)),
-			);
-		}
-	}
-}
-
-registerAction2(OpenTutorialAction);
 
 class InstallReviewCliInPathAction extends Action2 {
 	constructor() {
@@ -117,8 +90,8 @@ class InstallReviewCliInPathAction extends Action2 {
 registerAction2(InstallReviewCliInPathAction);
 
 /**
- * Removes everything the app installed on this machine: the tutorial, the
- * whiteboard terminal command, managed trace capture, and the consent stamp. It then
+ * Removes everything the app installed on this machine: the whiteboard
+ * terminal command, managed trace capture, and the consent stamp. It then
  * points at the app bundle so the user can move it to the Trash. Other Review
  * data stays untouched. Resetting the stamp makes a later reinstall start as
  * a first run.
@@ -138,7 +111,6 @@ class UninstallReviewDesktopAction extends Action2 {
 		const productService = accessor.get(IProductService);
 		const nativeHostService = accessor.get(INativeHostService);
 		const desktopConnection = accessor.get(IReviewDesktopConnectionService);
-		const storageService = accessor.get(IStorageService);
 
 		const status = await desktopConnection.getCliInstallStatus();
 		const detail = [
@@ -151,7 +123,6 @@ class UninstallReviewDesktopAction extends Action2 {
 						"Disables trace capture and restores hook paths for known repositories. R2 credentials stay on disk.",
 					)
 				: localize("review.uninstall.noTrace", "Trace capture is not managed by Whiteboard."),
-			localize("review.uninstall.tutorial", "Removes the bundled tutorial repository and session."),
 			localize("review.uninstall.keepsData", "Your sessions and their history stay on disk."),
 		].join("\n");
 		const { confirmed } = await dialogService.confirm({
@@ -163,27 +134,12 @@ class UninstallReviewDesktopAction extends Action2 {
 			return;
 		}
 
-		// The tutorial is disposable state: a failed delete must not stop
-		// the command removal the user just confirmed.
-		let tutorialError: unknown;
-		try {
-			await desktopConnection.deleteTutorial();
-			storageService.remove(REVIEW_TUTORIAL_PROGRESS_STORAGE_KEY, StorageScope.APPLICATION);
-		} catch (error) {
-			tutorialError = error;
-		}
 		try {
 			await desktopConnection.removeCliInstall({
 				shim: true,
 				...(status.stamp?.traceManaged ? { trace: true } : {}),
 			});
 			await desktopConnection.resetCliInstallPrompts();
-			if (tutorialError) {
-				await dialogService.error(
-					localize("review.uninstall.tutorialFailed", "Whiteboard could not remove the tutorial data at ~/.dev/tutorial."),
-					String(tutorialError),
-				);
-			}
 		} catch (error) {
 			await dialogService.error(
 				localize("review.uninstall.failed", "Whiteboard could not remove its command and trace setup."),
@@ -262,6 +218,8 @@ registerAction2(UninstallReviewDesktopAction);
  *
  * Dev sessions (`pnpm dev`, isBuilt false) never auto-open.
  */
+const LEGACY_TUTORIAL_STORAGE_KEYS = ["review.tutorial.progress.v1", "review.tutorial.autoPrepareSuppressed.v1"];
+
 class ReviewCliInstallStartup implements IWorkbenchContribution {
 	constructor(
 		@INativeWorkbenchEnvironmentService environmentService: INativeWorkbenchEnvironmentService,
@@ -269,7 +227,10 @@ class ReviewCliInstallStartup implements IWorkbenchContribution {
 		@IReviewDesktopConnectionService private readonly reviewDesktopConnectionService: IReviewDesktopConnectionService,
 		@IReviewCanvasEditorTabsService private readonly tabsService: IReviewCanvasEditorTabsService,
 		@IReviewApiCatalogService private readonly apiCatalog: IReviewApiCatalogService,
+		@IStorageService storageService: IStorageService,
 	) {
+		// Earlier versions kept the removed tutorial's progress here.
+		for (const key of LEGACY_TUTORIAL_STORAGE_KEYS) storageService.remove(key, StorageScope.APPLICATION);
 		if (!environmentService.isBuilt) {
 			return;
 		}

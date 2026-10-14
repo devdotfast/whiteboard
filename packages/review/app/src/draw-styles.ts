@@ -357,8 +357,7 @@ export const drawStyles = stylex.create({
   regionOn: {
     outline: { default: `1px solid ${tokens.accent}`, [ringOnSection]: "none" },
   },
-  // A block's own animation; a block is also the child of a tutorial
-  // feature, whose phase then draws it.
+  // A block's own animation.
   blockLand: {
     animationName: {
       default: landSlot,

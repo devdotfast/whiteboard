@@ -1247,52 +1247,6 @@ function rewrittenWatch(
   };
 }
 
-it("gives a review on another machine no tutorial controls, even a tutorial review", async () => {
-  const review = await command({
-    type: "create",
-    title: "Remote",
-    target: { kind: "commits", ...pins },
-  });
-
-  const app = new Hono().route("/reviews-api", createReviewApi(store));
-  app.get("/reviews-api/:id/commits", (context) => context.json([]));
-  const tutorial = vi.fn<(enabled: boolean) => void>();
-
-  const bridge = testReviewBridge(
-    {},
-    {
-      request: rewrittenWatch(
-        app,
-        (line) => {
-          if (line.value) line.value.origin = { tutorial: true };
-        },
-        [],
-      ),
-    },
-  );
-
-  const container = document.createElement("div");
-  document.body.append(container);
-  await act(async () => {
-    canvas = mount(container, {
-      kind: "api",
-      reviewId: review.reviewId,
-      host: "wb-a",
-      bridge,
-      setSourceView: () => {},
-      setTutorial: tutorial,
-    });
-  });
-  await act(async () => {
-    await vi.waitFor(() =>
-      expect(container.querySelector("h1")?.textContent).toBe("Remote"),
-    );
-  });
-
-  expect(tutorial).toHaveBeenCalled();
-  expect(tutorial).not.toHaveBeenCalledWith(true);
-});
-
 it("shows a lost remote host as a top-bar chip that retries the host and the stream", async () => {
   const review = await command({
     type: "create",

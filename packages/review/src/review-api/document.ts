@@ -450,10 +450,7 @@ export const editSchema = edits(contentSchema, blockSchema, z.json());
 
 export type Edit = z.infer<typeof editSchema>;
 
-// Tutorial blocks are the built-in tutorial's, not for agents to write.
-const writableBlockTypes = Object.keys(blocks).filter(
-  (type) => type !== "tutorial",
-);
+const writableBlockTypes = Object.keys(blocks);
 
 const namedByType = (types: string[]) =>
   z

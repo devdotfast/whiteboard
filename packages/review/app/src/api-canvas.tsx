@@ -57,7 +57,6 @@ import { ReviewPanelProvider } from "./review-panel";
 import { readReviewNavigationRestore } from "./review-view-state";
 import { SharingContext } from "./share-control";
 import { tokens } from "./tokens.stylex";
-import { TutorialProvider } from "./tutorial-context";
 import { Button } from "./ui/button";
 
 type ApiContent = Extract<ReviewCanvasContent, { kind: "api" }>;
@@ -418,13 +417,6 @@ export function ApiCanvas({
     if (data) content.bridge.ready();
   }, [Boolean(data), content.bridge]);
 
-  useEffect(() => {
-    if (data)
-      content.setTutorial?.(
-        !content.host && data.snapshot.origin?.tutorial === true,
-      );
-  }, [data?.snapshot.origin?.tutorial, content.host, content.setTutorial]);
-
   const sharing = useMemo(
     () =>
       data && !content.host && !data.snapshot.trashedAt
@@ -548,51 +540,49 @@ export function ApiCanvas({
                   coverageRevision={coverageRevision}
                   structuralDiffEnabled={content.structuralDiffEnabled}
                 >
-                  <TutorialProvider tutorial={content.tutorial}>
-                    {error && (
-                      <p {...stylex.props(styles.error)} role="status">
-                        {error}
-                      </p>
-                    )}
-                    {trashBanner}
-                    <ConnectionContext.Provider value={connection}>
-                      <AuthoringActivityContext.Provider
-                        value={version === undefined ? activity : undefined}
+                  {error && (
+                    <p {...stylex.props(styles.error)} role="status">
+                      {error}
+                    </p>
+                  )}
+                  {trashBanner}
+                  <ConnectionContext.Provider value={connection}>
+                    <AuthoringActivityContext.Provider
+                      value={version === undefined ? activity : undefined}
+                    >
+                      <DrawQueueProvider
+                        cursor={version === undefined ? cursor : undefined}
                       >
                         <DrawQueueProvider
-                          cursor={version === undefined ? cursor : undefined}
+                          scope="lenses"
+                          cursor={
+                            version === undefined ? lensCursor : undefined
+                          }
                         >
-                          <DrawQueueProvider
-                            scope="lenses"
-                            cursor={
-                              version === undefined ? lensCursor : undefined
-                            }
+                          <DisplayedReviewVersionContext.Provider
+                            value={data.snapshot.version}
                           >
-                            <DisplayedReviewVersionContext.Provider
-                              value={data.snapshot.version}
+                            <MapEnabled.Provider
+                              value={content.softwareMapEnabled === true}
                             >
-                              <MapEnabled.Provider
-                                value={content.softwareMapEnabled === true}
-                              >
-                                <SaveMarkdown.Provider value={saveMarkdown}>
-                                  <div {...stylex.props(styles.canvasFrame)}>
-                                    <CanvasDocument
-                                      data={data}
-                                      findHost={findHost}
-                                      softwareMapEnabled={
-                                        content.softwareMapEnabled === true
-                                      }
-                                      documentWidth={content.documentWidth}
-                                    />
-                                  </div>
-                                </SaveMarkdown.Provider>
-                              </MapEnabled.Provider>
-                            </DisplayedReviewVersionContext.Provider>
-                          </DrawQueueProvider>
+                              <SaveMarkdown.Provider value={saveMarkdown}>
+                                <div {...stylex.props(styles.canvasFrame)}>
+                                  <CanvasDocument
+                                    data={data}
+                                    findHost={findHost}
+                                    softwareMapEnabled={
+                                      content.softwareMapEnabled === true
+                                    }
+                                    documentWidth={content.documentWidth}
+                                  />
+                                </div>
+                              </SaveMarkdown.Provider>
+                            </MapEnabled.Provider>
+                          </DisplayedReviewVersionContext.Provider>
                         </DrawQueueProvider>
-                      </AuthoringActivityContext.Provider>
-                    </ConnectionContext.Provider>
-                  </TutorialProvider>
+                      </DrawQueueProvider>
+                    </AuthoringActivityContext.Provider>
+                  </ConnectionContext.Provider>
                 </ReviewLensesProvider>
               </DocumentData.Provider>
             </ReviewPanelProvider>

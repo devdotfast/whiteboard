@@ -64,6 +64,43 @@ export function readOpenAsks(
   ).data;
 }
 
+const handoffSchema = z.object({
+  threads: z.array(
+    z.object({
+      id: z.string(),
+      agent: agentSchema,
+      selection: AgentSelectionSchema,
+    }),
+  ),
+});
+
+/** Opens, minimized, the conversations this review took over as it was
+ * created: an agent started outside any review, as first run's is, carries
+ * on here without covering the whiteboard it draws. */
+export async function openHandedOffAsks(
+  store: ReviewPanelStore,
+  fetchReview: (
+    endpoint: "/ask/handoff",
+    init: RequestInit,
+  ) => Promise<Response>,
+): Promise<void> {
+  const response = await fetchReview("/ask/handoff", { method: "POST" });
+
+  // A review without Ask has no conversations to take over.
+  if (!response.ok) return;
+
+  for (const thread of handoffSchema.parse(await response.json()).threads)
+    store.getState().openAskView(
+      {
+        type: "saved",
+        threadId: thread.id,
+        selection: thread.selection,
+        agent: thread.agent,
+      },
+      { minimized: true },
+    );
+}
+
 /** What to remember of an open Ask: a question asked becomes its
  * conversation, to reopen. */
 function remembered({ key, view, threadId, presence }: AskPanel): {

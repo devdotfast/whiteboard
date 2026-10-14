@@ -107,7 +107,6 @@ import { withClass } from "./stylex-props";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { traceStyles } from "./trace-styles";
-import { TutorialExperienceProvider } from "./tutorial-experience";
 import { captureUiEvent } from "./ui-telemetry";
 import { segmentStyles } from "./ui/segmented";
 import { useReviewTabTelemetry } from "./use-review-tab-telemetry";
@@ -532,316 +531,306 @@ function ReviewLayoutContent({
           !!banner && shellStyles.documentShellBanner,
         )}
       >
-        <TutorialExperienceProvider
-          shellRef={shellRef}
-          scrollRegionRef={scrollRegionRef}
-        >
-          <header {...stylex.props(shellStyles.topbar)}>
-            <div {...stylex.props(shellStyles.topbarLeft, topbarTabsMarker)}>
-              <div
-                {...stylex.props(
-                  segmentStyles.segmented,
-                  segmentStyles.segmentedTopbar,
-                )}
-                role="group"
-                aria-label="Session views"
-              >
-                {reviewViews.map((view) => (
-                  <button
-                    key={view}
-                    type="button"
-                    aria-label={
-                      view === "map"
-                        ? "Map (Experimental)"
-                        : reviewViewLabel(view)
-                    }
-                    aria-pressed={activeView === view}
-                    data-tour-target={`${view}-tab`}
-                    title={view === "map" ? "Map (Experimental)" : undefined}
-                    {...withClass(
-                      "review-segment",
-                      segmentMarker,
-                      segmentStyles.segment,
-                      segmentStyles.segmentTopbar,
-                      activeView === view && segmentStyles.segmentActive,
-                      activeView === view && segmentStyles.segmentTopbarActive,
-                    )}
-                    onClick={() => {
-                      if (view === "diff")
-                        captureUiEvent(session, "diff_opened", {
-                          kind: diffOpenedKind(
-                            diffScope,
-                            Boolean(lenses?.structuralDiffEnabled),
-                          ),
-                          via: "topbar",
-                        });
-                      showView(view);
-                    }}
-                  >
-                    {view === "review" ? (
-                      <ReviewSurfaceLabel
-                        label={scratchpad ? "Scratchpad" : "Whiteboard"}
-                        hasContent={document.empty === false}
-                        active={activeView === "review"}
-                      />
-                    ) : (
-                      <span>{reviewViewLabel(view)}</span>
-                    )}
-                    {view === "diff" && filesTabFileCount !== null && (
-                      <span
-                        {...stylex.props(
-                          segmentStyles.segmentCount,
-                          activeView === view &&
-                            segmentStyles.segmentCountActive,
-                        )}
-                      >
-                        {filesTabFileCount}
-                      </span>
-                    )}
-                    {view === "commits" && (
-                      <span
-                        {...stylex.props(
-                          segmentStyles.segmentCount,
-                          activeView === view &&
-                            segmentStyles.segmentCountActive,
-                        )}
-                      >
-                        {commits.length}
-                      </span>
-                    )}
-                    <MarkerUnderline active={activeView === view} />
-                  </button>
-                ))}
-              </div>
-            </div>
+        <header {...stylex.props(shellStyles.topbar)}>
+          <div {...stylex.props(shellStyles.topbarLeft, topbarTabsMarker)}>
             <div
-              {...stylex.props(shellStyles.topbarActions, topbarActionsMarker)}
+              {...stylex.props(
+                segmentStyles.segmented,
+                segmentStyles.segmentedTopbar,
+              )}
+              role="group"
+              aria-label="Session views"
             >
-              <div
-                {...stylex.props(
-                  shellStyles.topbarItem,
-                  shellStyles.topbarContext,
-                )}
-              >
-                {!scratchpad && sourceTreeShown && (
-                  <Button
-                    variant="ghost"
-                    xstyle={shellStyles.openSourceTree}
-                    aria-label="Source tree ↗"
-                    disabled={!sourceWindows}
-                    ref={sourceTreeTooltip}
-                    onClick={() => {
-                      captureUiEvent(session, "source_tree_opened", {
-                        via: "topbar",
-                      });
-                      // The desktop already showed why it failed.
-                      session.surface
-                        .post({ name: "openSourceTree", args: {} })
-                        .catch(() => undefined);
-                    }}
-                  >
-                    <span {...stylex.props(shellStyles.openSourceTreeLabel)}>
-                      Source tree
-                    </span>
-                    <span aria-hidden="true">↗</span>
-                  </Button>
-                )}
-                <AuthoringActivityBadge
-                  onLocate={(view) => {
+              {reviewViews.map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  aria-label={
+                    view === "map"
+                      ? "Map (Experimental)"
+                      : reviewViewLabel(view)
+                  }
+                  aria-pressed={activeView === view}
+                  title={view === "map" ? "Map (Experimental)" : undefined}
+                  {...withClass(
+                    "review-segment",
+                    segmentMarker,
+                    segmentStyles.segment,
+                    segmentStyles.segmentTopbar,
+                    activeView === view && segmentStyles.segmentActive,
+                    activeView === view && segmentStyles.segmentTopbarActive,
+                  )}
+                  onClick={() => {
                     if (view === "diff")
                       captureUiEvent(session, "diff_opened", {
                         kind: diffOpenedKind(
                           diffScope,
                           Boolean(lenses?.structuralDiffEnabled),
                         ),
-                        via: "locate",
+                        via: "topbar",
                       });
                     showView(view);
                   }}
-                />
-              </div>
-              <ReviewStackSelector />
-              <AskHistoryControl />
-              <ShareControl />
-              <IconButton
-                xstyle={shellStyles.topbarItem}
-                ref={discordTooltip}
-                aria-label="Join our Discord community"
-                onClick={() => {
-                  captureUiEvent(session, "discord_clicked", {
-                    via: "topbar",
-                  });
-                  session.surface.post({ name: "joinDiscord", args: {} });
-                }}
-              >
-                <DiscordIcon xstyle={controlStyles.chromeIcon} />
-              </IconButton>
-              <BugReportControl />
-              <ReviewBatonChip outcome={review.submissionOutcome} />
-              <DiffLayoutControl />
-              {!scratchpad &&
-                !review.historicalRevision &&
-                !review.submissionOutcome && (
-                  <div
-                    {...stylex.props(
-                      shellStyles.topbarItem,
-                      shellStyles.actionsDivider,
-                    )}
-                  />
-                )}
-              {!scratchpad &&
-              !review.historicalRevision &&
-              !review.submissionOutcome ? (
-                <ReviewCornerAction />
-              ) : null}
+                >
+                  {view === "review" ? (
+                    <ReviewSurfaceLabel
+                      label={scratchpad ? "Scratchpad" : "Whiteboard"}
+                      hasContent={document.empty === false}
+                      active={activeView === "review"}
+                    />
+                  ) : (
+                    <span>{reviewViewLabel(view)}</span>
+                  )}
+                  {view === "diff" && filesTabFileCount !== null && (
+                    <span
+                      {...stylex.props(
+                        segmentStyles.segmentCount,
+                        activeView === view && segmentStyles.segmentCountActive,
+                      )}
+                    >
+                      {filesTabFileCount}
+                    </span>
+                  )}
+                  {view === "commits" && (
+                    <span
+                      {...stylex.props(
+                        segmentStyles.segmentCount,
+                        activeView === view && segmentStyles.segmentCountActive,
+                      )}
+                    >
+                      {commits.length}
+                    </span>
+                  )}
+                  <MarkerUnderline active={activeView === view} />
+                </button>
+              ))}
             </div>
-          </header>
-          {banner}
-          {activeView === "review" && (
-            <ReviewToc
-              entries={tocEntries}
-              besideHeader={document.header}
-              documentWidth={document.width}
-            />
-          )}
-          <section
-            ref={scrollRegionRef}
-            {...withClass(
-              `review-view-region review-view-region--${activeView}`,
-              shellStyles.viewRegion,
-              activeView === "commits" && shellStyles.commitsRegion,
-              activeView === "review" && shellStyles.reviewRegion,
-              activeView === "trace" && traceStyles.region,
-            )}
+          </div>
+          <div
+            {...stylex.props(shellStyles.topbarActions, topbarActionsMarker)}
           >
             <div
-              {...withClass(
-                "review-document-view",
-                shellStyles.documentView,
-                activeView !== "review" && shellStyles.hidden,
+              {...stylex.props(
+                shellStyles.topbarItem,
+                shellStyles.topbarContext,
               )}
-              hidden={activeView !== "review"}
             >
-              <>
-                <article
-                  ref={articleRef}
-                  {...withClass(
-                    "review-document",
-                    documentStyles.article,
-                    documentMarker,
-                    rightPanelOpen && documentStyles.articlePeekOpen,
-                  )}
-                  data-kind={scratchpad ? "scratchpad" : undefined}
+              {!scratchpad && sourceTreeShown && (
+                <Button
+                  variant="ghost"
+                  xstyle={shellStyles.openSourceTree}
+                  aria-label="Source tree ↗"
+                  disabled={!sourceWindows}
+                  ref={sourceTreeTooltip}
+                  onClick={() => {
+                    captureUiEvent(session, "source_tree_opened", {
+                      via: "topbar",
+                    });
+                    // The desktop already showed why it failed.
+                    session.surface
+                      .post({ name: "openSourceTree", args: {} })
+                      .catch(() => undefined);
+                  }}
                 >
-                  <ReviewDocumentBoundary
-                    key={documentRevision}
-                    session={session}
-                    revision={documentRevision}
-                    onError={(_revision, error) =>
-                      reportReviewDocumentRenderError(session, error)
-                    }
-                  >
-                    <document.render />
-                  </ReviewDocumentBoundary>
-                </article>
-                <AskThreadMarks
-                  articleRef={articleRef}
-                  revision={documentRevision}
-                />
-              </>
-            </div>
-            {softwareMapEnabled && activeView === "map" && (
-              <div
-                {...withClass(
-                  "review-map-view",
-                  shellStyles.mapView,
-                  mapViewStyles.view,
-                )}
-              >
-                <div
-                  {...stylex.props(
-                    shellStyles.mapCanvasShell,
-                    mapViewStyles.canvasShell,
-                  )}
-                >
-                  <SoftwareMapTopologyUnavailable
-                    repoSoftwareMap={repoSoftwareMap}
-                    baseSoftwareMap={baseSoftwareMap}
-                    baseRef={review.resolvedBaseRef ?? undefined}
-                    headRef={review.resolvedHeadRef ?? undefined}
-                  />
-                  <SoftwareMap
-                    model={activeSoftwareMap ?? undefined}
-                    pinnedData={
-                      activeSoftwareMapSource
-                        ? session.softwareMapData?.(activeSoftwareMapSource)
-                        : undefined
-                    }
-                    focusRequest={mapFocus?.pending ? mapFocus : null}
-                    onFocusRequestHandled={
-                      panelStore.getState().consumeMapFocus
-                    }
-                    height="100%"
-                    showChrome={false}
-                    showFloatingActions={!rightPanelOpen}
-                    variant="view"
-                  />
-                  <MapSettingsControl />
-                </div>
-              </div>
-            )}
-            {activeView === "commits" && (
-              <ReviewCommitsView
-                commits={commits}
-                range={range}
-                onOpenDiff={(commit, via, file) => {
-                  captureUiEvent(session, "commit_diff_opened", { via });
-                  panelStore.getState().openCommitDiff({ commit, file });
+                  <span {...stylex.props(shellStyles.openSourceTreeLabel)}>
+                    Source tree
+                  </span>
+                  <span aria-hidden="true">↗</span>
+                </Button>
+              )}
+              <AuthoringActivityBadge
+                onLocate={(view) => {
+                  if (view === "diff")
+                    captureUiEvent(session, "diff_opened", {
+                      kind: diffOpenedKind(
+                        diffScope,
+                        Boolean(lenses?.structuralDiffEnabled),
+                      ),
+                      via: "locate",
+                    });
+                  showView(view);
                 }}
               />
-            )}
-            <div
-              ref={diffHostRef}
-              aria-hidden={diffPreloaded}
-              {...stylex.props(
-                shellStyles.diffView,
-                diffPreloaded && shellStyles.diffViewPreloaded,
-              )}
-              style={frozenDiffStyle}
-            >
-              {diffOpened && <ReviewDiffView />}
             </div>
-            {activeView === "diff" && diffScope !== null && (
-              <div
+            <ReviewStackSelector />
+            <AskHistoryControl />
+            <ShareControl />
+            <IconButton
+              xstyle={shellStyles.topbarItem}
+              ref={discordTooltip}
+              aria-label="Join our Discord community"
+              onClick={() => {
+                captureUiEvent(session, "discord_clicked", {
+                  via: "topbar",
+                });
+                session.surface.post({ name: "joinDiscord", args: {} });
+              }}
+            >
+              <DiscordIcon xstyle={controlStyles.chromeIcon} />
+            </IconButton>
+            <BugReportControl />
+            <ReviewBatonChip outcome={review.submissionOutcome} />
+            <DiffLayoutControl />
+            {!scratchpad &&
+              !review.historicalRevision &&
+              !review.submissionOutcome && (
+                <div
+                  {...stylex.props(
+                    shellStyles.topbarItem,
+                    shellStyles.actionsDivider,
+                  )}
+                />
+              )}
+            {!scratchpad &&
+            !review.historicalRevision &&
+            !review.submissionOutcome ? (
+              <ReviewCornerAction />
+            ) : null}
+          </div>
+        </header>
+        {banner}
+        {activeView === "review" && (
+          <ReviewToc
+            entries={tocEntries}
+            besideHeader={document.header}
+            documentWidth={document.width}
+          />
+        )}
+        <section
+          ref={scrollRegionRef}
+          {...withClass(
+            `review-view-region review-view-region--${activeView}`,
+            shellStyles.viewRegion,
+            activeView === "commits" && shellStyles.commitsRegion,
+            activeView === "review" && shellStyles.reviewRegion,
+            activeView === "trace" && traceStyles.region,
+          )}
+        >
+          <div
+            {...withClass(
+              "review-document-view",
+              shellStyles.documentView,
+              activeView !== "review" && shellStyles.hidden,
+            )}
+            hidden={activeView !== "review"}
+          >
+            <>
+              <article
+                ref={articleRef}
                 {...withClass(
-                  "review-diff-view--scoped",
-                  shellStyles.diffView,
-                  shellStyles.diffViewScoped,
-                  scopedDiffMarker,
+                  "review-document",
+                  documentStyles.article,
+                  documentMarker,
+                  rightPanelOpen && documentStyles.articlePeekOpen,
+                )}
+                data-kind={scratchpad ? "scratchpad" : undefined}
+              >
+                <ReviewDocumentBoundary
+                  key={documentRevision}
+                  session={session}
+                  revision={documentRevision}
+                  onError={(_revision, error) =>
+                    reportReviewDocumentRenderError(session, error)
+                  }
+                >
+                  <document.render />
+                </ReviewDocumentBoundary>
+              </article>
+              <AskThreadMarks
+                articleRef={articleRef}
+                revision={documentRevision}
+              />
+            </>
+          </div>
+          {softwareMapEnabled && activeView === "map" && (
+            <div
+              {...withClass(
+                "review-map-view",
+                shellStyles.mapView,
+                mapViewStyles.view,
+              )}
+            >
+              <div
+                {...stylex.props(
+                  shellStyles.mapCanvasShell,
+                  mapViewStyles.canvasShell,
                 )}
               >
-                <CommitDiffScopeBar
-                  commit={diffScope.commit}
-                  onBack={() => showView("commits")}
+                <SoftwareMapTopologyUnavailable
+                  repoSoftwareMap={repoSoftwareMap}
+                  baseSoftwareMap={baseSoftwareMap}
+                  baseRef={review.resolvedBaseRef ?? undefined}
+                  headRef={review.resolvedHeadRef ?? undefined}
                 />
-                <ReviewDiffView
-                  scope={{ commit: diffScope.commit.commit }}
-                  revealFile={diffScope.file}
-                  restoreFile={diffScope.restoreFile}
+                <SoftwareMap
+                  model={activeSoftwareMap ?? undefined}
+                  pinnedData={
+                    activeSoftwareMapSource
+                      ? session.softwareMapData?.(activeSoftwareMapSource)
+                      : undefined
+                  }
+                  focusRequest={mapFocus?.pending ? mapFocus : null}
+                  onFocusRequestHandled={panelStore.getState().consumeMapFocus}
+                  height="100%"
+                  showChrome={false}
+                  showFloatingActions={!rightPanelOpen}
+                  variant="view"
                 />
+                <MapSettingsControl />
               </div>
+            </div>
+          )}
+          {activeView === "commits" && (
+            <ReviewCommitsView
+              commits={commits}
+              range={range}
+              onOpenDiff={(commit, via, file) => {
+                captureUiEvent(session, "commit_diff_opened", { via });
+                panelStore.getState().openCommitDiff({ commit, file });
+              }}
+            />
+          )}
+          <div
+            ref={diffHostRef}
+            aria-hidden={diffPreloaded}
+            {...stylex.props(
+              shellStyles.diffView,
+              diffPreloaded && shellStyles.diffViewPreloaded,
             )}
-            {activeView === "trace" && (
-              <ReviewTraceView
-                selection={traceSelection}
-                onSelect={panelStore.getState().selectTrace}
-                storage={traceStorage}
-                onSelectStorage={panelStore.getState().selectTraceStorage}
-                storedList={storedList}
+            style={frozenDiffStyle}
+          >
+            {diffOpened && <ReviewDiffView />}
+          </div>
+          {activeView === "diff" && diffScope !== null && (
+            <div
+              {...withClass(
+                "review-diff-view--scoped",
+                shellStyles.diffView,
+                shellStyles.diffViewScoped,
+                scopedDiffMarker,
+              )}
+            >
+              <CommitDiffScopeBar
+                commit={diffScope.commit}
+                onBack={() => showView("commits")}
               />
-            )}
-          </section>
-        </TutorialExperienceProvider>
+              <ReviewDiffView
+                scope={{ commit: diffScope.commit.commit }}
+                revealFile={diffScope.file}
+                restoreFile={diffScope.restoreFile}
+              />
+            </div>
+          )}
+          {activeView === "trace" && (
+            <ReviewTraceView
+              selection={traceSelection}
+              onSelect={panelStore.getState().selectTrace}
+              storage={traceStorage}
+              onSelectStorage={panelStore.getState().selectTraceStorage}
+              storedList={storedList}
+            />
+          )}
+        </section>
       </main>
       {rightPanelOpen && (
         <div

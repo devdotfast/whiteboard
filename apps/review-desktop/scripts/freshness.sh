@@ -28,9 +28,9 @@ needs_rebuild() {
   return 1
 }
 
-# Rebuilds the Review server, the desktop canvas, and the tutorial assets
-# from source when their outputs are stale. Shared by build.sh's full-compile
-# path and run.sh's launch freshness checks, so the three pnpm builds and
+# Rebuilds the Review server and the desktop canvas from source when their
+# outputs are stale. Shared by build.sh's full-compile path and run.sh's
+# launch freshness checks, so the pnpm builds and
 # their staleness inputs are written once.
 rebuild_review_desktop_outputs() {
   if (( $# != 2 )); then
@@ -57,16 +57,5 @@ rebuild_review_desktop_outputs() {
     "$review_package/package.json" \
     "$monorepo_root/packages/review-protocol/src"; then
     pnpm --dir "$monorepo_root" --filter @dev.fast/review-canvas build
-  fi
-  local tutorial_output="$review_package/tutorial/pins.json"
-  if needs_rebuild \
-    "$tutorial_output" \
-    "$review_package/scripts/build-tutorial-assets.ts" ||
-    [[ -n "$(
-      find "$review_package/tutorial" \
-        \( -path "$review_package/tutorial/.bundle" -o -path "$review_package/tutorial/git-stub" -o -path "$review_package/tutorial/pins.json" \) -prune \
-        -o -type f -newer "$tutorial_output" -print -quit
-    )" ]]; then
-    pnpm --dir "$monorepo_root" --filter @dev.fast/whiteboard build:tutorial-assets
   fi
 }

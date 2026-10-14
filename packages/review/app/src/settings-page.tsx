@@ -420,7 +420,7 @@ export function SettingsPage({
           <Section label="Uninstall">
             <Row
               label="Uninstall Whiteboard"
-              description="Removes the whiteboard command, trace setup, and tutorial. Your sessions stay on disk."
+              description="Removes the whiteboard command and trace setup. Your sessions stay on disk."
             >
               <Button onClick={settings.uninstallApp}>Uninstall…</Button>
             </Row>
