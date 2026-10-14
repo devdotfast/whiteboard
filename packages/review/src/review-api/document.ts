@@ -120,6 +120,24 @@ export function explicitPins(references: { source: { pins?: SourcePins } }[]) {
   return [...seen.values()];
 }
 
+/** Every repository a document's references can read by their own pins,
+ * found without parsing Markdown: a Markdown link reads at its block's pins. */
+export function pinnedRepositoryIds(document: Block[]): Set<string> {
+  const ids = new Set<string>();
+
+  for (const element of elements(document))
+    if (element.type === "markdown" && element.pins)
+      ids.add(element.pins.repositoryId);
+
+  for (const { source } of documentReferences(document, {
+    tolerant: true,
+    markdown: false,
+  }))
+    if (source.pins) ids.add(source.pins.repositoryId);
+
+  return ids;
+}
+
 const targets = <Repository extends Record<string, z.ZodType>>(
   repository: Repository,
 ) =>
@@ -214,7 +232,10 @@ export function resourceReferences(document: Block[]): Block[] {
  */
 function documentReferences(
   document: Block[],
-  { tolerant = false }: { tolerant?: boolean } = {},
+  {
+    tolerant = false,
+    markdown = true,
+  }: { tolerant?: boolean; markdown?: boolean } = {},
 ): {
   id: string;
   source: LensSource;
@@ -245,6 +266,8 @@ function documentReferences(
   };
 
   return elements(document).flatMap<Reference>((element) => {
+    if (element.type === "markdown" && !markdown) return [];
+
     if (element.type === "markdown")
       return [...markdownNodes(parseMarkdown(element.markdown))].flatMap(
         (node) => {

@@ -70,8 +70,8 @@ import {
   type SourcePins,
   anchorPins,
   elements,
-  explicitPins,
   fileLineRangeSchema,
+  pinnedRepositoryIds,
   pinsSchema,
   sourceReferences,
 } from "./document.js";
@@ -94,6 +94,7 @@ import {
   type Snapshot,
 } from "./store.js";
 import { traceSchema } from "./trace-schema.js";
+import { VersionCache } from "./version-cache.js";
 import { ReviewWorkspaces } from "./workspaces.js";
 import {
   INERT_GIT_PATHS,
@@ -539,28 +540,36 @@ export class LocalReviewData {
     return anchorPins({ pins: anchor }, undefined);
   }
 
-  /** References whose own repository is unregistered or gone from disk. */
+  /** References whose own repository is unregistered or gone from disk.
+   * `snapshot` is a stored version. */
   async unavailableAnchors(snapshot: Snapshot): Promise<string[]> {
     const missing = new Set<string>();
 
-    for (const pins of explicitPins(
-      sourceReferences(snapshot.document, { tolerant: true }),
-    ))
+    // Only Markdown needs parsing, so check the repositories first.
+    for (const repositoryId of pinnedRepositoryIds(snapshot.document))
       try {
-        await this.anchorSourcePins(pins);
+        if (!existsSync(this.store.repositoryPath(repositoryId)))
+          missing.add(repositoryId);
       } catch (error) {
         if (!(error instanceof ReviewInputError)) throw error;
-        missing.add(pins.repositoryId);
+        missing.add(repositoryId);
       }
 
     if (!missing.size) return [];
 
-    return sourceReferences(snapshot.document, { tolerant: true })
+    return this.storedReferences
+      .get(snapshot)
       .filter(
         (ref) => ref.source.pins && missing.has(ref.source.pins.repositoryId),
       )
       .map((ref) => ref.id);
   }
+
+  private readonly storedReferences = new VersionCache(
+    (snapshot: Snapshot) =>
+      sourceReferences(snapshot.document, { tolerant: true }),
+    { capacity: 512 },
+  );
 
   // A commit's tree never changes, so one listing serves every folder expansion.
   private readonly trackedFiles = new Map<string, Promise<string[]>>();
