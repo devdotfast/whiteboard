@@ -156,7 +156,8 @@ export function repositoryLabel(review: ReviewApiSummary): string {
   return repositoryIdentity(review)?.label || review.repositoryName || "";
 }
 
-/** Only hide a location when the filter pins that worktree, not its entire repo. */
+/** Only hide a location when the filter pins that worktree, not its entire repo.
+ * A review's PR stands in for its worktree. */
 export function reviewMetadataPills(
   review: ReviewApiSummary,
   filters: HomeFilters,
@@ -164,19 +165,37 @@ export function reviewMetadataPills(
   const branch = review.origin?.branch;
   const tree = worktreeLabel(review);
 
+  const { pullRequestNumber, pullRequestUrl, pullRequestTitle } =
+    review.origin ?? {};
+
   return [
     ...(branch &&
     !(filters.branches.length === 1 && filters.branches[0] === branch)
       ? [{ facet: "branches" as const, key: branch, label: branch }]
       : []),
-    ...(tree &&
-    !(
-      filters.worktrees.length === 1 &&
-      !filters.repositories.length &&
-      filters.worktrees[0] === worktreeKey(review)
-    )
-      ? [{ facet: "worktrees" as const, key: worktreeKey(review), label: tree }]
-      : []),
+    ...(pullRequestNumber && pullRequestUrl
+      ? [
+          {
+            facet: "pullRequest" as const,
+            key: pullRequestUrl,
+            label: `#${pullRequestNumber}`,
+            title: pullRequestTitle,
+          },
+        ]
+      : tree &&
+          !(
+            filters.worktrees.length === 1 &&
+            !filters.repositories.length &&
+            filters.worktrees[0] === worktreeKey(review)
+          )
+        ? [
+            {
+              facet: "worktrees" as const,
+              key: worktreeKey(review),
+              label: tree,
+            },
+          ]
+        : []),
   ];
 }
 
@@ -219,6 +238,7 @@ export function matchesHomeFilters(
           reviewTitle(review),
           worktreeLabel(review),
           review.origin?.branch ?? "",
+          review.origin?.pullRequestTitle ?? "",
           repositoryLabel(review),
         ),
       )

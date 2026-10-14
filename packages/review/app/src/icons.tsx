@@ -498,6 +498,22 @@ export function BranchIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+export function PullRequestIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      aria-hidden="true"
+      {...stylex.props(styles.icon, xstyle)}
+      focusable="false"
+      viewBox="0 0 24 24"
+    >
+      <circle cx="6" cy="4.5" r="2.5" />
+      <circle cx="6" cy="19.5" r="2.5" />
+      <circle cx="18" cy="19.5" r="2.5" />
+      <path d="M6 7v10M18 17V9a3 3 0 0 0-3-3h-4M12 3.5 9.5 6 12 8.5" />
+    </svg>
+  );
+}
+
 export function FolderIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg

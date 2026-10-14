@@ -35,6 +35,7 @@ import {
   FolderIcon,
   GearIcon,
   HelpIcon,
+  PullRequestIcon,
   SearchIcon,
   SortIcon,
 } from "./icons";
@@ -1212,49 +1213,59 @@ export function ReviewHome({
                         <span {...stylex.props(styles.metadata)}>
                           {reviewMetadataPills(review, appliedFilters)
                             .filter(
-                              (pill) => !inTrash || pill.facet === "worktrees",
+                              (pill) => !inTrash || pill.facet !== "branches",
                             )
-                            .map((pill) => (
-                              <button
-                                key={pill.facet}
-                                type="button"
-                                aria-label={`Filter ${pill.facet === "branches" ? "branch" : "worktree"}: ${pill.label}`}
-                                title={pill.label}
-                                {...stylex.props(styles.metadataPill)}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  setFilters((current) => ({
-                                    ...current,
-                                    [pill.facet]: [
-                                      ...new Set([
-                                        ...current[pill.facet],
-                                        pill.key,
-                                      ]),
-                                    ],
-                                  }));
-                                }}
-                              >
-                                {pill.facet === "branches" ? (
-                                  <>
-                                    <BranchIcon xstyle={styles.smallIcon} />
-                                    <MiddleTruncatedText
-                                      text={pill.label}
-                                      queries={searchTerms}
-                                    />
-                                  </>
-                                ) : (
-                                  <>
-                                    <FolderIcon xstyle={styles.smallIcon} />
-                                    <span {...stylex.props(styles.ellipsis)}>
-                                      <MatchedText
+                            .map((pill) =>
+                              pill.facet === "pullRequest" ? (
+                                <PullRequestPill
+                                  key={pill.facet}
+                                  url={pill.key}
+                                  label={pill.label}
+                                  title={pill.title}
+                                  queries={searchTerms}
+                                />
+                              ) : (
+                                <button
+                                  key={pill.facet}
+                                  type="button"
+                                  aria-label={`Filter ${pill.facet === "branches" ? "branch" : "worktree"}: ${pill.label}`}
+                                  title={pill.label}
+                                  {...stylex.props(styles.metadataPill)}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    setFilters((current) => ({
+                                      ...current,
+                                      [pill.facet]: [
+                                        ...new Set([
+                                          ...current[pill.facet],
+                                          pill.key,
+                                        ]),
+                                      ],
+                                    }));
+                                  }}
+                                >
+                                  {pill.facet === "branches" ? (
+                                    <>
+                                      <BranchIcon xstyle={styles.smallIcon} />
+                                      <MiddleTruncatedText
                                         text={pill.label}
                                         queries={searchTerms}
                                       />
-                                    </span>
-                                  </>
-                                )}
-                              </button>
-                            ))}
+                                    </>
+                                  ) : (
+                                    <>
+                                      <FolderIcon xstyle={styles.smallIcon} />
+                                      <span {...stylex.props(styles.ellipsis)}>
+                                        <MatchedText
+                                          text={pill.label}
+                                          queries={searchTerms}
+                                        />
+                                      </span>
+                                    </>
+                                  )}
+                                </button>
+                              ),
+                            )}
                         </span>
                         <RowTime review={review} now={now} inTrash={inTrash} />
                       </div>
@@ -1529,6 +1540,42 @@ function unavailable(review: ReviewApiSummary): boolean {
 
 function hostStateWords(review: ReviewApiSummary): string {
   return review.hostState?.replace("-", " ") ?? "";
+}
+
+function PullRequestPill({
+  url,
+  label,
+  title,
+  queries,
+}: {
+  url: string;
+  label: string;
+  title?: string;
+  queries: string[];
+}) {
+  const tooltip = useTooltip<HTMLAnchorElement>(
+    title ? `${label} ${title}` : label,
+    { quick: true },
+  );
+
+  return (
+    <a
+      ref={tooltip}
+      href={url}
+      target="_blank"
+      rel="noopener noreferrer"
+      {...stylex.props(styles.metadataPill)}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <PullRequestIcon xstyle={styles.smallIcon} />
+      {label}
+      {title && (
+        <span {...stylex.props(styles.ellipsis, styles.pullRequestTitle)}>
+          <MatchedText text={title} queries={queries} />
+        </span>
+      )}
+    </a>
+  );
 }
 
 function MiddleTruncatedText({

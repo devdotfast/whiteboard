@@ -302,8 +302,10 @@ export const styles = stylex.create({
     },
     color: tokens.inkMuted,
     font: "inherit",
+    textDecoration: "none",
     cursor: "pointer",
   },
+  pullRequestTitle: { maxWidth: "28ch", color: tokens.inkFaint },
   middle: { display: "inline-flex", flex: "0 1 auto", minWidth: 0 },
   middleSuffix: {
     flexShrink: 0,
