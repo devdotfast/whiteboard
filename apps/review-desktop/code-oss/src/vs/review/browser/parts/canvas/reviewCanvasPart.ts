@@ -382,7 +382,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				if (this.apiCatalog.reviews.find(review => review.reviewId === reviewId)?.trashedAt) {
 					throw new Error("This whiteboard is in Trash. Restore it from Home before opening it.");
 				}
-				await this.apiCatalog.attention(reviewId, "view");
+				// Marking the board viewed never holds up drawing it.
+				void this.apiCatalog.attention(reviewId, "view").catch(error =>
+					this.logService.warn("[Whiteboard] Could not mark the whiteboard viewed:", error),
+				);
 			}
 		} catch (error) {
 			if (generation === this.loadGeneration && !token.isCancellationRequested) {
