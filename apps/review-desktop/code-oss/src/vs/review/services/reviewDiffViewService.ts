@@ -8,7 +8,7 @@ import { IDiffProviderFactoryService } from "../../editor/browser/widget/diffEdi
 import { alignmentRows } from "../common/reviewLens.js";
 import type { ReviewInlineEditorSpec, ReviewInlineEditorHandle, ReviewFindQuery } from "../common/reviewProtocol.js";
 import { reviewFileCounts } from "../common/reviewStructuralDiff.js";
-import type { ReviewDiffProgress } from "../common/reviewProtocol.js";
+import type { ReviewDiffLayoutScope, ReviewDiffProgress } from "../common/reviewProtocol.js";
 import { lensRanges, withLens } from "./reviewLens.js";
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) dev.fast. All rights reserved.
@@ -82,6 +82,10 @@ export class ReviewDiffViewService extends Disposable {
 		}));
 		this.diffLayout = this._register(instantiationService.createInstance(ReviewDiffLayoutSetting, "diffEditor.renderSideBySide"));
 		this.peekLayout = this._register(instantiationService.createInstance(ReviewDiffLayoutSetting, REVIEW_PEEK_SIDE_BY_SIDE_SETTING));
+	}
+
+	layout(scope: ReviewDiffLayoutScope): ReviewDiffLayoutSetting {
+		return scope === "peek" ? this.peekLayout : this.diffLayout;
 	}
 
 	get structuralRenderingEnabled(): boolean {

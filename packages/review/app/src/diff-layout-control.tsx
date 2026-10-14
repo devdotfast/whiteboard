@@ -2,7 +2,10 @@ import { layer } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { SegmentedControl, labeledOptions } from "@canvas/ui/segmented";
 import { surfaceStyles } from "@canvas/ui/surface";
-import type { ReviewDiffLayout } from "@dev.fast/review-protocol";
+import type {
+  ReviewDiffLayout,
+  ReviewDiffLayoutScope,
+} from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
@@ -34,7 +37,8 @@ export function DiffLayoutControl(): ReactElement {
   const control = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const popoverRef = useAnchoredPopover(open, control);
-  const diff = useDiffLayout();
+  const diff = useDiffLayout("diff");
+  const peek = useDiffLayout("peek");
 
   useDismissOnOutside(control, open, setOpen, true, true);
 
@@ -64,7 +68,12 @@ export function DiffLayoutControl(): ReactElement {
             styles.popover,
           )}
         >
-          {([["Diff", diff]] as const).map(([label, layout]) => (
+          {(
+            [
+              ["Diff", diff],
+              ["Whiteboard", peek],
+            ] as const
+          ).map(([label, layout]) => (
             <div key={label} {...stylex.props(styles.row)}>
               <span>{label}</span>
               <SegmentedControl
@@ -103,20 +112,20 @@ const styles = stylex.create({
   },
 });
 
-function useDiffLayout() {
+function useDiffLayout(scope: ReviewDiffLayoutScope) {
   const session = useReviewSession();
   const bridge = session.bridge;
 
   const layout = useSyncExternalStore(
     useCallback(
       (onChange: () => void) => {
-        const subscription = bridge.onDidChangeDiffLayout(onChange);
+        const subscription = bridge.onDidChangeDiffLayout(scope, onChange);
 
         return () => subscription.dispose();
       },
-      [bridge],
+      [bridge, scope],
     ),
-    () => bridge.currentDiffLayout(),
+    () => bridge.currentDiffLayout(scope),
   );
 
   // The desktop confirms a write by round-tripping the setting through its
@@ -131,9 +140,9 @@ function useDiffLayout() {
 
   const choose = (next: ReviewDiffLayout) => {
     if (next === shownLayout) return;
-    captureUiEvent(session, "diff_layout_changed", { layout: next });
+    captureUiEvent(session, "diff_layout_changed", { layout: next, scope });
     setPending(next);
-    bridge.setDiffLayout(next).catch((error: Error) => {
+    bridge.setDiffLayout(scope, next).catch((error: Error) => {
       setPending(null);
       captureClientError(session, "settings", error, {
         component: "diff_layout",

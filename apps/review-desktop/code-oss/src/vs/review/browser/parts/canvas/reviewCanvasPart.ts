@@ -1233,9 +1233,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			subscribe: (listener) => this.surfaceEvents.event(listener),
 			currentTheme: () => this.colorScheme(),
 			onDidChangeTheme: (listener) => this.themeEvents.event(listener),
-			currentDiffLayout: () => this.diffViews.diffLayout.get(),
-			setDiffLayout: (layout) => this.diffViews.diffLayout.set(layout),
-			onDidChangeDiffLayout: (listener) => this.diffViews.diffLayout.onDidChange(listener),
+			currentDiffLayout: (scope) => this.diffViews.layout(scope).get(),
+			setDiffLayout: (scope, layout) => this.diffViews.layout(scope).set(layout),
+			onDidChangeDiffLayout: (scope, listener) => this.diffViews.layout(scope).onDidChange(listener),
 			notify: (notification) => showReviewNotification(this.notificationService, notification),
 			setupTooltip: this.setupTooltip,
 			ready: () => {

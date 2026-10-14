@@ -116,6 +116,10 @@ export const REVIEW_DIFF_LAYOUTS = ["split", "unified"] as const;
 
 export type ReviewDiffLayout = (typeof REVIEW_DIFF_LAYOUTS)[number];
 
+export const REVIEW_DIFF_LAYOUT_SCOPES = ["diff", "peek"] as const;
+
+export type ReviewDiffLayoutScope = (typeof REVIEW_DIFF_LAYOUT_SCOPES)[number];
+
 export interface ReviewDisposable {
   dispose(): void;
 }
@@ -334,11 +338,15 @@ export interface ReviewCanvasBridge {
   subscribe(listener: (event: ReviewSurfaceEvent) => void): ReviewDisposable;
   currentTheme(): ReviewTheme;
   onDidChangeTheme(listener: (theme: ReviewTheme) => void): ReviewDisposable;
-  // The diff layout is app-wide and backed by the `diffEditor.renderSideBySide`
-  // setting, so a choice outlives the session and the app restart.
-  currentDiffLayout(): ReviewDiffLayout;
-  setDiffLayout(layout: ReviewDiffLayout): Promise<void>;
+  // Each layout is app-wide and backed by a user setting, so a choice outlives
+  // the session and the app restart.
+  currentDiffLayout(scope: ReviewDiffLayoutScope): ReviewDiffLayout;
+  setDiffLayout(
+    scope: ReviewDiffLayoutScope,
+    layout: ReviewDiffLayout,
+  ): Promise<void>;
   onDidChangeDiffLayout(
+    scope: ReviewDiffLayoutScope,
     listener: (layout: ReviewDiffLayout) => void,
   ): ReviewDisposable;
   notify?(notification: ReviewNotification): ReviewDisposable;

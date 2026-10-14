@@ -19,6 +19,7 @@
 import {
   type JsonObject,
   REVIEW_DIFF_LAYOUTS,
+  REVIEW_DIFF_LAYOUT_SCOPES,
   REVIEW_THEME_CHOICES,
   isJsonObject,
   jsonBoolean,
@@ -369,7 +370,10 @@ export const UI_TELEMETRY_EVENTS = {
   },
   diff_layout_changed: {
     event: "review_diff_layout_changed",
-    properties: { layout: REVIEW_DIFF_LAYOUTS },
+    properties: {
+      layout: REVIEW_DIFF_LAYOUTS,
+      scope: REVIEW_DIFF_LAYOUT_SCOPES,
+    },
   },
   // Dismissal replaced the old reject decision: the reader is finished with the
   // review, whether or not they liked the change.
