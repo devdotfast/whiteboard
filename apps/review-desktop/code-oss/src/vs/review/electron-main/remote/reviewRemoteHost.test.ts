@@ -726,18 +726,17 @@ test("the version present: no prompt and no install shown; the installed CLI att
 	);
 });
 
-test("the version present with another sha256 is not installed: the user is asked and the install is shown", async (t) => {
+test("the version present with another sha256 is reinstalled without asking, and the install is shown", async (t) => {
 	const port = await healthServer(t);
-	const { flow, prompts, runs } = await installFlow(t, "ask", { answers: [true], steps: STEPS });
+	const { flow, prompts, runs } = await installFlow(t, "ask", { steps: STEPS });
 	const { host, reports, last } = hostFor(t, { probe: { installed: [at("0.1.5"), at("0.1.6", "b".repeat(64))] } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
 
-	assert.equal(prompts.length, 1);
+	assert.equal(prompts.length, 0);
 	assert.equal(runs.length, 1);
 	assert.deepEqual(reports.find((report) => report.installing)?.installing, { step: "preparing" });
-	assert.equal(await flow.consent.get("wb-test-a"), "allow");
 });
 
 test("the version absent with installs always: each step is reported, then the host attaches", async (t) => {
