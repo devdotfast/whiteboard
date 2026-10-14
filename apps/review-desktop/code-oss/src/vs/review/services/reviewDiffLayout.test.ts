@@ -29,12 +29,16 @@ function createService() {
     },
     onDidChangeConfiguration: changes.event,
   };
-  const service = new ReviewDiffLayoutSetting(configurationService as never);
+  const service = new ReviewDiffLayoutSetting(
+    "diffEditor.renderSideBySide",
+    configurationService as never,
+  );
   return { service, values, writes };
 }
 
-test("side by side is the default and inline maps to unified", () => {
+test("side by side maps to split and inline to unified", () => {
   const { service, values } = createService();
+  values.set("diffEditor.renderSideBySide", true);
   assert.equal(service.get(), "split");
   values.set("diffEditor.renderSideBySide", false);
   assert.equal(service.get(), "unified");

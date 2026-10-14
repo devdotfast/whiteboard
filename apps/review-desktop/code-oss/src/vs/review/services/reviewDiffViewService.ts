@@ -79,7 +79,7 @@ export class ReviewDiffViewService extends Disposable {
 		this._register(storage.onWillSaveState(() => {
 			for (const handle of this.handles) handle.captureViewState();
 		}));
-		this.diffLayout = this._register(instantiationService.createInstance(ReviewDiffLayoutSetting));
+		this.diffLayout = this._register(instantiationService.createInstance(ReviewDiffLayoutSetting, "diffEditor.renderSideBySide"));
 	}
 
 	get structuralRenderingEnabled(): boolean {
