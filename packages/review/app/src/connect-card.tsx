@@ -1,6 +1,7 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { CopyIcon, copyText } from "@canvas/ui/copy";
+import { focusStyles } from "@canvas/ui/focus";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
   type ReviewCanvasInstallContent,
@@ -208,7 +209,7 @@ export function ConnectCard({
             ) : null}
             <button
               type="button"
-              {...stylex.props(promptStyles.copy)}
+              {...stylex.props(focusStyles.ring, promptStyles.copy)}
               aria-live="polite"
               aria-label={`${copied ? "Copied" : "Copy"} ${noun} for ${agent}`}
               onClick={() => copy(text)}
@@ -231,7 +232,7 @@ export function ConnectCard({
           </p>
           <div {...stylex.props(promptStyles.actions)}>
             <a
-              {...stylex.props(promptStyles.copy)}
+              {...stylex.props(focusStyles.ring, promptStyles.copy)}
               href={plugin.url}
               {...newTabLinkProps(plugin.url)}
             >
@@ -275,6 +276,7 @@ function OtherAgentMenu({
       })}
       onChange={onSelect}
       triggerStyle={[
+        focusStyles.ringInset,
         segmentStyles.segment,
         segmentStyles.segmentLarge,
         styles.otherTrigger,

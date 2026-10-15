@@ -1,3 +1,4 @@
+import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewHostStatus,
@@ -722,7 +723,10 @@ export function AskPanelContent({
                     {" "}
                     <button
                       type="button"
-                      {...stylex.props(askPanelStyles.errorAction)}
+                      {...stylex.props(
+                        focusStyles.ring,
+                        askPanelStyles.errorAction,
+                      )}
                       onClick={errorAction.run}
                     >
                       {errorAction.label}

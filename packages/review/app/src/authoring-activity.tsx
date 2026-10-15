@@ -1,5 +1,6 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import { focusStyles } from "@canvas/ui/focus";
 import type { ActivityPresence } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
 import { useContext, useState } from "react";
@@ -125,6 +126,7 @@ function AgentPill({
       {...withClass(
         "host-authoring-activity",
         styles.badge,
+        focusStyles.ring,
         styles.badgeActive,
         agentColor(presence.slot),
       )}
@@ -239,8 +241,6 @@ const styles = stylex.create({
     },
     color: tokens.accent,
     fontWeight: fontWeight.semibold,
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   // A long update ends in an ellipsis inside the pill; the tooltip has it all.
   text: {

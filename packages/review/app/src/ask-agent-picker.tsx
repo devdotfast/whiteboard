@@ -1,3 +1,4 @@
+import { focusStyles } from "@canvas/ui/focus";
 import {
   type AskAgentId,
   type AskChoiceKind,
@@ -381,6 +382,7 @@ export function AskAgentMenu({
             role="menuitemradio"
             aria-checked={candidate.id === current}
             {...stylex.props(
+              focusStyles.ringInset,
               menuStyles.item,
               candidate.id === current && menuStyles.itemCurrent,
             )}
@@ -639,6 +641,7 @@ function AskChoiceItem({
       aria-checked={checked}
       data-highlighted={highlighted || undefined}
       {...stylex.props(
+        focusStyles.ringInset,
         menuStyles.item,
         checked && menuStyles.itemCurrent,
         highlighted && menuStyles.itemHighlighted,

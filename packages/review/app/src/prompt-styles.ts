@@ -45,8 +45,6 @@ export const promptStyles = stylex.create({
     backgroundColor: tokens.accent,
     font: `${fontWeight.medium} ${fontSize.body}/16px ${tokens.chromeFont}`,
     textDecoration: "none",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "2px" },
   },
   copyIcon: {
     width: "12px",

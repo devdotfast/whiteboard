@@ -1,3 +1,4 @@
+import { focusStyles } from "@canvas/ui/focus";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect } from "react";
 
@@ -233,7 +234,7 @@ export function AskHistoryList({
                 >
                   <button
                     type="button"
-                    {...stylex.props(styles.historyOpen)}
+                    {...stylex.props(focusStyles.ringInset, styles.historyOpen)}
                     onPointerEnter={() => {
                       history?.preview(entry.id);
                       history?.reveal(entry);
@@ -312,6 +313,7 @@ export function AskHistoryList({
           <button
             type="button"
             {...stylex.props(
+              focusStyles.ring,
               askPanelStyles.errorAction,
               styles.allConversations,
             )}
@@ -371,8 +373,6 @@ const styles = stylex.create({
     color: tokens.ink,
     textAlign: "left",
     cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-1px" },
   },
   historyLogo: {
     display: "flex",

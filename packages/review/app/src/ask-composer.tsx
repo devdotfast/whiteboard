@@ -1,3 +1,4 @@
+import { focusStyles } from "@canvas/ui/focus";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
 import {
@@ -514,6 +515,7 @@ export function AskComposer({
                 tabIndex={-1}
                 aria-selected={index === shown}
                 {...stylex.props(
+                  focusStyles.ringInset,
                   menuStyles.item,
                   styles.option,
                   index === shown && menuStyles.itemHighlighted,

@@ -1,5 +1,6 @@
 import { fontSize, layer } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { fieldStyles } from "@canvas/ui/text-field";
 import type { ReviewFindQuery } from "@dev.fast/review-protocol";
@@ -525,7 +526,12 @@ function FindToggle({
     <button
       ref={tooltip}
       type="button"
-      {...stylex.props(styles.toggle, active && styles.togglePressed, xstyle)}
+      {...stylex.props(
+        focusStyles.ring,
+        styles.toggle,
+        active && styles.togglePressed,
+        xstyle,
+      )}
       aria-label={label}
       aria-pressed={active}
       onMouseDown={(event) => event.preventDefault()}
@@ -622,11 +628,6 @@ const button = {
   borderStyle: "solid",
   borderRadius: "3px",
   cursor: "pointer",
-  outline: {
-    default: null,
-    ":focus-visible": `1px solid ${tokens.accent}`,
-  },
-  outlineOffset: { default: null, ":focus-visible": "1px" },
 } as const;
 
 const styles = stylex.create({

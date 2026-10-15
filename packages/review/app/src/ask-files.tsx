@@ -1,3 +1,4 @@
+import { focusStyles } from "@canvas/ui/focus";
 import { type AskFileRef, parseFileRef } from "@review/ask/file-refs";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -168,7 +169,7 @@ function AskFileLink({
       role="link"
       ref={tooltip}
       tabIndex={0}
-      {...stylex.props(styles.link)}
+      {...stylex.props(focusStyles.ring, styles.link)}
       onClick={open}
       onKeyDown={(event) => {
         if (event.key !== "Enter") return;
@@ -228,7 +229,5 @@ const styles = stylex.create({
     textUnderlineOffset: "3px",
     cursor: "pointer",
     borderRadius: { default: null, ":focus-visible": radius.small },
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
 });

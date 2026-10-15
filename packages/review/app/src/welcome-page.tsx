@@ -1,6 +1,7 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { EmptyState } from "@canvas/ui/empty-state";
+import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
 import { welcomeType } from "@canvas/welcome-page.stylex";
 import {
@@ -391,7 +392,11 @@ export function WelcomePage({
                   >
                     <button
                       type="button"
-                      {...stylex.props(chevronMarker, styles.stepHeader)}
+                      {...stylex.props(
+                        chevronMarker,
+                        focusStyles.ringInset,
+                        styles.stepHeader,
+                      )}
                       disabled={step.disabled}
                       aria-expanded={open}
                       aria-label={`${open ? "Collapse" : "Expand"} ${step.label ?? step.title}`}
@@ -620,8 +625,6 @@ const styles = stylex.create({
     opacity: { default: null, ":disabled": 0.5 },
     textAlign: "left",
     font: "inherit",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-2px" },
   },
   // The chevron closes the row: it sits in the trailing lane, after the note.
   stepChevron: {

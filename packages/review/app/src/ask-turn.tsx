@@ -1,3 +1,4 @@
+import { focusStyles } from "@canvas/ui/focus";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
 import type { AskEntry, AskThreadState } from "@review/ask/thread-state";
@@ -316,6 +317,7 @@ function AskToolItem({ activity }: { activity: Activity }): ReactElement {
           {...stylex.props(
             chevronMarker,
             styles.toolHead,
+            focusStyles.ringInset,
             styles.toolHeadButton,
           )}
           aria-expanded={open}
@@ -363,6 +365,7 @@ function AskToolGroup({
         type="button"
         {...stylex.props(
           chevronMarker,
+          focusStyles.ring,
           styles.summary,
           failed && styles.summaryFailed,
         )}
@@ -722,8 +725,6 @@ const styles = stylex.create({
     // Buttons center their text, which shows once a long summary wraps.
     textAlign: "left",
     cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   // Centered on the summary's first 20px line.
   summaryChevron: {
@@ -773,8 +774,6 @@ const styles = stylex.create({
       ":focus-visible": tokens.ink,
     },
     cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-1px" },
   },
   toolLabel: {
     flex: "1 1 auto",

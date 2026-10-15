@@ -1,3 +1,4 @@
+import { focusStyles } from "@canvas/ui/focus";
 import type { AskHistoryEntry } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -784,7 +785,7 @@ export function AskThreadMarks({
           {ticked ? (
             <button
               type="button"
-              {...stylex.props(styles.tick)}
+              {...stylex.props(focusStyles.ring, styles.tick)}
               aria-label={
                 row.marks.length === 1
                   ? `Show the pin for “${row.marks[0]!.quote.slice(0, 60)}”`
@@ -876,7 +877,7 @@ function AskPin({
       ref={tooltip}
       type="button"
       // Marker class: the pointer on a pin is not on its words.
-      {...withClass("ask-mark-pin", styles.pin)}
+      {...withClass("ask-mark-pin", focusStyles.ring, styles.pin)}
       data-active={active || undefined}
       aria-label={label}
       onPointerEnter={() => onActive(mark.key)}
@@ -926,7 +927,7 @@ function AskMore({
     <button
       ref={tooltip}
       type="button"
-      {...stylex.props(styles.pin, styles.more)}
+      {...stylex.props(focusStyles.ring, styles.pin, styles.more)}
       data-active={active || undefined}
       aria-label={`${marks.length} more: ${quotes.join(", ")}`}
       onPointerEnter={() => onActive(true)}
@@ -1010,7 +1011,6 @@ const styles = stylex.create({
     backgroundColor: tokens.transparent,
     visibility: "visible",
     cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     borderRadius: radius.control,
   },
   tickMark: {
@@ -1045,8 +1045,6 @@ const styles = stylex.create({
     lineHeight: "14px",
     whiteSpace: "nowrap",
     cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   logoSlot: {
     display: "flex",

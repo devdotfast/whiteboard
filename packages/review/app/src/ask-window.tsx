@@ -1,3 +1,4 @@
+import { focusStyles } from "@canvas/ui/focus";
 import * as stylex from "@stylexjs/stylex";
 import {
   type PointerEvent,

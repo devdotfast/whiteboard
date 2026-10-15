@@ -69,8 +69,6 @@ export const askPanelStyles = stylex.create({
     textUnderlineOffset: "3px",
     cursor: "pointer",
     borderRadius: radius.small,
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   // A loading shimmer; sites set the gradient and its size.
   sweep: {

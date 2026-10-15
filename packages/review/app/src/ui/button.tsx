@@ -1,6 +1,7 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
+import { focusStyles } from "@canvas/ui/focus";
 import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps } from "react";
 
@@ -37,6 +38,8 @@ export function Button({
   children,
   ...props
 }: ButtonProps) {
+  const filled = variant === "primary" || variant === "warning";
+
   return (
     <button
       type={type}
@@ -44,6 +47,7 @@ export function Button({
       disabled={disabled || loading}
       {...withClass(
         className,
+        filled ? focusStyles.ring : focusStyles.ringInset,
         buttonStyles.base,
         buttonStyles[variant],
         size === "large" && buttonStyles.large,
@@ -78,6 +82,7 @@ export function IconButton({
       {...props}
       {...withClass(
         className,
+        focusStyles.ringInset,
         buttonStyles.base,
         buttonStyles.icon,
         size === "small" && buttonStyles.iconSmall,
@@ -118,8 +123,6 @@ export const buttonStyles = stylex.create({
     whiteSpace: "nowrap",
     cursor: { default: "pointer", ":disabled": "default" },
     opacity: { default: null, ":disabled": 0.5 },
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-1px" },
   },
   ghost: {
     color: {
@@ -138,14 +141,12 @@ export const buttonStyles = stylex.create({
     backgroundColor: tokens.accent,
     color: tokens.onAccent,
     filter: { default: null, ":hover:not(:disabled)": "brightness(1.1)" },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   // The one action a warning asks for, like allowing an agent's command.
   warning: {
     backgroundColor: tokens.changeModified,
     color: tokens.onWarning,
     filter: { default: null, ":hover:not(:disabled)": "brightness(1.1)" },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   large: {
     height: "28px",

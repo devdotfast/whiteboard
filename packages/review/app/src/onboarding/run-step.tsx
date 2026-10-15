@@ -11,6 +11,7 @@ import {
 import { tokens } from "@canvas/tokens.stylex";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { CopyIcon } from "@canvas/ui/copy";
+import { focusStyles } from "@canvas/ui/focus";
 import { Shortcut } from "@canvas/ui/kbd";
 import { SegmentedControl, segmentStyles } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
@@ -390,7 +391,11 @@ export function RunStep({
                 <OptionMenu
                   ariaLabel="Project"
                   align="start"
-                  triggerStyle={[buttonStyles.base, styles.projectTrigger]}
+                  triggerStyle={[
+                    focusStyles.ringInset,
+                    buttonStyles.base,
+                    styles.projectTrigger,
+                  ]}
                   value={project?.path}
                   options={projectOptions}
                   onChange={(value) => {
@@ -617,7 +622,11 @@ export function RunStep({
                 {canChooseAgent ? (
                   <OptionMenu
                     ariaLabel="Draw with another agent"
-                    triggerStyle={[buttonStyles.base, styles.chipMenu]}
+                    triggerStyle={[
+                      focusStyles.ringInset,
+                      buttonStyles.base,
+                      styles.chipMenu,
+                    ]}
                     value={agent}
                     options={agents.map((candidate) => {
                       const Logo = AGENT_LOGOS[candidate.id];

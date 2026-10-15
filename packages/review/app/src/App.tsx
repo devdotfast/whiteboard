@@ -1,4 +1,5 @@
 import { Button, IconButton } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
 import {
   OverlayScrollbar,
   overlayScrollbarStyles,
