@@ -107,7 +107,7 @@ export function SettingsPage({
     ReviewCliInstallStatus | undefined
   >(settings.install?.status);
 
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
 
   useEffect(
@@ -125,7 +125,7 @@ export function SettingsPage({
     action: () => Promise<T>,
     adopt: (value: T) => void,
   ) => {
-    setBusy(key);
+    setBusy((current) => ({ ...current, [key]: true }));
     setError(null);
 
     try {
@@ -133,7 +133,7 @@ export function SettingsPage({
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
-      setBusy(null);
+      setBusy((current) => ({ ...current, [key]: false }));
     }
   };
 
@@ -172,7 +172,7 @@ export function SettingsPage({
               >
                 {install.status.shim.installer ? null : (
                   <Button
-                    disabled={busy !== null}
+                    disabled={busy["command"]}
                     onClick={() =>
                       void run(
                         "command",
@@ -202,7 +202,7 @@ export function SettingsPage({
               >
                 <Checkbox
                   checked={telemetryEnabled}
-                  disabled={busy !== null}
+                  disabled={busy["telemetry"]}
                   onChange={(event) => {
                     const enabled = event.target.checked;
                     void run(
@@ -222,7 +222,7 @@ export function SettingsPage({
                 label="Theme"
                 value={theme}
                 options={labeledOptions(THEME_LABELS)}
-                disabled={busy !== null}
+                disabled={busy["theme"]}
                 onChange={(choice) =>
                   void run("theme", () => settings.setTheme(choice), setTheme)
                 }
@@ -236,7 +236,7 @@ export function SettingsPage({
                 label="Document width"
                 value={documentWidth}
                 options={labeledOptions(DOCUMENT_WIDTH_LABELS)}
-                disabled={busy !== null}
+                disabled={busy["document-width"]}
                 onChange={(choice) =>
                   void run(
                     "document-width",
@@ -254,7 +254,7 @@ export function SettingsPage({
                 label="Code font size"
                 value={String(codeFontSize)}
                 options={labeledOptions(codeFontSizeLabels(codeFontSize))}
-                disabled={busy !== null}
+                disabled={busy["code-font-size"]}
                 onChange={(choice) =>
                   void run(
                     "code-font-size",
@@ -272,7 +272,7 @@ export function SettingsPage({
                 label="Keymap"
                 value={keymap}
                 options={labeledOptions(KEYMAP_LABELS)}
-                disabled={busy !== null}
+                disabled={busy["keymap"]}
                 onChange={(choice) => {
                   void run(
                     "keymap",
@@ -290,7 +290,7 @@ export function SettingsPage({
                 label="Ctrl+Tab"
                 value={ctrlTab}
                 options={labeledOptions(CTRL_TAB_LABELS)}
-                disabled={busy !== null}
+                disabled={busy["ctrl-tab"]}
                 onChange={(choice) =>
                   void run(
                     "ctrl-tab",
@@ -311,7 +311,7 @@ export function SettingsPage({
                 label="Review ready"
                 value={readyNotification}
                 options={labeledOptions(READY_NOTIFICATION_LABELS)}
-                disabled={busy !== null}
+                disabled={busy["ready-notification"]}
                 onChange={(choice) =>
                   void run(
                     "ready-notification",
@@ -351,7 +351,7 @@ export function SettingsPage({
                 <Checkbox
                   aria-label="Structural Diffs"
                   checked={structuralDiffEnabled}
-                  disabled={busy !== null}
+                  disabled={busy["structural-diff"]}
                   onChange={(event) => {
                     const enabled = event.target.checked;
                     void run(
@@ -377,7 +377,7 @@ export function SettingsPage({
                 <Checkbox
                   aria-label="Software Map"
                   checked={softwareMapEnabled}
-                  disabled={busy !== null}
+                  disabled={busy["software-map"]}
                   onChange={(event) => {
                     const enabled = event.target.checked;
                     void run(
@@ -397,7 +397,7 @@ export function SettingsPage({
                 <Checkbox
                   aria-label="Scratchpad"
                   checked={scratchpadEnabled}
-                  disabled={busy !== null}
+                  disabled={busy["scratchpad"]}
                   onChange={(event) => {
                     const enabled = event.target.checked;
                     void run(
