@@ -1,8 +1,8 @@
 import { Button, IconButton } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
+import { Dialog } from "@canvas/ui/dialog";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { BugIcon, CloseIcon } from "@canvas/ui/icons";
-import { surfaceStyles } from "@canvas/ui/surface";
 import { TextArea } from "@canvas/ui/text-field";
 import {
   type ReviewBugReportRequest,
@@ -28,7 +28,7 @@ import {
 import { useReviewSession } from "./host/review-session";
 import { appMarker } from "./markers.stylex";
 import { useNotify } from "./notify";
-import { fontSize, fontWeight, layer, radius } from "./scale.stylex";
+import { fontSize, fontWeight, radius } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent, clientErrorName } from "./ui-telemetry";
@@ -223,132 +223,118 @@ export function BugReportControl({
         </IconButton>
       )}
       {open && (
-        <div
-          {...stylex.props(shellStyles.topbarItem, styles.backdrop)}
-          onMouseDown={cancel}
+        <Dialog
+          aria-labelledby="bug-report-title"
+          closedby="any"
+          xstyle={[styles.dialog, dropActive && styles.dropTarget]}
+          onClose={cancel}
+          onPaste={pasteScreenshot}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDropActive(true);
+          }}
+          onDragLeave={(event) => {
+            const next = event.relatedTarget;
+
+            if (next instanceof Node && event.currentTarget.contains(next)) {
+              return;
+            }
+
+            setDropActive(false);
+          }}
+          onDrop={dropScreenshot}
         >
-          <section
-            {...stylex.props(
-              surfaceStyles.dialog,
-              styles.dialog,
-              dropActive && styles.dropTarget,
-            )}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="bug-report-title"
-            onMouseDown={(event) => event.stopPropagation()}
-            onPaste={pasteScreenshot}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setDropActive(true);
-            }}
-            onDragLeave={(event) => {
-              const next = event.relatedTarget;
-
-              if (next instanceof Node && event.currentTarget.contains(next)) {
-                return;
-              }
-
-              setDropActive(false);
-            }}
-            onDrop={dropScreenshot}
-          >
-            <form {...stylex.props(styles.form)} onSubmit={submit}>
-              <h2 {...stylex.props(styles.title)} id="bug-report-title">
-                Report a bug
-              </h2>
-              <label {...stylex.props(styles.description)}>
-                <span>What happened? (optional)</span>
-                <TextArea
-                  xstyle={styles.textarea}
-                  autoFocus
-                  rows={7}
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  placeholder="Describe what you expected and what happened."
+          <form {...stylex.props(styles.form)} onSubmit={submit}>
+            <h2 {...stylex.props(styles.title)} id="bug-report-title">
+              Report a bug
+            </h2>
+            <label {...stylex.props(styles.description)}>
+              <span>What happened? (optional)</span>
+              <TextArea
+                xstyle={styles.textarea}
+                rows={7}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Describe what you expected and what happened."
+              />
+            </label>
+            <div
+              {...stylex.props(
+                styles.byteCount,
+                descriptionBytes > MAX_DESCRIPTION_BYTES &&
+                  styles.byteCountError,
+              )}
+            >
+              {descriptionBytes.toLocaleString()} / 65,536 bytes
+            </div>
+            <fieldset {...stylex.props(styles.fieldset)}>
+              <legend {...stylex.props(styles.small)}>
+                Include diagnostic attachments
+              </legend>
+              <label {...stylex.props(styles.small, styles.option)}>
+                <Checkbox
+                  checked={includeContext}
+                  onChange={(event) => setIncludeContext(event.target.checked)}
                 />
+                Session
               </label>
-              <div
-                {...stylex.props(
-                  styles.byteCount,
-                  descriptionBytes > MAX_DESCRIPTION_BYTES &&
-                    styles.byteCountError,
+              <label {...stylex.props(styles.small, styles.option)}>
+                <Checkbox
+                  checked={includeDiff}
+                  onChange={(event) => setIncludeDiff(event.target.checked)}
+                />
+                Changed-file diffs used by CodePeeks
+              </label>
+              <div {...stylex.props(styles.screenshot)}>
+                {screenshot ? (
+                  <>
+                    <img
+                      {...stylex.props(styles.screenshotImage)}
+                      src={screenshot}
+                      alt="Screenshot preview"
+                    />
+                    <IconButton
+                      xstyle={styles.screenshotRemove}
+                      aria-label="Remove screenshot"
+                      title="Remove screenshot"
+                      onClick={() => setScreenshot(null)}
+                    >
+                      <CloseIcon />
+                    </IconButton>
+                  </>
+                ) : (
+                  <span {...stylex.props(styles.small, styles.faint)}>
+                    Paste or drop an image to attach a screenshot.
+                  </span>
                 )}
+              </div>
+            </fieldset>
+            <p {...stylex.props(styles.small, styles.privacy)}>
+              Reports are sent securely to /dev/fast. Only authorized /dev/fast
+              team members can access them. Reports are deleted after 90 days.
+              The screenshot above is included unless you remove it.
+            </p>
+            <div {...stylex.props(styles.actions)}>
+              <Button
+                size="large"
+                xstyle={styles.action}
+                onClick={cancel}
+                disabled={sending}
               >
-                {descriptionBytes.toLocaleString()} / 65,536 bytes
-              </div>
-              <fieldset {...stylex.props(styles.fieldset)}>
-                <legend {...stylex.props(styles.small)}>
-                  Include diagnostic attachments
-                </legend>
-                <label {...stylex.props(styles.small, styles.option)}>
-                  <Checkbox
-                    checked={includeContext}
-                    onChange={(event) =>
-                      setIncludeContext(event.target.checked)
-                    }
-                  />
-                  Session
-                </label>
-                <label {...stylex.props(styles.small, styles.option)}>
-                  <Checkbox
-                    checked={includeDiff}
-                    onChange={(event) => setIncludeDiff(event.target.checked)}
-                  />
-                  Changed-file diffs used by CodePeeks
-                </label>
-                <div {...stylex.props(styles.screenshot)}>
-                  {screenshot ? (
-                    <>
-                      <img
-                        {...stylex.props(styles.screenshotImage)}
-                        src={screenshot}
-                        alt="Screenshot preview"
-                      />
-                      <IconButton
-                        xstyle={styles.screenshotRemove}
-                        aria-label="Remove screenshot"
-                        title="Remove screenshot"
-                        onClick={() => setScreenshot(null)}
-                      >
-                        <CloseIcon />
-                      </IconButton>
-                    </>
-                  ) : (
-                    <span {...stylex.props(styles.small, styles.faint)}>
-                      Paste or drop an image to attach a screenshot.
-                    </span>
-                  )}
-                </div>
-              </fieldset>
-              <p {...stylex.props(styles.small, styles.privacy)}>
-                Reports are sent securely to /dev/fast. Only authorized
-                /dev/fast team members can access them. Reports are deleted
-                after 90 days. The screenshot above is included unless you
-                remove it.
-              </p>
-              <div {...stylex.props(styles.actions)}>
-                <Button
-                  size="large"
-                  xstyle={styles.action}
-                  onClick={cancel}
-                  disabled={sending}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="large"
-                  xstyle={styles.action}
-                  disabled={!canSend}
-                >
-                  {sending ? "Sending..." : "Send"}
-                </Button>
-              </div>
-            </form>
-          </section>
-        </div>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="large"
+                xstyle={styles.action}
+                disabled={!canSend}
+              >
+                {sending ? "Sending..." : "Send"}
+              </Button>
+            </div>
+          </form>
+        </Dialog>
       )}
     </>
   );
@@ -366,15 +352,6 @@ const chromeBorder = () =>
   }) as const;
 
 const styles = stylex.create({
-  backdrop: {
-    position: "fixed",
-    zIndex: layer.dialog,
-    inset: 0,
-    display: "grid",
-    placeItems: "center",
-    padding: "24px",
-    backgroundColor: tokens.backdrop,
-  },
   dialog: {
     width: "min(540px, 100%)",
   },
