@@ -330,9 +330,6 @@ described below.
 - `src/vs/platform/log/node/spdlogLog.ts`: without `@vscode/spdlog`, append
   to the log file with `fs` instead of dropping every message. The remote
   runtime bundle leaves spdlog out; Desktop has it.
-- `src/vs/workbench/api/browser/mainThreadMessageService.ts`: drop extension
-  messages that `vs/review/common/reviewSuppressedExtensionMessages.ts`
-  matches (ms-python's interpreter toasts).
 
 Compare a fresh checkout of the upstream commit with `code-oss/`, ignoring the
 vendor-time exclusions above. Every remaining difference must be covered by

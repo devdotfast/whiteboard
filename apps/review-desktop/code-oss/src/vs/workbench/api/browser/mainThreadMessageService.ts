@@ -14,7 +14,6 @@ import { Event } from '../../../base/common/event.js';
 import { ICommandService } from '../../../platform/commands/common/commands.js';
 import { IExtensionService } from '../../services/extensions/common/extensions.js';
 import { IDisposable } from '../../../base/common/lifecycle.js';
-import { isSuppressedExtensionMessage } from '../../../review/common/reviewSuppressedExtensionMessages.js';
 
 @extHostNamedCustomer(MainContext.MainThreadMessageService)
 export class MainThreadMessageService implements MainThreadMessageServiceShape {
@@ -45,9 +44,6 @@ export class MainThreadMessageService implements MainThreadMessageServiceShape {
 	}
 
 	$showMessage(severity: Severity, message: string, options: MainThreadMessageOptions, commands: { title: string; isCloseAffordance: boolean; handle: number }[]): Promise<number | undefined> {
-		if (isSuppressedExtensionMessage(options.source?.identifier.value, message)) {
-			return Promise.resolve(undefined);
-		}
 		if (options.modal) {
 			return this._showModalMessage(severity, message, options.detail, commands, options.useCustom);
 		} else {
