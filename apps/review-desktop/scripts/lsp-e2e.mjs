@@ -632,6 +632,15 @@ async function expectHover(sourceUri, position, expected) {
   }, `hover ${expected}`);
 }
 
+// The base side is plain text, as a git diff original is in Code OSS.
+async function expectNoLanguageFeatures(sourceUri, position) {
+  for (const feature of [hover, definition]) {
+    const result = await probe({ uri: sourceUri, ...position, feature, open: true });
+
+    assert.equal(result.result?.length ?? 0, 0, feature);
+  }
+}
+
 async function clickGreet(line) {
   const point = await line.evaluate((element) => {
     const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
@@ -688,15 +697,9 @@ try {
     "prepared",
   );
 
-  for (const side of ["base", "head"]) {
-    await expectDefinition(
-      uri(review, side),
-      greetAt,
-      uri(review, side, "library.ts"),
-      2,
-    );
-    await expectHover(uri(review, side), greetAt, "string");
-  }
+  await expectDefinition(uri(review), greetAt, uri(review, "head", "library.ts"), 2);
+  await expectHover(uri(review), greetAt, "string");
+  await expectNoLanguageFeatures(uri(review, "base"), greetAt);
 
   const headNavigator = await openNavigator(uri(review), greetAt);
   await probe({ command: "editor.action.showHover" }, headNavigator.page);
@@ -838,12 +841,6 @@ try {
   );
 
   await expectDefinition(
-    uri(review, "base"),
-    greetAt,
-    uri(review, "base", "library.ts"),
-    2,
-  );
-  await expectDefinition(
     uri(review),
     greetAt,
     environmentUri(review, path.join(headEnvironment.rootPath, "library.ts")),
@@ -854,9 +851,7 @@ try {
     path.join(headEnvironment.rootPath, "library.ts"),
     originalLibrary,
   );
-  await record(
-    "changed destinations open the environment file; matching base destinations stay in the review",
-  );
+  await record("changed destinations open the environment file");
 
   await writeFile(
     path.join(first.repo, "main.ts"),
@@ -883,25 +878,19 @@ try {
 
   const workingMain = await readFile(path.join(first.repo, "main.ts"), "utf8");
 
-  for (const side of ["base", "head"]) {
-    await expectDefinition(
-      uri(review, side),
-      greetAt,
-      uri(review, side, "library.ts"),
-      2,
-    );
-    const result = await expectHover(uri(review, side), greetAt, "string");
-    assert.equal(result.document.text, mainText(side));
-    await expectDefinition(
-      uri(review, side),
-      {
-        line: 7,
-        character: mainText("head").split(/\r?\n/)[7].lastIndexOf("shared") + 1,
-      },
-      uri(review, side, "main.ts"),
-      7,
-    );
-  }
+  await expectDefinition(uri(review), greetAt, uri(review, "head", "library.ts"), 2);
+  const pinnedHover = await expectHover(uri(review), greetAt, "string");
+  assert.equal(pinnedHover.document.text, mainText("head"));
+  await expectDefinition(
+    uri(review),
+    {
+      line: 7,
+      character: mainText("head").split(/\r?\n/)[7].lastIndexOf("shared") + 1,
+    },
+    uri(review, "head", "main.ts"),
+    7,
+  );
+  await expectNoLanguageFeatures(uri(review, "base"), greetAt);
 
   assert.equal(
     (
@@ -1006,19 +995,7 @@ try {
     "branch changes do not repin review content or change pinned LSP",
   );
 
-  const renamed = await probe({
-    uri: uri(review, "base", "old.ts"),
-    line: 0,
-    character: 25,
-    feature: definition,
-    open: true,
-  });
-
-  assert.ok(
-    locations(renamed.result).some(
-      (item) => locationUri(item.uri) === uri(review, "base", "library.ts"),
-    ),
-  );
+  await expectNoLanguageFeatures(uri(review, "base", "old.ts"), { line: 0, character: 25 });
   await expectDefinition(
     uri(review, "head", "renamed.ts"),
     { line: 0, character: 25 },
@@ -1271,27 +1248,22 @@ try {
   precision.head = await git(precision.repo, "rev-parse", "HEAD");
   const exact = await createReview(precision, "Historical project semantics");
   await readyEnvironment(exact);
-  await readyEnvironment(exact, "base");
 
-  for (const [side, type, dependency, python] of [
-    ["base", "string", "installed", "str"],
-    ["head", "number", "number", "int"],
-  ]) {
-    await expectHover(uri(exact, side), greetAt, type);
-    await expectHover(
-      uri(exact, side),
-      at(mainText("head"), 6, "dependencyValue"),
-      dependency,
-    );
-    await expectHover(
-      uri(exact, side, "main.py"),
-      { line: 2, character: 9 },
-      python,
-    );
-  }
+  await expectHover(uri(exact), greetAt, "number");
+  await expectHover(
+    uri(exact),
+    at(mainText("head"), 6, "dependencyValue"),
+    "number",
+  );
+  await expectHover(
+    uri(exact, "head", "main.py"),
+    { line: 2, character: 9 },
+    "int",
+  );
+  await expectNoLanguageFeatures(uri(exact, "base"), greetAt);
 
   await record(
-    "base/head TypeScript, Python and prepared dependencies use matching historical environments",
+    "head TypeScript, Python and prepared dependencies use the pinned historical environment",
   );
   await git(
     precision.repo,

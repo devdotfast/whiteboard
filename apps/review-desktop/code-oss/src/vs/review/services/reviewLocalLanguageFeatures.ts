@@ -39,6 +39,9 @@ const REMOTE_ANSWER_MS = 5_000;
 const WARM_DELAY_MS = 400;
 const RELEASE_DELAY_MS = 15_000;
 
+/** Like Code OSS, which disables language features on `git:` diff originals, only the head side gets them. */
+const hasLanguageFeatures = (model: ITextModel) => sourceLocation(model.uri).side === "head";
+
 interface LocalSource {
 	identity: string;
 	root: URI;
@@ -100,7 +103,7 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 		this._register(watchAttachedReviewModels(modelService, [REVIEW_API_SOURCE_SCHEME, REVIEW_LANGUAGE_SOURCE_SCHEME],
 			model => {
 				if (this.sources.has(model)) pending.deleteAndDispose(model);
-				else later(model, WARM_DELAY_MS, () => void this.localSource(model, true));
+				else if (hasLanguageFeatures(model)) later(model, WARM_DELAY_MS, () => void this.localSource(model, true));
 			},
 			(model, disposing) => {
 				if (!disposing && this.sources.has(model)) later(model, RELEASE_DELAY_MS, () => this.releaseSource(model));
@@ -148,7 +151,7 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 	}
 
 	private async localSource(model: ITextModel, warming = false): Promise<LocalSource | undefined> {
-		if (this._store.isDisposed || model.isDisposed() || new URLSearchParams(model.uri.query).has("empty")) return undefined;
+		if (this._store.isDisposed || model.isDisposed() || !hasLanguageFeatures(model) || new URLSearchParams(model.uri.query).has("empty")) return undefined;
 		try {
 			const epoch = this.environments.generation;
 			const context = await this.environment(model);

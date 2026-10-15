@@ -36,13 +36,13 @@ function deferred<T>() {
 	return { promise, resolve };
 }
 
-function model(attached = false) {
+function model(attached = false, side: "base" | "head" = "head") {
 	const changed = event<void>();
 	const disposed = event<void>();
 	let isDisposed = false;
 	const text = "same pinned source";
 	return {
-		uri: URI.parse("review-api-source://review/src/file.ts?version=1"),
+		uri: URI.parse(`review-api-source://review/src/file.ts?version=1&side=${side}`),
 		isAttachedToEditor: () => attached,
 		isDisposed: () => isDisposed,
 		getVersionId: () => 1,
@@ -180,6 +180,19 @@ test("detaching during an in-flight definition keeps its captured source until m
 	mapping.resolve("mapped result");
 	assert.equal(await request, "mapped result");
 	assert.equal(acquired.isDisposed(), true, "mapping completion releases the final source reference");
+});
+
+test("the base side of a diff never resolves a language environment or root, like a git diff original in Code OSS", async (t) => {
+	t.mock.timers.enable({ apis: ["setTimeout"] });
+	const result = setup(model(true, "base"));
+	t.after(() => result.service.dispose());
+	const internal = result.service as any;
+	let asked = 0;
+	internal.environment = async () => { asked++; return { rootPath: "/project", identity: "identity" }; };
+	internal.acquire = async () => { asked++; return source(result.local); };
+	t.mock.timers.runAll();
+	assert.equal(await internal.hover(result.sourceModel, new Position(1, 1), CancellationToken.None), undefined);
+	assert.equal(asked, 0);
 });
 
 test("hundreds of unattached pinned models allocate no native source models; detaching releases the visible model", async (t) => {
