@@ -33,10 +33,9 @@ import {
 } from "@dev.fast/trace-core";
 
 import {
-  CLAUDE_WINDOWS_MCP_ADD,
-  COPILOT_WINDOWS_MCP_ADD,
+  type CliConnectTarget,
+  connectLines,
   connectSetupPrompts,
-  launchCommand,
   reviewMcpLaunch,
 } from "./connect-prompts";
 import { cursorInstallDeeplink } from "./cursor-deeplink";
@@ -432,12 +431,17 @@ function withShimPath(
 function connectPlugins(
   hasShim: boolean,
 ): ReviewCliInstallStatus["connect"]["plugins"] {
+  const launch = reviewMcpLaunch(hasShim);
+
+  const command = (target: CliConnectTarget) =>
+    connectLines(target, launch, process.platform, false);
+
   return {
     claude:
       process.platform === "win32"
         ? {
             label: "Add the Claude Code MCP server",
-            command: CLAUDE_WINDOWS_MCP_ADD,
+            command: command("claude"),
           }
         : {
             label: "Install the Claude Code plugin",
@@ -446,8 +450,7 @@ function connectPlugins(
           },
     codex: {
       label: "Install the Codex plugin",
-      command:
-        "codex plugin marketplace add devdotfast/whiteboard\ncodex plugin add whiteboard@devfast",
+      command: command("codex"),
     },
     cursor: hasShim
       ? {
@@ -457,11 +460,11 @@ function connectPlugins(
       : { label: "Install in Cursor" },
     opencode: {
       label: "Add the OpenCode MCP server (OpenCode 2+)",
-      command: `opencode mcp add --global whiteboard -- ${launchCommand(reviewMcpLaunch(hasShim))}`,
+      command: command("opencode"),
     },
     pi: {
       label: "Add the Pi MCP server (Pi 0.99+)",
-      command: `pi mcp add whiteboard -- ${launchCommand(reviewMcpLaunch(hasShim))}`,
+      command: command("pi"),
     },
     omp: {
       label: "Add the oh-my-pi MCP server",
@@ -471,12 +474,11 @@ function connectPlugins(
       process.platform === "win32"
         ? {
             label: "Add the Copilot CLI MCP server",
-            command: COPILOT_WINDOWS_MCP_ADD,
+            command: command("copilot"),
           }
         : {
             label: "Install the Copilot CLI plugin",
-            command:
-              "copilot plugin marketplace add devdotfast/whiteboard\ncopilot plugin install whiteboard@devfast",
+            command: command("copilot"),
           },
   };
 }

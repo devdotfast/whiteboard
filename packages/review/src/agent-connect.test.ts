@@ -74,7 +74,7 @@ describe("detectConnectAgents", () => {
 });
 
 describe("connectAgent", () => {
-  it("adds the marketplace and installs the Claude plugin for the user", async () => {
+  it("adds the marketplace, installs the Claude plugin for the user, and removes an old manual registration", async () => {
     const claude = await installCli("claude");
     const { calls, run } = recorder([]);
 
@@ -96,6 +96,7 @@ describe("connectAgent", () => {
         file: claude,
         args: ["plugin", "install", "whiteboard@devfast", "--scope", "user"],
       },
+      { file: claude, args: ["mcp", "remove", "-s", "user", "whiteboard"] },
     ]);
   });
 
@@ -164,6 +165,25 @@ describe("connectAgent", () => {
     expect(calls).toHaveLength(2);
   });
 
+  it("is connected though a cleanup found nothing to remove", async () => {
+    await installCli("pi");
+
+    const { run } = recorder([
+      { code: 0, output: "" },
+      { code: 1, output: "No matching package found" },
+    ]);
+
+    const result = await connectAgent("pi", {
+      homeDir,
+      env: env(),
+      platform: "linux",
+      hasShim: true,
+      run,
+    });
+
+    expect(result.state).toBe("connected");
+  });
+
   it("fails without running anything when the harness is missing", async () => {
     const { calls, run } = recorder([]);
 
@@ -178,7 +198,7 @@ describe("connectAgent", () => {
     expect(calls).toEqual([]);
   });
 
-  it("registers Claude's server directly on Windows, where the plugin cannot start", async () => {
+  it("registers Claude's server directly on Windows, where the plugin cannot start, in place of the plugin", async () => {
     await installCli("claude");
     const { calls, run } = recorder([]);
 
@@ -191,6 +211,8 @@ describe("connectAgent", () => {
     });
 
     expect(calls.map((call) => call.args)).toEqual([
+      ["plugin", "uninstall", "whiteboard@devfast"],
+      ["mcp", "remove", "-s", "user", "whiteboard"],
       [
         "mcp",
         "add",
