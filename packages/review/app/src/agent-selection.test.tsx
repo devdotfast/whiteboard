@@ -109,6 +109,15 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
     });
     // Its article-relative position stays constant: scrolling is browser-owned.
     expect(popover().style.top).toBe(top);
+    await act(async () =>
+      container
+        .querySelector("[data-selection-scroller]")!
+        .dispatchEvent(
+          new WheelEvent("wheel", { bubbles: true, composed: true }),
+        ),
+    );
+    expect(container.querySelector('[aria-label="Copy ref"]')).toBeNull();
+    await act(async () => container.querySelector("button")!.click());
     expect(fetch).not.toHaveBeenCalled();
     await act(async () =>
       container

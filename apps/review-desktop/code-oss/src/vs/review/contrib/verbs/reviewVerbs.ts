@@ -76,7 +76,6 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 		this.selectionEditors.set(editor.getId(), store);
 		store.add(editor.onDidChangeCursorSelection(() => this.emitSelection(editor)));
 		store.add(editor.onDidFocusEditorText(() => this.emitSelection(editor)));
-		store.add(editor.onDidScrollChange(() => this.emitSelection(editor)));
 	}
 
 	private emitSelection(editor: ICodeEditor): void {

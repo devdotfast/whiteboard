@@ -288,14 +288,18 @@ export function AgentSelectionProvider({
   useEffect(() => {
     if (!selection) return;
 
-    const dismiss = (event: PointerEvent) => {
+    const dismiss = (event: Event) => {
       if (!actions.current || !event.composedPath().includes(actions.current))
         select(null);
     };
 
     window.addEventListener("pointerdown", dismiss, true);
+    window.addEventListener("wheel", dismiss, true);
 
-    return () => window.removeEventListener("pointerdown", dismiss, true);
+    return () => {
+      window.removeEventListener("pointerdown", dismiss, true);
+      window.removeEventListener("wheel", dismiss, true);
+    };
   }, [selection, select]);
 
   return (
