@@ -1,5 +1,5 @@
 import { AGENT_LOGOS } from "@canvas/agent-logos";
-import { RefreshIcon, SearchIcon } from "@canvas/icons";
+import { CopyIcon, RefreshIcon, SearchIcon } from "@canvas/icons";
 import { OptionMenu } from "@canvas/option-menu";
 import {
   elevation,
@@ -283,6 +283,7 @@ export function RunStep({
 
   const agentName = agents.find((candidate) => candidate.id === agent)?.name;
   const AgentLogo = agent ? AGENT_LOGOS[agent] : undefined;
+  const canChooseAgent = agents.length > 1;
 
   const canDraw =
     !starting &&
@@ -540,12 +541,23 @@ export function RunStep({
               ))}
             </div>
           )}
-          <label {...stylex.props(styles.prompt)}>
+          <div {...stylex.props(styles.prompt)}>
             <span {...stylex.props(styles.sectionHeader, styles.promptHeader)}>
               <span {...stylex.props(styles.label)}>Prompt</span>
-              <span {...stylex.props(styles.source)}>Edit freely</span>
+              {/* The copy sits by what it copies. */}
+              <button
+                type="button"
+                aria-label="Copy prompt"
+                disabled={!canCopy}
+                onClick={copy}
+                {...stylex.props(buttonStyles.base, styles.copy)}
+              >
+                <CopyIcon xstyle={styles.copyIcon} />
+                Copy
+              </button>
             </span>
             <textarea
+              aria-label="Prompt"
               {...stylex.props(
                 fieldStyles.box,
                 fieldStyles.multiline,
@@ -559,7 +571,7 @@ export function RunStep({
                 setEdited(true);
               }}
             />
-          </label>
+          </div>
         </div>
         {error ? (
           <p
@@ -569,68 +581,61 @@ export function RunStep({
             {error}
           </p>
         ) : null}
-        {/* Two ways to draw: the reader's own agent, or one Whiteboard runs. */}
+        {/* One sentence: copy the prompt for the reader's own agent, or draw
+            with the chip's agent, whose menu is the only thing to toggle. */}
         <div {...stylex.props(styles.footer)}>
-          <div {...stylex.props(styles.choice)}>
-            <div {...stylex.props(styles.choiceRow)}>
-              <Button
-                size="large"
-                xstyle={styles.action}
-                disabled={!canCopy}
-                onClick={copy}
-              >
-                Copy prompt
-              </Button>
-            </div>
-          </div>
-          <div {...stylex.props(styles.or)} aria-hidden="true">
-            <i {...stylex.props(styles.orRule)} />
-            or
-            <i {...stylex.props(styles.orRule)} />
-          </div>
-          <div {...stylex.props(styles.choice, styles.choiceHere)}>
-            <div {...stylex.props(styles.choiceRow)}>
-              {agents.length ? (
-                <OptionMenu
-                  ariaLabel="Agent"
-                  triggerStyle={[
-                    buttonStyles.base,
-                    buttonStyles.secondary,
-                    styles.picker,
-                  ]}
-                  value={agent}
-                  options={agents.map((candidate) => {
-                    const Logo = AGENT_LOGOS[candidate.id];
-
-                    return {
-                      value: candidate.id,
-                      label: candidate.name,
-                      icon: <Logo />,
-                    };
-                  })}
-                  onChange={(next: OnboardingRunAgent["id"]) => setAgent(next)}
+          {agents.length ? (
+            <>
+              <span {...stylex.props(styles.lead)}>
+                Copy for your agent, or use
+              </span>
+              <span {...stylex.props(styles.chip)}>
+                <button
+                  type="button"
+                  aria-label={`Draw with ${agentName}`}
+                  aria-keyshortcuts="Meta+Enter"
+                  title={agentMode}
+                  disabled={!canDraw}
+                  onClick={() => void draw()}
+                  {...stylex.props(buttonStyles.base, styles.chipDraw)}
                 >
-                  {AgentLogo ? <AgentLogo /> : null}
-                  {agentName}
-                </OptionMenu>
-              ) : loading ? null : (
-                <span {...stylex.props(styles.source, styles.noAgent)}>
-                  No agent Whiteboard can run is installed.
-                </span>
-              )}
-              <Button
-                variant="primary"
-                size="large"
-                xstyle={[styles.action, styles.draw]}
-                disabled={!canDraw}
-                title={agentMode}
-                onClick={() => void draw()}
-              >
-                {starting ? "Starting…" : "Draw whiteboard"}
-                <Shortcut xstyle={styles.shortcut}>⌘↵</Shortcut>
-              </Button>
-            </div>
-          </div>
+                  {AgentLogo ? <AgentLogo xstyle={styles.chipLogo} /> : null}
+                  {starting ? "Starting…" : agentName}
+                  <Shortcut aria-hidden="true" xstyle={styles.shortcut}>
+                    ⌘↵
+                  </Shortcut>
+                </button>
+                {canChooseAgent ? (
+                  <span aria-hidden="true" {...stylex.props(styles.chipRule)} />
+                ) : null}
+                {canChooseAgent ? (
+                  <OptionMenu
+                    ariaLabel="Draw with another agent"
+                    triggerStyle={[buttonStyles.base, styles.chipMenu]}
+                    value={agent}
+                    options={agents.map((candidate) => {
+                      const Logo = AGENT_LOGOS[candidate.id];
+
+                      return {
+                        value: candidate.id,
+                        label: candidate.name,
+                        icon: <Logo />,
+                      };
+                    })}
+                    onChange={(next: OnboardingRunAgent["id"]) =>
+                      setAgent(next)
+                    }
+                  >
+                    {null}
+                  </OptionMenu>
+                ) : null}
+              </span>
+            </>
+          ) : loading ? null : (
+            <span {...stylex.props(styles.source)}>
+              Copy for your agent; none Whiteboard can run is installed here.
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -945,63 +950,61 @@ const styles = stylex.create({
     marginInline: "20px",
   },
   alert: { paddingInline: "12px" },
+  // A quiet text control in the prompt's header.
+  copy: {
+    height: "24px",
+    marginBlock: "-4px",
+    marginInlineEnd: "-8px",
+    paddingInline: "8px",
+    color: { default: tokens.inkMuted, ":hover:not(:disabled)": tokens.ink },
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+  },
+  copyIcon: { width: "13px", height: "13px" },
+  // The sentence ends at the row's end, under the prompt's Copy.
   footer: {
     display: "flex",
-    alignItems: "stretch",
-    flexShrink: 0,
-    paddingBlock: "16px 8px",
-    paddingInline: "12px",
-  },
-  choice: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-    minWidth: 0,
-  },
-  // Draw it here takes the rest of the row and sits at its end.
-  choiceHere: { flex: 1, alignItems: "flex-end" },
-  choiceRow: {
-    display: "flex",
     alignItems: "center",
+    justifyContent: "flex-end",
     gap: "10px",
-  },
-  // The picker and both buttons share one height, so the row reads as one.
-  picker: {
-    gap: "8px",
-    height: "42px",
+    flexShrink: 0,
+    paddingBlock: "18px 10px",
     paddingInline: "12px",
-    borderRadius: radius.surface,
   },
-  action: {
-    gap: "10px",
-    height: "42px",
-    paddingBlock: 0,
-    paddingInline: "20px 18px",
-    borderRadius: radius.surface,
+  lead: {
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontSerif,
+    fontSize: fontSize.heading,
+    lineHeight: "22px",
+  },
+  // One small chip: the agent draws; past a hairline, its caret opens the
+  // agent menu.
+  chip: {
+    display: "inline-flex",
+    alignItems: "center",
+    borderRadius: radius.control,
+    backgroundColor: tokens.surface,
+    boxShadow: `${elevation.raised}, 0 0 0 1px ${tokens.rule}`,
+  },
+  chipDraw: {
+    gap: "8px",
+    height: "28px",
+    paddingInline: "8px",
+    color: tokens.ink,
+    fontFamily: tokens.fontMono,
     fontSize: fontSize.ui,
   },
-  // Only Draw is raised: it is the step the screen leads to.
-  draw: {
-    boxShadow: { default: elevation.popover, ":disabled": "none" },
-  },
-  noAgent: { alignSelf: "center" },
-  // A quiet "or" on a hairline, between the two ways.
-  or: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    gap: "6px",
-    width: "56px",
-    flexShrink: 0,
-    color: tokens.inkFaint,
-    fontFamily: tokens.fontSerif,
-    fontSize: fontSize.body,
-    fontStyle: "italic",
-  },
-  orRule: {
+  chipLogo: { width: "16px", height: "16px" },
+  chipRule: {
     width: "1px",
-    flexGrow: 1,
-    backgroundColor: tokens.rule,
+    height: "14px",
+    flexShrink: 0,
+    backgroundColor: tokens.ruleSoft,
   },
-  shortcut: { opacity: 0.7 },
+  chipMenu: {
+    height: "28px",
+    paddingInline: "8px",
+    color: tokens.inkMuted,
+  },
+  shortcut: { color: tokens.inkFaint },
 });
