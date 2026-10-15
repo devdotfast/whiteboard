@@ -47,11 +47,10 @@ export interface TraceSelection {
   eventIndex?: number;
 }
 
-/** A lens applies only to the version and diff mode it was chosen on. */
+/** A lens applies only to the version it was chosen on. */
 export interface ReviewLensSelection {
   id: string;
   version: number;
-  mode: "structural" | "textual";
 }
 
 export interface ReviewDiffScope {

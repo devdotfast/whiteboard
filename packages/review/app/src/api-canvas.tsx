@@ -276,7 +276,7 @@ export function ApiCanvas({
           ),
       },
     };
-  }, [content.bridge, sourceVersion, content.structuralDiffEnabled]);
+  }, [content.bridge, sourceVersion]);
 
   const baseSession = useMemo(() => {
     const bridge = {
@@ -525,10 +525,6 @@ export function ApiCanvas({
                     (data.snapshot.pins?.base ?? "") !==
                     (data.snapshot.pins?.head ?? ""),
                   version: data.snapshot.version,
-                  lensMode:
-                    content.structuralDiffEnabled === false
-                      ? "textual"
-                      : "structural",
                   commits: data.commits,
                 }),
               })}
@@ -538,7 +534,6 @@ export function ApiCanvas({
                   client={client}
                   snapshot={data.snapshot}
                   coverageRevision={coverageRevision}
-                  structuralDiffEnabled={content.structuralDiffEnabled}
                 >
                   {error && (
                     <p {...stylex.props(styles.error)} role="status">

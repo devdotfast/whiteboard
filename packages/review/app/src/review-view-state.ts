@@ -160,7 +160,6 @@ export function readReviewNavigationRestore(
     softwareMapEnabled: boolean;
     hasChangeRange: boolean;
     version: number;
-    lensMode: ReviewLensSelection["mode"];
     commits: readonly ReviewCommitSummary[];
   },
 ): ReviewNavigationRestore {
@@ -189,11 +188,7 @@ export function readReviewNavigationRestore(
       softwareMapEnabled: canvas.softwareMapEnabled,
       hasTraceSessions: true,
     }),
-    lens:
-      stored.lens?.version === canvas.version &&
-      stored.lens.mode === canvas.lensMode
-        ? stored.lens
-        : null,
+    lens: stored.lens?.version === canvas.version ? stored.lens : null,
     diffScope: scopedCommit
       ? {
           commit: scopedCommit,
@@ -489,12 +484,9 @@ function parsePersistedLens(
   if (!lens) return undefined;
   const id = jsonString(jsonProperty(lens, "id"));
   const version = jsonNumber(jsonProperty(lens, "version"));
-  const mode = jsonString(jsonProperty(lens, "mode"));
 
-  return id !== undefined &&
-    version !== undefined &&
-    (mode === "structural" || mode === "textual")
-    ? { id, version, mode }
+  return id !== undefined && version !== undefined
+    ? { id, version }
     : undefined;
 }
 

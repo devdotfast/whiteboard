@@ -77,7 +77,8 @@ export type ReviewStreamSnapshot<Snapshot extends object = JsonObject> =
 export type ReviewStreamLine<Snapshot extends object = JsonObject> =
   | {
       kind: "list";
-      mode: "structural" | "textual";
+      // Older clients match list lines by it.
+      mode: "structural";
       reviews: ReviewApiSummary[];
     }
   | { kind: "review"; reviewId: string; value: ReviewStreamSnapshot<Snapshot> }
@@ -89,7 +90,6 @@ export interface ReviewSourceEntry {
 }
 
 type Subscription = {
-  mode?: "structural" | "textual";
   reviewId: string | null;
 };
 
@@ -202,7 +202,6 @@ export class ReviewApiClient {
     signal: AbortSignal,
     accept: (snapshot: T) => void | Promise<void>,
     disconnected: (cause: unknown) => void,
-    mode?: "structural" | "textual",
   ) {
     if (signal.aborted) return;
     let connections = liveConnections.get(this.request);
@@ -219,8 +218,6 @@ export class ReviewApiClient {
     }
 
     const subscription: Subscription = { reviewId };
-
-    if (mode) subscription.mode = mode;
 
     return live.add(
       subscription,
@@ -275,8 +272,7 @@ function sleep(ms: number, signal: AbortSignal) {
 
 function concerns(line: ReviewStreamLine, subscription: Subscription) {
   return line.kind === "list"
-    ? subscription.reviewId === null &&
-        (subscription.mode ?? "structural") === line.mode
+    ? subscription.reviewId === null
     : subscription.reviewId === line.reviewId;
 }
 

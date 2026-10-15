@@ -95,10 +95,6 @@ export function SettingsPage({
     settings.softwareMapEnabled,
   );
 
-  const [structuralDiffEnabled, setStructuralDiffEnabled] = useState(
-    settings.structuralDiffEnabled,
-  );
-
   const [scratchpadEnabled, setScratchpadEnabled] = useState(
     settings.scratchpadEnabled,
   );
@@ -314,35 +310,15 @@ export function SettingsPage({
             >
               <Button onClick={settings.importVsCodeSettings}>Import…</Button>
             </Row>
+            <DiffrConfigSection
+              actions={settings.diffrConfig}
+              reloadWindow={settings.reloadWindow}
+            />
           </Section>
 
           <RemoteHostsSection hosts={settings.remoteHosts} />
 
           <Section label="Experimental Features">
-            <Row
-              label="Structural Diffs"
-              description="Replace the standard diff view with syntax-aware diffs and linked folds."
-            >
-              <label {...stylex.props(styles.toggle)}>
-                <Checkbox
-                  aria-label="Structural Diffs"
-                  checked={structuralDiffEnabled}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
-                    void run(
-                      () => settings.setStructuralDiffEnabled(enabled),
-                      setStructuralDiffEnabled,
-                    );
-                  }}
-                />
-              </label>
-            </Row>
-            {structuralDiffEnabled ? (
-              <DiffrConfigSection
-                actions={settings.diffrConfig}
-                reloadWindow={settings.reloadWindow}
-              />
-            ) : null}
             <Row
               label="Software Map"
               description="Show the experimental Software Map view in sessions."

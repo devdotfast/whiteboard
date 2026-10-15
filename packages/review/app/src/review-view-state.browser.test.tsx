@@ -441,7 +441,6 @@ const canvas = {
   softwareMapEnabled: true,
   hasChangeRange: true,
   version: 1,
-  lensMode: "structural",
   commits: [],
 } as const;
 

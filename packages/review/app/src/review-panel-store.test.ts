@@ -198,7 +198,7 @@ describe("Review navigation", () => {
     store.getState().showView("review");
     store.getState().openPeek({ kind: "peek", anchor, content });
 
-    const lens = { id: "api", version: 3, mode: "structural" } as const;
+    const lens = { id: "api", version: 3 } as const;
     store.getState().selectLens(lens);
     expect(store.getState()).toMatchObject({
       view: "diff",
@@ -306,7 +306,7 @@ describe("Fullscreen tours", () => {
     const store = createReviewPanelStore();
 
     store.getState().openOverlayTour(sequence, "first");
-    store.getState().selectLens({ id: "api", version: 3, mode: "structural" });
+    store.getState().selectLens({ id: "api", version: 3 });
     expect(store.getState()).toMatchObject({ view: "diff", overlayTour: null });
   });
 

@@ -137,7 +137,6 @@ export const SETTING_NAME = [
   "software_map_enabled",
   "scratchpad_enabled",
   "diffr_config",
-  "structural_diff",
   "theme",
   "ctrl_tab",
   "ready_notification",
@@ -245,7 +244,7 @@ export const INSTALL_LOCATION = [
 export const DIFF_OPENED_VIA = ["topbar", "lens", "locate"] as const;
 
 /** Which diff opened: a commit's, or a file diff drawn plain or structural. */
-export const DIFF_OPENED_KIND = ["commit", "file", "structural"] as const;
+export const DIFF_OPENED_KIND = ["commit", "structural"] as const;
 
 export const DISCORD_VIA = ["topbar", "dialog", "docs"] as const;
 

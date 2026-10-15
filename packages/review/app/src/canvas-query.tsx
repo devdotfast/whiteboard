@@ -60,8 +60,7 @@ export const canvasQueryKeys = {
       pullRequestUrl,
       branch,
     ] as const,
-  lensProgress: (version: number, mode: "structural" | "textual") =>
-    ["lens-progress", version, mode] as const,
+  lensProgress: (version: number) => ["lens-progress", version] as const,
   allLensProgress: () => ["lens-progress"] as const,
 };
 

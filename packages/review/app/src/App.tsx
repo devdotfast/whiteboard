@@ -176,17 +176,6 @@ export interface RenderedReviewDocument {
   width?: ReviewDocumentWidthChoice;
 }
 
-/** A commit-scoped diff stays "commit"; otherwise it follows the reader's
- * structural-diff setting. */
-function diffOpenedKind(
-  diffScope: ReviewDiffScope | null,
-  structuralDiffEnabled: boolean,
-): "commit" | "file" | "structural" {
-  if (diffScope) return "commit";
-
-  return structuralDiffEnabled ? "structural" : "file";
-}
-
 function ReviewLayout({
   document,
   softwareMap,
@@ -591,10 +580,7 @@ function ReviewLayoutContent({
                   onClick={() => {
                     if (view === "diff")
                       captureUiEvent(session, "diff_opened", {
-                        kind: diffOpenedKind(
-                          diffScope,
-                          Boolean(lenses?.structuralDiffEnabled),
-                        ),
+                        kind: diffScope ? "commit" : "structural",
                         via: "topbar",
                       });
                     showView(view);
@@ -670,10 +656,7 @@ function ReviewLayoutContent({
                 onLocate={(view) => {
                   if (view === "diff")
                     captureUiEvent(session, "diff_opened", {
-                      kind: diffOpenedKind(
-                        diffScope,
-                        Boolean(lenses?.structuralDiffEnabled),
-                      ),
+                      kind: diffScope ? "commit" : "structural",
                       via: "locate",
                     });
                   showView(view);

@@ -65,7 +65,6 @@ interface Lenses {
   busy: boolean;
   readOnly: boolean;
   error: string | null;
-  structuralDiffEnabled: boolean;
 }
 
 export type ReviewLensView = Pick<Lenses, "progress" | "resolve" | "error">;
@@ -77,13 +76,11 @@ export const useReviewLenses = () => useContext(Context);
 export function ReviewLensesProvider({
   client,
   snapshot,
-  structuralDiffEnabled = true,
   coverageRevision = 0,
   children,
 }: {
   client: ReviewApiClient;
   snapshot: Snapshot;
-  structuralDiffEnabled?: boolean;
   coverageRevision?: number;
   children: ReactNode;
 }) {
@@ -99,24 +96,21 @@ export function ReviewLensesProvider({
   const generation = useRef(0);
   const pending = useRef(false);
   const refreshAfterMark = useRef(false);
-  const mode = structuralDiffEnabled ? "structural" : "textual";
   const route = `/${snapshot.reviewId}/progress`;
-  const progressKey = canvasQueryKeys.lensProgress(snapshot.version, mode);
+  const progressKey = canvasQueryKeys.lensProgress(snapshot.version);
   const selectedLens = useReviewPanel((state) => state.lens);
 
-  // A lens chosen on another version or diff mode no longer applies.
+  // A lens chosen on another version no longer applies.
   const activeId =
-    selectedLens?.version === snapshot.version && selectedLens.mode === mode
-      ? selectedLens.id
-      : undefined;
+    selectedLens?.version === snapshot.version ? selectedLens.id : undefined;
 
-  // Coverage events drive freshness, and a version or mode left behind is not
-  // kept: returning to it reads again, as a first visit does.
+  // Coverage events drive freshness, and a version left behind is not kept:
+  // returning to it reads again, as a first visit does.
   const read = useQuery({
     queryKey: progressKey,
     queryFn: ({ signal }) =>
       client.read<ReviewProgress>(
-        `${route}?version=${snapshot.version}&mode=${mode}&wait=false`,
+        `${route}?version=${snapshot.version}&wait=false`,
         signal,
       ),
     enabled: !snapshot.sourceUnavailable,
@@ -129,22 +123,21 @@ export function ReviewLensesProvider({
   const markViewed = useMutation({
     mutationFn: (input: {
       version: number;
-      mode: typeof mode;
       files: { path: string; fingerprint: string; sources: FileLineRange[] }[];
       viewed: boolean;
     }) => client.post<ReviewProgress>(route, input),
     // A read that started before the mark must not land after it; it is
     // repeated once the mark has landed.
-    onMutate: async ({ version, mode }) => {
-      const queryKey = canvasQueryKeys.lensProgress(version, mode);
+    onMutate: async ({ version }) => {
+      const queryKey = canvasQueryKeys.lensProgress(version);
 
       if (queryClient.isFetching({ queryKey })) refreshAfterMark.current = true;
       await queryClient.cancelQueries({ queryKey });
     },
     // Only the version marked is updated, and only while it is still held.
-    onSuccess: (next, { version, mode }) =>
+    onSuccess: (next, { version }) =>
       queryClient.setQueryData<ReviewProgress>(
-        canvasQueryKeys.lensProgress(version, mode),
+        canvasQueryKeys.lensProgress(version),
         (current) =>
           current && { ...next, lenses: current.lenses ?? next.lenses },
       ),
@@ -167,7 +160,7 @@ export function ReviewLensesProvider({
     return () => {
       generation.current++;
     };
-  }, [client, route, snapshot.version, mode, resetMark]);
+  }, [client, route, snapshot.version, resetMark]);
 
   // Live coverage and worktree saves mark every held progress stale; a mark
   // in flight defers the reread until it lands.
@@ -257,7 +250,6 @@ export function ReviewLensesProvider({
     try {
       await markViewed.mutateAsync({
         version: snapshot.version,
-        mode,
         files,
         viewed,
       });
@@ -310,16 +302,13 @@ export function ReviewLensesProvider({
       busy,
       readOnly: Boolean(snapshot.trashedAt),
       error,
-      structuralDiffEnabled,
       select: (id) => {
         if (!lenses.some((item) => item.id === id && !item.unavailable)) return;
         captureUiEvent(session, "diff_opened", {
-          kind: structuralDiffEnabled ? "structural" : "file",
+          kind: "structural",
           via: "lens",
         });
-        panelStore
-          .getState()
-          .selectLens({ id, version: snapshot.version, mode });
+        panelStore.getState().selectLens({ id, version: snapshot.version });
       },
       clear: () => panelStore.getState().clearLens(),
       resolve: (sources) =>
@@ -370,7 +359,6 @@ export function ReviewLensesProvider({
       busy,
       snapshot.trashedAt,
       error,
-      structuralDiffEnabled,
       client,
       route,
       snapshot,

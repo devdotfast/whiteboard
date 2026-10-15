@@ -563,8 +563,6 @@ export interface ReviewCanvasSettingsContent {
   ): Promise<ReviewReadyNotificationChoice>;
   softwareMapEnabled: boolean;
   setSoftwareMapEnabled(enabled: boolean): Promise<boolean>;
-  structuralDiffEnabled: boolean;
-  setStructuralDiffEnabled(enabled: boolean): Promise<boolean>;
   // Not a workbench setting: the review server reads it, so it lives in the
   // server preferences file. Off by default. Turning it on shows the pad and
   // tells connected agents over MCP that they can draw on it; turning it off
@@ -748,7 +746,6 @@ export type ReviewCanvasContent =
   | { kind: "loading" }
   | {
       kind: "api";
-      structuralDiffEnabled?: boolean;
       softwareMapEnabled?: boolean;
       documentWidth?: ReviewDocumentWidthChoice;
       reviewId: string;

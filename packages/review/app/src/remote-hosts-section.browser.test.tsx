@@ -60,8 +60,6 @@ async function render(hosts: ReviewRemoteHostsSettings) {
     setReadyNotification: reject,
     softwareMapEnabled: false,
     setSoftwareMapEnabled: reject,
-    structuralDiffEnabled: false,
-    setStructuralDiffEnabled: reject,
     scratchpadEnabled: false,
     setScratchpadEnabled: reject,
     diffrConfig: {
