@@ -1019,7 +1019,7 @@ export function ReviewHome({
                   onClick={onNewWhiteboard}
                 >
                   <PlusIcon />
-                  New whiteboard
+                  New
                 </Button>
               ) : null}
             </div>
