@@ -166,10 +166,6 @@ export const themeStyles = stylex.create({
     "--accent-outline": "rgba(43, 85, 230, 0.32)",
     "--link-open-wash": "rgba(43, 85, 230, 0.12)",
     "--rpc-wash": "rgba(43, 85, 230, 0.08)",
-    "--review-home-bg": "var(--bg)",
-    "--review-home-rule": "var(--rule)",
-    "--review-home-rule-soft": "var(--rule-soft)",
-    "--review-home-meta": "#5d6472",
     // Code (Whiteboard Light): petrol and navy for types and functions, sepia
     // strings, plum numbers; inserted and deleted sit one step deeper than the
     // change colors so they hold AA as text on white.

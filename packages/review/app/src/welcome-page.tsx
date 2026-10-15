@@ -562,7 +562,7 @@ const styles = stylex.create({
     flexShrink: 0,
   },
   kicker: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
   },
   headline: {
     margin: 0,
@@ -571,7 +571,7 @@ const styles = stylex.create({
   },
   sub: {
     margin: 0,
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.ui,
     lineHeight: "21px",
   },
@@ -597,11 +597,11 @@ const styles = stylex.create({
     flexDirection: "column",
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: tokens.reviewHomeRule,
+    borderColor: tokens.rule,
     borderRadius: radius.surface,
   },
   stepOpen: {
-    borderColor: tokens.reviewHomeRuleSoft,
+    borderColor: tokens.ruleSoft,
     backgroundColor: tokens.tray,
   },
   stepHeader: {
@@ -626,7 +626,7 @@ const styles = stylex.create({
   // The chevron closes the row: it sits in the trailing lane, after the note.
   stepChevron: {
     margin: "2px 2px 2px auto",
-    stroke: tokens.reviewHomeMeta,
+    stroke: tokens.inkMuted,
   },
   badge: {
     display: "flex",
@@ -638,8 +638,8 @@ const styles = stylex.create({
     borderRadius: radius.round,
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: tokens.reviewHomeRuleSoft,
-    color: tokens.reviewHomeMeta,
+    borderColor: tokens.ruleSoft,
+    color: tokens.inkMuted,
     fontSize: fontSize.small,
     fontWeight: fontWeight.medium,
   },
@@ -667,10 +667,10 @@ const styles = stylex.create({
     fontSize: fontSize.ui,
   },
   stepTitleDone: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
   },
   stepNote: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   stepBody: {
@@ -701,7 +701,7 @@ const styles = stylex.create({
     padding: "1px 5px",
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: tokens.reviewHomeRuleSoft,
+    borderColor: tokens.ruleSoft,
     borderRadius: radius.small,
     color: tokens.ink,
     backgroundColor: tokens.controlBg,
@@ -710,7 +710,7 @@ const styles = stylex.create({
   feedback: {
     margin: "auto 0 0",
     paddingTop: "48px",
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
     lineHeight: "20px",
   },

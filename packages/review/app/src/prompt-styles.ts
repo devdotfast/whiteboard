@@ -19,7 +19,7 @@ export const promptStyles = stylex.create({
     padding: "2px 0 2px 14px",
     borderLeftWidth: "2px",
     borderLeftStyle: "solid",
-    borderLeftColor: tokens.reviewHomeRuleSoft,
+    borderLeftColor: tokens.ruleSoft,
     color: tokens.ink,
     font: `${fontSize.ui}/22px ${tokens.fontMono}`,
     // Prose, not code: keep a last word off its own line if the copy grows.

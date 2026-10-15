@@ -1255,7 +1255,7 @@ export function ReviewHome({
                       >
                         <Checkbox
                           aria-label={`Select ${boardTitle(review.title)}`}
-                          title="Select  x"
+                          title="Select"
                           checked={isSelected(index)}
                           xstyle={!isSelected(index) && styles.hiddenCheck}
                           onChange={() => {}}
