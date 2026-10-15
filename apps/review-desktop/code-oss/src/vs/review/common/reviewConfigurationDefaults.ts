@@ -114,8 +114,7 @@ export const reviewConfigurationDefaults = {
  * Defaults that keep the curated built-in extensions quiet.
  *
  * Review ships no marketplace, so an extension that prompts to install or update
- * something offers the reader a dead end. Most keys here close one such prompt;
- * the rest stop background builds a read-only review never needs.
+ * something offers the reader a dead end. Most keys here close one such prompt.
  * Keep this aligned with the curated groups in
  * `scripts/curated-extensions.manifest.mjs`, whose contract test is
  * `scripts/curated-extensions.test.mjs`.
@@ -142,8 +141,7 @@ export const curatedExtensionConfigurationDefaults = {
 	'rust-analyzer.showUnlinkedFileNotification': false,
 	'rust-analyzer.notifications.cargoTomlNotFound': false,
 	'rust-analyzer.showRequestFailedErrorNotification': false,
-	// Navigation needs only rust-analyzer's own analysis. `cargo check` and the
-	// Run/Debug lenses would build each pinned checkout from cold.
+	// These build the checkout. A review only needs navigation.
 	'rust-analyzer.checkOnSave': false,
 	'rust-analyzer.lens.run.enable': false,
 	'rust-analyzer.lens.debug.enable': false,
@@ -151,7 +149,7 @@ export const curatedExtensionConfigurationDefaults = {
 	// The Swift extension can offer to install Swiftly. Review uses the Swift
 	// toolchain that the user installed and made available on the shell PATH.
 	'swift.disableSwiftlyInstallPrompt': true,
-	// It writes `.vscode/launch.json` into the checkout. Test lenses build the package.
+	// These write files into the checkout or build the package.
 	'swift.autoGenerateLaunchConfigurations': false,
 	'swift.showTestCodeLenses': false,
 
@@ -159,8 +157,7 @@ export const curatedExtensionConfigurationDefaults = {
 	// tools. C# uses the system .NET SDK that Review resolves from the shell PATH.
 	'dotnetAcquisitionExtension.enableTelemetry': false,
 	'dotnetAcquisitionExtension.enableLanguageModelTools': false,
-	// NuGet restore downloads packages and writes `obj/` into the checkout, and
-	// test lenses build the project.
+	// These download packages or build the project.
 	'dotnet.projects.enableAutomaticRestore': false,
 	'csharp.suppressDotnetRestoreNotification': true,
 	'dotnet.codeLens.enableTestsCodeLens': false
