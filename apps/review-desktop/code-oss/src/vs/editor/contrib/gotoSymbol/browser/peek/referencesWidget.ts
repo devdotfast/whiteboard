@@ -350,6 +350,9 @@ export class ReferenceWidget extends peekView.PeekViewWidget {
 			scrollBeyondLastLine: false,
 			scrollbar: {
 				verticalScrollbarSize: 14,
+				// Multi-diff parents hide the scrollbar and ignore the wheel.
+				vertical: 'auto',
+				handleMouseWheel: true,
 				horizontal: 'auto',
 				useShadows: true,
 				verticalHasArrows: false,
