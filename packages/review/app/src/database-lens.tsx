@@ -1,8 +1,9 @@
-import { radius } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
+import { Select } from "@canvas/ui/text-field";
 import { type JsonValue, isStringValue } from "@dev.fast/review-protocol";
 import { type DiffSelection, anchorSelection } from "@review/lens-selection";
 import type {
@@ -497,8 +498,8 @@ export function DatabaseLens(block: DatabaseLensProps) {
         <div {...stylex.props(styles.actions)}>
           {activeUseCase && (
             <div {...stylex.props(styles.selectTarget)}>
-              <select
-                {...stylex.props(diagramStyles.control, diagramStyles.select)}
+              <Select
+                xstyle={styles.useCase}
                 aria-label="Database use case"
                 value={activeUseCase.id}
                 onChange={handleUseCaseChange}
@@ -508,7 +509,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
                     {databaseUseCaseOptionLabel(useCase)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
           {!stage && activeTourId && (
@@ -1330,6 +1331,18 @@ const styles = stylex.create({
     gap: "8px",
     width: { default: null, [narrow]: "100%" },
     minWidth: 0,
+  },
+  useCase: {
+    width: "100%",
+    height: "24px",
+    paddingLeft: "10px",
+    borderColor: { default: tokens.ruleSoft, ":focus": tokens.accent },
+    borderRadius: radius.control,
+    backgroundColor: { default: tokens.surface, ":hover": tokens.well },
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.medium,
+    lineHeight: "22px",
   },
   selectTarget: {
     position: "relative",

@@ -4,8 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { tokens } from "./tokens.stylex";
 
 // The header every diagram figure shares: a kind badge, the title and a quiet
-// count, then its 24px controls (the tour Button, the use-case
-// select).
+// count, then its 24px controls (the tour Button, the use-case select).
 export const diagramStyles = stylex.create({
   header: {
     position: "relative",
