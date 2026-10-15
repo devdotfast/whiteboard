@@ -34,6 +34,7 @@ import { Shortcut } from "./ui/kbd";
 import { menuStyles, moveMenuFocus } from "./ui/menu";
 import { surfaceStyles } from "./ui/surface";
 import { textStyles } from "./ui/text";
+import { fieldStyles } from "./ui/text-field";
 
 export type HomeFilterSection = "all" | "unread" | HomeFacet;
 
@@ -410,7 +411,7 @@ export function HomeFilterPicker({
           aria-label={scoped ? facetName : "Filter options"}
           placeholder={scoped ? facetName : "Filter…"}
           value={search}
-          {...stylex.props(styles.filter)}
+          {...stylex.props(fieldStyles.bare, styles.filter)}
           onChange={(event) => {
             setSearch(event.target.value);
             setRepository(null);
@@ -483,7 +484,7 @@ export function HomeFilterPicker({
             aria-label="Filter worktrees"
             placeholder="Filter worktrees…"
             value={subSearch}
-            {...stylex.props(styles.filter)}
+            {...stylex.props(fieldStyles.bare, styles.filter)}
             onChange={(event) => setSubSearch(event.target.value)}
           />
           <div {...stylex.props(styles.body)}>
@@ -611,13 +612,9 @@ const styles = stylex.create({
     width: "100%",
     height: "32px",
     padding: "0 8px",
-    borderWidth: 0,
     borderBottomWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    outlineStyle: "none",
-    backgroundColor: tokens.transparent,
-    color: tokens.ink,
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
   },

@@ -457,7 +457,7 @@ export function RunStep({
               disabled={!targets.length}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              {...stylex.props(styles.filter)}
+              {...stylex.props(fieldStyles.bare, styles.filter)}
             />
             {discovered && !loading ? (
               <IconButton
@@ -810,16 +810,9 @@ const styles = stylex.create({
   searchIcon: { color: tokens.inkFaint },
   filter: {
     flex: 1,
-    minWidth: 0,
     height: "28px",
-    padding: 0,
-    borderWidth: 0,
-    outlineStyle: "none",
-    backgroundColor: tokens.transparent,
-    color: tokens.ink,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.ui,
-    "::placeholder": { color: tokens.inkFaint },
   },
   target: {
     display: "flex",

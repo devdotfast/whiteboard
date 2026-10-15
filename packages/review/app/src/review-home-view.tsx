@@ -19,6 +19,7 @@ import {
   SortIcon,
 } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
+import { fieldStyles } from "@canvas/ui/text-field";
 import {
   REVIEW_DISCORD_URL,
   type ReviewApiSummary,
@@ -918,6 +919,7 @@ export function ReviewHome({
             spellCheck={false}
             value={query}
             {...stylex.props(
+              fieldStyles.bare,
               styles.textChipInput,
               styles.textChipWidth(Math.max(5, query.length + 1)),
             )}

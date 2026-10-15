@@ -548,7 +548,7 @@ export function AskComposer({
         <div {...stylex.props(styles.inputRow)}>
           <textarea
             ref={inputRef}
-            {...stylex.props(styles.question)}
+            {...stylex.props(fieldStyles.bare, styles.question)}
             value={draft}
             rows={1}
             placeholder={placeholder}
@@ -759,22 +759,11 @@ const styles = stylex.create({
     minWidth: 0,
     minHeight: "22px",
     maxHeight: "160px",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     resize: "none",
-    backgroundColor: tokens.transparent,
-    color: tokens.ink,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
     lineHeight: "22px",
     fieldSizing: "content",
-    // The composer around it shows the focus.
-    outline: "none",
-    "::placeholder": {
-      color: tokens.inkFaint,
-    },
   },
   // The question, with its buttons beside it.
   inputRow: {

@@ -61,6 +61,22 @@ export const fieldStyles = stylex.create({
   shell: {
     borderColor: { default: tokens.rule, ":focus-within": tokens.accent },
   },
+  // An input or textarea inside a shell: no box, the shell's type.
+  bare: {
+    minWidth: 0,
+    padding: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: tokens.transparent,
+    color: tokens.ink,
+    font: "inherit",
+    // The shell shows the focus.
+    outline: "none",
+    "::placeholder": {
+      color: tokens.inkFaint,
+    },
+  },
   multiline: {
     height: "auto",
     padding: "6px 8px",
