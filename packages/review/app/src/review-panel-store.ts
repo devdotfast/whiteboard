@@ -224,8 +224,10 @@ export function createReviewPanelStore({
         motion: "live",
       };
 
+    // Under a fullscreen tour, a docked Ask shows only as a pill.
     const place =
-      (from !== undefined && placeOf(state, from)) || state.askPlace;
+      (from !== undefined && placeOf(state, from)) ||
+      (state.overlayTour ? "window" : state.askPlace);
 
     const there = place === "docked" ? state.askDocked : state.askWindow;
     const occupant = state.asks.find((ask) => ask.key === there);
@@ -240,7 +242,7 @@ export function createReviewPanelStore({
       ...(place === "docked"
         ? { askDocked: ask.key, active: null }
         : { askWindow: ask.key }),
-      askPlace: place,
+      askPlace: state.overlayTour ? state.askPlace : place,
       // Switching views inside an open panel is not a new panel.
       motion:
         place === "docked" &&

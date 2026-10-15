@@ -329,6 +329,17 @@ describe("Fullscreen tours", () => {
     expect(store.getState().overlayTour!.revealRequest).toBeGreaterThan(shown);
   });
 
+  it("floats an Ask asked over a tour, keeping where Asks open", () => {
+    const store = createReviewPanelStore();
+
+    store.getState().openOverlayTour(sequence, "first");
+    store.getState().openAsk(selection);
+    expect(askShown(store.getState(), shownAt(store, "window")!)).toBe(
+      "window",
+    );
+    expect(store.getState().askPlace).toBe("docked");
+  });
+
   it("does not resume a tour over another view", () => {
     const store = createReviewPanelStore({
       view: "diff",
