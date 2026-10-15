@@ -1,5 +1,6 @@
 import { IconButton } from "@canvas/ui/button";
 import { useUiTooltip } from "@canvas/ui/host";
+import { CheckIcon } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, type ReactNode, useEffect, useState } from "react";
 
@@ -85,19 +86,6 @@ export function CopyIcon({
   );
 }
 
-function CheckGlyph({ xstyle }: { xstyle: stylex.StyleXStyles }) {
-  return (
-    <svg
-      aria-hidden="true"
-      {...stylex.props(styles.icon, xstyle)}
-      focusable="false"
-      viewBox="0 0 24 24"
-    >
-      <path d="M5 12.5l4.5 4.5L19 7" />
-    </svg>
-  );
-}
-
 export function CopyableText({
   text,
   children = text,
@@ -160,7 +148,7 @@ export function CopyButton({
       onClick={copy}
     >
       {copied ? (
-        <CheckGlyph xstyle={iconStyle} />
+        <CheckIcon xstyle={iconStyle} />
       ) : (
         <CopyIcon xstyle={iconStyle} />
       )}

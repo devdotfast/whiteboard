@@ -13,7 +13,20 @@ export type UseTooltip = <T extends HTMLElement = HTMLButtonElement>(
 
 const noTooltip: RefCallback<HTMLElement> = () => {};
 
-const TooltipContext = createContext<UseTooltip>(() => noTooltip);
+let warned = false;
+
+// Every root installs UiHostProvider; without one, tooltips silently vanish.
+const missingHost: UseTooltip = () => {
+  if (!warned)
+    console.warn(
+      "A UI kit component has no UiHostProvider above it, so it shows no tooltip.",
+    );
+  warned = true;
+
+  return noTooltip;
+};
+
+const TooltipContext = createContext<UseTooltip>(missingHost);
 
 export function UiHostProvider({
   useTooltip,
