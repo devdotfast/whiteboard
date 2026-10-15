@@ -165,6 +165,8 @@ export interface ReviewFindQuery {
   matchCase: boolean;
   wholeWord: boolean;
   isRegex: boolean;
+  /** Leave out matches in folded files and regions. */
+  skipFolded?: boolean;
 }
 
 export interface ReviewInlineFindResult {

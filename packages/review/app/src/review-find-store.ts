@@ -19,7 +19,11 @@ export type ReviewFindMatch =
       node: Node;
     };
 
-export type ReviewFindOption = "matchCase" | "wholeWord" | "isRegex";
+export type ReviewFindOption =
+  | "matchCase"
+  | "wholeWord"
+  | "isRegex"
+  | "skipFolded";
 
 export interface ReviewFindState {
   open: boolean;
@@ -64,6 +68,7 @@ const savedFindQuery = z.object({
   matchCase: z.boolean(),
   wholeWord: z.boolean(),
   isRegex: z.boolean(),
+  skipFolded: z.boolean().default(true),
 });
 
 type ReviewFindStoreState = ReviewFindState & ReviewFindActions;
@@ -71,7 +76,13 @@ type ReviewFindStoreState = ReviewFindState & ReviewFindActions;
 export function createReviewFindStore(config?: ReviewClientConfig) {
   const initialize: StateCreator<ReviewFindStoreState> = (set, get) => ({
     open: false,
-    query: { text: "", matchCase: false, wholeWord: false, isRegex: false },
+    query: {
+      text: "",
+      matchCase: false,
+      wholeWord: false,
+      isRegex: false,
+      skipFolded: true,
+    },
     ...emptyResults,
     generation: 0,
     show: (seed) =>

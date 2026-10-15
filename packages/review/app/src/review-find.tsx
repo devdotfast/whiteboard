@@ -437,6 +437,14 @@ function ReviewFindWidget({
           >
             .*
           </FindToggle>
+          <FindToggle
+            label="Skip Folded"
+            description="Skip Folded: leave out matches in folded files and regions."
+            active={query.skipFolded ?? false}
+            onClick={() => toggleOption("skipFolded")}
+          >
+            ⊟
+          </FindToggle>
         </div>
       </div>
       <span {...stylex.props(styles.count)} aria-live="polite">

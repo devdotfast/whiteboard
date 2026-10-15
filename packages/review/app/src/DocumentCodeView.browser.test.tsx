@@ -304,12 +304,7 @@ it("searches an offscreen peek without mounting Monaco", async () => {
         side: "head",
         ranges: [{ startLine: 1, endLine: 3 }],
       },
-      {
-        text: "needle",
-        matchCase: false,
-        wholeWord: false,
-        isRegex: true,
-      },
+      expect.objectContaining({ text: "needle", isRegex: true }),
     );
   });
   expect(created).toHaveLength(0);

@@ -359,6 +359,34 @@ it("restores the review's find inputs after a fresh mount and recomputes matches
   });
 });
 
+it("passes the skip-folded toggle to editors", async () => {
+  const handle = findHandle();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const host = createReviewFindHost();
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<FindHarness host={host} handles={[handle]} />);
+  });
+  await act(async () => {
+    host.showFind("Alpha");
+  });
+  await vi.waitFor(() => {
+    expect(handle.setFindQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ skipFolded: true }),
+    );
+  });
+  await act(async () => button(container, "Skip Folded").click());
+  await vi.waitFor(() => {
+    expect(handle.setFindQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ skipFolded: false }),
+    );
+  });
+  expect(button(container, "Skip Folded").getAttribute("aria-pressed")).toBe(
+    "false",
+  );
+});
+
 it("does not re-render the document while the reader searches", async () => {
   const container = document.createElement("div");
   document.body.append(container);
