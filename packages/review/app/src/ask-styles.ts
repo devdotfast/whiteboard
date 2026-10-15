@@ -37,16 +37,9 @@ export const askPanelStyles = stylex.create({
     gap: "8px",
     margin: 0,
   },
-  selectionCaption: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
   selectionQuote: {
-    display: "-webkit-box",
     margin: 0,
     paddingLeft: "12px",
-    overflow: "hidden",
     borderLeftWidth: "2px",
     borderLeftStyle: "solid",
     borderLeftColor: tokens.accent,
@@ -55,8 +48,6 @@ export const askPanelStyles = stylex.create({
     fontSize: fontSize.reading,
     fontStyle: "italic",
     lineHeight: "22px",
-    WebkitBoxOrient: "vertical",
-    WebkitLineClamp: 2,
   },
   error: {
     margin: 0,

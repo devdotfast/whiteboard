@@ -1,4 +1,5 @@
 import { Spinner } from "@canvas/ui/spinner";
+import { textStyles } from "@canvas/ui/text";
 import type { AskEntry, AskThreadState } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -298,7 +299,10 @@ function AskToolItem({ activity }: { activity: Activity }): ReactElement {
   const head = (
     <>
       <ActivityStatusIcon status={activity.status} />
-      <span ref={labelTooltip} {...stylex.props(styles.toolLabel)}>
+      <span
+        ref={labelTooltip}
+        {...stylex.props(textStyles.truncate, styles.toolLabel)}
+      >
         {activity.label}
       </span>
     </>
@@ -634,7 +638,13 @@ export function AskWorking({
         marching={writing}
         thinking={!writing}
       />
-      <span {...stylex.props(styles.workingLabel, askPanelStyles.sweep)}>
+      <span
+        {...stylex.props(
+          textStyles.truncate,
+          styles.workingLabel,
+          askPanelStyles.sweep,
+        )}
+      >
         {doing}…
       </span>
       <span {...stylex.props(styles.workingTime)}>{elapsed(since, now)}</span>
@@ -769,9 +779,6 @@ const styles = stylex.create({
   toolLabel: {
     flex: "1 1 auto",
     minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   status: {
     display: "flex",
@@ -853,7 +860,6 @@ const styles = stylex.create({
   },
   workingLabel: {
     minWidth: 0,
-    overflow: "hidden",
     backgroundImage: {
       default: `linear-gradient(90deg, ${tokens.inkMuted} 0%, ${tokens.inkMuted} 40%, ${tokens.ink} 50%, ${tokens.inkMuted} 60%, ${tokens.inkMuted} 100%)`,
       [stylex.env.reducedMotion]: "none",
@@ -870,8 +876,6 @@ const styles = stylex.create({
       default: tokens.transparent,
       [stylex.env.reducedMotion]: tokens.inkMuted,
     },
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   // A time, in Inter, its digits steady as it ticks.
   workingTime: {

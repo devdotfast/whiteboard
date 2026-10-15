@@ -392,6 +392,7 @@ export function TraceToolRow({
         <span {...stylex.props(styles.toolVerb)}>{event.verb}</span>
         <span
           {...stylex.props(
+            textStyles.truncate,
             styles.toolTitle,
             Boolean(event.filePath) && styles.toolTitleFile,
           )}

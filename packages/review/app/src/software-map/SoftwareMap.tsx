@@ -933,7 +933,11 @@ export function SoftwareMapFrame({
           <div {...stylex.props(diagramStyles.headerMain, styles.titleBlock)}>
             <Chip xstyle={styles.kindBadge}>{VIEW_TYPE_LABELS[viewType]}</Chip>
             <figcaption
-              {...stylex.props(diagramStyles.title, styles.title)}
+              {...stylex.props(
+                textStyles.truncate,
+                diagramStyles.title,
+                styles.title,
+              )}
               data-review-copy-prose
             >
               {title}
@@ -2064,6 +2068,7 @@ function SoftwareMapC4GroupNode({
         </span>
         <strong
           {...stylex.props(
+            textStyles.truncate,
             styles.groupLabel,
             data.node.type === "softwareSystem" && styles.groupLabelSystem,
             data.node.changeStatus === "removed" && styles.struck,
@@ -2415,6 +2420,7 @@ function SoftwareMapNodeFrame({
         <div {...stylex.props(styles.codeHead)}>
           <code
             {...stylex.props(
+              textStyles.truncate,
               styles.codeLabel,
               status === "removed" && styles.struck,
             )}
@@ -2436,7 +2442,13 @@ function SoftwareMapNodeFrame({
               isCollection && styles.hidden,
             )}
           >
-            <div {...stylex.props(textStyles.eyebrow, styles.nodeType)}>
+            <div
+              {...stylex.props(
+                textStyles.eyebrow,
+                textStyles.truncate,
+                styles.nodeType,
+              )}
+            >
               {softwareMapNodeTypeLabel(node)}
             </div>
             <SoftwareMapChangeBadge
@@ -2478,18 +2490,20 @@ function SoftwareMapNodeFrame({
           )}
         >
           {node.file && (
-            <span {...stylex.props(styles.metaItem)}>
+            <span {...stylex.props(textStyles.truncate, styles.metaItem)}>
               {node.file}
               {node.line === undefined ? "" : `:L${node.line}`}
             </span>
           )}
           {node.childCount !== undefined && node.childCount > 0 && (
-            <span {...stylex.props(styles.metaItem)}>
+            <span {...stylex.props(textStyles.truncate, styles.metaItem)}>
               {node.childCount} children
             </span>
           )}
           {node.boundary && (
-            <span {...stylex.props(styles.metaItem)}>boundary</span>
+            <span {...stylex.props(textStyles.truncate, styles.metaItem)}>
+              boundary
+            </span>
           )}
         </div>
       )}
@@ -2526,12 +2540,14 @@ function SoftwareMapDataStoreSchema({
         >
           <header {...stylex.props(styles.schemaHeader)}>
             <span {...stylex.props(styles.schemaKind)}>{section.kind}</span>
-            <strong {...stylex.props(styles.schemaLabel)}>
+            <strong {...stylex.props(textStyles.truncate, styles.schemaLabel)}>
               {section.label}
             </strong>
           </header>
           {section.key && (
-            <div {...stylex.props(styles.schemaKey)}>{section.key}</div>
+            <div {...stylex.props(textStyles.truncate, styles.schemaKey)}>
+              {section.key}
+            </div>
           )}
           <div>
             {section.rows.map((row) => (
@@ -2551,7 +2567,9 @@ function SoftwareMapDataStoreSchema({
                   } as CSSProperties
                 }
               >
-                <span {...stylex.props(styles.schemaRowName)}>
+                <span
+                  {...stylex.props(textStyles.truncate, styles.schemaRowName)}
+                >
                   {row.primaryKey && (
                     <Chip xstyle={styles.schemaKeyFlag}>PK</Chip>
                   )}
@@ -2567,7 +2585,9 @@ function SoftwareMapDataStoreSchema({
                   )}
                   {row.label}
                 </span>
-                <span {...stylex.props(styles.schemaRowType)}>
+                <span
+                  {...stylex.props(textStyles.truncate, styles.schemaRowType)}
+                >
                   {row.type ?? row.example ?? "object"}
                 </span>
               </div>
@@ -2626,6 +2646,7 @@ function SoftwareMapChangeBadge({
     return (
       <span
         {...stylex.props(
+          textStyles.truncate,
           styles.badge,
           inGroupTitle && styles.badgeInGroup,
           styles.badgeEmpty,
@@ -2636,7 +2657,13 @@ function SoftwareMapChangeBadge({
   }
 
   return (
-    <span {...stylex.props(styles.badge, inGroupTitle && styles.badgeInGroup)}>
+    <span
+      {...stylex.props(
+        textStyles.truncate,
+        styles.badge,
+        inGroupTitle && styles.badgeInGroup,
+      )}
+    >
       {visibleAdditions ? (
         <span
           {...stylex.props(
@@ -3275,12 +3302,9 @@ const styles = stylex.create({
   },
   groupLabel: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.ink,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.semibold,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   groupLabelSystem: {
     fontSize: fontSize.reading,
@@ -3407,10 +3431,7 @@ const styles = stylex.create({
   },
   nodeType: {
     minWidth: 0,
-    overflow: "hidden",
     lineHeight: "14px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   label: {
     margin: 0,
@@ -3441,7 +3462,6 @@ const styles = stylex.create({
   metaItem: {
     ...noBorder,
     maxWidth: "100%",
-    overflow: "hidden",
     padding: 0,
     borderRadius: 0,
     backgroundColor: tokens.transparent,
@@ -3450,8 +3470,6 @@ const styles = stylex.create({
     fontSize: fontSize.small,
     fontWeight: fontWeight.regular,
     lineHeight: "15px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   codeHead: {
     display: "flex",
@@ -3466,7 +3484,6 @@ const styles = stylex.create({
     display: "block",
     flex: "0 1 auto",
     minWidth: 0,
-    overflow: "hidden",
     padding: { default: null, [inDocument()]: "2px 5px" },
     borderRadius: { default: null, [inDocument()]: radius.small },
     backgroundColor: { default: null, [inDocument()]: tokens.well },
@@ -3475,8 +3492,6 @@ const styles = stylex.create({
     fontSize: fontSize.reading,
     fontWeight: fontWeight.semibold,
     lineHeight: "18px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   // Counts sit in the title row as plain text: the one +n −n pair, no pill.
   badge: {
@@ -3489,15 +3504,12 @@ const styles = stylex.create({
     width: "auto",
     maxWidth: "140px",
     minHeight: 0,
-    overflow: "hidden",
     padding: 0,
     backgroundColor: tokens.transparent,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     fontWeight: fontWeight.medium,
     lineHeight: "15px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   badgeEmpty: {
     visibility: "hidden",
@@ -3655,16 +3667,12 @@ const styles = stylex.create({
   },
   schemaLabel: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
     lineHeight: "15px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   schemaKey: {
-    overflow: "hidden",
     padding: "7px 10px",
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
@@ -3673,8 +3681,6 @@ const styles = stylex.create({
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   schemaRow: {
     display: "grid",
@@ -3700,12 +3706,9 @@ const styles = stylex.create({
   },
   schemaRowName: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.ink,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   schemaKeyFlag: {
     marginRight: "6px",
@@ -3718,13 +3721,10 @@ const styles = stylex.create({
   },
   schemaRowType: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
     textAlign: "right",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
 });
 

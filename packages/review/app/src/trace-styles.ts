@@ -95,9 +95,6 @@ export const traceStyles = stylex.create({
     flexShrink: 0,
   },
   pickerTitle: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
     fontWeight: fontWeight.medium,
     color: tokens.ink,
   },
@@ -173,9 +170,6 @@ export const traceStyles = stylex.create({
     color: tokens.accent,
   },
   pickerItemTitle: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
     fontWeight: fontWeight.regular,
   },
   pickerItemTitleActive: {
@@ -269,9 +263,6 @@ export const traceStyles = stylex.create({
   },
   toolTitle: {
     color: tokens.inkMuted,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
   },
   toolTitleFile: {
     color: tokens.accent,

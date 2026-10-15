@@ -1,4 +1,5 @@
 import { Spinner } from "@canvas/ui/spinner";
+import { textStyles } from "@canvas/ui/text";
 import {
   type AskCommand,
   type AskQuestion,
@@ -522,11 +523,13 @@ export function AskComposer({
                 onPointerMove={() => setActive(index)}
                 onClick={() => pick(index)}
               >
-                <span {...stylex.props(styles.optionLabel)}>
+                <span {...stylex.props(textStyles.truncate)}>
                   {option.label}
                 </span>
                 {option.detail ? (
-                  <span {...stylex.props(styles.optionDetail)}>
+                  <span
+                    {...stylex.props(textStyles.truncate, styles.optionDetail)}
+                  >
                     {option.detail}
                   </span>
                 ) : null}
@@ -632,7 +635,9 @@ export function AskComposer({
           </>
         ) : null}
         {permissions}
-        <span {...stylex.props(styles.status)}>{note ?? status}</span>
+        <span {...stylex.props(textStyles.truncate, styles.status)}>
+          {note ?? status}
+        </span>
         {share === undefined || share < CONTEXT_SHOWN_FROM ? null : (
           <span
             ref={usageTooltip}
@@ -720,18 +725,10 @@ const styles = stylex.create({
     flex: "none",
     fontFamily: tokens.chromeFont,
   },
-  optionLabel: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
   optionDetail: {
-    overflow: "hidden",
     color: tokens.inkMuted,
     fontSize: fontSize.micro,
     lineHeight: "14px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   images: {
     display: "flex",
@@ -805,9 +802,6 @@ const styles = stylex.create({
     color: tokens.inkMuted,
     fontSize: fontSize.small,
     lineHeight: "16px",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   actions: {
     display: "inline-flex",

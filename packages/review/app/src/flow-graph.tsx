@@ -1,4 +1,5 @@
 import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
+import { textStyles } from "@canvas/ui/text";
 import type { DiffSelection } from "@review/lens-selection";
 import {
   type FlowDiagramBlock,
@@ -614,7 +615,7 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
           (motion === "fill" || motion === "relabel") && drawStyles.labelFill,
         )}
       >
-        <span {...stylex.props(styles.label)}>
+        <span {...stylex.props(textStyles.truncate, styles.label)}>
           {node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label}
         </span>
         <span {...stylex.props(styles.caption)}>
@@ -799,10 +800,7 @@ const styles = stylex.create({
     padding: "0 12px",
   },
   label: {
-    overflow: "hidden",
     fontWeight: fontWeight.medium,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   caption: {
     color: tokens.inkFaint,

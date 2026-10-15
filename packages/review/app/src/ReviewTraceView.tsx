@@ -273,7 +273,9 @@ export function ReviewTraceView({
               <span {...stylex.props(textStyles.eyebrow, styles.pickerHarness)}>
                 {harnessTag(activeHarness, activeTarget.isSubagent)}
               </span>
-              <span {...stylex.props(styles.pickerTitle)}>{activeTitle}</span>
+              <span {...stylex.props(textStyles.truncate, styles.pickerTitle)}>
+                {activeTitle}
+              </span>
               <span
                 {...stylex.props(
                   styles.pickerChevron,
@@ -326,6 +328,7 @@ export function ReviewTraceView({
                         </span>
                         <span
                           {...stylex.props(
+                            textStyles.truncate,
                             styles.pickerItemTitle,
                             isActive && styles.pickerItemTitleActive,
                           )}

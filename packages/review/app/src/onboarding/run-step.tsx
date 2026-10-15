@@ -412,6 +412,7 @@ export function RunStep({
               ) : null}
               <span
                 {...stylex.props(
+                  textStyles.truncate,
                   styles.projectPath,
                   project && styles.projectPathEnd,
                 )}
@@ -673,11 +674,15 @@ function TargetRow({
       >
         {target.kind === "pr" ? `PR #${target.number}` : target.kind}
       </span>
-      <span {...stylex.props(styles.targetTitle)}>
+      <span {...stylex.props(textStyles.truncate, styles.targetTitle)}>
         {target.kind === "pr" ? target.title : target.branch}
       </span>
       <span
-        {...stylex.props(styles.targetMeta, selected && styles.targetMetaOn)}
+        {...stylex.props(
+          textStyles.truncate,
+          styles.targetMeta,
+          selected && styles.targetMetaOn,
+        )}
       >
         {target.kind === "pr"
           ? [target.author && `@${target.author}`, target.branch]
@@ -730,12 +735,9 @@ const styles = stylex.create({
   projectPathEnd: { textAlign: "end" },
   projectPath: {
     flex: 1,
-    overflow: "hidden",
     color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   projectPlaceholder: {
     display: "flex",
@@ -849,21 +851,15 @@ const styles = stylex.create({
     flex: "0 1 auto",
     minWidth: 0,
     maxWidth: "60%",
-    overflow: "hidden",
     fontSize: fontSize.ui,
     fontWeight: fontWeight.medium,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   targetMeta: {
     flex: 1,
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   targetMetaOn: { color: tokens.inkMuted },
   diff: {

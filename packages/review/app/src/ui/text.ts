@@ -17,4 +17,17 @@ export const textStyles = stylex.create({
   count: {
     fontVariantNumeric: "tabular-nums",
   },
+  // One line, cut with an ellipsis.
+  truncate: {
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  // At most two lines, the second cut with an ellipsis.
+  clamp2: {
+    display: "-webkit-box",
+    overflow: "hidden",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: 2,
+  },
 });

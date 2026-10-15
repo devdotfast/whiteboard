@@ -551,7 +551,7 @@ export function AskChoicePicker({
         onClick={() => setOpen((value) => !value)}
       >
         {icon}
-        <span {...stylex.props(styles.choiceName)}>
+        <span {...stylex.props(textStyles.truncate, styles.choiceName)}>
           {chosen?.name ?? current}
         </span>
         {/* Under the composer it reads as text; pointing at it shows it
@@ -875,8 +875,5 @@ const styles = stylex.create({
   },
   choiceName: {
     minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
 });

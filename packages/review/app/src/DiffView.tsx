@@ -416,7 +416,7 @@ export function ReviewDiffView({
               {...stylex.props(
                 textStyles.eyebrow,
                 styles.heading,
-                styles.filesHeading,
+                textStyles.truncate,
               )}
             >
               Files <span aria-hidden="true">·</span>{" "}
@@ -967,11 +967,6 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingBottom: "2px",
-  },
-  filesHeading: {
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
   },
   hint: {
     padding: "0 14px 6px 16px",
