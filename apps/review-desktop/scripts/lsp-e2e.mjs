@@ -447,20 +447,9 @@ async function createReview(fix, title, kind = "commits") {
           },
           ...["base", "head"].map((side) => ({
             type: "code_peek",
-            source: {
-              file: "main.ts",
-              start: { side, line: 3 },
-              end: { side, line: 10 },
-            },
+            source: `${side}/main.ts#L3-L10`,
           })),
-          {
-            type: "code_peek",
-            source: {
-              file: "main.py",
-              start: { side: "head", line: 1 },
-              end: { side: "head", line: 3 },
-            },
-          },
+          { type: "code_peek", source: "head/main.py#L1-L3" },
         ],
       },
     },
@@ -1707,6 +1696,7 @@ try {
     path.join(liveFixture.repo, "fresh.ts"),
     "export const fresh = 1;\n",
   );
+  await git(liveFixture.repo, "add", "-N", "fresh.ts");
   await until(
     async () =>
       (
@@ -1716,7 +1706,7 @@ try {
   );
   const updated = await api(`/${live.reviewId}?full=true`);
   assert.equal(updated.version, live.version);
-  assert.equal(updated.document[0].children[2].source.start.line, 3);
+  assert.equal(updated.document[0].children[2].source, "head/main.ts#L3-L10");
 
   const historicalWorktree = await api(
     `/${live.reviewId}/file?side=head&file=main.ts&version=${live.version}`,
