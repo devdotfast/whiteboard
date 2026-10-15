@@ -29,7 +29,6 @@ import type {
   ReviewRemoteAgentResult,
 } from "../common/reviewProtocol.js";
 import {
-  REVIEW_REMOTE_HOSTS_ENABLED_SETTING,
   REVIEW_REMOTE_HOSTS_SETTING,
   REVIEW_REMOTE_INSTALL_MODES,
   REVIEW_REMOTE_INSTALL_SETTING,
@@ -396,9 +395,6 @@ export class ReviewDesktopHost extends Disposable {
     this.remoteHosts = manager;
     const update = () => {
       manager.update(
-        this.configurationService.getValue(
-          REVIEW_REMOTE_HOSTS_ENABLED_SETTING,
-        ) === true,
         remoteHostAliases(
           this.configurationService.getValue(REVIEW_REMOTE_HOSTS_SETTING),
         ),
@@ -419,7 +415,6 @@ export class ReviewDesktopHost extends Disposable {
       this.configurationService.onDidChangeConfiguration((event) => {
         if (
           event.affectsConfiguration(REVIEW_REMOTE_HOSTS_SETTING) ||
-          event.affectsConfiguration(REVIEW_REMOTE_HOSTS_ENABLED_SETTING) ||
           event.affectsConfiguration(REVIEW_REMOTE_INSTALL_SETTING)
         )
           update();

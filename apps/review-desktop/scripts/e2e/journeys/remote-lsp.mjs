@@ -44,7 +44,6 @@ export const name = "remote-lsp";
 export const phase = 2;
 
 export const options = {
-  settings: { "review.experimental.remoteHosts.enabled": true },
   env: { DEV_FAST_REVIEW_SSH_CONFIG: `${runDir}/ssh_config` },
   beforeLaunch: stampDesktopCommit,
 };

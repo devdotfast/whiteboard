@@ -23,7 +23,6 @@ function remoteHosts(
   states: ReviewGatewayHostState[] = [],
 ): ReviewRemoteHostsSettings {
   return {
-    enabled: true,
     configured,
     suggestions: vi.fn<ReviewRemoteHostsSettings["suggestions"]>(async () => [
       "devbox",
@@ -87,17 +86,14 @@ async function render(hosts: ReviewRemoteHostsSettings) {
 }
 
 const section = () =>
-  document.querySelector<HTMLElement>('section[aria-label="Remote hosts"]');
+  document.querySelector<HTMLElement>(
+    'section[aria-label="Remote Hosts (Experimental)"]',
+  );
 
 const rows = () =>
   [...document.querySelectorAll("[data-remote-host]")].map(
     (row) => row.textContent,
   );
-
-test("the section is absent with the setting off", async () => {
-  await render({ ...remoteHosts(["devbox"]), enabled: false });
-  expect(section()).toBeNull();
-});
 
 test("lists each host with its state and detail, and the install command from Desktop as code", async () => {
   const install =

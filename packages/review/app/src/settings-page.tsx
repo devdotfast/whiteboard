@@ -1,6 +1,5 @@
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
-import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
@@ -11,12 +10,13 @@ import type {
   ReviewThemeChoice,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { type ReactNode, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { DiffrConfigSection } from "./diffr-config-section";
 import { homeStyles } from "./home-styles";
 import { RemoteHostsSection } from "./remote-hosts-section";
+import { Row, Section } from "./settings-section";
 import { settingsStyles as styles } from "./settings-styles";
 import { withClass } from "./stylex-props";
 import { TraceCaptureSection } from "./trace-capture-section";
@@ -316,9 +316,7 @@ export function SettingsPage({
             </Row>
           </Section>
 
-          {settings.remoteHosts.enabled ? (
-            <RemoteHostsSection hosts={settings.remoteHosts} />
-          ) : null}
+          <RemoteHostsSection hosts={settings.remoteHosts} />
 
           <Section label="Experimental Features">
             <Row
@@ -402,36 +400,5 @@ export function SettingsPage({
         </div>
       </div>
     </main>
-  );
-}
-
-function Section({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <section {...stylex.props(styles.section)} aria-label={label}>
-      <h2 {...stylex.props(textStyles.eyebrow, styles.sectionLabel)}>
-        {label}
-      </h2>
-      {children}
-    </section>
-  );
-}
-
-function Row({
-  label,
-  description,
-  children,
-}: {
-  label: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <div {...stylex.props(styles.row)}>
-      <div {...stylex.props(styles.rowText)}>
-        <span {...stylex.props(styles.rowLabel)}>{label}</span>
-        <span {...stylex.props(styles.rowDescription)}>{description}</span>
-      </div>
-      <div {...stylex.props(styles.rowControl)}>{children}</div>
-    </div>
   );
 }

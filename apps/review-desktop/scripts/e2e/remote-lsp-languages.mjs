@@ -102,7 +102,6 @@ d=$(ls -d ~/.dev/whiteboard-remote/extensions/rust-lang.rust-analyzer-*/)
 
 export const remoteLspOptions = () => ({
   extensions: "none",
-  settings: { "review.experimental.remoteHosts.enabled": true },
   env: { DEV_FAST_REVIEW_SSH_CONFIG: `${runDir}/ssh_config` },
 });
 

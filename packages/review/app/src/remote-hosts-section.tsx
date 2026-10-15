@@ -17,6 +17,7 @@ import {
   useRemoteHostStates,
   useSettingsReveal,
 } from "./remote-host-state";
+import { Section } from "./settings-section";
 import { settingsStyles as styles } from "./settings-styles";
 import { tokens } from "./tokens.stylex";
 
@@ -84,12 +85,7 @@ export function RemoteHostsSection({
   };
 
   return (
-    <section
-      ref={section}
-      {...stylex.props(styles.section)}
-      aria-label="Remote hosts"
-    >
-      <h2 {...stylex.props(styles.sectionLabel)}>Remote hosts</h2>
+    <Section ref={section} label="Remote Hosts (Experimental)">
       {configured.map((name) => {
         const state = states?.find((host) => host.alias === name);
         const failed = !!state && !!reviewHostStatus(state).action;
@@ -223,7 +219,7 @@ export function RemoteHostsSection({
           <CopyableText text={error} />
         </p>
       ) : null}
-    </section>
+    </Section>
   );
 }
 

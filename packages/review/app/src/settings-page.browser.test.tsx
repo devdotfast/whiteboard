@@ -50,10 +50,9 @@ function settings(): ReviewCanvasSettingsContent {
     importVsCodeSettings: unexpected,
     uninstallApp: unexpected,
     remoteHosts: {
-      enabled: false,
       configured: [],
-      suggestions: unexpected,
-      states: unexpected,
+      suggestions: async () => [],
+      states: async () => [],
       set: unexpected,
       retry: unexpected,
       install: unexpected,

@@ -126,9 +126,9 @@ export class ReviewRemoteHosts {
 		};
 	}
 
-	update(enabled: boolean, aliases: readonly string[]): void {
+	update(aliases: readonly string[]): void {
 		if (this.disposed) return;
-		const wanted = enabled ? [...new Set(aliases)] : [];
+		const wanted = [...new Set(aliases)];
 		for (const [alias, host] of this.hosts) {
 			if (wanted.includes(alias)) continue;
 			this.hosts.delete(alias);

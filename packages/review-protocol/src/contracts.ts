@@ -577,7 +577,6 @@ export interface ReviewRemoteHostActions {
 }
 
 export interface ReviewRemoteHostsSettings {
-  enabled: boolean;
   configured: string[];
   suggestions(): Promise<string[]>;
   states(): Promise<ReviewGatewayHostState[]>;

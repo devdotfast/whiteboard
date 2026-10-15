@@ -44,14 +44,8 @@ Each command Desktop runs on a Windows laptop opens its own SSH connection.
 
 ## Add a host
 
-Remote hosts are experimental. Turn them on in Whiteboard's `settings.json`:
-
-```json
-"review.experimental.remoteHosts.enabled": true
-```
-
-Then open Settings. Under **Remote hosts**, type an alias from your SSH
-configuration (the field suggests them) and click **Add**. The row shows the
+Remote hosts are experimental. Open Settings. Under **Remote Hosts
+(Experimental)**, type an alias from your SSH configuration (the field suggests them) and click **Add**. The row shows the
 host's state. The first time, Desktop asks to install Whiteboard there. When
 the row reads `online`, the host's reviews appear in Home.
 
