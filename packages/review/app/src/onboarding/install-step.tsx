@@ -342,7 +342,7 @@ export function InstallStep({
           </span>
           <span {...stylex.props(styles.trailing)}>
             <Button
-              variant="ghost"
+              variant="link"
               xstyle={styles.rescan}
               disabled={busy}
               onClick={() => void scan(false)}
@@ -662,7 +662,6 @@ const styles = stylex.create({
     fontSize: fontSize.body,
   },
   rescan: {
-    marginInlineEnd: "-10px",
     fontFamily: tokens.fontMono,
   },
   note: {

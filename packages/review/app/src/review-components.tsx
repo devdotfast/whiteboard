@@ -1,6 +1,6 @@
 import { documentType } from "@canvas/document-type.stylex";
 import { fontSize, fontWeight } from "@canvas/scale.stylex";
-import { IconButton, buttonStyles } from "@canvas/ui/button";
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
   ChevronDownIcon,
@@ -1265,16 +1265,10 @@ export function GuidedTourPanel({
             <>
               <div {...stylex.props(tourStyles.endCap)}>
                 <span>End of tour</span>
-                <button
-                  type="button"
-                  {...stylex.props(buttonStyles.reset, tourStyles.endCapButton)}
-                  onClick={() => stepTo(0)}
-                >
-                  <ChevronDownIcon
-                    xstyle={[iconStyles.flip, iconStyles.glyph]}
-                  />{" "}
+                <Button variant="link" tone="accent" onClick={() => stepTo(0)}>
+                  <ChevronDownIcon xstyle={iconStyles.flip} />
                   Back to step 1
-                </button>
+                </Button>
               </div>
               <div
                 ref={tailRef}

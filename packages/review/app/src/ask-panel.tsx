@@ -1,5 +1,3 @@
-import { buttonStyles } from "@canvas/ui/button";
-import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ArrowDownIcon, ImageIcon, LockIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
@@ -79,7 +77,7 @@ import { fontSize, radius } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
-import { IconButton } from "./ui/button";
+import { Button, IconButton } from "./ui/button";
 import { Chip } from "./ui/chip";
 import { StatusBanner } from "./ui/status-banner";
 import { surfaceStyles } from "./ui/surface";
@@ -725,17 +723,13 @@ export function AskPanelContent({
                 {errorAction ? (
                   <>
                     {" "}
-                    <button
-                      type="button"
-                      {...stylex.props(
-                        focusStyles.ring,
-                        buttonStyles.reset,
-                        askPanelStyles.errorAction,
-                      )}
+                    <Button
+                      variant="link"
+                      tone="accent"
                       onClick={errorAction.run}
                     >
                       {errorAction.label}
-                    </button>
+                    </Button>
                   </>
                 ) : null}
               </p>

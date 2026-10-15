@@ -200,14 +200,14 @@ export function ConnectCard({
           </div>
           <div {...stylex.props(promptStyles.actions)}>
             {collapsible && expanded ? (
-              <button
-                type="button"
-                {...stylex.props(buttonStyles.reset, styles.collapse)}
+              <Button
+                variant="link"
+                xstyle={styles.collapse}
                 aria-expanded={true}
                 onClick={() => setExpanded(false)}
               >
                 Show less
-              </button>
+              </Button>
             ) : null}
             <button
               type="button"
@@ -465,10 +465,7 @@ const styles = stylex.create({
   },
   collapse: {
     marginRight: "auto",
-    padding: 0,
-    color: { default: tokens.inkMuted, ":hover": tokens.ink },
     font: `${fontSize.body}/22px ${tokens.chromeFont}`,
-    cursor: "pointer",
   },
   legacy: {
     display: "flex",

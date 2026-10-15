@@ -317,18 +317,13 @@ export function AskHistoryList({
           </ul>
         ) : null}
         {passage && openHistory ? (
-          <button
-            type="button"
-            {...stylex.props(
-              focusStyles.ring,
-              buttonStyles.reset,
-              askPanelStyles.errorAction,
-              styles.allConversations,
-            )}
+          <Button
+            variant="link"
+            xstyle={styles.allConversations}
             onClick={openHistory}
           >
             All saved conversations
-          </button>
+          </Button>
         ) : null}
       </div>
     </div>
@@ -338,7 +333,6 @@ export function AskHistoryList({
 const styles = stylex.create({
   allConversations: {
     alignSelf: "flex-start",
-    color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
   },

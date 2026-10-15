@@ -264,14 +264,6 @@ export const tourStyles = stylex.create({
     fontSize: fontSize.small,
     fontWeight: fontWeight.bold,
   },
-  endCapButton: {
-    padding: 0,
-    boxShadow: "none",
-    color: tokens.accent,
-    font: "inherit",
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-  },
   scrollTail: {
     flexShrink: 0,
   },
