@@ -15,6 +15,7 @@ import { Shortcut } from "@canvas/ui/kbd";
 import { SegmentedControl, segmentStyles } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
 import { fieldStyles } from "@canvas/ui/text-field";
+import { useTooltip } from "@canvas/use-tooltip";
 import type {
   ReviewCanvasSetupActions,
   ReviewOnboardingProject,
@@ -340,6 +341,13 @@ export function RunStep({
     ? `${agentName} runs here in ${agents.find((option) => option.id === agent)?.auto ? "auto mode" : "read-only mode"}`
     : undefined;
 
+  const filterTooltip = useTooltip<HTMLInputElement>(
+    "From git worktree list and gh pr list",
+  );
+
+  const refreshTooltip = useTooltip("Refresh branches, worktrees and PRs");
+  const drawTooltip = useTooltip(agentMode ?? "");
+
   const projectOptions = useMemo(() => {
     const shared = (name: string) =>
       projects.filter((project) => project.name === name).length > 1;
@@ -433,9 +441,9 @@ export function RunStep({
           <div {...stylex.props(styles.toolbar)}>
             <SearchIcon xstyle={styles.searchIcon} />
             <input
+              ref={filterTooltip}
               type="search"
               aria-label="Filter what to draw"
-              title="From git worktree list and gh pr list"
               placeholder={
                 targets.length
                   ? `Filter ${targets.length} branches, worktrees and PRs`
@@ -448,11 +456,11 @@ export function RunStep({
             />
             {discovered && !loading ? (
               <IconButton
+                ref={refreshTooltip}
                 disabled={refreshing}
                 aria-busy={refreshing || undefined}
                 onClick={() => void refresh()}
                 aria-label="Refresh branches, worktrees and PRs"
-                title="Refresh branches, worktrees and PRs"
               >
                 <RefreshIcon xstyle={refreshing && styles.refreshing} />
               </IconButton>
@@ -595,10 +603,10 @@ export function RunStep({
               </span>
               <span {...stylex.props(styles.chip)}>
                 <Button
+                  ref={drawTooltip}
                   variant="ghost"
                   aria-label={`Draw with ${agentName}`}
                   aria-keyshortcuts="Meta+Enter"
-                  title={agentMode}
                   disabled={!canDraw}
                   onClick={() => void draw()}
                   xstyle={styles.chipDraw}

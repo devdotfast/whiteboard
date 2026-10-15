@@ -6,6 +6,7 @@ import { tokens } from "@canvas/tokens.stylex";
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { CopyIcon, useCopy } from "@canvas/ui/copy";
+import { useTooltip } from "@canvas/use-tooltip";
 import type {
   ReviewCanvasSetupActions,
   ReviewCliInstallStatus,
@@ -376,12 +377,13 @@ function OtherAgentRow({
 /** Copies a row's whole setup command; shows while the row is hovered. */
 function CopyChip({ text, name }: { text: string; name: string }) {
   const [copied, copy] = useCopy(text);
+  const tooltip = useTooltip(text);
 
   return (
     <button
+      ref={tooltip}
       type="button"
       aria-label={`Copy the ${name} setup command`}
-      title={text}
       {...stylex.props(styles.chip, copied && styles.chipShown)}
       onClick={copy}
     >
@@ -409,6 +411,7 @@ function InstallRow({
   onRetry(): void;
 }) {
   const checkboxId = useId();
+  const retryTooltip = useTooltip(row.output || "Try again");
   const left = skipped && row.state === "waiting";
 
   return (
@@ -459,7 +462,7 @@ function InstallRow({
         {row.state === "approve" ? (
           <Button onClick={onRetry}>Open Cursor</Button>
         ) : row.state === "failed" ? (
-          <Button onClick={onRetry} title={row.output}>
+          <Button ref={retryTooltip} onClick={onRetry}>
             Retry
           </Button>
         ) : (
