@@ -55,14 +55,13 @@ export function BugReportControl({
   const [includeDiff, setIncludeDiff] = useState(true);
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [dropActive, setDropActive] = useState(false);
-  const [capturing, setCapturing] = useState(false);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const notify = useNotify();
   const tooltip = useTooltip("Report a bug");
   const capturePending = useRef(false);
   const descriptionBytes = new TextEncoder().encode(description).byteLength;
-  const canSend = descriptionBytes <= MAX_DESCRIPTION_BYTES && !sending;
+  const canSend = descriptionBytes <= MAX_DESCRIPTION_BYTES;
 
   const reset = () => {
     setDescription("");
@@ -83,7 +82,7 @@ export function BugReportControl({
   const submit = async (event: FormEvent) => {
     event.preventDefault();
 
-    if (!canSend) return;
+    if (!canSend || sending) return;
     setSending(true);
     setError(null);
 
@@ -189,7 +188,6 @@ export function BugReportControl({
   const openDialog = async () => {
     if (capturePending.current) return;
     capturePending.current = true;
-    setCapturing(true);
     captureUiEvent(session, "bug_report_dialog_opened");
     let captured: string | null = null;
 
@@ -198,7 +196,6 @@ export function BugReportControl({
     } finally {
       setScreenshot(captured);
       setOpen(true);
-      setCapturing(false);
       capturePending.current = false;
     }
   };
@@ -213,7 +210,6 @@ export function BugReportControl({
           aria-label="Report a bug"
           data-page-bar-fold="chat"
           ref={tooltip}
-          disabled={capturing}
           onClick={() => void openDialog()}
         >
           <BugIcon xstyle={iconStyles.chrome} />
