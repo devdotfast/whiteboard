@@ -46,11 +46,6 @@ export const promptStyles = stylex.create({
     font: `${fontWeight.medium} ${fontSize.body}/16px ${tokens.chromeFont}`,
     textDecoration: "none",
   },
-  copyIcon: {
-    width: "12px",
-    height: "12px",
-    strokeWidth: "2.4px",
-  },
   error: {
     margin: "10px 0 0",
     fontSize: fontSize.body,

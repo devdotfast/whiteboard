@@ -65,7 +65,6 @@ export const styles = stylex.create({
   faint: { color: tokens.inkFaint },
   muted: { color: tokens.inkMuted },
   regular: { fontWeight: fontWeight.regular },
-  smallIcon: { width: "12px", height: "12px", flexShrink: 0 },
   ellipsis: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" },
   notice: {
     justifyContent: "space-between",

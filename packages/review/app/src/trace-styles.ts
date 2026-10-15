@@ -173,10 +173,7 @@ export const traceStyles = stylex.create({
     fontWeight: fontWeight.semibold,
   },
   pickerItemCheck: {
-    fontSize: fontSize.body,
-    fontWeight: fontWeight.bold,
     color: tokens.accent,
-    flexShrink: 0,
     marginLeft: "6px",
   },
   pickerItemBadge: {
@@ -232,13 +229,7 @@ export const traceStyles = stylex.create({
     minHeight: "24px",
   },
   icon: {
-    width: "14px",
-    height: "14px",
-    fill: "none",
-    stroke: tokens.inkFaint,
-    strokeWidth: 1.5,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
+    color: tokens.inkFaint,
   },
   centered: {
     display: "inline-flex",
@@ -282,9 +273,7 @@ export const traceStyles = stylex.create({
     flexShrink: 0,
   },
   toolChevronIcon: {
-    width: "12px",
-    height: "12px",
-    stroke: tokens.ruleSoft,
+    color: tokens.ruleSoft,
     transform: {
       default: "rotate(-90deg)",
       [stylex.when.ancestor(":is([open])", traceToolMarker)]: "rotate(0deg)",
@@ -365,9 +354,7 @@ export const traceStyles = stylex.create({
     alignItems: "center",
   },
   workedChevronIcon: {
-    width: "11px",
-    height: "11px",
-    stroke: tokens.inkFaint,
+    color: tokens.inkFaint,
     transform: {
       default: "rotate(-90deg)",
       [stylex.when.ancestor(":is([open])", traceWorkedMarker)]: "rotate(0deg)",
@@ -407,9 +394,7 @@ export const traceStyles = stylex.create({
     fontSize: fontSize.small,
   },
   toolGroupChevronIcon: {
-    width: "12px",
-    height: "12px",
-    stroke: tokens.ruleSoft,
+    color: tokens.ruleSoft,
     transform: {
       default: "rotate(-90deg)",
       [stylex.when.ancestor(":is([open])", traceGroupMarker)]: "rotate(0deg)",
@@ -486,12 +471,6 @@ export const traceStyles = stylex.create({
   collapseChevron: {
     width: "10px",
     height: "10px",
-    flexShrink: 0,
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
   },
   userSlot: {
     display: "flex",

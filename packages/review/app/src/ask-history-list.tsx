@@ -1,10 +1,12 @@
+import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { ChatIcon, HistoryIcon } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect } from "react";
 
-import { logos, useAskAgents } from "./ask-agent-picker";
+import { useAskAgents } from "./ask-agent-picker";
 import { resolveAskAnchor } from "./ask-anchor";
 import { AskDeleteButton } from "./ask-delete";
 import { useShowThreads } from "./ask-dock";
@@ -12,7 +14,6 @@ import { useAskHistory } from "./ask-history";
 import { askPanelStyles } from "./ask-styles";
 import { formatRelativeTime } from "./format";
 import { useReviewSession } from "./host/review-session";
-import { ChatIcon, HistoryIcon } from "./icons";
 import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
 import type { AskPassage, AskView } from "./review-panel-model";
 import { useReviewRoots } from "./review-root-context";
@@ -267,7 +268,7 @@ export function AskHistoryList({
                     }}
                   >
                     <span {...stylex.props(styles.historyLogo)}>
-                      {logos[entry.agent]({})}
+                      {AGENT_LOGOS[entry.agent]({})}
                     </span>
                     <span {...stylex.props(styles.historyText)}>
                       <span

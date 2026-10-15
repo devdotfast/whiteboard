@@ -2,6 +2,7 @@ import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
 import { Checkbox, Radio } from "@canvas/ui/checkbox";
+import { CloseIcon } from "@canvas/ui/icons";
 import { RatingScale } from "@canvas/ui/rating-scale";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { TextField, fieldStyles } from "@canvas/ui/text-field";
@@ -17,7 +18,6 @@ import { useId, useLayoutEffect, useRef, useState } from "react";
 
 import { createCanvasQueryClient } from "./canvas-query";
 import { CourierFigure } from "./courier-figure";
-import { CloseIcon } from "./icons";
 
 type Host = NonNullable<ReviewCanvasUi["feedback"]>;
 

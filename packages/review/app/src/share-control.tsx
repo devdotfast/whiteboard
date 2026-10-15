@@ -2,6 +2,7 @@ import { layer } from "@canvas/scale.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
 import { copyText } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { ShareIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
@@ -28,7 +29,6 @@ import {
 
 import { canvasQueryKeys } from "./canvas-query";
 import { useOptionalReviewSession } from "./host/review-session";
-import { ShareIcon } from "./icons";
 import { topbarActionsMarker } from "./markers.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";

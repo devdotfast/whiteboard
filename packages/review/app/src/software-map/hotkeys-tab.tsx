@@ -1,4 +1,3 @@
-import { MinusIcon, PlusIcon } from "@canvas/icons";
 import {
   elevation,
   fontSize,
@@ -8,6 +7,8 @@ import {
 } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { buttonStyles } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { MinusIcon, PlusIcon } from "@canvas/ui/icons";
 import { Kbd } from "@canvas/ui/kbd";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -161,7 +162,7 @@ export function SoftwareMapHotkeysTab({
           tabIndex={open ? 0 : -1}
           onClick={() => onOpenChange(false)}
         >
-          <MinusIcon xstyle={styles.icon} />
+          <MinusIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
         </button>
       </div>
       <button
@@ -179,7 +180,7 @@ export function SoftwareMapHotkeysTab({
         onClick={() => onOpenChange(true)}
       >
         <span>Hotkeys</span>
-        <PlusIcon xstyle={styles.icon} />
+        <PlusIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
       </button>
     </aside>
   );
@@ -342,10 +343,5 @@ const styles = stylex.create({
     opacity: 1,
     pointerEvents: "auto",
     transform: "translateY(0)",
-  },
-  icon: {
-    width: "14px",
-    height: "14px",
-    pointerEvents: "none",
   },
 });

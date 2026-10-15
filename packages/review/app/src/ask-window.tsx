@@ -1,6 +1,14 @@
+import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import {
+  ChatIcon,
+  CloseIcon,
+  DockIcon,
+  GripIcon,
+  MinusIcon,
+} from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import {
   type PointerEvent,
@@ -14,7 +22,6 @@ import {
 import { createPortal } from "react-dom";
 
 import { useReviewDebugSettings } from "./debug-settings";
-import { CloseIcon, DockIcon, GripIcon, MinusIcon } from "./icons";
 import { appMarker } from "./markers.stylex";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { AskAnchor, AskSize } from "./review-panel-model";

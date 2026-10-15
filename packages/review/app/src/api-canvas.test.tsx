@@ -1613,7 +1613,7 @@ it.each([
   async ({ available, shown }) => {
     const { inline, diffs, button } = await mountPeekReview({ available });
 
-    expect(Boolean(button("Source tree ↗"))).toBe(shown);
+    expect(Boolean(button("Source tree"))).toBe(shown);
     expect(inline[0]!.onDidOpen !== undefined).toBe(shown);
     await act(async () => button("Diff")!.click());
     await act(async () => {
@@ -1632,8 +1632,8 @@ it("keeps Source tree on a remote review whose Source windows are off, disabled 
     },
   });
 
-  expect(button("Source tree ↗")?.disabled).toBe(true);
-  expect(button("Source tree ↗")?.title).toBe("devbox offline.");
+  expect(button("Source tree")?.disabled).toBe(true);
+  expect(button("Source tree")?.title).toBe("devbox offline.");
 });
 
 it("keeps the open peeks and Diff view when the host's source windows go away and return", async () => {

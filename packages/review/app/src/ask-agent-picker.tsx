@@ -1,6 +1,8 @@
+import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { CheckIcon, ChevronDownIcon, SearchIcon } from "@canvas/ui/icons";
 import {
   type AskAgentId,
   type AskChoiceKind,
@@ -28,9 +30,7 @@ import {
 } from "react";
 import { z } from "zod";
 
-import { AGENT_LOGOS } from "./agent-logos";
 import type { ReviewSession } from "./host/review-session";
-import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 import { fontSize } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
@@ -60,11 +60,6 @@ const agentsSchema = z.object({
 });
 
 export type AskAgent = z.infer<typeof agentsSchema>["agents"][number];
-
-export const logos: Record<
-  AskAgentId,
-  (props: { xstyle?: stylex.StyleXStyles }) => ReactElement
-> = AGENT_LOGOS;
 
 // The last answer per canvas session, shown while the next is asked; and the
 // request under way, which the toolbar and the panel share.
@@ -391,7 +386,7 @@ export function AskAgentMenu({
             onClick={() => onPick(candidate.id)}
           >
             <span {...stylex.props(styles.logo)}>
-              {logos[candidate.id]({})}
+              {AGENT_LOGOS[candidate.id]({})}
             </span>
             <span {...stylex.props(styles.name)}>{candidate.name}</span>
             {candidate.id === current ? (
@@ -448,7 +443,7 @@ export function AskAgentPicker({
         ref={unavailable === undefined ? undefined : hint}
         {...stylex.props(styles.inline)}
       >
-        {agent ? logos[agent]({}) : null}
+        {agent ? AGENT_LOGOS[agent]({}) : null}
         <span>{chosen?.name ?? agent ?? "Agent"}</span>
       </span>
     );
@@ -466,7 +461,7 @@ export function AskAgentPicker({
         disabled={!agents}
         onClick={() => setOpen((value) => !value)}
       >
-        {agent ? logos[agent]({}) : null}
+        {agent ? AGENT_LOGOS[agent]({}) : null}
         <span>{chosen?.name ?? "Choose an agent"}</span>
         <ChevronDownIcon />
       </Button>

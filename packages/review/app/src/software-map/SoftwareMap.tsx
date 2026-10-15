@@ -9,7 +9,6 @@ import { diagramStyles } from "@canvas/diagram-styles";
 import { hasTextSelectionWithin } from "@canvas/diagram-text-selection";
 import { flowLayer } from "@canvas/flow-layers.stylex";
 import { useReviewSession } from "@canvas/host/review-session";
-import { CloseIcon, RefreshIcon } from "@canvas/icons";
 import {
   appMarker,
   codeInspectorMarker,
@@ -34,6 +33,7 @@ import { captureUiEvent } from "@canvas/ui-telemetry";
 import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
+import { CloseIcon, FoldIcon, RefreshIcon, UnfoldIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import { useCanvasScrollLock } from "@canvas/use-canvas-scroll-lock";
@@ -1097,13 +1097,7 @@ function SoftwareMapCodeInspector({
               aria-label={collapseActionLabel}
               title={collapseActionLabel}
             >
-              <span
-                {...withClass(
-                  `codicon ${diffsCollapsed ? "codicon-unfold" : "codicon-fold"}`,
-                  styles.codicon,
-                )}
-                aria-hidden="true"
-              />
+              {diffsCollapsed ? <UnfoldIcon /> : <FoldIcon />}
             </IconButton>
           ) : null}
           <SoftwareMapChangeBadge
@@ -3076,9 +3070,6 @@ const styles = stylex.create({
     flex: "none",
     gap: "4px",
     alignItems: "center",
-  },
-  codicon: {
-    fontSize: fontSize.reading,
   },
   inspectorDiffs: {
     minHeight: 0,

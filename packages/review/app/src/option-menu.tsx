@@ -1,5 +1,7 @@
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CheckIcon, ChevronDownIcon } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
@@ -10,7 +12,6 @@ import {
   useState,
 } from "react";
 
-import { CheckIcon } from "./icons";
 import { menuStyles, moveMenuFocus } from "./ui/menu";
 import { surfaceStyles } from "./ui/surface";
 import { useAnchoredPopover } from "./use-anchored-popover";
@@ -90,13 +91,7 @@ export function OptionMenu<T extends string>({
         {...triggerProps}
       >
         {children}
-        <svg
-          {...stylex.props(styles.chevron)}
-          viewBox="0 0 20 20"
-          aria-hidden="true"
-        >
-          <path d={open ? "m5 12 5-5 5 5" : "m5 8 5 5 5-5"} />
-        </svg>
+        <ChevronDownIcon xstyle={open && iconStyles.flip} />
       </button>
       {open && (
         <div
@@ -158,14 +153,4 @@ const styles = stylex.create({
     position: "relative",
   },
   options: { minWidth: "160px" },
-  chevron: {
-    width: "12px",
-    height: "12px",
-    flexShrink: 0,
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: "1.8",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-  },
 });

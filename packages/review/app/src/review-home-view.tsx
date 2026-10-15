@@ -1,4 +1,22 @@
 import { CopyableText, copyText } from "@canvas/ui/copy";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import {
+  BoardIcon,
+  BranchIcon,
+  ChevronDownIcon,
+  ClearFiltersIcon,
+  CloseIcon,
+  CodeIcon,
+  DisclosureChevron,
+  FilterIcon,
+  FolderIcon,
+  GearIcon,
+  HelpIcon,
+  PlusIcon,
+  PullRequestIcon,
+  SearchIcon,
+  SortIcon,
+} from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import {
   REVIEW_DISCORD_URL,
@@ -32,23 +50,6 @@ import { useHostActionButton } from "./connection-chip";
 import { countLabel, formatRelativeTime } from "./format";
 import { homeStyles } from "./home-styles";
 import { CanvasUiContext, useCanvasMenu } from "./host/canvas-ui";
-import {
-  BoardIcon,
-  BranchIcon,
-  ChevronDownIcon,
-  ClearFiltersIcon,
-  CloseIcon,
-  CodeIcon,
-  DisclosureChevron,
-  FilterIcon,
-  FolderIcon,
-  GearIcon,
-  HelpIcon,
-  PlusIcon,
-  PullRequestIcon,
-  SearchIcon,
-  SortIcon,
-} from "./icons";
 import { homeGroupMarker, homeRowMarker } from "./markers.stylex";
 import { useNotify } from "./notify";
 import { useReviewHostDown } from "./remote-host-state";
@@ -904,7 +905,7 @@ export function ReviewHome({
     if (id === "draft" || id === editingSearch) {
       return (
         <span key={id} {...stylex.props(styles.chip, styles.editingChip)}>
-          <SearchIcon xstyle={[styles.smallIcon, styles.editingIcon]} />
+          <SearchIcon xstyle={[iconStyles.inline, styles.editingIcon]} />
           <input
             ref={input}
             aria-label="Search whiteboards"
@@ -957,7 +958,7 @@ export function ReviewHome({
           onOpen={() => startTextFilter(term, id)}
           onRemove={() => setFilters((current) => removeHomeChip(current, id))}
         >
-          <SearchIcon xstyle={[styles.smallIcon, styles.muted]} />
+          <SearchIcon xstyle={[iconStyles.inline, styles.muted]} />
           <span {...stylex.props(styles.chipValue)}>{term}</span>
         </FilterChip>
       );
@@ -1345,7 +1346,7 @@ export function ReviewHome({
                                 >
                                   {pill.facet === "branches" ? (
                                     <>
-                                      <BranchIcon xstyle={styles.smallIcon} />
+                                      <BranchIcon xstyle={iconStyles.inline} />
                                       <MiddleTruncatedText
                                         text={pill.label}
                                         queries={searchTerms}
@@ -1353,7 +1354,7 @@ export function ReviewHome({
                                     </>
                                   ) : (
                                     <>
-                                      <FolderIcon xstyle={styles.smallIcon} />
+                                      <FolderIcon xstyle={iconStyles.inline} />
                                       <span {...stylex.props(styles.ellipsis)}>
                                         <MatchedText
                                           text={pill.label}
@@ -1378,7 +1379,8 @@ export function ReviewHome({
               <div>
                 {countLabel(hidden, "whiteboard")} hidden by {cause} ·{" "}
                 <Button variant="ghost" onClick={clearFilters}>
-                  Clear filters ×
+                  Clear filters
+                  <CloseIcon xstyle={iconStyles.inline} />
                 </Button>
               </div>
             </footer>
@@ -1579,7 +1581,7 @@ function FilterChip({
         onMouseDown={(event) => event.preventDefault()}
         onClick={onRemove}
       >
-        <CloseIcon xstyle={styles.smallIcon} />
+        <CloseIcon xstyle={iconStyles.inline} />
       </button>
     </span>
   );
@@ -1693,7 +1695,7 @@ function PullRequestPill({
       {...stylex.props(styles.metadataPill)}
       onClick={(event) => event.stopPropagation()}
     >
-      <PullRequestIcon xstyle={styles.smallIcon} />
+      <PullRequestIcon xstyle={iconStyles.inline} />
       {label}
       {title && (
         <span {...stylex.props(styles.ellipsis, styles.pullRequestTitle)}>

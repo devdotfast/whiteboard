@@ -1,3 +1,4 @@
+import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import {
   type ReviewProjectThread,
   type ReviewSidebarSectionProps,
@@ -7,7 +8,6 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
-import { AGENT_LOGOS } from "./agent-logos";
 import { BoardIcon } from "./board-icons";
 import { FolderLabel } from "./folder-label";
 import { fontSize, fontWeight, motion, radius } from "./scale.stylex";

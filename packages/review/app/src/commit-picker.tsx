@@ -1,6 +1,7 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
+import { CheckIcon, CloseIcon } from "@canvas/ui/icons";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { surfaceStyles } from "@canvas/ui/surface";
 import type { ReviewSidebarCommit } from "@dev.fast/review-protocol";
@@ -14,7 +15,6 @@ import {
 } from "react";
 
 import { DiffCount } from "./diff-count";
-import { CheckIcon, CloseIcon } from "./icons";
 import { relativeTimeLabel } from "./review-doc-meta";
 import { tokens } from "./tokens.stylex";
 import { useAnchoredPopover } from "./use-anchored-popover";

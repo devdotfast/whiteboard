@@ -1,3 +1,4 @@
+import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import type {
   ReviewAskMark,
   ReviewDiffViewHandle,
@@ -8,7 +9,6 @@ import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useLayoutEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
-import { AGENT_LOGOS } from "./agent-logos";
 import { useAskHistory } from "./ask-history";
 import { openAskConversations, truncate } from "./ask-marks";
 import { useOptionalReviewPanelStore } from "./review-panel";

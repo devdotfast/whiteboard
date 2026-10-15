@@ -1,6 +1,8 @@
 import { Button, buttonStyles } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CheckIcon, ChevronDownIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import { fieldStyles } from "@canvas/ui/text-field";
@@ -10,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useReviewSession } from "./host/review-session";
 import type { TraceSelection } from "./review-panel-store";
-import { ChevronIcon, TraceDocument, formatDuration } from "./trace-document";
+import { TraceDocument, formatDuration } from "./trace-document";
 import { TraceRuler } from "./trace-ruler";
 import { traceStyles as styles } from "./trace-styles";
 import {
@@ -282,7 +284,7 @@ export function ReviewTraceView({
                   pickerOpen && styles.pickerChevronOpen,
                 )}
               >
-                <ChevronIcon />
+                <ChevronDownIcon />
               </span>
             </Button>
             {pickerOpen && (
@@ -340,7 +342,9 @@ export function ReviewTraceView({
                       {target.notSynced ? (
                         <Chip xstyle={styles.pickerItemBadge}>not synced</Chip>
                       ) : isActive ? (
-                        <span {...stylex.props(styles.pickerItemCheck)}>✓</span>
+                        <CheckIcon
+                          xstyle={[iconStyles.inline, styles.pickerItemCheck]}
+                        />
                       ) : null}
                     </button>
                   );

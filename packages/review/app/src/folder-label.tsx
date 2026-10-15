@@ -1,7 +1,7 @@
+import { FolderIcon } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
-import { FolderIcon } from "./icons";
 import { fontSize } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 

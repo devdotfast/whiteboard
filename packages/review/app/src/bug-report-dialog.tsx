@@ -1,5 +1,6 @@
 import { Button, IconButton } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { BugIcon, CloseIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { fieldStyles } from "@canvas/ui/text-field";
 import {
@@ -24,7 +25,6 @@ import {
   normalizeScreenshot,
 } from "./bug-report-screenshot";
 import { useReviewSession } from "./host/review-session";
-import { BugIcon } from "./icons";
 import { appMarker } from "./markers.stylex";
 import { useNotify } from "./notify";
 import { fontSize, fontWeight, layer, radius } from "./scale.stylex";
@@ -316,7 +316,7 @@ export function BugReportControl({
                         title="Remove screenshot"
                         onClick={() => setScreenshot(null)}
                       >
-                        ×
+                        <CloseIcon />
                       </IconButton>
                     </>
                   ) : (
@@ -455,8 +455,6 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: tokens.chromeBorder,
     backgroundColor: tokens.tray,
-    fontSize: fontSize.heading,
-    fontWeight: fontWeight.regular,
   },
   faint: {
     color: tokens.inkFaint,

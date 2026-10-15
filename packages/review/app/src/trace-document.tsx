@@ -1,5 +1,17 @@
 import { buttonStyles } from "@canvas/ui/button";
 import { Chip, chipStyles } from "@canvas/ui/chip";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import {
+  ChevronDownIcon,
+  FileIcon,
+  PencilIcon,
+  SearchIcon,
+  SparkleIcon,
+  StepsIcon,
+  TerminalIcon,
+  TextIcon,
+  ThinkingIcon,
+} from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
@@ -248,36 +260,7 @@ export function TraceToolGroup({
     >
       <summary {...stylex.props(styles.summary, styles.toolGroupSummary)}>
         <span {...stylex.props(styles.centered)}>
-          {iconSvg(
-            <>
-              <rect
-                x="2"
-                y="3"
-                width="10"
-                height="2.2"
-                rx="1.1"
-                fill="currentColor"
-              />
-              <rect
-                x="2"
-                y="6.9"
-                width="10"
-                height="2.2"
-                rx="1.1"
-                fill="currentColor"
-                opacity="0.6"
-              />
-              <rect
-                x="2"
-                y="10.8"
-                width="10"
-                height="2.2"
-                rx="1.1"
-                fill="currentColor"
-                opacity="0.35"
-              />
-            </>,
-          )}
+          <StepsIcon xstyle={[iconStyles.chrome, styles.icon]} />
         </span>
         <span {...stylex.props(styles.toolGroupLabel)}>
           {toolGroupLabel(events)}
@@ -286,7 +269,7 @@ export function TraceToolGroup({
           {events.length} steps
         </span>
         <span {...stylex.props(styles.inlineCentered)} aria-hidden="true">
-          <ChevronIcon xstyle={styles.toolGroupChevronIcon} />
+          <ChevronDownIcon xstyle={styles.toolGroupChevronIcon} />
         </span>
       </summary>
       <div {...stylex.props(styles.toolGroupBody)}>
@@ -424,7 +407,7 @@ export function TraceToolRow({
       </span>
       {expandable && (
         <span {...stylex.props(styles.centered)} aria-hidden="true">
-          <ChevronIcon xstyle={styles.toolChevronIcon} />
+          <ChevronDownIcon xstyle={styles.toolChevronIcon} />
         </span>
       )}
     </span>
@@ -467,7 +450,7 @@ function ThinkingSummary() {
           <span {...stylex.props(styles.toolVerb)}>Thinking</span>
         </span>
         <span {...stylex.props(styles.centered)} aria-hidden="true">
-          <ChevronIcon xstyle={styles.toolChevronIcon} />
+          <ChevronDownIcon xstyle={styles.toolChevronIcon} />
         </span>
       </span>
     </summary>
@@ -500,67 +483,28 @@ export function formatDuration(durationMs: number): string {
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
 
-function iconSvg(children: ReactNode, xstyle?: stylex.StyleXStyles): ReactNode {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      {...stylex.props(styles.icon, xstyle)}
-      aria-hidden="true"
-    >
-      {children}
-    </svg>
-  );
-}
-
 export function toolIcon(verb: string): ReactNode {
+  const xstyle = [iconStyles.chrome, styles.icon];
+
   switch (verb) {
     case "Thinking":
-      return iconSvg(
-        <path d="M8 2a5 5 0 0 0-3.5 8.5V12a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-1.5A5 5 0 0 0 8 2zM6 15h4" />,
-      );
+      return <ThinkingIcon xstyle={xstyle} />;
     case "Ran":
-      return iconSvg(
-        <>
-          <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
-          <path d="M4.5 6l2 2-2 2M8.5 10.5h3" />
-        </>,
-      );
+      return <TerminalIcon xstyle={xstyle} />;
     case "Edited":
     case "Wrote":
-      return iconSvg(
-        <path d="M11.1 2.2a1.6 1.6 0 0 1 2.3 2.3L5 12.9l-3 .7.7-3z" />,
-      );
+      return <PencilIcon xstyle={xstyle} />;
     case "Read":
-      return iconSvg(
-        <>
-          <path d="M9.5 1.5h-5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V4.5z" />
-          <path d="M9.5 1.5v3h3" />
-        </>,
-      );
+      return <FileIcon xstyle={xstyle} />;
     case "Searched":
     case "Searched web":
     case "Fetched":
-      return iconSvg(
-        <>
-          <circle cx="7" cy="7" r="4.5" />
-          <path d="M10.5 10.5L14 14" />
-        </>,
-      );
+      return <SearchIcon xstyle={xstyle} />;
     case "Ran agent":
-      return iconSvg(
-        <path d="M8 1.5l1.8 4.2 4.2 1.8-4.2 1.8L8 13.5 6.2 9.3 2 7.5l4.2-1.8z" />,
-      );
+      return <SparkleIcon xstyle={xstyle} />;
     default:
-      return iconSvg(
-        <>
-          <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h7" />
-        </>,
-      );
+      return <TextIcon xstyle={xstyle} />;
   }
-}
-
-export function ChevronIcon({ xstyle }: { xstyle?: stylex.StyleXStyles } = {}) {
-  return iconSvg(<path d="M4 6l4 4 4-4" />, xstyle);
 }
 
 export interface LensPickEvent {
@@ -773,17 +717,9 @@ export function TraceCollapseRow({
           styles.lensRowChipSolid,
         ]}
       >
-        <svg
-          viewBox="0 0 16 16"
-          {...stylex.props(styles.collapseChevron)}
-          aria-hidden="true"
-        >
-          {edge === "top" ? (
-            <polyline points="4 6 8 10 12 6" />
-          ) : (
-            <polyline points="4 10 8 6 12 10" />
-          )}
-        </svg>
+        <ChevronDownIcon
+          xstyle={[styles.collapseChevron, edge !== "top" && iconStyles.flip]}
+        />
         collapse {span.count} {span.count === 1 ? "event" : "events"}
       </Chip>
       <span {...stylex.props(styles.lensLine, styles.lensLineSolid)} />
@@ -1103,7 +1039,7 @@ export function TraceTurn({
           >
             <span>{workedLabel}</span>
             <span {...stylex.props(styles.inlineCentered)} aria-hidden="true">
-              <ChevronIcon xstyle={styles.workedChevronIcon} />
+              <ChevronDownIcon xstyle={styles.workedChevronIcon} />
             </span>
             <span {...stylex.props(styles.line)} />
           </summary>

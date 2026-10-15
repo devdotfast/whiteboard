@@ -1,12 +1,12 @@
 import { IconButton } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { MoreIcon } from "@canvas/ui/icons";
 import type { ReviewView } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useRef, useState } from "react";
 
 import { useCanvasMenu } from "./host/canvas-ui";
 import { useReviewSession } from "./host/review-session";
-import { MoreIcon } from "./icons";
 import { useNotify } from "./notify";
 import { useReviewActions, useReviewState } from "./review-context";
 import { shellStyles } from "./shell-styles";

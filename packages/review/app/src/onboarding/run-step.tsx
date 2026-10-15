@@ -1,5 +1,3 @@
-import { AGENT_LOGOS } from "@canvas/agent-logos";
-import { FolderIcon, RefreshIcon, SearchIcon } from "@canvas/icons";
 import { OptionMenu } from "@canvas/option-menu";
 import {
   elevation,
@@ -9,9 +7,16 @@ import {
   radius,
 } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
+import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
-import { CopyIcon } from "@canvas/ui/copy";
 import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import {
+  CopyIcon,
+  FolderIcon,
+  RefreshIcon,
+  SearchIcon,
+} from "@canvas/ui/icons";
 import { Shortcut } from "@canvas/ui/kbd";
 import { SegmentedControl, segmentStyles } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
@@ -439,7 +444,7 @@ export function RunStep({
         </div>
         <div {...stylex.props(styles.card)}>
           <div {...stylex.props(styles.toolbar)}>
-            <SearchIcon xstyle={styles.searchIcon} />
+            <SearchIcon xstyle={[iconStyles.chrome, styles.searchIcon]} />
             <input
               ref={filterTooltip}
               type="search"
@@ -564,7 +569,7 @@ export function RunStep({
                 onClick={copy}
                 xstyle={styles.copy}
               >
-                <CopyIcon xstyle={styles.copyIcon} />
+                <CopyIcon xstyle={iconStyles.inline} />
                 Copy
               </Button>
             </span>
@@ -816,7 +821,7 @@ const styles = stylex.create({
     borderBottomStyle: "solid",
     borderBottomColor: tokens.ruleSoft,
   },
-  searchIcon: { width: "14px", height: "14px", color: tokens.inkFaint },
+  searchIcon: { color: tokens.inkFaint },
   filter: {
     flex: 1,
     minWidth: 0,
@@ -923,7 +928,6 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
   },
-  copyIcon: { width: "13px", height: "13px" },
   // The sentence ends at the row's end, under the prompt's Copy.
   footer: {
     display: "flex",

@@ -2,6 +2,8 @@ import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { Button, buttonStyles } from "@canvas/ui/button";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CheckIcon, DisclosureChevron, DrawnCheckIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import { welcomeType } from "@canvas/welcome-page.stylex";
 import {
@@ -17,7 +19,6 @@ import { type ReactNode, useEffect, useState } from "react";
 import { cliInstallReady } from "./cli-install-status";
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { homeStyles } from "./home-styles";
-import { DisclosureChevron, DrawnCheckIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { chevronMarker } from "./markers.stylex";
 import { PromptCard } from "./prompt-card";
@@ -524,13 +525,7 @@ function StepBadge({
       data-done={done}
     >
       {done ? (
-        <svg
-          {...stylex.props(styles.badgeCheck)}
-          viewBox="0 0 10 10"
-          aria-hidden="true"
-        >
-          <path d="M1.5 5.5 4 8l4.5-6" fill="none" strokeWidth="1.6" />
-        </svg>
+        <CheckIcon xstyle={[iconStyles.inline, styles.badgeCheck]} />
       ) : (
         label
       )}
@@ -656,14 +651,7 @@ const styles = stylex.create({
     backgroundColor: tokens.accent,
   },
   badgeCheck: {
-    width: "10px",
-    height: "10px",
-    flexShrink: 0,
-    fill: "none",
-    stroke: tokens.changeAdded,
-    strokeWidth: "1.5px",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
+    color: tokens.changeAdded,
   },
   stepTitle: {
     color: tokens.ink,
