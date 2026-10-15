@@ -15,6 +15,7 @@ import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { drawStyles } from "./draw-styles";
 import { FlowGraph } from "./flow-graph";
+import { countLabel } from "./format";
 import { documentMarker } from "./markers.stylex";
 import { useReviewLenses } from "./review-lenses";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
@@ -119,7 +120,7 @@ export function FlowDiagram({
       <DiagramHeader
         kind="FLOW"
         title={node.title}
-        meta={`${node.nodes.length} ${node.nodes.length === 1 ? "node" : "nodes"}`}
+        meta={countLabel(node.nodes.length, "node")}
         action={
           <Button
             className="diagram-tour-button"

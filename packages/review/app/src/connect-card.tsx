@@ -17,6 +17,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useState } from "react";
 
 import { cliInstallReady } from "./cli-install-status";
+import { countLabel } from "./format";
 import { newTabLinkProps } from "./link-props";
 import { OptionMenu } from "./option-menu";
 import { promptStyles } from "./prompt-styles";
@@ -356,7 +357,7 @@ export function LegacySkillsRow({
       {removed.length > 0 ? (
         <>
           <p {...stylex.props(styles.legacyText)}>
-            Removed {removed.length} skill{removed.length === 1 ? "" : "s"}
+            Removed {countLabel(removed.length, "skill")}
           </p>
           <ul {...stylex.props(styles.legacyList)}>
             {removed.map((path) => (

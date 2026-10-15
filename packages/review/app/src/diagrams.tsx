@@ -40,6 +40,7 @@ import { hasTextSelectionWithin } from "./diagram-text-selection";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { useMotionPhase } from "./draw-queue-provider";
 import { drawStyles } from "./draw-styles";
+import { countLabel } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { appMarker, documentMarker } from "./markers.stylex";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
@@ -601,7 +602,7 @@ function SequenceDiagramFigure({
         <DiagramHeader
           kind="SEQ"
           title={sequence.title}
-          meta={`${stopCount} ${stopCount === 1 ? "stop" : "stops"}`}
+          meta={countLabel(stopCount, "stop")}
           xstyle={styles.header}
           action={
             // The tour panel's header owns the close control fullscreen.

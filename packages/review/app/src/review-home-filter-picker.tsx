@@ -15,6 +15,7 @@ import {
   useState,
 } from "react";
 
+import { countLabel } from "./format";
 import { filterRowMarker } from "./markers.stylex";
 import {
   type HomeFacet,
@@ -447,9 +448,7 @@ export function HomeFilterPicker({
           )}
         </div>
         <div {...stylex.props(styles.footer)}>
-          <span>
-            Showing {count} {count === 1 ? "board" : "boards"}
-          </span>
+          <span>Showing {countLabel(count, "board")}</span>
           <span {...stylex.props(styles.faint)}>
             <Shortcut>esc</Shortcut> done
           </span>

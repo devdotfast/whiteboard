@@ -15,6 +15,7 @@ import {
 
 import { DiagramHeader } from "./diagram-header";
 import { drawStyles } from "./draw-styles";
+import { countLabel } from "./format";
 import { documentMarker } from "./markers.stylex";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -96,7 +97,7 @@ export function RenderedCodeBlock({
       <DiagramHeader
         kind={displayLanguage || "code"}
         title={caption}
-        meta={`${lineCount} ${lineCount === 1 ? "line" : "lines"}`}
+        meta={countLabel(lineCount, "line")}
         xstyle={styles.header}
         metaStyle={styles.meta}
         action={

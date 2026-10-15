@@ -21,6 +21,7 @@ import { AgentMarkdown } from "./agent-markdown";
 import { askFileCode, askFileLink } from "./ask-files";
 import { askPanelStyles } from "./ask-styles";
 import { CourierFigure } from "./courier-figure";
+import { formatDuration } from "./format";
 import { chevronMarker } from "./markers.stylex";
 import { fontSize, radius } from "./scale.stylex";
 import { settleStreamingMarkdown } from "./streaming-markdown";
@@ -571,14 +572,6 @@ export function AskAgentTurn({
   );
 }
 
-function elapsed(since: number, now: number) {
-  const seconds = Math.max(0, Math.floor((now - since) / 1000));
-
-  return seconds < 60
-    ? `${seconds}s`
-    : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-}
-
 /** How long after the answer text last grew the agent still reads as
  * writing: a pause between words is not yet thinking. */
 const WRITING_MS = 900;
@@ -654,7 +647,9 @@ export function AskWorking({
       >
         {doing}…
       </span>
-      <span {...stylex.props(styles.workingTime)}>{elapsed(since, now)}</span>
+      <span {...stylex.props(styles.workingTime)}>
+        {formatDuration(Math.max(0, now - since))}
+      </span>
     </div>
   );
 }

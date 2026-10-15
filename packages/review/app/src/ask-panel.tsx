@@ -65,7 +65,7 @@ import { useLatest, useThread } from "./ask-thread-stream";
 import { AskAgentTurn, AskWorking, turns } from "./ask-turn";
 import { canvasQueryKeys } from "./canvas-query";
 import { useHostActionButton } from "./connection-chip";
-import { formatRelativeTime } from "./format";
+import { countLabel, formatRelativeTime } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { useReviewHostDown } from "./remote-host-state";
 import {

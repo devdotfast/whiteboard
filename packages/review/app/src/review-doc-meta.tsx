@@ -17,6 +17,7 @@ import {
 
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { drawStyles } from "./draw-styles";
+import { formatRelativeTime } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { ComparedSides, DiffChanges, PullRequestLink } from "./review-source";
