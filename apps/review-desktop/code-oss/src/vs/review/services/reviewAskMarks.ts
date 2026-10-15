@@ -8,7 +8,7 @@ import type { ICodeEditor, IDiffEditor, IGlyphMarginWidget } from "../../editor/
 import { ICodeEditorService } from "../../editor/browser/services/codeEditorService.js";
 import { Range } from "../../editor/common/core/range.js";
 import type { IChange } from "../../editor/common/diff/legacyLinesDiffComputer.js";
-import { GlyphMarginLane } from "../../editor/common/model.js";
+import { GlyphMarginLane, type ITextModel } from "../../editor/common/model.js";
 import type { ReviewAskMark, ReviewAskPinMount } from "../common/reviewProtocol.js";
 import { REVIEW_API_SOURCE_SCHEME, sourceLocation } from "../common/reviewSourceView.js";
 
@@ -28,6 +28,14 @@ export function inlineHeadLine(line: number, changes: readonly IChange[]): numbe
 		shift += added - (change.originalEndLineNumber - change.originalStartLineNumber + 1);
 	}
 	return line + shift;
+}
+
+/** Whether a mark's lines still read as when asked about. */
+function unchanged(mark: ReviewAskMark, model: ITextModel | null | undefined): boolean {
+	return !mark.text || !!model && mark.text.every((text, index) => {
+		const line = mark.fromLine + index;
+		return line <= model.getLineCount() && model.getLineContent(line) === text;
+	});
 }
 
 interface Placed {
@@ -112,9 +120,10 @@ export class ReviewAskMarks extends Disposable {
 		// An inline diff hides its base editor and draws base lines in the head editor.
 		if (inline && side === "base") return [];
 		const changes = inline ? diff.getLineChanges() ?? [] : [];
-		const own = this.marks.filter(mark => mark.file === file && mark.side === side)
+		const base = diff?.getOriginalEditor().getModel();
+		const own = this.marks.filter(mark => mark.file === file && mark.side === side && unchanged(mark, editor.getModel()))
 			.map((mark): Placed => ({ mark, fromLine: mark.fromLine, toLine: mark.toLine, washed: true }));
-		const beside = inline ? this.marks.filter(mark => mark.file === file && mark.side === "base")
+		const beside = inline ? this.marks.filter(mark => mark.file === file && mark.side === "base" && unchanged(mark, base))
 			.map((mark): Placed => { const line = inlineHeadLine(mark.fromLine, changes); return { mark, fromLine: line, toLine: line, washed: false }; }) : [];
 		// The editor would put a pin for lines it hides beside the next line it shows.
 		const hidden = editor._getViewModel()?.getHiddenAreas() ?? [];

@@ -302,6 +302,8 @@ export interface ReviewAskMark {
   side: ReviewDiffSide;
   fromLine: number;
   toLine: number;
+  /** The lines' text when asked about; a mark whose lines changed is hidden. */
+  text?: readonly string[];
 }
 
 /** Draws a mark's pin into its gutter node; returns its cleanup. */

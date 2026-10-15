@@ -21,6 +21,36 @@ interface CodeMark extends ReviewAskMark {
   entries: AskHistoryEntry[];
 }
 
+type CodeTarget = Extract<
+  AskHistoryEntry["selection"]["target"],
+  { kind: "code" }
+>;
+
+/** The asked-about lines' text, from the diff rows saved with the Ask. */
+export function askedText(
+  target: CodeTarget,
+  diff: AskHistoryEntry["selection"]["selectedDiff"],
+): string[] | undefined {
+  if (!diff) return undefined;
+  const other = target.side === "base" ? "added" : "deleted";
+  const lines = new Map<number, string>();
+  let line = target.side === "base" ? diff.oldStart : diff.newStart;
+
+  for (const row of diff.rows)
+    if (row.kind !== other) lines.set(line++, row.text);
+
+  const text: string[] = [];
+
+  for (let at = target.startLine; at <= target.endLine; at++) {
+    const row = lines.get(at);
+
+    if (row === undefined) return undefined;
+    text.push(row);
+  }
+
+  return text;
+}
+
 /** Asks from the same commit's diff, or from the review's own. */
 function codeMarks(
   entries: readonly AskHistoryEntry[],
@@ -43,6 +73,7 @@ function codeMarks(
         side: target.side,
         fromLine: target.startLine,
         toLine: target.endLine,
+        text: askedText(target, entry.selection.selectedDiff),
         entries: [entry],
       });
   }

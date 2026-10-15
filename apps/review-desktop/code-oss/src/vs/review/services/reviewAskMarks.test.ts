@@ -24,14 +24,14 @@ const { ReviewAskMarks, inlineHeadLine } = await import('./reviewAskMarks.js');
 const view = { reviewId: 'review', version: 3 };
 const source = (file: string, side: 'base' | 'head') => apiSourceUri({ view, side, file });
 
-function editor(uri: URI | undefined, parent: HTMLElement) {
+function editor(uri: URI | undefined, parent: HTMLElement, text: string[] = []) {
 	const modelChanged = new Emitter<void>();
 	const node = document.createElement('div');
 	parent.append(node);
 	const widgets = new Map<string, IGlyphMarginWidget>();
 	let lines: string[] = [];
 	const fake = {
-		getModel: () => uri ? { id: uri.toString(), uri } : null,
+		getModel: () => uri ? { id: uri.toString(), uri, getLineCount: () => text.length, getLineContent: (line: number) => text[line - 1] } : null,
 		getContainerDomNode: () => node,
 		onDidChangeModel: modelChanged.event,
 		onDidChangeHiddenAreas: new Emitter<void>().event,
@@ -117,4 +117,23 @@ const changes = [
 
 test('finds the head line an inline diff draws each base line beside', () => {
 	assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9].map(line => inlineHeadLine(line, changes)), [1, 2, 3, 3, 4, 7, 8, 8, 9]);
+});
+
+test('marks no lines that read otherwise than when asked about', () => {
+	const container = document.createElement('div');
+	const head = editor(source('src/a.ts', 'head'), container, ['a', 'b', 'c']);
+	const editors = service();
+	editors.add(head.fake);
+
+	const marks = new ReviewAskMarks(container, editors.fake);
+	marks.set([
+		{ ...mark('same', 'src/a.ts', 'head', 2, 3), text: ['b', 'c'] },
+		{ ...mark('edited', 'src/a.ts', 'head', 1), text: ['x'] },
+		{ ...mark('gone', 'src/a.ts', 'head', 3, 4), text: ['c', 'd'] },
+	], (id, node) => {
+		node.textContent = id;
+		return () => { };
+	});
+	assert.deepEqual(head.pins(), ['2:same']);
+	marks.dispose();
 });

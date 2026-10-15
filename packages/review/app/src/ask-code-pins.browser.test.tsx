@@ -7,7 +7,7 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 
-import { AskCodePins } from "./ask-code-pins";
+import { AskCodePins, askedText } from "./ask-code-pins";
 import { AskHistoryProvider } from "./ask-history";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelProvider, useReviewPanel } from "./review-panel";
@@ -170,4 +170,40 @@ it("marks only that commit's conversations in a commit's diff", async () => {
   ]);
 
   await unmount();
+});
+
+it("reads the asked-about lines back from the diff rows saved with the question", () => {
+  const diff = {
+    oldPath: "src/a.ts",
+    newPath: "src/a.ts",
+    oldStart: 9,
+    newStart: 9,
+    rows: [
+      { kind: "unchanged" as const, text: "if (ready) {" },
+      { kind: "deleted" as const, text: "  return 1;" },
+      { kind: "added" as const, text: "  return 2;" },
+      { kind: "unchanged" as const, text: "}" },
+    ],
+  };
+
+  const target = (
+    side: "base" | "head",
+    startLine: number,
+    endLine: number,
+  ) => ({
+    kind: "code" as const,
+    path: "src/a.ts",
+    side,
+    startLine,
+    endLine,
+  });
+
+  expect(askedText(target("head", 10, 11), diff)).toEqual(["  return 2;", "}"]);
+  expect(askedText(target("base", 9, 10), diff)).toEqual([
+    "if (ready) {",
+    "  return 1;",
+  ]);
+  // Rows it did not save are not guessed at.
+  expect(askedText(target("head", 11, 12), diff)).toBeUndefined();
+  expect(askedText(target("head", 10, 10), undefined)).toBeUndefined();
 });
