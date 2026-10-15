@@ -1221,6 +1221,11 @@ body
   transform: rotate(0deg);
 }
 
+/* Reference files have no file mark; match the changed-files name inset. */
+.review-workbench .reference-zone-widget .ref-tree .reference-file {
+  padding-left: 7px;
+}
+
 /* File marks in the changed-files tree: status is one stroke beside the name,
    never a boxed codicon. Plus, minus, dot, arrow, a ghost file for referenced
    context, three dots while loading, a bang on error; viewed replaces the mark
