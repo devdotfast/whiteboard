@@ -14,6 +14,7 @@ import {
 } from "@canvas/ui/overlay-scrollbar";
 import { Popover } from "@canvas/ui/popover";
 import { StatusBanner } from "@canvas/ui/status-banner";
+import { Switch } from "@canvas/ui/switch";
 import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCanvasRange,
@@ -113,13 +114,7 @@ import { ReviewRootsProvider, useReviewContainer } from "./review-root-context";
 import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
 import { useReviewViewStateSync } from "./review-view-state";
 import { ReviewTraceView } from "./ReviewTraceView";
-import {
-  elevation,
-  fontSize,
-  fontWeight,
-  motion,
-  radius,
-} from "./scale.stylex";
+import { elevation, fontSize, fontWeight, radius } from "./scale.stylex";
 import { ShareControl, useCanShare } from "./share-control";
 import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
@@ -1226,18 +1221,9 @@ function DebugSwitch({
   return (
     <label {...stylex.props(mapSettingsStyles.switch)}>
       <span>{label}</span>
-      <input
-        type="checkbox"
-        {...stylex.props(mapSettingsStyles.switchInput)}
+      <Switch
         checked={checked}
         onChange={(event) => onChange(event.currentTarget.checked)}
-      />
-      <i
-        {...stylex.props(
-          mapSettingsStyles.switchTrack,
-          checked && mapSettingsStyles.switchTrackOn,
-        )}
-        aria-hidden="true"
       />
     </label>
   );
@@ -1314,7 +1300,6 @@ const mapSettingsStyles = stylex.create({
     padding: 0,
   },
   switch: {
-    position: "relative",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -1326,41 +1311,6 @@ const mapSettingsStyles = stylex.create({
     borderBottomColor: tokens.rule,
     color: tokens.ink,
     fontSize: fontSize.ui,
-  },
-  switchInput: {
-    position: "absolute",
-    opacity: 0,
-    pointerEvents: "none",
-  },
-  switchTrack: {
-    position: "relative",
-    flex: "0 0 auto",
-    width: "38px",
-    height: "22px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderRadius: radius.pill,
-    backgroundColor: tokens.controlBg,
-    "::before": {
-      position: "absolute",
-      top: "3px",
-      left: "3px",
-      width: "14px",
-      height: "14px",
-      borderRadius: radius.pill,
-      backgroundColor: tokens.inkFaint,
-      transition: `transform ${motion.fast} ${motion.ease}, background ${motion.fast} ${motion.ease}`,
-      content: "''",
-    },
-  },
-  switchTrackOn: {
-    borderColor: tokens.accent,
-    backgroundColor: tokens.accentSoft,
-    "::before": {
-      backgroundColor: tokens.accent,
-      transform: "translateX(16px)",
-    },
   },
   tints: {
     display: "flex",
