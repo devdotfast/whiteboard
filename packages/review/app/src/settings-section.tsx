@@ -29,14 +29,16 @@ export function Row({
   children,
 }: {
   label: string;
-  description: string;
+  description?: string;
   children: ReactNode;
 }) {
   return (
     <div {...stylex.props(styles.row)}>
       <div {...stylex.props(styles.rowText)}>
         <span {...stylex.props(styles.rowLabel)}>{label}</span>
-        <span {...stylex.props(styles.rowDescription)}>{description}</span>
+        {description ? (
+          <span {...stylex.props(styles.rowDescription)}>{description}</span>
+        ) : null}
       </div>
       <div {...stylex.props(styles.rowControl)}>{children}</div>
     </div>

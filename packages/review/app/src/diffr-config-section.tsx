@@ -13,9 +13,10 @@ import {
   isJsonObject,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { chevronMarker } from "./markers.stylex";
+import { Row } from "./settings-section";
 import { settingsStyles as styles } from "./settings-styles";
 import { SegmentedControl } from "./ui/segmented";
 
@@ -199,7 +200,7 @@ export function DiffrConfigSection({
                 <h3>Display</h3>
                 {displaySettings.map(([key, label]) => (
                   <div key={key}>
-                    <SettingRow label={label}>
+                    <Row label={label}>
                       <Checkbox
                         aria-label={label}
                         checked={
@@ -223,14 +224,14 @@ export function DiffrConfigSection({
                           );
                         }}
                       />
-                    </SettingRow>
+                    </Row>
                     {setting(config, key) === undefined && (
                       <p {...stylex.props(styles.unavailable)}>
                         Not available in this configuration.
                       </p>
                     )}
                     {key === "plugins.shape.bundled.context.enabled" && (
-                      <SettingRow label="Context lines">
+                      <Row label="Context lines">
                         <ContextLines
                           value={setting(
                             config,
@@ -248,7 +249,7 @@ export function DiffrConfigSection({
                             )
                           }
                         />
-                      </SettingRow>
+                      </Row>
                     )}
                     {key === hideKey && Array.isArray(hiddenTags) && (
                       <p {...stylex.props(styles.rowDescription)}>
@@ -272,7 +273,7 @@ export function DiffrConfigSection({
                     disabled={busy || unavailable}
                     {...stylex.props(styles.summaryFields)}
                   >
-                    <SettingRow label="Enable summaries">
+                    <Row label="Enable summaries">
                       <Checkbox
                         aria-label="Enable summaries"
                         checked={draft.enabled}
@@ -280,9 +281,9 @@ export function DiffrConfigSection({
                           setDraft({ ...draft, enabled: event.target.checked })
                         }
                       />
-                    </SettingRow>
+                    </Row>
                     {!!config.providers?.length && (
-                      <SettingRow label="Provider">
+                      <Row label="Provider">
                         <SegmentedControl
                           label="Provider"
                           value={draft.provider}
@@ -301,9 +302,9 @@ export function DiffrConfigSection({
                             })
                           }
                         />
-                      </SettingRow>
+                      </Row>
                     )}
-                    <SettingRow label="API key">
+                    <Row label="API key">
                       <TextField
                         xstyle={styles.input}
                         aria-label="API key"
@@ -315,7 +316,7 @@ export function DiffrConfigSection({
                           setDraft({ ...draft, apiKey: event.target.value })
                         }
                       />
-                    </SettingRow>
+                    </Row>
                     <p {...stylex.props(styles.rowDescription)}>
                       {draft.provider !== provider(config) ||
                       draft.endpoint !== savedDraft?.endpoint
@@ -332,7 +333,7 @@ export function DiffrConfigSection({
                                 : "Not configured"
                           }. Replacement keys are stored in diffr’s config. Leave blank to keep the current key.`}
                     </p>
-                    <SettingRow label="Model">
+                    <Row label="Model">
                       <TextField
                         xstyle={styles.input}
                         aria-label="Model"
@@ -341,8 +342,8 @@ export function DiffrConfigSection({
                           setDraft({ ...draft, model: event.target.value })
                         }
                       />
-                    </SettingRow>
-                    <SettingRow label="Endpoint URL">
+                    </Row>
+                    <Row label="Endpoint URL">
                       <TextField
                         xstyle={styles.input}
                         aria-label="Endpoint URL"
@@ -354,7 +355,7 @@ export function DiffrConfigSection({
                           setDraft({ ...draft, endpoint: event.target.value })
                         }
                       />
-                    </SettingRow>
+                    </Row>
                     <p {...stylex.props(styles.rowDescription)}>
                       Optional. With OpenAI, point this at any compatible
                       server, such as OpenRouter or Ollama.
@@ -398,7 +399,7 @@ export function DiffrConfigSection({
                           </Button>
                         )}
                     </p>
-                    <SettingRow label="Include tests">
+                    <Row label="Include tests">
                       <Checkbox
                         aria-label="Include tests"
                         checked={draft.tests}
@@ -406,7 +407,7 @@ export function DiffrConfigSection({
                           setDraft({ ...draft, tests: event.target.checked })
                         }
                       />
-                    </SettingRow>
+                    </Row>
                     <div {...stylex.props(styles.summaryActions)}>
                       <Button
                         disabled={!summaryValid}
@@ -482,21 +483,6 @@ export function DiffrConfigSection({
           <Button onClick={() => setConfirmReload(false)}>Cancel</Button>
         </div>
       )}
-    </div>
-  );
-}
-
-function SettingRow({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div {...stylex.props(styles.row)}>
-      <span {...stylex.props(styles.rowLabel)}>{label}</span>
-      {children}
     </div>
   );
 }
