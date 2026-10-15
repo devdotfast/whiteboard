@@ -64,7 +64,7 @@ function settings(): ReviewCanvasSettingsContent {
   };
 }
 
-test("saving settings leaves other rows available and overlapping saves settle independently", async () => {
+test("preferences stay enabled while overlapping saves settle independently", async () => {
   const content = settings();
   const width = Promise.withResolvers<"wide">();
   const font = Promise.withResolvers<number>();
@@ -79,16 +79,16 @@ test("saving settings leaves other rows available and overlapping saves settle i
   const fontSize = page.getByRole("button", { name: "14", exact: true });
   const dark = page.getByRole("button", { name: "Dark", exact: true });
   await act(async () => wide.click());
-  await expect.element(wide).toBeDisabled();
+  await expect.element(wide).toBeEnabled();
   await expect.element(fontSize).toBeEnabled();
   await expect.element(dark).toBeEnabled();
   await act(async () => fontSize.click());
-  await expect.element(fontSize).toBeDisabled();
+  await expect.element(fontSize).toBeEnabled();
 
   await act(async () => font.resolve(14));
   await expect.element(fontSize).toBeEnabled();
   await expect.element(fontSize).toHaveAttribute("aria-pressed", "true");
-  await expect.element(wide).toBeDisabled();
+  await expect.element(wide).toBeEnabled();
   await act(async () => width.reject(new Error("Could not save width")));
   await expect.element(wide).toBeEnabled();
   await expect.element(wide).toHaveAttribute("aria-pressed", "false");

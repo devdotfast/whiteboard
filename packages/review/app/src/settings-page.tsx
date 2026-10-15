@@ -107,7 +107,7 @@ export function SettingsPage({
     ReviewCliInstallStatus | undefined
   >(settings.install?.status);
 
-  const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [installingCli, setInstallingCli] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(
@@ -121,19 +121,15 @@ export function SettingsPage({
       : settings.install;
 
   const run = async <T,>(
-    key: string,
     action: () => Promise<T>,
     adopt: (value: T) => void,
   ) => {
-    setBusy((current) => ({ ...current, [key]: true }));
     setError(null);
 
     try {
       adopt(await action());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy((current) => ({ ...current, [key]: false }));
     }
   };
 
@@ -172,17 +168,18 @@ export function SettingsPage({
               >
                 {install.status.shim.installer ? null : (
                   <Button
-                    disabled={busy["command"]}
-                    onClick={() =>
-                      void run(
-                        "command",
+                    disabled={installingCli}
+                    onClick={async () => {
+                      setInstallingCli(true);
+                      await run(
                         () =>
                           install.status.shim.installed
                             ? install.remove({ shim: true })
                             : install.apply({ shim: true }),
                         setInstallStatus,
-                      )
-                    }
+                      );
+                      setInstallingCli(false);
+                    }}
                   >
                     {install.status.shim.installed ? "Remove" : "Install"}
                   </Button>
@@ -202,11 +199,9 @@ export function SettingsPage({
               >
                 <Checkbox
                   checked={telemetryEnabled}
-                  disabled={busy["telemetry"]}
                   onChange={(event) => {
                     const enabled = event.target.checked;
                     void run(
-                      "telemetry",
                       () => settings.setTelemetryEnabled(enabled),
                       setTelemetryEnabled,
                     );
@@ -222,9 +217,8 @@ export function SettingsPage({
                 label="Theme"
                 value={theme}
                 options={labeledOptions(THEME_LABELS)}
-                disabled={busy["theme"]}
                 onChange={(choice) =>
-                  void run("theme", () => settings.setTheme(choice), setTheme)
+                  void run(() => settings.setTheme(choice), setTheme)
                 }
               />
             </Row>
@@ -236,10 +230,8 @@ export function SettingsPage({
                 label="Document width"
                 value={documentWidth}
                 options={labeledOptions(DOCUMENT_WIDTH_LABELS)}
-                disabled={busy["document-width"]}
                 onChange={(choice) =>
                   void run(
-                    "document-width",
                     () => settings.setDocumentWidth(choice),
                     setDocumentWidth,
                   )
@@ -254,10 +246,8 @@ export function SettingsPage({
                 label="Code font size"
                 value={String(codeFontSize)}
                 options={labeledOptions(codeFontSizeLabels(codeFontSize))}
-                disabled={busy["code-font-size"]}
                 onChange={(choice) =>
                   void run(
-                    "code-font-size",
                     () => settings.setCodeFontSize(Number(choice)),
                     setCodeFontSize,
                   )
@@ -272,13 +262,8 @@ export function SettingsPage({
                 label="Keymap"
                 value={keymap}
                 options={labeledOptions(KEYMAP_LABELS)}
-                disabled={busy["keymap"]}
                 onChange={(choice) => {
-                  void run(
-                    "keymap",
-                    () => settings.setKeymap(choice),
-                    setKeymap,
-                  );
+                  void run(() => settings.setKeymap(choice), setKeymap);
                 }}
               />
             </Row>
@@ -290,13 +275,8 @@ export function SettingsPage({
                 label="Ctrl+Tab"
                 value={ctrlTab}
                 options={labeledOptions(CTRL_TAB_LABELS)}
-                disabled={busy["ctrl-tab"]}
                 onChange={(choice) =>
-                  void run(
-                    "ctrl-tab",
-                    () => settings.setCtrlTab(choice),
-                    setCtrlTab,
-                  )
+                  void run(() => settings.setCtrlTab(choice), setCtrlTab)
                 }
               />
             </Row>
@@ -311,10 +291,8 @@ export function SettingsPage({
                 label="Review ready"
                 value={readyNotification}
                 options={labeledOptions(READY_NOTIFICATION_LABELS)}
-                disabled={busy["ready-notification"]}
                 onChange={(choice) =>
                   void run(
-                    "ready-notification",
                     () => settings.setReadyNotification(choice),
                     setReadyNotification,
                   )
@@ -351,11 +329,9 @@ export function SettingsPage({
                 <Checkbox
                   aria-label="Structural Diffs"
                   checked={structuralDiffEnabled}
-                  disabled={busy["structural-diff"]}
                   onChange={(event) => {
                     const enabled = event.target.checked;
                     void run(
-                      "structural-diff",
                       () => settings.setStructuralDiffEnabled(enabled),
                       setStructuralDiffEnabled,
                     );
@@ -377,11 +353,9 @@ export function SettingsPage({
                 <Checkbox
                   aria-label="Software Map"
                   checked={softwareMapEnabled}
-                  disabled={busy["software-map"]}
                   onChange={(event) => {
                     const enabled = event.target.checked;
                     void run(
-                      "software-map",
                       () => settings.setSoftwareMapEnabled(enabled),
                       setSoftwareMapEnabled,
                     );
@@ -397,11 +371,9 @@ export function SettingsPage({
                 <Checkbox
                   aria-label="Scratchpad"
                   checked={scratchpadEnabled}
-                  disabled={busy["scratchpad"]}
                   onChange={(event) => {
                     const enabled = event.target.checked;
                     void run(
-                      "scratchpad",
                       () => settings.setScratchpadEnabled(enabled),
                       setScratchpadEnabled,
                     );
