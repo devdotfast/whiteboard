@@ -185,10 +185,6 @@ function stopSoftwareMapHotkeysKeyDown(event: KeyboardEvent<HTMLElement>) {
   event.stopPropagation();
 }
 
-const settle = "cubic-bezier(0.2, 0.8, 0.2, 1)";
-
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
 const styles = stylex.create({
   // A tab docked to the bottom edge, sized to its content.
   tab: {
@@ -220,8 +216,8 @@ const styles = stylex.create({
     lineHeight: 1,
     transform: "translateX(-50%)",
     transition: {
-      default: `width ${motion.medium} ${settle}, box-shadow ${motion.medium} ${motion.ease}`,
-      [reducedMotion]: "none",
+      default: `width ${motion.medium} ${motion.settle}, box-shadow ${motion.medium} ${motion.ease}`,
+      [stylex.env.reducedMotion]: "none",
     },
     willChange: "width",
   },
@@ -237,8 +233,8 @@ const styles = stylex.create({
     opacity: 1,
     transform: "translateY(0)",
     transition: {
-      default: `opacity ${motion.fast} ${motion.ease}, transform ${motion.medium} ${settle}`,
-      [reducedMotion]: "none",
+      default: `opacity ${motion.fast} ${motion.ease}, transform ${motion.medium} ${motion.settle}`,
+      [stylex.env.reducedMotion]: "none",
     },
   },
   panelCollapsed: {
@@ -335,8 +331,8 @@ const styles = stylex.create({
     pointerEvents: "none",
     transform: "translateY(-3px)",
     transition: {
-      default: `opacity ${motion.fast} ${motion.ease}, transform ${motion.medium} ${settle}`,
-      [reducedMotion]: "none",
+      default: `opacity ${motion.fast} ${motion.ease}, transform ${motion.medium} ${motion.settle}`,
+      [stylex.env.reducedMotion]: "none",
     },
   },
   collapsedButtonShown: {

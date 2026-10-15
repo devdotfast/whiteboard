@@ -17,7 +17,7 @@ import { controlStyles } from "./controls-styles";
 import { CourierFigure } from "./courier-figure";
 import { CheckIcon, CloseIcon, DisclosureChevron } from "./icons";
 import { chevronMarker } from "./markers.stylex";
-import { fontSize, radius } from "./scale.stylex";
+import { fontSize, motion, radius } from "./scale.stylex";
 import { settleStreamingMarkdown } from "./streaming-markdown";
 import { tokens } from "./tokens.stylex";
 import { useTooltip } from "./use-tooltip";
@@ -642,8 +642,6 @@ export function AskWorking({
   );
 }
 
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
 const styles = stylex.create({
   turn: {
     display: "flex",
@@ -858,14 +856,20 @@ const styles = stylex.create({
     overflow: "hidden",
     backgroundImage: {
       default: `linear-gradient(90deg, ${tokens.inkMuted} 0%, ${tokens.inkMuted} 40%, ${tokens.ink} 50%, ${tokens.inkMuted} 60%, ${tokens.inkMuted} 100%)`,
-      [reducedMotion]: "none",
+      [stylex.env.reducedMotion]: "none",
     },
     backgroundPosition: "0 0",
     // Twice the label: the sweep moves it by one repeat, so each loop ends
     // where the next begins.
     backgroundSize: "200% 100%",
-    backgroundClip: { default: "text", [reducedMotion]: "border-box" },
-    color: { default: tokens.transparent, [reducedMotion]: tokens.inkMuted },
+    backgroundClip: {
+      default: "text",
+      [stylex.env.reducedMotion]: "border-box",
+    },
+    color: {
+      default: tokens.transparent,
+      [stylex.env.reducedMotion]: tokens.inkMuted,
+    },
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },

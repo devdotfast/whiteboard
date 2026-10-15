@@ -23,6 +23,8 @@ export const onboardingMotion = stylex.defineConsts({
   screen: "420ms",
   // Each line of a screen after the one above it.
   stagger: "60ms",
-  spin: "900ms",
-  enter: "cubic-bezier(0.2, 0.7, 0.2, 1)",
+  summaryCard: "200ms",
+  flowCard: "420ms",
+  underline: "700ms",
+  arrow: "1000ms",
 });

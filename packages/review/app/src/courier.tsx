@@ -339,8 +339,6 @@ export function Courier({
   );
 }
 
-const REDUCED = "@media (prefers-reduced-motion: reduce)";
-
 const inDiffWorkspace = () =>
   stylex.when.ancestor(":is(*)", diffWorkspaceMarker);
 
@@ -415,7 +413,7 @@ const styles = stylex.create({
     pointerEvents: "none",
     transition: {
       default: `left ${courierMotion.hop} linear, top ${courierMotion.hop} linear`,
-      [REDUCED]: "none",
+      [stylex.env.reducedMotion]: "none",
     },
   },
   // Unknown: grey and slumped, no motion.
@@ -471,7 +469,7 @@ const styles = stylex.create({
       default: 0,
       [stylex.when.ancestor(":hover", courierMarker)]: 1,
       [stylex.when.ancestor(":focus-visible", courierMarker)]: 1,
-      [REDUCED]: 1,
+      [stylex.env.reducedMotion]: 1,
     },
     transition: `opacity ${motion.fast} ${motion.ease}`,
     pointerEvents: "none",
@@ -480,45 +478,51 @@ const styles = stylex.create({
     display: "block",
     width: "100%",
     height: "100%",
-    transition: { default: null, [REDUCED]: "none" },
+    transition: { default: null, [stylex.env.reducedMotion]: "none" },
   },
   hopArc: {
-    animationName: { default: hopArc, [REDUCED]: "none" },
+    animationName: { default: hopArc, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: courierMotion.hop,
-      [REDUCED]: motion.instant,
-    },
-    animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
-  },
-  jumpArc: {
-    animationName: { default: jumpArc, [REDUCED]: "none" },
-    animationDuration: {
-      default: courierMotion.jump,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
     animationTimingFunction: {
-      default: "cubic-bezier(0.3, 0, 0.2, 1)",
-      [REDUCED]: "ease",
+      default: "ease-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
+  },
+  jumpArc: {
+    animationName: { default: jumpArc, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: courierMotion.jump,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: courierMotion.jumpEase,
+      [stylex.env.reducedMotion]: "ease",
     },
   },
   leave: {
-    animationName: { default: leave, [REDUCED]: "none" },
+    animationName: { default: leave, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: courierMotion.leave,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
     animationTimingFunction: {
-      default: "cubic-bezier(0.4, 0, 1, 1)",
-      [REDUCED]: "ease",
+      default: courierMotion.leaveEase,
+      [stylex.env.reducedMotion]: "ease",
     },
-    animationFillMode: { default: "forwards", [REDUCED]: "none" },
+    animationFillMode: {
+      default: "forwards",
+      [stylex.env.reducedMotion]: "none",
+    },
   },
   body: {
     display: "block",
     width: "100%",
     height: "100%",
     transformOrigin: "50% 100%",
-    transition: { default: null, [REDUCED]: "none" },
+    transition: { default: null, [stylex.env.reducedMotion]: "none" },
   },
   // Sitting eases in, reduced motion included.
   sitting: {
@@ -529,29 +533,41 @@ const styles = stylex.create({
     transform: "translateY(2px) rotate(-8deg)",
   },
   squash: {
-    animationName: { default: hopSquash, [REDUCED]: "none" },
+    animationName: { default: hopSquash, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: courierMotion.squash,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
+    animationTimingFunction: {
+      default: "ease-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
   },
   jumpSquash: {
-    animationName: { default: jumpSquash, [REDUCED]: "none" },
+    animationName: { default: jumpSquash, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: courierMotion.bounce,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
+    animationTimingFunction: {
+      default: "ease-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
   },
   bob: {
-    animationName: { default: marchBob, [REDUCED]: "none" },
+    animationName: { default: marchBob, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: courierMotion.march,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "ease-in-out", [REDUCED]: "ease" },
-    animationIterationCount: { default: "infinite", [REDUCED]: 1 },
+    animationTimingFunction: {
+      default: "ease-in-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationIterationCount: {
+      default: "infinite",
+      [stylex.env.reducedMotion]: 1,
+    },
   },
   shadow: {
     position: "absolute",
@@ -563,25 +579,28 @@ const styles = stylex.create({
     borderRadius: radius.round,
     backgroundColor: tokens.ink,
     opacity: 0.18,
-    transition: { default: null, [REDUCED]: "none" },
+    transition: { default: null, [stylex.env.reducedMotion]: "none" },
   },
   hopShadow: {
-    animationName: { default: hopShadow, [REDUCED]: "none" },
+    animationName: { default: hopShadow, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: courierMotion.hop,
-      [REDUCED]: motion.instant,
-    },
-    animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
-  },
-  jumpShadow: {
-    animationName: { default: jumpShadow, [REDUCED]: "none" },
-    animationDuration: {
-      default: courierMotion.jump,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
     animationTimingFunction: {
-      default: "cubic-bezier(0.3, 0, 0.2, 1)",
-      [REDUCED]: "ease",
+      default: "ease-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
+  },
+  jumpShadow: {
+    animationName: { default: jumpShadow, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: courierMotion.jump,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: courierMotion.jumpEase,
+      [stylex.env.reducedMotion]: "ease",
     },
   },
 });

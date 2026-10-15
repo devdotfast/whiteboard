@@ -570,13 +570,11 @@ const drawIn = stylex.keyframes({
   to: { strokeDashoffset: 0 },
 });
 
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
 const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
 
 const styles = stylex.create({
   spinning: {
-    animationName: { default: spin, [reducedMotion]: "none" },
+    animationName: { default: spin, [stylex.env.reducedMotion]: "none" },
     animationDuration: motion.pulse,
     animationTimingFunction: "linear",
     animationIterationCount: "infinite",
@@ -642,8 +640,8 @@ const styles = stylex.create({
     transition: {
       default: `opacity ${motion.fast} ${motion.ease}, clip-path ${motion.instant} linear ${motion.fast}`,
       [stylex.when.ancestor(":hover", segmentMarker)]:
-        `opacity ${motion.instant}, clip-path ${motion.slow} cubic-bezier(0.2, 0.7, 0.2, 1)`,
-      [reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
+        `opacity ${motion.instant}, clip-path ${motion.slow} ${motion.enter}`,
+      [stylex.env.reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
     },
   },
   underlineActive: {
@@ -653,8 +651,8 @@ const styles = stylex.create({
       [stylex.when.ancestor(":hover", segmentMarker)]: 0.7,
     },
     transition: {
-      default: `opacity ${motion.instant}, clip-path ${motion.slow} cubic-bezier(0.2, 0.7, 0.2, 1)`,
-      [reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
+      default: `opacity ${motion.instant}, clip-path ${motion.slow} ${motion.enter}`,
+      [stylex.env.reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
     },
   },
   underlineStroke: {
@@ -696,12 +694,15 @@ const styles = stylex.create({
     strokeLinecap: "round",
     strokeLinejoin: "round",
     strokeWidth: "1.2",
-    animationName: { default: drawIn, [reducedMotion]: "none" },
+    animationName: { default: drawIn, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: motion.slow,
-      [reducedMotion]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "ease-out", [reducedMotion]: "ease" },
-    animationFillMode: { default: "both", [reducedMotion]: "none" },
+    animationTimingFunction: {
+      default: "ease-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
 });

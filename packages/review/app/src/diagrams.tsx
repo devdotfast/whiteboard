@@ -1056,7 +1056,7 @@ const styles = stylex.create({
     gridTemplateRows: "auto minmax(0, 1fr)",
     width: {
       default: "100%",
-      "@media (max-width: 720px)": {
+      [stylex.env.narrow]: {
         default: "100%",
         [inDocument()]: "calc(100cqi - 16px)",
       },

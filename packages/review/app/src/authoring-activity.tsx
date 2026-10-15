@@ -192,8 +192,6 @@ export function ReviewSurfaceLabel({
   );
 }
 
-const REDUCED = "@media (prefers-reduced-motion: reduce)";
-
 // The surface tab's word is styled only in the top bar's tabs.
 const inTopbarTabs = () => stylex.when.ancestor(":is(*)", topbarTabsMarker);
 
@@ -262,16 +260,19 @@ const styles = stylex.create({
   courierActive: {
     color: tokens.accent,
     transform: "none",
-    animationName: { default: courierArrive, [REDUCED]: "none" },
+    animationName: {
+      default: courierArrive,
+      [stylex.env.reducedMotion]: "none",
+    },
     animationDuration: {
       default: courierMotion.arrive,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
     animationTimingFunction: {
-      default: "cubic-bezier(0.2, 0.7, 0.2, 1)",
-      [REDUCED]: "ease",
+      default: motion.enter,
+      [stylex.env.reducedMotion]: "ease",
     },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   // Neither the ink nor the unread dot touches the tab's layout: the dot is
   // out of flow and only color moves.
@@ -282,38 +283,56 @@ const styles = stylex.create({
   wordWorking: {
     backgroundImage: {
       default: null,
-      [inTopbarTabs()]: { default: mutedInk, [REDUCED]: "none" },
+      [inTopbarTabs()]: {
+        default: mutedInk,
+        [stylex.env.reducedMotion]: "none",
+      },
     },
     backgroundSize: {
       default: null,
-      [inTopbarTabs()]: { default: "240% 100%", [REDUCED]: "auto" },
+      [inTopbarTabs()]: {
+        default: "240% 100%",
+        [stylex.env.reducedMotion]: "auto",
+      },
     },
     backgroundClip: {
       default: null,
-      [inTopbarTabs()]: { default: "text", [REDUCED]: "border-box" },
+      [inTopbarTabs()]: {
+        default: "text",
+        [stylex.env.reducedMotion]: "border-box",
+      },
     },
     color: {
       default: null,
       [inTopbarTabs()]: {
         default: tokens.transparent,
-        [REDUCED]: tokens.inkMuted,
+        [stylex.env.reducedMotion]: tokens.inkMuted,
       },
     },
     animationName: {
       default: null,
-      [inTopbarTabs()]: { default: shimmer, [REDUCED]: "none" },
+      [inTopbarTabs()]: {
+        default: shimmer,
+        [stylex.env.reducedMotion]: "none",
+      },
     },
     animationDuration: {
       default: null,
-      [inTopbarTabs()]: { default: motion.pulse, [REDUCED]: motion.instant },
+      [inTopbarTabs()]: {
+        default: motion.pulse,
+        [stylex.env.reducedMotion]: motion.instant,
+      },
     },
     animationTimingFunction: {
       default: null,
-      [inTopbarTabs()]: { default: "linear", [REDUCED]: "ease" },
+      [inTopbarTabs()]: {
+        default: "linear",
+        [stylex.env.reducedMotion]: "ease",
+      },
     },
     animationIterationCount: {
       default: null,
-      [inTopbarTabs()]: { default: "infinite", [REDUCED]: 1 },
+      [inTopbarTabs()]: { default: "infinite", [stylex.env.reducedMotion]: 1 },
     },
   },
   // The chosen tab inks darker, reduced motion included.

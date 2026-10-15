@@ -1267,7 +1267,7 @@ const styles = stylex.create({
     width: {
       default: "100%",
       [inDocument()]: "fit-content",
-      "@media (max-width: 720px)": {
+      [stylex.env.narrow]: {
         default: "100%",
         [inDocument()]: "calc(100cqi - 16px)",
       },
@@ -1279,7 +1279,7 @@ const styles = stylex.create({
     maxWidth: {
       default: "100%",
       [inDocument()]: `min(${tokens.reviewInlineDiagramMaxWidth}, calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline}))`,
-      "@media (max-width: 720px)": {
+      [stylex.env.narrow]: {
         default: "100%",
         [inDocument()]: "none",
       },

@@ -62,6 +62,10 @@ export const motion = stylex.defineConsts({
   // One turn of a spinner: a slower one reads as stalled.
   spin: "0.8s",
   ease: "ease",
+  // Something arriving: quick out of the gate, a long soft landing.
+  enter: "cubic-bezier(0.2, 0.7, 0.2, 1)",
+  // A panel sliding into place.
+  settle: "cubic-bezier(0.2, 0.8, 0.2, 1)",
 });
 
 export const elevation = stylex.defineConsts({
