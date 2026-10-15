@@ -22,7 +22,7 @@ import { Shortcut } from "@canvas/ui/kbd";
 import { SegmentedControl } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
 import { TextArea, fieldStyles } from "@canvas/ui/text-field";
-import { useTooltip } from "@canvas/use-tooltip";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewCanvasSetupActions,
   ReviewOnboardingProject,

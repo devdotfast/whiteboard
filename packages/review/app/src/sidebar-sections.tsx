@@ -1,3 +1,4 @@
+import { TooltipHostContext, useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewApiSummary,
   type ReviewSidebarSectionProps,
@@ -29,7 +30,6 @@ import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
 import { fontSize, fontWeight, radius, tracking } from "./scale.stylex";
 import { ThreadsSectionBody } from "./sidebar-threads";
 import { tokens } from "./tokens.stylex";
-import { TooltipHostContext, useTooltip } from "./use-tooltip";
 import {
   RECENT_SHOWN,
   type WhiteboardBranch,

@@ -15,6 +15,7 @@ import {
   ThinkingIcon,
 } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -620,6 +621,7 @@ export function ElidedMessage({
   const inColumn = useContext(InRightColumn);
   const text = event.kind === "user" ? event.text : event.markdown;
   const segments = elideByKeep(text, keep);
+  const expandTooltip = useTooltip("Show the hidden text");
 
   if (!segments) return <TraceEvent event={event} highlightQuote={quote} />;
 
@@ -640,8 +642,9 @@ export function ElidedMessage({
           <button
             key={index}
             type="button"
+            ref={expandTooltip}
             {...stylex.props(chipStyles.pill, styles.lensChip)}
-            title="Show the hidden text"
+            aria-label="Show the hidden text"
             onClick={onExpand}
           >
             ⋯

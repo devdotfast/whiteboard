@@ -1,11 +1,10 @@
+import { CanvasUiContext } from "@canvas/host/canvas-ui";
+import { useOptionalReviewSession } from "@canvas/host/review-session";
 import type {
   ReviewDisposable,
   ReviewTooltipOptions,
 } from "@dev.fast/review-protocol";
 import { createContext, useCallback, useContext } from "react";
-
-import { CanvasUiContext } from "./host/canvas-ui";
-import { useOptionalReviewSession } from "./host/review-session";
 
 type SetupTooltip = (
   target: HTMLElement,

@@ -9,6 +9,7 @@ import {
   GripIcon,
   MinusIcon,
 } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import {
   type PointerEvent,
@@ -33,7 +34,6 @@ import { tokens } from "./tokens.stylex";
 import { IconButton } from "./ui/button";
 import { surfaceStyles } from "./ui/surface";
 import { textStyles } from "./ui/text";
-import { useTooltip } from "./use-tooltip";
 
 // Clear of the canvas's edges and of what is docked beside it.
 const GAP = 24;

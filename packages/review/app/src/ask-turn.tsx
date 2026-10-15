@@ -6,6 +6,7 @@ import { iconStyles } from "@canvas/ui/icon-styles";
 import { CheckIcon, CloseIcon } from "@canvas/ui/icons";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { AskEntry, AskThreadState } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -24,7 +25,6 @@ import { chevronMarker } from "./markers.stylex";
 import { fontSize, radius } from "./scale.stylex";
 import { settleStreamingMarkdown } from "./streaming-markdown";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 type ToolEntry = Extract<AskEntry, { kind: "tool" }>;
 

@@ -16,6 +16,7 @@ import {
   overlayScrollbarStyles,
 } from "@canvas/ui/overlay-scrollbar";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import { extractTraceEventText } from "@dev.fast/trace-protocol";
 import * as stylex from "@stylexjs/stylex";
 import type {
@@ -99,7 +100,6 @@ import { TraceDocument } from "./trace-document";
 import { traceStyles } from "./trace-styles";
 import { captureUiEvent } from "./ui-telemetry";
 import { useAgentTrace } from "./use-agent-trace";
-import { useTooltip } from "./use-tooltip";
 
 const TOUR_ACTIVE_TOP_SLACK_PX = 18;
 

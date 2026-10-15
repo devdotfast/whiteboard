@@ -3,6 +3,7 @@ import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ChatIcon, HistoryIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect } from "react";
 
@@ -24,7 +25,6 @@ import { Button, IconButton } from "./ui/button";
 import { Chip } from "./ui/chip";
 import { EmptyState } from "./ui/empty-state";
 import { textStyles } from "./ui/text";
-import { useTooltip } from "./use-tooltip";
 
 /** Opens the list of this review's saved conversations. */
 function useOpenAskHistory() {

@@ -1,5 +1,6 @@
 import { drawMotion } from "@canvas/draw-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewSidebarCoverage,
   ReviewSidebarLenses,
@@ -12,7 +13,6 @@ import { drawStyles } from "./draw-styles";
 import { lensChipMarker } from "./markers.stylex";
 import { tokens } from "./tokens.stylex";
 import { ProgressRing } from "./ui/progress-ring";
-import { useTooltip } from "./use-tooltip";
 import { ViewedButton } from "./viewed-button";
 
 /**

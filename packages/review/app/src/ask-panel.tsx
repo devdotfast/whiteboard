@@ -1,6 +1,7 @@
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ArrowDownIcon, ImageIcon, LockIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewHostStatus,
   ReviewRemoteHostActions,
@@ -82,7 +83,6 @@ import { Chip } from "./ui/chip";
 import { StatusBanner } from "./ui/status-banner";
 import { surfaceStyles } from "./ui/surface";
 import { useFollowLatest } from "./use-follow-latest";
-import { useTooltip } from "./use-tooltip";
 
 /** What the panel sends: a first question, a follow-up, or a decision. */
 type AskRequest =

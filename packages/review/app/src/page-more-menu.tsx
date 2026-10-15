@@ -1,6 +1,7 @@
 import { IconButton } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { MoreIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { ReviewView } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useRef, useState } from "react";
@@ -11,7 +12,6 @@ import { useNotify } from "./notify";
 import { useReviewActions, useReviewState } from "./review-context";
 import { shellStyles } from "./shell-styles";
 import { captureUiEvent } from "./ui-telemetry";
-import { useTooltip } from "./use-tooltip";
 
 /** A page bar icon folded into "⋯" where the bar is too narrow for it. */
 export interface PageMoreFolded {

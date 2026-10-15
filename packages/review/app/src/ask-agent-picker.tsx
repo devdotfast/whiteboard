@@ -3,6 +3,7 @@ import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type AskAgentId,
   type AskChoiceKind,
@@ -38,7 +39,6 @@ import { menuStyles } from "./ui/menu";
 import { Popover } from "./ui/popover";
 import { textStyles } from "./ui/text";
 import { fieldStyles } from "./ui/text-field";
-import { useTooltip } from "./use-tooltip";
 
 const agentsSchema = z.object({
   agents: z.array(

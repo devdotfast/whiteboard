@@ -5,6 +5,7 @@ import { iconStyles } from "@canvas/ui/icon-styles";
 import { BugIcon, CloseIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import { TextArea } from "@canvas/ui/text-field";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewBugReportRequest,
   parseReviewBugReportResponse,
@@ -33,7 +34,6 @@ import { fontSize, fontWeight, radius } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent, clientErrorName } from "./ui-telemetry";
-import { useTooltip } from "./use-tooltip";
 
 const MAX_DESCRIPTION_BYTES = 64 * 1024;
 

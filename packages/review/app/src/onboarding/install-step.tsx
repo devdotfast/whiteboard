@@ -10,7 +10,7 @@ import { CopyIcon, DrawnCheckIcon, PlusIcon } from "@canvas/ui/icons";
 import { Kbd } from "@canvas/ui/kbd";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
-import { useTooltip } from "@canvas/use-tooltip";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewCanvasSetupActions,
   ReviewCliInstallStatus,

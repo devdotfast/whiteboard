@@ -4,6 +4,7 @@ import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { FileIcon, SearchIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewCommitScope,
   ReviewDiffLens,
@@ -60,7 +61,6 @@ import {
 import { useSidebarShowsBoard } from "./sidebar-shows-board";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 export function ReviewDiffView({
   scope,

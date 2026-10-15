@@ -1,5 +1,6 @@
 import { AgentLogo } from "@canvas/ui/brand-icons";
 import { focusStyles } from "@canvas/ui/focus";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { AskHistoryEntry } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -25,7 +26,6 @@ import type { AskOpenOptions, ReviewPanelStore } from "./review-panel-store";
 import { fontSize, radius } from "./scale.stylex";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 /** The CSS highlight that washes each passage a conversation is about. */
 const ASK_HIGHLIGHT = "ask-thread";

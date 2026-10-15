@@ -1,6 +1,6 @@
 import { IconButton } from "@canvas/ui/button";
-import { useUiTooltip } from "@canvas/ui/host";
 import { CheckIcon, CopyIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, type ReactNode, useEffect, useState } from "react";
 
@@ -90,7 +90,7 @@ export function CopyableText({
   const [copiedText, copy] = useCopy();
   const copied = copiedText === text;
 
-  const tooltip = useUiTooltip<HTMLSpanElement>(
+  const tooltip = useTooltip<HTMLSpanElement>(
     copied ? "Copied" : "Click to copy",
     { instant: true },
   );
@@ -132,7 +132,7 @@ export function CopyButton({
 }): ReactElement {
   const [copiedText, copy] = useCopy();
   const copied = copiedText === text;
-  const tooltip = useUiTooltip(label);
+  const tooltip = useTooltip(label);
 
   return (
     <IconButton

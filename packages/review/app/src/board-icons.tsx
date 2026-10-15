@@ -1,3 +1,4 @@
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   BOARD_ICONS,
   type BoardIconDefinition,
@@ -10,7 +11,6 @@ import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, createElement } from "react";
 
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 function DrawnIcon({
   icon,

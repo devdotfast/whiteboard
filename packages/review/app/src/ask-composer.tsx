@@ -4,6 +4,7 @@ import { iconStyles } from "@canvas/ui/icon-styles";
 import { ArrowUpIcon, CloseIcon, ImageIcon } from "@canvas/ui/icons";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type AskCommand,
   type AskQuestion,
@@ -33,7 +34,6 @@ import { menuStyles } from "./ui/menu";
 import { Popover } from "./ui/popover";
 import { ProgressRing } from "./ui/progress-ring";
 import { fieldStyles } from "./ui/text-field";
-import { useTooltip } from "./use-tooltip";
 
 type ImageType = (typeof askImageTypes)[number];
 
