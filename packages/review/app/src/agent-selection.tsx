@@ -44,6 +44,23 @@ type Selection = Omit<AgentSelection, "revision"> & {
 
 type Select = (selection: Selection | null) => void;
 
+function payloadOf({
+  anchor: _anchor,
+  anchorElement: _anchorElement,
+  anchorContainer: _anchorContainer,
+  range: _range,
+  ...payload
+}: Selection) {
+  return payload;
+}
+
+const selectionKey = (selection: Selection) =>
+  JSON.stringify([
+    selection.target,
+    selection.selectedDiff,
+    selection.apiSource,
+  ]);
+
 const SelectionContext = createContext<Select>(() => {});
 
 export function useAgentSelection() {
@@ -184,25 +201,10 @@ export function AgentSelectionProvider({
   const copy = useCallback(async () => {
     if (!selection || copying.current) return;
     copying.current = true;
-
-    const {
-      anchor: _anchor,
-      anchorElement: _anchorElement,
-      anchorContainer: _anchorContainer,
-      range: _range,
-      ...payload
-    } = selection;
-
-    setCopiedSelection(
-      JSON.stringify([
-        selection.target,
-        selection.selectedDiff,
-        selection.apiSource,
-      ]),
-    );
+    setCopiedSelection(selectionKey(selection));
 
     try {
-      await copyAgentContext(session, { ...payload, revision });
+      await copyAgentContext(session, { ...payloadOf(selection), revision });
       notify({
         kind: "success",
         text: "Selection copied to clipboard. Paste into your agent to chat about it.",
@@ -228,13 +230,8 @@ export function AgentSelectionProvider({
     (agent?: AskAgentId) => {
       if (!selection || !panels) return;
 
-      const {
-        anchor: _anchor,
-        anchorElement: _anchorElement,
-        anchorContainer: _anchorContainer,
-        range,
-        ...payload
-      } = selection;
+      const payload = payloadOf(selection);
+      const { range } = selection;
 
       // The saved conversation marks this passage by its place in its
       // block, so its pin finds it again in later versions.
@@ -306,96 +303,86 @@ export function AgentSelectionProvider({
       {children}
       <span hidden ref={bindOverlay} />
       {overlayHost &&
+        selection &&
+        copiedSelection !== selectionKey(selection) &&
         createPortal(
-          <>
-            {selection &&
-              copiedSelection !==
-                JSON.stringify([
-                  selection.target,
-                  selection.selectedDiff,
-                  selection.apiSource,
-                ]) &&
-              createPortal(
-                // The toolbar starts at the selection, after a lead that
-                // gives way so it never runs past the container's edge.
-                <div
-                  {...stylex.props(themeStyles.vars, styles.lane)}
-                  style={{
-                    top: selection.anchor?.y,
-                    right: selection.anchor?.right,
-                  }}
-                >
-                  <span
-                    {...stylex.props(styles.lead)}
-                    style={{ flexBasis: selection.anchor?.x }}
-                  />
-                  <div
-                    ref={actions}
-                    {...stylex.props(surfaceStyles.popover, styles.actions)}
-                    onMouseDown={(event) => event.preventDefault()}
-                  >
-                    {askAgents && askAgent ? (
-                      <>
-                        <span {...stylex.props(styles.split)}>
-                          <Button
-                            variant="primary"
-                            aria-keyshortcuts="Meta+L"
-                            onClick={() => ask()}
-                            xstyle={canChooseAgent && styles.splitMain}
-                          >
-                            <ChatIcon xstyle={controlStyles.inlineIcon} />
-                            <span>Ask {askAgent.name}</span>
-                            <Shortcut aria-hidden="true" xstyle={styles.key}>
-                              ⌘L
-                            </Shortcut>
-                          </Button>
-                          {canChooseAgent ? (
-                            <Button
-                              variant="primary"
-                              aria-label="Ask another agent"
-                              aria-haspopup="menu"
-                              aria-expanded={choosing}
-                              onClick={() => setChoosing((value) => !value)}
-                              xstyle={styles.splitMenu}
-                            >
-                              <ChevronDownIcon
-                                xstyle={[
-                                  styles.chevron,
-                                  choosing && styles.chevronOpen,
-                                ]}
-                              />
-                            </Button>
-                          ) : null}
-                        </span>
-                        {canChooseAgent && choosing ? (
-                          <AskAgentMenu
-                            agents={askAgents}
-                            current={askAgent.id}
-                            within={actions}
-                            onPick={ask}
-                            onDismiss={() => setChoosing(false)}
-                          />
-                        ) : null}
-                      </>
-                    ) : null}
+          // The toolbar starts at the selection, after a lead that
+          // gives way so it never runs past the container's edge.
+          <div
+            {...stylex.props(themeStyles.vars, styles.lane)}
+            style={{
+              top: selection.anchor?.y,
+              right: selection.anchor?.right,
+            }}
+          >
+            <span
+              {...stylex.props(styles.lead)}
+              style={{ flexBasis: selection.anchor?.x }}
+            />
+            <div
+              ref={actions}
+              {...stylex.props(surfaceStyles.popover, styles.actions)}
+              onMouseDown={(event) => event.preventDefault()}
+            >
+              {askAgents && askAgent ? (
+                <>
+                  <span {...stylex.props(styles.split)}>
                     <Button
-                      variant="ghost"
-                      aria-keyshortcuts="Meta+Shift+C"
-                      aria-label="Copy ref"
-                      onClick={() => void copy()}
+                      variant="primary"
+                      aria-keyshortcuts="Meta+L"
+                      onClick={() => ask()}
+                      xstyle={canChooseAgent && styles.splitMain}
                     >
-                      <CopyIcon xstyle={controlStyles.inlineIcon} />
-                      <span>Copy ref</span>
+                      <ChatIcon xstyle={controlStyles.inlineIcon} />
+                      <span>Ask {askAgent.name}</span>
                       <Shortcut aria-hidden="true" xstyle={styles.key}>
-                        ⇧⌘C
+                        ⌘L
                       </Shortcut>
                     </Button>
-                  </div>
-                </div>,
-                selection.anchorContainer ?? overlayHost,
-              )}
-          </>,
-          overlayHost,
+                    {canChooseAgent ? (
+                      <Button
+                        variant="primary"
+                        aria-label="Ask another agent"
+                        aria-haspopup="menu"
+                        aria-expanded={choosing}
+                        onClick={() => setChoosing((value) => !value)}
+                        xstyle={styles.splitMenu}
+                      >
+                        <ChevronDownIcon
+                          xstyle={[
+                            styles.chevron,
+                            choosing && styles.chevronOpen,
+                          ]}
+                        />
+                      </Button>
+                    ) : null}
+                  </span>
+                  {canChooseAgent && choosing ? (
+                    <AskAgentMenu
+                      agents={askAgents}
+                      current={askAgent.id}
+                      within={actions}
+                      onPick={ask}
+                      onDismiss={() => setChoosing(false)}
+                    />
+                  ) : null}
+                </>
+              ) : null}
+              <Button
+                variant="ghost"
+                aria-keyshortcuts="Meta+Shift+C"
+                aria-label="Copy ref"
+                onClick={() => void copy()}
+              >
+                <CopyIcon xstyle={controlStyles.inlineIcon} />
+                <span>Copy ref</span>
+                <Shortcut aria-hidden="true" xstyle={styles.key}>
+                  ⇧⌘C
+                </Shortcut>
+              </Button>
+            </div>
+          </div>,
+          selection.anchorContainer ?? overlayHost,
         )}
     </SelectionContext.Provider>
   );
