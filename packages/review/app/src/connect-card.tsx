@@ -1,6 +1,6 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
 import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
-import { Button, buttonStyles } from "@canvas/ui/button";
+import { Button, buttonLook, buttonStyles } from "@canvas/ui/button";
 import { copyText } from "@canvas/ui/copy";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
@@ -209,9 +209,10 @@ export function ConnectCard({
                 Show less
               </Button>
             ) : null}
-            <button
-              type="button"
-              {...stylex.props(focusStyles.ring, promptStyles.copy)}
+            <Button
+              variant="primary"
+              size="large"
+              xstyle={promptStyles.copy}
               aria-live="polite"
               aria-label={`${copied ? "Copied" : "Copy"} ${noun} for ${agent}`}
               onClick={() => copy(text)}
@@ -224,7 +225,7 @@ export function ConnectCard({
               {copied
                 ? "Copied"
                 : `Copy ${mode === "prompt" ? "prompt" : "command"}`}
-            </button>
+            </Button>
           </div>
         </>
       ) : plugin.url ? (
@@ -234,7 +235,10 @@ export function ConnectCard({
           </p>
           <div {...stylex.props(promptStyles.actions)}>
             <a
-              {...stylex.props(focusStyles.ring, promptStyles.copy)}
+              {...stylex.props(
+                buttonLook({ variant: "primary", size: "large" }),
+                promptStyles.copy,
+              )}
               href={plugin.url}
               {...newTabLinkProps(plugin.url)}
             >

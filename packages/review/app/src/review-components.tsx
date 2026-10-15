@@ -1176,9 +1176,10 @@ export function GuidedTourPanel({
         tour.stops.length > 0 ? (
           <div {...stylex.props(tourStyles.floatingFooter)}>
             {showIntroPill ? (
-              <button
-                type="button"
-                {...stylex.props(tourStyles.pill, tourStyles.pillIntro)}
+              <Button
+                variant="primary"
+                size="large"
+                xstyle={[tourStyles.pill, tourStyles.pillIntro]}
                 data-tour-target="tour-next"
                 onClick={() => {
                   setHasScrolled(true);
@@ -1186,11 +1187,11 @@ export function GuidedTourPanel({
                 }}
               >
                 <span>{tour.stops.length - 1} more steps</span>
-                <ChevronDownIcon xstyle={tourStyles.pillChevron} />
-              </button>
+                <ChevronDownIcon />
+              </Button>
             ) : (
               <div
-                {...stylex.props(tourStyles.pill)}
+                {...stylex.props(tourStyles.pill, tourStyles.pillGroup)}
                 role="group"
                 aria-label="Tour steps"
               >
