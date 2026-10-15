@@ -1,4 +1,5 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { Checkbox } from "@canvas/ui/checkbox";
 import { isNumberValue, isStringValue } from "@dev.fast/review-protocol";
 import { type MarkdownNode, parseMarkdown } from "@review/markdown";
 import * as stylex from "@stylexjs/stylex";
@@ -576,12 +577,11 @@ function TaskItem({
 
   return (
     <li {...stylex.props(!inChat && doc.item, styles.task)}>
-      <input
-        type="checkbox"
+      <Checkbox
         checked={node.checked === true}
         disabled={!toggle}
         onChange={() => toggle?.(node)}
-        {...stylex.props(styles.taskBox)}
+        xstyle={styles.taskBox}
       />
       <div {...stylex.props(styles.taskBody)}>{children}</div>
     </li>
@@ -799,13 +799,12 @@ const styles = stylex.create({
   },
   // Centered on the first line of text.
   taskBox: {
-    flex: "none",
     width: "1em",
     height: "1em",
     margin: "calc((1lh - 1em) / 2) 0 0",
+    backgroundSize: "70%",
     font: "inherit",
     lineHeight: "inherit",
-    cursor: { default: null, ":enabled": "pointer" },
   },
   taskBody: {
     minWidth: 0,
