@@ -2,7 +2,7 @@ import { Button } from "@canvas/ui/button";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
-import { TextField, fieldStyles } from "@canvas/ui/text-field";
+import { TextArea, TextField } from "@canvas/ui/text-field";
 import { isStringValue } from "@dev.fast/json";
 import {
   type JsonValue,
@@ -369,11 +369,7 @@ export function DiffrConfigSection({
                             : "Customized"}
                         </span>
                       </span>
-                      <textarea
-                        {...stylex.props(
-                          fieldStyles.box,
-                          fieldStyles.multiline,
-                        )}
+                      <TextArea
                         aria-label="Prompt"
                         rows={6}
                         value={draft.systemPrompt}

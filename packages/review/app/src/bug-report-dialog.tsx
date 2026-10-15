@@ -2,7 +2,7 @@ import { Button, IconButton } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { BugIcon, CloseIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
-import { fieldStyles } from "@canvas/ui/text-field";
+import { TextArea } from "@canvas/ui/text-field";
 import {
   type ReviewBugReportRequest,
   parseReviewBugReportResponse,
@@ -258,12 +258,8 @@ export function BugReportControl({
               </h2>
               <label {...stylex.props(styles.description)}>
                 <span>What happened? (optional)</span>
-                <textarea
-                  {...stylex.props(
-                    fieldStyles.box,
-                    fieldStyles.multiline,
-                    styles.textarea,
-                  )}
+                <TextArea
+                  xstyle={styles.textarea}
                   autoFocus
                   rows={7}
                   value={description}

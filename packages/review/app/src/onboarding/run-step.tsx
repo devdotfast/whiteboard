@@ -20,7 +20,7 @@ import {
 import { Shortcut } from "@canvas/ui/kbd";
 import { SegmentedControl } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
-import { fieldStyles } from "@canvas/ui/text-field";
+import { TextArea, fieldStyles } from "@canvas/ui/text-field";
 import { useTooltip } from "@canvas/use-tooltip";
 import type {
   ReviewCanvasSetupActions,
@@ -559,13 +559,9 @@ export function RunStep({
                 Copy
               </Button>
             </span>
-            <textarea
+            <TextArea
               aria-label="Prompt"
-              {...stylex.props(
-                fieldStyles.box,
-                fieldStyles.multiline,
-                styles.promptField,
-              )}
+              xstyle={styles.promptField}
               value={prompt}
               rows={3}
               disabled={!target}
