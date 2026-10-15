@@ -789,11 +789,7 @@ export const orderReviewBlocks = [
   },
   {
     type: "code_peek",
-    source: {
-      file: "order.ts",
-      start: { side: "head", line: 1 },
-      end: { side: "head", line: 1 },
-    },
+    source: "head/order.ts#L1",
   },
 ];
 

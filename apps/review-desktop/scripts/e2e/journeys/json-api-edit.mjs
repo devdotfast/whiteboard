@@ -51,11 +51,7 @@ export async function run(ctx) {
     [
       {
         type: "code_peek",
-        source: {
-          file: "../outside.ts",
-          start: { side: "head", line: 1 },
-          end: { side: "head", line: 1 },
-        },
+        source: "head/../outside.ts#L1",
       },
       "repository-relative",
     ],

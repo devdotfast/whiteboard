@@ -66,11 +66,7 @@ export async function run(ctx) {
     blocks: [
       {
         type: "code_peek",
-        source: {
-          file: "tests/check.rs",
-          start: { side: "head", line: 1 },
-          end: { side: "head", line: 8 },
-        },
+        source: "head/tests/check.rs#L1-L8",
       },
     ],
   });

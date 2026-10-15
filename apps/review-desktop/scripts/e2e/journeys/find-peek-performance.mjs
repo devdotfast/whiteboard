@@ -50,11 +50,7 @@ export async function run(ctx) {
     head,
     blocks: files.map((file) => ({
       type: "code_peek",
-      source: {
-        file,
-        start: { side: "head", line: 1 },
-        end: { side: "head", line: 40 },
-      },
+      source: `head/${file}#L1-L40`,
     })),
   });
 
