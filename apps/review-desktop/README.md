@@ -161,8 +161,8 @@ signs every binary and installer with Azure Artifact Signing through the
 `windows-signing` environment. Nothing is uploaded until every selected platform
 has built and validated; `publish-windows` then uploads the installers to
 `releases/<version>/win32-x64/`, points `install.dev.fast/windows` at the new
-per-user installer, and attaches the installers to the GitHub release. Windows
-has no update feed yet, so installed Windows apps do not update themselves.
+per-user installer, updates the Windows update feeds, and attaches the
+installers to the GitHub release.
 
 ### Promoting a preview to stable
 

@@ -443,13 +443,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ needs.version.outputs.version }}
+      RELEASE_COMMIT: ${{ needs.version.outputs.commit }}
     steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.version.outputs.commit }}
+          sparse-checkout: apps/review-desktop/scripts
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           digest-mismatch: warn
           name: windows-packages
           path: windows-packages
-      # Versioned payloads first, then the alias install.dev.fast/windows/preview serves.
+      # Versioned payloads first, then the alias install.dev.fast/windows/preview serves, then the update feeds.
       - name: Upload preview to R2
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -460,18 +465,36 @@ jobs:
         run: |
           RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/win32-x64"
           SETUP="Whiteboard-Preview-${RELEASE_VERSION}-Setup.exe"
-          aws s3 cp windows-packages/Whiteboard-win32-x64-user.exe "${RELEASE_PREFIX}/${SETUP}" \
-            --content-type application/vnd.microsoft.portable-executable \
-            --content-disposition "attachment; filename=\"${SETUP}\""
-          aws s3 cp windows-packages/Whiteboard-win32-x64-system.exe "${RELEASE_PREFIX}/Whiteboard-Preview-${RELEASE_VERSION}-System-Setup.exe" \
-            --content-type application/vnd.microsoft.portable-executable \
-            --content-disposition "attachment; filename=\"Whiteboard-Preview-${RELEASE_VERSION}-System-Setup.exe\""
+          mv windows-packages/Whiteboard-win32-x64-user.exe "windows-packages/${SETUP}"
+          mv windows-packages/Whiteboard-win32-x64-system.exe "windows-packages/Whiteboard-Preview-${RELEASE_VERSION}-System-Setup.exe"
+          for file in windows-packages/*.exe; do
+            aws s3 cp "$file" "${RELEASE_PREFIX}/$(basename "$file")" \
+              --content-type application/vnd.microsoft.portable-executable \
+              --content-disposition "attachment; filename=\"$(basename "$file")\""
+          done
           aws s3 cp windows-packages/Whiteboard-win32-x64.zip "${RELEASE_PREFIX}/Whiteboard-Preview-win32-x64-${RELEASE_VERSION}.zip" \
             --content-type application/zip
-          aws s3 cp windows-packages/Whiteboard-win32-x64-user.exe \
+          aws s3 cp "windows-packages/${SETUP}" \
             "s3://${R2_BUCKET}/releases/preview-latest/win32-x64/Whiteboard-Setup.exe" \
             --content-type application/vnd.microsoft.portable-executable \
             --content-disposition "attachment; filename=\"${SETUP}\""
+          for feed in win32-x64-user:Setup win32-x64:System-Setup; do
+            node apps/review-desktop/scripts/windows-update-manifest.mjs \
+              --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" \
+              "windows-packages/Whiteboard-Preview-${RELEASE_VERSION}-${feed#*:}.exe" > latest.json
+            aws s3 cp latest.json "s3://${R2_BUCKET}/update/preview/${feed%%:*}/latest.json" \
+              --content-type application/json
+          done
+      - name: Verify preview update feeds
+        run: |
+          for feed in win32-x64-user:Setup win32-x64:System-Setup; do
+            echo "${feed%%:*} feed for an outdated preview client (expect 200 with ${RELEASE_VERSION}):"
+            RESPONSE=$(curl -sf "https://update.dev.fast/api/update/${feed%%:*}/preview/0000000000000000000000000000000000000000")
+            echo "$RESPONSE"
+            echo "$RESPONSE" | grep -F "\"productVersion\":\"${RELEASE_VERSION}\""
+            echo "$RESPONSE" | grep -F "/Whiteboard-Preview-${RELEASE_VERSION}-${feed#*:}.exe"
+            test "$(curl -s -o /dev/null -w '%{http_code}' "https://update.dev.fast/api/update/${feed%%:*}/preview/${RELEASE_COMMIT}")" = 204
+          done
       - name: Verify preview install landing
         run: |
           echo "install.dev.fast/windows/preview (expect 302 to the preview installer):"
