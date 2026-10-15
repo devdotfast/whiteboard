@@ -243,10 +243,13 @@ function remoteSetup(connect?: () => Promise<unknown>) {
 	const asked: string[] = [];
 	const activated: string[] = [];
 	const windowActivations: string[] = [];
+	const released: string[] = [];
+	const removed = event<unknown>();
+	const opened: unknown[] = [];
 	const host = {
 		authority: AUTHORITY,
 		languageFeatures: remote,
-		addRoot: async (root: URI) => { roots.push(root.toString()); return Disposable.None; },
+		addRoot: async (root: URI) => { roots.push(root.toString()); return { dispose: () => released.push(root.toString()) }; },
 		activateByEvent: async (event: string) => { activated.push(event); },
 	};
 	const text = "same pinned source";
@@ -259,8 +262,8 @@ function remoteSetup(connect?: () => Promise<unknown>) {
 	const opening = codeEditors();
 	const service = new ReviewLocalLanguageFeatures(
 		{ onDidChangeConnection: () => Disposable.None } as any,
-		{ createModelReference: async (uri: URI) => ({ object: { textEditorModel: textModel(uri) }, dispose() { } }) } as any,
-		{ getModels: () => [], onModelAdded: () => Disposable.None } as any,
+		{ createModelReference: async (uri: URI) => { const local = textModel(uri); opened.push(local); return { object: { textEditorModel: local }, dispose() { } }; } } as any,
+		{ getModels: () => [], onModelAdded: () => Disposable.None, onModelRemoved: removed.event } as any,
 		window,
 		{ activateByEvent: async (event: string) => { windowActivations.push(event); } } as any,
 		{ addFolders: async () => { throw new Error("a remote root never enters the window's workspace"); } } as any,
@@ -273,8 +276,20 @@ function remoteSetup(connect?: () => Promise<unknown>) {
 	);
 	const internal = service as any;
 	internal.environment = async () => ({ remoteRootPath: ROOT, identity: "hash", serverId: SERVER_ID });
-	return { service, internal, review, window, remote, roots, asked, activated, windowActivations, opening };
+	return { service, internal, review, window, remote, roots, asked, activated, windowActivations, opening, released, removed, opened };
 }
+
+test("a remote host keeps a review's folder until the host has closed its file", async () => {
+	const { service, internal, review, remote, released, removed, opened } = remoteSetup();
+	remote.hoverProvider.register({ language: "typescript" }, { provideHover: () => ({ range: new Range(1, 1, 1, 5), contents: [{ value: "42" }] }) });
+	await internal.hover(review, new Position(1, 2), CancellationToken.None);
+	service.dispose();
+	await new Promise(resolve => setTimeout(resolve));
+	assert.deepEqual(released, []);
+	removed.fire(opened[0]);
+	await new Promise(resolve => setTimeout(resolve));
+	assert.deepEqual(released, [remoteUri(ROOT).toString()]);
+});
 
 test("a remote review is rooted on its host and asks that host's registry, never the window's", async (t) => {
 	const { service, internal, review, window, remote, roots, asked, activated, windowActivations } = remoteSetup();
