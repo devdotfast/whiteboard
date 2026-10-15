@@ -1050,6 +1050,5 @@ const styles = stylex.create({
   },
   error: {
     padding: "8px 12px",
-    color: tokens.changeRemoved,
   },
 });

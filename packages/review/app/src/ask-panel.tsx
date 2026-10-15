@@ -717,7 +717,10 @@ export function AskPanelContent({
                 onRetry={retry}
               />
             ) : error ? (
-              <p {...stylex.props(askPanelStyles.error)} role="alert">
+              <p
+                {...stylex.props(textStyles.error, askPanelStyles.error)}
+                role="alert"
+              >
                 {error}
                 {errorAction ? (
                   <>
@@ -841,7 +844,10 @@ export function AskReadOnlyThread({
         <AskSelectionQuote selection={selection} />
         {thread ? <AskTurns thread={thread} onDecide={() => {}} /> : null}
         {error ? (
-          <p {...stylex.props(askPanelStyles.error)} role="alert">
+          <p
+            {...stylex.props(textStyles.error, askPanelStyles.error)}
+            role="alert"
+          >
             {error.message}
           </p>
         ) : null}

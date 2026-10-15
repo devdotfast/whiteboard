@@ -588,7 +588,11 @@ export function RunStep({
         {error ? (
           <p
             role="alert"
-            {...stylex.props(onboardingStyles.error, styles.alert)}
+            {...stylex.props(
+              textStyles.error,
+              onboardingStyles.error,
+              styles.alert,
+            )}
           >
             {error}
           </p>

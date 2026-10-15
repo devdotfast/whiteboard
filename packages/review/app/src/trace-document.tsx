@@ -411,7 +411,13 @@ export function TraceToolRow({
           <span {...stylex.props(styles.removed)}>−{event.deletions}</span>
         )}
         {event.error && (
-          <span {...stylex.props(textStyles.eyebrow, styles.errorFlag)}>
+          <span
+            {...stylex.props(
+              textStyles.eyebrow,
+              textStyles.error,
+              styles.errorFlag,
+            )}
+          >
             failed
           </span>
         )}

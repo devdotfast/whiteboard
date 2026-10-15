@@ -279,7 +279,6 @@ export const traceStyles = stylex.create({
     flexShrink: 0,
   },
   errorFlag: {
-    color: tokens.changeRemoved,
     flexShrink: 0,
   },
   toolChevronIcon: {
@@ -432,9 +431,6 @@ export const traceStyles = stylex.create({
     fontSize: fontSize.body,
     lineHeight: "19px",
     color: tokens.inkFaint,
-  },
-  noteError: {
-    color: tokens.changeRemoved,
   },
   // The empty notice starts where a trace's header would.
   empty: {

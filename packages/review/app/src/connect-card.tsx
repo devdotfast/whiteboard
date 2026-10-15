@@ -2,6 +2,7 @@ import { fontSize, radius } from "@canvas/scale.stylex";
 import { Button, buttonStyles } from "@canvas/ui/button";
 import { CopyIcon, copyText } from "@canvas/ui/copy";
 import { focusStyles } from "@canvas/ui/focus";
+import { textStyles } from "@canvas/ui/text";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
   type ReviewCanvasInstallContent,
@@ -246,7 +247,9 @@ export function ConnectCard({
         </p>
       )}
       {status.error ? (
-        <p {...stylex.props(promptStyles.error)}>{status.error}</p>
+        <p {...stylex.props(textStyles.error, promptStyles.error)}>
+          {status.error}
+        </p>
       ) : null}
     </section>
   );
@@ -397,7 +400,15 @@ export function LegacySkillsRow({
         </>
       ) : null}
       {error ? (
-        <p {...stylex.props(promptStyles.error, styles.legacyText)}>{error}</p>
+        <p
+          {...stylex.props(
+            textStyles.error,
+            promptStyles.error,
+            styles.legacyText,
+          )}
+        >
+          {error}
+        </p>
       ) : null}
     </section>
   );

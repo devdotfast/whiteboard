@@ -256,7 +256,6 @@ export const onboardingStyles = stylex.create({
   error: {
     margin: 0,
     paddingTop: "16px",
-    color: tokens.changeRemoved,
     fontSize: fontSize.ui,
   },
   enter0: { ...enter, animationDelay: motion.instant },

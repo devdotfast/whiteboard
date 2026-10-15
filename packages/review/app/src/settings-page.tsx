@@ -1,5 +1,6 @@
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
+import { textStyles } from "@canvas/ui/text";
 import { fieldStyles } from "@canvas/ui/text-field";
 import type {
   ReviewCanvasSettingsContent,
@@ -367,7 +368,9 @@ export function SettingsPage({
             </Row>
           </Section>
 
-          {error ? <p {...stylex.props(styles.error)}>{error}</p> : null}
+          {error ? (
+            <p {...stylex.props(textStyles.error, styles.error)}>{error}</p>
+          ) : null}
         </div>
       </div>
     </main>

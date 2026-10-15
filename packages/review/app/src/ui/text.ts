@@ -17,6 +17,10 @@ export const textStyles = stylex.create({
   count: {
     fontVariantNumeric: "tabular-nums",
   },
+  // An error or a failure.
+  error: {
+    color: tokens.changeRemoved,
+  },
   // One line, cut with an ellipsis.
   truncate: {
     overflow: "hidden",

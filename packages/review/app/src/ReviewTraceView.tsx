@@ -201,7 +201,7 @@ export function ReviewTraceView({
           <p {...stylex.props(styles.note)}>Resolving agent sessions…</p>
         )}
         {list.status === "error" && (
-          <p {...stylex.props(styles.note, styles.noteError)}>{list.error}</p>
+          <p {...stylex.props(styles.note, textStyles.error)}>{list.error}</p>
         )}
         {sourceChoices.length > 1 && (
           <label {...stylex.props(styles.source)}>
@@ -353,7 +353,7 @@ export function ReviewTraceView({
           <p {...stylex.props(styles.note)}>Loading trace…</p>
         )}
         {detail.status === "error" && (
-          <p {...stylex.props(styles.note, styles.noteError)}>{detail.error}</p>
+          <p {...stylex.props(styles.note, textStyles.error)}>{detail.error}</p>
         )}
         {detail.status === "loaded" &&
           detail.trace.cacheStatus &&

@@ -2,6 +2,7 @@ import { railStepMarker } from "@canvas/markers.stylex";
 import { withClass } from "@canvas/stylex-props";
 import { Button, buttonStyles } from "@canvas/ui/button";
 import { Kbd } from "@canvas/ui/kbd";
+import { textStyles } from "@canvas/ui/text";
 import type { ReviewCanvasSetupActions } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useCallback, useEffect, useState } from "react";
@@ -122,7 +123,10 @@ export function Onboarding({
       </nav>
 
       {unavailable ? (
-        <p role="alert" {...stylex.props(styles.error, styles.stage)}>
+        <p
+          role="alert"
+          {...stylex.props(textStyles.error, styles.error, styles.stage)}
+        >
           Whiteboard could not reach its server: {unavailable}
         </p>
       ) : step === "welcome" ? (

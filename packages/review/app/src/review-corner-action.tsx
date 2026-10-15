@@ -1,6 +1,7 @@
 import { fontSize, fontWeight } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
+import { textStyles } from "@canvas/ui/text";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useRef, useState } from "react";
 
@@ -52,6 +53,7 @@ export function ReviewCornerAction(): ReactElement | null {
           {...stylex.props(
             shellStyles.topbarPopover,
             surfaceStyles.popover,
+            textStyles.error,
             styles.error,
           )}
           role="alert"
@@ -97,7 +99,6 @@ const styles = stylex.create({
   // Only rendered in the topbar, where the popover placement positions it.
   error: {
     padding: "8px 12px",
-    color: tokens.changeRemoved,
     font: `${fontWeight.regular} ${fontSize.small} ${tokens.chromeFont}`,
     whiteSpace: "nowrap",
   },

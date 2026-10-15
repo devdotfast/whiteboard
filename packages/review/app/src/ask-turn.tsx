@@ -274,7 +274,7 @@ export function summarize(activities: readonly Activity[]) {
 function ActivityStatusIcon({ status }: { status: ActivityStatus }) {
   return (
     <span
-      {...stylex.props(styles.status, status === "failed" && styles.failed)}
+      {...stylex.props(styles.status, status === "failed" && textStyles.error)}
       aria-label={status}
     >
       {status === "completed" ? (
@@ -490,7 +490,7 @@ export function AskAgentTurn({
             role="note"
             {...stylex.props(
               styles.notice,
-              entry.severity === "error" && styles.failed,
+              entry.severity === "error" && textStyles.error,
             )}
           >
             {entry.description
@@ -779,9 +779,6 @@ const styles = stylex.create({
     flex: "0 0 14px",
     justifyContent: "center",
     color: tokens.inkFaint,
-  },
-  failed: {
-    color: tokens.changeRemoved,
   },
   notice: {
     margin: 0,

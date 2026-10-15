@@ -824,7 +824,7 @@ function TraceQuotePeekPanel({
         closeLabel="Close side peek"
       >
         <div {...stylex.props(panelStyles.peekBody)}>
-          <p {...stylex.props(traceStyles.note, traceStyles.noteError)}>
+          <p {...stylex.props(traceStyles.note, textStyles.error)}>
             {data.error}
           </p>
         </div>

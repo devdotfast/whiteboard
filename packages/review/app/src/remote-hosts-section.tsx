@@ -5,6 +5,7 @@ import { Button, IconButton } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { CopyableText, useCopy } from "@canvas/ui/copy";
 import { useUiTooltip } from "@canvas/ui/host";
+import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
@@ -172,7 +173,7 @@ export function RemoteHostsSection({
         </div>
       </form>
       {error ? (
-        <p role="alert" {...stylex.props(styles.error)}>
+        <p role="alert" {...stylex.props(textStyles.error, styles.error)}>
           <CopyableText text={error} />
         </p>
       ) : null}
@@ -270,7 +271,10 @@ function HostRow({
           <span {...stylex.props(styles.rowLabel)}>{name}</span>
           {loaded ? (
             <span
-              {...stylex.props(styles.rowDescription, failed && local.failed)}
+              {...stylex.props(
+                styles.rowDescription,
+                failed && textStyles.error,
+              )}
             >
               {summary}
             </span>
@@ -543,7 +547,7 @@ function HostStep({
   return (
     <>
       {failure ? (
-        <span role="alert" {...stylex.props(styles.error)}>
+        <span role="alert" {...stylex.props(textStyles.error, styles.error)}>
           {failure}
         </span>
       ) : null}
@@ -619,7 +623,7 @@ function Detail({
       {...stylex.props(
         styles.rowDescription,
         local.detail,
-        failed && local.failed,
+        failed && textStyles.error,
       )}
     >
       {failed ? <CopyableText text={text} /> : text}
@@ -632,9 +636,6 @@ const local = stylex.create({
   detail: {
     overflowWrap: "anywhere",
     userSelect: "text",
-  },
-  failed: {
-    color: tokens.changeRemoved,
   },
   hostRow: {
     rowGap: "12px",

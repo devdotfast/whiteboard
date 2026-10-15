@@ -2,6 +2,7 @@ import { layer } from "@canvas/scale.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
 import { copyText } from "@canvas/ui/copy";
 import { surfaceStyles } from "@canvas/ui/surface";
+import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
 import {
   type ReviewApiClient,
@@ -266,7 +267,10 @@ export function ShareControl({
           )}
         >
           {(error || accountError || account?.error) && (
-            <p {...stylex.props(styles.paragraph, styles.error)} role="alert">
+            <p
+              {...stylex.props(styles.paragraph, textStyles.error)}
+              role="alert"
+            >
               {error ?? accountError ?? account?.error}
             </p>
           )}
@@ -367,9 +371,6 @@ const styles = stylex.create({
   },
   status: {
     color: tokens.chromeFgMuted,
-  },
-  error: {
-    color: tokens.errorFg,
   },
   link: {
     width: "100%",

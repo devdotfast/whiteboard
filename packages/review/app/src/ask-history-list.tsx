@@ -173,7 +173,10 @@ export function AskHistoryList({
           </figure>
         ) : null}
         {error ? (
-          <p {...stylex.props(askPanelStyles.error)} role="alert">
+          <p
+            {...stylex.props(textStyles.error, askPanelStyles.error)}
+            role="alert"
+          >
             {error}
           </p>
         ) : null}

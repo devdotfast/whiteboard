@@ -53,7 +53,6 @@ export const promptStyles = stylex.create({
   },
   error: {
     margin: "10px 0 0",
-    color: tokens.changeRemoved,
     fontSize: fontSize.body,
     whiteSpace: "pre-wrap",
   },

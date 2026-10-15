@@ -211,7 +211,10 @@ export function WelcomePage({
           ) : null}
         </div>
         {setupError ? (
-          <p role="alert" {...stylex.props(promptStyles.error)}>
+          <p
+            role="alert"
+            {...stylex.props(textStyles.error, promptStyles.error)}
+          >
             {setupError}
           </p>
         ) : null}
