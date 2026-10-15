@@ -18,8 +18,8 @@ import {
   scrollToReviewHeading,
   useHeadingInView,
 } from "./review-heading-scroll";
-import { tocLayer, tocRail } from "./review-toc.stylex";
-import { fontSize, fontWeight, motion, radius } from "./scale.stylex";
+import { tocRail } from "./review-toc.stylex";
+import { fontSize, fontWeight, layer, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { useAnchoredPopover } from "./use-anchored-popover";
 
@@ -294,7 +294,7 @@ const styles = stylex.create({
     gridColumn: "1",
     justifySelf: "end",
     alignSelf: "start",
-    zIndex: tocLayer.rail,
+    zIndex: layer.tocRail,
     marginTop: `calc(${tokens.reviewPageTop} + 8px)`,
     marginRight: "14px",
   },

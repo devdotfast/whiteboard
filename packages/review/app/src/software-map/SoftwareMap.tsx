@@ -18,6 +18,7 @@ import {
 } from "@canvas/markers.stylex";
 import { useReviewContainer } from "@canvas/review-root-context";
 import {
+  elevation,
   fontSize,
   fontWeight,
   motion,
@@ -1704,30 +1705,30 @@ function C4MapCanvas({
                   <Background
                     {...stylex.props(styles.background)}
                     gap={24}
-                    color="var(--canvas-grid)"
+                    color={tokens.canvasGrid}
                   />
                   {expanded && (
                     <MiniMap
                       pannable
                       zoomable
                       position="top-right"
-                      maskColor="var(--minimap-mask)"
-                      maskStrokeColor="var(--rule-soft)"
+                      maskColor={tokens.minimapMask}
+                      maskStrokeColor={tokens.ruleSoft}
                       maskStrokeWidth={1}
                       nodeColor={(node) =>
                         node.id === displayedSnapshot.selectedNodeId
-                          ? "var(--minimap-node-selected)"
-                          : "var(--minimap-node)"
+                          ? tokens.minimapNodeSelected
+                          : tokens.minimapNode
                       }
                       nodeStrokeColor={(node) =>
                         node.id === displayedSnapshot.selectedNodeId
-                          ? "var(--selection)"
-                          : "var(--rule-soft)"
+                          ? tokens.selection
+                          : tokens.ruleSoft
                       }
                       nodeBorderRadius={4}
                       style={{
-                        backgroundColor: "var(--surface)",
-                        border: "1px solid var(--rule)",
+                        backgroundColor: tokens.surface,
+                        border: `1px solid ${tokens.rule}`,
                         borderRadius: 8,
                       }}
                     />
@@ -2743,13 +2744,10 @@ const noBorder = {
 } as const;
 
 const styles = stylex.create({
-  // The expanded map: a fixed layer over the canvas. The layer variable lives
-  // on .review-app, outside this portal, so the fallback keeps it above the
-  // sticky topbar.
   overlay: {
     position: "fixed",
     inset: 0,
-    zIndex: "var(--review-debug-layer, 2147483000)",
+    zIndex: tokens.reviewDebugLayer,
     display: "grid",
     boxSizing: "border-box",
     minWidth: 0,
@@ -3251,7 +3249,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: tokens.accent,
     backgroundColor: tokens.markerTint,
-    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+    boxShadow: elevation.markerRing,
   },
   groupTitle: {
     position: "absolute",
@@ -3384,7 +3382,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: tokens.accent,
     backgroundColor: tokens.markerTint,
-    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+    boxShadow: elevation.markerRing,
   },
   nodeStoreMarked: {
     borderWidth: 0,

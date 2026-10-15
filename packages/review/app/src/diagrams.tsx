@@ -1,5 +1,5 @@
 import { flowLayer } from "@canvas/flow-layers.stylex";
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { elevation, fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { type DiffSelection, anchorSelection } from "@review/lens-selection";
 import {
   type SourcePins,
@@ -84,7 +84,7 @@ const sequenceNodeTypes = { sequenceParticipant: SequenceParticipantNode };
 const sequenceEdgeTypes = { sequenceMessage: SequenceMessageEdge };
 
 export function sequenceMessageColor(isActive: boolean): string {
-  return isActive ? "var(--accent)" : "var(--edge-muted)";
+  return isActive ? tokens.accent : tokens.edgeMuted;
 }
 
 /** The canonical `sequence` block as the document stores it. */
@@ -1221,7 +1221,7 @@ const styles = stylex.create({
   },
   dotAttention: {
     borderColor: tokens.accent,
-    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+    boxShadow: elevation.markerRing,
   },
   dotActive: {
     borderColor: tokens.accent,

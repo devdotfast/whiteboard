@@ -7,7 +7,7 @@ export const fontSize = stylex.defineConsts({
   // Uppercase micro labels, tags and counts.
   micro: "10px",
   small: "11px",
-  // Chrome and most canvas text; matches --chrome-font-size.
+  // Chrome and most canvas text; sets --chrome-font-size.
   body: "12px",
   ui: "13px",
   title: "14px",
@@ -30,7 +30,7 @@ export const radius = stylex.defineConsts({
   hairline: "2px",
   // Tags, inputs and inline marks.
   small: "4px",
-  // Buttons and controls; matches --chrome-control-radius.
+  // Buttons and controls; sets --chrome-control-radius.
   control: "6px",
   // Popovers, cards and dialogs.
   surface: "8px",
@@ -42,6 +42,8 @@ export const radius = stylex.defineConsts({
 // component (0–9) stays local.
 export const layer = stylex.defineConsts({
   sticky: "20",
+  // The contents rail over the board's scroller.
+  tocRail: "31",
   overlay: "40",
   // A side panel docked over the canvas as a sheet on narrow screens.
   sheet: "50",
@@ -74,6 +76,11 @@ export const elevation = stylex.defineConsts({
   // Menus, popovers and floating panels.
   popover: "0 8px 24px var(--shadow-color-strong)",
   dialog: "0 18px 60px var(--shadow-color-strong)",
+  // A popover's shadow cast upward, for a panel docked to the bottom edge.
+  dock: "0 -8px 24px var(--shadow-color-strong)",
+  dockCollapsed: "0 -4px 14px var(--shadow-color-strong)",
+  // The marker's glow around something it points at.
+  markerRing: "0 0 0 3px var(--marker-glow)",
 });
 
 export const tracking = stylex.defineConsts({
@@ -81,7 +88,7 @@ export const tracking = stylex.defineConsts({
   shortcut: "0.14em",
   // Uppercase micro labels.
   caps: "0.08em",
-  // Uppercase chrome labels; matches --chrome-tracking.
+  // Uppercase chrome labels; sets --chrome-tracking.
   chrome: "0.04em",
   // Large headings.
   tight: "-0.015em",

@@ -1,6 +1,11 @@
 import { MinusIcon, PlusIcon } from "@canvas/icons";
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
-import { dockShadow } from "@canvas/software-map/hotkeys-tab.stylex";
+import {
+  elevation,
+  fontSize,
+  fontWeight,
+  motion,
+  radius,
+} from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Kbd } from "@canvas/ui/kbd";
 import * as stylex from "@stylexjs/stylex";
@@ -211,7 +216,7 @@ const styles = stylex.create({
     borderRadius: `${radius.surface} ${radius.surface} 0 0`,
     backgroundColor: tokens.surface,
     color: tokens.ink,
-    boxShadow: dockShadow.open,
+    boxShadow: elevation.dock,
     fontSize: fontSize.small,
     lineHeight: 1,
     transform: "translateX(-50%)",
@@ -222,7 +227,7 @@ const styles = stylex.create({
     willChange: "width",
   },
   tabCollapsed: {
-    boxShadow: dockShadow.collapsed,
+    boxShadow: elevation.dockCollapsed,
   },
   panel: {
     display: "flex",
