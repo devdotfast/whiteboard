@@ -841,9 +841,8 @@ function TraceQuotePeekPanel({
   const events = loadedTrace.events;
 
   const headerAccessory = (
-    <button
-      type="button"
-      {...stylex.props(traceStyles.peekOpenFull)}
+    <Button
+      xstyle={traceStyles.peekOpenFull}
       onClick={() => {
         openTraceSession?.({
           sessionId,
@@ -855,7 +854,7 @@ function TraceQuotePeekPanel({
     >
       Full Trace
       <ExternalLinkIcon xstyle={iconStyles.inline} />
-    </button>
+    </Button>
   );
 
   return (
