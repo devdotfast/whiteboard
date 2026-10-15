@@ -8,7 +8,7 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 import { Emitter } from '../../base/common/event.js';
 import type { URI } from '../../base/common/uri.js';
-import type { ICodeEditor, IGlyphMarginWidget } from '../../editor/browser/editorBrowser.js';
+import type { ICodeEditor, IDiffEditor, IGlyphMarginWidget } from '../../editor/browser/editorBrowser.js';
 import type { ICodeEditorService } from '../../editor/browser/services/codeEditorService.js';
 import type { ReviewAskMark } from '../common/reviewProtocol.js';
 import { apiSourceUri } from '../common/reviewSourceView.js';
@@ -19,7 +19,7 @@ const dom = new JSDOM('<html><body></body></html>');
 for (const key of ['window', 'document', 'HTMLElement', 'Node'] as const) {
 	Object.defineProperty(globalThis, key, { configurable: true, value: dom.window[key] });
 }
-const { ReviewAskMarks } = await import('./reviewAskMarks.js');
+const { ReviewAskMarks, inlineHeadLine } = await import('./reviewAskMarks.js');
 
 const view = { reviewId: 'review', version: 3 };
 const source = (file: string, side: 'base' | 'head') => apiSourceUri({ view, side, file });
@@ -56,7 +56,10 @@ function service() {
 	const removed = new Emitter<ICodeEditor>();
 	const editors: ICodeEditor[] = [];
 	return {
-		fake: { onCodeEditorAdd: added.event, onCodeEditorRemove: removed.event, listCodeEditors: () => editors } as unknown as ICodeEditorService,
+		fake: {
+			onCodeEditorAdd: added.event, onCodeEditorRemove: removed.event, listCodeEditors: () => editors,
+			onDiffEditorAdd: new Emitter<IDiffEditor>().event, onDiffEditorRemove: new Emitter<IDiffEditor>().event, listDiffEditors: () => [],
+		} as unknown as ICodeEditorService,
 		add: (editor: ICodeEditor) => { editors.push(editor); added.fire(editor); },
 		remove: (editor: ICodeEditor) => { editors.splice(editors.indexOf(editor), 1); removed.fire(editor); },
 	};
@@ -102,4 +105,16 @@ test('pins marks beside their lines in this view\'s editors showing their file a
 	marks.dispose();
 	assert.deepEqual(late.pins(), []);
 	assert.deepEqual([...mounted], []);
+});
+
+// Base lines 3–4 became head line 3; head lines 5–6 were added after base
+// line 5; base line 8 was removed after head line 8.
+const changes = [
+	{ originalStartLineNumber: 3, originalEndLineNumber: 4, modifiedStartLineNumber: 3, modifiedEndLineNumber: 3 },
+	{ originalStartLineNumber: 5, originalEndLineNumber: 0, modifiedStartLineNumber: 5, modifiedEndLineNumber: 6 },
+	{ originalStartLineNumber: 8, originalEndLineNumber: 8, modifiedStartLineNumber: 8, modifiedEndLineNumber: 0 },
+];
+
+test('finds the head line an inline diff draws each base line beside', () => {
+	assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9].map(line => inlineHeadLine(line, changes)), [1, 2, 3, 3, 4, 7, 8, 8, 9]);
 });
