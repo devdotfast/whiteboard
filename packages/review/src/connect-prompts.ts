@@ -89,6 +89,106 @@ export const CLAUDE_WINDOWS_MCP_ADD = `claude mcp add -s user whiteboard -- ${WI
 /** Copilot CLI loads the Claude plugin, so on Windows it too registers the server directly. */
 export const COPILOT_WINDOWS_MCP_ADD = `copilot mcp add whiteboard -- ${WINDOWS_MCP_LAUNCH.command} ${WINDOWS_MCP_LAUNCH.args.join(" ")}`;
 
+export const WHITEBOARD_MARKETPLACE = "devdotfast/whiteboard";
+
+export const WHITEBOARD_PLUGIN = "whiteboard@devfast";
+
+/** Its CLI's command is its id. */
+export type CliConnectTarget = Exclude<InstallTarget, "cursor" | "omp">;
+
+export interface ConnectStep {
+  args: string[];
+  /** Output that means the step had already been done. */
+  done?: RegExp;
+  /** Whether a failure leaves the next step to decide the outcome. */
+  optional?: boolean;
+}
+
+const ALREADY = /already/i;
+
+/** Each CLI agent's connect commands. */
+export function connectSteps(
+  target: CliConnectTarget,
+  launch: McpLaunch,
+  platform: NodeJS.Platform,
+): ConnectStep[] {
+  // The plugin install says whether it worked: the marketplace can already be
+  // known by another source, such as the repository's earlier name.
+  const marketplace = {
+    args: ["plugin", "marketplace", "add", WHITEBOARD_MARKETPLACE],
+    optional: true,
+  };
+
+  // The plugins' sh launch cannot start on Windows, so there Claude and
+  // Copilot (which loads the Claude plugin) register the server directly.
+  const windowsServer = (scope: string[]) => ({
+    args: [
+      "mcp",
+      "add",
+      ...scope,
+      "whiteboard",
+      "--",
+      launch.command,
+      ...launch.args,
+    ],
+    done: ALREADY,
+  });
+
+  switch (target) {
+    case "claude":
+      return platform === "win32"
+        ? [windowsServer(["-s", "user"])]
+        : [
+            marketplace,
+            {
+              args: ["plugin", "install", WHITEBOARD_PLUGIN, "--scope", "user"],
+              done: ALREADY,
+            },
+          ];
+    case "codex":
+      return [
+        marketplace,
+        { args: ["plugin", "add", WHITEBOARD_PLUGIN], done: ALREADY },
+      ];
+    case "copilot":
+      return platform === "win32"
+        ? [windowsServer([])]
+        : [
+            marketplace,
+            { args: ["plugin", "install", WHITEBOARD_PLUGIN], done: ALREADY },
+          ];
+    case "opencode":
+      return [
+        {
+          args: [
+            "mcp",
+            "add",
+            "--global",
+            "whiteboard",
+            "--",
+            launch.command,
+            ...launch.args,
+          ],
+          done: ALREADY,
+        },
+      ];
+    case "pi":
+      return [
+        {
+          args: [
+            "mcp",
+            "add",
+            "whiteboard",
+            "--",
+            launch.command,
+            ...launch.args,
+          ],
+          done: ALREADY,
+        },
+      ];
+  }
+}
+
 export interface ConnectCommand {
   argv: readonly string[];
   ifAny?: true;
