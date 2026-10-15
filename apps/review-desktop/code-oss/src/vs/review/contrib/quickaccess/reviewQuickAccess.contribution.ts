@@ -84,8 +84,8 @@ quickAccessRegistry.registerQuickAccessProvider({
 	}]
 });
 
-// The Review window has no file search, so ⌘P lists the same Whiteboard
-// commands instead of an empty picker.
+// Outside a review's diff there is no file search, so ⌘P lists the same
+// Whiteboard commands instead of an empty picker.
 quickAccessRegistry.registerQuickAccessProvider({
 	ctor: ReviewCommandsQuickAccessProvider,
 	prefix: '',

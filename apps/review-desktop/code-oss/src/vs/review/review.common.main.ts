@@ -14,6 +14,7 @@ import { rewriteReviewActivationEvents } from "./common/reviewWorkspaceLanguageA
 // Before any extension is scanned: workspace-bound language extensions wait for the review checkout.
 ImplicitActivationEvents.setRewrite(rewriteReviewActivationEvents);
 import "./browser/parts/canvas/reviewCanvasEditor.contribution.js";
+import "./browser/parts/canvas/reviewDiffFilePicker.contribution.js";
 import "./browser/parts/canvas/reviewFind.contribution.js";
 import "./browser/reviewCommunity.contribution.js";
 import "./browser/reviewTheme.contribution.js";
