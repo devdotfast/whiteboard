@@ -137,15 +137,8 @@ export const onboardingStyles = stylex.create({
   },
   backLink: {
     alignSelf: "flex-start",
-    paddingBlock: "0 4px",
-    paddingInline: 0,
-    borderWidth: 0,
-    color: { default: tokens.inkMuted, ":hover": tokens.ink },
-    backgroundColor: "transparent",
-    cursor: "pointer",
+    marginInline: "-10px",
     fontFamily: tokens.fontMono,
-    fontSize: fontSize.body,
-    fontWeight: fontWeight.medium,
   },
   titleBar: {
     display: "flex",

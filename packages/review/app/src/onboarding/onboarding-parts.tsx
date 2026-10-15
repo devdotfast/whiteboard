@@ -1,4 +1,5 @@
 import { withClass } from "@canvas/stylex-props";
+import { Button } from "@canvas/ui/button";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, useEffect } from "react";
 
@@ -14,21 +15,6 @@ export function Spinner() {
     >
       <circle {...stylex.props(styles.spinnerTrack)} cx="11" cy="11" r="9" />
       <path {...stylex.props(styles.spinnerArc)} d="M11 2a9 9 0 0 1 9 9" />
-    </svg>
-  );
-}
-
-export function ArrowIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <path
-        d="M2 7h9.5M7.5 3l4 4-4 4"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
     </svg>
   );
 }
@@ -84,13 +70,13 @@ export function ScreenHeader({
     <header {...stylex.props(styles.titleBar)}>
       <div {...stylex.props(styles.titleText)}>
         {back ? (
-          <button
-            type="button"
-            {...stylex.props(styles.backLink, styles.enter0)}
+          <Button
+            variant="ghost"
+            xstyle={[styles.backLink, styles.enter0]}
             onClick={back.onClick}
           >
             ← {back.label}
-          </button>
+          </Button>
         ) : eyebrow ? (
           <span
             {...stylex.props(

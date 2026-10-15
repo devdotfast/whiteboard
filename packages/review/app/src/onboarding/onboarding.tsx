@@ -1,7 +1,6 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
 import { withClass } from "@canvas/stylex-props";
-import { tokens } from "@canvas/tokens.stylex";
 import { Button } from "@canvas/ui/button";
+import { Kbd } from "@canvas/ui/kbd";
 import type { ReviewCanvasSetupActions } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useState } from "react";
@@ -99,7 +98,7 @@ export function Onboarding({
         <span {...stylex.props(styles.railSide)}>
           <Button xstyle={railStyles.skip} onClick={onSkip}>
             Skip to Home
-            <kbd {...stylex.props(railStyles.key)}>esc</kbd>
+            <Kbd>esc</Kbd>
           </Button>
         </span>
       </nav>
@@ -135,13 +134,4 @@ export function Onboarding({
 
 const railStyles = stylex.create({
   skip: { gap: "10px", paddingInlineEnd: "8px" },
-  key: {
-    paddingInline: "5px",
-    borderRadius: radius.hairline,
-    backgroundColor: tokens.chromeHoverBg,
-    color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.small,
-    lineHeight: "16px",
-  },
 });

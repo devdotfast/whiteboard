@@ -347,7 +347,7 @@ export function SearchIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
-export function CopyIcon({ xstyle }: IconProps = {}): ReactElement {
+export function ArrowRightIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
@@ -355,8 +355,7 @@ export function CopyIcon({ xstyle }: IconProps = {}): ReactElement {
       focusable="false"
       viewBox="0 0 24 24"
     >
-      <rect x="9" y="9" width="11.25" height="11.25" rx="2.25" />
-      <path d="M15 9V5.75A2 2 0 0 0 13 3.75H5.75a2 2 0 0 0-2 2V13a2 2 0 0 0 2 2H9" />
+      <path d="M4 12h15M13 6l6 6-6 6" />
     </svg>
   );
 }

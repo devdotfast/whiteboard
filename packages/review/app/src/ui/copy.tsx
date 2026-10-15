@@ -51,7 +51,7 @@ export async function copyText(text: string): Promise<boolean> {
 
 const COPIED_FOR_MS = 1200;
 
-function useCopy(text: string) {
+export function useCopy(text: string) {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {

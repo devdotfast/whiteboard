@@ -1,11 +1,11 @@
 import { cliInstallReady } from "@canvas/cli-install-status";
-import { DrawnCheckIcon } from "@canvas/icons";
+import { ArrowRightIcon, DrawnCheckIcon, PlusIcon } from "@canvas/icons";
 import { installRowMarker } from "@canvas/markers.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
-import { copyText } from "@canvas/ui/copy";
+import { CopyIcon, useCopy } from "@canvas/ui/copy";
 import type {
   ReviewCanvasSetupActions,
   ReviewCliInstallStatus,
@@ -16,12 +16,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import type { OnboardingClient } from "./onboarding-client";
-import {
-  ArrowIcon,
-  ScreenHeader,
-  Spinner,
-  useReturnKey,
-} from "./onboarding-parts";
+import { ScreenHeader, Spinner, useReturnKey } from "./onboarding-parts";
 import { onboardingStyles } from "./onboarding-styles";
 
 type RowState = "waiting" | "running" | "done" | "approve" | "failed";
@@ -57,27 +52,6 @@ const ORDER: ReviewCliInstallTarget[] = [
   "copilot",
   "cursor",
 ];
-
-const COPIED_FOR_MS = 1200;
-
-/** Copies `text`, and says so for a moment. */
-function useCopied(text: string) {
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), COPIED_FOR_MS);
-
-    return () => clearTimeout(timer);
-  }, [copied]);
-
-  const copy = () =>
-    void copyText(text).then((ok) => {
-      if (ok) setCopied(true);
-    });
-
-  return [copied, copy] as const;
-}
 
 const byOrder = (a: ReviewConnectAgent, b: ReviewConnectAgent) =>
   ORDER.indexOf(a.target) - ORDER.indexOf(b.target);
@@ -306,7 +280,7 @@ export function InstallStep({
           onClick={ready ? onContinue : () => void install()}
         >
           {ready ? "Continue" : "Install"}
-          <ArrowIcon />
+          <ArrowRightIcon />
         </Button>
         {busy ? null : (
           <span {...stylex.props(onboardingStyles.keyHint)}>↵ Return</span>
@@ -347,14 +321,14 @@ export function InstallStep({
               : ""}
           </span>
           <span {...stylex.props(styles.trailing)}>
-            <button
-              type="button"
-              {...stylex.props(styles.link)}
+            <Button
+              variant="ghost"
+              xstyle={styles.rescan}
               disabled={busy}
               onClick={() => void scan(false)}
             >
               Rescan
-            </button>
+            </Button>
           </span>
         </div>
       </div>
@@ -369,7 +343,7 @@ function OtherAgentRow({
 }: {
   launch: Pick<ReviewCliInstallStatus["connect"], "command" | "args">;
 }) {
-  const [copied, copy] = useCopied(
+  const [copied, copy] = useCopy(
     JSON.stringify(
       {
         mcpServers: {
@@ -384,7 +358,7 @@ function OtherAgentRow({
   return (
     <div {...stylex.props(styles.row)}>
       <span {...stylex.props(styles.status)}>
-        <PlusGlyph />
+        <PlusIcon xstyle={styles.plus} />
       </span>
       <span {...stylex.props(styles.text)}>
         <span {...stylex.props(styles.name)}>Any other agent</span>
@@ -401,7 +375,7 @@ function OtherAgentRow({
 
 /** Copies a row's whole setup command; shows while the row is hovered. */
 function CopyChip({ text, name }: { text: string; name: string }) {
-  const [copied, copy] = useCopied(text);
+  const [copied, copy] = useCopy(text);
 
   return (
     <button
@@ -411,30 +385,9 @@ function CopyChip({ text, name }: { text: string; name: string }) {
       {...stylex.props(styles.chip, copied && styles.chipShown)}
       onClick={copy}
     >
-      <CopyGlyph />
+      <CopyIcon xstyle={styles.chipIcon} />
       {copied ? "Copied" : "Copy"}
     </button>
-  );
-}
-
-function CopyGlyph() {
-  return (
-    <svg
-      {...stylex.props(styles.chipIcon)}
-      viewBox="0 0 12 12"
-      aria-hidden="true"
-    >
-      <rect x="3.5" y="3.5" width="7" height="7" rx="1" />
-      <path d="M8.5 3.5v-1a1 1 0 0 0-1-1h-5a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h1" />
-    </svg>
-  );
-}
-
-function PlusGlyph() {
-  return (
-    <svg {...stylex.props(styles.plus)} viewBox="0 0 16 16" aria-hidden="true">
-      <path d="M8 3v10M3 8h10" />
-    </svg>
   );
 }
 
@@ -612,7 +565,7 @@ const styles = stylex.create({
   },
   badgeDone: {
     color: tokens.changeAdded,
-    backgroundColor: `color-mix(in srgb, ${tokens.changeAdded} 16%, transparent)`,
+    backgroundColor: `color-mix(in srgb, ${tokens.changeAdded} 16%, ${tokens.transparent})`,
   },
   badgeApprove: {
     borderWidth: "1.5px",
@@ -671,15 +624,9 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
   },
-  link: {
-    padding: 0,
-    borderWidth: 0,
-    color: { default: tokens.inkMuted, ":hover": tokens.ink },
-    backgroundColor: "transparent",
-    cursor: { default: "pointer", ":disabled": "default" },
-    opacity: { default: 1, ":disabled": 0.5 },
+  rescan: {
+    marginInlineEnd: "-10px",
     fontFamily: tokens.fontMono,
-    fontSize: fontSize.body,
   },
   note: {
     paddingInline: "72px 28px",
@@ -712,20 +659,6 @@ const styles = stylex.create({
     },
   },
   chipShown: { opacity: 1 },
-  chipIcon: {
-    width: "11px",
-    height: "11px",
-    fill: "none",
-    stroke: "currentColor",
-    strokeLinecap: "round",
-    strokeWidth: 1.2,
-  },
-  plus: {
-    width: "16px",
-    height: "16px",
-    fill: "none",
-    stroke: tokens.inkFaint,
-    strokeLinecap: "round",
-    strokeWidth: 1.5,
-  },
+  chipIcon: { width: "11px", height: "11px" },
+  plus: { width: "16px", height: "16px", color: tokens.inkFaint },
 });

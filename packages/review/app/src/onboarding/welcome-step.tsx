@@ -1,3 +1,4 @@
+import { ArrowRightIcon } from "@canvas/icons";
 import {
   elevation,
   fontSize,
@@ -7,9 +8,10 @@ import {
 } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Button } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import * as stylex from "@stylexjs/stylex";
 
-import { ArrowIcon, ScreenCopy, useReturnKey } from "./onboarding-parts";
+import { ScreenCopy, useReturnKey } from "./onboarding-parts";
 import { onboardingStyles } from "./onboarding-styles";
 import { onboardingMotion } from "./onboarding.stylex";
 
@@ -32,7 +34,7 @@ export function WelcomeStep({ onStart }: { onStart(): void }) {
           autoFocus
         >
           Get started
-          <ArrowIcon />
+          <ArrowRightIcon />
         </Button>
         <span {...stylex.props(onboardingStyles.keyHint)}>↵ Return</span>
       </ScreenCopy>
@@ -66,7 +68,9 @@ function BoardSketch() {
         </span>
       </div>
       <div {...stylex.props(styles.card, styles.flow)}>
-        <span {...stylex.props(styles.label)}>Delivery flow</span>
+        <span {...stylex.props(textStyles.eyebrow, styles.mono)}>
+          Delivery flow
+        </span>
         <div {...stylex.props(styles.flowRow)}>
           <span {...stylex.props(styles.node)}>dispatch()</span>
           <FlowArrow />
@@ -130,7 +134,7 @@ const styles = stylex.create({
     minHeight: "520px",
     overflow: "hidden",
     containerType: "inline-size",
-    backgroundImage: `radial-gradient(circle, ${tokens.canvasGrid} 1px, transparent 1.2px)`,
+    backgroundImage: `radial-gradient(circle, ${tokens.canvasGrid} 1px, ${tokens.transparent} 1.2px)`,
     backgroundSize: "24px 24px",
   },
   card: {
@@ -174,14 +178,7 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
   },
-  label: {
-    color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.micro,
-    fontWeight: fontWeight.semibold,
-    letterSpacing: tracking.caps,
-    textTransform: "uppercase",
-  },
+  mono: { fontFamily: tokens.fontMono },
   cardTitle: {
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.display,
