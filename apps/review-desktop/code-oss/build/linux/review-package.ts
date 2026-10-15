@@ -211,7 +211,6 @@ export async function prepareReviewNixPackage(codeRoot: string): Promise<void> {
 	const { pkg } = await stageReviewPackage(codeRoot, join(destination, 'payload'));
 	const { product } = await loadReviewPackage(appRoot);
 	await cp(join(appRoot, 'scripts/linux/nixos'), destination, { recursive: true });
-	await cp(join(appRoot, 'scripts/linux/smoke-installed-linux.mjs'), join(destination, 'smoke-installed-linux.mjs'));
 	await writeFile(join(destination, 'release.json'), JSON.stringify({
 		packageName: pkg.name, version: product.reviewVersion, revision: pkg.revision,
 		commit: product.commit, urlProtocol: product.urlProtocol,
