@@ -86,13 +86,6 @@ jobs:
         if: steps.playwright-chromium.outputs.cache-hit != 'true'
         run: pnpm --filter @dev.fast/review-canvas exec playwright install chromium --only-shell
 
-      - name: Save Playwright Chromium
-        if: steps.playwright-chromium.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-${{ runner.arch }}-playwright-chromium-${{ hashFiles('pnpm-lock.yaml') }}
-
       - name: Lint
         run: pnpm lint
 
@@ -131,11 +124,9 @@ jobs:
       # out/ is deliberately not cached: the build rebuilds it from scratch, so
       # caching it only adds download/upload time. The nested extension and
       # build-tool node_modules are cached so postinstall's per-directory npm
-      # installs become no-ops on a warm cache. Restore and save are split so
-      # the save lands right after a validated build — a failure later in the
-      # job (e.g. a flaky integration test) cannot prevent the cache from
-      # persisting. restore-keys lets a lockfile bump start from the previous
-      # tree and install only the delta.
+      # installs become no-ops on a warm cache. review-desktop-ci-cache.yml
+      # saves it from main. restore-keys lets a lockfile bump start from the
+      # previous tree and install only the delta.
       - name: Restore Code OSS dependencies
         id: code-oss-deps
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -165,23 +156,6 @@ jobs:
         run: |
           test -d apps/review-desktop/code-oss/node_modules
           test -f apps/review-desktop/code-oss/out/main.js
-
-      - name: Save Code OSS dependencies
-        if: steps.code-oss-deps.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            apps/review-desktop/code-oss/node_modules
-            apps/review-desktop/code-oss/build/node_modules
-            apps/review-desktop/code-oss/extensions/node_modules
-            apps/review-desktop/code-oss/extensions/*/node_modules
-            apps/review-desktop/code-oss/extensions/*/server/node_modules
-            apps/review-desktop/code-oss/.build/distro/npm/node_modules
-            apps/review-desktop/code-oss/.build/distro/npm/remote/node_modules
-            apps/review-desktop/code-oss/.build/distro/npm/remote/web/node_modules
-            apps/review-desktop/code-oss/.build/electron
-            ~/.cache/node-gyp
-          key: ${{ runner.os }}-${{ runner.arch }}-code-oss-deps-v3-${{ steps.code-oss-dependency-digest.outputs.digest }}
 
       # The build already built workspace dependencies and typechecked Code OSS.
       # Diffr Test checks diffr's packages, with the Bun and Claude Code types they need.
