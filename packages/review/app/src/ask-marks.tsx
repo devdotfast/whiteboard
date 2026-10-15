@@ -104,17 +104,31 @@ function overflows(
 /** Opens a pin's conversations: the one, or the list of them. Passages
  * folded together open as one list. */
 function openMarks(panels: ReviewPanelStore | null, marks: readonly AskMark[]) {
-  const entries = marks.flatMap((mark) => mark.entries);
+  openAskConversations(
+    panels,
+    marks.flatMap((mark) => mark.entries),
+    marks.map((mark) => mark.quote).join(" · "),
+    marks.length > 1,
+  );
+}
+
+/** Opens one conversation, or the list of several. */
+export function openAskConversations(
+  panels: ReviewPanelStore | null,
+  entries: readonly AskHistoryEntry[],
+  quote: string,
+  several = false,
+) {
   const [newest] = entries;
 
   if (!newest) return;
 
   const passage: AskPassage = {
-    quote: marks.map((mark) => mark.quote).join(" · "),
+    quote,
     threadIds: entries.map((entry) => entry.id),
   };
 
-  if (marks.length > 1) passage.several = true;
+  if (several) passage.several = true;
 
   panels?.getState().openAskView(
     entries.length === 1
@@ -830,7 +844,7 @@ export function AskThreadMarks({
   );
 }
 
-function truncate(text: string, length: number) {
+export function truncate(text: string, length: number) {
   const flat = text.trim().replace(/\s+/gu, " ");
 
   return flat.length > length ? `${flat.slice(0, length - 1)}…` : flat;

@@ -1,10 +1,11 @@
 import { ContentHoverController } from "../../editor/contrib/hover/browser/contentHoverController.js";
 import { orderReviewDiffFiles } from "../common/reviewChangedFilesModel.js";
-import type { ReviewInlineEditorSpec, ReviewInlineEditorHandle, ReviewFindQuery, ReviewInlineFindResult } from "../common/reviewProtocol.js";
+import type { ReviewInlineEditorSpec, ReviewInlineEditorHandle, ReviewFindQuery, ReviewInlineFindResult, ReviewAskMark, ReviewAskPinMount } from "../common/reviewProtocol.js";
 import { reviewFileCounts } from "../common/reviewStructuralDiff.js";
 import type { ReviewDiffLayoutScope, ReviewDiffProgress } from "../common/reviewProtocol.js";
 import { DiffFindIndex, findInEntries, type DiffFindMatch } from "./reviewDiffFind.js";
 import { ReviewFindDecorations } from "./reviewFindDecorations.js";
+import { ReviewAskMarks } from "./reviewAskMarks.js";
 import { lensRanges, withLens } from "./reviewLens.js";
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) dev.fast. All rights reserved.
@@ -228,6 +229,12 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 	}
 	clearActiveFindMatch(): void { this.decorations.setActive(undefined); }
 	clearFind(): void { this.findGeneration++; this.matches = []; this.decorations.clear(); }
+
+	private askMarks: ReviewAskMarks | undefined;
+	setAskMarks(marks: readonly ReviewAskMark[], mount: ReviewAskPinMount): void {
+		this.askMarks ??= this._register(this.instantiationService.createInstance(ReviewAskMarks, this.spec.container));
+		this.askMarks.set(marks, mount);
+	}
 
 	constructor(
 		private readonly spec: ReviewDiffViewSpec,

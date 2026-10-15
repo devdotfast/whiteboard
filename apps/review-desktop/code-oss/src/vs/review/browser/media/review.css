@@ -1476,3 +1476,13 @@ body
   background: color-mix(in srgb, var(--vscode-editor-background) 70%, transparent);
 }
 .review-workbench .monaco-editor .review-fold-pill.is-viewed:not(.is-target) { opacity: .65; }
+.review-workbench .monaco-editor :is(.review-ask-lines, .review-ask-code) {
+  background: var(--accent-wash);
+}
+.review-workbench .monaco-editor .review-ask-pin {
+  overflow: visible;
+}
+/* The pin spans this lane too. */
+.review-workbench .monaco-editor .review-ask-lane {
+  pointer-events: none;
+}

@@ -49,7 +49,8 @@ const REVIEW_FILES_DIFF_EDITOR_OPTIONS = {
 	hideUnchangedRegions: { enabled: true },
 	originalEditable: false,
 	readOnly: true,
-	glyphMargin: false,
+	// Ask pins.
+	glyphMargin: true,
 	lineNumbersMinChars: 3,
 	// A peek or diff on the page is read until it is clicked into; the current
 	// line highlight belongs to the cursor, not to the first revealed line.
@@ -120,7 +121,6 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 								// Fold controls follow the line numbers, with breathing room before code.
 								lineDecorationsWidth: 24,
 							} : {}),
-							glyphMargin: true,
 							experimental: { useTrueInlineView: false },
 						}
 						: { ...REVIEW_FILES_DIFF_EDITOR_OPTIONS, hideOriginalLineNumbers: entry.file.status === "added" || entry.file.status === "unchanged" },

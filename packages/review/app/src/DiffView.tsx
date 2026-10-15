@@ -29,6 +29,7 @@ import {
   useState,
 } from "react";
 
+import { AskCodePins } from "./ask-code-pins";
 import { AuthoringActivityContext } from "./authoring-activity-context";
 import { scopeLive } from "./authoring-cursor";
 import { Courier, LensCursorContext, lensRowElement } from "./courier";
@@ -710,6 +711,7 @@ function NativeDiffView({
         )}
         style={hidden ? { display: "none" } : undefined}
       />
+      <AskCodePins handle={findTarget} commit={scope?.commit} />
       {!hidden && error && (
         <div role="alert" {...stylex.props(styles.viewError)}>
           {error}
