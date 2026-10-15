@@ -93,6 +93,27 @@ const rows = () =>
     (row) => row.textContent,
   );
 
+const hostRow = (index: number) =>
+  document.querySelectorAll("[data-remote-host]")[index]!;
+
+const toggle = (index: number) =>
+  hostRow(index).querySelector<HTMLButtonElement>("button[aria-expanded]")!;
+
+const heading = (index: number, group: string) =>
+  hostRow(index).querySelector(`[role="group"][aria-label="${group}"] > span`)!
+    .textContent;
+
+const lines = (index: number, group: string) =>
+  [
+    ...hostRow(index).querySelectorAll(
+      `[role="group"][aria-label="${group}"] > :not(:first-child)`,
+    ),
+  ].map((item) =>
+    item.tagName === "DIV"
+      ? [...item.children].flatMap((part) => part.textContent || []).join(" · ")
+      : item.textContent,
+  );
+
 test("lists each host with its state and detail, and the install command from Desktop as code", async () => {
   const install =
     'curl -fsSL https://example.test/a.tar.xz | tar -xJ\nexport PATH="$HOME/bin:$PATH"';
@@ -134,7 +155,7 @@ test("lists each host with its state and detail, and the install command from De
   ).toEqual(["Retry box2"]);
 });
 
-test("says whether an online host has language features, and why not", async () => {
+test("says whether an online host has language features, and why not; only a host that needs something starts open", async () => {
   await render(
     remoteHosts(
       ["devbox", "box2", "box3"],
@@ -162,14 +183,23 @@ test("says whether an online host has language features, and why not", async () 
     ),
   );
   await vi.waitFor(() => expect(rows()[0]).toContain("online"));
-  expect(rows()[0]).toContain("Language features: available");
-  expect(rows()[1]).toContain(
-    "Language features: unavailable · it runs e10c782, this Desktop 3c82a2a",
-  );
+  expect([0, 1, 2].map((index) => toggle(index).ariaExpanded)).toEqual([
+    "false",
+    "true",
+    "true",
+  ]);
+  expect(heading(1, "Language features")).toBe("Language featuresunavailable");
+  expect(lines(1, "Language features")).toEqual([
+    "it runs e10c782, this Desktop 3c82a2a",
+  ]);
   expect(rows()[2]).not.toContain("Language features");
+
+  await act(async () => toggle(0).click());
+  expect(heading(0, "Language features")).toBe("Language featuresavailable");
+  expect(lines(0, "Language features")).toEqual([]);
 });
 
-test("lists an online host's language groups after its language features, each with what is missing and a way to check again", async () => {
+test("lists an online host's language groups with what is missing, and a way to check again that waits for the check", async () => {
   const hosts = remoteHosts(
     ["devbox", "box2"],
     [
@@ -196,27 +226,60 @@ test("lists an online host's language groups after its language features, each w
     ],
   );
 
+  let finish!: () => void;
+  vi.mocked(hosts.retry).mockImplementation(
+    () => new Promise<void>((resolve) => (finish = resolve)),
+  );
+
   await render(hosts);
   await vi.waitFor(() => expect(rows()[0]).toContain("online"));
-  expect(
-    [
-      ...document
-        .querySelector("[data-remote-host]")!
-        .querySelectorAll(":scope > div > span"),
-    ].map((line) => line.textContent),
-  ).toEqual([
-    "devbox",
-    "online",
-    "Language features: available",
-    "rust: installed",
-    "swift: installed · swift was not found on the login shell's PATH",
-    "csharp: not installed · download failed",
+  expect(lines(0, "Language features")).toEqual([
+    "rust · installed",
+    "swift · swift was not found on the login shell's PATH",
+    "csharp · download failed",
   ]);
   expect(rows()[1]).not.toContain("rust");
-  const checks = page.getByRole("button", { name: "Check devbox again" });
-  expect(checks.elements()).toHaveLength(2);
-  await checks.first().click();
+
+  const check = page.getByRole("button", { name: "Check devbox again" });
+  await check.click();
   expect(hosts.retry).toHaveBeenCalledWith("devbox");
+  await vi.waitFor(() => expect(check.element()).toBeDisabled());
+  expect(check.element().getAttribute("aria-busy")).toBe("true");
+  await act(async () => finish());
+  await vi.waitFor(() => expect(check.element()).toBeEnabled());
+});
+
+test("a collapsed host sums up its agents, and stays as it was opened", async () => {
+  const hosts = remoteHosts(
+    ["tidy"],
+    [
+      {
+        alias: "tidy",
+        serverId: "s1",
+        state: "online",
+        languageFeatures: true,
+        languageGroups: [{ group: "rust", installed: true }],
+      },
+    ],
+  );
+
+  vi.mocked(hosts.agents).mockResolvedValue([
+    { id: "claude", connected: true },
+    { id: "codex", connected: true },
+  ]);
+
+  await render(hosts);
+  await vi.waitFor(() => expect(rows()[0]).toContain("2 agents connected"));
+  await act(async () => toggle(0).click());
+  expect(lines(0, "Agents")).toEqual([
+    "Claude Code · connected · Reconnect",
+    "Codex · connected · Reconnect",
+  ]);
+
+  await act(async () => root!.unmount());
+  document.body.replaceChildren();
+  await render(hosts);
+  await vi.waitFor(() => expect(lines(0, "Agents")).toHaveLength(2));
 });
 
 test("offers Retry to a host that failed to authenticate, is offline or unreachable, not installed or unsupported", async () => {
@@ -296,7 +359,7 @@ test("shows the install step, offers Install to a declined host, and Retry after
 
   await render(hosts);
   await vi.waitFor(() =>
-    expect(rows()[0]).toContain("Installing the Whiteboard package."),
+    expect(rows()[0]).toBe("box1Installing the Whiteboard package.Remove"),
   );
   expect(
     page
@@ -316,7 +379,7 @@ test("shows the install step, offers Install to a declined host, and Retry after
   expect(hosts.retry).toHaveBeenCalledWith("box3");
 });
 
-test("offers an online host's unconnected agents by Desktop's names, connects them, and shows the result as plain text", async () => {
+test("lists an online host's agents by Desktop's names, connects or reconnects each, and shows the result as plain text", async () => {
   const hosts = remoteHosts(
     ["box1", "box2"],
     [
@@ -329,43 +392,77 @@ test("offers an online host's unconnected agents by Desktop's names, connects th
     .mockResolvedValueOnce([
       { id: "claude", connected: true },
       { id: "codex", connected: false },
-      { id: "pi", connected: false },
       { id: "opencode", connected: false, manual: true },
     ])
     .mockResolvedValue([
       { id: "claude", connected: true },
       { id: "codex", connected: false },
-      { id: "pi", connected: true },
       { id: "opencode", connected: false, manual: true },
     ]);
   vi.mocked(hosts.connectAgents).mockResolvedValue([
     { id: "codex", connected: false, output: "<b>codex: command failed</b>" },
-    { id: "pi", connected: true, output: "" },
   ]);
 
   await render(hosts);
   await vi.waitFor(() =>
-    expect(rows()[0]).toContain("Agents on box1: Codex, Pi — Connect"),
+    expect(lines(0, "Agents")).toEqual([
+      "Claude Code · connected · Reconnect",
+      "Codex · not connected · Connect",
+      "OpenCode · set up by hand",
+      "Paste into OpenCode on box1: Run `whiteboard connect opencode` and follow the instructions to connect this agent to Whiteboard.",
+    ]),
   );
   expect(hosts.agents).toHaveBeenCalledWith("box1");
   expect(hosts.agents).not.toHaveBeenCalledWith("box2");
   expect(hosts.connectAgents).not.toHaveBeenCalled();
-  expect(rows()[0]).toContain(
-    "Paste into OpenCode on box1: Run `whiteboard connect opencode` and follow the instructions to connect this agent to Whiteboard.",
-  );
 
-  await page.getByRole("button", { name: "Connect agents on box1" }).click();
-
-  expect(hosts.connectAgents).toHaveBeenCalledWith("box1", ["codex", "pi"]);
+  await page.getByRole("button", { name: "Connect Codex on box1" }).click();
+  expect(hosts.connectAgents).toHaveBeenCalledWith("box1", ["codex"]);
   await vi.waitFor(() =>
     expect(rows()[0]).toContain(
-      "Codex was not connected on box1: <b>codex: command failed</b> Pi is connected on box1.",
+      "Codex was not connected on box1: <b>codex: command failed</b>",
     ),
   );
   expect(section()!.querySelector("b")).toBeNull();
+
+  vi.mocked(hosts.connectAgents).mockResolvedValue([
+    { id: "claude", connected: true, output: "" },
+  ]);
+  await page
+    .getByRole("button", { name: "Reconnect Claude Code on box1" })
+    .click();
+  expect(hosts.connectAgents).toHaveBeenLastCalledWith("box1", ["claude"]);
   await vi.waitFor(() =>
-    expect(rows()[0]).toContain("Agents on box1: Codex — Connect"),
+    expect(rows()[0]).toContain("Claude Code is connected on box1."),
   );
+});
+
+test("looks for an online host's agents again, busy until the answer, and says when they cannot be read", async () => {
+  const hosts = remoteHosts(
+    ["box1"],
+    [{ alias: "box1", serverId: "s1", state: "online" }],
+  );
+
+  let answer!: (agents: null) => void;
+  vi.mocked(hosts.agents)
+    .mockResolvedValueOnce([{ id: "codex", connected: false }])
+    .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)));
+
+  await render(hosts);
+  await vi.waitFor(() =>
+    expect(lines(0, "Agents")).toEqual(["Codex · not connected · Connect"]),
+  );
+
+  const again = page.getByRole("button", {
+    name: "Look for agents on box1 again",
+  });
+
+  await again.click();
+  expect(hosts.agents).toHaveBeenLastCalledWith("box1", true);
+  await vi.waitFor(() => expect(again.element()).toBeDisabled());
+  await act(async () => answer(null));
+  await vi.waitFor(() => expect(again.element()).toBeEnabled());
+  expect(lines(0, "Agents")).toEqual(["Could not read the agents on box1."]);
 });
 
 test("adding -bad is refused with the reason", async () => {
@@ -483,7 +580,9 @@ test("a failed host's detail copies on click; a healthy one does not", async () 
   );
 
   await vi.waitFor(() => expect(rows()[1]).toContain("ssh: timed out"));
-  expect(page.getByRole("button", { name: "online" }).query()).toBeNull();
+  expect(
+    page.getByRole("button", { name: "online", exact: true }).query(),
+  ).toBeNull();
 
   await page.getByRole("button", { name: "ssh: timed out" }).click();
   expect(writeText).toHaveBeenCalledWith("ssh: timed out");

@@ -1,5 +1,6 @@
 import { controlStyles } from "@canvas/controls-styles";
-import { RefreshIcon } from "@canvas/icons";
+import { DisclosureChevron, RefreshIcon } from "@canvas/icons";
+import { fontSize } from "@canvas/scale.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { CopyableText } from "@canvas/ui/copy";
@@ -7,13 +8,23 @@ import { useUiTooltip } from "@canvas/ui/host";
 import { TextField } from "@canvas/ui/text-field";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
+  type ReviewGatewayHostState,
   type ReviewRemoteAgent,
+  type ReviewRemoteAgentId,
   type ReviewRemoteHostsSettings,
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  type ReactNode,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 
+import { chevronMarker } from "./markers.stylex";
 import {
   ACTION_WORDS,
   useHostAction,
@@ -89,106 +100,48 @@ export function RemoteHostsSection({
 
   return (
     <Section ref={section} label="Remote Hosts (Experimental)">
-      {configured.map((name) => {
-        const state = states?.find((host) => host.alias === name);
-        const failed = !!state && !!reviewHostStatus(state).action;
-
-        return (
-          <div key={name} {...stylex.props(styles.row)} data-remote-host="">
-            <div {...stylex.props(styles.rowText)}>
-              <span {...stylex.props(styles.rowLabel)}>{name}</span>
-              {states ? (
-                <Detail
-                  failed={failed}
-                  text={
-                    state?.detail ??
-                    reviewHostStatus(
-                      state ?? { alias: name, state: "connecting" },
-                    ).status
-                  }
+      {configured.map((name) => (
+        <HostRow
+          key={name}
+          hosts={hosts}
+          name={name}
+          state={states?.find((host) => host.alias === name)}
+          loaded={!!states}
+          remove={
+            <Button
+              aria-label={`Remove ${name}`}
+              aria-expanded={removing === name}
+              disabled={busy}
+              onClick={() => {
+                setUninstall(false);
+                setRemoving(removing === name ? undefined : name);
+              }}
+            >
+              Remove
+            </Button>
+          }
+        >
+          {removing === name ? (
+            <div
+              {...stylex.props(local.confirm)}
+              role="group"
+              aria-label={`Remove ${name}`}
+            >
+              <label {...stylex.props(styles.toggle)}>
+                <Checkbox
+                  checked={uninstall}
+                  onChange={(event) => setUninstall(event.target.checked)}
                 />
-              ) : null}
-              {state?.state === "online" ? (
-                <Detail
-                  failed={
-                    !state.languageFeatures && !!state.languageFeaturesDetail
-                  }
-                  text={
-                    state.languageFeatures
-                      ? "Language features: available"
-                      : `Language features: unavailable${state.languageFeaturesDetail ? ` · ${state.languageFeaturesDetail}` : ""}`
-                  }
-                >
-                  {!state.languageFeatures && state.languageFeaturesDetail ? (
-                    <CheckAgain hosts={hosts} alias={name} />
-                  ) : null}
-                </Detail>
-              ) : null}
-              {state?.state === "online"
-                ? state.languageGroups?.map(({ group, installed, detail }) => (
-                    <Detail
-                      key={group}
-                      failed={!!detail}
-                      text={`${group}: ${installed ? "installed" : "not installed"}${detail ? ` · ${detail}` : ""}`}
-                    >
-                      {detail ? (
-                        <CheckAgain hosts={hosts} alias={name} />
-                      ) : null}
-                    </Detail>
-                  ))
-                : null}
-              {state?.state === "online" ? (
-                <RemoteHostAgents hosts={hosts} alias={name} />
-              ) : null}
-              {state?.installCommand ? (
-                <span {...stylex.props(styles.rowDescription, local.detail)}>
-                  <code {...stylex.props(local.command)}>
-                    {state.installCommand}
-                  </code>
-                </span>
-              ) : null}
-            </div>
-            <div {...stylex.props(styles.rowControl, local.actions)}>
-              {state?.declined ? (
-                <HostStep hosts={hosts} alias={name} action="install" />
-              ) : null}
-              {failed ? (
-                <HostStep hosts={hosts} alias={name} action="retry" />
-              ) : null}
-              <Button
-                aria-label={`Remove ${name}`}
-                aria-expanded={removing === name}
-                disabled={busy}
-                onClick={() => {
-                  setUninstall(false);
-                  setRemoving(removing === name ? undefined : name);
-                }}
-              >
-                Remove
+                Also remove Whiteboard from {name}
+              </label>
+              <Button disabled={busy} onClick={() => void remove(name)}>
+                Remove host
               </Button>
+              <Button onClick={() => setRemoving(undefined)}>Cancel</Button>
             </div>
-            {removing === name ? (
-              <div
-                {...stylex.props(local.confirm)}
-                role="group"
-                aria-label={`Remove ${name}`}
-              >
-                <label {...stylex.props(styles.toggle)}>
-                  <Checkbox
-                    checked={uninstall}
-                    onChange={(event) => setUninstall(event.target.checked)}
-                  />
-                  Also remove Whiteboard from {name}
-                </label>
-                <Button disabled={busy} onClick={() => void remove(name)}>
-                  Remove host
-                </Button>
-                <Button onClick={() => setRemoving(undefined)}>Cancel</Button>
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
+          ) : null}
+        </HostRow>
+      ))}
       <form
         {...stylex.props(styles.row)}
         onSubmit={(event) => {
@@ -234,97 +187,337 @@ export function RemoteHostsSection({
   );
 }
 
-function RemoteHostAgents({
+// Rows toggled by hand, kept for the window.
+const expandedHosts = new Map<string, boolean>();
+
+function HostRow({
   hosts,
-  alias,
+  name,
+  state,
+  loaded,
+  remove,
+  children,
 }: {
   hosts: ReviewRemoteHostsSettings;
-  alias: string;
+  name: string;
+  state: ReviewGatewayHostState | undefined;
+  loaded: boolean;
+  remove: ReactNode;
+  children: ReactNode;
 }) {
-  const [agents, setAgents] = useState<ReviewRemoteAgent[] | null>(null);
+  const online = state?.state === "online";
+
+  const status = reviewHostStatus(
+    state ?? { alias: name, state: "connecting" },
+  );
+
+  const failed = !!state && !!status.action;
+  const agents = useRemoteAgents(hosts, name, online);
+
+  const languageFailed =
+    online && !state.languageFeatures && !!state.languageFeaturesDetail;
+
+  const missing = online
+    ? (state.languageGroups ?? []).filter((group) => group.detail)
+    : [];
+
+  const unconnected =
+    agents.list?.filter((agent) => !agent.connected && !agent.manual) ?? [];
+
+  const connected = agents.list?.filter((agent) => agent.connected).length ?? 0;
+
+  const needsAction =
+    failed ||
+    !!state?.declined ||
+    languageFailed ||
+    missing.length > 0 ||
+    unconnected.length > 0;
+
+  const [chosen, setChosen] = useState(() => expandedHosts.get(name));
+
+  // A row that opened itself stays open as its problem clears.
+  if (chosen === undefined && needsAction) setChosen(true);
+
+  const expanded = chosen ?? needsAction;
+  const body = useId();
+
+  const summary = [
+    status.busy && state?.detail ? state.detail : status.status,
+    ...(online && !expanded
+      ? [
+          connected
+            ? `${connected} ${connected === 1 ? "agent" : "agents"} connected`
+            : undefined,
+          unconnected.length ? `${unconnected.length} to connect` : undefined,
+          ...missing.map((group) => `${group.group} missing`),
+        ]
+      : []),
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <div {...stylex.props(styles.row, local.hostRow)} data-remote-host="">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-controls={body}
+        {...stylex.props(chevronMarker, local.toggle)}
+        onClick={() => {
+          expandedHosts.set(name, !expanded);
+          setChosen(!expanded);
+        }}
+      >
+        <DisclosureChevron expanded={expanded} />
+        <span {...stylex.props(styles.rowText)}>
+          <span {...stylex.props(styles.rowLabel)}>{name}</span>
+          {loaded ? (
+            <span
+              {...stylex.props(styles.rowDescription, failed && local.failed)}
+            >
+              {summary}
+            </span>
+          ) : null}
+        </span>
+      </button>
+      <div {...stylex.props(styles.rowControl, local.actions)}>
+        {state?.declined ? (
+          <HostStep hosts={hosts} alias={name} action="install" />
+        ) : null}
+        {failed ? <HostStep hosts={hosts} alias={name} action="retry" /> : null}
+        {remove}
+      </div>
+      {expanded ? (
+        <div id={body} {...stylex.props(local.body)}>
+          {state?.detail && !status.busy ? (
+            <Detail failed={failed} text={state.detail} />
+          ) : null}
+          {state?.installCommand ? (
+            <span {...stylex.props(styles.rowDescription, local.detail)}>
+              <code {...stylex.props(local.command)}>
+                {state.installCommand}
+              </code>
+            </span>
+          ) : null}
+          {online ? (
+            <Group
+              label="Language features"
+              note={state.languageFeatures ? "available" : "unavailable"}
+              refresh={<CheckAgain hosts={hosts} alias={name} />}
+            >
+              {!state.languageFeatures && state.languageFeaturesDetail ? (
+                <span {...stylex.props(local.wide)}>
+                  <Detail failed text={state.languageFeaturesDetail} />
+                </span>
+              ) : null}
+              {state.languageGroups?.map(({ group, installed, detail }) => (
+                <Item
+                  key={group}
+                  name={group}
+                  text={detail ?? (installed ? "installed" : "not installed")}
+                  failed={!!detail}
+                />
+              ))}
+            </Group>
+          ) : null}
+          {online ? (
+            <Group
+              label="Agents"
+              refresh={
+                <RefreshButton
+                  label={`Look for agents on ${name} again`}
+                  pending={agents.refreshing}
+                  onClick={agents.refresh}
+                />
+              }
+            >
+              {agents.list?.length ? null : (
+                <span {...stylex.props(styles.rowDescription, local.wide)}>
+                  {agents.list === undefined
+                    ? "Looking for agents…"
+                    : agents.list === null
+                      ? `Could not read the agents on ${name}.`
+                      : `No agents found on ${name}.`}
+                </span>
+              )}
+              {agents.list?.map((agent) => {
+                const label = REVIEW_CLI_INSTALL_TARGET_LABELS[agent.id];
+                const verb = agent.connected ? "Reconnect" : "Connect";
+
+                return (
+                  <Fragment key={agent.id}>
+                    <Item
+                      name={label}
+                      text={
+                        agent.connected
+                          ? "connected"
+                          : agent.manual
+                            ? "set up by hand"
+                            : "not connected"
+                      }
+                    >
+                      {agent.manual ? null : (
+                        <Button
+                          aria-label={`${verb} ${label} on ${name}`}
+                          disabled={agents.busy}
+                          onClick={() => void agents.connect(agent.id)}
+                        >
+                          {verb}
+                        </Button>
+                      )}
+                    </Item>
+                    {agent.manual && !agent.connected ? (
+                      <span
+                        {...stylex.props(
+                          styles.rowDescription,
+                          local.detail,
+                          local.wide,
+                        )}
+                      >
+                        Paste into {label} on {name}:{" "}
+                        <code {...stylex.props(local.command)}>
+                          Run `whiteboard connect {agent.id}` and follow the
+                          instructions to connect this agent to Whiteboard.
+                        </code>
+                      </span>
+                    ) : null}
+                  </Fragment>
+                );
+              })}
+              {agents.result ? (
+                <span {...stylex.props(local.wide)}>
+                  <Detail
+                    role="status"
+                    failed={agents.result.failed}
+                    text={agents.result.text}
+                  />
+                </span>
+              ) : null}
+            </Group>
+          ) : null}
+        </div>
+      ) : null}
+      {children}
+    </div>
+  );
+}
+
+function useRemoteAgents(
+  hosts: ReviewRemoteHostsSettings,
+  alias: string,
+  online: boolean,
+) {
+  const [list, setList] = useState<ReviewRemoteAgent[] | null>();
+  const [refreshing, setRefreshing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ text: string; failed: boolean }>();
 
   useEffect(() => {
+    if (!online) return;
     let live = true;
 
     void hosts
       .agents(alias)
       .then((next) => {
-        if (live) setAgents(next);
+        if (live) setList(next);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (live) setList(null);
+      });
 
     return () => {
       live = false;
     };
-  }, [hosts, alias]);
+  }, [hosts, alias, online]);
 
-  const offered = agents?.filter((agent) => !agent.connected && !agent.manual);
-  const manual = agents?.filter((agent) => !agent.connected && agent.manual);
+  const refresh = () => {
+    setRefreshing(true);
+    setResult(undefined);
+    void hosts
+      .agents(alias, true)
+      .then(setList, () => setList(null))
+      .finally(() => setRefreshing(false));
+  };
 
-  const connect = async (ids: ReviewRemoteAgent["id"][]) => {
+  const connect = async (id: ReviewRemoteAgentId) => {
+    const label = REVIEW_CLI_INSTALL_TARGET_LABELS[id];
     setBusy(true);
     setResult(undefined);
 
     try {
-      const results = await hosts.connectAgents(alias, ids);
+      const [done] = await hosts.connectAgents(alias, [id]);
 
-      setResult({
-        failed: results.some((done) => !done.connected),
-        text: results
-          .map((done) =>
-            done.connected
-              ? `${REVIEW_CLI_INSTALL_TARGET_LABELS[done.id]} is connected on ${alias}.`
-              : `${REVIEW_CLI_INSTALL_TARGET_LABELS[done.id]} was not connected on ${alias}: ${done.output || "it printed nothing"}`,
-          )
-          .join(" "),
-      });
-      setAgents(await hosts.agents(alias));
+      setResult(
+        done?.connected
+          ? { failed: false, text: `${label} is connected on ${alias}.` }
+          : {
+              failed: true,
+              text: `${label} was not connected on ${alias}: ${done?.output || "it printed nothing"}`,
+            },
+      );
+      setList(await hosts.agents(alias));
     } catch (cause) {
       setResult({
         failed: true,
-        text: `Could not connect agents on ${alias}: ${cause instanceof Error ? cause.message : String(cause)}`,
+        text: `Could not connect ${label} on ${alias}: ${cause instanceof Error ? cause.message : String(cause)}`,
       });
     } finally {
       setBusy(false);
     }
   };
 
+  return {
+    list: online ? list : undefined,
+    refreshing,
+    busy,
+    result,
+    refresh,
+    connect,
+  };
+}
+
+function Group({
+  label,
+  note,
+  refresh,
+  children,
+}: {
+  label: string;
+  note?: string;
+  refresh: ReactNode;
+  children: ReactNode;
+}) {
   return (
-    <>
-      {offered?.length ? (
-        <span {...stylex.props(styles.rowDescription, local.detail)}>
-          Agents on {alias}:{" "}
-          {offered
-            .map((agent) => REVIEW_CLI_INSTALL_TARGET_LABELS[agent.id])
-            .join(", ")}{" "}
-          —{" "}
-          <Button
-            aria-label={`Connect agents on ${alias}`}
-            disabled={busy}
-            onClick={() => void connect(offered.map((agent) => agent.id))}
-          >
-            Connect
-          </Button>
-        </span>
-      ) : null}
-      {manual?.map((agent) => (
-        <span
-          key={agent.id}
-          {...stylex.props(styles.rowDescription, local.detail)}
-        >
-          Paste into {REVIEW_CLI_INSTALL_TARGET_LABELS[agent.id]} on {alias}:{" "}
-          <code {...stylex.props(local.command)}>
-            Run `whiteboard connect {agent.id}` and follow the instructions to
-            connect this agent to Whiteboard.
-          </code>
-        </span>
-      ))}
-      {result ? (
-        <Detail role="status" failed={result.failed} text={result.text} />
-      ) : null}
-    </>
+    <div role="group" aria-label={label} {...stylex.props(local.group)}>
+      <span {...stylex.props(local.groupLabel)}>
+        {label}
+        {note ? (
+          <span {...stylex.props(styles.rowDescription)}>{note}</span>
+        ) : null}
+        {refresh}
+      </span>
+      {children}
+    </div>
+  );
+}
+
+function Item({
+  name,
+  text,
+  failed = false,
+  children,
+}: {
+  name: string;
+  text: string;
+  failed?: boolean;
+  children?: ReactNode;
+}) {
+  return (
+    <div {...stylex.props(local.item)}>
+      <span {...stylex.props(local.itemName)}>{name}</span>
+      <Detail failed={failed} text={text} />
+      <span {...stylex.props(local.itemAction)}>{children}</span>
+    </div>
   );
 }
 
@@ -367,17 +560,35 @@ function CheckAgain({
   alias: string;
 }) {
   const { run, pending } = useHostAction(hosts, alias);
+
+  return (
+    <RefreshButton
+      label={`Check ${alias} again`}
+      pending={pending}
+      onClick={() => run("retry")}
+    />
+  );
+}
+
+function RefreshButton({
+  label,
+  pending,
+  onClick,
+}: {
+  label: string;
+  pending: boolean;
+  onClick: () => void;
+}) {
   const tooltip = useUiTooltip("Check again");
 
   return (
     <IconButton
       ref={tooltip}
       size="small"
-      aria-label={`Check ${alias} again`}
+      aria-label={label}
       aria-busy={pending || undefined}
       disabled={pending}
-      xstyle={local.checkAgain}
-      onClick={() => run("retry")}
+      onClick={onClick}
     >
       <RefreshIcon xstyle={controlStyles.inlineIcon} spinning={pending} />
     </IconButton>
@@ -418,9 +629,59 @@ const local = stylex.create({
   failed: {
     color: tokens.changeRemoved,
   },
-  checkAgain: {
-    marginInlineStart: "4px",
-    verticalAlign: "middle",
+  hostRow: {
+    rowGap: "12px",
+  },
+  toggle: {
+    display: "flex",
+    minWidth: 0,
+    alignItems: "center",
+    padding: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: "transparent",
+    color: "inherit",
+    cursor: "pointer",
+    font: "inherit",
+    gap: "8px",
+    textAlign: "left",
+  },
+  body: {
+    display: "flex",
+    gridColumn: "1 / -1",
+    flexDirection: "column",
+    gap: "14px",
+    paddingInlineStart: "24px",
+  },
+  group: {
+    display: "grid",
+    gridTemplateColumns: "max-content minmax(0, 1fr) auto",
+    alignItems: "center",
+    columnGap: "16px",
+    rowGap: "6px",
+  },
+  groupLabel: {
+    display: "flex",
+    gridColumn: "1 / -1",
+    alignItems: "center",
+    color: tokens.ink,
+    fontSize: fontSize.body,
+    gap: "8px",
+  },
+  item: {
+    display: "contents",
+  },
+  itemName: {
+    color: tokens.ink,
+    fontSize: fontSize.body,
+  },
+  itemAction: {
+    display: "flex",
+    justifyContent: "flex-end",
+  },
+  wide: {
+    gridColumn: "1 / -1",
   },
   actions: {
     gap: "8px",

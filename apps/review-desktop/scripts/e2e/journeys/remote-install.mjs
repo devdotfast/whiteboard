@@ -58,7 +58,14 @@ const hasDocker = () =>
   });
 
 export async function prepare({ app }) {
-  if (prepared || app || !(await hasDocker().then(() => true, () => false)))
+  if (
+    prepared ||
+    app ||
+    !(await hasDocker().then(
+      () => true,
+      () => false,
+    ))
+  )
     return undefined;
 
   releases = await serveReleases();
@@ -248,7 +255,9 @@ async function watchPage(page) {
       open = Boolean(title);
 
       for (const row of document.querySelectorAll("[data-remote-host]")) {
-        const [label, detail] = row.firstElementChild?.children ?? [];
+        const [label, detail] =
+          row.querySelector("button[aria-expanded] > span")?.children ?? [];
+
         const rows = (ui.rows[label?.textContent] ??= []);
         const text = detail?.textContent;
 
@@ -782,7 +791,10 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   assert.equal(newFreshServer.version, next);
   assert.notEqual(newFreshServer.serverPid, oldFreshServer.serverPid);
   assert.match(
-    await onRemote(fresh, `cat /proc/${newFreshServer.serverPid}/cmdline | tr '\\0' ' '`),
+    await onRemote(
+      fresh,
+      `cat /proc/${newFreshServer.serverPid}/cmdline | tr '\\0' ' '`,
+    ),
     new RegExp(`/versions/${next.replaceAll(".", "\\.")}/`),
   );
   await homeRow(ctx, title);
@@ -827,15 +839,16 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   const section = await hostsSection(ctx);
   const freshRow = hostRow(section, fresh);
 
+  const connect = freshRow.getByRole("button", {
+    name: `Connect Claude Code on ${fresh}`,
+  });
+
   await until(
-    async () =>
-      /Agents on wb-test-fresh: Claude Code/.test(await freshRow.innerText()),
+    async () => (await connect.count()) === 1,
     "the agent offer for fresh",
     2 * MINUTE,
   );
-  await freshRow
-    .getByRole("button", { name: `Connect agents on ${fresh}` })
-    .click();
+  await connect.click();
   await until(
     async () =>
       /Claude Code (is connected|was not connected)/.test(
@@ -916,10 +929,7 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   );
 
   assert.equal(handSettled.state, "online", handSettled.detail);
-  assert.equal(
-    await onRemote(hand, `ls ${ROOT}/versions`),
-    next,
-  );
+  assert.equal(await onRemote(hand, `ls ${ROOT}/versions`), next);
   assert.match(
     await onRemote(hand, `cat ${WHITEBOARD}`),
     new RegExp(`/versions/${next.replaceAll(".", "\\.")}/whiteboard`),

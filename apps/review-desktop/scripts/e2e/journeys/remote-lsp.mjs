@@ -345,6 +345,18 @@ async function journey(ctx) {
   const hostRow = (alias) =>
     section.locator("[data-remote-host]").filter({ hasText: alias });
 
+  const languageFeatures = async (alias) => {
+    const toggle = hostRow(alias).locator("button[aria-expanded]").first();
+
+    if ((await toggle.getAttribute("aria-expanded")) === "false") {
+      await toggle.click();
+    }
+
+    return hostRow(alias)
+      .getByRole("group", { name: "Language features" })
+      .innerText();
+  };
+
   for (const alias of [aliasA, aliasB]) {
     await section.getByLabel("SSH alias").fill(alias);
     added[alias] = Date.now();
@@ -366,8 +378,8 @@ async function journey(ctx) {
       timings[`available ${alias}`] = Date.now() - added[alias];
       await until(
         async () =>
-          (await hostRow(alias).innerText()).includes(
-            "Language features: available",
+          /^Language features\s+available\b/.test(
+            await languageFeatures(alias),
           ),
         `the Settings row of ${alias} to say language features are available`,
       );
@@ -661,17 +673,17 @@ async function journey(ctx) {
     );
     settings = await openSettings(ctx);
     section = settings.getByRole("region", { name: "Remote hosts" });
-    await until(
-      async () =>
-        (await hostRow(aliasB).innerText()).includes(
-          `Language features: unavailable · ${why}`,
-        ),
-      "the Settings row to say why",
-    );
+    await until(async () => {
+      const text = await languageFeatures(aliasB);
 
-    const detail = (await hostRow(aliasB).innerText()).match(
-      /Language features: unavailable · .*/,
-    )[0];
+      return (
+        /^Language features\s+unavailable\b/.test(text) && text.includes(why)
+      );
+    }, "the Settings row to say why");
+
+    const detail = (await languageFeatures(aliasB))
+      .split("\n")
+      .find((line) => line.startsWith(why));
 
     await showDiff(ctx, title.b, "b.ts", reviewB);
     assert.match(await lines(visibleCanvas(page)), /answer \+ 1/);
