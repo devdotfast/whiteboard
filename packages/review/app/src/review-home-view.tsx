@@ -1,5 +1,6 @@
 import { CopyableText, copyText } from "@canvas/ui/copy";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
+import { dividerStyles } from "@canvas/ui/divider";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
@@ -1461,7 +1462,10 @@ export function ReviewHome({
           >
             {inTrash ? "Delete…" : "Trash"} <Shortcut>⌘⌫</Shortcut>
           </Button>
-          <span aria-hidden="true" {...stylex.props(styles.barDivider)} />
+          <span
+            aria-hidden="true"
+            {...stylex.props(dividerStyles.vertical, styles.barDivider)}
+          />
           <IconButton aria-label="Clear selection" onClick={clearSelection}>
             <CloseIcon />
           </IconButton>

@@ -283,12 +283,6 @@ export const shellStyles = stylex.create({
   openSourceTreeLabel: {
     display: { default: null, [narrowContent]: "none" },
   },
-  actionsDivider: {
-    flexShrink: 0,
-    width: "1px",
-    height: "16px",
-    backgroundColor: tokens.chromeBorder,
-  },
 
   viewRegion: {
     position: "relative",

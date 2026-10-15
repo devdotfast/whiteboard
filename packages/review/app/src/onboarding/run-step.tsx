@@ -9,6 +9,7 @@ import {
 import { tokens } from "@canvas/tokens.stylex";
 import { AgentLogo } from "@canvas/ui/brand-icons";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
+import { dividerStyles } from "@canvas/ui/divider";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
@@ -608,7 +609,10 @@ export function RunStep({
                   </Shortcut>
                 </Button>
                 {canChooseAgent ? (
-                  <span aria-hidden="true" {...stylex.props(styles.chipRule)} />
+                  <span
+                    aria-hidden="true"
+                    {...stylex.props(dividerStyles.vertical)}
+                  />
                 ) : null}
                 {canChooseAgent ? (
                   <OptionMenu
@@ -932,12 +936,6 @@ const styles = stylex.create({
     fontSize: fontSize.ui,
     borderTopRightRadius: 0,
     borderBottomRightRadius: 0,
-  },
-  chipRule: {
-    width: "1px",
-    height: "14px",
-    flexShrink: 0,
-    backgroundColor: tokens.ruleSoft,
   },
   chipMenu: {
     height: "28px",

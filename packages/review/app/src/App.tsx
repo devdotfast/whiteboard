@@ -1,5 +1,6 @@
 import { DiscordIcon } from "@canvas/ui/brand-icons";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
+import { dividerStyles } from "@canvas/ui/divider";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
   ArchiveIcon,
@@ -920,10 +921,8 @@ function ReviewLayoutContent({
               <>
                 {!review.historicalRevision && !review.submissionOutcome && (
                   <div
-                    {...stylex.props(
-                      shellStyles.topbarItem,
-                      shellStyles.actionsDivider,
-                    )}
+                    aria-hidden="true"
+                    {...stylex.props(dividerStyles.vertical)}
                   />
                 )}
                 {!review.historicalRevision && !review.submissionOutcome ? (

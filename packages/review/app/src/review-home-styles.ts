@@ -359,10 +359,7 @@ export const styles = stylex.create({
   },
   barCount: { paddingRight: "6px", whiteSpace: "nowrap" },
   barDivider: {
-    width: "1px",
-    height: "18px",
     marginInline: "4px",
-    backgroundColor: tokens.ruleSoft,
   },
   danger: { color: tokens.changeRemoved },
 });
