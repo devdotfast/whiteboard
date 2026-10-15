@@ -1,10 +1,10 @@
-import { controlStyles } from "@canvas/controls-styles";
 import { DisclosureChevron, RefreshIcon } from "@canvas/icons";
 import { fontSize } from "@canvas/scale.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { CopyableText, useCopy } from "@canvas/ui/copy";
 import { useUiTooltip } from "@canvas/ui/host";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
 import {
@@ -601,7 +601,7 @@ function RefreshButton({
       disabled={pending}
       onClick={onClick}
     >
-      <RefreshIcon xstyle={controlStyles.inlineIcon} spinning={pending} />
+      <RefreshIcon xstyle={iconStyles.inline} spinning={pending} />
     </IconButton>
   );
 }

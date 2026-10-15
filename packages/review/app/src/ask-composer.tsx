@@ -1,5 +1,6 @@
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
 import {
@@ -25,7 +26,6 @@ import {
   useState,
 } from "react";
 
-import { controlStyles } from "./controls-styles";
 import { ArrowUpIcon, CloseIcon, ImageIcon } from "./icons";
 import { fontSize, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
@@ -603,9 +603,7 @@ export function AskComposer({
                 xstyle={styles.square}
                 disabled={!draft.trim() || !canAsk}
               >
-                <ArrowUpIcon
-                  xstyle={[controlStyles.inlineIcon, styles.submitIcon]}
-                />
+                <ArrowUpIcon xstyle={[iconStyles.inline, styles.submitIcon]} />
               </Button>
             )}
           </span>
@@ -685,7 +683,7 @@ function AttachedImage({
         aria-label={label}
         onClick={onRemove}
       >
-        <CloseIcon xstyle={controlStyles.inlineIcon} />
+        <CloseIcon xstyle={iconStyles.inline} />
       </IconButton>
     </li>
   );

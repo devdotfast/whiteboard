@@ -1,4 +1,5 @@
 import { Button, IconButton } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { fieldStyles } from "@canvas/ui/text-field";
 import {
@@ -22,7 +23,6 @@ import {
   imageFileFromDataTransfer,
   normalizeScreenshot,
 } from "./bug-report-screenshot";
-import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { BugIcon } from "./icons";
 import { appMarker } from "./markers.stylex";
@@ -218,7 +218,7 @@ export function BugReportControl({
           disabled={capturing}
           onClick={() => void openDialog()}
         >
-          <BugIcon xstyle={controlStyles.chromeIcon} />
+          <BugIcon xstyle={iconStyles.chrome} />
         </IconButton>
       )}
       {open && (

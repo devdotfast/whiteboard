@@ -1,5 +1,6 @@
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect } from "react";
 
@@ -9,7 +10,6 @@ import { AskDeleteButton } from "./ask-delete";
 import { useShowThreads } from "./ask-dock";
 import { useAskHistory } from "./ask-history";
 import { askPanelStyles } from "./ask-styles";
-import { controlStyles } from "./controls-styles";
 import { formatRelativeTime } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { ChatIcon, HistoryIcon } from "./icons";
@@ -86,9 +86,7 @@ export function AskHistoryButton({ view }: { view: AskView }): ReactElement {
       disabled={!(showThreads ?? openHistory) || allShown}
       onClick={showThreads ?? openHistory}
     >
-      <HistoryIcon
-        xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-      />
+      <HistoryIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
     </IconButton>
   );
 }

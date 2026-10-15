@@ -1,9 +1,9 @@
 import { IconButton } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import type { ReviewView } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useRef, useState } from "react";
 
-import { controlStyles } from "./controls-styles";
 import { useCanvasMenu } from "./host/canvas-ui";
 import { useReviewSession } from "./host/review-session";
 import { MoreIcon } from "./icons";
@@ -110,7 +110,7 @@ export function PageMoreMenu({
       aria-label="More"
       {...menu.triggerProps}
     >
-      <MoreIcon xstyle={[controlStyles.chromeIcon, styles.dots]} />
+      <MoreIcon xstyle={[iconStyles.chrome, styles.dots]} />
     </IconButton>
   );
 }

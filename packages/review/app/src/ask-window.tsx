@@ -1,5 +1,6 @@
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import * as stylex from "@stylexjs/stylex";
 import {
   type PointerEvent,
@@ -12,7 +13,6 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { controlStyles } from "./controls-styles";
 import { useReviewDebugSettings } from "./debug-settings";
 import { CloseIcon, DockIcon, GripIcon, MinusIcon } from "./icons";
 import { appMarker } from "./markers.stylex";
@@ -275,9 +275,7 @@ export function AskWindow({
               aria-label="Dock Ask in the side panel"
               onClick={() => store.getState().dockAsk(askKey)}
             >
-              <DockIcon
-                xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-              />
+              <DockIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
             </IconButton>
             <IconButton
               ref={hideTooltip}
@@ -285,9 +283,7 @@ export function AskWindow({
               aria-label="Hide Ask"
               onClick={onHide}
             >
-              <MinusIcon
-                xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-              />
+              <MinusIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
             </IconButton>
             <IconButton
               ref={closeRef}
@@ -295,7 +291,7 @@ export function AskWindow({
               aria-label="Close Ask"
               onClick={onClose}
             >
-              <CloseIcon xstyle={controlStyles.inertIcon} />
+              <CloseIcon xstyle={iconStyles.inert} />
             </IconButton>
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import {
   type AskAgentId,
   type AskChoiceKind,
@@ -28,7 +29,6 @@ import {
 import { z } from "zod";
 
 import { AGENT_LOGOS } from "./agent-logos";
-import { controlStyles } from "./controls-styles";
 import type { ReviewSession } from "./host/review-session";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 import { fontSize } from "./scale.stylex";
@@ -395,9 +395,7 @@ export function AskAgentMenu({
             </span>
             <span {...stylex.props(styles.name)}>{candidate.name}</span>
             {candidate.id === current ? (
-              <CheckIcon
-                xstyle={[controlStyles.inlineIcon, menuStyles.check]}
-              />
+              <CheckIcon xstyle={[iconStyles.inline, menuStyles.check]} />
             ) : null}
           </button>
         ))}
@@ -654,7 +652,7 @@ function AskChoiceItem({
     >
       <span {...stylex.props(styles.name)}>{option.name}</span>
       {checked ? (
-        <CheckIcon xstyle={[controlStyles.inlineIcon, menuStyles.check]} />
+        <CheckIcon xstyle={[iconStyles.inline, menuStyles.check]} />
       ) : null}
     </button>
   );
@@ -707,7 +705,7 @@ function AskChoiceSearch({
       <label
         {...stylex.props(fieldStyles.box, fieldStyles.shell, styles.search)}
       >
-        <SearchIcon xstyle={[controlStyles.inlineIcon, styles.searchIcon]} />
+        <SearchIcon xstyle={[iconStyles.inline, styles.searchIcon]} />
         <input
           {...stylex.props(styles.searchInput)}
           value={query}
