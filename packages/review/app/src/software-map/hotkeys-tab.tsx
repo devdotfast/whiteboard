@@ -280,7 +280,7 @@ const styles = stylex.create({
   item: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "3px",
+    gap: space.s4,
     color: tokens.inkMuted,
   },
   keys: {

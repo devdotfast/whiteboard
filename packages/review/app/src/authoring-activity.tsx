@@ -231,7 +231,7 @@ const styles = stylex.create({
     minWidth: 0,
     maxWidth: "420px",
     alignItems: "center",
-    gap: "7px",
+    gap: space.s8,
     height: tokens.chromeControlHeight,
     marginInline: space.s4,
     padding: `0 ${space.s10} 0 ${space.s6}`,
@@ -350,7 +350,7 @@ const styles = stylex.create({
   unread: {
     position: { default: null, [inTopbarTabs()]: "absolute" },
     top: { default: null, [inTopbarTabs()]: "1px" },
-    right: { default: null, [inTopbarTabs()]: "-7px" },
+    right: { default: null, [inTopbarTabs()]: `-${space.s8}` },
     width: { default: null, [inTopbarTabs()]: "4px" },
     height: { default: null, [inTopbarTabs()]: "4px" },
     borderRadius: { default: null, [inTopbarTabs()]: radius.round },

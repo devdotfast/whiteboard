@@ -428,7 +428,7 @@ const styles = stylex.create({
   pillLabel: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "7px",
+    gap: space.s8,
     minWidth: 0,
     overflow: "hidden",
     height: "26px",

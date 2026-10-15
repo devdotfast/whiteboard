@@ -294,7 +294,7 @@ const styles = stylex.create({
   pill: {
     height: "24px",
     paddingBlock: 0,
-    paddingInline: "9px",
+    paddingInline: space.s8,
     fontSize: fontSize.ui,
     lineHeight: leading.px16,
     cursor: "pointer",

@@ -323,7 +323,7 @@ const styles = stylex.create({
   },
   stats: {
     display: "inline-flex",
-    gap: "5px",
+    gap: space.s4,
     fontVariantNumeric: "tabular-nums",
     flexShrink: 0,
     marginLeft: "auto",

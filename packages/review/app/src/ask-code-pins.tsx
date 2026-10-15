@@ -13,7 +13,7 @@ import { createPortal } from "react-dom";
 import { useAskHistory } from "./ask-history";
 import { openAskConversations, truncate } from "./ask-marks";
 import { useOptionalReviewPanelStore } from "./review-panel";
-import { fontSize, leading, radius } from "./scale.stylex";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 interface CodeMark extends ReviewAskMark {
@@ -189,7 +189,7 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    gap: "3px",
+    gap: space.s4,
     width: "calc(200% - 2px)",
     height: "100%",
     padding: 0,

@@ -111,7 +111,7 @@ export const onboardingStyles = stylex.create({
     flex: 1,
     flexDirection: { default: "row", [stacked]: "column" },
     alignItems: { default: "center", [stacked]: "stretch" },
-    gap: { default: "80px", [stacked]: space.s40 },
+    gap: { default: space.s72, [stacked]: space.s40 },
     // Bounded, so a panel that outgrows the window scrolls inside itself.
     minHeight: 0,
     paddingBlock: `${space.s24} ${space.s56}`,

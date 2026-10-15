@@ -78,7 +78,7 @@ const styles = stylex.create({
     paddingBlock: space.s16,
     color: tokens.inkMuted,
     fontSize: fontSize.ui,
-    lineHeight: 1.55,
+    lineHeight: leading.normal,
   },
   boxed: {
     boxSizing: "border-box",
@@ -110,6 +110,6 @@ const styles = stylex.create({
   boxedMessage: {
     maxWidth: "540px",
     fontSize: fontSize.ui,
-    lineHeight: 1.55,
+    lineHeight: leading.normal,
   },
 });

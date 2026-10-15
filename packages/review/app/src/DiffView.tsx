@@ -852,7 +852,7 @@ const styles = stylex.create({
   },
   railRing: {
     flexDirection: "column",
-    gap: "3px",
+    gap: space.s4,
     lineHeight: leading.none,
   },
   // 5ch is five letters in Geist Mono.
@@ -861,7 +861,7 @@ const styles = stylex.create({
     boxSizing: "content-box",
     width: "5ch",
     height: "24px",
-    padding: "0 5px",
+    padding: `0 ${space.s4}`,
     borderRadius: radius.pill,
     font: "inherit",
     color: "inherit",
@@ -951,14 +951,14 @@ const styles = stylex.create({
       top: 0,
       bottom: 0,
       left: 0,
-      right: "-3px",
+      right: `-${space.s4}`,
       content: "''",
     },
   },
   // Overlaps the files pane; the line stays on the pane edge.
   cabinetsResizer: {
     display: "block",
-    margin: "-5px 0",
+    margin: `-${space.s4} 0`,
     zIndex: 2,
   },
   resizing: {

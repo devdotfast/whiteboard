@@ -485,7 +485,7 @@ const styles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "23px",
+    lineHeight: leading.px24,
   },
   paragraph: { display: "block" },
   listItem: { display: "block" },

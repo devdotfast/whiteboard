@@ -928,7 +928,7 @@ const styles = stylex.create({
     display: "flex",
     flex: "1 1 auto",
     alignItems: "center",
-    gap: "5px",
+    gap: space.s4,
     minWidth: 0,
   },
   children: { margin: 0, padding: 0, listStyle: "none" },

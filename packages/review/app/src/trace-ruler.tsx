@@ -458,7 +458,7 @@ const styles = stylex.create({
   },
   card: {
     position: "absolute",
-    left: "52px",
+    left: space.s48,
     width: "300px",
     display: "flex",
     flexDirection: "column",
@@ -469,7 +469,7 @@ const styles = stylex.create({
   cardTitle: {
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "19px",
+    lineHeight: leading.px20,
     fontWeight: fontWeight.semibold,
     color: tokens.ink,
   },

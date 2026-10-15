@@ -108,7 +108,7 @@ export const fieldStyles = stylex.create({
     resize: "vertical",
   },
   select: {
-    paddingRight: "26px",
+    paddingRight: space.s24,
     overflow: "hidden",
     textOverflow: "ellipsis",
     appearance: "none",

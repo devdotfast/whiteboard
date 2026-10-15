@@ -289,7 +289,7 @@ const styles = stylex.create({
   row: {
     display: "flex",
     flexDirection: "column",
-    gap: "3px",
+    gap: space.s4,
     width: "100%",
     minWidth: 0,
     padding: space.s8,
@@ -336,10 +336,10 @@ const styles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.title,
-    lineHeight: "19px",
+    lineHeight: leading.px20,
   },
   openingUnread: { fontWeight: fontWeight.medium },
-  relation: { gap: "5px" },
+  relation: { gap: space.s4 },
   relationText: {
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,

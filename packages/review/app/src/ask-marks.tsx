@@ -1022,8 +1022,8 @@ const styles = stylex.create({
   pin: {
     display: "flex",
     alignItems: "center",
-    gap: "5px",
-    padding: "3px 5px",
+    gap: space.s4,
+    padding: space.s4,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: {

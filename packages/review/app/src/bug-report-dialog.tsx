@@ -371,7 +371,7 @@ const styles = stylex.create({
   },
   description: {
     display: "grid",
-    gap: "7px",
+    gap: space.s8,
     fontSize: fontSize.body,
     fontWeight: fontWeight.semibold,
   },
@@ -398,7 +398,7 @@ const styles = stylex.create({
     padding: `${space.s10} ${space.s12} ${space.s12}`,
   },
   small: {
-    font: `${fontSize.small}/1.45 ${tokens.chromeFont}`,
+    font: `${fontSize.small}/${leading.normal} ${tokens.chromeFont}`,
   },
   option: {
     display: "flex",

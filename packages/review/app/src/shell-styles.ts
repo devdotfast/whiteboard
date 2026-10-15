@@ -304,19 +304,19 @@ export const shellStyles = stylex.create({
     overflowX: "hidden",
     overflowY: "auto",
     padding: {
-      default: `${tokens.reviewPageTop} 52px calc(max(120px, var(--review-bottom-scroll-padding, 0px)) + var(--review-toc-tail, 0px))`,
+      default: `${tokens.reviewPageTop} ${space.s48} calc(max(120px, var(--review-bottom-scroll-padding, 0px)) + var(--review-toc-tail, 0px))`,
       "@container review-content (max-width: 1180px)": {
-        default: `${tokens.reviewPageTop} 42px calc(120px + var(--review-toc-tail, 0px))`,
+        default: `${tokens.reviewPageTop} ${space.s40} calc(120px + var(--review-toc-tail, 0px))`,
         // Wide enough for the contents rail to show, this padding widens on
         // the right to keep its gutter clear.
         "@container review-content (max-width: 1080px)": {
           default: `${tokens.reviewPageTop} max(${space.s24}, var(--review-rail-gutter, 0px)) calc(120px + var(--review-toc-tail, 0px)) ${space.s24}`,
           [stylex.env.narrow]:
-            `22px ${space.s8} calc(96px + var(--review-toc-tail, 0px))`,
+            `${space.s24} ${space.s8} calc(96px + var(--review-toc-tail, 0px))`,
         },
       },
       [stylex.env.narrow]:
-        `22px ${space.s8} calc(96px + var(--review-toc-tail, 0px))`,
+        `${space.s24} ${space.s8} calc(96px + var(--review-toc-tail, 0px))`,
     },
   },
   // While the contents rail shows, the page keeps its ticks' gutter clear:

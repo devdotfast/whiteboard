@@ -74,7 +74,7 @@ const styles = stylex.create({
   item: {
     justifyContent: "space-between",
     minHeight: "24px",
-    padding: `3px ${space.s8}`,
+    padding: `${space.s4} ${space.s8}`,
     fontSize: fontSize.ui,
     lineHeight: leading.px18,
   },

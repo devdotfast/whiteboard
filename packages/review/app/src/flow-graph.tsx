@@ -731,7 +731,7 @@ const styles = stylex.create({
     position: "relative",
     boxSizing: "border-box",
     color: tokens.ink,
-    font: `${fontSize.body}/1.4 ${tokens.fontMono}`,
+    font: `${fontSize.body}/${leading.normal} ${tokens.fontMono}`,
     cursor: "pointer",
     outline: { default: null, ":focus-visible": "none" },
   },

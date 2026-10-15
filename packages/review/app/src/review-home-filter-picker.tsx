@@ -632,7 +632,7 @@ const styles = stylex.create({
     flexShrink: 0,
     width: "24px",
     height: "24px",
-    margin: "-5px",
+    margin: `-${space.s4}`,
   },
   emptyCheck: {
     opacity: {
@@ -655,7 +655,7 @@ const styles = stylex.create({
     fontSize: fontSize.small,
   },
   hint: {
-    padding: `5px ${space.s8}`,
+    padding: `${space.s4} ${space.s8}`,
     color: tokens.inkFaint,
     fontSize: fontSize.small,
   },

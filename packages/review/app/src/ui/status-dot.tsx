@@ -39,7 +39,7 @@ export function StatusDot({
 const styles = stylex.create({
   dot: {
     position: "absolute",
-    top: "-3px",
+    top: `-${space.s4}`,
     right: `-${space.s4}`,
     width: "8px",
     height: "8px",
@@ -49,7 +49,7 @@ const styles = stylex.create({
     borderRadius: radius.round,
   },
   small: {
-    right: "-3px",
+    right: `-${space.s4}`,
     width: "6px",
     height: "6px",
   },

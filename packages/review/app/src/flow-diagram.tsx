@@ -252,7 +252,7 @@ const styles = stylex.create({
     flexWrap: "wrap",
     justifyContent: "space-between",
     gap: space.s12,
-    padding: `9px ${space.s16}`,
+    padding: `${space.s8} ${space.s16}`,
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
@@ -270,7 +270,7 @@ const styles = stylex.create({
     display: "inline-block",
     width: "6px",
     height: "6px",
-    marginLeft: "7px",
+    marginLeft: space.s8,
     borderRadius: radius.round,
   },
   added: {

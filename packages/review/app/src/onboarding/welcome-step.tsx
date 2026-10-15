@@ -170,7 +170,7 @@ const styles = stylex.create({
     maxWidth: "460px",
     marginInlineStart: { default: space.s96, [narrowBoard]: "0" },
     gap: space.s18,
-    padding: `22px ${space.s24} 26px`,
+    padding: space.s24,
     animationDelay: onboardingMotion.flowCard,
   },
   meta: {

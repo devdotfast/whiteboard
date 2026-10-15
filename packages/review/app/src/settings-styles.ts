@@ -43,7 +43,7 @@ export const settingsStyles = stylex.create({
   rowText: {
     display: "flex",
     flexDirection: "column",
-    gap: "3px",
+    gap: space.s4,
     minWidth: 0,
   },
   rowLabel: {

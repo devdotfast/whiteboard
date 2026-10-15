@@ -215,7 +215,7 @@ const styles = stylex.create({
     textOverflow: "ellipsis",
   },
   button: {
-    paddingInlineEnd: "7px",
+    paddingInlineEnd: space.s8,
     cursor: { default: "pointer", ":disabled": "progress" },
     filter: { default: null, ":hover:not(:disabled)": "brightness(1.15)" },
     outline: {

@@ -582,7 +582,7 @@ const styles = stylex.create({
     margin: 0,
     color: tokens.inkMuted,
     fontSize: fontSize.ui,
-    lineHeight: "21px",
+    lineHeight: leading.px20,
   },
   dismiss: {
     alignSelf: "flex-start",
@@ -692,7 +692,7 @@ const styles = stylex.create({
     font: `${fontSize.ui}/${leading.px20} ${tokens.chromeFont}`,
   },
   hintCode: {
-    padding: "1px 5px",
+    padding: `1px ${space.s4}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,

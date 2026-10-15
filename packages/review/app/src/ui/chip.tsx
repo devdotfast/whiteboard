@@ -47,7 +47,7 @@ export const chipStyles = stylex.create({
     flex: "0 0 auto",
     alignItems: "center",
     height: "18px",
-    padding: "0 5px",
+    padding: `0 ${space.s4}`,
     borderRadius: radius.small,
     backgroundColor: tokens.well,
     color: tokens.inkMuted,

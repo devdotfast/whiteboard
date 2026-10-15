@@ -408,7 +408,7 @@ const styles = stylex.create({
     gap: space.s4,
     minWidth: 0,
     paddingBlock: 0,
-    paddingInline: "5px",
+    paddingInline: space.s4,
     borderRadius: radius.small,
     backgroundColor: tokens.tray,
     color: tokens.ink,

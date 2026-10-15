@@ -262,7 +262,7 @@ export const styles = stylex.create({
     display: "block",
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: 1.45,
+    lineHeight: leading.normal,
   },
   metadata: {
     display: "flex",
@@ -320,7 +320,7 @@ export const styles = stylex.create({
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "flex-end",
-    gap: "7px",
+    gap: space.s8,
     color: tokens.inkMuted,
   },
   writingDot: {

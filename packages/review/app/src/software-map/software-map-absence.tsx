@@ -99,7 +99,7 @@ const styles = stylex.create({
     minHeight: "var(--software-map-empty-height, 520px)",
   },
   code: {
-    padding: `${space.s2} 5px`,
+    padding: `${space.s2} ${space.s4}`,
     borderRadius: radius.small,
     backgroundColor: tokens.well,
     color: tokens.ink,
@@ -110,7 +110,7 @@ const styles = stylex.create({
   topologyUnavailable: {
     flex: "none",
     margin: 0,
-    padding: `7px ${space.s12}`,
+    padding: `${space.s8} ${space.s12}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,

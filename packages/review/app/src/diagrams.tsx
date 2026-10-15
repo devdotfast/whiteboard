@@ -1175,7 +1175,7 @@ const styles = stylex.create({
   },
   lifeline: {
     position: "absolute",
-    top: "62px",
+    top: space.s56,
     bottom: space.s18,
     left: "50%",
     marginLeft: "-0.5px",
@@ -1250,7 +1250,7 @@ const styles = stylex.create({
     position: "relative",
     zIndex: 4,
     maxWidth: "calc(var(--sequence-lane-width, 176px) - 12px)",
-    padding: "0 3px",
+    padding: `0 ${space.s4}`,
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: 0,

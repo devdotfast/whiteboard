@@ -371,12 +371,12 @@ const styles = stylex.create({
   progressLabel: {
     display: "flex",
     alignItems: "center",
-    gap: "9px",
+    gap: space.s8,
   },
   ring: {
     display: "flex",
     alignItems: "center",
-    gap: "5px",
+    gap: space.s4,
     fontVariantNumeric: "tabular-nums",
   },
   hint: {
@@ -397,7 +397,7 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     paddingRight: space.s10,
-    gap: "7px",
+    gap: space.s8,
   },
   toggle: {
     display: "flex",
@@ -406,7 +406,7 @@ const styles = stylex.create({
     alignItems: "center",
     gap: space.s8,
     textAlign: "left",
-    padding: `3px ${space.s4} 3px ${space.s8}`,
+    padding: `${space.s4} ${space.s4} ${space.s4} ${space.s8}`,
     color: "inherit",
     cursor: "pointer",
     backgroundColor: { default: tokens.transparent, ":hover": tokens.well },

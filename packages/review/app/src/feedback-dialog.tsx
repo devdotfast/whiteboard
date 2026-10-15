@@ -647,7 +647,7 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   selectionCheckbox: {
-    marginTop: "3px",
+    marginTop: space.s4,
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: "3px",
   },
@@ -682,7 +682,7 @@ const styles = stylex.create({
     width: "100%",
     minHeight: "32px",
     maxHeight: "180px",
-    padding: `5px ${space.s10}`,
+    padding: `${space.s4} ${space.s10}`,
     borderRadius: radius.control,
   },
   emailRow: {

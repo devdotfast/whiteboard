@@ -759,7 +759,7 @@ const styles = stylex.create({
     flexShrink: 0,
     maxWidth: "100%",
     height: "10px",
-    marginBlock: "3px",
+    marginBlock: space.s4,
     borderRadius: radius.control,
     backgroundColor: tokens.ruleSoft,
     animationName: { default: breathe, [stylex.env.reducedMotion]: "none" },

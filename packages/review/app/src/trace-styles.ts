@@ -144,7 +144,7 @@ export const traceStyles = stylex.create({
   },
   // In a side peek.
   eventsScoped: {
-    marginTop: "22px",
+    marginTop: space.s24,
   },
   turn: {
     display: "flex",
@@ -191,7 +191,7 @@ export const traceStyles = stylex.create({
     minWidth: 0,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    lineHeight: "19px",
+    lineHeight: leading.px20,
   },
   toolVerb: {
     color: tokens.inkFaint,
@@ -227,7 +227,7 @@ export const traceStyles = stylex.create({
       default: null,
       [stylex.when.ancestor(":not([open])", traceToolMarker)]: "none",
     },
-    margin: `${space.s10} 0 0 26px`,
+    margin: `${space.s10} 0 0 ${space.s24}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
@@ -332,13 +332,13 @@ export const traceStyles = stylex.create({
     },
     flexDirection: "column",
     gap: space.s18,
-    padding: `${space.s2} 0 ${space.s4} 26px`,
+    padding: `${space.s2} 0 ${space.s4} ${space.s24}`,
   },
 
   note: {
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "19px",
+    lineHeight: leading.px20,
     color: tokens.inkFaint,
   },
   // The empty notice starts where a trace's header would.

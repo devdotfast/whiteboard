@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius, space } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { isNumberValue, isStringValue } from "@dev.fast/review-protocol";
 import { type MarkdownNode, parseMarkdown } from "@review/markdown";
@@ -727,7 +733,7 @@ const chat = stylex.create({
     color: tokens.ink,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.bold,
-    lineHeight: 1.35,
+    lineHeight: leading.tight,
   },
   list: {
     display: "grid",
@@ -768,7 +774,7 @@ const chat = stylex.create({
     tableLayout: "fixed",
   },
   cell: {
-    padding: "5px 7px",
+    padding: `${space.s4} ${space.s8}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,

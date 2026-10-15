@@ -44,7 +44,7 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-end",
-    gap: "5px",
+    gap: space.s4,
     marginTop: space.s14,
     marginLeft: "auto",
     maxWidth: "min(480px, 90%)",

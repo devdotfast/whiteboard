@@ -60,7 +60,7 @@ const headingStyles = stylex.create({
     lineHeight: leading.px32,
   },
   level2: {
-    marginBlock: `30px ${space.s10}`,
+    marginBlock: `${space.s32} ${space.s10}`,
     fontSize: documentType.h3,
     fontWeight: fontWeight.medium,
     lineHeight: leading.px28,
