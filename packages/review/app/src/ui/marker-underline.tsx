@@ -1,9 +1,8 @@
+import { segmentMarker } from "@canvas/markers.stylex";
 import { motion } from "@canvas/scale.stylex";
+import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
-
-import { segmentMarker } from "./markers.stylex";
-import { tokens } from "./tokens.stylex";
 
 /**
  * The whiteboard marker stroke, drawn under a top bar surface; it is revealed

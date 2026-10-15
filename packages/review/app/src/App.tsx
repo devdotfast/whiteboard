@@ -64,7 +64,6 @@ import { useDocumentEmbedScroll } from "./document-embed-scroll";
 import { documentStyles } from "./document-styles";
 import { useReviewSession } from "./host/review-session";
 import { useKeepPlace } from "./keep-place";
-import { MarkerUnderline } from "./marker-underline";
 import {
   appMarker,
   detailHostMarker,

@@ -1,10 +1,10 @@
-import { MarkerUnderline } from "@canvas/marker-underline";
 import { segmentMarker } from "@canvas/markers.stylex";
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
+import { MarkerUnderline } from "@canvas/ui/marker-underline";
 import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps, ReactNode } from "react";
 
