@@ -151,11 +151,19 @@ export const curatedExtensionConfigurationDefaults = {
 	// The Swift extension can offer to install Swiftly. Review uses the Swift
 	// toolchain that the user installed and made available on the shell PATH.
 	'swift.disableSwiftlyInstallPrompt': true,
+	// It writes `.vscode/launch.json` into the checkout. Test lenses build the package.
+	'swift.autoGenerateLaunchConfigurations': false,
+	'swift.showTestCodeLenses': false,
 
 	// The .NET support extension must not send its own telemetry or expose AI
 	// tools. C# uses the system .NET SDK that Review resolves from the shell PATH.
 	'dotnetAcquisitionExtension.enableTelemetry': false,
-	'dotnetAcquisitionExtension.enableLanguageModelTools': false
+	'dotnetAcquisitionExtension.enableLanguageModelTools': false,
+	// NuGet restore downloads packages and writes `obj/` into the checkout, and
+	// test lenses build the project.
+	'dotnet.projects.enableAutomaticRestore': false,
+	'csharp.suppressDotnetRestoreNotification': true,
+	'dotnet.codeLens.enableTestsCodeLens': false
 
 	// charliermarsh.ruff already defaults `ruff.showNotifications` to "off".
 	// astral-sh.ty, vscodevim.vim and tuttieee.emacs-mcx contribute no prompts.
