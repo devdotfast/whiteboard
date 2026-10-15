@@ -710,7 +710,7 @@ function SequenceParticipantNode({
             id={handle.id}
             type={handle.type}
             position={handle.side}
-            {...stylex.props(styles.handle)}
+            {...stylex.props(diagramStyles.handle, styles.handle)}
             style={{
               left: "50%",
               top: sequenceMessageHandleTop(message, handle.type, top),
@@ -1179,15 +1179,6 @@ const styles = stylex.create({
   // Edge endpoints sit exactly on the lane: left: 50% places the handle's
   // left edge, so the handle centers itself on it.
   handle: {
-    width: "1px",
-    height: "1px",
-    minWidth: 0,
-    minHeight: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    opacity: 0,
-    pointerEvents: "none",
     transform: "translate(-50%, -50%)",
   },
   message: {

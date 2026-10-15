@@ -2041,25 +2041,25 @@ function SoftwareMapC4GroupNode({
         id="target-left"
         type="target"
         position={Position.Left}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-left"
         type="source"
         position={Position.Left}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-top"
         type="target"
         position={Position.Top}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-top"
         type="source"
         position={Position.Top}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <div
         {...stylex.props(
@@ -2091,25 +2091,25 @@ function SoftwareMapC4GroupNode({
         id="source-right"
         type="source"
         position={Position.Right}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-right"
         type="target"
         position={Position.Right}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-bottom"
         type="source"
         position={Position.Bottom}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-bottom"
         type="target"
         position={Position.Bottom}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
     </div>
   );
@@ -2140,25 +2140,25 @@ function SoftwareMapC4Node({ data }: ReactFlowNodeProps<C4MapFlowNode>) {
         id="target-left"
         type="target"
         position={Position.Left}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-left"
         type="source"
         position={Position.Left}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-top"
         type="target"
         position={Position.Top}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-top"
         type="source"
         position={Position.Top}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <SoftwareMapNodeCard
         node={data.node}
@@ -2170,25 +2170,25 @@ function SoftwareMapC4Node({ data }: ReactFlowNodeProps<C4MapFlowNode>) {
         id="source-right"
         type="source"
         position={Position.Right}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-right"
         type="target"
         position={Position.Right}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-bottom"
         type="source"
         position={Position.Bottom}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-bottom"
         type="target"
         position={Position.Bottom}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
     </div>
   );
@@ -3329,12 +3329,6 @@ const styles = stylex.create({
   },
   hidden: {
     display: "none",
-  },
-  handle: {
-    width: "1px",
-    height: "1px",
-    opacity: 0,
-    pointerEvents: "none",
   },
   node: {
     position: "relative",
