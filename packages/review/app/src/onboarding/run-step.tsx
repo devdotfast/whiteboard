@@ -993,6 +993,8 @@ const styles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.ui,
+    borderTopRightRadius: 0,
+    borderBottomRightRadius: 0,
   },
   chipLogo: { width: "16px", height: "16px" },
   chipRule: {
@@ -1003,6 +1005,8 @@ const styles = stylex.create({
   },
   chipMenu: {
     height: "28px",
+    borderTopLeftRadius: 0,
+    borderBottomLeftRadius: 0,
     paddingInline: "8px",
     color: tokens.inkMuted,
   },
