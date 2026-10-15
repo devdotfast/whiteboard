@@ -125,6 +125,9 @@ export function IconButton({
 // Only popup triggers: disclosure toggles also carry aria-expanded.
 const expanded = ':is([aria-haspopup][aria-expanded="true"])';
 
+// A toggle that is on, like Find's Match Case.
+const pressed = ':is([aria-pressed="true"])';
+
 // Exported for a button another component renders (an OptionMenu trigger),
 // and `reset` for anything drawn without the native button box.
 export const buttonStyles = stylex.create({
@@ -231,11 +234,19 @@ export const buttonStyles = stylex.create({
   icon: {
     width: tokens.chromeControlHeight,
     padding: 0,
+    backgroundColor: {
+      default: tokens.transparent,
+      ":hover:not(:disabled)": tokens.chromeHoverBg,
+      [expanded]: tokens.chromeHoverBg,
+      [pressed]: tokens.inputOptionActiveBg,
+    },
+    boxShadow: { default: null, [pressed]: `inset 0 0 0 1px ${tokens.accent}` },
     color: {
       default: tokens.chromeIconFg,
       ":hover:not(:disabled)": tokens.chromeFg,
       ":focus-visible": tokens.chromeFg,
       [expanded]: tokens.chromeFg,
+      [pressed]: tokens.inputOptionActiveFg,
     },
   },
   iconSmall: {

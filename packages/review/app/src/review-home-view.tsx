@@ -1570,15 +1570,14 @@ function FilterChip({
       >
         {children}
       </button>
-      <button
-        type="button"
+      <IconButton
         aria-label={`Remove ${label}`}
-        {...stylex.props(styles.chipClose)}
+        xstyle={styles.chipClose}
         onMouseDown={(event) => event.preventDefault()}
         onClick={onRemove}
       >
         <CloseIcon xstyle={iconStyles.inline} />
-      </button>
+      </IconButton>
     </span>
   );
 }

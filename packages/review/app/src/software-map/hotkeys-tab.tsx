@@ -6,7 +6,7 @@ import {
   radius,
 } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
-import { buttonStyles } from "@canvas/ui/button";
+import { Button, IconButton } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { MinusIcon, PlusIcon } from "@canvas/ui/icons";
 import { Kbd } from "@canvas/ui/kbd";
@@ -153,27 +153,21 @@ export function SoftwareMapHotkeysTab({
             </div>
           ))}
         </div>
-        <button
+        <IconButton
           ref={toggleRef}
-          type="button"
-          {...stylex.props(buttonStyles.reset, styles.button, styles.toggle)}
+          xstyle={styles.toggle}
           aria-label="Minimize software map hotkeys"
           aria-expanded="true"
           tabIndex={open ? 0 : -1}
           onClick={() => onOpenChange(false)}
         >
           <MinusIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
-        </button>
+        </IconButton>
       </div>
-      <button
+      <Button
         ref={collapsedButtonRef}
-        type="button"
-        {...stylex.props(
-          buttonStyles.reset,
-          styles.button,
-          styles.collapsedButton,
-          !open && styles.collapsedButtonShown,
-        )}
+        variant="ghost"
+        xstyle={[styles.collapsedButton, !open && styles.collapsedButtonShown]}
         aria-label="Show software map hotkeys"
         aria-expanded="false"
         tabIndex={open ? -1 : 0}
@@ -181,7 +175,7 @@ export function SoftwareMapHotkeysTab({
       >
         <span>Hotkeys</span>
         <PlusIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
-      </button>
+      </Button>
     </aside>
   );
 }
@@ -295,27 +289,11 @@ const styles = stylex.create({
   itemLabel: {
     color: tokens.inkFaint,
   },
-  button: {
-    display: "inline-flex",
-    alignItems: "center",
-    height: "100%",
-    color: {
-      default: tokens.inkFaint,
-      ":hover": tokens.ink,
-      ":focus-visible": tokens.ink,
-    },
-    cursor: "pointer",
-    outline: {
-      default: null,
-      ":focus-visible": `1px solid ${tokens.ruleSoft}`,
-    },
-    outlineOffset: { default: null, ":focus-visible": "-3px" },
-  },
   toggle: {
     flex: "0 0 28px",
-    justifyContent: "center",
     width: "28px",
-    padding: 0,
+    height: "100%",
+    borderRadius: 0,
     borderLeftWidth: "1px",
     borderLeftStyle: "solid",
     borderLeftColor: tokens.ruleSoft,
@@ -323,14 +301,9 @@ const styles = stylex.create({
   collapsedButton: {
     position: "absolute",
     inset: "0 auto 0 0",
-    gap: "6px",
-    padding: "0 10px",
-    color: {
-      default: tokens.inkMuted,
-      ":hover": tokens.ink,
-      ":focus-visible": tokens.ink,
-    },
-    font: "inherit",
+    height: "100%",
+    borderRadius: 0,
+    fontSize: fontSize.small,
     opacity: 0,
     pointerEvents: "none",
     transform: "translateY(-3px)",
