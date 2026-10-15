@@ -762,6 +762,7 @@ export type ReviewCanvasContent =
       // Moves the review to Trash and closes its canvas. Absent when the host does
       // not support deletion.
       trashReview?(uuid: string): Promise<void>;
+      markReviewRead?(uuid: string): Promise<void>;
       // Boards in Trash can be restored for 30 days or deleted.
       deleteReview?(uuid: string): Promise<void>;
       restoreReview?(uuid: string): Promise<void>;

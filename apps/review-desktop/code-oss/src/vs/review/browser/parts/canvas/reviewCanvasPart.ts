@@ -538,6 +538,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 							this.reviewTelemetryService.capture("review_deleted", { via: "home" });
 							return this.apiCatalog.trashReview(uuid);
 						},
+						markReviewRead: (uuid) => this.apiCatalog.attention(uuid, "view"),
 						deleteReview: (uuid) => {
 							this.reviewTelemetryService.capture("review_deleted", { via: "home" });
 							return this.apiCatalog.deleteReview(uuid);
