@@ -13,7 +13,7 @@ import { installedAttachScript, parseRemoteAttach, reviewRemoteAttachScript, typ
 import type { ReviewRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
 import type { ReviewRemoteInstallInput, ReviewRemoteInstallResult } from "./reviewRemoteInstaller.js";
 import { reviewRemoteVersionDir } from "./reviewRemoteInstallScript.js";
-import { judgeRemote, missingInstallTools, probeRemote, type ReviewRemoteProbe, type ReviewRemoteTarget } from "./reviewRemoteProbe.js";
+import { judgeRemote, missingInstallTools, probeRemote, REVIEW_REMOTE_PROBE_TIMEOUT, type ReviewRemoteProbe, type ReviewRemoteTarget } from "./reviewRemoteProbe.js";
 import { socksAnswers, socksForward, type ReviewSocksForward } from "./reviewSocksForward.js";
 import {
 	sshCancelForwardArgs,
@@ -623,7 +623,7 @@ export class ReviewRemoteHost {
 	}
 
 	private async masterAnswers(env: NodeJS.ProcessEnv): Promise<{ ok: boolean; stderr: string }> {
-		if (this.direct) return { ok: this.socksPort !== undefined && (await socksAnswers(this.socksPort)), stderr: "" };
+		if (this.direct) return { ok: this.socksPort !== undefined && (await socksAnswers(this.socksPort)), stderr: firstLines(this.masterStderr) };
 		const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
 		return { ok: check.code === 0, stderr: check.stderr };
 	}
@@ -635,7 +635,9 @@ export class ReviewRemoteHost {
 		if (!flow || mode === "never") return onPath;
 		const origin = flow.origin();
 		const script = await flow.script();
-		const probed = await probeRemote({ session: this.options.session, spawn: this.options.spawn, env, script, releases: origin && `${origin}/` });
+		// A direct probe logs in afresh, so it gets the connect allowance too.
+		const timeout = this.direct ? REVIEW_REMOTE_PROBE_TIMEOUT + this.timeouts.connect : undefined;
+		const probed = await probeRemote({ session: this.options.session, spawn: this.options.spawn, env, script, releases: origin && `${origin}/`, timeout });
 		if (stale()) return;
 		if ("error" in probed) throw unreachable(probed.error);
 		const { probe } = probed;
@@ -853,8 +855,11 @@ export class ReviewRemoteHost {
 			const socksPort = this.socksPort;
 			if (socksPort === undefined) throw unreachable("The SSH connection ended.");
 			const forward = await socksForward(socksPort, remote);
+			if (stale()) {
+				await forward.close();
+				throw unreachable("The SSH connection ended.");
+			}
 			this.socks.set(forward.port, forward);
-			if (stale()) throw unreachable("The SSH connection ended.");
 			return forward.port;
 		}
 		const port = await this.options.freePort();

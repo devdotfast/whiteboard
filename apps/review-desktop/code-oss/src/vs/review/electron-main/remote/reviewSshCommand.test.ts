@@ -68,6 +68,7 @@ test("only Windows and the development switch make sessions direct", () => {
 	assert.equal(reviewSshSharesConnections({}, "win32"), false);
 	assert.equal(reviewSshSharesConnections({ DEV_FAST_REVIEW_SSH_DIRECT: "1", VSCODE_DEV: "1" }, "linux"), false);
 	assert.equal(reviewSshSharesConnections({ DEV_FAST_REVIEW_SSH_DIRECT: "1" }, "linux"), true);
+	assert.equal(reviewSshSharesConnections({ DEV_FAST_REVIEW_SSH_DIRECT: "0", VSCODE_DEV: "1" }, "linux"), true);
 });
 
 test("a development config file is passed to every call, and ignored in a packaged build", () => {

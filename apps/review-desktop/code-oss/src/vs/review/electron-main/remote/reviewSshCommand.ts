@@ -29,7 +29,7 @@ export interface ReviewSshSession {
 }
 
 export function reviewSshSharesConnections(env: NodeJS.ProcessEnv = process.env, platform = process.platform): boolean {
-	return platform !== "win32" && !(env.VSCODE_DEV && env[REVIEW_SSH_DIRECT_ENV]);
+	return platform !== "win32" && !(env.VSCODE_DEV && env[REVIEW_SSH_DIRECT_ENV] === "1");
 }
 
 /** Connection sharing needs Unix sockets and a uid; Windows has neither. */
