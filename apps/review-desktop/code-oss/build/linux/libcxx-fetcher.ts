@@ -8,7 +8,7 @@
 import fs from 'fs';
 import path from 'path';
 import debug from 'debug';
-import extract from 'extract-zip';
+import { extract } from '@electron-internal/extract-zip';
 import { downloadArtifact } from '@electron/get';
 
 const root = path.dirname(path.dirname(import.meta.dirname));
