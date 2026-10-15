@@ -60,33 +60,6 @@ export function useReturnKey(enabled: boolean, onReturn: () => void) {
   }, [enabled, onReturn]);
 }
 
-/** `y` copies, as it yanks in vim: never while the reader types in a field. */
-export function useCopyKey(enabled: boolean, onCopy: () => void) {
-  useEffect(() => {
-    if (!enabled) return;
-
-    const keydown = (event: KeyboardEvent) => {
-      const target = event.target instanceof Element ? event.target : null;
-
-      if (
-        event.key !== "y" ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.altKey ||
-        event.repeat ||
-        target?.closest("textarea, input, select, [contenteditable]")
-      )
-        return;
-      event.preventDefault();
-      onCopy();
-    };
-
-    window.addEventListener("keydown", keydown);
-
-    return () => window.removeEventListener("keydown", keydown);
-  }, [enabled, onCopy]);
-}
-
 /** Where a screen outside first run goes back to, in place of its eyebrow. */
 export interface BackLink {
   label: string;

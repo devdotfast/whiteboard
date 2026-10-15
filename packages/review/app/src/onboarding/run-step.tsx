@@ -1,3 +1,4 @@
+import { AGENT_LOGOS } from "@canvas/agent-logos";
 import { RefreshIcon, SearchIcon } from "@canvas/icons";
 import { OptionMenu } from "@canvas/option-menu";
 import {
@@ -22,7 +23,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { OnboardingClient, OnboardingRunAgent } from "./onboarding-client";
-import { type BackLink, ScreenHeader, useCopyKey } from "./onboarding-parts";
+import { type BackLink, ScreenHeader } from "./onboarding-parts";
 import { onboardingStyles } from "./onboarding-styles";
 
 const PICK_FOLDER = "\0pick";
@@ -257,6 +258,7 @@ export function RunStep({
   };
 
   const agentName = agents.find((candidate) => candidate.id === agent)?.name;
+  const AgentLogo = agent ? AGENT_LOGOS[agent] : undefined;
 
   const canDraw =
     !starting &&
@@ -292,8 +294,6 @@ export function RunStep({
     if (!canCopy) return;
     onCopy(prompt.trim());
   }, [canCopy, onCopy, prompt]);
-
-  useCopyKey(canCopy, copy);
 
   // ⌘↵ draws from anywhere on the screen, the prompt included.
   useEffect(() => {
@@ -348,16 +348,7 @@ export function RunStep({
       >
         <div {...stylex.props(styles.project)}>
           <FolderIcon />
-          {discovered ? (
-            <>
-              <span {...stylex.props(styles.projectName)}>
-                {discovered.project.name}
-              </span>
-              <span {...stylex.props(styles.projectPath)}>
-                {discovered.project.path}
-              </span>
-            </>
-          ) : loading ? (
+          {loading && !discovered ? (
             <span
               aria-label="Looking for your projects"
               {...stylex.props(styles.projectPlaceholder)}
@@ -366,24 +357,43 @@ export function RunStep({
               <span {...stylex.props(styles.bar, styles.barWidth("240px"))} />
             </span>
           ) : (
-            <span {...stylex.props(styles.projectPath)}>
-              Choose a project to draw from
-            </span>
-          )}
-          {projects.length ? (
-            <OptionMenu
-              ariaLabel="Project"
-              triggerStyle={[buttonStyles.base, buttonStyles.secondary]}
-              value={discovered?.project.path}
-              options={projectOptions}
-              onChange={(value) =>
-                void (value === PICK_FOLDER ? pickFolder() : open(value))
-              }
-            >
-              Change
-            </OptionMenu>
-          ) : (
-            <Button onClick={() => void pickFolder()}>Choose a folder…</Button>
+            <>
+              {projects.length ? (
+                <OptionMenu
+                  ariaLabel="Project"
+                  align="start"
+                  triggerStyle={[buttonStyles.base, styles.projectTrigger]}
+                  value={discovered?.project.path}
+                  options={projectOptions}
+                  onChange={(value) =>
+                    void (value === PICK_FOLDER ? pickFolder() : open(value))
+                  }
+                >
+                  {discovered?.project.name ?? "Choose a project"}
+                </OptionMenu>
+              ) : discovered ? (
+                <span {...stylex.props(styles.projectName)}>
+                  {discovered.project.name}
+                </span>
+              ) : null}
+              <span
+                {...stylex.props(
+                  styles.projectPath,
+                  discovered && styles.projectPathEnd,
+                )}
+              >
+                {discovered
+                  ? discovered.project.path
+                  : projects.length
+                    ? null
+                    : "Choose a project to draw from"}
+              </span>
+              {projects.length ? null : (
+                <Button onClick={() => void pickFolder()}>
+                  Choose a folder…
+                </Button>
+              )}
+            </>
           )}
         </div>
         <div {...stylex.props(styles.card)}>
@@ -532,7 +542,6 @@ export function RunStep({
         {/* Two ways to draw: the reader's own agent, or one Whiteboard runs. */}
         <div {...stylex.props(styles.footer)}>
           <div {...stylex.props(styles.choice)}>
-            <span {...stylex.props(styles.label)}>Paste into your agent</span>
             <div {...stylex.props(styles.choiceRow)}>
               <Button
                 size="large"
@@ -541,7 +550,6 @@ export function RunStep({
                 onClick={copy}
               >
                 Copy prompt
-                <span {...stylex.props(styles.shortcut)}>y</span>
               </Button>
             </div>
           </div>
@@ -551,7 +559,6 @@ export function RunStep({
             <i {...stylex.props(styles.orRule)} />
           </div>
           <div {...stylex.props(styles.choice, styles.choiceHere)}>
-            <span {...stylex.props(styles.label)}>Draw it here</span>
             <div {...stylex.props(styles.choiceRow)}>
               {agents.length ? (
                 <OptionMenu
@@ -562,13 +569,18 @@ export function RunStep({
                     styles.picker,
                   ]}
                   value={agent}
-                  options={agents.map((candidate) => ({
-                    value: candidate.id,
-                    label: candidate.name,
-                  }))}
+                  options={agents.map((candidate) => {
+                    const Logo = AGENT_LOGOS[candidate.id];
+
+                    return {
+                      value: candidate.id,
+                      label: candidate.name,
+                      icon: <Logo />,
+                    };
+                  })}
                   onChange={(next: OnboardingRunAgent["id"]) => setAgent(next)}
                 >
-                  <span {...stylex.props(styles.agentDot)} />
+                  {AgentLogo ? <AgentLogo /> : null}
                   {agentName}
                 </OptionMenu>
               ) : loading ? null : (
@@ -672,7 +684,7 @@ const styles = stylex.create({
     alignItems: "center",
     gap: "14px",
     paddingBlock: "10px",
-    paddingInline: "12px 6px",
+    paddingInline: "12px",
     color: tokens.inkMuted,
   },
   projectName: {
@@ -680,6 +692,16 @@ const styles = stylex.create({
     fontSize: fontSize.reading,
     fontWeight: fontWeight.medium,
   },
+  // The name is the project menu; it reads as the name until hovered.
+  projectTrigger: {
+    marginInline: "-8px -6px",
+    paddingInline: "8px",
+    color: tokens.ink,
+    fontFamily: "inherit",
+    fontSize: fontSize.reading,
+  },
+  // The path sits at the row's end, after the name's menu.
+  projectPathEnd: { textAlign: "end" },
   projectPath: {
     flex: 1,
     overflow: "hidden",
@@ -950,12 +972,6 @@ const styles = stylex.create({
     width: "1px",
     flexGrow: 1,
     backgroundColor: tokens.rule,
-  },
-  agentDot: {
-    width: "8px",
-    height: "8px",
-    borderRadius: radius.round,
-    backgroundColor: tokens.changeAdded,
   },
   shortcut: { opacity: 0.7 },
 });

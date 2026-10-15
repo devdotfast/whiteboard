@@ -23,6 +23,7 @@ export function OptionMenu<T extends string>({
   triggerStyle,
   triggerProps,
   triggerRef,
+  align = "end",
   children,
 }: {
   ariaLabel: string;
@@ -32,6 +33,8 @@ export function OptionMenu<T extends string>({
   triggerStyle?: stylex.StyleXStyles;
   triggerProps?: { "aria-pressed"?: boolean };
   triggerRef?: RefCallback<HTMLButtonElement>;
+  /** Which edge of the trigger the menu lines up with. */
+  align?: "start" | "end";
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -103,7 +106,7 @@ export function OptionMenu<T extends string>({
           {...stylex.props(
             surfaceStyles.popover,
             menuStyles.popover,
-            menuStyles.end,
+            align === "end" && menuStyles.end,
             styles.options,
           )}
           onKeyDown={(event) => {
