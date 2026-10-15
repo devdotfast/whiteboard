@@ -1,4 +1,4 @@
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import {
   type ReviewHostStatus,
@@ -67,9 +67,7 @@ export function ConnectionChip() {
         ref={tooltip}
       >
         <span {...stylex.props(styles.text)}>{label}</span>
-        {spinning ? (
-          <RefreshIcon xstyle={[styles.icon, styles.spinning]} />
-        ) : null}
+        {spinning ? <RefreshIcon xstyle={styles.icon} spinning /> : null}
       </span>
     );
 
@@ -87,7 +85,7 @@ export function ConnectionChip() {
         {label}
       </span>
       {action === "retry" ? (
-        <RefreshIcon xstyle={[styles.icon, spinning && styles.spinning]} />
+        <RefreshIcon xstyle={styles.icon} spinning={!!spinning} />
       ) : (
         <span {...stylex.props(styles.action)}>{ACTION_WORDS[action]}</span>
       )}
@@ -160,12 +158,6 @@ export function HostWaiting({
   );
 }
 
-const REDUCED = "@media (prefers-reduced-motion: reduce)";
-
-const spin = stylex.keyframes({
-  to: { transform: "rotate(360deg)" },
-});
-
 const styles = stylex.create({
   chip: {
     display: "inline-flex",
@@ -229,11 +221,5 @@ const styles = stylex.create({
     flexShrink: 0,
     width: "13px",
     height: "13px",
-  },
-  spinning: {
-    animationName: { default: spin, [REDUCED]: "none" },
-    animationDuration: { default: motion.pulse, [REDUCED]: motion.instant },
-    animationTimingFunction: "linear",
-    animationIterationCount: "infinite",
   },
 });

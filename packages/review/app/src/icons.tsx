@@ -105,11 +105,14 @@ export function MinusIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
-export function RefreshIcon({ xstyle }: IconProps = {}): ReactElement {
+export function RefreshIcon({
+  xstyle,
+  spinning = false,
+}: IconProps & { spinning?: boolean } = {}): ReactElement {
   return (
     <svg
       aria-hidden="true"
-      {...stylex.props(styles.icon, xstyle)}
+      {...stylex.props(styles.icon, spinning && styles.spinning, xstyle)}
       focusable="false"
       viewBox="0 0 24 24"
     >
@@ -555,7 +558,15 @@ const drawIn = stylex.keyframes({
 
 const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 
+const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
+
 const styles = stylex.create({
+  spinning: {
+    animationName: { default: spin, [reducedMotion]: "none" },
+    animationDuration: motion.pulse,
+    animationTimingFunction: "linear",
+    animationIterationCount: "infinite",
+  },
   icon: {
     width: "15px",
     height: "15px",

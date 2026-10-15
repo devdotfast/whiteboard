@@ -67,10 +67,6 @@ const breathe = stylex.keyframes({
   "50%": { opacity: 0.45 },
 });
 
-const spin = stylex.keyframes({
-  to: { transform: "rotate(360deg)" },
-});
-
 /** The agents Whiteboard can run, best first. */
 const AGENT_ORDER: OnboardingRunAgent["id"][] = [
   "claude",
@@ -462,7 +458,7 @@ export function RunStep({
                 onClick={() => void refresh()}
                 aria-label="Refresh branches, worktrees and PRs"
               >
-                <RefreshIcon xstyle={refreshing && styles.refreshing} />
+                <RefreshIcon spinning={refreshing} />
               </IconButton>
             ) : null}
             {kinds.length > 1 ? (
@@ -707,12 +703,6 @@ function TargetRow({
 }
 
 const styles = stylex.create({
-  refreshing: {
-    animationName: { default: spin, [reducedMotion]: "none" },
-    animationDuration: motion.pulse,
-    animationTimingFunction: "linear",
-    animationIterationCount: "infinite",
-  },
   composer: {
     flex: "0 1 auto",
     minHeight: 0,
