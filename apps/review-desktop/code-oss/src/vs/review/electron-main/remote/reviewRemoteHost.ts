@@ -735,8 +735,8 @@ export class ReviewRemoteHost {
 		}
 	}
 
-	detectAgents(): Promise<ReviewRemoteAgent[] | undefined> {
-		if (this.agents) return Promise.resolve(this.agents);
+	detectAgents(refresh = false): Promise<ReviewRemoteAgent[] | undefined> {
+		if (this.agents && !refresh) return Promise.resolve(this.agents);
 		return (this.detecting ??= this.readAgents().finally(() => (this.detecting = undefined)));
 	}
 

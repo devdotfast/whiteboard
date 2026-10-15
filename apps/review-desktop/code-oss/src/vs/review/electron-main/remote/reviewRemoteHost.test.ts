@@ -1041,7 +1041,7 @@ test("a failed upgrade attaches the older version, which reports why, and Retry 
 	assert.match(ssh.of("wb-test-a", "exec")[1].input!, /--replace/);
 });
 
-test("agents are detected once after the first attach, with the installed CLI, and kept", async (t) => {
+test("agents are detected once after the first attach, with the installed CLI, and kept until asked again", async (t) => {
 	const port = await healthServer(t);
 	const { flow } = await installFlow(t, "always");
 	const attached = new Set<string>();
@@ -1057,6 +1057,8 @@ test("agents are detected once after the first attach, with the installed CLI, a
 	assert.match(detect.input!, new RegExp(`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' 'connect' '--detect' '--json'\n$`));
 	assert.deepEqual(await host.detectAgents(), [{ id: "pi", connected: false }]);
 	assert.equal(ssh.of("wb-test-a", "detect").length, 1, "the kept answer");
+	assert.deepEqual(await host.detectAgents(true), [{ id: "pi", connected: false }]);
+	assert.equal(ssh.of("wb-test-a", "detect").length, 2, "read again when asked");
 	assert.equal(ssh.of("wb-test-a", "connect").length, 0, "nothing changed on the host");
 	assert.deepEqual([...attached], [FAKE_SERVER_ID]);
 
@@ -1064,7 +1066,7 @@ test("agents are detected once after the first attach, with the installed CLI, a
 	await until(() => ssh.of("wb-test-a", "exec").length === 2);
 	await until(() => last()?.endpoint !== undefined);
 	await new Promise((resolve) => setTimeout(resolve, 20));
-	assert.equal(ssh.of("wb-test-a", "detect").length, 1);
+	assert.equal(ssh.of("wb-test-a", "detect").length, 2);
 });
 
 test("a hand-installed host detects with the CLI on its PATH", async (t) => {

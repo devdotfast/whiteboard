@@ -287,8 +287,8 @@ export class ReviewDesktopHost extends Disposable {
     return this.remoteHosts?.install(alias) ?? Promise.resolve();
   }
 
-  detectRemoteAgents(alias: string): Promise<ReviewRemoteAgent[] | undefined> {
-    return this.remoteHosts?.detectAgents(alias) ?? Promise.resolve(undefined);
+  detectRemoteAgents(alias: string, refresh?: boolean): Promise<ReviewRemoteAgent[] | undefined> {
+    return this.remoteHosts?.detectAgents(alias, refresh) ?? Promise.resolve(undefined);
   }
 
   connectRemoteAgents(alias: string, ids: readonly unknown[]): Promise<ReviewRemoteAgentResult[]> {

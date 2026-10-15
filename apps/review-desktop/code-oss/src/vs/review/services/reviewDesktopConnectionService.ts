@@ -77,7 +77,7 @@ export interface IReviewDesktopConnectionService {
 	retryRemoteHost(alias: string): Promise<void>;
 	getRemoteLanguageEndpoint(serverId: string): Promise<ReviewRemoteLanguageEndpoint | undefined>;
 	installRemoteHost(alias: string): Promise<void>;
-	detectRemoteAgents(alias: string): Promise<ReviewRemoteAgent[] | null>;
+	detectRemoteAgents(alias: string, refresh?: boolean): Promise<ReviewRemoteAgent[] | null>;
 	connectRemoteAgents(alias: string, agents: ReviewRemoteAgentId[]): Promise<ReviewRemoteAgentResult[]>;
 	uninstallRemoteHost(alias: string): Promise<void>;
 	getCliInstallStatus(): Promise<ReviewCliInstallStatus>;
@@ -253,8 +253,8 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("installRemoteHost", alias);
 	}
 
-	detectRemoteAgents(alias: string): Promise<ReviewRemoteAgent[] | null> {
-		return this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("detectRemoteAgents", alias);
+	detectRemoteAgents(alias: string, refresh?: boolean): Promise<ReviewRemoteAgent[] | null> {
+		return this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("detectRemoteAgents", refresh ? [alias, true] : alias);
 	}
 
 	connectRemoteAgents(alias: string, agents: ReviewRemoteAgentId[]): Promise<ReviewRemoteAgentResult[]> {

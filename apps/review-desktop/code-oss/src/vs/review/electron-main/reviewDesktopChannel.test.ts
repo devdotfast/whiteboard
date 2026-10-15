@@ -64,20 +64,21 @@ test("relays ssh prompts to the window and takes its answer", async () => {
 test("reads and connects a remote host's agents through the host, refusing malformed calls", async () => {
 	const calls: unknown[] = [];
 	const host = {
-		detectRemoteAgents: async (alias: string) => (calls.push(["detect", alias]), alias === "gpu" ? [{ id: "pi", connected: false }] : undefined),
+		detectRemoteAgents: async (alias: string, refresh: boolean) => (calls.push(["detect", alias, refresh]), alias === "gpu" ? [{ id: "pi", connected: false }] : undefined),
 		connectRemoteAgents: async (alias: string, ids: unknown[]) => (calls.push(["connect", alias, ids]), [{ id: "pi", connected: true, output: "" }]),
 	};
 	const channel = new ReviewDesktopChannel(host as never, { getWindows: () => [] } as never, () => false);
 
 	assert.deepEqual(await channel.call("", "detectRemoteAgents", "gpu"), [{ id: "pi", connected: false }]);
 	assert.equal(await channel.call("", "detectRemoteAgents", "devbox"), null);
+	assert.equal(await channel.call("", "detectRemoteAgents", ["devbox", true]), null);
 	assert.deepEqual(await channel.call("", "connectRemoteAgents", { alias: "gpu", agents: ["pi"] }), [{ id: "pi", connected: true, output: "" }]);
 	for (const bad of [undefined, "gpu", { alias: 7, agents: ["pi"] }, { alias: "gpu", agents: "pi" }, { alias: "gpu", agents: Array(17).fill("pi") }]) {
 		await assert.rejects(channel.call("", "connectRemoteAgents", bad), /Unknown agents/);
 	}
 	await assert.rejects(channel.call("", "detectRemoteAgents", 7), /Unknown agents/);
 
-	assert.deepEqual(calls, [["detect", "gpu"], ["detect", "devbox"], ["connect", "gpu", ["pi"]]]);
+	assert.deepEqual(calls, [["detect", "gpu", false], ["detect", "devbox", false], ["detect", "devbox", true], ["connect", "gpu", ["pi"]]]);
 });
 
 test("hands a window a remote machine's VS Code server by its server id, and nothing for anything else", async () => {

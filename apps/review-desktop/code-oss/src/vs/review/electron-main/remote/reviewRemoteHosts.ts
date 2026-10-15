@@ -175,8 +175,8 @@ export class ReviewRemoteHosts {
 		this.hosts.get(alias)?.retry();
 	}
 
-	detectAgents(alias: string): Promise<ReviewRemoteAgent[] | undefined> {
-		return this.hosts.get(alias)?.detectAgents() ?? Promise.resolve(undefined);
+	detectAgents(alias: string, refresh?: boolean): Promise<ReviewRemoteAgent[] | undefined> {
+		return this.hosts.get(alias)?.detectAgents(refresh) ?? Promise.resolve(undefined);
 	}
 
 	connectAgents(alias: string, ids: readonly unknown[]): Promise<ReviewRemoteAgentResult[]> {

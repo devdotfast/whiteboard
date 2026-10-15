@@ -597,7 +597,7 @@ export interface ReviewRemoteHostsSettings {
   set(aliases: string[]): Promise<string[]>;
   retry(alias: string): Promise<void>;
   install(alias: string): Promise<void>;
-  agents(alias: string): Promise<ReviewRemoteAgent[] | null>;
+  agents(alias: string, refresh?: boolean): Promise<ReviewRemoteAgent[] | null>;
   connectAgents(
     alias: string,
     agents: ReviewRemoteAgentId[],

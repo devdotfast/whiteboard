@@ -20,7 +20,7 @@ export function reviewRemoteHostsSettings(input: {
 		states: () => input.connection.readRemoteHosts(),
 		retry: (alias) => input.connection.retryRemoteHost(alias),
 		install: (alias) => input.connection.installRemoteHost(alias),
-		agents: (alias) => input.connection.detectRemoteAgents(alias),
+		agents: (alias, refresh) => input.connection.detectRemoteAgents(alias, refresh),
 		connectAgents: (alias, agents) => input.connection.connectRemoteAgents(alias, agents),
 		uninstall: (alias) => input.connection.uninstallRemoteHost(alias),
 		set: async (aliases) => {
