@@ -327,6 +327,9 @@ described below.
 
 - `src/vs/editor/browser/controller/editContext/native/nativeEditContextUtils.ts`:
   prevent browser scrolling when the native editor input gains focus.
+- `src/vs/platform/log/node/spdlogLog.ts`: without `@vscode/spdlog`, append
+  to the log file with `fs` instead of dropping every message. The remote
+  runtime bundle leaves spdlog out; Desktop has it.
 
 Compare a fresh checkout of the upstream commit with `code-oss/`, ignoring the
 vendor-time exclusions above. Every remaining difference must be covered by

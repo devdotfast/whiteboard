@@ -5,7 +5,7 @@
 
 import assert from 'node:assert/strict';
 import { ChildProcess, execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -184,7 +184,7 @@ test('a client that disconnects cleanly leaves the server running', async () => 
 	close(await handshake(target));
 });
 
-test('with auto-shutdown, the server exits once the last extension host leaves', async () => {
+test('with auto-shutdown, the server exits once the last extension host leaves, and logs it to a file without spdlog', async () => {
 	const idle = await startServer(['--enable-remote-auto-shutdown', '--reconnection-grace-time', '600', '--remote-auto-shutdown-without-delay']);
 	const connection = await handshake(idle.target);
 	await new Promise(resolve => setTimeout(resolve, 500));
@@ -198,6 +198,9 @@ test('with auto-shutdown, the server exits once the last extension host leaves',
 		});
 	});
 	assert.ok(exited, output);
+	const logsDir = join(root, 'data', 'data', 'logs');
+	const logs = readdirSync(logsDir, { recursive: true, encoding: 'utf8' }).filter(file => file.endsWith('remoteagent.log'));
+	assert.ok(logs.some(file => /ServerLifetime: all consumers inactive, shutting down/.test(readFileSync(join(logsDir, file), 'utf8'))), `no server wrote its shutdown under ${logsDir}`);
 });
 
 test('refuses a wrong connection token', async () => {

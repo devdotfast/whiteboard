@@ -203,6 +203,10 @@ export async function buildRemoteRuntime({
 
   await buildBuiltinExtensions(out);
 
+  // The bundle keeps localize calls unbuilt, so the messages table is never
+  // read; an empty one spares every process an error at start.
+  fs.writeFileSync(path.join(out, "out/nls.messages.json"), "[]\n");
+
   return { out, commit };
 }
 
