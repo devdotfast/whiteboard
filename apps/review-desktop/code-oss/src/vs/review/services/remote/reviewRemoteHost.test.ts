@@ -90,11 +90,14 @@ test("the host is busy once its connect, first activation or reported work lasts
 	const { target } = host([() => connected.value]);
 	const changes: boolean[] = [];
 	target.onDidChangeBusy(() => changes.push(target.busy));
+	let settles = 0;
+	target.onDidSettle(() => settles++);
 
 	await target.connect();
 	await target.track(Promise.resolve());
 	mock.timers.tick(1_000);
 	assert.deepEqual(changes, [], "quick work never shows");
+	assert.equal(settles, 1, "quick work still settles");
 
 	const activation = target.activateByEvent("onLanguage:rust");
 	mock.timers.tick(300);

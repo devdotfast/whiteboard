@@ -93,9 +93,13 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	private readonly idle = this._register(new RunOnceScheduler(() => {
 		this.show.cancel();
 		this.report(false);
+		this.settled.fire();
 	}, IDLE_MS));
 	private readonly busyChanged = this._register(new Emitter<void>());
 	readonly onDidChangeBusy = this.busyChanged.event;
+	private readonly settled = this._register(new Emitter<void>());
+	/** All work has stopped, whether or not it lasted long enough to count as busy. */
+	readonly onDidSettle = this.settled.event;
 
 	constructor(
 		readonly serverId: string,

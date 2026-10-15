@@ -25,7 +25,7 @@ export interface IReviewRemoteHostsService {
 	readonly _serviceBrand: undefined;
 	host(serverId: string): Promise<IReviewRemoteHost | undefined>;
 	readonly onDidChangeBusy: Event<void>;
-	readonly busy: boolean;
+	readonly onDidSettle: Event<void>;
 	isBusy(alias: string): boolean;
 }
 
@@ -41,6 +41,8 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 	private readonly aliases = new Map<string, string>();
 	private readonly busyChanged = this._register(new Emitter<void>());
 	readonly onDidChangeBusy = this.busyChanged.event;
+	private readonly settled = this._register(new Emitter<void>());
+	readonly onDidSettle = this.settled.event;
 	private closing = false;
 
 	constructor(
@@ -64,13 +66,10 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 		if (!host) {
 			host = new ReviewRemoteHost(serverId, authority, (target) => this.open(target), () => this.endpoint(serverId), this.logService);
 			this._register(host.onDidChangeBusy(() => this.busyChanged.fire()));
+			this._register(host.onDidSettle(() => this.settled.fire()));
 			this.hosts.set(authority, host);
 		}
 		return (await host.connect()) ? host : undefined;
-	}
-
-	get busy(): boolean {
-		return [...this.hosts.values()].some((host) => host.busy);
 	}
 
 	isBusy(alias: string): boolean {
