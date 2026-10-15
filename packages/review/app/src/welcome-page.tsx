@@ -1,9 +1,10 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { Button, buttonStyles } from "@canvas/ui/button";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
-import { CheckIcon, DisclosureChevron, DrawnCheckIcon } from "@canvas/ui/icons";
+import { CheckIcon, DrawnCheckIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import { welcomeType } from "@canvas/welcome-page.stylex";
 import {
@@ -400,6 +401,7 @@ export function WelcomePage({
                         chevronMarker,
                         focusStyles.ringInset,
                         buttonStyles.reset,
+                        disclosureStyles.toggle,
                         styles.stepHeader,
                       )}
                       disabled={step.disabled}
@@ -425,10 +427,7 @@ export function WelcomePage({
                           {step.note}
                         </span>
                       ) : null}
-                      <DisclosureChevron
-                        expanded={open}
-                        xstyle={styles.stepChevron}
-                      />
+                      <DisclosureChevron xstyle={styles.stepChevron} />
                     </button>
                     {open ? (
                       <div {...stylex.props(styles.stepBody)}>{step.body}</div>
@@ -618,13 +617,11 @@ const styles = stylex.create({
     color: "inherit",
     cursor: { default: "pointer", ":disabled": "not-allowed" },
     opacity: { default: null, ":disabled": 0.5 },
-    textAlign: "left",
     font: "inherit",
   },
   // The chevron closes the row: it sits in the trailing lane, after the note.
   stepChevron: {
     margin: "2px 2px 2px auto",
-    stroke: tokens.inkMuted,
   },
   badge: {
     display: "flex",

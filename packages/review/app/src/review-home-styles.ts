@@ -160,8 +160,6 @@ export const styles = stylex.create({
     font: "inherit",
     fontSize: fontSize.ui,
     fontWeight: fontWeight.medium,
-    textAlign: "left",
-    cursor: "pointer",
   },
   slot: { display: "inline-flex", justifyContent: "center" },
   dot: {

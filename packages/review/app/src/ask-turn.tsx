@@ -1,8 +1,9 @@
 import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
-import { CheckIcon, CloseIcon, DisclosureChevron } from "@canvas/ui/icons";
+import { CheckIcon, CloseIcon } from "@canvas/ui/icons";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
 import type { AskEntry, AskThreadState } from "@review/ask/thread-state";
@@ -318,6 +319,7 @@ function AskToolItem({ activity }: { activity: Activity }): ReactElement {
           {...stylex.props(
             chevronMarker,
             buttonStyles.reset,
+            disclosureStyles.toggle,
             styles.toolHead,
             focusStyles.ringInset,
             styles.toolHeadButton,
@@ -326,7 +328,7 @@ function AskToolItem({ activity }: { activity: Activity }): ReactElement {
           onClick={() => setOpen((value) => !value)}
         >
           {head}
-          <DisclosureChevron expanded={open} />
+          <DisclosureChevron />
         </button>
       ) : (
         <div {...stylex.props(buttonStyles.reset, styles.toolHead)}>{head}</div>
@@ -369,6 +371,7 @@ function AskToolGroup({
           chevronMarker,
           focusStyles.ring,
           buttonStyles.reset,
+          disclosureStyles.toggle,
           styles.summary,
           failed && styles.summaryFailed,
         )}
@@ -376,7 +379,7 @@ function AskToolGroup({
         onClick={() => setOpen((value) => !value)}
       >
         <span>{summarize(activities)}</span>
-        <DisclosureChevron expanded={open} xstyle={styles.summaryChevron} />
+        <DisclosureChevron xstyle={styles.summaryChevron} />
       </button>
       {open ? (
         <ul {...stylex.props(styles.toolList)}>
@@ -721,9 +724,6 @@ const styles = stylex.create({
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
     lineHeight: "20px",
-    // Buttons center their text, which shows once a long summary wraps.
-    textAlign: "left",
-    cursor: "pointer",
   },
   // Centered on the summary's first 20px line.
   summaryChevron: {
@@ -768,7 +768,6 @@ const styles = stylex.create({
       ":hover": tokens.ink,
       ":focus-visible": tokens.ink,
     },
-    cursor: "pointer",
   },
   toolLabel: {
     flex: "1 1 auto",
