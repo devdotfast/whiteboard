@@ -1179,6 +1179,8 @@ export class LocalReviewData {
       target: { kind: "commits", repositoryId, head, base },
       pins: { repositoryId, base, head },
       title: pullRequest.title.trim(),
+      branch: pullRequest.headBranch,
+      baseBranch: pullRequest.baseRefName,
     };
   }
   async pullRequestTitle(url: string) {

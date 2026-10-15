@@ -1759,6 +1759,7 @@ describe("create for a pull request", () => {
       target: { kind: "commits", ...pins },
       pins,
       title: "From GitHub",
+      baseBranch: "main",
     }));
 
     providers.resolvePullRequest = resolvePullRequest;

@@ -224,6 +224,8 @@ export interface ResolvedPullRequest {
   pins: Pins;
   /** Empty when the PR has none. */
   title: string;
+  branch?: string;
+  baseBranch: string;
 }
 
 export interface ReviewProviders {
@@ -1308,6 +1310,13 @@ export class ReviewStore {
           snapshot.origin = { ...snapshot.origin, branch };
         }
       }
+
+      if (!requestedTarget && fromPullRequest)
+        snapshot.origin = {
+          ...snapshot.origin,
+          branch: fromPullRequest.branch ?? snapshot.origin?.branch,
+          baseBranch: fromPullRequest.baseBranch,
+        };
 
       // A base named rather than given as a commit; a stacked review names
       // the branch below it.

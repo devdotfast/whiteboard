@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { resolveReviewStackLayers } from "@review/review-stack.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { azureDevOpsProvider } from "./azure-devops-provider.js";
@@ -291,8 +292,9 @@ describe("creating a review from a pull request URL alone", () => {
         base: fork,
         head: upstreamHead(),
       },
-      origin: { pullRequestUrl: url, pullRequestNumber: 7 },
+      origin: { pullRequestUrl: url, pullRequestNumber: 7, baseBranch: "main" },
     });
+    expect(snapshot.origin).not.toHaveProperty("branch");
     expect(await local.data.changes(snapshot.pins!, "feature.ts")).toContain(
       "+export const feature = 1;",
     );
@@ -462,8 +464,64 @@ describe("creating a review from a pull request URL alone", () => {
     expect(local.store.read(reviewId)).toMatchObject({
       title: "Add widgets",
       pins: { repositoryId, base: fork, head: upstreamHead() },
-      origin: { pullRequestUrl: azure, pullRequestNumber: 7 },
+      origin: {
+        pullRequestUrl: azure,
+        pullRequestNumber: 7,
+        branch: "feature",
+        baseBranch: "main",
+      },
     });
+  });
+
+  it("stacks same-repository PRs by their branches without GitHub stacks", async () => {
+    const up = gitIn(upstream);
+    up("checkout", "-q", "-b", "lower");
+    commit(upstream, "lower.ts", "export const lower = 1;\n");
+    up("update-ref", "refs/pull/8/head", "HEAD");
+    up("checkout", "-q", "-b", "upper");
+    commit(upstream, "upper.ts", "export const upper = 1;\n");
+    up("update-ref", "refs/pull/9/head", "HEAD");
+    up("checkout", "-q", "main");
+    await local.data.register(checkout);
+
+    const create = (number: number, head: string, base: string) => {
+      pr = {
+        number,
+        title: `PR ${number}`,
+        baseRefName: base,
+        headRefName: head,
+        isCrossRepository: false,
+      };
+
+      return local.store.execute(
+        command({
+          type: "create",
+          pullRequestUrl: `https://github.com/acme/widget/pull/${number}`,
+        }),
+      );
+    };
+
+    await create(8, "lower", "main");
+    const { reviewId } = await create(9, "upper", "lower");
+
+    expect(local.store.read(reviewId).origin).toMatchObject({
+      branch: "upper",
+      baseBranch: "lower",
+    });
+
+    const layers = await resolveReviewStackLayers(
+      { ...local.store.read(reviewId), reviewId },
+      local.store.list(),
+      {
+        runGitHubApi: () => Promise.reject(new Error("stacks unavailable")),
+        repositoryPath: checkout,
+      },
+    );
+
+    expect(layers).toMatchObject([
+      { branch: "lower", relation: "earlier" },
+      { branch: "upper", relation: "current" },
+    ]);
   });
 
   it("uses an explicit target, asking GitHub only for the PR's title", async () => {
