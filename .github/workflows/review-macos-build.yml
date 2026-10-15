@@ -220,13 +220,13 @@ jobs:
         run: |
           while true; do
             CONCLUSION=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest&per_page=100" \
-              --jq '.jobs[] | select(.name | endswith("Compile Darwin payload on Linux")) | .conclusion // empty')
+              --jq '.jobs[] | select(.name | endswith("Compile Darwin payload on Linux")) | .conclusion // empty') || { sleep 10; continue; }
             if [ -n "$CONCLUSION" ] && [ "$CONCLUSION" != success ]; then
               echo "::error::Darwin compilation finished (${CONCLUSION})."
               exit 1
             fi
             ARTIFACT_ID=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
-              --jq ".artifacts[] | select(.name == \"${PAYLOAD_NAME}\" and .expired == false) | .id")
+              --jq ".artifacts[] | select(.name == \"${PAYLOAD_NAME}\" and .expired == false) | .id") || { sleep 10; continue; }
             if [ -n "$ARTIFACT_ID" ]; then
               echo "artifact-id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
               break
