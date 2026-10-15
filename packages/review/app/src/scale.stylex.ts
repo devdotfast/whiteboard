@@ -16,6 +16,52 @@ export const fontSize = stylex.defineConsts({
   display: "22px",
 });
 
+// Line heights. Unitless steps scale with the font; px steps set a fixed line
+// box for rows and controls.
+export const leading = stylex.defineConsts({
+  none: "1",
+  tight: "1.3",
+  normal: "1.5",
+  relaxed: "1.6",
+  // Document prose.
+  prose: "1.72",
+  px14: "14px",
+  px16: "16px",
+  px18: "18px",
+  px20: "20px",
+  px22: "22px",
+  px24: "24px",
+  px26: "26px",
+  px28: "28px",
+  px32: "32px",
+});
+
+// Padding, margin, gap and inset, named by size: a 2px grid to 20px, coarser
+// above. Offsets of a pixel or less (border overlaps) stay literal.
+export const space = stylex.defineConsts({
+  s2: "2px",
+  s4: "4px",
+  s6: "6px",
+  s8: "8px",
+  s10: "10px",
+  s12: "12px",
+  s14: "14px",
+  s16: "16px",
+  s18: "18px",
+  s20: "20px",
+  s24: "24px",
+  s28: "28px",
+  s32: "32px",
+  s36: "36px",
+  s40: "40px",
+  s48: "48px",
+  s56: "56px",
+  s72: "72px",
+  s96: "96px",
+  s120: "120px",
+  s160: "160px",
+});
+
 export const fontWeight = stylex.defineConsts({
   regular: "400",
   medium: "500",

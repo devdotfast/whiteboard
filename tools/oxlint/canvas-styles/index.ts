@@ -36,11 +36,49 @@ const fontCheck: ScaleCheck = {
     text.split(/\s+/).some((word) => /^\d+(\.\d+)?px(\/|$)/.test(word) || /^\d{3}$/.test(word)),
 };
 
+// The `/line-height` part of the `font` shorthand.
+const fontLeadingCheck: ScaleCheck = {
+  scale: "leading",
+  matches: (text) => /\/\d/.test(text),
+};
+
+// The words of a value outside function calls: `calc()`, `max()` and `anchor()`
+// mix units and tokens, so their literals stay.
+function bareWords(text: string): string[] {
+  let outside = text;
+
+  for (let previous = ""; previous !== outside; ) {
+    previous = outside;
+    outside = outside.replace(/[\w-]*\([^()]*\)/g, " ");
+  }
+
+  return outside.split(/\s+/).filter(Boolean);
+}
+
+// StyleX reads a bare number as px. Hairline offsets of a pixel or less stay literal.
+const spacingCheck: ScaleCheck = {
+  scale: "space",
+  matches: (text) =>
+    bareWords(text).some((word) => {
+      const length = /^-?(\d+(\.\d+)?)(px)?$/.exec(word);
+
+      return length !== null && Number(length[1]) > 1;
+    }),
+};
+
+const spacingProperty =
+  /^(padding|margin|inset)(Top|Right|Bottom|Left|(Inline|Block)(Start|End)?)?$|^(gap|rowGap|columnGap|top|right|bottom|left)$/;
+
+const leadingCheck: ScaleCheck = {
+  scale: "leading",
+  matches: (text) => /^\d+(\.\d+)?(px)?$/.test(text),
+};
+
 const checks = new Map<string, ScaleCheck>([
   // StyleX reads a bare number as px.
   ["fontSize", { scale: "fontSize", matches: (text) => px.test(text) || number.test(text) }],
   ["fontWeight", { scale: "fontWeight", matches: (text) => number.test(text) }],
-  ["font", fontCheck],
+  ["lineHeight", leadingCheck],
   ["borderRadius", radiusCheck],
   ["borderTopLeftRadius", radiusCheck],
   ["borderTopRightRadius", radiusCheck],
@@ -61,6 +99,15 @@ const checks = new Map<string, ScaleCheck>([
     { scale: "tracking", matches: (text) => /\d(em|px)$/.test(text) && !zero.test(text) },
   ],
 ]);
+
+function checksFor(name: string): ScaleCheck[] {
+  if (spacingProperty.test(name)) return [spacingCheck];
+
+  if (name === "font") return [fontCheck, fontLeadingCheck];
+  const check = checks.get(name);
+
+  return check === undefined ? [] : [check];
+}
 
 function propertyName(property: ESTree.ObjectProperty): string | null {
   const key = property.key;
@@ -105,8 +152,8 @@ function importOf(sourceCode: SourceCode, identifier: ESTree.IdentifierReference
 }
 
 // `stylex.create(...)` through any namespace or default name, or a named `create`.
-function isStylexCreate(sourceCode: SourceCode, node: ESTree.Node): boolean {
-  if (node.type !== "CallExpression") return false;
+function isStylexCreate(sourceCode: SourceCode, node: ESTree.Node | null): boolean {
+  if (node?.type !== "CallExpression") return false;
   const callee = node.callee;
 
   if (callee.type === "Identifier") {
@@ -156,7 +203,7 @@ function literalTexts(value: ESTree.Node): string[] {
   return [];
 }
 
-/** Flag literal type, radius, layer, motion, elevation and tracking values in stylex.create. */
+/** Flag literal type, leading, space, radius, layer, motion, elevation and tracking values in stylex.create. */
 const scaleLiteralsRule = defineRule({
   meta: {
     type: "suggestion",
@@ -172,17 +219,27 @@ const scaleLiteralsRule = defineRule({
     return {
       Property(node) {
         const name = propertyName(node);
-        const check = name === null ? undefined : checks.get(name);
+        const nameChecks = name === null ? [] : checksFor(name);
 
-        if (check === undefined || !insideStylexCreate(context.sourceCode, node)) return;
-        const offending = literalTexts(node.value).find((text) => check.matches(text.trim()));
+        // A namespace's name is not a property, whatever it is called.
+        if (
+          nameChecks.length === 0 ||
+          isStylexCreate(context.sourceCode, node.parent.parent) ||
+          !insideStylexCreate(context.sourceCode, node)
+        ) {
+          return;
+        }
 
-        if (offending !== undefined) {
-          context.report({
-            node: node.value,
-            messageId: "literal",
-            data: { scale: check.scale, value: offending },
-          });
+        for (const check of nameChecks) {
+          const offending = literalTexts(node.value).find((text) => check.matches(text.trim()));
+
+          if (offending !== undefined) {
+            context.report({
+              node: node.value,
+              messageId: "literal",
+              data: { scale: check.scale, value: offending },
+            });
+          }
         }
       },
     };
