@@ -57,7 +57,6 @@ import { z } from "zod";
 import { checkoutFs } from "./checkout-fs.js";
 import {
   type ComparisonCoverage,
-  type CoverageMode,
   comparisonCoverage,
 } from "./comparison-coverage.js";
 import { resourceReference } from "./document.js";
@@ -1487,8 +1486,8 @@ export class LocalReviewData {
   }
 
   /** Start shared coverage work without occupying an HTTP request until it completes. */
-  coveragePending(reviewId: string, pins: Pins, mode: CoverageMode): boolean {
-    const key = JSON.stringify([pins, mode]);
+  coveragePending(reviewId: string, pins: Pins): boolean {
+    const key = JSON.stringify(pins);
     const existing = this.coverageCache.get(key);
 
     if (existing?.state === "error") {
@@ -1496,14 +1495,14 @@ export class LocalReviewData {
       throw existing.error;
     }
 
-    void this.coverage(reviewId, pins, mode).catch(() => {});
+    void this.coverage(reviewId, pins).catch(() => {});
 
     return this.coverageCache.get(key)!.state === "pending";
   }
 
-  coverageSnapshot(reviewId: string, pins: Pins, mode: CoverageMode) {
-    const pending = this.coveragePending(reviewId, pins, mode);
-    const entry = this.coverageCache.get(JSON.stringify([pins, mode]))!;
+  coverageSnapshot(reviewId: string, pins: Pins) {
+    const pending = this.coveragePending(reviewId, pins);
+    const entry = this.coverageCache.get(JSON.stringify(pins))!;
 
     return {
       pending,
@@ -1527,8 +1526,8 @@ export class LocalReviewData {
     }, 50);
   }
 
-  coverage(reviewId: string, pins: Pins, mode: CoverageMode) {
-    const key = JSON.stringify([pins, mode]);
+  coverage(reviewId: string, pins: Pins) {
+    const key = JSON.stringify(pins);
     let entry = this.coverageCache.get(key);
 
     if (!entry || entry.state === "error") {
@@ -1536,7 +1535,6 @@ export class LocalReviewData {
         this,
         reviewId,
         pins,
-        mode,
         this.coverageAbort.signal,
         (partial) => {
           const current = this.coverageCache.get(key);
@@ -1569,23 +1567,18 @@ export class LocalReviewData {
           current.partial = value;
 
           if (!this.closed)
-            this.store.setDiffStats(
-              pins,
-              {
-                fileCount: value.files.length,
-                additions: value.files.reduce(
-                  (sum, file) =>
-                    sum + structuralChangeCounts(file.changed).added,
-                  0,
-                ),
-                deletions: value.files.reduce(
-                  (sum, file) =>
-                    sum + structuralChangeCounts(file.changed).removed,
-                  0,
-                ),
-              },
-              mode,
-            );
+            this.store.setDiffStats(pins, {
+              fileCount: value.files.length,
+              additions: value.files.reduce(
+                (sum, file) => sum + structuralChangeCounts(file.changed).added,
+                0,
+              ),
+              deletions: value.files.reduce(
+                (sum, file) =>
+                  sum + structuralChangeCounts(file.changed).removed,
+                0,
+              ),
+            });
           settled("ready");
         },
         (error) => settled("error", error),

@@ -158,10 +158,9 @@ export async function startFake(
     if (request.url?.startsWith("/reviews-api/watch")) {
       response.setHeader("content-type", "application/x-ndjson");
 
-      for (const mode of ["structural", "textual"])
-        response.write(
-          `${JSON.stringify({ kind: "list", mode, reviews: (options.reviewIds ?? []).map((reviewId) => summary(reviewId, reviewId)) })}\n`,
-        );
+      response.write(
+        `${JSON.stringify({ kind: "list", mode: "structural", reviews: (options.reviewIds ?? []).map((reviewId) => summary(reviewId, reviewId)) })}\n`,
+      );
 
       return;
     }

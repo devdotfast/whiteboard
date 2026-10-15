@@ -238,9 +238,7 @@ it("reads, resolves and retires a reference at its own pins in another repositor
     ).json(),
   ).toMatchObject({ text: expect.stringContaining("export const more = 2;") });
 
-  const progress = await (
-    await app.request(`/${reviewId}/progress?mode=textual`)
-  ).json();
+  const progress = await (await app.request(`/${reviewId}/progress`)).json();
 
   expect(
     progress.resolvedSelections[
@@ -619,11 +617,11 @@ it("lists the full repository path and hydrates diff counts from pinned commits"
     }),
   );
   const app = createReviewApi(local.store, local.data);
-  const first = await (await app.request("/?mode=textual")).json();
+  const first = await (await app.request("/")).json();
   expect(first[0].repositoryPath).toBe(realpathSync(repository));
   expect(first[0].diffStats).toBeNull();
-  await local.data.coverage(first[0].reviewId, pins, "textual");
-  const ready = await (await app.request("/?mode=textual")).json();
+  await local.data.coverage(first[0].reviewId, pins);
+  const ready = await (await app.request("/")).json();
   expect(ready[0].diffStats).toEqual({
     fileCount: 3,
     additions: 4,
@@ -633,8 +631,8 @@ it("lists the full repository path and hydrates diff counts from pinned commits"
   await local.store.execute(
     command({ type: "attention", reviewId: ready[0].reviewId, action: "view" }),
   );
-  await local.data.coverage(first[0].reviewId, pins, "textual");
-  expect(local.store.list("textual")[0]?.diffStats).toEqual(ready[0].diffStats);
+  await local.data.coverage(first[0].reviewId, pins);
+  expect(local.store.list()[0]?.diffStats).toEqual(ready[0].diffStats);
 });
 
 it("uses a managed pinned worktree for language services without changing local edits", async () => {

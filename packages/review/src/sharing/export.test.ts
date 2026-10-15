@@ -608,9 +608,7 @@ it("requires a pinned review before sharing saved worktree changes", async () =>
 
 it("counts a shared review's changed lines without a local review row", async () => {
   const { id, app } = await importFixture();
-  // Textual mode exercises this without shelling out to diffr, which other
-  // progress tests in this suite avoid the same way (see local-data.test.ts).
-  const response = await app.request(`/${id}/progress?mode=textual`);
+  const response = await app.request(`/${id}/progress`);
   expect(response.status).toBe(200);
   const progress = await response.json();
   expect(progress.complete).not.toBe(false);
@@ -622,18 +620,17 @@ it("counts a shared review's changed lines without a local review row", async ()
   );
 });
 
-it("lists and streams shared diff counts with the same mode and persistence as local reviews", async () => {
+it("lists and streams shared diff counts with the same persistence as local reviews", async () => {
   const { app, id, imported, recipient, local, reviewId, root } =
     await importFixture();
 
-  const readCatalog = async (mode: string) =>
-    await (await app.request(`/?mode=${mode}`)).json();
+  const readCatalog = async () => await (await app.request("/")).json();
 
-  expect((await readCatalog("textual"))[0].diffStats).toBeNull();
+  expect((await readCatalog())[0].diffStats).toBeNull();
 
   const response = await app.request(
     "/watch?subscriptions=" +
-      encodeURIComponent(JSON.stringify([{ reviewId: null, mode: "textual" }])),
+      encodeURIComponent(JSON.stringify([{ reviewId: null }])),
   );
 
   const reader = response.body!.getReader();
@@ -643,24 +640,15 @@ it("lists and streams shared diff counts with the same mode and persistence as l
 
   try {
     expect((await next()).reviews[0].diffStats).toBeNull();
-    expect((await app.request(`/${id}/progress?mode=textual`)).status).toBe(
-      200,
-    );
+    expect((await app.request(`/${id}/progress`)).status).toBe(200);
 
     const pins = local.store.read(reviewId).pins!;
-    await local.data.coverage(reviewId, pins, "textual");
-    const expected = local.store.list("textual")[0].diffStats;
+    await local.data.coverage(reviewId, pins);
+    const expected = local.store.list()[0].diffStats;
 
     expect(expected).toMatchObject({ fileCount: 4 });
     expect((await next()).reviews[0].diffStats).toEqual(expected);
-    expect((await readCatalog("textual"))[0].diffStats).toEqual(expected);
-    expect((await readCatalog("structural"))[0].diffStats).toBeNull();
-
-    const sharedPins = imported.get(id).snapshot.pins!;
-    const structural = { fileCount: 4, additions: 1, deletions: 1 };
-    recipient.store.setDiffStats(sharedPins, structural, "structural");
-    expect((await readCatalog("structural"))[0].diffStats).toEqual(structural);
-    expect((await readCatalog("textual"))[0].diffStats).toEqual(expected);
+    expect((await readCatalog())[0].diffStats).toEqual(expected);
 
     await recipient.data.close();
 
@@ -678,9 +666,9 @@ it("lists and streams shared diff counts with the same mode and persistence as l
       restored,
     );
 
-    expect(
-      (await (await restarted.request("/?mode=textual")).json())[0].diffStats,
-    ).toEqual(expected);
+    expect((await (await restarted.request("/")).json())[0].diffStats).toEqual(
+      expected,
+    );
   } finally {
     await reader.cancel();
   }

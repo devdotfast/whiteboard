@@ -70,7 +70,7 @@ import {
 } from "./request-origin.js";
 import {
   type UncategorizedReport,
-  coverageModeSchema,
+  legacyModeSchema,
   lensReport,
   progressUpdateSchema,
   reviewProgress,
@@ -300,23 +300,21 @@ export function createReviewApi(
     return snapshot;
   };
 
-  const catalog = (mode: "structural" | "textual" = "structural") => {
-    const local = store.list(mode);
+  const catalog = () => {
+    const local = store.list();
 
     return [
       ...(scratchpadEnabled()
         ? local
         : local.filter((summary) => summary.kind !== "scratchpad")),
-      ...(shared?.list(mode) ?? []),
+      ...(shared?.list() ?? []),
     ];
   };
 
   app.get("/", async (context) => {
     await ensureScratchpad();
 
-    return context.json(
-      catalog(coverageModeSchema.parse(context.req.query("mode"))),
-    );
+    return context.json(catalog());
   });
 
   // Server-owned state only: asking the Desktop canvas would let a stalled
@@ -350,7 +348,7 @@ export function createReviewApi(
     const query = readQuerySchemas.get
       .pick({ version: true })
       .extend({
-        mode: coverageModeSchema,
+        mode: legacyModeSchema,
         wait: z.enum(["false", "true"]).default("true"),
       })
       .parse(context.req.query());
@@ -363,11 +361,7 @@ export function createReviewApi(
         : undefined;
 
     if (documentPins) {
-      const state = data.coverageSnapshot(
-        snapshot.reviewId,
-        documentPins,
-        query.mode,
-      );
+      const state = data.coverageSnapshot(snapshot.reviewId, documentPins);
 
       if (state.pending)
         return context.json(
@@ -376,7 +370,6 @@ export function createReviewApi(
             data,
             snapshot,
             context.req.raw.signal,
-            query.mode,
             state.comparison,
           ),
           202,
@@ -384,13 +377,7 @@ export function createReviewApi(
     }
 
     return context.json(
-      await reviewProgress(
-        store,
-        data,
-        snapshot,
-        context.req.raw.signal,
-        query.mode,
-      ),
+      await reviewProgress(store, data, snapshot, context.req.raw.signal),
     );
   });
   app.post("/:id/progress", reviewAccess("edit"), async (context) => {
@@ -408,7 +395,7 @@ export function createReviewApi(
       ? (await data.resolveSource(snapshot)).pins
       : undefined;
 
-    const coverage = pins && data.coverageSnapshot(id, pins, input.mode);
+    const coverage = pins && data.coverageSnapshot(id, pins);
 
     const partial =
       coverage && coverage.pending ? coverage.comparison : undefined;
@@ -418,7 +405,6 @@ export function createReviewApi(
       data,
       snapshot,
       context.req.raw.signal,
-      input.mode,
       partial,
     );
 
@@ -451,7 +437,6 @@ export function createReviewApi(
         data,
         store.read(id, input.version),
         context.req.raw.signal,
-        input.mode,
         partial,
       ),
     );
@@ -527,24 +512,20 @@ export function createReviewApi(
       .array(
         z.strictObject({
           reviewId: z.string().min(1).nullable(),
-          mode: coverageModeSchema,
+          mode: legacyModeSchema,
         }),
       )
       .parse(input);
 
-    const modes = new Set(
-      subscriptions.flatMap((item) =>
-        item.reviewId === null ? [item.mode] : [],
-      ),
-    );
+    const lists = subscriptions.some((item) => item.reviewId === null);
 
     const reviewIds = new Set(
       subscriptions.flatMap((item) => item.reviewId ?? []),
     );
 
-    const dirtyModes = new Set(modes);
+    let dirtyList = lists;
     const dirtyReviews = new Set(reviewIds);
-    const sentLists = new Map<string, string>();
+    let sentList: string | undefined;
 
     const readReviewLine = (reviewId: string): ReviewStreamLine<Snapshot> => {
       try {
@@ -572,21 +553,21 @@ export function createReviewApi(
     const lines = () => {
       const pending: string[] = [];
 
-      for (const mode of dirtyModes) {
+      if (dirtyList) {
         const line = JSON.stringify({
           kind: "list",
-          mode,
-          reviews: catalog(mode),
+          mode: "structural",
+          reviews: catalog(),
         } satisfies ReviewStreamLine);
 
-        if (sentLists.get(mode) !== line) pending.push(line);
-        sentLists.set(mode, line);
+        if (sentList !== line) pending.push(line);
+        sentList = line;
       }
 
       for (const reviewId of dirtyReviews)
         pending.push(JSON.stringify(readReviewLine(reviewId)));
 
-      dirtyModes.clear();
+      dirtyList = false;
       dirtyReviews.clear();
 
       return pending;
@@ -600,9 +581,9 @@ export function createReviewApi(
     };
 
     const markLists = () => {
-      modes.forEach((mode) => dirtyModes.add(mode));
+      dirtyList ||= lists;
 
-      return modes.size > 0;
+      return lists;
     };
 
     return watch(lines, (notify) => {
@@ -1029,7 +1010,7 @@ export function createReviewApi(
   app.post("/:id/copy-context", reviewAccess("read"), async (context) => {
     const query = readQuerySchemas.get
       .pick({ version: true })
-      .extend({ mode: coverageModeSchema })
+      .extend({ mode: legacyModeSchema })
       .parse(context.req.query());
 
     const selection = AgentSelectionSchema.parse(

@@ -23,8 +23,6 @@ import type { Pins } from "./document.js";
 import { textualRows } from "./lens-alignment.js";
 import type { LocalReviewData } from "./local-data.js";
 
-export type CoverageMode = "structural" | "textual";
-
 const hash = (parts: (string | null)[]) =>
   createHash("sha256").update(JSON.stringify(parts)).digest("hex");
 
@@ -41,7 +39,6 @@ export async function comparisonCoverage(
   data: LocalReviewData,
   reviewId: string,
   pins: Pins,
-  mode: CoverageMode,
   signal: AbortSignal,
   publish?: (coverage: ComparisonCoverage) => void,
 ): Promise<ComparisonCoverage> {
@@ -132,14 +129,6 @@ export async function comparisonCoverage(
       changed,
       viewed: emptyCoverage(),
     });
-
-    if (mode === "textual")
-      publish?.({
-        counted: false,
-        files: [...files],
-        fileSources: new Map(fileSources),
-        alignments: new Map(alignments),
-      });
   }
 
   const coverage: ComparisonCoverage = {
@@ -148,8 +137,6 @@ export async function comparisonCoverage(
     alignments,
     counted: true,
   };
-
-  if (mode === "textual") return coverage;
 
   const unsupported = new Set<string>();
 

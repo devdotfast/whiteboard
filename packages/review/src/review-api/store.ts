@@ -60,6 +60,9 @@ import { initializeReviewStoreSchema } from "./store-schema.js";
 
 const reviewId = z.string().min(1);
 
+/** The key older hosts read and write. */
+const statsKey = (pins: Pins) => JSON.stringify([pins, "structural"]);
+
 /** There is one scratchpad. Its id is fixed so a skill can name it. */
 export const SCRATCHPAD_ID = SCRATCHPAD_REVIEW_ID;
 
@@ -915,17 +918,13 @@ export class ReviewStore {
 
     return snapshot;
   }
-  setDiffStats(
-    pins: Pins,
-    stats: NonNullable<ReviewApiSummary["diffStats"]>,
-    mode: "structural" | "textual" = "structural",
-  ) {
+  setDiffStats(pins: Pins, stats: NonNullable<ReviewApiSummary["diffStats"]>) {
     if (this.closing) return;
     this.db
       .prepare(
         "INSERT OR REPLACE INTO comparison_stats(identity, stats) VALUES (?, ?)",
       )
-      .run(JSON.stringify([pins, mode]), JSON.stringify(stats));
+      .run(statsKey(pins), JSON.stringify(stats));
 
     for (const listener of this.catalogListeners) {
       try {
@@ -946,17 +945,14 @@ export class ReviewStore {
       .map((row) => String(row.id));
   }
 
-  list(mode: "structural" | "textual" = "structural"): ReviewApiSummary[] {
-    return this.summaries(mode);
+  list(): ReviewApiSummary[] {
+    return this.summaries();
   }
   /** One review's catalog entry, as review_list shows it. */
   summary(id: string): ReviewApiSummary | undefined {
-    return this.summaries("structural", id)[0];
+    return this.summaries(id)[0];
   }
-  private summaries(
-    mode: "structural" | "textual",
-    id?: string,
-  ): ReviewApiSummary[] {
+  private summaries(id?: string): ReviewApiSummary[] {
     // One query, and the document never leaves SQLite: every catalog watcher
     // re-lists on every command.
 
@@ -1021,14 +1017,11 @@ export class ReviewStore {
         return listed;
       });
 
-    return this.withDiffStats(reviews, mode);
+    return this.withDiffStats(reviews);
   }
 
-  /** Local and imported summaries use the same persisted, mode-specific counts. */
-  withDiffStats<T extends ReviewApiSummary>(
-    reviews: T[],
-    mode: "structural" | "textual" = "structural",
-  ): T[] {
+  /** Local and imported summaries use the same persisted counts. */
+  withDiffStats<T extends ReviewApiSummary>(reviews: T[]): T[] {
     const stats = new Map(
       this.db
         .prepare("SELECT identity, stats FROM comparison_stats")
@@ -1045,7 +1038,7 @@ export class ReviewStore {
     return reviews.map((review) => ({
       ...review,
       diffStats: review.pins
-        ? (stats.get(JSON.stringify([review.pins, mode])) ?? null)
+        ? (stats.get(statsKey(review.pins)) ?? null)
         : null,
     }));
   }

@@ -381,7 +381,7 @@ it("keeps a local review on this machine when a remote lists its id, for every r
   detaches.push(() => abort.abort());
 
   for await (const line of client.watch(
-    [{ reviewId: onLocal, mode: "structural" }],
+    [{ reviewId: onLocal }],
     abort.signal,
   )) {
     expect(line).toMatchObject({

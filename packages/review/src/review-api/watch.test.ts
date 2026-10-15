@@ -4,7 +4,10 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { ReviewStreamLine } from "@dev.fast/review-protocol";
+import {
+  type ReviewStreamLine,
+  STRUCTURAL_DIFF_WIRE_VERSION,
+} from "@dev.fast/review-protocol";
 import { getRequestListener } from "@hono/node-server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -147,6 +150,15 @@ it("sends a list line only for what changed in the list", async () => {
     _pins: typeof pins,
     file?: string,
   ) => (file ? "" : [])) as typeof data.changes);
+  vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
+    yield {
+      type: "start",
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
+      lhs: { type: "revision", rev: "base" },
+      rhs: { type: "revision", rev: "head" },
+      files: [],
+    };
+  });
 
   const stream = await open(
     [{ reviewId: null }, { reviewId: a }, { reviewId: b }],
@@ -161,9 +173,9 @@ it("sends a list line only for what changed in the list", async () => {
     `review:${a}:value`,
   ]);
 
-  await data.coverage(a, pins, "textual");
-  expect((await stream.take(2)).map(label).sort()).toEqual(
-    [`review:${a}:value`, `review:${b}:value`].sort(),
+  await data.coverage(a, pins);
+  expect((await stream.take(3)).map(label).sort()).toEqual(
+    ["list:structural", `review:${a}:value`, `review:${b}:value`].sort(),
   );
   store.invalidateCatalog();
 

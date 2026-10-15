@@ -44,7 +44,7 @@ afterEach(async () => {
 
 type Api = <T>(route: string, init?: RequestInit) => Promise<T>;
 
-type Subscription = { reviewId: string | null; mode?: "structural" };
+type Subscription = { reviewId: string | null };
 
 function follow(url: string, subscriptions: Subscription[]) {
   const client = new ReviewApiClient({ serverUrl: url, token: "local-token" });

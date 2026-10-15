@@ -45,7 +45,6 @@ const summary = (list: ReviewApiSummary[]) =>
 
 it("lists this machine first, then each machine in the setting's order", () => {
   const merged = mergeLists(
-    "structural",
     [entry("local")],
     source(
       [
@@ -69,7 +68,6 @@ it("lists this machine first, then each machine in the setting's order", () => {
 
 it("offers language features and Source windows only for an online host whose Desktop reported language features", () => {
   const merged = mergeLists(
-    "structural",
     [],
     source(
       [
@@ -91,7 +89,6 @@ it("offers language features and Source windows only for an online host whose De
 
 it("lists a server two aliases share once, under the first, offline", () => {
   const merged = mergeLists(
-    "structural",
     [],
     source(
       [
@@ -107,7 +104,6 @@ it("lists a server two aliases share once, under the first, offline", () => {
 
 it("puts the alias in front of the group key and keeps the label", () => {
   const [merged] = mergeLists(
-    "structural",
     [],
     source(
       [{ alias: "a", serverId: "A", state: "online" }],
@@ -130,7 +126,6 @@ it("puts the alias in front of the group key and keeps the label", () => {
 
 it("keeps the last list of a host that is connecting, offline, incompatible or unreachable, with its state", () => {
   const merged = mergeLists(
-    "structural",
     [],
     source(
       [
@@ -178,7 +173,7 @@ it("gives an id to this machine, then to the first host in the setting's order t
     ["A"],
   );
 
-  expect(summary(mergeLists("structural", [shared], lists))).toEqual([
+  expect(summary(mergeLists([shared], lists))).toEqual([
     ["mine", undefined, undefined],
     ["b's", "b", "offline"],
   ]);
@@ -187,7 +182,6 @@ it("gives an id to this machine, then to the first host in the setting's order t
 
 it("says why Source windows are off: the host's sentence while it is down, else the language features detail", () => {
   const merged = mergeLists(
-    "structural",
     [],
     source(
       [

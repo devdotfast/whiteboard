@@ -8,7 +8,7 @@ import {
   STRUCTURAL_DIFF_WIRE_VERSION,
   type StructuralSource,
 } from "@dev.fast/review-protocol";
-import { anchorSelection, rangeAnchor } from "@review/lens-selection.js";
+import { rangeAnchor } from "@review/lens-selection.js";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { GlobalReviewDesktopVerbRelay } from "@review/server/global-verb-relay.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -2375,14 +2375,13 @@ it("preserves unchanged partial file coverage across pins and rejects stale writ
   const api = createReviewApi(store, data);
   const initial = await reviewProgress(store, data, store.read(reviewId));
 
-  await data.coverage(reviewId, pins, "structural");
+  await data.coverage(reviewId, pins);
   expect(store.list()[0].diffStats).toEqual({
     fileCount: 1,
     additions: 1,
     deletions: 1,
   });
   expect(data.structuralChanges).toHaveBeenCalledTimes(1);
-  expect(store.list("textual")[0].diffStats).toBeNull();
 
   const mark = (fingerprint: string, version: number) =>
     api.request(`/${reviewId}/progress`, {
@@ -2549,7 +2548,7 @@ it("still reports structural read failures", async () => {
   ).rejects.toThrow("Cannot count a.ts: unreadable");
 });
 
-it("textual coverage uses Git ranges without launching diffr", async () => {
+it("counts structural coverage without waiting for summary events", async () => {
   const { createReviewApi } = await import("./http.js");
   const { coverageProgress } = await import("@review/viewed-coverage.js");
   const { reviewId } = await create();
@@ -2574,26 +2573,7 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
     text: side === "head" ? "const x = 1;" : "const x=1;",
   }));
   const structural = vi.spyOn(data, "structuralChanges");
-
-  const response = await createReviewApi(store, data).request(
-    `/${reviewId}/progress?mode=textual`,
-  );
-
-  expect(response.status).toBe(200);
-  const progress = await response.json();
-  expect(coverageProgress(progress.files).total).toEqual({
-    additions: 1,
-    deletions: 1,
-  });
-  await data.coverage(reviewId, pins, "textual");
   const api = createReviewApi(store, data);
-  const textualCatalog = await (await api.request("/?mode=textual")).json();
-  expect(textualCatalog[0].diffStats).toEqual({
-    fileCount: 1,
-    additions: 1,
-    deletions: 1,
-  });
-  expect(structural).not.toHaveBeenCalled();
   structural.mockImplementation(async function* () {
     const file = {
       lhs: { path: "a.ts", oid: "base", mode: "100644" },
@@ -2623,11 +2603,9 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
     };
     throw new Error("Counts must not wait for summary events");
   });
-  await data.coverage(reviewId, pins, "structural");
+  await data.coverage(reviewId, pins);
 
-  const structuralCatalog = await (
-    await api.request("/?mode=structural")
-  ).json();
+  const structuralCatalog = await (await api.request("/")).json();
 
   expect(structuralCatalog[0].diffStats).toEqual({
     fileCount: 1,
@@ -2636,7 +2614,7 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
   });
 
   const structuralProgress = await (
-    await api.request(`/${reviewId}/progress?mode=structural`)
+    await api.request(`/${reviewId}/progress`)
   ).json();
 
   expect(coverageProgress(structuralProgress.files).total).toEqual({
@@ -2648,9 +2626,6 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
     deletions: 0,
   });
   expect(structural).toHaveBeenCalledTimes(1);
-  expect(store.list("textual")[0].diffStats).toEqual(
-    textualCatalog[0].diffStats,
-  );
 });
 
 it("resolves file lenses to whole changed files, preserves empty groups, and shares viewed coverage", async () => {
@@ -3012,8 +2987,17 @@ it("returns pending progress without waiting for coverage and signals completion
 
     return file ? "" : [];
   }) as typeof data.changes);
+  vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
+    yield {
+      type: "start",
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
+      lhs: { type: "revision", rev: "base" },
+      rhs: { type: "revision", rev: "head" },
+      files: [],
+    };
+  });
   const api = createReviewApi(store, data);
-  const route = `/${reviewId}/progress?version=0&mode=textual&wait=false`;
+  const route = `/${reviewId}/progress?version=0&wait=false`;
 
   try {
     const pending = await api.request(route);
@@ -3021,11 +3005,11 @@ it("returns pending progress without waiting for coverage and signals completion
     expect(await pending.json()).toMatchObject({ complete: false, files: [] });
     expect(data.coverageRevision).toBe(0);
     release();
-    await data.coverage(reviewId, pins, "textual");
+    await data.coverage(reviewId, pins);
     await vi.waitFor(() => expect(data.coverageRevision).toBeGreaterThan(0));
 
     const watch = await api.request(
-      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId, mode: "textual" }]))}`,
+      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId }]))}`,
     );
 
     const reader = watch.body!.getReader();
@@ -3063,7 +3047,7 @@ it("logs a provider failure and names its kind without returning its local detai
   vi.spyOn(data, "changes").mockRejectedValue(failure);
   const logged = vi.spyOn(console, "error").mockImplementation(() => {});
   const api = createReviewApi(store, data);
-  const route = `/${reviewId}/progress?version=0&mode=textual&wait=false`;
+  const route = `/${reviewId}/progress?version=0&wait=false`;
 
   try {
     await api.request(route);
@@ -3084,131 +3068,6 @@ it("logs a provider failure and names its kind without returning its local detai
   }
 });
 
-it("makes a streamed file selectable and markable before an unrelated file finishes counting", async () => {
-  const { createReviewApi } = await import("./http.js");
-  const { selectionKey } = await import("@review/lens-selection.js");
-  const { reviewId } = await create();
-
-  const refs = ["a.ts", "b.ts"].map((file) =>
-    rangeAnchor({ side: "head", file, fromLine: 1, toLine: 1 }),
-  );
-
-  await edit(reviewId, {
-    type: "insert",
-    content: {
-      ...diagram,
-      steps: refs.map((source, i) => ({
-        from: "app",
-        to: "db",
-        label: `step ${i}`,
-        source,
-      })),
-    },
-  });
-  const data = new LocalReviewData(store);
-  let release!: () => void;
-
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-
-  vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
-    snapshot,
-    pins: snapshot.pins!,
-  }));
-  vi.spyOn(data, "changes").mockImplementation((async (
-    _pins: typeof pins,
-    file?: string,
-  ) => {
-    if (!file)
-      return ["a.ts", "b.ts"].map((path) => ({
-        path,
-        status: "modified",
-        additions: 1,
-        deletions: 1,
-      }));
-
-    if (file === "b.ts") await gate;
-
-    return "@@ -1 +1 @@\n-old\n+new\n";
-  }) as typeof data.changes);
-  vi.spyOn(data, "file").mockImplementation(async (_pins, side, file) => ({
-    file,
-    side,
-    commit: _pins[side],
-    text: side === "head" ? "new" : "old",
-  }));
-  const api = createReviewApi(store, data);
-  const route = `/${reviewId}/progress?version=${store.read(reviewId).version}&mode=textual&wait=false`;
-
-  try {
-    await api.request(route);
-    await vi.waitFor(() =>
-      expect(
-        data.coverageSnapshot(reviewId, pins, "textual").comparison.files,
-      ).toHaveLength(1),
-    );
-    const partial = await (await api.request(route)).json();
-    expect(partial.complete).toBe(false);
-    // A diagram is not a Diff-view lens: only the automatic lens is listed.
-    expect(partial.lenses).toHaveLength(1);
-    expect(
-      partial.resolvedSelections[selectionKey(anchorSelection(refs[0]!))],
-    ).toBeDefined();
-    expect(
-      partial.resolvedSelections[selectionKey(anchorSelection(refs[1]!))],
-    ).toBeUndefined();
-    expect(partial.unavailableSelections).toEqual({});
-    expect(partial.lenses.at(-1)).toMatchObject({
-      id: "automatic-uncategorized",
-      pending: true,
-      sources: [],
-    });
-    let marked: Response | undefined;
-
-    const marking = Promise.resolve(
-      api.request(`/${reviewId}/progress`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          version: store.read(reviewId).version,
-          mode: "textual",
-          files: [
-            {
-              path: "a.ts",
-              fingerprint: partial.files[0].fingerprint,
-              sources: [{ side: "head", file: "a.ts", fromLine: 1, toLine: 1 }],
-            },
-          ],
-          viewed: true,
-        }),
-      }),
-    ).then((response) => {
-      marked = response;
-
-      return response;
-    });
-
-    await vi.waitFor(() => expect(marked).toBeDefined());
-    expect(marked!.status).toBe(200);
-    const markedProgress = await (await marking).json();
-    expect(markedProgress.complete).toBe(false);
-    expect(markedProgress.files[0].viewed.head).toEqual([[0, 1]]);
-    release();
-    await data.coverage(reviewId, pins, "textual");
-    const complete = await (await api.request(route)).json();
-    expect(complete.complete).toBe(true);
-    expect(complete.files[0].viewed.head).toEqual([[0, 1]]);
-    expect(complete.lenses[0].pending).toBe(false);
-    expect(
-      complete.resolvedSelections[selectionKey(anchorSelection(refs[1]!))],
-    ).toBeDefined();
-  } finally {
-    release();
-    await data.close();
-  }
-});
-
 it("Home reads persisted counts without scheduling comparisons, and changed pins start unknown", async () => {
   const { createReviewApi } = await import("./http.js");
   const { reviewId } = await create();
@@ -3218,11 +3077,10 @@ it("Home reads persisted counts without scheduling comparisons, and changed pins
   expect((await (await api.request("/")).json())[0].diffStats).toBeNull();
   expect(comparison).not.toHaveBeenCalled();
   const counts = { fileCount: 2, additions: 9, deletions: 3 };
-  store.setDiffStats(pins, counts, "structural");
+  store.setDiffStats(pins, counts);
   await store.close();
   store = new ReviewStore(database, providers);
   expect(store.list()[0].diffStats).toEqual(counts);
-  expect(store.list("textual")[0].diffStats).toBeNull();
   await store.execute(
     request({
       type: "set_target",
@@ -3262,13 +3120,13 @@ it("shares pending comparison work even when more than 32 reviews are opened", a
     };
     yield { type: "complete", succeeded: 0, failed: 0 };
   });
-  const first = data.coverage(reviewId, pins, "structural");
+  const first = data.coverage(reviewId, pins);
 
   const others = Array.from({ length: 33 }, (_, i) =>
-    data.coverage(reviewId, { ...pins, head: `head-${i}` }, "structural"),
+    data.coverage(reviewId, { ...pins, head: `head-${i}` }),
   );
 
-  expect(data.coverage(reviewId, pins, "structural")).toBe(first);
+  expect(data.coverage(reviewId, pins)).toBe(first);
   release();
   await Promise.all([first, ...others]);
 });

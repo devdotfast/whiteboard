@@ -598,7 +598,7 @@ it("routes a review a host just created once its list line arrives, and an unkno
     for await (const line of new ReviewApiClient({
       serverUrl: desktop.url,
       token: LOCAL_TOKEN,
-    }).watch([{ reviewId, mode: "structural" }], AbortSignal.timeout(5_000)))
+    }).watch([{ reviewId }], AbortSignal.timeout(5_000)))
       if (line.kind === "review" && "value" in line) return line.value;
 
     return undefined;

@@ -646,7 +646,7 @@ export class SharedReviewStore {
     };
   }
 
-  list(mode: "structural" | "textual" = "structural") {
+  list() {
     const reviews = this.loaded
       .keys()
       .filter(
@@ -669,7 +669,7 @@ export class SharedReviewStore {
       })
       .toArray();
 
-    return this.local?.store.withDiffStats(reviews, mode) ?? reviews;
+    return this.local?.store.withDiffStats(reviews) ?? reviews;
   }
 
   async readObject(id: string, objectId: string) {

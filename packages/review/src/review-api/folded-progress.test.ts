@@ -357,7 +357,6 @@ it("progress counts folded changes as done, overall, per lens and uncategorized"
 
   // Viewing every unfolded line reads 100%, with the folded code unopened.
   const viewed = await client.post<ReviewProgress>(`/${reviewId}/progress`, {
-    mode: "structural",
     version: store.read(reviewId).version,
     viewed: true,
     files: ["src/api.rs", "src/main.rs", "docs/readme.md"].map((path) => ({
@@ -417,7 +416,6 @@ it("counts all changes before plugins finish and preserves viewed marks as folds
     const file = initial.files.find((file) => file.path === "docs/readme.md")!;
 
     const marked = await client.post<ReviewProgress>(`/${reviewId}/progress`, {
-      mode: "structural",
       version: store.read(reviewId).version,
       viewed: true,
       files: [
@@ -433,7 +431,7 @@ it("counts all changes before plugins finish and preserves viewed marks as folds
       "viewed",
     );
     release();
-    await data.coverage(reviewId, pins, "structural");
+    await data.coverage(reviewId, pins);
     const final = await client.read<ReviewProgress>(`/${reviewId}/progress`);
     expect(coverageProgress(final.files).total).toEqual({
       additions: 7,
@@ -529,7 +527,6 @@ it("keeps Git's rename identity and counts when diffr emits separate deletion an
     data,
     "review",
     pins,
-    "structural",
     new AbortController().signal,
     (snapshot) => snapshots.push(snapshot),
   );
