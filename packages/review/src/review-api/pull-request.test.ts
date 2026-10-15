@@ -35,7 +35,16 @@ describe("reading a pull request", () => {
     title: "Add widgets",
     baseRefName: "main",
     baseRefOid: "a".repeat(40),
+    headBranch: "widgets",
   };
+
+  const { headBranch, ...ghRecord } = record;
+
+  const ghJson = JSON.stringify({
+    ...ghRecord,
+    headRefName: headBranch,
+    isCrossRepository: false,
+  });
 
   const deps = (
     gh: () => Promise<string>,
@@ -67,7 +76,8 @@ describe("reading a pull request", () => {
       Response.json({
         number: 7,
         title: "Add widgets",
-        base: { ref: "main", sha: record.baseRefOid },
+        base: { ref: "main", sha: record.baseRefOid, repo: { id: 1 } },
+        head: { ref: "widgets", repo: { id: 1 } },
       }),
     );
 
@@ -85,7 +95,7 @@ describe("reading a pull request", () => {
 
   it("reads a GitHub Enterprise PR through gh on its host, never the public API", async () => {
     const enterprise = "https://ghe.example.com/acme/widget/pull/7";
-    const using = deps(async () => JSON.stringify(record));
+    const using = deps(async () => ghJson);
 
     await expect(readPullRequest(enterprise, using)).resolves.toEqual({
       host: "ghe.example.com",
@@ -139,7 +149,13 @@ describe("creating a review from a pull request URL alone", () => {
   let local: ReturnType<typeof openLocalReviewStore>;
 
   /** What gh reports; the tests move the base as GitHub would. */
-  let pr: Omit<PullRequestRecord, "host" | "slug" | "headRef">;
+  let pr: Omit<
+    PullRequestRecord,
+    "host" | "slug" | "headRef" | "headBranch"
+  > & {
+    headRefName: string;
+    isCrossRepository: boolean;
+  };
 
   let ghCalls: number;
 
@@ -194,7 +210,13 @@ describe("creating a review from a pull request URL alone", () => {
     gitIn(directory)("clone", "-q", upstream, checkout);
     pointAtUpstream(path.join(checkout, ".git"));
 
-    pr = { number: 7, title: "Add widgets", baseRefName: "main" };
+    pr = {
+      number: 7,
+      title: "Add widgets",
+      baseRefName: "main",
+      headRefName: "contributor",
+      isCrossRepository: true,
+    };
     ghCalls = 0;
     local = openLocalReviewStore(path.join(directory, "reviews.db"), {
       manageWorkspaces: false,

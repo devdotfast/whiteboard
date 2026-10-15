@@ -18,6 +18,8 @@ const metadataSchema = z.object({
   title: z.string(),
   baseRefName: z.string().min(1),
   baseRefOid: z.string().optional(),
+  headRefName: z.string().min(1),
+  isCrossRepository: z.boolean(),
 });
 
 function unreadable(url: string, ghFailure: string, fallback: string) {
@@ -56,16 +58,20 @@ export const githubProvider: PullRequestProvider = {
           "--repo",
           `${host}/${slug}`,
           "--json",
-          "number,title,baseRefName,baseRefOid",
+          "number,title,baseRefName,baseRefOid,headRefName,isCrossRepository",
         ],
         { timeoutMs: GH_TIMEOUT_MS },
       );
+
+      const { headRefName, isCrossRepository, ...metadata } =
+        metadataSchema.parse(JSON.parse(stdout));
 
       return {
         host,
         slug,
         headRef,
-        ...metadataSchema.parse(JSON.parse(stdout)),
+        ...metadata,
+        headBranch: isCrossRepository ? undefined : headRefName,
       };
     } catch (error) {
       ghFailure = firstLine(errorMessage(error));
@@ -125,7 +131,15 @@ export const githubProvider: PullRequestProvider = {
       .object({
         number: z.number(),
         title: z.string(),
-        base: z.object({ ref: z.string().min(1), sha: z.string() }),
+        base: z.object({
+          ref: z.string().min(1),
+          sha: z.string(),
+          repo: z.object({ id: z.number() }),
+        }),
+        head: z.object({
+          ref: z.string().min(1),
+          repo: z.object({ id: z.number() }).nullable(),
+        }),
       })
       .safeParse(await response.json().catch(() => undefined));
 
@@ -140,6 +154,10 @@ export const githubProvider: PullRequestProvider = {
       title: parsed.data.title,
       baseRefName: parsed.data.base.ref,
       baseRefOid: parsed.data.base.sha,
+      headBranch:
+        parsed.data.head.repo?.id === parsed.data.base.repo.id
+          ? parsed.data.head.ref
+          : undefined,
     };
   },
 

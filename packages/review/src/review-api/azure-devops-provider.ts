@@ -24,6 +24,7 @@ const metadataSchema = z.object({
   sourceRefName: z.string().min(1),
   targetRefName: z.string().min(1),
   lastMergeTargetCommit: z.object({ commitId: z.string().min(1) }).optional(),
+  forkSource: z.object({}).optional(),
   repository: z.object({
     name: z.string(),
     project: z.object({ name: z.string() }),
@@ -153,6 +154,9 @@ export const azureDevOpsProvider: PullRequestProvider = {
       headRef: pr.sourceRefName,
       baseRefName: pr.targetRefName.replace(/^refs\/heads\//, ""),
       baseRefOid: pr.lastMergeTargetCommit?.commitId,
+      headBranch: pr.forkSource
+        ? undefined
+        : pr.sourceRefName.replace(/^refs\/heads\//, ""),
     };
   },
 

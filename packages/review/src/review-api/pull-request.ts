@@ -27,6 +27,8 @@ export interface PullRequestRecord {
   /** e.g. refs/pull/7/head */
   headRef: string;
   baseRefName: string;
+  /** Absent when the head lives in a fork. */
+  headBranch?: string;
   /** GitHub's base commit, frozen at the PR's last update. */
   baseRefOid?: string;
 }
