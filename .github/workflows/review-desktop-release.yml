@@ -312,7 +312,8 @@ jobs:
   remote:
     name: Publish remote tarballs
     needs: version
-    runs-on: ubuntu-latest
+    # xz compresses on every core.
+    runs-on: review_big_boy
     timeout-minutes: 60
     permissions:
       contents: write
