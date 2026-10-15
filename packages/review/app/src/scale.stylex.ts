@@ -56,6 +56,8 @@ export const motion = stylex.defineConsts({
   slow: "300ms",
   // One breath of a looping attention pulse.
   pulse: "1.6s",
+  // One turn of a spinner: a slower one reads as stalled.
+  spin: "0.8s",
   ease: "ease",
 });
 

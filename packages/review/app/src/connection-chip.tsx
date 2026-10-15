@@ -1,5 +1,6 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
+import { Spinner } from "@canvas/ui/spinner";
 import {
   type ReviewHostStatus,
   type ReviewRemoteHostActions,
@@ -67,7 +68,7 @@ export function ConnectionChip() {
         ref={tooltip}
       >
         <span {...stylex.props(styles.text)}>{label}</span>
-        {spinning ? <RefreshIcon xstyle={styles.icon} spinning /> : null}
+        {spinning ? <Spinner /> : null}
       </span>
     );
 

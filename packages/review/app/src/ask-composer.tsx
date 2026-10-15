@@ -1,3 +1,4 @@
+import { Spinner } from "@canvas/ui/spinner";
 import {
   type AskCommand,
   type AskQuestion,
@@ -21,7 +22,6 @@ import {
   useState,
 } from "react";
 
-import { askMotion } from "./ask-motion.stylex";
 import { controlStyles } from "./controls-styles";
 import { ArrowUpIcon, CloseIcon, ImageIcon } from "./icons";
 import { fontSize, motion, radius } from "./scale.stylex";
@@ -581,12 +581,11 @@ export function AskComposer({
                 xstyle={styles.square}
                 onClick={stop}
               >
-                <span
-                  aria-hidden="true"
-                  {...stylex.props(
-                    connecting ? styles.connecting : styles.stopMark,
-                  )}
-                />
+                {connecting ? (
+                  <Spinner />
+                ) : (
+                  <span aria-hidden="true" {...stylex.props(styles.stopMark)} />
+                )}
               </IconButton>
             ) : (
               <Button
@@ -652,10 +651,6 @@ export function AskComposer({
     </div>
   );
 }
-
-const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
-
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 
 function AttachedImage({
   image,
@@ -835,21 +830,6 @@ const styles = stylex.create({
     width: "14px",
     height: "14px",
     strokeWidth: "1.4px",
-  },
-  // In Stop's place while the agent starts.
-  connecting: {
-    width: "9px",
-    height: "9px",
-    borderWidth: "1.4px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderTopColor: tokens.accent,
-    borderRadius: radius.round,
-    boxSizing: "border-box",
-    animationName: { default: spin, [reducedMotion]: "none" },
-    animationDuration: askMotion.spin,
-    animationTimingFunction: "linear",
-    animationIterationCount: "infinite",
   },
   stopMark: {
     width: "9px",

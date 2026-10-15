@@ -1,3 +1,4 @@
+import { Spinner } from "@canvas/ui/spinner";
 import type { AskEntry, AskThreadState } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -11,7 +12,6 @@ import {
 import { AGENT_LOGOS } from "./agent-logos";
 import { AgentMarkdown } from "./agent-markdown";
 import { askFileCode, askFileLink } from "./ask-files";
-import { askMotion } from "./ask-motion.stylex";
 import { askPanelStyles } from "./ask-styles";
 import { controlStyles } from "./controls-styles";
 import { CourierFigure } from "./courier-figure";
@@ -279,7 +279,7 @@ function ActivityStatusIcon({ status }: { status: ActivityStatus }) {
       ) : status === "failed" ? (
         <CloseIcon xstyle={controlStyles.inlineIcon} />
       ) : status === "in_progress" ? (
-        <span {...stylex.props(styles.spinner)} />
+        <Spinner />
       ) : (
         <span
           {...stylex.props(styles.dot, status === "waiting" && styles.waiting)}
@@ -644,8 +644,6 @@ export function AskWorking({
 
 const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 
-const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
-
 const styles = stylex.create({
   turn: {
     display: "flex",
@@ -792,19 +790,6 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
     lineHeight: 1.5,
-  },
-  spinner: {
-    width: "8px",
-    height: "8px",
-    borderWidth: "1.4px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderTopColor: tokens.accent,
-    borderRadius: radius.round,
-    animationName: { default: spin, [reducedMotion]: "none" },
-    animationDuration: askMotion.spin,
-    animationTimingFunction: "linear",
-    animationIterationCount: "infinite",
   },
   dot: {
     width: "6px",
