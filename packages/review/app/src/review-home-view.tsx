@@ -63,6 +63,7 @@ import {
   homeFacetValues,
   homeGroups,
   isHomeFacet,
+  isUnread,
   matchesHomeFilters,
   mergeChipOrder,
   removeHomeChip,
@@ -91,6 +92,7 @@ interface ReviewHomeProps {
   onOpen(review: ReviewApiSummary): void;
   onDelete?(review: ReviewApiSummary): Promise<void>;
   onTrash?(review: ReviewApiSummary): Promise<void>;
+  onMarkRead?(review: ReviewApiSummary): Promise<void>;
   onRestore?(review: ReviewApiSummary): Promise<void>;
   remoteHosts?: ReviewRemoteHostActions;
   onboarding?: ReviewCanvasOnboarding;
@@ -144,6 +146,7 @@ export function ReviewHome({
   onOpen,
   onDelete,
   onTrash,
+  onMarkRead,
   onRestore,
   remoteHosts,
   onboarding,
@@ -186,6 +189,7 @@ export function ReviewHome({
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [selected, setSelected] = useState(new Set<string>());
   const [deleted, setDeleted] = useState(new Set<string>());
+  const [read, setRead] = useState(new Map<string, string>());
   const [lifecycle, setLifecycle] = useState(new Map<string, string | null>());
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -290,6 +294,17 @@ export function ReviewHome({
 
       return next.size === current.size ? current : next;
     });
+    setRead((current) => {
+      const next = new Map(
+        [...current].filter(([id]) => {
+          const review = reviews.find((r) => r.reviewId === id);
+
+          return review && isUnread(review);
+        }),
+      );
+
+      return next.size === current.size ? current : next;
+    });
     setLifecycle((current) => {
       const next = new Map(
         [...current].filter(([id, value]) => {
@@ -308,11 +323,14 @@ export function ReviewHome({
       homeSessions(reviews)
         .filter((r) => !deleted.has(r.reviewId))
         .map((r) =>
+          read.has(r.reviewId) ? { ...r, viewedAt: read.get(r.reviewId)! } : r,
+        )
+        .map((r) =>
           lifecycle.has(r.reviewId)
             ? { ...r, trashedAt: lifecycle.get(r.reviewId)! }
             : r,
         ),
-    [reviews, deleted, lifecycle],
+    [reviews, deleted, read, lifecycle],
   );
 
   const trashed = catalog.filter((review) => review.trashedAt);
@@ -638,6 +656,28 @@ export function ReviewHome({
     );
 
     if (succeeded.length) setNotice({ kind: "permanent", targets: succeeded });
+  }
+
+  async function markRead(targets: ReviewApiSummary[]) {
+    if (!onMarkRead || busyRef.current || !targets.length) return;
+    const timestamp = new Date().toISOString();
+
+    setRead((current) =>
+      withEntries(
+        current,
+        targets.map((review) => [review.reviewId, timestamp]),
+      ),
+    );
+
+    await runBatch(
+      targets,
+      onMarkRead,
+      (count) => `mark ${countLabel(count, "whiteboard")} read`,
+      (failed) =>
+        setRead(
+          (current) => new Map([...current].filter(([id]) => !failed.has(id))),
+        ),
+    );
   }
 
   function undo(shown: Notice) {
@@ -1352,6 +1392,15 @@ export function ReviewHome({
               onClick={() => void changeLifecycle(selectedReviews, true)}
             >
               Restore <Shortcut>R</Shortcut>
+            </Button>
+          )}
+          {!inTrash && selectedReviews.some(isUnread) && (
+            <Button
+              variant="ghost"
+              disabled={busy || !onMarkRead}
+              onClick={() => void markRead(selectedReviews.filter(isUnread))}
+            >
+              Mark Read
             </Button>
           )}
           <Button

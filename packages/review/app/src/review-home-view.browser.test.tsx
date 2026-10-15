@@ -743,6 +743,24 @@ describe("Home interactions", () => {
     });
     expect(titles()).toEqual(["Old"]);
   });
+  it("marks unread selections read and keeps failures unread", async () => {
+    const onMarkRead = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      async (r: ReviewApiSummary) => {
+        if (r.title === "Two") throw new Error("Offline");
+      },
+    );
+
+    await render([summary("One"), summary("Two"), summary("Seen", read)], {
+      onMarkRead,
+    });
+    await select("Seen");
+    expect(container.textContent).not.toContain("Mark Read");
+    await key("a", { metaKey: true });
+    await click("Mark Read");
+    expect(onMarkRead.mock.calls.map(([r]) => r.title)).toEqual(["One", "Two"]);
+    expect(titles("Unread")).toEqual(["Two"]);
+    expect(container.textContent).toContain("1 selected");
+  });
   it("removes the whole selected batch while requests are pending", async () => {
     const pending: Array<() => void> = [];
 

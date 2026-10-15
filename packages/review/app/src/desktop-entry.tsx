@@ -104,6 +104,8 @@ function Home({
   const trashReview = content.trashReview;
   const deleteReview = content.deleteReview;
   const restoreReview = content.restoreReview;
+  const markReviewRead = content.markReviewRead;
+
   const [skipped, setSkipped] = useState(readOnboardingSkipped);
   const [creating, setCreating] = useState(false);
   const setupActions = content.setupActions;
@@ -150,6 +152,9 @@ function Home({
       onOpen={(review) => content.openReview(review.reviewId)}
       onTrash={
         trashReview ? (review) => trashReview(review.reviewId) : undefined
+      }
+      onMarkRead={
+        markReviewRead ? (review) => markReviewRead(review.reviewId) : undefined
       }
       onDelete={
         deleteReview ? (review) => deleteReview(review.reviewId) : undefined
