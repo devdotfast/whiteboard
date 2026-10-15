@@ -10,8 +10,10 @@ import {
   elevation,
   fontSize,
   fontWeight,
+  leading,
   motion,
   radius,
+  space,
 } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
@@ -27,7 +29,7 @@ export const traceStyles = stylex.create({
     minHeight: "100%",
     // The left inset clears the event ruler: 14px edge inset + 6px resting
     // tick + 28px gap, so the 30px hover comb stops just short of the text.
-    padding: "36px 24px 96px 48px",
+    padding: `${space.s36} ${space.s24} ${space.s96} ${space.s48}`,
   },
   column: {
     width: "min(980px, 100%)",
@@ -41,8 +43,8 @@ export const traceStyles = stylex.create({
   header: {
     display: "flex",
     flexDirection: "column",
-    gap: "10px",
-    paddingBottom: "24px",
+    gap: space.s10,
+    paddingBottom: space.s24,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -51,7 +53,7 @@ export const traceStyles = stylex.create({
     margin: 0,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.display,
-    lineHeight: "28px",
+    lineHeight: leading.px28,
     fontWeight: fontWeight.medium,
     color: tokens.ink,
   },
@@ -59,7 +61,7 @@ export const traceStyles = stylex.create({
     display: "flex",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: "8px",
+    gap: space.s8,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     color: tokens.inkFaint,
@@ -71,12 +73,12 @@ export const traceStyles = stylex.create({
   picker: {
     position: "relative",
     display: "inline-block",
-    marginBottom: "20px",
+    marginBottom: space.s20,
   },
   // A secondary Button that stands off the page like a select.
   pickerTrigger: {
     justifyContent: "flex-start",
-    gap: "8px",
+    gap: space.s8,
     maxWidth: "min(680px, 100%)",
     borderColor: { default: tokens.rule, ":hover": tokens.ruleSoft },
     backgroundColor: { default: tokens.surface, ":hover": tokens.tray },
@@ -103,7 +105,7 @@ export const traceStyles = stylex.create({
     justifyContent: "center",
     width: "12px",
     height: "12px",
-    marginLeft: "2px",
+    marginLeft: space.s2,
     flexShrink: 0,
     color: tokens.inkFaint,
     transition: `transform ${motion.fast} ${motion.ease}`,
@@ -116,7 +118,7 @@ export const traceStyles = stylex.create({
     maxWidth: "min(640px, 90vw)",
   },
   pickerItemSubagent: {
-    paddingLeft: "20px",
+    paddingLeft: space.s20,
   },
   pickerItemHarness: {
     fontFamily: tokens.chromeFont,
@@ -137,8 +139,8 @@ export const traceStyles = stylex.create({
   events: {
     display: "flex",
     flexDirection: "column",
-    gap: "18px",
-    marginTop: "28px",
+    gap: space.s18,
+    marginTop: space.s28,
   },
   // In a side peek.
   eventsScoped: {
@@ -147,19 +149,19 @@ export const traceStyles = stylex.create({
   turn: {
     display: "flex",
     flexDirection: "column",
-    gap: "18px",
+    gap: space.s18,
   },
   // An elided message sets its own prose; a whole one leaves it to markdown.
   proseElided: {
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "26px",
+    lineHeight: leading.px26,
     color: tokens.ink,
   },
   proseMarkdown: {
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "26px",
+    lineHeight: leading.px26,
     color: tokens.ink,
     overflowWrap: "anywhere",
   },
@@ -170,7 +172,7 @@ export const traceStyles = stylex.create({
   toolRow: {
     display: "grid",
     gridTemplateColumns: "20px minmax(0, 1fr) 16px",
-    columnGap: "6px",
+    columnGap: space.s6,
     alignItems: "center",
     minHeight: "24px",
   },
@@ -185,7 +187,7 @@ export const traceStyles = stylex.create({
   toolLabel: {
     display: "flex",
     alignItems: "baseline",
-    gap: "6px",
+    gap: space.s6,
     minWidth: 0,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
@@ -225,7 +227,7 @@ export const traceStyles = stylex.create({
       default: null,
       [stylex.when.ancestor(":not([open])", traceToolMarker)]: "none",
     },
-    margin: "10px 0 0 26px",
+    margin: `${space.s10} 0 0 26px`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
@@ -238,7 +240,7 @@ export const traceStyles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     height: "30px",
-    padding: "0 12px",
+    padding: `0 ${space.s12}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -248,14 +250,14 @@ export const traceStyles = stylex.create({
   figureBody: {
     display: "flex",
     flexDirection: "column",
-    gap: "10px",
+    gap: space.s10,
     margin: 0,
-    padding: "14px 16px",
+    padding: `${space.s14} ${space.s16}`,
     maxHeight: "420px",
     overflow: "auto",
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    lineHeight: "20px",
+    lineHeight: leading.px20,
     whiteSpace: "pre-wrap",
     overflowWrap: "break-word",
   },
@@ -263,7 +265,7 @@ export const traceStyles = stylex.create({
     whiteSpace: "normal",
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "22px",
+    lineHeight: leading.px22,
     color: tokens.inkMuted,
   },
   thinkingMarkdown: {
@@ -282,8 +284,8 @@ export const traceStyles = stylex.create({
   workedSummary: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    margin: "6px 0 0",
+    gap: space.s8,
+    margin: `${space.s6} 0 0`,
     fontFamily: tokens.chromeFont,
     color: { default: tokens.inkFaint, ":hover": tokens.inkMuted },
   },
@@ -302,15 +304,15 @@ export const traceStyles = stylex.create({
       [stylex.when.ancestor(":not([open])", traceWorkedMarker)]: "none",
     },
     flexDirection: "column",
-    gap: "18px",
-    marginTop: "18px",
+    gap: space.s18,
+    marginTop: space.s18,
   },
 
   // Coalesced tool runs: one summary row per consecutive tool-call run.
   toolGroupSummary: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     minHeight: "24px",
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
@@ -329,8 +331,8 @@ export const traceStyles = stylex.create({
       [stylex.when.ancestor(":not([open])", traceGroupMarker)]: "none",
     },
     flexDirection: "column",
-    gap: "18px",
-    padding: "2px 0 4px 26px",
+    gap: space.s18,
+    padding: `${space.s2} 0 ${space.s4} 26px`,
   },
 
   note: {
@@ -341,7 +343,7 @@ export const traceStyles = stylex.create({
   },
   // The empty notice starts where a trace's header would.
   empty: {
-    paddingTop: "48px",
+    paddingTop: space.s48,
   },
 
   // Lens rows. A gap row marks hidden events with dashes; a collapse row,
@@ -349,8 +351,8 @@ export const traceStyles = stylex.create({
   lensRow: {
     display: "flex",
     alignItems: "center",
-    gap: "10px",
-    margin: "4px 0",
+    gap: space.s10,
+    margin: `${space.s4} 0`,
     padding: 0,
     cursor: "pointer",
     width: "100%",
@@ -397,7 +399,7 @@ export const traceStyles = stylex.create({
   userSlot: {
     display: "flex",
     flexDirection: "column",
-    gap: "18px",
+    gap: space.s18,
     width: "100%",
   },
   elided: {
@@ -406,14 +408,14 @@ export const traceStyles = stylex.create({
   kept: {
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "26px",
+    lineHeight: leading.px26,
     color: tokens.ink,
   },
   keptInBubble: {
-    lineHeight: "24px",
+    lineHeight: leading.px24,
   },
   lensChip: {
-    margin: "0 6px",
+    margin: `0 ${space.s6}`,
     borderWidth: "1px",
     borderStyle: "dashed",
     borderColor: { default: tokens.ruleSoft, ":hover": tokens.inkFaint },

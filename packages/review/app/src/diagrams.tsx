@@ -1,5 +1,12 @@
 import { flowLayer } from "@canvas/flow-layers.stylex";
-import { elevation, fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  elevation,
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { textStyles } from "@canvas/ui/text";
 import { type DiffSelection, anchorSelection } from "@review/lens-selection";
@@ -1074,7 +1081,7 @@ const styles = stylex.create({
     height: "auto",
     minHeight: `min(${tokens.sequenceHeight}, 260px)`,
     maxHeight: "3200px",
-    marginBlock: "24px",
+    marginBlock: space.s24,
     marginInline: { default: 0, [inDocument()]: "auto" },
     paddingTop: 0,
     overflow: "hidden",
@@ -1145,14 +1152,14 @@ const styles = stylex.create({
     width: "fit-content",
     minWidth: "min(148px, 100%)",
     maxWidth: "calc(100% - 16px)",
-    margin: "24px auto 0",
+    margin: `${space.s24} auto 0`,
     pointerEvents: "all",
   },
   participantLabel: {
     display: "block",
     boxSizing: "border-box",
     width: "100%",
-    padding: "6px 10px",
+    padding: `${space.s6} ${space.s10}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
@@ -1169,7 +1176,7 @@ const styles = stylex.create({
   lifeline: {
     position: "absolute",
     top: "62px",
-    bottom: "18px",
+    bottom: space.s18,
     left: "50%",
     marginLeft: "-0.5px",
     borderLeftWidth: "1px",
@@ -1227,7 +1234,7 @@ const styles = stylex.create({
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.micro,
-    lineHeight: 1,
+    lineHeight: leading.none,
   },
   stopBadgeActive: {
     color: tokens.onAccent,
@@ -1253,7 +1260,7 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
     fontWeight: fontWeight.medium,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
     overflowWrap: "anywhere",
     textAlign: "center",
     whiteSpace: "normal",

@@ -7,7 +7,7 @@ import { z } from "zod";
 
 import { countLabel } from "./format";
 import { useReviewSession } from "./host/review-session";
-import { fontSize } from "./scale.stylex";
+import { fontSize, leading, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 const boardsSchema = z.object({
@@ -92,13 +92,13 @@ const styles = stylex.create({
     display: "flex",
     flexWrap: "wrap",
     alignItems: "baseline",
-    gap: "4px 8px",
+    gap: `${space.s4} ${space.s8}`,
     margin: 0,
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
-  board: { gap: "4px", whiteSpace: "normal" },
+  board: { gap: space.s4, whiteSpace: "normal" },
   icon: { width: "12px", height: "12px" },
 });

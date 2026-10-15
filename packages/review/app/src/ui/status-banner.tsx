@@ -1,4 +1,4 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, space } from "@canvas/scale.stylex";
 import type { StyleArg } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
@@ -26,8 +26,8 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    gap: "12px",
-    padding: "6px 12px",
+    gap: space.s12,
+    padding: `${space.s6} ${space.s12}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.ruleSoft,

@@ -116,7 +116,14 @@ import { ReviewRootsProvider, useReviewContainer } from "./review-root-context";
 import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
 import { useReviewViewStateSync } from "./review-view-state";
 import { ReviewTraceView } from "./ReviewTraceView";
-import { elevation, fontSize, fontWeight, radius } from "./scale.stylex";
+import {
+  elevation,
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "./scale.stylex";
 import { ShareControl, useCanShare } from "./share-control";
 import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
@@ -1264,7 +1271,7 @@ const batonStyles = stylex.create({
     fontFamily: tokens.chromeFont,
     fontSize: tokens.chromeFontSizeSmall,
     fontWeight: tokens.chromeFontWeightStrong,
-    lineHeight: 1,
+    lineHeight: leading.none,
     letterSpacing: tokens.chromeTracking,
     textTransform: "uppercase",
     whiteSpace: "nowrap",
@@ -1276,8 +1283,8 @@ const batonStyles = stylex.create({
 const mapSettingsStyles = stylex.create({
   control: {
     position: "absolute",
-    right: "16px",
-    bottom: "16px",
+    right: space.s16,
+    bottom: space.s16,
     zIndex: 3,
   },
   // A floating corner control, so it keeps a border and lifts off the map.
@@ -1302,9 +1309,9 @@ const mapSettingsStyles = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: "14px",
+    gap: space.s14,
     minHeight: "50px",
-    padding: "10px 13px",
+    padding: `${space.s10} 13px`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -1315,8 +1322,8 @@ const mapSettingsStyles = stylex.create({
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-start",
-    gap: "6px",
-    padding: "10px",
+    gap: space.s6,
+    padding: space.s10,
   },
   groupLabel: {
     fontFamily: tokens.chromeFont,

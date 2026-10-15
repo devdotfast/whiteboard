@@ -1,4 +1,11 @@
-import { fontSize, fontWeight, radius, tracking } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+  tracking,
+} from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
@@ -47,7 +54,7 @@ export const chipStyles = stylex.create({
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
     fontWeight: fontWeight.semibold,
-    lineHeight: 1,
+    lineHeight: leading.none,
     letterSpacing: tracking.caps,
     textTransform: "uppercase",
     whiteSpace: "nowrap",
@@ -56,15 +63,15 @@ export const chipStyles = stylex.create({
     display: "inline-flex",
     flex: "0 0 auto",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     height: "18px",
-    padding: "0 8px",
+    padding: `0 ${space.s8}`,
     borderRadius: radius.pill,
     backgroundColor: tokens.well,
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: 1,
+    lineHeight: leading.none,
     whiteSpace: "nowrap",
   },
   large: {

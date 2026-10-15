@@ -1,5 +1,5 @@
 import { segmentMarker } from "@canvas/markers.stylex";
-import { motion } from "@canvas/scale.stylex";
+import { motion, space } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
@@ -31,7 +31,7 @@ const styles = stylex.create({
   // the ink and only then closes the clip, so the pen never runs backwards.
   underline: {
     position: "absolute",
-    bottom: "6px",
+    bottom: space.s6,
     left: 0,
     width: "100%",
     height: "3px",

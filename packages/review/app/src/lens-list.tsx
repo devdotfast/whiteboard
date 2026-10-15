@@ -1,5 +1,12 @@
 import { drawMotion } from "@canvas/draw-motion.stylex";
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  motion,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { CloseIcon } from "@canvas/ui/icons";
@@ -348,10 +355,10 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: "8px",
+    gap: space.s8,
     flexShrink: 0,
     minHeight: "52px",
-    padding: "0 14px 0 16px",
+    padding: `0 ${space.s14} 0 ${space.s16}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -370,9 +377,9 @@ const styles = stylex.create({
     fontVariantNumeric: "tabular-nums",
   },
   hint: {
-    padding: "0 14px 6px 16px",
+    padding: `0 ${space.s14} ${space.s6} ${space.s16}`,
     color: tokens.inkFaint,
-    font: `${fontSize.small}/16px ${tokens.chromeFont}`,
+    font: `${fontSize.small}/${leading.px16} ${tokens.chromeFont}`,
   },
   section: {
     borderBottomWidth: 0,
@@ -386,7 +393,7 @@ const styles = stylex.create({
   row: {
     display: "flex",
     alignItems: "center",
-    paddingRight: "10px",
+    paddingRight: space.s10,
     gap: "7px",
   },
   toggle: {
@@ -394,19 +401,19 @@ const styles = stylex.create({
     flex: 1,
     minWidth: 0,
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     textAlign: "left",
-    padding: "3px 4px 3px 8px",
+    padding: `3px ${space.s4} 3px ${space.s8}`,
     color: "inherit",
     cursor: "pointer",
     backgroundColor: { default: tokens.transparent, ":hover": tokens.well },
   },
   // Lines the name up with the sidebar's other rows.
-  toggleInset: { paddingLeft: "18px" },
+  toggleInset: { paddingLeft: space.s18 },
   insetStart: { paddingLeft: "26px" },
   progressInset: {
     minHeight: 0,
-    gap: "6px",
+    gap: space.s6,
     padding: 0,
     borderBottomWidth: 0,
     fontSize: fontSize.body,
@@ -425,15 +432,15 @@ const styles = stylex.create({
     display: "flex",
     minWidth: 0,
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     height: "24px",
-    padding: "0 8px",
+    padding: `0 ${space.s8}`,
   },
-  chipActive: { paddingRight: "4px" },
+  chipActive: { paddingRight: space.s4 },
   name: {
     minWidth: 0,
     flex: "0 1 auto",
-    lineHeight: 1.5,
+    lineHeight: leading.normal,
     whiteSpace: "nowrap",
     overflow: "hidden",
     textOverflow: "ellipsis",

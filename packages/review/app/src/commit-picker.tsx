@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
@@ -410,10 +416,10 @@ const styles = stylex.create({
   bar: {
     display: "flex",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     minWidth: 0,
-    paddingBlock: "6px 2px",
-    paddingInline: "12px",
+    paddingBlock: `${space.s6} ${space.s2}`,
+    paddingInline: space.s12,
   },
   // In a narrow sidebar the label gives way; the ×, ∧ and ∨ never do.
   pillLabel: {
@@ -424,15 +430,15 @@ const styles = stylex.create({
     overflow: "hidden",
     height: "26px",
     paddingBlock: 0,
-    paddingInline: "10px 8px",
+    paddingInline: `${space.s10} ${space.s8}`,
     borderRadius: radius.pill,
     color: tokens.ink,
     cursor: "pointer",
   },
   all: {
-    paddingInline: "10px",
+    paddingInline: space.s10,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   picked: {
     gap: 0,
@@ -440,7 +446,7 @@ const styles = stylex.create({
     height: "26px",
     overflow: "hidden",
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   icon: { width: "14px", height: "14px" },
   count: { color: tokens.inkFaint },
@@ -487,12 +493,12 @@ const styles = stylex.create({
     width: "min(440px, calc(100vw - 16px))",
     padding: 0,
     overflowY: "hidden",
-    font: `${fontSize.body}/16px ${tokens.chromeFont}`,
+    font: `${fontSize.body}/${leading.px16} ${tokens.chromeFont}`,
   },
   allRow: {
-    gap: "10px",
+    gap: space.s10,
     height: "44px",
-    paddingInline: "16px",
+    paddingInline: space.s16,
     borderRadius: 0,
     fontSize: fontSize.body,
   },
@@ -509,7 +515,7 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     height: "40px",
-    paddingInline: "16px",
+    paddingInline: space.s16,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.medium,
   },
@@ -517,8 +523,8 @@ const styles = stylex.create({
   list: {
     maxHeight: "min(360px, 50vh)",
     overflowY: "auto",
-    paddingBottom: "10px",
-    paddingInline: "8px",
+    paddingBottom: space.s10,
+    paddingInline: space.s8,
   },
   link: {
     display: "block",
@@ -528,7 +534,7 @@ const styles = stylex.create({
     backgroundColor: tokens.rule,
   },
   row: {
-    gap: "10px",
+    gap: space.s10,
     height: "28px",
     minHeight: 0,
     paddingBlock: 0,
@@ -557,7 +563,7 @@ const styles = stylex.create({
   changes: {
     display: "flex",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     fontSize: fontSize.body,
     whiteSpace: "nowrap",
   },

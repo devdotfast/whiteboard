@@ -23,7 +23,7 @@ import { askPanelStyles } from "./ask-styles";
 import { CourierFigure } from "./courier-figure";
 import { formatDuration } from "./format";
 import { chevronMarker } from "./markers.stylex";
-import { fontSize, radius } from "./scale.stylex";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import { settleStreamingMarkdown } from "./streaming-markdown";
 import { tokens } from "./tokens.stylex";
 
@@ -658,26 +658,26 @@ const styles = stylex.create({
   turn: {
     display: "flex",
     flexDirection: "column",
-    gap: "16px",
+    gap: space.s16,
   },
   byline: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    marginBottom: "-8px",
+    gap: space.s8,
+    marginBottom: `-${space.s8}`,
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   answer: {
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
+    gap: space.s12,
     color: tokens.ink,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "26px",
+    lineHeight: leading.px26,
   },
   // Lifted off the panel's tray, where the chat's own code sits. A long path
   // wraps; each line's piece keeps its padding and corners.
@@ -690,14 +690,14 @@ const styles = stylex.create({
   tools: {
     display: "flex",
     flexDirection: "column",
-    gap: "6px",
+    gap: space.s6,
   },
   summary: {
     display: "inline-flex",
     // A wrapped summary keeps its chevron on the first line.
     alignItems: "flex-start",
     alignSelf: "flex-start",
-    gap: "6px",
+    gap: space.s6,
     padding: 0,
     borderRadius: radius.small,
     color: {
@@ -707,11 +707,11 @@ const styles = stylex.create({
     },
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "20px",
+    lineHeight: leading.px20,
   },
   // Centered on the summary's first 20px line.
   summaryChevron: {
-    margin: "4px 2px",
+    margin: `${space.s4} ${space.s2}`,
   },
   summaryFailed: {
     color: tokens.inkFaint,
@@ -720,7 +720,7 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     margin: 0,
-    padding: "4px 0",
+    padding: `${space.s4} 0`,
     overflow: "hidden",
     borderWidth: "1px",
     borderStyle: "solid",
@@ -736,14 +736,14 @@ const styles = stylex.create({
   toolHead: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     width: "100%",
     minWidth: 0,
-    padding: "7px 12px",
+    padding: `7px ${space.s12}`,
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.ui,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
     textAlign: "left",
   },
   toolHeadButton: {
@@ -768,7 +768,7 @@ const styles = stylex.create({
     color: tokens.inkFaint,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: 1.5,
+    lineHeight: leading.normal,
   },
   dot: {
     width: "6px",
@@ -782,13 +782,13 @@ const styles = stylex.create({
   toolBody: {
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
-    padding: "0 12px 10px 34px",
+    gap: space.s8,
+    padding: `0 ${space.s12} ${space.s10} 34px`,
   },
   pre: {
     maxHeight: "240px",
     margin: 0,
-    padding: "8px 10px",
+    padding: `${space.s8} ${space.s10}`,
     overflow: "auto",
     borderRadius: radius.control,
     fontFamily: tokens.fontMono,
@@ -811,12 +811,12 @@ const styles = stylex.create({
   working: {
     display: "flex",
     alignItems: "baseline",
-    gap: "8px",
+    gap: space.s8,
     minWidth: 0,
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "20px",
+    lineHeight: leading.px20,
   },
 
   // The board's courier, working on the answer, standing on the text's
@@ -858,6 +858,6 @@ const styles = stylex.create({
     fontFamily: tokens.chromeFont,
     fontVariantNumeric: "tabular-nums",
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
 });

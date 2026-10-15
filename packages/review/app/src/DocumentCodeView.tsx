@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import type {
   ReviewDiffProgress,
   ReviewDiffSide,
@@ -385,10 +385,10 @@ const styles = stylex.create({
   error: {
     display: "flex",
     alignItems: "center",
-    padding: "0 10px",
+    padding: `0 ${space.s10}`,
     borderColor: tokens.ruleSoft,
     backgroundColor: tokens.surface,
     color: tokens.inkFaint,
-    font: `${fontSize.small}/1 ${tokens.chromeFont}`,
+    font: `${fontSize.small}/${leading.none} ${tokens.chromeFont}`,
   },
 });

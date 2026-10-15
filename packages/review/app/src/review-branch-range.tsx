@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import { useCopy } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ArrowLeftIcon } from "@canvas/ui/icons";
@@ -116,7 +116,7 @@ const styles = stylex.create({
     display: "flex",
     minWidth: 0,
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     color: "inherit",
     whiteSpace: "nowrap",
   },
@@ -128,14 +128,14 @@ const styles = stylex.create({
     minWidth: 0,
     alignItems: "center",
     margin: 0,
-    padding: "0 6px",
+    padding: `0 ${space.s6}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
     borderRadius: radius.small,
     backgroundColor: tokens.tray,
     color: tokens.ink,
-    font: `${fontSize.body}/18px ${tokens.fontMono}`,
+    font: `${fontSize.body}/${leading.px18} ${tokens.fontMono}`,
     cursor: "pointer",
   },
   copy: {

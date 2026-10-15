@@ -1,5 +1,12 @@
 import { documentType } from "@canvas/document-type.stylex";
-import { fontSize, fontWeight, radius, tracking } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+  tracking,
+} from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { appMarker, documentMarker, proseMarker } from "./markers.stylex";
@@ -101,19 +108,19 @@ export const documentStyles = stylex.create({
     },
     minWidth: 0,
     margin: {
-      default: "0 auto 96px",
+      default: `0 auto ${space.s96}`,
       [compact]: { default: "0 auto", [stylex.env.narrow]: 0 },
       [stylex.env.narrow]: 0,
     },
     padding: {
       default: `${tokens.reviewDocumentPaddingBlockStart} ${tokens.reviewDocumentPaddingInline} ${tokens.reviewDocumentPaddingBlockEnd}`,
-      [compact]: `28px ${tokens.reviewDocumentPaddingInline}`,
+      [compact]: `${space.s28} ${tokens.reviewDocumentPaddingInline}`,
     },
     backgroundColor: tokens.transparent,
     color: tokens.ink,
     fontFamily: tokens.fontSerif,
     fontSize: documentType.body,
-    lineHeight: 1.6,
+    lineHeight: leading.relaxed,
   },
   // Beside an open side peek the column narrows its inline diagrams, and a
   // database lens keeps a smaller gutter.
@@ -140,7 +147,7 @@ export const documentStyles = stylex.create({
   },
   h1: {
     width: { default: null, [inDocument()]: proseColumn },
-    margin: { default: null, [inDocument()]: "28px auto 18px" },
+    margin: { default: null, [inDocument()]: `${space.s28} auto ${space.s18}` },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h1 },
@@ -156,18 +163,18 @@ export const documentStyles = stylex.create({
     scrollMarginTop: { default: null, [inDocument()]: "24px" },
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
-    margin: { default: null, [inDocument()]: "40px auto 12px" },
+    margin: { default: null, [inDocument()]: `${space.s40} auto ${space.s12}` },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h2 },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument()]: "32px" },
+    lineHeight: { default: null, [inDocument()]: leading.px32 },
   },
   h3: {
     scrollMarginTop: { default: null, [inDocument()]: "24px" },
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
-    margin: { default: null, [inDocument()]: "30px auto 10px" },
+    margin: { default: null, [inDocument()]: `30px auto ${space.s10}` },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h3 },
@@ -186,12 +193,12 @@ export const documentStyles = stylex.create({
   paragraph: {
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
-    margin: { default: null, [inProse()]: "14px 0" },
+    margin: { default: null, [inProse()]: `${space.s14} 0` },
     marginInline: { default: null, [inDocumentBlock()]: "auto" },
     color: { default: null, [inProse()]: tokens.ink },
     fontFamily: { default: null, [inProse()]: tokens.fontSerif },
     fontSize: { default: null, [inProse()]: fontSize.reading },
-    lineHeight: { default: null, [inProse()]: 1.72 },
+    lineHeight: { default: null, [inProse()]: leading.prose },
     textAlign: { default: null, [inProse()]: "left" },
   },
   // A list item's paragraphs sit flush with the item.
@@ -206,21 +213,21 @@ export const documentStyles = stylex.create({
     },
   },
   item: {
-    marginTop: { default: null, [afterProseItem()]: "8px" },
+    marginTop: { default: null, [afterProseItem()]: space.s8 },
     color: { default: null, [inProse()]: tokens.ink },
     fontFamily: { default: null, [inProse()]: tokens.fontSerif },
     fontSize: { default: null, [inProse()]: fontSize.reading },
-    lineHeight: { default: null, [inProse()]: 1.72 },
+    lineHeight: { default: null, [inProse()]: leading.prose },
     textAlign: { default: null, [inProse()]: "left" },
   },
   // Document copy outside a Markdown block, read as its paragraphs: the
   // stale block's notice, the fallback message.
   note: {
-    margin: { default: null, [inDocument()]: "14px 0" },
+    margin: { default: null, [inDocument()]: `${space.s14} 0` },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: fontSize.reading },
-    lineHeight: { default: null, [inDocument()]: 1.72 },
+    lineHeight: { default: null, [inDocument()]: leading.prose },
     textAlign: { default: null, [inDocument()]: "left" },
   },
   // Links are just text in the link color, prose and code chips alike, with
@@ -241,7 +248,7 @@ export const documentStyles = stylex.create({
     },
   },
   code: {
-    padding: { default: null, [inDocument()]: "2px 5px" },
+    padding: { default: null, [inDocument()]: `${space.s2} 5px` },
     borderRadius: { default: null, [inDocument()]: radius.small },
     backgroundColor: {
       default: null,
@@ -258,7 +265,7 @@ export const documentStyles = stylex.create({
   },
   table: {
     width: { default: null, [inDocument()]: "min(100%, 600px)" },
-    margin: { default: null, [inDocument()]: "24px auto" },
+    margin: { default: null, [inDocument()]: `${space.s24} auto` },
     borderCollapse: { default: null, [inDocument()]: "collapse" },
     color: { default: null, [inDocument()]: tokens.ink },
     // The board's prose face; code chips in cells keep their own.
@@ -268,7 +275,7 @@ export const documentStyles = stylex.create({
     tableLayout: { default: null, [inDocument()]: "fixed" },
   },
   cell: {
-    padding: { default: null, [inDocument()]: "8px 10px" },
+    padding: { default: null, [inDocument()]: `${space.s8} ${space.s10}` },
     borderWidth: { default: null, [inDocument()]: "1px" },
     borderStyle: { default: null, [inDocument()]: "solid" },
     borderColor: { default: null, [inDocument()]: tokens.rule },

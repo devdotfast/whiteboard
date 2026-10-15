@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
@@ -290,23 +296,23 @@ const styles = stylex.create({
     paddingBlock: 0,
     paddingInline: "9px",
     fontSize: fontSize.ui,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     cursor: "pointer",
   },
   pillIcon: { width: "13px", height: "13px" },
   pillName: { fontWeight: fontWeight.medium },
   pillCount: { color: tokens.inkMuted },
   pillChevron: { width: "10px", height: "10px" },
-  menu: { width: "min(500px, calc(100vw - 16px))", padding: "6px" },
+  menu: { width: "min(500px, calc(100vw - 16px))", padding: space.s6 },
   heading: {
     display: "flex",
     alignItems: "baseline",
     justifyContent: "space-between",
-    padding: "6px 10px 8px",
+    padding: `${space.s6} ${space.s10} ${space.s8}`,
     color: tokens.inkFaint,
     fontSize: fontSize.small,
   },
-  row: { gap: "10px", minHeight: "34px", paddingInline: "10px" },
+  row: { gap: space.s10, minHeight: "34px", paddingInline: space.s10 },
   rowCurrent: { cursor: "default" },
   branchIcon: { width: "14px", height: "14px", color: tokens.inkMuted },
   // A branch with no whiteboard: an empty, dashed place.
@@ -350,14 +356,14 @@ const styles = stylex.create({
     fontSize: fontSize.body,
     fontWeight: fontWeight.medium,
   },
-  rule: { marginInline: "6px" },
+  rule: { marginInline: space.s6 },
   baseRow: {
     display: "flex",
     flex: "none",
     alignItems: "center",
-    gap: "10px",
+    gap: space.s10,
     minHeight: "30px",
-    paddingInline: "10px",
+    paddingInline: space.s10,
     color: tokens.inkFaint,
     fontSize: fontSize.body,
   },

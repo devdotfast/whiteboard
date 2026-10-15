@@ -1,4 +1,4 @@
-import { radius } from "@canvas/scale.stylex";
+import { radius, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
 
@@ -87,6 +87,6 @@ const styles = stylex.create({
     backgroundColor: tokens.quoteMark,
     color: "inherit",
     borderRadius: radius.hairline,
-    padding: "1px 2px",
+    padding: `1px ${space.s2}`,
   },
 });

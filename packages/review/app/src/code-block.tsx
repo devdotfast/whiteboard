@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { CopyButton } from "@canvas/ui/copy";
 import {
   type ShjLanguage,
@@ -245,7 +251,7 @@ const styles = stylex.create({
       default: null,
       [inDocumentBlock()]: "auto",
     },
-    marginBlock: "24px",
+    marginBlock: space.s24,
     overflow: "hidden",
     borderWidth: "1px",
     borderStyle: "solid",
@@ -254,10 +260,10 @@ const styles = stylex.create({
     backgroundColor: tokens.surface,
   },
   compact: {
-    marginBlock: "8px",
+    marginBlock: space.s8,
   },
   header: {
-    paddingRight: "8px",
+    paddingRight: space.s8,
   },
   meta: {
     marginLeft: 0,
@@ -283,13 +289,13 @@ const styles = stylex.create({
     margin: 0,
     overflowX: "auto",
     color: tokens.ink,
-    font: `${fontSize.ui}/20px ${tokens.fontMono}`,
+    font: `${fontSize.ui}/${leading.px20} ${tokens.fontMono}`,
     textAlign: "left",
   },
   code: {
     display: "block",
     flex: "1 0 auto",
-    padding: "12px 14px",
+    padding: `${space.s12} ${space.s14}`,
     borderRadius: 0,
     backgroundColor: tokens.transparent,
     color: "inherit",
@@ -304,7 +310,7 @@ const styles = stylex.create({
     left: 0,
     flex: "0 0 auto",
     minWidth: "50px",
-    padding: "12px 14px",
+    padding: `${space.s12} ${space.s14}`,
     backgroundColor: tokens.surface,
     color: tokens.ghost,
     textAlign: "right",

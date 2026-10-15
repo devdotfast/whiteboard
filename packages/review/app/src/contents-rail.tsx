@@ -19,7 +19,15 @@ import {
   useHeadingInView,
 } from "./review-heading-scroll";
 import { tocRail } from "./review-toc.stylex";
-import { fontSize, fontWeight, layer, motion, radius } from "./scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  layer,
+  leading,
+  motion,
+  radius,
+  space,
+} from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 /** Ticks this far apart, until they would run past the column's cap. */
@@ -294,13 +302,13 @@ const styles = stylex.create({
     alignSelf: "start",
     zIndex: layer.tocRail,
     marginTop: `calc(${tokens.reviewPageTop} + 8px)`,
-    marginRight: "14px",
+    marginRight: space.s14,
   },
   rail: {
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-end",
-    padding: "6px 0 6px 6px",
+    padding: `${space.s6} 0 ${space.s6} ${space.s6}`,
     outline: "none",
   },
   column: {
@@ -369,7 +377,7 @@ const styles = stylex.create({
     boxSizing: "border-box",
     width: "248px",
     gap: "1px",
-    padding: "6px",
+    padding: space.s6,
     borderColor: tokens.rule,
     backgroundColor: tokens.surface,
     fontFamily: tokens.chromeFont,
@@ -385,7 +393,7 @@ const styles = stylex.create({
     alignItems: "center",
     height: "28px",
     paddingBlock: 0,
-    paddingRight: "10px",
+    paddingRight: space.s10,
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: radius.small,
@@ -401,7 +409,7 @@ const styles = stylex.create({
     },
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.ui,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
     textAlign: "left",
     cursor: "pointer",
     outline: "none",

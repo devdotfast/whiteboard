@@ -27,7 +27,7 @@ import {
   useState,
 } from "react";
 
-import { fontSize, radius } from "./scale.stylex";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { Button, IconButton } from "./ui/button";
 import { menuStyles } from "./ui/menu";
@@ -685,23 +685,23 @@ const styles = stylex.create({
     display: "flex",
     flex: "0 0 auto",
     flexDirection: "column",
-    gap: "6px",
-    margin: "12px 16px 12px",
+    gap: space.s6,
+    margin: `${space.s12} ${space.s16} ${space.s12}`,
   },
   composer: {
     display: "flex",
     flexDirection: "column",
-    gap: "10px",
-    padding: "12px 12px 10px 14px",
+    gap: space.s10,
+    padding: `${space.s12} ${space.s12} ${space.s10} ${space.s14}`,
     resize: "none",
   },
   // Quiet, like the agent's own controls under its prompt.
   settings: {
     display: "flex",
     alignItems: "center",
-    gap: "2px",
+    gap: space.s2,
     minWidth: 0,
-    paddingInline: "2px",
+    paddingInline: space.s2,
   },
   list: {
     width: "anchor-size(width)",
@@ -710,19 +710,19 @@ const styles = stylex.create({
   option: {
     flexDirection: "column",
     alignItems: "stretch",
-    gap: "2px",
+    gap: space.s2,
     flex: "none",
     fontFamily: tokens.chromeFont,
   },
   optionDetail: {
     color: tokens.inkMuted,
     fontSize: fontSize.micro,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   images: {
     display: "flex",
     flexWrap: "wrap",
-    gap: "8px",
+    gap: space.s8,
     margin: 0,
     padding: 0,
     listStyle: "none",
@@ -743,8 +743,8 @@ const styles = stylex.create({
   },
   remove: {
     position: "absolute",
-    top: "-6px",
-    right: "-6px",
+    top: `-${space.s6}`,
+    right: `-${space.s6}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
@@ -762,30 +762,30 @@ const styles = stylex.create({
     resize: "none",
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "22px",
+    lineHeight: leading.px22,
     fieldSizing: "content",
   },
   // The question, with its buttons beside it.
   inputRow: {
     display: "flex",
     alignItems: "flex-end",
-    gap: "8px",
+    gap: space.s8,
   },
   // Fills the row between the settings, pushing the model and effort to its
   // end.
   status: {
     flex: "1 1 0",
     minWidth: 0,
-    paddingInline: "6px",
+    paddingInline: space.s6,
     color: tokens.inkMuted,
     fontSize: fontSize.small,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   actions: {
     display: "inline-flex",
     flex: "0 0 auto",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
   },
   // The one action in the field, a step up from the chrome's controls;
   // Stop takes its place at the same size, so sending never shifts it.
@@ -796,7 +796,7 @@ const styles = stylex.create({
   },
   usage: {
     display: "inline-flex",
-    padding: "4px",
+    padding: space.s4,
   },
   stopMark: {
     width: "9px",

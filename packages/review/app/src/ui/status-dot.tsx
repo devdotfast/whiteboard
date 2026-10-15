@@ -1,4 +1,4 @@
-import { radius } from "@canvas/scale.stylex";
+import { radius, space } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps, ReactElement } from "react";
@@ -40,7 +40,7 @@ const styles = stylex.create({
   dot: {
     position: "absolute",
     top: "-3px",
-    right: "-4px",
+    right: `-${space.s4}`,
     width: "8px",
     height: "8px",
     borderWidth: "1.5px",

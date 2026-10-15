@@ -37,7 +37,7 @@ import { chevronMarker } from "./markers.stylex";
 import { type ReviewTocEntry, headingDepth } from "./review-document-headings";
 import { worktreeLabel } from "./review-home-model";
 import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
-import { fontSize, fontWeight, radius } from "./scale.stylex";
+import { fontSize, fontWeight, leading, radius, space } from "./scale.stylex";
 import { ThreadsSectionBody } from "./sidebar-threads";
 import { tokens } from "./tokens.stylex";
 import {
@@ -866,26 +866,26 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     minHeight: 0,
-    paddingBottom: "6px",
+    paddingBottom: space.s6,
     color: tokens.ink,
-    font: `${fontSize.body}/1.5 ${tokens.chromeFont}`,
+    font: `${fontSize.body}/${leading.normal} ${tokens.chromeFont}`,
   },
   remaining: { paddingBottom: 0 },
   search: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     height: "28px",
-    marginBlock: "4px 8px",
-    marginInline: "12px",
-    paddingInline: "10px",
+    marginBlock: `${space.s4} ${space.s8}`,
+    marginInline: space.s12,
+    paddingInline: space.s10,
     borderRadius: radius.control,
     backgroundColor: tokens.surface,
   },
   searchIcon: { width: "13px", height: "13px", color: tokens.inkFaint },
   searchInput: {
     flex: 1,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     // Escape clears the search; the platform's clear button would add a
     // second, blue, control.
     "::-webkit-search-cancel-button": { display: "none" },
@@ -894,19 +894,19 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     margin: 0,
-    padding: "2px 8px 8px",
+    padding: `${space.s2} ${space.s8} ${space.s8}`,
     listStyle: "none",
   },
   // From the pane's edge: the chevron slot at 8px, a top-level icon at
   // 26px and its title at 46px; a child's icon at 42px and title at 62px.
-  treeRow: { gap: 0, paddingInline: "0 8px", cursor: "default" },
-  nestedRow: { paddingInline: "16px 8px" },
+  treeRow: { gap: 0, paddingInline: `0 ${space.s8}`, cursor: "default" },
+  nestedRow: { paddingInline: `${space.s16} ${space.s8}` },
   rowMain: {
     display: "flex",
     flex: 1,
     alignItems: "center",
-    gap: "6px",
-    marginLeft: "2px",
+    gap: space.s6,
+    marginLeft: space.s2,
     minWidth: 0,
     height: "100%",
     padding: 0,
@@ -960,27 +960,27 @@ const styles = stylex.create({
   pathParent: { flex: "0 1 auto" },
   // The parent's title gives way first; the board's own keeps most of the row.
   pathLeaf: { flex: "0 0 auto", maxWidth: "80%" },
-  moreIcon: { marginLeft: "2px" },
+  moreIcon: { marginLeft: space.s2 },
   metaBeforeFolder: { width: "auto" },
   // What a terminal would print: a commit id, a branch, a folder.
   code: { fontFamily: tokens.fontMono },
   groupHeader: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     height: "28px",
-    marginTop: "6px",
-    paddingInline: "14px 12px",
+    marginTop: space.s6,
+    paddingInline: `${space.s14} ${space.s12}`,
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   groupTitle: { whiteSpace: "nowrap" },
   // A count in Inter; a branch range in it is code.
   groupCount: { minWidth: 0, color: tokens.inkFaint },
   groupAction: { display: "flex", marginLeft: "auto" },
-  moreText: { marginLeft: "6px" },
+  moreText: { marginLeft: space.s6 },
   entry: { height: "24px" },
   // A subsection's text lines up with its section's, past the number.
   nested: { height: "24px", paddingLeft: "30px" },
@@ -993,7 +993,7 @@ const styles = stylex.create({
     color: tokens.inkFaint,
     fontVariantNumeric: "tabular-nums",
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   entryText: { color: tokens.ink },
   entryTextNested: { color: tokens.inkMuted },
@@ -1015,7 +1015,7 @@ const styles = stylex.create({
     textAlign: "right",
     color: tokens.inkFaint,
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   metaCurrent: { color: tokens.accent },
 });

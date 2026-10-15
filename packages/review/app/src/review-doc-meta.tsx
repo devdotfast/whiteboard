@@ -1,4 +1,4 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, leading, space } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import {
   type ReviewBoardPlace,
@@ -208,17 +208,17 @@ const styles = stylex.create({
     margin: "0 auto",
     display: "flex",
     flexDirection: "column",
-    paddingBottom: "28px",
-    font: `${fontSize.body}/18px ${tokens.chromeFont}`,
+    paddingBottom: space.s28,
+    font: `${fontSize.body}/${leading.px18} ${tokens.chromeFont}`,
     color: tokens.inkFaint,
   },
   // One line: branch names give way; the rest never does.
   facts: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     minWidth: 0,
-    paddingTop: "4px",
+    paddingTop: space.s4,
     whiteSpace: "nowrap",
   },
   fixed: { flexShrink: 0 },

@@ -6,7 +6,7 @@ import {
   ReviewDocumentTitleSlot,
   documentTitleClassName,
 } from "@canvas/review-document-surface";
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, leading } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Shortcut } from "@canvas/ui/kbd";
 import { UNTITLED_BOARD } from "@dev.fast/review-protocol";
@@ -348,7 +348,7 @@ const styles = stylex.create({
   hint: {
     position: "absolute",
     color: tokens.inkFaint,
-    font: `${fontSize.small}/14px ${tokens.chromeFont}`,
+    font: `${fontSize.small}/${leading.px14} ${tokens.chromeFont}`,
     whiteSpace: "nowrap",
     pointerEvents: "none",
   },

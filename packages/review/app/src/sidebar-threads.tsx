@@ -18,7 +18,7 @@ import type { ReactElement } from "react";
 
 import { FolderLabel } from "./folder-label";
 import { countLabel, formatRelativeTime } from "./format";
-import { fontSize, fontWeight, radius } from "./scale.stylex";
+import { fontSize, fontWeight, leading, radius, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { SegmentedControl, segmentStyles } from "./ui/segmented";
 
@@ -264,26 +264,26 @@ function ThreadMark({ thread }: { thread: ReviewProjectThread }): ReactElement {
 const styles = stylex.create({
   scope: {
     display: "flex",
-    paddingTop: "4px",
-    paddingBottom: "8px",
-    paddingInline: "12px",
+    paddingTop: space.s4,
+    paddingBottom: space.s8,
+    paddingInline: space.s12,
   },
   empty: {
     margin: 0,
-    paddingBlock: "8px",
-    paddingInline: "14px",
+    paddingBlock: space.s8,
+    paddingInline: space.s14,
     color: tokens.inkFaint,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
   },
   list: {
     display: "flex",
     flexDirection: "column",
     margin: 0,
     paddingTop: 0,
-    paddingBottom: "8px",
-    paddingInline: "6px",
+    paddingBottom: space.s8,
+    paddingInline: space.s6,
     listStyle: "none",
   },
   row: {
@@ -292,7 +292,7 @@ const styles = stylex.create({
     gap: "3px",
     width: "100%",
     minWidth: 0,
-    padding: "8px",
+    padding: space.s8,
     borderRadius: radius.control,
     color: tokens.ink,
     textAlign: "start",
@@ -301,7 +301,7 @@ const styles = stylex.create({
   line: {
     display: "flex",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     minWidth: 0,
   },
   mark: {
@@ -320,14 +320,14 @@ const styles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   status: {
     flexShrink: 0,
     color: tokens.inkFaint,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   statusWaiting: { color: tokens.changeModified },
   statusRunning: { color: tokens.inkMuted },
@@ -344,7 +344,7 @@ const styles = stylex.create({
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   // " · edited here" stays when the board's title is cut short.
   relationSuffix: {
@@ -352,7 +352,7 @@ const styles = stylex.create({
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     whiteSpace: "pre",
   },
   kind: { width: "12px", height: "12px", color: tokens.inkFaint },

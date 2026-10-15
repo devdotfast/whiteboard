@@ -5,7 +5,7 @@ import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
-import { fontSize } from "./scale.stylex";
+import { fontSize, leading, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 /** Where a row lives, at its end: a checkout's folder, else a project's
@@ -26,10 +26,10 @@ const styles = stylex.create({
     display: "flex",
     flexShrink: 0,
     alignItems: "center",
-    gap: "4px",
+    gap: space.s4,
     maxWidth: "96px",
     color: tokens.inkFaint,
-    font: `${fontSize.small}/16px ${tokens.chromeFont}`,
+    font: `${fontSize.small}/${leading.px16} ${tokens.chromeFont}`,
   },
   // A folder is what a terminal would print.
   name: { minWidth: 0, fontFamily: tokens.fontMono },

@@ -23,7 +23,7 @@ import { setCssHighlight } from "./css-highlights";
 import { useOptionalReviewPanelStore } from "./review-panel";
 import type { AskPassage } from "./review-panel-model";
 import type { AskOpenOptions, ReviewPanelStore } from "./review-panel-store";
-import { fontSize, radius } from "./scale.stylex";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 
@@ -959,7 +959,7 @@ const styles = stylex.create({
     // Its tick under its pins.
     zIndex: 0,
     display: "flex",
-    gap: "4px",
+    gap: space.s4,
     positionAnchor: "var(--ask-pin-block)",
     anchorName: "var(--ask-pin-row)",
     top: "max(calc(anchor(top) + var(--ask-pin-offset)), calc(anchor(var(--ask-pin-above) bottom, -99999px) + 4px))",
@@ -982,7 +982,7 @@ const styles = stylex.create({
   // than making the page scroll sideways.
   rowInside: {
     left: "auto",
-    right: "4px",
+    right: space.s4,
   },
   // Only its tick shows.
   rowResting: {
@@ -998,7 +998,7 @@ const styles = stylex.create({
     position: "absolute",
     zIndex: -1,
     top: 0,
-    right: "-4px",
+    right: `-${space.s4}`,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -1040,12 +1040,12 @@ const styles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
     whiteSpace: "nowrap",
     cursor: "pointer",
   },
   more: {
-    paddingInline: "4px",
+    paddingInline: space.s4,
     color: {
       default: tokens.inkMuted,
       ":is([data-active])": tokens.accent,
@@ -1053,6 +1053,6 @@ const styles = stylex.create({
     },
   },
   count: {
-    paddingRight: "2px",
+    paddingRight: space.s2,
   },
 });

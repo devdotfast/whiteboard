@@ -1,4 +1,10 @@
-import { elevation, fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  elevation,
+  fontSize,
+  fontWeight,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 
@@ -97,7 +103,7 @@ const styles = stylex.create({
   },
   input: {
     position: "absolute",
-    inset: "2px",
+    inset: space.s2,
     width: "calc(100% - 4px)",
     height: "32px",
     margin: 0,

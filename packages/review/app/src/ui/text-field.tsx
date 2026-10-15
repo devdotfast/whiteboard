@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
@@ -60,7 +60,7 @@ export const fieldStyles = stylex.create({
     boxSizing: "border-box",
     minWidth: 0,
     height: "26px",
-    padding: "0 8px",
+    padding: `0 ${space.s8}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: { default: tokens.rule, ":focus": tokens.accent },
@@ -74,11 +74,11 @@ export const fieldStyles = stylex.create({
   },
   form: {
     height: "32px",
-    padding: "0 10px",
+    padding: `0 ${space.s10}`,
     borderRadius: radius.control,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.ui,
-    lineHeight: 1.5,
+    lineHeight: leading.normal,
     "::placeholder": { color: tokens.inkMuted, opacity: 1 },
   },
   // The input inside draws no box of its own.
@@ -103,8 +103,8 @@ export const fieldStyles = stylex.create({
   },
   multiline: {
     height: "auto",
-    padding: "6px 8px",
-    lineHeight: 1.5,
+    padding: `${space.s6} ${space.s8}`,
+    lineHeight: leading.normal,
     resize: "vertical",
   },
   select: {

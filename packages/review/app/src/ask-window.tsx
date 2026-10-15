@@ -1,3 +1,4 @@
+import { space } from "@canvas/scale.stylex";
 import { AgentLogo } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
@@ -560,7 +561,7 @@ const styles = stylex.create({
     overflow: "hidden",
   },
   titleBar: {
-    paddingLeft: "10px",
+    paddingLeft: space.s10,
     cursor: "grab",
     touchAction: "none",
     userSelect: "none",
@@ -577,7 +578,7 @@ const styles = stylex.create({
   title: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     minWidth: 0,
   },
   grip: {

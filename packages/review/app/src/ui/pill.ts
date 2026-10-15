@@ -1,4 +1,4 @@
-import { radius } from "@canvas/scale.stylex";
+import { radius, space } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 
@@ -8,7 +8,7 @@ export const pillStyles = stylex.create({
   pill: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     borderRadius: radius.pill,
     fontFamily: tokens.chromeFont,
     whiteSpace: "nowrap",

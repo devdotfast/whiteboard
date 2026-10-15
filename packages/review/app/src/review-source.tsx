@@ -1,3 +1,4 @@
+import { space } from "@canvas/scale.stylex";
 import { PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { buttonLook } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
@@ -141,15 +142,15 @@ const styles = stylex.create({
     display: "inline-flex",
     flexShrink: 0,
     alignItems: "center",
-    gap: "4px",
+    gap: space.s4,
     color: tokens.ink,
     fontFamily: tokens.fontMono,
   },
-  pullRequestLink: { gap: "4px" },
+  pullRequestLink: { gap: space.s4 },
   compare: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     minWidth: 0,
     overflow: "hidden",
     color: tokens.inkMuted,
@@ -160,5 +161,5 @@ const styles = stylex.create({
   base: { flex: "0 1 auto" },
   head: { flex: "0 100 auto" },
   arrow: { flexShrink: 0, color: tokens.inkFaint },
-  changes: { display: "inline-flex", flexShrink: 0, gap: "8px" },
+  changes: { display: "inline-flex", flexShrink: 0, gap: space.s8 },
 });

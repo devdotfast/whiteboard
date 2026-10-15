@@ -1,4 +1,4 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -11,31 +11,31 @@ export const settingsStyles = stylex.create({
     width: "min(820px, 100%)",
   },
   lede: {
-    margin: "0 0 28px",
+    margin: `0 0 ${space.s28}`,
     color: tokens.inkMuted,
     fontSize: fontSize.ui,
   },
   section: {
-    marginBottom: "28px",
+    marginBottom: space.s28,
   },
   sectionLabel: {
-    margin: "0 0 2px",
-    paddingBottom: "6px",
+    margin: `0 0 ${space.s2}`,
+    paddingBottom: space.s6,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
     color: tokens.inkMuted,
   },
   connect: {
-    paddingBlock: "14px",
+    paddingBlock: space.s14,
   },
   row: {
     display: "grid",
     // Wide segmented controls grow the lane instead of overlapping the text.
     gridTemplateColumns: "minmax(0, 1fr) minmax(200px, max-content)",
     alignItems: "center",
-    gap: "24px",
-    padding: "14px 0",
+    gap: space.s24,
+    padding: `${space.s14} 0`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.ruleSoft,
@@ -62,7 +62,7 @@ export const settingsStyles = stylex.create({
   toggle: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     color: tokens.inkMuted,
     fontSize: fontSize.body,
     cursor: "pointer",
@@ -71,8 +71,8 @@ export const settingsStyles = stylex.create({
     minWidth: "200px",
   },
   diffr: {
-    marginTop: "8px",
-    paddingLeft: "12px",
+    marginTop: space.s8,
+    paddingLeft: space.s12,
     borderLeftWidth: "2px",
     borderLeftStyle: "solid",
     borderLeftColor: tokens.ruleSoft,
@@ -80,15 +80,15 @@ export const settingsStyles = stylex.create({
   diffrSummary: {
     display: "flex",
     alignItems: "center",
-    gap: "6px",
-    paddingBlock: "8px",
+    gap: space.s6,
+    paddingBlock: space.s8,
   },
   unavailable: {
     color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   error: {
-    margin: "4px 0 0",
+    margin: `${space.s4} 0 0`,
     fontSize: fontSize.body,
     whiteSpace: "pre-wrap",
   },
@@ -102,13 +102,13 @@ export const settingsStyles = stylex.create({
   },
   summaryActions: {
     display: "flex",
-    gap: "8px",
+    gap: space.s8,
   },
   prompt: {
     display: "flex",
     flexDirection: "column",
-    gap: "4px",
-    marginTop: "8px",
+    gap: space.s4,
+    marginTop: space.s8,
   },
   summaryResult: {
     whiteSpace: "pre-wrap",

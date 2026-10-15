@@ -16,7 +16,7 @@ import { z } from "zod";
 import { useReviewSession } from "./host/review-session";
 import { chevronMarker } from "./markers.stylex";
 import type { ReviewTocEntry } from "./review-document-headings";
-import { fontSize } from "./scale.stylex";
+import { fontSize, leading, space } from "./scale.stylex";
 import {
   ContentsList,
   type ProjectBoards,
@@ -173,18 +173,18 @@ const styles = stylex.create({
     display: "flex",
     flexShrink: 0,
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     width: "100%",
     height: "30px",
     paddingBlock: 0,
-    paddingLeft: "10px",
-    paddingRight: "14px",
+    paddingLeft: space.s10,
+    paddingRight: space.s14,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   chevron: { margin: 0 },
   faint: { color: tokens.inkFaint },

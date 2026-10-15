@@ -1,5 +1,11 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  motion,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import type { ActivitySurface } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
@@ -458,9 +464,9 @@ const styles = stylex.create({
   },
   tag: {
     position: "absolute",
-    top: "-20px",
+    top: `-${space.s20}`,
     left: "50%",
-    padding: "2px 7px",
+    padding: `${space.s2} 7px`,
     borderRadius: radius.pill,
     backgroundColor: tokens.ink,
     color: tokens.surface,

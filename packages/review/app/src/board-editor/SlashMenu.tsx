@@ -1,4 +1,4 @@
-import { fontSize, layer } from "@canvas/scale.stylex";
+import { fontSize, layer, leading, space } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { menuStyles } from "@canvas/ui/menu";
 import { surfaceStyles } from "@canvas/ui/surface";
@@ -67,20 +67,20 @@ const styles = stylex.create({
     zIndex: layer.sticky,
     display: "flex",
     flexDirection: "column",
-    gap: "2px",
+    gap: space.s2,
     width: "232px",
-    padding: "4px",
+    padding: space.s4,
   },
   item: {
     justifyContent: "space-between",
     minHeight: "24px",
-    padding: "3px 8px",
+    padding: `3px ${space.s8}`,
     fontSize: fontSize.ui,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
   },
   shortcut: {
     color: tokens.inkFaint,
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
 });

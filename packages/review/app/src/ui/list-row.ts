@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 
@@ -8,16 +8,16 @@ export const listRowStyles = stylex.create({
   row: {
     display: "flex",
     alignItems: "center",
-    gap: "10px",
+    gap: space.s10,
     width: "100%",
     height: "24px",
     paddingBlock: 0,
-    paddingInline: "8px",
+    paddingInline: space.s8,
     borderRadius: radius.small,
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     textAlign: "left",
     cursor: "pointer",
   },

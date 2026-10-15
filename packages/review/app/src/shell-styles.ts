@@ -1,4 +1,4 @@
-import { motion } from "@canvas/scale.stylex";
+import { motion, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { appMarker, topbarActionsMarker } from "./markers.stylex";
@@ -136,7 +136,7 @@ export const shellStyles = stylex.create({
       top: 0,
       bottom: 0,
       left: 0,
-      right: "-8px",
+      right: `-${space.s8}`,
       content: "''",
     },
   },
@@ -193,9 +193,9 @@ export const shellStyles = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: "8px",
+    gap: space.s8,
     height: tokens.reviewHeaderHeight,
-    padding: "0 12px 0 16px",
+    padding: `0 ${space.s12} 0 ${space.s16}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -232,7 +232,7 @@ export const shellStyles = stylex.create({
   topbarActions: {
     display: "flex",
     alignItems: "center",
-    gap: "10px",
+    gap: space.s10,
     flex: "1 1 auto",
     minWidth: 0,
     height: "100%",
@@ -270,7 +270,7 @@ export const shellStyles = stylex.create({
       content: "''",
       flex: "0 0 1px",
       height: "20px",
-      margin: "0 14px 0 16px",
+      margin: `0 ${space.s14} 0 ${space.s16}`,
       backgroundColor: tokens.chromeBorder,
     },
   },
@@ -281,7 +281,7 @@ export const shellStyles = stylex.create({
     flexShrink: 0,
     justifyContent: { default: null, [narrowContent]: "center" },
     width: { default: null, [narrowContent]: tokens.chromeControlHeight },
-    padding: { default: "0 10px", [narrowContent]: 0 },
+    padding: { default: `0 ${space.s10}`, [narrowContent]: 0 },
   },
   openSourceTreeLabel: {
     display: { default: null, [narrowContent]: "none" },
@@ -310,12 +310,13 @@ export const shellStyles = stylex.create({
         // Wide enough for the contents rail to show, this padding widens on
         // the right to keep its gutter clear.
         "@container review-content (max-width: 1080px)": {
-          default: `${tokens.reviewPageTop} max(24px, var(--review-rail-gutter, 0px)) calc(120px + var(--review-toc-tail, 0px)) 24px`,
+          default: `${tokens.reviewPageTop} max(${space.s24}, var(--review-rail-gutter, 0px)) calc(120px + var(--review-toc-tail, 0px)) ${space.s24}`,
           [stylex.env.narrow]:
-            "22px 8px calc(96px + var(--review-toc-tail, 0px))",
+            `22px ${space.s8} calc(96px + var(--review-toc-tail, 0px))`,
         },
       },
-      [stylex.env.narrow]: "22px 8px calc(96px + var(--review-toc-tail, 0px))",
+      [stylex.env.narrow]:
+        `22px ${space.s8} calc(96px + var(--review-toc-tail, 0px))`,
     },
   },
   // While the contents rail shows, the page keeps its ticks' gutter clear:

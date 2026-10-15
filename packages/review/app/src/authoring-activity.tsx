@@ -1,5 +1,11 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  motion,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { useTooltip } from "@canvas/ui/tooltip";
@@ -227,8 +233,8 @@ const styles = stylex.create({
     alignItems: "center",
     gap: "7px",
     height: tokens.chromeControlHeight,
-    marginInline: "4px",
-    padding: "0 10px 0 6px",
+    marginInline: space.s4,
+    padding: `0 ${space.s10} 0 ${space.s6}`,
     borderRadius: radius.pill,
     color: tokens.inkMuted,
     font: `${fontWeight.medium} ${fontSize.small} ${tokens.chromeFont}`,

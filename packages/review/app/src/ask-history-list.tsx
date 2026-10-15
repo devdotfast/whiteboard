@@ -18,7 +18,7 @@ import { useReviewSession } from "./host/review-session";
 import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
 import type { AskPassage, AskView } from "./review-panel-model";
 import { useReviewRoots } from "./review-root-context";
-import { fontSize } from "./scale.stylex";
+import { fontSize, leading, space } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { Button, IconButton } from "./ui/button";
@@ -346,7 +346,7 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: "8px",
+    gap: space.s8,
   },
   historyHeading: {
     margin: 0,
@@ -362,9 +362,9 @@ const styles = stylex.create({
   historyOpen: {
     display: "flex",
     flex: "1 1 auto",
-    gap: "12px",
+    gap: space.s12,
     minWidth: 0,
-    padding: "12px 40px 12px 14px",
+    padding: `${space.s12} ${space.s40} ${space.s12} ${space.s14}`,
     backgroundColor: {
       default: tokens.transparent,
       ":hover": tokens.chromeHoverBg,
@@ -380,32 +380,32 @@ const styles = stylex.create({
   historyText: {
     display: "flex",
     flexDirection: "column",
-    gap: "4px",
+    gap: space.s4,
     minWidth: 0,
   },
   historyTitle: {
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "22px",
+    lineHeight: leading.px22,
   },
   historyQuote: {
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.ui,
     fontStyle: "italic",
-    lineHeight: "20px",
+    lineHeight: leading.px20,
   },
   historyMeta: {
     color: tokens.inkFaint,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   // Shown with its row, or once it has focus or is armed.
   historyForget: {
     position: "absolute",
-    top: "10px",
-    right: "8px",
+    top: space.s10,
+    right: space.s8,
     opacity: {
       default: 0,
       ":focus-visible": 1,
@@ -420,17 +420,17 @@ const styles = stylex.create({
     backgroundColor: tokens.warningWash,
   },
   outdatedInline: {
-    marginLeft: "6px",
+    marginLeft: space.s6,
   },
   outdated: {
     display: "flex",
     flexWrap: "wrap",
     alignItems: "baseline",
-    gap: "4px 8px",
+    gap: `${space.s4} ${space.s8}`,
     margin: 0,
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
 });

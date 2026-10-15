@@ -1,6 +1,12 @@
 import { cliInstallReady } from "@canvas/cli-install-status";
 import { installRowMarker } from "@canvas/markers.stylex";
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  motion,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
@@ -560,14 +566,14 @@ const styles = stylex.create({
     flex: "0 1 auto",
     minHeight: 0,
     overflowY: "auto",
-    paddingBlock: "8px",
+    paddingBlock: space.s8,
   },
   row: {
     display: "flex",
     alignItems: "center",
-    gap: "16px",
-    paddingBlock: "12px",
-    paddingInline: "24px",
+    gap: space.s16,
+    paddingBlock: space.s12,
+    paddingInline: space.s24,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -578,7 +584,7 @@ const styles = stylex.create({
     backgroundColor: tokens.surface,
   },
   footer: {
-    paddingBlock: "16px 8px",
+    paddingBlock: `${space.s16} ${space.s8}`,
     borderBottomWidth: 0,
   },
   status: {
@@ -625,7 +631,7 @@ const styles = stylex.create({
     display: "flex",
     flex: 1,
     flexDirection: "column",
-    gap: "4px",
+    gap: space.s4,
     minWidth: 0,
   },
   name: {
@@ -669,12 +675,12 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
   },
   note: {
-    paddingInline: "72px 28px",
+    paddingInline: `${space.s72} ${space.s28}`,
   },
   detailLine: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     minWidth: 0,
   },
   // Out of sight until its row is hovered or it holds focus.
@@ -682,9 +688,9 @@ const styles = stylex.create({
     display: "inline-flex",
     alignItems: "center",
     flexShrink: 0,
-    gap: "4px",
+    gap: space.s4,
     height: "16px",
-    paddingInline: "6px",
+    paddingInline: space.s6,
     borderWidth: 0,
     borderRadius: radius.hairline,
     backgroundColor: { default: tokens.chromeHoverBg, ":hover": tokens.rule },

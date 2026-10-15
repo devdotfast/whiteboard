@@ -1,4 +1,4 @@
-import { fontSize, fontWeight } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, space } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { TrashIcon } from "@canvas/ui/icons";
 import { Popover } from "@canvas/ui/popover";
@@ -68,7 +68,7 @@ const styles = stylex.create({
   },
   // Only rendered in the topbar, where the popover placement positions it.
   error: {
-    padding: "8px 12px",
+    padding: `${space.s8} ${space.s12}`,
     font: `${fontWeight.regular} ${fontSize.small} ${tokens.chromeFont}`,
     whiteSpace: "nowrap",
   },

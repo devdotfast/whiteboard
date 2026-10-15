@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import { AgentLogo } from "@canvas/ui/brand-icons";
 import { Button, buttonLook, buttonStyles } from "@canvas/ui/button";
 import { useCopy } from "@canvas/ui/copy";
@@ -385,17 +385,17 @@ export function LegacySkillsRow({
 
 const styles = stylex.create({
   note: {
-    margin: "0 0 8px",
+    margin: `0 0 ${space.s8}`,
     color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   // The prompt card's tabs, one agent at a time.
   agentTabs: {
     flexWrap: "wrap",
-    marginBottom: "6px",
+    marginBottom: space.s6,
   },
   otherTrigger: {
-    paddingRight: "6px",
+    paddingRight: space.s6,
   },
   bodyWrap: {
     position: "relative",
@@ -417,18 +417,18 @@ const styles = stylex.create({
     borderRadius: radius.pill,
     backgroundColor: tokens.raised,
     color: tokens.ink,
-    font: `${fontSize.body}/18px ${tokens.chromeFont}`,
+    font: `${fontSize.body}/${leading.px18} ${tokens.chromeFont}`,
     cursor: "pointer",
   },
   collapse: {
     marginRight: "auto",
-    font: `${fontSize.body}/22px ${tokens.chromeFont}`,
+    font: `${fontSize.body}/${leading.px22} ${tokens.chromeFont}`,
   },
   legacy: {
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-start",
-    gap: "8px",
+    gap: space.s8,
     fontSize: fontSize.body,
   },
   legacyText: {
@@ -444,6 +444,6 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
   },
   legacyButton: {
-    marginTop: "8px",
+    marginTop: space.s8,
   },
 });

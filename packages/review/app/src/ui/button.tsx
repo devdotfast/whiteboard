@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import { focusStyles } from "@canvas/ui/focus";
@@ -142,9 +148,9 @@ export const buttonStyles = stylex.create({
     flex: "0 0 auto",
     alignItems: "center",
     justifyContent: "center",
-    gap: "6px",
+    gap: space.s6,
     height: tokens.chromeControlHeight,
-    padding: "0 10px",
+    padding: `0 ${space.s10}`,
     borderRadius: radius.control,
     // A trigger whose menu or popover is showing stays held down.
     backgroundColor: {
@@ -155,7 +161,7 @@ export const buttonStyles = stylex.create({
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
     fontWeight: fontWeight.medium,
-    lineHeight: 1,
+    lineHeight: leading.none,
     whiteSpace: "nowrap",
     textDecorationLine: "none",
     cursor: { default: "pointer", ":disabled": "default" },
@@ -164,7 +170,7 @@ export const buttonStyles = stylex.create({
   link: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     padding: 0,
     borderRadius: radius.small,
     color: {

@@ -12,7 +12,7 @@ import { askPanelStyles } from "./ask-styles";
 import { copyAgentContext } from "./copy-agent-context";
 import { useReviewSession } from "./host/review-session";
 import { useNotify } from "./notify";
-import { fontSize, radius } from "./scale.stylex";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { EmptyState } from "./ui/empty-state";
@@ -128,18 +128,18 @@ export function AskSignIn({
 
 const setupStyles = stylex.create({
   page: {
-    gap: "36px",
+    gap: space.s36,
   },
   // The page pads it already.
   message: {
     paddingBlock: 0,
-    paddingInline: "4px",
+    paddingInline: space.s4,
   },
   agent: {
     display: "flex",
     alignItems: "center",
-    gap: "12px",
-    padding: "12px 14px",
+    gap: space.s12,
+    padding: `${space.s12} ${space.s14}`,
   },
   logo: {
     opacity: 0.45,
@@ -147,31 +147,31 @@ const setupStyles = stylex.create({
   name: {
     display: "flex",
     flexDirection: "column",
-    gap: "2px",
+    gap: space.s2,
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   status: {
     color: tokens.inkFaint,
     fontSize: fontSize.micro,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   fallback: {
     display: "flex",
     flex: "0 0 auto",
     flexDirection: "column",
     alignItems: "center",
-    gap: "10px",
-    padding: "16px 16px 20px",
+    gap: space.s10,
+    padding: `${space.s16} ${space.s16} ${space.s20}`,
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
     color: tokens.inkFaint,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   copy: {
     width: "100%",
@@ -186,8 +186,8 @@ const signInStyles = stylex.create({
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-start",
-    gap: "12px",
-    padding: "16px",
+    gap: space.s12,
+    padding: space.s16,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
@@ -199,14 +199,14 @@ const signInStyles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "24px",
+    lineHeight: leading.px24,
   },
   command: {
     display: "flex",
     alignItems: "center",
     alignSelf: "stretch",
-    gap: "8px",
-    padding: "4px 4px 4px 12px",
+    gap: space.s8,
+    padding: `${space.s4} ${space.s4} ${space.s4} ${space.s12}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
@@ -219,7 +219,7 @@ const signInStyles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     overflowWrap: "anywhere",
   },
 });

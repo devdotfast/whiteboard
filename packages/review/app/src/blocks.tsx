@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import { anchorSelection } from "@review/lens-selection";
 import {
   type Block,
@@ -371,8 +371,8 @@ const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 const styles = stylex.create({
   callout: {
-    margin: { default: null, [inDocument()]: "18px 0" },
-    padding: { default: null, [inDocument()]: "12px 16px" },
+    margin: { default: null, [inDocument()]: `${space.s18} 0` },
+    padding: { default: null, [inDocument()]: `${space.s12} ${space.s16}` },
     borderLeftWidth: { default: null, [inDocument()]: "2px" },
     borderLeftStyle: { default: null, [inDocument()]: "solid" },
     borderLeftColor: { default: null, [inDocument()]: tokens.inkFaint },
@@ -382,7 +382,7 @@ const styles = stylex.create({
     },
     backgroundColor: { default: null, [inDocument()]: tokens.tray },
     fontSize: { default: null, [inDocument()]: fontSize.reading },
-    lineHeight: { default: null, [inDocument()]: "22px" },
+    lineHeight: { default: null, [inDocument()]: leading.px22 },
   },
   info: {
     borderLeftColor: { default: null, [inDocument()]: tokens.accent },

@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { Button, buttonStyles } from "@canvas/ui/button";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { EmptyState } from "@canvas/ui/empty-state";
@@ -553,14 +559,14 @@ const styles = stylex.create({
   columns: {
     display: "flex",
     flexDirection: { default: null, [stacked]: "column" },
-    gap: { default: "72px", [stacked]: "32px" },
+    gap: { default: space.s72, [stacked]: space.s32 },
     alignItems: "flex-start",
-    paddingTop: "48px",
+    paddingTop: space.s48,
   },
   intro: {
     display: "flex",
     flexDirection: "column",
-    gap: "20px",
+    gap: space.s20,
     width: { default: "380px", [stacked]: "auto" },
     flexShrink: 0,
   },
@@ -580,14 +586,14 @@ const styles = stylex.create({
   },
   dismiss: {
     alignSelf: "flex-start",
-    marginTop: "4px",
+    marginTop: space.s4,
   },
   steps: {
     display: "flex",
     flex: 1,
     flexDirection: "column",
     alignSelf: { default: null, [stacked]: "stretch" },
-    gap: "12px",
+    gap: space.s12,
     minWidth: 0,
     margin: 0,
     padding: 0,
@@ -610,9 +616,9 @@ const styles = stylex.create({
   stepHeader: {
     display: "flex",
     alignItems: "center",
-    gap: "12px",
+    gap: space.s12,
     width: "100%",
-    padding: "16px 20px",
+    padding: `${space.s16} ${space.s20}`,
     borderRadius: { default: null, ":focus-visible": radius.surface },
     color: "inherit",
     cursor: { default: "pointer", ":disabled": "not-allowed" },
@@ -621,7 +627,7 @@ const styles = stylex.create({
   },
   // The chevron closes the row: it sits in the trailing lane, after the note.
   stepChevron: {
-    margin: "2px 2px 2px auto",
+    margin: `${space.s2} ${space.s2} ${space.s2} auto`,
   },
   badge: {
     display: "flex",
@@ -664,7 +670,7 @@ const styles = stylex.create({
   stepBody: {
     display: "flex",
     flexDirection: "column",
-    padding: "0 20px 18px",
+    padding: `0 ${space.s20} ${space.s18}`,
   },
   stepButton: {
     alignSelf: "flex-start",
@@ -673,17 +679,17 @@ const styles = stylex.create({
     display: "flex",
     flexWrap: "wrap",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
   },
   // A finished step's button stays at full strength.
   stepDone: {
     opacity: 1,
   },
   hint: {
-    margin: "0 0 14px",
+    margin: `0 0 ${space.s14}`,
     maxWidth: "560px",
     color: tokens.inkMuted,
-    font: `${fontSize.ui}/20px ${tokens.chromeFont}`,
+    font: `${fontSize.ui}/${leading.px20} ${tokens.chromeFont}`,
   },
   hintCode: {
     padding: "1px 5px",
@@ -697,10 +703,10 @@ const styles = stylex.create({
   },
   feedback: {
     margin: "auto 0 0",
-    paddingTop: "48px",
+    paddingTop: space.s48,
     color: tokens.inkMuted,
     fontSize: fontSize.body,
-    lineHeight: "20px",
+    lineHeight: leading.px20,
   },
   feedbackLink: {
     color: tokens.accent,

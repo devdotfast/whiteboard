@@ -1,4 +1,4 @@
-import { motion, radius } from "@canvas/scale.stylex";
+import { motion, radius, space } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -201,8 +201,8 @@ const styles = stylex.create({
   thumb: {
     position: "absolute",
     top: 0,
-    right: "2px",
-    left: "2px",
+    right: space.s2,
+    left: space.s2,
     borderRadius: radius.pill,
     backgroundColor: {
       default: tokens.reviewScrollbarThumb,

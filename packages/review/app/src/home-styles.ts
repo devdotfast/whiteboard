@@ -1,5 +1,11 @@
 import { documentType } from "@canvas/document-type.stylex";
-import { fontSize, fontWeight, tracking } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  space,
+  tracking,
+} from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -19,16 +25,16 @@ export const homeStyles = stylex.create({
     overflow: "hidden",
     color: tokens.ink,
     backgroundColor: tokens.bg,
-    font: `${fontSize.body}/16px ${tokens.chromeFont}`,
+    font: `${fontSize.body}/${leading.px16} ${tokens.chromeFont}`,
   },
   scroll: {
     flex: "1 1 auto",
     minHeight: 0,
-    paddingTop: { default: "36px", [narrow]: "32px" },
+    paddingTop: { default: space.s36, [narrow]: space.s32 },
     paddingInline: {
       default: "clamp(36px, calc(12.5cqw - 60px), 120px)",
-      [wide]: "36px",
-      [narrow]: "24px",
+      [wide]: space.s36,
+      [narrow]: space.s24,
     },
     paddingBottom: "max(56px, var(--review-bottom-scroll-padding, 0px))",
     overflow: "auto",
@@ -44,7 +50,7 @@ export const homeStyles = stylex.create({
     display: "flex",
     alignItems: { default: "flex-start", [narrow]: "center" },
     justifyContent: "space-between",
-    gap: "32px",
+    gap: space.s32,
   },
   heading: {
     margin: 0,

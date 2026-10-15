@@ -1,3 +1,4 @@
+import { space } from "@canvas/scale.stylex";
 import type {
   ReviewDiffSide,
   ReviewInlineEditorHeightMode,
@@ -440,11 +441,14 @@ const styles = stylex.create({
       [inDocumentBlock()]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
     },
     marginInline: { default: null, [inDocumentBlock()]: "auto" },
-    marginBlock: { default: "24px", [inMapInspector()]: 0 },
+    marginBlock: { default: space.s24, [inMapInspector()]: 0 },
     overflow: { default: null, [inMapInspector()]: "visible" },
     padding: {
       default: null,
-      [inMapInspector()]: { default: 0, [stylex.env.narrow]: "0 8px 8px" },
+      [inMapInspector()]: {
+        default: 0,
+        [stylex.env.narrow]: `0 ${space.s8} ${space.s8}`,
+      },
     },
     overscrollBehavior: {
       default: null,

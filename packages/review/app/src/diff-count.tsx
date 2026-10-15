@@ -1,4 +1,4 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
@@ -70,7 +70,7 @@ export function DiffCount({
 export const diffCountStyles = stylex.create({
   counts: {
     display: "inline-flex",
-    gap: "6px",
+    gap: space.s6,
     font: `${fontSize.small} ${tokens.fontMono}`,
     fontVariantNumeric: "tabular-nums",
     whiteSpace: "nowrap",
@@ -89,6 +89,6 @@ export const diffCountStyles = stylex.create({
 const styles = stylex.create({
   large: {
     fontSize: fontSize.ui,
-    gap: "10px",
+    gap: space.s10,
   },
 });

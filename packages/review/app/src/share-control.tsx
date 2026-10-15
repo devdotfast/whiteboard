@@ -1,4 +1,4 @@
-import { layer } from "@canvas/scale.stylex";
+import { layer, space } from "@canvas/scale.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
 import { useCopy } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
@@ -335,10 +335,10 @@ const styles = stylex.create({
     right: { default: 0, [inTopbarActions()]: "anchor(right)" },
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: space.s8,
     width: "280px",
     margin: 0,
-    padding: "10px 12px",
+    padding: `${space.s10} ${space.s12}`,
     color: tokens.chromeFg,
     fontFamily: tokens.chromeFont,
     fontSize: tokens.chromeFontSize,

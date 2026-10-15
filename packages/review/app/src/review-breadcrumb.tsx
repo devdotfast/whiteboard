@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { CrumbSeparator } from "@canvas/ui/crumbs";
@@ -368,14 +368,14 @@ const styles = stylex.create({
   line: {
     display: "flex",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     minWidth: 0,
   },
   // Its icon and a couple of letters stay, as the page bar's fold counts.
   parent: {
     display: "flex",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     minWidth: "48px",
     maxWidth: "440px",
     padding: 0,
@@ -389,7 +389,7 @@ const styles = stylex.create({
     minWidth: 0,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.ui,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
   },
   // The switcher keeps its size while its count shows; once the count
   // has gone it gives way with the parent's title.
@@ -397,7 +397,7 @@ const styles = stylex.create({
     display: "inline-flex",
     flexShrink: 0,
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     minWidth: 0,
   },
   counterYields: { flexShrink: 1 },
@@ -405,7 +405,7 @@ const styles = stylex.create({
   count: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "4px",
+    gap: space.s4,
     minWidth: 0,
     paddingBlock: 0,
     paddingInline: "5px",
@@ -414,7 +414,7 @@ const styles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.ui,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
     whiteSpace: "nowrap",
     cursor: "pointer",
   },
@@ -428,7 +428,7 @@ const styles = stylex.create({
   position: {
     display: "inline-flex",
     flexShrink: 0,
-    gap: "4px",
+    gap: space.s4,
     color: tokens.inkMuted,
   },
   dot: { color: tokens.inkFaint },
@@ -441,7 +441,7 @@ const styles = stylex.create({
     width: "12px",
     color: tokens.inkFaint,
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   numberHere: { color: tokens.accent },
   title: { flex: "1 1 0", minWidth: 0 },
