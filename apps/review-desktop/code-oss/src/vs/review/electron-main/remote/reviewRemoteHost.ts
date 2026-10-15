@@ -384,6 +384,10 @@ export class ReviewRemoteHost {
 		return Promise.resolve();
 	}
 
+	recheck(): Promise<void> {
+		return this.attachAgain("asked to check it again", true);
+	}
+
 	private async attachAgain(reason: string, reuse: boolean): Promise<void> {
 		const env = this.env;
 		if (this.disposed || this.removing || this.reattaching || !this.master || this.connectedAt === undefined || !env || !this.forwarded) return;

@@ -166,6 +166,7 @@ export class ReviewRemoteHosts {
 	retry(alias: string): void {
 		const host = this.hosts.get(alias);
 		if (host?.quiesced && !this.uninstalling.has(alias)) host.unquiesce();
+		else if (host?.state.endpoint) void host.recheck();
 		else host?.retry();
 	}
 
