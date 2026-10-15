@@ -618,11 +618,14 @@ export const REVIEW_REMOTE_INSTALL_LOCK = "install.lock";
 
 export const REVIEW_REMOTE_LOCK_STALE_SECONDS = 15 * 60;
 
+// Cursor needs its app, so a remote host cannot connect it.
 export const REVIEW_REMOTE_AGENT_IDS = [
   "claude",
   "codex",
   "opencode",
   "pi",
+  "omp",
+  "copilot",
 ] as const satisfies readonly ReviewCliInstallTarget[];
 
 export type ReviewRemoteAgentId = (typeof REVIEW_REMOTE_AGENT_IDS)[number];
@@ -630,7 +633,6 @@ export type ReviewRemoteAgentId = (typeof REVIEW_REMOTE_AGENT_IDS)[number];
 export interface ReviewRemoteAgent {
   id: ReviewRemoteAgentId;
   connected: boolean;
-  manual?: true;
 }
 
 export interface ReviewRemoteAgentResult {

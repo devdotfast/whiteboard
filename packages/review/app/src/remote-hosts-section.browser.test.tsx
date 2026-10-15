@@ -392,12 +392,12 @@ test("lists an online host's agents by Desktop's names, connects or reconnects e
     .mockResolvedValueOnce([
       { id: "claude", connected: true },
       { id: "codex", connected: false },
-      { id: "opencode", connected: false, manual: true },
+      { id: "opencode", connected: false },
     ])
     .mockResolvedValue([
       { id: "claude", connected: true },
       { id: "codex", connected: false },
-      { id: "opencode", connected: false, manual: true },
+      { id: "opencode", connected: false },
     ]);
   vi.mocked(hosts.connectAgents).mockResolvedValue([
     { id: "codex", connected: false, output: "<b>codex: command failed</b>" },
@@ -408,8 +408,7 @@ test("lists an online host's agents by Desktop's names, connects or reconnects e
     expect(lines(0, "Agents")).toEqual([
       "Claude Code · connected · Reconnect",
       "Codex · not connected · Connect",
-      "OpenCode · set up by hand",
-      "Paste into OpenCode on box1: Run `whiteboard connect opencode` and follow the instructions to connect this agent to Whiteboard.",
+      "OpenCode · not connected · Connect",
     ]),
   );
   expect(hosts.agents).toHaveBeenCalledWith("box1");

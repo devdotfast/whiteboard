@@ -759,7 +759,7 @@ export class ReviewRemoteHost {
 		if (!known) throw new Error(`${this.alias} is not connected, or its agents could not be read.`);
 		const wanted = [...new Set(ids)];
 		for (const id of wanted) {
-			if (!isRemoteAgentId(id) || !known.some((agent) => agent.id === id && !agent.manual)) {
+			if (!isRemoteAgentId(id) || !known.some((agent) => agent.id === id)) {
 				throw new Error(`Whiteboard cannot connect ${isRemoteAgentId(id) ? id : "that agent"} on ${this.alias}.`);
 			}
 		}

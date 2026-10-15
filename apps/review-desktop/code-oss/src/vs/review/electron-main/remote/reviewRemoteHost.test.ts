@@ -1080,7 +1080,7 @@ test("a hand-installed host detects with the CLI on its PATH", async (t) => {
 	assert.deepEqual(await host.detectAgents(), []);
 });
 
-test("connecting runs the agents' commands with the installed CLI, and refuses agents it did not find or cannot connect alone", async (t) => {
+test("connecting runs the agents' commands with the installed CLI, and refuses agents it did not find", async (t) => {
 	const port = await healthServer(t);
 	const { flow } = await installFlow(t, "always");
 	const remote: FakeRemote = {
@@ -1088,7 +1088,6 @@ test("connecting runs the agents' commands with the installed CLI, and refuses a
 			code: 0,
 			stdout: detectOutput([
 				{ id: "pi", connected: false },
-				{ id: "codex", connected: false, manual: true },
 			]),
 		},
 	};
@@ -1105,8 +1104,5 @@ test("connecting runs the agents' commands with the installed CLI, and refuses a
 	assert.deepEqual(await host.connectAgents(["pi", "pi"]), [{ id: "pi", connected: true, output: "" }]);
 	const [connect] = ssh.of("wb-test-a", "connect");
 	assert.match(connect.input!, new RegExp(`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' 'connect' '--yes' '--json' 'pi'\n$`));
-	assert.deepEqual(await host.detectAgents(), [
-		{ id: "codex", connected: false, manual: true },
-		{ id: "pi", connected: true },
-	]);
+	assert.deepEqual(await host.detectAgents(), [{ id: "pi", connected: true }]);
 });

@@ -36,8 +36,8 @@ test("detection keeps only known agents, once each, and nothing the remote adds"
 		{ id: "claude", connected: true },
 		{ id: "pi", connected: false },
 	]);
-	assert.deepEqual(parseRemoteAgents(JSON.stringify({ event: "connect.detect", agents: [{ id: "codex", connected: false, manual: true }] })), [
-		{ id: "codex", connected: false, manual: true },
+	assert.deepEqual(parseRemoteAgents(JSON.stringify({ event: "connect.detect", agents: [{ id: "omp", connected: false }] })), [
+		{ id: "omp", connected: false },
 	]);
 	assert.equal(parseRemoteAgents("bash: whiteboard: command not found\n"), undefined);
 	assert.equal(parseRemoteAgents(JSON.stringify({ event: "connect.detect", agents: "all" })), undefined);

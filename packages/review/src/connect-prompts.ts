@@ -217,55 +217,6 @@ export function connectLines(
     .join("\n");
 }
 
-export interface ConnectCommand {
-  argv: readonly string[];
-  ifAny?: true;
-}
-
-export const CONNECT_COMMANDS = {
-  claude: [
-    {
-      argv: ["claude", "plugin", "marketplace", "add", "devdotfast/whiteboard"],
-    },
-    {
-      argv: [
-        "claude",
-        "plugin",
-        "install",
-        "whiteboard@devfast",
-        "--scope",
-        "user",
-      ],
-    },
-    {
-      argv: ["claude", "mcp", "remove", "-s", "user", "whiteboard"],
-      ifAny: true,
-    },
-  ],
-  codex: [
-    {
-      argv: ["codex", "plugin", "marketplace", "add", "devdotfast/whiteboard"],
-    },
-    { argv: ["codex", "plugin", "add", "whiteboard@devfast"] },
-    { argv: ["codex", "mcp", "remove", "whiteboard"], ifAny: true },
-  ],
-  opencode: [
-    {
-      argv: [
-        "opencode",
-        "mcp",
-        "add",
-        "--global",
-        "whiteboard",
-        "--",
-        REVIEW_MCP_LAUNCH.command,
-        ...REVIEW_MCP_LAUNCH.args,
-      ],
-    },
-  ],
-  pi: [{ argv: ["pi", "install", PI_WHITEBOARD_PACKAGE] }],
-} as const satisfies Record<string, readonly ConnectCommand[]>;
-
 function runBlock(lines: string): string {
   return `\`\`\`sh\n${lines}\n\`\`\``;
 }

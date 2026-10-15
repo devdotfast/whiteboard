@@ -15,14 +15,7 @@ import {
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import {
-  Fragment,
-  type ReactNode,
-  useEffect,
-  useId,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 
 import { chevronMarker } from "./markers.stylex";
 import {
@@ -221,8 +214,7 @@ function HostRow({
     ? (state.languageGroups ?? []).filter((group) => group.detail)
     : [];
 
-  const unconnected =
-    agents.list?.filter((agent) => !agent.connected && !agent.manual) ?? [];
+  const unconnected = agents.list?.filter((agent) => !agent.connected) ?? [];
 
   const connected = agents.list?.filter((agent) => agent.connected).length ?? 0;
 
@@ -340,50 +332,15 @@ function HostRow({
                       : `No agents found on ${name}.`}
                 </span>
               )}
-              {agents.list?.map((agent) => {
-                const label = REVIEW_CLI_INSTALL_TARGET_LABELS[agent.id];
-                const verb = agent.connected ? "Reconnect" : "Connect";
-
-                return (
-                  <Fragment key={agent.id}>
-                    <Item
-                      name={label}
-                      text={
-                        agent.connected
-                          ? "connected"
-                          : agent.manual
-                            ? "set up by hand"
-                            : "not connected"
-                      }
-                    >
-                      {agent.manual ? null : (
-                        <Button
-                          aria-label={`${verb} ${label} on ${name}`}
-                          disabled={agents.busy}
-                          onClick={() => void agents.connect(agent.id)}
-                        >
-                          {verb}
-                        </Button>
-                      )}
-                    </Item>
-                    {agent.manual && !agent.connected ? (
-                      <span
-                        {...stylex.props(
-                          styles.rowDescription,
-                          local.detail,
-                          local.wide,
-                        )}
-                      >
-                        Paste into {label} on {name}:{" "}
-                        <code {...stylex.props(local.command)}>
-                          Run `whiteboard connect {agent.id}` and follow the
-                          instructions to connect this agent to Whiteboard.
-                        </code>
-                      </span>
-                    ) : null}
-                  </Fragment>
-                );
-              })}
+              {agents.list?.map((agent) => (
+                <AgentItem
+                  key={agent.id}
+                  agent={agent}
+                  alias={name}
+                  busy={agents.busy}
+                  onConnect={() => void agents.connect(agent.id)}
+                />
+              ))}
               {agents.result ? (
                 <span {...stylex.props(local.wide)}>
                   <Detail
@@ -399,6 +356,33 @@ function HostRow({
       ) : null}
       {children}
     </div>
+  );
+}
+
+function AgentItem({
+  agent,
+  alias,
+  busy,
+  onConnect,
+}: {
+  agent: ReviewRemoteAgent;
+  alias: string;
+  busy: boolean;
+  onConnect: () => void;
+}) {
+  const label = REVIEW_CLI_INSTALL_TARGET_LABELS[agent.id];
+  const verb = agent.connected ? "Reconnect" : "Connect";
+
+  return (
+    <Item name={label} text={agent.connected ? "connected" : "not connected"}>
+      <Button
+        aria-label={`${verb} ${label} on ${alias}`}
+        disabled={busy}
+        onClick={onConnect}
+      >
+        {verb}
+      </Button>
+    </Item>
   );
 }
 
