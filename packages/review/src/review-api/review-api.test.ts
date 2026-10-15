@@ -245,7 +245,7 @@ describe("snapshot authoring", () => {
           pullRequestUrl: url,
         }),
       ),
-    ).toThrow(/canonical GitHub PR URL|PR number is too large/);
+    ).toThrow(/canonical PR URL|PR number is too large/);
     expect(store.list()).toEqual([]);
   });
 

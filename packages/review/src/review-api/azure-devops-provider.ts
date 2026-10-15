@@ -2,234 +2,164 @@ import { errorMessage } from "@dev.fast/trace-core";
 import { z } from "zod";
 
 import { ReviewInputError } from "./document.js";
-import type { PullRequestAddress, PullRequestProvider } from "./provider.js";
+import type { PullRequestProvider } from "./provider.js";
 import { firstLine } from "./pull-request.js";
 
 const AZ_TIMEOUT_MS = 30_000;
 
-const MODERN_ADO_PR_REGEX =
-  /^https:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+)\/pullrequest\/([1-9]\d*)$/;
+const PULL_REQUEST_URLS = [
+  /^https:\/\/dev\.azure\.com\/([A-Za-z0-9-]+)\/([^/]+)\/_git\/([^/]+)\/pullrequest\/([1-9]\d*)$/,
+  /^https:\/\/([A-Za-z0-9-]+)\.visualstudio\.com\/(?:DefaultCollection\/)?([^/]+)\/_git\/([^/]+)\/pullrequest\/([1-9]\d*)$/,
+];
 
-const LEGACY_ADO_PR_REGEX =
-  /^https:\/\/([^.]+)\.visualstudio\.com\/(?:DefaultCollection\/)?([^/]+)\/_git\/([^/]+)\/pullrequest\/([1-9]\d*)$/;
+const REMOTE_URLS = [
+  /^https:\/\/(?:[^@]+@)?dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+?)(?:\.git)?\/?$/,
+  /^https:\/\/([^.]+)\.visualstudio\.com\/(?:DefaultCollection\/)?([^/]+)\/_git\/([^/]+?)(?:\.git)?\/?$/,
+  /^git@ssh\.dev\.azure\.com:v3\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/,
+  /^[^@]+@vs-ssh\.visualstudio\.com:v3\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/,
+];
 
 const metadataSchema = z.object({
   title: z.string(),
   sourceRefName: z.string().min(1),
   targetRefName: z.string().min(1),
-  lastMergeTargetCommit: z
-    .object({
-      commitId: z.string().min(1),
-    })
-    .optional(),
+  lastMergeTargetCommit: z.object({ commitId: z.string().min(1) }).optional(),
+  repository: z.object({
+    name: z.string(),
+    project: z.object({ name: z.string() }),
+  }),
 });
 
-function parseAdoRemote(
-  url: string,
-): { org: string; project: string; repo: string } | undefined {
-  const trimmed = url.trim();
+/** org/project/repository, decoded; undefined for malformed escapes. */
+function slugOf(patterns: RegExp[], url: string) {
+  const match = patterns.map((pattern) => pattern.exec(url)).find(Boolean);
 
-  const modernHttps =
-    /^https:\/\/(?:[^@]+@)?dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+?)(?:\.git)?\/?$/.exec(
-      trimmed,
+  try {
+    return match && match.slice(1, 4).map(decodeURIComponent).join("/");
+  } catch {
+    return undefined;
+  }
+}
+
+function azFailure(url: string, failure: string) {
+  const unreadable = (hint: string) =>
+    new ReviewInputError(
+      `Could not read ${url}: az failed (${failure}). ${hint}`,
+      409,
     );
 
-  if (modernHttps) {
-    return {
-      org: decodeURIComponent(modernHttps[1]!),
-      project: decodeURIComponent(modernHttps[2]!),
-      repo: decodeURIComponent(modernHttps[3]!),
-    };
-  }
-
-  const legacyHttps =
-    /^https:\/\/([^.]+)\.visualstudio\.com\/(?:DefaultCollection\/)?([^/]+)\/_git\/([^/]+?)(?:\.git)?\/?$/.exec(
-      trimmed,
+  if (
+    /not recognized as an internal or external command|command not found|enoent/i.test(
+      failure,
+    )
+  )
+    return unreadable(
+      "Install the Azure CLI and the azure-devops extension, then retry.",
     );
 
-  if (legacyHttps) {
-    return {
-      org: decodeURIComponent(legacyHttps[1]!),
-      project: decodeURIComponent(legacyHttps[2]!),
-      repo: decodeURIComponent(legacyHttps[3]!),
-    };
-  }
-
-  const modernSsh =
-    /^git@ssh\.dev\.azure\.com:v3\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(
-      trimmed,
+  if (
+    /extension|unknown command ['"]repos['"]|'repos' is not in the 'az' command group/i.test(
+      failure,
+    )
+  )
+    return unreadable(
+      "Run `az extension add --name azure-devops`, then retry.",
     );
 
-  if (modernSsh) {
-    return {
-      org: decodeURIComponent(modernSsh[1]!),
-      project: decodeURIComponent(modernSsh[2]!),
-      repo: decodeURIComponent(modernSsh[3]!),
-    };
-  }
+  if (/az login|aadsts/i.test(failure))
+    return unreadable("Run `az login` to sign in, then retry.");
 
-  const legacySsh =
-    /^[^@]+@vs-ssh\.visualstudio\.com:v3\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/.exec(
-      trimmed,
+  if (/tf401027|not found|does not exist/i.test(failure))
+    return new ReviewInputError(
+      `${url} was not found: it does not exist, or it is private and az is not signed in to an account that can read it. az said: ${failure}`,
+      404,
     );
 
-  if (legacySsh) {
-    return {
-      org: decodeURIComponent(legacySsh[1]!),
-      project: decodeURIComponent(legacySsh[2]!),
-      repo: decodeURIComponent(legacySsh[3]!),
-    };
-  }
-
-  return undefined;
+  return unreadable(
+    "Check your Azure DevOps connection and credentials, then retry.",
+  );
 }
 
 export const azureDevOpsProvider: PullRequestProvider = {
   id: "azure-devops",
 
   parseUrl(url) {
-    const match =
-      MODERN_ADO_PR_REGEX.exec(url) ?? LEGACY_ADO_PR_REGEX.exec(url);
+    const slug = slugOf(PULL_REQUEST_URLS, url);
+    const number = Number(url.split("/").at(-1));
 
-    if (!match) return undefined;
+    if (!slug || !Number.isSafeInteger(number)) return undefined;
 
-    const number = Number(match[4]);
-
-    if (!Number.isSafeInteger(number)) return undefined;
-
-    try {
-      const org = decodeURIComponent(match[1]!);
-      const project = decodeURIComponent(match[2]!);
-      const repo = decodeURIComponent(match[3]!);
-
-      return {
-        host: "dev.azure.com",
-        slug: `${org}/${project}/${repo}`,
-        number,
-      };
-    } catch {
-      return undefined;
-    }
+    return { host: "dev.azure.com", slug, number };
   },
 
   async readPullRequest({ host, slug, number }, deps) {
     const [org, project, repo] = slug.split("/");
     const url = `https://dev.azure.com/${org}/${project}/_git/${repo}/pullrequest/${number}`;
 
+    const args = [
+      "repos",
+      "pr",
+      "show",
+      "--id",
+      String(number),
+      "--detect",
+      "false",
+      "--organization",
+      `https://dev.azure.com/${org}`,
+      "--output",
+      "json",
+      "--only-show-errors",
+    ];
+
     let stdout: string;
 
     try {
-      stdout = await deps.run(
-        "az",
-        [
-          "repos",
-          "pr",
-          "show",
-          "--id",
-          String(number),
-          "--detect",
-          "false",
-          "--organization",
-          `https://dev.azure.com/${org}`,
-          "--project",
-          project!,
-          "--output",
-          "json",
-        ],
-        { timeoutMs: AZ_TIMEOUT_MS },
-      );
+      // Windows installs az as az.cmd, which execFile cannot start directly.
+      stdout =
+        process.platform === "win32"
+          ? await deps.run("cmd.exe", ["/d", "/s", "/c", "az", ...args], {
+              timeoutMs: AZ_TIMEOUT_MS,
+            })
+          : await deps.run("az", args, { timeoutMs: AZ_TIMEOUT_MS });
     } catch (error) {
-      const failure = firstLine(errorMessage(error));
-      const lower = failure.toLowerCase();
-
-      if (
-        lower.includes("not recognized as an internal or external command") ||
-        lower.includes("command not found") ||
-        lower.includes("enoent")
-      ) {
-        throw new ReviewInputError(
-          `Could not read ${url}: az failed (${failure}). Install the Azure CLI and the azure-devops extension, then retry.`,
-          409,
-        );
-      }
-
-      if (
-        lower.includes("extension") ||
-        lower.includes("unknown command 'repos'") ||
-        lower.includes('unknown command "repos"') ||
-        lower.includes("'repos' is not in the 'az' command group")
-      ) {
-        throw new ReviewInputError(
-          `Could not read ${url}: az failed (${failure}). Run \`az extension add --name azure-devops\`, then retry.`,
-          409,
-        );
-      }
-
-      if (
-        lower.includes("az login") ||
-        lower.includes("aadsts") ||
-        lower.includes("please run 'az login'") ||
-        lower.includes('please run "az login"')
-      ) {
-        throw new ReviewInputError(
-          `Could not read ${url}: az failed (${failure}). Run \`az login\` to sign in, then retry.`,
-          409,
-        );
-      }
-
-      if (
-        lower.includes("tf401027") ||
-        lower.includes("not found") ||
-        lower.includes("does not exist")
-      ) {
-        throw new ReviewInputError(
-          `${url} was not found: it does not exist, or it is private and az is not signed in to an account that can read it. az said: ${failure}`,
-          404,
-        );
-      }
-
-      throw new ReviewInputError(
-        `Could not read ${url}: az failed (${failure}). Check your Azure DevOps connection and credentials, then retry.`,
-        409,
-      );
+      throw azFailure(url, firstLine(errorMessage(error)));
     }
 
-    const json = await Promise.resolve()
-      .then(() => JSON.parse(stdout))
-      .catch(() => undefined);
+    let pr: z.infer<typeof metadataSchema>;
 
-    const parsed = metadataSchema.safeParse(json);
-
-    if (!parsed.success) {
+    try {
+      pr = metadataSchema.parse(JSON.parse(stdout));
+    } catch {
       throw new ReviewInputError(
         `Could not read ${url}: the Azure DevOps response was malformed.`,
         409,
       );
     }
 
+    // PR numbers are unique per organization, so az ignores project and repository.
+    const actual = `${pr.repository.project.name}/${pr.repository.name}`;
+
+    if (actual.toLowerCase() !== `${project}/${repo}`.toLowerCase())
+      throw new ReviewInputError(
+        `${url} was not found: PR ${number} belongs to ${actual}.`,
+        404,
+      );
+
     return {
       host,
       slug,
       number,
-      title: parsed.data.title,
-      headRef: parsed.data.sourceRefName,
-      baseRefName: parsed.data.targetRefName.replace(/^refs\/heads\//, ""),
-      baseRefOid: parsed.data.lastMergeTargetCommit?.commitId,
+      title: pr.title,
+      headRef: pr.sourceRefName,
+      baseRefName: pr.targetRefName.replace(/^refs\/heads\//, ""),
+      baseRefOid: pr.lastMergeTargetCommit?.commitId,
     };
   },
 
   matchesRemote(remoteUrl, address) {
-    const remote = parseAdoRemote(remoteUrl);
-
-    if (!remote) return false;
-
-    const [expectedOrg, expectedProject, expectedRepo] =
-      address.slug.split("/");
-
     return (
-      remote.org.toLowerCase() === expectedOrg?.toLowerCase() &&
-      remote.project.toLowerCase() === expectedProject?.toLowerCase() &&
-      remote.repo.toLowerCase() === expectedRepo?.toLowerCase()
+      slugOf(REMOTE_URLS, remoteUrl.trim())?.toLowerCase() ===
+      address.slug.toLowerCase()
     );
   },
 };
