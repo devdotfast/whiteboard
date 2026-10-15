@@ -132,7 +132,7 @@ jobs:
   package:
     name: Build and validate macOS (${{ matrix.target }})
     strategy:
-      fail-fast: true
+      fail-fast: false
       matrix:
         include:
           - target: darwin-arm64
