@@ -412,6 +412,9 @@ function StepButton({
   );
 }
 
+// Centres the 1px link under the commit dots.
+const DOT_CENTER = "12.5px";
+
 const styles = stylex.create({
   bar: {
     display: "flex",
@@ -530,7 +533,7 @@ const styles = stylex.create({
     display: "block",
     width: "1px",
     height: "8px",
-    marginLeft: "12.5px",
+    marginLeft: DOT_CENTER,
     backgroundColor: tokens.rule,
   },
   row: {

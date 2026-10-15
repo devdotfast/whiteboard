@@ -17,6 +17,12 @@ const narrowCanvas = "@container review-canvas (max-width: 929px)";
 
 const short = "@media (max-height: 560px)";
 
+// A stop's rail column. The stop's content breaks out over it, and on narrow
+// panels the end cap lines up past it.
+const RAIL = "56px";
+
+const RAIL_NARROW = "38px";
+
 // The panel's own grid cell in App's detail host.
 const inDetailHost = () => stylex.when.ancestor(":is(*)", detailHostMarker);
 
@@ -255,7 +261,8 @@ export const tourStyles = stylex.create({
     gap: space.s12,
     margin: {
       default: `${space.s16} ${space.s16} ${space.s16} 52px`,
-      [stylex.env.narrow]: `${space.s16} ${space.s8} ${space.s16} 38px`,
+      [stylex.env.narrow]:
+        `${space.s16} ${space.s8} ${space.s16} ${RAIL_NARROW}`,
     },
     padding: `${space.s12} ${space.s16}`,
     borderWidth: "1px",
@@ -272,8 +279,8 @@ export const tourStyles = stylex.create({
   stop: {
     display: "grid",
     gridTemplateColumns: {
-      default: "56px minmax(0, 1fr)",
-      [stylex.env.narrow]: "38px minmax(0, 1fr)",
+      default: `${RAIL} minmax(0, 1fr)`,
+      [stylex.env.narrow]: `${RAIL_NARROW} minmax(0, 1fr)`,
     },
     paddingRight: { default: space.s16, [stylex.env.narrow]: space.s8 },
     // The rail's x in the stop, for the rail and its faint runs between a
@@ -335,7 +342,10 @@ export const tourStyles = stylex.create({
       default: "calc(100% + 76px)",
       [stylex.env.narrow]: "calc(100% + 46px)",
     },
-    marginLeft: { default: "-60px", [stylex.env.narrow]: "-38px" },
+    marginLeft: {
+      default: `calc(-1 * (${RAIL} + ${space.s4}))`,
+      [stylex.env.narrow]: `-${RAIL_NARROW}`,
+    },
     backgroundColor: tokens.bg,
     // A step's code cards stand apart; a lone peek's stay flush.
     "--review-code-card-gap": "12px",

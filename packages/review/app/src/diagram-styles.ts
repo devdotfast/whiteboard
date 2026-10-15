@@ -11,6 +11,9 @@ import { tokens } from "./tokens.stylex";
 
 // The header every diagram figure shares: a kind badge, the title and a quiet
 // count, then its 24px controls (the tour Button, the use-case select).
+// Clears the select's chevron.
+const CHEVRON_CLEARANCE = "26px";
+
 export const diagramStyles = stylex.create({
   handle: {
     width: "1px",
@@ -100,7 +103,7 @@ export const diagramStyles = stylex.create({
   select: {
     width: "100%",
     minWidth: 0,
-    paddingRight: "26px",
+    paddingRight: CHEVRON_CLEARANCE,
     overflow: "hidden",
     appearance: "none",
     backgroundImage: tokens.chevronDown,

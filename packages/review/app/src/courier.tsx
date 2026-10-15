@@ -412,15 +412,21 @@ const leave = stylex.keyframes({
   "100%": { transform: "translateY(-260px)", opacity: 0 },
 });
 
+const COURIER_WIDTH = 32;
+
+const COURIER_HEIGHT = 39;
+
+const SHADOW_WIDTH = 18;
+
 // He stands on the top edge of whatever the cursor names and slides when it
 // reflows. Reduced motion keeps him and drops the hops.
 const styles = stylex.create({
   courier: {
     position: "absolute",
     zIndex: 4,
-    width: "32px",
-    height: "39px",
-    margin: "-39px 0 0 -16px",
+    width: `${COURIER_WIDTH}px`,
+    height: `${COURIER_HEIGHT}px`,
+    margin: `-${COURIER_HEIGHT}px 0 0 -${COURIER_WIDTH / 2}px`,
     color: tokens.accent,
     pointerEvents: "none",
     transition: {
@@ -581,9 +587,9 @@ const styles = stylex.create({
     position: "absolute",
     bottom: "-3px",
     left: "50%",
-    width: "18px",
+    width: `${SHADOW_WIDTH}px`,
     height: "4px",
-    marginLeft: "-9px",
+    marginLeft: `-${SHADOW_WIDTH / 2}px`,
     borderRadius: radius.round,
     backgroundColor: tokens.ink,
     opacity: 0.18,

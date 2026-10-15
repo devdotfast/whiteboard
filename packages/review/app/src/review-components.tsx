@@ -1426,7 +1426,7 @@ const sectionStyles = stylex.create({
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h2 },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument()]: leading.px32 },
+    lineHeight: { default: null, [inDocument()]: documentType.h2Leading },
   },
   titleCollapsed: {
     color: tokens.ghost,

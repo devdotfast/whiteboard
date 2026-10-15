@@ -2790,6 +2790,15 @@ const cardBloom = stylex.keyframes({
   to: { opacity: 1, transform: "scale(1)" },
 });
 
+// c4-edge-label-geometry.ts sizes edge labels with this line height.
+const EDGE_LABEL_LINE_HEIGHT = "15px";
+
+// The folder tab path's baseline, where the folder body starts.
+const FOLDER_TAB_HEIGHT = "46px";
+
+// Off screen, so the layout can size each card before placing it.
+const OFFSCREEN = "-10000px";
+
 const styles = stylex.create({
   overlay: {
     position: "fixed",
@@ -3190,7 +3199,7 @@ const styles = stylex.create({
     fontSize: fontSize.small,
     fontWeight: fontWeight.medium,
     letterSpacing: 0,
-    lineHeight: "15px",
+    lineHeight: EDGE_LABEL_LINE_HEIGHT,
     textAlign: "center",
     whiteSpace: "normal",
     overflowWrap: "anywhere",
@@ -3201,11 +3210,10 @@ const styles = stylex.create({
   edgeLabelSelectedNode: {
     borderColor: tokens.accent,
   },
-  // Off screen, so the layout can size each card before placing it.
   measureLayer: {
     position: "absolute",
     top: 0,
-    left: "-10000px",
+    left: OFFSCREEN,
     zIndex: -1,
     width: "280px",
     visibility: "hidden",
@@ -3598,7 +3606,7 @@ const styles = stylex.create({
     pointerEvents: "none",
     "::after": {
       position: "absolute",
-      top: "46px",
+      top: FOLDER_TAB_HEIGHT,
       right: space.s10,
       left: "min(190px, 68%)",
       borderTopWidth: "2px",
@@ -3609,7 +3617,7 @@ const styles = stylex.create({
   },
   storageFolderBody: {
     position: "absolute",
-    top: "46px",
+    top: FOLDER_TAB_HEIGHT,
     right: 0,
     bottom: 0,
     left: 0,

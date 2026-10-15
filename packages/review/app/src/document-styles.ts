@@ -152,7 +152,7 @@ export const documentStyles = stylex.create({
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h1 },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument()]: "40px" },
+    lineHeight: { default: null, [inDocument()]: documentType.h1Leading },
     letterSpacing: { default: null, [inDocument()]: tracking.tight },
     textAlign: { default: null, [inDocument()]: "left" },
   },
@@ -168,7 +168,7 @@ export const documentStyles = stylex.create({
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h2 },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument()]: leading.px32 },
+    lineHeight: { default: null, [inDocument()]: documentType.h2Leading },
   },
   h3: {
     scrollMarginTop: { default: null, [inDocument()]: "24px" },
@@ -179,7 +179,7 @@ export const documentStyles = stylex.create({
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h3 },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument()]: "23px" },
+    lineHeight: { default: null, [inDocument()]: documentType.h3Leading },
   },
   // A block in the prose column: lists, quotes, images.
   column: {

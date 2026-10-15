@@ -861,6 +861,9 @@ function RecentBoards({
 /** A board row's height, which the family's cap counts in. */
 const FAMILY_ROW = "24px";
 
+// A subsection's text lines up with its section's, past the number.
+const NESTED_INSET = "30px";
+
 const styles = stylex.create({
   lenses: {
     display: "flex",
@@ -982,10 +985,11 @@ const styles = stylex.create({
   groupAction: { display: "flex", marginLeft: "auto" },
   moreText: { marginLeft: space.s6 },
   entry: { height: "24px" },
-  // A subsection's text lines up with its section's, past the number.
-  nested: { height: "24px", paddingLeft: "30px" },
+  nested: { height: "24px", paddingLeft: NESTED_INSET },
   // Each level below a subsection indents one more step.
-  indent: (steps: number) => ({ paddingLeft: `${30 + 16 * steps}px` }),
+  indent: (steps: number) => ({
+    paddingLeft: `calc(${NESTED_INSET} + ${16 * steps}px)`,
+  }),
   more: { cursor: "pointer", color: tokens.inkFaint },
   entryNumber: {
     flexShrink: 0,

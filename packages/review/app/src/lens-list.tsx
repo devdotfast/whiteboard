@@ -350,6 +350,9 @@ export const lensRowStyles = stylex.create({
   },
 });
 
+// Lines the name up with the sidebar's other rows.
+const ROW_INSET = "26px";
+
 const styles = stylex.create({
   progress: {
     display: "flex",
@@ -410,7 +413,7 @@ const styles = stylex.create({
   },
   // Lines the name up with the sidebar's other rows.
   toggleInset: { paddingLeft: space.s18 },
-  insetStart: { paddingLeft: "26px" },
+  insetStart: { paddingLeft: ROW_INSET },
   progressInset: {
     minHeight: 0,
     gap: space.s6,
