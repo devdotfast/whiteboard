@@ -66,18 +66,24 @@ export function createReviewFindHost(): ReviewFindHost {
   };
 }
 
+/** The tab a search runs over: the Review document, or a diff. */
+export type ReviewFindSurface = "review" | "diff";
+
 export interface ReviewInlineFindRegistration {
+  /** Defaults to the Review document. */
+  surface?: ReviewFindSurface;
   container: HTMLElement;
   setFindQuery(query: ReviewFindQuery): Promise<{ matchCount: number }>;
   revealFindMatch(index: number): Promise<void>;
   clearFind(): void;
-  getHandle(): ReviewInlineEditorHandle | null;
+  getHandle(): Pick<ReviewInlineEditorHandle, "clearActiveFindMatch"> | null;
   expand(): void;
 }
 
 interface FindContextValue {
   register(registration: ReviewInlineFindRegistration): () => void;
-  setReviewActive(active: boolean): void;
+  /** null closes find and refuses to open it. */
+  setSurface(surface: ReviewFindSurface | null): void;
 }
 
 const ReviewFindContext = createContext<FindContextValue | null>(null);
@@ -141,7 +147,7 @@ function createFindController(
   const store = createReviewFindStore(config);
   const registrations = new Set<ReviewInlineFindRegistration>();
   const inputRef = createRef<HTMLInputElement>();
-  let reviewActive = true;
+  let surface: ReviewFindSurface | null = "review";
   let priorFocus: HTMLElement | null = null;
   let searchScheduled = false;
 
@@ -191,7 +197,10 @@ function createFindController(
       match.registration.expand();
       requestAnimationFrame(async () => {
         if (!current()) return;
-        match.registration.container.scrollIntoView?.({ block: "center" });
+
+        // A diff view fills its column and scrolls itself.
+        if ((match.registration.surface ?? "review") === "review")
+          match.registration.container.scrollIntoView?.({ block: "center" });
         await match.registration.revealFindMatch(match.localIndex);
         inputRef.current?.focus();
       });
@@ -233,13 +242,15 @@ function createFindController(
     query: ReviewFindQuery,
     expression: RegExp,
   ) => {
-    const article = articleRef.current;
+    const article = surface === "review" ? articleRef.current : null;
 
     const ranges = article ? reviewFindRanges(article, expression) : [];
 
-    const orderedRegistrations = [...registrations].sort((left, right) =>
-      compareDocumentOrder(left.container, right.container),
-    );
+    const orderedRegistrations = [...registrations]
+      .filter((registration) => (registration.surface ?? "review") === surface)
+      .sort((left, right) =>
+        compareDocumentOrder(left.container, right.container),
+      );
 
     void Promise.all(
       orderedRegistrations.map(async (registration) => {
@@ -307,12 +318,19 @@ function createFindController(
       };
     },
     showFind(seed?: string) {
-      if (!reviewActive) return false;
+      if (surface === null) return false;
 
       if (!store.getState().open) {
         const active = articleRef.current?.ownerDocument.activeElement;
         priorFocus = active instanceof HTMLElement ? active : null;
-        store.getState().show(seed ?? selectedMdxText(articleRef.current));
+        store
+          .getState()
+          .show(
+            seed ??
+              (surface === "review"
+                ? selectedMdxText(articleRef.current)
+                : undefined),
+          );
       }
 
       requestAnimationFrame(() => {
@@ -344,10 +362,11 @@ function createFindController(
         scheduleSearch();
       };
     },
-    setReviewActive(active: boolean) {
-      reviewActive = active;
+    setSurface(next: ReviewFindSurface | null) {
+      if (next === surface) return;
+      surface = next;
 
-      if (!active && store.getState().open) close(false);
+      if (store.getState().open) close(false);
     },
   };
 }

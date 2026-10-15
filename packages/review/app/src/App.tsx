@@ -417,7 +417,13 @@ function ReviewLayoutContent({
 
   const reviewFind = useReviewFindRegistration();
   useEffect(() => {
-    reviewFind?.setReviewActive(activeView === "review");
+    reviewFind?.setSurface(
+      activeView === "review"
+        ? "review"
+        : activeView === "diff" || activeView === "commits"
+          ? "diff"
+          : null,
+    );
   }, [activeView, reviewFind]);
 
   const storedList = useTraceList();
