@@ -667,7 +667,7 @@ function InlineRegistration({
         handle.revealFindMatch(index);
       },
       clearFind: () => handle.clearFind(),
-      getHandle: () => handle,
+      clearActiveFindMatch: () => handle.clearActiveFindMatch(),
       expand() {},
     });
   }, [find, handle, surface]);

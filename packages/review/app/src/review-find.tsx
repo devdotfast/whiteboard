@@ -2,10 +2,7 @@ import { fontSize, layer } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { fieldStyles } from "@canvas/ui/text-field";
-import type {
-  ReviewFindQuery,
-  ReviewInlineEditorHandle,
-} from "@dev.fast/review-protocol";
+import type { ReviewFindQuery } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
@@ -76,7 +73,7 @@ export interface ReviewInlineFindRegistration {
   setFindQuery(query: ReviewFindQuery): Promise<{ matchCount: number }>;
   revealFindMatch(index: number): Promise<void>;
   clearFind(): void;
-  getHandle(): Pick<ReviewInlineEditorHandle, "clearActiveFindMatch"> | null;
+  clearActiveFindMatch(): void;
   expand(): void;
 }
 
@@ -179,7 +176,7 @@ function createFindController(
     setCssHighlight(articleRef.current, ACTIVE_HIGHLIGHT, []);
 
     for (const registration of registrations) {
-      registration.getHandle()?.clearActiveFindMatch();
+      registration.clearActiveFindMatch();
     }
 
     // A frame later the search may have closed or moved on.

@@ -178,7 +178,7 @@ export function DocumentCodeView({
       setFindQuery,
       revealFindMatch,
       clearFind,
-      getHandle: () => handleRef.current,
+      clearActiveFindMatch: () => handleRef.current?.clearActiveFindMatch(),
       expand: () => {
         container
           .closest(".review-section--collapsed")
