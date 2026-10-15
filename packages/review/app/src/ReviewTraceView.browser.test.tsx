@@ -209,12 +209,12 @@ describe("ReviewTraceView", () => {
     );
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!
         .click(),
     );
 
     const options = () => [
-      ...container.querySelectorAll<HTMLElement>('[role="option"]'),
+      ...container.querySelectorAll<HTMLElement>('[role="menuitemradio"]'),
     ];
 
     await act(async () => options().at(-1)!.click());
@@ -222,10 +222,10 @@ describe("ReviewTraceView", () => {
     await act(async () => container.querySelector("button")!.click());
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>('button[aria-haspopup="listbox"]')!
+        .querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]')!
         .click(),
     );
-    expect(options().at(-1)?.getAttribute("aria-selected")).toBe("true");
+    expect(options().at(-1)?.getAttribute("aria-checked")).toBe("true");
   });
 
   it("renders retained subagent events without downloading them", async () => {

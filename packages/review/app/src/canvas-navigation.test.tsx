@@ -468,14 +468,14 @@ it("resumes the Trace view and the picked trace", async () => {
   ]);
 
   const trigger = () =>
-    container.querySelector<HTMLButtonElement>(
-      'button[aria-haspopup="listbox"]',
-    );
+    container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
 
   const option = (title: string) =>
-    [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
-      (item) => item.textContent?.includes(title),
-    );
+    [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitemradio"]',
+      ),
+    ].find((item) => item.textContent?.includes(title));
 
   await open();
   await act(async () => {
@@ -494,8 +494,8 @@ it("resumes the Trace view and the picked trace", async () => {
   });
   expect(tab(container, "Trace")?.getAttribute("aria-pressed")).toBe("true");
   await act(async () => trigger()!.click());
-  expect(option("Second session")?.getAttribute("aria-selected")).toBe("true");
-  expect(option("Initial commit subject")?.getAttribute("aria-selected")).toBe(
+  expect(option("Second session")?.getAttribute("aria-checked")).toBe("true");
+  expect(option("Initial commit subject")?.getAttribute("aria-checked")).toBe(
     "false",
   );
 });

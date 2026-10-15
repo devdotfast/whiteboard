@@ -10,7 +10,6 @@ import {
   elevation,
   fontSize,
   fontWeight,
-  layer,
   motion,
   radius,
 } from "./scale.stylex";
@@ -113,49 +112,11 @@ export const traceStyles = stylex.create({
     transform: "rotate(180deg)",
   },
   pickerMenu: {
-    position: "absolute",
-    top: "calc(100% + 4px)",
-    left: 0,
-    zIndex: layer.popover,
     minWidth: "320px",
     maxWidth: "min(640px, 90vw)",
-    padding: "4px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "2px",
-  },
-  pickerItem: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: "10px",
-    width: "100%",
-    padding: "6px 10px",
-    borderRadius: radius.small,
-    backgroundColor: {
-      default: tokens.transparent,
-      ":hover": tokens.chromeHoverBg,
-    },
-    color: tokens.ink,
-    fontSize: fontSize.body,
-    textAlign: "left",
-    cursor: "pointer",
-    transition: `background ${motion.fast} ${motion.ease}`,
-  },
-  pickerItemActive: {
-    backgroundColor: tokens.accentWash,
-    color: tokens.accent,
   },
   pickerItemSubagent: {
     paddingLeft: "20px",
-  },
-  pickerItemLeft: {
-    display: "flex",
-    alignItems: "center",
-    gap: "8px",
-    overflow: "hidden",
-    minWidth: 0,
-    flex: "1",
   },
   pickerItemHarness: {
     fontFamily: tokens.chromeFont,
@@ -166,17 +127,9 @@ export const traceStyles = stylex.create({
   pickerItemHarnessActive: {
     color: tokens.accent,
   },
-  pickerItemTitle: {
-    fontWeight: fontWeight.regular,
-  },
-  pickerItemTitleActive: {
-    fontWeight: fontWeight.semibold,
-  },
-  pickerItemCheck: {
-    color: tokens.accent,
-    marginLeft: "6px",
-  },
   pickerItemBadge: {
+    flex: "none",
+    marginLeft: "auto",
     backgroundColor: tokens.tray,
     color: tokens.inkFaint,
   },
