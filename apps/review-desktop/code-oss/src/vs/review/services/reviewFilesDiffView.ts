@@ -37,6 +37,7 @@ import { ReviewChangedFilesTree } from "../browser/reviewChangedFilesTree.js";
 import { REVIEW_COUNTS_PENDING_TOOLTIP, reviewChangesTooltip, reviewCountsTooltip, ReviewTooltip, type ReviewTooltipContent } from "../browser/reviewTooltip.js";
 import { type ReviewDiffFileWire } from "../common/reviewProtocol.js";
 import { binarySizeLabel, isBinaryCounts, type ReviewFileCounts } from "../common/reviewStructuralDiff.js";
+import type { DiffFindFolds } from "./reviewDiffFind.js";
 import type { ReviewDiffLayoutSetting } from "./reviewDiffLayout.js";
 import { reviewMultiDiffLabelUris, ReviewMultiDiffUIElementFactory } from "./reviewMultiDiff.js";
 import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
@@ -213,6 +214,7 @@ export class ReviewFilesDiffView extends Disposable {
 	private pendingPath: string | undefined;
 	private pendingSectionId: string | undefined;
 	private pendingSource: ReviewDiffLens["ranges"][number] | undefined;
+	private pendingReveal: RevealSourceOptions | undefined;
 	private progress: ReviewDiffProgress | undefined;
 	private progressFiles = new Map<string, ReviewDiffProgressFile>();
 	private documentCollapsed = false;
@@ -450,7 +452,7 @@ export class ReviewFilesDiffView extends Disposable {
 				this.pendingPath = undefined;
 				this.showStreamStatus();
 				queueMicrotask(() => {
-					if (!this._store.isDisposed) { if (this.pendingSource) this.revealSource(this.pendingSource, this.pendingSectionId); else this.reveal(entry); }
+					if (!this._store.isDisposed) { if (this.pendingSource) this.revealSource(this.pendingSource, this.pendingSectionId, this.pendingReveal); else this.reveal(entry); }
 				});
 			}),
 		);
@@ -579,16 +581,33 @@ export class ReviewFilesDiffView extends Disposable {
 			this.viewedApplied.set(key, file.state);
 		}
 	}
-	revealSource(source: ReviewDiffLens['ranges'][number], sectionId?: string): void {
+	revealSource(source: ReviewDiffLens['ranges'][number], sectionId?: string, options?: RevealSourceOptions): void {
 		this.settleHold.clear();
 		const entry = this.input?.entries.find(entry => (!sectionId || entry.sectionId === sectionId) && (!entry.sectionId || this.progress?.sections?.find(section => section.id === entry.sectionId)?.sources.some(range => range.file === source.file && range.side === source.side && range.fromLine <= source.fromLine && range.toLine >= source.fromLine)) && source.file === (source.side === 'base' ? entry.file.previousPath ?? entry.file.path : entry.file.path));
 		if (!entry) return;
 		if (entry.sectionId && this.collapsedSections.delete(entry.sectionId)) this.headerFactory.refreshHeaders();
-		this.pendingSource = source; this.pendingSectionId = sectionId;
+		this.pendingSource = source; this.pendingSectionId = sectionId; this.pendingReveal = options;
 		if (this.fileStates.has(entry.file.path)) { this.pendingPath = entry.file.path; return; }
 		this.itemFor(entry)?.collapsed.set(false, undefined);
-		this.reveal(entry, { highlight: true, side: source.side === 'base' && entry.file.status !== 'unchanged' ? 'original' : 'modified', range: new Range(source.fromLine, 1, source.toLine, 1) });
-		this.pendingSource = undefined;
+		this.reveal(entry, { highlight: true, side: source.side === 'base' && entry.file.status !== 'unchanged' ? 'original' : 'modified', range: options?.range ?? new Range(source.fromLine, 1, source.toLine, 1), select: options?.select });
+		this.pendingSource = undefined; this.pendingReveal = undefined;
+	}
+
+	/** Collapsed files and hidden lines, for skip-folded find. */
+	folds(): DiffFindFolds {
+		return {
+			itemCollapsed: entry => this.documentCollapsed || (!!entry.sectionId && this.collapsedSections.has(entry.sectionId)) || (this.itemFor(entry)?.collapsed.get() ?? false),
+			// The view model outlives its editor.
+			hiddenLines: async (entry, side) => {
+				const comparison = this.itemFor(entry)?.diffEditorViewModel;
+				if (!(comparison instanceof DiffEditorViewModel)) return [];
+				await comparison.waitForDiff();
+				return comparison.unchangedRegions.get().map(region => {
+					const range = side === 'base' ? region.getHiddenOriginalRange(undefined) : region.getHiddenModifiedRange(undefined);
+					return { from: range.startLineNumber, to: range.endLineNumberExclusive - 1 };
+				}).filter(span => span.to >= span.from);
+			},
+		};
 	}
 
 	/** Scroll to a file, or to it once its diff has loaded. */
@@ -657,11 +676,25 @@ export class ReviewFilesDiffView extends Disposable {
 		this.splitView.layout(width, height);
 		if (this.fileTreeContainer) this.changedFilesTree?.layout(this.fileTreeContainer.clientHeight, this.fileTreeContainer.clientWidth);
 	}
-	private reveal(resource: { original: URI | undefined; modified: URI | undefined }, options: RevealOptions = { highlight: true }): void {
-		this.widget.reveal(resource, options);
+	private reveal(resource: { original: URI | undefined; modified: URI | undefined }, options: RevealOptions & { select?: boolean } = { highlight: true }): void {
+		const show = (highlight: boolean) => {
+			this.widget.reveal(resource, { ...options, highlight });
+			if (options.select && options.range) this.select(resource, options.side ?? 'modified', options.range);
+		};
+		show(options.highlight);
 		this.settle(() => {
-			if (this.itemFor(resource)) this.widget.reveal(resource, { ...options, highlight: false });
+			if (this.itemFor(resource)) show(false);
 		});
+	}
+
+	/** A selection makes the diff editor unfold the line, as the single-file find does. */
+	private select(resource: { original: URI | undefined; modified: URI | undefined }, side: 'original' | 'modified', range: Range): void {
+		const uri = side === 'original' ? resource.original : resource.modified;
+		const target = uri && this.widget.tryGetCodeEditor(uri);
+		if (!target) return;
+		const editor = side === 'original' ? target.diffEditor.getOriginalEditor() : target.diffEditor.getModifiedEditor();
+		if (!editor.getSelection()?.equalsRange(range)) editor.setSelection(range);
+		editor.revealRangeInCenter(range);
 	}
 
 	/**
@@ -702,6 +735,11 @@ export class ReviewFilesDiffView extends Disposable {
 		this.changedFilesTree?.setActiveFile(input.entries[index].file.path);
 	}
 }
+export interface RevealSourceOptions {
+	range?: Range;
+	select?: boolean;
+}
+
 function sameResource(left: URI | undefined, right: URI | undefined): boolean {
 	return left === undefined ? right === undefined : !!right && isEqual(left, right);
 }

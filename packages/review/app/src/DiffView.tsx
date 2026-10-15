@@ -43,6 +43,7 @@ import {
   scopedDiffMarker,
 } from "./markers.stylex";
 import { useReviewDiffFiles } from "./review-diff-files-context";
+import { useReviewFindRegistration } from "./review-find";
 import { useReviewLenses } from "./review-lenses";
 import { useOptionalReviewPanel } from "./review-panel";
 import { shellStyles } from "./shell-styles";
@@ -609,6 +610,12 @@ function NativeDiffView({
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [error, setError] = useState<string | null>(null);
   const handle = useRef<ReviewDiffViewHandle | null>(null);
+
+  // A lens, commit or save replaces the view; find follows it.
+  const [findTarget, setFindTarget] = useState<ReviewDiffViewHandle | null>(
+    null,
+  );
+
   // A save in a live checkout changes the comparison; a commit's never does.
   const revision = useReviewDiffFiles().revision;
   const liveRevision = scope ? undefined : revision;
@@ -636,12 +643,14 @@ function NativeDiffView({
       });
 
       handle.current = view;
+      setFindTarget(view);
       const subscription = view.onDidError(setError);
 
       return () => {
         subscription.dispose();
         view.dispose();
         handle.current = null;
+        setFindTarget(null);
       };
     } catch (error) {
       setError(String(error));
@@ -662,6 +671,33 @@ function NativeDiffView({
     if (revealFile)
       handle.current?.revealFile?.(revealFile, { restore: restoreFile });
   }, [revealFile, restoreFile, revealRequest, container, scope?.commit]);
+
+  const find = useReviewFindRegistration();
+  useLayoutEffect(() => {
+    if (!container || hidden || !find || !findTarget) return;
+
+    // A preloaded Diff tab stays mounted, hidden, behind other views; only a view on screen answers.
+    const shown = () =>
+      container.checkVisibility({
+        visibilityProperty: true,
+        opacityProperty: true,
+      });
+
+    return find.register({
+      surface: "diff",
+      container,
+      setFindQuery: async (query) =>
+        shown()
+          ? ((await findTarget.setFindQuery?.(query)) ?? { matchCount: 0 })
+          : { matchCount: 0 },
+      async revealFindMatch(index) {
+        findTarget.revealFindMatch?.(index);
+      },
+      clearFind: () => findTarget.clearFind?.(),
+      clearActiveFindMatch: () => findTarget.clearActiveFindMatch?.(),
+      expand() {},
+    });
+  }, [container, hidden, find, findTarget]);
 
   return (
     <>

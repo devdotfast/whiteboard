@@ -285,6 +285,11 @@ export interface ReviewDiffViewHandle extends ReviewDisposable {
   ): void;
   /** Scroll to a changed file once loaded. Restore requests defer to saved editor position. */
   revealFile?(path: string, options?: { restore?: boolean }): void;
+  /** Find across every file in the view; matches are ordered by file, then line. */
+  setFindQuery?(query: ReviewFindQuery): Promise<ReviewInlineFindResult>;
+  revealFindMatch?(index: number): void;
+  clearActiveFindMatch?(): void;
+  clearFind?(): void;
   onDidError(listener: (message: string) => void): ReviewDisposable;
 }
 

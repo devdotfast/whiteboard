@@ -1,22 +1,18 @@
 import { ContentHoverController } from "../../editor/contrib/hover/browser/contentHoverController.js";
 import { orderReviewDiffFiles } from "../common/reviewChangedFilesModel.js";
-import { CancellationToken } from "../../base/common/cancellation.js";
-import { Range } from "../../editor/common/core/range.js";
-import { USUAL_WORD_SEPARATORS } from "../../editor/common/core/wordHelper.js";
-import { ITextModelService } from "../../editor/common/services/resolverService.js";
-import { IDiffProviderFactoryService } from "../../editor/browser/widget/diffEditor/diffProviderFactoryService.js";
-import { alignmentRows } from "../common/reviewLens.js";
-import type { ReviewInlineEditorSpec, ReviewInlineEditorHandle, ReviewFindQuery } from "../common/reviewProtocol.js";
+import type { ReviewInlineEditorSpec, ReviewInlineEditorHandle, ReviewFindQuery, ReviewInlineFindResult } from "../common/reviewProtocol.js";
 import { reviewFileCounts } from "../common/reviewStructuralDiff.js";
 import type { ReviewDiffLayoutScope, ReviewDiffProgress } from "../common/reviewProtocol.js";
+import { DiffFindIndex, findInEntries, type DiffFindMatch } from "./reviewDiffFind.js";
+import { ReviewFindDecorations } from "./reviewFindDecorations.js";
 import { lensRanges, withLens } from "./reviewLens.js";
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) dev.fast. All rights reserved.
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { Emitter } from "../../base/common/event.js";
-import { Disposable, DisposableStore, isDisposable } from "../../base/common/lifecycle.js";
+import { Emitter, Event } from "../../base/common/event.js";
+import { Disposable, DisposableStore } from "../../base/common/lifecycle.js";
 import type { URI } from "../../base/common/uri.js";
 import type { ICodeEditor } from "../../editor/browser/editorBrowser.js";
 import { RunOnceScheduler } from "../../base/common/async.js";
@@ -130,8 +126,6 @@ export class ReviewDiffViewService extends Disposable {
 		const lifetime = new DisposableStore();
 		const heightChanged = lifetime.add(new Emitter<number>());
 		let height = 400;
-		let generation = 0;
-		let matches: DocumentMatch[] = [];
 		const view = this.create({
 			container: spec.container, lens, progress: spec.progress,
 			onSetViewed: spec.onSetViewed,
@@ -149,29 +143,16 @@ export class ReviewDiffViewService extends Disposable {
 			onDidError: view.onDidError,
 			setActive: active => spec.container.classList.toggle("review-document-code-active", active),
 			setCollapsed: collapsed => view.setCollapsed(collapsed),
-			setFindQuery: async query => {
-				const request = ++generation;
-				const result = await this.findDocument(lens, source, query);
-				if (lifetime.isDisposed || request !== generation) return { matchCount: 0 };
-				matches = result;
-				view.decorateMatches(matches);
-				return { matchCount: matches.length };
-			},
-			revealFindMatch: index => {
-				const match = matches[index];
-				if (!match) return;
-				view.setCollapsed(false);
-				view.revealSource({ file: match.file, side: match.side, fromLine: match.range.startLineNumber, toLine: match.range.endLineNumber });
-				view.decorateMatches(matches, index);
-			},
-			clearActiveFindMatch: () => view.decorateMatches(matches),
-			clearFind: () => { generation++; matches = []; view.decorateMatches([]); },
-			dispose: () => { generation++; lifetime.dispose(); },
+			setFindQuery: query => view.setFindQuery(query),
+			revealFindMatch: index => { view.setCollapsed(false); view.revealFindMatch(index); },
+			clearActiveFindMatch: () => view.clearActiveFindMatch(),
+			clearFind: () => view.clearFind(),
+			dispose: () => lifetime.dispose(),
 		};
 	}
 
-	/** Search pinned models through the same diff provider; no synthetic text/model is built. */
-	async findDocument(lens: ReviewDiffLens, source: ReviewDiffViewSource, query: ReviewFindQuery): Promise<DocumentMatch[]> {
+	/** Search a peek that is not mounted, through the same providers its editor would use. */
+	async findDocument(lens: ReviewDiffLens, source: ReviewDiffViewSource, query: ReviewFindQuery): Promise<DiffFindMatch[]> {
 		if (!query.text) return [];
 		const lifetime = new DisposableStore();
 		try {
@@ -179,32 +160,8 @@ export class ReviewDiffViewService extends Disposable {
 			const entries = data.entries.filter(entry => lensRanges(lens, entry).length > 0);
 			const structural = data.session ? createStructuralDiffEditors(this.instantiationService, entries, lifetime, data.session)
 				: { instantiation: this.instantiationService, entries };
-			const instantiation = withLens(structural.instantiation, structural.entries, lens, lifetime, () => undefined, () => ({ dispose() {} }));
-			const resolver = instantiation.invokeFunction(a => a.get(ITextModelService));
-			const factory = instantiation.invokeFunction(a => a.get(IDiffProviderFactoryService));
-			const matches: DocumentMatch[] = [];
-			for (const entry of structural.entries) {
-				const original = entry.original ? lifetime.add(await resolver.createModelReference(entry.original)).object.textEditorModel : undefined;
-				const modified = entry.modified ? lifetime.add(await resolver.createModelReference(entry.modified)).object.textEditorModel : undefined;
-				const provider = factory.createDiffProvider({ diffAlgorithm: "advanced" });
-				if (isDisposable(provider)) lifetime.add(provider);
-				const diff = original && modified ? await provider.computeDiff(original, modified, { ignoreTrimWhitespace: false, maxComputationTimeMs: 0, computeMoves: false }, CancellationToken.None) : undefined;
-				const pairs = diff && original && modified ? new Map(alignmentRows(diff, original.getLineCount(), modified.getLineCount()).filter((row): row is [number, number] => row[0] !== null && row[1] !== null)) : new Map<number, number>();
-				for (const [side, model] of [["base", original], ["head", modified]] as const) {
-					if (!model) continue;
-					const ranges = lensRanges(lens, entry).filter(range => range.side === side);
-					const found = model.findMatches(query.text, false, query.isRegex, query.matchCase, query.wholeWord ? USUAL_WORD_SEPARATORS : null, false);
-					for (const match of found) {
-						const line = match.range.startLineNumber;
-						const outside = diff?.contextGaps?.some(gap => gap.label === "Outside lens" && line >= (side === "base" ? gap.originalStart : gap.modifiedStart) && line < (side === "base" ? gap.originalStart + gap.originalCount : gap.modifiedStart + gap.modifiedCount));
-						if (outside || (!diff && !ranges.some(range => line >= range.fromLine && line <= range.toLine))) continue;
-						const headLine = pairs.get(line - 1);
-						if (side === "base" && headLine !== undefined && modified && match.range.startLineNumber === match.range.endLineNumber && model.getLineContent(line) === modified.getLineContent(headLine + 1)) continue;
-						matches.push({ file: side === "base" ? entry.file.previousPath ?? entry.file.path : entry.file.path, side, range: match.range });
-					}
-				}
-			}
-			return matches;
+			const instantiation = withLens(structural.instantiation, structural.entries, lens, lifetime, () => undefined, Event.None);
+			return await findInEntries(instantiation, structural.entries, lens, query);
 		} finally { lifetime.dispose(); }
 	}
 
@@ -219,12 +176,6 @@ export class ReviewDiffViewService extends Disposable {
 	toggleRenderSideBySide(): void {
 		void this.diffLayout.toggle();
 	}
-}
-
-interface DocumentMatch {
-	file: string;
-	side: "base" | "head";
-	range: Range;
 }
 
 class DiffViewController extends Disposable implements ReviewDiffViewHandle {
@@ -251,20 +202,32 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 	private adoptedEditors: readonly ICodeEditor[] = [];
 	private disposed = false;
 	private collapsed = false;
-	private matches: DocumentMatch[] = [];
-	private activeMatch: number | undefined;
-	private readonly findDecorations = this._register(new DisposableStore());
 	setCollapsed(collapsed: boolean): void { this.collapsed = collapsed; this.view?.setCollapsed(collapsed); }
-	decorateMatches(matches: DocumentMatch[], active?: number): void {
-		this.matches = matches; this.activeMatch = active;
-		this.findDecorations.clear();
-		const control = this.view?.getActiveControl();
-		if (!control) return;
-		for (const [side, editor] of [["base", control.getOriginalEditor()], ["head", control.getModifiedEditor()]] as const) {
-			const collection = editor.createDecorationsCollection(matches.flatMap((match, index) => match.side === side ? [{ range: match.range, options: { description: "review-document-find", className: index === active ? "currentFindMatch" : "findMatch" } }] : []));
-			this.findDecorations.add({ dispose: () => collection.clear() });
-		}
+
+	private readonly ready: Promise<void>;
+	private findIndex: DiffFindIndex | undefined;
+	private matches: DiffFindMatch[] = [];
+	private findGeneration = 0;
+	private readonly decorations: ReviewFindDecorations;
+	async setFindQuery(query: ReviewFindQuery): Promise<ReviewInlineFindResult> {
+		const request = ++this.findGeneration;
+		await this.ready;
+		const view = this.view;
+		if (this.disposed || request !== this.findGeneration || !this.findIndex || !view) return { matchCount: 0 };
+		const matches = await this.findIndex.find(query, view.folds());
+		if (this.disposed || request !== this.findGeneration) return { matchCount: 0 };
+		this.matches = matches;
+		this.decorations.set(matches.map(match => ({ uri: (match.side === "base" ? match.entry.original : match.entry.modified)!, range: match.range })));
+		return { matchCount: matches.length };
 	}
+	revealFindMatch(index: number): void {
+		const match = this.matches[index];
+		if (!match) return;
+		this.view?.revealSource({ file: match.file, side: match.side, fromLine: match.range.startLineNumber, toLine: match.range.endLineNumber }, match.entry.sectionId, { range: match.range, select: true });
+		this.decorations.setActive(index);
+	}
+	clearActiveFindMatch(): void { this.decorations.setActive(undefined); }
+	clearFind(): void { this.findGeneration++; this.matches = []; this.decorations.clear(); }
 
 	constructor(
 		private readonly spec: ReviewDiffViewSpec,
@@ -278,7 +241,8 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 	) {
 		super();
 		this.progress = spec.progress;
-		void this.initialize();
+		this.decorations = this._register(instantiationService.createInstance(ReviewFindDecorations));
+		this.ready = this.initialize();
 	}
 
 	focus(): void {
@@ -327,6 +291,9 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 				selected = orderReviewDiffFiles([...byFile.keys()]).map(file => byFile.get(file)!);
 			}
 			const instantiation = withLens(structural.instantiation, selected, lens, store, () => this.progress, this.progressChanged.event, !!viewed, !!this.spec.document);
+			// Find ignores viewed state; folds come from the view.
+			const sectionsOnly = () => this.progress?.sections && { sections: this.progress.sections, files: [] };
+			this.findIndex = store.add(new DiffFindIndex(withLens(structural.instantiation, selected, lens, store, sectionsOnly, Event.None), selected, lens));
 			// The input owns the text-model references its view model resolves, so
 			// this handle disposes it alongside the view.
 			const input = store.add(instantiation.createInstance(ReviewFilesEditorInput, sourceUri, selected,
@@ -411,7 +378,6 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 				}));
 			}
 		}
-		this.decorateMatches(this.matches, this.activeMatch);
 	}
 
 	captureViewState(): void {
