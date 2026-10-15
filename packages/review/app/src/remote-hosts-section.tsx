@@ -394,18 +394,17 @@ function AgentItem({
   const label = REVIEW_CLI_INSTALL_TARGET_LABELS[agent.id];
   const verb = agent.connected ? "Reconnect" : "Connect";
 
-  const [copied, copy] = useCopy(
-    `Run \`whiteboard connect ${agent.id}\` and follow the instructions to connect this agent to Whiteboard.`,
-  );
+  const prompt = `Run \`whiteboard connect ${agent.id}\` and follow the instructions to connect this agent to Whiteboard.`;
+  const [copied, copy] = useCopy();
 
   return (
     <Item name={label} text={agent.connected ? "connected" : "not connected"}>
       {agent.connected ? null : (
         <Button
           aria-label={`Copy a prompt for ${label} on ${alias}`}
-          onClick={copy}
+          onClick={() => copy(prompt)}
         >
-          {copied ? "Copied" : "Copy prompt"}
+          {copied === prompt ? "Copied" : "Copy prompt"}
         </Button>
       )}
       <Button

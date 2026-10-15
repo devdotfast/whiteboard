@@ -54,23 +54,30 @@ export async function copyText(text: string): Promise<boolean> {
 
 const COPIED_FOR_MS = 1200;
 
-export function useCopy(text: string) {
-  const [copied, setCopied] = useState(false);
+/** Copies text; `copied` is the last text copied, for a moment after. */
+export function useCopy({
+  onCopied,
+  onFailed,
+}: { onCopied?(): void; onFailed?(): void } = {}) {
+  // A new object per copy restarts the moment when the same text is copied again.
+  const [copied, setCopied] = useState<{ text: string } | null>(null);
 
   useEffect(() => {
     if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), COPIED_FOR_MS);
+    const timer = setTimeout(() => setCopied(null), COPIED_FOR_MS);
 
     return () => clearTimeout(timer);
   }, [copied]);
 
   // The workbench denies DOM clipboard requests, so copyText falls back to execCommand.
-  const copy = () =>
+  const copy = (text: string) =>
     void copyText(text).then((ok) => {
-      if (ok) setCopied(true);
+      if (!ok) return onFailed?.();
+      setCopied({ text });
+      onCopied?.();
     });
 
-  return [copied, copy] as const;
+  return [copied?.text ?? null, copy] as const;
 }
 
 export function CopyableText({
@@ -80,7 +87,8 @@ export function CopyableText({
   text: string;
   children?: ReactNode;
 }): ReactElement {
-  const [copied, copy] = useCopy(text);
+  const [copiedText, copy] = useCopy();
+  const copied = copiedText === text;
 
   const tooltip = useUiTooltip<HTMLSpanElement>(
     copied ? "Copied" : "Click to copy",
@@ -95,12 +103,12 @@ export function CopyableText({
       {...stylex.props(styles.copyable)}
       onClick={() => {
         // A drag that selects part of the text should not copy all of it.
-        if (document.getSelection()?.isCollapsed !== false) copy();
+        if (document.getSelection()?.isCollapsed !== false) copy(text);
       }}
       onKeyDown={(event) => {
         if (event.key !== "Enter" && event.key !== " ") return;
         event.preventDefault();
-        copy();
+        copy(text);
       }}
     >
       {children}
@@ -122,7 +130,8 @@ export function CopyButton({
   xstyle?: stylex.StyleXStyles;
   iconStyle: stylex.StyleXStyles;
 }): ReactElement {
-  const [copied, copy] = useCopy(text);
+  const [copiedText, copy] = useCopy();
+  const copied = copiedText === text;
   const tooltip = useUiTooltip(label);
 
   return (
@@ -132,7 +141,7 @@ export function CopyButton({
       xstyle={xstyle}
       aria-label={label}
       data-copied={copied ? "" : undefined}
-      onClick={copy}
+      onClick={() => copy(text)}
     >
       {copied ? (
         <CheckIcon xstyle={iconStyle} />

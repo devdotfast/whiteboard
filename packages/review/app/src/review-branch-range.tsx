@@ -1,9 +1,9 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
-import { copyText } from "@canvas/ui/copy";
+import { useCopy } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ArrowLeftIcon } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
-import { type ReactElement, useEffect, useRef, useState } from "react";
+import type { ReactElement } from "react";
 
 import { tokens } from "./tokens.stylex";
 import { useTooltip } from "./use-tooltip";
@@ -30,30 +30,18 @@ export function ReviewBranchRange({
   baseRef: string;
   headRef: string | typeof WORKING_TREE;
 }): ReactElement {
-  const [copied, setCopied] = useState<"base" | "head" | null>(null);
+  const [copied, copy] = useCopy();
 
-  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
+  const chip = (label: "base" | "head", name: string) => (
+    <BranchRef
+      label={label}
+      name={name}
+      copied={copied === name}
+      onCopy={() => copy(name)}
+    />
   );
 
-  useEffect(() => () => clearTimeout(resetTimer.current), []);
-
-  const copy = async (side: "base" | "head", ref: string) => {
-    if (!(await copyText(ref))) return;
-    clearTimeout(resetTimer.current);
-    setCopied(side);
-    resetTimer.current = setTimeout(() => setCopied(null), 1500);
-  };
-
-  if (baseRef === headRef)
-    return (
-      <BranchRef
-        label="head"
-        name={headRef}
-        copied={copied === "head"}
-        onCopy={() => void copy("head", headRef)}
-      />
-    );
+  if (baseRef === headRef) return chip("head", headRef);
 
   return (
     <div
@@ -63,23 +51,9 @@ export function ReviewBranchRange({
         headRef === WORKING_TREE ? "working tree" : shortRef(headRef)
       }`}
     >
-      <BranchRef
-        label="base"
-        name={baseRef}
-        copied={copied === "base"}
-        onCopy={() => void copy("base", baseRef)}
-      />
+      {chip("base", baseRef)}
       <ArrowLeftIcon xstyle={[iconStyles.inline, styles.arrow]} />
-      {headRef === WORKING_TREE ? (
-        <WorkingTreeRef />
-      ) : (
-        <BranchRef
-          label="head"
-          name={headRef}
-          copied={copied === "head"}
-          onCopy={() => void copy("head", headRef)}
-        />
-      )}
+      {headRef === WORKING_TREE ? <WorkingTreeRef /> : chip("head", headRef)}
     </div>
   );
 }

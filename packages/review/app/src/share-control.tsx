@@ -1,6 +1,6 @@
 import { layer } from "@canvas/scale.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
-import { copyText } from "@canvas/ui/copy";
+import { useCopy } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ShareIcon } from "@canvas/ui/icons";
 import { Popover } from "@canvas/ui/popover";
@@ -84,7 +84,6 @@ export function ShareControl({
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<ShareTarget>();
   const [copyError, setCopyError] = useState<string>();
-  const [copied, setCopied] = useState(false);
   const control = useRef<HTMLDivElement>(null);
   const shared = context?.reviewId.startsWith("shared-");
   const accountKey = canvasQueryKeys.sharingAccount();
@@ -129,6 +128,13 @@ export function ShareControl({
     staleTime: Infinity,
     gcTime: Infinity,
   }).data;
+
+  const [copied, copy] = useCopy({
+    onCopied: () => {
+      if (session) captureUiEvent(session, "review_shared");
+    },
+    onFailed: () => setCopyError("Copy the link below."),
+  });
 
   const login = useMutation({
     mutationFn: () => client!.post("/sharing/login", {}),
@@ -187,7 +193,6 @@ export function ShareControl({
       publish.reset();
       login.reset();
       setCopyError(undefined);
-      setCopied(false);
     }
 
     setOpen(!open);
@@ -204,13 +209,6 @@ export function ShareControl({
     if (open && signedIn && target && publish.isIdle && !link) upload(target);
   }, [open, signedIn, target, publish.isIdle, link]);
 
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-
-    return () => clearTimeout(timer);
-  }, [copied]);
-
   if (!context) return null;
 
   const error = copyError ?? actionError(publish.error ?? login.error);
@@ -218,18 +216,6 @@ export function ShareControl({
   const accountError = accountQuery.isError
     ? "Could not read sign-in status."
     : undefined;
-
-  const copy = async (url: string) => {
-    if (!(await copyText(url))) {
-      setCopyError("Copy the link below.");
-
-      return;
-    }
-
-    setCopied(true);
-
-    if (session) captureUiEvent(session, "review_shared");
-  };
 
   return (
     <div
@@ -282,8 +268,8 @@ export function ShareControl({
                   value={link}
                   onFocus={(event) => event.target.select()}
                 />
-                <Button variant="primary" onClick={() => void copy(link)}>
-                  {copied ? "Copied" : "Copy link"}
+                <Button variant="primary" onClick={() => copy(link)}>
+                  {copied === link ? "Copied" : "Copy link"}
                 </Button>
               </>
             ) : error ? (
