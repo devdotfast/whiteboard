@@ -195,15 +195,22 @@ test("a prompt cancelled through askpass is auth-failed, until a retry", async (
 	await until(() => ssh.of("wb-test-c", "master").length === 2);
 });
 
-test("a retry on an online host attaches again over the same master and forward, with fresh language groups", async (t) => {
+test("a retry on an online host waits while it attaches again over the same master and forward, with fresh language groups", async (t) => {
 	const groups = (detail?: string) => [{ group: "rust", installed: true, ...(detail && { detail }) }];
+	let attaches = 0;
 	const { manager, ssh, sentUntil } = await managerFor(t, {
-		"wb-test-a": { attach: (call) => ({ code: 0, stdout: attachOutput(41234, "token", { languageGroups: groups(call === 1 ? "cargo was not found" : undefined) }) }) },
+		"wb-test-a": {
+			attach: (call) => {
+				attaches = call;
+				return { code: 0, stdout: attachOutput(41234, "token", { languageGroups: groups(call === 1 ? "cargo was not found" : undefined) }) };
+			},
+		},
 	});
 
 	manager.update(["wb-test-a"]);
 	await sentUntil((hosts) => hosts[0]?.languageGroups?.[0]?.detail === "cargo was not found");
-	manager.retry("wb-test-a");
+	await manager.retry("wb-test-a");
+	assert.equal(attaches, 2);
 	await sentUntil((hosts) => hosts[0]?.endpoint !== undefined && hosts[0].languageGroups?.[0]?.detail === undefined);
 
 	assert.equal(ssh.of("wb-test-a", "master").length, 1);

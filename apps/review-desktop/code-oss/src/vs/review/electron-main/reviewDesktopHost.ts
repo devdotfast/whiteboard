@@ -255,8 +255,8 @@ export class ReviewDesktopHost extends Disposable {
     return listSshAliases(reviewSshConfigPath());
   }
 
-  retryRemoteHost(alias: string): void {
-    this.remoteHosts?.retry(alias);
+  async retryRemoteHost(alias: string): Promise<void> {
+    await this.remoteHosts?.retry(alias);
   }
 
   async getRemoteLanguageEndpoint(serverId: string) {

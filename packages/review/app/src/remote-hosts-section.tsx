@@ -379,7 +379,7 @@ function CheckAgain({
       xstyle={local.checkAgain}
       onClick={() => run("retry")}
     >
-      <RefreshIcon xstyle={controlStyles.inlineIcon} />
+      <RefreshIcon xstyle={controlStyles.inlineIcon} spinning={pending} />
     </IconButton>
   );
 }

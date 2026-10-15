@@ -63,7 +63,7 @@ export class ReviewDesktopChannel implements IServerChannel {
       return (await this.host.getRemoteHostState(serverId, typeof last === "string" ? last : undefined)) as T;
     }
     if (command === "retryRemoteHost") {
-      if (typeof arg === "string") this.host.retryRemoteHost(arg);
+      if (typeof arg === "string") await this.host.retryRemoteHost(arg);
       return undefined as T;
     }
     if (command === "detectRemoteAgents") {
