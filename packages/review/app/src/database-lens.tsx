@@ -1,4 +1,5 @@
 import { radius } from "@canvas/scale.stylex";
+import { Button } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
@@ -511,9 +512,9 @@ export function DatabaseLens(block: DatabaseLensProps) {
             </div>
           )}
           {!stage && activeTourId && (
-            <button
-              type="button"
-              {...withClass("diagram-tour-button", diagramStyles.control)}
+            <Button
+              className="diagram-tour-button"
+              xstyle={diagramStyles.button}
               data-tour-target="diagram-tour"
               onClick={(event) => {
                 event.preventDefault();
@@ -522,7 +523,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
               }}
             >
               Tour
-            </button>
+            </Button>
           )}
         </div>
       </header>

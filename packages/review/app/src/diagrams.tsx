@@ -1,5 +1,6 @@
 import { flowLayer } from "@canvas/flow-layers.stylex";
 import { elevation, fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { Button } from "@canvas/ui/button";
 import { textStyles } from "@canvas/ui/text";
 import { type DiffSelection, anchorSelection } from "@review/lens-selection";
 import {
@@ -605,9 +606,9 @@ function SequenceDiagramFigure({
           action={
             // The tour panel's header owns the close control fullscreen.
             onCloseTour ? null : (
-              <button
-                type="button"
-                {...withClass("diagram-tour-button", diagramStyles.control)}
+              <Button
+                className="diagram-tour-button"
+                xstyle={diagramStyles.button}
                 data-tour-target="diagram-tour"
                 onClick={(event) => {
                   event.preventDefault();
@@ -616,7 +617,7 @@ function SequenceDiagramFigure({
                 }}
               >
                 Tour
-              </button>
+              </Button>
             )
           }
         />
