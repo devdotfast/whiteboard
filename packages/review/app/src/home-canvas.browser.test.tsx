@@ -47,6 +47,7 @@ function server() {
   ];
 
   let release = () => {};
+
   const slow = new Promise<void>((resolve) => (release = resolve));
 
   const respond = vi.fn<typeof fetch>(async (input) => {
@@ -134,7 +135,7 @@ describe("Home's New whiteboard", () => {
 
   async function openNewWhiteboard(reviews: ReviewApiSummary[]) {
     const host: ReviewCanvasHomeHost = {
-      openReview: vi.fn(),
+      openReview: vi.fn<ReviewCanvasHomeHost["openReview"]>(),
       setupActions: setupActions(),
     };
 
@@ -216,7 +217,7 @@ describe("Home's New whiteboard", () => {
     vi.stubGlobal("fetch", respond);
 
     const host: ReviewCanvasHomeHost = {
-      openReview: vi.fn(),
+      openReview: vi.fn<ReviewCanvasHomeHost["openReview"]>(),
       setupActions: setupActions(),
     };
 

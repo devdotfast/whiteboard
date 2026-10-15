@@ -198,6 +198,7 @@ function Home({
     () => ({
       newWhiteboard() {
         if (!canCreate || firstRun) return false;
+
         if (!creating) startCreating();
 
         return true;
