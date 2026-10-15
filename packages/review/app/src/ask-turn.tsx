@@ -1,4 +1,4 @@
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { focusStyles } from "@canvas/ui/focus";
@@ -557,9 +557,7 @@ export function AskAgentTurn({
   return (
     <div {...stylex.props(styles.turn)}>
       <div {...stylex.props(styles.byline)}>
-        <span {...stylex.props(styles.bylineLogo)}>
-          {AGENT_LOGOS[thread.agent]({ xstyle: styles.bylineLogoMark })}
-        </span>
+        <AgentLogo agent={thread.agent} size="inline" />
         <span>{thread.agentName}</span>
       </div>
       {blocks.map((block) =>
@@ -676,15 +674,6 @@ const styles = stylex.create({
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "14px",
-  },
-  bylineLogo: {
-    display: "flex",
-    flex: "0 0 14px",
-    justifyContent: "center",
-  },
-  bylineLogoMark: {
-    width: "12px",
-    height: "12px",
   },
   answer: {
     display: "flex",

@@ -1,4 +1,4 @@
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import { focusStyles } from "@canvas/ui/focus";
 import type { AskHistoryEntry } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
@@ -888,9 +888,7 @@ function AskPin({
     >
       {/* Newest first; the count says how many conversations there are. */}
       {agents.slice(0, PIN_LOGOS).map((agent) => (
-        <span key={agent} {...stylex.props(styles.logoSlot)}>
-          {AGENT_LOGOS[agent]({ xstyle: styles.logo })}
-        </span>
+        <AgentLogo key={agent} agent={agent} size="inline" />
       ))}
       {/* One conversation needs no count. */}
       {count > 1 ? <span {...stylex.props(styles.count)}>{count}</span> : null}
@@ -1045,13 +1043,6 @@ const styles = stylex.create({
     lineHeight: "14px",
     whiteSpace: "nowrap",
     cursor: "pointer",
-  },
-  logoSlot: {
-    display: "flex",
-  },
-  logo: {
-    width: "12px",
-    height: "12px",
   },
   more: {
     paddingInline: "4px",

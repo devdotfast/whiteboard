@@ -7,7 +7,7 @@ import {
   radius,
 } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
@@ -284,7 +284,6 @@ export function RunStep({
   };
 
   const agentName = agents.find((candidate) => candidate.id === agent)?.name;
-  const AgentLogo = agent ? AGENT_LOGOS[agent] : undefined;
   const canChooseAgent = agents.length > 1;
 
   const canDraw =
@@ -602,7 +601,7 @@ export function RunStep({
                   onClick={() => void draw()}
                   xstyle={styles.chipDraw}
                 >
-                  {AgentLogo ? <AgentLogo xstyle={styles.chipLogo} /> : null}
+                  {agent ? <AgentLogo agent={agent} /> : null}
                   {starting ? "Starting…" : agentName}
                   <Shortcut aria-hidden="true" xstyle={styles.shortcut}>
                     ⌘↵
@@ -621,15 +620,11 @@ export function RunStep({
                       styles.chipMenu,
                     ]}
                     value={agent}
-                    options={agents.map((candidate) => {
-                      const Logo = AGENT_LOGOS[candidate.id];
-
-                      return {
-                        value: candidate.id,
-                        label: candidate.name,
-                        icon: <Logo />,
-                      };
-                    })}
+                    options={agents.map((candidate) => ({
+                      value: candidate.id,
+                      label: candidate.name,
+                      icon: <AgentLogo agent={candidate.id} />,
+                    }))}
                     onChange={(next: OnboardingRunAgent["id"]) =>
                       setAgent(next)
                     }
@@ -938,7 +933,6 @@ const styles = stylex.create({
     borderTopRightRadius: 0,
     borderBottomRightRadius: 0,
   },
-  chipLogo: { width: "16px", height: "16px" },
   chipRule: {
     width: "1px",
     height: "14px",

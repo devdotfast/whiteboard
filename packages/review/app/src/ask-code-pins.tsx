@@ -1,4 +1,4 @@
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import type {
   ReviewAskMark,
   ReviewDiffViewHandle,
@@ -174,7 +174,7 @@ function CodePin({ mark }: { mark: CodeMark }): ReactElement {
         )
       }
     >
-      {newest ? AGENT_LOGOS[newest.agent]({ xstyle: styles.logo }) : null}
+      {newest ? <AgentLogo agent={newest.agent} xstyle={styles.logo} /> : null}
       {count > 1 ? count : null}
     </button>
   );

@@ -1,5 +1,5 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import { Button, buttonLook, buttonStyles } from "@canvas/ui/button";
 import { useCopy } from "@canvas/ui/copy";
 import { focusStyles } from "@canvas/ui/focus";
@@ -112,19 +112,15 @@ export function ConnectCard({
       <SegmentedControl
         label="Agent"
         value={target}
-        options={TAB_TARGETS.map((tab) => {
-          const Logo = AGENT_LOGOS[tab];
-
-          return {
-            value: tab,
-            label: (
-              <>
-                <Logo xstyle={styles.logo} />
-                {REVIEW_CLI_INSTALL_TARGET_LABELS[tab]}
-              </>
-            ),
-          };
-        })}
+        options={TAB_TARGETS.map((tab) => ({
+          value: tab,
+          label: (
+            <>
+              <AgentLogo agent={tab} size="chrome" />
+              {REVIEW_CLI_INSTALL_TARGET_LABELS[tab]}
+            </>
+          ),
+        }))}
         onChange={selectTarget}
         size="large"
         xstyle={[promptStyles.tabs, styles.agentTabs]}
@@ -240,21 +236,15 @@ function OtherAgentMenu({
   selected: ReviewCliInstallTarget | undefined;
   onSelect(target: ReviewCliInstallTarget): void;
 }) {
-  const Logo = selected ? AGENT_LOGOS[selected] : undefined;
-
   return (
     <OptionMenu
       ariaLabel="Other agent"
       value={selected}
-      options={OTHER_TARGETS.map((other) => {
-        const OptionLogo = AGENT_LOGOS[other];
-
-        return {
-          value: other,
-          label: REVIEW_CLI_INSTALL_TARGET_LABELS[other],
-          icon: <OptionLogo />,
-        };
-      })}
+      options={OTHER_TARGETS.map((other) => ({
+        value: other,
+        label: REVIEW_CLI_INSTALL_TARGET_LABELS[other],
+        icon: <AgentLogo agent={other} />,
+      }))}
       onChange={onSelect}
       triggerStyle={[
         focusStyles.ringInset,
@@ -266,7 +256,7 @@ function OtherAgentMenu({
       ]}
       triggerProps={{ "aria-pressed": selected !== undefined }}
     >
-      {Logo ? <Logo xstyle={styles.logo} /> : null}
+      {selected ? <AgentLogo agent={selected} size="chrome" /> : null}
       {selected ? REVIEW_CLI_INSTALL_TARGET_LABELS[selected] : "Other…"}
     </OptionMenu>
   );
@@ -402,10 +392,6 @@ const styles = stylex.create({
   agentTabs: {
     flexWrap: "wrap",
     marginBottom: "6px",
-  },
-  logo: {
-    width: "14px",
-    height: "14px",
   },
   otherTrigger: {
     paddingRight: "6px",

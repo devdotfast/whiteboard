@@ -1,4 +1,4 @@
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
@@ -267,9 +267,10 @@ export function AskHistoryList({
                       );
                     }}
                   >
-                    <span {...stylex.props(styles.historyLogo)}>
-                      {AGENT_LOGOS[entry.agent]({})}
-                    </span>
+                    <AgentLogo
+                      agent={entry.agent}
+                      xstyle={styles.historyLogo}
+                    />
                     <span {...stylex.props(styles.historyText)}>
                       <span
                         {...stylex.props(
@@ -374,10 +375,7 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   historyLogo: {
-    display: "flex",
-    flex: "0 0 16px",
-    justifyContent: "center",
-    paddingTop: "3px",
+    marginTop: "3px",
   },
   historyText: {
     display: "flex",

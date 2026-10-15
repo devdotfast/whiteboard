@@ -1,4 +1,4 @@
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import {
   type ReviewProjectThread,
   type ReviewSidebarSectionProps,
@@ -162,11 +162,6 @@ export function ThreadsSectionBody({
           {shown.map((thread) => {
             const status = statusText[thread.status ?? "idle"];
 
-            const Logo = Object.hasOwn(AGENT_LOGOS, thread.agent)
-              ? // SAFETY: hasOwn just checked the key.
-                AGENT_LOGOS[thread.agent as keyof typeof AGENT_LOGOS]
-              : undefined;
-
             const { board, text, suffix } = relation(thread, reviewId);
 
             return (
@@ -181,7 +176,7 @@ export function ThreadsSectionBody({
                   onClick={() => onOpenThread?.(thread.id)}
                 >
                   <span {...stylex.props(styles.line)}>
-                    <ThreadMark thread={thread} Logo={Logo} />
+                    <ThreadMark thread={thread} />
                     <span {...stylex.props(styles.agent)}>
                       {thread.agentName}
                     </span>
@@ -247,13 +242,7 @@ export function threadAnswering(thread: ReviewProjectThread): boolean {
 /** A row's leading mark: the spinner while its agent answers; else the
  * agent's logo, with an amber dot when it needs you or a blue one when it
  * finished a turn you have not seen. */
-function ThreadMark({
-  thread,
-  Logo,
-}: {
-  thread: ReviewProjectThread;
-  Logo: ((props: { xstyle?: stylex.StyleXStyles }) => ReactElement) | undefined;
-}): ReactElement {
+function ThreadMark({ thread }: { thread: ReviewProjectThread }): ReactElement {
   if (threadAnswering(thread))
     return (
       <span {...stylex.props(styles.mark)}>
@@ -270,7 +259,7 @@ function ThreadMark({
 
   return (
     <span {...stylex.props(styles.mark)}>
-      {Logo ? <Logo xstyle={styles.logo} /> : null}
+      <AgentLogo agent={thread.agent} xstyle={styles.logo} />
       {dot ? (
         <span
           role="img"
