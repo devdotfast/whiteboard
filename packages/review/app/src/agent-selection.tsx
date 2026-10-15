@@ -35,7 +35,7 @@ import { Shortcut } from "./ui/kbd";
 import { surfaceStyles } from "./ui/surface";
 
 type Selection = Omit<AgentSelection, "revision"> & {
-  anchor?: { x: number; y: number };
+  anchor?: { x: number; y: number; right?: number };
   anchorElement?: Element;
   anchorContainer?: HTMLElement;
   /** The selected document text, read for its context only when asked. */
@@ -124,6 +124,13 @@ export function AgentSelectionProvider({
             x: Math.max(8, anchor.x - (rect?.left ?? 0)),
             // Above the selection: the toolbar's 34px and a 2px gap.
             y: anchor.y - (rect?.top ?? 0) - 36,
+            right:
+              value.anchor?.right === undefined
+                ? undefined
+                : Math.max(
+                    8,
+                    (rect?.right ?? window.innerWidth) - value.anchor.right,
+                  ),
           },
         };
       }
@@ -311,7 +318,10 @@ export function AgentSelectionProvider({
                 // gives way so it never runs past the container's edge.
                 <div
                   {...stylex.props(themeStyles.vars, styles.lane)}
-                  style={{ top: selection.anchor?.y }}
+                  style={{
+                    top: selection.anchor?.y,
+                    right: selection.anchor?.right,
+                  }}
                 >
                   <span
                     {...stylex.props(styles.lead)}

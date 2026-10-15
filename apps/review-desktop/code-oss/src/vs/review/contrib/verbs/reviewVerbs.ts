@@ -91,7 +91,13 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 		const rect = editor.getDomNode()?.getBoundingClientRect();
 		const cursor = selection.getPosition();
 		const position = editor.getScrolledVisiblePosition(cursor.lineNumber > toLine ? { lineNumber: toLine, column: model.getLineMaxColumn(toLine) } : cursor);
-		const anchor = rect && position ? { x: rect.left + position.left, y: rect.top + position.top } : undefined;
+		const layout = editor.getLayoutInfo();
+		const right = layout.contentLeft + layout.contentWidth;
+		const anchor = rect && position ? {
+			x: rect.left + Math.min(Math.max(position.left, layout.contentLeft), right),
+			y: rect.top + Math.min(Math.max(position.top, 0), layout.height),
+			right: rect.left + right,
+		} : undefined;
 		const apiSelection = apiSelectionEvent(model.uri, selection, anchor);
 		if (apiSelection) {
 			const diff = this.codeEditorService.listDiffEditors().find(diff => diff.getOriginalEditor() === editor || diff.getModifiedEditor() === editor);

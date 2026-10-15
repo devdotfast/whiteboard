@@ -1620,7 +1620,9 @@ export const ReviewSurfaceEventSchema = z.discriminatedUnion("event", [
     event: z.literal("editorSelectionChanged"),
     reviewId: requiredString,
     apiSource: ReviewApiSelectionSourceSchema.optional(),
-    anchor: z.object({ x: z.number(), y: z.number() }).optional(),
+    anchor: z
+      .object({ x: z.number(), y: z.number(), right: z.number().optional() })
+      .optional(),
     path: requiredString,
     range: ReviewRangeSchema,
     sideContext: reviewDiffSideSchema,
