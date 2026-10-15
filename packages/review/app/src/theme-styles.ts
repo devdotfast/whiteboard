@@ -90,9 +90,9 @@ export const themeStyles = stylex.create({
     "--tray": "#f3f4f6",
     "--tray-raised": "color-mix(in srgb, var(--ink) 6%, var(--tray))",
     "--chevron-down":
-      "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 4.25 6 8l3.5-3.75' fill='none' stroke='%239AA0AB' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
+      "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 8.5 12 16l7-7.5' fill='none' stroke='%239AA0AB' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
     "--check-mark":
-      "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 5.2 4.2 7.4 8 3.2' fill='none' stroke='%23FFFFFF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
+      "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5 9.5 17 19 7' fill='none' stroke='%23FFFFFF' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
     "--marker-tint": "rgba(43, 85, 230, 0.08)",
     "--marker-glow": "rgba(43, 85, 230, 0.22)",
     "--agent-1": "#7a4fd6",

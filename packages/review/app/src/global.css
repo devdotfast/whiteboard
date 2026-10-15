@@ -12,8 +12,8 @@
   --raised: #1a1f29;
   --tray: #12161e;
   --tray-raised: color-mix(in srgb, var(--ink) 6%, var(--tray));
-  --chevron-down: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 4.25 6 8l3.5-3.75' fill='none' stroke='%239AA0AB' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  --check-mark: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 5.2 4.2 7.4 8 3.2' fill='none' stroke='%230C0F15' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  --chevron-down: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 8.5 12 16l7-7.5' fill='none' stroke='%239AA0AB' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  --check-mark: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5 9.5 17 19 7' fill='none' stroke='%230C0F15' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
   --marker-tint: rgba(91, 124, 255, 0.14);
   --marker-glow: rgba(91, 124, 255, 0.3);
   /* Agents after the first, in the order they begin: violet, then teal. */
