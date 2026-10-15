@@ -85,6 +85,8 @@ export interface ReviewNavigationState {
   /** Views the canvas offers; navigation to any other lands on "review". */
   availableViews: readonly ReviewView[];
   diffScope: ReviewDiffScope | null;
+  /** Cleared by any navigation. */
+  diffReveal: { path: string; request: number } | null;
   traceSelection: TraceSelection | undefined;
   /** null reads the configured default. */
   traceStorage: AgentTraceStorage | null;
@@ -133,6 +135,7 @@ export interface AskOpenOptions {
 export interface ReviewNavigationActions {
   showView: (view: ReviewView) => void;
   openCommitDiff: (scope: ReviewDiffScope) => void;
+  revealDiffFile: (path: string) => void;
   /** A lens opens its diff alongside any open peek. */
   selectLens: (lens: ReviewLensSelection) => void;
   clearLens: () => void;
@@ -199,6 +202,8 @@ export function createReviewPanelStore({
   const open = (key: number | null | undefined) =>
     asks.find((ask) => ask.key === key)?.key ?? null;
 
+  let nextDiffReveal = 0;
+
   let nextAskKey = Math.max(-1, ...asks.map((ask) => ask.key)) + 1;
 
   // A view opens where Asks open, or where the Ask that asked is; docked, it
@@ -258,6 +263,7 @@ export function createReviewPanelStore({
     view: initialView,
     availableViews,
     diffScope: initialView === "diff" ? diffScope : null,
+    diffReveal: null,
     traceSelection,
     traceStorage,
     lens,
@@ -314,6 +320,14 @@ export function createReviewPanelStore({
           ? { ...transition, diffScope: scope }
           : transition;
       }),
+    revealDiffFile: (path) =>
+      set((state) => {
+        const transition = viewTransition(state, "diff");
+
+        return transition.view === "diff"
+          ? { ...transition, diffReveal: { path, request: nextDiffReveal++ } }
+          : transition;
+      }),
     selectLens: (lens) =>
       set((state) => ({
         ...viewTransition(state, "diff"),
@@ -322,7 +336,7 @@ export function createReviewPanelStore({
         lens,
         diffScope: null,
       })),
-    clearLens: () => set({ lens: null }),
+    clearLens: () => set({ lens: null, diffReveal: null }),
     openTrace: (selection) =>
       set((state) => ({
         ...viewTransition(state, "trace"),
@@ -508,6 +522,7 @@ function viewTransition(
 
   return {
     view,
+    diffReveal: null,
     ...(view !== "diff" && { diffScope: null }),
     ...(view !== "map" &&
       state.mapFocus?.pending && {

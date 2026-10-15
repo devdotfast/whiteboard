@@ -805,6 +805,9 @@ export interface ReviewCanvasHandle extends ReviewDisposable {
   update(content: ReviewCanvasContent): void;
   focus(): void;
   showFind(seed?: string): boolean;
+  /** Undefined when the canvas shows no review. */
+  diffFiles(): Promise<readonly ReviewDiffFileWire[]> | undefined;
+  revealDiffFile(path: string): void;
 }
 
 export const REVIEW_CANVAS_RESUME_EVENT = "dev-fast-review-canvas-resume";

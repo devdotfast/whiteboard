@@ -66,6 +66,7 @@ import type {
 	ReviewCanvasSetupActions,
 	ReviewCliInstallStatus,
 	ReviewCtrlTabChoice,
+	ReviewDiffFileWire,
 	ReviewDocumentWidthChoice,
 	ReviewKeymapChoice,
 	ReviewReadyNotificationChoice,
@@ -674,6 +675,14 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			}
 		}
 		return this.canvas.value?.showFind(seed) ?? false;
+	}
+
+	diffFiles(): Promise<readonly ReviewDiffFileWire[]> | undefined {
+		return this.canvas.value?.diffFiles();
+	}
+
+	revealDiffFile(path: string): void {
+		this.canvas.value?.revealDiffFile(path);
 	}
 
 	override getControl(): IEditorControl | undefined {

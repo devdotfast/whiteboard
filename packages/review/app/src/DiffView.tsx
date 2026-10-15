@@ -44,6 +44,7 @@ import {
 } from "./markers.stylex";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useReviewLenses } from "./review-lenses";
+import { useOptionalReviewPanel } from "./review-panel";
 import { shellStyles } from "./shell-styles";
 import {
   useBottomSheetResize,
@@ -172,6 +173,12 @@ export function ReviewDiffView({
   // The courier would nudge the lens the tour rings.
   const diffFiles = useReviewDiffFiles();
   const lens = scope ? undefined : lenses?.active;
+
+  // The full diff stays mounted behind a commit's, which takes the pick.
+  const picked = useOptionalReviewPanel((state) =>
+    scope || !state.diffScope ? state.diffReveal : null,
+  );
+
   const [lensList, setLensList] = useState<HTMLDivElement | null>(null);
   const rows = useLensRows(lenses?.lenses ?? []);
   const lensCursor = useContext(LensCursorContext);
@@ -250,8 +257,9 @@ export function ReviewDiffView({
     return (
       <NativeDiffView
         scope={scope}
-        revealFile={revealFile}
-        restoreFile={restoreFile}
+        revealFile={picked?.path ?? revealFile}
+        restoreFile={!picked && restoreFile}
+        revealRequest={picked?.request}
       />
     );
   const global = lenses.stats();
@@ -534,12 +542,16 @@ export function ReviewDiffView({
                 : (ranges, viewed) => lenses.mark(ranges, viewed)
             }
             hidden={!!lens}
+            revealFile={lens ? undefined : picked?.path}
+            revealRequest={lens ? undefined : picked?.request}
             inWorkspace
           />
         )}
         {lens && lensTree && (
           <NativeDiffView
             lens={lens}
+            revealFile={picked?.path}
+            revealRequest={picked?.request}
             treeContainer={lensTree}
             progress={lensProgress}
             onToggleViewed={
@@ -567,6 +579,7 @@ function NativeDiffView({
   scope,
   revealFile,
   restoreFile,
+  revealRequest,
   lens,
   treeContainer,
   progress,
@@ -578,6 +591,8 @@ function NativeDiffView({
   scope?: ReviewCommitScope;
   revealFile?: string;
   restoreFile?: boolean;
+  /** A new value reveals `revealFile` again. */
+  revealRequest?: number;
   lens?: ReviewDiffLens;
   treeContainer?: HTMLElement;
   progress?: ReviewDiffProgress;
@@ -646,7 +661,7 @@ function NativeDiffView({
   useLayoutEffect(() => {
     if (revealFile)
       handle.current?.revealFile?.(revealFile, { restore: restoreFile });
-  }, [revealFile, restoreFile, container, scope?.commit]);
+  }, [revealFile, restoreFile, revealRequest, container, scope?.commit]);
 
   return (
     <>

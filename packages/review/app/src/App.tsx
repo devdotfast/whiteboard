@@ -6,6 +6,7 @@ import {
   type ReviewCanvasRange,
   type ReviewCommitSummary,
   type ReviewDocumentWidthChoice,
+  lensDiffFiles,
 } from "@dev.fast/review-protocol";
 import {
   type SoftwareMapTopologyDiff,
@@ -40,6 +41,7 @@ import {
   type ReviewNodeTint,
   useReviewDebugSettings,
 } from "./debug-settings";
+import { type DiffFilePicker, useDiffFilePicker } from "./diff-file-picker";
 import { DiffLayoutControl } from "./diff-layout-control";
 import { ReviewDiffView } from "./DiffView";
 import { useDocumentEmbedScroll } from "./document-embed-scroll";
@@ -420,6 +422,26 @@ function ReviewLayoutContent({
 
   const storedList = useTraceList();
   const diffFiles = useReviewDiffFiles();
+
+  const activeLens = useReviewLenses()?.active;
+
+  const diffFilePicker = useMemo<DiffFilePicker>(
+    () => ({
+      files: async () => {
+        const commit = panelStore.getState().diffScope?.commit.commit;
+
+        const files = await session.bridge.diffView.files(
+          commit ? { commit } : undefined,
+        );
+
+        return commit || !activeLens ? files : lensDiffFiles(files, activeLens);
+      },
+      reveal: (path) => panelStore.getState().revealDiffFile(path),
+    }),
+    [panelStore, session.bridge.diffView, activeLens],
+  );
+
+  useDiffFilePicker(diffFilePicker);
 
   const hasTraceSessions =
     !scratchpad &&
