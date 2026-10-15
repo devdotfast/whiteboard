@@ -194,8 +194,9 @@ async function localStack(
 
   return branches.map((branch) => ({
     branch,
-    pullRequestNumber: null,
-    pullRequestUrl: null,
+    pullRequestNumber:
+      latest("branch", branch)?.origin?.pullRequestNumber ?? null,
+    pullRequestUrl: latest("branch", branch)?.origin?.pullRequestUrl ?? null,
     base: (branch === bottom && start?.base) || null,
     subject: (branch === bottom && start?.subject) || null,
     current: branch === current,

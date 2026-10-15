@@ -519,8 +519,8 @@ describe("creating a review from a pull request URL alone", () => {
     );
 
     expect(layers).toMatchObject([
-      { branch: "lower", relation: "earlier" },
-      { branch: "upper", relation: "current" },
+      { branch: "lower", pullRequestNumber: 8, relation: "earlier" },
+      { branch: "upper", pullRequestNumber: 9, relation: "current" },
     ]);
   });
 
