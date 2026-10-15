@@ -33,6 +33,7 @@ import { reviewFindRanges } from "./review-find-text";
 import { useReviewRoots } from "./review-root-context";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
+import { useTooltip } from "./use-tooltip";
 
 const ALL_HIGHLIGHT = "review-find-match";
 
@@ -487,13 +488,15 @@ function FindToggle({
   onClick(): void;
   children: ReactNode;
 }) {
+  const tooltip = useTooltip(description, { instant: true });
+
   return (
     <button
+      ref={tooltip}
       type="button"
       {...stylex.props(styles.toggle, active && styles.togglePressed, xstyle)}
       aria-label={label}
       aria-pressed={active}
-      title={description}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
     >
