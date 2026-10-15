@@ -171,34 +171,34 @@ test("says whether an online host has language features, and why not", async () 
   expect(rows()[2]).not.toContain("Language features");
 });
 
-test("lists an online host's language groups after its language features, each with what is missing", async () => {
-  await render(
-    remoteHosts(
-      ["devbox", "box2"],
-      [
-        {
-          alias: "devbox",
-          serverId: "s1",
-          state: "online",
-          languageFeatures: true,
-          languageGroups: [
-            { group: "rust", installed: true },
-            {
-              group: "swift",
-              installed: true,
-              detail: "swift was not found on the login shell's PATH",
-            },
-            { group: "csharp", installed: false, detail: "download failed" },
-          ],
-        },
-        {
-          alias: "box2",
-          state: "offline",
-          languageGroups: [{ group: "rust", installed: true }],
-        },
-      ],
-    ),
+test("lists an online host's language groups after its language features, each with what is missing and a way to check again", async () => {
+  const hosts = remoteHosts(
+    ["devbox", "box2"],
+    [
+      {
+        alias: "devbox",
+        serverId: "s1",
+        state: "online",
+        languageFeatures: true,
+        languageGroups: [
+          { group: "rust", installed: true },
+          {
+            group: "swift",
+            installed: true,
+            detail: "swift was not found on the login shell's PATH",
+          },
+          { group: "csharp", installed: false, detail: "download failed" },
+        ],
+      },
+      {
+        alias: "box2",
+        state: "offline",
+        languageGroups: [{ group: "rust", installed: true }],
+      },
+    ],
   );
+
+  await render(hosts);
   await vi.waitFor(() => expect(rows()[0]).toContain("online"));
   expect(
     [
@@ -215,6 +215,10 @@ test("lists an online host's language groups after its language features, each w
     "csharp: not installed · download failed",
   ]);
   expect(rows()[1]).not.toContain("rust");
+  const checks = page.getByRole("button", { name: "Check devbox again" });
+  expect(checks.elements()).toHaveLength(2);
+  await checks.first().click();
+  expect(hosts.retry).toHaveBeenCalledWith("devbox");
 });
 
 test("offers Retry to a host that failed to authenticate, is offline or unreachable, not installed or unsupported", async () => {

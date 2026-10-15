@@ -1,6 +1,9 @@
-import { Button } from "@canvas/ui/button";
+import { controlStyles } from "@canvas/controls-styles";
+import { RefreshIcon } from "@canvas/icons";
+import { Button, IconButton } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { CopyableText } from "@canvas/ui/copy";
+import { useUiTooltip } from "@canvas/ui/host";
 import { TextField } from "@canvas/ui/text-field";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
@@ -9,7 +12,7 @@ import {
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import {
   ACTION_WORDS,
@@ -115,7 +118,11 @@ export function RemoteHostsSection({
                       ? "Language features: available"
                       : `Language features: unavailable${state.languageFeaturesDetail ? ` · ${state.languageFeaturesDetail}` : ""}`
                   }
-                />
+                >
+                  {!state.languageFeatures && state.languageFeaturesDetail ? (
+                    <CheckAgain hosts={hosts} alias={name} />
+                  ) : null}
+                </Detail>
               ) : null}
               {state?.state === "online"
                 ? state.languageGroups?.map(({ group, installed, detail }) => (
@@ -123,7 +130,11 @@ export function RemoteHostsSection({
                       key={group}
                       failed={!!detail}
                       text={`${group}: ${installed ? "installed" : "not installed"}${detail ? ` · ${detail}` : ""}`}
-                    />
+                    >
+                      {detail ? (
+                        <CheckAgain hosts={hosts} alias={name} />
+                      ) : null}
+                    </Detail>
                   ))
                 : null}
               {state?.state === "online" ? (
@@ -348,14 +359,41 @@ function HostStep({
   );
 }
 
+function CheckAgain({
+  hosts,
+  alias,
+}: {
+  hosts: ReviewRemoteHostsSettings;
+  alias: string;
+}) {
+  const { run, pending } = useHostAction(hosts, alias);
+  const tooltip = useUiTooltip("Check again");
+
+  return (
+    <IconButton
+      ref={tooltip}
+      size="small"
+      aria-label={`Check ${alias} again`}
+      aria-busy={pending || undefined}
+      disabled={pending}
+      xstyle={local.checkAgain}
+      onClick={() => run("retry")}
+    >
+      <RefreshIcon xstyle={controlStyles.inlineIcon} />
+    </IconButton>
+  );
+}
+
 function Detail({
   text,
   failed,
   role,
+  children,
 }: {
   text: string;
   failed: boolean;
   role?: "status";
+  children?: ReactNode;
 }) {
   return (
     <span
@@ -367,6 +405,7 @@ function Detail({
       )}
     >
       {failed ? <CopyableText text={text} /> : text}
+      {children}
     </span>
   );
 }
@@ -378,6 +417,10 @@ const local = stylex.create({
   },
   failed: {
     color: tokens.changeRemoved,
+  },
+  checkAgain: {
+    marginInlineStart: "4px",
+    verticalAlign: "middle",
   },
   actions: {
     gap: "8px",
