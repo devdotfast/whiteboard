@@ -50,7 +50,6 @@ import {
 	REVIEW_KEYMAP_SETTING,
 	REVIEW_READY_NOTIFICATION_SETTING,
 	REVIEW_SOFTWARE_MAP_SETTING,
-	REVIEW_STRUCTURAL_DIFF_SETTING,
 	REVIEW_TELEMETRY_SETTING,
 } from "../../../common/reviewConfigurationDefaults.js";
 import { homeSessions, resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
@@ -288,14 +287,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			configurationService.onDidChangeConfiguration((event) => {
 				if (
 					!event.affectsConfiguration(REVIEW_SOFTWARE_MAP_SETTING) &&
-					!event.affectsConfiguration(REVIEW_STRUCTURAL_DIFF_SETTING) &&
 					!event.affectsConfiguration(REVIEW_DOCUMENT_WIDTH_SETTING)
 				)
 					return;
 				if (this.apiContent) {
 					this.apiContent = {
 						...this.apiContent,
-						structuralDiffEnabled: this.currentStructuralDiffEnabled(),
 						softwareMapEnabled: this.currentSoftwareMapEnabled(),
 						documentWidth: this.currentDocumentWidth(),
 					};
@@ -437,7 +434,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						reviewId,
 						...remoteEntry(this.apiCatalog.reviews.find((review) => review.reviewId === reviewId)),
 						remoteHosts: this.remoteHostActions(),
-						structuralDiffEnabled: this.currentStructuralDiffEnabled(),
 						softwareMapEnabled: this.currentSoftwareMapEnabled(),
 						documentWidth: this.currentDocumentWidth(),
 						setTitle: (title) => input.setApiTitle(title),
@@ -957,19 +953,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				});
 				return this.desktopConnection.setScratchpadEnabled(enabled);
 			},
-			structuralDiffEnabled: this.currentStructuralDiffEnabled(),
-			setStructuralDiffEnabled: async (enabled) => {
-				this.reviewTelemetryService.capture("setting_changed", {
-					setting: "structural_diff",
-					enabled,
-				});
-				await this.configurationService.updateValue(
-					REVIEW_STRUCTURAL_DIFF_SETTING,
-					enabled,
-					ConfigurationTarget.USER,
-				);
-				return this.currentStructuralDiffEnabled();
-			},
 			remoteHosts: reviewRemoteHostsSettings({
 				get: (key) => this.configurationService.getValue(key),
 				update: (key, value) => this.configurationService.updateValue(key, value, ConfigurationTarget.APPLICATION),
@@ -1013,14 +996,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	private currentReadyNotification(): ReviewReadyNotificationChoice {
 		return this.configurationService.getValue<ReviewReadyNotificationChoice>(REVIEW_READY_NOTIFICATION_SETTING) ?? "off";
-	}
-
-	private currentStructuralDiffEnabled(): boolean {
-		return (
-			this.configurationService.getValue<boolean>(
-				REVIEW_STRUCTURAL_DIFF_SETTING,
-			) === true
-		);
 	}
 
 	private currentSoftwareMapEnabled(): boolean {

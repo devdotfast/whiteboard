@@ -79,8 +79,7 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 	constructor(
 		source: URI,
 		readonly entries: readonly ReviewFilesEditorEntry[],
-		structural: StructuralDiffSession | undefined,
-		lens: boolean = false,
+		structural: StructuralDiffSession,
 		@ITextModelService textModelService: ITextModelService,
 		@ITextResourceConfigurationService
 		textResourceConfigurationService: ITextResourceConfigurationService,
@@ -98,32 +97,28 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 					entry.original,
 					entry.modified,
 					entry.goToFileResource,
-					structural && entry.file.status !== "unchanged" && structural.getFileResult(entry.file.path)?.diff?.type !== "binary"
+					entry.file.status !== "unchanged" && structural.getFileResult(entry.file.path)?.diff?.type !== "binary"
 						? structural.fileCollapse(entry.file.path)
 						: observableValue("collapsed", false),
 					undefined,
 					undefined,
 					reviewMultiDiffLabelUris(entry.file),
 					// Use diffr's child folds; the file header controls the root.
-					(structural || lens)
-						? {
-							...REVIEW_FILES_DIFF_EDITOR_OPTIONS,
-							hideOriginalLineNumbers: entry.file.status === "added" || entry.file.status === "unchanged",
-							hideUnchangedRegions: {
-								enabled: true,
-								minimumLineCount: 1,
-								contextLineCount: 0,
-							},
-							folding: false,
-							// Structural rails use one geometry through code, folds and deleted rows.
-							...(structural ? {
-								guides: { indentation: false, bracketPairs: false },
-								// Fold controls follow the line numbers, with breathing room before code.
-								lineDecorationsWidth: 24,
-							} : {}),
-							experimental: { useTrueInlineView: false },
-						}
-						: { ...REVIEW_FILES_DIFF_EDITOR_OPTIONS, hideOriginalLineNumbers: entry.file.status === "added" || entry.file.status === "unchanged" },
+					{
+						...REVIEW_FILES_DIFF_EDITOR_OPTIONS,
+						hideOriginalLineNumbers: entry.file.status === "added" || entry.file.status === "unchanged",
+						hideUnchangedRegions: {
+							enabled: true,
+							minimumLineCount: 1,
+							contextLineCount: 0,
+						},
+						folding: false,
+						// Structural rails use one geometry through code, folds and deleted rows.
+						guides: { indentation: false, bracketPairs: false },
+						// Fold controls follow the line numbers, with breathing room before code.
+						lineDecorationsWidth: 24,
+						experimental: { useTrueInlineView: false },
+					},
 				);
 				items.set(entry, item);
 			}
@@ -144,19 +139,17 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 		super(
 			source,
 			"Files",
-			structural ? undefined : entries.map(itemFor),
+			undefined,
 			true,
 			textModelService,
 			textResourceConfigurationService,
 			instantiationService,
-			structural
-				? {
-					_serviceBrand: undefined,
-					registerResolver: (resolver) =>
-						multiDiffSourceResolverService.registerResolver(resolver),
-					resolve: async () => streamSource,
-				}
-				: multiDiffSourceResolverService,
+			{
+				_serviceBrand: undefined,
+				registerResolver: (resolver) =>
+					multiDiffSourceResolverService.registerResolver(resolver),
+				resolve: async () => streamSource,
+			},
 			textFileService,
 		);
 		this._register(changes);

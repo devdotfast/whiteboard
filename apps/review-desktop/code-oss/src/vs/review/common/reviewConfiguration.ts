@@ -20,7 +20,7 @@
 import { localize } from '../../nls.js';
 import { Registry } from '../../platform/registry/common/platform.js';
 import { ConfigurationScope, Extensions, type IConfigurationRegistry } from '../../platform/configuration/common/configurationRegistry.js';
-import { REVIEW_CTRL_TAB_CHOICES, REVIEW_CTRL_TAB_SETTING, REVIEW_DOCUMENT_WIDTH_CHOICES, REVIEW_DOCUMENT_WIDTH_SETTING, REVIEW_KEYMAPS, REVIEW_KEYMAP_SETTING, REVIEW_PEEK_SIDE_BY_SIDE_SETTING, REVIEW_READY_NOTIFICATION_CHOICES, REVIEW_READY_NOTIFICATION_SETTING, REVIEW_REMOTE_HOSTS_SETTING, REVIEW_REMOTE_INSTALL_MODES, REVIEW_REMOTE_INSTALL_SETTING, REVIEW_SOFTWARE_MAP_SETTING, REVIEW_STRUCTURAL_DIFF_SETTING, REVIEW_TELEMETRY_SETTING, curatedExtensionConfigurationDefaults, reviewConfigurationDefaults } from './reviewConfigurationDefaults.js';
+import { REVIEW_CTRL_TAB_CHOICES, REVIEW_CTRL_TAB_SETTING, REVIEW_DOCUMENT_WIDTH_CHOICES, REVIEW_DOCUMENT_WIDTH_SETTING, REVIEW_KEYMAPS, REVIEW_KEYMAP_SETTING, REVIEW_PEEK_SIDE_BY_SIDE_SETTING, REVIEW_READY_NOTIFICATION_CHOICES, REVIEW_READY_NOTIFICATION_SETTING, REVIEW_REMOTE_HOSTS_SETTING, REVIEW_REMOTE_INSTALL_MODES, REVIEW_REMOTE_INSTALL_SETTING, REVIEW_SOFTWARE_MAP_SETTING, REVIEW_TELEMETRY_SETTING, curatedExtensionConfigurationDefaults, reviewConfigurationDefaults } from './reviewConfigurationDefaults.js';
 
 const configurationRegistry = Registry.as<IConfigurationRegistry>(Extensions.Configuration);
 
@@ -77,11 +77,6 @@ configurationRegistry.registerConfiguration({
 			type: 'boolean',
 			default: true,
 			description: localize('review.telemetry.enabled', "Send anonymous Whiteboard usage data."),
-		},
-		[REVIEW_STRUCTURAL_DIFF_SETTING]: {
-			type: 'boolean',
-			default: true,
-			description: localize('review.experimental.structuralDiff.enabled', "Replace the standard diff view with structural diffs from diffr."),
 		},
 		[REVIEW_SOFTWARE_MAP_SETTING]: {
 			type: 'boolean',

@@ -9,7 +9,6 @@ export const name = "diffr-settings";
 export const phase = 1;
 
 export const options = {
-  settings: { "review.experimental.structuralDiff.enabled": true },
   env: {
     GEMINI_API_KEY: "",
     GOOGLE_API_KEY: "",

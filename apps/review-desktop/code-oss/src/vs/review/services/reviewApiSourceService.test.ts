@@ -80,7 +80,7 @@ test("a document diff retains its pinned comparison even if the review advances 
 	let source!: ReviewDiffViewSource;
 	let lens!: ReviewDiffLens;
 	const canvas = service.canvas(() => view(version), {} as never, {
-		openComparison: () => undefined,
+		openComparison: () => ({}),
 		createDocument: (_: unknown, scope: ReviewDiffLens, input: ReviewDiffViewSource) => { lens = scope; source = input; return {}; },
 	} as never);
 	canvas.inlineEditors.create({ path: "src/[route].ts", side: "base", ranges: [{ startLine: 2, endLine: 2 }] } as never);
@@ -115,7 +115,7 @@ test("diff entries keep rename paths and missing sides, even when the review adv
 		() => resolveReviewSourceView({ reviewId: "review-a", version, pins: { worktreeRevision: generation } }),
 		{} as never,
 		{
-			openComparison: () => undefined,
+			openComparison: () => ({}),
 			create: (_: unknown, input: ReviewDiffViewSource) => {
 				source = input;
 				return {};

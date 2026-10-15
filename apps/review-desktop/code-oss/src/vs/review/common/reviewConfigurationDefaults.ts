@@ -24,7 +24,6 @@
 
 export const REVIEW_KEYMAP_SETTING = 'review.keymap';
 export const REVIEW_TELEMETRY_SETTING = 'review.telemetry.enabled';
-export const REVIEW_STRUCTURAL_DIFF_SETTING = 'review.experimental.structuralDiff.enabled';
 export const REVIEW_SOFTWARE_MAP_SETTING = 'review.experimental.softwareMap.enabled';
 export const REVIEW_REMOTE_HOSTS_SETTING = 'review.remote.hosts';
 export const REVIEW_REMOTE_INSTALL_SETTING = 'review.remote.install';
@@ -44,7 +43,6 @@ export const reviewConfigurationDefaults = {
 	[REVIEW_SOFTWARE_MAP_SETTING]: false,
 	[REVIEW_REMOTE_HOSTS_SETTING]: [],
 	[REVIEW_REMOTE_INSTALL_SETTING]: 'ask',
-	[REVIEW_STRUCTURAL_DIFF_SETTING]: true,
 	[REVIEW_TELEMETRY_SETTING]: true,
 	'telemetry.telemetryLevel': 'off',
 	'telemetry.enableTelemetry': false,
