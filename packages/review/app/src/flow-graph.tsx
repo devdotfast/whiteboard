@@ -1,5 +1,6 @@
 import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
 import { Button, buttonStyles } from "@canvas/ui/button";
+import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
 import type { DiffSelection } from "@review/lens-selection";
 import {
@@ -623,7 +624,7 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
         <span {...stylex.props(styles.caption)}>
           {unavailable ? (
             availability === "pending" ? (
-              "…"
+              <Spinner />
             ) : (
               "Unavailable"
             )

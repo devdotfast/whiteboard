@@ -2,6 +2,7 @@ import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CheckIcon } from "@canvas/ui/icons";
+import { Spinner } from "@canvas/ui/spinner";
 import type { DiffSelection } from "@review/lens-selection";
 import type { CallStackDiffBlock } from "@review/review-api/blocks/call_stack_diff";
 import * as stylex from "@stylexjs/stylex";
@@ -114,7 +115,7 @@ export function CallTree({
                 </span>
                 {unavailable && (
                   <span {...stylex.props(styles.stats)}>
-                    {availability === "pending" ? "…" : "Unavailable"}
+                    {availability === "pending" ? <Spinner /> : "Unavailable"}
                   </span>
                 )}
                 {!unavailable && stats && change !== "unchanged" && (
