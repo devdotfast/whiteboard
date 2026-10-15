@@ -3,7 +3,7 @@ import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { BranchIcon, ChevronDownIcon, PullRequestIcon } from "@canvas/ui/icons";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
 import {
   PULL_REQUEST_STATE_LABELS,
@@ -25,8 +25,6 @@ import { PullRequestStateIcon } from "./board-icons";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { useReviewSession } from "./host/review-session";
 import { tokens } from "./tokens.stylex";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
 
 type OpenEvent = Pick<
   MouseEvent,
@@ -76,10 +74,6 @@ export function ReviewStackSelector(): ReactElement | null {
   const review = session.review!;
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLSpanElement>(null);
-  const popoverRef = useAnchoredPopover<HTMLDivElement>(open, container);
-
-  useDismissOnOutside(container, open, setOpen);
-
   const { layers, base } = useStack();
 
   if (layers.length < 2) return null;
@@ -132,17 +126,13 @@ export function ReviewStackSelector(): ReactElement | null {
         <ChevronDownIcon xstyle={styles.pillChevron} />
       </button>
       {open ? (
-        <div
-          ref={popoverRef}
-          popover="manual"
+        <Popover
+          anchor={container}
+          onDismiss={() => setOpen(false)}
           role="menu"
           tabIndex={-1}
           aria-label="Stack"
-          {...stylex.props(
-            surfaceStyles.popover,
-            menuStyles.popover,
-            styles.menu,
-          )}
+          xstyle={[menuStyles.popover, styles.menu]}
           onKeyDown={(event) => moveMenuFocus(event)}
         >
           <div {...stylex.props(menuStyles.label, styles.heading)}>
@@ -175,7 +165,7 @@ export function ReviewStackSelector(): ReactElement | null {
               </div>
             </>
           ) : null}
-        </div>
+        </Popover>
       ) : null}
     </span>
   );

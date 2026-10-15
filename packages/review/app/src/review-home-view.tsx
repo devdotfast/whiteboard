@@ -86,9 +86,9 @@ import { Button, IconButton } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { EmptyState } from "./ui/empty-state";
 import { Shortcut } from "./ui/kbd";
+import { useDismissOnOutside } from "./ui/popover";
 import { StatusBanner } from "./ui/status-banner";
 import { surfaceStyles } from "./ui/surface";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
 
 interface ReviewHomeProps {

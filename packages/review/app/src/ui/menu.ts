@@ -38,9 +38,8 @@ export function moveMenuFocus(
   enabled[index]?.focus();
 }
 
-// An in-page menu: a manual popover that useAnchoredPopover puts in the top
-// layer under its trigger, so no clipping ancestor cuts it off. Pair with
-// surfaceStyles.popover; sites set their own width.
+// An in-page menu's placement, under its trigger, for a Popover; sites set
+// their own width.
 export const menuStyles = stylex.create({
   popover: {
     position: "fixed",

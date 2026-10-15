@@ -19,7 +19,6 @@ import {
   type ReactElement,
   type ReactNode,
   type RefObject,
-  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -31,11 +30,9 @@ import { fontSize, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { Button, IconButton } from "./ui/button";
 import { menuStyles } from "./ui/menu";
+import { Popover } from "./ui/popover";
 import { ProgressRing } from "./ui/progress-ring";
-import { surfaceStyles } from "./ui/surface";
 import { fieldStyles } from "./ui/text-field";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
 
 type ImageType = (typeof askImageTypes)[number];
@@ -288,11 +285,6 @@ export function AskComposer({
 
   const open = options.length > 0;
   const shown = Math.min(active, options.length - 1);
-  const list = useAnchoredPopover(open, form);
-  const dismissList = useCallback(() => setDismissed(draft), [draft]);
-
-  useDismissOnOutside(form, open, dismissList, true);
-
   useEffect(() => setActive(0), [completion?.kind, completion?.query]);
 
   const place = (text: string, at: number) => {
@@ -495,18 +487,13 @@ export function AskComposer({
         onDrop={drop}
       >
         {open ? (
-          <div
-            ref={list}
-            popover="manual"
+          <Popover
+            anchor={form}
+            onDismiss={() => setDismissed(draft)}
             id={listId}
             role="listbox"
             aria-label={completion?.kind === "command" ? "Commands" : "Files"}
-            {...stylex.props(
-              surfaceStyles.popover,
-              menuStyles.popover,
-              menuStyles.above,
-              styles.list,
-            )}
+            xstyle={[menuStyles.popover, menuStyles.above, styles.list]}
           >
             {options.map((option, index) => (
               <div
@@ -539,7 +526,7 @@ export function AskComposer({
                 ) : null}
               </div>
             ))}
-          </div>
+          </Popover>
         ) : null}
 
         {images.length ? (

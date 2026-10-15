@@ -21,7 +21,6 @@ import {
   type ReactElement,
   type ReactNode,
   type RefObject,
-  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -36,11 +35,9 @@ import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { EmptyState } from "./ui/empty-state";
 import { menuStyles } from "./ui/menu";
-import { surfaceStyles } from "./ui/surface";
+import { Popover } from "./ui/popover";
 import { textStyles } from "./ui/text";
 import { fieldStyles } from "./ui/text-field";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
 
 const agentsSchema = z.object({
@@ -333,9 +330,7 @@ export function AskAgentMenu({
   onPick: (agent: AskAgentId) => void;
   onDismiss: () => void;
 }): ReactElement {
-  const menu = useAnchoredPopover(true, within);
-
-  useDismissOnOutside(within, true, onDismiss, true);
+  const menu = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -345,23 +340,14 @@ export function AskAgentMenu({
   }, [autoFocus, menu]);
 
   return (
-    <div
+    <Popover
       ref={menu}
-      popover="manual"
+      anchor={within}
+      onDismiss={onDismiss}
       role="menu"
       tabIndex={-1}
       aria-label="Answer with"
-      {...stylex.props(
-        surfaceStyles.popover,
-        menuStyles.popover,
-        styles.agentMenu,
-      )}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        // Escape closes the menu, not the panel behind it.
-        event.stopPropagation();
-        onDismiss();
-      }}
+      xstyle={[menuStyles.popover, styles.agentMenu]}
     >
       <div
         {...stylex.props(textStyles.eyebrow, menuStyles.label)}
@@ -394,23 +380,8 @@ export function AskAgentMenu({
             ) : null}
           </button>
         ))}
-    </div>
+    </Popover>
   );
-}
-
-/** Closes a menu; focus that went with it returns to its button. */
-function useMenuClose(
-  setOpen: (open: boolean) => void,
-  trigger: RefObject<HTMLButtonElement | null>,
-) {
-  return useCallback(() => {
-    setOpen(false);
-    requestAnimationFrame(() => {
-      const focused = document.activeElement;
-
-      if (!focused || focused === document.body) trigger.current?.focus();
-    });
-  }, [setOpen, trigger]);
 }
 
 export function AskAgentPicker({
@@ -428,8 +399,7 @@ export function AskAgentPicker({
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const dismiss = useMenuClose(setOpen, trigger);
+  const dismiss = () => setOpen(false);
   const hint = useTooltip<HTMLSpanElement>(unavailable ?? "");
   const chosen = agents?.find((candidate) => candidate.id === agent);
 
@@ -452,7 +422,6 @@ export function AskAgentPicker({
   return (
     <div ref={anchor} {...stylex.props(styles.anchor, styles.whole)}>
       <Button
-        ref={trigger}
         variant="secondary"
         size="large"
         xstyle={styles.trigger}
@@ -507,12 +476,9 @@ export function AskChoicePicker({
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const dismiss = useMenuClose(setOpen, trigger);
-  const menu = useAnchoredPopover(open, anchor);
+  const menu = useRef<HTMLDivElement>(null);
+  const dismiss = () => setOpen(false);
   const chosen = select.options.find((option) => option.value === current);
-
-  useDismissOnOutside(anchor, open, dismiss, true);
 
   useEffect(() => {
     if (!open) return;
@@ -534,7 +500,6 @@ export function AskChoicePicker({
   return (
     <div ref={anchor} {...stylex.props(styles.anchor)}>
       <Button
-        ref={trigger}
         variant={quiet ? "ghost" : "secondary"}
         size={quiet ? "default" : "large"}
         xstyle={[styles.trigger, styles.choice, quiet && styles.quiet]}
@@ -556,25 +521,19 @@ export function AskChoicePicker({
         {quiet ? null : <ChevronDownIcon />}
       </Button>
       {open ? (
-        <div
+        <Popover
           ref={menu}
-          popover="manual"
+          anchor={anchor}
+          onDismiss={dismiss}
           role="menu"
           tabIndex={-1}
           aria-label={label}
-          {...stylex.props(
-            surfaceStyles.popover,
+          xstyle={[
             menuStyles.popover,
             quiet && menuStyles.above,
             end && menuStyles.end,
             searchable ? styles.searchMenu : styles.choiceMenu,
-          )}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            // Escape closes the menu, not the panel behind it.
-            event.stopPropagation();
-            dismiss();
-          }}
+          ]}
         >
           {searchable ? (
             <AskChoiceSearch
@@ -601,7 +560,7 @@ export function AskChoicePicker({
               ))}
             </>
           )}
-        </div>
+        </Popover>
       ) : null}
     </div>
   );
