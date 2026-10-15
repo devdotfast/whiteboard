@@ -79,7 +79,8 @@ export function structuralContextScopes(diff: StructuralTextDiff) {
 			}
 			region.children.forEach(visit);
 		};
-		if (source) visit(source.root);
+		// The root is the file itself, not a construct around the pinned code.
+		if (source?.root.kind === "fold") source.root.children.forEach(visit);
 		return result;
 	};
 	return { original: scopes(diff.lhs), modified: scopes(diff.rhs) };

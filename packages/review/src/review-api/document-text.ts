@@ -1,4 +1,9 @@
-import { type Element, ReviewInputError, elements } from "./document.js";
+import {
+  type Element,
+  ReviewInputError,
+  elements,
+  stepSources,
+} from "./document.js";
 import type { Snapshot } from "./store.js";
 
 /** A reading view of saved content, not another document format to maintain. */
@@ -79,7 +84,7 @@ export function documentText(
           `${element.from} → ${element.to}: ${element.label} (${element.style})`,
         );
 
-        if (element.source) detail(element.source);
+        for (const source of stepSources(element)) detail(source);
 
         if (detailed && element.explanation) detail(element.explanation);
 

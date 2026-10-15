@@ -16,10 +16,12 @@ export function lensContextGaps(diff: IDocumentDiff, originalCount: number, modi
 	const context = visible.map((_, index) => visible.slice(Math.max(0, index - 3), index + 4).some(Boolean));
 	if (diff.contextScopes) {
 		// A lens must not clip context that diffr kept around its selected code.
-		// Seed enclosing scope boundaries, then retain the unchanged lines of each
-		// visible context run touching a seed. Never expand through a collapsed
-		// provider band, and never into changed lines: diffr never folds those,
-		// so a run that holds them is not context diffr chose to keep.
+		// Retain the unchanged lines of each open run (no collapsed provider
+		// band) holding pinned lines. Show each enclosing scope's first and
+		// last line, plus the unchanged lines diffr kept between it and the
+		// pin, such as the rest of a multi-line header. Never fill away from
+		// the pin, and never into changed lines: diffr never folds those, so
+		// a run that holds them is not context diffr chose to keep.
 		const scopes = [diff.contextScopes.original, diff.contextScopes.modified];
 		const enclosing = scopes.map((sideScopes, side) => sideScopes.filter(([start, end]) =>
 			rows.some((row, index) => visible[index] && row[side] !== null && row[side]! >= start && row[side]! < end)));
@@ -31,8 +33,6 @@ export function lensContextGaps(diff: IDocumentDiff, originalCount: number, modi
 			const count = side === 0 ? gap.originalCount : gap.modifiedCount;
 			return line + 1 >= start && line + 1 < start + count;
 		})));
-		const seeds = rows.map((row, index) => visible[index] || row.some((line, side) =>
-			line !== null && enclosing[side].some(([start, end]) => line === start || line === end - 1)));
 		const edited = [new Uint8Array(originalCount), new Uint8Array(modifiedCount)];
 		for (const change of diff.changes) {
 			edited[0].fill(1, change.original.startLineNumber - 1, change.original.endLineNumberExclusive - 1);
@@ -43,8 +43,18 @@ export function lensContextGaps(diff: IDocumentDiff, originalCount: number, modi
 			if (!open[start]) { start++; continue; }
 			let end = start + 1;
 			while (end < rows.length && open[end]) end++;
-			if (seeds.slice(start, end).some(Boolean)) for (let index = start; index < end; index++) context[index] ||= seeds[index] || unchanged[index];
+			if (visible.slice(start, end).some(Boolean)) for (let index = start; index < end; index++) context[index] ||= unchanged[index];
 			start = end;
+		}
+		// A boundary inside a collapsed band stays folded with it.
+		const boundary = (index: number, edge: 'start' | 'end') => open[index] && rows[index].some((line, side) =>
+			line !== null && enclosing[side].some(([start, end]) => line === (edge === 'start' ? start : end - 1)));
+		for (let index = 0; index < rows.length; index++) {
+			for (const [edge, step] of [['start', 1], ['end', -1]] as const) {
+				if (!boundary(index, edge)) continue;
+				context[index] = true;
+				for (let next = index + step; next >= 0 && next < rows.length && !context[next] && open[next] && unchanged[next]; next += step) context[next] = true;
+			}
 		}
 	}
 	const gaps: IDocumentContextGap[] = [];

@@ -86,3 +86,22 @@ export function checkReferences(document: Block[]): void {
 
   document.forEach(visit);
 }
+
+function adviseBlock<K extends BlockType>(
+  type: K,
+  block: Extract<Block, { type: K }>,
+): string[] {
+  const definition: Definitions[K] = blocks[type];
+
+  return definition.advise?.(block) ?? [];
+}
+
+/** Every block's warnings about allowed content that is usually a mistake. */
+export function documentAdvice(document: Block[]): string[] {
+  const visit = (block: Block): string[] => [
+    ...adviseBlock(block.type, block),
+    ...("children" in block ? block.children.flatMap(visit) : []),
+  ];
+
+  return document.flatMap(visit);
+}

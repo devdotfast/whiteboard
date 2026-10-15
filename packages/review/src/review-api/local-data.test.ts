@@ -37,7 +37,7 @@ import {
   callAuthoringTool,
 } from "./agent-client.js";
 import { ReviewApiClient } from "./client.js";
-import type { Pins } from "./document.js";
+import { type Pins, elements } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";
 
@@ -3078,6 +3078,58 @@ it("keeps authored coordinates fixed as live source changes and warns only on un
     await local.store.refreshWorktrees();
     expect(local.store.read(result.reviewId).staleSources).toEqual([
       saved.document[0]!.id,
+    ]);
+  });
+});
+
+it("marks only the range of a step that no longer exists", async () => {
+  writeFileSync(
+    path.join(repository, "range.ts"),
+    "const first = 1;\nconst second = 2;\nconst third = 3;\n",
+  );
+  git("add", "-N", "range.ts");
+
+  const result = await local.store.execute(
+    command({
+      type: "create",
+      title: "Ranges",
+      target: {
+        kind: "worktree",
+        repositoryId: pins.repositoryId,
+        base: pins.base,
+      },
+    }),
+  );
+
+  const line = (fromLine: number) =>
+    rangeAnchor({ side: "head", file: "range.ts", fromLine, toLine: fromLine });
+
+  await insert(result.reviewId, {
+    type: "sequence",
+    title: "Read",
+    actors: { app: "App" },
+    steps: [
+      {
+        from: "app",
+        to: "app",
+        label: "Read",
+        source: [line(1), line(2), line(3)],
+      },
+    ],
+  });
+
+  const step = elements(local.store.read(result.reviewId).document).find(
+    (element) => element.type === "step",
+  )!;
+
+  writeFileSync(
+    path.join(repository, "range.ts"),
+    "const first = 99;\nconst second = 2;\n",
+  );
+  await vi.waitFor(async () => {
+    await local.store.refreshWorktrees();
+    expect(local.store.read(result.reviewId).staleSources).toEqual([
+      `${step.id}:source:2`,
     ]);
   });
 });

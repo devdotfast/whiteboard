@@ -3,17 +3,24 @@ import type {
   ReviewVerbRequest,
 } from "@dev.fast/review-protocol";
 import { selectSource, sourceAnchors } from "@review/lens-selection";
+import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { CodePeek, CodePeekCard, CodePeekGroup } from "./CodePeek";
+import {
+  CodePeek,
+  CodePeekCard,
+  CodePeekGroup,
+  SourceCodePeek,
+} from "./CodePeek";
 import {
   type ReviewSession,
   ReviewSessionProvider,
 } from "./host/review-session";
 import type { ReviewLensView } from "./review-lenses";
 import { testReviewSession } from "./review-session-test-utils";
+import { tourStyles } from "./side-panel-styles";
 
 const testLenses: ReviewLensView = {
   progress: null,
@@ -214,6 +221,86 @@ describe("CodePeek native editor", () => {
         preserveFocus: false,
       },
     });
+  });
+
+  it("shows each of a step's ranges as its own card, in order, clipped to its lines", async () => {
+    const range = (file: string, fromLine: number, toLine: number) =>
+      selectSource({ side: "head", file, fromLine, toLine });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () =>
+      renderWithSession(
+        <SourceCodePeek
+          sources={[
+            range("src/store.ts", 412, 413),
+            range("src/store.ts", 380, 391),
+            range("src/config.ts", 41, 44),
+          ]}
+          lenses={testLenses}
+        />,
+      ),
+    );
+
+    await vi.waitFor(() => {
+      expect(created).toMatchObject([
+        { path: "src/store.ts", ranges: [{ startLine: 412, endLine: 413 }] },
+        { path: "src/store.ts", ranges: [{ startLine: 380, endLine: 391 }] },
+        { path: "src/config.ts", ranges: [{ startLine: 41, endLine: 44 }] },
+      ]);
+    });
+    // Plain cards: the editor draws each header, so no header row of ours.
+    expect(container.querySelector("button")).toBeNull();
+  });
+
+  it("spaces a tour step's cards apart and leaves a lone peek's cards flush", async () => {
+    const range = (file: string, fromLine: number, toLine: number) =>
+      selectSource({ side: "head", file, fromLine, toLine });
+
+    const sources = [
+      range("src/store.ts", 412, 413),
+      range("src/config.ts", 41, 44),
+    ];
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () =>
+      renderWithSession(
+        <>
+          <div data-host="tour" {...stylex.props(tourStyles.content)}>
+            <SourceCodePeek sources={sources} lenses={testLenses} />
+          </div>
+          <div data-host="tour-single" {...stylex.props(tourStyles.content)}>
+            <SourceCodePeek sources={sources.slice(0, 1)} lenses={testLenses} />
+          </div>
+          <div data-host="peek">
+            <SourceCodePeek sources={sources} lenses={testLenses} />
+          </div>
+        </>,
+      ),
+    );
+
+    const cards = (host: string) => [
+      ...container.querySelectorAll<HTMLElement>(
+        `[data-host="${host}"] .code-peek`,
+      ),
+    ];
+
+    const gapBetween = ([first, second]: HTMLElement[]) =>
+      second!.getBoundingClientRect().top -
+      first!.getBoundingClientRect().bottom;
+
+    expect(gapBetween(cards("tour"))).toBe(12);
+    expect(gapBetween(cards("peek"))).toBe(0);
+
+    const [single] = cards("tour-single");
+    expect(single!.getBoundingClientRect().bottom).toBe(
+      single!.parentElement!.getBoundingClientRect().bottom,
+    );
   });
 
   it("disposes every prior editor while rapidly retargeting one inline surface", async () => {

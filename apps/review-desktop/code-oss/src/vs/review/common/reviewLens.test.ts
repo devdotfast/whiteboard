@@ -4,6 +4,7 @@ import { lensContextGaps } from './reviewLens.js';
 import { LineRange } from '../../editor/common/core/ranges/lineRange.js';
 import { DetailedLineRangeMapping } from '../../editor/common/diff/rangeMapping.js';
 import type { IDocumentContextGap, IDocumentDiff } from '../../editor/common/diff/documentDiffProvider.js';
+import { structuralContextScopes, type StructuralLeaf } from './reviewStructuralDiff.js';
 
 const plain: IDocumentDiff = { changes: [], moves: [], identical: false, quitEarly: false };
 test('a lens keeps disjoint attachments and hides the intervening code', () => {
@@ -135,4 +136,77 @@ test('an identical file exposes the referenced slice with three surrounding line
 		{ file: 'context.ts', side: 'head', fromLine: 10, toLine: 12 },
 	]);
 	assert.deepEqual(gaps.map(gap => [gap.originalStart, gap.originalCount, gap.modifiedStart, gap.modifiedCount]), [[1, 6, 1, 6], [16, 15, 16, 15]]);
+});
+
+// A modified file shaped like a schema declaration, the same on both sides
+// except for lines 1-3 and 23-24: an import block on lines 1-11 that diffr
+// leaves open, `export const schema = z` / `.strictObject({` on lines 15-16
+// opening a scope that closes on line 40, and an unchanged run on lines
+// 41-50 that diffr also leaves open. Diffr collapses lines 17-19, 28-39 and
+// 51-60.
+const schemaDiff = (contextScopes: IDocumentDiff['contextScopes']): IDocumentDiff => ({
+	...plain,
+	changes: [
+		new DetailedLineRangeMapping(new LineRange(1, 4), new LineRange(1, 4), undefined),
+		new DetailedLineRangeMapping(new LineRange(23, 25), new LineRange(23, 25), undefined),
+	],
+	contextScopes,
+	contextGaps: [[17, 3], [28, 12], [51, 10]].map(([start, count]) =>
+		({ originalStart: start, originalCount: count, modifiedStart: start, modifiedCount: count, collapsed: true })),
+});
+const schemaScope: [number, number] = [14, 40];
+
+test('a code peek never treats the file as a scope around its pin', () => {
+	// A tagged root, as a plugin could leave it, around the schema's scope.
+	const lines = Array.from({ length: 60 }, (_, i) => `line ${i + 1}`);
+	const at = (line: number) => ({ line, column: 0 });
+	const leaf = (id: number, start: number, end: number): StructuralLeaf =>
+		({ id, alignment_id: id, fold_state_id: id, kind: 'leaf', start: at(start), end: at(end) });
+	const source = {
+		text: lines.join('\n') + '\n',
+		root: {
+			id: 1, fold_state_id: 1, kind: 'fold' as const, tags: ['context:scope'], start: at(0), end: at(60), indent: at(0), children: [
+				leaf(2, 0, 14),
+				{ id: 3, fold_state_id: 3, kind: 'fold' as const, tags: ['context:scope'], start: at(14), end: at(40), indent: at(14), children: [leaf(4, 14, 40)] },
+				leaf(5, 40, 60),
+			],
+		},
+	};
+	const scopes = structuralContextScopes({ type: 'text', stats: { textual: { added: 0, removed: 0 }, visible: { added: 0, removed: 0 } }, structural_changes: { base: [], head: [] }, lhs: source, rhs: source });
+	assert.deepEqual(scopes, { original: [schemaScope], modified: [schemaScope] });
+	const shown = shownLines(lensContextGaps(schemaDiff(scopes), 60, 60, head(23, 24)), 60);
+	assert.ok(shown.every(([from]) => from > 11), JSON.stringify(shown));
+});
+
+test('a code peek shows a scope boundary, not the unchanged code beyond it', () => {
+	const diff = schemaDiff({ original: [schemaScope], modified: [schemaScope] });
+	// The header's second line is kept, as diffr keeps it, up to the first fold.
+	assert.deepEqual(shownLines(lensContextGaps(diff, 60, 60, head(23, 24)), 60), [[15, 16], [20, 27], [40, 40]]);
+	// A base-side pin projects the same way.
+	const base = lensContextGaps(diff, 60, 60, [{ side: 'base', file: 'a.ts', fromLine: 23, toLine: 24 }]);
+	assert.deepEqual(shownLines(base, 60), [[15, 16], [20, 27], [40, 40]]);
+});
+
+test('a code peek inside nested scopes shows each header and closer, and leaves diffr\'s folds folded', () => {
+	// A class on lines 1-40, a method on 6-35, an if on 14-28; the pin is line 21.
+	const fold = (start: number, count: number) => ({ originalStart: start, originalCount: count, modifiedStart: start, modifiedCount: count, collapsed: true });
+	const diff: IDocumentDiff = {
+		...plain,
+		changes: [new DetailedLineRangeMapping(new LineRange(21, 22), new LineRange(21, 22), undefined)],
+		contextScopes: { original: [[0, 40], [5, 35], [13, 28]], modified: [[0, 40], [5, 35], [13, 28]] },
+		contextGaps: [fold(2, 4), fold(7, 7), fold(15, 3), fold(25, 3), fold(29, 6), fold(36, 4)],
+	};
+	assert.deepEqual(shownLines(lensContextGaps(diff, 40, 40, head(21, 21)), 40), [[1, 1], [6, 6], [14, 14], [18, 24], [28, 28], [35, 35], [40, 40]]);
+});
+
+test('a code peek spanning two functions shows both of their boundaries', () => {
+	// Functions on lines 3-20 and 22-40, each body collapsed away from the pin on lines 19-23.
+	const fold = (start: number, count: number) => ({ originalStart: start, originalCount: count, modifiedStart: start, modifiedCount: count, collapsed: true });
+	const diff: IDocumentDiff = {
+		...plain,
+		changes: [new DetailedLineRangeMapping(new LineRange(19, 24), new LineRange(19, 24), undefined)],
+		contextScopes: { original: [[2, 20], [21, 40]], modified: [[2, 20], [21, 40]] },
+		contextGaps: [fold(1, 2), fold(4, 12), fold(27, 13)],
+	};
+	assert.deepEqual(shownLines(lensContextGaps(diff, 40, 40, head(19, 23)), 40), [[3, 3], [16, 26], [40, 40]]);
 });

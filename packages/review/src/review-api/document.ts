@@ -31,7 +31,7 @@ import {
   blockSchema,
   blocks,
 } from "./blocks/index.js";
-import { type Step, stepSchema } from "./blocks/sequence.js";
+import { type Step, stepSchema, stepSources } from "./blocks/sequence.js";
 import type { Lens } from "./diff-lenses.js";
 import { ReviewInputError } from "./input-error.js";
 
@@ -45,6 +45,7 @@ export {
   blockSchema,
   blocks,
   checkReferences,
+  documentAdvice,
 } from "./blocks/index.js";
 
 export { type Frame, frameSchema } from "./blocks/call_stack_diff.js";
@@ -67,6 +68,7 @@ export {
   type Step,
   sequenceSchema,
   stepSchema,
+  stepSources,
 } from "./blocks/sequence.js";
 
 const text = z.string();
@@ -321,16 +323,18 @@ function documentReferences(
     // A step, frame and operation render the range as a peek, so a
     // whitespace-only range is an authoring mistake for each of them; prose
     // links and context sources only need the range to exist.
+    // Each of a step's ranges is its own reference, so a stale one marks only
+    // itself. The first keeps the step's id, as a single source always had.
     if (element.type === "sequence")
       return element.steps.flatMap((step) =>
-        step.source
-          ? select(step.source, step.pins ?? element.pins).map((source) => ({
-              id: step.id!,
-              source,
-              label: step.label,
-              peek: true,
-            }))
-          : [],
+        stepSources(step).flatMap((anchor, index) =>
+          select(anchor, step.pins ?? element.pins).map((source) => ({
+            id: index ? `${step.id}:source:${index}` : step.id!,
+            source,
+            label: step.label,
+            peek: true,
+          })),
+        ),
       );
 
     if (element.type === "flow_diagram")

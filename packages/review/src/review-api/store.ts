@@ -44,6 +44,7 @@ import {
   applyEdit,
   assignFreshIds,
   checkReferences,
+  documentAdvice,
   documentSchema,
   editSchema,
   elements,
@@ -1452,11 +1453,19 @@ export class ReviewStore {
       )
         await this.providers.validatePins(snapshot.pins);
 
-      const warnings = await this.validateExternal(
-        snapshot,
-        previous,
-        op.type === "set_target",
-      );
+      // Advice is about what this command wrote; earlier advice stays said.
+      const advised = new Set(documentAdvice(previous?.document ?? []));
+
+      const warnings = [
+        ...documentAdvice(snapshot.document).filter(
+          (advice) => !advised.has(advice),
+        ),
+        ...(await this.validateExternal(
+          snapshot,
+          previous,
+          op.type === "set_target",
+        )),
+      ];
 
       snapshot.version = previous ? previous.version + 1 : 0;
       snapshot.createdAt = new Date().toISOString();

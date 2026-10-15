@@ -284,6 +284,9 @@ export const tourStyles = stylex.create({
       [narrow]: "38px minmax(0, 1fr)",
     },
     paddingRight: { default: "16px", [narrow]: "8px" },
+    // The rail's x in the stop, for the rail and its faint runs between a
+    // step's code cards.
+    "--review-tour-rail-x": { default: "29px", [narrow]: "19px" },
   },
   rail: {
     position: "relative",
@@ -293,7 +296,7 @@ export const tourStyles = stylex.create({
       position: "absolute",
       top: 0,
       bottom: 0,
-      left: { default: "29px", [narrow]: "19px" },
+      left: "var(--review-tour-rail-x)",
       width: "2px",
       backgroundColor: tokens.ruleSoft,
       content: "''",
@@ -339,6 +342,8 @@ export const tourStyles = stylex.create({
     width: { default: "calc(100% + 76px)", [narrow]: "calc(100% + 46px)" },
     marginLeft: { default: "-60px", [narrow]: "-38px" },
     backgroundColor: tokens.bg,
+    // A step's code cards stand apart; a lone peek's stay flush.
+    "--review-code-card-gap": "12px",
   },
   header: {
     display: "flex",

@@ -143,7 +143,9 @@ describe("sequence diagram guided tour", () => {
     expect(
       createSequenceTourEntry(sequence).stops.map((stop) => stop.anchor.id),
     ).toEqual(["request", "reply"]);
-    expect(sequence.messages[0]?.source).toEqual(sequence.messages[1]?.source);
+    expect(sequence.messages[0]?.sources).toEqual(
+      sequence.messages[1]?.sources,
+    );
   });
 
   it("calculates scroll targets that reveal the active message participants", () => {

@@ -3,7 +3,8 @@ import type { AskAgentId } from "@review/ask/thread-state";
 import { type DiffSelection } from "@review/lens-selection";
 
 export type ReviewPeekContent =
-  | { kind: "source"; source: DiffSelection }
+  /** `more` follows `source` for a step with several ranges. */
+  | { kind: "source"; source: DiffSelection; more?: DiffSelection[] }
   | { kind: "inline-code"; language?: string; text: string }
   | { kind: "explanation"; text?: string }
   | {

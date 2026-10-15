@@ -1,7 +1,11 @@
 import { flowLayer } from "@canvas/flow-layers.stylex";
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { type DiffSelection, anchorSelection } from "@review/lens-selection";
-import type { SourcePins, Step } from "@review/review-api/document";
+import {
+  type SourcePins,
+  type Step,
+  stepSources,
+} from "@review/review-api/document";
 import * as stylex from "@stylexjs/stylex";
 import {
   BaseEdge,
@@ -97,7 +101,8 @@ export interface SequenceMessage {
   to: SequenceParticipant;
   label: string;
   style: Step["style"];
-  source?: DiffSelection;
+  /** Every range of the step, in order; the first is its call site. */
+  sources: DiffSelection[];
   code?: Step["code"];
   explanation?: string;
 }
@@ -125,10 +130,10 @@ export function sequenceView(block: SequenceDiagramProps): SequenceView {
       to: participant(step.to),
       label: step.label,
       style: step.style,
+      sources: stepSources(step).map((anchor) =>
+        anchorSelection(anchor, step.pins ?? block.pins),
+      ),
     };
-
-    if (step.source)
-      message.source = anchorSelection(step.source, step.pins ?? block.pins);
 
     if (step.code) message.code = step.code;
 
@@ -153,7 +158,7 @@ function panelAnchor(message: SequenceMessage): PeekAnchor {
     title: message.label,
   };
 
-  if (message.source) anchor.peek = message.source;
+  if (message.sources[0]) anchor.peek = message.sources[0];
 
   return anchor;
 }
@@ -169,8 +174,14 @@ export function createSequenceTourEntry(sequence: SequenceView): GuidedTour {
       detail: `${message.from.label} -> ${message.to.label}`,
       content: message.code
         ? { kind: "inline-code" as const, ...message.code }
-        : message.source
-          ? { kind: "source" as const, source: message.source }
+        : message.sources[0]
+          ? {
+              kind: "source" as const,
+              source: message.sources[0],
+              ...(message.sources.length > 1 && {
+                more: message.sources.slice(1),
+              }),
+            }
           : { kind: "explanation" as const, text: message.explanation },
     })),
   };

@@ -105,6 +105,12 @@ beforeEach(async () => {
     "export const a = 1;\n\n\n// end\n",
   );
   writeFileSync(
+    path.join(repository, "src/long.ts"),
+    Array.from({ length: 20 }, (_, i) => `export const n${i} = ${i};\n`).join(
+      "",
+    ),
+  );
+  writeFileSync(
     path.join(repository, "assets/logo.png"),
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]),
   );
@@ -276,6 +282,64 @@ describe("diagram rules", () => {
         ),
       "A step needs exactly one of source, explanation, or code.",
     );
+  });
+
+  const call = rangeAnchor(head("src/store.ts", 2));
+  const callee = rangeAnchor(head("order.ts", 1));
+
+  const step = (source: JsonValue) => ({
+    from: "app",
+    to: "db",
+    label: "Write",
+    source,
+  });
+
+  it("stores a step's several ranges in order and a single one as before", async () => {
+    const source = [call, rangeAnchor(head("src/blank.ts", 1))];
+
+    expect((await insert(sequence([step(source), step(call)]))).status).toBe(
+      200,
+    );
+    expect(
+      elements(local.store.read(reviewId).document).filter(
+        (element) => element.type === "step",
+      ),
+    ).toMatchObject([{ source }, { source: call }]);
+  });
+
+  it("rejects more than four ranges and a range listed twice", async () => {
+    const lines = [1, 2, 3, 4].map((line) =>
+      rangeAnchor(head("src/long.ts", line)),
+    );
+
+    await expectRejected(
+      () => insert(sequence([step([...lines, call])])),
+      "expected array to have <=4 items",
+    );
+    await expectRejected(
+      () => insert(sequence([step([call, call])])),
+      `Range ${call} repeats another range of its step.`,
+    );
+  });
+
+  it("rejects a range that is another step's code", () =>
+    // The callee is the next step, not more of this one.
+    expectRejected(
+      () => insert(sequence([step([call, callee]), step(callee)])),
+      `Range ${callee} is step 2's code; link the step instead.`,
+    ));
+
+  it("warns once about each range longer than a call", async () => {
+    const long = rangeAnchor(head("src/long.ts", 1, 20));
+
+    const warnings = async (content: JsonValue) =>
+      ((await insert(content)).body as { warnings?: string[] }).warnings ?? [];
+
+    expect(await warnings(sequence([step([call, long])]))).toEqual([
+      `Step 1 of "Save" pins 20 lines at ${long}. A step's source is its call site; pin the call, not the function body.`,
+    ]);
+    // The step already written is not warned about again.
+    expect(await warnings({ type: "markdown", markdown: "Next" })).toEqual([]);
   });
 
   it("rejects duplicate frame keys within a column", async () => {

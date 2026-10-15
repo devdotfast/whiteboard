@@ -10,7 +10,7 @@ import {
 } from "@review/lens-selection";
 import { type FileLineRange, codePeekSource } from "@review/source";
 import * as stylex from "@stylexjs/stylex";
-import { useEffect, useMemo, useRef } from "react";
+import { Fragment, useEffect, useMemo, useRef } from "react";
 
 import { DocumentCodeView } from "./DocumentCodeView";
 import { drawStyles } from "./draw-styles";
@@ -233,6 +233,42 @@ export function CodePeekCard({
   );
 }
 
+/** A peek's or tour stop's code: one ordinary card per range, in order. A
+ * step with several ranges, even in one file, gets a card for each. */
+export function SourceCodePeek({
+  sources,
+  active,
+  onNativeFocus,
+  lenses,
+  reportOutcome,
+}: {
+  sources: readonly DiffSelection[];
+  active?: boolean;
+  onNativeFocus?: () => void;
+  lenses?: ReviewLensView;
+  reportOutcome?: boolean;
+}) {
+  return sources.map((source, index) => (
+    <Fragment key={selectionKey(source)}>
+      {index > 0 && (
+        <div
+          {...withClass("code-peek-gap", styles.cardGap)}
+          aria-hidden="true"
+        />
+      )}
+      <CodePeekCard
+        source={source}
+        active={active}
+        heightMode="content"
+        edgeToEdge
+        onNativeFocus={onNativeFocus}
+        lenses={lenses}
+        reportOutcome={reportOutcome && index === 0}
+      />
+    </Fragment>
+  ));
+}
+
 function FileSnippetCard({
   source,
   active = false,
@@ -418,5 +454,20 @@ const styles = stylex.create({
   },
   edgeToEdge: {
     marginBlock: 0,
+  },
+  // Between a step's cards, sized by --review-code-card-gap (unset outside a
+  // tour step) with the tour rail running faintly through it.
+  cardGap: {
+    position: "relative",
+    height: "var(--review-code-card-gap, 0px)",
+    "::before": {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: "var(--review-tour-rail-x)",
+      width: "2px",
+      backgroundColor: `color-mix(in srgb, ${tokens.ruleSoft} 70%, transparent)`,
+      content: "''",
+    },
   },
 });

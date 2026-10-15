@@ -34,7 +34,7 @@ import {
 } from "./ask-thread-stream";
 import { AskPills, AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
-import { CodePeekCard } from "./CodePeek";
+import { SourceCodePeek } from "./CodePeek";
 import { controlStyles } from "./controls-styles";
 import { documentStyles } from "./document-styles";
 import { drawStyles } from "./draw-styles";
@@ -1325,11 +1325,9 @@ function ReviewPeekContentView({
 
   if (content.kind === "source") {
     return (
-      <CodePeekCard
-        source={content.source}
+      <SourceCodePeek
+        sources={[content.source, ...(content.more ?? [])]}
         active={active}
-        heightMode="content"
-        edgeToEdge
         onNativeFocus={onNativeFocus}
         reportOutcome={reportOutcome}
       />
