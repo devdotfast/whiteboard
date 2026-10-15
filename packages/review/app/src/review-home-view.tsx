@@ -1357,10 +1357,10 @@ export function ReviewHome({
           <Button
             variant="ghost"
             disabled={busy || !(inTrash ? onDelete : onTrash)}
-            xstyle={inTrash && styles.danger}
+            xstyle={styles.danger}
             onClick={() => deleteSelection()}
           >
-            {inTrash ? "Delete…" : "Move to Trash"} <Shortcut>⌘⌫</Shortcut>
+            {inTrash ? "Delete…" : "Trash"} <Shortcut>⌘⌫</Shortcut>
           </Button>
           <span aria-hidden="true" {...stylex.props(styles.barDivider)} />
           <IconButton aria-label="Clear selection" onClick={clearSelection}>
