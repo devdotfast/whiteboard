@@ -114,7 +114,8 @@ export const reviewConfigurationDefaults = {
  * Defaults that keep the curated built-in extensions quiet.
  *
  * Review ships no marketplace, so an extension that prompts to install or update
- * something offers the reader a dead end. Every key here closes one such prompt.
+ * something offers the reader a dead end. Most keys here close one such prompt;
+ * the rest stop background builds a read-only review never needs.
  * Keep this aligned with the curated groups in
  * `scripts/curated-extensions.manifest.mjs`, whose contract test is
  * `scripts/curated-extensions.test.mjs`.
@@ -141,6 +142,11 @@ export const curatedExtensionConfigurationDefaults = {
 	'rust-analyzer.showUnlinkedFileNotification': false,
 	'rust-analyzer.notifications.cargoTomlNotFound': false,
 	'rust-analyzer.showRequestFailedErrorNotification': false,
+	// Navigation needs only rust-analyzer's own analysis. `cargo check` and the
+	// Run/Debug lenses would build each pinned checkout from cold.
+	'rust-analyzer.checkOnSave': false,
+	'rust-analyzer.lens.run.enable': false,
+	'rust-analyzer.lens.debug.enable': false,
 
 	// The Swift extension can offer to install Swiftly. Review uses the Swift
 	// toolchain that the user installed and made available on the shell PATH.
