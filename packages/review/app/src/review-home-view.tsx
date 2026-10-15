@@ -90,6 +90,7 @@ import { styles } from "./review-home-styles";
 import { withClass } from "./stylex-props";
 import { Button, IconButton } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
+import { Dialog } from "./ui/dialog";
 import { EmptyState } from "./ui/empty-state";
 import { Shortcut } from "./ui/kbd";
 import { useDismissOnOutside } from "./ui/popover";
@@ -1468,7 +1469,8 @@ export function ReviewHome({
       )}
       {refresherOpen && (
         <Dialog
-          labelledBy="home-help-title"
+          aria-labelledby="home-help-title"
+          xstyle={styles.dialog}
           onClose={() => setRefresherOpen(false)}
         >
           <div {...stylex.props(styles.header)}>
@@ -1511,39 +1513,6 @@ export function ReviewHome({
         </Dialog>
       )}
     </main>
-  );
-}
-
-/** A modal shown as soon as it mounts; Enter never submits it. */
-function Dialog({
-  labelledBy,
-  onClose,
-  children,
-}: {
-  labelledBy: string;
-  onClose(): void;
-  children: ReactNode;
-}) {
-  const dialog = useRef<HTMLDialogElement>(null);
-
-  useLayoutEffect(() => dialog.current?.showModal(), []);
-
-  return (
-    <dialog
-      ref={dialog}
-      aria-labelledby={labelledBy}
-      {...stylex.props(surfaceStyles.dialog, styles.dialog)}
-      onClose={onClose}
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") event.preventDefault();
-      }}
-    >
-      {children}
-    </dialog>
   );
 }
 
