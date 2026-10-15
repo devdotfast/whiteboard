@@ -189,6 +189,46 @@ describe("Home's New whiteboard", () => {
     expect(prompt.value).toBe("Walk me through the agent's change.");
   });
 
+  it("opens from the workbench's New Whiteboard command, except in Trash", async () => {
+    const { respond } = server();
+
+    vi.stubGlobal("fetch", respond);
+
+    const host: ReviewCanvasHomeHost = {
+      openReview: vi.fn(),
+      setupActions: setupActions(),
+    };
+
+    await act(async () => {
+      canvas = mountReviewCanvas(
+        container,
+        { kind: "home", data: { view: "trash", reviews: [] }, host },
+        testCanvasUi().ui,
+      );
+    });
+
+    expect(canvas?.newWhiteboard()).toBe(false);
+
+    await act(async () =>
+      canvas?.update({
+        kind: "home",
+        data: { reviews: [summary("Plan")] },
+        host,
+      }),
+    );
+
+    let opened: boolean | undefined;
+
+    await act(async () => {
+      opened = canvas?.newWhiteboard();
+    });
+    await settle();
+
+    expect(opened).toBe(true);
+    expect(container.textContent).toContain("New whiteboard.");
+    expect(target("agent-work")).toBeDefined();
+  });
+
   it("stays open when a whiteboard is published elsewhere", async () => {
     const { respond } = server();
 

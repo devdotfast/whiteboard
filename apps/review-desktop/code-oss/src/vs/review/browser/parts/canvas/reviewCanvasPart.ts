@@ -700,6 +700,11 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return this.canvas.value?.diffFiles();
 	}
 
+	/** False when the canvas is not on a Home that can draw one. */
+	newWhiteboard(): boolean {
+		return this.canvas.value?.newWhiteboard() ?? false;
+	}
+
 	revealDiffFile(path: string): void {
 		this.canvas.value?.revealDiffFile(path);
 	}

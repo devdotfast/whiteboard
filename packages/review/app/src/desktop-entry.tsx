@@ -13,7 +13,15 @@ import type {
   ReviewCliInstallStatus,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { createRef, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type RefObject,
+  createRef,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createRoot } from "react-dom/client";
 
 import { ApiCanvas } from "./api-canvas";
@@ -34,12 +42,19 @@ import "./styles.css";
 
 export { clearPersistedReviewViewState as clearReviewViewState } from "./review-view-state";
 
+/** What the workbench can ask of Home through the canvas handle. */
+interface HomeCommands {
+  newWhiteboard(): boolean;
+}
+
 function ReviewCanvas({
   content,
   findHost,
+  homeCommands,
 }: {
   content: ReviewCanvasContent;
   findHost: ReviewFindHost;
+  homeCommands: RefObject<HomeCommands | null>;
 }) {
   if (content.kind === "api")
     return (
@@ -53,7 +68,14 @@ function ReviewCanvas({
     );
 
   if (content.kind === "home")
-    return <Home data={content.data} host={content.host} findHost={findHost} />;
+    return (
+      <Home
+        data={content.data}
+        host={content.host}
+        findHost={findHost}
+        commands={homeCommands}
+      />
+    );
 
   if (content.kind === "source") {
     if (content.error) {
@@ -124,10 +146,12 @@ function Home({
   data,
   host,
   findHost,
+  commands,
 }: {
   data: ReviewCanvasHomeData;
   host: ReviewCanvasHomeHost;
   findHost: ReviewFindHost;
+  commands: RefObject<HomeCommands | null>;
 }) {
   const {
     trashReview,
@@ -163,7 +187,26 @@ function Home({
 
   // Until the first whiteboard is published, Home is first run, unless the
   // reader skipped it.
-  if (data.view !== "trash" && data.onboarding?.published === false && !skipped)
+  const firstRun =
+    data.view !== "trash" && data.onboarding?.published === false && !skipped;
+
+  // ⌘N: wherever the New button would show.
+  const canCreate = setupActions !== undefined && data.view !== "trash";
+
+  useImperativeHandle(
+    commands,
+    () => ({
+      newWhiteboard() {
+        if (!canCreate || firstRun) return false;
+        if (!creating) startCreating();
+
+        return true;
+      },
+    }),
+    [canCreate, firstRun, creating],
+  );
+
+  if (firstRun)
     return (
       <FirstRun
         install={install}
@@ -260,6 +303,7 @@ export function mountReviewCanvas(
   let themeSubscription: { dispose(): void } | null = null;
   const findHost = createReviewFindHost();
   const diffFilePicker = createRef<DiffFilePicker>();
+  const homeCommands = createRef<HomeCommands>();
   container.classList.add("review-canvas-root");
   // The canvas stylesheet is compiled inside @scope (.review-canvas-root),
   // where the scope root itself is only matched by :scope — a theme class on
@@ -322,7 +366,11 @@ export function mountReviewCanvas(
         <CanvasUiContext.Provider value={ui}>
           <UiHostProvider useTooltip={useTooltip}>
             <DiffFilePickerContext.Provider value={diffFilePicker}>
-              <ReviewCanvas content={content} findHost={findHost} />
+              <ReviewCanvas
+                content={content}
+                findHost={findHost}
+                homeCommands={homeCommands}
+              />
             </DiffFilePickerContext.Provider>
           </UiHostProvider>
         </CanvasUiContext.Provider>
@@ -352,6 +400,12 @@ export function mountReviewCanvas(
     },
     revealDiffFile(path) {
       diffFilePicker.current?.reveal(path);
+    },
+    newWhiteboard() {
+      return (
+        content.kind === "home" &&
+        (homeCommands.current?.newWhiteboard() ?? false)
+      );
     },
     dispose() {
       if (disposed) return;

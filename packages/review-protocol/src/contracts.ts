@@ -834,6 +834,9 @@ export interface ReviewCanvasHandle extends ReviewDisposable {
   /** Undefined when the canvas shows no review. */
   diffFiles(): Promise<readonly ReviewDiffFileWire[]> | undefined;
   revealDiffFile(path: string): void;
+  /** Opens New whiteboard; false when the canvas is not on a Home that can
+   * draw one (Trash, first run, another tab). */
+  newWhiteboard(): boolean;
 }
 
 export const REVIEW_CANVAS_RESUME_EVENT = "dev-fast-review-canvas-resume";
