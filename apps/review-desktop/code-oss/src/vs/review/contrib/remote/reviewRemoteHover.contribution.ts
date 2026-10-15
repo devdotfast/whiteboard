@@ -13,7 +13,7 @@ import { HoverStartMode, HoverStartSource } from "../../../editor/contrib/hover/
 import { registerWorkbenchContribution2, WorkbenchPhase } from "../../../workbench/common/contributions.js";
 import { IReviewRemoteHostsService } from "../../services/remote/reviewRemoteHosts.js";
 
-/** When a remote language server finishes starting, the hover under the pointer asks again. */
+/** When a remote language server finishes starting, a hover under the pointer asks again. */
 class ReviewRemoteHoverRefresh extends Disposable {
 	static readonly ID = "review.remoteHoverRefresh";
 
@@ -52,8 +52,9 @@ class ReviewRemoteHoverRefresh extends Disposable {
 	private refresh(): void {
 		for (const [editor, position] of this.pointers) {
 			const hover = ContentHoverController.get(editor);
-			hover?.hideContentHover();
-			hover?.showContentHover(Range.fromPositions(position), HoverStartMode.Immediate, HoverStartSource.Mouse, false);
+			if (!hover?.isHoverVisible) continue;
+			hover.hideContentHover();
+			hover.showContentHover(Range.fromPositions(position), HoverStartMode.Immediate, HoverStartSource.Mouse, false);
 		}
 	}
 }

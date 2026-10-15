@@ -23,3 +23,8 @@ test("a laptop review's entry changes nothing", () => {
 	const content: { reviewId: string; host?: string } = { reviewId: "r1" };
 	assert.equal(withRemoteEntry(content, entry()), undefined);
 });
+
+test("a busy host marks its review pending only while it is online", () => {
+	assert.deepEqual(remoteEntry({ ...entry("wb-a"), hostState: "online" }, true).available, { sourceWindows: false, pending: true });
+	assert.deepEqual(remoteEntry({ ...entry("wb-a"), hostState: "offline" }, true).available, available);
+});

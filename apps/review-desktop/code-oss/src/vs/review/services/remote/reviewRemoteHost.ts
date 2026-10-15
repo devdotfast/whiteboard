@@ -69,6 +69,9 @@ const STABLE_MS = 60_000;
 
 const PROBE_MS = 5_000;
 
+// Startup runs connect, activation and extension work back to back; one gap shorter than this is not idle.
+const IDLE_MS = 250;
+
 export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	readonly languageFeatures: ILanguageFeaturesService = new LanguageFeaturesService();
 	readonly workspace: ReviewRemoteWorkspace;
@@ -82,6 +85,8 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	private readonly retry = this._register(new TimeoutTimer());
 	private readonly activations = new Set<string>();
 	private work = 0;
+	private reported = false;
+	private readonly idle = this._register(new TimeoutTimer());
 	private readonly busyChanged = this._register(new Emitter<void>());
 	readonly onDidChangeBusy = this.busyChanged.event;
 
@@ -171,14 +176,22 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 
 	/** Connecting, activating extensions, or work they report. */
 	get busy(): boolean {
-		return this.work > 0;
+		return this.reported;
 	}
 
 	track<T>(work: Promise<T>): Promise<T> {
-		if (this.work++ === 0) this.busyChanged.fire();
+		this.work++;
+		this.idle.cancel();
+		this.report(true);
 		return work.finally(() => {
-			if (--this.work === 0) this.busyChanged.fire();
+			if (--this.work === 0 && !this._store.isDisposed) this.idle.cancelAndSet(() => this.report(false), IDLE_MS);
 		});
+	}
+
+	private report(busy: boolean): void {
+		if (this.reported === busy) return;
+		this.reported = busy;
+		this.busyChanged.fire();
 	}
 
 	async close(): Promise<void> {

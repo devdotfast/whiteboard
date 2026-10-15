@@ -81,7 +81,9 @@ test("a failed session is replaced after a delay, with the roots and activation 
 	target.dispose();
 });
 
-test("the host is busy while it connects, activates an extension, or runs reported work", async () => {
+test("the host is busy from its connect through activation and reported work, and idle once nothing runs for a moment", async (t) => {
+	mock.timers.enable({ apis: ["setTimeout"] });
+	t.after(() => mock.timers.reset());
 	let activated!: () => void;
 	const connected = session();
 	connected.value.activateByEvent = () => new Promise<void>((resolve) => (activated = resolve));
@@ -92,7 +94,6 @@ test("the host is busy while it connects, activates an extension, or runs report
 	const connecting = target.connect();
 	assert.equal(target.busy, true);
 	await connecting;
-	assert.equal(target.busy, false);
 
 	const activation = target.activateByEvent("onLanguage:rust");
 	assert.equal(target.busy, true);
@@ -104,8 +105,10 @@ test("the host is busy while it connects, activates an extension, or runs report
 	assert.equal(target.busy, true);
 	indexed();
 	await indexing;
+	assert.equal(target.busy, true);
+	mock.timers.tick(250);
 
-	assert.deepEqual(changes, [true, false, true, false, true, false]);
+	assert.deepEqual(changes, [true, false]);
 	target.dispose();
 });
 
