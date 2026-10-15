@@ -94,12 +94,11 @@ const SSH_SENTENCES: [RegExp, (alias: string) => string][] = [
 ];
 
 /** A direct session cannot prompt, so a key with a passphrase only works through ssh-agent. */
-const DIRECT_PERMISSION = (alias: string) =>
-	`${alias} did not accept an SSH key that needs no prompt. Whiteboard cannot ask for a password or passphrase here: add your key to ssh-agent with "ssh-add", then retry.`;
+const DIRECT_PERMISSION_HINT = 'Whiteboard cannot ask for a password or passphrase here: if your key has one, add it to ssh-agent with "ssh-add", then retry.';
 
 function sshFailureSentence(stderr: string, alias: string, direct = false): string | undefined {
-	if (direct && /Permission denied/.test(stderr)) return DIRECT_PERMISSION(alias);
-	return SSH_SENTENCES.find(([pattern]) => pattern.test(stderr))?.[1](alias);
+	const sentence = SSH_SENTENCES.find(([pattern]) => pattern.test(stderr))?.[1](alias);
+	return direct && sentence && /Permission denied/.test(stderr) ? `${sentence} ${DIRECT_PERMISSION_HINT}` : sentence;
 }
 
 const SSH_DROPS: [RegExp, (alias: string) => string][] = [
