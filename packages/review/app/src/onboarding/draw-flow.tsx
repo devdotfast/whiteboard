@@ -1,5 +1,5 @@
-import { copyText } from "@canvas/copy-text";
 import { useNotify } from "@canvas/notify";
+import { copyText } from "@canvas/ui/copy";
 import type { ReviewCanvasSetupActions } from "@dev.fast/review-protocol";
 import { useCallback, useEffect, useState } from "react";
 

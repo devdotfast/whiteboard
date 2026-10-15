@@ -1,11 +1,11 @@
 import { cliInstallReady } from "@canvas/cli-install-status";
-import { copyText } from "@canvas/copy-text";
 import { DrawnCheckIcon } from "@canvas/icons";
 import { installRowMarker } from "@canvas/markers.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
+import { copyText } from "@canvas/ui/copy";
 import type {
   ReviewCanvasSetupActions,
   ReviewCliInstallStatus,
