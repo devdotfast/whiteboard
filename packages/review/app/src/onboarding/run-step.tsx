@@ -10,6 +10,7 @@ import { tokens } from "@canvas/tokens.stylex";
 import { AgentLogo } from "@canvas/ui/brand-icons";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { dividerStyles } from "@canvas/ui/divider";
+import { EmptyState } from "@canvas/ui/empty-state";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
@@ -513,15 +514,19 @@ export function RunStep({
               ))}
             </div>
           ) : targets.length === 0 ? (
-            <p {...stylex.props(styles.empty)}>
-              {discovered
-                ? "Nothing to draw here yet: check out a branch, then choose the folder again."
-                : "Choose a project folder above."}
-            </p>
+            <EmptyState
+              xstyle={styles.empty}
+              message={
+                discovered
+                  ? "Nothing to draw here yet: check out a branch, then choose the folder again."
+                  : "Choose a project folder above."
+              }
+            />
           ) : shown.length === 0 ? (
-            <p {...stylex.props(styles.empty)}>
-              Nothing matches “{query.trim()}”.
-            </p>
+            <EmptyState
+              xstyle={styles.empty}
+              message={`Nothing matches “${query.trim()}”.`}
+            />
           ) : (
             // The list scrolls in place, so the prompt and Draw stay on screen.
             <div
@@ -786,11 +791,7 @@ const styles = stylex.create({
     fontSize: fontSize.small,
   },
   empty: {
-    margin: 0,
-    paddingBlock: "12px 20px",
     paddingInline: "20px",
-    color: tokens.inkMuted,
-    fontSize: fontSize.ui,
   },
   toolbar: {
     display: "flex",
