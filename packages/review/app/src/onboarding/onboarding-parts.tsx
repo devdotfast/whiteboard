@@ -7,20 +7,6 @@ import { type ReactNode, useEffect } from "react";
 
 import { onboardingStyles as styles } from "./onboarding-styles";
 
-/** The ring an agent's or an install's work turns in. */
-export function Spinner() {
-  return (
-    <svg
-      {...stylex.props(styles.spinner)}
-      viewBox="0 0 22 22"
-      aria-hidden="true"
-    >
-      <circle {...stylex.props(styles.spinnerTrack)} cx="11" cy="11" r="9" />
-      <path {...stylex.props(styles.spinnerArc)} d="M11 2a9 9 0 0 1 9 9" />
-    </svg>
-  );
-}
-
 /** Return presses the screen's one button, as the key on it says. */
 export function useReturnKey(enabled: boolean, onReturn: () => void) {
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { chevronMarker } from "@canvas/markers.stylex";
 import { motion } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
+import { spinStyles } from "@canvas/ui/spinner";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement, ReactNode } from "react";
 
@@ -133,7 +134,7 @@ export function RefreshIcon({
   spinning = false,
 }: IconProps & { spinning?: boolean } = {}): ReactElement {
   return (
-    <Icon xstyle={[spinning && styles.spinning, xstyle]}>
+    <Icon xstyle={[spinning && spinStyles.turning, xstyle]}>
       <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
       <path d="M21 3v5h-5" />
     </Icon>
@@ -518,15 +519,7 @@ const drawIn = stylex.keyframes({
   to: { strokeDashoffset: 0 },
 });
 
-const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
-
 const styles = stylex.create({
-  spinning: {
-    animationName: { default: spin, [stylex.env.reducedMotion]: "none" },
-    animationDuration: motion.pulse,
-    animationTimingFunction: "linear",
-    animationIterationCount: "infinite",
-  },
   icon: {
     flexShrink: 0,
     width: "15px",

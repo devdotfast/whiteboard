@@ -23,11 +23,6 @@ const rise = stylex.keyframes({
   to: { opacity: 1, transform: "none" },
 });
 
-const spin = stylex.keyframes({
-  from: { transform: "rotate(0deg)" },
-  to: { transform: "rotate(360deg)" },
-});
-
 const enter = {
   animationName: { default: rise, [stylex.env.reducedMotion]: "none" },
   animationDuration: onboardingMotion.screen,
@@ -261,24 +256,4 @@ export const onboardingStyles = stylex.create({
   enter1: { ...enter, animationDelay: onboardingMotion.stagger },
   enter2: { ...enter, animationDelay: `calc(${onboardingMotion.stagger} * 2)` },
   enter3: { ...enter, animationDelay: `calc(${onboardingMotion.stagger} * 3)` },
-  spinner: {
-    width: "20px",
-    height: "20px",
-    flexShrink: 0,
-    animationName: { default: spin, [stylex.env.reducedMotion]: "none" },
-    animationDuration: motion.spin,
-    animationIterationCount: "infinite",
-    animationTimingFunction: "linear",
-  },
-  spinnerTrack: {
-    fill: "none",
-    stroke: tokens.markerTint,
-    strokeWidth: 2,
-  },
-  spinnerArc: {
-    fill: "none",
-    stroke: tokens.accent,
-    strokeLinecap: "round",
-    strokeWidth: 2,
-  },
 });

@@ -27,7 +27,7 @@ import {
   useState,
 } from "react";
 
-import { fontSize, motion, radius } from "./scale.stylex";
+import { fontSize, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { Button, IconButton } from "./ui/button";
 import { menuStyles } from "./ui/menu";
@@ -589,7 +589,7 @@ export function AskComposer({
                 onClick={stop}
               >
                 {connecting ? (
-                  <Spinner />
+                  <Spinner tone="accent" />
                 ) : (
                   <span aria-hidden="true" {...stylex.props(styles.stopMark)} />
                 )}
