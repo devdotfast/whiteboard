@@ -1,4 +1,5 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
 import type {
@@ -407,6 +408,7 @@ export function ReviewDiffView({
           <div
             {...cabinetsResize.separatorProps}
             {...stylex.props(
+              buttonStyles.reset,
               shellStyles.sheetResizer,
               styles.cabinetsResizer,
               cabinetsResize.isResizing && styles.resizing,
@@ -434,6 +436,7 @@ export function ReviewDiffView({
       <div
         {...sidebarResize.separatorProps}
         {...stylex.props(
+          buttonStyles.reset,
           shellStyles.resizer,
           styles.sidebarResizer,
           sidebarResize.isResizing && styles.resizing,
@@ -740,6 +743,7 @@ function RailLens({
     <button
       {...stylex.props(
         focusStyles.ringInset,
+        buttonStyles.reset,
         styles.railLens,
         empty && lensRowStyles.toggleEmpty,
         selected && styles.railLensActive,
@@ -782,7 +786,11 @@ function RailButton({
   return (
     <button
       ref={tooltip}
-      {...stylex.props(focusStyles.ringInset, styles.railButton)}
+      {...stylex.props(
+        focusStyles.ringInset,
+        buttonStyles.reset,
+        styles.railButton,
+      )}
       aria-label={label}
       onClick={onClick}
     >
@@ -893,9 +901,6 @@ const styles = stylex.create({
     flexShrink: 0,
     width: "28px",
     height: "28px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.control,
     padding: 0,
     color: tokens.inkMuted,
@@ -909,9 +914,6 @@ const styles = stylex.create({
     width: "5ch",
     height: "24px",
     padding: "0 5px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.pill,
     font: "inherit",
     color: "inherit",

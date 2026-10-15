@@ -59,10 +59,6 @@ export const askPanelStyles = stylex.create({
   },
   errorAction: {
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     color: tokens.ink,
     font: "inherit",
     textDecorationLine: "underline",

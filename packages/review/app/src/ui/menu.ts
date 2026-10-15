@@ -82,9 +82,6 @@ export const menuStyles = stylex.create({
     width: "100%",
     minHeight: "28px",
     padding: "5px 8px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.control,
     backgroundColor: {
       default: tokens.transparent,

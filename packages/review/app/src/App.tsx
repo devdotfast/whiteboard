@@ -1,4 +1,4 @@
-import { Button, IconButton } from "@canvas/ui/button";
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import {
   OverlayScrollbar,
@@ -1113,6 +1113,7 @@ function ReviewLayoutContent({
       {rightPanelOpen && (
         <div
           {...stylex.props(
+            buttonStyles.reset,
             shellStyles.resizer,
             shellStyles.peekResizer,
             shellStyles.resizerGrabPanel,

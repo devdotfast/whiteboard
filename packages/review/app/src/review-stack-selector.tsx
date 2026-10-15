@@ -1,4 +1,6 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
@@ -215,6 +217,8 @@ function LayerRow({
               : "Create a whiteboard of this branch (Cmd/Ctrl-click to open in the background)"
       }
       {...stylex.props(
+        focusStyles.ringInset,
+        buttonStyles.reset,
         menuStyles.item,
         styles.row,
         current && styles.rowCurrent,

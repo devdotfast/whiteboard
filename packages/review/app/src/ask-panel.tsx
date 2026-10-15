@@ -1,3 +1,4 @@
+import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
 import type {
@@ -725,6 +726,7 @@ export function AskPanelContent({
                       type="button"
                       {...stylex.props(
                         focusStyles.ring,
+                        buttonStyles.reset,
                         askPanelStyles.errorAction,
                       )}
                       onClick={errorAction.run}

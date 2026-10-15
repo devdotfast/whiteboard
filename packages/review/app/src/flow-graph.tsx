@@ -1,4 +1,5 @@
 import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
 import { textStyles } from "@canvas/ui/text";
 import type { DiffSelection } from "@review/lens-selection";
 import {
@@ -571,12 +572,12 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
       <Handle
         type="target"
         position={Position.Top}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         type="source"
         position={Position.Bottom}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <svg
         {...stylex.props(styles.drawing)}
@@ -735,10 +736,6 @@ const styles = stylex.create({
     height: "1px",
     minWidth: 0,
     minHeight: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     opacity: 0,
     pointerEvents: "none",
   },

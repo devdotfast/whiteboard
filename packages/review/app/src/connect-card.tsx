@@ -1,5 +1,5 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { CopyIcon, copyText } from "@canvas/ui/copy";
 import { focusStyles } from "@canvas/ui/focus";
 import {
@@ -200,7 +200,7 @@ export function ConnectCard({
             {collapsible && expanded ? (
               <button
                 type="button"
-                {...stylex.props(styles.collapse)}
+                {...stylex.props(buttonStyles.reset, styles.collapse)}
                 aria-expanded={true}
                 onClick={() => setExpanded(false)}
               >
@@ -277,6 +277,7 @@ function OtherAgentMenu({
       onChange={onSelect}
       triggerStyle={[
         focusStyles.ringInset,
+        buttonStyles.reset,
         segmentStyles.segment,
         segmentStyles.segmentLarge,
         styles.otherTrigger,
@@ -453,10 +454,6 @@ const styles = stylex.create({
   collapse: {
     marginRight: "auto",
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     color: { default: tokens.inkMuted, ":hover": tokens.ink },
     font: `${fontSize.body}/22px ${tokens.chromeFont}`,
     cursor: "pointer",

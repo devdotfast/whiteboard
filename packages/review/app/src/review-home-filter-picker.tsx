@@ -1,3 +1,4 @@
+import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { fuzzyMatches } from "@review/fuzzy-match";
@@ -541,6 +542,7 @@ function PickerRow({
       {...stylex.props(
         filterRowMarker,
         focusStyles.ringInset,
+        buttonStyles.reset,
         menuStyles.item,
         expanded && styles.expanded,
       )}

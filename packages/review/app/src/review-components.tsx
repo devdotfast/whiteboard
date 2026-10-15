@@ -1,6 +1,6 @@
 import { documentType } from "@canvas/document-type.stylex";
 import { fontSize, fontWeight } from "@canvas/scale.stylex";
-import { IconButton } from "@canvas/ui/button";
+import { IconButton, buttonStyles } from "@canvas/ui/button";
 import {
   OverlayScrollbar,
   overlayScrollbarStyles,
@@ -199,7 +199,7 @@ function ReviewPanelFrame({
       style={panelStyle}
     >
       <div
-        {...stylex.props(shellStyles.sheetResizer)}
+        {...stylex.props(buttonStyles.reset, shellStyles.sheetResizer)}
         {...sheet.separatorProps}
       />
       <header
@@ -1266,7 +1266,7 @@ export function GuidedTourPanel({
                 <span>End of tour</span>
                 <button
                   type="button"
-                  {...stylex.props(tourStyles.endCapButton)}
+                  {...stylex.props(buttonStyles.reset, tourStyles.endCapButton)}
                   onClick={() => stepTo(0)}
                 >
                   ↑ Back to step 1

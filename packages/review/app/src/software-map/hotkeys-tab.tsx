@@ -7,6 +7,7 @@ import {
   radius,
 } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
+import { buttonStyles } from "@canvas/ui/button";
 import { Kbd } from "@canvas/ui/kbd";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -154,7 +155,7 @@ export function SoftwareMapHotkeysTab({
         <button
           ref={toggleRef}
           type="button"
-          {...stylex.props(styles.button, styles.toggle)}
+          {...stylex.props(buttonStyles.reset, styles.button, styles.toggle)}
           aria-label="Minimize software map hotkeys"
           aria-expanded="true"
           tabIndex={open ? 0 : -1}
@@ -167,6 +168,7 @@ export function SoftwareMapHotkeysTab({
         ref={collapsedButtonRef}
         type="button"
         {...stylex.props(
+          buttonStyles.reset,
           styles.button,
           styles.collapsedButton,
           !open && styles.collapsedButtonShown,
@@ -296,10 +298,6 @@ const styles = stylex.create({
     display: "inline-flex",
     alignItems: "center",
     height: "100%",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     color: {
       default: tokens.inkFaint,
       ":hover": tokens.ink,

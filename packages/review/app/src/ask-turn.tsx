@@ -1,3 +1,4 @@
+import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
@@ -316,6 +317,7 @@ function AskToolItem({ activity }: { activity: Activity }): ReactElement {
           type="button"
           {...stylex.props(
             chevronMarker,
+            buttonStyles.reset,
             styles.toolHead,
             focusStyles.ringInset,
             styles.toolHeadButton,
@@ -327,7 +329,7 @@ function AskToolItem({ activity }: { activity: Activity }): ReactElement {
           <DisclosureChevron expanded={open} />
         </button>
       ) : (
-        <div {...stylex.props(styles.toolHead)}>{head}</div>
+        <div {...stylex.props(buttonStyles.reset, styles.toolHead)}>{head}</div>
       )}
       {open ? (
         <div {...stylex.props(styles.toolBody)}>
@@ -366,6 +368,7 @@ function AskToolGroup({
         {...stylex.props(
           chevronMarker,
           focusStyles.ring,
+          buttonStyles.reset,
           styles.summary,
           failed && styles.summaryFailed,
         )}
@@ -709,11 +712,7 @@ const styles = stylex.create({
     alignSelf: "flex-start",
     gap: "6px",
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.small,
-    backgroundColor: tokens.transparent,
     color: {
       default: tokens.inkMuted,
       ":hover": tokens.ink,
@@ -757,10 +756,6 @@ const styles = stylex.create({
     width: "100%",
     minWidth: 0,
     padding: "7px 12px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.ui,

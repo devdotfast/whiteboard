@@ -266,10 +266,6 @@ export const tourStyles = stylex.create({
   },
   endCapButton: {
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     boxShadow: "none",
     color: tokens.accent,
     font: "inherit",

@@ -1,3 +1,4 @@
+import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
@@ -516,6 +517,7 @@ export function AskComposer({
                 aria-selected={index === shown}
                 {...stylex.props(
                   focusStyles.ringInset,
+                  buttonStyles.reset,
                   menuStyles.item,
                   styles.option,
                   index === shown && menuStyles.itemHighlighted,

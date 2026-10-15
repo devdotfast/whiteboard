@@ -1,5 +1,5 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
@@ -395,6 +395,7 @@ export function WelcomePage({
                       {...stylex.props(
                         chevronMarker,
                         focusStyles.ringInset,
+                        buttonStyles.reset,
                         styles.stepHeader,
                       )}
                       disabled={step.disabled}
@@ -615,12 +616,8 @@ const styles = stylex.create({
     gap: "12px",
     width: "100%",
     padding: "16px 20px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: { default: null, ":focus-visible": radius.surface },
     color: "inherit",
-    backgroundColor: tokens.transparent,
     cursor: { default: "pointer", ":disabled": "not-allowed" },
     opacity: { default: null, ":disabled": 0.5 },
     textAlign: "left",

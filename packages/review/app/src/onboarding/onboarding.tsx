@@ -1,6 +1,6 @@
 import { railStepMarker } from "@canvas/markers.stylex";
 import { withClass } from "@canvas/stylex-props";
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { Kbd } from "@canvas/ui/kbd";
 import type { ReviewCanvasSetupActions } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
@@ -86,7 +86,11 @@ export function Onboarding({
             <li key={label}>
               <button
                 type="button"
-                {...stylex.props(railStepMarker, styles.railStep)}
+                {...stylex.props(
+                  railStepMarker,
+                  buttonStyles.reset,
+                  styles.railStep,
+                )}
                 aria-current={index === current ? "step" : undefined}
                 disabled={target === "run" && !connected && step !== "run"}
                 onClick={() => setStep(target)}

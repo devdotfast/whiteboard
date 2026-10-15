@@ -31,7 +31,7 @@ import { withClass } from "@canvas/stylex-props";
 import { themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
 import { captureUiEvent } from "@canvas/ui-telemetry";
-import { IconButton } from "@canvas/ui/button";
+import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { surfaceStyles } from "@canvas/ui/surface";
@@ -929,7 +929,7 @@ export function SoftwareMapFrame({
       style={style}
     >
       {showChrome && (
-        <header {...stylex.props(styles.header)}>
+        <header {...stylex.props(buttonStyles.reset, styles.header)}>
           <div {...stylex.props(diagramStyles.headerMain, styles.titleBlock)}>
             <Chip xstyle={styles.kindBadge}>{VIEW_TYPE_LABELS[viewType]}</Chip>
             <figcaption
@@ -999,6 +999,7 @@ export function SoftwareMapFrame({
           {(status || error || !hasResolvedSnapshot) && (
             <div
               {...stylex.props(
+                buttonStyles.reset,
                 styles.status,
                 Boolean(error) && styles.statusError,
               )}
@@ -1034,7 +1035,11 @@ export function SoftwareMapFrame({
               onClick={onCloseCodeInspector}
             />
             <div
-              {...stylex.props(shellStyles.resizer, styles.inspectorResizer)}
+              {...stylex.props(
+                buttonStyles.reset,
+                shellStyles.resizer,
+                styles.inspectorResizer,
+              )}
               {...codeInspectorResize.separatorProps}
             />
             <SoftwareMapCodeInspector
@@ -1641,6 +1646,7 @@ function C4MapCanvas({
   // The class is the block tests' hook for a map still laying out.
   const codeStatusProps = withClass(
     "software-map-code-status",
+    buttonStyles.reset,
     styles.codeStatus,
   );
 
@@ -2037,25 +2043,25 @@ function SoftwareMapC4GroupNode({
         id="target-left"
         type="target"
         position={Position.Left}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="source-left"
         type="source"
         position={Position.Left}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="target-top"
         type="target"
         position={Position.Top}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="source-top"
         type="source"
         position={Position.Top}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <div
         {...stylex.props(
@@ -2087,25 +2093,25 @@ function SoftwareMapC4GroupNode({
         id="source-right"
         type="source"
         position={Position.Right}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="target-right"
         type="target"
         position={Position.Right}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="source-bottom"
         type="source"
         position={Position.Bottom}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="target-bottom"
         type="target"
         position={Position.Bottom}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
     </div>
   );
@@ -2136,25 +2142,25 @@ function SoftwareMapC4Node({ data }: ReactFlowNodeProps<C4MapFlowNode>) {
         id="target-left"
         type="target"
         position={Position.Left}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="source-left"
         type="source"
         position={Position.Left}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="target-top"
         type="target"
         position={Position.Top}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="source-top"
         type="source"
         position={Position.Top}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <SoftwareMapNodeCard
         node={data.node}
@@ -2166,25 +2172,25 @@ function SoftwareMapC4Node({ data }: ReactFlowNodeProps<C4MapFlowNode>) {
         id="source-right"
         type="source"
         position={Position.Right}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="target-right"
         type="target"
         position={Position.Right}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="source-bottom"
         type="source"
         position={Position.Bottom}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
       <Handle
         id="target-bottom"
         type="target"
         position={Position.Bottom}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(buttonStyles.reset, styles.handle)}
       />
     </div>
   );
@@ -2490,18 +2496,36 @@ function SoftwareMapNodeFrame({
           )}
         >
           {node.file && (
-            <span {...stylex.props(textStyles.truncate, styles.metaItem)}>
+            <span
+              {...stylex.props(
+                textStyles.truncate,
+                buttonStyles.reset,
+                styles.metaItem,
+              )}
+            >
               {node.file}
               {node.line === undefined ? "" : `:L${node.line}`}
             </span>
           )}
           {node.childCount !== undefined && node.childCount > 0 && (
-            <span {...stylex.props(textStyles.truncate, styles.metaItem)}>
+            <span
+              {...stylex.props(
+                textStyles.truncate,
+                buttonStyles.reset,
+                styles.metaItem,
+              )}
+            >
               {node.childCount} children
             </span>
           )}
           {node.boundary && (
-            <span {...stylex.props(textStyles.truncate, styles.metaItem)}>
+            <span
+              {...stylex.props(
+                textStyles.truncate,
+                buttonStyles.reset,
+                styles.metaItem,
+              )}
+            >
               boundary
             </span>
           )}
@@ -2647,6 +2671,7 @@ function SoftwareMapChangeBadge({
       <span
         {...stylex.props(
           textStyles.truncate,
+          buttonStyles.reset,
           styles.badge,
           inGroupTitle && styles.badgeInGroup,
           styles.badgeEmpty,
@@ -2660,6 +2685,7 @@ function SoftwareMapChangeBadge({
     <span
       {...stylex.props(
         textStyles.truncate,
+        buttonStyles.reset,
         styles.badge,
         inGroupTitle && styles.badgeInGroup,
       )}
@@ -2764,12 +2790,6 @@ const cardBloom = stylex.keyframes({
   to: { opacity: 1, transform: "scale(1)" },
 });
 
-const noBorder = {
-  borderWidth: 0,
-  borderStyle: "none",
-  borderColor: "currentcolor",
-} as const;
-
 const styles = stylex.create({
   overlay: {
     position: "fixed",
@@ -2802,7 +2822,9 @@ const styles = stylex.create({
     fontFamily: tokens.chromeFont,
   },
   frameExpanded: {
-    ...noBorder,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
     boxSizing: "border-box",
     width: "100%",
     height: "100%",
@@ -2810,7 +2832,9 @@ const styles = stylex.create({
     minHeight: 0,
   },
   frameChromeHidden: {
-    ...noBorder,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
     gridTemplateRows: "minmax(0, 1fr)",
     borderRadius: 0,
   },
@@ -2824,7 +2848,6 @@ const styles = stylex.create({
     backgroundColor: tokens.transparent,
   },
   header: {
-    ...noBorder,
     display: "flex",
     justifyContent: "space-between",
     gap: "16px",
@@ -2834,7 +2857,6 @@ const styles = stylex.create({
     paddingBlock: 0,
     paddingRight: "12px",
     paddingLeft: "calc(12px + var(--review-fullscreen-inset, 0px))",
-    backgroundColor: tokens.transparent,
     boxShadow: "none",
     fontFamily: tokens.chromeFont,
   },
@@ -2949,7 +2971,6 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
   },
   status: {
-    ...noBorder,
     position: "absolute",
     top: "14px",
     left: "14px",
@@ -2959,7 +2980,6 @@ const styles = stylex.create({
     margin: 0,
     padding: "8px 10px",
     borderRadius: radius.control,
-    backgroundColor: tokens.transparent,
     boxShadow: "none",
     color: tokens.inkMuted,
     fontSize: fontSize.body,
@@ -2997,7 +3017,9 @@ const styles = stylex.create({
     backgroundColor: { default: null, [stylex.env.narrow]: tokens.backdrop },
   },
   inspector: {
-    ...noBorder,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
     position: { default: null, [stylex.env.narrow]: "absolute" },
     right: { default: null, [stylex.env.narrow]: "8px" },
     bottom: { default: null, [stylex.env.narrow]: "8px" },
@@ -3068,7 +3090,9 @@ const styles = stylex.create({
     paddingInline: "16px",
   },
   c4Canvas: {
-    ...noBorder,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
     position: "relative",
     width: "100%",
     height: "100%",
@@ -3090,8 +3114,6 @@ const styles = stylex.create({
   },
   // React Flow's node wrapper. Its text reads like the prose around it.
   flowNode: {
-    ...noBorder,
-    backgroundColor: tokens.transparent,
     boxShadow: "none",
     transition: `transform ${motion.medium} ${motion.settle}, width ${motion.medium} ${motion.settle}, height ${motion.medium} ${motion.settle}, opacity ${motion.medium} ${motion.ease}`,
     userSelect: "text",
@@ -3100,7 +3122,6 @@ const styles = stylex.create({
     zIndex: 1,
   },
   codeStatus: {
-    ...noBorder,
     position: "absolute",
     right: "14px",
     bottom: "14px",
@@ -3108,7 +3129,6 @@ const styles = stylex.create({
     maxWidth: "min(380px, calc(100% - 28px))",
     padding: "8px 10px",
     borderRadius: radius.control,
-    backgroundColor: tokens.transparent,
     boxShadow: "none",
     color: tokens.inkMuted,
     fontSize: fontSize.body,
@@ -3316,10 +3336,8 @@ const styles = stylex.create({
     display: "none",
   },
   handle: {
-    ...noBorder,
     width: "1px",
     height: "1px",
-    backgroundColor: tokens.transparent,
     opacity: 0,
     pointerEvents: "none",
   },
@@ -3460,11 +3478,9 @@ const styles = stylex.create({
     minWidth: 0,
   },
   metaItem: {
-    ...noBorder,
     maxWidth: "100%",
     padding: 0,
     borderRadius: 0,
-    backgroundColor: tokens.transparent,
     color: tokens.inkFaint,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
@@ -3495,7 +3511,6 @@ const styles = stylex.create({
   },
   // Counts sit in the title row as plain text: the one +n −n pair, no pill.
   badge: {
-    ...noBorder,
     display: "inline-flex",
     flex: "0 0 auto",
     alignItems: "center",
@@ -3505,7 +3520,6 @@ const styles = stylex.create({
     maxWidth: "140px",
     minHeight: 0,
     padding: 0,
-    backgroundColor: tokens.transparent,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     fontWeight: fontWeight.medium,
@@ -3763,6 +3777,9 @@ const codeRingStyles = stylex.create({
 });
 
 // React Flow takes node and edge classes as strings.
-const FLOW_NODE_CLASS_NAME = stylex.props(styles.flowNode).className;
+const FLOW_NODE_CLASS_NAME = stylex.props(
+  buttonStyles.reset,
+  styles.flowNode,
+).className;
 
 const FLOW_EDGE_CLASS_NAME = stylex.props(styles.flowEdge).className;

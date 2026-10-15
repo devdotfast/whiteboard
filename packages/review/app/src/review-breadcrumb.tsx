@@ -1,4 +1,6 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { surfaceStyles } from "@canvas/ui/surface";
 import {
@@ -295,6 +297,8 @@ function PlaceList({
                 : "Open whiteboard"
           }
           {...stylex.props(
+            focusStyles.ringInset,
+            buttonStyles.reset,
             menuStyles.item,
             row.here && menuStyles.itemCurrent,
             row.here && styles.rowCurrent,

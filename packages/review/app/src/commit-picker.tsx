@@ -1,4 +1,6 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { surfaceStyles } from "@canvas/ui/surface";
 import type { ReviewSidebarCommit } from "@dev.fast/review-protocol";
@@ -202,7 +204,12 @@ function CommitMenu({
         type="button"
         role="menuitemradio"
         aria-checked={!selected}
-        {...stylex.props(menuStyles.item, styles.allRow)}
+        {...stylex.props(
+          focusStyles.ringInset,
+          buttonStyles.reset,
+          menuStyles.item,
+          styles.allRow,
+        )}
         onClick={() => onPick(null)}
       >
         <span {...stylex.props(styles.check)}>
@@ -250,6 +257,8 @@ function CommitMenu({
                 aria-checked={here}
                 title={commit.subject}
                 {...stylex.props(
+                  focusStyles.ringInset,
+                  buttonStyles.reset,
                   menuStyles.item,
                   styles.row,
                   here && styles.rowPicked,

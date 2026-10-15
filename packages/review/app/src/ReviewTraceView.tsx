@@ -1,4 +1,4 @@
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { surfaceStyles } from "@canvas/ui/surface";
@@ -302,6 +302,7 @@ export function ReviewTraceView({
                       role="option"
                       aria-selected={isActive}
                       {...stylex.props(
+                        buttonStyles.reset,
                         styles.pickerItem,
                         isActive
                           ? styles.pickerItemActive

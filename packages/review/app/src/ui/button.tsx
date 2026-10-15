@@ -48,6 +48,7 @@ export function Button({
       {...withClass(
         className,
         filled ? focusStyles.ring : focusStyles.ringInset,
+        buttonStyles.reset,
         buttonStyles.base,
         buttonStyles[variant],
         size === "large" && buttonStyles.large,
@@ -83,6 +84,7 @@ export function IconButton({
       {...withClass(
         className,
         focusStyles.ringInset,
+        buttonStyles.reset,
         buttonStyles.base,
         buttonStyles.icon,
         size === "small" && buttonStyles.iconSmall,
@@ -96,8 +98,15 @@ export function IconButton({
 // Only popup triggers: disclosure toggles also carry aria-expanded.
 const expanded = ':is([aria-haspopup][aria-expanded="true"])';
 
-// Exported only for a button another component renders (an OptionMenu trigger).
+// Exported for a button another component renders (an OptionMenu trigger),
+// and `reset` for anything drawn without the native button box.
 export const buttonStyles = stylex.create({
+  reset: {
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: tokens.transparent,
+  },
   base: {
     display: "inline-flex",
     flex: "0 0 auto",
@@ -106,9 +115,6 @@ export const buttonStyles = stylex.create({
     gap: "6px",
     height: tokens.chromeControlHeight,
     padding: "0 10px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.control,
     // A trigger whose menu or popover is showing stays held down.
     backgroundColor: {

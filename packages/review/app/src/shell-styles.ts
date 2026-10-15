@@ -15,12 +15,6 @@ const peekOpen = () => stylex.when.ancestor("[data-peek-open]", appMarker);
 const inTopbarActions = () =>
   stylex.when.ancestor(":is(*)", topbarActionsMarker);
 
-const noBorder = {
-  borderWidth: 0,
-  borderStyle: "none",
-  borderColor: "currentcolor",
-} as const;
-
 export const shellStyles = stylex.create({
   // Narrow layouts dock the panel to the bottom half of the canvas as a
   // sheet, so the peek column collapses.
@@ -99,8 +93,6 @@ export const shellStyles = stylex.create({
     minWidth: "10px",
     zIndex: 1,
     cursor: "col-resize",
-    backgroundColor: tokens.transparent,
-    ...noBorder,
     touchAction: "none",
     outline: {
       default: null,
@@ -169,8 +161,6 @@ export const shellStyles = stylex.create({
     height: "10px",
     minHeight: "10px",
     cursor: "row-resize",
-    backgroundColor: tokens.transparent,
-    ...noBorder,
     touchAction: "none",
     outline: {
       default: null,

@@ -393,6 +393,7 @@ export function RunStep({
                   align="start"
                   triggerStyle={[
                     focusStyles.ringInset,
+                    buttonStyles.reset,
                     buttonStyles.base,
                     styles.projectTrigger,
                   ]}
@@ -624,6 +625,7 @@ export function RunStep({
                     ariaLabel="Draw with another agent"
                     triggerStyle={[
                       focusStyles.ringInset,
+                      buttonStyles.reset,
                       buttonStyles.base,
                       styles.chipMenu,
                     ]}

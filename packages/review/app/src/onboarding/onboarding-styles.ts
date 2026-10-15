@@ -72,8 +72,6 @@ export const onboardingStyles = stylex.create({
     gap: "8px",
     width: "120px",
     padding: 0,
-    borderWidth: 0,
-    backgroundColor: tokens.transparent,
     color: "inherit",
     cursor: { default: "pointer", ":disabled": "default" },
     font: "inherit",
