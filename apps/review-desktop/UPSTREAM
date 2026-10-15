@@ -636,7 +636,9 @@ one of these entries:
   - `server.main.ts`: `spawnCli` reports that the extension management CLI is
     not included.
   The rest of `src/vs/server/` and `src/server-cli.ts` stay deleted.
-  `src/vs/server/node/reviewServerHandshake.test.ts` is fork-owned.
+  `src/vs/server/node/reviewServerHandshake.test.ts` is fork-owned. The
+  bundle writes an empty `out/nls.messages.json`; its `localize` calls stay
+  unbuilt, so the table is never read.
 
 ## Serialize the fork
 
