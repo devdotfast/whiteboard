@@ -145,9 +145,15 @@ async function harnessFound(
   return false;
 }
 
+/** OpenCode's config is JSONC: drop comments and trailing commas, keep strings. */
+const JSONC_EXTRAS =
+  /("(?:\\.|[^"\\])*")|\/\/[^\n]*|\/\*[\s\S]*?\*\/|,(?=\s*[}\]])/g;
+
 async function readJson(file: string): Promise<JsonValue | undefined> {
   try {
-    return JSON.parse(await readFile(file, "utf8"));
+    return JSON.parse(
+      (await readFile(file, "utf8")).replace(JSONC_EXTRAS, "$1"),
+    );
   } catch {
     return undefined;
   }
@@ -236,19 +242,23 @@ async function harnessConnected(
       }
 
     case "opencode": {
-      const config = await readJson(
-        path.join(
-          env.XDG_CONFIG_HOME ?? path.join(homeDir, ".config"),
-          "opencode",
-          "opencode.json",
-        ),
+      const configDir = path.join(
+        env.XDG_CONFIG_HOME || path.join(homeDir, ".config"),
+        "opencode",
       );
 
-      // Its `mcp add` has written both shapes.
-      return (
-        lookup(config, "mcp", "whiteboard") !== undefined ||
-        lookup(config, "mcp", "servers", "whiteboard") !== undefined
-      );
+      for (const name of ["opencode.json", "opencode.jsonc", "config.json"]) {
+        const config = await readJson(path.join(configDir, name));
+
+        // Its `mcp add` has written both shapes.
+        if (
+          lookup(config, "mcp", "whiteboard") !== undefined ||
+          lookup(config, "mcp", "servers", "whiteboard") !== undefined
+        )
+          return true;
+      }
+
+      return false;
     }
 
     case "pi":

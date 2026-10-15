@@ -71,6 +71,27 @@ describe("detectConnectAgents", () => {
     expect(found.sort()).toEqual(["codex", "cursor"]);
     expect(agents).toHaveLength(7);
   });
+
+  it("reads OpenCode's server from its JSONC config", async () => {
+    await installCli("opencode");
+    const config = path.join(homeDir, ".config", "opencode", "opencode.jsonc");
+
+    await mkdir(path.dirname(config), { recursive: true });
+    await writeFile(
+      config,
+      '{\n  // mine\n  "mcp": {\n    "servers": { "whiteboard": { "type": "local" }, },\n  },\n}\n',
+    );
+
+    const agents = await detectConnectAgents({
+      homeDir,
+      env: env(),
+      platform: "linux",
+    });
+
+    expect(agents.find((agent) => agent.target === "opencode")?.connected).toBe(
+      true,
+    );
+  });
 });
 
 describe("connectAgent", () => {
