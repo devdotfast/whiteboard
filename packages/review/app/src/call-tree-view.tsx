@@ -1,8 +1,9 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { fontSize, fontWeight } from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CheckIcon } from "@canvas/ui/icons";
 import { Spinner } from "@canvas/ui/spinner";
+import { surfaceStyles } from "@canvas/ui/surface";
 import type { DiffSelection } from "@review/lens-selection";
 import type { CallStackDiffBlock } from "@review/review-api/blocks/call_stack_diff";
 import * as stylex from "@stylexjs/stylex";
@@ -234,7 +235,11 @@ export function DocumentCallTree({ block }: { block: CallStackDiffBlock }) {
 
   return (
     <figure
-      {...stylex.props(styles.figure, drawStyles.blockChild)}
+      {...stylex.props(
+        surfaceStyles.card,
+        styles.figure,
+        drawStyles.blockChild,
+      )}
       data-review-call-stack="ready"
     >
       <DiagramHeader kind="Call tree" title={block.title ?? "Call tree"} />
@@ -265,12 +270,6 @@ export function DocumentCallTree({ block }: { block: CallStackDiffBlock }) {
 const styles = stylex.create({
   figure: {
     margin: "14px 0",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: radius.surface,
-    overflow: "hidden",
-    backgroundColor: tokens.surface,
   },
   tree: {
     minWidth: "100%",

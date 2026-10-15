@@ -1,5 +1,6 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
 import {
   type FlowDiagramBlock,
   nodeSources,
@@ -108,6 +109,7 @@ export function FlowDiagram({
     <figure
       {...withClass(
         "flow-diagram",
+        surfaceStyles.card,
         styles.figure,
         fullscreen && styles.stage,
         drawStyles.blockChild,
@@ -201,13 +203,7 @@ const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 const styles = stylex.create({
   figure: {
-    overflow: "hidden",
     margin: "18px 0 4px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: radius.surface,
-    backgroundColor: tokens.surface,
     color: tokens.ink,
     font: `${fontSize.body}/1.5 ${tokens.fontMono}`,
   },

@@ -2,9 +2,17 @@ import { elevation, radius } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 
-// The box of anything that floats over the canvas. Sites keep their own
-// placement, size and padding, applied after these.
+// The box of anything that floats over the canvas, or a card set in it.
+// Sites keep their own placement, size and padding, applied after these.
 export const surfaceStyles = stylex.create({
+  card: {
+    overflow: "hidden",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: tokens.rule,
+    borderRadius: radius.surface,
+    backgroundColor: tokens.surface,
+  },
   popover: {
     borderWidth: "1px",
     borderStyle: "solid",
