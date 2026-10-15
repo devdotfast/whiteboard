@@ -58,9 +58,7 @@ import {
  * Optional groups always show so the user can consent to their download.
  */
 const BUNDLED_EXTENSIONS: readonly { id: string; label: string }[] = [
-	{ id: 'ms-python.python', label: localize('review.curated.python', "Python") },
 	{ id: 'astral-sh.ty', label: localize('review.curated.ty', "Python type checking (ty)") },
-	{ id: 'charliermarsh.ruff', label: localize('review.curated.ruff', "Python lint and format (ruff)") },
 	{ id: 'vscodevim.vim', label: localize('review.curated.vim', "Vim keybindings") },
 	{ id: 'tuttieee.emacs-mcx', label: localize('review.curated.emacs', "Emacs keybindings") },
 	{ id: 'ms-vscode.sublime-keybindings', label: localize('review.curated.sublime', "Sublime Text keybindings") }

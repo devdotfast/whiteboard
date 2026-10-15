@@ -170,7 +170,7 @@ remote by the same language extensions a laptop review uses. Desktop runs a
 VS Code server and one extension host on each remote it connects to.
 
 - **Which languages:** TypeScript, JavaScript, JSON, CSS and HTML always.
-  Python, with ty, Ruff and the Python extension. Go, Rust, Swift and C# when
+  Python, with ty. Go, Rust, Swift and C# when
   you have turned their group on in Whiteboard (Settings → Tools → Extensions);
   see [Optional languages](#optional-languages).
 - **First use:** the remote downloads its language extensions from Open VSX

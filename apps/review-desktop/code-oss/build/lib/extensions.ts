@@ -319,9 +319,7 @@ const excludedExtensions = [
 	'llvm-vs-code-extensions.lldb-dap',
 	'muhammad-sammy.csharp',
 	'ms-dotnettools.vscode-dotnet-runtime',
-	'ms-python.python',
 	'astral-sh.ty',
-	'charliermarsh.ruff',
 	'golang.go',
 ];
 

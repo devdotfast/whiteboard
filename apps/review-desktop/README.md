@@ -278,7 +278,7 @@ of the host it runs on.
 | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | Code OSS `out-build`, `out-vscode-min`, and `out`                                                        | Electron application bundle                            |
 | Compiled built-in extensions in `.build/extensions`                                                      | Darwin-native npm closure installed by `pnpm`          |
-| Manifest-selected `darwin-arm64` and `darwin-x64` VSIX payloads, including `ty`, Ruff, and rust-analyzer | Manifest-selected extensions copied into the final app |
+| Manifest-selected `darwin-arm64` and `darwin-x64` VSIX payloads, including `ty` and rust-analyzer       | Manifest-selected extensions copied into the final app |
 | Review canvas/server and required workspace `dist` directories                                           | App icon, signatures, notarization, ZIP, and DMG       |
 
 The curated-extension handoff is manifest-driven. Linux materializes the
@@ -391,7 +391,7 @@ unpacks the extension into `code-oss/extensions/`.
 
 | Extension  | Notes                                                                                        |
 | ---------- | -------------------------------------------------------------------------------------------- |
-| ty, ruff   | Same; `ms-python.python` rides along as their extension dependency                           |
+| ty         | Bundles its own server                                                                       |
 | Go         | Bundles nothing and prompts to `go install gopls` against your own Go toolchain              |
 | Vim, Emacs | Adopted from the host VS Code install on first launch; otherwise off, and mutually exclusive |
 

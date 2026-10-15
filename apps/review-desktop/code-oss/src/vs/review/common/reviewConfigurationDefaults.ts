@@ -116,16 +116,8 @@ export const reviewConfigurationDefaults = {
  * `scripts/curated-extensions.test.mjs`.
  */
 export const curatedExtensionConfigurationDefaults = {
-	// ms-python.python resolves the "Default" language server to Pylance, which is
-	// proprietary and can never ship here, then prompts to install it. ty is
-	// Review's Python language server and ignores this setting.
-	'python.languageServer': 'None',
-	// Fetches A/B experiment payloads and prompts into them.
-	'python.experiments.enabled': false,
-	// "Do you want to create a virtual environment?" on requirements.txt.
-	'python.createEnvironment.trigger': 'off',
-	// "Configure a test framework?" on test files.
-	'python.testing.promptToConfigure': false,
+	// Otherwise ty runs any `ty` on PATH instead of its bundled build.
+	'ty.importStrategy': 'useBundled',
 
 	// golang.go asks users to fill in a survey on a timer.
 	'go.survey.prompt': false,
@@ -158,8 +150,7 @@ export const curatedExtensionConfigurationDefaults = {
 	'csharp.suppressDotnetRestoreNotification': true,
 	'dotnet.codeLens.enableTestsCodeLens': false
 
-	// charliermarsh.ruff already defaults `ruff.showNotifications` to "off".
-	// astral-sh.ty, vscodevim.vim and tuttieee.emacs-mcx contribute no prompts.
+	// vscodevim.vim and tuttieee.emacs-mcx contribute no prompts.
 	// ms-vscode.sublime-keybindings asks once, on first activation, whether to
 	// import Sublime Text settings. It has no setting to turn that off.
 } as const;

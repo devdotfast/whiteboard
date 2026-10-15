@@ -24,9 +24,6 @@
  * `executables` are paths (relative to the unpacked extension root) that must
  * exist and stay executable. They are asserted at materialize time so a payload
  * layout change fails the build instead of silently shipping a broken server.
- *
- * `prunePaths` are removed from the unpacked extension because Review never
- * runs them.
  */
 export const curatedExtensions = Object.freeze([
   {
@@ -229,102 +226,40 @@ export const curatedExtensions = Object.freeze([
     stripExtensionPack: false,
   },
   {
-    // ty and ruff both declare `extensionDependencies: ["ms-python.python"]`,
-    // so the Python extension has to ship alongside them or neither activates.
-    id: "ms-python.python",
-    tier: "bundled",
-    namespace: "ms-python",
-    name: "python",
-    version: "2026.4.0",
-    group: "python",
-    label: "Python",
-    targets: {
-      universal: {
-        sha256:
-          "232aeafb01f069824fdd92d3e628c1c442bbcfa1d3cc945ff97076340bb2b4a6",
-        size: 6826731,
-      },
-    },
-    executables: [],
-    // Its extension pack points at Pylance (proprietary, not redistributable)
-    // and debugpy, none of which Review ships.
-    stripExtensionPack: true,
-    // The bundled Jedi language server; Review defaults
-    // `python.languageServer` to "None" and ty serves Python instead.
-    prunePaths: ["python_files/lib/jedilsp"],
-  },
-  {
     id: "astral-sh.ty",
     tier: "bundled",
     namespace: "astral-sh",
     name: "ty",
-    version: "2026.64.0",
+    version: "2026.78.0",
     group: "python",
     label: "Python type checking (ty)",
     targets: {
       "win32-x64": {
-        url: "https://open-vsx.org/api/astral-sh/ty/win32-x64/2026.64.0/file/astral-sh.ty-2026.64.0@win32-x64.vsix",
+        url: "https://open-vsx.org/api/astral-sh/ty/win32-x64/2026.78.0/file/astral-sh.ty-2026.78.0@win32-x64.vsix",
         sha256:
-          "b88ffd1b25c87fe209745ecf68a1871ad31e1eb970441b1d016cba64429b112d",
-        size: 12920723,
+          "57de40331bbe9a5d8ec412992638042c2428873a226a4022001da9cb2dd02f77",
+        size: 14702427,
       },
       "darwin-arm64": {
         sha256:
-          "3ac92b3f4b7ac848ea9a125a787a0b181879835d54b2e136e760161df414b08a",
+          "8a65a899144dd42a3a89db106ce7ad17133de9964c2b31345b99f3dd42f293b4",
       },
       "darwin-x64": {
         sha256:
-          "27d57df17fc3670b8c818b246f08cbb150ceaa2005273a06b23bc4b6241e66c1",
+          "136d275ed833135a0e9d6cc8e40e223a03bbbf341574f2af4309a192395145c3",
       },
       "linux-x64": {
         sha256:
-          "d64fc3104f07c4d47c3122a0fa9f2da3e593937c8b506b5f952b4283d877d212",
-        size: 12848973,
+          "8c0a8f478f4d726c8cf3fde3b92449d036a50b77a8d8766912285f56a910b68a",
+        size: 14986753,
       },
       "linux-arm64": {
         sha256:
-          "c8874795cb19bbe3bd3f3a28398a6cbb63fab1bd917b622aa8aaa31efc9f775d",
-        size: 12328752,
+          "13e844631049fbc59fa8f7a0579a15d408658d725460f6d5564d17251931c246",
+        size: 14249156,
       },
     },
     executables: ["bundled/libs/bin/ty"],
-    stripExtensionPack: false,
-  },
-  {
-    id: "charliermarsh.ruff",
-    tier: "bundled",
-    namespace: "charliermarsh",
-    name: "ruff",
-    version: "2026.66.0",
-    group: "python",
-    label: "Python lint/format (ruff)",
-    targets: {
-      "win32-x64": {
-        url: "https://open-vsx.org/api/charliermarsh/ruff/win32-x64/2026.66.0/file/charliermarsh.ruff-2026.66.0@win32-x64.vsix",
-        sha256:
-          "23474f4e92ead0e18e8034275d2dff743f2aaaff6c4e87254b156bbedac7fb46",
-        size: 12802660,
-      },
-      "darwin-arm64": {
-        sha256:
-          "652cf695fbe11c4bcae85432b3baf70f8bc2520dc13bbc5dd95b3600c8b1f227",
-      },
-      "darwin-x64": {
-        sha256:
-          "9c780cad1d6a6f26593ecde22190cb04e4345ac512ca86104b697c04a6b005c1",
-      },
-      "linux-x64": {
-        sha256:
-          "3ed6bc6d6dc9a70cff97698d498844b756110b5c66964689dad5839845f06556",
-        size: 12225917,
-      },
-      "linux-arm64": {
-        sha256:
-          "7a6e4eea699617bb0ff318d0301a52df8d6f36c6a8f9dbc977ba695cef30425e",
-        size: 11760344,
-      },
-    },
-    executables: ["bundled/libs/bin/ruff"],
     stripExtensionPack: false,
   },
   {
@@ -366,9 +301,7 @@ export const supportedTargets = Object.freeze([
 export const remoteTargets = Object.freeze(["linux-x64", "linux-arm64"]);
 
 export const remoteExtensionIds = Object.freeze([
-  "ms-python.python",
   "astral-sh.ty",
-  "charliermarsh.ruff",
   "golang.go",
   "rust-lang.rust-analyzer",
   "swiftlang.swift-vscode",
