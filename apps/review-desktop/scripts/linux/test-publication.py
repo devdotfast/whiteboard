@@ -122,10 +122,9 @@ class PublicationTests(unittest.TestCase):
                 self.publish(promote_only=True)
             self.assertEqual(self.writes(), [])
 
-    def test_separate_promotion_still_rejects_stale_release(self):
+    def test_separate_promotion_leaves_newer_release_in_place(self):
         self.previous = {**self.current, "generation": "1.2.4-1-" + "c" * 40}
-        with self.assertRaisesRegex(ValueError, "newer package"):
-            self.publish(promote_only=True)
+        self.publish(promote_only=True)
         self.assertEqual(self.writes(), [])
 
     def test_unsupported_worker_is_rejected_before_uploads(self):
@@ -156,8 +155,9 @@ class PublicationTests(unittest.TestCase):
         self.publish()
         self.assertEqual(self.writes()[-1][-2:], ("--if-match", '"previous-etag"'))
         self.previous = {**self.current, "version": "1.2.4~preview.20260923.1", "generation": "1.2.4~preview.20260923.1-1-" + "f" * 40, "commit": "f" * 40}
-        with self.assertRaisesRegex(ValueError, "newer package"):
-            self.publish()
+        self.calls.clear()
+        self.publish()
+        self.assertNotIn("repos/preview/current.json", [call[call.index("--key") + 1] for call in self.writes()])
 
     def test_publication_must_match_the_requested_channel(self):
         self.channel = "preview"
@@ -345,9 +345,15 @@ class PublicationTests(unittest.TestCase):
             self.publish()
         self.assertEqual(self.calls, [])
 
-    def test_stale_rerun_cannot_roll_back_newer_release(self):
+    def test_backfill_uploads_but_cannot_roll_back_newer_release(self):
         self.previous = {**self.current, "version": "1.2.4", "generation": "1.2.4-1-" + "c" * 40, "commit": "c" * 40}
-        with self.assertRaisesRegex(ValueError, "newer package"):
+        self.publish()
+        self.assertNotIn(self.pointer_key, [call[call.index("--key") + 1] for call in self.writes()])
+        self.assertNotEqual(self.writes(), [])
+
+    def test_same_release_with_different_content_is_rejected(self):
+        self.previous = {**self.current, "deb": False}
+        with self.assertRaisesRegex(ValueError, "different content"):
             self.publish()
         self.assertEqual(self.writes(), [])
 

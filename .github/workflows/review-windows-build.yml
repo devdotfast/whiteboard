@@ -19,6 +19,17 @@ on:
       sign:
         type: boolean
         default: false
+      channel:
+        description: preview or stable; names the installers and the latest aliases.
+        type: string
+        default: preview
+      publish:
+        type: boolean
+        default: false
+      release_tag:
+        description: Stable GitHub Release to attach the installers to and publish.
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -162,3 +173,97 @@ jobs:
         with:
           name: ${{ inputs.artifact_name }}-launch
           path: artifacts/windows/*
+
+  publish:
+    name: Publish Windows
+    needs: windows
+    if: ${{ inputs.publish }}
+    runs-on: ubuntu-latest
+    environment: review-release
+    permissions:
+      contents: write
+    env:
+      CHANNEL: ${{ inputs.channel }}
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_COMMIT: ${{ inputs.commit }}
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      PREFIX: ${{ inputs.channel == 'preview' && 'Whiteboard-Preview' || 'Whiteboard' }}
+      LATEST: ${{ inputs.channel == 'preview' && 'releases/preview-latest' || 'releases/latest' }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.workflow_sha }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          digest-mismatch: warn
+          name: ${{ inputs.artifact_name }}
+          path: windows-packages
+      - name: Name the installers for this release
+        run: |
+          mkdir windows-release
+          cp windows-packages/Whiteboard-win32-x64-user.exe "windows-release/${PREFIX}-${RELEASE_VERSION}-Setup.exe"
+          cp windows-packages/Whiteboard-win32-x64-system.exe "windows-release/${PREFIX}-${RELEASE_VERSION}-System-Setup.exe"
+          cp windows-packages/Whiteboard-win32-x64.zip "windows-release/${PREFIX}-win32-x64-${RELEASE_VERSION}.zip"
+      # Versioned payloads first, then the update feeds and the alias the
+      # install landing serves. The per-user feed decides whether they move.
+      - name: Upload to R2
+        id: upload
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
+          AWS_REGION: auto
+          R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
+        run: |
+          RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/win32-x64"
+          for file in windows-release/*.exe; do
+            aws s3 cp "$file" "${RELEASE_PREFIX}/$(basename "$file")" \
+              --content-type application/vnd.microsoft.portable-executable \
+              --content-disposition "attachment; filename=\"$(basename "$file")\""
+          done
+          aws s3 cp "windows-release/${PREFIX}-win32-x64-${RELEASE_VERSION}.zip" \
+            "${RELEASE_PREFIX}/${PREFIX}-win32-x64-${RELEASE_VERSION}.zip" \
+            --content-type application/zip
+          SETUP="${PREFIX}-${RELEASE_VERSION}-Setup.exe"
+          mkdir feeds
+          for feed in win32-x64-user:Setup win32-x64:System-Setup; do
+            node apps/review-desktop/scripts/windows-update-manifest.mjs \
+              --version "$RELEASE_VERSION" --commit "$RELEASE_COMMIT" \
+              "windows-release/${PREFIX}-${RELEASE_VERSION}-${feed#*:}.exe" > "feeds/${feed%%:*}.json"
+          done
+          node apps/review-desktop/scripts/promote-release-aliases.mjs \
+            --bucket "$R2_BUCKET" --version "$RELEASE_VERSION" \
+            "windows-release/${SETUP}=${LATEST}/win32-x64/Whiteboard-Setup.exe=${SETUP}" \
+            "feeds/win32-x64.json=update/${CHANNEL}/win32-x64/latest.json" \
+            "feeds/win32-x64-user.json=update/${CHANNEL}/win32-x64-user/latest.json"
+      - name: Verify update feeds
+        if: steps.upload.outputs.moved == 'true'
+        run: |
+          for feed in win32-x64-user:Setup win32-x64:System-Setup; do
+            echo "${feed%%:*} feed for an outdated client (expect 200 with ${RELEASE_VERSION}):"
+            RESPONSE=$(curl -sf "https://update.dev.fast/api/update/${feed%%:*}/${CHANNEL}/0000000000000000000000000000000000000000")
+            echo "$RESPONSE"
+            echo "$RESPONSE" | grep -F "\"productVersion\":\"${RELEASE_VERSION}\""
+            echo "$RESPONSE" | grep -F "/${PREFIX}-${RELEASE_VERSION}-${feed#*:}.exe"
+            test "$(curl -s -o /dev/null -w '%{http_code}' "https://update.dev.fast/api/update/${feed%%:*}/${CHANNEL}/${RELEASE_COMMIT}")" = 204
+          done
+      - name: Verify install landing
+        env:
+          LANDING: ${{ inputs.channel == 'preview' && 'https://install.dev.fast/windows/preview' || 'https://install.dev.fast/windows' }}
+        run: |
+          echo "${LANDING} (expect 302 to the installer):"
+          LOCATION=$(curl -s -o /dev/null -w "%{redirect_url}" "$LANDING")
+          echo "$LOCATION"
+          test "$LOCATION" = "https://install.dev.fast/${LATEST}/win32-x64/Whiteboard-Setup.exe"
+
+          echo "Following it (expect 200 and a Windows executable):"
+          curl -sfL -o /dev/null -w "%{http_code} %{content_type}\n" "$LANDING" \
+            | grep -F "200 application/vnd.microsoft.portable-executable"
+      # The first platform to publish takes the release out of draft.
+      - name: Attach installers and publish the GitHub Release
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber windows-release/*
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false

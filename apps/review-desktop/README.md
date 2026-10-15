@@ -148,19 +148,24 @@ patch/minor/major bump. The workflow:
    extension closure, staple and Gatekeeper checks, and packaged `product.json`
    commit/quality/updateUrl assertions), which also emits the `latest.json`
    feed manifest for that arch;
-5. once both legs pass, `publish-macos` uploads to R2 in two passes — both
-   arches' zip and dmg payloads first, both `latest.json` files last — so a
-   client can never see a manifest whose payload is missing;
+5. once both legs pass, its `publish` job uploads to R2 in two passes — both
+   arches' zip and dmg payloads first, then the `latest.json` feeds and dmg
+   aliases — so a client can never see a manifest whose payload is missing;
 6. curls both live feeds to confirm the new release is served, attaches both
    dmgs to the GitHub release, and publishes it.
+
+Each platform publishes as soon as its own build passes; one failing platform
+does not hold back the others. Latest aliases and feeds only move forward
+(`scripts/promote-release-aliases.mjs`; Linux's pointer has the same rule), so
+publishing an older version uploads its files and leaves latest alone. The
+first platform to publish takes the GitHub release out of draft.
 
 The `platforms` input picks `all` (the default), `macos`, `linux` or `windows`.
 Windows builds in parallel with the Darwin payload and the Linux packages
 (`review-windows-build.yml` on the 16-core `review_big_boy_windows` runner) and
 signs every binary and installer with Azure Artifact Signing through the
-`windows-signing` environment. Nothing is uploaded until every selected platform
-has built and validated; `publish-windows` then uploads the installers to
-`releases/<version>/win32-x64/`, points `install.dev.fast/windows` at the new
+`windows-signing` environment. Its `publish` job then uploads the installers
+to `releases/<version>/win32-x64/`, points `install.dev.fast/windows` at the new
 per-user installer, updates the Windows update feeds, and attaches the
 installers to the GitHub release.
 
@@ -213,9 +218,10 @@ gh workflow run review-desktop-preview.yml -f ref=<branch>
 The workflow makes no commit and no GitHub release. It stamps the working
 tree with the next patch version plus
 `-preview.<yyyymmdd>.<run-number>`, then publishes only to preview R2 keys.
-Once the upload, the update feed, and the installer landing all check out, it
-pushes a lightweight `v<version>` tag at the commit it built — but only when
-that commit is on `main`, since a branch that never landed cannot be promoted.
+Once the version is computed, it pushes a lightweight `v<version>` tag at the
+commit it builds — but only when that commit is on `main`, since a branch that
+never landed cannot be promoted. The tag names the build, not a set of
+published platforms.
 That tag is what "Promoting a preview to stable" above takes as its
 `preview_tag`, and it stays promotable as `main` moves on.
 The ref must include the preview tooling, so branch it from a `main` that

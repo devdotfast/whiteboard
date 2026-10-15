@@ -29,47 +29,6 @@ function stepScript(workflow, name) {
     .join("\n");
 }
 
-for (const channel of ["preview", "release"]) {
-  test(`${channel} requires success from every selected platform`, () => {
-    const script = stepScript(
-      `review-desktop-${channel}`,
-      "Require every selected build and validation",
-    );
-
-    const platforms = ["macos", "linux", "windows"];
-
-    for (const selection of ["all", ...platforms]) {
-      const baseline = Object.fromEntries(
-        platforms.map((platform) => [
-          platform,
-          selection === "all" || selection === platform ? "success" : "skipped",
-        ]),
-      );
-
-      for (const platform of platforms) {
-        for (const result of ["success", "skipped", "failure", "cancelled"]) {
-          const run = spawnSync("bash", ["-e", "-c", script], {
-            env: {
-              ...process.env,
-              ...baseline,
-              PLATFORMS: selection,
-              [platform]: result,
-            },
-            encoding: "utf8",
-          });
-
-          const required = selection === "all" || selection === platform;
-          assert.equal(
-            run.status,
-            required && result !== "success" ? 1 : 0,
-            `${selection}: ${platform}=${result}\n${run.stdout}${run.stderr}`,
-          );
-        }
-      }
-    }
-  });
-}
-
 for (const scenario of [
   "ready",
   "delayed",

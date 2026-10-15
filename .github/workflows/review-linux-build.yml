@@ -25,6 +25,17 @@ on:
       release_signing:
         type: boolean
         default: false
+      channel:
+        description: preview or stable repository to publish to.
+        type: string
+        default: preview
+      publish:
+        type: boolean
+        default: false
+      release_tag:
+        description: Stable GitHub Release to attach the packages to and publish.
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -252,3 +263,16 @@ jobs:
           mkdir linux-repository
           tar --zstd -xf linux-packages/linux-publication.tar.zst -C linux-repository
           bash apps/review-desktop/scripts/linux/verify-repository.sh linux-repository "$TARGET"
+
+  publish:
+    name: Publish Linux
+    needs: validate
+    if: ${{ inputs.publish }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/review-linux-publish.yml
+    with:
+      channel: ${{ inputs.channel }}
+      release_tag: ${{ inputs.release_tag }}
+      artifact_name: ${{ inputs.artifact_name }}
+    secrets: inherit

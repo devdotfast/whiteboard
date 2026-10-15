@@ -60,7 +60,7 @@ jobs:
             arch) files=(linux-packages/*.pkg.tar.zst linux-packages/*.pkg.tar.zst.sig) ;;
             nixos) files=(linux-packages/*.nix.tar.gz linux-packages/*.nix.tar.gz.asc) ;;
           esac
-          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" "${files[@]}"
+          gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber "${files[@]}"
 
   promote:
     name: Promote Linux repositories
@@ -92,3 +92,10 @@ jobs:
             curl -fsS https://install.dev.fast/repos/whiteboard-preview.repo | grep -F 'baseurl=https://install.dev.fast/repos/preview/rpm/x86_64/'
             curl -fsSI https://install.dev.fast/repos/preview/arch/x86_64/whiteboard-preview.db | grep -q '^HTTP/[0-9.]* 302'
           fi
+      # The first platform to publish takes the release out of draft.
+      - name: Publish the GitHub Release
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false
