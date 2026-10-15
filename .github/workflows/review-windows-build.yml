@@ -9,10 +9,6 @@ on:
       version:
         type: string
         required: true
-      whiteboard_remote:
-        description: The remote job's pin (stamp-remote-artifacts.mjs); required with a version.
-        type: string
-        default: ""
       artifact_name:
         type: string
         default: windows-packages
@@ -33,6 +29,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   windows:
@@ -43,6 +40,7 @@ jobs:
     environment: ${{ inputs.sign && 'windows-signing' || 'windows-ci' }}
     permissions:
       contents: read
+      actions: read
       id-token: write
     defaults:
       run:
@@ -80,10 +78,6 @@ jobs:
           QUALITY=stable
           if [[ "$VERSION" == *-preview.* ]]; then QUALITY=preview; fi
           node apps/review-desktop/scripts/stamp-release-channel.mjs --version "$VERSION" --quality "$QUALITY"
-      - name: Pin the remote tarballs
-        env:
-          WHITEBOARD_REMOTE: ${{ inputs.whiteboard_remote }}
-        run: node apps/review-desktop/scripts/stamp-remote-artifacts.mjs --pinned "$WHITEBOARD_REMOTE"
       - name: Restore native dependencies
         id: native-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
@@ -104,6 +98,18 @@ jobs:
           key: ${{ steps.native-cache.outputs.cache-primary-key }}
       - name: Build desktop
         run: pnpm desktop:build
+      - name: Wait for the remote pin
+        id: pin
+        timeout-minutes: 45
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node apps/review-desktop/scripts/wait-for-run-artifact.mjs --job "Publish remote tarballs" --artifact "whiteboard-remote-pin-${{ inputs.version }}"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.pin.outputs.artifact-id }}
+          path: remote-pin
+      - name: Pin the remote tarballs
+        run: node apps/review-desktop/scripts/stamp-remote-artifacts.mjs --pinned "$(cat remote-pin/pin.json)"
       - name: Log in to Azure for code signing
         if: inputs.sign
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0

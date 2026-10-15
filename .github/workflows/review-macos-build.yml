@@ -12,10 +12,6 @@ on:
       channel:
         required: true
         type: string
-      whiteboard_remote:
-        description: The remote job's pin (stamp-remote-artifacts.mjs).
-        required: true
-        type: string
       publish:
         type: boolean
         default: false
@@ -166,11 +162,6 @@ jobs:
             --version "$RELEASE_VERSION" \
             --quality "${{ inputs.channel }}"
 
-      - name: Pin the remote tarballs
-        env:
-          WHITEBOARD_REMOTE: ${{ inputs.whiteboard_remote }}
-        run: node apps/review-desktop/scripts/stamp-remote-artifacts.mjs --pinned "$WHITEBOARD_REMOTE"
-
       - name: Setup pnpm
         uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
 
@@ -223,27 +214,7 @@ jobs:
         timeout-minutes: 45
         env:
           GH_TOKEN: ${{ github.token }}
-          PAYLOAD_NAME: darwin-payload-${{ inputs.channel }}-${{ inputs.version }}-${{ inputs.commit }}
-        run: |
-          while true; do
-            CONCLUSION=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs?filter=latest&per_page=100" \
-              --jq '.jobs[] | select(.name | endswith("Compile Darwin payload on Linux")) | .conclusion // empty') || { sleep 10; continue; }
-            if [ -n "$CONCLUSION" ] && [ "$CONCLUSION" != success ]; then
-              echo "::error::Darwin compilation finished (${CONCLUSION})."
-              exit 1
-            fi
-            ARTIFACT_ID=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
-              --jq ".artifacts[] | select(.name == \"${PAYLOAD_NAME}\" and .expired == false) | .id") || { sleep 10; continue; }
-            if [ -n "$ARTIFACT_ID" ]; then
-              echo "artifact-id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
-              break
-            fi
-            if [ "$CONCLUSION" = success ]; then
-              echo "::error::Darwin compilation succeeded without the expected payload."
-              exit 1
-            fi
-            sleep 10
-          done
+        run: node apps/review-desktop/scripts/wait-for-run-artifact.mjs --job "Compile Darwin payload on Linux" --artifact "darwin-payload-${{ inputs.channel }}-${{ inputs.version }}-${{ inputs.commit }}"
 
       - name: Download darwin payload
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -255,6 +226,21 @@ jobs:
       - name: Extract darwin payload
         run: |
           zstd -dc "$RUNNER_TEMP/darwin-payload/darwin-payload.tar.zst" | tar -xf - -C .
+
+      - name: Wait for the remote pin
+        id: pin
+        timeout-minutes: 45
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node apps/review-desktop/scripts/wait-for-run-artifact.mjs --job "Publish remote tarballs" --artifact "whiteboard-remote-pin-${{ inputs.version }}"
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.pin.outputs.artifact-id }}
+          path: remote-pin
+
+      - name: Pin the remote tarballs
+        run: node apps/review-desktop/scripts/stamp-remote-artifacts.mjs --pinned "$(cat remote-pin/pin.json)"
 
       # package-macos.sh checks the complete handoff before Gulp runs, stages
       # every manifest-selected curated extension, and verifies the final app

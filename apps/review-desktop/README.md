@@ -158,7 +158,9 @@ Each platform publishes as soon as its own build passes; one failing platform
 does not hold back the others. Latest aliases and feeds only move forward
 (`scripts/promote-release-aliases.mjs`; Linux's pointer has the same rule), so
 publishing an older version uploads its files and leaves latest alone. The
-first platform to publish takes the GitHub release out of draft.
+first platform to publish takes the GitHub release out of draft. Platform
+builds start with the remote tarball job and wait for its pin artifact only
+before packaging (`scripts/wait-for-run-artifact.mjs`).
 
 To retry a platform that failed, use **Re-run failed jobs** on the run. To
 build it again later for the same version, start a new run with that version's

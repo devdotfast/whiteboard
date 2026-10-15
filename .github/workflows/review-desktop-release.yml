@@ -316,8 +316,6 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: write
-    outputs:
-      whiteboard_remote: ${{ steps.remote.outputs.whiteboard_remote }}
     env:
       VERSION: ${{ needs.version.outputs.version }}
       COMMIT: ${{ needs.version.outputs.commit }}
@@ -416,11 +414,17 @@ jobs:
           aws s3 cp remote-artifacts/ "$PREFIX" --recursive --exclude "*" --include "*.tar.xz" --content-type application/x-xz
           aws s3 cp remote-artifacts/ "$PREFIX" --recursive --exclude "*" --include "*.sha256" --content-type text/plain
           aws s3 cp remote-artifacts/install.sh "${PREFIX}install.sh" --content-type text/plain
+      # Platform builds start before this job ends and wait for this pin only
+      # when they package (wait-for-run-artifact.mjs).
       - name: Pin the remote tarballs
-        id: remote
         run: |
-          PIN=$(node apps/review-desktop/scripts/stamp-remote-artifacts.mjs remote-artifacts "$VERSION" "https://install.dev.fast/releases/${VERSION}/remote")
-          echo "whiteboard_remote=$PIN" >> "$GITHUB_OUTPUT"
+          mkdir -p remote-pin
+          node apps/review-desktop/scripts/stamp-remote-artifacts.mjs remote-artifacts "$VERSION" "https://install.dev.fast/releases/${VERSION}/remote" > remote-pin/pin.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: whiteboard-remote-pin-${{ env.VERSION }}
+          path: remote-pin/pin.json
+          overwrite: true
 
   npm:
     name: Publish npm package
@@ -489,14 +493,14 @@ jobs:
 
   linux:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'linux' }}
-    needs: [version, remote]
+    needs: version
     permissions:
       contents: write
+      actions: read
     uses: ./.github/workflows/review-linux-build.yml
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
-      whiteboard_remote: ${{ needs.remote.outputs.whiteboard_remote }}
       release_signing: ${{ !inputs.dry_run }}
       channel: stable
       publish: ${{ !inputs.dry_run }}
@@ -506,15 +510,15 @@ jobs:
   # Signs even on a dry run, so the run validates exactly what would ship.
   windows:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'windows' }}
-    needs: [version, remote]
+    needs: version
     permissions:
       contents: write
+      actions: read
       id-token: write
     uses: ./.github/workflows/review-windows-build.yml
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
-      whiteboard_remote: ${{ needs.remote.outputs.whiteboard_remote }}
       sign: true
       channel: stable
       publish: ${{ !inputs.dry_run }}
@@ -523,7 +527,7 @@ jobs:
 
   macos:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'macos' }}
-    needs: [version, remote]
+    needs: version
     permissions:
       contents: write
       actions: read
@@ -531,7 +535,6 @@ jobs:
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
-      whiteboard_remote: ${{ needs.remote.outputs.whiteboard_remote }}
       channel: stable
       publish: ${{ !inputs.dry_run }}
       release_tag: ${{ needs.version.outputs.tag }}
