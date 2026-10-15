@@ -35,6 +35,7 @@ import {
   ReviewSurfaceLabel,
 } from "./authoring-activity";
 import { BugReportControl } from "./bug-report-dialog";
+import { LanguageServerChip } from "./connection-chip";
 import { controlStyles } from "./controls-styles";
 import {
   ReviewDebugSettingsProvider,
@@ -652,6 +653,9 @@ function ReviewLayoutContent({
                   <span aria-hidden="true">↗</span>
                 </Button>
               )}
+              {session.review?.available?.pending && session.review.host ? (
+                <LanguageServerChip host={session.review.host} />
+              ) : null}
               <AuthoringActivityBadge
                 onLocate={(view) => {
                   if (view === "diff")

@@ -55,6 +55,7 @@ interface Host extends GatewayRemote {
   problem?: ReviewGatewayHost["problem"];
   languageFeatures?: boolean;
   languageFeaturesDetail?: string;
+  languageFeaturesPending?: true;
   languageGroups?: ReviewGatewayHost["languageGroups"];
   installing?: ReviewGatewayHost["installing"];
   declined?: true;
@@ -316,6 +317,7 @@ export function createGatewayHosts(input: {
           previous.delete(given.alias);
           current.languageFeatures = given.languageFeatures;
           current.languageFeaturesDetail = given.languageFeaturesDetail;
+          current.languageFeaturesPending = given.languageFeaturesPending;
           current.languageGroups = given.languageGroups;
           next.push(current);
         } else {
@@ -362,12 +364,17 @@ export type GatewayHosts = ReturnType<typeof createGatewayHosts>;
 const languageOf = ({
   languageFeatures,
   languageFeaturesDetail,
+  languageFeaturesPending,
   languageGroups,
 }: Pick<
   ReviewGatewayHost,
-  "languageFeatures" | "languageFeaturesDetail" | "languageGroups"
+  | "languageFeatures"
+  | "languageFeaturesDetail"
+  | "languageFeaturesPending"
+  | "languageGroups"
 >) => ({
   ...(languageFeatures !== undefined && { languageFeatures }),
   ...(languageFeaturesDetail !== undefined && { languageFeaturesDetail }),
+  ...(languageFeaturesPending && { languageFeaturesPending }),
   ...(languageGroups !== undefined && { languageGroups }),
 });

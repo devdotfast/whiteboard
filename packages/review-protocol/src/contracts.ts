@@ -972,6 +972,7 @@ export const ReviewGatewayHostSchema = z.strictObject({
     .optional(),
   languageFeatures: z.boolean().optional(),
   languageFeaturesDetail: stringAllowEmpty.optional(),
+  languageFeaturesPending: z.literal(true).optional(),
   languageGroups: z
     .array(
       z.strictObject({
@@ -1003,6 +1004,7 @@ export interface ReviewGatewayHostState {
   installCommand?: string;
   languageFeatures?: boolean;
   languageFeaturesDetail?: string;
+  languageFeaturesPending?: true;
   languageGroups?: ReviewGatewayHost["languageGroups"];
   declined?: true;
 }

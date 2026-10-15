@@ -166,7 +166,7 @@ test("lists each host with its state and detail, and the install command from De
 test("says whether an online host has language features, and why not; only a host that needs something starts open", async () => {
   await render(
     remoteHosts(
-      ["devbox", "box2", "box3"],
+      ["devbox", "box2", "box3", "box4"],
       [
         {
           alias: "devbox",
@@ -187,14 +187,23 @@ test("says whether an online host has language features, and why not; only a hos
           detail: "timed out",
           languageFeatures: false,
         },
+        {
+          alias: "box4",
+          serverId: "s4",
+          state: "online",
+          languageFeatures: false,
+          languageFeaturesDetail: "Installing the language extensions.",
+          languageFeaturesPending: true,
+        },
       ],
     ),
   );
   await vi.waitFor(() => expect(rows()[0]).toContain("online"));
-  expect([0, 1, 2].map((index) => toggle(index).ariaExpanded)).toEqual([
+  expect([0, 1, 2, 3].map((index) => toggle(index).ariaExpanded)).toEqual([
     "false",
     "true",
     "true",
+    "false",
   ]);
   expect(heading(1, "Language features")).toBe("Language featuresunavailable");
   expect(lines(1, "Language features")).toEqual([
@@ -205,6 +214,10 @@ test("says whether an online host has language features, and why not; only a hos
   await act(async () => toggle(0).click());
   expect(heading(0, "Language features")).toBe("Language featuresavailable");
   expect(lines(0, "Language features")).toEqual([]);
+
+  await act(async () => toggle(3).click());
+  expect(heading(3, "Language features")).toBe("Language featuresstarting…");
+  expect(lines(3, "Language features")).toEqual([]);
 });
 
 test("lists an online host's language groups with what is missing, and a way to check again that waits for the check", async () => {

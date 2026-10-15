@@ -207,8 +207,13 @@ function HostRow({
   const failed = !!state && !!status.action;
   const agents = useRemoteAgents(hosts, name, online);
 
+  const starting = online && !!state.languageFeaturesPending;
+
   const languageFailed =
-    online && !state.languageFeatures && !!state.languageFeaturesDetail;
+    online &&
+    !starting &&
+    !state.languageFeatures &&
+    !!state.languageFeaturesDetail;
 
   const missing = online
     ? (state.languageGroups ?? []).filter((group) => group.detail)
@@ -294,10 +299,16 @@ function HostRow({
           {online ? (
             <Group
               label="Language features"
-              note={state.languageFeatures ? "available" : "unavailable"}
+              note={
+                starting
+                  ? "starting…"
+                  : state.languageFeatures
+                    ? "available"
+                    : "unavailable"
+              }
               refresh={<CheckAgain hosts={hosts} alias={name} />}
             >
-              {!state.languageFeatures && state.languageFeaturesDetail ? (
+              {languageFailed && state.languageFeaturesDetail ? (
                 <span {...stylex.props(local.wide)}>
                   <Detail failed text={state.languageFeaturesDetail} />
                 </span>

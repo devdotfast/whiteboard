@@ -300,6 +300,7 @@ test("a remote still installing its extensions is attached again after a minute,
 		endpoint: { url: `http://127.0.0.1:${ports[0]}`, token: "remote-token" },
 		languageFeatures: false,
 		languageFeaturesDetail: PENDING_DETAIL,
+		languageFeaturesPending: true,
 	});
 	assert.equal(clock.pending, 1);
 	assert.equal(clock.delays.at(-1), 60_000);

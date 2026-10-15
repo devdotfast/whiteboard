@@ -43,6 +43,7 @@ function decorate(
     available: {
       sourceWindows: features,
       ...(reason && { reason }),
+      ...(online && state.languageFeaturesPending && { pending: true }),
     },
   };
 }

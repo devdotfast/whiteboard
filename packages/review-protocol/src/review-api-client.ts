@@ -55,6 +55,7 @@ export interface ReviewApiSummary {
     sourceWindows: boolean;
     /** Why they are off: the host's sentence, or its language features detail. */
     reason?: string;
+    pending?: true;
   };
 }
 

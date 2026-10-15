@@ -201,6 +201,14 @@ it("says why Source windows are off: the host's sentence while it is down, else 
           detail: "Permission denied.",
         },
         { alias: "e", serverId: "E", state: "online", detail: "stale" },
+        {
+          alias: "f",
+          serverId: "F",
+          state: "online",
+          languageFeatures: false,
+          languageFeaturesDetail: "Installing the language extensions.",
+          languageFeaturesPending: true,
+        },
       ],
       {
         A: [entry("on a")],
@@ -208,18 +216,24 @@ it("says why Source windows are off: the host's sentence while it is down, else 
         C: [entry("on c")],
         D: [entry("on d")],
         E: [entry("on e")],
+        F: [entry("on f")],
       },
-      ["A", "B"],
+      ["A", "B", "F"],
     ),
   );
 
   expect(
-    merged.map((review) => [review.host, review.available?.reason]),
+    merged.map((review) => [
+      review.host,
+      review.available?.reason,
+      review.available?.pending,
+    ]),
   ).toEqual([
-    ["a", undefined],
-    ["b", "The Whiteboard on b has no VS Code server."],
-    ["c", "c offline."],
-    ["d", "Permission denied."],
-    ["e", "e offline."],
+    ["a", undefined, undefined],
+    ["b", "The Whiteboard on b has no VS Code server.", undefined],
+    ["c", "c offline.", undefined],
+    ["d", "Permission denied.", undefined],
+    ["e", "e offline.", undefined],
+    ["f", "Installing the language extensions.", true],
   ]);
 });

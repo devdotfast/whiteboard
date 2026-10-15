@@ -214,6 +214,7 @@ it("shows Desktop's language features on an online host, and keeps the host onli
       endpoint: fake.endpoint,
       languageFeatures: false,
       languageFeaturesDetail: detail,
+      languageFeaturesPending: true,
     },
   ]);
 
@@ -221,6 +222,7 @@ it("shows Desktop's language features on an online host, and keeps the host onli
   expect(gateway.states()[0]).toMatchObject({
     languageFeatures: false,
     languageFeaturesDetail: detail,
+    languageFeaturesPending: true,
   });
 
   const languageGroups = [
@@ -246,6 +248,7 @@ it("shows Desktop's language features on an online host, and keeps the host onli
     languageGroups,
   });
   expect(gateway.states()[0]?.languageFeaturesDetail).toBeUndefined();
+  expect(gateway.states()[0]?.languageFeaturesPending).toBeUndefined();
   expect(gateway.online().map((host) => host.alias)).toEqual(["devbox"]);
 });
 

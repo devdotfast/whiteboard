@@ -94,6 +94,23 @@ export function ConnectionChip() {
   );
 }
 
+/** Shown while a remote review's language server starts. */
+export function LanguageServerChip({ host }: { host: string }) {
+  if (useContext(ConnectionContext)) return null;
+
+  return (
+    <span
+      {...withClass("language-server-chip", styles.chip, styles.neutral)}
+      role="status"
+    >
+      <span {...stylex.props(styles.text)}>
+        Starting language server on {host}
+      </span>
+      <Spinner />
+    </span>
+  );
+}
+
 /** A host's next step as a button; `failure` says why the last one failed. */
 export function useHostActionButton(
   hosts: ReviewRemoteHostActions | undefined,
@@ -178,6 +195,11 @@ const styles = stylex.create({
     color: tokens.changeModified,
     font: `${fontWeight.semibold} ${fontSize.small} ${tokens.fontMono}`,
     whiteSpace: "nowrap",
+  },
+  neutral: {
+    borderColor: tokens.chromeBorder,
+    backgroundColor: tokens.transparent,
+    color: tokens.chromeFgMuted,
   },
   // A long alias ends in an ellipsis; the tooltip has it all.
   text: {

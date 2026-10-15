@@ -184,7 +184,7 @@ export function languageCommitMismatch(alias: string, serverCommit: string, desk
 	return `language features need the same Whiteboard version on ${alias}: its Whiteboard server runs ${serverCommit.slice(0, 7)}, this Desktop ${desktopCommit.slice(0, 7)}`;
 }
 
-type LanguageFeatures = Pick<ReviewGatewayHost, "languageFeatures" | "languageFeaturesDetail">;
+type LanguageFeatures = Pick<ReviewGatewayHost, "languageFeatures" | "languageFeaturesDetail" | "languageFeaturesPending">;
 
 const groupsOf = ({ languageGroups }: ReviewRemoteAttach): Pick<ReviewGatewayHost, "languageGroups"> =>
 	languageGroups.length > 0 ? { languageGroups: [...languageGroups] } : {};
@@ -828,7 +828,7 @@ export class ReviewRemoteHost {
 		this.language = undefined;
 		const server = attach.languageServer;
 		const unavailable = (detail: string): LanguageFeatures => ({ languageFeatures: false, languageFeaturesDetail: detail });
-		if (!server) return unavailable(attach.languageServerDetail ?? "This host has no language server.");
+		if (!server) return { ...unavailable(attach.languageServerDetail ?? "This host has no language server."), ...(attach.languageServerPending && { languageFeaturesPending: true }) };
 		const mismatch = languageCommitMismatch(this.alias, server.commit, this.options.desktopCommit);
 		if (mismatch) return unavailable(mismatch);
 		const port = await this.openForward(env, server.port, stale);
