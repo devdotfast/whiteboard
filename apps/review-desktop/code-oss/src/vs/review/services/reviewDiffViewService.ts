@@ -30,6 +30,8 @@ import type {
 } from "../common/reviewProtocol.js";
 import { ReviewDiffLayoutSetting } from "./reviewDiffLayout.js";
 import { markReviewEmbeddedEditor } from "./reviewEmbeddedNavigation.js";
+import { markReviewDefinitionPeekHost } from "./reviewDefinitionPeek.js";
+import { sourceLocation } from "../common/reviewSourceView.js";
 import { ReviewFilesDiffView, ReviewFilesEditorInput, type ReviewFilesEditorEntry } from "./reviewFilesDiffView.js";
 import { ReviewEmbeddedEditors } from "./reviewEmbeddedEditors.js";
 
@@ -206,6 +208,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 
 	private readonly ready: Promise<void>;
 	private findIndex: DiffFindIndex | undefined;
+	private diffEntries: readonly ReviewFilesEditorEntry[] = [];
 	private matches: DiffFindMatch[] = [];
 	private findGeneration = 0;
 	private readonly decorations: ReviewFindDecorations;
@@ -277,6 +280,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 				? store.add(new StructuralViewedState(session, entries, () => this.progress, this.progressChanged.event)) : undefined;
 			const structural = session && structuralEnabled ? createStructuralDiffEditors(this.instantiationService, entries, store, session, viewed)
 				: { instantiation: this.instantiationService, entries };
+			this.diffEntries = structural.entries;
 
 			if (this.disposed) return;
 			const lens = this.spec.lens;
@@ -310,6 +314,8 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 			);
 			this.view = view;
 			view.viewedScope = lens && !lens.wholeFiles && !this.spec.document ? 'lens' : undefined;
+			// Not the active control: it follows scrolling, not focus.
+			if (!this.spec.document) store.add(markReviewDefinitionPeekHost(this.spec.container, resource => this.peekDiff(resource)));
 			if (this.progress) view.setProgress(this.progress);
 			if (structuralEnabled) view.startLoading(selected);
 			store.add(view.onDidChangeActiveControl(() => this.bindActiveControl(view)));
@@ -378,6 +384,12 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 				}));
 			}
 		}
+	}
+
+	private peekDiff(resource: URI): { original: URI; modified: URI } | undefined {
+		const { file, side } = sourceLocation(resource);
+		const entry = this.diffEntries.find(entry => entry.file.status !== "unchanged" && file === (side === "base" ? entry.file.previousPath ?? entry.file.path : entry.file.path));
+		return entry?.original && entry.modified ? { original: entry.original, modified: entry.modified } : undefined;
 	}
 
 	captureViewState(): void {
