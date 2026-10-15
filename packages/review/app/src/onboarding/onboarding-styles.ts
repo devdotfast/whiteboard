@@ -1,5 +1,4 @@
 import {
-  elevation,
   fontSize,
   fontWeight,
   motion,
@@ -236,13 +235,10 @@ export const onboardingStyles = stylex.create({
     paddingTop: "40px",
   },
   primary: {
-    gap: "10px",
-    height: "auto",
-    paddingBlock: "14px",
-    paddingInline: "24px 22px",
-    borderRadius: radius.surface,
-    fontSize: fontSize.reading,
-    boxShadow: { default: elevation.popover, ":disabled": "none" },
+    gap: "8px",
+    height: "36px",
+    paddingInline: "16px 14px",
+    fontSize: fontSize.ui,
   },
   keyHint: {
     color: tokens.inkFaint,
