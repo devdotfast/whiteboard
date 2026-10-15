@@ -219,8 +219,18 @@ jobs:
             --commit "$BUILD_SOURCEVERSION" --fingerprint "$FINGERPRINT" --channel "$CHANNEL"
           find apps/review-desktop/dist/linux-repository -name '*.rpm' -exec cp {} apps/review-desktop/dist/linux/ \;
           find apps/review-desktop/dist/linux-repository -path '*/repos*/arch/x86_64/*.pkg.tar.zst.sig' -exec cp {} apps/review-desktop/dist/linux/ \;
-          tar --zstd -cf apps/review-desktop/dist/linux/linux-publication.tar.zst -C apps/review-desktop/dist/linux-repository .
-      - name: Upload Linux artifacts
+          mkdir -p apps/review-desktop/dist/linux-publication
+          tar --zstd -cf apps/review-desktop/dist/linux-publication/linux-publication.tar.zst -C apps/review-desktop/dist/linux-repository .
+      # Validation and R2 publishing read only the sealed publication; the loose
+      # packages are for GitHub Release attachments.
+      - name: Upload Linux publication
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.artifact_name }}-publication
+          path: apps/review-desktop/dist/linux-publication/linux-publication.tar.zst
+          retention-days: 7
+          compression-level: 0
+      - name: Upload Linux packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.artifact_name }}
@@ -254,7 +264,7 @@ jobs:
           ref: ${{ github.workflow_sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ inputs.artifact_name }}
+          name: ${{ inputs.artifact_name }}-publication
           path: linux-packages
       - name: Validate clean installs and rejected signatures
         env:

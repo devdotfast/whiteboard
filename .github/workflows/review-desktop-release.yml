@@ -392,9 +392,8 @@ jobs:
         run: |
           source apps/review-desktop/scripts/code-oss-dependencies.sh
           ensure_code_oss_dependencies "$PWD/apps/review-desktop" "$PWD/apps/review-desktop/code-oss"
-          for t in linux-x64 linux-arm64; do
-            node apps/review-desktop/scripts/build-remote-tarball.mjs --target "$t" --out remote-artifacts --version "$VERSION" --commit "$COMMIT"
-          done
+          node apps/review-desktop/scripts/build-remote-tarball.mjs --target linux-x64 --target linux-arm64 \
+            --out remote-artifacts --version "$VERSION" --commit "$COMMIT"
           cp packages/review/remote/install.sh remote-artifacts/install.sh
       # Release assets, then R2, then the pin: a rerun that finds the tarballs on
       # R2 skips both uploads, and no Desktop build may pin a tarball R2 lacks.

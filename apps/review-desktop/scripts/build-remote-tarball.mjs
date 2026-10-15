@@ -324,6 +324,8 @@ export async function buildRemoteTarball({
   cacheDir = DEFAULT_CACHE,
   compression = 6,
   stdio = "inherit",
+  // Another target in this process already built the shared packages and runtime.
+  prebuilt = false,
 }) {
   if (!REMOTE_TARGETS.includes(target))
     throw new Error(`${target} is not one of ${REMOTE_TARGETS.join(", ")}`);
@@ -338,15 +340,16 @@ export async function buildRemoteTarball({
   await mkdir(stage, { recursive: true });
 
   try {
-    execFileSync("pnpm", ["--filter", "@dev.fast/whiteboard", "build"], {
-      cwd: monorepoRoot,
-      stdio,
-    });
+    if (!prebuilt)
+      execFileSync("pnpm", ["--filter", "@dev.fast/whiteboard", "build"], {
+        cwd: monorepoRoot,
+        stdio,
+      });
 
     await bundleCli(stage);
     await installSidecar(stage, target, stdio);
 
-    await buildRemoteRuntime({ commit });
+    if (!prebuilt) await buildRemoteRuntime({ commit });
     await stageVscodeServer(stage, { commit });
     await pruneVscodeServerArch(stage, target);
 
@@ -458,7 +461,7 @@ export async function buildDevRemoteTarball({
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const { values } = parseArgs({
     options: {
-      target: { type: "string" },
+      target: { type: "string", multiple: true },
       out: { type: "string" },
       version: { type: "string" },
       commit: { type: "string" },
@@ -470,19 +473,22 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
 
   if (!values.target || !values.out || !version || !commit)
     throw new Error(
-      "usage: build-remote-tarball.mjs --target <linux-x64|linux-arm64> --out <dir> --version <v> --commit <sha> [--cache <dir>]",
+      "usage: build-remote-tarball.mjs --target <linux-x64|linux-arm64>... --out <dir> --version <v> --commit <sha> [--cache <dir>]",
     );
 
   const cache = process.env.REVIEW_REMOTE_BUILD_CACHE || values.cache;
 
-  const result = await buildRemoteTarball({
-    target: values.target,
-    out: values.out,
-    version,
-    commit,
-    cacheDir: cache ? path.resolve(cache) : undefined,
-    stdio: ["ignore", process.stderr, process.stderr],
-  });
+  for (const [index, target] of values.target.entries()) {
+    const result = await buildRemoteTarball({
+      target,
+      out: values.out,
+      version,
+      commit,
+      cacheDir: cache ? path.resolve(cache) : undefined,
+      stdio: ["ignore", process.stderr, process.stderr],
+      prebuilt: index > 0,
+    });
 
-  console.log(JSON.stringify(result));
+    console.log(JSON.stringify(result));
+  }
 }

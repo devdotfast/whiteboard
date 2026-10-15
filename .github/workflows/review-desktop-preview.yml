@@ -206,9 +206,8 @@ jobs:
         run: |
           source apps/review-desktop/scripts/code-oss-dependencies.sh
           ensure_code_oss_dependencies "$PWD/apps/review-desktop" "$PWD/apps/review-desktop/code-oss"
-          for t in linux-x64 linux-arm64; do
-            node apps/review-desktop/scripts/build-remote-tarball.mjs --target "$t" --out remote-artifacts --version "$VERSION" --commit "$COMMIT"
-          done
+          node apps/review-desktop/scripts/build-remote-tarball.mjs --target linux-x64 --target linux-arm64 \
+            --out remote-artifacts --version "$VERSION" --commit "$COMMIT"
           cp packages/review/remote/install.sh remote-artifacts/install.sh
       # Payloads before the pin: no Desktop build may pin a tarball R2 lacks.
       - name: Upload the remote tarballs to R2

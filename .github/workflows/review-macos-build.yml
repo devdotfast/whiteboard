@@ -369,19 +369,24 @@ jobs:
           rm -f "$RUNNER_TEMP/notary-key.p8"
 
   publish:
-    name: Publish macOS
+    name: Publish macOS (${{ matrix.target }})
     needs: package
     if: ${{ inputs.publish }}
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [darwin-arm64, darwin-x64]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
       CHANNEL: ${{ inputs.channel }}
+      TARGET: ${{ matrix.target }}
       RELEASE_VERSION: ${{ inputs.version }}
       RELEASE_COMMIT: ${{ inputs.commit }}
       RELEASE_TAG: ${{ inputs.release_tag }}
       LATEST: ${{ inputs.channel == 'preview' && 'releases/preview-latest' || 'releases/latest' }}
-      DOWNLOAD: ${{ inputs.channel == 'preview' && 'df-whiteboard-preview' || 'df-whiteboard' }}
+      DMG_NAME: ${{ inputs.channel == 'preview' && 'df-whiteboard-preview' || 'df-whiteboard' }}-${{ inputs.version }}-${{ matrix.target == 'darwin-arm64' && 'arm64' || 'x64' }}.dmg
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -389,12 +394,12 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           digest-mismatch: warn
-          pattern: macos-*
+          name: macos-${{ matrix.target }}
           path: dist
 
       # Payloads first, aliases last: a client must never see a latest.json
-      # whose zip is not yet downloadable, on either arch. The latest/ keys are
-      # version-free, so the version rides in the name a download is saved as.
+      # whose zip is not yet downloadable. The latest/ keys are version-free,
+      # so the version rides in the name a download is saved as.
       - name: Upload to R2
         id: upload
         env:
@@ -404,77 +409,63 @@ jobs:
           AWS_REGION: auto
           R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
         run: |
-          for dir in dist/macos-*; do
-            target="${dir#dist/macos-}"
-            RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/${target}"
-            for zip in "$dir"/*-"${target}"-"${RELEASE_VERSION}".zip; do
-              aws s3 cp "$zip" "${RELEASE_PREFIX}/$(basename "$zip")" \
-                --content-type application/zip
-            done
-            aws s3 cp "$dir/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
-              "${RELEASE_PREFIX}/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
-              --content-type application/x-apple-diskimage \
-              --content-disposition "attachment; filename=\"${DOWNLOAD}-${RELEASE_VERSION}-${target#darwin-}.dmg\""
+          RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/${TARGET}"
+          for zip in dist/*-"${TARGET}"-"${RELEASE_VERSION}".zip; do
+            aws s3 cp "$zip" "${RELEASE_PREFIX}/$(basename "$zip")" \
+              --content-type application/zip
           done
-
-          for dir in dist/macos-*; do
-            target="${dir#dist/macos-}"
-            node apps/review-desktop/scripts/promote-release-aliases.mjs \
-              --bucket "$R2_BUCKET" --version "$RELEASE_VERSION" \
-              "$dir/Whiteboard-${target}-${RELEASE_VERSION}.dmg=${LATEST}/${target}/Whiteboard.dmg=${DOWNLOAD}-${RELEASE_VERSION}-${target#darwin-}.dmg" \
-              "$dir/latest.json=update/${CHANNEL}/${target}/latest.json"
-          done
+          DMG="dist/Whiteboard-${TARGET}-${RELEASE_VERSION}.dmg"
+          aws s3 cp "$DMG" "${RELEASE_PREFIX}/$(basename "$DMG")" \
+            --content-type application/x-apple-diskimage \
+            --content-disposition "attachment; filename=\"${DMG_NAME}\""
+          node apps/review-desktop/scripts/promote-release-aliases.mjs \
+            --bucket "$R2_BUCKET" --version "$RELEASE_VERSION" \
+            "s3:releases/${RELEASE_VERSION}/${TARGET}/$(basename "$DMG")=${LATEST}/${TARGET}/Whiteboard.dmg=${DMG_NAME}" \
+            "dist/latest.json=update/${CHANNEL}/${TARGET}/latest.json"
 
       - name: Verify update feed
         if: steps.upload.outputs.moved == 'true'
         env:
           BUNDLE: ${{ inputs.channel == 'preview' && 'Whiteboard%20Preview' || 'Whiteboard' }}
+          # Intel clients send plain darwin.
+          FEED_ID: ${{ matrix.target == 'darwin-arm64' && 'darwin-arm64' || 'darwin' }}
         run: |
-          FEED="https://update.dev.fast/api/update"
+          FEED="https://update.dev.fast/api/update/${FEED_ID}/${CHANNEL}"
           ZERO=0000000000000000000000000000000000000000
-          echo "Feed for an outdated client (expect 200 with ${RELEASE_VERSION}):"
-          RESPONSE=$(curl -sf "${FEED}/darwin-arm64/${CHANNEL}/${ZERO}")
+          echo "Feed for an outdated Whiteboard install (expect 200 with ${RELEASE_VERSION}):"
+          RESPONSE=$(curl -sf "${FEED}/${ZERO}?bundle=${BUNDLE}")
           echo "$RESPONSE"
           echo "$RESPONSE" | grep -F "\"productVersion\":\"${RELEASE_VERSION}\""
           echo "$RESPONSE" | grep -F "\"version\":\"${RELEASE_COMMIT}\""
-          echo "$RESPONSE" | grep -F "/Review-darwin-arm64-${RELEASE_VERSION}.zip"
+          echo "$RESPONSE" | grep -F "/Whiteboard-${TARGET}-${RELEASE_VERSION}.zip"
 
-          echo "Feed for a Whiteboard install (expect the Whiteboard zip):"
-          curl -sf "${FEED}/darwin-arm64/${CHANNEL}/${ZERO}?bundle=${BUNDLE}" \
-            | grep -F "/Whiteboard-darwin-arm64-${RELEASE_VERSION}.zip"
+          if [ "$TARGET" = darwin-arm64 ]; then
+            echo "Feed for a Review.app install (expect the Review zip):"
+            curl -sf "${FEED}/${ZERO}" | grep -F "/Review-darwin-arm64-${RELEASE_VERSION}.zip"
+          fi
 
           echo "Feed for the just-released commit (expect 204):"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${FEED}/darwin-arm64/${CHANNEL}/${RELEASE_COMMIT}")
-          echo "$STATUS"
-          test "$STATUS" = "204"
-
-          echo "Intel feed (clients send plain darwin):"
-          curl -sf "${FEED}/darwin/${CHANNEL}/${ZERO}?bundle=${BUNDLE}" \
-            | grep -F "/Whiteboard-darwin-x64-${RELEASE_VERSION}.zip"
-          test "$(curl -s -o /dev/null -w '%{http_code}' "${FEED}/darwin/${CHANNEL}/${RELEASE_COMMIT}")" = 204
+          test "$(curl -s -o /dev/null -w '%{http_code}' "${FEED}/${RELEASE_COMMIT}")" = 204
 
       - name: Verify install landing
         env:
           LANDING: ${{ inputs.channel == 'preview' && 'https://install.dev.fast/preview' || 'https://install.dev.fast/' }}
         run: |
-          echo "${LANDING} (expect 302 to the disk image):"
-          LOCATION=$(curl -s -o /dev/null -w "%{redirect_url}" "$LANDING")
-          echo "$LOCATION"
-          test "$LOCATION" = "https://install.dev.fast/${LATEST}/darwin-arm64/Whiteboard.dmg"
-
-          echo "Following it (expect 200 and a disk image):"
-          curl -sfL -o /dev/null -w "%{http_code} %{content_type}\n" "$LANDING" \
-            | grep -F "200 application/x-apple-diskimage"
-
-          echo "Intel disk image (expect a disk image):"
-          curl -sfI "https://install.dev.fast/${LATEST}/darwin-x64/Whiteboard.dmg" | grep -i "content-type: application/x-apple-diskimage"
+          if [ "$TARGET" = darwin-arm64 ]; then
+            echo "${LANDING} (expect 302 to the disk image):"
+            LOCATION=$(curl -s -o /dev/null -w "%{redirect_url}" "$LANDING")
+            echo "$LOCATION"
+            test "$LOCATION" = "https://install.dev.fast/${LATEST}/darwin-arm64/Whiteboard.dmg"
+          fi
+          echo "Latest ${TARGET} disk image (expect a disk image):"
+          curl -sfI "https://install.dev.fast/${LATEST}/${TARGET}/Whiteboard.dmg" | grep -i "content-type: application/x-apple-diskimage"
 
       # The first platform to publish takes the release out of draft.
-      - name: Attach DMGs and publish the GitHub Release
+      - name: Attach the DMG and publish the GitHub Release
         if: inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-            dist/macos-*/Whiteboard-*-"${RELEASE_VERSION}".dmg
+            "dist/Whiteboard-${TARGET}-${RELEASE_VERSION}.dmg"
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false

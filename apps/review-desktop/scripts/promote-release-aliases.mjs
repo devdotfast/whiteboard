@@ -1,8 +1,9 @@
 // Moves a platform's latest aliases (download links, update manifest) to a
 // release, unless they already name a newer one. Each argument is
-// FILE=KEY[=DOWNLOAD_NAME]; the last key is the pointer that decides, written
-// last and only if nobody moved it since it was read. Sets the step output
-// moved=true when it moved them.
+// SOURCE=KEY[=DOWNLOAD_NAME], where SOURCE is a local file or s3:<key> for an
+// object already in the bucket, copied without a re-upload. The last key is the
+// pointer that decides, a local file; the other aliases follow it. Sets the
+// step output moved=true when it moved them.
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -52,58 +53,91 @@ function s3api(...args) {
 
 const notFound = (error) => /Not Found|NoSuchKey|\(404\)/.test(error.message);
 
+const preconditionFailed = (error) => /PreconditionFailed|\(412\)/.test(error.message);
+
+const VERSION_IN_NAME = /\d+\.\d+\.\d+(?:-preview\.\d{8}\.\d+)?/;
+
+// The pointer's current version and ETag, or undefined if it does not exist.
+function readPointer(aws, bucket, key) {
+  let head;
+
+  try {
+    head = aws("head-object", "--bucket", bucket, "--key", key);
+  } catch (error) {
+    if (notFound(error)) return undefined;
+    throw error;
+  }
+
+  // Aliases written before they carried a version still name it, in their
+  // download name or, for a manifest, its productVersion.
+  let current = head.Metadata?.version ?? VERSION_IN_NAME.exec(head.ContentDisposition ?? "")?.[0];
+
+  if (!current && key.endsWith(".json")) {
+    const dir = mkdtempSync(path.join(tmpdir(), "release-alias-"));
+
+    try {
+      const file = path.join(dir, "current.json");
+
+      aws("get-object", "--bucket", bucket, "--key", key, file);
+      const manifest = JSON.parse(readFileSync(file, "utf8"));
+
+      // macOS manifests carry it as productVersion, Windows ones as version.
+      current = manifest.productVersion ?? manifest.version;
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  return { current, etag: head.ETag };
+}
+
+function write(aws, bucket, version, object, condition = []) {
+  const disposition = object.downloadName
+    ? ["--content-disposition", `attachment; filename="${object.downloadName}"`]
+    : [];
+
+  const source = object.file.startsWith("s3:")
+    ? ["copy-object", "--copy-source", `${bucket}/${object.file.slice(3)}`, "--metadata-directive", "REPLACE"]
+    : ["put-object", "--body", object.file];
+
+  aws(
+    source[0],
+    "--bucket", bucket,
+    "--key", object.key,
+    ...source.slice(1),
+    "--content-type", CONTENT_TYPES[path.extname(object.key)] ?? "application/octet-stream",
+    "--metadata", `version=${version}`,
+    ...disposition,
+    ...condition,
+  );
+}
+
+// The pointer is written first and only if nobody moved it since it was read,
+// so a run that loses a race re-reads it instead of overwriting the others.
 export function promoteAliases({ bucket, version, objects, aws = s3api }) {
   versionOrder(version);
   const pointer = objects.at(-1);
-  let condition = ["--if-none-match", "*"];
 
-  try {
-    const head = aws("head-object", "--bucket", bucket, "--key", pointer.key);
-    let current = head.Metadata?.version;
+  if (pointer.file.startsWith("s3:")) throw new Error("The pointer must be a local file");
 
-    // Manifests written before aliases carried a version still name it.
-    if (!current && pointer.key.endsWith(".json")) {
-      const dir = mkdtempSync(path.join(tmpdir(), "release-alias-"));
+  for (let attempt = 1; ; attempt++) {
+    const state = readPointer(aws, bucket, pointer.key);
 
-      try {
-        const file = path.join(dir, "current.json");
-        aws("get-object", "--bucket", bucket, "--key", pointer.key, file);
-        const manifest = JSON.parse(readFileSync(file, "utf8"));
-
-        // macOS manifests carry it as productVersion, Windows ones as version.
-        current = manifest.productVersion ?? manifest.version;
-      } finally {
-        rmSync(dir, { recursive: true, force: true });
-      }
-    }
-
-    if (current && compareVersions(version, current) < 0) {
-      console.log(`${pointer.key} names ${current}, newer than ${version}; leaving it in place.`);
+    if (state?.current && compareVersions(version, state.current) < 0) {
+      console.log(`${pointer.key} names ${state.current}, newer than ${version}; leaving it in place.`);
 
       return false;
     }
 
-    condition = ["--if-match", head.ETag];
-  } catch (error) {
-    if (!notFound(error)) throw error;
+    try {
+      write(aws, bucket, version, pointer, state ? ["--if-match", state.etag] : ["--if-none-match", "*"]);
+      break;
+    } catch (error) {
+      if (!preconditionFailed(error) || attempt === 3) throw error;
+    }
   }
 
-  for (const object of objects) {
-    const disposition = object.downloadName
-      ? ["--content-disposition", `attachment; filename="${object.downloadName}"`]
-      : [];
-
-    aws(
-      "put-object",
-      "--bucket", bucket,
-      "--key", object.key,
-      "--body", object.file,
-      "--content-type", CONTENT_TYPES[path.extname(object.key)] ?? "application/octet-stream",
-      "--metadata", `version=${version}`,
-      ...disposition,
-      ...(object === pointer ? condition : []),
-    );
-  }
+  for (const object of objects.slice(0, -1)) write(aws, bucket, version, object);
 
   console.log(`Moved ${objects.map((object) => object.key).join(", ")} to ${version}.`);
 
@@ -117,7 +151,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   });
 
   if (!values.bucket || !values.version || positionals.length === 0)
-    throw new Error("usage: promote-release-aliases.mjs --bucket B --version V FILE=KEY[=DOWNLOAD_NAME]...");
+    throw new Error("usage: promote-release-aliases.mjs --bucket B --version V SOURCE=KEY[=DOWNLOAD_NAME]...");
 
   const objects = positionals.map((spec) => {
     const [file, key, downloadName] = spec.split("=");

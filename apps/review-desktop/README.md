@@ -148,11 +148,11 @@ patch/minor/major bump. The workflow:
    extension closure, staple and Gatekeeper checks, and packaged `product.json`
    commit/quality/updateUrl assertions), which also emits the `latest.json`
    feed manifest for that arch;
-5. once both legs pass, its `publish` job uploads to R2 in two passes — both
-   arches' zip and dmg payloads first, then the `latest.json` feeds and dmg
-   aliases — so a client can never see a manifest whose payload is missing;
-6. curls both live feeds to confirm the new release is served, attaches both
-   dmgs to the GitHub release, and publishes it.
+5. once both legs pass, a `publish` job per arch uploads its zip and dmg
+   payloads first, then its `latest.json` feed and dmg alias, so a client can
+   never see a manifest whose payload is missing;
+6. curls that arch's live feed to confirm the new release is served, attaches
+   the dmg to the GitHub release, and publishes it.
 
 Each platform publishes as soon as its own build passes; one failing platform
 does not hold back the others. Latest aliases and feeds only move forward

@@ -233,7 +233,7 @@ jobs:
           done
           node apps/review-desktop/scripts/promote-release-aliases.mjs \
             --bucket "$R2_BUCKET" --version "$RELEASE_VERSION" \
-            "windows-release/${SETUP}=${LATEST}/win32-x64/Whiteboard-Setup.exe=${SETUP}" \
+            "s3:releases/${RELEASE_VERSION}/win32-x64/${SETUP}=${LATEST}/win32-x64/Whiteboard-Setup.exe=${SETUP}" \
             "feeds/win32-x64.json=update/${CHANNEL}/win32-x64/latest.json" \
             "feeds/win32-x64-user.json=update/${CHANNEL}/win32-x64-user/latest.json"
       - name: Verify update feeds
