@@ -1,5 +1,4 @@
 import { orderReviewDiffFiles } from "../common/reviewChangedFilesModel.js";
-import { lensFiles } from "../common/reviewLensFiles.js";
 import { StructuralDiffClient } from "./reviewStructuralDiffClient.js";
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) dev.fast. All rights reserved.
@@ -25,7 +24,7 @@ import type {
 	ReviewSourceEntry,
 	ReviewApiSourceLocation,
 } from "../common/reviewProtocol.js";
-import { resolveReviewSourceView, reviewSourceAnchor, reviewSourceComparison, reviewSourceQuery, type ReviewSourceView } from "../common/reviewProtocol.js";
+import { lensDiffFiles, resolveReviewSourceView, reviewSourceAnchor, reviewSourceComparison, reviewSourceQuery, type ReviewSourceView } from "../common/reviewProtocol.js";
 import { REVIEW_LANGUAGE_SOURCE_SCHEME } from "../common/reviewReadonlySource.js";
 import { apiSourceUri, sourceLocation, sourceTreeUri, sourceTreeSelection, REVIEW_API_TREE_SCHEME, REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
 import { IReviewCanvasEditorTabsService } from "./reviewCanvasEditorTabsService.js";
@@ -265,8 +264,7 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 				// Capture the comparison once; live checkout bytes may change during the load.
 				const current = reviewSourceComparison(getView(), scope?.commit);
 				const comparisonFiles = await files(current);
-				const entries = lens ? lensFiles(comparisonFiles, lens).filter(file => lens.ranges.some(range =>
-					range.file === (range.side === "base" ? file.previousPath ?? file.path : file.path))) : orderReviewDiffFiles(comparisonFiles);
+				const entries = lens ? lensDiffFiles(comparisonFiles, lens) : orderReviewDiffFiles(comparisonFiles);
 
 				return {
 					session: openComparison(current),

@@ -128,3 +128,11 @@ test('folding an inline scope keeps its header inside a code peek', () => {
 	assert.ok(folded.some(gap => gap.foldStateId === 7));
 	assert.ok(!folded.some(gap => gap.label === 'Outside lens' && gap.modifiedStart <= 20 && gap.modifiedStart + gap.modifiedCount > 20));
 });
+
+test('an identical file exposes the referenced slice with three surrounding lines', () => {
+	const gaps = lensContextGaps({ changes: [], moves: [], identical: true, quitEarly: false }, 30, 30, [
+		{ file: 'context.ts', side: 'base', fromLine: 10, toLine: 12 },
+		{ file: 'context.ts', side: 'head', fromLine: 10, toLine: 12 },
+	]);
+	assert.deepEqual(gaps.map(gap => [gap.originalStart, gap.originalCount, gap.modifiedStart, gap.modifiedCount]), [[1, 6, 1, 6], [16, 15, 16, 15]]);
+});

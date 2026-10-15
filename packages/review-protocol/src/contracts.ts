@@ -1317,6 +1317,41 @@ export function summarizeReviewDiffFiles(
   );
 }
 
+/** Diagram evidence may provide context outside the comparison's changed-file list. */
+export function lensDiffFiles(
+  files: readonly ReviewDiffFileWire[],
+  lens: ReviewDiffLens,
+): readonly ReviewDiffFileWire[] {
+  const known = new Set(
+    files.flatMap((file) => [
+      file.path,
+      ...(file.previousPath ? [file.previousPath] : []),
+    ]),
+  );
+
+  const context: ReviewDiffFileWire[] = [];
+
+  if (!lens.wholeFiles)
+    for (const range of lens.ranges) {
+      if (known.has(range.file)) continue;
+      known.add(range.file);
+      context.push({
+        path: range.file,
+        status: "unchanged",
+        additions: 0,
+        deletions: 0,
+      });
+    }
+
+  return [...files, ...context].filter((file) =>
+    lens.ranges.some(
+      (range) =>
+        range.file ===
+        (range.side === "base" ? (file.previousPath ?? file.path) : file.path),
+    ),
+  );
+}
+
 export const ReviewDiffFilesRequestSchema = z.strictObject({
   includePatch: z.boolean().optional(),
   paths: z.array(z.string()).optional(),
