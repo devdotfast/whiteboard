@@ -139,9 +139,9 @@ patch/minor/major bump. The workflow:
    `vX.Y.Z`, and creates a draft GitHub release;
 2. compiles the platform-independent Code OSS, Review canvas, Review server,
    workspace packages, and pinned `darwin-arm64` and `darwin-x64` curated
-   extensions on Linux, then uploads one `darwin-payload` artifact;
-3. extracts that payload on two matrix legs, `darwin-arm64` on `macos-15-xlarge`
-   and `darwin-x64` on `macos-15-large`, performs only the native Darwin
+   extensions on Linux, then uploads a `darwin-payload` artifact per arch;
+3. extracts that payload on `macos-15-xlarge` (`darwin-arm64`) or
+   `macos-15-large` (`darwin-x64`), performs only the native Darwin
    package assembly, stages the runtime, tools, and extensions, then signs and
    notarizes via `app:package:macos`;
 4. gates the upload with `scripts/validate-release-artifacts.mjs` (curated
@@ -176,7 +176,8 @@ makes no version bump, tag, or new GitHub release. Linux packages are not
 byte-for-byte reproducible, so a Linux publish that failed partway is recovered
 by re-running its failed jobs, not by a backfill.
 
-The `platforms` input picks `all` (the default), `macos`, `linux` or `windows`.
+The `platforms` input picks `all` (the default), `macos-arm64`, `macos-x64`,
+`linux` or `windows`. The two Mac arches build, publish and backfill on their own.
 Windows builds in parallel with the Darwin payload and the Linux packages
 (`review-windows-build.yml` on the 16-core `review_big_boy_windows` runner) and
 signs every binary and installer with Azure Artifact Signing through the
