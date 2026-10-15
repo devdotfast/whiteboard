@@ -599,9 +599,9 @@ export function ApiCanvas({
               {error ?? `Connection lost. Reconnecting… ${lost}`}
             </p>
             {version !== undefined && (
-              <button onClick={() => setVersion(undefined)}>
+              <Button onClick={() => setVersion(undefined)}>
                 Back to latest version
-              </button>
+              </Button>
             )}
           </>
         ) : null}
