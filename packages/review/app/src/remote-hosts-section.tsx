@@ -3,7 +3,7 @@ import { DisclosureChevron, RefreshIcon } from "@canvas/icons";
 import { fontSize } from "@canvas/scale.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
-import { CopyableText } from "@canvas/ui/copy";
+import { CopyableText, useCopy } from "@canvas/ui/copy";
 import { useUiTooltip } from "@canvas/ui/host";
 import { TextField } from "@canvas/ui/text-field";
 import {
@@ -373,8 +373,20 @@ function AgentItem({
   const label = REVIEW_CLI_INSTALL_TARGET_LABELS[agent.id];
   const verb = agent.connected ? "Reconnect" : "Connect";
 
+  const [copied, copy] = useCopy(
+    `Run \`whiteboard connect ${agent.id}\` and follow the instructions to connect this agent to Whiteboard.`,
+  );
+
   return (
     <Item name={label} text={agent.connected ? "connected" : "not connected"}>
+      {agent.connected ? null : (
+        <Button
+          aria-label={`Copy a prompt for ${label} on ${alias}`}
+          onClick={copy}
+        >
+          {copied ? "Copied" : "Copy prompt"}
+        </Button>
+      )}
       <Button
         aria-label={`${verb} ${label} on ${alias}`}
         disabled={busy}
@@ -663,6 +675,7 @@ const local = stylex.create({
   itemAction: {
     display: "flex",
     justifyContent: "flex-end",
+    gap: "8px",
   },
   wide: {
     gridColumn: "1 / -1",

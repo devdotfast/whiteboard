@@ -110,7 +110,15 @@ const lines = (index: number, group: string) =>
     ),
   ].map((item) =>
     item.tagName === "DIV"
-      ? [...item.children].flatMap((part) => part.textContent || []).join(" · ")
+      ? [...item.children]
+          .flatMap((part) =>
+            part.tagName === "SPAN" && part.querySelector("button")
+              ? [...part.querySelectorAll("button")].map(
+                  (button) => button.textContent,
+                )
+              : part.textContent || [],
+          )
+          .join(" · ")
       : item.textContent,
   );
 
@@ -379,7 +387,7 @@ test("shows the install step, offers Install to a declined host, and Retry after
   expect(hosts.retry).toHaveBeenCalledWith("box3");
 });
 
-test("lists an online host's agents by Desktop's names, connects or reconnects each, and shows the result as plain text", async () => {
+test("lists an online host's agents by Desktop's names, connects or reconnects each, offers a prompt to copy, and shows the result as plain text", async () => {
   const hosts = remoteHosts(
     ["box1", "box2"],
     [
@@ -407,13 +415,24 @@ test("lists an online host's agents by Desktop's names, connects or reconnects e
   await vi.waitFor(() =>
     expect(lines(0, "Agents")).toEqual([
       "Claude Code · connected · Reconnect",
-      "Codex · not connected · Connect",
-      "OpenCode · not connected · Connect",
+      "Codex · not connected · Copy prompt · Connect",
+      "OpenCode · not connected · Copy prompt · Connect",
     ]),
   );
   expect(hosts.agents).toHaveBeenCalledWith("box1");
   expect(hosts.agents).not.toHaveBeenCalledWith("box2");
   expect(hosts.connectAgents).not.toHaveBeenCalled();
+
+  const writeText = vi
+    .spyOn(navigator.clipboard, "writeText")
+    .mockResolvedValue();
+
+  await page
+    .getByRole("button", { name: "Copy a prompt for OpenCode on box1" })
+    .click();
+  expect(writeText).toHaveBeenCalledWith(
+    "Run `whiteboard connect opencode` and follow the instructions to connect this agent to Whiteboard.",
+  );
 
   await page.getByRole("button", { name: "Connect Codex on box1" }).click();
   expect(hosts.connectAgents).toHaveBeenCalledWith("box1", ["codex"]);
@@ -449,7 +468,9 @@ test("looks for an online host's agents again, busy until the answer, and says w
 
   await render(hosts);
   await vi.waitFor(() =>
-    expect(lines(0, "Agents")).toEqual(["Codex · not connected · Connect"]),
+    expect(lines(0, "Agents")).toEqual([
+      "Codex · not connected · Copy prompt · Connect",
+    ]),
   );
 
   const again = page.getByRole("button", {
