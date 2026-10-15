@@ -102,13 +102,12 @@ jobs:
           fi
 
   remote:
-    name: Publish remote tarballs and npm package
+    name: Publish remote tarballs
     needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
       contents: read
-      id-token: write
     outputs:
       whiteboard_remote: ${{ steps.remote.outputs.whiteboard_remote }}
     env:
@@ -122,26 +121,9 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .nvmrc
-          registry-url: https://registry.npmjs.org
           cache: pnpm
       - name: Install build dependencies
         run: pnpm install --frozen-lockfile
-      - name: Resolve dist-tag and publication state
-        id: npm
-        env:
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          DIST_TAG=$(node scripts/review-cli-release.mjs dist-tag "$VERSION")
-          if PUBLISHED=$(node scripts/review-cli-release.mjs published "$VERSION" "$COMMIT"); then
-            :
-          elif [ "$DRY_RUN" = true ]; then
-            echo "::warning::@dev.fast/whiteboard@${VERSION} exists on npm from another commit, or the registry check failed (see above); this dry run skips publish validation."
-            PUBLISHED=true
-          else
-            exit 1
-          fi
-          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
-          echo "published=$PUBLISHED" >> "$GITHUB_OUTPUT"
       - name: Install Code OSS native build prerequisites
         run: |
           # The hosted runner image lists an HTTP Azure mirror first. That
@@ -223,6 +205,46 @@ jobs:
         run: |
           PIN=$(node apps/review-desktop/scripts/stamp-remote-artifacts.mjs remote-artifacts "$VERSION" "https://install.dev.fast/releases/${VERSION}/remote")
           echo "whiteboard_remote=$PIN" >> "$GITHUB_OUTPUT"
+
+  npm:
+    name: Publish npm package
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      COMMIT: ${{ needs.version.outputs.commit }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.version.outputs.commit }}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+      - name: Install build dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Resolve dist-tag and publication state
+        id: npm
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          DIST_TAG=$(node scripts/review-cli-release.mjs dist-tag "$VERSION")
+          if PUBLISHED=$(node scripts/review-cli-release.mjs published "$VERSION" "$COMMIT"); then
+            :
+          elif [ "$DRY_RUN" = true ]; then
+            echo "::warning::@dev.fast/whiteboard@${VERSION} exists on npm from another commit, or the registry check failed (see above); this dry run skips publish validation."
+            PUBLISHED=true
+          else
+            exit 1
+          fi
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "published=$PUBLISHED" >> "$GITHUB_OUTPUT"
       - name: Build release tarball
         run: |
           jq -n --arg version "$VERSION" --arg commit "$COMMIT" '{$version, $commit}' > release-plan.json
