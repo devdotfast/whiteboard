@@ -20,7 +20,7 @@ import type {
   ReviewOnboardingTargetsResponse,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { OnboardingClient, OnboardingRunAgent } from "./onboarding-client";
 import { type BackLink, ScreenHeader } from "./onboarding-parts";
@@ -100,6 +100,11 @@ export function defaultPrompt(target: ReviewOnboardingTarget): string {
     : `Draw a whiteboard that walks me through ${target.branch}.`;
 }
 
+/** A folder's own name, on any platform's separators. */
+function folderName(folder: string) {
+  return folder.split(/[\\/]/).filter(Boolean).at(-1) ?? folder;
+}
+
 /** The name of the folder holding `folder`, on any platform's separators. */
 function parentName(folder: string) {
   return folder.split(/[\\/]/).filter(Boolean).at(-2) ?? folder;
@@ -128,6 +133,11 @@ export function RunStep({
   const [discovered, setDiscovered] =
     useState<ReviewOnboardingTargetsResponse>();
 
+  // The project being drawn from, shown as soon as it is chosen; its targets
+  // follow in `discovered`.
+  const [project, setProject] = useState<ReviewOnboardingProject>();
+  const opening = useRef(0);
+
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<string>();
   const [query, setQuery] = useState("");
@@ -141,12 +151,19 @@ export function RunStep({
   const [refreshing, setRefreshing] = useState(false);
 
   const open = useCallback(
-    async (directory: string) => {
+    async (chosen: ReviewOnboardingProject) => {
+      // Only the latest choice lands, however the answers arrive.
+      const attempt = ++opening.current;
+
+      setProject(chosen);
+      setDiscovered(undefined);
       setLoading(true);
       setError(undefined);
 
       try {
-        const next = await client.targets(directory);
+        const next = await client.targets(chosen.path);
+
+        if (attempt !== opening.current) return;
 
         // A checkout of the base branch has nothing to draw against it;
         // start from the first target that has.
@@ -155,6 +172,7 @@ export function RunStep({
             (target) => target.kind !== "branch" || target.branch !== next.base,
           ) ?? next.targets[0];
 
+        setProject(next.project);
         setDiscovered(next);
         setSelected(first ? targetKey(first) : undefined);
         setQuery("");
@@ -162,10 +180,11 @@ export function RunStep({
         setEdited(false);
         setPrompt(first ? defaultPrompt(first) : "");
       } catch (cause) {
+        if (attempt !== opening.current) return;
         setError(cause instanceof Error ? cause.message : String(cause));
-      } finally {
-        setLoading(false);
       }
+
+      if (attempt === opening.current) setLoading(false);
     },
     [client],
   );
@@ -174,12 +193,16 @@ export function RunStep({
   // agents move branches and worktrees. The choice, filter and prompt stay.
   const refresh = useCallback(async () => {
     if (!discovered) return;
+    // A project chosen meanwhile wins over this answer.
+    const attempt = opening.current;
+
     setRefreshing(true);
     setError(undefined);
 
     try {
       const next = await client.targets(discovered.project.path);
 
+      if (attempt !== opening.current) return;
       setDiscovered(next);
       setSelected((current) =>
         next.targets.some((candidate) => targetKey(candidate) === current)
@@ -187,7 +210,8 @@ export function RunStep({
           : undefined,
       );
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : String(cause));
+      if (attempt === opening.current)
+        setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setRefreshing(false);
     }
@@ -196,7 +220,7 @@ export function RunStep({
   const pickFolder = useCallback(async () => {
     const folder = await setupActions.pickFolder();
 
-    if (folder) await open(folder);
+    if (folder) await open({ path: folder, name: folderName(folder) });
   }, [open, setupActions]);
 
   useEffect(() => {
@@ -216,7 +240,7 @@ export function RunStep({
         setAgents(available);
         setAgent((current) => current ?? available[0]?.id);
 
-        if (known[0]) void open(known[0].path);
+        if (known[0]) void open(known[0]);
         else setLoading(false);
       },
       (cause: unknown) => {
@@ -348,7 +372,7 @@ export function RunStep({
       >
         <div {...stylex.props(styles.project)}>
           <FolderIcon />
-          {loading && !discovered ? (
+          {loading && !project ? (
             <span
               aria-label="Looking for your projects"
               {...stylex.props(styles.projectPlaceholder)}
@@ -363,27 +387,33 @@ export function RunStep({
                   ariaLabel="Project"
                   align="start"
                   triggerStyle={[buttonStyles.base, styles.projectTrigger]}
-                  value={discovered?.project.path}
+                  value={project?.path}
                   options={projectOptions}
-                  onChange={(value) =>
-                    void (value === PICK_FOLDER ? pickFolder() : open(value))
-                  }
+                  onChange={(value) => {
+                    if (value === PICK_FOLDER) return void pickFolder();
+
+                    const known = projects.find(
+                      (candidate) => candidate.path === value,
+                    );
+
+                    if (known) void open(known);
+                  }}
                 >
-                  {discovered?.project.name ?? "Choose a project"}
+                  {project?.name ?? "Choose a project"}
                 </OptionMenu>
-              ) : discovered ? (
+              ) : project ? (
                 <span {...stylex.props(styles.projectName)}>
-                  {discovered.project.name}
+                  {project.name}
                 </span>
               ) : null}
               <span
                 {...stylex.props(
                   styles.projectPath,
-                  discovered && styles.projectPathEnd,
+                  project && styles.projectPathEnd,
                 )}
               >
-                {discovered
-                  ? discovered.project.path
+                {project
+                  ? project.path
                   : projects.length
                     ? null
                     : "Choose a project to draw from"}

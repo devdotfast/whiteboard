@@ -16,6 +16,9 @@ const SERVER = "http://127.0.0.1:4000";
 
 const PROJECT = { path: "/repo/main", name: "main" };
 
+// Its targets answer only once the test releases them.
+const SLOW = { path: "/repo/slow", name: "slow" };
+
 function summary(
   title: string,
   extra: Partial<ReviewApiSummary> = {},
@@ -43,18 +46,35 @@ function server() {
     { kind: "worktree", path: "/repo/agent", branch: "agent-work" },
   ];
 
+  let release = () => {};
+  const slow = new Promise<void>((resolve) => (release = resolve));
+
   const respond = vi.fn<typeof fetch>(async (input) => {
-    const route = new URL(String(input)).pathname;
+    const url = new URL(String(input));
+    const route = url.pathname;
 
     requests.push(route);
 
     if (route === "/reviews-api/onboarding/projects")
-      return Response.json({ projects: [PROJECT] });
+      return Response.json({ projects: [PROJECT, SLOW] });
 
     if (route === "/reviews-api/onboarding/agents")
       return Response.json({
         agents: [{ id: "claude", name: "Claude Code", available: true }],
       });
+
+    if (
+      route === "/reviews-api/onboarding/targets" &&
+      url.searchParams.get("path") === SLOW.path
+    ) {
+      await slow;
+
+      return Response.json({
+        project: SLOW,
+        base: "main",
+        targets: [{ kind: "branch", path: SLOW.path, branch: "slow-work" }],
+      });
+    }
 
     if (route === "/reviews-api/onboarding/targets")
       return Response.json({ project: PROJECT, base: "main", targets });
@@ -65,6 +85,7 @@ function server() {
   return {
     respond,
     targets,
+    release: () => release(),
     count: (route: string) =>
       requests.filter((asked) => asked === route).length,
   };
@@ -227,6 +248,42 @@ describe("Home's New whiteboard", () => {
     expect(opened).toBe(true);
     expect(container.textContent).toContain("New whiteboard.");
     expect(target("agent-work")).toBeDefined();
+  });
+
+  it("shows a chosen project at once, before its targets load", async () => {
+    const { respond, release } = server();
+
+    vi.stubGlobal("fetch", respond);
+
+    await openNewWhiteboard([summary("Plan")]);
+
+    const menu = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Project"]',
+    );
+
+    await act(async () => menu?.click());
+
+    const slowItem = [
+      ...container.ownerDocument.querySelectorAll('[role="menuitemradio"]'),
+    ].find((item) => item.textContent?.trim() === SLOW.name) as HTMLElement;
+
+    await act(async () => slowItem.click());
+    await settle();
+
+    // The header follows the choice; the old project's targets are gone.
+    expect(menu?.textContent).toContain(SLOW.name);
+    expect(container.textContent).toContain(SLOW.path);
+    expect(target("agent-work")).toBeUndefined();
+    expect(
+      container.querySelector(
+        '[aria-label="Reading branches, worktrees and pull requests"]',
+      ),
+    ).not.toBeNull();
+
+    release();
+    await settle();
+
+    expect(target("slow-work")).toBeDefined();
   });
 
   it("stays open when a whiteboard is published elsewhere", async () => {
