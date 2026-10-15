@@ -84,9 +84,12 @@ for (const scenario of [
     writeFileSync(
       path.join(dir, "gh"),
       `#!/bin/bash
-if [ "$SCENARIO" = api-error ]; then exit 1; fi
+if [ "$SCENARIO" = api-error ] && [ ! -f "$STATE" ]; then exit 1; fi
 if [[ "$*" = *artifacts* ]]; then
-  if [ "$SCENARIO" = ready ] || { [ "$SCENARIO" = delayed ] && [ -f "$STATE" ]; }; then echo 123; fi
+  case "$SCENARIO" in
+    ready) echo 123;;
+    delayed|api-error) [ ! -f "$STATE" ] || echo 123;;
+  esac
 else
   case "$SCENARIO" in
     failure|cancelled) echo "$SCENARIO";;
@@ -128,7 +131,7 @@ fi
 
     assert.equal(
       run.status,
-      ["ready", "delayed"].includes(scenario) ? 0 : 1,
+      ["ready", "delayed", "api-error"].includes(scenario) ? 0 : 1,
       `${run.stdout}${run.stderr}`,
     );
 
