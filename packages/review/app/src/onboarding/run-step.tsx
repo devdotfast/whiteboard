@@ -1,4 +1,4 @@
-import { SearchIcon } from "@canvas/icons";
+import { RefreshIcon, SearchIcon } from "@canvas/icons";
 import { OptionMenu } from "@canvas/option-menu";
 import {
   elevation,
@@ -9,7 +9,7 @@ import {
   tracking,
 } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
-import { Button, buttonStyles } from "@canvas/ui/button";
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { Shortcut } from "@canvas/ui/kbd";
 import { fieldStyles } from "@canvas/ui/text-field";
 import type {
@@ -61,6 +61,10 @@ const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 const breathe = stylex.keyframes({
   "0%, 100%": { opacity: 1 },
   "50%": { opacity: 0.45 },
+});
+
+const spin = stylex.keyframes({
+  to: { transform: "rotate(360deg)" },
 });
 
 /** The agents Whiteboard can run, best first. */
@@ -133,6 +137,7 @@ export function RunStep({
   const [agent, setAgent] = useState<OnboardingRunAgent["id"]>();
   const [error, setError] = useState<string>();
   const [starting, setStarting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const open = useCallback(
     async (directory: string) => {
@@ -163,6 +168,29 @@ export function RunStep({
     },
     [client],
   );
+
+  // The list only changes when asked: it holds still under the pointer while
+  // agents move branches and worktrees. The choice, filter and prompt stay.
+  const refresh = useCallback(async () => {
+    if (!discovered) return;
+    setRefreshing(true);
+    setError(undefined);
+
+    try {
+      const next = await client.targets(discovered.project.path);
+
+      setDiscovered(next);
+      setSelected((current) =>
+        next.targets.some((candidate) => targetKey(candidate) === current)
+          ? current
+          : undefined,
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setRefreshing(false);
+    }
+  }, [client, discovered]);
 
   const pickFolder = useCallback(async () => {
     const folder = await setupActions.pickFolder();
@@ -375,6 +403,17 @@ export function RunStep({
               onChange={(event) => setQuery(event.target.value)}
               {...stylex.props(styles.filter)}
             />
+            {discovered && !loading ? (
+              <IconButton
+                disabled={refreshing}
+                aria-busy={refreshing || undefined}
+                onClick={() => void refresh()}
+                aria-label="Refresh branches, worktrees and PRs"
+                title="Refresh branches, worktrees and PRs"
+              >
+                <RefreshIcon xstyle={refreshing && styles.refreshing} />
+              </IconButton>
+            ) : null}
             {kinds.length > 1 ? (
               <div
                 role="group"
@@ -617,6 +656,12 @@ function FolderIcon() {
 }
 
 const styles = stylex.create({
+  refreshing: {
+    animationName: { default: spin, [reducedMotion]: "none" },
+    animationDuration: motion.pulse,
+    animationTimingFunction: "linear",
+    animationIterationCount: "infinite",
+  },
   composer: {
     flex: "0 1 auto",
     minHeight: 0,

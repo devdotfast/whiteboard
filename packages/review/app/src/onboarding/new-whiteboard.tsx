@@ -16,11 +16,14 @@ export function NewWhiteboard({
   setupActions,
   embedded = false,
   onClose,
+  onCopied,
 }: {
   setupActions: ReviewCanvasSetupActions;
   embedded?: boolean;
   /** Back to the list; the full-window screen only. */
   onClose?(): void;
+  /** The prompt went to the clipboard, for the reader's own agent. */
+  onCopied?(): void;
 }) {
   const { client, unavailable } = useOnboardingClient(setupActions);
 
@@ -34,6 +37,7 @@ export function NewWhiteboard({
       setupActions={setupActions}
       embedded={embedded}
       onStarted={onClose}
+      onCopied={onCopied}
       intro={
         embedded
           ? undefined

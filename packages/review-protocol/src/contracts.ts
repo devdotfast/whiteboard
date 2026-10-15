@@ -370,12 +370,11 @@ export interface ReviewCanvasSetupActions {
 }
 
 /**
- * Install state and actions the workbench hands to the Home canvas. Every
- * action resolves with the refreshed status so the card can re-render without
- * a full canvas update.
+ * Install actions the workbench hands to the Home canvas. Every action
+ * resolves with the refreshed status so the card can re-render without a full
+ * canvas update.
  */
-export interface ReviewCanvasInstallContent {
-  status: ReviewCliInstallStatus;
+export interface ReviewCanvasInstallActions {
   apply(request: {
     shim?: boolean;
     trace?:
@@ -397,6 +396,11 @@ export interface ReviewCanvasInstallContent {
   decline(): Promise<ReviewCliInstallStatus>;
   skip(): Promise<ReviewCliInstallStatus>;
   enablePrompts(): Promise<ReviewCliInstallStatus>;
+}
+
+/** Install state with the actions that change it. */
+export interface ReviewCanvasInstallContent extends ReviewCanvasInstallActions {
+  status: ReviewCliInstallStatus;
 }
 
 /** Onboarding progress for the Welcome pane: which steps the user finished. */
@@ -751,45 +755,66 @@ export type ReviewCanvasContent =
   // when the worktree cannot be browsed (deleted checkout, unavailable
   // session) and carries the human-readable reason.
   | { kind: "source"; error?: string }
-  | {
-      kind: "home";
-      view?: "active" | "trash";
-      navigate?(view: "active" | "trash"): void;
-      openSettings?(): void;
-      openSetup?(): void;
-      reviews: readonly ReviewApiSummary[];
-      openReview(uuid: string): void;
-      // Moves the review to Trash and closes its canvas. Absent when the host does
-      // not support deletion.
-      trashReview?(uuid: string): Promise<void>;
-      markReviewRead?(uuid: string): Promise<void>;
-      // Boards in Trash can be restored for 30 days or deleted.
-      deleteReview?(uuid: string): Promise<void>;
-      restoreReview?(uuid: string): Promise<void>;
-      remoteHosts?: ReviewRemoteHostActions;
-      // Opens the review and pins its read-only source tree open. Absent when
-      // the host cannot show the tree.
-      openSourceTree?(uuid: string): void;
-      // Setup status is available for small catalogs so Home can show
-      // progress. Absent when the install status endpoint is unavailable.
-      install?: ReviewCanvasInstallContent;
-      setupActions?: ReviewCanvasSetupActions;
-      onboarding?: ReviewCanvasOnboarding;
-    }
+  | { kind: "home"; data: ReviewCanvasHomeData; host: ReviewCanvasHomeHost }
   | {
       kind: "welcome";
-      // Absent when the install status endpoint is unavailable.
-      install?: ReviewCanvasInstallContent;
-      setupActions?: ReviewCanvasSetupActions;
-      // Closes the Welcome tab ("Skip for now" on first run).
-      close?(): void;
-      // Drives the step rail. Absent when the install status is unavailable.
-      onboarding?: ReviewCanvasOnboarding;
+      data: ReviewCanvasWelcomeData;
+      host: ReviewCanvasWelcomeHost;
     }
   | {
       kind: "settings";
       settings: ReviewCanvasSettingsContent;
     };
+
+/** What Home shows; a new snapshot on every change. */
+export interface ReviewCanvasHomeData {
+  view?: "active" | "trash";
+  reviews: readonly ReviewApiSummary[];
+  // Setup status is available for small catalogs so Home can show progress.
+  // Absent when the install status endpoint is unavailable.
+  installStatus?: ReviewCliInstallStatus;
+  onboarding?: ReviewCanvasOnboarding;
+}
+
+/**
+ * What Home can do. The workbench makes it once per pane and passes the same
+ * object with every update, so the canvas can depend on its members.
+ */
+export interface ReviewCanvasHomeHost {
+  navigate?(view: "active" | "trash"): void;
+  openSettings?(): void;
+  openSetup?(): void;
+  openReview(uuid: string): void;
+  // Moves the review to Trash and closes its canvas. Absent when the host does
+  // not support deletion.
+  trashReview?(uuid: string): Promise<void>;
+  markReviewRead?(uuid: string): Promise<void>;
+  // Boards in Trash can be restored for 30 days or deleted.
+  deleteReview?(uuid: string): Promise<void>;
+  restoreReview?(uuid: string): Promise<void>;
+  remoteHosts?: ReviewRemoteHostActions;
+  // Opens the review and pins its read-only source tree open. Absent when
+  // the host cannot show the tree.
+  openSourceTree?(uuid: string): void;
+  install?: ReviewCanvasInstallActions;
+  setupActions?: ReviewCanvasSetupActions;
+}
+
+/** What the Welcome tab shows; a new snapshot on every change. */
+export interface ReviewCanvasWelcomeData {
+  // Absent when the install status endpoint is unavailable.
+  installStatus?: ReviewCliInstallStatus;
+  // Drives the step rail. Absent when the install status is unavailable.
+  onboarding?: ReviewCanvasOnboarding;
+}
+
+/** What the Welcome tab can do; stable like `ReviewCanvasHomeHost`. */
+export interface ReviewCanvasWelcomeHost {
+  install?: ReviewCanvasInstallActions;
+  setupActions?: ReviewCanvasSetupActions;
+  // Closes the Welcome tab ("Skip for now" on first run).
+  close?(): void;
+}
 
 export interface ReviewCanvasRange {
   sourceUnavailable?: string;

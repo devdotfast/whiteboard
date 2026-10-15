@@ -5,10 +5,15 @@ import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCanvasContent,
   ReviewCanvasHandle,
+  ReviewCanvasHomeData,
+  ReviewCanvasHomeHost,
+  ReviewCanvasInstallActions,
+  ReviewCanvasInstallContent,
   ReviewCanvasUi,
+  ReviewCliInstallStatus,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { createRef, useEffect, useRef, useState } from "react";
+import { createRef, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import { ApiCanvas } from "./api-canvas";
@@ -48,7 +53,7 @@ function ReviewCanvas({
     );
 
   if (content.kind === "home")
-    return <Home content={content} findHost={findHost} />;
+    return <Home data={content.data} host={content.host} findHost={findHost} />;
 
   if (content.kind === "source") {
     if (content.error) {
@@ -70,17 +75,7 @@ function ReviewCanvas({
     );
   }
 
-  if (content.kind === "welcome") {
-    return (
-      <FirstRun
-        install={content.install}
-        setupActions={content.setupActions}
-        onSkip={() => content.close?.()}
-        onClose={content.close}
-        onboarding={content.onboarding}
-      />
-    );
-  }
+  if (content.kind === "welcome") return <Welcome {...content} />;
 
   if (content.kind === "settings") {
     return <SettingsPage settings={content.settings} />;
@@ -97,42 +92,83 @@ function ReviewCanvas({
   return null;
 }
 
+/** Status with the host's stable actions, rebuilt only when the status is. */
+function useInstall(
+  status: ReviewCliInstallStatus | undefined,
+  actions: ReviewCanvasInstallActions | undefined,
+): ReviewCanvasInstallContent | undefined {
+  return useMemo(
+    () => (status && actions ? { ...actions, status } : undefined),
+    [status, actions],
+  );
+}
+
+function Welcome({
+  data,
+  host,
+}: Extract<ReviewCanvasContent, { kind: "welcome" }>) {
+  const install = useInstall(data.installStatus, host.install);
+
+  return (
+    <FirstRun
+      install={install}
+      setupActions={host.setupActions}
+      onSkip={() => host.close?.()}
+      onClose={host.close}
+      onboarding={data.onboarding}
+    />
+  );
+}
+
 function Home({
-  content,
+  data,
+  host,
   findHost,
 }: {
-  content: Extract<ReviewCanvasContent, { kind: "home" }>;
+  data: ReviewCanvasHomeData;
+  host: ReviewCanvasHomeHost;
   findHost: ReviewFindHost;
 }) {
-  const trashReview = content.trashReview;
-  const deleteReview = content.deleteReview;
-  const restoreReview = content.restoreReview;
-  const markReviewRead = content.markReviewRead;
+  const {
+    trashReview,
+    deleteReview,
+    restoreReview,
+    markReviewRead,
+    setupActions,
+  } = host;
 
+  const install = useInstall(data.installStatus, host.install);
   const [skipped, setSkipped] = useState(readOnboardingSkipped);
   const [creating, setCreating] = useState(false);
-  const setupActions = content.setupActions;
 
-  // A new whiteboard opens in its own tab; Home is back to its list after.
-  const listed = useRef(content.reviews.length);
+  // Drawing here closes New whiteboard once the run starts. A copied prompt
+  // is drawn by the reader's own agent, so the screen closes when the next
+  // whiteboard appears; an agent elsewhere publishing first doesn't.
+  const copied = useRef(false);
+  const listed = useRef(data.reviews.length);
 
   useEffect(() => {
-    if (content.reviews.length > listed.current) setCreating(false);
-    listed.current = content.reviews.length;
-  }, [content.reviews.length]);
+    if (copied.current && data.reviews.length > listed.current) {
+      copied.current = false;
+      setCreating(false);
+    }
+
+    listed.current = data.reviews.length;
+  }, [data.reviews.length]);
+
+  const startCreating = () => {
+    copied.current = false;
+    setCreating(true);
+  };
 
   // Until the first whiteboard is published, Home is first run, unless the
   // reader skipped it.
-  if (
-    content.view !== "trash" &&
-    content.onboarding?.published === false &&
-    !skipped
-  )
+  if (data.view !== "trash" && data.onboarding?.published === false && !skipped)
     return (
       <FirstRun
-        install={content.install}
-        setupActions={content.setupActions}
-        onboarding={content.onboarding}
+        install={install}
+        setupActions={setupActions}
+        onboarding={data.onboarding}
         onSkip={() => setSkipped(true)}
         onDismissUpdate={() => setSkipped(true)}
       />
@@ -143,16 +179,19 @@ function Home({
       <NewWhiteboard
         setupActions={setupActions}
         onClose={() => setCreating(false)}
+        onCopied={() => {
+          copied.current = true;
+        }}
       />
     );
 
   return (
     <ReviewHome
       findHost={findHost}
-      view={content.view}
-      onViewChange={content.navigate}
-      reviews={content.reviews}
-      onOpen={(review) => content.openReview(review.reviewId)}
+      view={data.view}
+      onViewChange={host.navigate}
+      reviews={data.reviews}
+      onOpen={(review) => host.openReview(review.reviewId)}
       onTrash={
         trashReview ? (review) => trashReview(review.reviewId) : undefined
       }
@@ -165,11 +204,11 @@ function Home({
       onRestore={
         restoreReview ? (review) => restoreReview(review.reviewId) : undefined
       }
-      remoteHosts={content.remoteHosts}
-      onboarding={content.onboarding}
-      onOpenSettings={content.openSettings}
-      onOpenSetup={content.openSetup}
-      onNewWhiteboard={setupActions ? () => setCreating(true) : undefined}
+      remoteHosts={host.remoteHosts}
+      onboarding={data.onboarding}
+      onOpenSettings={host.openSettings}
+      onOpenSetup={host.openSetup}
+      onNewWhiteboard={setupActions ? startCreating : undefined}
       emptyState={
         setupActions ? (
           <NewWhiteboard setupActions={setupActions} embedded />

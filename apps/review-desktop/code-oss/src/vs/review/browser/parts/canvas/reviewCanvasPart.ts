@@ -59,11 +59,14 @@ import type {
 	ReviewCanvasContent,
 	ReviewCanvasDiagnostic,
 	ReviewCanvasHandle,
+	ReviewCanvasHomeHost,
+	ReviewCanvasInstallActions,
 	ReviewCanvasInstallContent,
 	ReviewCanvasModule,
 	ReviewCanvasOnboarding,
 	ReviewCanvasSettingsContent,
 	ReviewCanvasSetupActions,
+	ReviewCanvasWelcomeHost,
 	ReviewCliInstallStatus,
 	ReviewCtrlTabChoice,
 	ReviewDiffFileWire,
@@ -501,6 +504,47 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			   suspended empty render from resuming after a later list render
 			   and overwriting it with a stale snapshot. */
 			let renderSeq = 0;
+			/* Made once for this input: every render passes the same host, so
+			   the canvas can depend on its members across list changes. */
+			const host: ReviewCanvasHomeHost = {
+				navigate: view => {
+					if (this.homeView === view) return;
+					this.homeView = view;
+					void renderHome();
+					this._onDidChangeSelection.fire({ reason: EditorPaneSelectionChangeReason.NAVIGATION });
+				},
+				openSettings: () => { void this.tabsService.openSettings(true); },
+				openSetup: () => { void this.tabsService.openWelcome(true); },
+				openReview: (uuid) => {
+					this.reviewTelemetryService.capture("review_opened", {
+						via: "home",
+					});
+					const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);
+					if (api) void this.tabsService.openApiReview(uuid, api.title);
+				},
+				trashReview: (uuid) => {
+					this.reviewTelemetryService.capture("review_deleted", { via: "home" });
+					return this.apiCatalog.trashReview(uuid);
+				},
+				markReviewRead: (uuid) => this.apiCatalog.attention(uuid, "view"),
+				deleteReview: (uuid) => {
+					this.reviewTelemetryService.capture("review_deleted", { via: "home" });
+					return this.apiCatalog.deleteReview(uuid);
+				},
+				restoreReview: (uuid) => {
+					this.reviewTelemetryService.capture("review_restored", { via: "home" });
+					return this.apiCatalog.lifecycle(uuid, "active");
+				},
+				remoteHosts: this.remoteHostActions(),
+				openSourceTree: (uuid) => {
+					const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);
+					if (api) {
+						void this.tabsService.openApiSource({ reviewId: api.reviewId, kind: "current" }, api.title).catch(error => this.notifyOpenFailure(error));
+					}
+				},
+				install: this.installActions(),
+				setupActions: this.setupActions(),
+			};
 			const renderHome = async () => {
 				const seq = ++renderSeq;
 				const reviews = this.apiCatalog.reviews;
@@ -508,58 +552,22 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				// is not one, so the rail still gets install status beside it.
 				const isEmpty = homeSessions(reviews).length === 0;
 				// Small catalogs can show setup progress on Home.
-				const install = homeSessions(reviews).length < 5 ? await this.resolveInstallContent() : undefined;
+				const installStatus = homeSessions(reviews).length < 5 ? await this.resolveInstallStatus() : undefined;
 				if (seq !== renderSeq) return;
 				if (isEmpty && !emptyStateVisible) {
 					this.reviewTelemetryService.capture("home_empty_state_viewed");
 				}
 				emptyStateVisible = isEmpty;
-				const openReview = (uuid: string) => {
-					this.reviewTelemetryService.capture("review_opened", {
-						via: "home",
-					});
-					const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);
-					return api ? this.tabsService.openApiReview(uuid, api.title) : Promise.resolve();
-				};
 				return this.render(
 					{
 						kind: "home",
-						view: this.homeView,
-						navigate: view => {
-							if (this.homeView === view) return;
-							this.homeView = view;
-							void renderHome();
-							this._onDidChangeSelection.fire({ reason: EditorPaneSelectionChangeReason.NAVIGATION });
+						data: {
+							view: this.homeView,
+							reviews,
+							installStatus,
+							onboarding: installStatus ? this.resolveOnboarding(installStatus) : undefined,
 						},
-						openSettings: () => { void this.tabsService.openSettings(true); },
-						openSetup: () => { void this.tabsService.openWelcome(true); },
-						reviews,
-						openReview: (uuid) => void openReview(uuid),
-						trashReview: (uuid) => {
-							this.reviewTelemetryService.capture("review_deleted", { via: "home" });
-							return this.apiCatalog.trashReview(uuid);
-						},
-						markReviewRead: (uuid) => this.apiCatalog.attention(uuid, "view"),
-						deleteReview: (uuid) => {
-							this.reviewTelemetryService.capture("review_deleted", { via: "home" });
-							return this.apiCatalog.deleteReview(uuid);
-						},
-						restoreReview: (uuid) => {
-							this.reviewTelemetryService.capture("review_restored", { via: "home" });
-							return this.apiCatalog.lifecycle(uuid, "active");
-						},
-						remoteHosts: this.remoteHostActions(),
-						openSourceTree: (uuid) => {
-							const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);
-							if (api) {
-								void this.tabsService.openApiSource({ reviewId: api.reviewId, kind: "current" }, api.title).catch(error => this.notifyOpenFailure(error));
-								return;
-							}
-						},
-						// Home shows setup progress for small catalogs.
-						install,
-						setupActions: this.setupActions(),
-						onboarding: install ? this.resolveOnboarding(install.status) : undefined,
+						host,
 					},
 					generation,
 				);
@@ -581,17 +589,23 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			/* Same stale-resume guard as Home: the install fetch suspends, and
 			   a later list event must win over an earlier suspended render. */
 			let renderSeq = 0;
+			const host: ReviewCanvasWelcomeHost = {
+				install: this.installActions(),
+				setupActions: this.setupActions(),
+				close: () => void this.group.closeEditor(input),
+			};
 			const renderWelcome = async () => {
 				const seq = ++renderSeq;
-				const install = await this.resolveInstallContent();
+				const installStatus = await this.resolveInstallStatus();
 				if (seq !== renderSeq) return;
 				return this.render(
 					{
 						kind: "welcome",
-						install,
-						setupActions: this.setupActions(),
-						close: () => void this.group.closeEditor(input),
-						onboarding: install ? this.resolveOnboarding(install.status) : undefined,
+						data: {
+							installStatus,
+							onboarding: installStatus ? this.resolveOnboarding(installStatus) : undefined,
+						},
+						host,
 					},
 					generation,
 				);
@@ -626,8 +640,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		}
 	}
 
+	private cachedRemoteHostActions: ReviewRemoteHostActions | undefined;
+
+	/* One object for the pane's life, like `setupActions`: the canvas keys
+	   effects on it. */
 	private remoteHostActions(): ReviewRemoteHostActions {
-		return {
+		return this.cachedRemoteHostActions ??= {
 			states: () => this.desktopConnection.readRemoteHosts(),
 			retry: (alias) => this.desktopConnection.retryRemoteHost(alias),
 			install: (alias) => this.desktopConnection.installRemoteHost(alias),
@@ -762,8 +780,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		// The canvas uses normal CSS flow and fills the editor pane.
 	}
 
+	private cachedSetupActions: ReviewCanvasSetupActions | undefined;
+
+	/* One object for the pane's life: Home re-renders on each list change, and
+	   New whiteboard reconnects, refetching its targets, when this changes. */
 	private setupActions(): ReviewCanvasSetupActions {
-		return {
+		return this.cachedSetupActions ??= {
 			load: () => this.loadInstallContent(),
 			installCli: async () => { await this.commandService.executeCommand("review.installCliInPath"); },
 			connection: async () => {
@@ -784,8 +806,13 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	private async resolveInstallContent(): Promise<ReviewCanvasInstallContent | undefined> {
+		const status = await this.resolveInstallStatus();
+		return status ? { status, ...this.installActions() } : undefined;
+	}
+
+	private async resolveInstallStatus(): Promise<ReviewCliInstallStatus | undefined> {
 		try {
-			return await this.loadInstallContent();
+			return await this.desktopConnection.getCliInstallStatus();
 		} catch (error) {
 			this.logService.warn("Whiteboard install status failed", error);
 			return undefined;
@@ -793,9 +820,14 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	private async loadInstallContent(): Promise<ReviewCanvasInstallContent> {
-		const status = await this.desktopConnection.getCliInstallStatus();
-		return {
-			status,
+		return { status: await this.desktopConnection.getCliInstallStatus(), ...this.installActions() };
+	}
+
+	private cachedInstallActions: ReviewCanvasInstallActions | undefined;
+
+	/* Stable like `setupActions`; each action resolves with the new status. */
+	private installActions(): ReviewCanvasInstallActions {
+		return this.cachedInstallActions ??= {
 			apply: async (request) => {
 				await this.desktopConnection.applyCliInstall(request);
 				return this.desktopConnection.getCliInstallStatus();

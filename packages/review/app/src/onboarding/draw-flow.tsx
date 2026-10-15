@@ -39,20 +39,26 @@ export function DrawFlow({
   intro,
   embedded,
   onStarted,
+  onCopied,
 }: {
   client: OnboardingClient;
   setupActions: ReviewCanvasSetupActions;
   intro?: StepIntro;
   embedded?: boolean;
   onStarted?(reviewId: string): void;
+  onCopied?(): void;
 }) {
   const notify = useNotify();
 
   // The reader's own agent draws it; the whiteboard opens here once it does.
   const copy = useCallback(
     async (prompt: string) => {
+      const copied = await copyText(prompt);
+
+      if (copied) onCopied?.();
+
       notify(
-        (await copyText(prompt))
+        copied
           ? {
               kind: "success",
               text: "Prompt copied. Paste it into your agent.",
@@ -63,7 +69,7 @@ export function DrawFlow({
             },
       );
     },
-    [notify],
+    [notify, onCopied],
   );
 
   return (
