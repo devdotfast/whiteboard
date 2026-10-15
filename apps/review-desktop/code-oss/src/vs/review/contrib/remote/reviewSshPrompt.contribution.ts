@@ -54,7 +54,7 @@ class ReviewSshPrompts extends Disposable {
 			this.quickInputService,
 			prompt,
 			prompt.kind === "install"
-				? localize("review.remoteInstallPrompt.title", "Install Whiteboard on {0}?", prompt.alias)
+				? prompt.text
 				: localize("review.sshPrompt.title", "SSH: {0}", prompt.alias),
 			settle,
 			{

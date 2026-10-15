@@ -268,11 +268,6 @@ const STEP_WORDS: Record<InstallStep, string> = {
 const noTarballText = (alias: string) =>
 	`This dev build has no remote tarball; run \`node apps/review-desktop/scripts/remote-dev-install.mjs ${alias}\` from the checkout or set DEV_FAST_REVIEW_REMOTE_RELEASES.`;
 
-export function installPromptText(alias: string, version: string, probe: ReviewRemoteProbe): string {
-	const where = probe.root === `${probe.home}/.dev/whiteboard-remote` ? "~/.dev/whiteboard-remote" : "whiteboard-remote under DEV_REVIEW_HOME";
-	return `Whiteboard ${version} is not installed on ${alias}. Install it in ${where}? It takes about 250 MB. Whiteboard also adds ~/.local/bin/whiteboard if that path is free.`;
-}
-
 export function installFailureText(alias: string, version: string, step: InstallStep, message: string): string {
 	const said = /^Installing on .+? failed( while .+?)?: ([\s\S]*)$/.exec(message);
 	const what = said ? (said[1] ?? "") : ` while ${STEP_WORDS[step]}`;
@@ -658,7 +653,7 @@ export class ReviewRemoteHost {
 		if (!present && !probe.releasesReachable) return this.cannotInstall(probe, version, `${this.alias} cannot reach ${origin}.`);
 		// Like VS Code's server, an install Desktop recognises is updated without asking; a CLI the user put on PATH is theirs.
 		const upgrade = probe.installed.length > 0;
-		if (!present && !upgrade && mode === "ask" && !(await this.agreed(flow, probe, version, stale))) {
+		if (!present && !upgrade && mode === "ask" && !(await this.agreed(flow, version, stale))) {
 			this.declined = true;
 			return stale() ? undefined : onPath;
 		}
@@ -678,13 +673,13 @@ export class ReviewRemoteHost {
 		return { script: reviewRemoteAttachScript };
 	}
 
-	private async agreed(flow: ReviewRemoteInstallFlow, probe: ReviewRemoteProbe, version: string, stale: () => boolean): Promise<boolean> {
+	private async agreed(flow: ReviewRemoteInstallFlow, version: string, stale: () => boolean): Promise<boolean> {
 		const log = (error: Error) => this.options.log(`${this.alias}: install consent: ${error.message}`);
 		const stored = await flow.consent.get(this.alias).catch(log);
 		if (stored) return stored === "allow";
 		if (stale()) return false;
 		this.set({ alias: this.alias, asking: version });
-		const answer = await flow.confirm({ alias: this.alias, text: installPromptText(this.alias, version, probe) });
+		const answer = await flow.confirm({ alias: this.alias, text: `Install remote server on ${this.alias}? (~250 MB)` });
 		if (!stale()) this.set({ alias: this.alias });
 		if (answer !== undefined && !stale()) await flow.consent.set(this.alias, answer ? "allow" : "deny").catch(log);
 		return answer === true;
