@@ -8,13 +8,18 @@ on:
         required: true
         type: string
         default: main
+      version:
+        description: "Existing preview tag to build again for the selected platforms, e.g. v0.2.5-preview.20261015.117. Overrides ref."
+        required: false
+        type: string
+        default: ""
       dry_run:
         description: "Build and validate only. Do not upload."
         required: false
         type: boolean
         default: false
       platforms:
-        description: "Platforms to release; only all creates a promotable preview tag"
+        description: "Platforms to release"
         required: true
         type: choice
         options:
@@ -27,8 +32,10 @@ on:
 permissions:
   contents: read
 
+# Per selection, so backfilling one platform does not wait behind a release of
+# another. Latest aliases only move forward, so overlapping runs are safe.
 concurrency:
-  group: review-desktop-preview
+  group: review-desktop-preview-${{ inputs.platforms }}
   cancel-in-progress: false
 
 jobs:
@@ -55,12 +62,28 @@ jobs:
       - name: Checkout preview ref
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.version && format('refs/tags/{0}', inputs.version) || inputs.ref }}
 
       - name: Compute preview version
         id: version
         shell: bash
+        env:
+          EXISTING: ${{ inputs.version }}
         run: |
+          # A backfill rebuilds an existing preview, so it keeps that version.
+          if [ -n "$EXISTING" ]; then
+            if [[ ! "$EXISTING" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]{8}\.[0-9]+$ ]]; then
+              echo "::error::version '${EXISTING}' is not a preview tag (vX.Y.Z-preview.YYYYMMDD.N)."
+              exit 1
+            fi
+            VERSION="${EXISTING#v}"
+            COMMIT=$(git rev-parse HEAD)
+            echo "Backfilling Whiteboard ${VERSION} from ${COMMIT}"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           CURRENT=$(node -p "require('./apps/review-desktop/package.json').version")
           if [[ "$CURRENT" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)([-+].*)?$ ]]; then
             PATCH="${BASH_REMATCH[3]}"
@@ -326,7 +349,7 @@ jobs:
   tag-preview:
     name: Tag preview
     needs: version
-    if: ${{ !inputs.dry_run }}
+    if: ${{ !inputs.dry_run && !inputs.version }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

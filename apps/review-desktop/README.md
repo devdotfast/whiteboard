@@ -160,6 +160,20 @@ does not hold back the others. Latest aliases and feeds only move forward
 publishing an older version uploads its files and leaves latest alone. The
 first platform to publish takes the GitHub release out of draft.
 
+To retry a platform that failed, use **Re-run failed jobs** on the run. To
+build it again later for the same version, start a new run with that version's
+tag and only that platform:
+
+```sh
+gh workflow run review-desktop-release.yml -f version=v0.2.4 -f platforms=windows
+gh workflow run review-desktop-preview.yml -f version=v0.2.5-preview.20261015.117 -f platforms=windows
+```
+
+A backfill builds the tagged commit, reuses the published remote tarballs, and
+makes no version bump, tag, or new GitHub release. Linux packages are not
+byte-for-byte reproducible, so a Linux publish that failed partway is recovered
+by re-running its failed jobs, not by a backfill.
+
 The `platforms` input picks `all` (the default), `macos`, `linux` or `windows`.
 Windows builds in parallel with the Darwin payload and the Linux packages
 (`review-windows-build.yml` on the 16-core `review_big_boy_windows` runner) and

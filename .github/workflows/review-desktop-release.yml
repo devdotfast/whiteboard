@@ -35,6 +35,11 @@ on:
         required: false
         type: string
         default: ""
+      version:
+        description: "Existing release tag to build again for the selected platforms, e.g. v0.2.4. Skips the bump; bump, release_source and preview_tag are ignored."
+        required: false
+        type: string
+        default: ""
       dry_run:
         description: "Build and validate only. Do not tag, upload, or publish."
         required: false
@@ -44,8 +49,10 @@ on:
 permissions:
   contents: write
 
+# Per selection, so backfilling one platform does not wait behind a release of
+# another. Latest aliases only move forward, so overlapping runs are safe.
 concurrency:
-  group: review-desktop-release
+  group: review-desktop-release-${{ inputs.platforms }}
   cancel-in-progress: false
 
 jobs:
@@ -64,9 +71,9 @@ jobs:
     environment: review-release
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.bump.outputs.version || steps.dryrun.outputs.version }}
-      tag: ${{ steps.bump.outputs.tag }}
-      commit: ${{ steps.bump.outputs.commit || steps.dryrun.outputs.commit }}
+      version: ${{ steps.existing.outputs.version || steps.bump.outputs.version || steps.dryrun.outputs.version }}
+      tag: ${{ steps.existing.outputs.tag || steps.bump.outputs.tag }}
+      commit: ${{ steps.existing.outputs.commit || steps.bump.outputs.commit || steps.dryrun.outputs.commit }}
     steps:
       # The `main` ruleset requires a pull request and the "Review Desktop"
       # check, and lists DeployKey as its only non-admin bypass actor. Checking
@@ -91,9 +98,37 @@ jobs:
           curl -fsS https://install.dev.fast/repos/apt/health | python3 -c 'import json,sys; assert json.load(sys.stdin) == {"schemaVersion": 1, "format": "deb"}'
           curl -fsS https://install.dev.fast/repos/arch/health | python3 -c 'import json,sys; assert json.load(sys.stdin) == {"schemaVersion": 1, "format": "pacman"}'
 
+      # A backfill builds missing platforms for a release that already exists:
+      # no bump, no tag, no new GitHub release.
+      - name: Use the existing release
+        if: ${{ inputs.version }}
+        id: existing
+        shell: bash
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="$(printf '%s' "$VERSION_INPUT" | tr -d '[:space:]')"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version '${TAG}' is not a release tag (vX.Y.Z)."
+            exit 1
+          fi
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::${TAG} does not exist on origin."
+            exit 1
+          fi
+          git fetch --no-tags origin "+refs/tags/${TAG}:refs/tags/${TAG}"
+          COMMIT=$(git rev-parse "refs/tags/${TAG}^{commit}")
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          echo "Backfilling Whiteboard ${TAG} from ${COMMIT}."
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+
       # Every read-only gate lives here so a dry run rehearses the same checks a
       # real run must pass, and so the write step below re-derives nothing.
       - name: Resolve release version
+        if: ${{ !inputs.version }}
         id: resolve
         shell: bash
         env:
@@ -207,7 +242,7 @@ jobs:
           echo "preview_commit=$PREVIEW_COMMIT" >> "$GITHUB_OUTPUT"
 
       - name: Bump version and create tag
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && !inputs.version }}
         id: bump
         shell: bash
         env:
@@ -243,7 +278,7 @@ jobs:
           echo "commit=$TARGET" >> "$GITHUB_OUTPUT"
 
       - name: Dry-run version
-        if: ${{ inputs.dry_run }}
+        if: ${{ inputs.dry_run && !inputs.version }}
         id: dryrun
         shell: bash
         env:
@@ -264,7 +299,7 @@ jobs:
           echo "commit=${PREVIEW_COMMIT:-$(git rev-parse HEAD)}" >> "$GITHUB_OUTPUT"
 
       - name: Create draft GitHub Release
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && !inputs.version }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
