@@ -3,6 +3,7 @@ import { Checkbox } from "@canvas/ui/checkbox";
 import { Dialog } from "@canvas/ui/dialog";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { BugIcon, CloseIcon } from "@canvas/ui/icons";
+import { textStyles } from "@canvas/ui/text";
 import { TextArea } from "@canvas/ui/text-field";
 import {
   type ReviewBugReportRequest,
@@ -56,6 +57,7 @@ export function BugReportControl({
   const [dropActive, setDropActive] = useState(false);
   const [capturing, setCapturing] = useState(false);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const notify = useNotify();
   const tooltip = useTooltip("Report a bug");
   const capturePending = useRef(false);
@@ -69,6 +71,7 @@ export function BugReportControl({
     setScreenshot(null);
     setDropActive(false);
     setSending(false);
+    setError(null);
   };
 
   const cancel = () => {
@@ -82,6 +85,7 @@ export function BugReportControl({
 
     if (!canSend) return;
     setSending(true);
+    setError(null);
 
     try {
       const report: ReviewBugReportRequest = {
@@ -112,15 +116,13 @@ export function BugReportControl({
         captureUiEvent(session, "bug_report_send_failed", {
           error_name: clientErrorName(new Error()),
         });
-        notify({
-          kind: "error",
-          text:
-            response.status === 429
-              ? "Too many reports. Try again later."
-              : response.status === 413
-                ? "The report is too large. Remove an attachment and try again."
-                : "The report could not be sent. Try again.",
-        });
+        setError(
+          response.status === 429
+            ? "Too many reports. Try again later."
+            : response.status === 413
+              ? "The report is too large. Remove an attachment and try again."
+              : "The report could not be sent. Try again.",
+        );
 
         return;
       }
@@ -138,10 +140,7 @@ export function BugReportControl({
       captureUiEvent(session, "bug_report_send_failed", {
         error_name: clientErrorName(error),
       });
-      notify({
-        kind: "error",
-        text: "The report could not be sent. Try again.",
-      });
+      setError("The report could not be sent. Try again.");
     } finally {
       setSending(false);
     }
@@ -153,14 +152,13 @@ export function BugReportControl({
 
       if (!normalized) throw new Error("Screenshot could not be decoded.");
       setScreenshot(normalized);
+      setError(null);
     } catch (error) {
-      notify({
-        kind: "error",
-        text:
-          error instanceof ScreenshotTooLargeError
-            ? "The screenshot is too large. Use an image under 3 MiB."
-            : "That image could not be attached. Use a PNG, JPEG, or WebP image.",
-      });
+      setError(
+        error instanceof ScreenshotTooLargeError
+          ? "The screenshot is too large. Use an image under 3 MiB."
+          : "That image could not be attached. Use a PNG, JPEG, or WebP image.",
+      );
     }
   };
 
@@ -178,10 +176,9 @@ export function BugReportControl({
     const image = imageFileFromDataTransfer(event.dataTransfer);
 
     if (!image) {
-      notify({
-        kind: "error",
-        text: "That image could not be attached. Use a PNG, JPEG, or WebP image.",
-      });
+      setError(
+        "That image could not be attached. Use a PNG, JPEG, or WebP image.",
+      );
 
       return;
     }
@@ -314,6 +311,14 @@ export function BugReportControl({
               team members can access them. Reports are deleted after 90 days.
               The screenshot above is included unless you remove it.
             </p>
+            {error && (
+              <p
+                {...stylex.props(styles.small, styles.error, textStyles.error)}
+                role="alert"
+              >
+                {error}
+              </p>
+            )}
             <div {...stylex.props(styles.actions)}>
               <Button
                 size="large"
@@ -434,6 +439,9 @@ const styles = stylex.create({
   privacy: {
     margin: 0,
     color: tokens.inkFaint,
+  },
+  error: {
+    margin: 0,
   },
   actions: {
     display: "flex",
