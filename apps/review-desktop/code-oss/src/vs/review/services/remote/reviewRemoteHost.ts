@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { DeferredPromise, raceTimeout, TimeoutTimer } from "../../../base/common/async.js";
+import { DeferredPromise, raceTimeout, RunOnceScheduler, TimeoutTimer } from "../../../base/common/async.js";
 import { toErrorMessage } from "../../../base/common/errorMessage.js";
 import { CancellationError } from "../../../base/common/errors.js";
 import { Emitter } from "../../../base/common/event.js";
@@ -69,7 +69,8 @@ const STABLE_MS = 60_000;
 
 const PROBE_MS = 5_000;
 
-// Startup runs connect, activation and extension work back to back; one gap shorter than this is not idle.
+// Work shorter than this never shows; startup's back-to-back phases read as one.
+const SHOW_MS = 500;
 const IDLE_MS = 250;
 
 export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
@@ -86,7 +87,13 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	private readonly activations = new Set<string>();
 	private work = 0;
 	private reported = false;
-	private readonly idle = this._register(new TimeoutTimer());
+	private readonly show = this._register(new RunOnceScheduler(() => {
+		if (this.work > 0) this.report(true);
+	}, SHOW_MS));
+	private readonly idle = this._register(new RunOnceScheduler(() => {
+		this.show.cancel();
+		this.report(false);
+	}, IDLE_MS));
 	private readonly busyChanged = this._register(new Emitter<void>());
 	readonly onDidChangeBusy = this.busyChanged.event;
 
@@ -170,8 +177,11 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	}
 
 	async activateByEvent(event: string): Promise<void> {
+		const first = !this.activations.has(event);
 		this.activations.add(event);
-		if (this.session) await this.track(this.session.activateByEvent(event));
+		if (!this.session) return;
+		const activation = this.session.activateByEvent(event);
+		await (first ? this.track(activation) : activation);
 	}
 
 	/** Connecting, activating extensions, or work they report. */
@@ -180,11 +190,12 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	}
 
 	track<T>(work: Promise<T>): Promise<T> {
-		this.work++;
-		this.idle.cancel();
-		this.report(true);
+		if (this.work++ === 0) {
+			this.idle.cancel();
+			if (!this.reported && !this.show.isScheduled()) this.show.schedule();
+		}
 		return work.finally(() => {
-			if (--this.work === 0 && !this._store.isDisposed) this.idle.cancelAndSet(() => this.report(false), IDLE_MS);
+			if (--this.work === 0 && !this._store.isDisposed) this.idle.schedule();
 		});
 	}
 

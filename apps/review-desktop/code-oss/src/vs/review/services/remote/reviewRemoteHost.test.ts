@@ -81,7 +81,7 @@ test("a failed session is replaced after a delay, with the roots and activation 
 	target.dispose();
 });
 
-test("the host is busy from its connect through activation and reported work, and idle once nothing runs for a moment", async (t) => {
+test("the host is busy once its connect, first activation or reported work lasts a moment, until nothing runs for a moment", async (t) => {
 	mock.timers.enable({ apis: ["setTimeout"] });
 	t.after(() => mock.timers.reset());
 	let activated!: () => void;
@@ -91,24 +91,33 @@ test("the host is busy from its connect through activation and reported work, an
 	const changes: boolean[] = [];
 	target.onDidChangeBusy(() => changes.push(target.busy));
 
-	const connecting = target.connect();
-	assert.equal(target.busy, true);
-	await connecting;
+	await target.connect();
+	await target.track(Promise.resolve());
+	mock.timers.tick(1_000);
+	assert.deepEqual(changes, [], "quick work never shows");
 
 	const activation = target.activateByEvent("onLanguage:rust");
-	assert.equal(target.busy, true);
+	mock.timers.tick(300);
 	activated();
 	await activation;
-
+	mock.timers.tick(100);
 	let indexed!: () => void;
 	const indexing = target.track(new Promise<void>((resolve) => (indexed = resolve)));
-	assert.equal(target.busy, true);
+	mock.timers.tick(100);
+	assert.equal(target.busy, true, "phases shorter than the delay add up");
+
 	indexed();
 	await indexing;
-	assert.equal(target.busy, true);
-	mock.timers.tick(250);
+	mock.timers.tick(200);
+	assert.equal(target.busy, true, "a gap between phases is not idle");
+	mock.timers.tick(50);
+	assert.equal(target.busy, false);
 
-	assert.deepEqual(changes, [true, false]);
+	connected.value.activateByEvent = async () => {};
+	const again = target.activateByEvent("onLanguage:rust");
+	mock.timers.tick(500);
+	await again;
+	assert.deepEqual(changes, [true, false], "an activation the host already ran is not new work");
 	target.dispose();
 });
 
