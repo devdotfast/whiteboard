@@ -6,6 +6,7 @@
 import { DeferredPromise, raceTimeout, TimeoutTimer } from "../../../base/common/async.js";
 import { toErrorMessage } from "../../../base/common/errorMessage.js";
 import { CancellationError } from "../../../base/common/errors.js";
+import { Emitter } from "../../../base/common/event.js";
 import { Disposable, type IDisposable } from "../../../base/common/lifecycle.js";
 import * as platform from "../../../base/common/platform.js";
 import type { Mutable } from "../../../base/common/types.js";
@@ -80,6 +81,9 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	private probedEndpoint: string | undefined;
 	private readonly retry = this._register(new TimeoutTimer());
 	private readonly activations = new Set<string>();
+	private work = 0;
+	private readonly busyChanged = this._register(new Emitter<void>());
+	readonly onDidChangeBusy = this.busyChanged.event;
 
 	constructor(
 		readonly serverId: string,
@@ -119,7 +123,7 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	private async attempt(): Promise<boolean> {
 		let session: IReviewRemoteSession | undefined;
 		try {
-			session = await this.open(this);
+			session = await this.track(this.open(this));
 		} catch (error) {
 			this.logService.warn(`[Remote language] ${this.authority}: could not connect: ${toErrorMessage(error)}`);
 		}
@@ -142,7 +146,7 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 			this.retryLater();
 		});
 		for (const event of this.activations) {
-			session.activateByEvent(event).catch((error) => this.logService.warn(`[Remote language] ${this.authority}: ${event} failed: ${toErrorMessage(error)}`));
+			this.track(session.activateByEvent(event)).catch((error) => this.logService.warn(`[Remote language] ${this.authority}: ${event} failed: ${toErrorMessage(error)}`));
 		}
 		return true;
 	}
@@ -162,7 +166,19 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 
 	async activateByEvent(event: string): Promise<void> {
 		this.activations.add(event);
-		await this.session?.activateByEvent(event);
+		if (this.session) await this.track(this.session.activateByEvent(event));
+	}
+
+	/** Connecting, activating extensions, or work they report. */
+	get busy(): boolean {
+		return this.work > 0;
+	}
+
+	track<T>(work: Promise<T>): Promise<T> {
+		if (this.work++ === 0) this.busyChanged.fire();
+		return work.finally(() => {
+			if (--this.work === 0) this.busyChanged.fire();
+		});
 	}
 
 	async close(): Promise<void> {
@@ -276,6 +292,7 @@ export class ReviewRemoteSession extends Disposable implements IReviewRemoteSess
 			activate: (event) => this.activateByEvent(event),
 			languageFeatures: this.host.languageFeatures,
 			workspace: this.host.workspace,
+			track: (work) => this.host.track(work),
 			resolver: reviewRemoteResolver(this.resolverService, authority, () => this.address()),
 		}, window))));
 		const extensionHost = scope.createInstance(ReviewRemoteExtensionHost, new RemoteRunningLocation(), {

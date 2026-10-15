@@ -20,6 +20,7 @@ import { ServiceCollection } from "../../../platform/instantiation/common/servic
 import { ILogService, NullLogService } from "../../../platform/log/common/log.js";
 import { MarkerService } from "../../../platform/markers/common/markerService.js";
 import { IMarkerService, MarkerSeverity } from "../../../platform/markers/common/markers.js";
+import { IProgressService } from "../../../platform/progress/common/progress.js";
 import type { IWorkspaceSymbol } from "../../../workbench/contrib/search/common/search.js";
 import { IExtensionService } from "../../../workbench/services/extensions/common/extensions.js";
 import type { IRemoteAuthorityResolverService } from "../../../platform/remote/common/remoteAuthorityResolver.js";
@@ -190,6 +191,7 @@ test("a host's vscode.executeHoverProvider and executeDocumentSymbolProvider run
 		[IExtensionStorageService, {}],
 		[IFileService, { onDidFilesChange: Event.None, onDidRunOperation: Event.None }],
 		[IExtensionService, { activateByEvent: async (event: string) => { activated.push(`window ${event}`); } }],
+		[IProgressService, {}],
 	);
 	const parent = new InstantiationService(window, true);
 	const scope = parent.createChild(parent.invokeFunction((accessor) => reviewRemoteScope({
@@ -199,6 +201,7 @@ test("a host's vscode.executeHoverProvider and executeDocumentSymbolProvider run
 		languageFeatures: remote,
 		workspace: new ReviewRemoteWorkspace("w"),
 		resolver: {} as IRemoteAuthorityResolverService,
+		track: (work) => work,
 	}, accessor)));
 
 	const commands = scope.invokeFunction((accessor) => accessor.get(ICommandService));

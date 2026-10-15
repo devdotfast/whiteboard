@@ -81,6 +81,34 @@ test("a failed session is replaced after a delay, with the roots and activation 
 	target.dispose();
 });
 
+test("the host is busy while it connects, activates an extension, or runs reported work", async () => {
+	let activated!: () => void;
+	const connected = session();
+	connected.value.activateByEvent = () => new Promise<void>((resolve) => (activated = resolve));
+	const { target } = host([() => connected.value]);
+	const changes: boolean[] = [];
+	target.onDidChangeBusy(() => changes.push(target.busy));
+
+	const connecting = target.connect();
+	assert.equal(target.busy, true);
+	await connecting;
+	assert.equal(target.busy, false);
+
+	const activation = target.activateByEvent("onLanguage:rust");
+	assert.equal(target.busy, true);
+	activated();
+	await activation;
+
+	let indexed!: () => void;
+	const indexing = target.track(new Promise<void>((resolve) => (indexed = resolve)));
+	assert.equal(target.busy, true);
+	indexed();
+	await indexing;
+
+	assert.deepEqual(changes, [true, false, true, false, true, false]);
+	target.dispose();
+});
+
 test("a root on another machine is refused, and a closed host stops trying and closes its session", async (t) => {
 	mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
 	t.after(() => mock.timers.reset());

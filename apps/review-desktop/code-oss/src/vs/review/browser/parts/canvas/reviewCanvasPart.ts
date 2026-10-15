@@ -94,6 +94,7 @@ import { IReviewApiCatalogService, REVIEW_HAS_PUBLISHED_BOARD } from "../../../s
 import { IReviewApiSourceService } from "../../../services/reviewApiSourceService.js";
 import { IReviewCanvasEditorTabsService } from "../../../services/reviewCanvasEditorTabsService.js";
 import { IReviewDesktopConnectionService } from "../../../services/reviewDesktopConnectionService.js";
+import { IReviewRemoteHostsService } from "../../../services/remote/reviewRemoteHosts.js";
 import { ReviewDiffViewService } from "../../../services/reviewDiffViewService.js";
 import {
 	ReviewEmbeddedEditorSelection,
@@ -185,6 +186,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		private readonly desktopConnection: IReviewDesktopConnectionService,
 		@IReviewApiSourceService private readonly apiSource: IReviewApiSourceService,
 		@IReviewApiCatalogService private readonly apiCatalog: IReviewApiCatalogService,
+		@IReviewRemoteHostsService private readonly remoteHosts: IReviewRemoteHostsService,
 		@IReviewVerbsService private readonly verbs: IReviewVerbsService,
 		@IReviewCanvasEditorTabsService
 		private readonly tabsService: IReviewCanvasEditorTabsService,
@@ -241,13 +243,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			const previous = catalog;
 			catalog = this.apiCatalog.reviews;
 			this.sessionTelemetry.catalogChanged(previous, catalog);
-			const content = this.apiContent;
-			const updated = content && withRemoteEntry(content, catalog.find((review) => review.reviewId === content.reviewId));
-			if (updated) {
-				this.apiContent = updated;
-				this.canvas.value?.update(updated);
-			}
+			this.updateRemoteEntry();
 		}));
+		this._register(this.remoteHosts.onDidChangeBusy(() => this.updateRemoteEntry()));
 		this.inlineEditors = this._register(reviewInstantiationService.createInstance(ReviewEmbeddedEditors));
 		this.refreshProgress = this._register(new LongRunningOperation(editorProgressService));
 		this.diffViews = this._register(
@@ -432,7 +430,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 					{
 						kind: "api",
 						reviewId,
-						...remoteEntry(this.apiCatalog.reviews.find((review) => review.reviewId === reviewId)),
+						...remoteEntry(...this.catalogEntry(reviewId)),
 						remoteHosts: this.remoteHostActions(),
 						softwareMapEnabled: this.currentSoftwareMapEnabled(),
 						documentWidth: this.currentDocumentWidth(),
@@ -640,6 +638,20 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	/* One object for the pane's life, like `setupActions`: the canvas keys
 	   effects on it. */
+	private catalogEntry(reviewId: string) {
+		const review = this.apiCatalog.reviews.find((entry) => entry.reviewId === reviewId);
+		return [review, !!review?.host && this.remoteHosts.isBusy(review.host)] as const;
+	}
+
+	private updateRemoteEntry(): void {
+		const content = this.apiContent;
+		const updated = content && withRemoteEntry(content, ...this.catalogEntry(content.reviewId));
+		if (updated) {
+			this.apiContent = updated;
+			this.canvas.value?.update(updated);
+		}
+	}
+
 	private remoteHostActions(): ReviewRemoteHostActions {
 		return this.cachedRemoteHostActions ??= {
 			states: () => this.desktopConnection.readRemoteHosts(),
