@@ -18,7 +18,6 @@ import { AGENT_LOGOS } from "./agent-logos";
 import { resolveAskAnchor } from "./ask-anchor";
 import { useAskHistory } from "./ask-history";
 import { setCssHighlight } from "./css-highlights";
-import { INLINE_EDITOR_MADE } from "./DocumentCodeView";
 import { useOptionalReviewPanelStore } from "./review-panel";
 import type { AskPassage } from "./review-panel-model";
 import type { ReviewPanelStore } from "./review-panel-store";
@@ -40,13 +39,11 @@ interface AskMark {
   quote: string;
   /** Newest first, like the history. */
   entries: AskHistoryEntry[];
-  /** Its words, which are washed; code in an editor has none to wash. */
-  range?: Range;
-  /** Asked-about code, found again where the pointer is. */
-  code?: CodeTarget;
-  /** What its pin is level with: the passage's block, or the editor. */
+  /** Its words, which are washed. */
+  range: Range;
+  /** What its pin is level with: the passage's block. */
   block: HTMLElement;
-  /** The outermost list, table or editor, which its pin stays clear of. */
+  /** The outermost list or table, which its pin stays clear of. */
   lane: HTMLElement;
 }
 
@@ -163,53 +160,6 @@ function outermost(block: HTMLElement, article: HTMLElement): HTMLElement {
 
 const CONTAINER_BLOCKS = "ul, ol, dl, table";
 
-type CodeTarget = Extract<
-  AskHistoryEntry["selection"]["target"],
-  { kind: "code" }
->;
-
-/** An editor the canvas shows a file in; it names the file. */
-const EDITOR = "[data-review-inline-editor]";
-
-/** Where asked-about code is in the review as rendered now: its lines in
- * an editor showing its file, on the side asked about, or that editor
- * where the lines are not drawn. None when no editor shows the file. */
-function placeCode(
-  article: HTMLElement,
-  target: CodeTarget,
-): { editor: HTMLElement; rects: DOMRect[] } | null {
-  const editors = [...article.querySelectorAll<HTMLElement>(EDITOR)].filter(
-    (editor) => editor.dataset.reviewInlineEditor === target.path,
-  );
-
-  for (const editor of editors) {
-    const box = editor.getBoundingClientRect();
-
-    const side =
-      editor.querySelector(
-        target.side === "base" ? ".editor.original" : ".editor.modified",
-      ) ?? editor;
-
-    // The editor numbers each line it draws; a line spans the editor.
-    const rects = [...side.querySelectorAll(".line-numbers")].flatMap(
-      (number) => {
-        const line = Number(number.textContent);
-        const at = number.getBoundingClientRect();
-
-        return line >= target.startLine && line <= target.endLine && at.height
-          ? [new DOMRect(box.left, at.top, box.width, at.height)]
-          : [];
-      },
-    );
-
-    if (rects.length) return { editor, rects };
-  }
-
-  const [editor] = editors;
-
-  return editor ? { editor, rects: [editor.getBoundingClientRect()] } : null;
-}
-
 interface FoundMarks {
   marks: AskMark[];
   /** Conversations whose passage changed. */
@@ -235,21 +185,10 @@ function firstLineOffset(block: HTMLElement) {
 }
 
 /** From a mark's block's top to its pin, centred on the passage's first
- * line, or on the line of code where the editor has drawn it. */
-function offsetOf(article: HTMLElement, mark: AskMark): number {
+ * line. */
+function offsetOf(mark: AskMark): number {
   const top = mark.block.getBoundingClientRect().top;
-
-  if (mark.code) {
-    const [first] = placeCode(article, mark.code)?.rects ?? [];
-
-    // Else level with the editor's top.
-    if (!first) return 0;
-    const level = Math.min(first.height, PIN_HEIGHT);
-
-    return first.top - top + level / 2 - PIN_HEIGHT / 2;
-  }
-
-  const rects = [...(mark.range?.getClientRects() ?? [])];
+  const rects = [...mark.range.getClientRects()];
 
   // A passage starting where a line wraps has an empty box at the end of
   // the line before.
@@ -269,10 +208,10 @@ function offsetOf(article: HTMLElement, mark: AskMark): number {
 /** Lays out the pins as the document is drawn now: in reading order, which
  * is also the order Tab reaches them, each beside its passage's own line.
  * Pins for passages on one line of a block share a row. */
-function layOutRows(article: HTMLElement, marks: readonly AskMark[]): PinRow[] {
+function layOutRows(marks: readonly AskMark[]): PinRow[] {
   const placed = marks.map((mark) => ({
     mark,
-    offset: Math.round(offsetOf(article, mark)),
+    offset: Math.round(offsetOf(mark)),
   }));
 
   placed.sort(
@@ -283,12 +222,10 @@ function layOutRows(article: HTMLElement, marks: readonly AskMark[]): PinRow[] {
             Node.DOCUMENT_POSITION_FOLLOWING
           ? -1
           : 1) ||
-      (above.mark.range && below.mark.range
-        ? above.mark.range.compareBoundaryPoints(
-            Range.START_TO_START,
-            below.mark.range,
-          )
-        : above.offset - below.offset),
+      above.mark.range.compareBoundaryPoints(
+        Range.START_TO_START,
+        below.mark.range,
+      ),
   );
 
   const rows: PinRow[] = [];
@@ -331,25 +268,10 @@ function findMarks(
   // Conversations about the same words share a mark.
   const found = new Map<string, { range: Range; entries: AskHistoryEntry[] }>();
 
-  // And those about the same lines of a file.
-  const code = new Map<
-    string,
-    { target: CodeTarget; entries: AskHistoryEntry[] }
-  >();
-
   const outdated = new Set<string>();
 
   for (const entry of entries) {
     const { target } = entry.selection;
-
-    if (target.kind === "code") {
-      const key = `code:${target.path}:${target.side}:${target.startLine}:${target.endLine}`;
-      const mark = code.get(key);
-
-      if (mark) mark.entries.push(entry);
-      else code.set(key, { target, entries: [entry] });
-      continue;
-    }
 
     // Only a selection in a review block has a place to mark.
     if (target.kind !== "text" || !target.anchor) continue;
@@ -392,27 +314,10 @@ function findMarks(
     });
   }
 
-  for (const [key, { target, entries: asked }] of code) {
-    const at = placeCode(article, target);
-
-    // This version shows the file nowhere.
-    if (!at) continue;
-
-    // Its pin is outside an editor wider than the prose.
-    marks.push({
-      key,
-      quote: asked[0]!.selection.title,
-      entries: asked,
-      code: target,
-      block: at.editor,
-      lane: at.editor,
-    });
-  }
-
   setCssHighlight(
     article,
     ASK_HIGHLIGHT,
-    marks.flatMap(({ range }) => (range ? [range] : [])),
+    marks.map(({ range }) => range),
   );
 
   return { marks, outdated };
@@ -438,15 +343,9 @@ function rowStyle(
   } as CSSProperties;
 }
 
-/** Whether the pointer is on a mark's words, or its lines of code. */
-function under(article: HTMLElement, mark: AskMark, x: number, y: number) {
-  const rects = mark.range
-    ? [...mark.range.getClientRects()]
-    : mark.code
-      ? (placeCode(article, mark.code)?.rects ?? [])
-      : [];
-
-  return rects.some(
+/** Whether the pointer is on a mark's words. */
+function under(mark: AskMark, x: number, y: number) {
+  return [...mark.range.getClientRects()].some(
     (rect) =>
       x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom,
   );
@@ -504,55 +403,10 @@ export function AskThreadMarks({
       });
     };
 
-    // An editor draws its lines once it nears the screen, and a diff's
-    // editor is made once its lines are found, both after the marks were
-    // placed; asked-about code is then found on its line.
-    // Watched only until then: an editor in use changes all the time.
-    const files = new Set(
-      entries.flatMap(({ selection: { target } }) =>
-        target.kind === "code" ? [target.path] : [],
-      ),
-    );
-
-    const waiting = new Set<MutationObserver>();
-
-    const wait = (editor: HTMLElement) => {
-      if (!files.has(editor.dataset.reviewInlineEditor ?? "")) return;
-
-      if (editor.querySelector(".line-numbers")) {
-        place();
-
-        return;
-      }
-
-      const drawn = new MutationObserver(() => {
-        if (!editor.querySelector(".line-numbers")) return;
-        drawn.disconnect();
-        waiting.delete(drawn);
-        place();
-      });
-
-      drawn.observe(editor, { childList: true, subtree: true });
-      waiting.add(drawn);
-    };
-
-    for (const editor of article.querySelectorAll<HTMLElement>(EDITOR))
-      if (!editor.querySelector(".line-numbers")) wait(editor);
-
-    const made = (event: Event) => {
-      if (event.target instanceof HTMLElement) wait(event.target);
-    };
-
-    if (files.size) article.addEventListener(INLINE_EDITOR_MADE, made);
-
     place();
 
     return () => {
       cancelAnimationFrame(frame);
-      article.removeEventListener(INLINE_EDITOR_MADE, made);
-
-      for (const drawn of waiting) drawn.disconnect();
-
       setCssHighlight(article, ASK_HIGHLIGHT, []);
     };
   }, [article, entries, revision, reportOutdated]);
@@ -571,7 +425,7 @@ export function AskThreadMarks({
 
     // Most resizes leave every passage on its line.
     const layOut = () => {
-      const after = layOutRows(article, marks);
+      const after = layOutRows(marks);
 
       if (laid && sameRows(laid, after)) return;
       laid = after;
@@ -604,9 +458,8 @@ export function AskThreadMarks({
           return;
 
         setActive(
-          marks.find((mark) =>
-            under(article, mark, event.clientX, event.clientY),
-          )?.key ?? null,
+          marks.find((mark) => under(mark, event.clientX, event.clientY))
+            ?.key ?? null,
         );
       });
     };

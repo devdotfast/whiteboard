@@ -191,6 +191,7 @@ export interface ReviewInlineEditorHandle extends ReviewDisposable {
   revealFindMatch(index: number): void;
   clearActiveFindMatch(): void;
   clearFind(): void;
+  setAskMarks?(marks: readonly ReviewAskMark[], mount: ReviewAskPinMount): void;
 }
 
 export interface ReviewInlineEditorFactory {

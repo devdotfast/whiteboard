@@ -12,6 +12,7 @@ import { coverageProgress, coverageSources } from "@review/viewed-coverage";
 import * as stylex from "@stylexjs/stylex";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
+import { AskCodePins } from "./ask-code-pins";
 import { useReviewSession } from "./host/review-session";
 import { useReviewFindRegistration } from "./review-find";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
@@ -23,9 +24,6 @@ const LINE_HEIGHT = 20;
 const MAX_VISIBLE_LINES = 18;
 
 const INLINE_HEADER_HEIGHT = 40;
-
-/** Sent up the page from an editor's host once the editor is made in it. */
-export const INLINE_EDITOR_MADE = "review-inline-editor-made";
 
 export function DocumentCodeView({
   path,
@@ -109,6 +107,11 @@ export function DocumentCodeView({
 
   const [error, setError] = useState<string | null>(null);
   const handleRef = useRef<ReviewInlineEditorHandle | null>(null);
+
+  const [askTarget, setAskTarget] = useState<ReviewInlineEditorHandle | null>(
+    null,
+  );
+
   const creationFailedRef = useRef(false);
   const latestFindQueryRef = useRef<ReviewFindQuery | null>(null);
 
@@ -253,7 +256,7 @@ export function DocumentCodeView({
 
     handle.setCollapsed(collapsedRef.current);
     handleRef.current = handle;
-    container.dispatchEvent(new Event(INLINE_EDITOR_MADE, { bubbles: true }));
+    setAskTarget(handle);
 
     for (const resolve of handleWaitersRef.current.splice(0)) resolve(handle);
     setHeight(handle.height);
@@ -265,6 +268,7 @@ export function DocumentCodeView({
 
     return () => {
       if (handleRef.current === handle) handleRef.current = null;
+      setAskTarget(null);
       handle.clearFind();
       errorSubscription.dispose();
       heightSubscription.dispose();
@@ -320,6 +324,7 @@ export function DocumentCodeView({
         data-review-inline-editor-active={active ? "true" : "false"}
         style={{ height }}
       />
+      <AskCodePins handle={askTarget} />
       {error ? (
         <div {...stylex.props(styles.error)} title={error}>
           Inline preview unavailable

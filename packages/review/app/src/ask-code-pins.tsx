@@ -1,6 +1,7 @@
 import type {
   ReviewAskMark,
   ReviewDiffViewHandle,
+  ReviewInlineEditorHandle,
 } from "@dev.fast/review-protocol";
 import type { AskHistoryEntry } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
@@ -49,13 +50,13 @@ function codeMarks(
   return [...marks.values()];
 }
 
-/** Pins saved Ask conversations in a diff's gutter, beside the lines they
- * asked about; a pin reopens them. */
+/** Pins saved Ask conversations in the gutter of a diff or code peek,
+ * beside the lines they asked about; a pin reopens them. */
 export function AskCodePins({
   handle,
   commit,
 }: {
-  handle: ReviewDiffViewHandle | null;
+  handle: ReviewDiffViewHandle | ReviewInlineEditorHandle | null;
   commit?: string;
 }): ReactElement {
   const entries = useAskHistory()?.entries;

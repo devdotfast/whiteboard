@@ -148,6 +148,7 @@ export class ReviewDiffViewService extends Disposable {
 			revealFindMatch: index => { view.setCollapsed(false); view.revealFindMatch(index); },
 			clearActiveFindMatch: () => view.clearActiveFindMatch(),
 			clearFind: () => view.clearFind(),
+			setAskMarks: (marks, mount) => view.setAskMarks(marks, mount),
 			dispose: () => lifetime.dispose(),
 		};
 	}
