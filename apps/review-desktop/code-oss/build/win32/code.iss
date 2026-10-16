@@ -1428,6 +1428,18 @@ begin
 		Result := True;
 end;
 
+// The CLI and MCP server run the installed exe and outlive the app mutex.
+procedure StopCliProcesses();
+var
+	ExePath: String;
+	ResultCode: Integer;
+begin
+	ExePath := ExpandConstant('{app}\{#ExeBasename}.exe');
+	Log('Stopping remaining processes at ' + ExePath);
+	StringChangeEx(ExePath, '''', '''''', True);
+	ShellExec('', 'powershell.exe', '-NoLogo -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -Command "Get-WmiObject Win32_Process | Where-Object { $_.ExecutablePath -eq ''' + ExePath + ''' } | Select @{Name=''Id''; Expression={$_.ProcessId}} | Stop-Process -Force"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
 procedure StopTunnelServiceIfNeeded();
 var
 	StopServiceResultCode: Integer;
@@ -1818,6 +1830,7 @@ begin
 
       if not SessionEndFileExists() and not CancelFileExists() then begin
         StopTunnelServiceIfNeeded();
+        StopCliProcesses();
         Log('Invoking inno_updater for background update');
         Exec(ExpandConstant('{app}\{#VersionedResourcesFolder}\tools\inno_updater.exe'), ExpandConstant('"{app}\{#ExeBasename}.exe" ' + BoolToStr(LockFileExists()) + ' "{cm:UpdatingVisualStudioCode}"'), '', SW_SHOW, ewWaitUntilTerminated, UpdateResultCode);
         DeleteFile(ExpandConstant('{app}\updating_version'));
