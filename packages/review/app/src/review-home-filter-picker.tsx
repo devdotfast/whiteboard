@@ -380,7 +380,7 @@ export function HomeFilterPicker({
       <>
         {selected.map((row) => row.node)}
         {selected.length > 0 && rest.length > 0 && (
-          <div role="separator" {...stylex.props(styles.divider)} />
+          <div role="separator" {...stylex.props(menuStyles.separator)} />
         )}
         {rest.map((row) => row.node)}
         {all.length === 0 && <Empty />}
@@ -599,12 +599,6 @@ const styles = stylex.create({
     left: "anchor(right)",
   },
   submenuStart: { left: "auto", right: "anchor(left)" },
-  divider: {
-    flexShrink: 0,
-    height: "1px",
-    marginBlock: "4px",
-    backgroundColor: tokens.rule,
-  },
   filter: {
     flexShrink: 0,
     boxSizing: "border-box",

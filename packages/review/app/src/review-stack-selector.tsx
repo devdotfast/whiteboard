@@ -153,7 +153,10 @@ export function ReviewStackSelector(): ReactElement | null {
           ))}
           {base ? (
             <>
-              <div role="separator" {...stylex.props(styles.rule)} />
+              <div
+                role="separator"
+                {...stylex.props(menuStyles.separator, styles.rule)}
+              />
               <div {...stylex.props(styles.baseRow)}>
                 <span {...stylex.props(styles.slot)} />
                 <span {...stylex.props(styles.branch, styles.faint)}>
@@ -343,13 +346,7 @@ const styles = stylex.create({
     fontSize: fontSize.body,
     fontWeight: fontWeight.medium,
   },
-  rule: {
-    flexShrink: 0,
-    height: "1px",
-    marginBlock: "4px",
-    marginInline: "6px",
-    backgroundColor: tokens.ruleSoft,
-  },
+  rule: { marginInline: "6px" },
   baseRow: {
     display: "flex",
     flex: "none",

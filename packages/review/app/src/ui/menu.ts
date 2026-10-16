@@ -72,6 +72,13 @@ export const menuStyles = stylex.create({
   label: {
     padding: "6px 8px 4px",
   },
+  // A hairline between groups of items.
+  separator: {
+    flex: "none",
+    height: "1px",
+    marginBlock: "4px",
+    backgroundColor: tokens.ruleSoft,
+  },
   item: {
     display: "flex",
     // A scrolling list must not squeeze its items.

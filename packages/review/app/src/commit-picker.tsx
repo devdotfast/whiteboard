@@ -206,7 +206,10 @@ function CommitMenu({
           {countLabel(total, "commit")}
         </span>
       </button>
-      <div {...stylex.props(styles.rule)} />
+      <div
+        role="separator"
+        {...stylex.props(menuStyles.separator, styles.rule)}
+      />
       <div {...stylex.props(styles.header)}>
         Specific commits
         <button
@@ -455,7 +458,7 @@ const styles = stylex.create({
     fontWeight: fontWeight.medium,
   },
   allCount: { color: tokens.inkMuted },
-  rule: { height: "1px", backgroundColor: tokens.ruleSoft },
+  rule: { marginBlock: 0 },
   header: {
     display: "flex",
     alignItems: "center",
