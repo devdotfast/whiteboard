@@ -9,12 +9,10 @@ import { promisify } from "node:util";
 import { DEFAULT_REMOTE_RUNTIME } from "../../build-remote-runtime.mjs";
 import {
   appRoot,
-  closeSourceWindow,
   createReview,
   openHome,
   openSettings,
   sleep,
-  sourceWindowFor,
 } from "../harness.mjs";
 
 const exec = promisify(execFile);
@@ -494,30 +492,16 @@ async function journey(ctx) {
       warm[m.key].push(result.ms);
     }
 
-    const opened = await windowCall(ctx, "goto", m.review, "b.ts", 3, "answer");
+    const { peek } = await windowCall(ctx, "goto", m.review, "b.ts", 3, "answer");
 
-    if (m.key === "laptop") {
-      const source = await sourceWindowFor(ctx, "a.ts");
-
-      assert.match(await lines(source), /export const answer = 1;/);
-      await closeSourceWindow(source);
-    } else {
-      assert.match(
-        opened.active?.resource ?? "",
-        new RegExp(
-          `^vscode-remote://whiteboard%2B${m.serverId.toLowerCase()}/.*/a\\.ts$`,
-        ),
-        JSON.stringify(opened),
-      );
-      assert.match(opened.active.text, new RegExp(`answer = ${m.answer};`));
-      assert.ok(opened.active.readonly, "the host's a.ts is not read-only");
-      assert.ok(opened.active.label.startsWith(`${m.alias}: `));
-      await windowCall(ctx, "closeModal");
-    }
+    assert.match(peek?.resource ?? "", /\/a\.ts(\?|$)/, JSON.stringify(peek));
+    assert.match(peek.text, new RegExp(`answer = ${m.answer};`));
+    assert.ok(peek.readonly, "the peeked a.ts is not read-only");
+    await windowCall(ctx, "closePeek");
 
     check(
       ctx,
-      `3${m.key}. ${m.alias}: the hover read "${shown.text.match(answer(m.answer))[0]}" ${shown.ms} ms after the pointer arrived; go to definition opened ${m.key === "laptop" ? "a Source window on" : "read-only"} its a.ts`,
+      `3${m.key}. ${m.alias}: the hover read "${shown.text.match(answer(m.answer))[0]}" ${shown.ms} ms after the pointer arrived; go to definition peeked its a.ts`,
     );
   }
 
@@ -705,10 +689,17 @@ async function journey(ctx) {
       `8. ${aliasB} with another commit: its review and Diff read normally, the hover is empty (${absent.ms} ms) and no widget shows; Settings says "${detail}"`,
     );
 
-    await remote("install", nameB);
+    // The same package is already installed, so only the commit changes back.
+    await remote("install", nameB, "--commit", commit);
     await onRemote(aliasB, "whiteboard server stop");
     await until(
-      async () => (await hostState(aliasB))?.languageFeatures === true,
+      async () => {
+        const state = await hostState(aliasB);
+
+        if (state?.languageFeatures !== true) throw new Error(JSON.stringify(state));
+
+        return true;
+      },
       `${aliasB} available again`,
       120000,
     );
@@ -1031,13 +1022,23 @@ async function inWindow(command, args) {
     return {};
   }
 
-  if (command === "closeModal") {
-    const groups = await get(
-      "vs/workbench/services/editor/common/editorGroupsService.js",
-      "IEditorGroupsService",
-    );
+  const peekEditor = async () =>
+    (
+      await get(
+        "vs/editor/browser/services/codeEditorService.js",
+        "ICodeEditorService",
+      )
+    )
+      .listCodeEditors()
+      .find((e) => e.getModel() && e.getDomNode()?.closest(".peekview-widget"));
 
-    return { closed: (await groups.activeModalEditorPart?.close()) ?? null };
+  if (command === "closePeek") {
+    (await peekEditor())?.focus();
+    await (
+      await get("vs/platform/commands/common/commands.js", "ICommandService")
+    ).executeCommand("review.closeDefinitionPeek");
+
+    return { open: Boolean(await peekEditor()) };
   }
 
   const languages = await get(
@@ -1158,13 +1159,8 @@ async function inWindow(command, args) {
   }
 
   if (command === "goto") {
-    const [editors, labels, commands, { SymbolNavigationAnchor }] =
+    const [commands, { SymbolNavigationAnchor }] =
       await Promise.all([
-        get(
-          "vs/workbench/services/editor/common/editorService.js",
-          "IEditorService",
-        ),
-        get("vs/platform/label/common/label.js", "ILabelService"),
         get("vs/platform/commands/common/commands.js", "ICommandService"),
         import(
           `${globalThis._VSCODE_FILE_ROOT}vs/editor/contrib/gotoSymbol/browser/goToCommands.js`
@@ -1179,15 +1175,14 @@ async function inWindow(command, args) {
     );
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const active = editors.activeEditor;
+    const peek = await peekEditor();
 
     return {
       ms: ms(),
-      active: active && {
-        resource: active.resource?.toString() ?? null,
-        label: active.resource ? labels.getUriLabel(active.resource) : null,
-        readonly: Boolean(active.isReadonly()),
-        text: editors.activeTextEditorControl?.getModel?.()?.getValue?.() ?? "",
+      peek: peek && {
+        resource: peek.getModel().uri.toString(),
+        readonly: Boolean(peek.getRawOptions().readOnly),
+        text: peek.getModel().getValue(),
       },
     };
   }
