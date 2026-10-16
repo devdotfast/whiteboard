@@ -10,7 +10,11 @@ import {
   type ReviewOnboardingTarget,
   type ReviewOnboardingTargetsResponse,
 } from "@dev.fast/review-protocol";
-import { askAgentIds } from "@review/ask/thread-state.js";
+import {
+  type AskAgentId,
+  type AskPicks,
+  askAgentIds,
+} from "@review/ask/thread-state.js";
 import type { AskThreadHooks } from "@review/ask/thread.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";
 import type { Hono } from "hono";
@@ -25,6 +29,12 @@ import type { ReviewStore } from "./store.js";
 const COMMAND_TIMEOUT_MS = 15_000;
 
 const PULL_REQUEST_LIMIT = 10;
+
+/** Ignored when the agent does not offer the model. */
+const RUN_PICKS: Partial<Record<AskAgentId, AskPicks>> = {
+  claude: { model: "sonnet" },
+  codex: { model: "gpt-6-luna" },
+};
 
 /** Runs one subprocess and resolves its stdout; rejects on failure. */
 export type OnboardingRun = (
@@ -466,6 +476,7 @@ export function registerOnboardingRoutes(
       head,
       selection: { title },
       context: await runContext(ask, input.agent, id, reviewId),
+      picks: RUN_PICKS[input.agent],
       question: { text: input.prompt },
     });
 
