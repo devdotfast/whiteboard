@@ -8,8 +8,9 @@ export interface AskFileRef {
 /** `:42`, `:42:7`, `:42-50`, `#L42`, `#L42C7`, `#L42-L50`. */
 const lineSuffix = /(?::(\d+)(?::\d+)?(?:-\d+)?|#L(\d+)(?:C\d+)?(?:-L?\d+)?)$/;
 
-/** A scheme, as in `https://`; a Windows drive letter is not one. */
-const urlScheme = /^[a-z][a-z\d+.-]+:/i;
+/** A scheme, as in `https://`; a Windows drive letter is not one, nor is
+ * `app.ts:42`. */
+const urlScheme = /^[a-z][a-z\d+.-]+:(?!\d)/i;
 
 /** What a piece of inline code or a link target names, if it could be a
  * file: a path with a directory or an extension, and no spaces. Whether the
