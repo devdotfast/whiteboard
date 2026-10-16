@@ -23,7 +23,7 @@ import { FolderLabel } from "./folder-label";
 import { countLabel } from "./format";
 import { reviewPreferenceKey } from "./host/review-client";
 import { LensProgress, LensRows } from "./lens-list";
-import type { ReviewTocEntry } from "./review-document-headings";
+import { type ReviewTocEntry, headingDepth } from "./review-document-headings";
 import { worktreeLabel } from "./review-home-model";
 import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
 import { fontSize, fontWeight, radius, tracking } from "./scale.stylex";
@@ -330,7 +330,8 @@ function BoardRow({
   );
 }
 
-/** The document's headings; a click scrolls the canvas to one. */
+/** The document's headings, as the Diff view's folded Contents lists them;
+ * a click opens the document at one. */
 export function ContentsList({
   entries,
   active,
@@ -343,8 +344,7 @@ export function ContentsList({
 }): ReactElement {
   // Top-level sections are numbered; each deeper section is indented one
   // step under its parent.
-  const depth = (entry: ReviewTocEntry) =>
-    entry.depth ?? (entry.level === "h2" ? 1 : 2);
+  const depth = headingDepth;
 
   const sectionNumbers = new Map(
     entries
@@ -470,23 +470,14 @@ function SectionBody(props: ReviewSidebarSectionProps): ReactElement | null {
 
   if (props.section === "family") return <FamilySectionBody {...props} />;
 
-  if (props.section === "contents")
-    return (
-      <ContentsList
-        entries={props.contents}
-        active={props.activeHeading}
-        onOpen={props.onOpenHeading}
-      />
-    );
-
   return <WhiteboardsSectionBody {...props} />;
 }
 
 /**
  * The top of the Whiteboard tab: a search over every board in the
- * project, its matches listed under it. Desktop puts the board's CONTENTS
- * next, then THIS BOARD (the open board's family), then RECENT (the boards
- * opened last); while a search shows matches, THIS BOARD steps aside.
+ * project, its matches listed under it. Desktop puts THIS BOARD (the open
+ * board's family) next, then RECENT (the boards opened last); while a
+ * search shows matches, THIS BOARD steps aside.
  */
 function WhiteboardsSectionBody({
   project,
