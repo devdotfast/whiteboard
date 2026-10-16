@@ -401,3 +401,31 @@ it("hides the rail on a narrow board, and ⋯ opens its contents instead", async
   expect(document.querySelector('[role="menu"]')).toBeNull();
   expect(document.activeElement).toBe(board.region);
 });
+
+it("overlays the board's scrollbar right of the ticks, shown only while it scrolls", async () => {
+  // Headless Chromium hides native scrollbars, so their width can't be
+  // measured here; the overlay's lane and its showing can.
+  const board = await mountBoard(900);
+
+  const lane = board.container.querySelector<HTMLElement>(
+    'main > [aria-hidden="true"]',
+  )!;
+
+  const shown = () => Number(getComputedStyle(lane).opacity) > 0;
+
+  expect(board.region.scrollHeight).toBeGreaterThan(board.region.clientHeight);
+  expect(lane.getBoundingClientRect().left).toBeGreaterThanOrEqual(
+    board.rail.getBoundingClientRect().right,
+  );
+  expect(lane.getBoundingClientRect().right).toBe(
+    board.region.getBoundingClientRect().right,
+  );
+  expect(shown()).toBe(false);
+
+  await act(async () => {
+    board.region.scrollTop = 200;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+  });
+  await vi.waitFor(() => expect(shown()).toBe(true));
+});
