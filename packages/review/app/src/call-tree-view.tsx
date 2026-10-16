@@ -1,4 +1,4 @@
-import { fontSize, fontWeight } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, leading, space } from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CheckIcon } from "@canvas/ui/icons";
@@ -269,12 +269,12 @@ export function DocumentCallTree({ block }: { block: CallStackDiffBlock }) {
 
 const styles = stylex.create({
   figure: {
-    margin: "14px 0",
+    margin: `${space.s14} 0`,
   },
   tree: {
     minWidth: "100%",
     width: "100%",
-    padding: "6px 0 12px",
+    padding: `${space.s6} 0 ${space.s12}`,
   },
   // A hovered or focused call-site edge paints over the rows below it.
   entry: {
@@ -291,12 +291,12 @@ const styles = stylex.create({
     alignItems: "center",
     width: "100%",
     height: "26px",
-    padding: "0 12px 0 14px",
+    padding: `0 ${space.s12} 0 ${space.s14}`,
     backgroundColor: {
       default: tokens.transparent,
       ":hover:not(:disabled)": `color-mix(in srgb, ${tokens.ink} 3%, transparent)`,
     },
-    font: `${fontSize.body}/26px ${tokens.fontMono}`,
+    font: `${fontSize.body}/${leading.px26} ${tokens.fontMono}`,
     textAlign: "left",
     whiteSpace: "nowrap",
   },
@@ -323,18 +323,18 @@ const styles = stylex.create({
   },
   stats: {
     display: "inline-flex",
-    gap: "5px",
+    gap: space.s4,
     fontVariantNumeric: "tabular-nums",
     flexShrink: 0,
     marginLeft: "auto",
-    paddingLeft: "12px",
+    paddingLeft: space.s12,
     fontSize: fontSize.micro,
   },
   connectors: {
     flexShrink: 0,
     alignSelf: "stretch",
     position: "absolute",
-    left: "14px",
+    left: space.s14,
     top: 0,
     zIndex: 1,
     pointerEvents: "none",

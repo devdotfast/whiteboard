@@ -1,5 +1,6 @@
 import { drawStyles } from "@canvas/draw-styles";
 import { documentMarker } from "@canvas/markers.stylex";
+import { space } from "@canvas/scale.stylex";
 import { withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
@@ -23,7 +24,7 @@ export function softwareMapRootProps(className?: string, variant?: "view") {
 
 const styles = stylex.create({
   root: {
-    margin: "24px 0",
+    margin: `${space.s24} 0`,
     fontFamily: tokens.fontMono,
     // In a document the map centers on the prose column, never narrower than
     // the prose measure.

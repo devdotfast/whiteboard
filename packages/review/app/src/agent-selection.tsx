@@ -26,7 +26,7 @@ import { useReviewSession } from "./host/review-session";
 import { useNotify } from "./notify";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useOptionalReviewPanelStore } from "./review-panel";
-import { fontSize, layer, motion } from "./scale.stylex";
+import { fontSize, layer, motion, space } from "./scale.stylex";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
@@ -399,7 +399,7 @@ const styles = stylex.create({
   lane: {
     position: "absolute",
     left: 0,
-    right: "8px",
+    right: space.s8,
     zIndex: layer.agentSelection,
     display: "flex",
     pointerEvents: "none",
@@ -415,8 +415,8 @@ const styles = stylex.create({
     pointerEvents: "auto",
     display: "inline-flex",
     alignItems: "center",
-    gap: "4px",
-    padding: "4px",
+    gap: space.s4,
+    padding: space.s4,
     whiteSpace: "nowrap",
   },
   // Ask and its agent menu are one split button; the fill sets it apart from

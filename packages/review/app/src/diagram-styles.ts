@@ -1,4 +1,4 @@
-import { fontSize, fontWeight } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, leading, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -24,10 +24,10 @@ export const diagramStyles = stylex.create({
     zIndex: 6,
     display: "flex",
     alignItems: "center",
-    gap: "10px",
+    gap: space.s10,
     minWidth: 0,
     minHeight: "36px",
-    padding: "0 12px 0 14px",
+    padding: `0 ${space.s12} 0 ${space.s14}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -40,7 +40,7 @@ export const diagramStyles = stylex.create({
     display: "inline-flex",
     flex: "1 1 auto",
     alignItems: "center",
-    gap: "10px",
+    gap: space.s10,
     minWidth: 0,
   },
   title: {
@@ -49,7 +49,7 @@ export const diagramStyles = stylex.create({
     fontSize: fontSize.body,
     fontStyle: "normal",
     fontWeight: fontWeight.semibold,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
   },
   // A quiet count ("5 stops", "4 nodes"), not a chip.
   meta: {

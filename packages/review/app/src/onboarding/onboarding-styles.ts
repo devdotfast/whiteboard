@@ -2,8 +2,10 @@ import { railStepMarker } from "@canvas/markers.stylex";
 import {
   fontSize,
   fontWeight,
+  leading,
   motion,
   radius,
+  space,
   tracking,
 } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
@@ -46,7 +48,7 @@ export const onboardingStyles = stylex.create({
     alignItems: "center",
     flexShrink: 0,
     height: "56px",
-    paddingInline: "24px",
+    paddingInline: space.s24,
   },
   railSide: {
     display: "flex",
@@ -59,12 +61,12 @@ export const onboardingStyles = stylex.create({
     listStyle: "none",
     flex: 1,
     justifyContent: "center",
-    gap: "28px",
+    gap: space.s28,
   },
   railStep: {
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: space.s8,
     width: "120px",
     padding: 0,
     color: "inherit",
@@ -109,11 +111,14 @@ export const onboardingStyles = stylex.create({
     flex: 1,
     flexDirection: { default: "row", [stacked]: "column" },
     alignItems: { default: "center", [stacked]: "stretch" },
-    gap: { default: "80px", [stacked]: "40px" },
+    gap: { default: space.s72, [stacked]: space.s40 },
     // Bounded, so a panel that outgrows the window scrolls inside itself.
     minHeight: 0,
-    paddingBlock: "24px 56px",
-    paddingInline: { default: "120px 96px", [stacked]: "48px" },
+    paddingBlock: `${space.s24} ${space.s56}`,
+    paddingInline: {
+      default: `${space.s120} ${space.s96}`,
+      [stacked]: space.s48,
+    },
   },
   // A working screen: its title bar, then its content, in one column.
   sheet: {
@@ -124,8 +129,8 @@ export const onboardingStyles = stylex.create({
     width: "100%",
     maxWidth: "880px",
     minHeight: 0,
-    paddingBlock: "20px 32px",
-    paddingInline: "40px",
+    paddingBlock: `${space.s20} ${space.s32}`,
+    paddingInline: space.s40,
     boxSizing: "border-box",
   },
   // The same screen set inside a page that already pads and titles it.
@@ -138,7 +143,7 @@ export const onboardingStyles = stylex.create({
   },
   // A screen with no rail above it starts where the rail would end.
   railless: {
-    paddingTop: "56px",
+    paddingTop: space.s56,
   },
   backLink: {
     alignSelf: "flex-start",
@@ -149,13 +154,13 @@ export const onboardingStyles = stylex.create({
     flexShrink: 0,
     alignItems: "flex-end",
     justifyContent: "space-between",
-    gap: "32px",
-    paddingBottom: "28px",
+    gap: space.s32,
+    paddingBottom: space.s28,
   },
   titleText: {
     display: "flex",
     flexDirection: "column",
-    gap: "10px",
+    gap: space.s10,
     minWidth: 0,
   },
   heading: {
@@ -172,13 +177,13 @@ export const onboardingStyles = stylex.create({
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: 1.5,
+    lineHeight: leading.normal,
   },
   titleActions: {
     display: "flex",
     flexShrink: 0,
     alignItems: "center",
-    gap: "16px",
+    gap: space.s16,
   },
   copy: {
     display: "flex",
@@ -195,7 +200,7 @@ export const onboardingStyles = stylex.create({
     backgroundColor: tokens.tray,
   },
   eyebrow: {
-    paddingBottom: "28px",
+    paddingBottom: space.s28,
     color: tokens.accent,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
@@ -223,7 +228,7 @@ export const onboardingStyles = stylex.create({
   },
   lead: {
     margin: 0,
-    paddingTop: "28px",
+    paddingTop: space.s28,
     maxWidth: "460px",
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
@@ -233,13 +238,13 @@ export const onboardingStyles = stylex.create({
   actions: {
     display: "flex",
     alignItems: "center",
-    gap: "20px",
-    paddingTop: "40px",
+    gap: space.s20,
+    paddingTop: space.s40,
   },
   primary: {
-    gap: "8px",
+    gap: space.s8,
     height: "36px",
-    paddingInline: "16px 14px",
+    paddingInline: `${space.s16} ${space.s14}`,
     fontSize: fontSize.ui,
   },
   primaryKey: {
@@ -249,7 +254,7 @@ export const onboardingStyles = stylex.create({
   },
   error: {
     margin: 0,
-    paddingTop: "16px",
+    paddingTop: space.s16,
     fontSize: fontSize.ui,
   },
   enter0: { ...enter, animationDelay: motion.instant },

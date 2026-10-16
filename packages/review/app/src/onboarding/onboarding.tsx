@@ -1,4 +1,5 @@
 import { railStepMarker } from "@canvas/markers.stylex";
+import { space } from "@canvas/scale.stylex";
 import { withClass } from "@canvas/stylex-props";
 import { Button, buttonStyles } from "@canvas/ui/button";
 import { Kbd } from "@canvas/ui/kbd";
@@ -146,5 +147,5 @@ export function Onboarding({
 }
 
 const railStyles = stylex.create({
-  skip: { gap: "10px", paddingInlineEnd: "8px" },
+  skip: { gap: space.s10, paddingInlineEnd: space.s8 },
 });

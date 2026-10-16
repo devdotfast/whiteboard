@@ -1,4 +1,4 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, space } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
@@ -230,9 +230,9 @@ const styles = stylex.create({
     display: "flex",
     flexWrap: "wrap",
     alignItems: "flex-start",
-    gap: "10px",
-    marginTop: "12px",
-    paddingTop: "10px",
+    gap: space.s10,
+    marginTop: space.s12,
+    paddingTop: space.s10,
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.ruleSoft,
@@ -244,7 +244,7 @@ const styles = stylex.create({
     flexBasis: "100%",
     flexWrap: "wrap",
     alignItems: "baseline",
-    gap: "10px",
+    gap: space.s10,
     minWidth: 0,
   },
   name: {
@@ -268,6 +268,6 @@ const styles = stylex.create({
     display: "grid",
     flex: 1,
     gridTemplateColumns: "repeat(2, minmax(160px, 1fr))",
-    gap: "6px",
+    gap: space.s6,
   },
 });

@@ -1,4 +1,11 @@
-import { fontSize, fontWeight, layer, motion } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  layer,
+  leading,
+  motion,
+  space,
+} from "@canvas/scale.stylex";
 import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { ContentsIcon } from "@canvas/ui/icons";
 import { useDismissOnOutside } from "@canvas/ui/popover";
@@ -408,7 +415,7 @@ const styles = stylex.create({
     position: "absolute",
     // Sits 16px above the content top so it clears the page title.
     top: `calc(32px + ${tokens.reviewPageTop})`,
-    left: { default: "24px", [stylex.env.narrow]: "8px" },
+    left: { default: space.s24, [stylex.env.narrow]: space.s8 },
     zIndex: layer.toc,
     display: "block",
     flex: "none",
@@ -444,14 +451,14 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     pointerEvents: "none",
-    left: { default: "24px", [stylex.env.narrow]: "8px" },
+    left: { default: space.s24, [stylex.env.narrow]: space.s8 },
     zIndex: layer.tocRail,
     width: {
       default: "248px",
       [stylex.env.narrow]: "min(248px, calc(100cqi - 16px))",
     },
     overflow: "visible",
-    padding: "20px 18px 22px 20px",
+    padding: `${space.s20} ${space.s18} ${space.s24} ${space.s20}`,
     transition: "none",
     borderColor: tokens.transparent,
     backgroundColor: tokens.transparent,
@@ -462,7 +469,7 @@ const styles = stylex.create({
   tocRailBesideHeader: {
     left: "max(24px, calc((100% - 1320px) / 2))",
     width: "240px",
-    padding: "6px 0 0",
+    padding: `${space.s6} 0 0`,
   },
   // Beside a wide document the page is its block column plus the same gutters.
   tocRailBesideWideHeader: {
@@ -507,40 +514,40 @@ const styles = stylex.create({
   // the glyph. The rail has no glyph, so its head sits flush.
   head: {
     height: "32px",
-    paddingLeft: "32px",
+    paddingLeft: space.s32,
     fontFamily: tokens.fontMono,
-    lineHeight: "32px",
+    lineHeight: leading.px32,
     whiteSpace: "nowrap",
   },
   headRail: {
     height: "auto",
-    marginBottom: "14px",
+    marginBottom: space.s14,
     paddingLeft: 0,
     lineHeight: "normal",
   },
   headRailBesideHeader: {
-    paddingBottom: "10px",
-    paddingLeft: "14px",
+    paddingBottom: space.s10,
+    paddingLeft: space.s14,
   },
   list: {
     display: "grid",
     margin: 0,
-    padding: "4px 18px 20px 20px",
+    padding: `${space.s4} ${space.s18} ${space.s20} ${space.s20}`,
     listStyle: "none",
-    gap: "6px",
+    gap: space.s6,
   },
   listRail: {
     padding: 0,
   },
   listRailBesideHeader: {
-    gap: "4px",
+    gap: space.s4,
   },
   item: {
     margin: 0,
     padding: 0,
   },
   itemH3: {
-    paddingLeft: "14px",
+    paddingLeft: space.s14,
   },
   link: {
     display: "flex",
@@ -552,8 +559,8 @@ const styles = stylex.create({
     },
     textAlign: "left",
     position: "relative",
-    gap: "10px",
-    padding: "2px 0",
+    gap: space.s10,
+    padding: `${space.s2} 0`,
     borderRadius: 0,
     color: {
       default: tokens.inkMuted,
@@ -563,7 +570,7 @@ const styles = stylex.create({
     },
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
     outline: {
       default: null,
       ":hover": "none",
@@ -573,7 +580,7 @@ const styles = stylex.create({
   },
   linkRailBesideHeader: {
     minHeight: "30px",
-    gap: "12px",
+    gap: space.s12,
     paddingBlock: 0,
     fontSize: fontSize.ui,
   },

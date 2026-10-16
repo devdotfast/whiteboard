@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { KeyboardEvent } from "react";
@@ -49,11 +55,11 @@ export const menuStyles = stylex.create({
     left: "anchor(left)",
     display: "flex",
     flexDirection: "column",
-    gap: "2px",
+    gap: space.s2,
     maxWidth: "calc(100vw - 16px)",
     maxHeight: "min(420px, calc(100vh - 16px))",
     margin: 0,
-    padding: "4px",
+    padding: space.s4,
     overflowY: "auto",
     overscrollBehavior: "contain",
     // Its trigger's row may not wrap; the menu does.
@@ -70,17 +76,17 @@ export const menuStyles = stylex.create({
     left: "auto",
   },
   label: {
-    padding: "6px 8px 4px",
+    padding: `${space.s6} ${space.s8} ${space.s4}`,
   },
   item: {
     display: "flex",
     // A scrolling list must not squeeze its items.
     flex: "none",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     width: "100%",
     minHeight: "28px",
-    padding: "5px 8px",
+    padding: `${space.s4} ${space.s8}`,
     borderRadius: radius.control,
     backgroundColor: {
       default: tokens.transparent,
@@ -90,7 +96,7 @@ export const menuStyles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     textAlign: "left",
     cursor: { default: "pointer", ":disabled": "default" },
     opacity: { default: null, ":disabled": 0.5 },

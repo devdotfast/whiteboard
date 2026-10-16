@@ -1,5 +1,11 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  motion,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { useTooltip } from "@canvas/ui/tooltip";
@@ -228,10 +234,10 @@ const styles = stylex.create({
     minWidth: 0,
     maxWidth: "420px",
     alignItems: "center",
-    gap: "7px",
+    gap: space.s8,
     height: tokens.chromeControlHeight,
-    marginInline: "4px",
-    padding: "0 10px 0 6px",
+    marginInline: space.s4,
+    padding: `0 ${space.s10} 0 ${space.s6}`,
     borderRadius: radius.pill,
     color: tokens.inkMuted,
     font: `${fontWeight.medium} ${fontSize.small} ${tokens.fontMono}`,
@@ -347,7 +353,7 @@ const styles = stylex.create({
   unread: {
     position: { default: null, [inTopbarTabs()]: "absolute" },
     top: { default: null, [inTopbarTabs()]: "1px" },
-    right: { default: null, [inTopbarTabs()]: "-7px" },
+    right: { default: null, [inTopbarTabs()]: `-${space.s8}` },
     width: { default: null, [inTopbarTabs()]: "4px" },
     height: { default: null, [inTopbarTabs()]: "4px" },
     borderRadius: { default: null, [inTopbarTabs()]: radius.round },

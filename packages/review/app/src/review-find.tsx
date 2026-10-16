@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, layer } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  layer,
+  leading,
+  space,
+} from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ArrowDownIcon, ArrowUpIcon, CloseIcon } from "@canvas/ui/icons";
@@ -600,16 +606,16 @@ const styles = stylex.create({
   widget: {
     position: "absolute",
     zIndex: layer.popover,
-    top: "48px",
-    right: { default: "16px", [compact]: "8px" },
-    left: { default: null, [compact]: "8px" },
+    top: space.s48,
+    right: { default: space.s16, [compact]: space.s8 },
+    left: { default: null, [compact]: space.s8 },
     display: "flex",
     alignItems: "center",
     minWidth: { default: "490px", [compact]: 0 },
     maxWidth: { default: "calc(100vw - 32px)", [compact]: "none" },
     height: "34px",
-    gap: "3px",
-    padding: "3px 4px 3px 6px",
+    gap: space.s4,
+    padding: `${space.s4} ${space.s4} ${space.s4} ${space.s6}`,
   },
   inputShell: {
     display: "flex",
@@ -617,7 +623,7 @@ const styles = stylex.create({
     flex: 1,
     minWidth: "160px",
     gap: "1px",
-    padding: "0 2px 0 6px",
+    padding: `0 ${space.s2} 0 ${space.s6}`,
   },
   inputShellInvalid: {
     borderColor: tokens.changeRemoved,
@@ -637,12 +643,12 @@ const styles = stylex.create({
     flexShrink: 0,
     flexBasis: { default: "auto", [compact]: "56px" },
     minWidth: "64px",
-    marginLeft: "4px",
-    padding: "0 3px",
+    marginLeft: space.s4,
+    padding: `0 ${space.s4}`,
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     textAlign: "center",
     whiteSpace: "nowrap",
   },

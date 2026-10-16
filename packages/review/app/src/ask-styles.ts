@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 
-import { fontSize, motion, radius } from "./scale.stylex";
+import { fontSize, leading, motion, radius, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 const sweep = stylex.keyframes({
@@ -22,24 +22,24 @@ export const askPanelStyles = stylex.create({
     display: "flex",
     flex: "1 1 auto",
     flexDirection: "column",
-    gap: "14px",
+    gap: space.s14,
     minHeight: 0,
-    padding: "20px 16px 16px",
+    padding: `${space.s20} ${space.s16} ${space.s16}`,
     overflowY: "auto",
   },
   caps: {
     fontFamily: tokens.fontMono,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   selection: {
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: space.s8,
     margin: 0,
   },
   selectionQuote: {
     margin: 0,
-    paddingLeft: "12px",
+    paddingLeft: space.s12,
     borderLeftWidth: "2px",
     borderLeftStyle: "solid",
     borderLeftColor: tokens.accent,
@@ -47,13 +47,13 @@ export const askPanelStyles = stylex.create({
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
     fontStyle: "italic",
-    lineHeight: "22px",
+    lineHeight: leading.px22,
   },
   error: {
     margin: 0,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
     whiteSpace: "pre-wrap",
   },
   // A loading shimmer; sites set the gradient and its size.

@@ -1,4 +1,4 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, leading, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
@@ -61,7 +61,7 @@ const styles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    lineHeight: "19px",
+    lineHeight: leading.px20,
   },
   line: {
     display: "grid",
@@ -71,7 +71,7 @@ const styles = stylex.create({
     whiteSpace: "pre",
   },
   gutter: {
-    padding: "0 5px 0 16px",
+    padding: `0 ${space.s4} 0 ${space.s16}`,
     color: tokens.inkFaint,
     textAlign: "right",
   },

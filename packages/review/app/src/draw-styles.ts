@@ -1,5 +1,5 @@
 import { drawDelay, drawMotion } from "@canvas/draw-motion.stylex";
-import { elevation, motion, radius } from "@canvas/scale.stylex";
+import { elevation, motion, radius, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { documentNodeMarker } from "./markers.stylex";
@@ -314,7 +314,7 @@ export const drawStyles = stylex.create({
       left: tokens.wbWipe,
       width: "8px",
       height: "8px",
-      margin: "-4px 0 0 -4px",
+      margin: `-${space.s4} 0 0 -${space.s4}`,
       borderRadius: radius.round,
       backgroundColor: tokens.accent,
       boxShadow: elevation.markerRing,
@@ -513,8 +513,8 @@ export const drawStyles = stylex.create({
       },
       inset: {
         default: null,
-        [regionOff]: "-12px -12px -12px -40px",
-        [regionOn]: "-12px -12px -12px -40px",
+        [regionOff]: `-${space.s12} -${space.s12} -${space.s12} -${space.s40}`,
+        [regionOn]: `-${space.s12} -${space.s12} -${space.s12} -${space.s40}`,
       },
       borderWidth: { default: null, [regionOff]: "1px", [regionOn]: "1px" },
       borderStyle: {

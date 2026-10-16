@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { isNumberValue, isStringValue } from "@dev.fast/review-protocol";
 import { type MarkdownNode, parseMarkdown } from "@review/markdown";
@@ -727,11 +733,11 @@ const chat = stylex.create({
     color: tokens.ink,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.bold,
-    lineHeight: 1.35,
+    lineHeight: leading.tight,
   },
   list: {
     display: "grid",
-    gap: "4px",
+    gap: space.s4,
     paddingLeft: "1.35em",
   },
   itemParagraph: {
@@ -744,7 +750,7 @@ const chat = stylex.create({
     textUnderlineOffset: "3px",
   },
   code: {
-    padding: "1px 4px",
+    padding: `1px ${space.s4}`,
     borderRadius: radius.small,
     backgroundColor: tokens.tray,
     color: tokens.ink,
@@ -752,7 +758,7 @@ const chat = stylex.create({
     fontSize: "0.92em",
   },
   quote: {
-    paddingLeft: "10px",
+    paddingLeft: space.s10,
     borderLeftWidth: "3px",
     borderLeftStyle: "solid",
     borderLeftColor: tokens.ruleSoft,
@@ -768,7 +774,7 @@ const chat = stylex.create({
     tableLayout: "fixed",
   },
   cell: {
-    padding: "5px 7px",
+    padding: `${space.s4} ${space.s8}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,

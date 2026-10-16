@@ -1,5 +1,5 @@
 import { documentType } from "@canvas/document-type.stylex";
-import { fontSize, fontWeight } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, leading, space } from "@canvas/scale.stylex";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { DisclosureChevron } from "@canvas/ui/disclosure";
 import { iconStyles } from "@canvas/ui/icon-styles";
@@ -1378,18 +1378,18 @@ const sectionStyles = stylex.create({
     position: "relative",
     display: "flex",
     alignItems: "baseline",
-    gap: "12px",
+    gap: space.s12,
     width: `min(100%, ${tokens.reviewProseMaxWidth})`,
     maxWidth: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
-    marginBlock: "40px 12px",
+    marginBlock: `${space.s40} ${space.s12}`,
     marginInline: "auto",
   },
   // Expanded sections keep a faint chevron so "this collapses" is legible
   // without hovering the header first.
   toggle: {
     position: "absolute",
-    top: "4px",
-    left: "-29px",
+    top: space.s4,
+    left: `-${space.s28}`,
   },
   heading: {
     minWidth: 0,
@@ -1401,7 +1401,7 @@ const sectionStyles = stylex.create({
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h2 },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument()]: "32px" },
+    lineHeight: { default: null, [inDocument()]: documentType.h2Leading },
   },
   titleCollapsed: {
     color: tokens.ghost,

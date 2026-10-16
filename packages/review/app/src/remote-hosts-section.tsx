@@ -1,4 +1,4 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, space } from "@canvas/scale.stylex";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { CopyableText, useCopy } from "@canvas/ui/copy";
@@ -643,27 +643,27 @@ const local = stylex.create({
     userSelect: "text",
   },
   hostRow: {
-    rowGap: "12px",
+    rowGap: space.s12,
   },
   toggle: {
     display: "flex",
     minWidth: 0,
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
   },
   body: {
     display: "flex",
     gridColumn: "1 / -1",
     flexDirection: "column",
-    gap: "14px",
-    paddingInlineStart: "24px",
+    gap: space.s14,
+    paddingInlineStart: space.s24,
   },
   group: {
     display: "grid",
     gridTemplateColumns: "max-content minmax(0, 1fr) auto",
     alignItems: "center",
-    columnGap: "16px",
-    rowGap: "6px",
+    columnGap: space.s16,
+    rowGap: space.s6,
   },
   groupLabel: {
     display: "flex",
@@ -671,7 +671,7 @@ const local = stylex.create({
     alignItems: "center",
     color: tokens.ink,
     fontSize: fontSize.body,
-    gap: "8px",
+    gap: space.s8,
   },
   item: {
     display: "contents",
@@ -683,20 +683,20 @@ const local = stylex.create({
   itemAction: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: "8px",
+    gap: space.s8,
   },
   wide: {
     gridColumn: "1 / -1",
   },
   actions: {
-    gap: "8px",
+    gap: space.s8,
   },
   confirm: {
     display: "flex",
     gridColumn: "1 / -1",
     flexWrap: "wrap",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
   },
   alias: {
     minWidth: 0,

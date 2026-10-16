@@ -1,5 +1,5 @@
 import { segmentMarker } from "@canvas/markers.stylex";
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, radius, space } from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import { buttonStyles } from "@canvas/ui/button";
@@ -127,7 +127,7 @@ export const segmentStyles = stylex.create({
     flex: "0 0 auto",
     alignItems: "center",
     gap: 0,
-    padding: "2px",
+    padding: space.s2,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
@@ -135,7 +135,7 @@ export const segmentStyles = stylex.create({
     backgroundColor: tokens.tray,
   },
   segmentedTopbar: {
-    gap: "18px",
+    gap: space.s18,
     padding: 0,
     borderWidth: 0,
     borderStyle: "none",
@@ -149,9 +149,9 @@ export const segmentStyles = stylex.create({
     fontFamily: tokens.chromeFont,
     whiteSpace: "nowrap",
     position: "relative",
-    gap: "6px",
+    gap: space.s6,
     height: "20px",
-    padding: "0 10px",
+    padding: `0 ${space.s10}`,
     borderRadius: radius.small,
     color: { default: tokens.inkMuted, ":hover": tokens.ink },
     fontSize: fontSize.small,
@@ -162,7 +162,7 @@ export const segmentStyles = stylex.create({
   // Segments set in prose (the welcome page) grow a step.
   segmentLarge: {
     height: "26px",
-    padding: "0 12px",
+    padding: `0 ${space.s12}`,
     fontSize: fontSize.ui,
   },
   segmentTopbar: {

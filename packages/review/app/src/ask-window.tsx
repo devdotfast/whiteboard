@@ -35,7 +35,14 @@ import type {
   AskView,
 } from "./review-panel-model";
 import { useReviewContainer } from "./review-root-context";
-import { elevation, fontSize, motion, radius } from "./scale.stylex";
+import {
+  elevation,
+  fontSize,
+  leading,
+  motion,
+  radius,
+  space,
+} from "./scale.stylex";
 import { panelStyles } from "./side-panel-styles";
 import { withClass } from "./stylex-props";
 import { themeStyles } from "./theme-styles";
@@ -1061,7 +1068,7 @@ const styles = stylex.create({
     overflow: "hidden",
   },
   titleBar: {
-    paddingLeft: "10px",
+    paddingLeft: space.s10,
     cursor: "grab",
     touchAction: "none",
     userSelect: "none",
@@ -1078,7 +1085,7 @@ const styles = stylex.create({
   title: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     minWidth: 0,
   },
   grip: {
@@ -1106,9 +1113,9 @@ const styles = stylex.create({
   pill: {
     display: "flex",
     alignItems: "center",
-    gap: "10px",
+    gap: space.s10,
     maxWidth: "100%",
-    padding: "6px 6px 6px 12px",
+    padding: `${space.s6} ${space.s6} ${space.s6} ${space.s12}`,
     borderRadius: radius.pill,
     fontFamily: tokens.fontMono,
     cursor: "pointer",
@@ -1135,14 +1142,14 @@ const styles = stylex.create({
     flex: "0 0 auto",
     color: tokens.ink,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     whiteSpace: "nowrap",
   },
   status: {
     minWidth: 0,
     color: tokens.inkMuted,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   statusWaiting: {
     color: tokens.changeModified,
@@ -1158,10 +1165,10 @@ const styles = stylex.create({
   list: {
     display: "flex",
     flexDirection: "column",
-    gap: "2px",
+    gap: space.s2,
     width: "300px",
     maxWidth: "100%",
-    padding: "4px",
+    padding: space.s4,
     overflowY: "auto",
     overscrollBehavior: "contain",
     transformOrigin: "bottom right",
@@ -1180,7 +1187,7 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "baseline",
     justifyContent: "space-between",
-    gap: "8px",
+    gap: space.s8,
   },
   listCount: {
     color: tokens.inkFaint,
@@ -1190,8 +1197,8 @@ const styles = stylex.create({
   },
   // A menu item with the passage under the agent.
   row: {
-    gap: "10px",
-    padding: "6px 8px",
+    gap: space.s10,
+    padding: `${space.s6} ${space.s8}`,
   },
   rowLogo: {
     display: "flex",
@@ -1210,7 +1217,7 @@ const styles = stylex.create({
   rowLine: {
     display: "flex",
     alignItems: "baseline",
-    gap: "8px",
+    gap: space.s8,
     minWidth: 0,
   },
   passage: {
@@ -1218,7 +1225,7 @@ const styles = stylex.create({
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.ui,
-    lineHeight: "17px",
+    lineHeight: leading.px16,
   },
   pillPassage: {
     flex: "0 1 auto",

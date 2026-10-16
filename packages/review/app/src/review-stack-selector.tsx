@@ -1,4 +1,11 @@
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  motion,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { Button, buttonStyles } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ChevronDownIcon, StackIcon } from "@canvas/ui/icons";
@@ -214,8 +221,8 @@ function LayerRow({
 
 const styles = stylex.create({
   trigger: {
-    gap: "7px",
-    padding: "0 8px",
+    gap: space.s8,
+    padding: `0 ${space.s8}`,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
   },
@@ -239,15 +246,15 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     minWidth: "280px",
-    padding: "4px",
-    font: `${fontSize.ui}/18px ${tokens.fontMono}`,
+    padding: space.s4,
+    font: `${fontSize.ui}/${leading.px18} ${tokens.fontMono}`,
   },
   row: {
     display: "flex",
     alignItems: "center",
     width: "100%",
     minHeight: "40px",
-    padding: "5px 8px",
+    padding: `${space.s4} ${space.s8}`,
     borderRadius: radius.control,
     color: tokens.ink,
     font: "inherit",
@@ -270,12 +277,12 @@ const styles = stylex.create({
     display: "flex",
     flex: "1 1 0",
     flexDirection: "column",
-    gap: "2px",
+    gap: space.s2,
     minWidth: 0,
   },
   title: {
     fontSize: fontSize.small,
-    lineHeight: "15px",
+    lineHeight: leading.px16,
   },
   titleCurrent: {
     fontWeight: fontWeight.semibold,
@@ -283,7 +290,7 @@ const styles = stylex.create({
   branch: {
     color: tokens.inkFaint,
     fontSize: fontSize.micro,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   branchCurrent: {
     color: tokens.inkMuted,

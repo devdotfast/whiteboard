@@ -1,4 +1,4 @@
-import { fontSize, fontWeight } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, leading, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, type RefObject, useEffect, useRef } from "react";
 
@@ -54,9 +54,9 @@ export function AskCloseWarning({
 
 const styles = stylex.create({
   warning: {
-    gap: "6px",
+    gap: space.s6,
     width: "276px",
-    padding: "12px 12px 10px 14px",
+    padding: `${space.s12} ${space.s12} ${space.s10} ${space.s14}`,
     overflowY: "visible",
     fontFamily: tokens.chromeFont,
   },
@@ -65,18 +65,18 @@ const styles = stylex.create({
     color: tokens.ink,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.semibold,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
   },
   text: {
     margin: 0,
     color: tokens.inkMuted,
     fontSize: fontSize.body,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
   },
   actions: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: "6px",
-    marginTop: "6px",
+    gap: space.s6,
+    marginTop: space.s6,
   },
 });

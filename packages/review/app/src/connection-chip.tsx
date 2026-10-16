@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { RefreshIcon } from "@canvas/ui/icons";
@@ -184,10 +190,10 @@ const styles = stylex.create({
     minWidth: 0,
     maxWidth: "320px",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     height: tokens.chromeControlHeight,
-    marginInline: "4px",
-    padding: "0 10px",
+    marginInline: space.s4,
+    padding: `0 ${space.s10}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.warningOutline,
@@ -209,7 +215,7 @@ const styles = stylex.create({
     textOverflow: "ellipsis",
   },
   button: {
-    paddingInlineEnd: "7px",
+    paddingInlineEnd: space.s8,
     cursor: { default: "pointer", ":disabled": "progress" },
     filter: { default: null, ":hover:not(:disabled)": "brightness(1.15)" },
     outline: {
@@ -222,11 +228,11 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-start",
-    gap: "12px",
+    gap: space.s12,
     maxWidth: "72ch",
-    margin: "32px auto",
-    padding: "0 24px",
-    font: `${fontSize.reading}/1.6 ${tokens.fontDisplay}`,
+    margin: `${space.s32} auto`,
+    padding: `0 ${space.s24}`,
+    font: `${fontSize.reading}/${leading.relaxed} ${tokens.fontDisplay}`,
   },
   waitingLabel: {
     margin: 0,

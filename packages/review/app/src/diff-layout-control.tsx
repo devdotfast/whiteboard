@@ -1,4 +1,4 @@
-import { layer } from "@canvas/scale.stylex";
+import { layer, space } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { SlidersIcon } from "@canvas/ui/icons";
@@ -89,8 +89,8 @@ const styles = stylex.create({
     zIndex: layer.popover,
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
-    padding: "10px 12px",
+    gap: space.s8,
+    padding: `${space.s10} ${space.s12}`,
     color: tokens.chromeFg,
     fontFamily: tokens.chromeFont,
     fontSize: tokens.chromeFontSize,
@@ -99,7 +99,7 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: "16px",
+    gap: space.s16,
   },
 });
 

@@ -31,7 +31,7 @@ import {
 import { z } from "zod";
 
 import type { ReviewSession } from "./host/review-session";
-import { fontSize } from "./scale.stylex";
+import { fontSize, leading, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { EmptyState } from "./ui/empty-state";
@@ -744,7 +744,7 @@ const styles = stylex.create({
     display: "flex",
     flex: "0 0 auto",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     cursor: "text",
   },
   searchIcon: {
@@ -766,15 +766,15 @@ const styles = stylex.create({
     display: "flex",
     flex: "1 1 auto",
     flexDirection: "column",
-    gap: "2px",
+    gap: space.s2,
     minHeight: 0,
     maxHeight: "118px",
     overflowY: "auto",
     overscrollBehavior: "contain",
   },
   empty: {
-    paddingBlock: "8px",
-    paddingInline: "8px",
+    paddingBlock: space.s8,
+    paddingInline: space.s8,
     fontSize: fontSize.small,
   },
   name: {
@@ -790,16 +790,16 @@ const styles = stylex.create({
   },
   trigger: {
     maxWidth: "100%",
-    padding: "0 8px",
+    padding: `0 ${space.s8}`,
   },
   inline: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     whiteSpace: "nowrap",
   },
   choice: {
@@ -809,7 +809,7 @@ const styles = stylex.create({
   // it truncates only once the row is full.
   quiet: {
     maxWidth: "100%",
-    padding: "0 6px",
+    padding: `0 ${space.s6}`,
   },
   choiceName: {
     minWidth: 0,

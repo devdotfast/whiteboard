@@ -15,7 +15,7 @@ import {
 import { useAskHistory } from "./ask-history";
 import { useNotify } from "./notify";
 import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
-import { fontSize, radius } from "./scale.stylex";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { IconButton } from "./ui/button";
@@ -143,15 +143,15 @@ const styles = stylex.create({
   armed: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "5px",
+    gap: space.s4,
     width: "auto",
-    padding: "0 8px",
+    padding: `0 ${space.s8}`,
     borderRadius: radius.control,
     backgroundColor: tokens.diffRemovedBg,
     color: tokens.changeRemoved,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
     opacity: 1,
   },
 });

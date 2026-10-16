@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
 import {
@@ -204,9 +204,9 @@ const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 const styles = stylex.create({
   figure: {
-    margin: "18px 0 4px",
+    margin: `${space.s18} 0 ${space.s4}`,
     color: tokens.ink,
-    font: `${fontSize.body}/1.5 ${tokens.fontMono}`,
+    font: `${fontSize.body}/${leading.normal} ${tokens.fontMono}`,
   },
   // The tour stage: the figure fills the overlay without its card chrome.
   stage: {
@@ -224,9 +224,9 @@ const styles = stylex.create({
   // Keeps its caption type among document paragraphs.
   description: {
     margin: 0,
-    padding: "0 16px 12px",
+    padding: `0 ${space.s16} ${space.s12}`,
     color: tokens.inkMuted,
-    font: `${fontSize.small}/1.6 ${tokens.fontMono}`,
+    font: `${fontSize.small}/${leading.relaxed} ${tokens.fontMono}`,
     textAlign: { default: null, [inDocument()]: "left" },
   },
   body: {
@@ -251,26 +251,26 @@ const styles = stylex.create({
     display: "flex",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    gap: "12px",
-    padding: "9px 16px",
+    gap: space.s12,
+    padding: `${space.s8} ${space.s16}`,
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
     backgroundColor: tokens.tray,
     color: tokens.inkMuted,
-    font: `${fontSize.micro}/1.5 ${tokens.fontMono}`,
+    font: `${fontSize.micro}/${leading.normal} ${tokens.fontMono}`,
     fontSize: fontSize.small,
   },
   legend: {
     display: "flex",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
   },
   swatch: {
     display: "inline-block",
     width: "6px",
     height: "6px",
-    marginLeft: "7px",
+    marginLeft: space.s8,
     borderRadius: radius.round,
   },
   added: {

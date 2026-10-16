@@ -1,4 +1,4 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, leading, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -10,18 +10,18 @@ export const promptStyles = stylex.create({
   tabs: {
     width: "fit-content",
     maxWidth: "100%",
-    marginBottom: "10px",
+    marginBottom: space.s10,
   },
   // The prompt is the artifact, not chrome: a quote rule separates it from
   // the step's own copy without putting the card frame back.
   body: {
     margin: 0,
-    padding: "2px 0 2px 14px",
+    padding: `${space.s2} 0 ${space.s2} ${space.s14}`,
     borderLeftWidth: "2px",
     borderLeftStyle: "solid",
     borderLeftColor: tokens.ruleSoft,
     color: tokens.ink,
-    font: `${fontSize.ui}/22px ${tokens.fontMono}`,
+    font: `${fontSize.ui}/${leading.px22} ${tokens.fontMono}`,
     // Prose, not code: keep a last word off its own line if the copy grows.
     textWrap: "pretty",
     whiteSpace: "pre-wrap",
@@ -30,13 +30,13 @@ export const promptStyles = stylex.create({
   actions: {
     display: "flex",
     justifyContent: "flex-end",
-    padding: "18px 0 4px",
+    padding: `${space.s18} 0 ${space.s4}`,
   },
   copy: {
     fontFamily: tokens.fontMono,
   },
   error: {
-    margin: "10px 0 0",
+    margin: `${space.s10} 0 0`,
     fontSize: fontSize.body,
     whiteSpace: "pre-wrap",
   },

@@ -1,5 +1,11 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  motion,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import type { ActivitySurface } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
@@ -402,15 +408,21 @@ const leave = stylex.keyframes({
   "100%": { transform: "translateY(-260px)", opacity: 0 },
 });
 
+const COURIER_WIDTH = 32;
+
+const COURIER_HEIGHT = 39;
+
+const SHADOW_WIDTH = 18;
+
 // He stands on the top edge of whatever the cursor names and slides when it
 // reflows. Reduced motion keeps him and drops the hops.
 const styles = stylex.create({
   courier: {
     position: "absolute",
     zIndex: 4,
-    width: "32px",
-    height: "39px",
-    margin: "-39px 0 0 -16px",
+    width: `${COURIER_WIDTH}px`,
+    height: `${COURIER_HEIGHT}px`,
+    margin: `-${COURIER_HEIGHT}px 0 0 -${COURIER_WIDTH / 2}px`,
     color: tokens.accent,
     pointerEvents: "none",
     transition: {
@@ -454,9 +466,9 @@ const styles = stylex.create({
   },
   tag: {
     position: "absolute",
-    top: "-20px",
+    top: `-${space.s20}`,
     left: "50%",
-    padding: "2px 7px",
+    padding: `${space.s2} ${space.s8}`,
     borderRadius: radius.pill,
     backgroundColor: tokens.ink,
     color: tokens.surface,
@@ -569,11 +581,11 @@ const styles = stylex.create({
   },
   shadow: {
     position: "absolute",
-    bottom: "-3px",
+    bottom: `-${space.s4}`,
     left: "50%",
-    width: "18px",
+    width: `${SHADOW_WIDTH}px`,
     height: "4px",
-    marginLeft: "-9px",
+    marginLeft: `-${SHADOW_WIDTH / 2}px`,
     borderRadius: radius.round,
     backgroundColor: tokens.ink,
     opacity: 0.18,

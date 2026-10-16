@@ -28,7 +28,7 @@ import {
 import { useReviewSession } from "./host/review-session";
 import { appMarker } from "./markers.stylex";
 import { useNotify } from "./notify";
-import { fontSize, fontWeight, radius } from "./scale.stylex";
+import { fontSize, fontWeight, leading, radius, space } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent, clientErrorName } from "./ui-telemetry";
@@ -350,8 +350,8 @@ const styles = stylex.create({
   },
   form: {
     display: "grid",
-    gap: "14px",
-    padding: "20px",
+    gap: space.s14,
+    padding: space.s20,
   },
   title: {
     margin: 0,
@@ -359,7 +359,7 @@ const styles = stylex.create({
   },
   description: {
     display: "grid",
-    gap: "7px",
+    gap: space.s8,
     fontSize: fontSize.body,
     fontWeight: fontWeight.semibold,
   },
@@ -367,9 +367,9 @@ const styles = stylex.create({
     width: "100%",
   },
   byteCount: {
-    marginTop: "-10px",
+    marginTop: `-${space.s10}`,
     color: tokens.inkFaint,
-    font: `${fontSize.micro}/1.3 ${tokens.fontMono}`,
+    font: `${fontSize.micro}/${leading.tight} ${tokens.fontMono}`,
     textAlign: "right",
   },
   byteCountError: {
@@ -377,32 +377,32 @@ const styles = stylex.create({
   },
   fieldset: {
     display: "grid",
-    gap: "8px",
+    gap: space.s8,
     margin: 0,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
     borderRadius: radius.small,
-    padding: "10px 12px 12px",
+    padding: `${space.s10} ${space.s12} ${space.s12}`,
   },
   small: {
-    font: `${fontSize.small}/1.45 ${tokens.fontMono}`,
+    font: `${fontSize.small}/${leading.normal} ${tokens.fontMono}`,
   },
   option: {
     display: "flex",
-    gap: "8px",
+    gap: space.s8,
     alignItems: "center",
   },
   screenshot: {
     display: "flex",
     minHeight: "54px",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     borderWidth: "1px",
     borderStyle: "dashed",
     borderColor: tokens.ruleSoft,
     borderRadius: radius.small,
-    padding: "8px",
+    padding: space.s8,
   },
   screenshotImage: {
     display: "block",
@@ -430,7 +430,7 @@ const styles = stylex.create({
   actions: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: "8px",
+    gap: space.s8,
   },
   action: {
     minWidth: "76px",

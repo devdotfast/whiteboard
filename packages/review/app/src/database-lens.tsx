@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
@@ -1290,7 +1296,7 @@ const styles = stylex.create({
         [inDocument()]: "none",
       },
     },
-    marginBlock: "24px",
+    marginBlock: space.s24,
     marginInline: { default: 0, [inDocument()]: "auto" },
     overflow: "hidden",
     // Without --diagram-border the border drops out whole, as the shorthand
@@ -1328,21 +1334,21 @@ const styles = stylex.create({
     gridTemplateColumns: { default: null, [narrow]: "minmax(0, 1fr) auto" },
     alignItems: "center",
     justifyContent: "flex-end",
-    gap: "8px",
+    gap: space.s8,
     width: { default: null, [narrow]: "100%" },
     minWidth: 0,
   },
   useCase: {
     width: "100%",
     height: "24px",
-    paddingLeft: "10px",
+    paddingLeft: space.s10,
     borderColor: { default: tokens.ruleSoft, ":focus": tokens.accent },
     borderRadius: radius.control,
     backgroundColor: { default: tokens.surface, ":hover": tokens.well },
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
     fontWeight: fontWeight.medium,
-    lineHeight: "22px",
+    lineHeight: leading.px22,
   },
   selectTarget: {
     position: "relative",

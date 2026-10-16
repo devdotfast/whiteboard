@@ -28,7 +28,7 @@ import {
   toggleHomeRepository,
   toggleHomeWorktree,
 } from "./review-home-model";
-import { fontSize } from "./scale.stylex";
+import { fontSize, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { CheckboxMark } from "./ui/checkbox";
 import { Shortcut } from "./ui/kbd";
@@ -602,7 +602,7 @@ const styles = stylex.create({
   divider: {
     flexShrink: 0,
     height: "1px",
-    marginBlock: "4px",
+    marginBlock: space.s4,
     backgroundColor: tokens.rule,
   },
   filter: {
@@ -610,7 +610,7 @@ const styles = stylex.create({
     boxSizing: "border-box",
     width: "100%",
     height: "32px",
-    padding: "0 8px",
+    padding: `0 ${space.s8}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -621,9 +621,9 @@ const styles = stylex.create({
     flex: "1 1 auto",
     display: "flex",
     flexDirection: "column",
-    gap: "2px",
+    gap: space.s2,
     minHeight: 0,
-    paddingBlock: "4px",
+    paddingBlock: space.s4,
     overflowY: "auto",
     overscrollBehavior: "contain",
   },
@@ -638,7 +638,7 @@ const styles = stylex.create({
     flexShrink: 0,
     width: "24px",
     height: "24px",
-    margin: "-5px",
+    margin: `-${space.s4}`,
   },
   emptyCheck: {
     opacity: {
@@ -653,20 +653,20 @@ const styles = stylex.create({
     display: "flex",
     flexShrink: 0,
     justifyContent: "space-between",
-    gap: "8px",
-    padding: "8px 8px 4px",
+    gap: space.s8,
+    padding: `${space.s8} ${space.s8} ${space.s4}`,
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
     fontSize: fontSize.small,
   },
   hint: {
-    padding: "5px 8px",
+    padding: `${space.s4} ${space.s8}`,
     color: tokens.inkFaint,
     fontSize: fontSize.small,
   },
   empty: {
-    padding: "12px 8px",
+    padding: `${space.s12} ${space.s8}`,
     color: tokens.inkMuted,
     fontSize: fontSize.small,
   },

@@ -2,8 +2,10 @@ import {
   elevation,
   fontSize,
   fontWeight,
+  leading,
   motion,
   radius,
+  space,
 } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
@@ -215,7 +217,7 @@ const styles = stylex.create({
     color: tokens.ink,
     boxShadow: elevation.dock,
     fontSize: fontSize.small,
-    lineHeight: 1,
+    lineHeight: leading.none,
     transform: "translateX(-50%)",
     transition: {
       default: `width ${motion.medium} ${motion.settle}, box-shadow ${motion.medium} ${motion.ease}`,
@@ -247,11 +249,11 @@ const styles = stylex.create({
   strip: {
     display: "flex",
     flex: "1 1 auto",
-    gap: "12px",
+    gap: space.s12,
     alignItems: "center",
     minWidth: 0,
     height: "100%",
-    padding: "0 8px 0 10px",
+    padding: `0 ${space.s8} 0 ${space.s10}`,
     overflowX: "auto",
     scrollbarWidth: "none",
     "::-webkit-scrollbar": {
@@ -261,7 +263,7 @@ const styles = stylex.create({
   group: {
     display: "flex",
     flex: "0 0 auto",
-    gap: "6px",
+    gap: space.s6,
     alignItems: "center",
     minWidth: 0,
     whiteSpace: "nowrap",
@@ -278,13 +280,13 @@ const styles = stylex.create({
   item: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "3px",
+    gap: space.s4,
     color: tokens.inkMuted,
   },
   keys: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "2px",
+    gap: space.s2,
   },
   itemLabel: {
     color: tokens.inkFaint,

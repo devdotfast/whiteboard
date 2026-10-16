@@ -1,4 +1,4 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, leading, space } from "@canvas/scale.stylex";
 import {
   type ReviewCanvasContent,
   type ReviewDiffViewSpec,
@@ -662,9 +662,9 @@ const styles = stylex.create({
   canvasFrame: { flex: "1 1 auto", minHeight: 0 },
   trashBanner: {
     display: "flex",
-    gap: "12px",
+    gap: space.s12,
     alignItems: "center",
-    padding: "10px 24px",
+    padding: `${space.s10} ${space.s24}`,
     backgroundColor: tokens.tray,
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
@@ -673,8 +673,8 @@ const styles = stylex.create({
   },
   error: {
     maxWidth: "72ch",
-    margin: "32px auto",
-    padding: "0 24px",
-    font: `${fontSize.reading}/1.6 ${tokens.fontDisplay}`,
+    margin: `${space.s32} auto`,
+    padding: `0 ${space.s24}`,
+    font: `${fontSize.reading}/${leading.relaxed} ${tokens.fontDisplay}`,
   },
 });

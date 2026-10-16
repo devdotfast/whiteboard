@@ -68,7 +68,7 @@ import { useReviewSession } from "./host/review-session";
 import { useReviewHostDown } from "./remote-host-state";
 import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
 import type { AskPresence, AskReport } from "./review-panel-model";
-import { fontSize, radius } from "./scale.stylex";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { Button, IconButton } from "./ui/button";
@@ -1024,20 +1024,20 @@ const AskTurns = memo(function AskTurns({
 const styles = stylex.create({
   // Level with the pickers beside it.
   settingsLabel: {
-    padding: "4px 6px",
+    padding: `${space.s4} ${space.s6}`,
     fontSize: fontSize.ui,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   mode: {
     display: "inline-flex",
     flex: "0 1 auto",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     minWidth: 0,
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   // Holds the thread and, over its foot, the way back to the newest.
   threadFrame: {
@@ -1049,7 +1049,7 @@ const styles = stylex.create({
   },
   toLatest: {
     position: "absolute",
-    bottom: "12px",
+    bottom: space.s12,
     left: "50%",
     borderRadius: radius.round,
     color: {
@@ -1063,9 +1063,9 @@ const styles = stylex.create({
     display: "flex",
     flex: "1 1 auto",
     flexDirection: "column",
-    gap: "18px",
+    gap: space.s18,
     minHeight: 0,
-    padding: "20px 16px 16px",
+    padding: `${space.s20} ${space.s16} ${space.s16}`,
     overflowY: "auto",
     overscrollBehavior: "contain",
   },
@@ -1080,7 +1080,7 @@ const styles = stylex.create({
     marginTop: 0,
   },
   userBubble: {
-    padding: "10px 14px",
+    padding: `${space.s10} ${space.s14}`,
     backgroundColor: tokens.trayRaised,
   },
   queuedBubble: {
@@ -1089,12 +1089,12 @@ const styles = stylex.create({
   attachments: {
     display: "flex",
     flexWrap: "wrap",
-    gap: "6px",
-    marginTop: "8px",
+    gap: space.s6,
+    marginTop: space.s8,
   },
   // Outlined: the pill's well would vanish on the bubble.
   attachment: {
-    gap: "4px",
+    gap: space.s4,
     maxWidth: "100%",
     overflow: "hidden",
     borderWidth: "1px",

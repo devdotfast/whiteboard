@@ -1,5 +1,5 @@
 import { chevronMarker } from "@canvas/markers.stylex";
-import { motion } from "@canvas/scale.stylex";
+import { motion, space } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { ChevronDownIcon, type IconProps } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
@@ -28,7 +28,7 @@ export const disclosureStyles = stylex.create({
 
 const styles = stylex.create({
   chevron: {
-    margin: "2px",
+    margin: space.s2,
     color: {
       default: tokens.inkFaint,
       [stylex.when.ancestor(":hover", chevronMarker)]: tokens.ink,

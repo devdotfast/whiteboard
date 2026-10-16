@@ -6,14 +6,22 @@ import {
   fontSize,
   fontWeight,
   layer,
+  leading,
   motion,
   radius,
+  space,
 } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 const narrowCanvas = "@container review-canvas (max-width: 929px)";
 
 const short = "@media (max-height: 560px)";
+
+// A stop's rail column. The stop's content breaks out over it, and on narrow
+// panels the end cap lines up past it.
+const RAIL = "56px";
+
+const RAIL_NARROW = "38px";
 
 // The panel's own grid cell in App's detail host.
 const inDetailHost = () => stylex.when.ancestor(":is(*)", detailHostMarker);
@@ -91,9 +99,9 @@ export const panelStyles = stylex.create({
     flex: "0 0 auto",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: "12px",
+    gap: space.s12,
     minHeight: tokens.reviewHeaderHeight,
-    padding: "0 10px 0 16px",
+    padding: `0 ${space.s10} 0 ${space.s16}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -102,7 +110,7 @@ export const panelStyles = stylex.create({
   title: {
     display: "flex",
     alignItems: "center",
-    gap: "9px",
+    gap: space.s8,
     minWidth: 0,
   },
   kicker: {
@@ -115,7 +123,7 @@ export const panelStyles = stylex.create({
     fontFamily: tokens.fontMono,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.semibold,
-    lineHeight: 1.3,
+    lineHeight: leading.tight,
   },
   close: {
     flex: "0 0 auto",
@@ -124,7 +132,7 @@ export const panelStyles = stylex.create({
     display: "flex",
     flex: "0 0 auto",
     alignItems: "center",
-    gap: "2px",
+    gap: space.s2,
   },
   // A conversation sits on the tray, header and all.
   tray: {
@@ -153,12 +161,12 @@ export const panelStyles = stylex.create({
   },
   peekBody: {
     minWidth: 0,
-    padding: { default: "12px", [stylex.env.narrow]: "8px" },
+    padding: { default: space.s12, [stylex.env.narrow]: space.s8 },
   },
   peekActions: {
     display: "flex",
     justifyContent: "flex-end",
-    marginBottom: "12px",
+    marginBottom: space.s12,
   },
   peekContent: {
     minWidth: 0,
@@ -166,10 +174,13 @@ export const panelStyles = stylex.create({
   // Peek content runs to the column's edges; text and actions keep the
   // panel's inset.
   peekText: {
-    paddingInline: { default: "16px", [stylex.env.narrow]: "8px" },
+    paddingInline: { default: space.s16, [stylex.env.narrow]: space.s8 },
   },
   inset: {
-    padding: { default: "12px 12px 0", [stylex.env.narrow]: "8px 8px 0" },
+    padding: {
+      default: `${space.s12} ${space.s12} 0`,
+      [stylex.env.narrow]: `${space.s8} ${space.s8} 0`,
+    },
   },
 });
 
@@ -186,19 +197,22 @@ export const tourStyles = stylex.create({
     borderTopColor: tokens.rule,
   },
   feed: {
-    padding: "0 0 72px",
+    padding: `0 0 ${space.s72}`,
     scrollPaddingTop: "18px",
     scrollPaddingBottom: "72px",
   },
   floatingFooter: {
     position: "absolute",
     right: 0,
-    bottom: { default: "12px", [stylex.env.narrow]: "8px" },
+    bottom: { default: space.s12, [stylex.env.narrow]: space.s8 },
     left: 0,
     zIndex: 4,
     display: "flex",
     justifyContent: "center",
-    padding: { default: "0 12px", [stylex.env.narrow]: "0 8px" },
+    padding: {
+      default: `0 ${space.s12}`,
+      [stylex.env.narrow]: `0 ${space.s8}`,
+    },
     pointerEvents: "none",
   },
   pill: {
@@ -209,13 +223,13 @@ export const tourStyles = stylex.create({
     pointerEvents: "auto",
   },
   pillIntro: {
-    padding: "0 14px",
+    padding: `0 ${space.s14}`,
   },
   pillGroup: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    padding: "4px 10px",
+    gap: space.s8,
+    padding: `${space.s4} ${space.s10}`,
     backgroundColor: tokens.accent,
     color: tokens.onAccent,
   },
@@ -235,12 +249,13 @@ export const tourStyles = stylex.create({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: "12px",
+    gap: space.s12,
     margin: {
-      default: "16px 16px 16px 52px",
-      [stylex.env.narrow]: "16px 8px 16px 38px",
+      default: `${space.s16} ${space.s16} ${space.s16} ${space.s48}`,
+      [stylex.env.narrow]:
+        `${space.s16} ${space.s8} ${space.s16} ${RAIL_NARROW}`,
     },
-    padding: "12px 16px",
+    padding: `${space.s12} ${space.s16}`,
     borderWidth: "1px",
     borderStyle: "dashed",
     borderColor: tokens.ruleSoft,
@@ -255,13 +270,16 @@ export const tourStyles = stylex.create({
   stop: {
     display: "grid",
     gridTemplateColumns: {
-      default: "56px minmax(0, 1fr)",
-      [stylex.env.narrow]: "38px minmax(0, 1fr)",
+      default: `${RAIL} minmax(0, 1fr)`,
+      [stylex.env.narrow]: `${RAIL_NARROW} minmax(0, 1fr)`,
     },
-    paddingRight: { default: "16px", [stylex.env.narrow]: "8px" },
+    paddingRight: { default: space.s16, [stylex.env.narrow]: space.s8 },
     // The rail's x in the stop, for the rail and its faint runs between a
     // step's code cards.
-    "--review-tour-rail-x": { default: "29px", [stylex.env.narrow]: "19px" },
+    "--review-tour-rail-x": {
+      default: space.s28,
+      [stylex.env.narrow]: space.s18,
+    },
   },
   rail: {
     position: "relative",
@@ -283,7 +301,7 @@ export const tourStyles = stylex.create({
     placeItems: "center",
     width: "26px",
     height: "26px",
-    marginTop: "18px",
+    marginTop: space.s18,
     borderWidth: "2px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
@@ -301,10 +319,10 @@ export const tourStyles = stylex.create({
   },
   main: {
     minWidth: 0,
-    paddingTop: "16px",
+    paddingTop: space.s16,
     paddingRight: 0,
     paddingBottom: 0,
-    paddingLeft: { default: "4px", [stylex.env.narrow]: 0 },
+    paddingLeft: { default: space.s4, [stylex.env.narrow]: 0 },
   },
   mainActive: {
     borderRadius: radius.surface,
@@ -318,7 +336,10 @@ export const tourStyles = stylex.create({
       default: "calc(100% + 76px)",
       [stylex.env.narrow]: "calc(100% + 46px)",
     },
-    marginLeft: { default: "-60px", [stylex.env.narrow]: "-38px" },
+    marginLeft: {
+      default: `calc(-1 * (${RAIL} + ${space.s4}))`,
+      [stylex.env.narrow]: `-${RAIL_NARROW}`,
+    },
     backgroundColor: tokens.bg,
     // A step's code cards stand apart; a lone peek's stay flush.
     "--review-code-card-gap": "12px",
@@ -327,28 +348,28 @@ export const tourStyles = stylex.create({
     display: "flex",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: "14px",
-    marginBottom: "12px",
+    gap: space.s14,
+    marginBottom: space.s12,
   },
   titleRow: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
   },
   title: {
-    margin: "3px 0 0",
+    margin: `${space.s4} 0 0`,
     color: tokens.ink,
     fontSize: fontSize.heading,
-    lineHeight: "24px",
+    lineHeight: leading.px24,
   },
   titleActive: {
     color: tokens.accent,
   },
   detail: {
-    margin: "6px 0 0",
+    margin: `${space.s6} 0 0`,
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
-    lineHeight: "15px",
+    lineHeight: leading.px16,
   },
 });

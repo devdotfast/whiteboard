@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { BranchIcon, ExternalLinkIcon } from "@canvas/ui/icons";
 import {
@@ -226,12 +232,12 @@ function reviewDiffStats(diff: {
 const styles = stylex.create({
   header: {
     width: `min(100%, ${tokens.reviewProseMaxWidth})`,
-    margin: "28px auto 0",
+    margin: `${space.s28} auto 0`,
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
-    paddingBottom: "28px",
-    font: `${fontSize.ui}/18px ${tokens.fontMono}`,
+    gap: space.s12,
+    paddingBottom: space.s28,
+    font: `${fontSize.ui}/${leading.px18} ${tokens.fontMono}`,
     color: tokens.inkFaint,
   },
   row: {
@@ -241,10 +247,10 @@ const styles = stylex.create({
   },
   top: {
     justifyContent: "space-between",
-    gap: "10px 24px",
+    gap: `${space.s10} ${space.s24}`,
   },
   identity: {
-    gap: "10px",
+    gap: space.s10,
     minWidth: 0,
     overflowWrap: "anywhere",
   },
@@ -257,7 +263,7 @@ const styles = stylex.create({
   pullRequest: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "5px",
+    gap: space.s4,
     color: tokens.accent,
     fontWeight: fontWeight.medium,
     textDecoration: "none",
@@ -267,8 +273,8 @@ const styles = stylex.create({
   },
   // Facts in the details row are divided by small ink-faint dots.
   details: {
-    gap: "8px 10px",
-    paddingTop: "12px",
+    gap: `${space.s8} ${space.s10}`,
+    paddingTop: space.s12,
   },
   dot: {
     flex: "0 0 3px",
@@ -280,12 +286,12 @@ const styles = stylex.create({
   branch: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "7px",
+    gap: space.s8,
     boxSizing: "border-box",
     minWidth: 0,
     minHeight: "26px",
     maxWidth: "100%",
-    padding: "3px 10px",
+    padding: `${space.s4} ${space.s10}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
@@ -302,12 +308,12 @@ const styles = stylex.create({
     overflowWrap: "anywhere",
   },
   stats: {
-    gap: "10px",
+    gap: space.s10,
   },
   changeBar: {
     display: "flex",
     flex: "0 0 42px",
-    gap: "2px",
+    gap: space.s2,
     height: "8px",
   },
   change: {

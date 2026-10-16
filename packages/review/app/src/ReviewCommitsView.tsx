@@ -1,4 +1,4 @@
-import { fontSize, fontWeight } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, leading, space } from "@canvas/scale.stylex";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { CopyButton } from "@canvas/ui/copy";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
@@ -295,7 +295,10 @@ export function groupCommitsByDate(commits: readonly ReviewCommitSummary[]) {
 const styles = stylex.create({
   view: {
     minHeight: "100%",
-    padding: { default: "32px 24px", "@media (max-width: 760px)": "24px 16px" },
+    padding: {
+      default: `${space.s32} ${space.s24}`,
+      "@media (max-width: 760px)": `${space.s24} ${space.s16}`,
+    },
   },
   column: {
     width: "min(760px, 100%)",
@@ -304,13 +307,13 @@ const styles = stylex.create({
   range: {
     display: "flex",
     alignItems: "baseline",
-    gap: "12px",
-    paddingBottom: "16px",
+    gap: space.s12,
+    paddingBottom: space.s16,
   },
   rangeCount: {
     color: tokens.ink,
     flexShrink: 0,
-    font: `${fontWeight.semibold} ${fontSize.reading}/20px ${tokens.fontMono}`,
+    font: `${fontWeight.semibold} ${fontSize.reading}/${leading.px20} ${tokens.fontMono}`,
     whiteSpace: "nowrap",
   },
   rangeRefs: {
@@ -321,11 +324,11 @@ const styles = stylex.create({
   date: {
     display: "flex",
     alignItems: "center",
-    gap: "10px",
-    padding: "8px 0",
+    gap: space.s10,
+    padding: `${space.s8} 0`,
   },
   laterDate: {
-    paddingTop: "10px",
+    paddingTop: space.s10,
   },
   dateIcon: {
     width: "14px",
@@ -340,11 +343,11 @@ const styles = stylex.create({
   },
   timeline: {
     position: "relative",
-    marginLeft: "6px",
-    paddingLeft: "22px",
+    marginLeft: space.s6,
+    paddingLeft: space.s24,
     "::before": {
       position: "absolute",
-      top: "-8px",
+      top: `-${space.s8}`,
       bottom: 0,
       left: 0,
       width: "1px",
@@ -353,7 +356,7 @@ const styles = stylex.create({
     },
   },
   card: {
-    marginBottom: "6px",
+    marginBottom: space.s6,
     boxShadow: "none",
   },
   cardExpanded: {
@@ -366,8 +369,8 @@ const styles = stylex.create({
     position: "relative",
     display: "grid",
     alignItems: "center",
-    padding: "10px 12px",
-    gap: "4px 12px",
+    padding: `${space.s10} ${space.s12}`,
+    gap: `${space.s4} ${space.s12}`,
     gridTemplateColumns: "minmax(0, 1fr) auto",
     boxShadow: {
       default: null,
@@ -386,7 +389,7 @@ const styles = stylex.create({
     alignItems: "center",
     padding: 0,
     color: "inherit",
-    gap: "10px",
+    gap: space.s10,
     outline: { default: null, ":focus-visible": "none" },
     "::after": {
       position: "absolute",
@@ -403,12 +406,12 @@ const styles = stylex.create({
     position: "relative",
     display: "flex",
     alignItems: "center",
-    gap: "2px",
+    gap: space.s2,
     gridColumn: 2,
     gridRow: "1 / 3",
   },
   sha: {
-    marginRight: "6px",
+    marginRight: space.s6,
     color: tokens.inkFaint,
     font: `${fontSize.small} ${tokens.fontMono}`,
     fontVariantNumeric: "tabular-nums",
@@ -416,14 +419,15 @@ const styles = stylex.create({
   meta: {
     font: `${fontSize.small} ${tokens.fontMono}`,
     fontVariantNumeric: "tabular-nums",
-    paddingLeft: "26px",
+    // Lines up with the subject, past the 16px chevron and the toggle's gap.
+    paddingLeft: `calc(16px + ${space.s10})`,
     color: tokens.inkMuted,
   },
   files: {
-    padding: "6px 0",
+    padding: `${space.s6} 0`,
   },
   filesNote: {
-    margin: "6px 12px",
+    margin: `${space.s6} ${space.s12}`,
     color: tokens.inkFaint,
     fontSize: fontSize.small,
   },
@@ -431,8 +435,8 @@ const styles = stylex.create({
     display: "flex",
     width: "100%",
     alignItems: "center",
-    gap: "10px",
-    padding: "6px 12px",
+    gap: space.s10,
+    padding: `${space.s6} ${space.s12}`,
     backgroundColor: {
       default: tokens.transparent,
       ":hover": tokens.controlBg,
@@ -446,7 +450,8 @@ const styles = stylex.create({
     flex: 1,
   },
   filesFooter: {
-    padding: "6px 12px 4px 38px",
+    // Lines up with the paths, past a file's padding, 16px mark and gap.
+    padding: `${space.s6} ${space.s12} ${space.s4} calc(${space.s12} + 16px + ${space.s10})`,
     fontSize: fontSize.micro,
   },
   // The whole header is the toggle's hit area, so its chevron stays quiet on

@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  motion,
+  space,
+} from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
@@ -698,15 +704,15 @@ const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 const styles = stylex.create({
   // Read as document paragraphs inside a document.
   paragraph: {
-    margin: { default: null, [inDocument()]: "14px 0" },
+    margin: { default: null, [inDocument()]: `${space.s14} 0` },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: fontSize.reading },
-    lineHeight: { default: null, [inDocument()]: 1.72 },
+    lineHeight: { default: null, [inDocument()]: leading.prose },
     textAlign: { default: null, [inDocument()]: "left" },
   },
   note: {
-    padding: "8px 12px",
+    padding: `${space.s8} ${space.s12}`,
     color: { default: tokens.inkFaint, [inDocument()]: tokens.ink },
   },
   flow: {
@@ -725,7 +731,7 @@ const styles = stylex.create({
     position: "relative",
     boxSizing: "border-box",
     color: tokens.ink,
-    font: `${fontSize.body}/1.4 ${tokens.fontMono}`,
+    font: `${fontSize.body}/${leading.normal} ${tokens.fontMono}`,
     cursor: "pointer",
     outline: { default: null, ":focus-visible": "none" },
   },
@@ -785,9 +791,9 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
-    gap: "2px",
+    gap: space.s2,
     minWidth: 0,
-    padding: "0 12px",
+    padding: `0 ${space.s12}`,
   },
   label: {
     fontWeight: fontWeight.medium,

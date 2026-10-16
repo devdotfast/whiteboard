@@ -1,5 +1,11 @@
 import { documentStyles } from "@canvas/document-styles";
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
@@ -67,19 +73,19 @@ const styles = stylex.create({
   inline: {
     display: "flex",
     flexDirection: "column",
-    gap: "4px",
+    gap: space.s4,
     // Aligned to the pane's own content edge.
-    paddingBlock: "16px",
+    paddingBlock: space.s16,
     color: tokens.inkMuted,
     fontSize: fontSize.ui,
-    lineHeight: 1.55,
+    lineHeight: leading.normal,
   },
   boxed: {
     boxSizing: "border-box",
     display: "grid",
     placeContent: "center",
     justifyItems: "center",
-    padding: "32px",
+    padding: space.s32,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
@@ -97,13 +103,13 @@ const styles = stylex.create({
     margin: 0,
   },
   boxedTitle: {
-    marginBottom: "8px",
+    marginBottom: space.s8,
     fontSize: fontSize.reading,
-    lineHeight: 1.3,
+    lineHeight: leading.tight,
   },
   boxedMessage: {
     maxWidth: "540px",
     fontSize: fontSize.ui,
-    lineHeight: 1.55,
+    lineHeight: leading.normal,
   },
 });
