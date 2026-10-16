@@ -1,7 +1,10 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
+import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import { Button, buttonStyles } from "@canvas/ui/button";
-import { CopyIcon, copyText } from "@canvas/ui/copy";
+import { copyText } from "@canvas/ui/copy";
 import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CopyIcon, DrawnCheckIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
@@ -13,9 +16,7 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useRef, useState } from "react";
 
-import { AGENT_LOGOS } from "./agent-logos";
 import { cliInstallReady } from "./cli-install-status";
-import { DrawnCheckIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { OptionMenu } from "./option-menu";
 import { promptStyles } from "./prompt-styles";
@@ -218,7 +219,7 @@ export function ConnectCard({
               {copied ? (
                 <DrawnCheckIcon />
               ) : (
-                <CopyIcon xstyle={promptStyles.copyIcon} />
+                <CopyIcon xstyle={iconStyles.inline} />
               )}
               {copied
                 ? "Copied"

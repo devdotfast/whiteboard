@@ -1,6 +1,8 @@
+import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { CheckIcon, CloseIcon, DisclosureChevron } from "@canvas/ui/icons";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
 import type { AskEntry, AskThreadState } from "@review/ask/thread-state";
@@ -13,12 +15,10 @@ import {
   useState,
 } from "react";
 
-import { AGENT_LOGOS } from "./agent-logos";
 import { AgentMarkdown } from "./agent-markdown";
 import { askFileCode, askFileLink } from "./ask-files";
 import { askPanelStyles } from "./ask-styles";
 import { CourierFigure } from "./courier-figure";
-import { CheckIcon, CloseIcon, DisclosureChevron } from "./icons";
 import { chevronMarker } from "./markers.stylex";
 import { fontSize, motion, radius } from "./scale.stylex";
 import { settleStreamingMarkdown } from "./streaming-markdown";

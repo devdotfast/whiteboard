@@ -1,3 +1,4 @@
+import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import { focusStyles } from "@canvas/ui/focus";
 import type { AskHistoryEntry } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
@@ -15,7 +16,6 @@ import {
 } from "react";
 import { createPortal, flushSync } from "react-dom";
 
-import { AGENT_LOGOS } from "./agent-logos";
 import { resolveAskAnchor } from "./ask-anchor";
 import { useAskHistory } from "./ask-history";
 import { setCssHighlight } from "./css-highlights";

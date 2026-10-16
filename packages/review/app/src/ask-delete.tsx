@@ -1,4 +1,5 @@
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { TrashIcon } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
@@ -11,7 +12,6 @@ import {
 } from "react";
 
 import { useAskHistory } from "./ask-history";
-import { TrashIcon } from "./icons";
 import { useNotify } from "./notify";
 import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
 import { fontSize, radius } from "./scale.stylex";

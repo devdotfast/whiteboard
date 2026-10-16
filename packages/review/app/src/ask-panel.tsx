@@ -1,6 +1,7 @@
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { ArrowDownIcon, ImageIcon, LockIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewHostStatus,
@@ -65,7 +66,6 @@ import { canvasQueryKeys } from "./canvas-query";
 import { useHostActionButton } from "./connection-chip";
 import { formatRelativeTime } from "./format";
 import { useReviewSession } from "./host/review-session";
-import { ArrowUpIcon, ImageIcon, LockIcon } from "./icons";
 import { useReviewHostDown } from "./remote-host-state";
 import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
 import type { AskPresence, AskReport } from "./review-panel-model";
@@ -892,7 +892,7 @@ function ToLatestButton({ onClick }: { onClick: () => void }): ReactElement {
       aria-label={label}
       onClick={onClick}
     >
-      <ArrowUpIcon xstyle={[iconStyles.chrome, styles.toLatestIcon]} />
+      <ArrowDownIcon xstyle={iconStyles.chrome} />
     </IconButton>
   );
 }
@@ -1066,9 +1066,6 @@ const styles = stylex.create({
       ":focus-visible": tokens.chromeFg,
     },
     transform: "translateX(-50%)",
-  },
-  toLatestIcon: {
-    transform: "rotate(180deg)",
   },
   thread: {
     display: "flex",

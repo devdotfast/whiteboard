@@ -1,5 +1,7 @@
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { Button, buttonStyles } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { ChevronDownIcon, StackIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import type { ReviewStackLayer } from "@dev.fast/review-protocol";
@@ -16,7 +18,6 @@ import {
 import { canvasQueryKeys } from "./canvas-query";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { useReviewSession } from "./host/review-session";
-import { StackIcon } from "./icons";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { useAnchoredPopover } from "./use-anchored-popover";
@@ -93,20 +94,14 @@ export function ReviewStackSelector(): ReactElement | null {
         aria-label={`Stack, ${index + 1} of ${layers.length}`}
         onClick={() => setOpen(!open)}
       >
-        <StackIcon xstyle={styles.triggerIcon} />
+        <StackIcon xstyle={[iconStyles.chrome, styles.triggerIcon]} />
         <span {...stylex.props(styles.triggerNumber, textStyles.truncate)}>
           {label(layers[index]!)}
         </span>
         <span {...stylex.props(styles.triggerPosition)}>
           {index + 1}/{layers.length}
         </span>
-        <svg
-          viewBox="0 0 12 12"
-          aria-hidden="true"
-          {...stylex.props(styles.chevron, open && styles.chevronOpen)}
-        >
-          <path d="m3 4.5 3 3 3-3" />
-        </svg>
+        <ChevronDownIcon xstyle={[styles.chevron, open && iconStyles.flip]} />
       </Button>
       {open && (
         <div
@@ -234,8 +229,6 @@ const styles = stylex.create({
     fontSize: fontSize.small,
   },
   triggerIcon: {
-    width: "14px",
-    height: "14px",
     color: tokens.inkMuted,
   },
   triggerNumber: {
@@ -248,17 +241,8 @@ const styles = stylex.create({
     fontWeight: fontWeight.regular,
   },
   chevron: {
-    width: "12px",
-    height: "12px",
-    fill: "none",
-    stroke: tokens.inkFaint,
-    strokeWidth: "1.25",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
+    color: tokens.inkFaint,
     transition: `transform ${motion.fast} ease-out`,
-  },
-  chevronOpen: {
-    transform: "rotate(180deg)",
   },
   menu: {
     display: "flex",

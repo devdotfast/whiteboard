@@ -1,5 +1,7 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
 import { copyText } from "@canvas/ui/copy";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { ArrowLeftIcon } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useRef, useState } from "react";
 
@@ -67,9 +69,7 @@ export function ReviewBranchRange({
         copied={copied === "base"}
         onCopy={() => void copy("base", baseRef)}
       />
-      <span {...stylex.props(styles.arrow)} aria-hidden="true">
-        ←
-      </span>
+      <ArrowLeftIcon xstyle={[iconStyles.inline, styles.arrow]} />
       {headRef === WORKING_TREE ? (
         <WorkingTreeRef />
       ) : (

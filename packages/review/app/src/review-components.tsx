@@ -3,6 +3,15 @@ import { fontSize, fontWeight } from "@canvas/scale.stylex";
 import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
+  ChevronDownIcon,
+  CloseIcon,
+  DisclosureChevron,
+  ExternalLinkIcon,
+  MapPinIcon,
+  MinusIcon,
+  PopOutIcon,
+} from "@canvas/ui/icons";
+import {
   OverlayScrollbar,
   overlayScrollbarStyles,
 } from "@canvas/ui/overlay-scrollbar";
@@ -48,13 +57,6 @@ import {
   useOptionalReviewSession,
   useReviewSession,
 } from "./host/review-session";
-import {
-  CloseIcon,
-  DisclosureChevron,
-  MapPinIcon,
-  MinusIcon,
-  PopOutIcon,
-} from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { chevronMarker, documentMarker } from "./markers.stylex";
 import { useReviewActions } from "./review-context";
@@ -826,7 +828,8 @@ function TraceQuotePeekPanel({
         onClose();
       }}
     >
-      Full Trace ↗
+      Full Trace
+      <ExternalLinkIcon xstyle={iconStyles.inline} />
     </button>
   );
 
@@ -1158,12 +1161,7 @@ export function GuidedTourPanel({
                 }}
               >
                 <span>{tour.stops.length - 1} more steps</span>
-                <span
-                  {...stylex.props(tourStyles.pillChevron)}
-                  aria-hidden="true"
-                >
-                  ↓
-                </span>
+                <ChevronDownIcon xstyle={tourStyles.pillChevron} />
               </button>
             ) : (
               <div
@@ -1177,7 +1175,7 @@ export function GuidedTourPanel({
                   disabled={displayIndex === 0}
                   onClick={() => stepTo(displayIndex - 1)}
                 >
-                  ↑
+                  <ChevronDownIcon xstyle={iconStyles.flip} />
                 </IconButton>
                 <span className="tour-pill-count" aria-live="polite">
                   {displayIndex + 1}/{tour.stops.length}
@@ -1189,7 +1187,7 @@ export function GuidedTourPanel({
                   disabled={displayIndex === lastIndex}
                   onClick={() => stepTo(displayIndex + 1)}
                 >
-                  ↓
+                  <ChevronDownIcon />
                 </IconButton>
               </div>
             )}
@@ -1247,7 +1245,10 @@ export function GuidedTourPanel({
                   {...stylex.props(buttonStyles.reset, tourStyles.endCapButton)}
                   onClick={() => stepTo(0)}
                 >
-                  ↑ Back to step 1
+                  <ChevronDownIcon
+                    xstyle={[iconStyles.flip, iconStyles.glyph]}
+                  />{" "}
+                  Back to step 1
                 </button>
               </div>
               <div

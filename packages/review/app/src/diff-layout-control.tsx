@@ -1,6 +1,7 @@
 import { layer } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { SlidersIcon } from "@canvas/ui/icons";
 import { SegmentedControl, labeledOptions } from "@canvas/ui/segmented";
 import { surfaceStyles } from "@canvas/ui/surface";
 import type {
@@ -18,7 +19,6 @@ import {
 } from "react";
 
 import { useReviewSession } from "./host/review-session";
-import { SlidersIcon } from "./icons";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureClientError, captureUiEvent } from "./ui-telemetry";

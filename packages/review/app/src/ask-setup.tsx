@@ -1,10 +1,12 @@
-import { CopyButton, CopyIcon } from "@canvas/ui/copy";
+import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { CopyButton } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { CopyIcon } from "@canvas/ui/icons";
 import type { AgentSelection } from "@review/agent-selection";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
-import { type AskAgent, logos } from "./ask-agent-picker";
+import type { AskAgent } from "./ask-agent-picker";
 import { AskSelectionQuote } from "./ask-panel-shared";
 import { askPanelStyles } from "./ask-styles";
 import { copyAgentContext } from "./copy-agent-context";
@@ -61,7 +63,7 @@ export function AskSetup({
               {...stylex.props(askPanelStyles.listItem, setupStyles.agent)}
             >
               <span {...stylex.props(setupStyles.logo)}>
-                {logos[candidate.id]({ xstyle: setupStyles.logoMark })}
+                {AGENT_LOGOS[candidate.id]({ xstyle: setupStyles.logoMark })}
               </span>
               <span {...stylex.props(setupStyles.name)}>
                 <span>{candidate.name}</span>

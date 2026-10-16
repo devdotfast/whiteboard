@@ -1,4 +1,6 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { BranchIcon, ExternalLinkIcon } from "@canvas/ui/icons";
 import {
   type ReviewDiffStats,
   summarizeReviewDiffFiles,
@@ -73,18 +75,7 @@ export function ReviewDocumentMetaLine({
       key: "branch",
       node: (
         <span {...stylex.props(styles.branch)} title={`Head branch: ${branch}`}>
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 20 20"
-            aria-hidden="true"
-            {...stylex.props(styles.icon, styles.branchIcon)}
-          >
-            <circle cx="5" cy="4.5" r="2" />
-            <circle cx="5" cy="15.5" r="2" />
-            <circle cx="15" cy="6.5" r="2" />
-            <path d="M5 6.5v7M15 8.5c0 3-10 2-10 5" />
-          </svg>
+          <BranchIcon xstyle={[iconStyles.inline, styles.branchIcon]} />
           <span {...stylex.props(styles.branchName)}>{branch}</span>
         </span>
       ),
@@ -173,15 +164,7 @@ export function ReviewDocumentMetaLine({
                 {...stylex.props(styles.pullRequest, styles.pullRequestLink)}
               >
                 PR #{meta.pullRequestNumber}
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 20 20"
-                  aria-hidden="true"
-                  {...stylex.props(styles.icon)}
-                >
-                  <path d="M7 4h9v9M16 4 5 15" />
-                </svg>
+                <ExternalLinkIcon xstyle={iconStyles.inline} />
               </a>
             ) : (
               <span {...stylex.props(styles.pullRequest)}>
@@ -290,14 +273,6 @@ const styles = stylex.create({
   },
   updated: {
     marginLeft: "auto",
-  },
-  icon: {
-    flexShrink: 0,
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: "1.8",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
   },
   pullRequest: {
     display: "inline-flex",

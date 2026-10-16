@@ -1,11 +1,12 @@
 import { cliInstallReady } from "@canvas/cli-install-status";
-import { DrawnCheckIcon, PlusIcon } from "@canvas/icons";
 import { installRowMarker } from "@canvas/markers.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
-import { CopyIcon, useCopy } from "@canvas/ui/copy";
+import { useCopy } from "@canvas/ui/copy";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CopyIcon, DrawnCheckIcon, PlusIcon } from "@canvas/ui/icons";
 import { Kbd } from "@canvas/ui/kbd";
 import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/use-tooltip";
@@ -407,7 +408,7 @@ function CopyChip({ text, name }: { text: string; name: string }) {
       {...stylex.props(styles.chip, copied && styles.chipShown)}
       onClick={copy}
     >
-      <CopyIcon xstyle={styles.chipIcon} />
+      <CopyIcon xstyle={iconStyles.inline} />
       {copied ? "Copied" : "Copy"}
     </button>
   );
@@ -695,6 +696,5 @@ const styles = stylex.create({
     },
   },
   chipShown: { opacity: 1 },
-  chipIcon: { width: "11px", height: "11px" },
-  plus: { width: "16px", height: "16px", color: tokens.inkFaint },
+  plus: { color: tokens.inkFaint },
 });

@@ -2,6 +2,7 @@ import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { CopyButton } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { ArrowRightIcon, CodeIcon, DisclosureChevron } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCommitSummary,
@@ -16,7 +17,6 @@ import { DiffCount } from "./diff-count";
 import { FileMark } from "./file-mark";
 import { countLabel } from "./format";
 import { useReviewSession } from "./host/review-session";
-import { CodeIcon, DisclosureChevron } from "./icons";
 import { chevronMarker } from "./markers.stylex";
 import { shortRef } from "./review-branch-range";
 import { tokens } from "./tokens.stylex";
@@ -51,7 +51,8 @@ export function ReviewCommitsView({
             {...stylex.props(textStyles.truncate, styles.rangeRefs)}
             title={`${range.baseCommit}..${range.headCommit}`}
           >
-            {shortRef(range.baseRef || range.baseCommit)} →{" "}
+            {shortRef(range.baseRef || range.baseCommit)}{" "}
+            <ArrowRightIcon xstyle={[iconStyles.inline, iconStyles.glyph]} />{" "}
             {shortRef(range.headRef || range.headCommit)}
           </span>
         </header>

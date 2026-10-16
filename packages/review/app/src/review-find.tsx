@@ -1,6 +1,8 @@
 import { fontSize, layer } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { ArrowDownIcon, ArrowUpIcon, CloseIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { fieldStyles } from "@canvas/ui/text-field";
 import type { ReviewFindQuery } from "@dev.fast/review-protocol";
@@ -556,27 +558,14 @@ function FindActionButton({
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
     >
-      <FindActionIcon icon={icon} />
+      {icon === "previous" ? (
+        <ArrowUpIcon xstyle={iconStyles.chrome} />
+      ) : icon === "next" ? (
+        <ArrowDownIcon xstyle={iconStyles.chrome} />
+      ) : (
+        <CloseIcon xstyle={iconStyles.chrome} />
+      )}
     </IconButton>
-  );
-}
-
-function FindActionIcon({ icon }: { icon: "previous" | "next" | "close" }) {
-  const path =
-    icon === "previous"
-      ? "M3 7.5 8 2.5l5 5M8 3v10.5"
-      : icon === "next"
-        ? "m3 8.5 5 5 5-5M8 13V2.5"
-        : "m3 3 10 10M13 3 3 13";
-
-  return (
-    <svg
-      {...stylex.props(styles.actionIcon)}
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-    >
-      <path d={path} />
-    </svg>
   );
 }
 
@@ -716,14 +705,5 @@ const styles = stylex.create({
   },
   regex: {
     fontFamily: tokens.fontMono,
-  },
-  actionIcon: {
-    width: "14px",
-    height: "14px",
-    fill: "none",
-    stroke: "currentcolor",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    strokeWidth: "1.35",
   },
 });

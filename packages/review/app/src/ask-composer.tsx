@@ -1,6 +1,7 @@
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import { ArrowUpIcon, CloseIcon, ImageIcon } from "@canvas/ui/icons";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
 import {
@@ -26,7 +27,6 @@ import {
   useState,
 } from "react";
 
-import { ArrowUpIcon, CloseIcon, ImageIcon } from "./icons";
 import { fontSize, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { Button, IconButton } from "./ui/button";
@@ -603,7 +603,7 @@ export function AskComposer({
                 xstyle={styles.square}
                 disabled={!draft.trim() || !canAsk}
               >
-                <ArrowUpIcon xstyle={[iconStyles.inline, styles.submitIcon]} />
+                <ArrowUpIcon xstyle={iconStyles.chrome} />
               </Button>
             )}
           </span>
@@ -821,11 +821,6 @@ const styles = stylex.create({
   usage: {
     display: "inline-flex",
     padding: "4px",
-  },
-  submitIcon: {
-    width: "14px",
-    height: "14px",
-    strokeWidth: "1.4px",
   },
   stopMark: {
     width: "9px",

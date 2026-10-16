@@ -1,5 +1,7 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { RefreshIcon } from "@canvas/ui/icons";
 import { Spinner } from "@canvas/ui/spinner";
 import {
   type ReviewHostStatus,
@@ -9,7 +11,6 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import { createContext, useContext } from "react";
 
-import { RefreshIcon } from "./icons";
 import {
   ACTION_WORDS,
   useHostAction,
@@ -86,7 +87,7 @@ export function ConnectionChip() {
         {label}
       </span>
       {action === "retry" ? (
-        <RefreshIcon xstyle={styles.icon} spinning={!!spinning} />
+        <RefreshIcon xstyle={iconStyles.inline} spinning={!!spinning} />
       ) : (
         <span {...stylex.props(styles.action)}>{ACTION_WORDS[action]}</span>
       )}
@@ -239,10 +240,5 @@ const styles = stylex.create({
   action: {
     textDecorationLine: "underline",
     textUnderlineOffset: "2px",
-  },
-  icon: {
-    flexShrink: 0,
-    width: "13px",
-    height: "13px",
   },
 });

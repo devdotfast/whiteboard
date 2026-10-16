@@ -1,6 +1,13 @@
+import { DiscordIcon } from "@canvas/ui/brand-icons";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import {
+  ArchiveIcon,
+  ArrowLeftIcon,
+  ExternalLinkIcon,
+  SlidersIcon,
+} from "@canvas/ui/icons";
 import { StatusBanner } from "@canvas/ui/status-banner";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
@@ -49,7 +56,7 @@ import { ReviewDiffView } from "./DiffView";
 import { useDocumentEmbedScroll } from "./document-embed-scroll";
 import { documentStyles } from "./document-styles";
 import { useReviewSession } from "./host/review-session";
-import { DiscordIcon, MarkerUnderline, SettingsSlidersIcon } from "./icons";
+import { MarkerUnderline } from "./marker-underline";
 import {
   appMarker,
   detailHostMarker,
@@ -637,7 +644,7 @@ function ReviewLayoutContent({
                 <Button
                   variant="ghost"
                   xstyle={shellStyles.openSourceTree}
-                  aria-label="Source tree ↗"
+                  aria-label="Source tree"
                   disabled={!sourceWindows}
                   ref={sourceTreeTooltip}
                   onClick={() => {
@@ -653,7 +660,7 @@ function ReviewLayoutContent({
                   <span {...stylex.props(shellStyles.openSourceTreeLabel)}>
                     Source tree
                   </span>
-                  <span aria-hidden="true">↗</span>
+                  <ExternalLinkIcon xstyle={iconStyles.inline} />
                 </Button>
               )}
               {session.review?.available?.pending && session.review.host ? (
@@ -884,7 +891,7 @@ function CommitDiffScopeBar({
         {...stylex.props(buttonStyles.reset, scopeBarStyles.back)}
         onClick={onBack}
       >
-        <span aria-hidden="true">←</span> Commits
+        <ArrowLeftIcon xstyle={[iconStyles.inline, iconStyles.glyph]} /> Commits
       </button>
       <code {...stylex.props(scopeBarStyles.sha)} title={commit.commit}>
         {commit.commit.slice(0, 8)}
@@ -949,16 +956,7 @@ function ReviewBatonChip({
       ref={tooltip}
       {...stylex.props(shellStyles.topbarItem, batonStyles.chip)}
     >
-      <svg
-        {...stylex.props(batonStyles.glyph)}
-        viewBox="0 0 16 16"
-        width="12"
-        height="12"
-        aria-hidden="true"
-      >
-        <rect x="1.6" y="2.6" width="12.8" height="3.4" rx="1" />
-        <path d="M3 6v6.2a1.2 1.2 0 0 0 1.2 1.2h7.6A1.2 1.2 0 0 0 13 12.2V6" />
-      </svg>
+      <ArchiveIcon xstyle={iconStyles.inline} />
       <span>deleted</span>
     </span>
   );
@@ -1067,7 +1065,7 @@ function MapSettingsControl(): ReactElement {
         aria-expanded={isOpen}
         onClick={() => setIsOpen((open) => !open)}
       >
-        <SettingsSlidersIcon />
+        <SlidersIcon />
       </IconButton>
     </div>
   );
@@ -1142,13 +1140,6 @@ const batonStyles = stylex.create({
     letterSpacing: tokens.chromeTracking,
     textTransform: "uppercase",
     whiteSpace: "nowrap",
-  },
-  glyph: {
-    fill: "none",
-    stroke: "currentColor",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    strokeWidth: "1.4",
   },
 });
 

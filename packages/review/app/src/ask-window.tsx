@@ -1,6 +1,14 @@
+import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
+import {
+  ChatIcon,
+  CloseIcon,
+  DockIcon,
+  GripIcon,
+  MinusIcon,
+} from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import {
   type PointerEvent,
@@ -15,9 +23,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { logos } from "./ask-agent-picker";
 import { useReviewDebugSettings } from "./debug-settings";
-import { ChatIcon, CloseIcon, DockIcon, GripIcon, MinusIcon } from "./icons";
 import { appMarker } from "./markers.stylex";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type {
@@ -481,7 +487,7 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
       aria-expanded={listOpen}
       {...pressHandlers(() => setListed(!listOpen))}
     >
-      <ChatIcon xstyle={[styles.logo, styles.askGlyph]} />
+      <ChatIcon xstyle={[iconStyles.chrome, styles.askGlyph]} />
       <span {...stylex.props(styles.name)}>{asks.length} Asks</span>
       {needsYou ? (
         <span
@@ -606,9 +612,9 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
 /** The agent's logo, or Ask's own for the list of conversations. */
 function PresenceLogo({ presence }: { presence: AskPresence }) {
   return presence.agent ? (
-    logos[presence.agent]({ xstyle: styles.logo })
+    AGENT_LOGOS[presence.agent]({ xstyle: styles.logo })
   ) : (
-    <ChatIcon xstyle={[styles.logo, styles.askGlyph]} />
+    <ChatIcon xstyle={[iconStyles.chrome, styles.askGlyph]} />
   );
 }
 

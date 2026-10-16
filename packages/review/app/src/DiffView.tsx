@@ -2,6 +2,8 @@ import { drawMotion } from "@canvas/draw-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CloseIcon, FileIcon, SearchIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCommitScope,
@@ -344,7 +346,7 @@ export function ReviewDiffView({
               )}
             >
               Lenses
-              <MagnifierIcon />
+              <SearchIcon xstyle={[iconStyles.chrome, styles.icon]} />
             </div>
             <div {...stylex.props(styles.hint)}>
               Click any lens to filter the diff
@@ -411,12 +413,7 @@ export function ReviewDiffView({
                             {...stylex.props(styles.clear)}
                             aria-hidden="true"
                           >
-                            <svg width="10" height="10" viewBox="0 0 10 10">
-                              <path
-                                {...stylex.props(styles.clearMark)}
-                                d="M2 2l6 6M8 2L2 8"
-                              />
-                            </svg>
+                            <CloseIcon xstyle={iconStyles.inline} />
                           </span>
                         )}
                       </span>
@@ -793,7 +790,7 @@ function DiffRail({
         {viewed && <ViewedRing {...viewed} xstyle={styles.railRing} />}
       </div>
       <RailButton label="Show lenses" onClick={onExpand}>
-        <MagnifierIcon />
+        <SearchIcon xstyle={[iconStyles.chrome, styles.icon]} />
       </RailButton>
       {rows.items.map((item) => (
         <RailLens
@@ -806,7 +803,7 @@ function DiffRail({
       ))}
       <div {...stylex.props(styles.railFiles)}>
         <RailButton label="Show files" onClick={onExpand}>
-          <FileIcon />
+          <FileIcon xstyle={[iconStyles.chrome, styles.icon]} />
         </RailButton>
       </div>
     </nav>
@@ -890,44 +887,6 @@ function RailButton({
     >
       {children}
     </button>
-  );
-}
-
-function FileIcon() {
-  return (
-    <svg
-      {...stylex.props(styles.icon)}
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M4 1.75h5l3.25 3.25v9.25H4z" />
-      <path d="M9 1.75V5h3.25" />
-    </svg>
-  );
-}
-
-function MagnifierIcon() {
-  return (
-    <svg
-      {...stylex.props(styles.icon)}
-      width="14"
-      height="14"
-      viewBox="0 0 14 14"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinecap="round"
-      aria-hidden="true"
-    >
-      <circle cx="6" cy="6" r="4.25" />
-      <path d="M9.2 9.2l3.3 3.3" />
-    </svg>
   );
 }
 
@@ -1207,7 +1166,6 @@ const styles = stylex.create({
     backgroundColor: tokens.markerTint,
   },
   icon: {
-    flexShrink: 0,
     color: tokens.inkMuted,
   },
   name: {
@@ -1239,12 +1197,6 @@ const styles = stylex.create({
       default: null,
       [stylex.when.ancestor(":hover", lensChipMarker)]: tokens.markerGlow,
     },
-  },
-  clearMark: {
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: "1.4",
-    strokeLinecap: "round",
   },
   // Inside the sidebar, clear of its scrollbar; line on the editor's edge.
   sidebarResizer: {

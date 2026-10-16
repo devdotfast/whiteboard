@@ -1,5 +1,7 @@
 import { withClass } from "@canvas/stylex-props";
 import { Button } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { ArrowLeftIcon } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, useEffect } from "react";
 
@@ -73,7 +75,8 @@ export function ScreenHeader({
             xstyle={[styles.backLink, styles.enter0]}
             onClick={back.onClick}
           >
-            ← {back.label}
+            <ArrowLeftIcon xstyle={iconStyles.inline} />
+            {back.label}
           </Button>
         ) : null}
         <h1
