@@ -107,6 +107,12 @@ it("closes on a press outside, even one that stops propagation", async () => {
   expect(panel()).toBeNull();
 });
 
+it("closes when the window loses focus", async () => {
+  await render();
+  await act(async () => window.dispatchEvent(new Event("blur")));
+  expect(panel()).toBeNull();
+});
+
 it("closes, not reopens, when its trigger is clicked again", async () => {
   await render();
   await pointerDown(trigger());

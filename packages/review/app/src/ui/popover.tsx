@@ -14,8 +14,9 @@ import { surfaceStyles } from "./surface";
 
 type Region = RefObject<HTMLElement | null>;
 
-/** Calls `dismiss` on Escape, or on a pointer down outside every region,
- * even one whose target stops propagation. A nested control that stops its
+/** Calls `dismiss` on Escape, on a pointer down outside every region, even
+ * one whose target stops propagation, and when the window loses focus, as a
+ * click into another frame or webview does. A nested control that stops its
  * Escape keeps it open. */
 export function useDismissOnOutside(
   inside: Region | readonly Region[],
@@ -40,10 +41,12 @@ export function useDismissOnOutside(
 
     document.addEventListener("pointerdown", outside, true);
     document.addEventListener("keydown", escape);
+    window.addEventListener("blur", dismiss);
 
     return () => {
       document.removeEventListener("pointerdown", outside, true);
       document.removeEventListener("keydown", escape);
+      window.removeEventListener("blur", dismiss);
     };
   }, [inside, open, dismiss]);
 }
@@ -54,7 +57,7 @@ type PopoverProps = Omit<
 > & {
   /** What it hangs from; a press inside it does not dismiss. */
   anchor: Region;
-  /** Escape or a press outside. Without it, it stays until unmounted. */
+  /** Escape, a press outside or the window losing focus. Without it, it stays until unmounted. */
   onDismiss?: () => void;
   ref?: RefObject<HTMLDivElement | null>;
   /** Placement and size, e.g. menuStyles.popover or
