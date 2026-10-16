@@ -129,6 +129,7 @@ export function CodePeekCard({
   onNativeFocus,
   lenses: lensesOverride,
   reportOutcome = false,
+  xstyle,
 }: {
   source: DiffSelection;
   active?: boolean;
@@ -138,6 +139,8 @@ export function CodePeekCard({
   /** Report resolution telemetry. Only the panel the user opened sets this,
    * so an authored document with many inline peeks sends one event, not N. */
   reportOutcome?: boolean;
+  /** Call-site styles, applied last. */
+  xstyle?: stylex.StyleXStyles;
 }) {
   const session = useReviewSession();
   const contextLenses = useReviewLenses();
@@ -176,7 +179,7 @@ export function CodePeekCard({
   if (!ranges.length)
     return (
       <section
-        {...withClass("code-peek", styles.peek, drawStyles.blockChild)}
+        {...withClass("code-peek", styles.peek, drawStyles.blockChild, xstyle)}
         role="status"
       >
         {outcome === "failed" ? "Code unavailable" : "Loading code…"}
@@ -185,7 +188,7 @@ export function CodePeekCard({
 
   return (
     <section
-      {...withClass("code-peek", styles.peek, drawStyles.blockChild)}
+      {...withClass("code-peek", styles.peek, drawStyles.blockChild, xstyle)}
       data-code-rendering="inline-editor"
     >
       <DocumentCodeView

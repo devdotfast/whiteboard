@@ -9,6 +9,9 @@ catalogs:
     '@parcel/watcher':
       specifier: 2.6.0
       version: 2.6.0
+    animejs:
+      specifier: 4.5.0
+      version: 4.5.0
     zod:
       specifier: 4.6.5
       version: 4.6.5
@@ -90,7 +93,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -127,7 +130,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -192,7 +195,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/agent-plugins/pi: {}
 
@@ -225,7 +228,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/review:
     dependencies:
@@ -343,7 +346,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/review-protocol:
     dependencies:
@@ -365,7 +368,7 @@ importers:
         version: 0.28.1
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/review-share-protocol:
     dependencies:
@@ -375,7 +378,7 @@ importers:
     devDependencies:
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/review/app:
     dependencies:
@@ -403,6 +406,9 @@ importers:
       '@xyflow/react':
         specifier: 12.10.2
         version: 12.10.2(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      animejs:
+        specifier: 'catalog:'
+        version: 4.5.0
       decode-named-character-reference:
         specifier: 1.3.0
         version: 1.3.0
@@ -463,7 +469,7 @@ importers:
         version: 8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0)
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/trace-core:
     dependencies:
@@ -497,7 +503,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/trace-protocol:
     dependencies:
@@ -507,7 +513,7 @@ importers:
     devDependencies:
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
 packages:
 
@@ -2018,6 +2024,17 @@ packages:
   ajv@8.20.0:
     resolution: {integrity: sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA==}
 
+  animejs@4.5.0:
+    resolution: {integrity: sha512-NQimYX+lz8WaXonGS9zVVoviCIAjONeJayxacUditaivYLqyXgGjFKjuyl0aUUhFKm5MriX9ty1TGovNzoJQWA==}
+    peerDependencies:
+      '@types/three': '>=0.150.0'
+      three: '>=0.150.0'
+    peerDependenciesMeta:
+      '@types/three':
+        optional: true
+      three:
+        optional: true
+
   ansi-regex@6.4.0:
     resolution: {integrity: sha512-KzTVk2tCWAHtYrvvvaP8bJKJq2pVinhLcGEQdtLIYPbmNGNyYe8QwNaTUYQp2J7/vIsUKt5QCqAfUkYyG9DkOw==}
     engines: {node: '>=12'}
@@ -3433,6 +3450,7 @@ packages:
       '@vitest/ui': 4.1.11
       happy-dom: '*'
       jsdom: '*'
+      vite: 8.0.16
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -4540,7 +4558,7 @@ snapshots:
       '@vitest/mocker': 4.1.11(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
       playwright: 1.62.1
       tinyrainbow: 3.1.1
-      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
     transitivePeerDependencies:
       - bufferutil
       - msw
@@ -4556,7 +4574,7 @@ snapshots:
       pngjs: 7.0.0
       sirv: 3.0.2
       tinyrainbow: 3.1.1
-      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
@@ -4719,6 +4737,8 @@ snapshots:
       fast-uri: 3.1.8
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
+
+  animejs@4.5.0: {}
 
   ansi-regex@6.4.0: {}
 
@@ -6267,7 +6287,7 @@ snapshots:
       fsevents: 2.3.3
       tsx: 4.21.0
 
-  vitest@4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0):
+  vitest@4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0)):
     dependencies:
       '@vitest/expect': 4.1.11
       '@vitest/mocker': 4.1.11(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
@@ -6294,18 +6314,7 @@ snapshots:
       '@vitest/browser-playwright': 4.1.11(playwright@1.62.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))(vitest@4.1.11)
       jsdom: 29.1.1
     transitivePeerDependencies:
-      - '@vitejs/devtools'
-      - esbuild
-      - jiti
-      - less
       - msw
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - terser
-      - tsx
-      - yaml
 
   vscode-jsonrpc@9.0.2: {}
 

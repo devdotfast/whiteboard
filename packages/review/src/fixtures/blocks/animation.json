@@ -1,0 +1,19 @@
+[
+  {
+    "id": "block-1",
+    "type": "animation",
+    "title": "Order status",
+    "height": 300,
+    "frames": [
+      { "key": "before", "title": "An order arrives", "label": "ARRIVE" },
+      {
+        "key": "change",
+        "title": "Its status is queued",
+        "label": "QUEUE",
+        "caption": "The status line sets it."
+      }
+    ],
+    "code": { "status": "head/order.ts#L1" },
+    "html": "<script>const s = whiteboard.scene({ columns: 2 });\nconst client = s.actor({ id: \"client\", at: [1, 1], title: \"Client\", note: \"createOrder()\" });\nconst queue = s.store({ id: \"queue\", at: [2, 1], title: \"Queue\" });\ns.link(client, queue, { label: \"enqueue\", enter: \"change\" });\ns.send(client, queue, \"order\", \"change\");\ns.on(\"change\", queue, { note: \"1 pending\", tone: \"added\" });\nqueue.item(\"order\", { enter: \"change\", tone: \"added\" });\ns.peek(\"status\", { at: [1, 2, 1, 2], enter: \"change\" });</script>"
+  }
+]

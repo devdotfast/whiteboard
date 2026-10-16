@@ -98,6 +98,56 @@ describe("block definitions", () => {
 
       expect(() => checkReferences([comparison])).not.toThrow();
     });
+    it("animation: frame keys are unique", async () => {
+      const [animation] = await fixture("animation");
+
+      const broken = {
+        ...animation!,
+        frames: [animation!.frames[0]!, animation!.frames[0]!],
+      };
+
+      expect(() => checkReferences([broken])).toThrow(
+        new ReviewInputError(
+          "Animation frame keys must be unique within the animation.",
+        ),
+      );
+    });
+    it("animation: frame labels are all or none", async () => {
+      const [animation] = await fixture("animation");
+
+      const bare = animation!.frames.map(
+        ({ label: _label, ...frame }) => frame,
+      );
+
+      const partial = {
+        ...animation!,
+        frames: [{ ...bare[0]!, label: "FIRST" }, ...bare.slice(1)],
+      };
+
+      expect(() => checkReferences([partial])).toThrow(
+        /Give every animation frame a label/,
+      );
+
+      const all = {
+        ...animation!,
+        frames: bare.map((frame, index) => ({
+          ...frame,
+          label: `STEP ${index + 1}`,
+        })),
+      };
+
+      expect(() => checkReferences([all])).not.toThrow();
+    });
+    it("animation: code names a source anchor", async () => {
+      const [animation] = await fixture("animation");
+
+      expect(() =>
+        blocks.animation.schema.parse({
+          ...animation!,
+          code: { status: "order.ts:1" },
+        }),
+      ).toThrow(/source anchor/);
+    });
     it.each([
       ["actor", { actor: "nobody" }, "Unknown component name: nobody"],
       ["store", { store: "missing" }, "Unknown component name: missing"],

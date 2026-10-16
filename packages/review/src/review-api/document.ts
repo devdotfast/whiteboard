@@ -155,6 +155,11 @@ const unitTypes = new Set(["step", "flow_node", "flow_edge"]);
 export const isUnit = (element: Element): element is Unit =>
   unitTypes.has(element.type);
 
+/** The reference id of a code peek an animation names: the canvas finds the
+ * peek's resolved anchor by it. */
+export const animationCodeId = (blockId: string, name: string) =>
+  `${blockId}:code:${name}`;
+
 /** Inline trace quotes keep paragraph/list layout while using retained resources. */
 export function traceQuoteLink(
   href: string,
@@ -322,6 +327,16 @@ function documentReferences(
             })),
           ),
         ),
+      );
+
+    if (element.type === "animation")
+      return Object.entries(element.code).flatMap(([name, anchor]) =>
+        select(anchor, element.pins).map((source) => ({
+          id: animationCodeId(element.id!, name),
+          source,
+          label: name,
+          peek: true,
+        })),
       );
 
     if (element.type === "call_stack_diff")

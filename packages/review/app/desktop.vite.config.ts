@@ -15,6 +15,13 @@ import { stylexOptions } from "./stylex-options";
 
 const require = createRequire(import.meta.url);
 
+// The animation stage runs anime.js's UMD build, which the package does not
+// export; the stage imports it as text from here.
+const animeBundles = path.join(
+  path.dirname(require.resolve("animejs/package.json")),
+  "dist/bundles",
+);
+
 const decodeNamedCharacterReferenceIndex = path.join(
   path.dirname(require.resolve("decode-named-character-reference")),
   "index.js",
@@ -78,6 +85,7 @@ export default defineConfig({
     alias: {
       ...sourceAliases,
       "decode-named-character-reference": decodeNamedCharacterReferenceIndex,
+      "@animejs-bundles": animeBundles,
     },
   },
   // Relative asset URLs: the stylesheet is loaded by `<link>` from the workbench

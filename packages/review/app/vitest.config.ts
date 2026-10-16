@@ -15,6 +15,10 @@ const require = createRequire(import.meta.url);
 
 const alias = {
   ...reviewTestAliases,
+  "@animejs-bundles": path.join(
+    path.dirname(require.resolve("animejs/package.json")),
+    "dist/bundles",
+  ),
   "decode-named-character-reference": path.join(
     path.dirname(require.resolve("decode-named-character-reference")),
     "index.js",
@@ -78,6 +82,10 @@ export default defineConfig({
       {
         plugins: [stylexDevCss(), react()],
         resolve: { alias, dedupe: ["react", "react-dom"] },
+        // The stage needs anime.js's file as text; prebundling would make it a module.
+        optimizeDeps: {
+          exclude: ["@animejs-bundles/anime.umd.min.js?raw"],
+        },
         test: {
           name: "browser",
           include: ["src/**/*.browser.test.{ts,tsx}"],

@@ -25,6 +25,7 @@ export const COMPONENT_REFERENCE = [
   "- store {label, storage: relational|document, collections: {key: {label, fields: {key: field}, source?: anchor of its schema declaration}}, dataStoreKind?: database|objectStore|bucket|artifactStore|fileStore}",
   "- field {label, dataType, nullable?, primaryKey?, references?: {store, collection, field}, fields?: {key: field}}",
   "- useCase {label, summary?, operations: operation[] (1 or more)}; operation {kind: read|write, actor, store, collection, label, source: anchor, field?, detail?, pins?}, naming declared keys",
+  '- animation {title, html, frames: {key, title, caption?, duration? (ms)}[] (1 to 60), code?: {name: anchor}, height? (px, default 360), pins?}; read session_get_instructions({topic:"animation"}) before writing one',
   "",
   'Example (replace its path and lines with verified ones): {"type":"sequence","title":"Request","actors":{"a":"Client","b":"Server"},"steps":[{"from":"a","to":"b","label":"Send","source":"head/src/app.ts#L10-L20"}]}',
 ].join("\n");

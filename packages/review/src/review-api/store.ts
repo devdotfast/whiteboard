@@ -68,6 +68,7 @@ const DIAGRAM_TYPES = new Set([
   "call_stack_diff",
   "database_lens",
   "software_map",
+  "animation",
 ]);
 
 export const SCRATCHPAD_TITLE = "Scratchpad";

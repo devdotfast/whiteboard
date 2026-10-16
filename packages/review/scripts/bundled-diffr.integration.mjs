@@ -38,11 +38,10 @@ async function stageDiffr(runtime) {
     ["diffr", diffrPackage],
     [`diffr-${process.platform}-${process.arch}`, platformPackage],
   ])
-    await cp(
-      directory,
-      path.join(runtime, "node_modules/@dev.fast", name),
-      { recursive: true, dereference: true },
-    );
+    await cp(directory, path.join(runtime, "node_modules/@dev.fast", name), {
+      recursive: true,
+      dereference: true,
+    });
 }
 
 async function collect(repositoryPath, base, head, paths, kind = "trees") {

@@ -8,6 +8,7 @@ import { COMPONENT_REFERENCE } from "./component-reference.js";
 
 export const INSTRUCTION_TOPICS = [
   "authoring",
+  "animation",
   "file-lenses",
   "scratchpad",
   "trace-archaeology",

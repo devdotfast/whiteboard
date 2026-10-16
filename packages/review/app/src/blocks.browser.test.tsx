@@ -166,6 +166,13 @@ const rendered: Record<
   callout: (c) =>
     c.querySelector("blockquote[data-tone='warning'] strong")?.textContent ===
       "Note" && text(c).includes("Careful."),
+  // The stage ran its script and laid out the code placeholder, which the
+  // canvas filled with a peek; it shows from its enter frame on.
+  animation: (c) =>
+    has(
+      c,
+      "[data-animation-slot='code'] .fixture-inline-editor[data-path='order.ts']",
+    ) && text(c).includes("An order arrives"),
 };
 
 let canvas: ReturnType<typeof mount> | undefined;
@@ -493,6 +500,185 @@ describe("block components", () => {
       expect(empty).toEqual([]);
     },
   );
+
+  it("shows an animation's code peek from the frame it enters on", async () => {
+    const { container } = await mountFixture("animation");
+
+    const slot = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']");
+
+    expect(await settled(() => slot()?.style.visibility === "hidden")).toBe(
+      true,
+    );
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+        .click(),
+    );
+
+    expect(await settled(() => slot()?.style.visibility === "visible")).toBe(
+      true,
+    );
+    expect(text(container)).toContain("Its status is queued");
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("plays an animation's frame timeline forward and seeks it back", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Timeline",
+          height: 240,
+          frames: [
+            { key: "a", title: "Two services" },
+            { key: "b", title: "A calls B" },
+            { key: "c", title: "The peek moves" },
+          ],
+          code: { status: "head/order.ts#L1" },
+          html: [
+            '<div class="wb-row"><div class="wb-node" id="a">A</div><div class="wb-node" id="b">B</div></div>',
+            '<div id="peek" data-wb-code="status" style="width: 200px; margin: 0 16px"></div>',
+            "<script>",
+            'const arrow = whiteboard.arrow("#a", "#b", { label: "call", enter: "b" });',
+            'whiteboard.travel(whiteboard.token({ label: "req" }), arrow, "b");',
+            'whiteboard.timeline("c").set("#peek", { translateX: 60 }).add("#peek", { translateX: 120, duration: 300 });',
+            "</script>",
+          ].join(""),
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    // The slot overlay copies the placeholder's position in the stage.
+    const x = () => {
+      const slot = container.querySelector<HTMLElement>(
+        "[data-animation-slot='code']",
+      );
+
+      return (
+        slot && Number(/translate\(([-\d.]+)px/.exec(slot.style.transform)?.[1])
+      );
+    };
+
+    const next = (label: string) =>
+      act(async () =>
+        container
+          .querySelector<HTMLButtonElement>(`button[aria-label='${label}']`)!
+          .click(),
+      );
+
+    const start = await settled(x);
+
+    expect(start).toBeGreaterThan(0);
+    await next("Next frame");
+    // Landing on frame b's end must not apply frame c's first set().
+    expect(await settled(() => x() === start)).toBe(true);
+    await next("Next frame");
+    expect(await settled(() => x() === start! + 120)).toBe(true);
+    await next("Previous frame");
+    expect(await settled(() => x() === start)).toBe(true);
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("shows an animation's data-only element during its frames alone", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Only",
+          height: 240,
+          frames: [
+            { key: "a", title: "Before" },
+            { key: "b", title: "During" },
+            { key: "c", title: "After" },
+          ],
+          code: { status: "head/order.ts#L1" },
+          html: '<div data-wb-code="status" data-only="b" style="width: 200px"></div>',
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    const visibility = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.visibility;
+
+    const next = () =>
+      act(async () =>
+        container
+          .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+          .click(),
+      );
+
+    expect(await settled(() => visibility() === "hidden")).toBe(true);
+    await next();
+    expect(await settled(() => visibility() === "visible")).toBe(true);
+    await next();
+    expect(await settled(() => visibility() === "hidden")).toBe(true);
+  });
+
+  it("lays out a scene and shows a peek the scene reveals on a later frame", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Scene",
+          height: 320,
+          frames: [
+            { key: "idle", title: "Idle", label: "IDLE" },
+            { key: "run", title: "Running", label: "RUN" },
+          ],
+          code: { status: "head/order.ts#L1" },
+          html: [
+            "<script>",
+            "const s = whiteboard.scene({ columns: 3 });",
+            'const a = s.actor({ id: "a", at: [1, 1], title: "A" });',
+            'const b = s.actor({ id: "b", at: [2, 1], title: "B", note: "idle" });',
+            's.link(a, b, { label: "call" });',
+            's.send(a, b, "req", "run");',
+            's.on("run", b, { note: "done", tone: "added" });',
+            's.peek("status", { at: [1, 2, 1, 3], only: ["run"] });',
+            "</script>",
+          ].join(""),
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    const visibility = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.visibility;
+
+    // The step strip names the frames and marks the current one.
+    const strip = await settled(() =>
+      container.querySelector('[role="group"][aria-label="Steps"]'),
+    );
+
+    expect(
+      [...strip!.querySelectorAll("button")].map((b) => b.textContent),
+    ).toEqual(["1IDLE", "2RUN"]);
+    expect(strip!.querySelector('[aria-current="step"]')!.textContent).toBe(
+      "1IDLE",
+    );
+
+    // The scene ran and placed a peek that only shows on the second frame.
+    expect(await settled(() => visibility() === "hidden")).toBe(true);
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+        .click(),
+    );
+    expect(await settled(() => visibility() === "visible")).toBe(true);
+    expect(strip!.querySelector('[aria-current="step"]')!.textContent).toBe(
+      "2RUN",
+    );
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
 
   it("opens the selected call-tree frame's code", async () => {
     const { container } = await mountFixture("call_stack_diff");

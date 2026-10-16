@@ -15,6 +15,7 @@ import {
 } from "react";
 
 import { MarkdownContent } from "./agent-markdown";
+import { AnimationBlock } from "./animation/animation-block";
 import type { ApiDocumentData } from "./api-document";
 import { blockSectionSummary } from "./block-document-derivations";
 import { DocumentCallTree } from "./call-tree-view";
@@ -289,6 +290,7 @@ export const blockComponents = {
     <FlowDiagram node={node} snapshot={data.snapshot} />
   ),
   software_map: SoftwareMapBlock,
+  animation: AnimationBlock,
   section: SectionBlock,
   callout: CalloutBlock,
 } satisfies Components;
