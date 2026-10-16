@@ -91,3 +91,6 @@ artifacts/devbox/
 scripts/acceptance/evidence/
 
 packages/review/tutorial/pins.json
+
+# Prebuilt, platform-specific diffr binary fetched at build time
+packages/review/bin/
