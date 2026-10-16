@@ -542,7 +542,9 @@ one of these entries:
   append Review's PostHog install ID to the native About details and copied
   details after the embedded server announces its stored identity.
 - `src/vs/workbench/services/layout/browser/layoutService.ts`: alias the Review
-  canvas to the sessions part.
+  canvas to the sessions part, and add the board sidebar part
+  (`REVIEW_SIDEBAR_PART`, which replaces `REVIEW_EXPLORER_PART`) and the
+  column right of the board (`REVIEW_ASK_PART`).
 - `src/vs/workbench/common/editor.ts`, `src/vs/workbench/common/contextkeys.ts`,
   `src/vs/workbench/services/editor/common/editorGroupsService.ts`, and
   `src/vs/workbench/browser/parts/editor/` (`editor.ts`,

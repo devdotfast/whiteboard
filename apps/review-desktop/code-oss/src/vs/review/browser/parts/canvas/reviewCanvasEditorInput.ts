@@ -15,7 +15,7 @@ import {
 import { EditorInput } from "../../../../workbench/common/editor/editorInput.js";
 import { IEditorGroupsService } from "../../../../workbench/services/editor/common/editorGroupsService.js";
 
-import { SCRATCHPAD_REVIEW_ID, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
+import { boardTitle, type BoardIconKind, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
 import { sourceSelectionIdentity } from "../../../common/reviewSourceView.js";
 
 export type ReviewCanvasEditorTarget =
@@ -59,6 +59,32 @@ export class ReviewCanvasEditorInput extends EditorInput {
 		return this._target;
 	}
 
+	private boardIcon: BoardIconKind | undefined;
+	private changed = false;
+
+	/** Sets the tab's board icon. */
+	setBoardIcon(icon: BoardIconKind): void {
+		if (this.boardIcon === icon) return;
+		this.boardIcon = icon;
+		this._onDidChangeLabel.fire();
+	}
+
+	/** Shows or clears the changed badge on the tab. */
+	setChanged(changed: boolean): void {
+		if (this.changed === changed) return;
+		this.changed = changed;
+		this._onDidChangeLabel.fire();
+	}
+
+	override getLabelExtraClasses(): string[] {
+		if (this.target.kind !== "api") return [];
+		// review.css draws the board's icon over the codicon's slot.
+		return [
+			...(this.boardIcon ? ["review-board-icon", `review-board-icon-${this.boardIcon}`] : []),
+			...(this.changed ? ["review-tab-changed"] : []),
+		];
+	}
+
 	setApiTitle(title: string): void {
 		if (this._target.kind !== "api" || this._target.title === title) return;
 		this._target = { ...this._target, title };
@@ -93,8 +119,11 @@ export class ReviewCanvasEditorInput extends EditorInput {
 	}
 
 	override getName(): string {
-		if (this.target.kind === "api-source") return this.target.selection.kind === "current" ? `Source — ${this.target.title}` : `Source — ${this.target.title} (v${this.target.selection.version})`;
-		if (this.target.kind === "api") return this.target.title;
+		if (this.target.kind === "api-source") {
+			const title = boardTitle(this.target.title);
+			return this.target.selection.kind === "current" ? `Source — ${title}` : `Source — ${title} (v${this.target.selection.version})`;
+		}
+		if (this.target.kind === "api") return boardTitle(this.target.title);
 		if (this.target.kind === "home") return "Home";
 		if (this.target.kind === "welcome") return "Welcome";
 		if (this.target.kind === "settings") return "Settings";
@@ -103,8 +132,9 @@ export class ReviewCanvasEditorInput extends EditorInput {
 
 	override getIcon(): ThemeIcon | undefined {
 		if (this.target.kind === "home") return Codicon.home;
+		// A placeholder slot: the board's own icon is drawn over it.
+		if (this.target.kind === "api" && this.boardIcon) return Codicon.window;
 		if (this.target.kind === "api-source") return Codicon.repo;
-		if (this.target.kind === "api" && this.target.reviewId === SCRATCHPAD_REVIEW_ID) return Codicon.edit;
 		return undefined;
 	}
 

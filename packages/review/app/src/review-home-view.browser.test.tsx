@@ -24,9 +24,9 @@ function summary(
     title,
     version: 1,
     repositoryName: "whiteboard",
-    repositoryGroup: {
-      key: extra.repositoryName ?? "whiteboard",
-      label: extra.repositoryName ?? "whiteboard",
+    project: {
+      id: extra.repositoryName ?? "whiteboard",
+      name: extra.repositoryName ?? "whiteboard",
     },
     repositoryPath: "/repo/main",
     createdAt: "2026-10-10T12:00:00Z",
@@ -165,13 +165,36 @@ describe("Home interactions", () => {
     expect(findHost.showFind()).toBe(false);
   });
   const read = { viewedAt: "2026-10-11T12:00:00Z" };
+  it("badges a row that changed since it was last viewed", async () => {
+    await render([
+      summary("Changed", { changed: true }),
+      summary("Seen", { changed: false }),
+    ]);
+    expect(
+      container.querySelectorAll(
+        '[aria-label="Changed since you last viewed it"]',
+      ),
+    ).toHaveLength(1);
+  });
+  it("marks a PR's row by its state", async () => {
+    await render([
+      summary("Stack", {
+        origin: { pullRequestNumber: 320 },
+        pullRequestState: "merged",
+      }),
+      summary("Plan"),
+    ]);
+    expect(
+      container.querySelector('[aria-label="PR #320, merged"]'),
+    ).not.toBeNull();
+    expect(container.querySelectorAll('[role="img"]')).toHaveLength(1);
+  });
   it("uses unread precedence, persists collapse, and sorts within fixed groups", async () => {
     const reviews = [
       summary("Zulu"),
       summary("Alpha", { createdAt: "2026-09-01T00:00:00Z" }),
       summary("Read", read),
       summary("Old", { ...read, createdAt: "2026-09-01T00:00:00Z" }),
-      summary("Scratchpad", { kind: "scratchpad" }),
     ];
 
     await render(reviews);
@@ -358,7 +381,7 @@ describe("Home interactions", () => {
     await key(" ", {}, button("beta"));
     expect(titles()).toEqual(["Two"]);
     expect(button("beta").getAttribute("aria-checked")).toBe("true");
-    await click("Remove Repo beta");
+    await click("Remove Project beta");
     expect(button("beta").getAttribute("aria-checked")).toBe("false");
     expect(titles()).toHaveLength(2);
     await key("Escape");
@@ -395,7 +418,7 @@ describe("Home interactions", () => {
     expect(titles()).toEqual(["One"]);
     expect(button("alpha").getAttribute("aria-checked")).toBe("mixed");
     await click("feature");
-    expect(button("Repo alpha")).toBeTruthy();
+    expect(button("Project alpha")).toBeTruthy();
     expect(button("alpha").getAttribute("aria-checked")).toBe("true");
     expect(button("main").getAttribute("aria-checked")).toBe("true");
     await render([
@@ -415,7 +438,7 @@ describe("Home interactions", () => {
     await key("Escape");
     await click("Worktree feature +1");
     await key("Escape");
-    await click("Repo beta");
+    await click("Project beta");
     await click("alpha");
     expect(container.querySelector("[data-home-submenu]")).not.toBeNull();
     await key("ArrowLeft", {}, document.activeElement!);
@@ -425,10 +448,12 @@ describe("Home interactions", () => {
         button("alpha").querySelector("[data-picker-check]") as HTMLElement
       ).click(),
     );
-    expect(button("Repo beta +1")).toBeTruthy();
+    expect(button("Project beta +1")).toBeTruthy();
     await key(" ", {}, button("gamma"));
     expect(titles()).toHaveLength(5);
-    expect(container.querySelector('[aria-label^="Remove Repo"]')).toBeNull();
+    expect(
+      container.querySelector('[aria-label^="Remove Project"]'),
+    ).toBeNull();
     expect(container.querySelector("[data-home-picker]")).toBeNull();
     await openFilters();
     expect(button("alpha").getAttribute("aria-checked")).toBe("false");
@@ -441,7 +466,7 @@ describe("Home interactions", () => {
       }),
       summary("Other", { repositoryName: "beta" }),
       summary("Fold local", {
-        repositoryGroup: undefined,
+        project: undefined,
         repositoryPath: "/local/main",
       }),
     ]);
@@ -453,7 +478,7 @@ describe("Home interactions", () => {
     await click("alpha › feature");
     expect(titles()).toEqual(["Fold one"]);
     await key("Escape");
-    await click("Remove Repo alpha");
+    await click("Remove Project alpha");
     expect(titles()).toHaveLength(2);
   });
   it("keeps the caret in the menu under the pointer when hover opens or switches submenus", async () => {
@@ -710,6 +735,39 @@ describe("Home interactions", () => {
       container.querySelector('[aria-label="Selected whiteboards"]'),
     ).toBeNull();
   });
+  it("asks once before moving boards others need to Trash, and keeps them all if refused", async () => {
+    const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      async () => {},
+    );
+
+    vi.mocked(host.ui.confirmDelete!).mockResolvedValue(false);
+    await render([summary("One"), summary("Two")], { onTrash });
+    await key("a", { metaKey: true });
+    await key("Backspace", { metaKey: true });
+    expect(host.ui.confirmDelete).toHaveBeenCalledExactlyOnceWith(
+      ["One", "Two"],
+      { reviewIds: ["One", "Two"], trash: true },
+    );
+    expect(onTrash).not.toHaveBeenCalled();
+    expect(titles()).toEqual(["One", "Two"]);
+  });
+  it("deletes from Trash once the host's dialog, naming the linking boards, says so", async () => {
+    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      async () => {},
+    );
+
+    await render([summary("Gone", { trashedAt: "2026-10-10" })], {
+      onDelete,
+    });
+    await click("1 in Trash ›");
+    await select("Gone");
+    await key("Backspace", { metaKey: true });
+    expect(host.ui.confirmDelete).toHaveBeenCalledExactlyOnceWith(["Gone"], {
+      reviewIds: ["Gone"],
+    });
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(titles()).toEqual([]);
+  });
   it("deletes in a batch with Undo, and restores a deleted selection", async () => {
     const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       async () => {},
@@ -853,7 +911,9 @@ describe("Home interactions", () => {
     await click("1 in Trash ›");
     await select("Gone");
     await key("Backspace", { metaKey: true });
-    expect(confirmDelete).toHaveBeenLastCalledWith(["Gone"]);
+    expect(confirmDelete).toHaveBeenLastCalledWith(["Gone"], {
+      reviewIds: ["Gone"],
+    });
     expect(onDelete).not.toHaveBeenCalled();
     await key("Backspace", { metaKey: true });
     expect(onDelete).toHaveBeenCalledOnce();

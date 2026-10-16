@@ -1,11 +1,23 @@
-import { type JsonObject, isJsonObject } from "@dev.fast/json";
+import {
+  type JsonObject,
+  type JsonValue,
+  isJsonObject,
+  isStringValue,
+} from "@dev.fast/json";
+import { defaultBranch, resolveRepoContextSync } from "@dev.fast/local-vcs";
 import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
+  type ReviewApiSummary,
+  type ReviewBoardPlace,
+  type ReviewProjectThreads,
   type ReviewRemoteLanguageEnvironment,
   type ReviewRemoteNavigatorAnswer,
   type ReviewStreamLine,
   type ReviewStructuralDiffEvent,
+  type ReviewThreadBoard,
+  boardIconKind,
+  boardTitle,
 } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 import {
@@ -51,12 +63,13 @@ import { anchorQuotes } from "./anchor-quotes.js";
 import type { AskRecord } from "./ask-history.js";
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
-import { ReviewInputError } from "./document.js";
 import {
-  instructionsQuerySchema,
-  renderInstructions,
-  scratchpadAvailable,
-} from "./instructions.js";
+  ReviewInputError,
+  type ReviewTarget,
+  boardLinks,
+  boardRepositoryId,
+} from "./document.js";
+import { instructionsQuerySchema, renderInstructions } from "./instructions.js";
 import type { LocalReviewData } from "./local-data.js";
 import { registerOnboardingRoutes } from "./onboarding.js";
 import {
@@ -65,6 +78,8 @@ import {
   readQuerySchemas,
 } from "./read-schemas.js";
 import {
+  REVIEW_PERSON_HEADER,
+  REVIEW_THREAD_HEADER,
   type ReviewRequestVia,
   reviewRequestOrigin,
 } from "./request-origin.js";
@@ -77,8 +92,9 @@ import {
   uncategorizedReport,
 } from "./review-progress.js";
 import {
+  type Author,
+  type PlacedBoard,
   type ReviewStore,
-  SCRATCHPAD_ID,
   type Snapshot,
   commandSchema,
   inspectSnapshot,
@@ -142,12 +158,7 @@ const askDecisionSchema = z.strictObject({
 export interface AuthoringCapabilities {
   desktopAvailable: boolean;
   softwareMapEnabled: boolean;
-  /** Off, the host neither makes nor lists the scratchpad, and refuses its id. */
-  scratchpadEnabled: boolean;
 }
-
-const SCRATCHPAD_DISABLED =
-  "The scratchpad is off. Turn it on in Whiteboard Desktop Settings.";
 
 /**
  * What the host reports about reviews, for telemetry. `onReviewCreated` fires
@@ -156,13 +167,20 @@ const SCRATCHPAD_DISABLED =
 export interface ReviewApiHooks {
   onReviewCreated?: (event: {
     reviewId: string;
-    kind: "review" | "scratchpad";
     blocks: number;
     via: ReviewRequestVia;
     agentKind?: ReviewSessionAgent;
   }) => void;
   sharing?: SharingHostEvents;
 }
+
+/** A person's save carries the whole board, which edits one at a time can
+ * grow past the size of a single command. */
+const PERSON_EDIT_MAX_BYTES = 16 * 1024 * 1024;
+
+/** A request the gateway forwarded from another machine. */
+const remoteCaller = (context: Context) =>
+  context.req.header(REVIEW_CLIENT_HEADER) === REVIEW_CLIENT_REMOTE;
 
 /** Both hosts mount this behind their token authentication. */
 export function createReviewApi(
@@ -174,14 +192,11 @@ export function createReviewApi(
   }) => Promise<{ softwareMapEnabled: boolean }>,
   shared?: SharedReviewStore,
   capabilities: () =>
-    | Omit<AuthoringCapabilities, "scratchpadEnabled">
-    | Promise<Omit<AuthoringCapabilities, "scratchpadEnabled">> = () => ({
+    | AuthoringCapabilities
+    | Promise<AuthoringCapabilities> = () => ({
     desktopAvailable: Boolean(open),
     softwareMapEnabled: false,
   }),
-  // Synchronous because the catalog is read inside watch callbacks. The host
-  // keeps it current from its preferences file.
-  scratchpadEnabled: () => boolean = () => false,
   // Read per request: capture can change from outside this server.
   traceEnabled: () => Promise<boolean> = async () => false,
   /** Which server this is, for whiteboard_status. */
@@ -252,23 +267,7 @@ export function createReviewApi(
     operation: z.object({ reviewId: z.string().optional() }),
   });
 
-  // The host that can show the scratchpad keeps it: Desktop, while the
-  // preference is on. Headless servers never make one, and a pad made earlier
-  // stays in the store while it is off.
-  const ensureScratchpad = async (id?: string) => {
-    if (open && scratchpadEnabled() && (!id || id === SCRATCHPAD_ID))
-      await store.ensureScratchpad();
-  };
-
-  const refuseDisabledScratchpad = (id?: string) => {
-    if (id === SCRATCHPAD_ID && !scratchpadEnabled())
-      throw new ReviewInputError(SCRATCHPAD_DISABLED, 409);
-  };
-
   const sharedGuard: MiddlewareHandler = async (context, next) => {
-    refuseDisabledScratchpad(context.req.param("id"));
-    await ensureScratchpad(context.req.param("id"));
-
     const id = context.req.param("id");
 
     if (!id || !isShared(id)) return next();
@@ -300,40 +299,79 @@ export function createReviewApi(
     return snapshot;
   };
 
-  const catalog = () => {
-    const local = store.list();
+  /** Adds a PR board's state, as this host last read it from GitHub. */
+  const withPullRequestState = <
+    Board extends {
+      pullRequestUrl?: string;
+      origin?: { pullRequestUrl?: string };
+    },
+  >(
+    board: Board,
+  ) => {
+    const state = data?.pullRequestState(
+      board.origin?.pullRequestUrl ?? board.pullRequestUrl,
+    );
 
-    return [
-      ...(scratchpadEnabled()
-        ? local
-        : local.filter((summary) => summary.kind !== "scratchpad")),
-      ...(shared?.list() ?? []),
-    ];
+    return state ? { ...board, pullRequestState: state } : board;
   };
 
-  app.get("/", async (context) => {
-    await ensureScratchpad();
+  const catalog = () => [
+    ...store.list().map(withPullRequestState),
+    ...(shared?.list() ?? []),
+  ];
 
-    return context.json(catalog());
-  });
+  /** Where a board sits among its project's, and its PR's facts, for the
+   * board's header. */
+  const placeOf = (id: string): ReviewBoardPlace => {
+    if (isShared(id) || !store.has(id)) return { siblings: [] };
+
+    const { board, parent, siblings, children } = store.place(id);
+    const url = board.origin?.pullRequestUrl;
+    const state = data?.pullRequestState(url);
+    const baseBranch = url && data?.pullRequestBaseBranch(url);
+    const headBranch = url && data?.pullRequestHeadBranch(url);
+
+    const place = ({ reviewId, title, target }: PlacedBoard) => ({
+      reviewId,
+      title,
+      icon: boardIconKind(target),
+    });
+
+    const listed = (child: PlacedBoard) => {
+      const childState = data?.pullRequestState(child.origin?.pullRequestUrl);
+
+      return {
+        ...place(child),
+        ...(child.origin?.pullRequestNumber && {
+          pullRequestNumber: child.origin.pullRequestNumber,
+        }),
+        ...(childState && { pullRequestState: childState }),
+      };
+    };
+
+    return {
+      ...(state && { pullRequestState: state }),
+      ...(baseBranch && { baseBranch }),
+      ...(headBranch && { headBranch }),
+      board: place(board),
+      ...(parent && { parent: place(parent) }),
+      siblings: siblings.map(listed),
+      ...(children?.length && { children: children.map(listed) }),
+    };
+  };
+
+  app.get("/", (context) => context.json(catalog()));
 
   // Server-owned state only: asking the Desktop canvas would let a stalled
   // renderer block tool listing and the first instructions call.
   const instructionContext = async () => ({
-    desktopAvailable: Boolean(open),
-    scratchpadEnabled: scratchpadEnabled(),
     traceEnabled: await traceEnabled(),
   });
 
   app.get("/authoring", async (context) => {
     const instructions = await instructionContext();
 
-    return context.json(
-      authoringTools(
-        scratchpadAvailable(instructions),
-        instructions.traceEnabled,
-      ),
-    );
+    return context.json(authoringTools(instructions.traceEnabled));
   });
   app.get("/instructions", async (context) => {
     const { topic } = instructionsQuerySchema.parse(context.req.query());
@@ -464,10 +502,7 @@ export function createReviewApi(
   );
 
   app.get("/capabilities", async (context) =>
-    context.json({
-      ...(await capabilities()),
-      scratchpadEnabled: scratchpadEnabled(),
-    }),
+    context.json(await capabilities()),
   );
 
   app.get("/:id/activity", (context) => {
@@ -499,6 +534,27 @@ export function createReviewApi(
         );
       },
     );
+  // The person's canvas, never an agent tool: a save of the whole board,
+  // the block in focus, and discarding a board left untouched.
+  app.post("/:id/person-edit", async (context) =>
+    context.json(
+      await store.personEdit(
+        context.req.param("id"),
+        await readBoundedRequestJson(context.req.raw, PERSON_EDIT_MAX_BYTES),
+      ),
+    ),
+  );
+  app.post("/:id/focus", async (context) =>
+    context.json(
+      store.focus(
+        context.req.param("id"),
+        await readBoundedRequestJson(context.req.raw),
+      ),
+    ),
+  );
+  app.post("/:id/discard", async (context) =>
+    context.json(await store.discard(context.req.param("id"))),
+  );
   app.get("/watch", (context) => {
     let input: unknown;
 
@@ -526,6 +582,36 @@ export function createReviewApi(
     let dirtyList = lists;
     const dirtyReviews = new Set(reviewIds);
     let sentList: string | undefined;
+    // Bumped when a board a review links to changes, so its links reload.
+    const linksRevision = new Map<string, number>();
+
+    // The PR states its links show: only a change to one of them sends the
+    // review again. GitHub answers for every PR on launch, a few at a time.
+    const linksKey = (id: string) => {
+      if (!data || isShared(id) || !store.has(id)) return "";
+      const { outgoing, backlinks } = store.links(id);
+
+      return JSON.stringify(
+        [...outgoing, ...backlinks].map(
+          (link) =>
+            link.pullRequestUrl &&
+            data.pullRequestState(link.pullRequestUrl, { seen: false }),
+        ),
+      );
+    };
+
+    const linksKeys = new Map(
+      [...reviewIds].map((reviewId) => [reviewId, linksKey(reviewId)] as const),
+    );
+
+    // Bumped when a review's parent or siblings change, so its header
+    // reloads them.
+    const placeRevision = new Map<string, number>();
+    const placeKey = (id: string) => JSON.stringify(placeOf(id));
+
+    const placeKeys = new Map(
+      [...reviewIds].map((reviewId) => [reviewId, placeKey(reviewId)] as const),
+    );
 
     const readReviewLine = (reviewId: string): ReviewStreamLine<Snapshot> => {
       try {
@@ -536,6 +622,8 @@ export function createReviewApi(
             ...readReview(reviewId),
             activity: store.activity.read(reviewId),
             coverageRevision: data?.coverageRevision ?? 0,
+            linksRevision: linksRevision.get(reviewId) ?? 0,
+            placeRevision: placeRevision.get(reviewId) ?? 0,
           },
         };
       } catch (error) {
@@ -580,6 +668,22 @@ export function createReviewApi(
       return true;
     };
 
+    /** Bumps the place of each board whose place changed. */
+    const refreshPlaces = () => {
+      let marked = false;
+
+      for (const [id, key] of placeKeys) {
+        const next = placeKey(id);
+
+        if (next === key) continue;
+        placeKeys.set(id, next);
+        placeRevision.set(id, (placeRevision.get(id) ?? 0) + 1);
+        marked = markReview(id) || marked;
+      }
+
+      return marked;
+    };
+
     const markLists = () => {
       dirtyList ||= lists;
 
@@ -594,7 +698,14 @@ export function createReviewApi(
           notify();
         }) ?? (() => {}),
         store.subscribe((result) => {
-          if (markReview(result.reviewId)) notify();
+          let marked = markReview(result.reviewId);
+
+          for (const from of store.linkingBoards(result.reviewId)) {
+            linksRevision.set(from, (linksRevision.get(from) ?? 0) + 1);
+            marked = markReview(from) || marked;
+          }
+
+          if (marked) notify();
         }),
         store.activity.subscribe((id) => {
           if (markReview(id)) notify();
@@ -602,11 +713,31 @@ export function createReviewApi(
         store.activity.subscribeWorking(() => {
           if (markLists()) notify();
         }),
+        // A PR's state shows on its board in the list, on links to it, and
+        // with its branches in its board's header.
+        data?.subscribePullRequestStates(() => {
+          let marked = markLists();
+
+          marked = refreshPlaces() || marked;
+
+          for (const reviewId of reviewIds) {
+            const next = linksKey(reviewId);
+
+            if (next === linksKeys.get(reviewId)) continue;
+            linksKeys.set(reviewId, next);
+            linksRevision.set(reviewId, (linksRevision.get(reviewId) ?? 0) + 1);
+            marked = markReview(reviewId) || marked;
+          }
+
+          if (marked) notify();
+        }) ?? (() => {}),
         shared?.subscribe(() => {
           if (markLists()) notify();
         }) ?? (() => {}),
         store.subscribeCatalog(() => {
-          if (markLists()) notify();
+          const marked = refreshPlaces();
+
+          if (markLists() || marked) notify();
         }),
       ];
 
@@ -680,21 +811,15 @@ export function createReviewApi(
     });
 
     // Traces are stored beside the review's own repository.
-    const tracePins = (id: string, version?: number) => {
-      const { pins } = readReview(id, version);
+    const tracePins = async (id: string, version?: number) => {
+      const snapshot = readReview(id, version);
 
-      if (!pins)
-        throw new ReviewInputError(
-          "This document has no source pins of its own.",
-          409,
-        );
-
-      return pins;
+      return snapshot.pins ?? (await data.documentPins(snapshot));
     };
 
     app.get("/:id/agent-traces", async (context) => {
       const query = traceQuery.parse(context.req.query());
-      const pins = tracePins(context.req.param("id"), query.version);
+      const pins = await tracePins(context.req.param("id"), query.version);
 
       return context.json(
         await listPinnedTraces(
@@ -706,7 +831,7 @@ export function createReviewApi(
     });
     app.get("/:id/agent-traces/:sessionId", async (context) => {
       const query = traceQuery.parse(context.req.query());
-      const pins = tracePins(context.req.param("id"), query.version);
+      const pins = await tracePins(context.req.param("id"), query.version);
 
       const result = await readStoredTrace(
         store.repositoryPath(pins.repositoryId),
@@ -785,13 +910,27 @@ export function createReviewApi(
 
       return context.json(await data!.register(input.path));
     });
-    app.post("/resources", async (context) =>
-      context.json(
-        await data!.upload(
-          await readBoundedRequestJson(context.req.raw, 8 * 1024 * 1024),
-        ),
-      ),
-    );
+    app.post("/resources", async (context) => {
+      const body = await readBoundedRequestJson(
+        context.req.raw,
+        8 * 1024 * 1024,
+      );
+
+      // Agents send a checkout path; swap it for a repository id.
+      const named = z
+        .looseObject({ repositoryPath: z.string().min(1) })
+        .safeParse(body);
+
+      if (!named.success) return context.json(await data!.upload(body));
+      const { repositoryPath, ...upload } = named.data;
+
+      return context.json(
+        await data!.upload({
+          ...upload,
+          repositoryId: (await data!.register(repositoryPath)).id,
+        }),
+      );
+    });
     app.get("/:id/resources/:resourceId", async (context) => {
       const id = context.req.param("id");
       const snapshot = readReview(id);
@@ -992,6 +1131,20 @@ export function createReviewApi(
 
       return context.json(await data.changes(pins));
     });
+    // A commit a quote is read at, in the board's repository.
+    app.get("/:id/commit/:commit", async (context) => {
+      const repositoryId = boardRepositoryId(
+        readReview(context.req.param("id")),
+      );
+
+      if (!repositoryId)
+        throw new ReviewInputError("This board has no repository.", 404);
+
+      return context.json(
+        await data.commitInfo(repositoryId, context.req.param("commit")),
+      );
+    });
+
     app.get("/:id/commits", async (context) => {
       const input = readQuerySchemas.commits.parse(context.req.query());
 
@@ -1081,7 +1234,7 @@ export function createReviewApi(
     );
 
     return [
-      `Whiteboard: ${snapshot.title}`,
+      `Whiteboard: ${boardTitle(snapshot.title)}`,
       `Session ID: ${snapshot.reviewId}`,
       `Version: ${snapshot.version}`,
       ...(selection.apiSource?.commit
@@ -1089,7 +1242,6 @@ export function createReviewApi(
         : []),
       ...(selection.apiSource?.pins
         ? [
-            `Selected repository ID: ${selection.apiSource.pins.repositoryId}`,
             ...(selection.apiSource.pins.base
               ? [`Selected base: ${selection.apiSource.pins.base}`]
               : []),
@@ -1098,7 +1250,6 @@ export function createReviewApi(
         : []),
       ...(snapshot.pins
         ? [
-            `Repository ID: ${snapshot.pins.repositoryId}`,
             `Session base: ${snapshot.pins.base}`,
             `Session head: ${snapshot.pins.head}`,
           ]
@@ -1112,10 +1263,15 @@ export function createReviewApi(
   }
 
   if (ask && data) {
+    const projectOf = (reviewId: string) =>
+      isShared(reviewId) || !store.has(reviewId)
+        ? undefined
+        : store.projectOf(reviewId);
+
     const readThread = (reviewId: string, threadId: string) => {
       const thread = ask.threads.get(threadId);
 
-      if (!thread || thread.reviewId !== reviewId)
+      if (!thread)
         throw new ReviewInputError("This conversation has ended.", 404);
 
       return thread;
@@ -1194,7 +1350,7 @@ export function createReviewApi(
       const { reviewId } = snapshot;
 
       return [
-        `A reviewer is reading "${snapshot.title}" in Whiteboard and has a question about ${selection.target.kind === "review" ? "it" : "a selection"}.`,
+        `A reviewer is reading "${boardTitle(snapshot.title)}" in Whiteboard and has a question about ${selection.target.kind === "review" ? "it" : "a selection"}.`,
         checkout.live
           ? "Your working directory is the repository the review describes."
           : `Your working directory is a checkout of the review's head commit, ${checkout.head}. Answer from this code, not from other branches.`,
@@ -1322,6 +1478,9 @@ export function createReviewApi(
 
       assertWritable(reviewId);
 
+      // Asked on screen: seen from the start.
+      store.askHistory.markViewed(id, createdAt);
+
       const thread = ask.threads.open({
         id,
         reviewId,
@@ -1330,7 +1489,10 @@ export function createReviewApi(
         // replaces a session the agent could not reopen.
         ...historyHooks({
           id,
-          reviewId,
+          anchor:
+            target.kind === "text" && target.anchor
+              ? { board: reviewId, block: target.anchor.blockId }
+              : { board: reviewId },
           agent: input.agent,
           version: snapshot.version,
           head: checkout.head,
@@ -1356,12 +1518,109 @@ export function createReviewApi(
       return context.json({ threadId: thread.id });
     });
 
+    /** Every project's threads for the sidebar: who runs them, where they
+     * started and live, and which boards they changed. */
+    const projectThreads = (reviewId: string): ReviewProjectThreads => {
+      const entries = store.askHistory.listAll();
+
+      const ids = entries.map((entry) => entry.id);
+      const edited = store.boardsChangedByThreads(ids);
+      const viewed = store.askHistory.viewedAt(ids);
+
+      const boards = new Map<string, ReviewThreadBoard>();
+
+      const board = (id: string) => {
+        let found = boards.get(id);
+
+        if (!found) {
+          found = store.has(id)
+            ? store.boardFace(id)
+            : { reviewId: id, icon: boardIconKind(undefined) };
+          boards.set(id, found);
+        }
+
+        return found;
+      };
+
+      const project = projectOf(reviewId);
+
+      return {
+        board: reviewId,
+        ...(project && { project }),
+        threads: entries.map((entry) => {
+          const anchor = entry.anchor ?? { board: reviewId };
+          const status = ask.threads.get(entry.id)?.status;
+          const viewedAt = viewed.get(entry.id);
+
+          // A turn finished since the reviewer last saw the thread.
+          const unread =
+            status !== "starting" &&
+            status !== "running" &&
+            status !== "waiting" &&
+            viewedAt !== undefined &&
+            entry.updatedAt > viewedAt;
+
+          return {
+            id: entry.id,
+            ...(entry.projectId && { projectId: entry.projectId }),
+            ...(store.has(anchor.board) && {
+              place: store.boardPlace(anchor.board),
+            }),
+            agent: entry.agent,
+            agentName: askAgents[entry.agent].name,
+            opening: entry.question ?? entry.title,
+            pinned:
+              entry.selection.target.kind === "text" &&
+              entry.selection.target.anchor !== undefined,
+            ...(status && { status }),
+            ...(unread && { unread }),
+            updatedAt: entry.updatedAt,
+            anchor: {
+              board: board(anchor.board),
+              ...(anchor.block && { block: anchor.block }),
+            },
+            edited: edited.get(entry.id) ?? [],
+          };
+        }),
+      };
+    };
+
     app.get("/:id/ask/threads", (context) => {
       const reviewId = context.req.param("id");
 
       readReview(reviewId);
 
-      return context.json({ threads: store.askHistory.list(reviewId) });
+      if (context.req.query("watch") !== undefined) {
+        // Sent again only when it reads differently.
+        let sent = "";
+
+        return watch(
+          () => {
+            const line = JSON.stringify(projectThreads(reviewId));
+
+            if (line === sent) return [];
+            sent = line;
+
+            return [line];
+          },
+          (notify) => {
+            const stops = [
+              store.askHistory.subscribe(notify),
+              ask.threads.subscribeStatus(notify),
+              // An edit, title or target of any board a thread may show; a
+              // deleted board may have been a thread's anchor.
+              store.subscribe(() => notify()),
+            ];
+
+            return () => stops.forEach((stop) => stop());
+          },
+        );
+      }
+
+      return context.json({
+        threads: store.askHistory.list(reviewId, projectOf(reviewId)),
+        board: reviewId,
+      });
     });
 
     // The threads of every open Ask in a review, over one connection. Before
@@ -1380,20 +1639,32 @@ export function createReviewApi(
           threads.map((threadId) => {
             const thread = ask.threads.get(threadId);
 
-            return [
-              threadId,
-              thread?.reviewId === reviewId ? thread : undefined,
-            ];
+            return [threadId, thread];
           }),
         ),
       );
+    });
+
+    // The boards a thread changed: titles from any project, so only for a
+    // local caller.
+    app.get("/:id/ask/:threadId/boards", (context) => {
+      const threadId = context.req.param("threadId");
+      const record = store.askHistory.get(threadId);
+
+      const anchor =
+        record?.anchor.board ?? ask.threads.get(threadId)?.reviewId;
+
+      if (remoteCaller(context) || !anchor)
+        throw new ReviewInputError("This conversation was not found.", 404);
+
+      return context.json({ boards: store.boardsChangedBy(threadId) });
     });
 
     // A saved conversation, without starting its agent.
     app.get("/:id/ask/:threadId", (context) => {
       const record = store.askHistory.get(context.req.param("threadId"));
 
-      if (record?.reviewId !== context.req.param("id"))
+      if (!record)
         throw new ReviewInputError("This conversation was not found.", 404);
       const target = record.selection.target;
 
@@ -1425,17 +1696,19 @@ export function createReviewApi(
         const threadId = context.req.param("threadId");
         const live = ask.threads.get(threadId);
 
-        if (live?.reviewId === reviewId) return context.json({ threadId });
+        if (live) return context.json({ threadId });
         const record = store.askHistory.get(threadId);
 
         const { picks } = askOpenSchema.parse(
           await readBoundedRequestJson(context.req.raw, undefined, {}),
         );
 
-        if (record?.reviewId !== reviewId)
+        if (!record)
           throw new ReviewInputError("This conversation was not found.", 404);
 
-        const snapshot = readReview(reviewId, record.version);
+        // The thread runs in the checkout of the board it started on.
+        const anchor = record.anchor.board;
+        const snapshot = readReview(anchor, record.version);
         const checkout = await data.agentCheckout(snapshot);
         const target = record.selection.target;
 
@@ -1451,7 +1724,7 @@ export function createReviewApi(
         assertWritable(reviewId);
         ask.threads.open({
           id: record.id,
-          reviewId,
+          reviewId: anchor,
           agent: record.agent,
           cwd: checkout.rootPath,
           head: checkout.head,
@@ -1643,6 +1916,16 @@ export function createReviewApi(
       },
     );
 
+    app.post("/:id/ask/:threadId/viewed", (context) => {
+      const threadId = context.req.param("threadId");
+
+      if (!ask.threads.get(threadId) && !store.askHistory.get(threadId))
+        throw new ReviewInputError("This conversation was not found.", 404);
+      store.askHistory.markViewed(threadId);
+
+      return context.json({ ok: true });
+    });
+
     // Closing an Ask ends its agent; the conversation stays saved. A tab
     // switched away from or a reload leaves it running, to come back to.
     app.post("/:id/ask/:threadId/close", reviewAccess("read"), (context) => {
@@ -1660,17 +1943,29 @@ export function createReviewApi(
       const reviewId = context.req.param("id");
       const threadId = context.req.param("threadId");
 
-      if (store.askHistory.get(threadId)?.reviewId !== reviewId)
+      const record = store.askHistory.get(threadId);
+
+      if (!record)
         throw new ReviewInputError("This conversation was not found.", 404);
 
-      if (ask.threads.get(threadId)?.reviewId === reviewId)
-        ask.threads.close(threadId);
+      if (ask.threads.get(threadId)) ask.threads.close(threadId);
       store.askHistory.delete(threadId);
 
       return context.json({ ok: true });
     });
   }
 
+  app.get("/:id/place", (context) => {
+    const id = context.req.param("id");
+
+    if (!isShared(id)) store.assertExists(id);
+
+    return context.json(placeOf(id));
+  });
+
+  // The board's branch stack: its GitHub stack, else the reviews chained
+  // through the bases they name, bottom first. Apart from its place among
+  // boards.
   app.get("/:id/stack", async (context) => {
     const query = readQuerySchemas.get.parse(context.req.query());
     const id = context.req.param("id");
@@ -1678,14 +1973,94 @@ export function createReviewApi(
 
     if (isShared(id) || !snapshot.pins) return context.json({ layers: [] });
 
+    const repositoryPath = store
+      .repositories()
+      .find(
+        (repository) => repository.id === snapshot.pins!.repositoryId,
+      )?.path;
+
     const layers = await resolveReviewStackLayers(snapshot, store.list(), {
-      repositoryPath: store
-        .repositories()
-        .find((repository) => repository.id === snapshot.pins!.repositoryId)
-        ?.path,
+      repositoryPath,
     });
 
-    return context.json({ layers });
+    // The branch the stack sits on: the repository's default branch.
+    const trunk =
+      layers.length > 1 && repositoryPath
+        ? await defaultBranch(repositoryPath).catch(() => null)
+        : null;
+
+    return context.json({
+      layers: layers.map((layer) => {
+        const state = data?.pullRequestState(layer.pullRequestUrl ?? undefined);
+
+        return state ? { ...layer, pullRequestState: state } : layer;
+      }),
+      ...(trunk && { base: trunk.ref.replace(/^origin\//, "") }),
+    });
+  });
+
+  // The board's project and its whiteboards, for the board's sidebar.
+  app.get("/:id/project", (context) => {
+    const id = context.req.param("id");
+
+    if (isShared(id)) return context.json({ project: null, boards: [] });
+
+    const project = store.summary(id)?.project ?? null;
+
+    return context.json({
+      project,
+      boards: project
+        ? store
+            .list()
+            .filter(
+              (board) => board.project?.id === project.id && !board.trashedAt,
+            )
+            .map(withPullRequestState)
+        : [],
+    });
+  });
+  app.get("/:id/links", (context) => {
+    const id = context.req.param("id");
+
+    // A shared board's links name boards on the sender's machine: shown,
+    // but not followed.
+    if (isShared(id))
+      return context.json({
+        outgoing: boardLinks(id, readReview(id).document).map(
+          ({ from, to }) => ({ from, to, missing: true, elsewhere: true }),
+        ),
+        backlinks: [],
+      });
+
+    const { version } = readQuerySchemas.get
+      .pick({ version: true })
+      .parse({ version: context.req.query("version") });
+
+    const { outgoing, backlinks } = store.links(id, version);
+
+    return context.json({
+      outgoing: outgoing.map(withPullRequestState),
+      backlinks: backlinks.map(withPullRequestState),
+    });
+  });
+  // A link's hover card, read when it opens.
+  app.get("/:id/links/peek", (context) => {
+    const id = context.req.param("id");
+
+    if (isShared(id)) return context.json({});
+
+    const { version } = readQuerySchemas.get
+      .pick({ version: true })
+      .parse({ version: context.req.query("version") });
+
+    const board = context.req.query("board");
+    const block = context.req.query("block");
+
+    if (!board) throw new ReviewInputError("Name the linked board.", 400);
+
+    return context.json(
+      store.linkPeek(id, { board, ...(block && { block }) }, version),
+    );
   });
 
   app.get("/:id/history", (context) => {
@@ -1699,9 +2074,44 @@ export function createReviewApi(
         version: snapshot.version,
         title: snapshot.title,
         createdAt: snapshot.createdAt,
+        author: "agent",
       },
     ]);
   });
+
+  /** A board's relations as session_list reports them: only those it has. */
+  const listedRelations = ({
+    parentId,
+    children,
+    dependsOn,
+  }: ReturnType<typeof store.relations>) => {
+    const listed: Partial<ReturnType<typeof store.relations>> = {};
+
+    if (parentId) listed.parentId = parentId;
+
+    if (children.length) listed.children = children;
+
+    if (dependsOn.length) listed.dependsOn = dependsOn;
+
+    return listed;
+  };
+
+  /** A board's relations, each board named by its title. */
+  const relatedBoards = (id: string) => {
+    const { parentId, children, dependsOn } = store.relations(id);
+
+    const named = (board: string) => ({
+      id: board,
+      title: store.read(board).title,
+    });
+
+    return {
+      ...(parentId && { parent: named(parentId) }),
+      children: children.map(named),
+      dependsOn: dependsOn.map(named),
+    };
+  };
+
   app.get("/:id/inspect", (context) => {
     const query = inspectQuerySchema.parse(context.req.query());
     const id = context.req.param("id");
@@ -1709,12 +2119,19 @@ export function createReviewApi(
 
     return context.json(
       query.format === "text"
-        ? documentText(snapshot, query.targetId, Boolean(query.full))
+        ? documentText(
+            snapshot,
+            query.targetId,
+            Boolean(query.full),
+            isShared(id) ? undefined : relatedBoards(id),
+          )
         : query.targetId !== undefined
           ? inspectSnapshot(snapshot, query.targetId)
-          : query.full
-            ? snapshot
-            : inspectSnapshot(snapshot),
+          : {
+              ...(query.full ? snapshot : inspectSnapshot(snapshot)),
+              // Its place among the project's boards, as session_list has it.
+              ...(!isShared(id) && listedRelations(store.relations(id))),
+            },
     );
   });
   app.get("/:id", async (context) => {
@@ -1774,26 +2191,31 @@ export function createReviewApi(
       await readBoundedRequestJson(context.req.raw),
     );
 
-    const request = await locateRepositories(body, (path) => {
-      if (!data) throw new ReviewInputError("Repositories are unavailable.");
+    // Without local data (a bare store), a path is recorded as it is.
+    const register = async (path: string) =>
+      data ? data.register(path) : store.registerRepository(path);
 
-      return data.register(path);
-    });
+    const request = withBoardRepository(
+      await locateRepositories(
+        await pullRequestTargets(
+          body,
+          register,
+          (url, repositoryId) => {
+            if (!data)
+              throw new ReviewInputError("Repositories are unavailable.");
+
+            return data.resolvePullRequest(url, { id: repositoryId });
+          },
+          (id) => store.read(id),
+        ),
+        register,
+      ),
+      (id) => (store.has(id) ? store.read(id) : undefined),
+    );
 
     const input = commandSchema.parse(request);
 
     const command = sharedCommandSchema.safeParse(input);
-
-    if (command.success) {
-      refuseDisabledScratchpad(command.data.operation.reviewId);
-      await ensureScratchpad(command.data.operation.reviewId);
-    }
-
-    if (
-      input.operation.type === "create" &&
-      input.operation.kind === "scratchpad"
-    )
-      refuseDisabledScratchpad(SCRATCHPAD_ID);
 
     if (
       command.success &&
@@ -1843,7 +2265,23 @@ export function createReviewApi(
       throw new ReviewInputError("Shared reviews are read-only.", 409);
     }
 
-    const result = await store.execute(input);
+    // Who is writing, trusted only from local callers: a person from
+    // Desktop or the canvas, or an agent, perhaps a thread's. The store
+    // keeps each author's rules.
+    const threadId = remoteCaller(context)
+      ? undefined
+      : context.req.header(REVIEW_THREAD_HEADER)?.trim() || undefined;
+
+    const author: Author =
+      !remoteCaller(context) &&
+      context.req.header(REVIEW_PERSON_HEADER) !== undefined
+        ? { kind: "person" }
+        : {
+            kind: "agent",
+            ...(threadId && { threadId }),
+          };
+
+    const result = await store.execute(input, undefined, author);
 
     if (
       result.deleted ||
@@ -1889,7 +2327,6 @@ export function createReviewApi(
     if (result.created !== false)
       hooks.onReviewCreated?.({
         reviewId: result.reviewId,
-        kind: input.operation.kind === "scratchpad" ? "scratchpad" : "review",
         blocks: store.read(result.reviewId).document.length,
         ...reviewRequestOrigin(context.req.raw.headers),
       });
@@ -1972,6 +2409,148 @@ async function locateRepositories(
       ...(target && { target: await byId(target) }),
       ...(repositoryPath && (await byId({ repositoryPath }))),
     },
+  };
+}
+
+/** Turns an agent's pullRequest target into what the store takes: a create
+ * from pullRequestUrl, or for set_target the PR's resolved commits. */
+async function pullRequestTargets(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Request body boundary: commandSchema parses the result.
+  body: unknown,
+  register: (path: string) => Promise<{ id: string }>,
+  resolve: (
+    url: string,
+    repositoryId: string,
+  ) => Promise<{ target: ReviewTarget }>,
+  board: (id: string) => void,
+) {
+  const target = z.strictObject({
+    kind: z.literal("pullRequest"),
+    repositoryPath: z.string().min(1),
+    pullRequest: z.union([z.string().min(1), z.number().int().positive()]),
+  });
+
+  // A set_target is checked whole before anything is registered or fetched.
+  const located = z
+    .looseObject({
+      operation: z.discriminatedUnion("type", [
+        z.looseObject({ type: z.literal("create"), target }),
+        z.strictObject({
+          type: z.literal("set_target"),
+          reviewId: z.string().min(1),
+          target,
+        }),
+      ]),
+    })
+    .safeParse(body);
+
+  if (!located.success) return body;
+  const { target: pullRequest, ...operation } = located.data.operation;
+
+  if (operation.type === "set_target") board(operation.reviewId);
+  const { id: repositoryId } = await register(pullRequest.repositoryPath);
+
+  const url = pullRequestAt(
+    pullRequest.repositoryPath,
+    pullRequest.pullRequest,
+  );
+
+  if (operation.type === "create")
+    return {
+      ...located.data,
+      operation: { ...operation, pullRequestUrl: url, repositoryId },
+    };
+
+  return {
+    ...located.data,
+    operation: {
+      ...operation,
+      target: (await resolve(url, repositoryId)).target,
+      pullRequestUrl: url,
+    },
+  };
+}
+
+/** A PR's URL: as given, or its number on the checkout's GitHub repository. */
+function pullRequestAt(repositoryPath: string, pullRequest: string | number) {
+  if (isStringValue(pullRequest) && !/^\d+$/.test(pullRequest))
+    return pullRequest;
+
+  const slug = resolveRepoContextSync(repositoryPath)?.githubSlug;
+
+  if (!slug)
+    throw new ReviewInputError(
+      "This checkout has no GitHub remote to find the PR number in; pass the PR's URL.",
+    );
+
+  return `https://github.com/${slug}/pull/${pullRequest}`;
+}
+
+/** A pins object as an edit spells it: commits, with no other fields. A
+ * diagram may key its own data `pins`, and that is left alone. */
+/** Pins as an agent writes them: the board's repository is the host's to
+ * add. */
+const agentPinsSchema = z.strictObject({
+  head: z.string().min(1),
+  base: z.string().min(1).optional(),
+});
+
+/** An object an agent meant as pins: one naming a head, base or repository.
+ * Content may have a field called `pins` that is nothing of the kind. */
+const meantAsPins = (value: JsonValue): value is JsonObject =>
+  isJsonObject(value) &&
+  ["head", "base", "repositoryId"].some((key) => key in value);
+
+/** Sets every pins object in an edit to the board's own repository. */
+function withBoardRepository(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Request body boundary: commandSchema parses the result.
+  body: unknown,
+  board: (id: string) => Snapshot | undefined,
+) {
+  const located = z
+    .looseObject({
+      operation: z.looseObject({
+        type: z.enum(["edit", "lens_edit"]),
+        reviewId: z.string(),
+        edit: z.json(),
+      }),
+    })
+    .safeParse(body);
+
+  if (!located.success) return body;
+  const snapshot = board(located.data.operation.reviewId);
+
+  const repositoryId = snapshot ? boardRepositoryId(snapshot) : undefined;
+
+  const edit = JSON.parse(
+    JSON.stringify(located.data.operation.edit),
+    (key, value: JsonValue) => {
+      if (key !== "pins" || !meantAsPins(value)) return value;
+
+      // Checked as the agent wrote them, so a mistake names head or base,
+      // never the repository the host adds.
+      const { repositoryId: _ignored, ...written } = value;
+      const pins = agentPinsSchema.safeParse(written);
+
+      if (!pins.success)
+        throw new ReviewInputError(
+          `Write pins as {head, base?}, each a commit: ${pins.error.issues
+            .map((issue) => `pins.${issue.path.join(".")}: ${issue.message}`)
+            .join("; ")}.`,
+        );
+
+      if (!repositoryId)
+        throw new ReviewInputError(
+          "This whiteboard has no repository for its pins to name commits of.",
+        );
+
+      return { ...pins.data, repositoryId };
+    },
+  );
+
+  return {
+    ...located.data,
+    operation: { ...located.data.operation, edit },
   };
 }
 

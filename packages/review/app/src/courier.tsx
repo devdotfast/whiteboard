@@ -244,9 +244,13 @@ export function Courier({
     return () => clearTimeout(timer);
   }, [live, unknown, activity === undefined, Boolean(position), gone]);
 
-  // An agent that begins again brings him back.
+  // An agent that begins again brings him back, or keeps him if he was
+  // still leaving.
   useEffect(() => {
-    if (live && gone) setGone(false);
+    if (!live) return;
+
+    if (gone) setGone(false);
+    setMotion((current) => (current === "leaving" ? null : current));
   }, [live, gone]);
 
   const jump = () => {
@@ -460,7 +464,7 @@ const styles = stylex.create({
     borderRadius: radius.pill,
     backgroundColor: tokens.ink,
     color: tokens.surface,
-    font: `${fontWeight.medium} ${fontSize.micro} ${tokens.fontMono}`,
+    font: `${fontWeight.medium} ${fontSize.micro} ${tokens.chromeFont}`,
     whiteSpace: "nowrap",
     transform: "translateX(-50%)",
     opacity: {

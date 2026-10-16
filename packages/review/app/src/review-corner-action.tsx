@@ -98,7 +98,7 @@ const styles = stylex.create({
   error: {
     padding: "8px 12px",
     color: tokens.changeRemoved,
-    font: `${fontWeight.regular} ${fontSize.small} ${tokens.fontMono}`,
+    font: `${fontWeight.regular} ${fontSize.small} ${tokens.chromeFont}`,
     whiteSpace: "nowrap",
   },
 });

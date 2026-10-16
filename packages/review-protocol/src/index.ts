@@ -38,6 +38,8 @@ import {
   ReviewFileContentRequestSchema,
   type ReviewFileContentResponse,
   ReviewFileContentResponseSchema,
+  type ReviewBoardPlace,
+  ReviewBoardPlaceSchema,
   type ReviewStackResponse,
   ReviewStackResponseSchema,
   type ReviewVerbRequest,
@@ -56,6 +58,8 @@ export * from "./review-api-client.js";
 
 export * from "./review-host-status.js";
 
+export * from "./board-icons.js";
+
 export {
   type ByCommitEntry,
   type ReviewAgentTraceEvent,
@@ -73,6 +77,10 @@ export function parseReviewDesktopDiscovery(
   value: JsonValue,
 ): ReviewDesktopDiscovery {
   return parseZod(ReviewDesktopDiscoverySchema, value);
+}
+
+export function parseReviewBoardPlace(value: JsonValue): ReviewBoardPlace {
+  return parseZod(ReviewBoardPlaceSchema, value);
 }
 
 export function parseReviewStackResponse(

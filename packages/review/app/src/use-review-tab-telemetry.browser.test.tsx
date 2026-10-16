@@ -39,13 +39,15 @@ it("keeps dwell continuous through live review updates and sends the latest vers
   const base = testReviewSession({}, { request });
 
   const review: ReviewSessionData = {
+    reviewId: "test-review",
     pins: { base: "base", head: "head" },
     historicalRevision: null,
     updatedAtMs: 0,
     traces: new Map(),
-    stack: async () => [],
+    place: async () => ({ siblings: [] }),
+    stack: async () => ({ layers: [] }),
     createBranchReview: async () => "",
-    dismiss: async () => {},
+    dismiss: async () => true,
   };
 
   const container = document.createElement("div");

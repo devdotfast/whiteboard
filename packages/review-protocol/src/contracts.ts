@@ -5,6 +5,7 @@ import {
 } from "@dev.fast/trace-protocol";
 import { z } from "zod";
 
+import type { BoardIconKind } from "./board-icons.js";
 import type { ReviewApiSummary } from "./review-api-client.js";
 
 // Version 3: the desktop serves prebuilt revisions instead of building them.
@@ -22,6 +23,15 @@ export const REVIEW_CLIENT_HEADER = "x-review-client";
 export const REVIEW_CLIENT_REMOTE = "remote";
 
 export const REVIEW_HOST_HEADER = "x-review-host";
+
+export const PULL_REQUEST_STATES = [
+  "open",
+  "draft",
+  "merged",
+  "closed",
+] as const;
+
+export type PullRequestState = (typeof PULL_REQUEST_STATES)[number];
 
 const requiredString = z
   .string({ error: "must be a string" })
@@ -140,6 +150,13 @@ export interface ReviewSourcePins {
   readonly base?: string;
 }
 
+/** The commit a quote is read at, as its file header names it: the short
+ * ID, and on hover what the commit is. */
+export interface ReviewCodeCommit {
+  label: string;
+  tooltip?: { label: string; detail?: string };
+}
+
 export interface ReviewInlineEditorSpec {
   progress?: ReviewDiffProgress;
   onSetViewed?: ReviewDiffViewSpec["onSetViewed"];
@@ -150,6 +167,8 @@ export interface ReviewInlineEditorSpec {
   side: ReviewDiffSide;
   /** Read at these pins instead of the review's. */
   pins?: ReviewSourcePins;
+  /** The commit to name in the file header: one other than the board's. */
+  commit?: ReviewCodeCommit;
   ranges: readonly ReviewInlineEditorRange[];
   /** Original authored selections, before display ranges are merged. */
   countRanges?: readonly ReviewInlineEditorRange[];
@@ -182,6 +201,8 @@ export interface ReviewInlineFindSpec {
 
 export interface ReviewInlineEditorHandle extends ReviewDisposable {
   setProgress?(progress: ReviewDiffProgress): void;
+  /** Updates the commit's name, as when its description loads. */
+  setCommit?(commit: ReviewCodeCommit | undefined): void;
   readonly height: number;
   setActive(active: boolean): void;
   setCollapsed(collapsed: boolean): void;
@@ -261,9 +282,14 @@ export interface ReviewDiffViewSpec {
     onDidFocus?: () => void;
     onDidOpen?: () => void;
     onDidShowHover?: () => void;
+    /** The commit its code is read at, when not the board's own. */
+    commit?: ReviewCodeCommit;
   };
   container: HTMLElement;
   fileTreeContainer?: HTMLElement;
+  /** Desktop puts the changed-files tree in its sidebar's Files section
+   * instead, while the sidebar shows this board. */
+  sidebarFileTree?: boolean;
   progress?: ReviewDiffProgress;
   onToggleViewed?: (path: string, sectionId?: string) => void;
   /** Mark a structural scope using the same persisted line coverage as file marks. */
@@ -279,6 +305,8 @@ export interface ReviewDiffViewSpec {
 
 export interface ReviewDiffViewHandle extends ReviewDisposable {
   focus(): void;
+  /** Hides the sidebar file tree, e.g. while the lens tree replaces it. */
+  setFileTreeHidden?(hidden: boolean): void;
   setProgress?(progress: ReviewDiffProgress): void;
   revealSource?(
     source: ReviewDiffLens["ranges"][number],
@@ -380,6 +408,211 @@ export interface ReviewCanvasBridge {
   ): ReviewDisposable;
   ready(): void;
   reportDiagnostic?(diagnostic: ReviewCanvasDiagnostic): void;
+  /** Reports the document's headings and the current view to Desktop's
+   * sidebar. */
+  reportSidebar?(state: ReviewSidebarState): void;
+  /** What the sidebar's Lenses section lists, from the Diff view. */
+  reportSidebarLenses?(lenses: ReviewSidebarLenses): void;
+  /** Whether Desktop's sidebar shows this board. If so, the Diff view moves
+   * its lenses and file trees there. */
+  sidebarShowsBoard?(): boolean;
+  onDidChangeSidebarShowsBoard?(listener: () => void): ReviewDisposable;
+  /** The sidebar's lens list, where the agent's cursor is drawn. */
+  sidebarLensList?(): HTMLElement | undefined;
+  /** Desktop's right column; undefined where Ask docks beside the document. */
+  askPanelHost?(): HTMLElement | undefined;
+  /** Whether the right column is open, and the thread Ask shows. */
+  reportAsk?(state: ReviewAskState): void;
+  /** Opens the sidebar on its Threads tab. */
+  showThreads?(): void;
+}
+
+export interface ReviewAskState {
+  /** The right column shows something: Ask docked, or a peek. */
+  docked: boolean;
+  /** The saved threads on screen: the column's and the floating one. */
+  threadIds: string[];
+}
+
+/** Changed lines over a lens or the whole diff, and how many are left. */
+export interface ReviewSidebarCoverage {
+  state: "unread" | "partial" | "viewed" | "folded";
+  total: { additions: number; deletions: number };
+  remaining: { additions: number; deletions: number };
+  folded: { additions: number; deletions: number };
+}
+
+export interface ReviewSidebarLensRow {
+  id: string;
+  title: string;
+  /** Its counts are still coming. */
+  pending?: boolean;
+  /** Why it can't filter the diff, when it can't. */
+  unavailable?: string;
+  /** No changed file to filter to. */
+  empty: boolean;
+  progress: ReviewSidebarCoverage;
+  /** Its draw-queue phase while an agent writes or erases it. */
+  phase?: string;
+}
+
+/** The Diff view's lenses, as its sidebar lists them. */
+export interface ReviewSidebarLenses {
+  /** Remaining over the whole diff; absent while counting. */
+  remaining?: ReviewSidebarCoverage;
+  /** The counts can't be read. */
+  unavailable?: boolean;
+  viewed?: { percent: number; title: string };
+  /** A viewed mark is being saved. */
+  busy: boolean;
+  /** The lens filtering the diff. */
+  active?: string;
+  /** How many changed files the active lens covers. */
+  activeFiles?: number;
+  rows: ReviewSidebarLensRow[];
+}
+
+/** A commit in the board's range, as the Diff's commit picker lists it. */
+export interface ReviewSidebarCommit {
+  commit: string;
+  subject: string;
+  author: string;
+  authoredAt: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface ReviewSidebarState {
+  view: string;
+  /** The board's commits, newest first in ancestry order, as git lists
+   * them; absent or empty without any. */
+  commits?: ReviewSidebarCommit[];
+  /** The commit the Diff view is filtered to, picked in its commit picker. */
+  commit?: string;
+  /** The compared branches, as "main ← feature". */
+  compare?: string;
+  /** The change's counts are still loading: Lenses and Files keep what
+   * they show until a report has them. */
+  countsPending?: boolean;
+  /** For the folded Lenses and Files headers; absent without a change. */
+  lenses?: number;
+  files?: {
+    count: number;
+    additions: number;
+    deletions: number;
+    /** Untracked files left out of the review, noted under the tree. */
+    untracked?: number;
+  };
+}
+
+/** A board a thread started on or edited. */
+export interface ReviewThreadBoard {
+  reviewId: string;
+  /** Absent once the board is deleted. */
+  title?: string;
+  icon: BoardIconKind;
+}
+
+/** A conversation, as the Threads tab lists it. */
+export interface ReviewProjectThread {
+  id: string;
+  /** The project it works in; absent for one on a shared board. */
+  projectId?: string;
+  /** Where it lives: its board's checkout folder, else its project's name. */
+  place?: string;
+  agent: string;
+  agentName: string;
+  /** The first question asked, else the agent's title for it. */
+  opening: string;
+  /** While its agent runs: "waiting" needs you. Absent once it stopped. */
+  status?: "starting" | "running" | "waiting" | "idle" | "failed";
+  /** Its agent finished a turn since the reviewer last saw it. */
+  unread?: boolean;
+  updatedAt: string;
+  /** The board it started on, and the block it was about. */
+  anchor: { board: ReviewThreadBoard; block?: string };
+  /** Asked about an anchored passage. */
+  pinned: boolean;
+  /** The boards it changed, newest first. */
+  edited: ReviewThreadBoard[];
+}
+
+/** GET /:id/ask/threads?watch: every project's threads, newest first. */
+export interface ReviewProjectThreads {
+  board: string;
+  /** The board's project. */
+  project?: string;
+  threads: ReviewProjectThread[];
+}
+
+/** Which threads the Threads tab lists: those on this board (started on it,
+ * or that edited it), the board's project's, or every project's. */
+export type ReviewThreadsFilter = "board" | "project" | "all";
+
+/** Props for a section list that Desktop's sidebar mounts from the canvas
+ * bundle. */
+export interface ReviewSidebarSectionProps {
+  /** "remaining" is the Diff view's Remaining row, above the Lenses
+   * header; "commitPicker" picks the commits it shows, under it. */
+  section:
+    | "whiteboards"
+    | "family"
+    | "recent"
+    | "threads"
+    | "commitPicker"
+    | "lenses"
+    | "remaining";
+  connection: { serverUrl: string; token: string };
+  /** The board in the active tab. */
+  reviewId: string;
+  onOpenBoard(reviewId: string, active: boolean): void;
+  /** Whiteboards: the board's project and its boards, from Desktop's
+   * catalog. */
+  project?: {
+    project: { id: string; name: string } | null;
+    boards: ReviewApiSummary[];
+  };
+  /** Recent: every project's boards, from Desktop's catalog. */
+  recent?: ReviewApiSummary[];
+  /** Threads: every project's, the board's project, the filter, and the
+   * threads open in Ask. */
+  threads?: {
+    list: readonly ReviewProjectThread[];
+    project?: string;
+    filter: ReviewThreadsFilter;
+    open?: readonly string[];
+  };
+  onFilterThreads?(filter: ReviewThreadsFilter): void;
+  /** The commit picker: the board's commits, and the one the Diff view
+   * is filtered to. */
+  commits?: {
+    list: readonly ReviewSidebarCommit[];
+    selected?: string;
+    compare?: string;
+  };
+  /** Filter the Diff view to a commit, or to all of them with null. */
+  onPickCommit?(commit: string | null): void;
+  /** Whiteboard: start a new whiteboard, as its shortcut does. */
+  onNewWhiteboard?(): void;
+  newWhiteboardShortcut?: string;
+  onOpenThread?(threadId: string): void;
+  /** Lenses: the Diff view's, as its canvas reports them. */
+  lenses?: ReviewSidebarLenses;
+  /** Filter the diff to a lens, or clear the filter with null. */
+  onSelectLens?(lensId: string | null): void;
+  /** Toggle a lens viewed. */
+  onMarkLens?(lensId: string): void;
+  /** The workbench's tooltips, for counts and truncated names. */
+  setupTooltip?(
+    target: HTMLElement,
+    text: string,
+    options?: ReviewTooltipOptions,
+  ): ReviewDisposable;
+}
+
+export interface ReviewSidebarSectionHandle {
+  update(props: ReviewSidebarSectionProps): void;
+  dispose(): void;
 }
 
 export interface ReviewCanvasSetupActions {
@@ -450,8 +683,6 @@ export const REVIEW_KEYMAP_CHOICES = [
 ] as const;
 
 export type ReviewKeymapChoice = (typeof REVIEW_KEYMAP_CHOICES)[number];
-
-export type ReviewCtrlTabChoice = "recent" | "next";
 
 export type ReviewDocumentWidthChoice = "standard" | "wide" | "full";
 
@@ -548,8 +779,6 @@ export interface ReviewCanvasSettingsContent {
   // A keymap only takes effect after the extension host restarts, so the
   // workbench offers the window reload. The page never forces one.
   setKeymap(choice: ReviewKeymapChoice): Promise<ReviewKeymapChoice>;
-  ctrlTab: ReviewCtrlTabChoice;
-  setCtrlTab(choice: ReviewCtrlTabChoice): Promise<ReviewCtrlTabChoice>;
   documentWidth: ReviewDocumentWidthChoice;
   setDocumentWidth(
     choice: ReviewDocumentWidthChoice,
@@ -563,12 +792,6 @@ export interface ReviewCanvasSettingsContent {
   ): Promise<ReviewReadyNotificationChoice>;
   softwareMapEnabled: boolean;
   setSoftwareMapEnabled(enabled: boolean): Promise<boolean>;
-  // Not a workbench setting: the review server reads it, so it lives in the
-  // server preferences file. Off by default. Turning it on shows the pad and
-  // tells connected agents over MCP that they can draw on it; turning it off
-  // hides the pad.
-  scratchpadEnabled: boolean;
-  setScratchpadEnabled(enabled: boolean): Promise<boolean>;
   // Shared CLI configuration, read when its disclosure opens.
   diffrConfig: ReviewDiffrConfigActions;
   reloadWindow(): Promise<void>;
@@ -751,6 +974,8 @@ export type ReviewCanvasContent =
       softwareMapEnabled?: boolean;
       documentWidth?: ReviewDocumentWidthChoice;
       reviewId: string;
+      /** The board's project: its boards share the threads on screen. */
+      projectId?: string;
       version?: number;
       host?: string;
       hostState?: ReviewApiSummary["hostState"];
@@ -878,7 +1103,14 @@ export interface ReviewMenuRequest {
 
 export interface ReviewCanvasUi {
   setupTooltip?: ReviewCanvasBridge["setupTooltip"];
-  confirmDelete?(titles: readonly string[]): Promise<boolean>;
+  /** Asks before deleting the boards with these titles. reviewIds let the
+   * host name the whiteboards that link to them and the children that move
+   * up. With trash, they move to Trash, and the host asks only when other
+   * boards need them. */
+  confirmDelete?(
+    titles: readonly string[],
+    options?: { reviewIds?: readonly string[]; trash?: boolean },
+  ): Promise<boolean>;
   notify?: ReviewCanvasBridge["notify"];
   showMenu(request: ReviewMenuRequest): ReviewDisposable;
 }
@@ -889,6 +1121,10 @@ export interface ReviewCanvasModule {
     content: ReviewCanvasContent,
     ui?: ReviewCanvasUi,
   ): ReviewCanvasHandle;
+  mountReviewSidebarSection(
+    container: HTMLElement,
+    props: ReviewSidebarSectionProps,
+  ): ReviewSidebarSectionHandle;
 }
 
 // Tolerant of unknown keys so future additive fields never force a version
@@ -1100,15 +1336,50 @@ export const ReviewStackLayerSchema = z.strictObject({
   reviewUuid: z.uuid({ error: "must be a UUID" }).nullable(),
   reviewTitle: stringAllowEmpty.nullable(),
   relation: z.enum(["earlier", "current", "later"]),
+  /** The layer's PR state, as last read from GitHub. */
+  pullRequestState: z.enum(PULL_REQUEST_STATES).optional(),
 });
 
 export type ReviewStackLayer = z.infer<typeof ReviewStackLayerSchema>;
 
 export const ReviewStackResponseSchema = z.strictObject({
+  /** Bottom first. */
   layers: z.array(ReviewStackLayerSchema),
+  /** The branch the stack sits on, as `main`. */
+  base: requiredString.optional(),
 });
 
 export type ReviewStackResponse = z.infer<typeof ReviewStackResponseSchema>;
+
+const ReviewPlaceBoardSchema = z.strictObject({
+  reviewId: requiredString,
+  title: stringAllowEmpty,
+  icon: z.enum(["board", "code"]),
+});
+
+const ReviewPlaceSiblingSchema = ReviewPlaceBoardSchema.extend({
+  pullRequestNumber: positiveInteger.optional(),
+  pullRequestState: z.enum(PULL_REQUEST_STATES).optional(),
+});
+
+/** Where a board sits, for its header: its parent and the parent's
+ * children in order, or a top-level board's own children, and its PR's
+ * facts the summary lacks. */
+export const ReviewBoardPlaceSchema = z.strictObject({
+  /** The board's PR state and branches, as last read from GitHub. */
+  pullRequestState: z.enum(PULL_REQUEST_STATES).optional(),
+  baseBranch: requiredString.optional(),
+  headBranch: requiredString.optional(),
+  /** The board itself. */
+  board: ReviewPlaceBoardSchema.optional(),
+  parent: ReviewPlaceBoardSchema.optional(),
+  /** Empty for a top-level board. */
+  siblings: z.array(ReviewPlaceSiblingSchema),
+  /** A top-level board's children in sibling order; absent for a child. */
+  children: z.array(ReviewPlaceSiblingSchema).optional(),
+});
+
+export type ReviewBoardPlace = z.infer<typeof ReviewBoardPlaceSchema>;
 
 export const ReviewCliInstallTargetSchema = z.enum(
   ["claude", "codex", "cursor", "opencode", "pi", "omp", "copilot"],
@@ -1522,13 +1793,9 @@ const revealArgsSchema = z
 
 export const REVIEW_DISCORD_URL = "https://discord.gg/wYvd2cpMQg";
 
-/** The one scratchpad's fixed review id. */
-export const SCRATCHPAD_REVIEW_ID = "scratchpad";
-
 const apiReviewIdSchema = z.union([
   z.uuid(),
   z.string().regex(/^shared-[a-f0-9]{64}$/),
-  z.literal(SCRATCHPAD_REVIEW_ID),
 ]);
 
 export const ReviewVerbRequestSchema = z.discriminatedUnion("name", [
@@ -1573,6 +1840,8 @@ export const ReviewVerbRequestSchema = z.discriminatedUnion("name", [
     args: z.strictObject({
       reviewUuid: apiReviewIdSchema,
       active: z.boolean(),
+      /** Block to scroll to after opening. */
+      blockId: requiredString.optional(),
     }),
   }),
   z.strictObject({
@@ -1659,6 +1928,45 @@ export const ReviewSurfaceEventSchema = z.discriminatedUnion("event", [
   z.strictObject({
     event: z.literal("showReviewView"),
     view: reviewViewSchema,
+    /** The board to switch, from its sidebar; else the one asking. */
+    reviewId: requiredString.optional(),
+  }),
+  /** Show one block of a board, once that board is on screen. */
+  z.strictObject({
+    event: z.literal("revealBlock"),
+    reviewId: requiredString,
+    blockId: requiredString,
+  }),
+  /** Filter the board's diff to a lens, or clear it with null, from its
+   * sidebar's Lenses. */
+  z.strictObject({
+    event: z.literal("selectLens"),
+    reviewId: requiredString,
+    lensId: requiredString.nullable(),
+  }),
+  /** Toggle a lens viewed, from the sidebar's Lenses. */
+  z.strictObject({
+    event: z.literal("markLens"),
+    reviewId: requiredString,
+    lensId: requiredString,
+  }),
+  /** Filter the board's Diff view to one commit, or to all of them with
+   * null, from its sidebar's Commits. */
+  z.strictObject({
+    event: z.literal("pickCommit"),
+    reviewId: requiredString,
+    commit: requiredString.nullable(),
+  }),
+  /** Open a saved thread in Ask, from the sidebar's Threads. */
+  z.strictObject({
+    event: z.literal("openAskThread"),
+    reviewId: requiredString,
+    threadId: requiredString,
+  }),
+  /** Put the right column away, or bring back what it held. */
+  z.strictObject({
+    event: z.literal("toggleAskColumn"),
+    reviewId: requiredString,
   }),
 ]);
 

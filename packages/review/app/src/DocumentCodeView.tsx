@@ -13,6 +13,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { AskCodePins } from "./ask-code-pins";
+import { useCodeCommit } from "./code-commit";
 import { useReviewSession } from "./host/review-session";
 import { useReviewFindRegistration } from "./review-find";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
@@ -104,6 +105,10 @@ export function DocumentCodeView({
 
   const countRangesKey = JSON.stringify(countRanges);
   const pinsKey = JSON.stringify(pins);
+  const commit = useCodeCommit(pins, side);
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+  const commitKey = JSON.stringify(commit ?? null);
 
   const [error, setError] = useState<string | null>(null);
   const handleRef = useRef<ReviewInlineEditorHandle | null>(null);
@@ -237,6 +242,7 @@ export function DocumentCodeView({
         description,
         side,
         pins,
+        commit: commitRef.current,
         ranges,
         heightMode,
         active,
@@ -294,6 +300,10 @@ export function DocumentCodeView({
   useLayoutEffect(() => {
     handleRef.current?.setActive(active);
   }, [active]);
+
+  useLayoutEffect(() => {
+    handleRef.current?.setCommit?.(commitRef.current);
+  }, [commitKey]);
 
   useLayoutEffect(() => {
     handleRef.current?.setProgress?.(progressRef.current);
@@ -379,6 +389,6 @@ const styles = stylex.create({
     borderColor: tokens.ruleSoft,
     backgroundColor: tokens.surface,
     color: tokens.inkFaint,
-    font: `${fontSize.small}/1 ${tokens.fontMono}`,
+    font: `${fontSize.small}/1 ${tokens.chromeFont}`,
   },
 });

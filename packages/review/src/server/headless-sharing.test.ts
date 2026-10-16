@@ -121,7 +121,12 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
       operation: {
         type: "create",
         title: "CI review",
-        target: { kind: "commits", ...pins, repositoryId: registered.id },
+        target: {
+          kind: "commits",
+          repositoryPath: fixture.repo,
+          base: pins!.base,
+          head: pins!.head,
+        },
       },
     });
 

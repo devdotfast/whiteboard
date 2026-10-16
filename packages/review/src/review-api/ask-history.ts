@@ -17,7 +17,11 @@ import { ReviewInputError } from "./document.js";
 
 /** A saved Ask conversation: its history entry, and how to reopen it. */
 export const askRecordSchema = askHistoryEntrySchema.extend({
-  reviewId: z.string(),
+  /** The board the conversation started on, and the block if any. */
+  anchor: z.object({ board: z.string(), block: z.string().optional() }),
+  /** The project of the board it started on, read from that board, or its
+   * tombstone once deleted; absent for a shared board. */
+  projectId: z.string().optional(),
   /** The ACP session the agent keeps the transcript under. */
   sessionId: z.string(),
   /** The review version asked about; its pins recreate the checkout. */
@@ -34,7 +38,9 @@ export type AskRecord = z.infer<typeof askRecordSchema>;
 const rowSchema = z
   .object({
     id: z.string(),
-    review_id: z.string(),
+    anchor_board: z.string(),
+    anchor_block: z.string().nullable(),
+    project_id: z.string().nullable(),
     agent: z.string(),
     session_id: z.string(),
     version: z.number(),
@@ -51,7 +57,11 @@ const rowSchema = z
   .transform((row) =>
     askRecordSchema.parse({
       id: row.id,
-      reviewId: row.review_id,
+      anchor:
+        row.anchor_block === null
+          ? { board: row.anchor_board }
+          : { board: row.anchor_board, block: row.anchor_block },
+      projectId: row.project_id ?? undefined,
       agent: row.agent,
       sessionId: row.session_id,
       version: row.version,
@@ -68,17 +78,36 @@ const rowSchema = z
     }),
   );
 
-/** Saved Ask conversations, per review. Shared reviews are not in
- * `reviews`, so there is no foreign key; deleting a review deletes its rows. */
+/** A thread's project: its anchor board's, or a deleted board's from its
+ * tombstone. The one place a thread's project comes from, so it can never
+ * disagree with its board's. */
+const THREAD_PROJECT_SQL = `COALESCE(
+  (SELECT project_id FROM reviews WHERE reviews.id=ask_conversations.anchor_board),
+  (SELECT project_id FROM deleted_boards WHERE deleted_boards.id=ask_conversations.anchor_board))`;
+
+/** Every column of a thread, with its project. */
+const THREAD_COLUMNS = `ask_conversations.*, ${THREAD_PROJECT_SQL} AS project_id`;
+
+/** Saved Ask conversations by project, each anchored on the board it started
+ * on. No foreign key on the anchor: shared reviews are not in `reviews`.
+ * So deleting a board removes its threads by hand (removeReview). */
 export class AskHistory {
+  private readonly listeners = new Set<() => void>();
+
   private externalWriteGuard?: (reviewId: string) => void;
   setExternalWriteGuard(guard: (reviewId: string) => void) {
     this.externalWriteGuard = guard;
   }
-  constructor(private readonly db: DatabaseSync) {
+  constructor(
+    private readonly db: DatabaseSync,
+    /** The store's rule for writing about a board: one in Trash is
+     * read-only. */
+    private readonly writable: (reviewId: string) => void = () => {},
+  ) {
     db.exec(`CREATE TABLE IF NOT EXISTS ask_conversations(
       id TEXT PRIMARY KEY,
-      review_id TEXT NOT NULL,
+      anchor_board TEXT NOT NULL,
+      anchor_block TEXT,
       agent TEXT NOT NULL,
       session_id TEXT NOT NULL,
       version INTEGER NOT NULL,
@@ -91,25 +120,12 @@ export class AskHistory {
       entries TEXT,
       bypass INTEGER NOT NULL DEFAULT 0,
       permissions TEXT,
-      UNIQUE(agent, session_id));
-    CREATE INDEX IF NOT EXISTS ask_conversations_review ON ask_conversations(review_id, updated_at);`);
+      viewed_at TEXT,
+      UNIQUE(agent, session_id));`);
 
-    // Conversations saved before bypassing permissions, or before auto mode,
-    // lack its column.
-    const columns = new Set(
-      db
-        .prepare("PRAGMA table_info(ask_conversations)")
-        .all()
-        .map((column) => String(column.name)),
+    db.exec(
+      "CREATE INDEX IF NOT EXISTS ask_conversations_review ON ask_conversations(anchor_board, updated_at)",
     );
-
-    if (!columns.has("bypass"))
-      db.exec(
-        "ALTER TABLE ask_conversations ADD COLUMN bypass INTEGER NOT NULL DEFAULT 0",
-      );
-
-    if (!columns.has("permissions"))
-      db.exec("ALTER TABLE ask_conversations ADD COLUMN permissions TEXT");
 
     // What each agent offered last, so a new question can pick a model and
     // effort, and a command, before its agent starts.
@@ -122,34 +138,46 @@ export class AskHistory {
     );
   }
 
+  /** Calls back when a conversation is saved, renamed, used or deleted. */
+  subscribe(listener: () => void) {
+    this.listeners.add(listener);
+
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private changed() {
+    for (const listener of this.listeners) listener();
+  }
+
   private assertWritable(reviewId: string) {
     if (reviewId.startsWith("shared-")) this.externalWriteGuard?.(reviewId);
-
-    const row = this.db
-      .prepare("SELECT deleted_at FROM review_attention WHERE review_id=?")
-      .get(reviewId);
-
-    if (row?.deleted_at)
-      throw new ReviewInputError(
-        `This whiteboard was moved to Trash on ${new Date(String(row.deleted_at)).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Restore it with session_lifecycle({"sessionId":"${reviewId}","state":"active"}) to continue.`,
-        409,
-      );
+    else this.writable(reviewId);
   }
+
   private assertThreadWritable(id: string) {
     const record = this.get(id);
 
-    if (record) this.assertWritable(record.reviewId);
+    if (record) this.assertWritable(record.anchor.board);
   }
   save(record: AskRecord) {
-    this.assertWritable(record.reviewId);
+    this.assertWritable(record.anchor.board);
     this.db
       .prepare(
-        `INSERT OR REPLACE INTO ask_conversations(id,review_id,agent,session_id,version,head,cwd,selection,title,created_at,updated_at,bypass,permissions)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        // Its columns, not the row: when it was last seen, and what the
+        // panel showed, stay.
+        `INSERT INTO ask_conversations(id,anchor_board,anchor_block,agent,session_id,version,head,cwd,selection,title,created_at,updated_at,bypass,permissions)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET anchor_board=excluded.anchor_board, anchor_block=excluded.anchor_block,
+          agent=excluded.agent, session_id=excluded.session_id, version=excluded.version, head=excluded.head,
+          cwd=excluded.cwd, selection=excluded.selection, title=excluded.title, created_at=excluded.created_at,
+          updated_at=excluded.updated_at, bypass=excluded.bypass, permissions=excluded.permissions`,
       )
       .run(
         record.id,
-        record.reviewId,
+        record.anchor.board,
+        record.anchor.block ?? null,
         record.agent,
         record.sessionId,
         record.version,
@@ -162,6 +190,7 @@ export class AskHistory {
         record.permissions === "bypass" ? 1 : 0,
         record.permissions ?? null,
       );
+    this.changed();
   }
 
   /** What the agent may do without asking when the conversation reopens. */
@@ -189,6 +218,7 @@ export class AskHistory {
     this.db
       .prepare("UPDATE ask_conversations SET entries=? WHERE id=?")
       .run(JSON.stringify(entries), id);
+    this.changed();
   }
 
   /** The agent's name for the conversation, which the list shows. */
@@ -197,6 +227,7 @@ export class AskHistory {
     this.db
       .prepare("UPDATE ask_conversations SET title=? WHERE id=?")
       .run(title.slice(0, 200), id);
+    this.changed();
   }
 
   saveOffer(agent: AskAgentId, offer: AskOffer) {
@@ -245,50 +276,105 @@ export class AskHistory {
     this.db
       .prepare("UPDATE ask_conversations SET updated_at=? WHERE id=?")
       .run(at, id);
+    this.changed();
   }
 
-  /** Newest first. */
-  list(reviewId: string): AskHistoryEntry[] {
+  /** Conversations in a board's project, or started on the board when it
+   * has none. Newest first. */
+  list(board: string, projectId?: string) {
+    // The project's boards by their index on project_id, then their
+    // threads by ask_conversations_review.
+    return this.entries(
+      "anchor_board=? OR anchor_board IN (SELECT id FROM reviews WHERE project_id=? UNION ALL SELECT id FROM deleted_boards WHERE project_id=?)",
+      board,
+      projectId ?? null,
+      projectId ?? null,
+    );
+  }
+
+  /** Every project's conversations, newest first. */
+  listAll() {
+    return this.entries("1");
+  }
+
+  private entries(
+    where: string,
+    ...params: (string | null)[]
+  ): (AskHistoryEntry & { projectId?: string })[] {
+    // A transcript can be long: SQLite finds its first question, and the
+    // rest of it is left unread.
     return this.db
       .prepare(
-        "SELECT * FROM ask_conversations WHERE review_id=? ORDER BY updated_at DESC",
+        `SELECT id, anchor_board, anchor_block, ${THREAD_PROJECT_SQL} AS project_id, agent, session_id, version, head, cwd, selection, title,
+          created_at, updated_at, NULL AS entries, bypass, permissions,
+          (SELECT json_extract(value,'$.text') FROM json_each(entries)
+            WHERE json_extract(value,'$.kind')='user' LIMIT 1) AS question
+        FROM ask_conversations WHERE ${where} ORDER BY updated_at DESC`,
       )
-      .all(reviewId)
+      .all(...params)
       .map((row) => {
         const {
-          reviewId: _reviewId,
+          anchor,
           sessionId: _sessionId,
           version: _version,
           cwd: _cwd,
-          entries,
+          entries: _entries,
           permissions: _permissions,
           ...entry
         } = rowSchema.parse(row);
 
-        const question = entries?.find((entry) => entry.kind === "user")?.text;
+        const question = z.string().nullable().parse(row.question) ?? "";
 
-        if (question?.trim()) entry.question = question;
+        if (question.trim()) entry.question = question;
 
-        return entry;
+        return { ...entry, anchor };
       });
   }
 
   get(id: string): AskRecord | undefined {
     const row = this.db
-      .prepare("SELECT * FROM ask_conversations WHERE id=?")
+      .prepare(`SELECT ${THREAD_COLUMNS} FROM ask_conversations WHERE id=?`)
       .get(id);
 
     return row ? rowSchema.parse(row) : undefined;
   }
 
+  /** The reviewer saw the thread, on screen with the app focused. Only
+   * when it was seen changes: not its order, nor when it was used. */
+  markViewed(id: string, at = new Date().toISOString()) {
+    this.db
+      .prepare("UPDATE ask_conversations SET viewed_at=? WHERE id=?")
+      .run(at, id);
+    this.changed();
+  }
+
+  /** When each of these threads was last viewed, where it ever was.
+   * Threads from before views were kept have none, and none is unread. */
+  viewedAt(ids: readonly string[]): Map<string, string> {
+    const select = this.db.prepare(
+      "SELECT viewed_at FROM ask_conversations WHERE id=? AND viewed_at IS NOT NULL",
+    );
+
+    return new Map(
+      ids.flatMap((id) => {
+        const row = select.get(id);
+
+        return row ? [[id, String(row.viewed_at)] as const] : [];
+      }),
+    );
+  }
+
+  /** Forgets the threads that started on a board gone for good. */
   removeReview(reviewId: string) {
     this.db
-      .prepare("DELETE FROM ask_conversations WHERE review_id=?")
+      .prepare("DELETE FROM ask_conversations WHERE anchor_board=?")
       .run(reviewId);
+    this.changed();
   }
 
   delete(id: string) {
     this.assertThreadWritable(id);
     this.db.prepare("DELETE FROM ask_conversations WHERE id=?").run(id);
+    this.changed();
   }
 }

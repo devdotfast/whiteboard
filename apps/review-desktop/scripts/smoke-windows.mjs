@@ -207,7 +207,10 @@ export async function smokeWindows(app, evidence) {
         assert.match(version, /\d+\.\d+\.\d+/);
 
         const diffr = execFileSync(
-          path.join(runtime, "node_modules/@dev.fast/diffr-win32-x64/diffr.exe"),
+          path.join(
+            runtime,
+            "node_modules/@dev.fast/diffr-win32-x64/diffr.exe",
+          ),
           ["--version"],
           { encoding: "utf8", timeout: 30000 },
         );
@@ -251,16 +254,11 @@ export async function smokeWindows(app, evidence) {
         const head = git("rev-parse", "HEAD").trim();
 
         const stream = execFileSync(
-          path.join(runtime, "node_modules/@dev.fast/diffr-win32-x64/diffr.exe"),
-          [
-            "--repo",
-            repository,
-            "--format",
-            "ndjson",
-            base,
-            head,
-            "--",
-          ],
+          path.join(
+            runtime,
+            "node_modules/@dev.fast/diffr-win32-x64/diffr.exe",
+          ),
+          ["--repo", repository, "--format", "ndjson", base, head, "--"],
           { encoding: "utf8", timeout: 60000, maxBuffer: 8 * 1024 * 1024 },
         );
 
@@ -295,14 +293,11 @@ export async function smokeWindows(app, evidence) {
             ),
           );
 
-        const registered = api("session_register_repository", {
-          path: repository,
-        });
-
+        // Checkouts are named by path; the host registers them.
         const created = api("session_create", {
           title: "Windows structural diff smoke",
           open: false,
-          target: { kind: "commits", repositoryId: registered.id, base, head },
+          target: { kind: "commits", repositoryPath: repository, base, head },
         });
 
         assert.ok(created.sessionId);

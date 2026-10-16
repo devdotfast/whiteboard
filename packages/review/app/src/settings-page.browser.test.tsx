@@ -25,8 +25,6 @@ function settings(): ReviewCanvasSettingsContent {
     setTheme: async (choice) => choice,
     keymap: "none",
     setKeymap: async (choice) => choice,
-    ctrlTab: "recent",
-    setCtrlTab: async (choice) => choice,
     documentWidth: "standard",
     setDocumentWidth: async (choice) => choice,
     codeFontSize: 12,
@@ -35,8 +33,6 @@ function settings(): ReviewCanvasSettingsContent {
     setReadyNotification: async (choice) => choice,
     softwareMapEnabled: false,
     setSoftwareMapEnabled: async (enabled) => enabled,
-    scratchpadEnabled: false,
-    setScratchpadEnabled: async (enabled) => enabled,
     diffrConfig: {
       read: unexpected,
       set: unexpected,

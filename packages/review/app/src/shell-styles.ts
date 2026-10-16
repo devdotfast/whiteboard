@@ -209,6 +209,29 @@ export const shellStyles = stylex.create({
     borderBottomColor: tokens.rule,
     backgroundColor: tokens.surface,
   },
+  // Notion's page bar: where you are at the far left, what you can do at
+  // the far right, on the page's own surface with no rule under it.
+  // In Desktop a collapsed sidebar leaves the window controls over the
+  // bar's left end; --review-page-bar-inset clears them.
+  // A fullscreen surface's left column runs under those controls too: its
+  // header reads --review-fullscreen-inset to clear them as the page bar does.
+  clearsWindowControls: {
+    "--review-fullscreen-inset": "var(--review-page-bar-inset, 0px)",
+  },
+  pageBar: {
+    height: "40px",
+    paddingLeft: "calc(16px + var(--review-page-bar-inset, 0px))",
+    borderBottomWidth: 0,
+  },
+  // The breadcrumb takes what the icons leave, and clamps inside it.
+  // At the narrowest the breadcrumb clips rather than run under the icons.
+  pageBarLeft: {
+    flex: "1 1 auto",
+    minWidth: 0,
+    overflow: "clip",
+    overflowClipMargin: "4px",
+  },
+  pageBarActions: { flex: "0 0 auto", position: "relative" },
   topbarLeft: {
     display: "flex",
     flex: "0 0 auto",
@@ -246,8 +269,6 @@ export const shellStyles = stylex.create({
       [inTopbarActions()]: "anchors-visible",
     },
   },
-  // The scratchpad has no source tree or pins to set apart, so no rule.
-  // Shrinks before the action row scrolls, so its badges end in an ellipsis.
   topbarContext: {
     display: "flex",
     flex: "0 1 auto",
@@ -288,11 +309,8 @@ export const shellStyles = stylex.create({
     minHeight: 0,
     overflow: "hidden",
   },
-  commitsRegion: {
-    overflow: "auto",
-  },
-  // --review-toc-tail is the room the contents rail adds so the last heading
-  // can scroll up to the top edge, measured by the rail itself.
+  // --review-toc-tail is the room below the last heading so Contents can
+  // scroll it to the top edge, measured by useHeadingInView.
   reviewRegion: {
     display: "flex",
     alignItems: "flex-start",
@@ -306,9 +324,9 @@ export const shellStyles = stylex.create({
     padding: {
       default: `${tokens.reviewPageTop} 52px calc(max(120px, var(--review-bottom-scroll-padding, 0px)) + var(--review-toc-tail, 0px))`,
       "@container review-content (max-width: 1180px)": {
-        default: `${tokens.reviewPageTop} 42px 120px`,
+        default: `${tokens.reviewPageTop} 42px calc(120px + var(--review-toc-tail, 0px))`,
         "@container review-content (max-width: 1080px)": {
-          default: `${tokens.reviewPageTop} 24px 120px`,
+          default: `${tokens.reviewPageTop} 24px calc(120px + var(--review-toc-tail, 0px))`,
           [narrowViewport]: "22px 8px calc(96px + var(--review-toc-tail, 0px))",
         },
       },

@@ -33,10 +33,10 @@ function copyReview(from: string, to: string, title: string) {
 
   try {
     db.prepare(
-      "INSERT INTO reviews SELECT ?,version,next_id FROM reviews WHERE id=?",
+      "INSERT INTO reviews(id,version,next_id,project_id) SELECT ?,version,next_id,project_id FROM reviews WHERE id=?",
     ).run(to, from);
     db.prepare(
-      "INSERT INTO versions SELECT ?,version,json_set(snapshot,'$.reviewId',?,'$.title',?) FROM versions WHERE review_id=?",
+      "INSERT INTO versions(review_id,version,snapshot) SELECT ?,version,json_set(snapshot,'$.reviewId',?,'$.title',?) FROM versions WHERE review_id=?",
     ).run(to, to, title, from);
   } finally {
     db.close();
@@ -253,11 +253,6 @@ it("refuses every push from a remote but capabilities, focus and opening one of 
       "home",
       { name: "openReview", args: { reviewUuid: randomUUID(), active: true } },
       "openReview",
-    ],
-    [
-      "pad",
-      { name: "openApiReview", args: { reviewId: "scratchpad", title: "P" } },
-      "scratchpad",
     ],
     [
       "shared",

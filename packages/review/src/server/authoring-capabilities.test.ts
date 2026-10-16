@@ -72,7 +72,6 @@ it("discovers the live Desktop map preference without opening a review", async (
     expect(await client.read("/capabilities")).toMatchObject({
       desktopAvailable: true,
       softwareMapEnabled: false,
-      scratchpadEnabled: false,
     });
     softwareMapEnabled = true;
     expect(await client.read("/capabilities")).toMatchObject({

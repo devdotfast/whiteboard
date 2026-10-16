@@ -3,6 +3,7 @@ import { anchorSelection } from "@review/lens-selection";
 import {
   type Block,
   type BlockType,
+  boardLink,
   traceQuoteLink,
 } from "@review/review-api/document";
 import * as stylex from "@stylexjs/stylex";
@@ -17,6 +18,7 @@ import {
 import { MarkdownContent } from "./agent-markdown";
 import type { ApiDocumentData } from "./api-document";
 import { blockSectionSummary } from "./block-document-derivations";
+import { BoardLink } from "./board-link";
 import { DocumentCallTree } from "./call-tree-view";
 import { RenderedCodeBlock } from "./code-block";
 import { CodePeekCard } from "./CodePeek";
@@ -81,6 +83,19 @@ function MarkdownBlock({ node, data }: BlockProps<"markdown">) {
       headingId={(index) => data.headings.get(node.id, index)}
       h1={ReviewDocumentTitle}
       renderLink={(href, children) => {
+        const board = boardLink(href);
+
+        if (board)
+          return (
+            <BoardLink
+              reviewId={board.board}
+              blockId={board.block}
+              target={data.boards.get(`${board.board}#${board.block ?? ""}`)}
+            >
+              {children}
+            </BoardLink>
+          );
+
         const quote = traceQuoteLink(href);
 
         if (quote) {

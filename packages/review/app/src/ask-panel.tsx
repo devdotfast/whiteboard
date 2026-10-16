@@ -20,6 +20,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   type ReactElement,
   type ReactNode,
+  type RefObject,
   memo,
   useCallback,
   useEffect,
@@ -29,7 +30,7 @@ import {
 import { createPortal } from "react-dom";
 import { z } from "zod";
 
-import { AgentChatUserMessage } from "./agent-chat";
+import { AgentChatUserMessage, trayBubbleStyles } from "./agent-chat";
 import {
   AskAgentPicker,
   AskChoicePicker,
@@ -46,6 +47,7 @@ import {
   useAskAgents,
   useOffer,
 } from "./ask-agent-picker";
+import { AskChangedBoards } from "./ask-changed-boards";
 import { AskComposer } from "./ask-composer";
 import { useShowOpenThread } from "./ask-delete";
 import { AskFilesProvider } from "./ask-files";
@@ -64,8 +66,12 @@ import { formatRelativeTime } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { ArrowUpIcon, ImageIcon, LockIcon } from "./icons";
 import { useReviewHostDown } from "./remote-host-state";
-import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
-import type { AskPresence, AskReport } from "./review-panel-model";
+import {
+  useAskKey,
+  useOptionalReviewPanel,
+  useOptionalReviewPanelStore,
+} from "./review-panel";
+import type { AskReport } from "./review-panel-model";
 import { fontSize, radius } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -103,14 +109,18 @@ export function AskPanelContent({
   savedThreadId,
   onReport,
   header,
+  stopping,
 }: {
   selection: AgentSelection;
   agent?: AskAgentId;
   header?: HTMLElement | null;
   /** A saved conversation to reopen instead of asking a new question. */
   savedThreadId?: string;
-  /** What the conversation is doing, for the pill to say while it is out
-   * of sight and for closing to warn while its agent works. */
+  /** Set when the reader stops this Ask. A thread that starts after the
+   * panel left the screen keeps running unless this is set. */
+  stopping?: RefObject<boolean>;
+  /** Who answers and whether they are working: what replaces a working
+   * thread floats it, and closing it warns. */
   onReport?: (report: AskReport) => void;
 }): ReactElement {
   const session = useReviewSession();
@@ -161,13 +171,16 @@ export function AskPanelContent({
     };
   }, []);
 
-  // A thread opened after the panel closed has nobody to close it.
+  // A thread that starts after the reader stopped its Ask has nobody else
+  // to stop it. One that only left the screen keeps running, in Threads.
   const closeLate = useCallback(
-    (id: string) =>
-      void latestSession.current
-        .fetch(`/ask/${id}/close`, { method: "POST", keepalive: true })
-        .catch(() => {}),
-    [latestSession],
+    (id: string) => {
+      if (stopping?.current)
+        void latestSession.current
+          .fetch(`/ask/${id}/close`, { method: "POST", keepalive: true })
+          .catch(() => {});
+    },
+    [latestSession, stopping],
   );
 
   // A saved conversation: the server starts its agent and loads it, once
@@ -210,7 +223,14 @@ export function AskPanelContent({
     };
   }, [latestSession, savedThreadId, requestedAgent, closeLate]);
 
-  useEffect(() => composer.current?.focus(), [agent, loadingConversation]);
+  // Unless it opened where the reader is editing.
+  const unfocused = useOptionalReviewPanel(
+    (state) => state.asks.find((ask) => ask.key === askKey)?.unfocused,
+  );
+
+  useEffect(() => {
+    if (!unfocused) composer.current?.focus();
+  }, [agent, loadingConversation, unfocused]);
 
   // The server saves a conversation once the agent starts it and dates it
   // by its last turn, so the document's marks and the history follow.
@@ -511,25 +531,8 @@ export function AskPanelContent({
 
   const agentName = thread?.agentName ?? chosenName;
 
-  // Before the agents load, the pill names Ask.
-  const pillName = thread?.agentName ?? chosen?.name ?? "Ask";
-
-  const presence: AskPresence =
-    thread?.status === "waiting"
-      ? { agentName: pillName, status: "Needs your approval", tone: "waiting" }
-      : thread?.status === "failed" || error
-        ? { agentName: pillName, status: "Stopped", tone: "failed" }
-        : {
-            agentName: pillName,
-            status: connecting
-              ? "Connecting…"
-              : busy
-                ? answeringStatus(thread)
-                : thread
-                  ? "Answered"
-                  : "New question",
-            tone: "quiet",
-          };
+  // Before the agents load, the Ask is Ask's.
+  const presenceName = thread?.agentName ?? chosen?.name ?? "Ask";
 
   const presenceAgent = thread?.agent ?? agent;
   const reportedThreadId = threadId ?? savedThreadId ?? null;
@@ -546,22 +549,9 @@ export function AskPanelContent({
     onReport?.({
       threadId: reportedThreadId,
       busy: working,
-      presence: {
-        agent: presenceAgent,
-        agentName: presence.agentName,
-        status: presence.status,
-        tone: presence.tone,
-      },
+      presence: { agent: presenceAgent, agentName: presenceName },
     });
-  }, [
-    onReport,
-    reportedThreadId,
-    working,
-    presenceAgent,
-    presence.agentName,
-    presence.status,
-    presence.tone,
-  ]);
+  }, [onReport, reportedThreadId, working, presenceAgent, presenceName]);
 
   if (agents && !agents.some((candidate) => candidate.available))
     return <AskSetup agents={agents} selection={selection} />;
@@ -680,6 +670,10 @@ export function AskPanelContent({
           >
             <AskSelectionQuote selection={selection} />
             <AskOutdatedNote threadId={threadId ?? savedThreadId ?? null} />
+            <AskChangedBoards
+              threadId={threadId ?? savedThreadId ?? null}
+              turns={thread?.entries.length ?? 0}
+            />
 
             {thread ? <AskTurns thread={thread} onDecide={decide} /> : null}
 
@@ -698,7 +692,7 @@ export function AskPanelContent({
               <AgentChatUserMessage
                 key={queued.id}
                 xstyle={styles.userMessage}
-                bubbleXstyle={[styles.userBubble, styles.queuedBubble]}
+                bubbleXstyle={[trayBubbleStyles.bubble, styles.queuedBubble]}
                 caption={`Sends when ${agentName} finishes`}
               >
                 {queued.text}
@@ -822,12 +816,7 @@ export function AskReadOnlyThread({
     onReport?.({
       threadId: null,
       busy: false,
-      presence: {
-        agent: thread?.agent,
-        agentName,
-        status: "Read-only",
-        tone: "quiet",
-      },
+      presence: { agent: thread?.agent, agentName },
     });
   }, [onReport, thread?.agent, agentName]);
 
@@ -915,25 +904,6 @@ function askPlaceholders(
   return [`${lead} · ${hint}`, `${lead}…`, `Ask about ${subject}…`];
 }
 
-/** What a busy agent is doing, for where the thread is out of sight. */
-function answeringStatus(thread: AskThreadState | null) {
-  const sinceQuestion = thread?.entries.slice(
-    thread.entries.findLastIndex((entry) => entry.kind === "user") + 1,
-  );
-
-  const read =
-    sinceQuestion?.filter(
-      (entry) =>
-        entry.kind === "tool" &&
-        entry.toolKind === "read" &&
-        entry.status === "completed",
-    ).length ?? 0;
-
-  return read
-    ? `Answering · ${read} ${read === 1 ? "file" : "files"} read`
-    : "Answering…";
-}
-
 /** The images sent with a question. Its files show as its @ mentions. */
 function AskUserImages({
   entry,
@@ -985,7 +955,7 @@ const AskTurns = memo(function AskTurns({
           <AgentChatUserMessage
             key={turn.entry.id}
             xstyle={styles.userMessage}
-            bubbleXstyle={styles.userBubble}
+            bubbleXstyle={trayBubbleStyles.bubble}
             caption={
               turn.entry.at === undefined
                 ? "You"
@@ -1032,7 +1002,7 @@ const styles = stylex.create({
     overflow: "hidden",
     textOverflow: "ellipsis",
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "14px",
     whiteSpace: "nowrap",
@@ -1079,10 +1049,6 @@ const styles = stylex.create({
   userMessage: {
     maxWidth: "88%",
     marginTop: 0,
-  },
-  userBubble: {
-    padding: "10px 14px",
-    backgroundColor: tokens.trayRaised,
   },
   queuedBubble: {
     opacity: 0.6,

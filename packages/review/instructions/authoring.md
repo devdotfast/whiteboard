@@ -3,7 +3,7 @@ you are writing an interactive rfc-style whiteboard, for consumption by a staff 
 **flow**
 follow these first five steps in order, with no tool calls beyond what they need: loading the tools they use (`session_create`, `session_activity_begin`, `session_edit`, `session_get`, and later `session_activity_update` and `session_activity_end`) and, for a PR, reading its description (`gh pr view`).
 
-- create the whiteboard, pinned to the commits/pr the user describes, naming the checkout by its `repositoryPath`. if they name none, use a `worktree` target with no `base`: it reviews the checkout, uncommitted work included, against the default branch. for uncommitted work only, pass `base: "HEAD"`. untracked files are left out: run `git add -N <file>` on new files you want reviewed
+- create the whiteboard with a `target` naming the checkout by its `repositoryPath`: `{kind:"commits", head, base?}` for commits, `{kind:"pullRequest", pullRequest}` for a PR by URL or number, or `{kind:"project"}` for a plan with no change yet. if they name none, use a `worktree` target with no `base`: it reviews the checkout, uncommitted work included, against the default branch. for uncommitted work only, pass `base: "HEAD"`. untracked files are left out: run `git add -N <file>` on new files you want reviewed
 - trigger a subagent with this exact instruction: "Call `session_get_instructions({topic:\"file-lenses\"})` and follow it for whiteboard <sessionId>, whose change is `<base>..<head>` in `<repositoryPath>`."
 - call `session_activity_begin` and pass its `activityId` on every `session_edit`
 - read the diff with git (or jj) in `repositoryPath`, at the commits `session_create` returned: `git diff <base> <head>`, or for a worktree target `git diff <base>` plus `git status` for untracked files. if it shows no changes, the target is wrong: fix it with `session_set_target` before writing
@@ -37,4 +37,5 @@ follow these first five steps in order, with no tool calls beyond what they need
 - use `session_activity_update` to provide regular status updates on your area of focus.
 - keep whiteboards short and sweet when possible (esp. for small changes.) feel free to omit sections.
 - when something (a phrase in the prose, diagram node, etc.) describes actual code in the codebase, always default to attaching/hyperlink code.
-- Link repository code as `[label](review-source:head/src/file.ts#L10-L24)`; use `base` for old code. Use repository-relative paths and verified line numbers.
+- Link repository code as `[label](whiteboard:source/head/src/file.ts#L10-L24)`; use `base` for old code. To quote any other commit of the board's repository, as a plan does, put the commit in place of `head`: `[label](whiteboard:source/<commit>/src/file.ts#L10-L24)`. Use repository-relative paths and verified line numbers.
+- Link another whiteboard inline as `[label](whiteboard:board/<sessionId>)`, or one of its blocks as `[label](whiteboard:board/<sessionId>#<blockId>)`, wherever the prose refers to it. The board and block must exist.

@@ -136,7 +136,9 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 				case "openReview": {
 					const review = this.apiCatalog.reviews.find((review) => review.reviewId === request.args.reviewUuid);
 					if (!review) throw new Error("Review not found. If this is an old Whiteboard review, ask your agent to migrate your old Whiteboard reviews.");
-					await this.tabsService.openApiReview(review.reviewId, review.title, request.args.active);
+					await this.tabsService.openApiReview(review.reviewId, review.title);
+					// The canvas scrolls to the block once the board loads.
+					if (request.args.blockId) this._onDidEmitSurfaceEvent.fire({ event: "revealBlock", reviewId: review.reviewId, blockId: request.args.blockId });
 					break;
 				}
 				case "openApiReview":

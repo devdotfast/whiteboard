@@ -130,7 +130,6 @@ export interface WhiteboardCoreInput {
   token: string;
   instanceId: string;
   softwareMapEnabled?: boolean;
-  scratchpad: () => boolean;
   status: () => JsonObject;
   hooks?: ReviewApiHooks;
   ask?: {
@@ -190,7 +189,6 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
     callbacks.open,
     shared,
     callbacks.capabilities,
-    input.scratchpad,
     () => traceMachineEnabled(),
     input.status,
     input.hooks,
@@ -234,9 +232,7 @@ export function relayReviewCallbacks(
 
       return z.object({ softwareMapEnabled: z.boolean() }).parse(result.result);
     },
-    async capabilities(): Promise<
-      Omit<AuthoringCapabilities, "scratchpadEnabled">
-    > {
+    async capabilities(): Promise<AuthoringCapabilities> {
       if (!relay.attached)
         return { desktopAvailable: false, softwareMapEnabled };
 

@@ -1,4 +1,5 @@
 import { type JsonValue, isJsonObject, isStringValue } from "@dev.fast/json";
+import { boardTitle } from "@dev.fast/review-protocol";
 
 import {
   type AuthoringTool,
@@ -78,7 +79,13 @@ export function publicResult(value: JsonValue): JsonValue {
 
       return [
         name,
-        key === "review" || key === "reviews" ? publicResult(item) : item,
+        key === "review" || key === "reviews"
+          ? publicResult(item)
+          : // A board's title as every surface shows it: an empty one is
+            // "Untitled".
+            key === "title" && "reviewId" in value && isStringValue(item)
+            ? boardTitle(item)
+            : item,
       ];
     }),
   );
@@ -98,5 +105,20 @@ export async function callPublicTool(
   if (sessionId !== undefined) fields.reviewId = sessionId;
   const result = await callAuthoringTool(client, tool, fields, signal);
 
-  return result instanceof ToolText ? result : publicResult(result);
+  return result instanceof ToolText
+    ? result
+    : withoutRepositoryIds(publicResult(result));
+}
+
+/** Agents never see repository ids. */
+function withoutRepositoryIds(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) return value.map(withoutRepositoryIds);
+
+  if (!isJsonObject(value)) return value;
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== "repositoryId")
+      .map(([key, item]) => [key, withoutRepositoryIds(item)]),
+  );
 }

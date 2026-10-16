@@ -19,6 +19,7 @@ import "./browser/parts/canvas/reviewFind.contribution.js";
 import "./browser/parts/canvas/reviewNewWhiteboard.contribution.js";
 import "./browser/reviewCommunity.contribution.js";
 import "./browser/reviewTheme.contribution.js";
+import "./contrib/boardTabs/reviewBoardTabs.contribution.js";
 import "./contrib/explorer/reviewFileTree.contribution.js";
 import "./contrib/extensions/reviewCuratedExtensions.contribution.js";
 import "./contrib/install/reviewCliInstall.contribution.js";
@@ -26,11 +27,15 @@ import "./contrib/quickaccess/reviewQuickAccess.contribution.js";
 import "./contrib/settings/reviewSettings.contribution.js";
 import "./contrib/telemetry/reviewLspTelemetry.contribution.js";
 import "./contrib/telemetry/reviewTelemetry.contribution.js";
+import "./contrib/tabs/reviewNewWhiteboard.contribution.js";
+// Board windows only: the source tree's window has no board catalog.
+import "./contrib/tabs/reviewOneBoard.contribution.js";
 // Sessions supplies the native fixed-grid shell; Review replaces its session
 // model, setup flow, and content part and deliberately imports no Agents UI.
 import "../workbench/browser/parts/editor/editorParts.js";
 import { IReviewCanvasPartsService, ReviewCanvasParts } from "./browser/parts/canvas/reviewCanvasPart.js";
-import { IReviewExplorerPartsService, ReviewExplorerParts } from "./browser/parts/explorer/reviewExplorerPart.js";
+import { IReviewSidebarPartsService, ReviewSidebarParts } from "./browser/parts/sidebar/reviewSidebarPart.js";
+import { IReviewAskPartsService, ReviewAskParts } from "./browser/parts/ask/reviewAskPart.js";
 import "./browser/reviewPaneCompositePartService.js";
 import "./common/reviewConfiguration.js";
 import { IReviewVerbsService, ReviewVerbsService } from "./contrib/verbs/reviewVerbs.js";
@@ -61,7 +66,8 @@ registerSingleton(IReviewApiSourceService, ReviewApiSourceService, Instantiation
 registerSingleton(IReviewApiCatalogService, ReviewApiCatalogService, InstantiationType.Delayed);
 registerSingleton(IReviewVerbsService, ReviewVerbsService, InstantiationType.Delayed);
 registerSingleton(IReviewCanvasPartsService, ReviewCanvasParts, InstantiationType.Eager);
-registerSingleton(IReviewExplorerPartsService, ReviewExplorerParts, InstantiationType.Eager);
+registerSingleton(IReviewSidebarPartsService, ReviewSidebarParts, InstantiationType.Eager);
+registerSingleton(IReviewAskPartsService, ReviewAskParts, InstantiationType.Eager);
 
 import "./contrib/sharing/reviewSharing.contribution.js";
 import "./contrib/notifications/reviewDoneNotification.contribution.js";

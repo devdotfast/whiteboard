@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import {
   type BlobBatchReader,
@@ -11,6 +9,7 @@ import {
   type LocalVcsDiffFileSummary,
   type LocalVcsKind,
   LocalVcsToolsMissingError,
+  type VcsArg,
   createBlobBatchReader,
   detectLocalVcs,
   diffFileSummariesTrees,
@@ -22,9 +21,11 @@ import {
   listTrackedFilesAtCommit,
   readFileAtCommit,
   resolveRepoContext,
+  runVcs,
 } from "@dev.fast/local-vcs";
-import { structuralChangeCounts } from "@dev.fast/review-protocol";
+import { boardTitle, structuralChangeCounts } from "@dev.fast/review-protocol";
 import type {
+  PullRequestState,
   ReviewLanguageEnvironment,
   ReviewSourceEntry,
   StructuralDiffEvent,
@@ -68,6 +69,7 @@ import {
   type ReviewTarget,
   type SourcePins,
   anchorPins,
+  boardRepositoryId,
   elements,
   fileLineRangeSchema,
   pinnedRepositoryIds,
@@ -82,6 +84,7 @@ import {
   resolvePullRequest,
 } from "./provider.js";
 import {
+  GitHubRefusedRead,
   type PullRequestDeps,
   defaultPullRequestDeps,
   fetchPullRequest,
@@ -165,7 +168,14 @@ interface RepositoryVcs {
   vcs?: LocalVcs;
 }
 
+/** How long a PR's state is shown before it is read again. */
+const PULL_REQUEST_STATE_TTL_MS = 5 * 60_000;
+
+/** How many PR states are read from GitHub at once. */
+const PULL_REQUEST_STATE_READS = 2;
+
 /** Local source/resource boundary, including Desktop-only local language context. */
+
 export class LocalReviewData {
   private readonly workspaceManager?: ReviewWorkspaces;
 
@@ -301,7 +311,12 @@ export class LocalReviewData {
     if (commit && !anchor)
       await this.comparison(await this.documentPins(snapshot), commit);
 
-    const repositoryId = anchor?.repositoryId ?? snapshot.pins?.repositoryId;
+    const repositoryId =
+      anchor?.repositoryId ??
+      snapshot.pins?.repositoryId ??
+      (snapshot.target?.kind === "project"
+        ? snapshot.target.repositoryId
+        : undefined);
 
     if (!repositoryId)
       throw new ReviewInputError(
@@ -419,7 +434,7 @@ export class LocalReviewData {
       );
 
     if (!live) {
-      const { stdout } = await promisify(execFile)("git", [
+      const { stdout } = await runVcs("git", [
         "-C",
         rootPath,
         "status",
@@ -472,7 +487,7 @@ export class LocalReviewData {
           ),
         ));
 
-      const title = `${snapshot.title} — ${live ? "Live source" : side === "base" ? "Base source" : "Source"} — Whiteboard`;
+      const title = `${boardTitle(snapshot.title)} — ${live ? "Live source" : side === "base" ? "Base source" : "Source"} — Whiteboard`;
 
       const workspace = previous ?? {
         folders: [],
@@ -518,9 +533,14 @@ export class LocalReviewData {
     return { workspacePath, filePath };
   }
 
-  /** A document read that needs default pins; 409 when the document has none. */
+  /** A document read that needs default pins: its own, or for a plan its
+   * repository's live checkout with base at head; 409 when it has neither. */
   async documentPins(snapshot: Snapshot): Promise<Pins> {
-    const pins = await this.sourcePins(snapshot);
+    const pins =
+      (await this.sourcePins(snapshot)) ??
+      (snapshot.target?.kind === "project"
+        ? await this.livePins(snapshot.target.repositoryId)
+        : undefined);
 
     if (!pins)
       throw new ReviewInputError(
@@ -529,6 +549,21 @@ export class LocalReviewData {
       );
 
     return pins;
+  }
+
+  /** A checkout's current state, base at head: what a plan reads. */
+  private async livePins(repositoryId: string): Promise<Pins> {
+    const vcs = await this.vcs(repositoryId);
+
+    if (!vcs) throw unavailableCheckout();
+    const { revision, commit } = await this.worktreeState(repositoryId, vcs);
+
+    return {
+      repositoryId,
+      base: commit,
+      head: commit,
+      worktreeRevision: revision,
+    };
   }
 
   /** Pins a reference names itself, checked against the registered checkout. */
@@ -544,8 +579,14 @@ export class LocalReviewData {
   async unavailableAnchors(snapshot: Snapshot): Promise<string[]> {
     const missing = new Set<string>();
 
-    // Only Markdown needs parsing, so check the repositories first.
-    for (const repositoryId of pinnedRepositoryIds(snapshot.document))
+    // Only Markdown needs parsing, so check the repositories first. Its
+    // commit links read from the board's repository.
+    const repositoryIds = pinnedRepositoryIds(snapshot.document);
+    const boardRepository = boardRepositoryId(snapshot);
+
+    if (boardRepository) repositoryIds.add(boardRepository);
+
+    for (const repositoryId of repositoryIds)
       try {
         if (!existsSync(this.store.repositoryPath(repositoryId)))
           missing.add(repositoryId);
@@ -566,7 +607,10 @@ export class LocalReviewData {
 
   private readonly storedReferences = new VersionCache(
     (snapshot: Snapshot) =>
-      sourceReferences(snapshot.document, { tolerant: true }),
+      sourceReferences(snapshot.document, {
+        tolerant: true,
+        repositoryId: boardRepositoryId(snapshot),
+      }),
     { capacity: 512 },
   );
 
@@ -591,6 +635,8 @@ export class LocalReviewData {
       subscribe?: typeof subscribe;
       /** gh, git and GitHub API access for pull request targets. */
       pullRequests?: PullRequestDeps;
+      /** Read PR states from GitHub for the catalog. */
+      pullRequestStates?: boolean;
     } = {},
   ) {
     if (options.manageWorkspaces !== false)
@@ -972,6 +1018,7 @@ export class LocalReviewData {
     // that no longer exist; the author decides how to update changed source.
     for (const reference of sourceReferences(snapshot.document, {
       tolerant: true,
+      repositoryId: boardRepositoryId(snapshot),
     })) {
       try {
         await this.quote(anchorPins(reference.source, pins), reference.source);
@@ -989,6 +1036,13 @@ export class LocalReviewData {
     if (snapshot.target?.kind === "worktree")
       return (await this.resolveTarget(snapshot.target, snapshot.pins)).pins;
 
+    // A plan has no pins of its own, but its checkout must exist.
+    if (
+      snapshot.target?.kind === "project" &&
+      !existsSync(this.store.repositoryPath(snapshot.target.repositoryId))
+    )
+      throw unavailableCheckout();
+
     if (!snapshot.pins) return undefined;
 
     if (!existsSync(this.store.repositoryPath(snapshot.pins.repositoryId)))
@@ -1003,18 +1057,15 @@ export class LocalReviewData {
     if (!vcs || vcs.kind !== "git") return undefined;
 
     try {
-      const run = promisify(execFile);
-
-      const { stdout } = await run("git", [
+      const { stdout } = await runVcs("git", [
         "-C",
         vcs.rootPath,
         "rev-parse",
         "--symbolic-full-name",
         "--verify",
-        "--end-of-options",
         !headRef || /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(headRef)
           ? "HEAD"
-          : headRef,
+          : { rev: headRef },
       ]);
 
       const ref = stdout.trim();
@@ -1039,6 +1090,9 @@ export class LocalReviewData {
     target: ReviewTarget,
     pinned?: Pins,
   ): Promise<{ target: ReviewTarget; pins: Pins }> {
+    if (target.kind === "project")
+      throw new ReviewInputError("A project target has no commits.");
+
     const vcs = await this.vcs(target.repositoryId);
 
     if (!vcs) throw unavailableCheckout();
@@ -1150,10 +1204,147 @@ export class LocalReviewData {
 
     return { ref: branch, commit: fork.commit };
   }
+  /** Each PR's state, by URL, as last read. */
+  private readonly pullRequestStates = new Map<
+    string,
+    {
+      state?: PullRequestState;
+      /** The branch it merges into, and its own. */
+      baseBranch?: string;
+      headBranch?: string;
+      readAt: number;
+      /** When a board last showed it; a deleted board's PR is forgotten. */
+      seenAt: number;
+      reading: boolean;
+    }
+  >();
+
+  private readonly pullRequestStateListeners = new Set<() => void>();
+  private pullRequestStateTimer: ReturnType<typeof setInterval> | undefined;
+  private readonly pullRequestStateQueue: string[] = [];
+  private pullRequestStateReads = 0;
+
+  /** While GitHub rate-limits, no state is read. */
+  private pullRequestStatesPausedUntil = 0;
+
+  /** Calls back when a PR's state changes. While anyone listens, every PR
+   * still shown is read again once its state is a few minutes old. */
+  subscribePullRequestStates(listener: () => void): () => void {
+    this.pullRequestStateListeners.add(listener);
+    this.pullRequestStateTimer ??= setInterval(() => {
+      for (const [url, entry] of this.pullRequestStates)
+        if (Date.now() - entry.seenAt > 2 * PULL_REQUEST_STATE_TTL_MS)
+          this.pullRequestStates.delete(url);
+        else this.pullRequestState(url, { seen: false });
+      this.readPullRequestStates();
+    }, PULL_REQUEST_STATE_TTL_MS / 5);
+    this.pullRequestStateTimer.unref?.();
+
+    return () => {
+      this.pullRequestStateListeners.delete(listener);
+
+      if (!this.pullRequestStateListeners.size) {
+        clearInterval(this.pullRequestStateTimer);
+        this.pullRequestStateTimer = undefined;
+      }
+    };
+  }
+
+  /** A PR's state as last read from GitHub; a read older than a few minutes
+   * queues another in the background. Undefined until the first read lands,
+   * and a failed read keeps the last state. A merged or closed PR is not
+   * read again. */
+  pullRequestState(
+    url: string | undefined,
+    { seen = true }: { seen?: boolean } = {},
+  ): PullRequestState | undefined {
+    if (!url || !this.options.pullRequestStates) return undefined;
+
+    const entry = this.pullRequestStates.get(url) ?? {
+      readAt: 0,
+      seenAt: 0,
+      reading: false,
+    };
+
+    this.pullRequestStates.set(url, entry);
+
+    if (seen) entry.seenAt = Date.now();
+
+    if (
+      !entry.reading &&
+      entry.state !== "merged" &&
+      entry.state !== "closed" &&
+      Date.now() - entry.readAt > PULL_REQUEST_STATE_TTL_MS
+    ) {
+      entry.reading = true;
+      this.pullRequestStateQueue.push(url);
+      this.readPullRequestStates();
+    }
+
+    return entry.state;
+  }
+
+  /** Reads queued PR states a few at a time. */
+  private readPullRequestStates() {
+    while (
+      this.pullRequestStateReads < PULL_REQUEST_STATE_READS &&
+      this.pullRequestStateQueue.length &&
+      Date.now() >= this.pullRequestStatesPausedUntil
+    ) {
+      const url = this.pullRequestStateQueue.shift()!;
+      const entry = this.pullRequestStates.get(url);
+
+      if (!entry) continue;
+      this.pullRequestStateReads++;
+      void Promise.resolve()
+        .then(() => {
+          const { provider, address } = resolvePullRequest(url);
+
+          return provider.readPullRequest(
+            address,
+            this.options.pullRequests ?? defaultPullRequestDeps,
+          );
+        })
+        .then((pullRequest) => {
+          if (
+            (!pullRequest.state || pullRequest.state === entry.state) &&
+            pullRequest.baseRefName === entry.baseBranch &&
+            pullRequest.headBranch === entry.headBranch
+          )
+            return;
+          entry.state = pullRequest.state ?? entry.state;
+          entry.baseBranch = pullRequest.baseRefName;
+          entry.headBranch = pullRequest.headBranch;
+
+          for (const listener of this.pullRequestStateListeners) listener();
+        })
+        .catch((error) => {
+          if (error instanceof GitHubRefusedRead)
+            this.pullRequestStatesPausedUntil = error.retryAt;
+        })
+        .finally(() => {
+          entry.readAt = Date.now();
+          entry.reading = false;
+          this.pullRequestStateReads--;
+          this.readPullRequestStates();
+        });
+    }
+  }
+
+  /** The branch a PR merges into, as last read with its state. */
+  pullRequestBaseBranch(url: string): string | undefined {
+    return this.pullRequestStates.get(url)?.baseBranch;
+  }
+
+  /** A PR's own branch, as last read with its state. */
+  pullRequestHeadBranch(url: string): string | undefined {
+    return this.pullRequestStates.get(url)?.headBranch;
+  }
+
   /** The PR's current comparison, fetched into a registered checkout of its repository. */
   async resolvePullRequest(
     url: string,
-    repository: { id?: string; preferred?: string },
+    repository: { id: string },
   ): Promise<ResolvedPullRequest> {
     const deps = this.options.pullRequests ?? defaultPullRequestDeps;
     const { provider, address } = resolvePullRequest(url);
@@ -1201,19 +1392,14 @@ export class LocalReviewData {
   private async pullRequestCheckout(
     provider: PullRequestProvider,
     address: PullRequestAddress,
-    repository: { id?: string; preferred?: string },
+    repository: { id: string },
     deps: PullRequestDeps,
   ) {
-    const registered = this.store.repositories();
+    const candidates = this.store
+      .repositories()
+      .filter((entry) => entry.id === repository.id);
 
-    const candidates = repository.id
-      ? registered.filter((entry) => entry.id === repository.id)
-      : [
-          ...registered.filter((entry) => entry.id === repository.preferred),
-          ...registered.filter((entry) => entry.id !== repository.preferred),
-        ];
-
-    if (repository.id && candidates.length === 0)
+    if (candidates.length === 0)
       throw new ReviewInputError("Repository is not registered.", 404);
 
     for (const { id } of candidates) {
@@ -1241,9 +1427,7 @@ export class LocalReviewData {
     const name = host === "github.com" ? slug : `${host}/${slug}`;
 
     throw new ReviewInputError(
-      repository.id
-        ? `That checkout has no remote for ${name}. Add one, or omit repositoryId.`
-        : `No registered checkout has a remote for ${name}. Register a checkout of ${name} with review_register_repository first, or pass a target.`,
+      `That checkout has no remote for ${name}. Name a checkout of ${name} as the target's repositoryPath.`,
       404,
     );
   }
@@ -1299,6 +1483,74 @@ export class LocalReviewData {
     const [base, head] = await Promise.all([changed("base"), changed("head")]);
 
     return { base, head };
+  }
+  /** What a commit is, for a quote read at it: its subject, author and
+   * date, and how far behind the default branch's tip it is when both are
+   * known. */
+  async commitInfo(
+    repositoryId: string,
+    commit: string,
+  ): Promise<{
+    commit: string;
+    subject: string;
+    author: string;
+    authoredAt: string;
+    behind?: { count: number; branch: string };
+  }> {
+    const vcs = await this.vcs(repositoryId);
+
+    if (!vcs) throw unavailableCheckout();
+
+    const git = async (...args: VcsArg[]) =>
+      (await runVcs("git", ["-C", vcs.rootPath, ...args])).stdout.trim();
+
+    let line: string;
+
+    try {
+      line = await git("log", "-1", "--format=%H%x00%s%x00%an%x00%aI", {
+        rev: commit,
+      });
+    } catch {
+      throw new ReviewInputError("That commit is not in the repository.", 404);
+    }
+
+    const [full = commit, subject = "", author = "", authoredAt = ""] =
+      line.split("\0");
+
+    const branch = await vcs.defaultBranch().catch(() => null);
+
+    const behind = branch
+      ? await git("rev-list", "--count", { rev: `${full}..${branch.commit}` })
+          .then((count) => ({
+            count: Number(count),
+            branch: branch.ref.replace(/^origin\//, ""),
+          }))
+          .catch(() => undefined)
+      : undefined;
+
+    return {
+      commit: full,
+      subject,
+      author,
+      authoredAt,
+      ...(behind && { behind }),
+    };
+  }
+  /** The full commit a commit ID or its prefix names in the repository,
+   * or undefined when it names none. */
+  async resolveCommit(
+    repositoryId: string,
+    commit: string,
+  ): Promise<string | undefined> {
+    const vcs = await this.vcs(repositoryId);
+
+    if (!vcs) throw unavailableCheckout();
+    const resolved = await vcs.resolveRevision(commit);
+
+    // A branch or tag spelled in hex is not the commit it seems.
+    return resolved?.commit.startsWith(commit.toLowerCase())
+      ? resolved.commit
+      : undefined;
   }
   async validatePins(pins: Pins) {
     if (pins.worktreeRevision) {
@@ -1925,29 +2177,41 @@ export function openLocalReviewStore(
     manageWorkspaces?: boolean;
     subscribe?: typeof subscribe;
     pullRequests?: PullRequestDeps;
+    pullRequestStates?: boolean;
+    /** From `groupCheckoutsAhead`. */
+    checkoutOwners?: ReadonlyMap<string, string>;
   } = {},
 ) {
-  const store: ReviewStore = new ReviewStore(databasePath, {
-    projectSource: (snapshot, pins) => data.projectSource(snapshot, pins),
-    resolveTarget: (target, pinned) => data.resolveTarget(target, pinned),
-    resolvePullRequest: (url, repository) =>
-      data.resolvePullRequest(url, repository),
-    pullRequestTitle: (url) => data.pullRequestTitle(url),
-    headBranch: (pins, headRef) => data.headBranch(pins, headRef),
-    sourcePins: (snapshot) => data.sourcePins(snapshot),
-    unavailableAnchors: (snapshot) => data.unavailableAnchors(snapshot),
-    validatePins: (pins) => data.validatePins(pins),
-    filesChangedBetween: (from, to) => data.filesChangedBetween(from, to),
-    validateSource: (pins, source, options) =>
-      data.validateSource(pins, source, options),
-    validateResource: (pins, block) => data.validateResource(pins, block),
-  });
+  const { checkoutOwners, ...dataOptions } = options;
+
+  const store: ReviewStore = new ReviewStore(
+    databasePath,
+    {
+      projectSource: (snapshot, pins) => data.projectSource(snapshot, pins),
+      resolveTarget: (target, pinned) => data.resolveTarget(target, pinned),
+      resolvePullRequest: (url, repository) =>
+        data.resolvePullRequest(url, repository),
+      pullRequestTitle: (url) => data.pullRequestTitle(url),
+      headBranch: (pins, headRef) => data.headBranch(pins, headRef),
+      sourcePins: (snapshot) => data.sourcePins(snapshot),
+      unavailableAnchors: (snapshot) => data.unavailableAnchors(snapshot),
+      validatePins: (pins) => data.validatePins(pins),
+      resolveCommit: (repositoryId, commit) =>
+        data.resolveCommit(repositoryId, commit),
+      filesChangedBetween: (from, to) => data.filesChangedBetween(from, to),
+      validateSource: (pins, source, options) =>
+        data.validateSource(pins, source, options),
+      validateResource: (pins, block) => data.validateResource(pins, block),
+      pullRequestBaseBranch: (url) => data.pullRequestBaseBranch(url),
+    },
+    checkoutOwners,
+  );
 
   let data: LocalReviewData;
 
   try {
     data = new LocalReviewData(store, {
-      ...options,
+      ...dataOptions,
       workspaceDatabase: `${databasePath}.workspaces`,
     });
   } catch (error) {

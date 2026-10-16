@@ -69,13 +69,15 @@ export function testReviewSession(
       },
     }),
     review: {
+      reviewId: config.reviewId ?? "test-review",
       pins: { base: "a".repeat(40), head: "b".repeat(40) },
       historicalRevision: null,
       updatedAtMs: Date.now(),
       traces: new Map(),
-      stack: async () => [],
+      place: async () => ({ siblings: [] }),
+      stack: async () => ({ layers: [] }),
       createBranchReview: async () => "",
-      dismiss: async () => {},
+      dismiss: async () => true,
     },
   };
 }
@@ -102,6 +104,7 @@ export function testApiDocumentData(blocks: Block[]): ApiDocumentData {
     anchors: new Map(),
     images: new Map(),
     traces: new Map(),
+    boards: new Map(),
     maps: new Map(),
   };
 }

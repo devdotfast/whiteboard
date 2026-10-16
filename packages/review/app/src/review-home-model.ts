@@ -1,4 +1,4 @@
-import type { ReviewApiSummary } from "@dev.fast/review-protocol";
+import { type ReviewApiSummary, boardTitle } from "@dev.fast/review-protocol";
 import { fuzzyMatches } from "@review/fuzzy-match";
 
 export type HomeSort = "updated" | "created" | "title" | "trash";
@@ -8,7 +8,7 @@ export type HomeGroup = "unread" | "week" | "earlier";
 export type HomeFacet = "repositories" | "worktrees" | "branches";
 
 export const homeFacetLabels: Record<HomeFacet, string> = {
-  repositories: "Repo",
+  repositories: "Project",
   worktrees: "Worktree",
   branches: "Branch",
 };
@@ -42,10 +42,6 @@ export const homeGroups: { id: HomeGroup; label: string }[] = [
   { id: "week", label: "Last 7 days" },
   { id: "earlier", label: "Older than 7 days" },
 ];
-
-export function reviewTitle(review: ReviewApiSummary): string {
-  return review.title.trim() || "Untitled whiteboard";
-}
 
 /** Empty for shared imports, whose pinned checkouts aren't the user's worktrees. */
 export function worktreeLabel(review: ReviewApiSummary): string {
@@ -124,13 +120,16 @@ export function trashDaysLeft(review: ReviewApiSummary, now: number): number {
 export function repositoryIdentity(
   review: ReviewApiSummary,
 ): { key: string; label: string } | undefined {
-  if (review.repositoryGroup)
-    return review.host
-      ? {
-          key: review.repositoryGroup.key,
-          label: `${review.host}: ${review.repositoryGroup.label}`,
-        }
-      : review.repositoryGroup;
+  // A board's project names its repository, across its checkouts. One on
+  // another machine is that machine's: the gateway keys it with the host.
+  if (review.project)
+    return {
+      key: review.project.id,
+      label: review.host
+        ? `${review.host}: ${review.project.name}`
+        : review.project.name,
+    };
+
   const remote = review.shared?.cloneUrl || review.origin?.pullRequestUrl;
 
   if (!remote) return undefined;
@@ -235,7 +234,7 @@ export function matchesHomeFilters(
       .every((term) =>
         fuzzyMatches(
           term.trim(),
-          reviewTitle(review),
+          boardTitle(review.title),
           worktreeLabel(review),
           review.origin?.branch ?? "",
           review.origin?.pullRequestTitle ?? "",
@@ -255,7 +254,7 @@ export function sortHomeReviews(
       review.reviewId,
       queries.filter(
         (query) =>
-          query.trim() && fuzzyMatches(query.trim(), reviewTitle(review)),
+          query.trim() && fuzzyMatches(query.trim(), boardTitle(review.title)),
       ).length,
     ]),
   );
@@ -273,7 +272,7 @@ export function sortHomeReviews(
       return Date.parse(b.trashedAt!) - Date.parse(a.trashedAt!);
 
     if (sort === "title")
-      return reviewTitle(a).localeCompare(reviewTitle(b)) || updated;
+      return boardTitle(a.title).localeCompare(boardTitle(b.title)) || updated;
 
     if (sort === "created")
       return (

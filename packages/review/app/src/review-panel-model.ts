@@ -75,13 +75,11 @@ export type AskView =
       passage?: AskPassage;
     };
 
-/** What the pill says about a conversation it stands in for. */
+/** Who answers in an Ask. */
 export interface AskPresence {
   /** Absent for the list of conversations, which has no one agent. */
   agent?: AskAgentId;
   agentName: string;
-  status: string;
-  tone: "quiet" | "waiting" | "failed";
 }
 
 /** One open Ask: a conversation with a local agent about a selection, or
@@ -92,29 +90,27 @@ export interface AskPanel {
   view: AskView;
   /** The conversation it shows, once it has one. */
   threadId: string | null;
-  /** Its agent is working: closing it stops the agent, so it asks first,
-   * and a new question opens beside it rather than in its place. */
+  /** Its agent is answering or waiting on the reviewer: closing it stops
+   * the agent, so it asks first, and what replaces it floats it in the
+   * window. */
   busy: boolean;
   presence: AskPresence;
+  /** Opened where the reader is editing, which keeps the caret: its
+   * composer waits to be clicked into. */
+  unfocused?: true;
 }
 
 /** What an open Ask says about itself as its conversation goes. */
 export type AskReport = Pick<AskPanel, "threadId" | "busy" | "presence">;
 
-/** Where Ask shows: in the side panel, or in a window over the canvas that
- * stays above peeks, fullscreen diagrams and every view. One Ask at most
- * shows in each; the others are pills. */
-export type AskPlace = "docked" | "window";
+/** How a thread shows: in the column, or in the window over the board that
+ * stays above peeks, fullscreen diagrams and every view. */
+export type AskShown = "panel" | "window";
 
-/** How an Ask shows now: in the side panel, in the window, or as a pill
- * that says what its agent is doing. A docked Ask that a peek or a
- * fullscreen diagram covers shows as a pill. */
-export type AskShown = "panel" | "window" | "pill";
-
-/** Where Ask floats, shared by its window and its pill: a corner of the
- * canvas beside any docked panel, and how far the same corner of the window
- * or pill is from it. Keeping to a corner, Ask moves aside as a panel docks
- * and follows the canvas as it resizes. */
+/** Where the window floats: a corner of the canvas beside any docked
+ * panel, and how far the same corner of the window is from it. Keeping to
+ * a corner, it moves aside as a panel docks and follows the canvas as it
+ * resizes. */
 export interface AskAnchor {
   x: "left" | "right";
   y: "top" | "bottom";

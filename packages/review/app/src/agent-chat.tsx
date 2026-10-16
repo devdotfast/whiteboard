@@ -31,6 +31,14 @@ export function AgentChatUserMessage({
   );
 }
 
+/** The bubble on a tray (Ask's panel, the right column), lifted off it. */
+export const trayBubbleStyles = stylex.create({
+  bubble: {
+    padding: "10px 14px",
+    backgroundColor: tokens.trayRaised,
+  },
+});
+
 const styles = stylex.create({
   message: {
     display: "flex",
@@ -56,7 +64,7 @@ const styles = stylex.create({
     maxWidth: "100%",
   },
   caption: {
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
     color: tokens.inkFaint,
   },

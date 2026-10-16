@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 
 import { openLocalReviewStore } from "@review/review-api/local-data";
-import { ReviewStore, SCRATCHPAD_ID } from "@review/review-api/store";
+import { ReviewStore } from "@review/review-api/store";
 import { ReviewTelemetry } from "@review/review-telemetry";
 import { expect, it, vi } from "vitest";
 
@@ -27,7 +27,7 @@ it("keeps a client's occurrence time only within the recent past", () => {
   expect(clientOccurredAt(undefined, now)).toBe(now);
 });
 
-it("derives source_kind from the review's stored target, or the scratchpad kind", async () => {
+it("derives source_kind from the review's stored target", async () => {
   const store = new ReviewStore(":memory:", {
     validatePins: async () => {},
     validateSource: async () => {},
@@ -51,8 +51,6 @@ it("derives source_kind from the review's stored target, or the scratchpad kind"
     });
 
     expect(sessionStartedSourceKind(store, reviewId)).toBe("commits");
-    await store.ensureScratchpad();
-    expect(sessionStartedSourceKind(store, SCRATCHPAD_ID)).toBe("scratchpad");
     expect(sessionStartedSourceKind(store, randomUUID())).toBeUndefined();
     expect(sessionStartedSourceKind(store, undefined)).toBeUndefined();
   } finally {
@@ -68,7 +66,16 @@ it("enriches session_started with source_kind on the global /telemetry/event rou
   const local = openLocalReviewStore(path.join(home, "review-api.db"));
   const token = "session-telemetry-test-token";
 
-  await local.store.ensureScratchpad();
+  const { reviewId } = await local.store.execute({
+    operation: {
+      type: "create",
+      title: "Plan",
+      target: {
+        kind: "project",
+        repositoryId: local.store.registerRepository(process.cwd()).id,
+      },
+    },
+  });
 
   const telemetry = ReviewTelemetry.fromEnv({
     ...process.env,
@@ -93,7 +100,7 @@ it("enriches session_started with source_kind on the global /telemetry/event rou
     await server.listen();
 
     const context = {
-      reviewUuid: SCRATCHPAD_ID,
+      reviewUuid: reviewId,
       presentationSessionId: randomUUID(),
     };
 
@@ -110,7 +117,7 @@ it("enriches session_started with source_kind on the global /telemetry/event rou
     expect(response.status).toBe(200);
     expect(captureUiEvent).toHaveBeenCalledWith(
       "review_session_started",
-      { source_kind: "scratchpad" },
+      { source_kind: "project" },
       context,
       expect.any(Number),
     );

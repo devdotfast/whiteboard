@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { isAbsolute, relative } from "node:path";
-import { promisify } from "node:util";
 
-const exec = promisify(execFile);
+import { runVcs } from "@dev.fast/local-vcs";
 
 const normalize = (name: string) => name.replaceAll("\\", "/").normalize("NFC");
 
@@ -53,7 +51,7 @@ export async function ignoredDirectories(
   gitDirectory?: string,
 ): Promise<string[]> {
   try {
-    const { stdout } = await exec(
+    const { stdout } = await runVcs(
       "git",
       [
         "-C",
@@ -105,7 +103,7 @@ export async function gitDirectoryPrefix(
   common: string,
 ): Promise<string | null> {
   try {
-    const { stdout } = await exec("git", [
+    const { stdout } = await runVcs("git", [
       "-C",
       rootPath,
       "rev-parse",

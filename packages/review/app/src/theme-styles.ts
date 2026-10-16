@@ -18,8 +18,8 @@ export const themeStyles = stylex.create({
     // declared, so declaring them further up would freeze the dark values.
     // The workbench has no font custom property to bridge to -- it hardcodes a
     // stack per platform and per language -- so Desktop's review.css publishes
-    // --review-chrome-font; the browser build keeps the canvas's mono face.
-    "--chrome-font": "var(--review-chrome-font, var(--font-mono))",
+    // --review-chrome-font; the browser build uses the canvas's own Inter.
+    "--chrome-font": "var(--review-chrome-font, var(--font-sans))",
     // The workbench publishes a font-weight ramp, so the weights bridge like the
     // color tokens below. The sizes are fixed at the end of this rule.
     "--chrome-font-weight": "var(--vscode-fontWeight-regular, 400)",
@@ -80,7 +80,7 @@ export const themeStyles = stylex.create({
     color: tokens.ink,
     backgroundColor: tokens.bg,
     colorScheme: "dark",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   light: {
     "--ghost": "#cdd1d8",
@@ -147,6 +147,7 @@ export const themeStyles = stylex.create({
     "--change-added": "#1b9a57",
     "--change-removed": "#d8402c",
     "--change-modified": "#c98a0b",
+    "--merged": "#8250df",
     "--warning-wash": "rgba(201, 138, 11, 0.1)",
     "--warning-outline": "rgba(201, 138, 11, 0.24)",
     "--on-warning": "#4a3514",

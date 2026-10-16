@@ -43,23 +43,9 @@ export const canvasQueryKeys = {
     trace: string | null | undefined,
     storage: AgentTraceStorage | null | undefined,
   ) => ["agent-trace", sessionId, trace ?? null, storage ?? null] as const,
-  commitFiles: (commit: string) => ["commit-files", commit] as const,
   askThread: (threadId: string) => ["ask-thread", threadId] as const,
   diffFiles: (documentKey: string, source: number, revision?: string) =>
     ["diff-files", documentKey, source, revision] as const,
-  reviewStack: (
-    version: number | undefined,
-    pullRequestNumber: number | null,
-    pullRequestUrl: string | null,
-    branch: string | null,
-  ) =>
-    [
-      "review-stack",
-      version,
-      pullRequestNumber,
-      pullRequestUrl,
-      branch,
-    ] as const,
   lensProgress: (version: number) => ["lens-progress", version] as const,
   allLensProgress: () => ["lens-progress"] as const,
 };

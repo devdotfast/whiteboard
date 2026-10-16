@@ -18,6 +18,7 @@ import {
   type AskThreadStart,
   askThreadLimits,
 } from "@review/ask/thread.js";
+import { ASK_THREAD_ENV } from "@review/review-api/request-origin.js";
 
 /** How long an agent may take to say what it offers. */
 const OFFER_TIMEOUT_MS = 30_000;
@@ -163,7 +164,7 @@ export function cliAskTools(
   ];
 
   return {
-    mcpServers: () => {
+    mcpServers: (threadId) => {
       const cli = cliPath();
 
       return cli
@@ -172,7 +173,9 @@ export function cliAskTools(
               name: "whiteboard",
               command: process.execPath,
               args: [cli, "mcp"],
-              env: env(),
+              // MCP clients may not pass their own env on, so the server
+              // gets the thread it serves in its own.
+              env: [...env(), { name: ASK_THREAD_ENV, value: threadId }],
             },
           ]
         : [];
@@ -218,6 +221,8 @@ export class AskThreads {
 
   private readonly mcpServers: AskMcpServers;
 
+  private readonly statusListeners = new Set<() => void>();
+
   constructor(
     private readonly launch: AskAgentLauncher,
     private readonly tools: AskTools = {},
@@ -249,6 +254,8 @@ export class AskThreads {
     );
 
     this.threads.set(thread.id, thread);
+    thread.onStatusChange(() => this.statusChanged());
+    this.statusChanged();
     void thread.open();
     this.sweeper ??= setInterval(() => this.sweep(), SWEEP_MS);
     this.sweeper.unref?.();
@@ -291,6 +298,19 @@ export class AskThreads {
     }
   }
 
+  /** Calls back when a thread opens, closes or changes its status. */
+  subscribeStatus(listener: () => void) {
+    this.statusListeners.add(listener);
+
+    return () => {
+      this.statusListeners.delete(listener);
+    };
+  }
+
+  private statusChanged() {
+    for (const listener of this.statusListeners) listener();
+  }
+
   get(id: string) {
     return this.threads.get(id);
   }
@@ -313,9 +333,10 @@ export class AskThreads {
 
   close(id: string, save = true) {
     const thread = this.threads.get(id);
-    this.threads.delete(id);
     this.unwatchedSince.delete(id);
     thread?.close(save);
+
+    if (this.threads.delete(id)) this.statusChanged();
   }
 
   closeDeletedReviews(isDeleted: (reviewId: string) => boolean) {

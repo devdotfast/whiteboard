@@ -24,7 +24,11 @@ export function AskSelectionQuote({
           askPanelStyles.selectionCaption,
         )}
       >
-        {target.kind === "text" ? "Selection" : "Code"}
+        {target.kind === "text"
+          ? "Selection"
+          : target.kind === "code"
+            ? "Code"
+            : "Whiteboard"}
       </figcaption>
       <blockquote {...stylex.props(askPanelStyles.selectionQuote)}>
         {target.kind === "text" ? target.quote : selection.title}

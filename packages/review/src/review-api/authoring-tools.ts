@@ -1,3 +1,4 @@
+import { type JsonValue, isJsonObject } from "@dev.fast/json";
 import { z } from "zod";
 
 import {
@@ -15,10 +16,7 @@ import { commandSchema } from "./store.js";
 /** The host publishes its input schemas, except where agents write less than
  * the host accepts (publishedEditSchema, publishedLensEditSchema) or name a
  * checkout by path (pathTargetSchema); adapters validate nothing. */
-export function authoringTools(
-  scratchpadAvailable = false,
-  traceEnabled = false,
-) {
+export function authoringTools(traceEnabled = false) {
   const id = z.string().min(1);
   const review = { reviewId: id };
 
@@ -31,19 +29,21 @@ export function authoringTools(
       ...trace.shape,
       kind: z.enum(["image", "trace"]),
     })
+    .omit({ repositoryId: true })
+    .extend({ repositoryPath: id })
     .partial()
-    .required({ id: true, repositoryId: true, kind: true });
+    .required({ id: true, repositoryPath: true, kind: true });
 
   const descriptions = {
     create:
-      'Create a review of saved working files, immutable commits or a GitHub PR. Revisions are resolved on acceptance. A worktree target reviews the saved files in its checkout, uncommitted ones included and untracked ones left out (git add -N a new file to include it), against base: the branch to compare against, by default the default branch of the repository. The diff starts at the merge base of base and HEAD, which follows rebases. Omitted commits base means source at head with no diff; supply the parent to review introduced changes. For a branch stacked on another, pass the branch below it as base; Desktop links reviews into a stack through their bases. For a GitHub PR, pullRequestUrl alone is enough: target and title become optional, and the host fetches the PR into a registered checkout of its repository and pins the current PR head and GitHub diff base, titled from the PR. When the existing review for that PR is in Trash, creation reports its ID; restore it with review_lifecycle state:"active" before continuing. When an active review for that PR exists, it is returned instead, reporting whether its head moved and whether an agent is working on it; update it in place, move its target with review_set_target, or create a separate review with reuseExisting. kind:"scratchpad" names the one scratchpad, which the host creates itself. The result carries review, the review as review_list shows it: its target with resolved commits, origin (its PR), repositoryName and repositoryPath, so no follow-up read is needed before diffing. When Desktop is available the review opens there and the result reports opened, softwareMapEnabled and environmentIssues, as review_open does; set open:false to author in the background without taking over Desktop.',
+      'Create a whiteboard. target names its repository by the checkout\'s path, and what it shows: {kind:"project"} for a plan in that repository\'s project with no change; {kind:"worktree", base?} for the saved files in the checkout, uncommitted ones included and untracked ones left out (git add -N a new file to include it), against base, by default the repository\'s default branch, from the merge base of base and HEAD, which follows rebases; {kind:"commits", head, base?} for immutable commits (omitted base means source at head with no diff; supply the parent to review introduced changes); {kind:"pullRequest", pullRequest} for a GitHub PR by URL or number, fetched into that checkout and pinned at the PR head and GitHub diff base. For a branch stacked on another, pass the branch below it as base; Desktop links whiteboards into a stack through their bases. Revisions are resolved on acceptance. With a PR and no title the PR\'s title is used. When the existing review for that PR is in Trash, creation reports its ID; restore it with review_lifecycle state:"active" before continuing. When an active review for that PR exists, it is returned instead, reporting whether its head moved and whether an agent is working on it; update it in place, move its target with review_set_target, or create a separate review with reuseExisting:false. The result carries review, as review_list shows it, with its target and repositoryPath, so no follow-up read is needed before diffing. When Desktop is available the review opens there and the result reports opened, softwareMapEnabled and environmentIssues, as review_open does; set open:false to author in the background without taking over Desktop. parentId and dependsOn set its place among the project\'s reviews, as review_set_parent and review_set_dependencies do.',
     set_target:
-      "Move the review to a new target, such as the commits after a rebase or amend, preserving the document and component IDs. Revisions are resolved on acceptance. Returns warnings for retained source ranges in files the new commits changed, to verify, and resources that no longer match; fix them with review_edit. Earlier versions keep their source. Omitted pullRequestUrl keeps the PR within the same repository; changing repositories clears it. Supply a URL to replace it or null to detach.",
+      "Move the review to a new target (the same targets review_create takes), such as the commits after a rebase or amend, or commits or a PR for a board that had none. The document and component IDs are kept. Revisions are resolved on acceptance. Returns warnings for retained source ranges in files the new commits changed, to verify, and resources that no longer match; fix them with review_edit. Earlier versions keep their source. A PR target names the PR; other targets keep it within the same repository and clear it across repositories.",
     edit: [
-      "Edit one document component. content is one component, named by its type; each type's fields are in the Components section of session_get_instructions (authoring or scratchpad).",
-      "Anchors are head/path#L10-L20 or base/path#L7, or diff/path#L84-R90 for a range across sides, with repository-relative paths and 1-based inclusive lines. pins {repositoryId, head, base?} say which commits anchors quote: a step, frame, attachment or operation without pins uses its block's, and a block without them the review's.",
-      "insert adds content: parentId nests it, afterId places it, and omitted placement appends (on the scratchpad, it lands at the top). update patches a component's own fields; null removes an optional one. A section's children and a diagram's units change through their own IDs; a call stack's frames change by replacing the call stack. move and remove take a targetId; removing a flow_node removes its edges.",
-      "The host assigns short durable IDs. The result names the edited component and, for an insert or replace, its first-level children, and quotes the first and last line of each anchor the edit added or changed (the first 20; unquotedAnchors counts the rest): check they are the lines you meant. Accepted edits save at once.",
+      "Edit one document component. content is one component, named by its type; each type's fields are in the Components section of session_get_instructions.",
+      "Anchors are head/path#L10-L20 or base/path#L7, or diff/path#L84-R90 for a range across sides, with repository-relative paths and 1-based inclusive lines. pins {head, base?} say which commits of the whiteboard's repository anchors quote: a step, frame, attachment or operation without pins uses its block's, and a block without them the review's.",
+      "insert adds content: parentId nests it, afterId places it, and omitted placement appends. update patches a component's own fields; null removes an optional one. A section's children and a diagram's units change through their own IDs; a call stack's frames change by replacing the call stack. move and remove take a targetId; removing a flow_node removes its edges.",
+      "The host assigns short durable IDs. The result names the edited component and, for an insert or replace, its first-level children, and quotes the first and last line of each anchor the edit added or changed (the first 20; unquotedAnchors counts the rest): check they are the lines you meant. Accepted edits save at once. An edit to a block the user is editing is refused with an error: edit another block, or retry later.",
       "While a reader may be watching, write small and often: one paragraph per edit. Insert a new diagram whole. Change one already drawn a unit at a time (a flow_node, flow_edge or step, with parentId naming the diagram), and link each added flow_node to a node already drawn.",
     ].join("\n"),
     lens_edit:
@@ -56,7 +56,11 @@ export function authoringTools(
     lifecycle:
       "Move a review between active and trash. Trash retains the review for 30 days before automatic deletion. Moving it back to active restores it; moving it to trash again does not restart that period.",
     delete:
-      "Permanently delete a review and its history. The review must be in Trash. This cannot be undone.",
+      "Permanently delete a review and its history. The review must be in Trash. This cannot be undone. Its children move up to top level, and dependencies on it are dropped.",
+    set_parent:
+      "Nest the review under another review of the same project, or make it top-level with parentId:null. Nesting is one level deep: the parent must be top-level, and a review with children can't become a child. The sidebar shows children under their parent. Saves no review version. Returns the review's relations: parentId, children in sibling order, and dependsOn.",
+    set_dependencies:
+      "Replace the list of reviews this one builds on: any reviews of the same project. Siblings list after what they depend on, directly or through other reviews; a PR stack is a chain. A list that would close a cycle is refused, naming the cycle. Saves no review version. Returns the review's relations.",
   };
 
   const tool = (
@@ -70,7 +74,7 @@ export function authoringTools(
     name: `review_${name === "restore" ? "restore_version" : name}`,
     description,
     inputSchema: {
-      ...z.toJSONSchema(schema, { io: "input" }),
+      ...withoutRepositoryIds(z.toJSONSchema(schema, { io: "input" })),
       type: "object" as const,
     },
     method,
@@ -92,9 +96,6 @@ export function authoringTools(
       'Read Whiteboard\'s guidance before creating or editing a review. The default topic gives the authoring workflow; "file-lenses" covers Diff-view file lenses.' +
         (traceEnabled
           ? ' Call review_get_instructions({topic:"trace-archaeology"}) for why code exists, what an agent was thinking, or whether an agent solved this before.'
-          : "") +
-        (scratchpadAvailable
-          ? ' When the user asks in conversation to be shown how code works or wants a diagram, without asking for a review, draw it on the scratchpad rather than answering only in chat: call review_get_instructions({topic:"scratchpad"}) first. A request for a review or to use Whiteboard means authoring a review with the default topic.'
           : ""),
       instructionsQuerySchema.partial(),
       "GET",
@@ -124,10 +125,12 @@ export function authoringTools(
     ...commandSchema.shape.operation.options.map((operation) => {
       const type = operation.shape.type.value;
 
-      // Agents name a checkout by its path; /commands registers it.
+      // Hidden from agents: they name checkouts by path inside the target
+      // and give PRs as a target.
       const {
         type: _type,
         repositoryId: _repositoryId,
+        pullRequestUrl: _pullRequestUrl,
         ...fields
       }: Record<string, z.ZodType> = operation.shape;
 
@@ -137,12 +140,7 @@ export function authoringTools(
         z.strictObject({
           ...fields,
           ...(type === "create" && {
-            target: pathTargetSchema.optional(),
-            repositoryPath: id
-              .optional()
-              .describe(
-                "Only with pullRequestUrl and no target: the local checkout to fetch the PR into. Default: the existing review's, else the first registered checkout with a remote for the PR's repository.",
-              ),
+            target: pathTargetSchema,
             open: z.boolean().optional(),
           }),
           ...(type === "set_target" && { target: pathTargetSchema }),
@@ -197,13 +195,6 @@ export function authoringTools(
       "/workspace-cleanup",
     ),
     tool(
-      "register_repository",
-      "Register a local Git or jj repository and return its id, for pins on scratchpad blocks. session_create and session_set_target take the checkout's path instead.",
-      z.strictObject({ path: id }),
-      "POST",
-      "/repositories",
-    ),
-    tool(
       "upload",
       'Retain an image or trace for use in a review. kind:"image" takes base64; kind:"trace" takes trace. Reusing an upload ID requires identical content; rejected uploads are not saved.',
       uploadInput,
@@ -211,4 +202,28 @@ export function authoringTools(
       "/resources",
     ),
   ];
+}
+
+/** Drops repositoryId from pins: the host fills in the board's own. */
+function withoutRepositoryIds<T>(schema: T): T {
+  // SAFETY: a JSON round trip of a JSON Schema, dropping one property.
+  return JSON.parse(JSON.stringify(schema), (_key, value: JsonValue) => {
+    if (
+      !isJsonObject(value) ||
+      !isJsonObject(value.properties) ||
+      !("repositoryId" in value.properties) ||
+      !("head" in value.properties)
+    )
+      return value;
+
+    const { repositoryId: _repositoryId, ...properties } = value.properties;
+
+    return {
+      ...value,
+      properties,
+      ...(Array.isArray(value.required) && {
+        required: value.required.filter((name) => name !== "repositoryId"),
+      }),
+    };
+  }) as T;
 }

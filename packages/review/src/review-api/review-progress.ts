@@ -15,7 +15,12 @@ import {
   UNCATEGORIZED_LENS_ID,
   lensSelections,
 } from "./diff-lenses.js";
-import { type Pins, anchorPins, selectionReferences } from "./document.js";
+import {
+  type Pins,
+  anchorPins,
+  boardRepositoryId,
+  selectionReferences,
+} from "./document.js";
 import { resolveFileLens, uncategorizedSources } from "./file-lenses.js";
 import type { LocalReviewData } from "./local-data.js";
 import type { ReviewStore, Snapshot } from "./store.js";
@@ -254,15 +259,16 @@ export async function reviewProgress(
 
   // Peeks share alignment resolution without claiming lens coverage.
   await Promise.all(
-    selectionReferences(snapshot.document, { tolerant: true }).map(
-      async ({ source }) => {
-        try {
-          await resolveAvailable(source);
-        } catch {
-          /* An unavailable peek does not hide other content. */
-        }
-      },
-    ),
+    selectionReferences(snapshot.document, {
+      tolerant: true,
+      repositoryId: boardRepositoryId(snapshot),
+    }).map(async ({ source }) => {
+      try {
+        await resolveAvailable(source);
+      } catch {
+        /* An unavailable peek does not hide other content. */
+      }
+    }),
   );
 
   const uncategorized = counting

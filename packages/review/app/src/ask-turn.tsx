@@ -656,7 +656,7 @@ const styles = stylex.create({
     gap: "8px",
     marginBottom: "-8px",
     color: tokens.ink,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "14px",
   },
@@ -787,7 +787,7 @@ const styles = stylex.create({
   notice: {
     margin: 0,
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: 1.5,
   },
@@ -869,10 +869,12 @@ const styles = stylex.create({
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
+  // A time, in Inter, its digits steady as it ticks.
   workingTime: {
     flex: "0 0 auto",
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
+    fontVariantNumeric: "tabular-nums",
     fontSize: fontSize.small,
     lineHeight: "14px",
   },

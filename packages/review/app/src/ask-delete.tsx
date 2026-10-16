@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 
+import { useShowThreads } from "./ask-dock";
 import { useAskHistory } from "./ask-history";
 import { controlStyles } from "./controls-styles";
 import { TrashIcon } from "./icons";
@@ -102,15 +103,14 @@ export function AskDeleteButton({
   );
 }
 
-/** The header's delete for the open conversation, once it is saved: it
- * leaves Whiteboard, and the panel returns to the saved conversations. The
- * agent keeps its own transcript. */
+/** Deletes the saved conversation; the agent keeps its own transcript. */
 export function AskDeleteThreadButton(): ReactElement | null {
   const threadId = useContext(OpenThreadContext)?.threadId;
   const history = useAskHistory();
   const panels = useOptionalReviewPanelStore();
   const askKey = useAskKey();
   const notify = useNotify();
+  const showThreads = useShowThreads();
 
   if (!threadId || !history?.entries?.some((entry) => entry.id === threadId))
     return null;
@@ -120,7 +120,10 @@ export function AskDeleteThreadButton(): ReactElement | null {
       label="Delete this conversation"
       onDelete={() =>
         void history.forget(threadId).then((deleted) => {
-          if (deleted)
+          if (deleted && showThreads) {
+            if (askKey !== undefined) panels?.getState().hideAsk(askKey);
+            showThreads();
+          } else if (deleted)
             panels
               ?.getState()
               .openAskView(
@@ -149,7 +152,7 @@ const styles = stylex.create({
     borderRadius: radius.control,
     backgroundColor: tokens.diffRemovedBg,
     color: tokens.changeRemoved,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "14px",
     opacity: 1,

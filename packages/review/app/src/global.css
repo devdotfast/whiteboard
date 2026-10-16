@@ -25,10 +25,14 @@
   --agent-2-glow: rgba(43, 179, 173, 0.3);
   --board-grid: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='1' cy='1' r='0.8' fill='%231A1F2A'/></svg>");
   --review-header-height: 35px;
+  /* Three faces, each with one role: Inter for the app's own interface
+     (sidebar, tabs, page bar, Home, menus, buttons, tooltips and lists),
+     Newsreader for a board's prose, its tables and thread quotes, and Geist
+     Mono for code, commit ids, paths, line numbers and counts. */
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
   --font-serif: "Newsreader", Georgia, serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
-  --font-display: var(--font-mono);
+  --font-display: var(--font-sans);
   --transparent: transparent;
   /* Ground bridge. Same principle as the --chrome-* tokens on .review-app: the
      canvas mounts straight into the Code OSS DOM, so --vscode-* is in scope and
@@ -76,6 +80,7 @@
   --change-added: #4ed990;
   --change-removed: #f26a55;
   --change-modified: #f2c14e;
+  --merged: #a371f7;
   --warning-wash: rgba(242, 193, 78, 0.12);
   --warning-outline: rgba(242, 193, 78, 0.52);
   --on-warning: #1a1405;
@@ -325,4 +330,183 @@ button {
   syntax: "<length>";
   inherits: false;
   initial-value: 560px;
+}
+
+/* The board editor's ProseMirror document (board-editor/). A heading's
+   chevron sits in the gutter, as a section's does; a collapsed heading hides
+   the lines after it; an empty line can show a faint hint. */
+
+.review-board-editor {
+  position: relative;
+  outline: none;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  overflow-wrap: break-word;
+  font-variant-ligatures: none;
+  caret-color: var(--ink);
+}
+
+/* A selected rich block shows its ring, not a text selection or a caret. */
+.review-board-editor.ProseMirror-hideselection {
+  caret-color: transparent;
+}
+
+.review-board-editor.ProseMirror-hideselection *::selection {
+  background: transparent;
+  color: inherit;
+}
+
+.review-board-editor .review-board-hidden {
+  display: none;
+}
+
+/* What a collapsed heading hides, after its text. */
+.review-board-summary {
+  margin-left: 12px;
+  color: var(--ink-faint);
+  font: 11px/1 var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Over the heading's own ink, as a collapsed section's title is. */
+.review-board-editor .review-board-heading-collapsed {
+  color: var(--ghost) !important;
+}
+
+.review-board-editor .review-board-placeholder::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+
+.review-board-chevron {
+  position: absolute;
+  top: calc((1lh - 20px) / 2);
+  left: -29px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-faint);
+  user-select: none;
+}
+
+.review-board-chevron:hover {
+  background: var(--well);
+  color: var(--ink);
+}
+
+.review-board-chevron svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+
+.review-board-chevron[aria-expanded="false"] svg {
+  transform: none;
+}
+
+/* An empty heading's chevron is ghost until the heading has text. */
+.review-board-placeholder > .review-board-chevron {
+  color: var(--ghost);
+}
+
+/* A list item's paragraphs sit flush with the item, as on the read-only
+   page; the prose margin a paragraph carries is stronger than a plain rule. */
+.review-board-editor li > p:first-child {
+  margin-top: 0 !important;
+}
+
+.review-board-editor li > p:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* A task item, as the read-only page draws it: its checkbox in place of
+   the bullet, beside the item's first line. The node view draws
+   li > label > input, and the item's blocks in a div. */
+.review-board-editor li.review-board-task {
+  display: flex;
+  gap: 0.5em;
+  list-style: none;
+}
+
+.review-board-editor li.review-board-task > label {
+  flex: none;
+  display: flex;
+}
+
+.review-board-editor li.review-board-task input {
+  width: 1em;
+  height: 1em;
+  margin: calc((1lh - 1em) / 2) 0 0;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.review-board-editor li.review-board-task > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.review-board-editor li.review-board-task > div > p:first-child {
+  margin-top: 0 !important;
+}
+
+.review-board-editor li.review-board-task > div > p:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* A table cell holds one line, set in the table's own type, as the
+   read-only page's cells hold inline text. */
+.review-board-editor .review-board-table p {
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  font: inherit !important;
+  color: inherit !important;
+  text-align: inherit !important;
+}
+
+.review-board-editor .review-board-table .selectedCell {
+  background: var(--link-open-wash);
+}
+
+/* A table selected whole, to delete it. */
+.review-board-editor .review-board-table.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The link whose target the side column shows. Its code chips wash whole. */
+.review-board-editor .review-board-link-open,
+.review-board-editor code:has(> .review-board-link-open) {
+  background-color: var(--link-open-wash);
+}
+
+.review-board-editor .review-board-code {
+  margin: 14px auto;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: var(--well);
+  font: 13px/20px var(--font-mono);
+  white-space: pre-wrap;
+}
+
+/* A selected rich block: a ring outside its card, not a wash over it. */
+.review-board-editor [data-board-selected] > [data-review-node-id] > * {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }

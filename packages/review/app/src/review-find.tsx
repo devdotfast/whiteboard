@@ -163,7 +163,9 @@ function createFindController(
     const target = priorFocus;
     priorFocus = null;
 
-    if (restoreFocus && target?.isConnected) target.focus();
+    // Back where it was, without scrolling the board to it.
+    if (restoreFocus && target?.isConnected)
+      target.focus({ preventScroll: true });
   };
 
   const reveal = (index: number) => {
@@ -679,6 +681,7 @@ const styles = stylex.create({
     padding: "0 3px",
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
+    fontVariantNumeric: "tabular-nums",
     fontSize: fontSize.body,
     lineHeight: "16px",
     textAlign: "center",

@@ -1,17 +1,28 @@
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { promisify } from "node:util";
 
-import type { LocalVcsKind } from "@dev.fast/local-vcs";
+import {
+  type LocalVcsKind,
+  type VcsArg,
+  renderVcsArgs,
+  runVcs,
+} from "@dev.fast/local-vcs";
+import type { PullRequestState } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 
 import { ReviewInputError } from "./document.js";
 
-/** Runs one subprocess and resolves its stdout; rejects on failure or timeout. */
+/** Runs one subprocess and resolves its stdout; rejects on failure or
+ * timeout. git, jj and gh go through the VCS runner; Azure DevOps's az (by
+ * way of cmd.exe on Windows) gets its operands checked the same way. */
 export type RunCommand = (
-  file: string,
-  args: string[],
+  file: "git" | "jj" | "gh" | "az" | "cmd.exe",
+  args: VcsArg[],
   options: { cwd?: string; timeoutMs: number },
 ) => Promise<string>;
+
+const execFileAsync = promisify(execFile);
 
 export interface PullRequestDeps {
   run: RunCommand;
@@ -31,6 +42,7 @@ export interface PullRequestRecord {
   headBranch?: string;
   /** GitHub's base commit, frozen at the PR's last update. */
   baseRefOid?: string;
+  state?: PullRequestState;
 }
 
 const FETCH_TIMEOUT_MS = 120_000;
@@ -38,35 +50,38 @@ const FETCH_TIMEOUT_MS = 120_000;
 const LOCAL_TIMEOUT_MS = 30_000;
 
 export const defaultPullRequestDeps: PullRequestDeps = {
-  run: (file, args, options) =>
-    new Promise((resolve, reject) => {
-      execFile(
-        file,
-        args,
-        {
-          cwd: options.cwd,
-          timeout: options.timeoutMs,
-          maxBuffer: 16 * 1024 * 1024,
-          // Never wait on a credential or confirmation prompt nobody can see.
-          env: {
-            ...process.env,
-            GIT_TERMINAL_PROMPT: "0",
-            GH_PROMPT_DISABLED: "1",
-            GIT_SSH_COMMAND:
-              process.env.GIT_SSH_COMMAND ?? "ssh -o BatchMode=yes",
-          },
-        },
-        (error, stdout, stderr) => {
-          if (!error) return resolve(stdout);
+  run: async (file, args, options) => {
+    const spawnOptions = {
+      cwd: options.cwd,
+      timeout: options.timeoutMs,
+      maxBuffer: 16 * 1024 * 1024,
+      // Never wait on ssh asking for a passphrase nobody can see.
+      env: {
+        ...process.env,
+        GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND ?? "ssh -o BatchMode=yes",
+      },
+    };
 
-          const reason = error.killed
-            ? `timed out after ${options.timeoutMs / 1000}s`
-            : String(stderr).trim() || error.message;
+    try {
+      return (
+        file === "az" || file === "cmd.exe"
+          ? await execFileAsync(file, renderVcsArgs(args), {
+              ...spawnOptions,
+              encoding: "utf8",
+            })
+          : await runVcs(file, args, spawnOptions)
+      ).stdout;
+    } catch (error) {
+      // SAFETY: execFile rejects with an ExecFileException carrying stderr.
+      const failure = error as { killed?: boolean; stderr?: string };
 
-          reject(new Error(`${file} ${args[0]}: ${reason}`));
-        },
-      );
-    }),
+      const reason = failure.killed
+        ? `timed out after ${options.timeoutMs / 1000}s`
+        : String(failure.stderr ?? "").trim() || errorMessage(error);
+
+      throw new Error(`${file} ${String(args[0])}: ${reason}`);
+    }
+  },
   fetch: (input, init) => fetch(input, init),
 };
 
@@ -135,55 +150,62 @@ export async function fetchPullRequest(
   const { pullRequest: pr } = input;
   const refs = pullRequestRefs(input.provider, pr);
 
-  const git = (args: string[], timeoutMs = LOCAL_TIMEOUT_MS) =>
+  const git = (args: VcsArg[], timeoutMs = LOCAL_TIMEOUT_MS) =>
     deps
       .run("git", ["--git-dir", input.gitDir, ...args], { timeoutMs })
       .then((stdout) => stdout.trim());
 
-  const fetchRefs = (...refspecs: string[]) =>
+  const fetchRefs = (...refspecs: VcsArg[]) =>
     git(
       [
         "fetch",
         "--no-tags",
         "--no-write-fetch-head",
         "--quiet",
-        input.remote,
+        { remote: input.remote },
         ...refspecs,
       ],
       FETCH_TIMEOUT_MS,
     );
 
   const commit = (ref: string) =>
-    git(["rev-parse", "--verify", "--quiet", `${ref}^{commit}`]).catch(
+    git(["rev-parse", "--verify", "--quiet", { rev: `${ref}^{commit}` }]).catch(
       () => undefined,
     );
 
   const mergeBase = (left: string, right: string) =>
-    git(["merge-base", left, right]).catch(() => undefined);
+    git(["merge-base", { rev: left }, { rev: right }]).catch(() => undefined);
 
   const frozenBase = async () => {
     if (!pr.baseRefOid) return undefined;
 
     if (!(await commit(pr.baseRefOid)))
-      await fetchRefs(`+${pr.baseRefOid}:${refs.frozenBase}`).catch(
-        () => undefined,
-      );
+      await fetchRefs({
+        refspec: { from: pr.baseRefOid, to: refs.frozenBase, force: true },
+      }).catch(() => undefined);
 
     return commit(pr.baseRefOid);
   };
 
   let baseTip: string | undefined;
 
+  const pullHead: VcsArg = {
+    refspec: { from: pr.headRef, to: refs.head, force: true },
+  };
+
   try {
-    await fetchRefs(
-      `+${pr.headRef}:${refs.head}`,
-      `+refs/heads/${pr.baseRefName}:${refs.base}`,
-    );
+    await fetchRefs(pullHead, {
+      refspec: {
+        from: `refs/heads/${pr.baseRefName}`,
+        to: refs.base,
+        force: true,
+      },
+    });
     baseTip = await commit(refs.base);
   } catch (error) {
     // The base branch may be gone; the head and the frozen base suffice.
     try {
-      await fetchRefs(`+${pr.headRef}:${refs.head}`);
+      await fetchRefs(pullHead);
     } catch {
       throw new ReviewInputError(
         `Could not fetch PR #${pr.number} from remote "${input.remote}" (${pr.slug}). Check \`git fetch ${input.remote}\` works with your Git credentials, then retry. Git said: ${firstLine(errorMessage(error))}`,
@@ -232,7 +254,7 @@ export async function fetchPullRequest(
 async function indexForJj(
   rootPath: string,
   commits: string[],
-  git: (args: string[]) => Promise<string>,
+  git: (args: VcsArg[]) => Promise<string>,
   deps: PullRequestDeps,
 ) {
   const tags = commits.map(() => `refs/tags/review-index-${randomUUID()}`);
@@ -246,12 +268,23 @@ async function indexForJj(
 
   try {
     for (const [index, tag] of tags.entries())
-      await git(["update-ref", tag, commits[index]!]);
+      await git(["update-ref", { ref: tag }, { commit: commits[index]! }]);
     await jjImport();
   } finally {
     for (const tag of tags)
       await git(["update-ref", "-d", tag]).catch(() => undefined);
     await jjImport().catch(() => undefined);
+  }
+}
+
+/** GitHub refused a read, as it does past a rate limit; it takes reads
+ * again at `retryAt`. */
+export class GitHubRefusedRead extends ReviewInputError {
+  constructor(
+    message: string,
+    readonly retryAt: number,
+  ) {
+    super(message, 409);
   }
 }
 

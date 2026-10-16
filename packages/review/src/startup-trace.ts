@@ -221,9 +221,9 @@ if (traceEnabled) {
   // Every git/jj spawn inside @dev.fast/local-vcs becomes a `$ …` span under
   // whatever span is active in the caller's async context.
   setLocalVcsCommandObserver({
-    start({ file, args, cwd }) {
-      const handle = startSpan(commandSpanName(file, args), {
-        detail: commandDetail(file, args, cwd),
+    start({ tool, args, cwd }) {
+      const handle = startSpan(commandSpanName(tool, args), {
+        detail: commandDetail(tool, args, cwd),
       });
 
       return ({ ok }) => (ok ? handle.end() : handle.fail());

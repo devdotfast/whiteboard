@@ -50,8 +50,6 @@ async function render(hosts: ReviewRemoteHostsSettings) {
     setTheme: reject,
     keymap: "none",
     setKeymap: reject,
-    ctrlTab: "recent",
-    setCtrlTab: reject,
     documentWidth: "standard",
     setDocumentWidth: reject,
     codeFontSize: 13,
@@ -60,8 +58,6 @@ async function render(hosts: ReviewRemoteHostsSettings) {
     setReadyNotification: reject,
     softwareMapEnabled: false,
     setSoftwareMapEnabled: reject,
-    scratchpadEnabled: false,
-    setScratchpadEnabled: reject,
     diffrConfig: {
       read: reject,
       set: reject,

@@ -12,8 +12,10 @@ import { tokens } from "./tokens.stylex";
 
 const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
-// A block's own element: it sits in the prose column.
-const inDocumentBlock = () => `${inDocument()}:is([data-review-node-id] > *)`;
+// A block's own element: it sits in the prose column. A board's Markdown
+// block is one before its first save gives it an id.
+const inDocumentBlock = () =>
+  `${inDocument()}:is([data-review-node-id] > *, [data-board-markdown] > *)`;
 
 // Inside a Markdown or trace quote block.
 const inProse = () =>
@@ -25,10 +27,6 @@ const inOpenDocumentLink = () =>
   `${inDocument()}:is(a[data-review-anchor-open] *)`;
 
 const afterProseItem = () => `${inProse()}:is(li + *)`;
-
-// The scratchpad has no title, so its opening heading sits at the top.
-const scratchpadOpening = () =>
-  `${inDocument()}:is([data-kind="scratchpad"] > [data-review-node-id]:first-child *):first-child`;
 
 const narrow = "@media (max-width: 720px)";
 
@@ -73,7 +71,9 @@ export const documentStyles = stylex.create({
       default: "clamp(20px, calc((100cqi - 720px) * 0.122 + 20px), 64px)",
       [narrow]: "clamp(12px, 4vw, 20px)",
     },
-    "--review-document-padding-block-start": "28px",
+    // With the view's own top padding, the header's first line sits 36px
+    // under the top bar.
+    "--review-document-padding-block-start": "16px",
     "--review-document-padding-block-end": {
       default: "72px",
       [narrow]: "48px",
@@ -143,7 +143,6 @@ export const documentStyles = stylex.create({
   h1: {
     width: { default: null, [inDocument()]: proseColumn },
     margin: { default: null, [inDocument()]: "28px auto 18px" },
-    marginTop: { default: null, [scratchpadOpening()]: 0 },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h1 },
@@ -160,7 +159,6 @@ export const documentStyles = stylex.create({
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
     margin: { default: null, [inDocument()]: "40px auto 12px" },
-    marginTop: { default: null, [scratchpadOpening()]: 0 },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h2 },
@@ -172,7 +170,6 @@ export const documentStyles = stylex.create({
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
     margin: { default: null, [inDocument()]: "30px auto 10px" },
-    marginTop: { default: null, [scratchpadOpening()]: 0 },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h3 },
@@ -266,7 +263,8 @@ export const documentStyles = stylex.create({
     margin: { default: null, [inDocument()]: "24px auto" },
     borderCollapse: { default: null, [inDocument()]: "collapse" },
     color: { default: null, [inDocument()]: tokens.ink },
-    fontFamily: { default: null, [inDocument()]: tokens.fontMono },
+    // The board's prose face; code chips in cells keep their own.
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: fontSize.ui },
     lineHeight: { default: null, [inDocument()]: 1.55 },
     tableLayout: { default: null, [inDocument()]: "fixed" },

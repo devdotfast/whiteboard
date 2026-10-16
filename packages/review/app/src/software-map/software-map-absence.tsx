@@ -110,7 +110,7 @@ const styles = stylex.create({
     borderBottomColor: tokens.rule,
     backgroundColor: tokens.tray,
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "16px",
   },

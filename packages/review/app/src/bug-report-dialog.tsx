@@ -10,6 +10,8 @@ import {
   type ClipboardEvent,
   type DragEvent,
   type FormEvent,
+  type Ref,
+  useImperativeHandle,
   useRef,
   useState,
 } from "react";
@@ -35,9 +37,14 @@ const MAX_DESCRIPTION_BYTES = 64 * 1024;
 
 export function BugReportControl({
   captureScreenshot = captureWindowScreenshot,
+  folded = false,
+  handle,
 }: {
   /** Captures the window when the dialog opens; tests inject a fake. */
   captureScreenshot?: typeof captureWindowScreenshot;
+  /** In "⋯": no button; `handle` opens the dialog. */
+  folded?: boolean;
+  handle?: Ref<{ open(): void }>;
 } = {}) {
   const session = useReviewSession();
   const [open, setOpen] = useState(false);
@@ -198,17 +205,22 @@ export function BugReportControl({
     }
   };
 
+  useImperativeHandle(handle, () => ({ open: () => void openDialog() }));
+
   return (
     <>
-      <IconButton
-        xstyle={shellStyles.topbarItem}
-        aria-label="Report a bug"
-        ref={tooltip}
-        disabled={capturing}
-        onClick={() => void openDialog()}
-      >
-        <BugIcon xstyle={controlStyles.chromeIcon} />
-      </IconButton>
+      {folded ? null : (
+        <IconButton
+          xstyle={shellStyles.topbarItem}
+          aria-label="Report a bug"
+          data-page-bar-fold="chat"
+          ref={tooltip}
+          disabled={capturing}
+          onClick={() => void openDialog()}
+        >
+          <BugIcon xstyle={controlStyles.chromeIcon} />
+        </IconButton>
+      )}
       {open && (
         <div
           {...stylex.props(shellStyles.topbarItem, styles.backdrop)}
@@ -413,7 +425,7 @@ const styles = stylex.create({
     padding: "10px 12px 12px",
   },
   small: {
-    font: `${fontSize.small}/1.45 ${tokens.fontMono}`,
+    font: `${fontSize.small}/1.45 ${tokens.chromeFont}`,
   },
   option: {
     display: "flex",

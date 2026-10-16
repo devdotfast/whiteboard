@@ -9,6 +9,9 @@ catalogs:
     '@parcel/watcher':
       specifier: 2.6.0
       version: 2.6.0
+    fast-check:
+      specifier: 4.10.2
+      version: 4.10.2
     zod:
       specifier: 4.6.5
       version: 4.6.5
@@ -90,7 +93,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -127,7 +130,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -192,7 +195,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/agent-plugins/pi: {}
 
@@ -225,7 +228,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/review:
     dependencies:
@@ -343,7 +346,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/review-protocol:
     dependencies:
@@ -365,7 +368,7 @@ importers:
         version: 0.28.1
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/review-share-protocol:
     dependencies:
@@ -375,7 +378,7 @@ importers:
     devDependencies:
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/review/app:
     dependencies:
@@ -400,6 +403,9 @@ importers:
       '@tanstack/react-query':
         specifier: 5.103.1
         version: 5.103.1(react@19.2.5)
+      '@tiptap/pm':
+        specifier: 3.31.4
+        version: 3.31.4
       '@xyflow/react':
         specifier: 12.10.2
         version: 12.10.2(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
@@ -412,6 +418,15 @@ importers:
       katex:
         specifier: 0.18.7
         version: 0.18.7
+      mdast-util-gfm:
+        specifier: 3.1.0
+        version: 3.1.0
+      mdast-util-math:
+        specifier: 3.0.0
+        version: 3.0.0
+      mdast-util-to-markdown:
+        specifier: 2.1.2
+        version: 2.1.2
       react:
         specifier: 19.2.5
         version: 19.2.5
@@ -443,6 +458,9 @@ importers:
       '@vitest/browser-playwright':
         specifier: 4.1.11
         version: 4.1.11(playwright@1.62.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))(vitest@4.1.11)
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.2
       hono:
         specifier: 4.13.5
         version: 4.13.5
@@ -463,7 +481,7 @@ importers:
         version: 8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0)
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/trace-core:
     dependencies:
@@ -497,7 +515,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
   packages/trace-protocol:
     dependencies:
@@ -507,7 +525,7 @@ importers:
     devDependencies:
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
 
 packages:
 
@@ -1581,6 +1599,9 @@ packages:
     peerDependencies:
       react: ^18 || ^19
 
+  '@tiptap/pm@3.31.4':
+    resolution: {integrity: sha512-x7dwth79cQp4QGae66/RJqMDJQv0+n7b7dD7cyFQBWqzPFLJxN/4paHY4qbWedZjNLhRyIOAD9a5q4AYM1zmPA==}
+
   '@tybys/wasm-util@0.10.3':
     resolution: {integrity: sha512-F3fo1MYrRJYL3zER0OUOmkutjr1Vp23m7OsSgp7nq4SP6OqX6C/56XFIPAl5bt3zaBRjmW7SGz3u/6LwFpYcOg==}
 
@@ -2345,6 +2366,10 @@ packages:
     resolution: {integrity: sha512-hIS4idWWai69NezIdRt2xFVofaF4j+6INOpJlVOLDO8zXGpUVEVzIYk12UUi2JzjEzWL3IOAxcTubgz9Po0yXw==}
     engines: {node: '>= 18'}
 
+  fast-check@4.10.2:
+    resolution: {integrity: sha512-iK2f+YrcmoeGqk6fA0ea2bptcu/itMIm4NfEozq6N25+aG6h7s5HZbB/k1aV7b5w5sFLMCbbtRUsTVR+BgC3xw==}
+    engines: {node: '>=12.17.0'}
+
   fast-copy@4.0.4:
     resolution: {integrity: sha512-eVAiWVNPSEGIzDl5yPuLrx8fNMogScXvD9xp1Kzd41FjRIz2I3sSIcxsFeM5EzFfHAfobdvs8ZySffUopljvIA==}
 
@@ -2860,6 +2885,9 @@ packages:
     resolution: {integrity: sha512-++Zlftm0kVLPmzC06t6epuWmcRMDbI4z5P3NNX979WA/k23+NtSOynEGzsVfZwguKw2mi5umVgnBlJQMwRz4Pg==}
     engines: {node: '>=20'}
 
+  orderedmap@2.1.1:
+    resolution: {integrity: sha512-TvAWxi0nDe1j/rtMcWcIj94+Ffe6n7zhow33h40SKxmsmozs6dz/e+EajymfoFcHd7sxNn8yHM8839uixMOV6g==}
+
   oxfmt@0.48.0:
     resolution: {integrity: sha512-AVaLh+7XeGx+R1zfFV+f6VV61nT2MWVJXVUDhbTm5LBWGyNt64xAyh3NYYyjeY2WykNt9AvqSQLPHcbWquYF9g==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -2967,6 +2995,45 @@ packages:
   proper-lockfile@4.1.2:
     resolution: {integrity: sha512-TjNPblN4BwAWMXU8s9AEz4JmQxnD1NNL7bNOY/AKUzyamc379FWASUhc/K1pL2noVb+XmZKLL68cjzLsiOAMaA==}
 
+  prosemirror-changeset@2.4.4:
+    resolution: {integrity: sha512-Gyuz9jYdrAeA9I7AholyOes9KUmv/lEwsC5O9s5xF5VB3EgTPsXMGUxz4+H1B+wKVPdZbvRcg1Cp3x8qX+8ofA==}
+
+  prosemirror-commands@1.7.2:
+    resolution: {integrity: sha512-q6Q6szxqdu9Xd6EcdKsqXghu5nQdZTpB4Q9yd04WRc7/jt763e/rT60Owh0L1GYY+T46o5rD+9lEN36dZS43tw==}
+
+  prosemirror-dropcursor@1.8.4:
+    resolution: {integrity: sha512-VmKxhcA6a+h5oPSYmfF1ZNeQqPbyYaIxqZsKqeYCyTlPtrjUgNaHL3P8vVaO19oqAV0zuaM/axkowZHrB1P3Tg==}
+
+  prosemirror-gapcursor@1.4.1:
+    resolution: {integrity: sha512-pMdYaEnjNMSwl11yjEGtgTmLkR08m/Vl+Jj443167p9eB3HVQKhYCc4gmHVDsLPODfZfjr/MmirsdyZziXbQKw==}
+
+  prosemirror-history@1.5.1:
+    resolution: {integrity: sha512-onlwnqKvgtFg6srZOmDOAhlAy1FIHQpOExORybX0S+DvJepE5tPALrB9iGet/2sqqqrelSnB10OoiOJqAvu2DA==}
+
+  prosemirror-inputrules@1.5.1:
+    resolution: {integrity: sha512-7wj4uMjKaXWAQ1CDgxNzNtR9AlsuwzHfdFH1ygEHA2KHF2DOEaXl1CJfNPAKCg9qNEh4rum975QLaCiQPyY6Fw==}
+
+  prosemirror-keymap@1.2.3:
+    resolution: {integrity: sha512-4HucRlpiLd1IPQQXNqeo81BGtkY8Ai5smHhKW9jjPKRc2wQIxksg7Hl1tTI2IfT2B/LgX6bfYvXxEpJl7aKYKw==}
+
+  prosemirror-model@1.25.12:
+    resolution: {integrity: sha512-Ue2gTmXMa7EhpLNhC7J+h4+ykD8ha12K6rrZFFKKJHBForfIStw5gJ6Zrf1mqqAa9NmpmEB4wp9bKmA4eUVjWg==}
+
+  prosemirror-schema-list@1.5.1:
+    resolution: {integrity: sha512-927lFx/uwyQaGwJxLWCZRkjXG0p48KpMj6ueoYiu4JX05GGuGcgzAy62dfiV8eFZftgyBUvLx76RsMe20fJl+Q==}
+
+  prosemirror-state@1.4.4:
+    resolution: {integrity: sha512-6jiYHH2CIGbCfnxdHbXZ12gySFY/fz/ulZE333G6bPqIZ4F+TXo9ifiR86nAHpWnfoNjOb3o5ESi7J8Uz1jXHw==}
+
+  prosemirror-tables@1.8.5:
+    resolution: {integrity: sha512-V/0cDCsHKHe/tfWkeCmthNUcEp1IVO3p6vwN8XtwE9PZQLAZJigbw3QoraAdfJPir4NKJtNvOB8oYGKRl+t0Dw==}
+
+  prosemirror-transform@1.12.2:
+    resolution: {integrity: sha512-PE/aY0HEY4zczvmqrilgkUK/WautF0chvMqkmM/iN5/aPHvwrCWaQZjS6CIZp+K84YrvPFqrL+YArrfJX8xX7g==}
+
+  prosemirror-view@1.42.6:
+    resolution: {integrity: sha512-3g25f6hKV2bBxo3puH3EcYWmmVNSH0iWmNsMVT7sugDSpA025jgpOLarcDWr39SdzPjYMaiYtRdNtXialPSjEQ==}
+
   protocols@2.0.2:
     resolution: {integrity: sha512-hHVTzba3wboROl0/aWRRG9dMytgH6ow//STBZh43l/wQgmMhYhOFi0EHWAPtoCz9IAUymsyP0TSBHkhgMEGNnQ==}
 
@@ -2980,6 +3047,9 @@ packages:
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
+
+  pure-rand@8.4.2:
+    resolution: {integrity: sha512-vvuOGgcuPJAirlHvuQw1TrOiw7ptaIXXmIbNuiNOY6lNGJJH49PQ1Kj4nd783nPdQhQdicgOjVI2yI/9BD6/Ng==}
 
   qs@6.16.0:
     resolution: {integrity: sha512-h6fhOIaRrID2CbEY2fqs+7t+UXZo+MLAnU5gRIq85uFtdiUPCdsApMlHhXogKVM4HM2DVbIjGNTTYH2OcmP1vA==}
@@ -3067,6 +3137,9 @@ packages:
     resolution: {integrity: sha512-rn9wpmxplLf7NLNyCk9FyWh3FM43DbY8jOzCdEPzH7uflhTftRbCEpqi6Ly2osgoU8OwObtmavMbWLaWy4LX7A==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
+
+  rope-sequence@1.3.4:
+    resolution: {integrity: sha512-UT5EDe2cu2E/6O4igUr5PSFs23nvvukicWHx6GnOPlHAiiYbzNuCRQCuiUdHJQcqKalLKlrYJnjY0ySGsXNQXQ==}
 
   router@2.2.0:
     resolution: {integrity: sha512-nLTrUKm2UyiL7rlhapu/Zl45FwNgkZGaCpZbIHajDYgwlJCOzLSk+cIPAnsEqV955GjILJnKbdQC1nVPz+gAYQ==}
@@ -3433,6 +3506,7 @@ packages:
       '@vitest/ui': 4.1.11
       happy-dom: '*'
       jsdom: '*'
+      vite: 8.0.16
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -3460,6 +3534,9 @@ packages:
   vscode-jsonrpc@9.0.2:
     resolution: {integrity: sha512-SbQSV9yRemARxeXw6LU5sS6Zq0e9/DgCCX5yelH263ZQWukbTk8EF8fjTrr1dziasf4GwlJbvTwFnTrnQFWZXQ==}
     engines: {node: '>=14.0.0'}
+
+  w3c-keyname@2.2.8:
+    resolution: {integrity: sha512-dpojBhNsCNN7T82Tm7k26A6G9ML3NkhDsnw9n/eoxSRlVBB4CEtIQ/KTCLI2Fwf3ataSXRhYFkQi3SlnFwPvPQ==}
 
   w3c-xmlserializer@5.0.0:
     resolution: {integrity: sha512-o8qghlI8NZHU1lLPrpi2+Uq7abh4GGPpYANlalzWxyWteJOCsr/P+oPBA49TOLu5FTZO4d3F9MnWJfiMo4BkmA==}
@@ -4380,6 +4457,22 @@ snapshots:
       '@tanstack/query-core': 5.103.1
       react: 19.2.5
 
+  '@tiptap/pm@3.31.4':
+    dependencies:
+      prosemirror-changeset: 2.4.4
+      prosemirror-commands: 1.7.2
+      prosemirror-dropcursor: 1.8.4
+      prosemirror-gapcursor: 1.4.1
+      prosemirror-history: 1.5.1
+      prosemirror-inputrules: 1.5.1
+      prosemirror-keymap: 1.2.3
+      prosemirror-model: 1.25.12
+      prosemirror-schema-list: 1.5.1
+      prosemirror-state: 1.4.4
+      prosemirror-tables: 1.8.5
+      prosemirror-transform: 1.12.2
+      prosemirror-view: 1.42.6
+
   '@tybys/wasm-util@0.10.3':
     dependencies:
       tslib: 2.8.1
@@ -4540,7 +4633,7 @@ snapshots:
       '@vitest/mocker': 4.1.11(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
       playwright: 1.62.1
       tinyrainbow: 3.1.1
-      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
     transitivePeerDependencies:
       - bufferutil
       - msw
@@ -4556,7 +4649,7 @@ snapshots:
       pngjs: 7.0.0
       sirv: 3.0.2
       tinyrainbow: 3.1.1
-      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
+      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
@@ -5035,6 +5128,10 @@ snapshots:
       vary: 1.1.2
     transitivePeerDependencies:
       - supports-color
+
+  fast-check@4.10.2:
+    dependencies:
+      pure-rand: 8.4.2
 
   fast-copy@4.0.4: {}
 
@@ -5675,6 +5772,8 @@ snapshots:
       powershell-utils: 0.2.1
       wsl-utils: 1.0.0
 
+  orderedmap@2.1.1: {}
+
   oxfmt@0.48.0:
     dependencies:
       tinypool: 2.2.0
@@ -5822,6 +5921,80 @@ snapshots:
       retry: 0.12.0
       signal-exit: 3.0.7
 
+  prosemirror-changeset@2.4.4:
+    dependencies:
+      prosemirror-transform: 1.12.2
+
+  prosemirror-commands@1.7.2:
+    dependencies:
+      prosemirror-model: 1.25.12
+      prosemirror-state: 1.4.4
+      prosemirror-transform: 1.12.2
+
+  prosemirror-dropcursor@1.8.4:
+    dependencies:
+      prosemirror-state: 1.4.4
+      prosemirror-transform: 1.12.2
+      prosemirror-view: 1.42.6
+
+  prosemirror-gapcursor@1.4.1:
+    dependencies:
+      prosemirror-keymap: 1.2.3
+      prosemirror-model: 1.25.12
+      prosemirror-state: 1.4.4
+      prosemirror-view: 1.42.6
+
+  prosemirror-history@1.5.1:
+    dependencies:
+      prosemirror-state: 1.4.4
+      prosemirror-transform: 1.12.2
+      prosemirror-view: 1.42.6
+      rope-sequence: 1.3.4
+
+  prosemirror-inputrules@1.5.1:
+    dependencies:
+      prosemirror-state: 1.4.4
+      prosemirror-transform: 1.12.2
+
+  prosemirror-keymap@1.2.3:
+    dependencies:
+      prosemirror-state: 1.4.4
+      w3c-keyname: 2.2.8
+
+  prosemirror-model@1.25.12:
+    dependencies:
+      orderedmap: 2.1.1
+
+  prosemirror-schema-list@1.5.1:
+    dependencies:
+      prosemirror-model: 1.25.12
+      prosemirror-state: 1.4.4
+      prosemirror-transform: 1.12.2
+
+  prosemirror-state@1.4.4:
+    dependencies:
+      prosemirror-model: 1.25.12
+      prosemirror-transform: 1.12.2
+      prosemirror-view: 1.42.6
+
+  prosemirror-tables@1.8.5:
+    dependencies:
+      prosemirror-keymap: 1.2.3
+      prosemirror-model: 1.25.12
+      prosemirror-state: 1.4.4
+      prosemirror-transform: 1.12.2
+      prosemirror-view: 1.42.6
+
+  prosemirror-transform@1.12.2:
+    dependencies:
+      prosemirror-model: 1.25.12
+
+  prosemirror-view@1.42.6:
+    dependencies:
+      prosemirror-model: 1.25.12
+      prosemirror-state: 1.4.4
+      prosemirror-transform: 1.12.2
+
   protocols@2.0.2: {}
 
   proxy-addr@2.0.8:
@@ -5835,6 +6008,8 @@ snapshots:
       once: 1.4.0
 
   punycode@2.3.1: {}
+
+  pure-rand@8.4.2: {}
 
   qs@6.16.0:
     dependencies:
@@ -5940,6 +6115,8 @@ snapshots:
       '@rolldown/binding-openharmony-arm64': 1.2.3
       '@rolldown/binding-win32-arm64-msvc': 1.2.3
       '@rolldown/binding-win32-x64-msvc': 1.2.3
+
+  rope-sequence@1.3.4: {}
 
   router@2.2.0:
     dependencies:
@@ -6267,7 +6444,7 @@ snapshots:
       fsevents: 2.3.3
       tsx: 4.21.0
 
-  vitest@4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0):
+  vitest@4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0)):
     dependencies:
       '@vitest/expect': 4.1.11
       '@vitest/mocker': 4.1.11(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
@@ -6294,20 +6471,11 @@ snapshots:
       '@vitest/browser-playwright': 4.1.11(playwright@1.62.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))(vitest@4.1.11)
       jsdom: 29.1.1
     transitivePeerDependencies:
-      - '@vitejs/devtools'
-      - esbuild
-      - jiti
-      - less
       - msw
-      - sass
-      - sass-embedded
-      - stylus
-      - sugarss
-      - terser
-      - tsx
-      - yaml
 
   vscode-jsonrpc@9.0.2: {}
+
+  w3c-keyname@2.2.8: {}
 
   w3c-xmlserializer@5.0.0:
     dependencies:

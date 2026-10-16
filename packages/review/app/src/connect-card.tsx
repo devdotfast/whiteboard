@@ -445,7 +445,7 @@ const styles = stylex.create({
     borderRadius: radius.pill,
     backgroundColor: tokens.raised,
     color: tokens.ink,
-    font: `${fontSize.body}/18px ${tokens.fontMono}`,
+    font: `${fontSize.body}/18px ${tokens.chromeFont}`,
     cursor: "pointer",
   },
   collapse: {
@@ -456,7 +456,7 @@ const styles = stylex.create({
     borderColor: "currentcolor",
     backgroundColor: "transparent",
     color: { default: tokens.inkMuted, ":hover": tokens.ink },
-    font: `${fontSize.body}/22px ${tokens.fontMono}`,
+    font: `${fontSize.body}/22px ${tokens.chromeFont}`,
     cursor: "pointer",
   },
   legacy: {

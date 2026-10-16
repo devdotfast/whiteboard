@@ -4,7 +4,8 @@ import {
   type ReviewApiSummary,
   type ReviewCanvasOnboarding,
   type ReviewRemoteHostActions,
-  homeSessions,
+  boardIconKind,
+  boardTitle,
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
 import { fuzzySegments } from "@review/fuzzy-match";
@@ -21,6 +22,11 @@ import {
   useState,
 } from "react";
 
+import {
+  BoardIcon as BoardTargetIcon,
+  PullRequestStateIcon,
+} from "./board-icons";
+import { ChangedBadge } from "./changed-badge";
 import { useHostActionButton } from "./connection-chip";
 import { countLabel, formatRelativeTime } from "./format";
 import { homeStyles } from "./home-styles";
@@ -68,7 +74,6 @@ import {
   mergeChipOrder,
   removeHomeChip,
   reviewMetadataPills,
-  reviewTitle,
   sortHomeReviews,
   trashDaysLeft,
   trashRetentionDays,
@@ -222,7 +227,7 @@ export function ReviewHome({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [localView, setLocalView] = useState<"active" | "trash">("active");
   const inTrash = (view ?? localView) === "trash";
-  const published = onboarding?.published || homeSessions(reviews).length > 0;
+  const published = onboarding?.published || reviews.length > 0;
   const [hasPublished, setHasPublished] = useState(published);
 
   if (published && !hasPublished) setHasPublished(true);
@@ -320,7 +325,7 @@ export function ReviewHome({
 
   const catalog = useMemo(
     () =>
-      homeSessions(reviews)
+      reviews
         .filter((r) => !deleted.has(r.reviewId))
         .map((r) =>
           read.has(r.reviewId) ? { ...r, viewedAt: read.get(r.reviewId)! } : r,
@@ -586,13 +591,31 @@ export function ReviewHome({
   }
 
   async function changeLifecycle(
-    targets = selectedReviews,
+    chosen = selectedReviews,
     restore = false,
     undoing = false,
   ) {
     const action = restore ? onRestore : onTrash;
 
-    if (!action || busyRef.current || !targets.length) return;
+    if (!action || busyRef.current || !chosen.length) return;
+
+    // Boards other boards need ask first, together, naming their children
+    // and the boards that link to them; the host lets the rest through.
+    if (
+      !restore &&
+      !undoing &&
+      ui?.confirmDelete &&
+      !(await ui.confirmDelete(
+        chosen.map((review) => boardTitle(review.title)),
+        {
+          reviewIds: chosen.map((review) => review.reviewId),
+          trash: true,
+        },
+      ))
+    )
+      return;
+
+    const targets = chosen;
     const timestamp = restore ? null : new Date().toISOString();
 
     setLifecycle((current) =>
@@ -637,7 +660,12 @@ export function ReviewHome({
     if (
       !onDelete ||
       busyRef.current ||
-      !(await ui?.confirmDelete?.(targets.map(reviewTitle)))
+      !(await ui?.confirmDelete?.(
+        targets.map((review) => boardTitle(review.title)),
+        {
+          reviewIds: targets.map((review) => review.reviewId),
+        },
+      ))
     )
       return;
 
@@ -1226,7 +1254,7 @@ export function ReviewHome({
                         }}
                       >
                         <Checkbox
-                          aria-label={`Select ${reviewTitle(review)}`}
+                          aria-label={`Select ${boardTitle(review.title)}`}
                           title="Select  x"
                           checked={isSelected(index)}
                           xstyle={!isSelected(index) && styles.hiddenCheck}
@@ -1236,14 +1264,23 @@ export function ReviewHome({
                             toggleRow(review.reviewId, event.shiftKey);
                           }}
                         />
-                        {review.origin?.pullRequestNumber ? (
-                          <CodeIcon xstyle={styles.kindIcon} />
-                        ) : (
-                          <BoardIcon xstyle={styles.kindIcon} />
-                        )}
+                        {/* A PR's state, else the board's target. */}
+                        <span {...stylex.props(styles.kindIcon)}>
+                          {review.origin?.pullRequestNumber ? (
+                            <PullRequestStateIcon
+                              number={review.origin.pullRequestNumber}
+                              state={review.pullRequestState}
+                            />
+                          ) : (
+                            <BoardTargetIcon
+                              icon={boardIconKind(review.target)}
+                            />
+                          )}
+                          {review.changed ? <ChangedBadge onIcon /> : null}
+                        </span>
                         <button
                           type="button"
-                          aria-label={`${inTrash ? "Select" : "Open"} ${reviewTitle(review)}`}
+                          aria-label={`${inTrash ? "Select" : "Open"} ${boardTitle(review.title)}`}
                           aria-disabled={unavailable(review) || undefined}
                           {...stylex.props(styles.rowOpen)}
                           onClick={(event) => {
@@ -1257,7 +1294,7 @@ export function ReviewHome({
                             title={
                               unavailable(review)
                                 ? hostStatus(review).label
-                                : reviewTitle(review)
+                                : boardTitle(review.title)
                             }
                             {...stylex.props(
                               styles.title,
@@ -1265,7 +1302,7 @@ export function ReviewHome({
                             )}
                           >
                             <MatchedText
-                              text={reviewTitle(review)}
+                              text={boardTitle(review.title)}
                               queries={searchTerms}
                             />
                           </span>

@@ -214,6 +214,8 @@ export class ReviewServerSupervisor extends Disposable {
   private processListeners = new DisposableStore();
   private restartTimer: ReturnType<typeof setTimeout> | undefined;
   private restartCount = 0;
+  /** Why the server could not start, in its own words, when it said. */
+  private startupError: string | undefined;
   private stopping = false;
   private telemetryEnabled: boolean;
   private readyProcess: IReviewServerProcess | undefined;
@@ -363,9 +365,13 @@ export class ReviewServerSupervisor extends Disposable {
       }),
     );
     this.processListeners.add(
-      serverProcess.onStderr((value) =>
-        this.options.logError(`[Review server] ${value.trimEnd()}`),
-      ),
+      serverProcess.onStderr((value) => {
+        this.options.logError(`[Review server] ${value.trimEnd()}`);
+        // A store the server can't upgrade fails every restart the same way;
+        // its own words are what the user needs to see.
+        const upgrade = /Could not upgrade the whiteboard store[^\n]*/.exec(value);
+        if (upgrade) this.startupError = upgrade[0];
+      }),
     );
 
     let terminated = false;
@@ -389,7 +395,8 @@ export class ReviewServerSupervisor extends Disposable {
       if (delay === undefined) {
         this.failStartup(
           new Error(
-            "The Review server exhausted its restart budget without becoming ready.",
+            this.startupError ??
+              "The Review server exhausted its restart budget without becoming ready.",
           ),
         );
         return;
@@ -452,7 +459,8 @@ export class ReviewServerSupervisor extends Disposable {
     this.readyTimer.cancelAndSet(() => {
       this.failStartup(
         new Error(
-          `The Review server did not become ready within ${this.readyTimeout}ms.`,
+          this.startupError ??
+            `The Review server did not become ready within ${this.readyTimeout}ms.`,
         ),
       );
     }, this.readyTimeout);

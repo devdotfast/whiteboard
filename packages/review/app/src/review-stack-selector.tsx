@@ -1,22 +1,27 @@
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
-import { Button } from "@canvas/ui/button";
+import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { surfaceStyles } from "@canvas/ui/surface";
-import type { ReviewStackLayer } from "@dev.fast/review-protocol";
+import { textStyles } from "@canvas/ui/text";
+import {
+  PULL_REQUEST_STATE_LABELS,
+  type ReviewStackLayer,
+  type ReviewStackResponse,
+  boardTitle,
+} from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useQuery } from "@tanstack/react-query";
 import {
   type MouseEvent,
   type ReactElement,
   useContext,
+  useEffect,
   useRef,
   useState,
 } from "react";
 
-import { canvasQueryKeys } from "./canvas-query";
+import { PullRequestStateIcon } from "./board-icons";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { useReviewSession } from "./host/review-session";
-import { StackIcon } from "./icons";
-import { shellStyles } from "./shell-styles";
+import { BranchIcon, ChevronDownIcon, PullRequestIcon } from "./icons";
 import { tokens } from "./tokens.stylex";
 import { useAnchoredPopover } from "./use-anchored-popover";
 import { useDismissOnOutside } from "./use-dismiss-on-outside";
@@ -26,30 +31,54 @@ type OpenEvent = Pick<
   "metaKey" | "ctrlKey" | "shiftKey" | "button"
 >;
 
-/** The stack this review belongs to, shown in every view. */
+/** The displayed version's branch stack; empty until read,
+ * and a read for a version left behind never lands. */
+function useStack(): ReviewStackResponse {
+  const review = useReviewSession().review!;
+  const displayedVersion = useContext(DisplayedReviewVersionContext);
+  const [stack, setStack] = useState<ReviewStackResponse>(NO_STACK);
+  const inStack = Boolean(review.pullRequestNumber || review.headBranch);
+
+  useEffect(() => {
+    setStack(NO_STACK);
+
+    if (!inStack) return;
+
+    const abort = new AbortController();
+
+    // Optional context: a failed read shows none.
+    review
+      .stack()
+      .then((read) => {
+        if (!abort.signal.aborted) setStack(read);
+      })
+      .catch(() => {});
+
+    return () => abort.abort();
+  }, [review, displayedVersion, inStack]);
+
+  return stack;
+}
+
+const NO_STACK: ReviewStackResponse = { layers: [] };
+
+/**
+ * "[stack] Stack 3 of 5 ⌄" at the start of the board's meta line, for a
+ * board in a branch stack: its GitHub stack, else the reviews chained
+ * through the bases they name. The menu lists the stack newest first down
+ * to its base; a branch nobody reviewed yet gets a new whiteboard. Apart
+ * from the board's place among boards, which the page bar shows.
+ */
 export function ReviewStackSelector(): ReactElement | null {
   const session = useReviewSession();
-  const displayedVersion = useContext(DisplayedReviewVersionContext);
   const review = session.review!;
   const [open, setOpen] = useState(false);
-  const container = useRef<HTMLDivElement>(null);
-  const popoverRef = useAnchoredPopover(open, container);
+  const container = useRef<HTMLSpanElement>(null);
+  const popoverRef = useAnchoredPopover<HTMLDivElement>(open, container);
 
   useDismissOnOutside(container, open, setOpen);
 
-  // The stack is optional context; a failed read is not shown.
-  const layers =
-    useQuery({
-      queryKey: canvasQueryKeys.reviewStack(
-        displayedVersion,
-        review.pullRequestNumber ?? null,
-        review.pullRequestUrl ?? null,
-        review.headBranch ?? null,
-      ),
-      queryFn: ({ signal }) => review.stack(signal),
-      enabled: Boolean(review.pullRequestNumber || review.headBranch),
-      staleTime: 0,
-    }).data ?? [];
+  const { layers, base } = useStack();
 
   if (layers.length < 2) return null;
 
@@ -84,59 +113,71 @@ export function ReviewStackSelector(): ReactElement | null {
   };
 
   return (
-    <div ref={container} {...stylex.props(shellStyles.topbarItem)}>
-      <Button
-        xstyle={styles.trigger}
+    <span ref={container} {...stylex.props(styles.control)}>
+      <button
+        type="button"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Stack, ${index + 1} of ${layers.length}`}
+        {...stylex.props(styles.pill)}
         onClick={() => setOpen(!open)}
       >
-        <StackIcon xstyle={styles.triggerIcon} />
-        <span {...stylex.props(styles.triggerNumber, styles.ellipsis)}>
-          {label(layers[index]!)}
+        <PullRequestIcon xstyle={styles.pillIcon} />
+        <span {...stylex.props(styles.pillName)}>Stack</span>
+        <span {...stylex.props(textStyles.count, styles.pillCount)}>
+          {index + 1} of {layers.length}
         </span>
-        <span {...stylex.props(styles.triggerPosition)}>
-          {index + 1}/{layers.length}
-        </span>
-        <svg
-          viewBox="0 0 12 12"
-          aria-hidden="true"
-          {...stylex.props(styles.chevron, open && styles.chevronOpen)}
-        >
-          <path d="m3 4.5 3 3 3-3" />
-        </svg>
-      </Button>
-      {open && (
+        <ChevronDownIcon xstyle={styles.pillChevron} />
+      </button>
+      {open ? (
         <div
           ref={popoverRef}
           popover="manual"
           role="menu"
+          tabIndex={-1}
           aria-label="Stack"
           {...stylex.props(
-            shellStyles.topbarPopover,
             surfaceStyles.popover,
+            menuStyles.popover,
             styles.menu,
           )}
+          onKeyDown={(event) => moveMenuFocus(event)}
         >
-          <div {...stylex.props(styles.row, styles.baseRow)}>
-            <span {...stylex.props(styles.branch)}>main</span>
+          <div {...stylex.props(menuStyles.label, styles.heading)}>
+            <span {...stylex.props(textStyles.eyebrow, styles.headingName)}>
+              Stack
+            </span>
+            <span>
+              {layers.some((layer) => layer.base)
+                ? "from branch bases"
+                : "from GitHub"}{" "}
+              · newest first
+            </span>
           </div>
-          {layers.map((layer) => (
+          {[...layers].reverse().map((layer) => (
             <LayerRow
               key={layer.branch}
               layer={layer}
               onOpen={(layer, event) => void openLayer(layer, event)}
             />
           ))}
+          {base ? (
+            <>
+              <div role="separator" {...stylex.props(styles.rule)} />
+              <div {...stylex.props(styles.baseRow)}>
+                <span {...stylex.props(styles.slot)} />
+                <span {...stylex.props(styles.branch, styles.faint)}>
+                  {base}
+                </span>
+                <span>base</span>
+              </div>
+            </>
+          ) : null}
         </div>
-      )}
-    </div>
+      ) : null}
+    </span>
   );
 }
-
-const label = (layer: ReviewStackLayer) =>
-  layer.pullRequestNumber ? `PR #${layer.pullRequestNumber}` : layer.branch;
 
 /** A pull request opens only its existing review; a local branch can get one. */
 const openable = (layer: ReviewStackLayer) =>
@@ -150,173 +191,183 @@ function LayerRow({
   onOpen: (layer: ReviewStackLayer, event: OpenEvent) => void;
 }): ReactElement {
   const current = layer.relation === "current";
+  const reviewed = Boolean(layer.reviewUuid);
   const disabled = !current && !openable(layer);
-  const empty = !current && !layer.reviewUuid;
 
-  const title = layer.pullRequestNumber
-    ? `PR #${layer.pullRequestNumber}${layer.reviewTitle ? ` · ${layer.reviewTitle}` : ""}`
-    : (layer.reviewTitle ?? layer.subject ?? layer.branch);
-
-  const detail = [title !== layer.branch && layer.branch, empty && "No session"]
-    .filter(Boolean)
-    .join(" · ");
-
-  const content = (
-    <>
-      <span {...stylex.props(styles.copy)}>
-        <span
-          {...stylex.props(
-            styles.ellipsis,
-            styles.title,
-            current && styles.titleCurrent,
-            disabled && styles.faint,
-          )}
-        >
-          {title}
-        </span>
-        {detail && (
-          <span
-            {...stylex.props(
-              styles.ellipsis,
-              styles.branch,
-              current && styles.branchCurrent,
-            )}
-          >
-            {detail}
-          </span>
-        )}
-      </span>
-    </>
-  );
-
-  if (current) {
-    return (
-      <div {...stylex.props(styles.row, styles.rowCurrent)} aria-current="true">
-        {content}
-      </div>
-    );
-  }
+  const open = (event: OpenEvent) => {
+    if (!current) onOpen(layer, event);
+  };
 
   return (
     <button
-      {...stylex.props(styles.row, styles.rowButton)}
       type="button"
+      role="menuitem"
+      aria-current={current || undefined}
       data-relation={layer.relation}
       disabled={disabled}
       title={
-        disabled
-          ? "No generated session exists for this pull request"
-          : empty
-            ? "Create a session for this branch (Cmd/Ctrl-click to open in the background)"
-            : "Open session (Cmd/Ctrl-click to open in the background)"
+        current
+          ? undefined
+          : disabled
+            ? "No whiteboard of this pull request yet"
+            : reviewed
+              ? "Open whiteboard (Cmd/Ctrl-click to open in the background)"
+              : "Create a whiteboard of this branch (Cmd/Ctrl-click to open in the background)"
       }
-      onClick={(event) => onOpen(layer, event)}
+      {...stylex.props(
+        menuStyles.item,
+        styles.row,
+        current && styles.rowCurrent,
+      )}
+      onClick={open}
       onAuxClick={(event) => {
-        if (event.button === 1) onOpen(layer, event);
+        if (event.button === 1) open(event);
       }}
     >
-      {content}
+      {layer.pullRequestNumber ? (
+        <PullRequestStateIcon
+          number={layer.pullRequestNumber}
+          state={layer.pullRequestState}
+        />
+      ) : reviewed ? (
+        <BranchIcon xstyle={styles.branchIcon} />
+      ) : (
+        <span aria-hidden="true" {...stylex.props(styles.unreviewed)} />
+      )}
+      <span {...stylex.props(styles.branch, current && styles.branchCurrent)}>
+        {layer.branch}
+      </span>
+      <span
+        {...stylex.props(
+          styles.title,
+          current && styles.titleCurrent,
+          !reviewed && styles.faint,
+        )}
+      >
+        {reviewed
+          ? boardTitle(layer.reviewTitle ?? layer.subject ?? layer.branch)
+          : "No whiteboard"}
+      </span>
+      {layer.pullRequestNumber ? (
+        <span
+          {...stylex.props(styles.trailing, current && styles.trailingCurrent)}
+        >
+          #{layer.pullRequestNumber}
+          {layer.pullRequestState
+            ? ` ${PULL_REQUEST_STATE_LABELS[layer.pullRequestState].toLowerCase()}`
+            : ""}
+        </span>
+      ) : !reviewed && !disabled ? (
+        <span {...stylex.props(styles.create)}>Create</span>
+      ) : null}
     </button>
   );
 }
 
 const styles = stylex.create({
-  trigger: {
-    gap: "7px",
-    padding: "0 8px",
-    fontFamily: tokens.fontMono,
+  control: { display: "inline-flex", flexShrink: 0 },
+  pill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    height: "24px",
+    paddingBlock: 0,
+    paddingInline: "9px",
+    borderWidth: 0,
+    borderRadius: radius.pill,
+    backgroundColor: tokens.accentWash,
+    boxShadow: `inset 0 0 0 1px ${tokens.accentOutline}`,
+    color: tokens.accent,
+    fontFamily: tokens.chromeFont,
+    fontSize: fontSize.ui,
+    lineHeight: "16px",
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+  },
+  pillIcon: { width: "13px", height: "13px" },
+  pillName: { fontWeight: fontWeight.medium },
+  pillCount: { color: tokens.inkMuted },
+  pillChevron: { width: "10px", height: "10px" },
+  menu: { width: "min(500px, calc(100vw - 16px))", padding: "6px" },
+  heading: {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    padding: "6px 10px 8px",
+    color: tokens.inkFaint,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
   },
-  triggerIcon: {
+  headingName: { color: tokens.inkMuted, fontSize: fontSize.small },
+  row: { gap: "10px", minHeight: "34px", paddingInline: "10px" },
+  rowCurrent: {
+    backgroundColor: tokens.markerTint,
+    cursor: "default",
+  },
+  branchIcon: { width: "14px", height: "14px", color: tokens.inkMuted },
+  // A branch with no whiteboard: an empty, dashed place.
+  unreviewed: {
+    flexShrink: 0,
     width: "14px",
     height: "14px",
-    color: tokens.inkMuted,
+    boxSizing: "border-box",
+    borderWidth: "1.3px",
+    borderStyle: "dashed",
+    borderColor: tokens.inkFaint,
+    borderRadius: radius.round,
   },
-  triggerNumber: {
-    maxWidth: "200px",
-    fontWeight: fontWeight.semibold,
-  },
-  triggerPosition: {
-    color: tokens.inkFaint,
-    fontSize: fontSize.micro,
-    fontWeight: fontWeight.regular,
-  },
-  chevron: {
-    width: "12px",
-    height: "12px",
-    fill: "none",
-    stroke: tokens.inkFaint,
-    strokeWidth: "1.25",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    transition: `transform ${motion.fast} ease-out`,
-  },
-  chevronOpen: {
-    transform: "rotate(180deg)",
-  },
-  menu: {
-    display: "flex",
-    flexDirection: "column",
-    minWidth: "280px",
-    padding: "4px",
-    font: `${fontSize.ui}/18px ${tokens.fontMono}`,
-  },
-  row: {
-    display: "flex",
-    alignItems: "center",
-    width: "100%",
-    minHeight: "40px",
-    padding: "5px 8px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: radius.control,
-    backgroundColor: "transparent",
-    color: tokens.ink,
-    font: "inherit",
-    textAlign: "left",
-  },
-  baseRow: {
-    minHeight: "26px",
-  },
-  rowCurrent: {
-    backgroundColor: `color-mix(in srgb, ${tokens.accent} 8%, ${tokens.surfaceRaised})`,
-  },
-  rowButton: {
-    backgroundColor: {
-      default: "transparent",
-      ":hover:not(:disabled)": tokens.tray,
-    },
-    cursor: { default: "pointer", ":disabled": "default" },
-  },
-  copy: {
-    display: "flex",
-    flex: "1 1 0",
-    flexDirection: "column",
-    gap: "2px",
-    minWidth: 0,
-  },
-  ellipsis: {
+  slot: { flexShrink: 0, width: "14px" },
+  branch: {
+    flexShrink: 0,
+    width: "136px",
     overflow: "hidden",
+    color: tokens.inkMuted,
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.body,
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
   },
+  branchCurrent: { color: tokens.ink },
   title: {
+    flex: "1 1 0",
+    minWidth: 0,
+    overflow: "hidden",
+    color: tokens.ink,
+    fontSize: fontSize.ui,
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap",
+  },
+  titleCurrent: { fontWeight: fontWeight.medium },
+  faint: { color: tokens.inkFaint },
+  trailing: {
+    flexShrink: 0,
+    color: tokens.inkFaint,
+    fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
-    lineHeight: "15px",
   },
-  titleCurrent: {
-    fontWeight: fontWeight.semibold,
+  trailingCurrent: { color: tokens.inkMuted },
+  create: {
+    flexShrink: 0,
+    color: tokens.accent,
+    fontSize: fontSize.body,
+    fontWeight: fontWeight.medium,
   },
-  branch: {
+  rule: {
+    flexShrink: 0,
+    height: "1px",
+    marginBlock: "4px",
+    marginInline: "6px",
+    backgroundColor: tokens.ruleSoft,
+  },
+  baseRow: {
+    display: "flex",
+    flex: "none",
+    alignItems: "center",
+    gap: "10px",
+    minHeight: "30px",
+    paddingInline: "10px",
     color: tokens.inkFaint,
-    fontSize: fontSize.micro,
-    lineHeight: "14px",
-  },
-  branchCurrent: {
-    color: tokens.inkMuted,
-  },
-  faint: {
-    color: tokens.inkFaint,
+    fontFamily: tokens.chromeFont,
+    fontSize: fontSize.body,
   },
 });

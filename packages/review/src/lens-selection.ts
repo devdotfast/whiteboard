@@ -24,8 +24,23 @@ const sameSideAnchor = /^(head|base)\/(.+)#L(\d+)(?:-L(\d+))?$/;
 
 const crossSideAnchor = /^diff\/(.+)#([LR])(\d+)-([LR])(\d+)$/;
 
+const commitLinkAnchor = /^([0-9a-f]{7,40})\/(.+#L\d+(?:-L\d+)?)$/i;
+
+/** A source link's commit form, "<sha>/path#L10-L24" (without its
+ * `whiteboard:source/` prefix): lines of that commit of the board's own
+ * repository, read as their head side. Undefined for any other form. */
+export function commitLinkTarget(
+  target: string,
+): { commit: string; anchor: Anchor } | undefined {
+  const match = commitLinkAnchor.exec(target);
+
+  return match
+    ? { commit: match[1]!.toLowerCase(), anchor: `head/${match[2]!}` }
+    : undefined;
+}
+
 /** An anchor's selection, as markdown source links write it too (without
- * their `review-source:` scheme). Undefined when it isn't one. */
+ * their `whiteboard:source/` prefix). Undefined when it isn't one. */
 export function parseAnchor(text: string): DiffSelection | undefined {
   const same = sameSideAnchor.exec(text);
 

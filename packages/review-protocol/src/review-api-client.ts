@@ -1,16 +1,13 @@
 import type { JsonObject } from "@dev.fast/json";
 
 import type { ReviewGatewayHostState } from "./contracts.js";
+import type { PullRequestState } from "./contracts.js";
 
 /** List metadata for the authenticated local catalog; document contents stay in snapshots. */
 export interface ReviewApiSummary {
   reviewId: string;
   version: number;
   title: string;
-  /** Absent for a review. The one scratchpad has no pins or lifecycle. */
-  kind?: "scratchpad";
-  /** What is on the scratchpad, for its Home card; absent for a review. */
-  contents?: { blocks: number; diagrams: number };
   /** Absent for a document whose references all carry their own pins. */
   pins?: {
     repositoryId: string;
@@ -19,6 +16,7 @@ export interface ReviewApiSummary {
     worktreeRevision?: string;
   };
   target?:
+    | { kind: "project"; repositoryId: string }
     | { kind: "worktree"; repositoryId: string; base?: string }
     | { kind: "commits"; repositoryId: string; head: string; base?: string };
   createdAt: string;
@@ -34,10 +32,13 @@ export interface ReviewApiSummary {
     pullRequestTitle?: string;
     revision?: string;
   };
+  /** The PR's state on GitHub, when the host has read it. */
+  pullRequestState?: PullRequestState;
   /** Shared imports have separate local checkouts but retain their remote identity. */
   shared?: { cloneUrl?: string };
-  /** Display grouping only; source pins remain bound to their own checkout. */
-  repositoryGroup?: { key: string; label: string };
+  /** The project the board belongs to; absent for a share with no
+   * repository here. */
+  project?: { id: string; name: string };
   repositoryName: string;
   repositoryPath?: string;
   diffStats?: {
@@ -47,6 +48,8 @@ export interface ReviewApiSummary {
   } | null;
   viewedAt: string | null;
   trashedAt: string | null;
+  /** A version was saved after viewedAt, or the board was never viewed. */
+  changed?: boolean;
   /** An agent holds a live lease; absent on shared reviews. */
   working?: boolean;
   host?: string;
@@ -57,22 +60,22 @@ export interface ReviewApiSummary {
     reason?: string;
     pending?: true;
   };
-}
-
-/**
- * The sessions Home lists, the scratchpad aside. With none, Home is the
- * Welcome rail, so the host fetches install status exactly when this is empty.
- */
-export function homeSessions(
-  reviews: readonly ReviewApiSummary[],
-): ReviewApiSummary[] {
-  return reviews.filter((review) => review.kind !== "scratchpad");
+  /** The board this one is nested under; absent at top level. */
+  parentId?: string;
+  /** The boards nested under this one, in sibling order. */
+  children?: string[];
+  /** The boards in its project this one builds on. */
+  dependsOn?: string[];
 }
 
 export type ReviewStreamSnapshot<Snapshot extends object = JsonObject> =
   Snapshot & {
     activity: { workingCount: number; expiresAt: number | null };
     coverageRevision: number;
+    /** Bumped when a board the review links to changes. */
+    linksRevision?: number;
+    /** Bumped when the review's parent or siblings change. */
+    placeRevision?: number;
   };
 
 export type ReviewStreamLine<Snapshot extends object = JsonObject> =
@@ -153,6 +156,21 @@ export class ReviewApiClient {
         method: "POST",
         body: JSON.stringify(input),
         signal,
+      })
+    ).json();
+  }
+  /** A command the person gave from the app, not an agent: its version is
+   * credited to them, and a block they hold never stops it. The header is
+   * the one request-origin.ts names. */
+  async personCommand<T>(
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- JSON transport boundary; /commands parses its input schema.
+    operation: unknown,
+  ): Promise<T> {
+    return (
+      await this.response("/commands", {
+        method: "POST",
+        headers: { "x-review-person": "1" },
+        body: JSON.stringify({ operation }),
       })
     ).json();
   }

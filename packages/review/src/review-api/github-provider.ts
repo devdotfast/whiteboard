@@ -1,10 +1,11 @@
 import { parseGitRemote } from "@dev.fast/local-vcs";
+import type { PullRequestState } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 import { z } from "zod";
 
 import { ReviewInputError } from "./document.js";
 import type { PullRequestProvider } from "./provider.js";
-import { firstLine } from "./pull-request.js";
+import { GitHubRefusedRead, firstLine } from "./pull-request.js";
 
 const GH_TIMEOUT_MS = 20_000;
 
@@ -20,7 +21,23 @@ const metadataSchema = z.object({
   baseRefOid: z.string().optional(),
   headRefName: z.string().min(1),
   isCrossRepository: z.boolean(),
+  state: z.enum(["OPEN", "CLOSED", "MERGED"]).optional(),
+  isDraft: z.boolean().optional(),
 });
+
+/** gh's state and draft flag as one state. */
+function ghState(
+  state: "OPEN" | "CLOSED" | "MERGED" | undefined,
+  isDraft: boolean | undefined,
+): PullRequestState | undefined {
+  if (state === "MERGED") return "merged";
+
+  if (state === "CLOSED") return "closed";
+
+  if (state === "OPEN") return isDraft ? "draft" : "open";
+
+  return undefined;
+}
 
 function unreadable(url: string, ghFailure: string, fallback: string) {
   return new ReviewInputError(
@@ -54,17 +71,19 @@ export const githubProvider: PullRequestProvider = {
         [
           "pr",
           "view",
-          String(number),
+          { value: String(number) },
           "--repo",
-          `${host}/${slug}`,
+          { value: `${host}/${slug}` },
           "--json",
-          "number,title,baseRefName,baseRefOid,headRefName,isCrossRepository",
+          "number,title,baseRefName,baseRefOid,headRefName,isCrossRepository,state,isDraft",
         ],
         { timeoutMs: GH_TIMEOUT_MS },
       );
 
-      const { headRefName, isCrossRepository, ...metadata } =
+      const { headRefName, isCrossRepository, state, isDraft, ...metadata } =
         metadataSchema.parse(JSON.parse(stdout));
+
+      const pullRequestState = ghState(state, isDraft);
 
       return {
         host,
@@ -72,6 +91,7 @@ export const githubProvider: PullRequestProvider = {
         headRef,
         ...metadata,
         headBranch: isCrossRepository ? undefined : headRefName,
+        ...(pullRequestState && { state: pullRequestState }),
       };
     } catch (error) {
       ghFailure = firstLine(errorMessage(error));
@@ -110,15 +130,21 @@ export const githubProvider: PullRequestProvider = {
         404,
       );
 
-    if (response.status === 403 || response.status === 429)
-      throw unreadable(
-        url,
-        ghFailure,
-        response.headers.get("x-ratelimit-remaining") === "0" ||
-          response.status === 429
-          ? "the unauthenticated GitHub API rate limit is exhausted"
-          : "the GitHub API refused the request",
+    if (response.status === 403 || response.status === 429) {
+      const reset = Number(response.headers.get("x-ratelimit-reset"));
+
+      throw new GitHubRefusedRead(
+        unreadable(
+          url,
+          ghFailure,
+          response.headers.get("x-ratelimit-remaining") === "0" ||
+            response.status === 429
+            ? "the unauthenticated GitHub API rate limit is exhausted"
+            : "the GitHub API refused the request",
+        ).message,
+        reset > 0 ? reset * 1000 : Date.now() + 15 * 60_000,
       );
+    }
 
     if (!response.ok)
       throw unreadable(
@@ -140,6 +166,9 @@ export const githubProvider: PullRequestProvider = {
           ref: z.string().min(1),
           repo: z.object({ id: z.number() }).nullable(),
         }),
+        state: z.enum(["open", "closed"]).optional(),
+        draft: z.boolean().optional(),
+        merged_at: z.string().nullable().optional(),
       })
       .safeParse(await response.json().catch(() => undefined));
 
@@ -158,6 +187,15 @@ export const githubProvider: PullRequestProvider = {
         parsed.data.head.repo?.id === parsed.data.base.repo.id
           ? parsed.data.head.ref
           : undefined,
+      ...(parsed.data.state && {
+        state: parsed.data.merged_at
+          ? "merged"
+          : parsed.data.state === "closed"
+            ? "closed"
+            : parsed.data.draft
+              ? "draft"
+              : "open",
+      }),
     };
   },
 

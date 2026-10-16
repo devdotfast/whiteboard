@@ -13,7 +13,7 @@ export const identity = { id: text.optional() };
  * them reads its document's. */
 export const elementPins = sourcePinsSchema
   .optional()
-  .describe("Pins for the anchors here; needed on the scratchpad.");
+  .describe("Pins for the anchors here.");
 
 /**
  * One block kind: the strict schema the store parses with, and the rules a

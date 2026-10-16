@@ -1,9 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { ReviewInputError } from "@review/review-api/document.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
 import type { commandSchema } from "@review/review-api/store.js";
@@ -32,7 +32,14 @@ async function fixture() {
   cleanup.push(() => local.data.close());
 
   const { reviewId } = await local.store.execute({
-    operation: { type: "create", kind: "scratchpad", title: "Whiteboard" },
+    operation: {
+      type: "create",
+      title: "Whiteboard",
+      target: {
+        kind: "project",
+        repositoryId: local.store.registerRepository(root).id,
+      },
+    },
   });
 
   await local.store.execute({
@@ -111,7 +118,6 @@ it("uploads and opens a document without registering or fetching a repository, i
 
   expect(await response.json()).toMatchObject({ shareId });
   expect(response.status).toBe(200);
-  expect(readRepository).not.toHaveBeenCalled();
   expect(verifyRepository).not.toHaveBeenCalled();
   expect(manifest!.repository).toBeUndefined();
   bytes.delete("manifest");
@@ -130,7 +136,6 @@ it("uploads and opens a document without registering or fetching a repository, i
   });
   expect(shared.get(id).snapshot.pins).toBeUndefined();
   expect(shared.get(id).snapshot.target).toBeUndefined();
-  expect(shared.get(id).snapshot).not.toHaveProperty("kind");
   expect(shared.list().map((review) => review.reviewId)).toEqual([id]);
 
   const api = createReviewApi(
@@ -224,8 +229,11 @@ it("retains image and trace resources on a document without source pins", async 
   const { reviewId } = await resources.store.execute({
     operation: {
       type: "create",
-      kind: "scratchpad",
       title: "Document with attachments",
+      target: {
+        kind: "project",
+        repositoryId: resources.store.registerRepository(local.root).id,
+      },
     },
   });
 
@@ -327,11 +335,77 @@ it("rejects source-dependent content disguised as a document-only share", async 
       }),
     ).toThrow(/source pins|code references/i);
   }
+});
 
-  await expect(
-    exportShare({
-      ...local,
-      repository: { cloneUrl: "https://github.com/example/repo.git" },
-    }),
-  ).rejects.toBeInstanceOf(ReviewInputError);
+async function sharedPlan(cloneUrl?: string) {
+  const local = await fixture();
+  const checkout = path.join(local.root, "app");
+  execFileSync("git", ["init", "-q", checkout]);
+  execFileSync("git", [
+    "-C",
+    checkout,
+    "remote",
+    "add",
+    "origin",
+    "https://github.com/acme/app.git",
+  ]);
+  const { id: repositoryId } = await local.data.register(checkout);
+
+  const { reviewId } = await local.store.execute({
+    operation: {
+      type: "create",
+      title: "Plan",
+      target: { kind: "project", repositoryId },
+    },
+  });
+
+  await local.store.execute({
+    operation: {
+      type: "edit",
+      reviewId,
+      edit: {
+        type: "insert",
+        content: { type: "markdown", markdown: "Ship the sidebar." },
+      },
+    },
+  });
+
+  const bundle = await exportShare({
+    store: local.store,
+    data: local.data,
+    reviewId,
+    ...(cloneUrl && { repository: { cloneUrl } }),
+  });
+
+  const cloneRepository = vi.fn<(root: string) => Promise<void>>(
+    async (root) => {
+      await mkdir(root, { recursive: true });
+      execFileSync("git", ["init", "-q", root]);
+    },
+  );
+
+  const shared = new SharedReviewStore(
+    path.join(local.root, "shared"),
+    undefined,
+    cloneRepository,
+  );
+
+  shared.connect(local.store, local.data);
+  const id = await shared.import("https://sharing.test", randomUUID(), bundle);
+
+  return { local, shared, id, repositoryId, cloneRepository };
+}
+
+it("files a shared plan without pins on the receiver's checkout of its repository", async () => {
+  const { local, shared, id, repositoryId, cloneRepository } = await sharedPlan(
+    "https://github.com/acme/app.git",
+  );
+
+  const { snapshot } = shared.get(id);
+
+  expect(snapshot.target).toEqual({ kind: "project", repositoryId });
+  expect(cloneRepository).not.toHaveBeenCalled();
+  expect(shared.list()[0]?.project).toEqual(
+    local.store.checkoutProject(repositoryId),
+  );
 });

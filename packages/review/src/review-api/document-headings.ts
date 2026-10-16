@@ -1,7 +1,11 @@
+import {
+  headingAnchors,
+  isBoardHeading,
+  markdownHeadingDepth,
+} from "@review/heading-anchors.js";
 import { markdownText, parseMarkdown } from "@review/markdown.js";
-import { slugify, uniqueId } from "@review/slug.js";
 
-import { type Block, elements } from "./document.js";
+import type { Block } from "./document.js";
 
 export type ReviewHeadingLevel = "h2" | "h3";
 
@@ -14,38 +18,65 @@ export interface DocumentHeading {
   block: Block;
   /** Position among the markdown block's own headings; absent for a section. */
   index?: number;
+  /** How deep it sits, 1 at the top: a section by its nesting, a Markdown
+   * heading one step under its section and under the block's bigger
+   * headings before it. */
+  depth: number;
 }
 
 /** Heading ids by the rule the MDX renderer published, `slugify(text)` made
  * unique in document order, so imported `#fragment` links still land. */
 export function documentHeadings(blocks: Block[]): DocumentHeading[] {
-  const used = new Set<string>();
+  const anchor = headingAnchors();
+  const out: DocumentHeading[] = [];
 
-  const assign = (heading: Omit<DocumentHeading, "id">): DocumentHeading => {
-    const id = uniqueId(slugify(heading.text) || "section", used);
-    used.add(id);
-
-    return { id, ...heading };
+  const assign = (heading: Omit<DocumentHeading, "id">) => {
+    out.push({ id: anchor(heading.text), ...heading });
   };
 
-  return elements(blocks).flatMap((block): DocumentHeading[] => {
-    if (block.type === "section")
-      return [assign({ text: block.title, level: "h2", block })];
+  /** The Markdown headings open under the current section, by `#` count. */
+  let open: number[] = [];
 
-    if (block.type !== "markdown") return [];
-    let index = 0;
+  const visit = (list: Block[], depth: number) => {
+    for (const block of list) {
+      if (block.type === "section") {
+        assign({
+          text: block.title,
+          level: depth === 1 ? "h2" : "h3",
+          block,
+          depth,
+        });
+        open = [];
+        visit(block.children, depth + 1);
+        open = [];
+        continue;
+      }
 
-    return (parseMarkdown(block.markdown).children ?? []).flatMap((node) =>
-      node.type === "heading" && (node.depth === 2 || node.depth === 3)
-        ? [
-            assign({
-              text: markdownText(node),
-              level: node.depth === 2 ? "h2" : "h3",
-              block,
-              index: index++,
-            }),
-          ]
-        : [],
-    );
-  });
+      if (block.type === "markdown") {
+        let index = 0;
+
+        for (const node of parseMarkdown(block.markdown).children ?? []) {
+          if (node.type !== "heading" || !isBoardHeading(node.depth)) continue;
+
+          const at = markdownHeadingDepth(open, node.depth!, depth);
+
+          assign({
+            text: markdownText(node),
+            level: node.depth === 2 ? "h2" : "h3",
+            block,
+            index: index++,
+            depth: at,
+          });
+        }
+
+        continue;
+      }
+
+      if ("children" in block) visit(block.children, depth);
+    }
+  };
+
+  visit(blocks, 1);
+
+  return out;
 }

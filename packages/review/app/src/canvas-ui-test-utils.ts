@@ -16,7 +16,7 @@ export function testCanvasUi() {
   };
 
   const ui: ReviewCanvasUi = {
-    confirmDelete: vi.fn<(titles: readonly string[]) => Promise<boolean>>(
+    confirmDelete: vi.fn<NonNullable<ReviewCanvasUi["confirmDelete"]>>(
       async () => true,
     ),
     notify: vi.fn<NonNullable<ReviewCanvasUi["notify"]>>((shown) => {

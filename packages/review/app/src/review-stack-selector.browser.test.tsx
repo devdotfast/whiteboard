@@ -37,38 +37,40 @@ describe("ReviewStackSelector", () => {
 
     const stackSession = testReviewSession({}, { post });
     stackSession.review!.pullRequestNumber = 20;
-    stackSession.review!.stack = async () => [
-      {
-        branch: "feature-b",
-        relation: "current",
-        pullRequestNumber: 20,
-        pullRequestUrl: "https://github.com/o/r/pull/20",
-        base: null,
-        subject: null,
-        reviewUuid: "22222222-2222-4222-8222-222222222222",
-        reviewTitle: "Review B",
-      },
-      {
-        branch: "feature-c",
-        relation: "later",
-        pullRequestNumber: 30,
-        pullRequestUrl: "https://github.com/o/r/pull/30",
-        base: null,
-        subject: null,
-        reviewUuid: "11111111-1111-4111-8111-111111111111",
-        reviewTitle: "Review C",
-      },
-      {
-        branch: "feature-d",
-        relation: "later",
-        pullRequestNumber: 40,
-        pullRequestUrl: "https://github.com/o/r/pull/40",
-        base: null,
-        subject: null,
-        reviewUuid: null,
-        reviewTitle: null,
-      },
-    ];
+    stackSession.review!.stack = async () => ({
+      layers: [
+        {
+          branch: "feature-b",
+          relation: "current",
+          pullRequestNumber: 20,
+          pullRequestUrl: "https://github.com/o/r/pull/20",
+          base: null,
+          subject: null,
+          reviewUuid: "22222222-2222-4222-8222-222222222222",
+          reviewTitle: "Review B",
+        },
+        {
+          branch: "feature-c",
+          relation: "later",
+          pullRequestNumber: 30,
+          pullRequestUrl: "https://github.com/o/r/pull/30",
+          base: null,
+          subject: null,
+          reviewUuid: "11111111-1111-4111-8111-111111111111",
+          reviewTitle: "Review C",
+        },
+        {
+          branch: "feature-d",
+          relation: "later",
+          pullRequestNumber: 40,
+          pullRequestUrl: "https://github.com/o/r/pull/40",
+          base: null,
+          subject: null,
+          reviewUuid: null,
+          reviewTitle: null,
+        },
+      ],
+    });
 
     const container = document.createElement("div");
     document.body.append(container);
@@ -95,14 +97,14 @@ describe("ReviewStackSelector", () => {
       "[role=menu] button:disabled",
     );
 
-    expect(unavailable?.textContent).toContain("PR #40");
-    expect(unavailable?.textContent).toContain("No session");
+    expect(unavailable?.textContent).toContain("#40");
+    expect(unavailable?.textContent).toContain("No whiteboard");
 
     const layer = container.querySelector<HTMLButtonElement>(
-      '[role=menu] button[data-relation="later"]',
+      '[role=menu] button[data-relation="later"]:not(:disabled)',
     );
 
-    expect(layer?.textContent).toContain("PR #30");
+    expect(layer?.textContent).toContain("#30");
     await act(async () => {
       layer?.dispatchEvent(
         new MouseEvent("click", { bubbles: true, metaKey: true }),
@@ -131,8 +133,8 @@ describe("ReviewStackSelector", () => {
 
     session.review!.headBranch = "a";
     session.review!.createBranchReview = createBranchReview;
-    session.review!.stack = async () =>
-      ["a", "b"].map((branch, index) => ({
+    session.review!.stack = async () => ({
+      layers: ["a", "b"].map((branch, index) => ({
         branch,
         relation: index === 0 ? "current" : "later",
         pullRequestNumber: null,
@@ -141,7 +143,8 @@ describe("ReviewStackSelector", () => {
         subject: `Add ${branch}`,
         reviewUuid: null,
         reviewTitle: null,
-      }));
+      })),
+    });
 
     const container = document.createElement("div");
     document.body.append(container);
@@ -156,8 +159,9 @@ describe("ReviewStackSelector", () => {
       );
     });
 
-    await vi.waitFor(() => expect(container.textContent).toContain("1/2"));
+    await vi.waitFor(() => expect(container.textContent).toContain("1 of 2"));
     await openMenu(container);
+    expect(container.textContent).toContain("Create");
     await act(async () => {
       container
         .querySelector<HTMLButtonElement>(
@@ -172,7 +176,7 @@ describe("ReviewStackSelector", () => {
     });
   });
   it("never shows a slower stack read from a version left behind", async () => {
-    const reads: ((layers: ReviewStackLayer[]) => void)[] = [];
+    const reads: ((stack: { layers: ReviewStackLayer[] }) => void)[] = [];
     const session = testReviewSession();
     session.review!.pullRequestNumber = 20;
     session.review!.stack = () =>
@@ -188,7 +192,8 @@ describe("ReviewStackSelector", () => {
         pullRequestUrl: `https://github.com/o/r/pull/${pullRequestNumber}`,
         base: null,
         subject: null,
-        reviewUuid: null,
+        reviewUuid:
+          `${pullRequestNumber}`.repeat(4) + "-1111-4111-8111-111111111111",
         reviewTitle: `${title} ${pullRequestNumber}`,
       }));
 
@@ -212,14 +217,69 @@ describe("ReviewStackSelector", () => {
     await render(1);
     await render(2);
     expect(reads).toHaveLength(2);
-    await act(async () => reads[1]!(layers("Second")));
-    await vi.waitFor(() => expect(container.textContent).toContain("1/2"));
+    await act(async () => reads[1]!({ layers: layers("Second") }));
+    await vi.waitFor(() => expect(container.textContent).toContain("1 of 2"));
     await openMenu(container);
     expect(container.textContent).toContain("Second 30");
     await act(async () => {
-      reads[0]!(layers("First"));
+      reads[0]!({ layers: layers("First") });
       await new Promise((resolve) => setTimeout(resolve, 20));
     });
     expect(container.textContent).not.toContain("First");
+  });
+  it("lists the stack newest first down to its base, the board on screen opening nothing", async () => {
+    const post = vi.fn<ReviewCanvasBridge["post"]>(async () => ({ ok: true }));
+    const session = testReviewSession({}, { post });
+
+    session.review!.headBranch = "b";
+    session.review!.stack = async () => ({
+      base: "main",
+      layers: (["a", "b", "c"] as const).map((branch, index) => ({
+        branch,
+        relation: (["earlier", "current", "later"] as const)[index]!,
+        pullRequestNumber: 10 + index,
+        pullRequestUrl: `https://github.com/o/r/pull/${10 + index}`,
+        base: null,
+        subject: null,
+        reviewUuid: `${index + 1}`.repeat(8) + "-1111-4111-8111-111111111111",
+        reviewTitle: `Review ${branch}`,
+        pullRequestState: index === 0 ? "merged" : "open",
+      })),
+    });
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => {
+      root?.render(
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewStackSelector />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
+      );
+    });
+
+    await vi.waitFor(() =>
+      expect(container.querySelector("button[aria-haspopup]")?.ariaLabel).toBe(
+        "Stack, 2 of 3",
+      ),
+    );
+    await openMenu(container);
+
+    const rows = [...container.querySelectorAll("[role=menuitem]")];
+
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining("Review c"),
+      expect.stringContaining("Review b"),
+      expect.stringMatching(/Review a.*#10 merged/),
+    ]);
+    expect(
+      container.querySelector("[role=separator]")?.nextElementSibling
+        ?.textContent,
+    ).toContain("main");
+
+    await act(async () => (rows[1] as HTMLElement).click());
+    expect(post).not.toHaveBeenCalled();
   });
 });

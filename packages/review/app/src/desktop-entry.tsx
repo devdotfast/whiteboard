@@ -11,9 +11,13 @@ import type {
   ReviewCanvasInstallContent,
   ReviewCanvasUi,
   ReviewCliInstallStatus,
+  ReviewDisposable,
+  ReviewSidebarSectionHandle,
+  ReviewSidebarSectionProps,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
+  type ReactElement,
   type RefObject,
   createRef,
   useEffect,
@@ -34,6 +38,7 @@ import { ReviewHome } from "./review-home-view";
 import { ReviewContainerProvider } from "./review-root-context";
 import { SettingsPage } from "./settings-page";
 import { shellStyles } from "./shell-styles";
+import { ReviewSidebarSection } from "./sidebar-sections";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { useTooltip } from "./use-tooltip";
@@ -91,8 +96,8 @@ function ReviewCanvas({
     return (
       <EmptyState
         xstyle={styles.sourceEmpty}
-        title="Select a file in the source tree"
-        message="⌘B toggles the tree"
+        title="No file open"
+        message="Open one from a quote or a link on the board."
       />
     );
   }
@@ -293,6 +298,74 @@ function workbenchColorTheme(container: HTMLElement): "dark" | "light" {
     : "light";
 }
 
+interface ThemedRoot {
+  render(element: ReactElement): void;
+  dispose(): void;
+}
+
+/** A React root in workbench DOM that follows the workbench theme. */
+function mountThemed(container: HTMLElement): ThemedRoot {
+  let disposed = false;
+  container.classList.add("review-canvas-root");
+  const themeHost = container.ownerDocument.createElement("div");
+
+  const applyTheme = () => {
+    const light = workbenchColorTheme(container) === "light";
+
+    themeHost.className = [
+      light && "review-app--theme-light",
+      stylex.props(
+        themeStyles.vars,
+        styles.themeHost,
+        light && themeStyles.light,
+      ).className,
+    ]
+      .filter(Boolean)
+      .join(" ");
+  };
+
+  applyTheme();
+  container.appendChild(themeHost);
+  const root = createRoot(themeHost);
+  const workbench = container.ownerDocument.querySelector(".monaco-workbench");
+  const observer = new MutationObserver(applyTheme);
+
+  if (workbench)
+    observer.observe(workbench, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+  return {
+    render(element) {
+      if (!disposed) root.render(element);
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      observer.disconnect();
+      root.unmount();
+      themeHost.remove();
+      container.classList.remove("review-canvas-root");
+    },
+  };
+}
+
+/** Mounts one section's list in Desktop's sidebar. */
+export function mountReviewSidebarSection(
+  container: HTMLElement,
+  props: ReviewSidebarSectionProps,
+): ReviewSidebarSectionHandle {
+  const mounted = mountThemed(container);
+
+  mounted.render(<ReviewSidebarSection {...props} />);
+
+  return {
+    update: (next) => mounted.render(<ReviewSidebarSection {...next} />),
+    dispose: () => mounted.dispose(),
+  };
+}
+
 export function mountReviewCanvas(
   container: HTMLElement,
   initialContent: ReviewCanvasContent,
@@ -446,7 +519,7 @@ const styles = stylex.create({
     margin: "0 auto",
     padding: "32px",
     color: tokens.ink,
-    font: `${fontSize.ui}/1.55 ${tokens.fontDisplay}`,
+    font: `${fontSize.ui}/1.55 ${tokens.chromeFont}`,
   },
   shellTitle: {
     margin: "10px 0 6px",

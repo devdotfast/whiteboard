@@ -1,0 +1,776 @@
+[
+  {
+    "title": "Every rich block",
+    "document": [
+      {
+        "type": "code_peek",
+        "source": "head/package.json#L1-L5",
+        "id": "block-1"
+      },
+      {
+        "type": "callout",
+        "title": "Note",
+        "tone": "warning",
+        "children": [
+          {
+            "type": "markdown",
+            "markdown": "Careful.\n",
+            "id": "block-3"
+          }
+        ],
+        "id": "block-2"
+      },
+      {
+        "type": "code",
+        "language": "ts",
+        "text": "export const status = \"queued\";\n",
+        "caption": "The new status",
+        "id": "block-4"
+      },
+      {
+        "type": "markdown",
+        "markdown": "| a | b |\n|---|---|\n| 1 | 2 |",
+        "id": "block-5"
+      },
+      {
+        "type": "database_lens",
+        "title": "Orders",
+        "actors": {
+          "service": "Order service"
+        },
+        "stores": {
+          "orders": {
+            "label": "Orders DB",
+            "storage": "relational",
+            "collections": {
+              "orders": {
+                "label": "orders",
+                "key": "id",
+                "fields": {
+                  "status": {
+                    "label": "status",
+                    "dataType": "text"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "useCases": [
+          {
+            "label": "Queue an order",
+            "operations": [
+              {
+                "kind": "write",
+                "store": "orders",
+                "collection": "orders",
+                "field": "status",
+                "actor": "service",
+                "label": "write queued",
+                "source": "head/package.json#L1-L2",
+                "id": "operation-8"
+              }
+            ],
+            "id": "case-7"
+          }
+        ],
+        "id": "block-6"
+      },
+      {
+        "type": "flow_diagram",
+        "title": "Queue an order",
+        "nodes": [
+          {
+            "type": "flow_node",
+            "key": "request",
+            "label": "Queue order",
+            "attachments": [
+              {
+                "label": "Handler",
+                "sources": ["head/package.json#L1-L2"]
+              },
+              {
+                "label": "Validation",
+                "sources": ["head/package.json#L1-L2"]
+              }
+            ],
+            "id": "node-10"
+          },
+          {
+            "type": "flow_node",
+            "key": "saved",
+            "label": "Saved",
+            "kind": "terminal",
+            "attachments": [],
+            "id": "node-11"
+          }
+        ],
+        "edges": [
+          {
+            "type": "flow_edge",
+            "from": "request",
+            "to": "saved",
+            "label": "persist",
+            "id": "edge-12"
+          }
+        ],
+        "id": "diagram-9"
+      },
+      {
+        "type": "sequence",
+        "title": "Order status",
+        "actors": {
+          "api": "API",
+          "store": "Order store"
+        },
+        "steps": [
+          {
+            "type": "step",
+            "from": "api",
+            "to": "store",
+            "label": "set status",
+            "style": "call",
+            "source": "head/package.json#L1-L2",
+            "id": "step-14"
+          },
+          {
+            "type": "step",
+            "from": "store",
+            "to": "api",
+            "label": "queued",
+            "style": "return",
+            "explanation": "The stored status",
+            "id": "step-15"
+          }
+        ],
+        "id": "diagram-13"
+      },
+      {
+        "type": "call_stack_diff",
+        "title": "Status path",
+        "base": [
+          {
+            "key": "status",
+            "source": "head/package.json#L1-L2",
+            "label": "status = draft",
+            "id": "frame-17"
+          }
+        ],
+        "head": [
+          {
+            "key": "status",
+            "source": "head/package.json#L1-L2",
+            "label": "status = queued",
+            "via": {
+              "kind": "call",
+              "reason": "direct"
+            },
+            "id": "frame-18"
+          }
+        ],
+        "id": "block-16"
+      }
+    ]
+  },
+  {
+    "title": "Commits on alpha",
+    "document": [
+      {
+        "type": "markdown",
+        "markdown": "See [the constant](review-source:head/a.ts#L2-L4).",
+        "id": "block-1"
+      },
+      {
+        "type": "code_peek",
+        "source": "head/a.ts#L1-L5",
+        "id": "block-2"
+      },
+      {
+        "type": "sequence",
+        "title": "Flow",
+        "actors": {
+          "app": "App",
+          "db": "DB"
+        },
+        "steps": [
+          {
+            "type": "step",
+            "from": "app",
+            "to": "db",
+            "label": "Write",
+            "style": "call",
+            "source": "head/a.ts#L3-L6",
+            "id": "step-4"
+          }
+        ],
+        "id": "diagram-3"
+      },
+      {
+        "type": "flow_diagram",
+        "title": "Nodes",
+        "nodes": [
+          {
+            "type": "flow_node",
+            "key": "n1",
+            "label": "Start",
+            "attachments": [
+              {
+                "label": "code",
+                "sources": ["head/a.ts#L1-L2"]
+              }
+            ],
+            "id": "node-6"
+          }
+        ],
+        "edges": [],
+        "id": "diagram-5"
+      },
+      {
+        "type": "section",
+        "title": "Section 🎯",
+        "children": [
+          {
+            "type": "markdown",
+            "markdown": "nested",
+            "id": "block-8"
+          }
+        ],
+        "id": "block-7"
+      }
+    ]
+  },
+  {
+    "title": "🧪 Ünïcödé — 日本語のボード ‮RTL‬ \"quotes\" 'x' \\ back",
+    "document": [
+      {
+        "type": "markdown",
+        "markdown": "Emoji 👩‍👩‍👧‍👦 and NUL-ish \u0001 and ZWJ‍ text",
+        "id": "block-1"
+      }
+    ]
+  },
+  {
+    "title": "Commits on gamma (repo moved later)",
+    "document": [
+      {
+        "type": "code_peek",
+        "source": "head/a.ts#L1-L3",
+        "id": "block-1"
+      }
+    ]
+  },
+  {
+    "title": "Worktree wt2 (to be deleted, not pruned)",
+    "document": [
+      {
+        "type": "markdown",
+        "markdown": "work in wt2",
+        "id": "block-1"
+      }
+    ]
+  },
+  {
+    "title": "Worktree wt3 (to be pruned)",
+    "document": [
+      {
+        "type": "code_peek",
+        "source": "head/a.ts#L1-L3",
+        "id": "block-1"
+      }
+    ]
+  },
+  {
+    "title": "Scratchpad",
+    "document": [
+      {
+        "type": "markdown",
+        "markdown": "pad thought 59",
+        "id": "block-71"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 58",
+        "id": "block-70"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 57",
+        "id": "block-69"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 56",
+        "id": "block-68"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 55",
+        "id": "block-67"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 54",
+        "id": "block-66"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 53",
+        "id": "block-65"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 52",
+        "id": "block-64"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 51",
+        "id": "block-63"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 50",
+        "id": "block-62"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 49",
+        "id": "block-61"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 48",
+        "id": "block-60"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 47",
+        "id": "block-59"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 46",
+        "id": "block-58"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 45",
+        "id": "block-57"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 44",
+        "id": "block-56"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 43",
+        "id": "block-55"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 42",
+        "id": "block-54"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 41",
+        "id": "block-53"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 40",
+        "id": "block-52"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 39",
+        "id": "block-51"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 38",
+        "id": "block-50"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 37",
+        "id": "block-49"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 36",
+        "id": "block-48"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 35",
+        "id": "block-47"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 34",
+        "id": "block-46"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 33",
+        "id": "block-45"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 32",
+        "id": "block-44"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 31",
+        "id": "block-43"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 30",
+        "id": "block-42"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 29",
+        "id": "block-41"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 28",
+        "id": "block-40"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 27",
+        "id": "block-39"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 26",
+        "id": "block-38"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 25",
+        "id": "block-37"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 24",
+        "id": "block-36"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 23",
+        "id": "block-35"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 22",
+        "id": "block-34"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 21",
+        "id": "block-33"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 20",
+        "id": "block-32"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 19",
+        "id": "block-31"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 18",
+        "id": "block-30"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 17",
+        "id": "block-29"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 16",
+        "id": "block-28"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 15",
+        "id": "block-27"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 14",
+        "id": "block-26"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 13",
+        "id": "block-25"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 12",
+        "id": "block-24"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 11",
+        "id": "block-23"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 10",
+        "id": "block-22"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 9",
+        "id": "block-21"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 8",
+        "id": "block-20"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 7",
+        "id": "block-19"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 6",
+        "id": "block-18"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 5",
+        "id": "block-17"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 4",
+        "id": "block-16"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 3",
+        "id": "block-15"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 2",
+        "id": "block-14"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 1",
+        "id": "block-13"
+      },
+      {
+        "type": "markdown",
+        "markdown": "pad thought 0",
+        "id": "block-12"
+      },
+      {
+        "type": "flow_diagram",
+        "title": "Cross flow",
+        "nodes": [
+          {
+            "type": "flow_node",
+            "key": "n",
+            "label": "N",
+            "attachments": [
+              {
+                "label": "beta code",
+                "sources": ["head/a.ts#L1-L2"],
+                "pins": {
+                  "repositoryId": "420a1f3d-8dc7-450c-95ed-d07268468691",
+                  "head": "40dfdcdb33e75778b7df495fd0a300660f280bfe",
+                  "base": "22d032804d052fd2d589b38a802bca3db52aa230"
+                }
+              },
+              {
+                "label": "alpha code",
+                "sources": ["head/a.ts#L1-L2"],
+                "pins": {
+                  "repositoryId": "7e0f6e0c-f653-4a54-aceb-a3ab452615d7",
+                  "head": "40dfdcdb33e75778b7df495fd0a300660f280bfe",
+                  "base": "22d032804d052fd2d589b38a802bca3db52aa230"
+                }
+              }
+            ],
+            "id": "node-11"
+          }
+        ],
+        "edges": [],
+        "id": "diagram-10"
+      },
+      {
+        "type": "sequence",
+        "title": "Cross-repo",
+        "actors": {
+          "a": "A",
+          "b": "B"
+        },
+        "steps": [
+          {
+            "type": "step",
+            "from": "a",
+            "to": "b",
+            "label": "call",
+            "style": "call",
+            "source": "head/a.ts#L1-L3",
+            "pins": {
+              "repositoryId": "420a1f3d-8dc7-450c-95ed-d07268468691",
+              "head": "40dfdcdb33e75778b7df495fd0a300660f280bfe",
+              "base": "22d032804d052fd2d589b38a802bca3db52aa230"
+            },
+            "id": "step-9"
+          }
+        ],
+        "id": "diagram-8"
+      },
+      {
+        "type": "markdown",
+        "markdown": "Link to alpha [here](review-source:head/a.ts#L1-L3).",
+        "pins": {
+          "repositoryId": "7e0f6e0c-f653-4a54-aceb-a3ab452615d7",
+          "head": "40dfdcdb33e75778b7df495fd0a300660f280bfe",
+          "base": "22d032804d052fd2d589b38a802bca3db52aa230"
+        },
+        "id": "block-7"
+      },
+      {
+        "type": "markdown",
+        "markdown": "Link to beta [here](review-source:head/a.ts#L1-L3) and [again](review-source:head/b.py#L1-L1).",
+        "pins": {
+          "repositoryId": "420a1f3d-8dc7-450c-95ed-d07268468691",
+          "head": "40dfdcdb33e75778b7df495fd0a300660f280bfe",
+          "base": "22d032804d052fd2d589b38a802bca3db52aa230"
+        },
+        "id": "block-6"
+      },
+      {
+        "type": "code_peek",
+        "source": "head/a.ts#L1-L2",
+        "pins": {
+          "repositoryId": "25abd4cf-8383-4f0c-9b9e-3f89e9f993ba",
+          "head": "40dfdcdb33e75778b7df495fd0a300660f280bfe"
+        },
+        "id": "block-5"
+      },
+      {
+        "type": "code_peek",
+        "source": "head/a.ts#L1-L2",
+        "pins": {
+          "repositoryId": "e5f66712-3b1c-40b8-9625-7c39f978c75c",
+          "head": "40dfdcdb33e75778b7df495fd0a300660f280bfe",
+          "base": "22d032804d052fd2d589b38a802bca3db52aa230"
+        },
+        "id": "block-4"
+      },
+      {
+        "type": "code_peek",
+        "source": "head/a.ts#L2-L5",
+        "pins": {
+          "repositoryId": "420a1f3d-8dc7-450c-95ed-d07268468691",
+          "head": "40dfdcdb33e75778b7df495fd0a300660f280bfe",
+          "base": "22d032804d052fd2d589b38a802bca3db52aa230"
+        },
+        "id": "block-3"
+      },
+      {
+        "type": "code_peek",
+        "source": "head/a.ts#L1-L4",
+        "pins": {
+          "repositoryId": "7e0f6e0c-f653-4a54-aceb-a3ab452615d7",
+          "head": "40dfdcdb33e75778b7df495fd0a300660f280bfe",
+          "base": "22d032804d052fd2d589b38a802bca3db52aa230"
+        },
+        "id": "block-2"
+      },
+      {
+        "type": "markdown",
+        "markdown": "Plain pad note ✍️",
+        "id": "block-1"
+      }
+    ]
+  },
+  {
+    "title": "Markdown that round-trips",
+    "document": [
+      {
+        "id": "block-1",
+        "type": "markdown",
+        "markdown": "# Not a section\n\nA paragraph with *emphasis*, **strong**, ~~strike~~, `code`, and a [link](https://example.com).\n\n- one\n- two\n  - nested\n    1. ordered\n    2. deeper\n\n> A quote\n> over two lines\n\n```ts\nconst x = 1;\n```\n\n| a | b |\n|---|:-:|\n| 1 | 2 |\n"
+      },
+      {
+        "id": "block-2",
+        "type": "markdown",
+        "markdown": "Line one  \nline two after a hard break.\n\nInline math $x^2$ and an HTML <kbd>⌘K</kbd>.\n"
+      }
+    ]
+  },
+  {
+    "title": "Sections three deep",
+    "document": [
+      {
+        "id": "block-1",
+        "type": "section",
+        "title": "One",
+        "children": [
+          {
+            "id": "block-2",
+            "type": "markdown",
+            "markdown": "Under one."
+          },
+          {
+            "id": "block-3",
+            "type": "section",
+            "title": "Two",
+            "children": [
+              {
+                "id": "block-4",
+                "type": "section",
+                "title": "Three",
+                "children": [
+                  {
+                    "id": "block-5",
+                    "type": "markdown",
+                    "markdown": "Deepest."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "block-6",
+        "type": "markdown",
+        "markdown": "After the sections."
+      }
+    ]
+  },
+  {
+    "title": "Links of every kind",
+    "document": [
+      {
+        "id": "block-1",
+        "type": "markdown",
+        "markdown": "A [source](whiteboard:source/abc1234/src/a.ts#L1-L3), a [board](whiteboard:board/11111111-1111-4111-8111-111111111111), a [block](whiteboard:board/11111111-1111-4111-8111-111111111111#block-2) and an [anchor](#heading)."
+      }
+    ]
+  }
+]

@@ -10,7 +10,7 @@ import {
   useShowOpenThread,
 } from "./ask-delete";
 import { AskHistoryProvider, useAskHistory } from "./ask-history";
-import { AskHistoryControl, AskHistoryList } from "./ask-history-list";
+import { AskHistoryList } from "./ask-history-list";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewSessionProvider } from "./host/review-session";
@@ -338,8 +338,8 @@ it("lists saved conversations, reopens one, and deletes another once confirmed",
 
   function Probe() {
     view = useReviewPanel(
-      ({ asks, askDocked }) =>
-        asks.find((ask) => ask.key === askDocked)?.view ?? null,
+      ({ asks, askColumn }) =>
+        asks.find((ask) => ask.key === askColumn)?.view ?? null,
     );
 
     return null;
@@ -589,8 +589,8 @@ it("keeps the agent through new versions of the review, and says so when the con
 
   function Probe() {
     view = useReviewPanel(
-      ({ asks, askDocked }) =>
-        asks.find((ask) => ask.key === askDocked)?.view ?? null,
+      ({ asks, askColumn }) =>
+        asks.find((ask) => ask.key === askColumn)?.view ?? null,
     );
 
     return null;
@@ -1066,8 +1066,8 @@ it("offers a new conversation when one cannot be reopened: one lost before it wa
 
   function Probe() {
     view = useReviewPanel(
-      ({ asks, askDocked }) =>
-        asks.find((ask) => ask.key === askDocked)?.view ?? null,
+      ({ asks, askColumn }) =>
+        asks.find((ask) => ask.key === askColumn)?.view ?? null,
     );
 
     return null;
@@ -1337,7 +1337,7 @@ it("moves from setup to asking once an agent is installed", async () => {
   }
 });
 
-it("closes an agent that starts after its panel closed", async () => {
+it("keeps an agent that starts after its panel left the screen, unless the reader stopped it", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const session = testReviewSession();
   const answers: Record<string, (response: Response) => void> = {};
@@ -1359,7 +1359,10 @@ it("closes an agent that starts after its panel closed", async () => {
   const closes = (id: string) =>
     fetch.mock.calls.filter(([called]) => called === `/ask/${id}/close`).length;
 
-  const panel = async (savedThreadId?: string) => {
+  const panel = async (
+    savedThreadId?: string,
+    stopping = { current: false },
+  ) => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
@@ -1371,15 +1374,18 @@ it("closes an agent that starts after its panel closed", async () => {
             selection={selection}
             agent="claude"
             savedThreadId={savedThreadId}
+            stopping={stopping}
           />
         </ReviewSessionProvider>,
       ),
     );
 
-    return { container, root };
+    return { container, root, stopping };
   };
 
   try {
+    // Keep running, or something else taking the column: it runs on, in
+    // Threads.
     const asking = await panel();
     const textarea = asking.container.querySelector("textarea")!;
 
@@ -1387,11 +1393,13 @@ it("closes an agent that starts after its panel closed", async () => {
     await enter(textarea);
     await act(async () => asking.root.unmount());
     await act(async () => answers["/ask"]!(Response.json({ threadId: "new" })));
-    expect(closes("new")).toBe(1);
+    expect(closes("new")).toBe(0);
     asking.container.remove();
 
+    // Stop and close, before the thread had started.
     const opening = await panel("saved");
 
+    opening.stopping.current = true;
     await act(async () => opening.root.unmount());
     await act(async () =>
       answers["/ask/saved/open"]!(Response.json({ ok: true })),
@@ -1669,7 +1677,6 @@ it("keeps Ask while its host cannot list agents, and lets an agent be picked aga
           }}
         >
           <ReviewPanelProvider>
-            <AskHistoryControl />
             <AskPanelContent selection={selection} header={header} />
           </ReviewPanelProvider>
         </ReviewSessionProvider>,
@@ -1684,7 +1691,6 @@ it("keeps Ask while its host cannot list agents, and lets an agent be picked aga
     await render();
     expect(picker()).toBeNull();
     expect(header.textContent).toBe("Claude Code");
-    expect(buttonNamed(container, "Saved conversations")).not.toBeNull();
 
     hostState = "online";
     await render();

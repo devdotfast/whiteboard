@@ -94,7 +94,9 @@ export const panelStyles = stylex.create({
     justifyContent: "space-between",
     gap: "12px",
     minHeight: tokens.reviewHeaderHeight,
-    padding: "0 10px 0 16px",
+    paddingBlock: 0,
+    paddingRight: "10px",
+    paddingLeft: "calc(16px + var(--review-fullscreen-inset, 0px))",
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -108,13 +110,13 @@ export const panelStyles = stylex.create({
   },
   kicker: {
     flex: "0 0 auto",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   heading: {
     overflow: "hidden",
     margin: 0,
     color: tokens.ink,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.semibold,
     lineHeight: 1.3,
@@ -129,6 +131,13 @@ export const panelStyles = stylex.create({
     flex: "0 0 auto",
     alignItems: "center",
     gap: "2px",
+  },
+  // As tall as the window controls beside it, with no rule: the header row
+  // of Desktop's Ask panel.
+  nativeHeader: {
+    height: "40px",
+    minHeight: "40px",
+    borderBottomWidth: 0,
   },
   // A conversation sits on the tray, header and all.
   tray: {
@@ -363,7 +372,7 @@ export const tourStyles = stylex.create({
   detail: {
     margin: "6px 0 0",
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "15px",
   },

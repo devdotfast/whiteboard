@@ -18,15 +18,13 @@ test("notifies once when a review stops being authored", () => {
 	assert.deepEqual(tracker.update([review(false)]), [review(false)]);
 });
 
-test("deleted reviews, dismissed reviews and scratchpads stay quiet", () => {
+test("deleted and dismissed reviews stay quiet", () => {
 	const tracker = new ReviewCompletionTracker();
 	tracker.update([review(true)]);
 	assert.deepEqual(tracker.update([]), []);
 	assert.deepEqual(tracker.update([review(false)]), []);
 	tracker.update([review(true)]);
 	assert.deepEqual(tracker.update([review(false, { trashedAt: "today" })]), []);
-	tracker.update([review(true, { kind: "scratchpad" })]);
-	assert.deepEqual(tracker.update([review(false, { kind: "scratchpad" })]), []);
 });
 
 test("completion counts include nested sections and distinguish unfinished sections", () => {

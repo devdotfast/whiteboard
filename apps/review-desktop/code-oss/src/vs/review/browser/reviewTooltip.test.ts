@@ -20,6 +20,7 @@ registerHooks({ load(url, context, next) {
 	return url.endsWith('.css') ? { format: 'module', source: '', shortCircuit: true } : next(url, context);
 } });
 const { ReviewTooltip, ReviewViewedCheckbox } = await import('./reviewTooltip.js');
+const { HoverPosition } = await import('../../base/browser/ui/hover/hoverWidget.js');
 
 function hoverService() {
 	const shown: IHoverOptions[] = [];
@@ -51,6 +52,32 @@ test('the tooltip shows the moment the pointer lands and goes on click', () => {
 	assert.equal(hovers.visible(), 0);
 	tooltip.dispose();
 	target.remove();
+});
+
+test('a tooltip never opens into the title bar: below a target just under it, above one further down, beside one that asks', () => {
+	const hovers = hoverService();
+	const titleBar = document.createElement('div');
+	titleBar.className = 'part titlebar';
+	document.body.append(titleBar);
+	const at = (element: Element, top: number, bottom: number) => {
+		element.getBoundingClientRect = () => ({ top, bottom }) as DOMRect;
+	};
+	at(titleBar, 0, 40);
+	const hover = (top: number, side?: 'right') => {
+		const target = document.createElement('button');
+		document.body.append(target);
+		at(target, top, top + 32);
+		const tooltip = new ReviewTooltip(hovers.service, target, { label: 'Whiteboard' }, side);
+		target.dispatchEvent(new MouseEvent('mouseenter'));
+		tooltip.dispose();
+		target.remove();
+		return hovers.shown.at(-1)?.position?.hoverPosition;
+	};
+
+	assert.equal(hover(48), HoverPosition.BELOW);
+	assert.equal(hover(200), HoverPosition.ABOVE);
+	assert.equal(hover(48, 'right'), HoverPosition.RIGHT);
+	titleBar.remove();
 });
 
 test('the viewed box toggles without collapsing the header it sits in', () => {

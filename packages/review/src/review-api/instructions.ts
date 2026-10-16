@@ -9,7 +9,6 @@ import { COMPONENT_REFERENCE } from "./component-reference.js";
 export const INSTRUCTION_TOPICS = [
   "authoring",
   "file-lenses",
-  "scratchpad",
   "trace-archaeology",
 ] as const;
 
@@ -20,13 +19,7 @@ export const instructionsQuerySchema = z.strictObject({
 });
 
 export interface InstructionContext {
-  desktopAvailable: boolean;
-  scratchpadEnabled: boolean;
   traceEnabled: boolean;
-}
-
-export function scratchpadAvailable(context: InstructionContext): boolean {
-  return context.desktopAvailable && context.scratchpadEnabled;
 }
 
 const cache = new Map<string, Promise<string>>();
@@ -51,24 +44,12 @@ export async function renderInstructions(
   context: InstructionContext,
   root = findReviewPackageRoot(import.meta.url),
 ): Promise<string> {
-  if (topic === "scratchpad" && !scratchpadAvailable(context)) {
-    return "The Whiteboard scratchpad is turned off or Whiteboard Desktop is not running. Answer in chat; the scratchpad can be turned on in Whiteboard Desktop Settings.";
-  }
-
   if (topic === "trace-archaeology" && !context.traceEnabled)
     return "Trace capture is off on this machine, so no agent traces are available. It can be turned on in Whiteboard Desktop Settings under Experimental Features.";
-
-  if (topic === "scratchpad")
-    return `${await read(root, topic)}\n\n${COMPONENT_REFERENCE}`;
 
   if (topic !== "authoring") return read(root, topic);
 
   const more = [
-    ...(scratchpadAvailable(context)
-      ? [
-          '- Explaining code visually outside a review: `session_get_instructions({topic:"scratchpad"})`',
-        ]
-      : []),
     ...(context.traceEnabled
       ? [
           '- Why code exists / past agent sessions: `session_get_instructions({topic:"trace-archaeology"})`',

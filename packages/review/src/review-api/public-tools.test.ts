@@ -39,7 +39,7 @@ test("public session tools create, edit and retry against the unchanged review s
     title: "Public names",
     target: {
       kind: "commits",
-      repositoryId: "repo",
+      repositoryPath: "repo",
       base: "base",
       head: "head",
     },

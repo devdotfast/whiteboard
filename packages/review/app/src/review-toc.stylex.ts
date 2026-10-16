@@ -1,7 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
-// The contents card floats over the document; the rail sits just under it.
+// The contents rail floats over the board's scroller; its card opens in the
+// top layer, over everything.
 export const tocLayer = stylex.defineConsts({
   rail: "31",
-  card: "32",
 });

@@ -18,6 +18,7 @@ import type {
 } from "react";
 import {
   useCallback,
+  useContext,
   useEffect,
   useEffectEvent,
   useMemo,
@@ -29,15 +30,21 @@ import { useShallow } from "zustand/react/shallow";
 
 import { AskCloseWarning } from "./ask-close";
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
+import { AskDock, InRightColumn, useAskPanelHost } from "./ask-dock";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
-import { openHandedOffAsks, syncOpenAsks } from "./ask-open-state";
+import {
+  AskProjectContext,
+  openHandedOffAsks,
+  syncOpenAsks,
+} from "./ask-open-state";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
 import {
   AskThreadsWatchContext,
   useAskThreadsWatch,
   useLatest,
 } from "./ask-thread-stream";
-import { AskPills, AskSlot, AskWindow } from "./ask-window";
+import { useMarkThreadViewed } from "./ask-viewed";
+import { AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
 import { SourceCodePeek } from "./CodePeek";
 import { controlStyles } from "./controls-styles";
@@ -48,13 +55,7 @@ import {
   useOptionalReviewSession,
   useReviewSession,
 } from "./host/review-session";
-import {
-  CloseIcon,
-  DisclosureChevron,
-  MapPinIcon,
-  MinusIcon,
-  PopOutIcon,
-} from "./icons";
+import { CloseIcon, DisclosureChevron, MapPinIcon, PopOutIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { chevronMarker, documentMarker } from "./markers.stylex";
 import { useReviewActions } from "./review-context";
@@ -73,7 +74,7 @@ import type {
   ReviewPeekContent,
   SourcePeekAnchor,
 } from "./review-panel-model";
-import { askPills, askShown } from "./review-panel-store";
+import { askShown, peekShown } from "./review-panel-store";
 import { useReviewRoots } from "./review-root-context";
 import type { ReviewSectionSummary } from "./review-section-summary";
 import { useReviewUiState } from "./review-ui-state";
@@ -156,6 +157,9 @@ function ReviewPanelFrame({
     [bodyRef],
   );
 
+  // In Desktop's right column, the header sits level with the window controls.
+  const nativeFrame = useContext(InRightColumn);
+
   const sheet = useBottomSheetResize({
     stateKey: "bottomSheetFraction",
     label: "Resize panel height",
@@ -187,8 +191,8 @@ function ReviewPanelFrame({
         "side-panel",
         panelStyles.panel,
         panelMotion === "restored" && panelStyles.restored,
-        docked && panelStyles.docked,
-        tray && panelStyles.tray,
+        (docked || nativeFrame) && panelStyles.docked,
+        (tray || nativeFrame) && panelStyles.tray,
       )}
       role="complementary"
       aria-label={title ?? label}
@@ -198,7 +202,14 @@ function ReviewPanelFrame({
         {...stylex.props(shellStyles.sheetResizer)}
         {...sheet.separatorProps}
       />
-      <header {...stylex.props(panelStyles.header, tray && panelStyles.tray)}>
+      <header
+        {...withClass(
+          nativeFrame ? "review-ask-chrome" : undefined,
+          panelStyles.header,
+          (tray || nativeFrame) && panelStyles.tray,
+          nativeFrame && panelStyles.nativeHeader,
+        )}
+      >
         <div {...stylex.props(panelStyles.title)}>
           <span
             {...stylex.props(
@@ -340,7 +351,10 @@ export function ReviewSection({
   );
 }
 
-function reviewSectionSummaryLabel(summary: ReviewSectionSummary): string {
+/** What a collapsed section holds, in a few words; empty when nothing. */
+export function reviewSectionSummaryLabel(
+  summary: ReviewSectionSummary,
+): string {
   const parts: string[] = [];
 
   if (summary.diagrams > 0) {
@@ -499,15 +513,20 @@ function keepAnchorLinkVisible(link: HTMLElement) {
 export function ReviewPanelHost() {
   const activePanel = useReviewPanel((state) => state.active);
   const close = useReviewPanel((state) => state.close);
+  const columnHost = useAskPanelHost();
+  // Put away, the peek stays mounted, to come back where it was.
+  const hidden = !useReviewPanel(peekShown);
 
   return (
     <>
       {activePanel ? (
-        <ReviewPeekPanel
-          anchor={activePanel.anchor}
-          content={activePanel.content}
-          onClose={close}
-        />
+        <AskDock host={columnHost} hidden={hidden}>
+          <ReviewPeekPanel
+            anchor={activePanel.anchor}
+            content={activePanel.content}
+            onClose={close}
+          />
+        </AskDock>
       ) : null}
       <AskHost />
     </>
@@ -515,30 +534,19 @@ export function ReviewPanelHost() {
 }
 
 /**
- * The open Asks, each in the side panel, the window or a pill. Each renders
- * once, into an element of its own that moves between them, so popping
- * out, docking or minimizing never restarts it.
+ * The threads on screen, in the column or the window. Each renders once,
+ * into an element of its own that moves between them, so popping out or
+ * docking never restarts it.
  */
 function AskHost() {
   const store = useReviewPanelStore();
   const session = useLatest(useReviewSession());
+  const config = session.current.config;
+  const projectId = useContext(AskProjectContext);
 
-  // Closing an Ask ends its agent; its canvas going, as for another tab,
-  // does not.
   useEffect(
-    () =>
-      syncOpenAsks(
-        store,
-        session.current.config,
-        (threadId) =>
-          void session.current
-            .fetch(`/ask/${threadId}/close`, {
-              method: "POST",
-              keepalive: true,
-            })
-            .catch(() => {}),
-      ),
-    [store, session],
+    () => syncOpenAsks(store, config, projectId),
+    [store, config, projectId],
   );
 
   useEffect(() => {
@@ -551,8 +559,7 @@ function AskHost() {
     useShallow((state) => state.asks.map((ask) => ask.key)),
   );
 
-  const pills = useReviewPanel(useShallow(askPills));
-  // Every open Ask follows its thread over this one stream.
+  // Every thread on screen follows its thread over this one stream.
   const watch = useAskThreadsWatch(useReviewSession());
 
   return (
@@ -560,56 +567,70 @@ function AskHost() {
       {keys.map((key) => (
         <OpenAsk key={key} askKey={key} />
       ))}
-      {pills.length ? <AskPills asks={pills} /> : null}
     </AskThreadsWatchContext.Provider>
   );
 }
 
 function OpenAsk({ askKey }: { askKey: number }) {
   const store = useReviewPanelStore();
+  const session = useReviewSession();
 
   const view = useReviewPanel(
     (state) => state.asks.find((ask) => ask.key === askKey)?.view,
   );
 
   const shown = useReviewPanel((state) => askShown(state, askKey));
+  const nativeHost = useAskPanelHost();
   const popOutTooltip = useTooltip("Pop out");
-  const minimizeTooltip = useTooltip("Minimize");
   const [node] = useState(() => document.createElement("div"));
   const [header, setHeader] = useState<HTMLDivElement | null>(null);
   const checkoutGone = useReviewDiffFiles().status === "unavailable";
   const deleted = Boolean(useReviewSession().review?.trashedAt);
   const [warning, setWarning] = useState(false);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const stopping = useRef(false);
 
   const report = useCallback(
     (report: AskReport) => store.getState().reportAsk(askKey, report),
     [store, askKey],
   );
 
-  if (!view || !shown) return null;
+  const ask = useReviewPanel((state) =>
+    state.asks.find((candidate) => candidate.key === askKey),
+  );
 
-  const ask = () =>
-    store.getState().asks.find((candidate) => candidate.key === askKey);
+  useMarkThreadViewed(ask?.threadId ?? null, shown !== null, ask?.busy);
 
-  // Closing stops the agent: while it works, ask first.
-  const close = () => {
-    if (ask()?.busy) setWarning(true);
-    else store.getState().closeAsk(askKey);
+  if (!view) return null;
+
+  const hide = () => {
+    setWarning(false);
+    store.getState().hideAsk(askKey);
   };
 
-  const busy = ask()?.busy ?? false;
+  // Closing stops the agent, even one whose thread is still starting.
+  const stop = () => {
+    const threadId = ask?.threadId;
+
+    stopping.current = true;
+    hide();
+
+    if (threadId)
+      void session
+        .fetch(`/ask/${threadId}/close`, { method: "POST", keepalive: true })
+        .catch(() => {});
+  };
+
+  // While the agent works, closing asks first.
+  const close = () => (ask?.busy ? setWarning(true) : stop());
 
   const closeWarning =
-    warning && busy && shown !== "pill" ? (
+    warning && ask?.busy ? (
       <AskCloseWarning
         anchor={closeButton}
-        agentName={ask()?.presence.agentName ?? "The agent"}
-        onMinimize={() => {
-          setWarning(false);
-          store.getState().minimizeAsk(askKey);
-        }}
-        onClose={() => store.getState().closeAsk(askKey)}
+        agentName={ask.presence.agentName}
+        onKeepRunning={hide}
+        onClose={stop}
         onKeep={() => setWarning(false)}
       />
     ) : null;
@@ -640,50 +661,46 @@ function OpenAsk({ askKey }: { askKey: number }) {
               savedThreadId={view.type === "saved" ? view.threadId : undefined}
               onReport={report}
               header={header}
+              stopping={stopping}
             />
           ),
           node,
         )}
         {shown === "panel" ? (
-          <ReviewPanelFrame
-            tray
-            label="Ask"
-            titleAccessory={
-              <div ref={setHeader} {...stylex.props(panelStyles.title)} />
-            }
-            onClose={close}
-            onEscape={warning ? () => setWarning(false) : close}
-            closeLabel="Close Ask"
-            closeRef={closeButton}
-            headerActions={
-              <>
-                {actions}
-                <IconButton
-                  ref={popOutTooltip}
-                  size="large"
-                  aria-label="Pop out Ask"
-                  onClick={() => store.getState().popOutAsk(askKey)}
-                >
-                  <PopOutIcon
-                    xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-                  />
-                </IconButton>
-                <IconButton
-                  ref={minimizeTooltip}
-                  size="large"
-                  aria-label="Minimize Ask"
-                  onClick={() => store.getState().minimizeAsk(askKey)}
-                >
-                  <MinusIcon
-                    xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-                  />
-                </IconButton>
-              </>
-            }
-          >
-            {closeWarning}
-            <AskSlot node={node} />
-          </ReviewPanelFrame>
+          <AskDock host={nativeHost}>
+            <ReviewPanelFrame
+              tray
+              label="Ask"
+              titleAccessory={
+                <div ref={setHeader} {...stylex.props(panelStyles.title)} />
+              }
+              onClose={close}
+              onEscape={warning ? () => setWarning(false) : close}
+              closeLabel="Close Ask"
+              closeRef={closeButton}
+              headerActions={
+                <>
+                  {actions}
+                  <IconButton
+                    ref={popOutTooltip}
+                    size="large"
+                    aria-label="Pop out Ask"
+                    onClick={() => store.getState().popOutAsk(askKey)}
+                  >
+                    <PopOutIcon
+                      xstyle={[
+                        controlStyles.inertIcon,
+                        controlStyles.chromeIcon,
+                      ]}
+                    />
+                  </IconButton>
+                </>
+              }
+            >
+              {closeWarning}
+              <AskSlot node={node} />
+            </ReviewPanelFrame>
+          </AskDock>
         ) : shown === "window" ? (
           <AskWindow
             askKey={askKey}
@@ -691,6 +708,7 @@ function OpenAsk({ askKey }: { askKey: number }) {
             titleAccessory={
               <div ref={setHeader} {...stylex.props(panelStyles.title)} />
             }
+            onHide={hide}
             onClose={close}
             closeRef={closeButton}
           >
@@ -1414,7 +1432,7 @@ const sectionStyles = stylex.create({
   meta: {
     flex: "0 0 auto",
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     whiteSpace: "nowrap",
   },
