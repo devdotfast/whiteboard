@@ -1,4 +1,5 @@
 import { BoardIcon } from "@canvas/ui/board-icons";
+import { Button } from "@canvas/ui/button";
 import { boardTitle } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
@@ -62,10 +63,11 @@ export function AskChangedBoards({
     >
       <span>Edited {countLabel(boards.length, "board")}</span>
       {boards.map((board) => (
-        <button
+        <Button
           key={board.reviewId}
-          type="button"
-          {...stylex.props(styles.board)}
+          variant="link"
+          tone="accent"
+          xstyle={styles.board}
           onClick={(event) =>
             void session.surface.post({
               name: "openReview",
@@ -79,7 +81,7 @@ export function AskChangedBoards({
         >
           <BoardIcon icon={board.icon} xstyle={styles.icon} />
           {boardTitle(board.title)}
-        </button>
+        </Button>
       ))}
     </nav>
   );
@@ -97,16 +99,6 @@ const styles = stylex.create({
     fontSize: fontSize.small,
     lineHeight: "16px",
   },
-  board: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "4px",
-    padding: 0,
-    borderWidth: 0,
-    backgroundColor: "transparent",
-    color: tokens.accent,
-    font: "inherit",
-    cursor: "pointer",
-  },
+  board: { gap: "4px", whiteSpace: "normal" },
   icon: { width: "12px", height: "12px" },
 });

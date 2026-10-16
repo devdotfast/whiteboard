@@ -1,4 +1,5 @@
 import { fontSize } from "@canvas/scale.stylex";
+import { Button } from "@canvas/ui/button";
 import {
   type ReviewBoardPlace,
   type ReviewDiffStats,
@@ -149,13 +150,9 @@ export function ReviewDocumentMetaLine({
           {retrySave && (
             <>
               {" · "}
-              <button
-                type="button"
-                onClick={retrySave}
-                {...stylex.props(styles.retry)}
-              >
+              <Button variant="link" xstyle={styles.retry} onClick={retrySave}>
                 Retry
-              </button>
+              </Button>
             </>
           )}
         </span>
@@ -226,13 +223,5 @@ const styles = stylex.create({
   },
   fixed: { flexShrink: 0 },
   failed: { color: tokens.changeRemoved },
-  retry: {
-    padding: 0,
-    borderWidth: 0,
-    backgroundColor: "transparent",
-    color: "inherit",
-    font: "inherit",
-    textDecoration: "underline",
-    cursor: "pointer",
-  },
+  retry: { color: "inherit", textDecorationLine: "underline" },
 });
