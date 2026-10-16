@@ -1,5 +1,5 @@
 import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
-import { Button, buttonStyles } from "@canvas/ui/button";
+import { Button } from "@canvas/ui/button";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
 import type { DiffSelection } from "@review/lens-selection";
@@ -574,12 +574,12 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
       <Handle
         type="target"
         position={Position.Top}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         type="source"
         position={Position.Bottom}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <svg
         {...stylex.props(styles.drawing)}
@@ -731,15 +731,6 @@ const styles = stylex.create({
   },
   viewed: {
     opacity: 0.42,
-  },
-  // Handles exist only so edges can attach.
-  handle: {
-    width: "1px",
-    height: "1px",
-    minWidth: 0,
-    minHeight: 0,
-    opacity: 0,
-    pointerEvents: "none",
   },
   drawing: {
     position: "absolute",

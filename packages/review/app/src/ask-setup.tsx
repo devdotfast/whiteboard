@@ -1,4 +1,4 @@
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import { CopyButton } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CopyIcon } from "@canvas/ui/icons";
@@ -62,9 +62,7 @@ export function AskSetup({
               key={candidate.id}
               {...stylex.props(askPanelStyles.listItem, setupStyles.agent)}
             >
-              <span {...stylex.props(setupStyles.logo)}>
-                {AGENT_LOGOS[candidate.id]({ xstyle: setupStyles.logoMark })}
-              </span>
+              <AgentLogo agent={candidate.id} xstyle={setupStyles.logo} />
               <span {...stylex.props(setupStyles.name)}>
                 <span>{candidate.name}</span>
                 <span {...stylex.props(setupStyles.status)}>
@@ -144,14 +142,7 @@ const setupStyles = stylex.create({
     padding: "12px 14px",
   },
   logo: {
-    display: "flex",
-    flex: "0 0 18px",
-    justifyContent: "center",
     opacity: 0.45,
-  },
-  logoMark: {
-    width: "18px",
-    height: "18px",
   },
   name: {
     display: "flex",

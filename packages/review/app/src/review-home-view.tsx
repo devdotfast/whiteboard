@@ -1,5 +1,6 @@
 import { CopyableText, copyText } from "@canvas/ui/copy";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
+import { dividerStyles } from "@canvas/ui/divider";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
@@ -20,6 +21,7 @@ import {
 } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import { fieldStyles } from "@canvas/ui/text-field";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   REVIEW_DISCORD_URL,
   type ReviewApiSummary,
@@ -91,7 +93,6 @@ import { Shortcut } from "./ui/kbd";
 import { useDismissOnOutside } from "./ui/popover";
 import { StatusBanner } from "./ui/status-banner";
 import { surfaceStyles } from "./ui/surface";
-import { useTooltip } from "./use-tooltip";
 
 interface ReviewHomeProps {
   findHost?: ReviewFindHost;
@@ -169,6 +170,8 @@ export function ReviewHome({
   const clearTooltip = useTooltip("Clear filters", { instant: true });
   const filterTooltip = useTooltip("Filter", { instant: true });
   const sortTooltip = useTooltip("Sort", { instant: true });
+  const selectGroupTooltip = useTooltip<HTMLInputElement>("Select group");
+  const selectTooltip = useTooltip<HTMLInputElement>("Select");
   const ui = useContext(CanvasUiContext);
   const notify = useNotify();
 
@@ -1190,8 +1193,8 @@ export function ReviewHome({
                           </span>
                         )}
                         <Checkbox
+                          ref={selectGroupTooltip}
                           aria-label={`Select ${group.label}`}
-                          title="Select group"
                           checked={count === group.reviews.length}
                           indeterminate={
                             count > 0 && count < group.reviews.length
@@ -1237,8 +1240,8 @@ export function ReviewHome({
                         }}
                       >
                         <Checkbox
+                          ref={selectTooltip}
                           aria-label={`Select ${reviewTitle(review)}`}
-                          title="Select"
                           checked={isSelected(index)}
                           xstyle={!isSelected(index) && styles.hiddenCheck}
                           onChange={() => {}}
@@ -1428,7 +1431,10 @@ export function ReviewHome({
           >
             {inTrash ? "Delete…" : "Trash"} <Shortcut>⌘⌫</Shortcut>
           </Button>
-          <span aria-hidden="true" {...stylex.props(styles.barDivider)} />
+          <span
+            aria-hidden="true"
+            {...stylex.props(dividerStyles.vertical, styles.barDivider)}
+          />
           <IconButton aria-label="Clear selection" onClick={clearSelection}>
             <CloseIcon />
           </IconButton>

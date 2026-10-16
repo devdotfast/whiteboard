@@ -1,8 +1,9 @@
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type AskAgentId,
   type AskChoiceKind,
@@ -38,7 +39,6 @@ import { menuStyles } from "./ui/menu";
 import { Popover } from "./ui/popover";
 import { textStyles } from "./ui/text";
 import { fieldStyles } from "./ui/text-field";
-import { useTooltip } from "./use-tooltip";
 
 const agentsSchema = z.object({
   agents: z.array(
@@ -371,9 +371,7 @@ export function AskAgentMenu({
             )}
             onClick={() => onPick(candidate.id)}
           >
-            <span {...stylex.props(styles.logo)}>
-              {AGENT_LOGOS[candidate.id]({})}
-            </span>
+            <AgentLogo agent={candidate.id} />
             <span {...stylex.props(styles.name)}>{candidate.name}</span>
             {candidate.id === current ? (
               <CheckIcon xstyle={[iconStyles.inline, menuStyles.check]} />
@@ -413,7 +411,7 @@ export function AskAgentPicker({
         ref={unavailable === undefined ? undefined : hint}
         {...stylex.props(styles.inline)}
       >
-        {agent ? AGENT_LOGOS[agent]({}) : null}
+        {agent ? <AgentLogo agent={agent} /> : null}
         <span>{chosen?.name ?? agent ?? "Agent"}</span>
       </span>
     );
@@ -430,7 +428,7 @@ export function AskAgentPicker({
         disabled={!agents}
         onClick={() => setOpen((value) => !value)}
       >
-        {agent ? AGENT_LOGOS[agent]({}) : null}
+        {agent ? <AgentLogo agent={agent} /> : null}
         <span>{chosen?.name ?? "Choose an agent"}</span>
         <ChevronDownIcon />
       </Button>
@@ -778,11 +776,6 @@ const styles = stylex.create({
     paddingBlock: "8px",
     paddingInline: "8px",
     fontSize: fontSize.small,
-  },
-  logo: {
-    display: "flex",
-    flex: "0 0 16px",
-    justifyContent: "center",
   },
   name: {
     flex: "1 1 0",

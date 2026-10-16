@@ -1,10 +1,12 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { fontSize, fontWeight } from "@canvas/scale.stylex";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { CopyButton } from "@canvas/ui/copy";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ArrowRightIcon, CodeIcon } from "@canvas/ui/icons";
+import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewCommitSummary,
   type ReviewDiffFileWire,
@@ -16,13 +18,12 @@ import { useMemo, useState } from "react";
 import { canvasQueryKeys } from "./canvas-query";
 import { DiffCount } from "./diff-count";
 import { FileMark } from "./file-mark";
-import { countLabel } from "./format";
+import { countLabel, formatClockTime } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { chevronMarker } from "./markers.stylex";
 import { shortRef } from "./review-branch-range";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
-import { useTooltip } from "./use-tooltip";
 
 type OpenCommitDiff = (
   commit: ReviewCommitSummary,
@@ -133,7 +134,13 @@ function CommitRow({
     : 0;
 
   return (
-    <article {...stylex.props(styles.card, expanded && styles.cardExpanded)}>
+    <article
+      {...stylex.props(
+        surfaceStyles.card,
+        styles.card,
+        expanded && styles.cardExpanded,
+      )}
+    >
       <div {...stylex.props(styles.header, expanded && styles.headerExpanded)}>
         <button
           type="button"
@@ -169,7 +176,7 @@ function CommitRow({
           </IconButton>
         </span>
         <span {...stylex.props(styles.meta)}>
-          {commit.author} · {formatCommitTime(commit.authoredAt)} ·{" "}
+          {commit.author} · {formatClockTime(commit.authoredAt)} ·{" "}
           {countLabel(commit.fileCount, "file")}{" "}
           <DiffCount
             additions={commit.additions}
@@ -285,13 +292,6 @@ export function groupCommitsByDate(commits: readonly ReviewCommitSummary[]) {
   return groups;
 }
 
-function formatCommitTime(value: string): string {
-  return new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
 const styles = stylex.create({
   view: {
     minHeight: "100%",
@@ -354,12 +354,6 @@ const styles = stylex.create({
   },
   card: {
     marginBottom: "6px",
-    overflow: "hidden",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: radius.surface,
-    backgroundColor: tokens.surface,
     boxShadow: "none",
   },
   cardExpanded: {

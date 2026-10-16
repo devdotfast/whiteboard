@@ -1,5 +1,6 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
+import { surfaceStyles } from "@canvas/ui/surface";
 import {
   type FlowDiagramBlock,
   nodeSources,
@@ -14,6 +15,7 @@ import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { drawStyles } from "./draw-styles";
 import { FlowGraph } from "./flow-graph";
+import { countLabel } from "./format";
 import { documentMarker } from "./markers.stylex";
 import { useReviewLenses } from "./review-lenses";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
@@ -108,6 +110,7 @@ export function FlowDiagram({
     <figure
       {...withClass(
         "flow-diagram",
+        surfaceStyles.card,
         styles.figure,
         fullscreen && styles.stage,
         drawStyles.blockChild,
@@ -117,7 +120,7 @@ export function FlowDiagram({
       <DiagramHeader
         kind="FLOW"
         title={node.title}
-        meta={`${node.nodes.length} ${node.nodes.length === 1 ? "node" : "nodes"}`}
+        meta={countLabel(node.nodes.length, "node")}
         action={
           <Button
             className="diagram-tour-button"
@@ -201,13 +204,7 @@ const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 const styles = stylex.create({
   figure: {
-    overflow: "hidden",
     margin: "18px 0 4px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: radius.surface,
-    backgroundColor: tokens.surface,
     color: tokens.ink,
     font: `${fontSize.body}/1.5 ${tokens.fontMono}`,
   },

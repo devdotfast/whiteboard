@@ -1,8 +1,6 @@
 import type { NormalizedSoftwareModel } from "@canvas/software-map/model";
 import type { PinnedSoftwareMapData } from "@canvas/software-map/SoftwareMap";
 import { createReviewAppSessionId } from "@canvas/tab-dwell-telemetry";
-import { UiHostProvider } from "@canvas/ui/host";
-import { useTooltip } from "@canvas/use-tooltip";
 import type {
   ReviewCanvasBridge,
   ReviewCanvasDiagnostic,
@@ -100,7 +98,7 @@ export function ReviewSessionProvider({
 }) {
   return (
     <ReviewSessionContext.Provider value={session}>
-      <UiHostProvider useTooltip={useTooltip}>{children}</UiHostProvider>
+      {children}
     </ReviewSessionContext.Provider>
   );
 }

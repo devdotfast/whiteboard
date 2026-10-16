@@ -6,6 +6,7 @@ import { ShareIcon } from "@canvas/ui/icons";
 import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewApiClient,
   ReviewApiError,
@@ -25,7 +26,6 @@ import { topbarActionsMarker } from "./markers.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
-import { useTooltip } from "./use-tooltip";
 
 export const SharingContext = createContext<{
   client: ReviewApiClient;

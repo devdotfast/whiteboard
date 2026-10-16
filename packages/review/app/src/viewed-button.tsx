@@ -1,6 +1,5 @@
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { CoverageProgress } from "@review/viewed-coverage";
-
-import { useTooltip } from "./use-tooltip";
 
 /**
  * The viewed box. Its look lives in the workbench's review.css so the diff

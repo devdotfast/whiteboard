@@ -2,11 +2,11 @@ import { fontSize, radius } from "@canvas/scale.stylex";
 import { useCopy } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ArrowLeftIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 const fullHash = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i;
 

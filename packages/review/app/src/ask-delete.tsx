@@ -1,5 +1,6 @@
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { TrashIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
@@ -18,7 +19,6 @@ import { fontSize, radius } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { IconButton } from "./ui/button";
-import { useTooltip } from "./use-tooltip";
 
 /** How long a first click keeps a delete armed. */
 const ARMED_MS = 4_000;

@@ -3,11 +3,11 @@ import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { CopyableText, useCopy } from "@canvas/ui/copy";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
-import { useUiTooltip } from "@canvas/ui/host";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { RefreshIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
   type ReviewGatewayHostState,
@@ -595,7 +595,7 @@ function RefreshButton({
   pending: boolean;
   onClick: () => void;
 }) {
-  const tooltip = useUiTooltip("Check again");
+  const tooltip = useTooltip("Check again");
 
   return (
     <IconButton

@@ -1,5 +1,6 @@
 import { DiscordIcon } from "@canvas/ui/brand-icons";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
+import { dividerStyles } from "@canvas/ui/divider";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
   ArchiveIcon,
@@ -12,6 +13,7 @@ import { Popover } from "@canvas/ui/popover";
 import { StatusBanner } from "@canvas/ui/status-banner";
 import { Switch } from "@canvas/ui/switch";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewCanvasRange,
   type ReviewCommitSummary,
@@ -114,7 +116,6 @@ import { traceStyles } from "./trace-styles";
 import { captureUiEvent } from "./ui-telemetry";
 import { SegmentedControl, labeledOptions } from "./ui/segmented";
 import { useReviewTabTelemetry } from "./use-review-tab-telemetry";
-import { useTooltip } from "./use-tooltip";
 import { useTraceList } from "./use-trace-list";
 
 const DEFAULT_SIDE_PEEK_WIDTH = 560;
@@ -657,10 +658,8 @@ function ReviewLayoutContent({
               !review.historicalRevision &&
               !review.submissionOutcome && (
                 <div
-                  {...stylex.props(
-                    shellStyles.topbarItem,
-                    shellStyles.actionsDivider,
-                  )}
+                  aria-hidden="true"
+                  {...stylex.props(dividerStyles.vertical)}
                 />
               )}
             {!scratchpad &&

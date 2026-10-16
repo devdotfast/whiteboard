@@ -1,12 +1,11 @@
+import { testCanvasUi } from "@canvas/canvas-ui-test-utils";
+import { CanvasUiContext } from "@canvas/host/canvas-ui";
+import { ReviewSessionProvider } from "@canvas/host/review-session";
+import { testReviewSession } from "@canvas/review-session-test-utils";
+import { useTooltip } from "@canvas/ui/tooltip";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
-
-import { testCanvasUi } from "./canvas-ui-test-utils";
-import { CanvasUiContext } from "./host/canvas-ui";
-import { ReviewSessionProvider } from "./host/review-session";
-import { testReviewSession } from "./review-session-test-utils";
-import { useTooltip } from "./use-tooltip";
 
 function Control({ label }: { label: string }) {
   return <button ref={useTooltip(label)} aria-label={label} />;

@@ -1,8 +1,9 @@
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ChatIcon, HistoryIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect } from "react";
 
@@ -23,7 +24,6 @@ import { Button, IconButton } from "./ui/button";
 import { Chip } from "./ui/chip";
 import { EmptyState } from "./ui/empty-state";
 import { textStyles } from "./ui/text";
-import { useTooltip } from "./use-tooltip";
 
 /** Opens the list of this review's saved conversations. */
 function useOpenAskHistory() {
@@ -285,9 +285,10 @@ export function AskHistoryList({
                       );
                     }}
                   >
-                    <span {...stylex.props(styles.historyLogo)}>
-                      {AGENT_LOGOS[entry.agent]({})}
-                    </span>
+                    <AgentLogo
+                      agent={entry.agent}
+                      xstyle={styles.historyLogo}
+                    />
                     <span {...stylex.props(styles.historyText)}>
                       <span
                         {...stylex.props(
@@ -392,10 +393,7 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   historyLogo: {
-    display: "flex",
-    flex: "0 0 16px",
-    justifyContent: "center",
-    paddingTop: "3px",
+    marginTop: "3px",
   },
   historyText: {
     display: "flex",

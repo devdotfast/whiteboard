@@ -4,6 +4,7 @@ import { iconStyles } from "@canvas/ui/icon-styles";
 import { ArrowDownIcon, ArrowUpIcon, CloseIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { fieldStyles } from "@canvas/ui/text-field";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { ReviewFindQuery } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -32,7 +33,6 @@ import { reviewFindRanges } from "./review-find-text";
 import { useReviewRoots } from "./review-root-context";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 const ALL_HIGHLIGHT = "review-find-match";
 

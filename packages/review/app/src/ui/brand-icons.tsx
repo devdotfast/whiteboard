@@ -1,3 +1,4 @@
+import { iconStyles } from "@canvas/ui/icon-styles";
 import type { IconProps } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
@@ -152,7 +153,7 @@ export function DiscordIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
-export const AGENT_LOGOS = {
+const AGENT_LOGOS = {
   claude: ClaudeCodeLogo,
   codex: CodexLogo,
   cursor: CursorLogo,
@@ -162,10 +163,37 @@ export const AGENT_LOGOS = {
   copilot: CopilotLogo,
 } as const;
 
+/** An agent's mark. Inline sits beside a small label; chrome matches the
+ * top bar's icons; default heads a row. */
+export function AgentLogo({
+  agent,
+  size = "default",
+  xstyle,
+}: IconProps & {
+  agent: keyof typeof AGENT_LOGOS;
+  size?: "inline" | "chrome" | "default";
+}): ReactElement {
+  const Logo = AGENT_LOGOS[agent];
+
+  return (
+    <Logo
+      xstyle={[
+        styles.fixed,
+        size === "inline" && iconStyles.inline,
+        size === "chrome" && iconStyles.chrome,
+        xstyle,
+      ]}
+    />
+  );
+}
+
 const styles = stylex.create({
   logo: {
     width: "16px",
     height: "16px",
+  },
+  fixed: {
+    flex: "none",
   },
   discord: {
     width: "15px",

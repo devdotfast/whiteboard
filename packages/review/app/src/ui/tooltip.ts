@@ -1,8 +1,7 @@
+import { CanvasUiContext } from "@canvas/host/canvas-ui";
+import { useOptionalReviewSession } from "@canvas/host/review-session";
 import type { ReviewTooltipOptions } from "@dev.fast/review-protocol";
 import { useCallback, useContext } from "react";
-
-import { CanvasUiContext } from "./host/canvas-ui";
-import { useOptionalReviewSession } from "./host/review-session";
 
 /**
  * Attach the host's tooltip to an element, or a native `title` without a

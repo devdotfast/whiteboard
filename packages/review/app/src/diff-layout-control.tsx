@@ -4,6 +4,7 @@ import { iconStyles } from "@canvas/ui/icon-styles";
 import { SlidersIcon } from "@canvas/ui/icons";
 import { Popover } from "@canvas/ui/popover";
 import { SegmentedControl, labeledOptions } from "@canvas/ui/segmented";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewDiffLayout,
   ReviewDiffLayoutScope,
@@ -22,7 +23,6 @@ import { useReviewSession } from "./host/review-session";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureClientError, captureUiEvent } from "./ui-telemetry";
-import { useTooltip } from "./use-tooltip";
 
 const LAYOUT_OPTIONS = labeledOptions<ReviewDiffLayout>({
   unified: "Unified",

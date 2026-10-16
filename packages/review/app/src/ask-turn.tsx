@@ -1,4 +1,4 @@
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { focusStyles } from "@canvas/ui/focus";
@@ -6,6 +6,7 @@ import { iconStyles } from "@canvas/ui/icon-styles";
 import { CheckIcon, CloseIcon } from "@canvas/ui/icons";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { AskEntry, AskThreadState } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -20,11 +21,11 @@ import { AgentMarkdown } from "./agent-markdown";
 import { askFileCode, askFileLink } from "./ask-files";
 import { askPanelStyles } from "./ask-styles";
 import { CourierFigure } from "./courier-figure";
+import { formatDuration } from "./format";
 import { chevronMarker } from "./markers.stylex";
 import { fontSize, radius } from "./scale.stylex";
 import { settleStreamingMarkdown } from "./streaming-markdown";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 type ToolEntry = Extract<AskEntry, { kind: "tool" }>;
 
@@ -557,9 +558,7 @@ export function AskAgentTurn({
   return (
     <div {...stylex.props(styles.turn)}>
       <div {...stylex.props(styles.byline)}>
-        <span {...stylex.props(styles.bylineLogo)}>
-          {AGENT_LOGOS[thread.agent]({ xstyle: styles.bylineLogoMark })}
-        </span>
+        <AgentLogo agent={thread.agent} size="inline" />
         <span>{thread.agentName}</span>
       </div>
       {blocks.map((block) =>
@@ -571,14 +570,6 @@ export function AskAgentTurn({
       )}
     </div>
   );
-}
-
-function elapsed(since: number, now: number) {
-  const seconds = Math.max(0, Math.floor((now - since) / 1000));
-
-  return seconds < 60
-    ? `${seconds}s`
-    : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 /** How long after the answer text last grew the agent still reads as
@@ -656,7 +647,9 @@ export function AskWorking({
       >
         {doing}…
       </span>
-      <span {...stylex.props(styles.workingTime)}>{elapsed(since, now)}</span>
+      <span {...stylex.props(styles.workingTime)}>
+        {formatDuration(Math.max(0, now - since))}
+      </span>
     </div>
   );
 }
@@ -676,15 +669,6 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
     lineHeight: "14px",
-  },
-  bylineLogo: {
-    display: "flex",
-    flex: "0 0 14px",
-    justifyContent: "center",
-  },
-  bylineLogoMark: {
-    width: "12px",
-    height: "12px",
   },
   answer: {
     display: "flex",

@@ -18,6 +18,7 @@ import {
 import { DiffCount } from "./diff-count";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { drawStyles } from "./draw-styles";
+import { formatRelativeTime } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { ReviewBranchRange, WORKING_TREE } from "./review-branch-range";
 import { useReviewDiffFiles } from "./review-diff-files-context";
@@ -58,8 +59,8 @@ export function ReviewDocumentMetaLine({
     diffFiles.status === "loaded" ? reviewDiffStats(diffFiles) : null;
 
   const updatedLabel =
-    meta?.updatedAtMs != null && relativeTimeNowMs != null
-      ? relativeTimeLabel(meta.updatedAtMs, relativeTimeNowMs)
+    Number.isFinite(meta?.updatedAtMs) && relativeTimeNowMs != null
+      ? formatRelativeTime(meta.updatedAtMs, relativeTimeNowMs)
       : null;
 
   const repository = meta.pullRequestUrl?.match(
@@ -219,27 +220,6 @@ function reviewDiffStats(diff: {
   if (!diff.files?.length) return null;
 
   return summarizeReviewDiffFiles(diff.files);
-}
-
-function relativeTimeLabel(timeMs: number, nowMs: number): string | null {
-  if (!Number.isFinite(timeMs)) return null;
-  const seconds = Math.max(0, Math.round((nowMs - timeMs) / 1000));
-
-  if (seconds < 60) return "just now";
-  const minutes = Math.round(seconds / 60);
-
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-
-  if (hours < 24) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
-  const days = Math.round(hours / 24);
-
-  if (days < 7) return days === 1 ? "1 day ago" : `${days} days ago`;
-
-  return new Date(timeMs).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
 }
 
 // Paper's review header: identity, title, then source and diff metadata.

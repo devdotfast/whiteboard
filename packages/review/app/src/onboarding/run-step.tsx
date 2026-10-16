@@ -7,8 +7,10 @@ import {
   radius,
 } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
+import { dividerStyles } from "@canvas/ui/divider";
+import { EmptyState } from "@canvas/ui/empty-state";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
@@ -21,7 +23,7 @@ import { Shortcut } from "@canvas/ui/kbd";
 import { SegmentedControl } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
 import { TextArea, fieldStyles } from "@canvas/ui/text-field";
-import { useTooltip } from "@canvas/use-tooltip";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewCanvasSetupActions,
   ReviewOnboardingProject,
@@ -284,7 +286,6 @@ export function RunStep({
   };
 
   const agentName = agents.find((candidate) => candidate.id === agent)?.name;
-  const AgentLogo = agent ? AGENT_LOGOS[agent] : undefined;
   const canChooseAgent = agents.length > 1;
 
   const canDraw =
@@ -513,15 +514,19 @@ export function RunStep({
               ))}
             </div>
           ) : targets.length === 0 ? (
-            <p {...stylex.props(styles.empty)}>
-              {discovered
-                ? "Nothing to draw here yet: check out a branch, then choose the folder again."
-                : "Choose a project folder above."}
-            </p>
+            <EmptyState
+              xstyle={styles.empty}
+              message={
+                discovered
+                  ? "Nothing to draw here yet: check out a branch, then choose the folder again."
+                  : "Choose a project folder above."
+              }
+            />
           ) : shown.length === 0 ? (
-            <p {...stylex.props(styles.empty)}>
-              Nothing matches “{query.trim()}”.
-            </p>
+            <EmptyState
+              xstyle={styles.empty}
+              message={`Nothing matches “${query.trim()}”.`}
+            />
           ) : (
             // The list scrolls in place, so the prompt and Draw stay on screen.
             <div
@@ -602,14 +607,17 @@ export function RunStep({
                   onClick={() => void draw()}
                   xstyle={styles.chipDraw}
                 >
-                  {AgentLogo ? <AgentLogo xstyle={styles.chipLogo} /> : null}
+                  {agent ? <AgentLogo agent={agent} /> : null}
                   {starting ? "Starting…" : agentName}
                   <Shortcut aria-hidden="true" xstyle={styles.shortcut}>
                     ⌘↵
                   </Shortcut>
                 </Button>
                 {canChooseAgent ? (
-                  <span aria-hidden="true" {...stylex.props(styles.chipRule)} />
+                  <span
+                    aria-hidden="true"
+                    {...stylex.props(dividerStyles.vertical)}
+                  />
                 ) : null}
                 {canChooseAgent ? (
                   <OptionMenu
@@ -621,15 +629,11 @@ export function RunStep({
                       styles.chipMenu,
                     ]}
                     value={agent}
-                    options={agents.map((candidate) => {
-                      const Logo = AGENT_LOGOS[candidate.id];
-
-                      return {
-                        value: candidate.id,
-                        label: candidate.name,
-                        icon: <Logo />,
-                      };
-                    })}
+                    options={agents.map((candidate) => ({
+                      value: candidate.id,
+                      label: candidate.name,
+                      icon: <AgentLogo agent={candidate.id} />,
+                    }))}
                     onChange={(next: OnboardingRunAgent["id"]) =>
                       setAgent(next)
                     }
@@ -787,11 +791,7 @@ const styles = stylex.create({
     fontSize: fontSize.small,
   },
   empty: {
-    margin: 0,
-    paddingBlock: "12px 20px",
     paddingInline: "20px",
-    color: tokens.inkMuted,
-    fontSize: fontSize.ui,
   },
   toolbar: {
     display: "flex",
@@ -937,13 +937,6 @@ const styles = stylex.create({
     fontSize: fontSize.ui,
     borderTopRightRadius: 0,
     borderBottomRightRadius: 0,
-  },
-  chipLogo: { width: "16px", height: "16px" },
-  chipRule: {
-    width: "1px",
-    height: "14px",
-    flexShrink: 0,
-    backgroundColor: tokens.ruleSoft,
   },
   chipMenu: {
     height: "28px",

@@ -6,6 +6,7 @@ import { iconStyles } from "@canvas/ui/icon-styles";
 import { CloseIcon, FileIcon, SearchIcon } from "@canvas/ui/icons";
 import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewCommitScope,
   ReviewDiffLens,
@@ -60,7 +61,6 @@ import {
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { ProgressRing } from "./ui/progress-ring";
-import { useTooltip } from "./use-tooltip";
 import { ViewedButton } from "./viewed-button";
 
 // An empty label shows no tooltip, so only a truncated name gets one.

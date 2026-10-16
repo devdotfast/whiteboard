@@ -3,6 +3,7 @@ import { Button } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { RefreshIcon } from "@canvas/ui/icons";
 import { Spinner } from "@canvas/ui/spinner";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewHostStatus,
   type ReviewRemoteHostActions,
@@ -18,7 +19,6 @@ import {
 } from "./remote-host-state";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 export interface LostConnection {
   host?: string;

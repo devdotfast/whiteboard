@@ -1,3 +1,4 @@
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { AskEntry, AskThreadState } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
@@ -7,7 +8,6 @@ import { fontSize, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { textStyles } from "./ui/text";
-import { useTooltip } from "./use-tooltip";
 
 type PermissionEntry = Extract<AskEntry, { kind: "permission" }>;
 

@@ -12,9 +12,10 @@ import { type ReviewAgentTraceSession } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { countLabel, formatDuration } from "./format";
 import { useReviewSession } from "./host/review-session";
 import type { TraceSelection } from "./review-panel-store";
-import { TraceDocument, formatDuration } from "./trace-document";
+import { TraceDocument } from "./trace-document";
 import { TraceRuler } from "./trace-ruler";
 import { traceStyles as styles } from "./trace-styles";
 import {
@@ -474,9 +475,7 @@ export function ReviewTraceDocument({
             </>
           )}
           <span {...stylex.props(styles.metaSeparator)}>·</span>
-          <span>
-            {trace.userTurns} {trace.userTurns === 1 ? "turn" : "turns"}
-          </span>
+          <span>{countLabel(trace.userTurns, "turn")}</span>
           <span {...stylex.props(styles.metaSeparator)}>·</span>
           <span>{trace.toolCalls} tool calls</span>
           {duration && (

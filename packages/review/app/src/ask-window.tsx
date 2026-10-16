@@ -1,4 +1,4 @@
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
@@ -9,6 +9,7 @@ import {
   GripIcon,
   MinusIcon,
 } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import {
   type PointerEvent,
@@ -45,7 +46,6 @@ import { menuStyles } from "./ui/menu";
 import { useDismissOnOutside } from "./ui/popover";
 import { surfaceStyles } from "./ui/surface";
 import { textStyles } from "./ui/text";
-import { useTooltip } from "./use-tooltip";
 
 export type { AskPresence };
 
@@ -612,7 +612,7 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
 /** The agent's logo, or Ask's own for the list of conversations. */
 function PresenceLogo({ presence }: { presence: AskPresence }) {
   return presence.agent ? (
-    AGENT_LOGOS[presence.agent]({ xstyle: styles.logo })
+    <AgentLogo agent={presence.agent} size="chrome" />
   ) : (
     <ChatIcon xstyle={[iconStyles.chrome, styles.askGlyph]} />
   );
@@ -1127,10 +1127,6 @@ const styles = stylex.create({
   pillWaiting: {
     borderColor: tokens.changeModified,
     boxShadow: `${elevation.popover}, 0 0 0 4px ${tokens.warningWash}`,
-  },
-  logo: {
-    width: "14px",
-    height: "14px",
   },
   askGlyph: {
     color: tokens.inkMuted,

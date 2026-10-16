@@ -2,6 +2,7 @@ import { courierMotion } from "@canvas/courier-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { ActivityPresence } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
 import { useContext, useState } from "react";
@@ -22,7 +23,6 @@ import { topbarTabsMarker } from "./markers.stylex";
 import { useReviewRoots } from "./review-root-context";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 /**
  * The top-bar badges: one pill per working agent, in its color, with its

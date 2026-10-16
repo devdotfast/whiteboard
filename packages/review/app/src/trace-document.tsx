@@ -15,6 +15,7 @@ import {
   ThinkingIcon,
 } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -28,6 +29,7 @@ import {
 
 import { AgentChatUserMessage } from "./agent-chat";
 import { AgentMarkdown } from "./agent-markdown";
+import { countLabel, formatClockTime, formatDuration } from "./format";
 import {
   HighlightedText,
   QuoteMark,
@@ -313,7 +315,7 @@ export function TraceEvent({
   if (event.kind === "user") {
     return (
       <AgentChatUserMessage
-        caption={event.at ? timeLabel(event.at) : undefined}
+        caption={event.at ? formatClockTime(event.at) : undefined}
       >
         {highlightQuote ? (
           <HighlightedText text={event.text} quote={highlightQuote} />
@@ -475,32 +477,6 @@ function ThinkingSummary() {
   );
 }
 
-export function timeLabel(at: string): string {
-  const value = new Date(at);
-
-  if (Number.isNaN(value.getTime())) return "";
-
-  return value.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-export function formatDuration(durationMs: number): string {
-  if (!Number.isFinite(durationMs) || durationMs < 0) return "";
-  const totalSeconds = Math.round(durationMs / 1000);
-
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  if (minutes < 60) return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-
-  return rest ? `${hours}h ${rest}m` : `${hours}h`;
-}
-
 export function toolIcon(verb: string): ReactNode {
   const xstyle = [iconStyles.chrome, styles.icon];
 
@@ -613,6 +589,7 @@ export function ElidedMessage({
 }) {
   const text = event.kind === "user" ? event.text : event.markdown;
   const segments = elideByKeep(text, keep);
+  const expandTooltip = useTooltip("Show the hidden text");
 
   if (!segments) return <TraceEvent event={event} highlightQuote={quote} />;
 
@@ -633,8 +610,9 @@ export function ElidedMessage({
           <button
             key={index}
             type="button"
+            ref={expandTooltip}
             {...stylex.props(chipStyles.pill, styles.lensChip)}
-            title="Show the hidden text"
+            aria-label="Show the hidden text"
             onClick={onExpand}
           >
             ⋯
@@ -647,7 +625,7 @@ export function ElidedMessage({
   if (event.kind === "user") {
     return (
       <AgentChatUserMessage
-        caption={event.at ? timeLabel(event.at) : undefined}
+        caption={event.at ? formatClockTime(event.at) : undefined}
       >
         {body}
       </AgentChatUserMessage>
@@ -736,7 +714,7 @@ export function TraceCollapseRow({
         <ChevronDownIcon
           xstyle={[styles.collapseChevron, edge !== "top" && iconStyles.flip]}
         />
-        collapse {span.count} {span.count === 1 ? "event" : "events"}
+        collapse {countLabel(span.count, "event")}
       </Chip>
       <span {...stylex.props(styles.lensLine, styles.lensLineSolid)} />
     </button>
@@ -783,7 +761,7 @@ export function TraceTurn({
   const workedLabel =
     turn.workedMs !== null && turn.workedMs >= 1000
       ? `Worked for ${formatDuration(turn.workedMs)}`
-      : `Worked · ${steps} ${steps === 1 ? "step" : "steps"}`;
+      : `Worked · ${countLabel(steps, "step")}`;
 
   const renderTurnEvent = (item: IndexedTraceTurnEvent) => {
     const isTarget = item.index === targetEventIndex;

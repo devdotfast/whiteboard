@@ -36,6 +36,7 @@ import { EmptyState } from "@canvas/ui/empty-state";
 import { CloseIcon, FoldIcon, RefreshIcon, UnfoldIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import { useCanvasScrollLock } from "@canvas/use-canvas-scroll-lock";
 import { codePeekSource } from "@review/source";
 import * as stylex from "@stylexjs/stylex";
@@ -856,6 +857,7 @@ export function SoftwareMapFrame({
   onViewportFocusComplete,
 }: SoftwareMapFrameProps) {
   const session = useReviewSession();
+  const refreshTooltip = useTooltip("Refresh software map");
   const frameRef = useRef<HTMLElement | null>(null);
 
   const codeInspectorResize = useRightPanelResize({
@@ -948,8 +950,8 @@ export function SoftwareMapFrame({
               <IconButton
                 xstyle={refreshing && styles.refreshing}
                 onClick={onRefresh}
+                ref={refreshTooltip}
                 aria-label="Refresh software map"
-                title="Refresh software map"
               >
                 <RefreshIcon />
               </IconButton>
@@ -978,8 +980,8 @@ export function SoftwareMapFrame({
           <IconButton
             xstyle={refreshing && styles.refreshing}
             onClick={onRefresh}
+            ref={refreshTooltip}
             aria-label="Refresh software map"
-            title="Refresh software map"
           >
             <RefreshIcon />
           </IconButton>
@@ -1074,6 +1076,8 @@ function SoftwareMapCodeInspector({
     ? "Expand all diffs"
     : "Collapse all diffs";
 
+  const collapseTooltip = useTooltip(collapseActionLabel);
+
   return (
     // The marker is the hook code peeks restyle themselves by in the inspector.
     <aside
@@ -1094,8 +1098,8 @@ function SoftwareMapCodeInspector({
             <IconButton
               onClick={() => setDiffsCollapsed((current) => !current)}
               aria-expanded={!diffsCollapsed}
+              ref={collapseTooltip}
               aria-label={collapseActionLabel}
-              title={collapseActionLabel}
             >
               {diffsCollapsed ? <UnfoldIcon /> : <FoldIcon />}
             </IconButton>
@@ -2037,25 +2041,25 @@ function SoftwareMapC4GroupNode({
         id="target-left"
         type="target"
         position={Position.Left}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-left"
         type="source"
         position={Position.Left}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-top"
         type="target"
         position={Position.Top}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-top"
         type="source"
         position={Position.Top}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <div
         {...stylex.props(
@@ -2087,25 +2091,25 @@ function SoftwareMapC4GroupNode({
         id="source-right"
         type="source"
         position={Position.Right}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-right"
         type="target"
         position={Position.Right}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-bottom"
         type="source"
         position={Position.Bottom}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-bottom"
         type="target"
         position={Position.Bottom}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
     </div>
   );
@@ -2136,25 +2140,25 @@ function SoftwareMapC4Node({ data }: ReactFlowNodeProps<C4MapFlowNode>) {
         id="target-left"
         type="target"
         position={Position.Left}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-left"
         type="source"
         position={Position.Left}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-top"
         type="target"
         position={Position.Top}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-top"
         type="source"
         position={Position.Top}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <SoftwareMapNodeCard
         node={data.node}
@@ -2166,25 +2170,25 @@ function SoftwareMapC4Node({ data }: ReactFlowNodeProps<C4MapFlowNode>) {
         id="source-right"
         type="source"
         position={Position.Right}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-right"
         type="target"
         position={Position.Right}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-bottom"
         type="source"
         position={Position.Bottom}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-bottom"
         type="target"
         position={Position.Bottom}
-        {...stylex.props(buttonStyles.reset, styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
     </div>
   );
@@ -3323,12 +3327,6 @@ const styles = stylex.create({
   },
   hidden: {
     display: "none",
-  },
-  handle: {
-    width: "1px",
-    height: "1px",
-    opacity: 0,
-    pointerEvents: "none",
   },
   node: {
     position: "relative",

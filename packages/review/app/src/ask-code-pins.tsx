@@ -1,4 +1,5 @@
-import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
+import { AgentLogo } from "@canvas/ui/brand-icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewAskMark,
   ReviewDiffViewHandle,
@@ -14,7 +15,6 @@ import { openAskConversations, truncate } from "./ask-marks";
 import { useOptionalReviewPanelStore } from "./review-panel";
 import { fontSize, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 interface CodeMark extends ReviewAskMark {
   /** Newest first, like the history. */
@@ -168,7 +168,7 @@ function CodePin({ mark }: { mark: CodeMark }): ReactElement {
         )
       }
     >
-      {newest ? AGENT_LOGOS[newest.agent]({ xstyle: styles.logo }) : null}
+      {newest ? <AgentLogo agent={newest.agent} xstyle={styles.logo} /> : null}
       {count > 1 ? count : null}
     </button>
   );

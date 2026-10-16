@@ -1,4 +1,5 @@
 import { focusStyles } from "@canvas/ui/focus";
+import { useTooltip } from "@canvas/ui/tooltip";
 import { type AskFileRef, parseFileRef } from "@review/ask/file-refs";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -16,7 +17,6 @@ import { z } from "zod";
 import { useReviewSession } from "./host/review-session";
 import { radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 const resolvedSchema = z.object({
   files: z.array(z.object({ path: z.string(), file: z.string() })),

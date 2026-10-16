@@ -2,7 +2,7 @@ import { radius } from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
-import type { ComponentProps } from "react";
+import { type ComponentProps, type RefCallback, useCallback } from "react";
 
 const mixedBar = `linear-gradient(${tokens.onAccent}, ${tokens.onAccent})`;
 
@@ -11,22 +11,31 @@ type CheckboxProps = Omit<
   "type" | "ref" | "className" | "style"
 > & {
   indeterminate?: boolean;
+  ref?: RefCallback<HTMLInputElement>;
   className?: string;
   xstyle?: StyleArg;
 };
 
 export function Checkbox({
   indeterminate = false,
+  ref,
   className,
   xstyle,
   ...props
 }: CheckboxProps) {
+  const box = useCallback(
+    (element: HTMLInputElement | null) => {
+      if (element) element.indeterminate = indeterminate;
+
+      return ref?.(element);
+    },
+    [indeterminate, ref],
+  );
+
   return (
     <input
       type="checkbox"
-      ref={(element) => {
-        if (element) element.indeterminate = indeterminate;
-      }}
+      ref={box}
       {...props}
       {...withClass(className, styles.box, xstyle)}
     />
