@@ -352,11 +352,11 @@ button {
 
 /* A selected rich block shows its ring, not a text selection or a caret. */
 .review-board-editor.ProseMirror-hideselection {
-  caret-color: transparent;
+  caret-color: var(--transparent);
 }
 
 .review-board-editor.ProseMirror-hideselection *::selection {
-  background: transparent;
+  background: var(--transparent);
   color: inherit;
 }
 
@@ -396,14 +396,19 @@ button {
   padding: 0;
   border: 0;
   border-radius: 4px;
-  background: transparent;
+  background: var(--transparent);
   color: var(--ink-faint);
   user-select: none;
 }
 
 .review-board-chevron:hover {
-  background: var(--well);
-  color: var(--ink);
+  background: var(--chrome-hover-bg);
+  color: var(--chrome-fg);
+}
+
+.review-board-chevron:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
 }
 
 .review-board-chevron svg {
@@ -411,15 +416,20 @@ button {
   height: 12px;
   fill: none;
   stroke: currentcolor;
-  stroke-width: 1.5;
+  stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
-  transform: rotate(90deg);
   transition: transform 120ms ease;
 }
 
 .review-board-chevron[aria-expanded="false"] svg {
-  transform: none;
+  transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-board-chevron svg {
+    transition: none;
+  }
 }
 
 /* An empty heading's chevron is ghost until the heading has text. */

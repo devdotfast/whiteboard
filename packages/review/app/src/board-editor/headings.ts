@@ -113,9 +113,10 @@ function chevron(
   label(button, collapsed);
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  svg.setAttribute("viewBox", "0 0 12 12");
+  // The kit's ChevronDownIcon, which the CSS turns as DisclosureChevron does.
+  svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
-  path.setAttribute("d", "M4.25 2.5 8 6l-3.75 3.5");
+  path.setAttribute("d", "M5 8.5 12 16l7-7.5");
   svg.append(path);
   button.append(svg);
   button.addEventListener("mousedown", (event) => event.preventDefault());
