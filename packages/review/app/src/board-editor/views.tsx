@@ -8,6 +8,7 @@ import {
 } from "@canvas/review-document-surface";
 import { fontSize } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
+import { Shortcut } from "@canvas/ui/kbd";
 import { UNTITLED_BOARD } from "@dev.fast/review-protocol";
 import { parseMarkdown } from "@review/markdown";
 import * as stylex from "@stylexjs/stylex";
@@ -227,7 +228,8 @@ function RichBlock({
           {...stylex.props(styles.hint)}
           style={{ top: hint.top, right: hint.right }}
         >
-          ⌫ to delete · ⌘Z restores
+          <Shortcut xstyle={styles.hintKey}>⌫</Shortcut> to delete ·{" "}
+          <Shortcut xstyle={styles.hintKey}>⌘Z</Shortcut> restores
         </span>
       )}
     </div>
@@ -350,4 +352,6 @@ const styles = stylex.create({
     whiteSpace: "nowrap",
     pointerEvents: "none",
   },
+  // The hint's own size; the keys keep the kit's spacing.
+  hintKey: { fontSize: "inherit", lineHeight: "inherit" },
 });
