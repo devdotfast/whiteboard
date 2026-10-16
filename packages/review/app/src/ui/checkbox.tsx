@@ -83,7 +83,7 @@ const styles = stylex.create({
     backgroundSize: { default: "10px 10px", ":indeterminate": "8px 1.5px" },
     backgroundRepeat: "no-repeat",
     appearance: "none",
-    cursor: "pointer",
+    cursor: { default: "pointer", ":disabled": "default" },
   },
   checked: {
     borderColor: tokens.accent,

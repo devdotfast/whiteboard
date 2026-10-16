@@ -13,7 +13,10 @@ import { Onboarding } from "./onboarding";
 const SERVER = "http://127.0.0.1:4000";
 
 /** The desktop server's answers, by method and path. */
-function server(connect: (target: string) => ReviewConnectResult) {
+function server(
+  connect: (target: string) => ReviewConnectResult,
+  claudeConnected = false,
+) {
   const requests: string[] = [];
 
   const respond = vi.fn<typeof fetch>(async (input, init) => {
@@ -29,7 +32,7 @@ function server(connect: (target: string) => ReviewConnectResult) {
             target: "claude",
             name: "Claude Code",
             found: true,
-            connected: false,
+            connected: claudeConnected,
           },
           { target: "cursor", name: "Cursor", found: true, connected: false },
           { target: "codex", name: "Codex", found: false, connected: false },
@@ -48,7 +51,7 @@ function server(connect: (target: string) => ReviewConnectResult) {
   return { requests, respond };
 }
 
-function setupActions(): ReviewCanvasSetupActions {
+function setupActions(cliInstalled = true): ReviewCanvasSetupActions {
   const status: ReviewCliInstallStatus = {
     fingerprint: "test",
     stamp: null,
@@ -56,7 +59,7 @@ function setupActions(): ReviewCanvasSetupActions {
     updateNeeded: false,
     shim: {
       path: "/home/me/.local/bin/whiteboard",
-      installed: true,
+      installed: cliInstalled,
       profileConfigured: true,
       onPath: true,
     },
@@ -108,7 +111,9 @@ function setupActions(): ReviewCanvasSetupActions {
 
   return {
     load: vi.fn<ReviewCanvasSetupActions["load"]>(async () => ready),
-    installCli: vi.fn<ReviewCanvasSetupActions["installCli"]>(async () => {}),
+    installCli: vi.fn<ReviewCanvasSetupActions["installCli"]>(async () => {
+      status.shim.installed = true;
+    }),
     connection: vi.fn<ReviewCanvasSetupActions["connection"]>(async () => ({
       serverUrl: SERVER,
       token: "token",
@@ -226,5 +231,32 @@ describe("Onboarding", () => {
     await settle();
 
     expect(row("Claude Code")?.getAttribute("data-state")).toBe("done");
+  });
+
+  it("holds Continue until the whiteboard command is installed", async () => {
+    const { requests, respond } = server(
+      () => ({ target: "cursor", state: "connected", output: "" }),
+      true,
+    );
+
+    vi.stubGlobal("fetch", respond);
+
+    await act(async () =>
+      root.render(
+        <Onboarding setupActions={setupActions(false)} onSkip={() => {}} />,
+      ),
+    );
+    await act(async () => button("Get started")?.click());
+    await settle();
+
+    expect(row("Claude Code")?.getAttribute("data-state")).toBe("done");
+    expect(button("Continue")).toBeUndefined();
+
+    await act(async () => button("Install")?.click());
+    await settle();
+
+    expect(row("whiteboard command")?.getAttribute("data-state")).toBe("done");
+    expect(requests).toEqual(["GET /install/agents", "POST /install/connect"]);
+    expect(button("Continue")?.disabled).toBe(false);
   });
 });

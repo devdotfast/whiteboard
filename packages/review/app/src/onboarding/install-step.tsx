@@ -226,13 +226,15 @@ export function InstallStep({
     [client, connectAll, setupActions],
   );
 
-  const install = async () => {
-    setApproved(true);
-
-    // First, so each agent's server launches the installed command.
+  // First, so each agent's server launches the installed command.
+  const ensureCli = async () => {
     if (rowsRef.current.find((row) => row.id === "cli")?.state !== "done")
       await installCli();
+  };
 
+  const install = async () => {
+    setApproved(true);
+    await ensureCli();
     await connectAll(
       rowsRef.current.flatMap((row) =>
         row.id !== "cli" &&
@@ -272,7 +274,10 @@ export function InstallStep({
   const nothingToDo =
     !scanning && rows.length > 0 && rows.every((row) => row.state === "done");
 
-  const ready = approved || nothingToDo;
+  // Every agent needs the command, so nothing continues without it.
+  const ready =
+    nothingToDo ||
+    (approved && rows.some((row) => row.id === "cli" && row.state === "done"));
 
   useReturnKey(!busy, ready ? onContinue : () => void install());
 
@@ -302,11 +307,13 @@ export function InstallStep({
               key={id}
               row={row}
               manual={id === "cli" ? undefined : manual?.plugins[id].command}
-              choosing={!approved && id !== "cli" && row.state === "waiting"}
+              choosing={!approved && row.state === "waiting"}
               skipped={skipped.has(id)}
               onToggle={() => toggle(id)}
               onRetry={
-                id === "cli" ? () => void installCli() : () => void connect(id)
+                id === "cli"
+                  ? () => void installCli()
+                  : () => void ensureCli().then(() => connect(id))
               }
             />
           );
@@ -419,6 +426,11 @@ function InstallRow({
   const checkboxId = useId();
   const retryTooltip = useTooltip(row.output || "Try again");
   const left = skipped && row.state === "waiting";
+  const required = row.id === "cli";
+
+  const requiredTooltip = useTooltip<HTMLSpanElement>(
+    "Every agent needs the whiteboard command",
+  );
 
   return (
     <div
@@ -429,9 +441,17 @@ function InstallRow({
       )}
       data-state={row.state}
     >
-      <span {...stylex.props(styles.status)}>
+      <span
+        ref={choosing && required ? requiredTooltip : undefined}
+        {...stylex.props(styles.status)}
+      >
         {choosing ? (
-          <Checkbox id={checkboxId} checked={!skipped} onChange={onToggle} />
+          <Checkbox
+            id={checkboxId}
+            checked={required || !skipped}
+            disabled={required}
+            onChange={onToggle}
+          />
         ) : (
           <RowStatus state={row.state} />
         )}
@@ -443,7 +463,7 @@ function InstallRow({
             styles.name,
             (left || (row.state === "waiting" && !choosing)) &&
               styles.nameWaiting,
-            choosing && styles.nameChoosing,
+            choosing && !required && styles.nameChoosing,
           )}
         >
           {row.name}
@@ -485,9 +505,11 @@ function InstallRow({
                 : "Connected"
               : row.state === "running"
                 ? "Installing…"
-                : left
-                  ? "Skipped"
-                  : "Waiting"}
+                : required
+                  ? "Required"
+                  : left
+                    ? "Skipped"
+                    : "Waiting"}
           </span>
         )}
       </span>
