@@ -46,7 +46,7 @@ export function SlashMenu({
           {...stylex.props(
             menuStyles.item,
             styles.item,
-            index === state.index && styles.highlighted,
+            index === state.index && menuStyles.itemHighlighted,
           )}
           onMouseDown={(event) => {
             event.preventDefault();
@@ -75,17 +75,11 @@ const styles = stylex.create({
     justifyContent: "space-between",
     minHeight: "24px",
     padding: "3px 8px",
-    // System text, as on the canvas's other menus in the design.
-    fontFamily: tokens.chromeFont,
     fontSize: fontSize.ui,
     lineHeight: "18px",
   },
-  highlighted: {
-    backgroundColor: tokens.well,
-  },
   shortcut: {
     color: tokens.inkFaint,
-    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     lineHeight: "14px",
   },
