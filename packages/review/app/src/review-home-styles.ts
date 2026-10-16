@@ -331,7 +331,6 @@ export const styles = stylex.create({
     padding: "24px",
     fontSize: fontSize.ui,
     lineHeight: 1.6,
-    "::backdrop": { backgroundColor: tokens.backdrop },
   },
   dialogTitle: {
     margin: 0,

@@ -60,34 +60,35 @@ describe("BugReportControl", () => {
     vi.clearAllMocks();
   });
 
-  it.each([200, 500])(
-    "uses host notifications after sending a report (%s)",
-    async (status) => {
-      const notify = vi.fn<NonNullable<typeof session.bridge.notify>>();
-      session.bridge.notify = notify;
+  it("uses a host notification after sending a report", async () => {
+    const notify = vi.fn<NonNullable<typeof session.bridge.notify>>();
+    session.bridge.notify = notify;
 
-      if (status === 500) {
-        request.mockImplementation(async () =>
-          jsonResponse({ error: "Unavailable" }, 500),
-        );
-      }
+    await renderAndOpen();
+    await act(async () => sendButton().click());
 
-      await renderAndOpen();
-      await act(async () => sendButton().click());
+    expect(notify).toHaveBeenCalledWith({
+      kind: "success",
+      text: "Bug report was sent.",
+    });
+    expect(container.querySelector("dialog")).toBeNull();
+  });
 
-      expect(notify).toHaveBeenCalledWith({
-        kind: status === 200 ? "success" : "error",
-        text:
-          status === 200
-            ? "Bug report was sent."
-            : "The report could not be sent. Try again.",
-      });
-      expect(container.querySelector('[role="status"]')).toBeNull();
-      expect(container.querySelector('[role="dialog"]') !== null).toBe(
-        status !== 200,
-      );
-    },
-  );
+  it("shows a failed send inside the dialog", async () => {
+    const notify = vi.fn<NonNullable<typeof session.bridge.notify>>();
+    session.bridge.notify = notify;
+    request.mockImplementation(async () =>
+      jsonResponse({ error: "Unavailable" }, 500),
+    );
+
+    await renderAndOpen();
+    await act(async () => sendButton().click());
+
+    expect(notify).not.toHaveBeenCalled();
+    expect(container.querySelector('dialog [role="alert"]')?.textContent).toBe(
+      "The report could not be sent. Try again.",
+    );
+  });
 
   it("disables Send when the description exceeds the byte limit", async () => {
     await renderAndOpen();
