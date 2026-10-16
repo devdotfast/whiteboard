@@ -1,4 +1,5 @@
 import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
+import { CrumbSeparator } from "@canvas/ui/crumbs";
 import { TooltipHostContext, useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewApiSummary,
@@ -288,7 +289,7 @@ function BoardRow({
             >
               {parentTitle}
             </span>
-            <span {...stylex.props(styles.separator)}>›</span>
+            <CrumbSeparator />
             <span
               {...stylex.props(
                 styles.title,
@@ -965,7 +966,6 @@ const styles = stylex.create({
   },
   faint: { color: tokens.inkFaint },
   pathParent: { flex: "0 1 auto" },
-  separator: { flexShrink: 0, color: tokens.inkFaint },
   // The parent's title gives way first; the board's own keeps most of the row.
   pathLeaf: { flex: "0 0 auto", maxWidth: "80%" },
   moreIcon: { marginLeft: "2px" },

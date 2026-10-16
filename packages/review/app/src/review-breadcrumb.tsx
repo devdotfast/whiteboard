@@ -1,6 +1,7 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
 import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { buttonStyles } from "@canvas/ui/button";
+import { CrumbSeparator } from "@canvas/ui/crumbs";
 import { focusStyles } from "@canvas/ui/focus";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { Popover } from "@canvas/ui/popover";
@@ -103,18 +104,6 @@ export function ReviewBreadcrumb({
       open: (event) => openBoard(board.reviewId, event),
     }));
 
-  const chevron = (
-    <svg
-      aria-hidden="true"
-      width="10"
-      height="10"
-      viewBox="0 0 10 10"
-      {...stylex.props(styles.chevron, styles.separator)}
-    >
-      <path d="M4 2.5 L6.5 5 L4 7.5" />
-    </svg>
-  );
-
   /** A menu button over `rows`, which lists them to jump to. */
   const menu = (
     rows: readonly PlaceRow[],
@@ -133,7 +122,7 @@ export function ReviewBreadcrumb({
         keep > 0 && styles.keeps(keep),
       )}
     >
-      {chevron}
+      <CrumbSeparator />
       <span ref={control} {...stylex.props(styles.control)}>
         <button
           type="button"
@@ -374,7 +363,6 @@ const styles = stylex.create({
     minWidth: 0,
   },
   counterYields: { flexShrink: 1 },
-  separator: { flexShrink: 0, stroke: tokens.inkFaint },
   control: { display: "inline-flex", minWidth: 0 },
   count: {
     display: "inline-flex",

@@ -6,6 +6,7 @@ import {
   tracking,
 } from "@canvas/scale.stylex";
 import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
+import { CrumbSeparator } from "@canvas/ui/crumbs";
 import { surfaceStyles } from "@canvas/ui/surface";
 import {
   type BoardIconKind,
@@ -353,15 +354,7 @@ function BlockPeek({ target }: { target: BoardLinkTarget }): ReactNode {
         <span {...stylex.props(styles.crumb)}>{boardTitle(target.title)}</span>
         {preview.section ? (
           <>
-            <svg
-              aria-hidden="true"
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
-              {...stylex.props(styles.chevron)}
-            >
-              <path d="M3.5 2 L6.5 5 L3.5 8" />
-            </svg>
+            <CrumbSeparator />
             <span {...stylex.props(styles.crumb)}>{preview.section}</span>
           </>
         ) : null}
@@ -504,14 +497,6 @@ const styles = stylex.create({
     lineHeight: "16px",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
-  },
-  chevron: {
-    flexShrink: 0,
-    fill: "none",
-    stroke: tokens.inkFaint,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    strokeWidth: 1.2,
   },
   quote: { display: "flex", gap: "12px", minWidth: 0 },
   bar: {
