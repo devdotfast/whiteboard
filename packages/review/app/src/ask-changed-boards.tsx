@@ -4,6 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 import { z } from "zod";
 
+import { countLabel } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { fontSize } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
@@ -59,9 +60,7 @@ export function AskChangedBoards({
       aria-label="Boards this conversation changed"
       {...stylex.props(styles.list)}
     >
-      <span>
-        Edited {boards.length} {boards.length === 1 ? "board" : "boards"}
-      </span>
+      <span>Edited {countLabel(boards.length, "board")}</span>
       {boards.map((board) => (
         <button
           key={board.reviewId}

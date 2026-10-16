@@ -10,7 +10,7 @@ import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
 import { FolderLabel } from "./folder-label";
-import { formatRelativeTime } from "./format";
+import { countLabel, formatRelativeTime } from "./format";
 import { fontSize, fontWeight, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { SegmentedControl, segmentStyles } from "./ui/segmented";
@@ -52,7 +52,7 @@ function relation(thread: ReviewProjectThread, reviewId: string) {
           ? started
           : edited === 1 && editedHere
             ? `${started} · edited here`
-            : `${started} · edited ${edited} ${edited === 1 ? "board" : "boards"}`,
+            : `${started} · edited ${countLabel(edited, "board")}`,
     };
   }
 

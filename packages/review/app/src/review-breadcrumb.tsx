@@ -21,6 +21,7 @@ import {
   useState,
 } from "react";
 
+import { countLabel } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { tokens } from "./tokens.stylex";
 
@@ -183,7 +184,7 @@ export function ReviewBreadcrumb({
 
   if (!parent) {
     const top = board!;
-    const count = `${children.length} ${children.length === 1 ? "board" : "boards"}`;
+    const count = countLabel(children.length, "board");
 
     return (
       <nav

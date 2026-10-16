@@ -15,7 +15,7 @@ import {
 } from "react";
 
 import { DiffCount } from "./diff-count";
-import { formatRelativeTime } from "./format";
+import { countLabel, formatRelativeTime } from "./format";
 import { tokens } from "./tokens.stylex";
 
 /**
@@ -97,7 +97,7 @@ export function CommitPicker({
           type="button"
           aria-haspopup="menu"
           aria-expanded={open}
-          aria-label={`All ${commits.length} ${commits.length === 1 ? "commit" : "commits"}. Choose commits`}
+          aria-label={`All ${countLabel(commits.length, "commit")}. Choose commits`}
           {...stylex.props(styles.pill, styles.pillLabel, styles.all)}
           onClick={() => setOpen(!open)}
         >
@@ -203,7 +203,7 @@ function CommitMenu({
         </span>
         <span {...stylex.props(styles.allTitle)}>All commits</span>
         <span {...stylex.props(styles.allCount)}>
-          {total} {total === 1 ? "commit" : "commits"}
+          {countLabel(total, "commit")}
         </span>
       </button>
       <div {...stylex.props(styles.rule)} />
