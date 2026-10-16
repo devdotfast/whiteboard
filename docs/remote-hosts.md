@@ -1,107 +1,154 @@
 # Remote hosts
 
-A remote host is a Linux machine that you reach over SSH, such as a
-development server or a cloud VM, where your code and your coding agent live.
-Whiteboard runs its review server there, next to the code. Whiteboard Desktop
-on your laptop connects to it over SSH and shows its reviews beside your local
-ones: in Home, each one is labelled with the host, as `devbox: my-repo`.
+A remote host is a Linux machine you reach over SSH, such as a devbox or a
+cloud VM, where your code and your coding agent live. Whiteboard runs its
+review server there, next to the code. Desktop connects over SSH and lists the
+host's reviews in Home beside your local ones, labelled `devbox: my-repo`.
 
-Whiteboard uses your own SSH configuration. A host is an alias from it, such
-as `devbox`. User names, keys, ports, jump hosts and agents all come from that
-configuration; Whiteboard stores only the alias.
+Remote hosts are experimental.
 
-## Trust
+## Setup
 
-Add only hosts you trust as much as your laptop. Like VS Code Remote-SSH,
-Whiteboard does not sandbox a connected host. Verify a new or changed host
-key's fingerprint before accepting it. Agent and port forwarding from your SSH
-config apply to Whiteboard's connections too.
+### Requirements
 
-## What the remote needs
+The remote:
 
-- Linux on x64 or ARM64, with glibc 2.34 or newer (Ubuntu 22.04, Debian 12,
+- Linux on x64 or ARM64, glibc 2.34 or newer (Ubuntu 22.04, Debian 12,
   Fedora 35, RHEL 9 or later).
 - A writable home directory with 1 GB free.
 - `tar`, `xz`, `curl` or `wget`, and `sha256sum` or `openssl`.
-- HTTPS access to `install.dev.fast`.
-- An OpenSSH server that allows TCP forwarding. See
-  [TCP forwarding](#tcp-forwarding).
+- HTTPS access to `install.dev.fast`, and to `open-vsx.org` for
+  [language features](#language-features).
+- An OpenSSH server that allows TCP forwarding (the default).
 
-Your laptop needs the OpenSSH client. On Windows, that is the built-in
-OpenSSH Client, with two limits:
+Your laptop: the OpenSSH client. On Windows, the built-in OpenSSH Client; see
+[Windows laptops](#windows-laptops).
 
-- Whiteboard cannot show SSH prompts there. Use a key without a passphrase, or
-  load it into the `ssh-agent` service:
+### Add a host
+
+1. Make sure `ssh <alias>` works in a terminal. Whiteboard uses your SSH
+   config for users, keys, ports, jump hosts and agents, and stores only the
+   alias.
+2. In Settings, under **Remote Hosts (Experimental)**, type the alias (the
+   field suggests them) and click **Add**.
+3. Accept the install prompt the first time.
+
+When the row reads `online`, the host's reviews appear in Home. You do not
+start anything on the remote: Desktop starts the review server when it
+connects. On a remote with no Desktop connected, `whiteboard api` starts one,
+so an agent there can write reviews before you connect.
+
+On macOS and Linux, password, passphrase and host key prompts from `ssh`
+appear in Whiteboard's window. Answers go to `ssh` and are never stored.
+
+Hosts are kept in `review.remote.hosts`, a list of aliases. Only you can
+change it; a repository or a remote never adds a host.
+
+### Windows laptops
+
+Whiteboard cannot show SSH prompts on Windows:
+
+- Use a key without a passphrase, or load it into `ssh-agent`:
 
   ```powershell
   Get-Service ssh-agent | Set-Service -StartupType Automatic -PassThru | Start-Service
   ssh-add
   ```
 
-- Run `ssh <alias>` once in a terminal to verify and accept the host's key.
+- Run `ssh <alias>` once in a terminal to accept the host key.
 
-Each command Desktop runs on a Windows laptop opens its own SSH connection.
+### Agents
 
-## Add a host
+Once a host is `online`, Settings lists its unconnected agents (Claude Code,
+Codex, OpenCode, Pi). **Connect** runs the agent's own install commands on the
+host.
 
-Remote hosts are experimental. Open Settings. Under **Remote Hosts
-(Experimental)**, type an alias from your SSH configuration (the field suggests them) and click **Add**. The row shows the
-host's state. The first time, Desktop asks to install Whiteboard there. When
-the row reads `online`, the host's reviews appear in Home.
+Ask on a remote review runs the agent on the host, in the review's checkout,
+using the sign-ins already there (`claude auth login`, `codex login`,
+`opencode auth login`, `cursor-agent login`, Pi's `/login`).
 
-**Remove** takes the host and its reviews out of Whiteboard. Nothing on the
-remote is deleted unless you check
-[**Also remove Whiteboard**](#remove-whiteboard-from-a-host).
+## Troubleshooting
 
-The hosts are kept in the setting `review.remote.hosts`, a list of aliases.
-Only you can change it: a repository or a remote never adds a host.
+First check that `ssh <alias>` works in a terminal without prompts you have
+not answered before.
 
-On macOS and Linux, if `ssh` asks for a password, a passphrase or a host key
-confirmation, Whiteboard shows the prompt in its window. Your answer goes to `ssh` and is
-never stored.
+| State | Meaning | Fix |
+|---|---|---|
+| `connecting` | Opening SSH and starting the review server. | Wait. |
+| `installing` | Installing Desktop's version on the host. | Wait. |
+| `online` | Connected; reviews listed and open. | — |
+| `offline` | SSH is up but the review server does not answer (checked every 10 s, so within ~15 s). | Usually recovers. After three missed checks Desktop reattaches; a hung server then shows `unreachable` and the detail says to run `whiteboard server stop` on the host. |
+| `unreachable` | `ssh` failed, the connection dropped, or the server did not start. | Desktop retries every 1–60 s; **Retry** tries now. Follow the detail. |
+| `auth-failed` | Login refused, prompt cancelled, or host key mismatch. | Fix the login, then **Retry**. Not retried automatically. |
+| `not-installed` | Desktop's version is missing and was not installed. | **Install**, or [install by hand](#install-by-hand) and **Retry**. |
+| `unsupported` | The machine cannot run Whiteboard. Nothing was written. | Use another machine. |
+| `incompatible` | The host runs another Whiteboard version. | Run `whiteboard server stop` on the host and **Retry**, or update Desktop. |
+| `duplicate` | Several hosts report the same server id; none is used. | Same machine under two aliases: remove all but one. A copied review store: remove the copy's host, run `whiteboard server stop` then `whiteboard server reset-id` on it, and re-add. |
 
-## How Desktop installs Whiteboard
+While a host is not `online`, its reviews stay in Home as unavailable, and
+opening one says why.
 
-Desktop first checks the host and writes nothing. If the host has no install
-Desktop recognises, Desktop asks once, then installs as your user. A host with
-one gets Desktop's new version without a question. The host downloads
-it from `install.dev.fast` and checks its pinned checksum before unpacking.
-Desktop runs the same `install.sh` you can run by hand.
+Common problems:
 
-You do not need to start anything. Desktop starts the review server when it
-connects. On a remote with no Desktop, `whiteboard api` starts one too, so an
-agent there can write reviews before you connect.
+- **"administratively prohibited" / `unreachable`:** `sshd_config` sets
+  `AllowTcpForwarding no`. Whiteboard needs TCP forwarding.
+- **No hovers:** Settings shows "Language features" under each online host
+  with the reason. Usually a version mismatch between Desktop and the host,
+  no access to Open VSX, or a missing toolchain (for example "swift was not
+  found on the login shell's PATH"). Put toolchains on your login shell's
+  `PATH` (`~/.profile` is enough).
+- **`whiteboard server stop` does not stick:** a connected Desktop restarts
+  the server within ~10 s. Remove the host first.
+- **Windows asks for nothing and fails:** see
+  [Windows laptops](#windows-laptops).
 
-### What Desktop writes on the remote
+## How it works
+
+### Connection
+
+On macOS and Linux, Desktop opens one SSH master connection per host
+(`ControlMaster`) and runs every command and port forward over it. On Windows,
+which has no `ControlMaster`, a master connection serves a loopback SOCKS port
+for forwards, and each command opens its own `BatchMode` connection.
+
+The remote review server listens only on the remote's loopback interface.
+Desktop's local review server reaches it through an SSH port forward and acts
+as a gateway: the canvas talks only to the local server, which proxies remote
+reviews with the remote server's token. Language features use a second
+forward, to a VS Code server also on loopback.
+
+### Install and updates
+
+Desktop first probes the host and writes nothing. With no install it
+recognises, it asks once, then installs as your user; a host with a
+recognised install gets new versions without asking. The host downloads the
+archive from `install.dev.fast` and verifies Desktop's pinned checksum before
+unpacking. Desktop runs the same `install.sh` you can run by hand.
+
+On update, Desktop installs its new version (also over a hand install),
+restarts the server it started, and keeps the previous version and any
+version still running. A server you started yourself keeps running.
+
+`review.remote.install` controls this:
+
+| Value | Behavior |
+|---|---|
+| `ask` (default) | Ask once per host, unless it has a recognised install. |
+| `always` | Install without asking. |
+| `never` | Never install; use `whiteboard` on the host's `PATH`. |
+
+What Desktop writes on the remote:
 
 | Path | What it is |
 |---|---|
-| `~/.dev/whiteboard-remote/versions/<version>/` | One Whiteboard version, about 250 MB, with its own Node. |
+| `~/.dev/whiteboard-remote/versions/<version>/` | One version, ~250 MB, with its own Node. |
 | `~/.dev/whiteboard-remote/install.lock/` | Present while an install runs. |
-| `~/.local/bin/whiteboard` | A launcher for the newest version, if that path is free or Desktop's own. |
+| `~/.local/bin/whiteboard` | Launcher for the newest version, if that path is free or already Desktop's. |
 
-With `DEV_REVIEW_HOME` set on the remote, `whiteboard-remote/` is under it
-instead of `~/.dev`. The review server keeps reviews in `~/.dev`.
+With `DEV_REVIEW_HOME` set on the remote, `whiteboard-remote/` lives under it.
+Reviews are kept in `~/.dev`.
 
-### Updates
-
-When Desktop updates, it installs its new version without asking, also over an
-`install.sh` hand install. It restarts the review server it started. It keeps
-the previous version and any version still running. It leaves a server you
-started yourself running.
-
-### The setting
-
-`review.remote.install` decides whether Desktop installs on a host that does
-not have its version:
-
-| Value | What Desktop does |
-|---|---|
-| `ask` (the default) | Asks once per host, unless it already has an install Desktop recognises. |
-| `always` | Installs without asking. |
-| `never` | Never installs, and uses the `whiteboard` on the host's `PATH`. |
-
-### Install by hand
+#### Install by hand
 
 On the remote, with `<version>` set to Desktop's version:
 
@@ -111,164 +158,106 @@ curl -fsSL https://install.dev.fast/releases/<version>/remote/install.sh | sh -s
 
 It installs where Desktop does, so Desktop finds it.
 
-### Developing
+### Language features
 
-A development Desktop pins no archive. Set `DEV_FAST_REVIEW_REMOTE_RELEASES` to
-a URL that serves the archives and their `.sha256` files, or install this
-checkout's archive with `node apps/review-desktop/scripts/remote-dev-install.mjs <alias>`.
-With `DEV_FAST_REVIEW_REMOTE_PUBLISH=1` and Cloudflare credentials, the script
-publishes the archives and prints the URL to export.
+Hover and go to definition in remote reviews are answered on the remote by
+the same extensions a local review uses. Desktop runs one VS Code server and
+extension host per connected remote; the server exits 5 minutes after the
+last window leaves.
 
-## Agents on the remote
+- **Languages:** TypeScript, JavaScript, JSON, CSS and HTML always; Python
+  with ty; Go, Rust, Swift and C# when their group is on (Settings → Tools →
+  Extensions).
+- **First connect:** the remote downloads its extensions from Open VSX (a few
+  seconds to a minute), each checked against a checksum Whiteboard pins.
+  Whiteboard redistributes none of them. Without Open VSX access, reviews
+  still open, without hovers.
+- **Memory:** ~1 GB for one TypeScript plus one Python project, ~0.8 GB for
+  TypeScript alone, ~1 GB for a small Rust project.
+- **Version:** both ends must run the same Whiteboard version. Otherwise the
+  host stays `online` without language features.
 
-Once a host is `online`, Settings lists its unconnected agents: Claude Code,
-Codex, OpenCode and Pi. **Connect** runs the agent's own install commands on
-the host.
+Optional groups are installed on each remote at its next connection, at your
+laptop's version. Groups you never turned on are never installed; turning one
+off leaves it on the remote, unused.
 
-**Ask.** Ask works on a review that lives on a host. The agent runs on the
-host, in the review's checkout, with the agents and sign-ins already there
-(`claude auth login`, `codex login`, `opencode auth login`,
-`cursor-agent login`, Pi's `/login`). Threads are kept on the host, so every
-laptop that connects to it sees the same history for its reviews. A file that
-an answer names opens in a Source window on the host; see
-[Source windows](#source-windows).
-
-## Remove Whiteboard from a host
-
-In Settings, click **Remove** on the host, check **Also remove Whiteboard from
-`<alias>`**, and click **Remove host**. Desktop then stops the servers
-Whiteboard started and removes `~/.dev/whiteboard-remote/` and its
-`~/.local/bin/whiteboard`. Your reviews stay, and Desktop forgets your install
-answer. Nothing is removed while an install or a process you started runs from
-the install.
-
-On the remote, `whiteboard remote uninstall --keep-reviews` does the same.
-`--delete-reviews` also deletes the reviews.
-
-## States
-
-| State | Meaning | What to do |
-|---|---|---|
-| `connecting` | Whiteboard is opening the SSH connection and starting the review server. | Wait. |
-| `installing` | Desktop is installing its version there. | Wait. |
-| `online` | Connected. The host's reviews are listed and open. | Nothing. |
-| `offline` | The connection is up, but the review server did not answer. Whiteboard checks every 10 seconds, so a host that hangs shows `offline` within about 15 seconds. | It returns by itself when the server answers. After three checks in a row without an answer, Whiteboard attaches again. A hung server then shows `unreachable`, and its detail names `whiteboard server stop`: run it on the host. |
-| `unreachable` | `ssh` could not connect, the connection ended, or the review server there did not start (the detail says why). | Whiteboard tries again by itself, waiting 1 to 60 seconds between tries; **Retry** tries now. Check that `ssh <alias>` works in a terminal, or do what the detail says. |
-| `auth-failed` | The login was refused, a prompt was cancelled, or the host key did not match. | Fix the login, then click **Retry**. Whiteboard does not retry this by itself. |
-| `not-installed` | Desktop's version is not on the host, and Desktop did not install it. | Click **Install**, or [install by hand](#install-by-hand) and click **Retry**. |
-| `unsupported` | Whiteboard cannot run on this machine. Nothing was written there. | Use another machine. |
-| `incompatible` | The remote runs another version of Whiteboard. | Stop your server with `whiteboard server stop` and click **Retry**, or update this Desktop. |
-| `duplicate` | Two or more hosts report the same server id, so Whiteboard uses none of them. This happens when one machine is added under two aliases, or a review store was copied to a second machine. | If the aliases are one machine, remove all but one. If they are two machines, remove the copy's host, run `whiteboard server stop` and then `whiteboard server reset-id` on the copy, and add it again. |
-
-While a host is not `online`, its reviews stay in Home, drawn as unavailable.
-Opening one says why.
-
-## Language features
-
-Hover and go to definition work in a remote review's code, answered on the
-remote by the same language extensions a laptop review uses. Desktop runs a
-VS Code server and one extension host on each remote it connects to.
-
-- **Which languages:** TypeScript, JavaScript, JSON, CSS and HTML always.
-  Python, with ty. Go, Rust, Swift and C# when
-  you have turned their group on in Whiteboard (Settings → Tools → Extensions);
-  see [Optional languages](#optional-languages).
-- **First use:** the remote downloads its language extensions from Open VSX
-  (`open-vsx.org`) the first time Desktop connects. That takes a few seconds
-  to a minute, and the remote needs network access to Open VSX for it. A
-  remote without that access still shows its reviews, without hovers.
-- **Memory:** plan on about 1 GB for the VS Code server, its extension host and
-  the language servers of one TypeScript and one Python project; about 0.8 GB
-  with TypeScript alone. The server exits 5 minutes after the last window
-  leaves.
-- **Same version:** language features need the same Whiteboard version on
-  both ends. Otherwise the host stays `online` and its reviews open, and
-  Settings says under the host why language features are unavailable.
-
-Settings shows "Language features: available" or why not for each online host.
-
-Extensions on a remote are trusted the way VS Code Remote trusts them: they
-run on that machine and can do in the window what a local extension can. The
-code in a review stays read-only.
-
-An extension on a remote that asks for call or type hierarchies may also get
-answers about another remote's files.
-
-### Optional languages
-
-A group you turn on in Whiteboard is installed on each remote at its next
-connection, at the same version as on your laptop. A group you have not turned
-on is never installed on a remote. Turning a group off leaves it on the remote,
-unused. Each group needs its toolchain on the remote, on the `PATH` of your
-login shell (`~/.profile` or your shell's own start-up file is enough):
-
-| Group | Needs on the remote | Extensions the remote downloads |
+| Group | Needs on the remote's login `PATH` | Downloads |
 |---|---|---|
 | Go | `go` | Go |
-| Rust | `cargo` and `rustc` | rust-analyzer, about 16 MB |
-| Swift | `swift` | Swift and LLDB DAP, about 16 MB |
-| C# | `dotnet` (a .NET SDK) | C# and .NET Runtime, about 80 MB |
+| Rust | `cargo`, `rustc` | rust-analyzer, ~16 MB |
+| Swift | `swift` | Swift, LLDB DAP, ~16 MB |
+| C# | `dotnet` (.NET SDK) | C#, .NET Runtime, ~80 MB; OmniSharp from Microsoft on first start |
 
-- When a toolchain is missing, the host still connects. Settings says under
-  the host which tool the login shell could not find, for example
-  "swift: installed — swift was not found on the login shell's PATH".
-- **Memory:** a small Rust project needs about 1 GB for the VS Code server,
-  its extension host and rust-analyzer.
-- **Rust** gives hover and go to definition on remotes. The glibc a remote
-  needs for Whiteboard (2.34 or newer) is enough for rust-analyzer.
-- **Swift and C#** are installed on a remote but do not answer hovers yet,
-  on a remote or on your laptop. Swift's extension needs the task API, which
-  Whiteboard does not expose yet, and on a remote also `node-pty`, which the
-  remote's VS Code server does not include.
-- The debuggers in the Swift and C# groups are never started: reviews are
-  read-only.
-- The remote downloads each extension from Open VSX itself, and checks it
-  against the checksum Whiteboard pins. Whiteboard redistributes none of them.
-  The C# extension downloads its OmniSharp server from Microsoft the first
-  time it starts.
+Swift and C# install but do not answer hovers yet, locally or remotely: Swift
+needs the task API, and on remotes `node-pty`. Their debuggers never start;
+reviews are read-only.
 
-## Source windows
+### Source windows
 
 "Open file", the source tree and Ask's file links open a read-only Source
-window on the host, with search and language features.
+window on the host, with search and language features. Each window runs its
+own extension host on the host; close ones you are done with. When the host
+stops answering, the status bar offers Retry and the window reconnects when
+the host is back.
 
-When the host stops answering, the status bar says so and offers Retry. The
-window reconnects when the host is back.
+Source windows have no terminals or source control. On musl hosts such as
+Alpine, the explorer refreshes on focus instead of live.
 
-Not available in a Source window:
+### Ask
 
-- Terminals and source control.
-- Live file updates on musl hosts such as Alpine. The explorer refreshes when
-  the window gets focus.
+Ask threads are kept on the host, so every laptop connected to it sees the
+same history.
 
-Each Source window runs its own extension host on the host. Close the ones you
-are done with.
+## Trust model
+
+Whiteboard follows VS Code Remote-SSH: add only hosts you trust as much as
+your laptop. A connected host is not sandboxed.
+
+- **SSH is the boundary.** Your SSH config applies as-is, including agent and
+  port forwarding. Verify a new or changed host key's fingerprint before
+  accepting it.
+- **Nothing listens publicly.** The review server and VS Code server bind to
+  the remote's loopback interface and are reached only through SSH forwards.
+- **Review server tokens.** The remote server's token is read over SSH at
+  attach and stays in the laptop's local review server, which adds it to
+  proxied requests. The laptop's own token is stripped and never reaches the
+  remote.
+- **VS Code server token.** New each time the server starts. Unlike the review
+  server's token, it reaches the window, which connects to the VS Code server
+  directly. Desktop hands it only to a window that asks for an `online` host
+  running the same version, never on a command line, and never logs it.
+- **Extensions** run on the remote and can do in the window what a local
+  extension can. Review code stays read-only. An extension asking for call or
+  type hierarchies may get answers about another remote's files.
+- **Install** runs as your user, with explicit consent the first time
+  (`review.remote.install`), from `install.dev.fast`, verified against a
+  checksum pinned in Desktop.
+- **Shared server.** Every Desktop connected to a remote receives the reviews
+  its agent opens.
 
 ## Not available for remote reviews yet
 
 - Sharing.
 - Traces.
-- Scratchpads. The scratchpad is always the laptop's.
+- Scratchpads; the scratchpad is always the laptop's.
 
-Also:
+## Remove a host
 
-- `whiteboard server stop` on a remote is undone within about 10 seconds while
-  Desktop is connected to it, because Desktop starts the server again. To stop
-  it for good, remove the host first.
-- Every Desktop connected to a remote receives the reviews its agent opens.
+**Remove** in Settings takes the host and its reviews out of Whiteboard and
+deletes nothing on the remote. Check **Also remove Whiteboard from `<alias>`**
+to also stop the servers Whiteboard started and delete
+`~/.dev/whiteboard-remote/` and its `~/.local/bin/whiteboard`. Reviews stay,
+and Desktop forgets your install answer. Nothing is removed while an install
+or a process you started from the install is running.
 
-## TCP forwarding
+On the remote, `whiteboard remote uninstall --keep-reviews` does the same;
+`--delete-reviews` also deletes reviews.
 
-Whiteboard reaches the remote's review server through an SSH port forward
-(`ssh -L`) to a port on the remote's loopback interface. The server never
-listens on a public address. So the remote's `sshd` must allow TCP
-forwarding, which is OpenSSH's default. If `sshd_config` sets
-`AllowTcpForwarding no`, the host shows `unreachable`, and the detail quotes
-OpenSSH's "administratively prohibited" message.
+## Developing
 
-Language features use a second forward, to the remote's VS Code server on its
-loopback interface. That server has its own connection token, new each time it
-starts. Unlike the review server's token, it reaches the Desktop window: the
-window connects to the VS Code server itself. Desktop hands it only to a window
-that asks for an `online` host running the same Whiteboard version, never on a
-command line, and never writes it to a log.
+A development Desktop pins no archive. Set `DEV_FAST_REVIEW_REMOTE_RELEASES` to
+a URL serving the archives and their `.sha256` files, or install this
+checkout's archive with
+`node apps/review-desktop/scripts/remote-dev-install.mjs <alias>`. With
+`DEV_FAST_REVIEW_REMOTE_PUBLISH=1` and Cloudflare credentials, the script
+publishes the archives and prints the URL to export.
