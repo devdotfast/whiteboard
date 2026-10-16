@@ -1,8 +1,10 @@
 # Connect your agent
 
 Whiteboard connects to your coding agent through
-[MCP](https://modelcontextprotocol.io/). It sets up Claude Code, Codex, Cursor,
-OpenCode, Pi, oh-my-pi, and Copilot CLI for you.
+[MCP](https://modelcontextprotocol.io/), so any agent that supports MCP can
+create whiteboards. Whiteboard sets up Claude Code, Codex, Cursor, OpenCode, Pi,
+oh-my-pi, and Copilot CLI for you; see [Other agents](#other-agents) for the
+rest.
 
 Keep Whiteboard open and
 [install the `whiteboard` command](quick-start.md#install-the-whiteboard-command)
@@ -103,6 +105,13 @@ in OpenCode, to see the connection. Then ask your agent:
 ```text
 Call session_get_instructions on the Whiteboard server to confirm the connection.
 ```
+
+## Ask
+
+**Ask** lets you question a review from inside Whiteboard, and runs an agent
+to answer. It works with Claude Code, Codex, Cursor (through `cursor-agent`),
+OpenCode, and Pi, using the sign-ins already on your machine. Other agents can
+create whiteboards but cannot answer in Ask.
 
 ## Other agents
 
