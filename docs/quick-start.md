@@ -15,7 +15,7 @@
 
 See [Create a review](create-a-review.md) for what happens next.
 
-## Enable the command
+## Install the `whiteboard` command
 
 If you skipped the **Install Whiteboard** screen, open Settings and select
 **Install** under Command line. Open a new terminal and run:
