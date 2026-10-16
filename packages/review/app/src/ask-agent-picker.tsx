@@ -661,7 +661,7 @@ function AskChoiceSearch({
       >
         <SearchIcon xstyle={[iconStyles.inline, styles.searchIcon]} />
         <input
-          {...stylex.props(styles.searchInput)}
+          {...stylex.props(fieldStyles.bare, styles.searchInput)}
           value={query}
           placeholder={`Search ${noun}s`}
           aria-label={`Search ${noun}s`}
@@ -756,19 +756,6 @@ const styles = stylex.create({
   searchInput: {
     flex: "1 1 auto",
     alignSelf: "stretch",
-    minWidth: 0,
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
-    color: "inherit",
-    font: "inherit",
-    // The field around it shows the focus.
-    outline: "none",
-    "::placeholder": {
-      color: tokens.inkFaint,
-    },
   },
   count: {
     flex: "0 0 auto",

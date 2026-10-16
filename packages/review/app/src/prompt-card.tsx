@@ -1,9 +1,9 @@
 import { Button } from "@canvas/ui/button";
-import { copyText } from "@canvas/ui/copy";
+import { useCopy } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CopyIcon } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { promptStyles } from "./prompt-styles";
 import { SegmentedControl } from "./ui/segmented";
@@ -30,8 +30,6 @@ export const PROMPTS: Record<PromptKind, string> = {
     "Create a Whiteboard that sketches out the main data flows, access patterns, and code paths in this repo, so I can do a full architecture review of it. Open it in Whiteboard when you're done.",
 };
 
-const COPIED_RESET_MS = 2000;
-
 /**
  * The copy-a-prompt card. Only the user's agent can write a review of their
  * own repo, so both the Welcome rail and the Home zero state end here.
@@ -40,18 +38,10 @@ const COPIED_RESET_MS = 2000;
  */
 export function PromptCard() {
   const [kind, setKind] = useState<PromptKind>(readStoredPromptKind);
-  const [copied, setCopied] = useState(false);
-
-  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-
-  useEffect(() => () => clearTimeout(resetTimer.current), []);
+  const [copied, copy] = useCopy();
 
   const selectKind = (next: PromptKind) => {
     setKind(next);
-    setCopied(false);
-    clearTimeout(resetTimer.current);
 
     try {
       globalThis.localStorage?.setItem(
@@ -61,18 +51,6 @@ export function PromptCard() {
     } catch {
       // The desktop can disable DOM storage; the in-memory selection still works.
     }
-  };
-
-  const copyPrompt = () => {
-    void copyText(PROMPTS[kind]).then((ok) => {
-      if (!ok) {
-        return;
-      }
-
-      setCopied(true);
-      clearTimeout(resetTimer.current);
-      resetTimer.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
-    });
   };
 
   return (
@@ -95,11 +73,13 @@ export function PromptCard() {
           size="large"
           xstyle={promptStyles.copy}
           aria-live="polite"
-          aria-label={copied ? "Prompt copied" : "Copy prompt"}
-          onClick={copyPrompt}
+          aria-label={
+            copied === PROMPTS[kind] ? "Prompt copied" : "Copy prompt"
+          }
+          onClick={() => copy(PROMPTS[kind])}
         >
           <CopyIcon xstyle={iconStyles.inline} />
-          {copied ? "Copied" : "Copy prompt"}
+          {copied === PROMPTS[kind] ? "Copied" : "Copy prompt"}
         </Button>
       </div>
     </section>

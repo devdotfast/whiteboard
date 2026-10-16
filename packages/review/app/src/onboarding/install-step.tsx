@@ -364,16 +364,16 @@ function OtherAgentRow({
 }: {
   launch: Pick<ReviewCliInstallStatus["connect"], "command" | "args">;
 }) {
-  const [copied, copy] = useCopy(
-    JSON.stringify(
-      {
-        mcpServers: {
-          whiteboard: { command: launch.command, args: launch.args },
-        },
+  const [copied, copy] = useCopy();
+
+  const config = JSON.stringify(
+    {
+      mcpServers: {
+        whiteboard: { command: launch.command, args: launch.args },
       },
-      null,
-      2,
-    ),
+    },
+    null,
+    2,
   );
 
   return (
@@ -390,7 +390,9 @@ function OtherAgentRow({
         </span>
       </span>
       <span {...stylex.props(styles.trailing)}>
-        <Button onClick={copy}>{copied ? "Copied" : "Copy config"}</Button>
+        <Button onClick={() => copy(config)}>
+          {copied === config ? "Copied" : "Copy config"}
+        </Button>
       </span>
     </div>
   );
@@ -398,7 +400,8 @@ function OtherAgentRow({
 
 /** Copies a row's whole setup command; shows while the row is hovered. */
 function CopyChip({ text, name }: { text: string; name: string }) {
-  const [copied, copy] = useCopy(text);
+  const [copiedText, copy] = useCopy();
+  const copied = copiedText === text;
   const tooltip = useTooltip(text);
 
   return (
@@ -407,7 +410,7 @@ function CopyChip({ text, name }: { text: string; name: string }) {
       type="button"
       aria-label={`Copy the ${name} setup command`}
       {...stylex.props(styles.chip, copied && styles.chipShown)}
-      onClick={copy}
+      onClick={() => copy(text)}
     >
       <CopyIcon xstyle={iconStyles.inline} />
       {copied ? "Copied" : "Copy"}

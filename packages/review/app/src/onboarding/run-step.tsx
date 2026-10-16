@@ -20,7 +20,7 @@ import {
 import { Shortcut } from "@canvas/ui/kbd";
 import { SegmentedControl } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
-import { fieldStyles } from "@canvas/ui/text-field";
+import { TextArea, fieldStyles } from "@canvas/ui/text-field";
 import { useTooltip } from "@canvas/use-tooltip";
 import type {
   ReviewCanvasSetupActions,
@@ -457,7 +457,7 @@ export function RunStep({
               disabled={!targets.length}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              {...stylex.props(styles.filter)}
+              {...stylex.props(fieldStyles.bare, styles.filter)}
             />
             {discovered && !loading ? (
               <IconButton
@@ -559,13 +559,9 @@ export function RunStep({
                 Copy
               </Button>
             </span>
-            <textarea
+            <TextArea
               aria-label="Prompt"
-              {...stylex.props(
-                fieldStyles.box,
-                fieldStyles.multiline,
-                styles.promptField,
-              )}
+              xstyle={styles.promptField}
               value={prompt}
               rows={3}
               disabled={!target}
@@ -810,16 +806,9 @@ const styles = stylex.create({
   searchIcon: { color: tokens.inkFaint },
   filter: {
     flex: 1,
-    minWidth: 0,
     height: "28px",
-    padding: 0,
-    borderWidth: 0,
-    outlineStyle: "none",
-    backgroundColor: tokens.transparent,
-    color: tokens.ink,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.ui,
-    "::placeholder": { color: tokens.inkFaint },
   },
   target: {
     display: "flex",

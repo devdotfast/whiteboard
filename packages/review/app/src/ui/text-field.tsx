@@ -4,19 +4,48 @@ import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps } from "react";
 
-type TextFieldProps = Omit<ComponentProps<"input">, "className" | "style"> & {
+type Styled<Props> = Omit<Props, "className" | "style"> & {
   className?: string;
   xstyle?: StyleArg;
 };
 
-export function TextField({ className, xstyle, ...props }: TextFieldProps) {
+export function TextField({
+  className,
+  xstyle,
+  ...props
+}: Styled<ComponentProps<"input">>) {
   return (
     <input {...props} {...withClass(className, fieldStyles.box, xstyle)} />
   );
 }
 
-// Exported for fields that are not a bare input: a textarea, a select, or a
-// shell around an input and its buttons.
+export function TextArea({
+  className,
+  xstyle,
+  ...props
+}: Styled<ComponentProps<"textarea">>) {
+  return (
+    <textarea
+      {...props}
+      {...withClass(className, fieldStyles.box, fieldStyles.multiline, xstyle)}
+    />
+  );
+}
+
+export function Select({
+  className,
+  xstyle,
+  ...props
+}: Styled<ComponentProps<"select">>) {
+  return (
+    <select
+      {...props}
+      {...withClass(className, fieldStyles.box, fieldStyles.select, xstyle)}
+    />
+  );
+}
+
+// Exported for a shell around an input and its buttons or icon.
 export const fieldStyles = stylex.create({
   box: {
     boxSizing: "border-box",
@@ -38,10 +67,37 @@ export const fieldStyles = stylex.create({
   shell: {
     borderColor: { default: tokens.rule, ":focus-within": tokens.accent },
   },
+  // An input or textarea inside a shell: no box, the shell's type.
+  bare: {
+    minWidth: 0,
+    padding: 0,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: tokens.transparent,
+    color: tokens.ink,
+    font: "inherit",
+    // The shell shows the focus.
+    outline: "none",
+    "::placeholder": {
+      color: tokens.inkFaint,
+    },
+  },
   multiline: {
     height: "auto",
     padding: "6px 8px",
     lineHeight: 1.5,
     resize: "vertical",
+  },
+  select: {
+    paddingRight: "26px",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    appearance: "none",
+    backgroundImage: tokens.chevronDown,
+    backgroundPosition: "right 8px center",
+    backgroundSize: "12px 12px",
+    backgroundRepeat: "no-repeat",
+    cursor: "pointer",
   },
 });

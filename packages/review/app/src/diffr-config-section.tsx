@@ -1,8 +1,9 @@
 import { Button } from "@canvas/ui/button";
+import { Checkbox } from "@canvas/ui/checkbox";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
-import { TextField, fieldStyles } from "@canvas/ui/text-field";
+import { TextArea, TextField } from "@canvas/ui/text-field";
 import { isStringValue } from "@dev.fast/json";
 import {
   type JsonValue,
@@ -199,8 +200,7 @@ export function DiffrConfigSection({
                 {displaySettings.map(([key, label]) => (
                   <div key={key}>
                     <SettingRow label={label}>
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         aria-label={label}
                         checked={
                           key === hideKey
@@ -273,9 +273,8 @@ export function DiffrConfigSection({
                     {...stylex.props(styles.summaryFields)}
                   >
                     <SettingRow label="Enable summaries">
-                      <input
+                      <Checkbox
                         aria-label="Enable summaries"
-                        type="checkbox"
                         checked={draft.enabled}
                         onChange={(event) =>
                           setDraft({ ...draft, enabled: event.target.checked })
@@ -369,11 +368,7 @@ export function DiffrConfigSection({
                             : "Customized"}
                         </span>
                       </span>
-                      <textarea
-                        {...stylex.props(
-                          fieldStyles.box,
-                          fieldStyles.multiline,
-                        )}
+                      <TextArea
                         aria-label="Prompt"
                         rows={6}
                         value={draft.systemPrompt}
@@ -404,8 +399,7 @@ export function DiffrConfigSection({
                         )}
                     </p>
                     <SettingRow label="Include tests">
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         aria-label="Include tests"
                         checked={draft.tests}
                         onChange={(event) =>

@@ -412,7 +412,7 @@ function ReviewFindWidget({
       >
         <input
           ref={inputRef}
-          {...stylex.props(styles.input)}
+          {...stylex.props(fieldStyles.bare, styles.input)}
           aria-label="Find"
           aria-invalid={invalid ? "true" : undefined}
           title={invalid ?? undefined}
@@ -624,17 +624,7 @@ const styles = stylex.create({
   },
   input: {
     flex: 1,
-    minWidth: 0,
     height: "100%",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
-    color: tokens.ink,
-    fontFamily: tokens.chromeFont,
-    fontSize: fontSize.body,
-    outline: "none",
   },
   options: {
     display: "flex",

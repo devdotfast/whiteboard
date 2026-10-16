@@ -84,6 +84,7 @@ const styles = stylex.create({
     backgroundRepeat: "no-repeat",
     appearance: "none",
     cursor: { default: "pointer", ":disabled": "default" },
+    opacity: { default: null, ":disabled": 0.5 },
   },
   checked: {
     borderColor: tokens.accent,

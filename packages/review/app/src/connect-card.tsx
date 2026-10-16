@@ -1,7 +1,7 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
 import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
 import { Button, buttonLook, buttonStyles } from "@canvas/ui/button";
-import { copyText } from "@canvas/ui/copy";
+import { useCopy } from "@canvas/ui/copy";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CopyIcon, DrawnCheckIcon } from "@canvas/ui/icons";
@@ -14,7 +14,7 @@ import {
   ReviewCliInstallTargetSchema,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { cliInstallReady } from "./cli-install-status";
 import { newTabLinkProps } from "./link-props";
@@ -32,8 +32,6 @@ const OTHER_TARGETS = ReviewCliInstallTargetSchema.options.filter(
 
 export const REVIEW_CONNECT_TARGET_STORAGE_KEY =
   "dev.fast.review.connectTarget";
-
-const COPIED_RESET_MS = 2000;
 
 /** Lines of a prompt shown before the reader expands it. */
 const COLLAPSED_LINES = 4;
@@ -62,23 +60,10 @@ export function ConnectCard({
     useState<ReviewCliInstallTarget>(readStoredTarget);
 
   const [mode, setMode] = useState<Mode>("prompt");
-  const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
-
-  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-
-  useEffect(() => () => clearTimeout(resetTimer.current), []);
-
-  const clearCopied = () => {
-    setCopied(false);
-    clearTimeout(resetTimer.current);
-  };
 
   const selectTarget = (next: ReviewCliInstallTarget) => {
     setTarget(next);
-    clearCopied();
     setExpanded(false);
 
     try {
@@ -90,7 +75,6 @@ export function ConnectCard({
 
   const selectMode = (next: Mode) => {
     setMode(next);
-    clearCopied();
     setExpanded(false);
   };
 
@@ -101,18 +85,8 @@ export function ConnectCard({
   const text =
     mode === "prompt" ? status.connect.prompts[target] : plugin.command;
 
-  const copy = (value: string) => {
-    void copyText(value).then((ok) => {
-      if (!ok) {
-        return;
-      }
-
-      setCopied(true);
-      clearTimeout(resetTimer.current);
-      resetTimer.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
-      onCopied?.();
-    });
-  };
+  const [copiedText, copy] = useCopy({ onCopied });
+  const copied = copiedText === text;
 
   const noun = mode === "prompt" ? "prompt" : "install command";
 

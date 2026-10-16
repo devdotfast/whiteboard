@@ -7,7 +7,7 @@ import { CheckIcon, ChevronDownIcon } from "@canvas/ui/icons";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
-import { fieldStyles } from "@canvas/ui/text-field";
+import { Select } from "@canvas/ui/text-field";
 import { type ReviewAgentTraceSession } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
@@ -210,8 +210,7 @@ export function ReviewTraceView({
             <span {...stylex.props(textStyles.eyebrow, styles.kicker)}>
               Trace source
             </span>
-            <select
-              {...stylex.props(fieldStyles.box)}
+            <Select
               aria-label="Trace source"
               value={activeSource ?? ""}
               onChange={(event) => {
@@ -226,7 +225,7 @@ export function ReviewTraceView({
                   {source === "s3" ? "S3/R2 bucket" : "Hosted store"}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         {list.status === "loaded" &&
