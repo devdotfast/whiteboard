@@ -3,12 +3,12 @@ import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { CheckIcon, CloseIcon } from "@canvas/ui/icons";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { Popover } from "@canvas/ui/popover";
 import type { ReviewSidebarCommit } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
-  type KeyboardEvent,
   type ReactElement,
+  type RefObject,
   useEffect,
   useRef,
   useState,
@@ -17,8 +17,6 @@ import {
 import { DiffCount } from "./diff-count";
 import { relativeTimeLabel } from "./review-doc-meta";
 import { tokens } from "./tokens.stylex";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
 
 /**
  * Which of the board's commits the Diff shows: all of them, or one. A pill,
@@ -42,10 +40,6 @@ export function CommitPicker({
   const [newestFirst, setNewestFirst] = useState(false);
   const control = useRef<HTMLDivElement>(null);
   const pill = useRef<HTMLButtonElement>(null);
-  const popover = useAnchoredPopover<HTMLDivElement>(open, control);
-
-  // On capture: an editor in the diff stops its own pointer downs.
-  useDismissOnOutside(control, open, setOpen, true);
 
   // Oldest first: ancestry order, never author dates, which a rebase skews.
   const oldestFirst = [...commits].reverse();
@@ -130,7 +124,7 @@ export function CommitPicker({
       ) : null}
       {open ? (
         <CommitMenu
-          popover={popover}
+          anchor={control}
           commits={listed}
           total={commits.length}
           selected={picked?.commit}
@@ -138,10 +132,7 @@ export function CommitPicker({
           now={now}
           onFlip={() => setNewestFirst(!newestFirst)}
           onPick={pick}
-          onClose={() => {
-            setOpen(false);
-            pill.current?.focus();
-          }}
+          onClose={() => setOpen(false)}
         />
       ) : null}
     </div>
@@ -149,7 +140,7 @@ export function CommitPicker({
 }
 
 function CommitMenu({
-  popover,
+  anchor,
   commits,
   total,
   selected,
@@ -159,7 +150,7 @@ function CommitMenu({
   onPick,
   onClose,
 }: {
-  popover: ReturnType<typeof useAnchoredPopover<HTMLDivElement>>;
+  anchor: RefObject<HTMLElement | null>;
   commits: readonly ReviewSidebarCommit[];
   total: number;
   selected?: string;
@@ -169,6 +160,8 @@ function CommitMenu({
   onPick(commit: string | null): void;
   onClose(): void;
 }): ReactElement {
+  const popover = useRef<HTMLDivElement>(null);
+
   // The menu opens on what is picked, so arrows start from there.
   useEffect(() => {
     const menu = popover.current;
@@ -180,25 +173,18 @@ function CommitMenu({
 
     current?.focus();
     current?.scrollIntoView?.({ block: "nearest" });
-  }, [popover]);
-
-  const keys = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      onClose();
-    } else moveMenuFocus(event, "[role=menuitemradio]");
-  };
+  }, []);
 
   return (
-    <div
+    <Popover
       ref={popover}
-      popover="manual"
+      anchor={anchor}
+      onDismiss={onClose}
       role="menu"
       tabIndex={-1}
       aria-label="Commits"
-      {...stylex.props(surfaceStyles.popover, menuStyles.popover, styles.menu)}
-      onKeyDown={keys}
+      xstyle={[menuStyles.popover, styles.menu]}
+      onKeyDown={(event) => moveMenuFocus(event, "[role=menuitemradio]")}
     >
       <button
         type="button"
@@ -280,7 +266,7 @@ function CommitMenu({
           );
         })}
       </div>
-    </div>
+    </Popover>
   );
 }
 
