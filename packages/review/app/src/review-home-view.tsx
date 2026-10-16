@@ -1284,7 +1284,7 @@ export function ReviewHome({
                           ) : (
                             <BoardIcon icon={boardIconKind(review.target)} />
                           )}
-                          {review.changed ? <ChangedBadge onIcon /> : null}
+                          {review.changed ? <ChangedBadge /> : null}
                         </span>
                         <button
                           type="button"

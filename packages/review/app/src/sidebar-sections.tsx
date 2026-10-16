@@ -280,7 +280,7 @@ function BoardRow({
       >
         <span {...stylex.props(styles.iconSlot)}>
           <BoardIcon icon={boardIconKind(board.target)} current={isCurrent} />
-          {changed ? <ChangedBadge onIcon /> : null}
+          {changed ? <ChangedBadge /> : null}
         </span>
         {parentTitle ? (
           <span {...stylex.props(styles.path)}>

@@ -1,5 +1,6 @@
 import { BoardIcon } from "@canvas/ui/board-icons";
 import { AgentLogo } from "@canvas/ui/brand-icons";
+import { StatusDot } from "@canvas/ui/status-dot";
 import {
   type ReviewProjectThread,
   type ReviewSidebarSectionProps,
@@ -231,26 +232,13 @@ function ThreadMark({ thread }: { thread: ReviewProjectThread }): ReactElement {
       </span>
     );
 
-  const dot =
-    thread.status === "waiting"
-      ? styles.dotWaiting
-      : thread.unread
-        ? styles.dotUnread
-        : null;
-
   return (
     <span {...stylex.props(styles.mark)}>
       <AgentLogo agent={thread.agent} xstyle={styles.logo} />
-      {dot ? (
-        <span
-          role="img"
-          aria-label={
-            thread.status === "waiting"
-              ? "Needs you"
-              : "Answered since you looked"
-          }
-          {...stylex.props(styles.dot, dot)}
-        />
+      {thread.status === "waiting" ? (
+        <StatusDot label="Needs you" tone="warning" size="small" />
+      ) : thread.unread ? (
+        <StatusDot label="Answered since you looked" size="small" />
       ) : null}
     </span>
   );
@@ -350,20 +338,6 @@ const styles = stylex.create({
     height: "10px",
   },
   logo: { width: "10px", height: "10px" },
-  dot: {
-    position: "absolute",
-    top: "-3px",
-    right: "-3px",
-    boxSizing: "border-box",
-    width: "6px",
-    height: "6px",
-    borderWidth: "1.5px",
-    borderStyle: "solid",
-    borderColor: tokens.tray,
-    borderRadius: radius.round,
-  },
-  dotUnread: { backgroundColor: tokens.accent },
-  dotWaiting: { backgroundColor: tokens.changeModified },
   spinner: {
     flexShrink: 0,
     animationName: { default: spin, [reducedMotion]: "none" },
