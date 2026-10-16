@@ -31,7 +31,7 @@ Use the same machine, toolchain, Cargo profile, target, allocator, and `RUSTFLAG
 | --- | --- | --- |
 | `init/queries/default` | Assemble all default enabled plugin queries; drop resulting parameters. Each language compiles on first use | Configuration construction, component loading |
 | `init/queries/no_context` | Same, with context disabled | Same |
-| `engine/pr998/default` | Parse, structural diff, syntax highlighting, project trees, run enabled shape plugins, dispose results | Query compilation, component compilation/instantiation, fixture loading, preflight validation |
+| `engine/pr998/default` | Parse, structural diff, syntax highlighting, project trees, run enabled shape plugins, finalize presentation (fold cleanup and visible-change accounting), dispose results | Query compilation, component compilation/instantiation, fixture loading, preflight validation |
 | `engine/pr998/no_context` | Same, with context and its contributed queries disabled | Same |
 | `startup/one_file` | Assemble default queries, then parse, diff and project the first fixture, compiling its language's queries | Shape plugins |
 | `shape/pr998/context` | Run only context on fresh default-query trees, including worker dispatch and result disposal | Parsing, diffing, projection, query compilation, component loading, cloning inputs |

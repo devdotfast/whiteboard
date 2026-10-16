@@ -1,5 +1,7 @@
 //! What a diff looks like once the plugins have shaped it: the changed
 //! lines that stay visible.
+use std::collections::HashSet;
+
 use crate::pairing::Pairing;
 use crate::protocol::{Diff, LineRange, Node, Region, Source, StructuralChanges, Visibility};
 
@@ -26,6 +28,7 @@ pub async fn present(
                 }),
                 None => shape(sides).await?,
             };
+            let sides = remove_redundant_folds(sides);
             let coverage = change_coverage(&sides);
             stats.visible = coverage.initially_visible.counts();
             Ok(Diff::Text {
@@ -36,6 +39,50 @@ pub async fn present(
         }
         Diff::Binary { sides } => Ok(Diff::Binary { sides }),
     }
+}
+
+/// Context queries need single-line scopes while plugins select relevant code.
+/// Once shaping is finished, an open, unlabelled single-line fold without
+/// delimiters would only replace one source line with one fold row. Unwrap it,
+/// keeping its leaves and their alignment. Keep every member of a shared fold
+/// state if any member has useful folding behavior, including on the other side.
+fn remove_redundant_folds(sides: Pairing<Source>) -> Pairing<Source> {
+    fn retain_states(region: &Region, retained: &mut HashSet<u32>) {
+        let useful = !region.visibility.is_unset()
+            || matches!(&region.node, Node::Fold { syntax, .. }
+                if syntax.is_some() || region.range.lines().len() > 1);
+        if useful {
+            retained.insert(region.fold_state_id);
+        }
+        for child in region.children() {
+            retain_states(child, retained);
+        }
+    }
+    fn unwrap_children(region: &mut Region, retained: &HashSet<u32>) {
+        let Node::Fold { children, .. } = &mut region.node else {
+            return;
+        };
+        *children = std::mem::take(children)
+            .into_iter()
+            .flat_map(|mut child| {
+                unwrap_children(&mut child, retained);
+                if !retained.contains(&child.fold_state_id) {
+                    if let Node::Fold { children, .. } = child.node {
+                        return children;
+                    }
+                }
+                vec![child]
+            })
+            .collect();
+    }
+    let mut retained = HashSet::new();
+    for source in sides.sides() {
+        retain_states(&source.root, &mut retained);
+    }
+    sides.map(|mut source| {
+        unwrap_children(&mut source.root, &retained);
+        source
+    })
 }
 
 /// Collect complete and default-visible coverage together. A paired leaf counts
@@ -195,6 +242,154 @@ mod visible_tests {
             syntax: vec![],
             root: test_root(regions),
         }
+    }
+
+    #[test]
+    fn single_line_statements_remain_source_leaves_in_presented_blocks() {
+        use crate::config::Config;
+        use crate::protocol::{project, FileRef};
+        use crate::summary::DiffResult;
+
+        let script = r#"async function check(p: Page) {
+  const data = fixture();
+  data.change.files = data.change.files.slice(0, 1);
+  await p.route("**/_ui-fixture.json", (r) => r.fulfill({ json: data }));
+  await p.goto(`${base}/fixture/mobile/pull/1?ui-fixture`);
+  await p.getByRole("button", { name: "Skip", exact: true }).click();
+  await p.locator(".modified .view-line").first().waitFor();
+  await p.waitForTimeout(1500);
+}
+"#;
+        let javascript = script.replace("p: Page", "p");
+        let params = Config::default().compile().unwrap();
+        for (path, text) in [
+            ("a.css", ".input {\n  box-sizing: border-box;\n  width: 100%;\n  color: var(--foreground);\n}\n"),
+            ("a.ts", script),
+            ("a.js", javascript.as_str()),
+        ] {
+            let result = DiffResult::from_sources_with_params(path, "", text, &params);
+            let file = Pairing::RightOnly {
+                rhs: FileRef {
+                    path: path.to_owned(),
+                    oid: String::new(),
+                    mode: String::new(),
+                },
+            };
+            let Diff::Text { sides, .. } = project::diff(
+                &result,
+                project::Inputs {
+                    file: &file,
+                    sizes: (0, text.len() as u64),
+                },
+            ) else {
+                panic!("expected a text diff");
+            };
+            fn declarations(region: &Region) -> usize {
+                usize::from(
+                    matches!(region.node, Node::Fold { syntax: None, .. })
+                        && region.range.lines().len() == 1,
+                ) + region.children().iter().map(declarations).sum::<usize>()
+            }
+            assert!(
+                declarations(&sides.rhs().unwrap().root) >= 3,
+                "context selection receives declaration scopes"
+            );
+            let cleaned = remove_redundant_folds(sides);
+            let rhs = cleaned.rhs().unwrap();
+            assert_eq!(rhs.text, text);
+            assert_eq!(
+                declarations(&rhs.root),
+                0,
+                "output has no standalone one-line folds"
+            );
+            fn block(region: &Region) -> Option<&Region> {
+                if matches!(
+                    region.node,
+                    Node::Fold {
+                        syntax: Some(_),
+                        ..
+                    }
+                ) {
+                    Some(region)
+                } else {
+                    region.children().iter().find_map(block)
+                }
+            }
+            let body = block(&rhs.root).expect("the containing block remains foldable");
+            assert_eq!(body.range.lines(), 1..text.lines().count() as u32 - 1, "{path}");
+            assert!(body
+                .children()
+                .iter()
+                .all(|region| matches!(region.node, Node::Leaf { .. })));
+        }
+    }
+
+    #[test]
+    fn single_line_scopes_are_unwrapped_without_losing_code_or_block_folds() {
+        let declaration = leaf(2, 2, (1, 2), &[1], false);
+        let mut body = fold(
+            10,
+            (1, 2),
+            false,
+            vec![fold(1, (1, 2), false, vec![declaration.clone()])],
+        );
+        if let Node::Fold { syntax, .. } = &mut body.node {
+            *syntax = Some(SourceRange {
+                start: pos(0),
+                end: pos(2),
+            });
+        }
+        let mut rhs = source(vec![
+            leaf(3, 3, (0, 1), &[0], false),
+            body,
+            leaf(4, 4, (2, 3), &[2], false),
+        ]);
+        rhs.text = ".input {\n  width: 100%;\n}\n".to_owned();
+        let sides = Pairing::RightOnly { rhs };
+        let coverage = change_coverage(&sides);
+        let cleaned = remove_redundant_folds(sides);
+        let rhs = cleaned.rhs().unwrap();
+        let body = &rhs.root.children()[1];
+        assert_eq!(body.id, 10, "a block with a one-line body still folds");
+        assert_eq!(
+            body.children(),
+            &[declaration],
+            "only the scope wrapper is removed"
+        );
+        let after = change_coverage(&cleaned);
+        assert_eq!(after.all, coverage.all);
+        assert_eq!(after.initially_visible, coverage.initially_visible);
+    }
+
+    #[test]
+    fn summaries_and_shared_folding_states_survive_cleanup() {
+        let mut summary = fold(1, (0, 1), false, vec![leaf(2, 2, (0, 1), &[], false)]);
+        summary.visibility.label = "summary".to_owned();
+        let collapsed = fold(3, (1, 2), true, vec![leaf(4, 4, (1, 2), &[], false)]);
+        let mut linked = fold(5, (2, 3), false, vec![leaf(6, 6, (2, 3), &[], false)]);
+        linked.fold_state_id = 7;
+        let lhs = source(vec![summary, collapsed, linked]);
+        let rhs = source(vec![fold(
+            7,
+            (0, 2),
+            false,
+            vec![leaf(8, 8, (0, 2), &[], false)],
+        )]);
+        let sides = Pairing::Both { lhs, rhs };
+        assert_eq!(remove_redundant_folds(sides.clone()), sides);
+    }
+
+    #[test]
+    fn redundant_scopes_on_both_sides_are_removed_together() {
+        let lhs_leaf = leaf(2, 2, (0, 1), &[], false);
+        let rhs_leaf = leaf(4, 2, (0, 1), &[], false);
+        let lhs = source(vec![fold(1, (0, 1), false, vec![lhs_leaf.clone()])]);
+        let mut rhs_fold = fold(3, (0, 1), false, vec![rhs_leaf.clone()]);
+        rhs_fold.fold_state_id = 1;
+        let rhs = source(vec![rhs_fold]);
+        let cleaned = remove_redundant_folds(Pairing::Both { lhs, rhs });
+        assert_eq!(cleaned.lhs().unwrap().root.children(), &[lhs_leaf]);
+        assert_eq!(cleaned.rhs().unwrap().root.children(), &[rhs_leaf]);
     }
 
     #[test]
