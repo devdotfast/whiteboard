@@ -2,11 +2,8 @@
 
 ## Logs
 
-Press F1 in Whiteboard and run **Developer: Open Logs Folder**. Each launch
-writes a folder named for its start time. `main.log` in that folder has the app
-and review server logs.
-
-The logs live here:
+Each launch of Whiteboard writes a folder named for its start time. `main.log`
+in that folder has the app and review server logs. The folders live here:
 
 - macOS: `~/Library/Application Support/Whiteboard/logs/`
 - Linux: `~/.config/Whiteboard/logs/` (or `$XDG_CONFIG_HOME/Whiteboard/logs/`)
