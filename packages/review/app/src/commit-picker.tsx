@@ -1,10 +1,21 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
-import { buttonStyles } from "@canvas/ui/button";
+import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
-import { CheckIcon, CloseIcon } from "@canvas/ui/icons";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  CloseIcon,
+  CommitIcon,
+  SortAscendingIcon,
+  SortDescendingIcon,
+} from "@canvas/ui/icons";
 import { listRowStyles } from "@canvas/ui/list-row";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
+import { pillStyles } from "@canvas/ui/pill";
 import { Popover } from "@canvas/ui/popover";
+import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { ReviewSidebarCommit } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -65,33 +76,13 @@ export function CommitPicker({
   return (
     <div ref={control} {...stylex.props(styles.bar)}>
       {picked ? (
-        <span {...stylex.props(styles.pill, styles.picked)}>
-          <button
-            ref={pill}
-            type="button"
-            aria-haspopup="menu"
-            aria-expanded={open}
-            aria-label={`Commit ${picked.commit.slice(0, 7)}: ${picked.subject}. Choose commits`}
-            title={picked.subject}
-            {...stylex.props(styles.pillLabel)}
-            onClick={() => setOpen(!open)}
-          >
-            Commit
-            <code {...stylex.props(styles.sha)}>
-              {picked.commit.slice(0, 7)}
-            </code>
-          </button>
-          <span {...stylex.props(styles.divider)} />
-          <button
-            type="button"
-            aria-label="Show all commits"
-            title="All commits"
-            {...stylex.props(styles.clear)}
-            onClick={() => onPick(null)}
-          >
-            <CloseIcon xstyle={styles.clearIcon} />
-          </button>
-        </span>
+        <PickedPill
+          commit={picked}
+          pill={pill}
+          open={open}
+          onToggle={() => setOpen(!open)}
+          onClear={() => onPick(null)}
+        />
       ) : (
         <button
           ref={pill}
@@ -99,26 +90,35 @@ export function CommitPicker({
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label={`All ${countLabel(commits.length, "commit")}. Choose commits`}
-          {...stylex.props(styles.pill, styles.pillLabel, styles.all)}
+          {...stylex.props(
+            focusStyles.ring,
+            buttonStyles.reset,
+            pillStyles.pill,
+            pillStyles.neutral,
+            pillStyles.pressable,
+            styles.pillLabel,
+            styles.all,
+          )}
           onClick={() => setOpen(!open)}
         >
-          <CommitIcon />
+          <CommitIcon xstyle={styles.icon} />
           Commits
-          <span {...stylex.props(styles.count)}>{commits.length}</span>
+          <span {...stylex.props(textStyles.count, styles.count)}>
+            {commits.length}
+          </span>
         </button>
       )}
       {picked ? (
         <>
           <StepButton
             label="Older commit"
-            path="M2.5 7.75 6 4.25l3.5 3.5"
-            disabled={index <= 0}
+            up
+            atEnd={index <= 0}
             onClick={() => step(-1)}
           />
           <StepButton
             label="Newer commit"
-            path="M2.5 4.25 6 7.75l3.5-3.5"
-            disabled={index >= oldestFirst.length - 1}
+            atEnd={index >= oldestFirst.length - 1}
             onClick={() => step(1)}
           />
         </>
@@ -137,6 +137,63 @@ export function CommitPicker({
         />
       ) : null}
     </div>
+  );
+}
+
+/** "Commit 8d52426 ×": the menu's trigger, and the × back to all. */
+function PickedPill({
+  commit,
+  pill,
+  open,
+  onToggle,
+  onClear,
+}: {
+  commit: ReviewSidebarCommit;
+  pill: RefObject<HTMLButtonElement | null>;
+  open: boolean;
+  onToggle(): void;
+  onClear(): void;
+}): ReactElement {
+  const subjectTooltip = useTooltip(commit.subject);
+  const clearTooltip = useTooltip("All commits");
+
+  return (
+    <span {...stylex.props(pillStyles.pill, pillStyles.neutral, styles.picked)}>
+      <button
+        ref={(element) => {
+          pill.current = element;
+
+          return subjectTooltip(element);
+        }}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={`Commit ${commit.commit.slice(0, 7)}: ${commit.subject}. Choose commits`}
+        {...stylex.props(
+          focusStyles.ringInset,
+          buttonStyles.reset,
+          styles.pillLabel,
+        )}
+        onClick={onToggle}
+      >
+        Commit
+        <code {...stylex.props(styles.sha)}>{commit.commit.slice(0, 7)}</code>
+      </button>
+      <span {...stylex.props(styles.divider)} />
+      <button
+        ref={clearTooltip}
+        type="button"
+        aria-label="Show all commits"
+        {...stylex.props(
+          focusStyles.ringInset,
+          buttonStyles.reset,
+          styles.clear,
+        )}
+        onClick={onClear}
+      >
+        <CloseIcon xstyle={iconStyles.inline} />
+      </button>
+    </span>
   );
 }
 
@@ -200,7 +257,7 @@ function CommitMenu({
         onClick={() => onPick(null)}
       >
         <span {...stylex.props(styles.check)}>
-          {selected ? null : <CheckIcon xstyle={styles.checkIcon} />}
+          {selected ? null : <CheckIcon xstyle={iconStyles.inline} />}
         </span>
         <span {...stylex.props(styles.allTitle)}>All commits</span>
         <span {...stylex.props(styles.allCount)}>
@@ -213,62 +270,22 @@ function CommitMenu({
       />
       <div {...stylex.props(styles.header)}>
         Specific commits
-        <button
-          type="button"
-          aria-label={newestFirst ? "Newest first" : "Oldest first"}
-          title={newestFirst ? "Newest first" : "Oldest first"}
-          aria-pressed={newestFirst}
-          {...stylex.props(styles.sort)}
-          onClick={onFlip}
-        >
-          <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16">
-            <path
-              d={
-                newestFirst
-                  ? "M4 3v10M1.5 10.5 4 13l2.5-2.5M8.5 4.5h6M8.5 8h4.5M8.5 11.5h3"
-                  : "M4 13V3M1.5 5.5 4 3l2.5 2.5M8.5 4.5h6M8.5 8h4.5M8.5 11.5h3"
-              }
-            />
-          </svg>
-        </button>
+        <SortButton newestFirst={newestFirst} onFlip={onFlip} />
       </div>
       <div {...stylex.props(styles.list)}>
-        {commits.map((commit, index) => {
-          const here = commit.commit === selected;
-
-          return (
-            <div key={commit.commit}>
-              {index > 0 ? (
-                <span aria-hidden="true" {...stylex.props(styles.link)} />
-              ) : null}
-              <button
-                type="button"
-                role="menuitemradio"
-                aria-checked={here}
-                title={commit.subject}
-                {...stylex.props(
-                  focusStyles.ringInset,
-                  buttonStyles.reset,
-                  menuStyles.item,
-                  styles.row,
-                  here && listRowStyles.current,
-                )}
-                onClick={() => onPick(commit.commit)}
-              >
-                <span {...stylex.props(styles.dot, here && styles.dotPicked)} />
-                <code
-                  {...stylex.props(styles.rowSha, here && styles.rowShaPicked)}
-                >
-                  {commit.commit.slice(0, 7)}
-                </code>
-                <span {...stylex.props(styles.subject)}>{commit.subject}</span>
-                <span {...stylex.props(styles.when)}>
-                  {formatRelativeTime(commit.authoredAt, now, { short: true })}
-                </span>
-              </button>
-            </div>
-          );
-        })}
+        {commits.map((commit, index) => (
+          <div key={commit.commit}>
+            {index > 0 ? (
+              <span aria-hidden="true" {...stylex.props(styles.link)} />
+            ) : null}
+            <CommitRow
+              commit={commit}
+              here={commit.commit === selected}
+              now={now}
+              onPick={onPick}
+            />
+          </div>
+        ))}
       </div>
     </Popover>
   );
@@ -288,60 +305,106 @@ export function CommitChanges({
   );
 }
 
-function StepButton({
-  label,
-  path,
-  disabled,
-  onClick,
+function CommitRow({
+  commit,
+  here,
+  now,
+  onPick,
 }: {
-  label: string;
-  path: string;
-  disabled: boolean;
-  onClick(): void;
+  commit: ReviewSidebarCommit;
+  here: boolean;
+  now: number;
+  onPick(commit: string): void;
 }): ReactElement {
+  const tooltip = useTooltip(commit.subject);
+
   return (
     <button
+      ref={tooltip}
       type="button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      {...stylex.props(styles.step)}
-      onClick={onClick}
+      role="menuitemradio"
+      aria-checked={here}
+      {...stylex.props(
+        focusStyles.ringInset,
+        buttonStyles.reset,
+        menuStyles.item,
+        styles.row,
+        here && listRowStyles.current,
+      )}
+      onClick={() => onPick(commit.commit)}
     >
-      <svg
-        aria-hidden="true"
-        width="10"
-        height="10"
-        viewBox="0 0 12 12"
-        {...stylex.props(styles.glyph)}
-      >
-        <path d={path} />
-      </svg>
+      <span {...stylex.props(styles.dot, here && styles.dotPicked)} />
+      <code {...stylex.props(styles.rowSha, here && styles.rowShaPicked)}>
+        {commit.commit.slice(0, 7)}
+      </code>
+      <span {...stylex.props(textStyles.truncate, styles.subject)}>
+        {commit.subject}
+      </span>
+      <span {...stylex.props(styles.when)}>
+        {formatRelativeTime(commit.authoredAt, now, { short: true })}
+      </span>
     </button>
   );
 }
 
-function CommitIcon(): ReactElement {
+function SortButton({
+  newestFirst,
+  onFlip,
+}: {
+  newestFirst: boolean;
+  onFlip(): void;
+}): ReactElement {
+  const label = newestFirst ? "Newest first" : "Oldest first";
+  const tooltip = useTooltip(label);
+
   return (
-    <svg
-      aria-hidden="true"
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      {...stylex.props(styles.icon)}
-    >
-      <circle cx="8" cy="8" r="2.3" />
-      <path d="M1.5 8h4.2M10.3 8h4.2" />
-    </svg>
+    <IconButton ref={tooltip} size="small" aria-label={label} onClick={onFlip}>
+      {newestFirst ? (
+        <SortDescendingIcon xstyle={styles.icon} />
+      ) : (
+        <SortAscendingIcon xstyle={styles.icon} />
+      )}
+    </IconButton>
   );
 }
 
-const stroke = {
-  fill: "none",
-  stroke: "currentColor",
-  strokeLinecap: "round",
-  strokeLinejoin: "round",
-} as const;
+/** ∧ or ∨ through the commits. At the end it stays focusable and does
+ * nothing, so a held key does not drop focus. */
+function StepButton({
+  label,
+  up = false,
+  atEnd,
+  onClick,
+}: {
+  label: string;
+  up?: boolean;
+  atEnd: boolean;
+  onClick(): void;
+}): ReactElement {
+  const tooltip = useTooltip(label);
+
+  return (
+    <button
+      ref={tooltip}
+      type="button"
+      aria-label={label}
+      aria-disabled={atEnd || undefined}
+      {...stylex.props(
+        focusStyles.ring,
+        buttonStyles.reset,
+        pillStyles.pill,
+        pillStyles.neutral,
+        pillStyles.pressable,
+        styles.step,
+      )}
+      onClick={() => {
+        if (!atEnd) onClick();
+      }}
+    >
+      <ChevronDownIcon xstyle={[styles.stepIcon, up && iconStyles.flip]} />
+    </button>
+  );
+}
 
 const styles = stylex.create({
   bar: {
@@ -352,15 +415,6 @@ const styles = stylex.create({
     paddingBlock: "6px 2px",
     paddingInline: "12px",
   },
-  pill: {
-    display: "inline-flex",
-    alignItems: "center",
-    minWidth: 0,
-    height: "26px",
-    borderRadius: radius.pill,
-    font: `${fontSize.body}/16px ${tokens.chromeFont}`,
-    color: tokens.ink,
-  },
   // In a narrow sidebar the label gives way; the ×, ∧ and ∨ never do.
   pillLabel: {
     display: "inline-flex",
@@ -368,34 +422,28 @@ const styles = stylex.create({
     gap: "7px",
     minWidth: 0,
     overflow: "hidden",
-    whiteSpace: "nowrap",
     height: "26px",
     paddingBlock: 0,
     paddingInline: "10px 8px",
-    borderWidth: 0,
     borderRadius: radius.pill,
-    backgroundColor: "transparent",
     color: tokens.ink,
-    font: "inherit",
     cursor: "pointer",
   },
   all: {
-    backgroundColor: { default: tokens.tray, ":hover": tokens.markerTint },
-    boxShadow: `inset 0 0 0 1px ${tokens.rule}`,
     paddingInline: "10px",
+    fontSize: fontSize.body,
+    lineHeight: "16px",
   },
   picked: {
+    gap: 0,
+    minWidth: 0,
+    height: "26px",
     overflow: "hidden",
-    backgroundColor: tokens.tray,
-    boxShadow: `inset 0 0 0 1px ${tokens.rule}`,
+    fontSize: fontSize.body,
+    lineHeight: "16px",
   },
-  glyph: { ...stroke, flexShrink: 0, strokeWidth: 1.5 },
-  clearIcon: { width: "12px", height: "12px" },
-  icon: { ...stroke, flexShrink: 0, strokeWidth: 1.3 },
-  count: {
-    color: tokens.inkFaint,
-    fontVariantNumeric: "tabular-nums",
-  },
+  icon: { width: "14px", height: "14px" },
+  count: { color: tokens.inkFaint },
   sha: {
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
@@ -415,27 +463,24 @@ const styles = stylex.create({
     width: "26px",
     height: "26px",
     padding: 0,
-    borderWidth: 0,
-    backgroundColor: { default: "transparent", ":hover": tokens.markerTint },
+    backgroundColor: {
+      default: tokens.transparent,
+      ":hover": tokens.markerTint,
+    },
     color: tokens.inkMuted,
     cursor: "pointer",
   },
   step: {
-    display: "flex",
     flexShrink: 0,
-    alignItems: "center",
     justifyContent: "center",
     width: "26px",
     height: "26px",
     padding: 0,
-    borderWidth: 0,
-    borderRadius: radius.pill,
-    backgroundColor: { default: tokens.tray, ":hover": tokens.markerTint },
-    boxShadow: `inset 0 0 0 1px ${tokens.rule}`,
     color: tokens.inkMuted,
-    cursor: { default: "pointer", ":disabled": "default" },
-    opacity: { default: 1, ":disabled": 0.4 },
+    cursor: { default: "pointer", ':is([aria-disabled="true"])': "default" },
+    opacity: { default: null, ':is([aria-disabled="true"])': 0.4 },
   },
+  stepIcon: { width: "10px", height: "10px" },
   // The shared menu, one list under its header; the list scrolls.
   menu: {
     gap: 0,
@@ -452,7 +497,6 @@ const styles = stylex.create({
     fontSize: fontSize.body,
   },
   check: { display: "flex", width: "12px" },
-  checkIcon: { width: "12px", height: "12px" },
   allTitle: {
     flex: "1 1 0",
     fontSize: fontSize.ui,
@@ -468,17 +512,6 @@ const styles = stylex.create({
     paddingInline: "16px",
     fontSize: fontSize.ui,
     fontWeight: fontWeight.medium,
-  },
-  sort: {
-    ...stroke,
-    display: "flex",
-    padding: "3px",
-    borderWidth: 0,
-    borderRadius: radius.small,
-    backgroundColor: { default: "transparent", ":hover": tokens.markerTint },
-    color: tokens.inkMuted,
-    strokeWidth: 1.3,
-    cursor: "pointer",
   },
   // A long range scrolls inside the menu.
   list: {
@@ -504,7 +537,6 @@ const styles = stylex.create({
   },
   dot: {
     flexShrink: 0,
-    boxSizing: "border-box",
     width: "10px",
     height: "10px",
     borderWidth: "1.5px",
@@ -520,14 +552,7 @@ const styles = stylex.create({
     fontSize: fontSize.small,
   },
   rowShaPicked: { color: tokens.inkMuted },
-  subject: {
-    flex: "1 1 0",
-    minWidth: 0,
-    overflow: "hidden",
-    fontSize: fontSize.ui,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
+  subject: { flex: "1 1 0", minWidth: 0, fontSize: fontSize.ui },
   when: { flexShrink: 0, color: tokens.inkFaint },
   changes: {
     display: "flex",

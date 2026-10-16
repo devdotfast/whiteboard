@@ -7,7 +7,6 @@ import * as stylex from "@stylexjs/stylex";
 export const pillStyles = stylex.create({
   pill: {
     display: "inline-flex",
-    flexShrink: 0,
     alignItems: "center",
     gap: "6px",
     borderRadius: radius.pill,

@@ -276,10 +276,14 @@ it("picks one of the board's commits for the diff, in ancestry order, and steps 
 
   // At the oldest, there is no older one.
   await act(async () => view.update(picker("a")));
+  onPickCommit.mockClear();
+  await view.click('[aria-label="Older commit"]');
+  expect(onPickCommit).not.toHaveBeenCalled();
   expect(
-    document.querySelector<HTMLButtonElement>('[aria-label="Older commit"]')
-      ?.disabled,
-  ).toBe(true);
+    document
+      .querySelector('[aria-label="Older commit"]')
+      ?.getAttribute("aria-disabled"),
+  ).toBe("true");
 
   // One commit: the same pill and menu, and nothing to step to.
   await act(async () =>
@@ -292,13 +296,15 @@ it("picks one of the board's commits for the diff, in ancestry order, and steps 
     ),
   );
   expect(
-    document.querySelector<HTMLButtonElement>('[aria-label="Older commit"]')
-      ?.disabled,
-  ).toBe(true);
+    document
+      .querySelector('[aria-label="Older commit"]')
+      ?.getAttribute("aria-disabled"),
+  ).toBe("true");
   expect(
-    document.querySelector<HTMLButtonElement>('[aria-label="Newer commit"]')
-      ?.disabled,
-  ).toBe(true);
+    document
+      .querySelector('[aria-label="Newer commit"]')
+      ?.getAttribute("aria-disabled"),
+  ).toBe("true");
   await act(async () =>
     view.update(
       props({
