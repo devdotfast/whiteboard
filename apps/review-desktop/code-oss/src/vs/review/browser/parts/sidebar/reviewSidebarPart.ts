@@ -187,9 +187,6 @@ export class ReviewSidebarPart extends Part {
 
 	private readonly panes: ReviewSidebarPane[] = [];
 	private readonly lit = new ReviewSidebarTabs((id) => this.offers(id));
-	private contentsHeader: HTMLElement | undefined;
-	private contentsBody: HTMLElement | undefined;
-	private contentsCount: HTMLElement | undefined;
 	private recentBody: HTMLElement | undefined;
 	private whiteboardsBody: HTMLElement | undefined;
 	private familyBody: HTMLElement | undefined;
@@ -206,7 +203,7 @@ export class ReviewSidebarPart extends Part {
 	private files: ReviewSidebarGroup | undefined;
 	private readonly handles = new Map<ReviewSidebarSectionProps["section"], ReviewSidebarSectionHandle>();
 	private reviewId: string | undefined;
-	private state: ReviewSidebarState = { contents: [], view: "review" };
+	private state: ReviewSidebarState = { view: "review" };
 	/** Each open board's last report, so switching tabs shows it at once. */
 	private readonly states = new Map<string, ReviewSidebarState>();
 	/** What each open board's Diff view last reported for Lenses. */
@@ -385,18 +382,11 @@ export class ReviewSidebarPart extends Part {
 			return row;
 		};
 
-		// Search, then the board's contents, then This board, then Recent,
-		// scrolling as one.
+		// Search, then This board, then Recent, scrolling as one.
 		const whiteboards = this.pane("whiteboard");
 		const stack = $(".review-sidebar-pane-body.review-sidebar-stack");
 		this.whiteboardsBody = $(".review-sidebar-stack-body");
 		stack.appendChild(this.whiteboardsBody);
-		this.contentsHeader = header(stack, localize("review.sidebar.contents", "Contents"));
-		this.contentsHeader.classList.add("review-sidebar-stack-header");
-		this.contentsCount = $("span.review-sidebar-section-count");
-		this.contentsHeader.append(this.contentsCount);
-		this.contentsBody = $(".review-sidebar-stack-body");
-		stack.appendChild(this.contentsBody);
 		this.familyBody = $(".review-sidebar-stack-body.review-sidebar-family");
 		stack.appendChild(this.familyBody);
 		// Recent comes last.
@@ -517,16 +507,15 @@ export class ReviewSidebarPart extends Part {
 		if (reviewId === this.reviewId) return;
 		this.reviewId = reviewId;
 		// A board not yet reported keeps the last board's frame until its
-		// canvas reports, rather than blanking it, but none of its Contents:
-		// a heading there would belong to the last board.
-		this.state = (reviewId && this.states.get(reviewId)) || { ...this.state, contents: [], activeHeading: undefined };
+		// canvas reports, rather than blanking it.
+		this.state = (reviewId && this.states.get(reviewId)) || this.state;
 		this.follow(reviewId);
 		this.showFileTrees();
 		this.render();
 		this._onDidChangeBoard.fire();
 	}
 
-	/** What the board's canvas reports: its headings and the view on screen. */
+	/** What the board's canvas reports: the view on screen and its counts. */
 	report(reviewId: string | undefined, state: ReviewSidebarState): void {
 		if (!reviewId) return;
 		// Counts still loading keep what is shown: the board's last counts,
@@ -647,14 +636,6 @@ export class ReviewSidebarPart extends Part {
 
 		const reviewId = this.reviewId;
 		const lensReport = reviewId ? this.lensReports.get(reviewId) : undefined;
-		if (this.contentsCount) {
-			const headings = this.state.contents.filter((entry) => entry.level === "h2").length;
-			this.contentsCount.textContent = headings ? String(headings) : "";
-		}
-		// A board with no headings has no Contents section.
-		const empty = this.state.contents.length === 0;
-		if (this.contentsHeader) this.contentsHeader.hidden = empty;
-		if (this.contentsBody) this.contentsBody.hidden = empty;
 		if (this.lenses) this.lenses.count.textContent = this.state.lenses === undefined ? "" : String(this.state.lenses);
 		if (this.files) {
 			const untracked = this.state.files?.untracked ?? 0;
@@ -718,16 +699,13 @@ export class ReviewSidebarPart extends Part {
 		const lenses = this.lensReports.get(reviewId);
 		const newWhiteboardShortcut = this.shortcut(REVIEW_NEW_WHITEBOARD_COMMAND_ID);
 		const props: ReviewSidebarSectionProps = {
-			section: "contents",
+			section: "whiteboards",
 			connection: { serverUrl: connection.serverUrl, token: connection.token },
 			reviewId,
-			contents: this.state.contents,
-			...(this.state.activeHeading && { activeHeading: this.state.activeHeading }),
 			onOpenBoard: (id) => {
 				const title = this.catalog.reviews.find((review) => review.reviewId === id)?.title ?? "Whiteboard";
 				void this.tabs.openApiReview(id, title);
 			},
-			onOpenHeading: (headingId) => this.emitSurfaceEvent({ event: "revealHeading", reviewId, headingId }),
 			...(project && { project }),
 			// Recent spans every project: the catalog Home already keeps.
 			recent: [...this.catalog.reviews],
@@ -756,7 +734,6 @@ export class ReviewSidebarPart extends Part {
 		};
 
 		const mounts: [ReviewSidebarSectionProps["section"], HTMLElement | undefined][] = [
-			["contents", this.contentsBody],
 			["family", this.familyBody],
 			["recent", this.recentBody],
 			["whiteboards", this.whiteboardsBody],
@@ -818,7 +795,7 @@ export interface IReviewSidebarPartsService {
 	/** Clears a sticky close so the sidebar shows beside the active board. */
 	show(): void;
 
-	/** A board's canvas reports its headings and the view on screen. */
+	/** A board's canvas reports the view on screen and its counts. */
 	report(reviewId: string | undefined, state: ReviewSidebarState): void;
 
 	/** A board's canvas reports the thread its Ask shows. */

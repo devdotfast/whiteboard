@@ -1744,8 +1744,8 @@ body
   overflow-y: auto;
 }
 
-/* Search, Contents, This board and Recent: one scroll, each list at its
-   own height, each section a step below the one above. */
+/* Search, This board and Recent: one scroll, each list at its own
+   height, each section a step below the one above. */
 .monaco-workbench .review-sidebar-stack-body.review-canvas-root {
   height: auto;
   min-height: 0;
@@ -1754,11 +1754,7 @@ body
   background-color: transparent;
 }
 
-.monaco-workbench .review-sidebar-pane-header.review-sidebar-stack-header {
-  margin-top: 14px;
-}
-
-/* This board under Contents, a section's step below it; it steps aside
+/* This board under Search, a section's step below it; it steps aside
    while a search lists its matches. */
 .monaco-workbench .review-sidebar-stack-body.review-sidebar-family {
   margin-top: 8px;

@@ -166,25 +166,6 @@ it("exposes JSON section and Markdown headings plus imported PR and its place un
     "implementation",
     "details-2",
   ]);
-
-  // Desktop's sidebar lists them in Contents, and scrolls the canvas to one.
-  const { contents } = reportSidebar.mock.lastCall![0];
-
-  expect(contents.map((entry) => entry.text)).toEqual(
-    headings.map((heading) => heading.textContent),
-  );
-  const scroll = vi.fn<() => void>();
-  container.querySelectorAll<HTMLElement>("*").forEach((element) => {
-    element.scrollTo = scroll;
-    element.scrollIntoView = scroll;
-  });
-
-  for (const { id } of contents)
-    await act(async () => {
-      for (const listener of listeners)
-        listener({ event: "revealHeading", reviewId, headingId: id });
-    });
-  expect(scroll).toHaveBeenCalledTimes(4);
   // Desktop's sidebar tabs pick the view, so the page bar holds only the
   // board's place and its actions.
   const pageBar = container.querySelector("main > header")!;
@@ -228,7 +209,7 @@ it("exposes JSON section and Markdown headings plus imported PR and its place un
   expect(lone.querySelector("[aria-haspopup=menu]")).toBeNull();
 });
 
-it("reports a board's Contents without waiting for its diff", async () => {
+it("reports a board's view without waiting for its diff", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(
     "ResizeObserver",
@@ -306,12 +287,10 @@ it("reports a board's Contents without waiting for its diff", async () => {
   });
 
   await vi.waitFor(() =>
-    expect(
-      reportSidebar.mock.lastCall?.[0].contents.map((entry) => entry.text),
-    ).toEqual(["Summary", "Details"]),
+    expect(reportSidebar.mock.lastCall?.[0]).toMatchObject({
+      view: "review",
+      countsPending: true,
+    }),
   );
-  expect(reportSidebar.mock.lastCall![0]).toMatchObject({
-    countsPending: true,
-  });
   expect(reportSidebar.mock.lastCall![0].files).toBeUndefined();
 });
