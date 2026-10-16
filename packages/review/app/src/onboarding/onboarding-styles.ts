@@ -79,6 +79,7 @@ export const onboardingStyles = stylex.create({
     backgroundColor: tokens.rule,
   },
   railFill: {
+    display: "block",
     height: "100%",
     backgroundColor: tokens.accent,
     transformOrigin: "left",
