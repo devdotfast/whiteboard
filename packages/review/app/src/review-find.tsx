@@ -1,6 +1,5 @@
-import { fontSize, layer } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, layer } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
-import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ArrowDownIcon, ArrowUpIcon, CloseIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
@@ -518,22 +517,17 @@ function FindToggle({
   const tooltip = useTooltip(description, { instant: true });
 
   return (
-    <button
+    <IconButton
       ref={tooltip}
-      type="button"
-      {...stylex.props(
-        focusStyles.ring,
-        styles.toggle,
-        active && styles.togglePressed,
-        xstyle,
-      )}
+      size="small"
+      xstyle={[styles.toggle, xstyle]}
       aria-label={label}
       aria-pressed={active}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
     >
       {children}
-    </button>
+    </IconButton>
   );
 }
 
@@ -602,16 +596,6 @@ function compareDocumentOrder(left: Node, right: Node): number {
 
 const compact = "@media (max-width: 620px)";
 
-const button = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  borderWidth: "1px",
-  borderStyle: "solid",
-  borderRadius: "3px",
-  cursor: "pointer",
-} as const;
-
 const styles = stylex.create({
   widget: {
     position: "absolute",
@@ -673,31 +657,7 @@ const styles = stylex.create({
     whiteSpace: "nowrap",
   },
   toggle: {
-    ...button,
-    flex: "0 0 22px",
-    width: "22px",
-    height: "20px",
-    padding: 0,
-    borderColor: tokens.transparent,
-    backgroundColor: {
-      default: tokens.transparent,
-      ":hover:not(:disabled)": tokens.toolbarHoverBg,
-    },
-    color: { default: tokens.inkMuted, ":hover:not(:disabled)": tokens.ink },
-    fontFamily: tokens.chromeFont,
-    fontSize: fontSize.body,
-    lineHeight: "16px",
-  },
-  togglePressed: {
-    borderColor: tokens.accent,
-    backgroundColor: {
-      default: tokens.inputOptionActiveBg,
-      ":hover:not(:disabled)": tokens.toolbarHoverBg,
-    },
-    color: {
-      default: tokens.inputOptionActiveFg,
-      ":hover:not(:disabled)": tokens.ink,
-    },
+    fontWeight: fontWeight.regular,
   },
   wholeWord: {
     textDecorationLine: "underline",

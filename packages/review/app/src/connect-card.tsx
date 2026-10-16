@@ -1,6 +1,6 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
 import { AGENT_LOGOS } from "@canvas/ui/brand-icons";
-import { Button, buttonStyles } from "@canvas/ui/button";
+import { Button, buttonLook, buttonStyles } from "@canvas/ui/button";
 import { copyText } from "@canvas/ui/copy";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
@@ -188,30 +188,30 @@ export function ConnectCard({
               )}
             </pre>
             {collapsed ? (
-              <button
-                type="button"
-                {...stylex.props(styles.expand)}
+              <Button
+                xstyle={styles.expand}
                 aria-expanded={false}
                 onClick={() => setExpanded(true)}
               >
                 Show full {noun}
-              </button>
+              </Button>
             ) : null}
           </div>
           <div {...stylex.props(promptStyles.actions)}>
             {collapsible && expanded ? (
-              <button
-                type="button"
-                {...stylex.props(buttonStyles.reset, styles.collapse)}
+              <Button
+                variant="link"
+                xstyle={styles.collapse}
                 aria-expanded={true}
                 onClick={() => setExpanded(false)}
               >
                 Show less
-              </button>
+              </Button>
             ) : null}
-            <button
-              type="button"
-              {...stylex.props(focusStyles.ring, promptStyles.copy)}
+            <Button
+              variant="primary"
+              size="large"
+              xstyle={promptStyles.copy}
               aria-live="polite"
               aria-label={`${copied ? "Copied" : "Copy"} ${noun} for ${agent}`}
               onClick={() => copy(text)}
@@ -224,7 +224,7 @@ export function ConnectCard({
               {copied
                 ? "Copied"
                 : `Copy ${mode === "prompt" ? "prompt" : "command"}`}
-            </button>
+            </Button>
           </div>
         </>
       ) : plugin.url ? (
@@ -234,7 +234,10 @@ export function ConnectCard({
           </p>
           <div {...stylex.props(promptStyles.actions)}>
             <a
-              {...stylex.props(focusStyles.ring, promptStyles.copy)}
+              {...stylex.props(
+                buttonLook({ variant: "primary", size: "large" }),
+                promptStyles.copy,
+              )}
               href={plugin.url}
               {...newTabLinkProps(plugin.url)}
             >
@@ -450,25 +453,16 @@ const styles = stylex.create({
     bottom: 0,
     left: "50%",
     transform: "translateX(-50%)",
-    padding: "3px 12px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: {
-      default: tokens.ruleSoft,
-      ":hover": tokens.inkMuted,
-    },
     borderRadius: radius.pill,
-    backgroundColor: tokens.raised,
-    color: tokens.ink,
-    font: `${fontSize.body}/18px ${tokens.fontMono}`,
-    cursor: "pointer",
+    backgroundColor: {
+      default: tokens.raised,
+      ":hover:not(:disabled)": tokens.well,
+    },
+    fontFamily: tokens.fontMono,
   },
   collapse: {
     marginRight: "auto",
-    padding: 0,
-    color: { default: tokens.inkMuted, ":hover": tokens.ink },
     font: `${fontSize.body}/22px ${tokens.fontMono}`,
-    cursor: "pointer",
   },
   legacy: {
     display: "flex",

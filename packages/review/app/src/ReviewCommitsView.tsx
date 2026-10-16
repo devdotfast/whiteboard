@@ -1,5 +1,5 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
-import { IconButton, buttonStyles } from "@canvas/ui/button";
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { CopyButton } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ArrowRightIcon, CodeIcon, DisclosureChevron } from "@canvas/ui/icons";
@@ -198,13 +198,13 @@ function CommitRow({
             </button>
           ))}
           {omittedFileCount > 0 ? (
-            <button
-              type="button"
-              {...stylex.props(buttonStyles.reset, styles.filesFooter)}
+            <Button
+              variant="link"
+              xstyle={styles.filesFooter}
               onClick={() => onOpenDiff(commit, "row")}
             >
               {countLabel(omittedFileCount, "more file")}
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}
@@ -448,7 +448,6 @@ const styles = stylex.create({
   },
   filesFooter: {
     padding: "6px 12px 4px 38px",
-    color: { default: tokens.inkFaint, ":hover": tokens.accent },
     fontSize: fontSize.micro,
   },
   // The whole header is the toggle's hit area, so its chevron stays quiet on

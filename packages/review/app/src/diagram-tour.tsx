@@ -72,6 +72,7 @@ export function DiagramTourOverlay({
       ref={overlayRef}
       {...withClass(
         `diagram-tour-overlay review-app--theme-${theme}`,
+        themeStyles.vars,
         theme === "light" && themeStyles.light,
         styles.overlay,
         flow && styles.flowOverlay,

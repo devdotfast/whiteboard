@@ -1,6 +1,6 @@
 import { documentType } from "@canvas/document-type.stylex";
 import { fontSize, fontWeight } from "@canvas/scale.stylex";
-import { IconButton, buttonStyles } from "@canvas/ui/button";
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
   ChevronDownIcon,
@@ -816,9 +816,8 @@ function TraceQuotePeekPanel({
   const events = loadedTrace.events;
 
   const headerAccessory = (
-    <button
-      type="button"
-      {...stylex.props(traceStyles.peekOpenFull)}
+    <Button
+      xstyle={traceStyles.peekOpenFull}
       onClick={() => {
         openTraceSession?.({
           sessionId,
@@ -830,7 +829,7 @@ function TraceQuotePeekPanel({
     >
       Full Trace
       <ExternalLinkIcon xstyle={iconStyles.inline} />
-    </button>
+    </Button>
   );
 
   return (
@@ -1151,9 +1150,10 @@ export function GuidedTourPanel({
         tour.stops.length > 0 ? (
           <div {...stylex.props(tourStyles.floatingFooter)}>
             {showIntroPill ? (
-              <button
-                type="button"
-                {...stylex.props(tourStyles.pill, tourStyles.pillIntro)}
+              <Button
+                variant="primary"
+                size="large"
+                xstyle={[tourStyles.pill, tourStyles.pillIntro]}
                 data-tour-target="tour-next"
                 onClick={() => {
                   setHasScrolled(true);
@@ -1161,11 +1161,11 @@ export function GuidedTourPanel({
                 }}
               >
                 <span>{tour.stops.length - 1} more steps</span>
-                <ChevronDownIcon xstyle={tourStyles.pillChevron} />
-              </button>
+                <ChevronDownIcon />
+              </Button>
             ) : (
               <div
-                {...stylex.props(tourStyles.pill)}
+                {...stylex.props(tourStyles.pill, tourStyles.pillGroup)}
                 role="group"
                 aria-label="Tour steps"
               >
@@ -1240,16 +1240,10 @@ export function GuidedTourPanel({
             <>
               <div {...stylex.props(tourStyles.endCap)}>
                 <span>End of tour</span>
-                <button
-                  type="button"
-                  {...stylex.props(buttonStyles.reset, tourStyles.endCapButton)}
-                  onClick={() => stepTo(0)}
-                >
-                  <ChevronDownIcon
-                    xstyle={[iconStyles.flip, iconStyles.glyph]}
-                  />{" "}
+                <Button variant="link" tone="accent" onClick={() => stepTo(0)}>
+                  <ChevronDownIcon xstyle={iconStyles.flip} />
                   Back to step 1
-                </button>
+                </Button>
               </div>
               <div
                 ref={tailRef}

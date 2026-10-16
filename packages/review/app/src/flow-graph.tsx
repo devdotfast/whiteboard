@@ -1,5 +1,5 @@
 import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
-import { buttonStyles } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { textStyles } from "@canvas/ui/text";
 import type { DiffSelection } from "@review/lens-selection";
 import {
@@ -233,12 +233,13 @@ export function FlowGraph({
         >
           {moved ? (
             <Panel position="top-right">
-              <button
-                {...withClass("diagram-tour-button", diagramStyles.control)}
+              <Button
+                className="diagram-tour-button"
+                xstyle={diagramStyles.button}
                 onClick={() => setMovedLayout(undefined)}
               >
                 Reset view
-              </button>
+              </Button>
             </Panel>
           ) : (
             <FitToLayout layout={layout} frame={frame} />

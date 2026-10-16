@@ -18,7 +18,7 @@ import {
   SearchIcon,
 } from "@canvas/ui/icons";
 import { Shortcut } from "@canvas/ui/kbd";
-import { SegmentedControl, segmentStyles } from "@canvas/ui/segmented";
+import { SegmentedControl } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
 import { fieldStyles } from "@canvas/ui/text-field";
 import { useTooltip } from "@canvas/use-tooltip";
@@ -479,22 +479,8 @@ export function RunStep({
                   ...kinds,
                 ].map((option) => ({
                   value: option.kind,
-                  label: (
-                    <>
-                      {option.label}
-                      {option.count ? (
-                        <span
-                          {...stylex.props(
-                            segmentStyles.segmentCount,
-                            kind === option.kind &&
-                              segmentStyles.segmentCountActive,
-                          )}
-                        >
-                          {option.count}
-                        </span>
-                      ) : null}
-                    </>
-                  ),
+                  label: option.label,
+                  count: option.count || undefined,
                 }))}
                 onChange={(next) => setKind(next === "all" ? undefined : next)}
               />

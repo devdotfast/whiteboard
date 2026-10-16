@@ -1,4 +1,5 @@
 import { fontSize } from "@canvas/scale.stylex";
+import { Button } from "@canvas/ui/button";
 import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
 import type {
@@ -173,19 +174,17 @@ export function TraceCaptureSection({
         </div>
       )}
       {status.trace.enabled ? (
-        <button
-          type="button"
+        <Button
           disabled={busy !== null}
           onClick={() =>
             void run("trace-remove", () => install.remove({ trace: true }))
           }
         >
           {busy === "trace-remove" ? "Disabling…" : "Disable"}
-        </button>
+        </Button>
       ) : null}
       {hosted ? null : (
-        <button
-          type="button"
+        <Button
           disabled={busy !== null}
           onClick={() =>
             void run(
@@ -217,7 +216,7 @@ export function TraceCaptureSection({
             : status.trace.enabled
               ? "Repair"
               : "Enable"}
-        </button>
+        </Button>
       )}
       {error ? (
         <p {...stylex.props(textStyles.error, promptStyles.error)}>{error}</p>

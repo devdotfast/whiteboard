@@ -1,8 +1,10 @@
+import { segmentMarker } from "@canvas/markers.stylex";
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
+import { MarkerUnderline } from "@canvas/ui/marker-underline";
 import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps, ReactNode } from "react";
 
@@ -12,13 +14,24 @@ type SegmentedControlProps<T extends string> = Omit<
 > & {
   label: string;
   value: T | undefined;
-  options: readonly { value: T; label: ReactNode }[];
+  options: readonly SegmentOption<T>[];
   onChange(value: T): void;
   // Large segments stand in prose (the welcome page).
   size?: "default" | "large";
+  // The top bar's view tabs: words on the tray, a marker under the chosen.
+  variant?: "default" | "topbar";
   disabled?: boolean;
   className?: string;
   xstyle?: StyleArg;
+};
+
+type SegmentOption<T extends string> = {
+  value: T;
+  label: ReactNode;
+  // A tally after the label, like a tab's file count.
+  count?: number;
+  "aria-label"?: string;
+  title?: string;
 };
 
 /** Pick one of a few; `children` follow the segments inside the track. */
@@ -28,37 +41,65 @@ export function SegmentedControl<T extends string>({
   options,
   onChange,
   size = "default",
+  variant = "default",
   disabled = false,
   className,
   xstyle,
   children,
   ...props
 }: SegmentedControlProps<T>) {
+  const topbar = variant === "topbar";
+
   return (
     <div
       role="group"
       aria-label={label}
       {...props}
-      {...withClass(className, segmentStyles.segmented, xstyle)}
+      {...withClass(
+        className,
+        segmentStyles.segmented,
+        topbar && segmentStyles.segmentedTopbar,
+        xstyle,
+      )}
     >
-      {options.map((option) => (
-        <button
-          key={option.value}
-          type="button"
-          aria-pressed={option.value === value}
-          disabled={disabled}
-          {...stylex.props(
-            focusStyles.ringInset,
-            buttonStyles.reset,
-            segmentStyles.segment,
-            size === "large" && segmentStyles.segmentLarge,
-            option.value === value && segmentStyles.segmentActive,
-          )}
-          onClick={() => onChange(option.value)}
-        >
-          {option.label}
-        </button>
-      ))}
+      {options.map((option) => {
+        const active = option.value === value;
+
+        return (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={active}
+            aria-label={option["aria-label"]}
+            title={option.title}
+            disabled={disabled}
+            {...stylex.props(
+              topbar && segmentMarker,
+              focusStyles.ringInset,
+              buttonStyles.reset,
+              segmentStyles.segment,
+              size === "large" && segmentStyles.segmentLarge,
+              topbar && segmentStyles.segmentTopbar,
+              active && segmentStyles.segmentActive,
+              active && topbar && segmentStyles.segmentTopbarActive,
+            )}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+            {option.count === undefined ? null : (
+              <span
+                {...stylex.props(
+                  segmentStyles.segmentCount,
+                  active && segmentStyles.segmentCountActive,
+                )}
+              >
+                {option.count}
+              </span>
+            )}
+            {topbar ? <MarkerUnderline active={active} /> : null}
+          </button>
+        );
+      })}
       {children}
     </div>
   );
@@ -74,8 +115,8 @@ export function labeledOptions<T extends string>(labels: Record<T, ReactNode>) {
   }));
 }
 
-// Exported for segments another component renders: the top bar's view tabs
-// and the connect card's "Other…" menu trigger.
+// Exported for a segment another component renders: the connect card's
+// "Other…" menu trigger.
 export const segmentStyles = stylex.create({
   // Segmented choice controls: a tray-colored track, the chosen side raised
   // on a hairline. One part for every "pick one of a few" setting. The

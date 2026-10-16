@@ -503,21 +503,8 @@ export const traceStyles = stylex.create({
   },
 
   peekOpenFull: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "4px",
-    padding: "3px 8px",
-    borderRadius: radius.small,
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    backgroundColor: { default: tokens.surface, ":hover": tokens.accentWash },
-    color: tokens.accent,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
-    cursor: "pointer",
-    whiteSpace: "nowrap",
-    flexShrink: 0,
   },
   source: {
     display: "flex",

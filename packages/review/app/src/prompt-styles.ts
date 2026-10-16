@@ -1,4 +1,4 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { fontSize } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
@@ -33,18 +33,7 @@ export const promptStyles = stylex.create({
     padding: "18px 0 4px",
   },
   copy: {
-    display: "inline-flex",
-    gap: "6px",
-    alignItems: "center",
-    padding: "6px 14px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: radius.control,
-    color: tokens.onAccent,
-    backgroundColor: tokens.accent,
-    font: `${fontWeight.medium} ${fontSize.body}/16px ${tokens.fontMono}`,
-    textDecoration: "none",
+    fontFamily: tokens.fontMono,
   },
   error: {
     margin: "10px 0 0",

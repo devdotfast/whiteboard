@@ -1,6 +1,6 @@
 import { drawMotion } from "@canvas/draw-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
-import { buttonStyles } from "@canvas/ui/button";
+import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CloseIcon, FileIcon, SearchIcon } from "@canvas/ui/icons";
@@ -875,18 +875,9 @@ function RailButton({
   const tooltip = useTooltip(label, { instant: true });
 
   return (
-    <button
-      ref={tooltip}
-      {...stylex.props(
-        focusStyles.ringInset,
-        buttonStyles.reset,
-        styles.railButton,
-      )}
-      aria-label={label}
-      onClick={onClick}
-    >
+    <IconButton ref={tooltip} size="large" aria-label={label} onClick={onClick}>
       {children}
-    </button>
+    </IconButton>
   );
 }
 
@@ -990,19 +981,6 @@ const styles = stylex.create({
     flexDirection: "column",
     gap: "3px",
     lineHeight: 1,
-  },
-  railButton: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-    width: "28px",
-    height: "28px",
-    borderRadius: radius.control,
-    padding: 0,
-    color: tokens.inkMuted,
-    cursor: "pointer",
-    backgroundColor: { default: tokens.transparent, ":hover": tokens.well },
   },
   // 5ch is five letters in Geist Mono.
   railLens: {

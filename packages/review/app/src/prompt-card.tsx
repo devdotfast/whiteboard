@@ -1,5 +1,5 @@
+import { Button } from "@canvas/ui/button";
 import { copyText } from "@canvas/ui/copy";
-import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CopyIcon } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
@@ -90,16 +90,17 @@ export function PromptCard() {
       />
       <pre {...stylex.props(promptStyles.body)}>{PROMPTS[kind]}</pre>
       <div {...stylex.props(promptStyles.actions)}>
-        <button
-          type="button"
-          {...stylex.props(focusStyles.ring, promptStyles.copy)}
+        <Button
+          variant="primary"
+          size="large"
+          xstyle={promptStyles.copy}
           aria-live="polite"
           aria-label={copied ? "Prompt copied" : "Copy prompt"}
           onClick={copyPrompt}
         >
           <CopyIcon xstyle={iconStyles.inline} />
           {copied ? "Copied" : "Copy prompt"}
-        </button>
+        </Button>
       </div>
     </section>
   );

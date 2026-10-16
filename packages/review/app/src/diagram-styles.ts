@@ -4,7 +4,7 @@ import * as stylex from "@stylexjs/stylex";
 import { tokens } from "./tokens.stylex";
 
 // The header every diagram figure shares: a kind badge, the title and a quiet
-// count, then its 24px hairline controls (the tour button, the use-case
+// count, then its 24px controls (the tour Button, the use-case
 // select).
 export const diagramStyles = stylex.create({
   header: {
@@ -55,6 +55,14 @@ export const diagramStyles = stylex.create({
     fontStyle: "normal",
     letterSpacing: 0,
     textTransform: "none",
+  },
+  button: {
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    backgroundColor: {
+      default: tokens.surface,
+      ":hover:not(:disabled)": tokens.well,
+    },
   },
   control: {
     flex: "0 0 auto",

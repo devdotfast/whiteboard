@@ -31,15 +31,6 @@ export const styles = stylex.create({
   // Set apart from the list's own controls: it adds to the list.
   newWhiteboard: { marginInlineStart: "8px" },
   trail: { display: "flex", alignItems: "baseline", gap: "12px" },
-  crumb: {
-    padding: 0,
-    borderWidth: 0,
-    backgroundColor: tokens.transparent,
-    color: { default: tokens.inkMuted, ":hover": tokens.ink },
-    font: "inherit",
-    letterSpacing: "inherit",
-    cursor: "pointer",
-  },
   corner: {
     position: "fixed",
     zIndex: layer.overlay,
@@ -117,22 +108,12 @@ export const styles = stylex.create({
   },
   chipValue: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" },
   chipClose: {
-    display: "grid",
-    placeItems: "center",
     alignSelf: "stretch",
-    flexShrink: 0,
-    width: "24px",
-    padding: 0,
-    borderWidth: 0,
+    height: "auto",
+    borderRadius: 0,
     borderLeftWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    backgroundColor: {
-      default: tokens.transparent,
-      ":hover": tokens.chromeHoverBg,
-    },
-    color: tokens.inkMuted,
-    cursor: "pointer",
+    borderLeftStyle: "solid",
+    borderLeftColor: tokens.ruleSoft,
   },
   editingChip: {
     gap: "6px",

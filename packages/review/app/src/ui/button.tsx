@@ -7,15 +7,20 @@ import type { ComponentProps } from "react";
 
 type NativeButtonProps = Omit<ComponentProps<"button">, "className" | "style">;
 
-type ButtonProps = NativeButtonProps & {
-  variant?: "ghost" | "secondary" | "primary" | "warning";
+type ButtonLook = {
+  variant?: "ghost" | "secondary" | "primary" | "warning" | "link";
   // Large is for canvas and dialog actions; default matches the chrome.
   size?: "default" | "large";
-  /** A plain class that code, tests or global.css look up. */
-  className?: string;
-  /** Call-site styles, applied last; a StyleX marker may ride along. */
-  xstyle?: StyleArg;
+  tone?: "muted" | "accent";
 };
+
+type ButtonProps = NativeButtonProps &
+  ButtonLook & {
+    /** A plain class that code, tests or global.css look up. */
+    className?: string;
+    /** Call-site styles, applied last; a StyleX marker may ride along. */
+    xstyle?: StyleArg;
+  };
 
 type IconButtonProps = NativeButtonProps & {
   "aria-label": string;
@@ -24,29 +29,47 @@ type IconButtonProps = NativeButtonProps & {
   xstyle?: StyleArg;
 };
 
-export function Button({
+/** A button's styles, for an element that is not a button: a link that
+ * looks like one. */
+export function buttonLook({
   variant = "secondary",
   size = "default",
+  tone = "muted",
+}: ButtonLook): StyleArg {
+  if (variant === "link") {
+    return [
+      focusStyles.ring,
+      buttonStyles.reset,
+      buttonStyles.link,
+      tone === "accent" && buttonStyles.linkAccent,
+    ];
+  }
+
+  const filled = variant === "primary" || variant === "warning";
+
+  return [
+    filled ? focusStyles.ring : focusStyles.ringInset,
+    buttonStyles.reset,
+    buttonStyles.base,
+    buttonStyles[variant],
+    size === "large" && buttonStyles.large,
+  ];
+}
+
+export function Button({
+  variant,
+  size,
+  tone,
   className,
   xstyle,
   type = "button",
   ...props
 }: ButtonProps) {
-  const filled = variant === "primary" || variant === "warning";
-
   return (
     <button
       type={type}
       {...props}
-      {...withClass(
-        className,
-        filled ? focusStyles.ring : focusStyles.ringInset,
-        buttonStyles.reset,
-        buttonStyles.base,
-        buttonStyles[variant],
-        size === "large" && buttonStyles.large,
-        xstyle,
-      )}
+      {...withClass(className, buttonLook({ variant, size, tone }), xstyle)}
     />
   );
 }
@@ -79,6 +102,9 @@ export function IconButton({
 // Only popup triggers: disclosure toggles also carry aria-expanded.
 const expanded = ':is([aria-haspopup][aria-expanded="true"])';
 
+// A toggle that is on, like Find's Match Case.
+const pressed = ':is([aria-pressed="true"])';
+
 // Exported for a button another component renders (an OptionMenu trigger),
 // and `reset` for anything drawn without the native button box.
 export const buttonStyles = stylex.create({
@@ -108,8 +134,34 @@ export const buttonStyles = stylex.create({
     fontWeight: fontWeight.medium,
     lineHeight: 1,
     whiteSpace: "nowrap",
+    textDecorationLine: "none",
     cursor: { default: "pointer", ":disabled": "default" },
     opacity: { default: null, ":disabled": 0.5 },
+  },
+  link: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    padding: 0,
+    borderRadius: radius.small,
+    color: {
+      default: tokens.inkMuted,
+      ":hover:not(:disabled)": tokens.ink,
+    },
+    letterSpacing: "inherit",
+    textAlign: "inherit",
+    whiteSpace: "nowrap",
+    textDecorationLine: "none",
+    textUnderlineOffset: "2px",
+    cursor: { default: "pointer", ":disabled": "default" },
+    opacity: { default: null, ":disabled": 0.5 },
+  },
+  linkAccent: {
+    color: tokens.accent,
+    textDecorationLine: {
+      default: "none",
+      ":hover:not(:disabled)": "underline",
+    },
   },
   ghost: {
     color: {
@@ -141,11 +193,19 @@ export const buttonStyles = stylex.create({
   icon: {
     width: tokens.chromeControlHeight,
     padding: 0,
+    backgroundColor: {
+      default: tokens.transparent,
+      ":hover:not(:disabled)": tokens.chromeHoverBg,
+      [expanded]: tokens.chromeHoverBg,
+      [pressed]: tokens.inputOptionActiveBg,
+    },
+    boxShadow: { default: null, [pressed]: `inset 0 0 0 1px ${tokens.accent}` },
     color: {
       default: tokens.chromeIconFg,
       ":hover:not(:disabled)": tokens.chromeFg,
       ":focus-visible": tokens.chromeFg,
       [expanded]: tokens.chromeFg,
+      [pressed]: tokens.inputOptionActiveFg,
     },
   },
   iconSmall: {

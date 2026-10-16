@@ -71,7 +71,7 @@ export function ScreenHeader({
       <div {...stylex.props(styles.titleText)}>
         {back ? (
           <Button
-            variant="ghost"
+            variant="link"
             xstyle={[styles.backLink, styles.enter0]}
             onClick={back.onClick}
           >

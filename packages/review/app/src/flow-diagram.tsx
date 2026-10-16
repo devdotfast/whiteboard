@@ -1,4 +1,5 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
+import { Button } from "@canvas/ui/button";
 import {
   type FlowDiagramBlock,
   nodeSources,
@@ -118,15 +119,16 @@ export function FlowDiagram({
         title={node.title}
         meta={`${node.nodes.length} ${node.nodes.length === 1 ? "node" : "nodes"}`}
         action={
-          <button
-            {...withClass("diagram-tour-button", diagramStyles.control)}
+          <Button
+            className="diagram-tour-button"
+            xstyle={diagramStyles.button}
             onClick={() => (fullscreen ? close() : open())}
             aria-label={
               fullscreen ? "Close expanded diagram" : "Expand diagram"
             }
           >
             {fullscreen ? "Close" : "Expand"}
-          </button>
+          </Button>
         }
       />
       {node.description && (

@@ -56,15 +56,6 @@ export const askPanelStyles = stylex.create({
     lineHeight: "18px",
     whiteSpace: "pre-wrap",
   },
-  errorAction: {
-    padding: 0,
-    color: tokens.ink,
-    font: "inherit",
-    textDecorationLine: "underline",
-    textUnderlineOffset: "3px",
-    cursor: "pointer",
-    borderRadius: radius.small,
-  },
   // A loading shimmer; sites set the gradient and its size.
   sweep: {
     animationName: { default: sweep, [stylex.env.reducedMotion]: "none" },

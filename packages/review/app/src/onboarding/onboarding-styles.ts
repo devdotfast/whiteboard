@@ -147,7 +147,6 @@ export const onboardingStyles = stylex.create({
   },
   backLink: {
     alignSelf: "flex-start",
-    marginInline: "-10px",
     fontFamily: tokens.fontMono,
   },
   titleBar: {

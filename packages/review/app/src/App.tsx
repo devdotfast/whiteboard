@@ -1,6 +1,5 @@
 import { DiscordIcon } from "@canvas/ui/brand-icons";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
-import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
   ArchiveIcon,
@@ -56,13 +55,11 @@ import { ReviewDiffView } from "./DiffView";
 import { useDocumentEmbedScroll } from "./document-embed-scroll";
 import { documentStyles } from "./document-styles";
 import { useReviewSession } from "./host/review-session";
-import { MarkerUnderline } from "./marker-underline";
 import {
   appMarker,
   detailHostMarker,
   documentMarker,
   scopedDiffMarker,
-  segmentMarker,
   topbarActionsMarker,
   topbarTabsMarker,
 } from "./markers.stylex";
@@ -119,7 +116,7 @@ import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { traceStyles } from "./trace-styles";
 import { captureUiEvent } from "./ui-telemetry";
-import { segmentStyles } from "./ui/segmented";
+import { SegmentedControl, labeledOptions } from "./ui/segmented";
 import { useReviewTabTelemetry } from "./use-review-tab-telemetry";
 import { useTooltip } from "./use-tooltip";
 import { useTraceList } from "./use-trace-list";
@@ -559,45 +556,17 @@ function ReviewLayoutContent({
       >
         <header {...stylex.props(shellStyles.topbar)}>
           <div {...stylex.props(shellStyles.topbarLeft, topbarTabsMarker)}>
-            <div
-              {...stylex.props(
-                segmentStyles.segmented,
-                segmentStyles.segmentedTopbar,
-              )}
-              role="group"
-              aria-label="Session views"
-            >
-              {reviewViews.map((view) => (
-                <button
-                  key={view}
-                  type="button"
-                  aria-label={
-                    view === "map"
-                      ? "Map (Experimental)"
-                      : reviewViewLabel(view)
-                  }
-                  aria-pressed={activeView === view}
-                  title={view === "map" ? "Map (Experimental)" : undefined}
-                  {...withClass(
-                    "review-segment",
-                    segmentMarker,
-                    focusStyles.ringInset,
-                    buttonStyles.reset,
-                    segmentStyles.segment,
-                    segmentStyles.segmentTopbar,
-                    activeView === view && segmentStyles.segmentActive,
-                    activeView === view && segmentStyles.segmentTopbarActive,
-                  )}
-                  onClick={() => {
-                    if (view === "diff")
-                      captureUiEvent(session, "diff_opened", {
-                        kind: diffScope ? "commit" : "structural",
-                        via: "topbar",
-                      });
-                    showView(view);
-                  }}
-                >
-                  {view === "review" ? (
+            <SegmentedControl
+              label="Session views"
+              variant="topbar"
+              value={activeView}
+              options={reviewViews.map((view) => ({
+                value: view,
+                "aria-label":
+                  view === "map" ? "Map (Experimental)" : reviewViewLabel(view),
+                title: view === "map" ? "Map (Experimental)" : undefined,
+                label:
+                  view === "review" ? (
                     <ReviewSurfaceLabel
                       label={scratchpad ? "Scratchpad" : "Whiteboard"}
                       hasContent={document.empty === false}
@@ -605,31 +574,23 @@ function ReviewLayoutContent({
                     />
                   ) : (
                     <span>{reviewViewLabel(view)}</span>
-                  )}
-                  {view === "diff" && filesTabFileCount !== null && (
-                    <span
-                      {...stylex.props(
-                        segmentStyles.segmentCount,
-                        activeView === view && segmentStyles.segmentCountActive,
-                      )}
-                    >
-                      {filesTabFileCount}
-                    </span>
-                  )}
-                  {view === "commits" && (
-                    <span
-                      {...stylex.props(
-                        segmentStyles.segmentCount,
-                        activeView === view && segmentStyles.segmentCountActive,
-                      )}
-                    >
-                      {commits.length}
-                    </span>
-                  )}
-                  <MarkerUnderline active={activeView === view} />
-                </button>
-              ))}
-            </div>
+                  ),
+                count:
+                  view === "diff"
+                    ? (filesTabFileCount ?? undefined)
+                    : view === "commits"
+                      ? commits.length
+                      : undefined,
+              }))}
+              onChange={(view) => {
+                if (view === "diff")
+                  captureUiEvent(session, "diff_opened", {
+                    kind: diffScope ? "commit" : "structural",
+                    via: "topbar",
+                  });
+                showView(view);
+              }}
+            />
           </div>
           <div
             {...stylex.props(shellStyles.topbarActions, topbarActionsMarker)}
@@ -886,13 +847,15 @@ function CommitDiffScopeBar({
 }) {
   return (
     <div {...stylex.props(scopeBarStyles.bar)}>
-      <button
-        type="button"
-        {...stylex.props(buttonStyles.reset, scopeBarStyles.back)}
+      <Button
+        variant="link"
+        tone="accent"
+        xstyle={scopeBarStyles.back}
         onClick={onBack}
       >
-        <ArrowLeftIcon xstyle={[iconStyles.inline, iconStyles.glyph]} /> Commits
-      </button>
+        <ArrowLeftIcon xstyle={iconStyles.inline} />
+        Commits
+      </Button>
       <code {...stylex.props(scopeBarStyles.sha)} title={commit.commit}>
         {commit.commit.slice(0, 8)}
       </code>
@@ -922,8 +885,7 @@ const scopeBarStyles = stylex.create({
   back: {
     height: "20px",
     flex: "0 0 auto",
-    padding: 0,
-    color: tokens.accent,
+    gap: "4px",
     fontSize: fontSize.micro,
   },
   sha: {
@@ -1025,11 +987,7 @@ function MapSettingsControl(): ReactElement {
             checked={showRemovedNodes}
             onChange={setShowRemovedNodes}
           />
-          <div
-            {...stylex.props(mapSettingsStyles.tints)}
-            role="group"
-            aria-label="Node tint"
-          >
+          <div {...stylex.props(mapSettingsStyles.tints)}>
             <span
               {...stylex.props(
                 textStyles.eyebrow,
@@ -1038,20 +996,12 @@ function MapSettingsControl(): ReactElement {
             >
               Map node tint
             </span>
-            {(["none", "slate", "mineral"] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                {...stylex.props(
-                  mapSettingsStyles.tint,
-                  nodeTint === option && mapSettingsStyles.tintActive,
-                )}
-                aria-pressed={nodeTint === option}
-                onClick={() => setNodeTint(option)}
-              >
-                {nodeTintLabel(option)}
-              </button>
-            ))}
+            <SegmentedControl
+              label="Node tint"
+              value={nodeTint}
+              options={labeledOptions(NODE_TINT_LABELS)}
+              onChange={setNodeTint}
+            />
           </div>
         </section>
       )}
@@ -1100,11 +1050,11 @@ function DebugSwitch({
   );
 }
 
-function nodeTintLabel(tint: ReviewNodeTint) {
-  if (tint === "none") return "None";
-
-  return tint === "slate" ? "Slate" : "Mineral";
-}
+const NODE_TINT_LABELS: Record<ReviewNodeTint, string> = {
+  none: "None",
+  slate: "Slate",
+  mineral: "Mineral",
+};
 
 export function applySoftwareMapTopologyStatuses(
   model: NormalizedSoftwareModel | undefined,
@@ -1224,44 +1174,14 @@ const mapSettingsStyles = stylex.create({
     },
   },
   tints: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr 1fr",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
     gap: "6px",
     padding: "10px",
   },
   groupLabel: {
-    gridColumn: "1 / -1",
     fontFamily: tokens.fontMono,
-  },
-  tint: {
-    minHeight: "32px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: {
-      default: tokens.rule,
-      ":hover": tokens.accent,
-      ":focus-visible": tokens.accent,
-    },
-    borderRadius: radius.control,
-    backgroundColor: {
-      default: tokens.tray,
-      ":hover": tokens.accentSoft,
-      ":focus-visible": tokens.accentSoft,
-    },
-    color: {
-      default: tokens.inkMuted,
-      ":hover": tokens.accent,
-      ":focus-visible": tokens.accent,
-    },
-    fontSize: fontSize.body,
-    fontWeight: fontWeight.bold,
-    outline: { default: null, ":hover": "none", ":focus-visible": "none" },
-  },
-  tintActive: {
-    borderColor: tokens.accent,
-    backgroundColor: tokens.accentSoft,
-    color: tokens.accent,
-    outline: "none",
   },
 });
 
