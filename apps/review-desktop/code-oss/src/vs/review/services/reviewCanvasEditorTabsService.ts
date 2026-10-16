@@ -9,6 +9,7 @@ import { Schemas } from "../../base/common/network.js";
 import { Disposable } from "../../base/common/lifecycle.js";
 import { joinPath } from "../../base/common/resources.js";
 import { URI } from "../../base/common/uri.js";
+import { IConfigurationService } from "../../platform/configuration/common/configuration.js";
 import type { ITextEditorOptions } from "../../platform/editor/common/editor.js";
 import { IEnvironmentService } from "../../platform/environment/common/environment.js";
 import { IFileService } from "../../platform/files/common/files.js";
@@ -25,13 +26,15 @@ import {
 } from "../browser/parts/canvas/reviewCanvasEditorInput.js";
 import { ReviewHostDown } from "../browser/parts/canvas/reviewHostFailure.js";
 
+import { REVIEW_OPEN_FILES_IN_APPLICATION_SETTING, REVIEW_OPEN_FILES_IN_SETTING } from "../common/reviewConfigurationDefaults.js";
+import { isExternalEditor } from "../common/reviewExternalEditor.js";
 import { reviewSourceQuery, type ReviewRemoteNavigatorAnswer, type ReviewSourceSelection } from "../common/reviewProtocol.js";
 import { REVIEW_LANGUAGE_SOURCE_SCHEME } from "../common/reviewReadonlySource.js";
 import { sourceLocation, sourceSelectionIdentity, REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
 import { reviewRemoteAuthority } from "./remote/reviewRemoteAuthority.js";
 import { IReviewDesktopConnectionService, reviewResponseError } from "./reviewDesktopConnectionService.js";
 
-type NavigatorAnswer = { workspacePath: string; filePath?: string } | ReviewRemoteNavigatorAnswer;
+type NavigatorAnswer = { workspacePath: string; filePath?: string; rootPath?: string } | ReviewRemoteNavigatorAnswer;
 
 function navigatorPaths(answer: NavigatorAnswer): { uri: (path: string) => URI; remote: { remoteAuthority?: string } } {
 	if (!("serverId" in answer)) return { uri: URI.file, remote: {} };
@@ -77,6 +80,7 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		@ILogService private readonly logService: ILogService,
 		@IFileService private readonly files: IFileService,
 		@IEnvironmentService private readonly environment: IEnvironmentService,
+		@IConfigurationService private readonly configurationService: IConfigurationService,
 	) {
 		super();
 		this._register(
@@ -131,7 +135,11 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		await this.host.openWindow([{ workspaceUri: uri(result.workspacePath), label: title }], { forceNewWindow: true, ...remote });
 	}
 
-	/** Hand source opens to the native workspace before Review creates an editor group. */
+	/**
+	 * Hand source opens to the native workspace before Review creates an editor
+	 * group, or to the `review.openFilesIn` editor. A pinned revision opens from
+	 * the checkout Whiteboard keeps for it, so the line matches the review.
+	 */
 	async openSourceEditor(editor: IUntypedEditorInput): Promise<boolean> {
 		const diff = isResourceDiffEditorInput(editor);
 		const resources = diff ? [editor.original.resource, editor.modified.resource] : [isResourceEditorInput(editor) ? editor.resource : undefined];
@@ -139,10 +147,25 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		const destinations = await Promise.all(resources.map(resource => this.sourceDestination(resource)));
 		const { workspaceUri, remote } = destinations[destinations.length - 1];
 		const selection = !diff ? (editor.options as ITextEditorOptions | undefined)?.selection : undefined;
+		if (!diff && destinations[0].external && await this.openExternalEditor(destinations[0], selection)) return true;
 		await this.host.openWindow([
 			{ workspaceUri },
 			...destinations.map(({ fileUri }) => ({ fileUri: selection ? fileUri.with({ path: `${fileUri.path}:${selection.startLineNumber}:${selection.startColumn ?? 1}` }) : fileUri })),
 		], { forceNewWindow: true, gotoLineMode: true, diffMode: diff, ...remote });
+		return true;
+	}
+
+	private async openExternalEditor({ fileUri, rootPath }: { fileUri: URI; rootPath?: string }, selection: ITextEditorOptions["selection"]): Promise<boolean> {
+		const editor = this.configurationService.getValue<string>(REVIEW_OPEN_FILES_IN_SETTING);
+		if (editor === "application") {
+			// An application takes the file alone: only the editors' URLs carry a line.
+			const application = this.configurationService.getValue<string>(REVIEW_OPEN_FILES_IN_APPLICATION_SETTING);
+			if (!application) return false;
+			await this.desktopConnection.openInApplication(application, fileUri.fsPath);
+			return true;
+		}
+		if (!isExternalEditor(editor)) return false;
+		await this.desktopConnection.openInExternalEditor({ editor, filePath: fileUri.fsPath, line: selection?.startLineNumber, column: selection?.startColumn, folder: rootPath });
 		return true;
 	}
 
@@ -160,18 +183,22 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 	private async sourceDestination(resource: URI) {
 		const target = sourceLocation(resource);
 		const local = resource.scheme === REVIEW_LANGUAGE_SOURCE_SCHEME;
+		const empty = new URLSearchParams(resource.query).has("empty");
 		const result = await this.navigatorWorkspace(target.view.reviewId, {
 			...reviewSourceQuery(target.view),
 			side: target.side,
 			file: local ? undefined : target.file,
-			empty: new URLSearchParams(resource.query).has("empty") ? "true" : undefined,
+			empty: empty ? "true" : undefined,
 		});
 		const { uri, remote } = navigatorPaths(result);
 		const fileUri = "serverId" in result
 			? result.emptySide ? await this.emptyFile() : result.filePath && uri(result.filePath)
 			: local ? URI.file(resource.fsPath) : result.filePath && uri(result.filePath);
 		if (!fileUri) throw new Error("The navigator did not resolve the source file.");
-		return { workspaceUri: uri(result.workspacePath), fileUri, remote };
+		// An editor on this machine opens neither a remote host's file nor the
+		// placeholder the navigator writes for an empty side of a native diff.
+		const external = !("serverId" in result) && !empty;
+		return { workspaceUri: uri(result.workspacePath), fileUri, remote, rootPath: "serverId" in result ? undefined : result.rootPath, external };
 	}
 
 	private async emptyFile(): Promise<URI> {

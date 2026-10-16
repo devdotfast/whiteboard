@@ -40,6 +40,7 @@ async function closeWelcome(updateNeeded: boolean): Promise<number> {
 		{ warn() {} } as never,
 		{} as never,
 		{} as never,
+		{} as never,
 	);
 	try {
 		const welcome = await tabs.openWelcome(true);
@@ -60,7 +61,7 @@ const HOST = "whiteboard+c0ffee";
 const remote = (path: string) => URI.from({ scheme: "vscode-remote", authority: HOST, path }).toString();
 const view = (generation?: string) => ({ reviewId: "r1", version: 2, generation });
 
-function sourceTabs(t: TestContext, answer: (url: URL) => object) {
+function sourceTabs(t: TestContext, answer: (url: URL) => object, openFilesIn = "whiteboard") {
 	const opened: { toOpen: { workspaceUri?: URI; fileUri?: URI; label?: string }[]; options: Record<string, unknown> }[] = [];
 	const written: string[] = [];
 	t.mock.method(globalThis, "fetch", async (url: string) => Response.json(answer(new URL(url))));
@@ -73,6 +74,7 @@ function sourceTabs(t: TestContext, answer: (url: URL) => object) {
 		{ warn() {} } as never,
 		{ async writeFile(resource: URI, content: VSBuffer) { written.push(`${resource.toString()}=${content.toString()}`); } } as never,
 		{ cacheHome: URI.file("/laptop/cache") } as never,
+		{ getValue: () => openFilesIn } as never,
 	);
 	t.after(() => tabs.dispose());
 	return { tabs, opened, written };
@@ -92,6 +94,12 @@ test("a remote answer opens the host's workspace and file at the position, title
 	const [{ toOpen, options }] = opened;
 	assert.deepEqual(toOpen.map(item => (item.workspaceUri ?? item.fileUri)!.toString()), [remote("/home/dev/navigator/repo.code-workspace"), remote("/home/dev/repo/src/a b.ts:3:2")]);
 	assert.equal(options.remoteAuthority, HOST);
+});
+
+test("a remote file opens on its host even when files open in another editor", async (t) => {
+	const { tabs, opened } = sourceTabs(t, () => remoteAnswer, "zed");
+	await tabs.openSourceEditor({ resource: apiSourceUri({ view: view(), side: "head", file: "src/a b.ts" }) });
+	assert.equal(opened[0].options.remoteAuthority, HOST);
 });
 
 test("a remote diff opens its empty side from a laptop empty file", async (t) => {

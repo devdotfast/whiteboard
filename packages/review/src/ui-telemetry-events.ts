@@ -139,6 +139,7 @@ export const SETTING_NAME = [
   "diffr_config",
   "theme",
   "ctrl_tab",
+  "open_files_in",
   "ready_notification",
   "document_width",
   "code_font_size",

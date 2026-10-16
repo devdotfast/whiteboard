@@ -1,11 +1,14 @@
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
+import { fieldStyles } from "@canvas/ui/text-field";
 import type {
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
   ReviewCtrlTabChoice,
   ReviewDocumentWidthChoice,
   ReviewKeymapChoice,
+  ReviewOpenFilesIn,
+  ReviewOpenFilesInChoice,
   ReviewReadyNotificationChoice,
   ReviewThemeChoice,
 } from "@dev.fast/review-protocol";
@@ -39,6 +42,19 @@ const CTRL_TAB_LABELS: Record<ReviewCtrlTabChoice, string> = {
   recent: "Last used tab",
   next: "Next tab",
 };
+
+// The editors open at the selected line; a picked application gets the file.
+const OPEN_FILES_IN_EDITORS: Record<
+  Exclude<ReviewOpenFilesInChoice, "application">,
+  string
+> = {
+  whiteboard: "Whiteboard",
+  vscode: "VS Code",
+  cursor: "Cursor",
+  zed: "Zed",
+};
+
+const CHOOSE_APPLICATION = "choose";
 
 const DOCUMENT_WIDTH_LABELS: Record<ReviewDocumentWidthChoice, string> = {
   standard: "Standard",
@@ -84,6 +100,7 @@ export function SettingsPage({
   const [theme, setTheme] = useState(settings.theme);
   const [keymap, setKeymap] = useState(settings.keymap);
   const [ctrlTab, setCtrlTab] = useState(settings.ctrlTab);
+  const [openFilesIn, setOpenFilesIn] = useState(settings.openFilesIn);
   const [documentWidth, setDocumentWidth] = useState(settings.documentWidth);
   const [codeFontSize, setCodeFontSize] = useState(settings.codeFontSize);
 
@@ -355,6 +372,26 @@ export function SettingsPage({
                 />
               </label>
             </Row>
+            <Row
+              label="Open files in"
+              description="Where Open file sends a file. Diffs stay in Whiteboard."
+            >
+              <OpenFilesInSelect
+                value={openFilesIn}
+                onChoose={() =>
+                  void run(
+                    () => settings.chooseOpenFilesInApplication(),
+                    setOpenFilesIn,
+                  )
+                }
+                onChange={(choice) =>
+                  void run(
+                    () => settings.setOpenFilesIn(choice),
+                    setOpenFilesIn,
+                  )
+                }
+              />
+            </Row>
             {install ? (
               <TraceCaptureSection
                 install={install}
@@ -376,5 +413,46 @@ export function SettingsPage({
         </div>
       </div>
     </main>
+  );
+}
+
+function OpenFilesInSelect({
+  value,
+  onChoose,
+  onChange,
+}: {
+  value: ReviewOpenFilesIn;
+  onChoose: () => void;
+  onChange: (choice: ReviewOpenFilesInChoice) => void;
+}) {
+  return (
+    <select
+      {...stylex.props(fieldStyles.box)}
+      aria-label="Open files in"
+      title={value.application?.path}
+      value={value.choice}
+      onChange={(event) => {
+        const next = event.currentTarget.value;
+
+        if (next === CHOOSE_APPLICATION) return onChoose();
+
+        // SAFETY: every other option's value is a ReviewOpenFilesInChoice.
+        onChange(next as ReviewOpenFilesInChoice);
+      }}
+    >
+      {Object.entries(OPEN_FILES_IN_EDITORS).map(([choice, label]) => (
+        <option key={choice} value={choice}>
+          {label}
+        </option>
+      ))}
+      {value.application ? (
+        <option value="application">{value.application.name}</option>
+      ) : null}
+      <option value={CHOOSE_APPLICATION}>
+        {value.application
+          ? "Choose another application…"
+          : "Choose application…"}
+      </option>
+    </select>
   );
 }
