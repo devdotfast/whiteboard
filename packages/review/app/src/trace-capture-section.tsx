@@ -229,11 +229,8 @@ const styles = stylex.create({
     flexWrap: "wrap",
     alignItems: "flex-start",
     gap: "10px",
-    marginTop: "12px",
-    paddingTop: "10px",
-    borderTopWidth: "1px",
-    borderTopStyle: "solid",
-    borderTopColor: tokens.reviewHomeRuleSoft,
+    // The settings row above draws the rule; match its padding below it.
+    paddingTop: "14px",
   },
   info: {
     display: "flex",
