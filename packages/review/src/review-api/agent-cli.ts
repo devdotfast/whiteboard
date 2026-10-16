@@ -17,6 +17,7 @@ import {
   toolResultText,
 } from "./agent-client.js";
 import { type ReviewApiClient, ReviewApiError } from "./client.js";
+import { exitOnInstallUpdate } from "./install-update.js";
 import { callPublicTool, publicTool } from "./public-tools.js";
 import { RECOVERY } from "./recovery.js";
 import { REVIEW_AGENT_HEADER, REVIEW_VIA_HEADER } from "./request-origin.js";
@@ -70,6 +71,7 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
 
     if (mode === "mcp") {
       const { serveReviewMcp } = await import("./mcp.js");
+      exitOnInstallUpdate(input.stderr);
       await serveReviewMcp(
         async (key, agentKind) => {
           const connected = await connectReviewInstance(

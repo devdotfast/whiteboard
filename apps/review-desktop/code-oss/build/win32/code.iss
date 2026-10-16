@@ -1434,6 +1434,8 @@ var
 	ExePath: String;
 	ResultCode: Integer;
 begin
+	SaveStringToFile(ExpandConstant('{app}\applying_update'), '{#Commit}', False);
+	Sleep(2000);
 	ExePath := ExpandConstant('{app}\{#ExeBasename}.exe');
 	Log('Stopping remaining processes at ' + ExePath);
 	StringChangeEx(ExePath, '''', '''''', True);
@@ -1834,6 +1836,7 @@ begin
         Log('Invoking inno_updater for background update');
         Exec(ExpandConstant('{app}\{#VersionedResourcesFolder}\tools\inno_updater.exe'), ExpandConstant('"{app}\{#ExeBasename}.exe" ' + BoolToStr(LockFileExists()) + ' "{cm:UpdatingVisualStudioCode}"'), '', SW_SHOW, ewWaitUntilTerminated, UpdateResultCode);
         DeleteFile(ExpandConstant('{app}\updating_version'));
+        DeleteFile(ExpandConstant('{app}\applying_update'));
         Log('inno_updater completed successfully');
         #if "system" == InstallTarget
           if IsVersionedUpdate() then begin
