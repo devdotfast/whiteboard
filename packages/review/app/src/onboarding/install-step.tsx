@@ -63,11 +63,14 @@ export function InstallStep({
   client,
   setupActions,
   onProgress,
+  onConnected,
   onContinue,
 }: {
   client: OnboardingClient;
   setupActions: ReviewCanvasSetupActions;
   onProgress(fraction: number): void;
+  /** Whether any agent has Whiteboard yet. */
+  onConnected(connected: boolean): void;
   onContinue(): void;
 }) {
   const [rows, setRows] = useState<Row[]>([]);
@@ -257,6 +260,12 @@ export function InstallStep({
   useEffect(() => {
     onProgress(rows.length ? settled / rows.length : 0);
   }, [onProgress, rows.length, settled]);
+
+  const connected = rows.some(
+    (row) => row.id !== "cli" && row.state === "done",
+  );
+
+  useEffect(() => onConnected(connected), [onConnected, connected]);
 
   // With everything already there, nothing waits on the reader's say-so.
   const nothingToDo =

@@ -1,3 +1,4 @@
+import { railStepMarker } from "@canvas/markers.stylex";
 import { withClass } from "@canvas/stylex-props";
 import { Button } from "@canvas/ui/button";
 import { Kbd } from "@canvas/ui/kbd";
@@ -12,13 +13,11 @@ import { WelcomeStep } from "./welcome-step";
 
 type Step = "welcome" | "install" | "run";
 
-const RAIL = ["Welcome", "Install", "Run"] as const;
-
-const railIndex: Record<Step, number> = {
-  welcome: 0,
-  install: 1,
-  run: 2,
-};
+const RAIL: { step: Step; label: string }[] = [
+  { step: "welcome", label: "Welcome" },
+  { step: "install", label: "Install" },
+  { step: "run", label: "Run" },
+];
 
 /**
  * First run, full window: welcome, connect every agent on the machine, then
@@ -36,6 +35,8 @@ export function Onboarding({
   const [step, setStep] = useState<Step>("welcome");
   const { client, unavailable } = useOnboardingClient(setupActions);
   const [installProgress, setInstallProgress] = useState(0);
+  // Run needs an agent with Whiteboard, which Install finds out.
+  const [connected, setConnected] = useState(false);
   // Escape leaves for Home, unless a field or menu has it.
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -57,9 +58,9 @@ export function Onboarding({
     return () => window.removeEventListener("keydown", keydown);
   }, [onSkip]);
 
-  const fill = (index: number) => {
-    const current = railIndex[step];
+  const current = RAIL.findIndex((rail) => rail.step === step);
 
+  const fill = (index: number) => {
     if (index < current) return 1;
 
     if (index > current) return 0;
@@ -72,26 +73,30 @@ export function Onboarding({
       <nav {...stylex.props(styles.rail)} aria-label="Setup">
         <span {...stylex.props(styles.railSide)} />
         <ol {...stylex.props(styles.railSteps)}>
-          {RAIL.map((label, index) => (
-            <li
-              key={label}
-              {...stylex.props(styles.railStep)}
-              aria-current={index === railIndex[step] ? "step" : undefined}
-            >
-              <span {...stylex.props(styles.railTrack)}>
-                <span
-                  {...stylex.props(styles.railFill)}
-                  style={{ transform: `scaleX(${fill(index)})` }}
-                />
-              </span>
-              <span
-                {...stylex.props(
-                  styles.railLabel,
-                  index === railIndex[step] && styles.railLabelCurrent,
-                )}
+          {RAIL.map(({ step: target, label }, index) => (
+            <li key={label}>
+              <button
+                type="button"
+                {...stylex.props(railStepMarker, styles.railStep)}
+                aria-current={index === current ? "step" : undefined}
+                disabled={target === "run" && !connected && step !== "run"}
+                onClick={() => setStep(target)}
               >
-                {label}
-              </span>
+                <span {...stylex.props(styles.railTrack)}>
+                  <span
+                    {...stylex.props(styles.railFill)}
+                    style={{ transform: `scaleX(${fill(index)})` }}
+                  />
+                </span>
+                <span
+                  {...stylex.props(
+                    styles.railLabel,
+                    index === current && styles.railLabelCurrent,
+                  )}
+                >
+                  {label}
+                </span>
+              </button>
             </li>
           ))}
         </ol>
@@ -115,6 +120,7 @@ export function Onboarding({
           client={client}
           setupActions={setupActions}
           onProgress={setInstallProgress}
+          onConnected={setConnected}
           onContinue={() => setStep("run")}
         />
       ) : (

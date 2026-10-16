@@ -136,9 +136,9 @@ describe("Onboarding", () => {
   });
 
   const button = (label: string) =>
-    [...container.querySelectorAll("button")].find((candidate) =>
-      candidate.textContent?.startsWith(label),
-    );
+    [
+      ...container.querySelectorAll<HTMLButtonElement>("button:not(nav *)"),
+    ].find((candidate) => candidate.textContent?.startsWith(label));
 
   const row = (name: string) =>
     [...container.querySelectorAll("[data-state]")].find((candidate) =>

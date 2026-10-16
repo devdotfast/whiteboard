@@ -81,3 +81,6 @@ export const filterRowMarker = stylex.defineMarker();
 
 /** A first-run install row; its copy chip shows while it is hovered. */
 export const installRowMarker = stylex.defineMarker();
+
+/** An onboarding rail step; its label inks while it is hovered. */
+export const railStepMarker = stylex.defineMarker();
