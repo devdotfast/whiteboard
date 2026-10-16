@@ -177,23 +177,40 @@ it("replaces this machine's token with the remote's, drops its credentials and m
   expect(seen?.headers.authorization).toBeUndefined();
 });
 
-it("answers per-review telemetry for a remote review itself and refuses local-only routes", async () => {
+it("captures a remote review's canvas events locally and refuses local-only routes", async () => {
   const reviewId = randomUUID();
   const fake = await startFake({ version, reviewIds: [reviewId] });
+  const captured: [string, unknown][] = [];
 
-  const { request, gateway } = await startGateway([
-    { alias: "wb-a", endpoint: fake.endpoint },
-  ]);
+  const { request, gateway } = await startLocalGateway(
+    root,
+    [{ alias: "wb-a", endpoint: fake.endpoint }],
+    {
+      remoteEvent: async (event, id) => {
+        captured.push([id, await event.json()]);
+      },
+    },
+  );
 
   await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+  expect(gateway.isRemote(reviewId)).toBe(true);
 
   const telemetry = await request(`/${reviewId}/telemetry/event`, {
     method: "POST",
-    body: "{}",
+    body: '{"name":"ask_sent"}',
   });
 
   expect(telemetry.status).toBe(200);
   expect(telemetry.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  expect(captured).toEqual([[reviewId, { name: "ask_sent" }]]);
+
+  const tab = await request(`/${reviewId}/telemetry/tab`, {
+    method: "POST",
+    body: "{}",
+  });
+
+  expect(tab.status).toBe(200);
+  expect(captured).toHaveLength(1);
 
   for (const [method, route] of [
     ["POST", "open"],

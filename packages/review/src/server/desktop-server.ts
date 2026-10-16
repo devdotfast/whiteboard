@@ -77,7 +77,10 @@ import {
   readBoundedRequestJson,
 } from "./hono-http";
 import { ReviewServerError } from "./http-json";
-import { createJsonReviewReporting } from "./json-review-reporting";
+import {
+  captureReviewUiEvent,
+  createJsonReviewReporting,
+} from "./json-review-reporting";
 import { removeLegacyTutorial } from "./legacy-tutorial-cleanup";
 import { createReviewGateway } from "./review-gateway";
 import { reviewLifecycleTelemetry } from "./review-lifecycle-telemetry";
@@ -253,6 +256,8 @@ export function createGlobalReviewServer(
     home: devReviewHome(),
     relay,
     restarted: (alias) => input.onRemoteHostRestarted?.(alias),
+    remoteEvent: (request, reviewId) =>
+      captureReviewUiEvent(telemetry, request, reviewId),
     log: input.log,
   });
 
