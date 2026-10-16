@@ -168,9 +168,6 @@ export const onboardingStyles = stylex.create({
     gap: "10px",
     minWidth: 0,
   },
-  titleEyebrow: {
-    paddingBottom: "4px",
-  },
   heading: {
     margin: 0,
     fontFamily: tokens.fontSerif,

@@ -279,9 +279,8 @@ export function InstallStep({
   return (
     <div {...stylex.props(onboardingStyles.sheet)}>
       <ScreenHeader
-        eyebrow="Step 2 of 3 · Install"
         heading="Install Whiteboard."
-        lead="Choose the agents to add it to."
+        lead="Check off the agents you want Whiteboard added to."
       >
         <Button
           variant="primary"

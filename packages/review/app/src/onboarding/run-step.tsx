@@ -79,7 +79,6 @@ const AGENT_ORDER: OnboardingRunAgent["id"][] = [
 /** What a screen says above its content; first run and Home word it
  * differently. */
 export interface StepIntro {
-  eyebrow?: string;
   back?: BackLink;
   heading: string;
   lead: string;

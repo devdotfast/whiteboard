@@ -46,7 +46,7 @@ export function useReturnKey(enabled: boolean, onReturn: () => void) {
   }, [enabled, onReturn]);
 }
 
-/** Where a screen outside first run goes back to, in place of its eyebrow. */
+/** Where a screen outside first run goes back to. */
 export interface BackLink {
   label: string;
   onClick(): void;
@@ -54,13 +54,11 @@ export interface BackLink {
 
 /** A working screen's title bar: what the step is, and its one action. */
 export function ScreenHeader({
-  eyebrow,
   back,
   heading,
   lead,
   children,
 }: {
-  eyebrow?: string;
   back?: BackLink;
   heading: string;
   lead: ReactNode;
@@ -77,16 +75,6 @@ export function ScreenHeader({
           >
             ← {back.label}
           </Button>
-        ) : eyebrow ? (
-          <span
-            {...stylex.props(
-              styles.eyebrow,
-              styles.titleEyebrow,
-              styles.enter0,
-            )}
-          >
-            {eyebrow}
-          </span>
         ) : null}
         <h1
           {...withClass(

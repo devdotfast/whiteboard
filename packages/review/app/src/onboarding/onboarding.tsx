@@ -128,7 +128,6 @@ export function Onboarding({
           client={client}
           setupActions={setupActions}
           intro={{
-            eyebrow: "Step 3 of 3 · Run",
             heading: "Draw your first whiteboard.",
             lead: "Pick a branch, worktree or pull request. Draw it with an agent right here, or copy the prompt into your own.",
           }}
