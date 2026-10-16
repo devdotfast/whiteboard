@@ -5,6 +5,7 @@ import { focusStyles } from "@canvas/ui/focus";
 import { BranchIcon, ChevronDownIcon, PullRequestIcon } from "@canvas/ui/icons";
 import { listRowStyles } from "@canvas/ui/list-row";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
+import { pillStyles } from "@canvas/ui/pill";
 import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
 import {
@@ -116,7 +117,13 @@ export function ReviewStackSelector(): ReactElement | null {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={`Stack, ${index + 1} of ${layers.length}`}
-        {...stylex.props(styles.pill)}
+        {...stylex.props(
+          focusStyles.ring,
+          buttonStyles.reset,
+          pillStyles.pill,
+          pillStyles.accent,
+          styles.pill,
+        )}
         onClick={() => setOpen(!open)}
       >
         <PullRequestIcon xstyle={styles.pillIcon} />
@@ -263,21 +270,11 @@ function LayerRow({
 const styles = stylex.create({
   control: { display: "inline-flex", flexShrink: 0 },
   pill: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "6px",
     height: "24px",
     paddingBlock: 0,
     paddingInline: "9px",
-    borderWidth: 0,
-    borderRadius: radius.pill,
-    backgroundColor: tokens.accentWash,
-    boxShadow: `inset 0 0 0 1px ${tokens.accentOutline}`,
-    color: tokens.accent,
-    fontFamily: tokens.chromeFont,
     fontSize: fontSize.ui,
     lineHeight: "16px",
-    whiteSpace: "nowrap",
     cursor: "pointer",
   },
   pillIcon: { width: "13px", height: "13px" },
