@@ -1,5 +1,5 @@
-import { drawMotion } from "@canvas/draw-motion.stylex";
-import { motion, radius } from "@canvas/scale.stylex";
+import { drawDelay, drawMotion } from "@canvas/draw-motion.stylex";
+import { elevation, motion, radius } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { documentNodeMarker } from "./markers.stylex";
@@ -17,10 +17,6 @@ import { tokens } from "./tokens.stylex";
 // motion shows every phase as its finished frame.
 //
 // `--wb-wipe` and `--wb-sweep` are registered in global.css so they animate.
-
-const REDUCED = "@media (prefers-reduced-motion: reduce)";
-
-const ease = "cubic-bezier(0.2, 0.7, 0.2, 1)";
 
 // A block's own elements: the children of a block in a phase.
 const landingChild = ':is([data-review-node-id][data-motion="landing"] > *)';
@@ -170,45 +166,66 @@ const stepPop = stylex.keyframes({
 // A block's own elements while it is drawn. Reduced motion stops them (the
 // finished frame); an erased block's content stays gone.
 const childAnimationName = {
-  [landingChild]: { default: wipe, [REDUCED]: "none" },
-  [rewritingChild]: { default: `${erase}, ${rewrite}`, [REDUCED]: "none" },
-  [erasingChild]: { default: erase, [REDUCED]: "none" },
+  [landingChild]: { default: wipe, [stylex.env.reducedMotion]: "none" },
+  [rewritingChild]: {
+    default: `${erase}, ${rewrite}`,
+    [stylex.env.reducedMotion]: "none",
+  },
+  [erasingChild]: { default: erase, [stylex.env.reducedMotion]: "none" },
 };
 
 const childAnimationDuration = {
-  [landingChild]: { default: "420ms", [REDUCED]: "0s" },
-  [rewritingChild]: { default: "400ms, 500ms", [REDUCED]: "0s" },
-  [erasingChild]: { default: "400ms", [REDUCED]: "0s" },
+  [landingChild]: { default: "420ms", [stylex.env.reducedMotion]: "0s" },
+  [rewritingChild]: {
+    default: "400ms, 500ms",
+    [stylex.env.reducedMotion]: "0s",
+  },
+  [erasingChild]: { default: "400ms", [stylex.env.reducedMotion]: "0s" },
 };
 
 const childAnimationTimingFunction = {
-  [landingChild]: { default: ease, [REDUCED]: "ease" },
-  [rewritingChild]: { default: `linear, ${ease}`, [REDUCED]: "ease" },
-  [erasingChild]: { default: "linear", [REDUCED]: "ease" },
+  [landingChild]: { default: motion.enter, [stylex.env.reducedMotion]: "ease" },
+  [rewritingChild]: {
+    default: `linear, ${motion.enter}`,
+    [stylex.env.reducedMotion]: "ease",
+  },
+  [erasingChild]: { default: "linear", [stylex.env.reducedMotion]: "ease" },
 };
 
 const childAnimationDelay = {
-  [landingChild]: { default: "260ms", [REDUCED]: "0s" },
-  [rewritingChild]: { default: "200ms, 600ms", [REDUCED]: "0s" },
-  [erasingChild]: { default: "0s", [REDUCED]: "0s" },
+  [landingChild]: { default: "260ms", [stylex.env.reducedMotion]: "0s" },
+  [rewritingChild]: {
+    default: "200ms, 600ms",
+    [stylex.env.reducedMotion]: "0s",
+  },
+  [erasingChild]: { default: "0s", [stylex.env.reducedMotion]: "0s" },
 };
 
 const childAnimationFillMode = {
-  [landingChild]: { default: "both", [REDUCED]: "none" },
-  [rewritingChild]: { default: "both, both", [REDUCED]: "none" },
-  [erasingChild]: { default: "forwards", [REDUCED]: "none" },
+  [landingChild]: { default: "both", [stylex.env.reducedMotion]: "none" },
+  [rewritingChild]: {
+    default: "both, both",
+    [stylex.env.reducedMotion]: "none",
+  },
+  [erasingChild]: { default: "forwards", [stylex.env.reducedMotion]: "none" },
 };
 
 const childAnimationList = {
-  [rewritingChild]: { default: "1, 1", [REDUCED]: "1" },
+  [rewritingChild]: { default: "1, 1", [stylex.env.reducedMotion]: "1" },
 };
 
 const childAnimationDirection = {
-  [rewritingChild]: { default: "normal, normal", [REDUCED]: "normal" },
+  [rewritingChild]: {
+    default: "normal, normal",
+    [stylex.env.reducedMotion]: "normal",
+  },
 };
 
 const childAnimationPlayState = {
-  [rewritingChild]: { default: "running, running", [REDUCED]: "running" },
+  [rewritingChild]: {
+    default: "running, running",
+    [stylex.env.reducedMotion]: "running",
+  },
 };
 
 const wipeMask = `linear-gradient(90deg, #000 calc(${tokens.wbWipe} - 8%), transparent ${tokens.wbWipe})`;
@@ -229,24 +246,30 @@ const eraser = {
   backgroundColor: tokens.well,
   opacity: 0,
   pointerEvents: "none",
-  display: { default: null, [REDUCED]: "none" },
+  display: { default: null, [stylex.env.reducedMotion]: "none" },
   animationName: {
     default: `${eraserIn}, ${eraserSweeps}, ${eraserOut}`,
-    [REDUCED]: "none",
+    [stylex.env.reducedMotion]: "none",
   },
-  animationIterationCount: { default: "1, 1, 1", [REDUCED]: "1" },
+  animationIterationCount: {
+    default: "1, 1, 1",
+    [stylex.env.reducedMotion]: "1",
+  },
   animationDirection: {
     default: "normal, normal, normal",
-    [REDUCED]: "normal",
+    [stylex.env.reducedMotion]: "normal",
   },
   animationPlayState: {
     default: "running, running, running",
-    [REDUCED]: "running",
+    [stylex.env.reducedMotion]: "running",
   },
-  animationFillMode: { default: "both, both, both", [REDUCED]: "none" },
+  animationFillMode: {
+    default: "both, both, both",
+    [stylex.env.reducedMotion]: "none",
+  },
   animationTimingFunction: {
-    default: `${ease}, linear, ease`,
-    [REDUCED]: "ease",
+    default: `${motion.enter}, linear, ease`,
+    [stylex.env.reducedMotion]: "ease",
   },
 };
 
@@ -257,11 +280,11 @@ export const drawStyles = stylex.create({
   blockChild: {
     WebkitMaskImage: {
       default: null,
-      [landingChild]: { default: wipeMask, [REDUCED]: "none" },
+      [landingChild]: { default: wipeMask, [stylex.env.reducedMotion]: "none" },
     },
     maskImage: {
       default: null,
-      [landingChild]: { default: wipeMask, [REDUCED]: "none" },
+      [landingChild]: { default: wipeMask, [stylex.env.reducedMotion]: "none" },
     },
     opacity: { default: null, [erasingChild]: 0 },
     animationName: { default: null, ...childAnimationName },
@@ -294,22 +317,40 @@ export const drawStyles = stylex.create({
       margin: "-4px 0 0 -4px",
       borderRadius: radius.round,
       backgroundColor: tokens.accent,
-      boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+      boxShadow: elevation.markerRing,
       pointerEvents: "none",
-      display: { default: null, [REDUCED]: "none" },
-      animationName: { default: `${wipe}, ${dotFade}`, [REDUCED]: "none" },
+      display: { default: null, [stylex.env.reducedMotion]: "none" },
+      animationName: {
+        default: `${wipe}, ${dotFade}`,
+        [stylex.env.reducedMotion]: "none",
+      },
       animationDuration: {
         default: `${drawMotion.stroke}, ${drawMotion.dotFade}`,
-        [REDUCED]: motion.instant,
+        [stylex.env.reducedMotion]: motion.instant,
       },
-      animationTimingFunction: { default: `${ease}, ease`, [REDUCED]: "ease" },
-      animationDelay: { default: "260ms, 680ms", [REDUCED]: "0s" },
-      animationFillMode: { default: "both, both", [REDUCED]: "none" },
-      animationIterationCount: { default: "1, 1", [REDUCED]: "1" },
-      animationDirection: { default: "normal, normal", [REDUCED]: "normal" },
+      animationTimingFunction: {
+        default: `${motion.enter}, ease`,
+        [stylex.env.reducedMotion]: "ease",
+      },
+      animationDelay: {
+        default: drawDelay.dot,
+        [stylex.env.reducedMotion]: motion.instant,
+      },
+      animationFillMode: {
+        default: "both, both",
+        [stylex.env.reducedMotion]: "none",
+      },
+      animationIterationCount: {
+        default: "1, 1",
+        [stylex.env.reducedMotion]: "1",
+      },
+      animationDirection: {
+        default: "normal, normal",
+        [stylex.env.reducedMotion]: "normal",
+      },
       animationPlayState: {
         default: "running, running",
-        [REDUCED]: "running",
+        [stylex.env.reducedMotion]: "running",
       },
     },
   },
@@ -321,24 +362,30 @@ export const drawStyles = stylex.create({
       ...eraser,
       animationDuration: {
         default: `${drawMotion.beat}, ${drawMotion.pass}, ${drawMotion.beat}`,
-        [REDUCED]: motion.instant,
+        [stylex.env.reducedMotion]: motion.instant,
       },
-      animationDelay: { default: "0s, 200ms, 600ms", [REDUCED]: "0s" },
+      animationDelay: {
+        default: drawDelay.rewrite,
+        [stylex.env.reducedMotion]: motion.instant,
+      },
     },
   },
   // Erasing: the eraser's three passes, then the board closes over the gap.
   erasing: {
     position: "relative",
-    display: { default: null, [REDUCED]: "none" },
+    display: { default: null, [stylex.env.reducedMotion]: "none" },
     overflow: "clip",
     interpolateSize: "allow-keywords",
     "::before": {
       ...eraser,
       animationDuration: {
         default: `${drawMotion.tick}, ${drawMotion.pass}, ${drawMotion.tick}`,
-        [REDUCED]: motion.instant,
+        [stylex.env.reducedMotion]: motion.instant,
       },
-      animationDelay: { default: "0s, 0s, 400ms", [REDUCED]: "0s" },
+      animationDelay: {
+        default: drawDelay.erase,
+        [stylex.env.reducedMotion]: motion.instant,
+      },
     },
   },
   // The section ring: the top-level block the agent is editing wears the
@@ -362,26 +409,26 @@ export const drawStyles = stylex.create({
     animationName: {
       default: landSlot,
       [ringOnSection]: "none",
-      [REDUCED]: "none",
+      [stylex.env.reducedMotion]: "none",
       ...childAnimationName,
     },
     animationDuration: {
       default: drawMotion.land,
       [ringOnSection]: motion.instant,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
       ...childAnimationDuration,
     },
     animationTimingFunction: {
-      default: ease,
+      default: motion.enter,
       [ringOnSection]: "ease",
-      [REDUCED]: "ease",
+      [stylex.env.reducedMotion]: "ease",
       ...childAnimationTimingFunction,
     },
     animationDelay: { default: null, ...childAnimationDelay },
     animationFillMode: {
       default: "both",
       [ringOnSection]: "none",
-      [REDUCED]: "none",
+      [stylex.env.reducedMotion]: "none",
       ...childAnimationFillMode,
     },
     animationIterationCount: { default: null, ...childAnimationList },
@@ -392,31 +439,31 @@ export const drawStyles = stylex.create({
     animationName: {
       default: collapse,
       [ringOnSection]: "none",
-      [REDUCED]: "none",
+      [stylex.env.reducedMotion]: "none",
       ...childAnimationName,
     },
     animationDuration: {
       default: drawMotion.collapse,
       [ringOnSection]: motion.instant,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
       ...childAnimationDuration,
     },
     animationTimingFunction: {
-      default: ease,
+      default: motion.enter,
       [ringOnSection]: "ease",
-      [REDUCED]: "ease",
+      [stylex.env.reducedMotion]: "ease",
       ...childAnimationTimingFunction,
     },
     animationDelay: {
-      default: "400ms",
-      [ringOnSection]: "0s",
-      [REDUCED]: "0s",
+      default: drawMotion.pass,
+      [ringOnSection]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
       ...childAnimationDelay,
     },
     animationFillMode: {
       default: "both",
       [ringOnSection]: "none",
-      [REDUCED]: "none",
+      [stylex.env.reducedMotion]: "none",
       ...childAnimationFillMode,
     },
     animationIterationCount: { default: null, ...childAnimationList },
@@ -427,19 +474,19 @@ export const drawStyles = stylex.create({
     animationName: {
       default: regionPulse,
       [ringOnSection]: "none",
-      [REDUCED]: "none",
+      [stylex.env.reducedMotion]: "none",
       ...childAnimationName,
     },
     animationDuration: {
       default: motion.pulse,
       [ringOnSection]: motion.instant,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
       ...childAnimationDuration,
     },
     animationTimingFunction: {
       default: "ease-in-out",
       [ringOnSection]: "ease",
-      [REDUCED]: "ease",
+      [stylex.env.reducedMotion]: "ease",
       ...childAnimationTimingFunction,
     },
     animationDelay: { default: null, ...childAnimationDelay },
@@ -447,7 +494,7 @@ export const drawStyles = stylex.create({
     animationIterationCount: {
       default: "infinite",
       [ringOnSection]: "1",
-      [REDUCED]: "1",
+      [stylex.env.reducedMotion]: "1",
       ...childAnimationList,
     },
     animationDirection: { default: null, ...childAnimationDirection },
@@ -497,19 +544,31 @@ export const drawStyles = stylex.create({
       },
       animationName: {
         default: null,
-        [regionWriting]: { default: regionPulseBorder, [REDUCED]: "none" },
+        [regionWriting]: {
+          default: regionPulseBorder,
+          [stylex.env.reducedMotion]: "none",
+        },
       },
       animationDuration: {
         default: null,
-        [regionWriting]: { default: motion.pulse, [REDUCED]: motion.instant },
+        [regionWriting]: {
+          default: motion.pulse,
+          [stylex.env.reducedMotion]: motion.instant,
+        },
       },
       animationTimingFunction: {
         default: null,
-        [regionWriting]: { default: "ease-in-out", [REDUCED]: "ease" },
+        [regionWriting]: {
+          default: "ease-in-out",
+          [stylex.env.reducedMotion]: "ease",
+        },
       },
       animationIterationCount: {
         default: null,
-        [regionWriting]: { default: "infinite", [REDUCED]: "1" },
+        [regionWriting]: {
+          default: "infinite",
+          [stylex.env.reducedMotion]: "1",
+        },
       },
     },
   },
@@ -520,39 +579,45 @@ export const drawStyles = stylex.create({
       [stylex.when.ancestor(
         ':is([data-motion="retitle"])',
         documentNodeMarker,
-      )]: { default: label, [REDUCED]: "none" },
+      )]: { default: label, [stylex.env.reducedMotion]: "none" },
     },
     animationDuration: {
       default: null,
       [stylex.when.ancestor(
         ':is([data-motion="retitle"])',
         documentNodeMarker,
-      )]: { default: drawMotion.stroke, [REDUCED]: motion.instant },
+      )]: {
+        default: drawMotion.stroke,
+        [stylex.env.reducedMotion]: motion.instant,
+      },
     },
     animationTimingFunction: {
       default: null,
       [stylex.when.ancestor(
         ':is([data-motion="retitle"])',
         documentNodeMarker,
-      )]: { default: "steps(14)", [REDUCED]: "ease" },
+      )]: { default: "steps(14)", [stylex.env.reducedMotion]: "ease" },
     },
     animationFillMode: {
       default: null,
       [stylex.when.ancestor(
         ':is([data-motion="retitle"])',
         documentNodeMarker,
-      )]: { default: "both", [REDUCED]: "none" },
+      )]: { default: "both", [stylex.env.reducedMotion]: "none" },
     },
   },
   // A callout's title, while its block is retitled.
   retitle: {
-    animationName: { default: label, [REDUCED]: "none" },
+    animationName: { default: label, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: drawMotion.stroke,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "steps(14)", [REDUCED]: "ease" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationTimingFunction: {
+      default: "steps(14)",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   // Diagram units wait unseen while queued.
   hidden: {
@@ -562,108 +627,195 @@ export const drawStyles = stylex.create({
   // over a diagram written whole, or the outline of a new unit.
   traceQuick: {
     strokeDasharray: "1",
-    animationName: { default: trace, [REDUCED]: "none" },
-    animationDuration: { default: drawMotion.quick, [REDUCED]: motion.instant },
-    animationTimingFunction: { default: "linear", [REDUCED]: "ease" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationName: { default: trace, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: drawMotion.quick,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: "linear",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   traceNode: {
     strokeDasharray: "1",
-    animationName: { default: trace, [REDUCED]: "none" },
+    animationName: { default: trace, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: drawMotion.stroke,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: ease, [REDUCED]: "ease" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationTimingFunction: {
+      default: motion.enter,
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   traceLine: {
     strokeDasharray: "1",
-    animationName: { default: trace, [REDUCED]: "none" },
-    animationDuration: { default: drawMotion.line, [REDUCED]: motion.instant },
-    animationTimingFunction: { default: ease, [REDUCED]: "ease" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationName: { default: trace, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: drawMotion.line,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: motion.enter,
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   // The marker wash and a pulse once a node is traced, or again when it is
   // relabeled.
   fill: {
-    animationName: { default: nodeFill, [REDUCED]: "none" },
-    animationDuration: { default: drawMotion.fill, [REDUCED]: motion.instant },
-    animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationName: { default: nodeFill, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: drawMotion.fill,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: "ease-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   refill: {
-    animationName: { default: nodeFill, [REDUCED]: "none" },
+    animationName: { default: nodeFill, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: drawMotion.stroke,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationTimingFunction: {
+      default: "ease-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   // Labels compose left to right once their unit is drawn.
   labelQuick: {
-    animationName: { default: label, [REDUCED]: "none" },
-    animationDuration: { default: drawMotion.label, [REDUCED]: motion.instant },
-    animationTimingFunction: { default: "steps(8)", [REDUCED]: "ease" },
-    animationDelay: { default: "60ms", [REDUCED]: "0s" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationName: { default: label, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: drawMotion.label,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: "steps(8)",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationDelay: {
+      default: drawDelay.labelQuick,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   labelFill: {
-    animationName: { default: label, [REDUCED]: "none" },
-    animationDuration: { default: drawMotion.fill, [REDUCED]: motion.instant },
-    animationTimingFunction: { default: "steps(12)", [REDUCED]: "ease" },
-    animationDelay: { default: "90ms", [REDUCED]: "0s" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationName: { default: label, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: drawMotion.fill,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: "steps(12)",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationDelay: {
+      default: drawDelay.labelFill,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   labelEdgeQuick: {
-    animationName: { default: label, [REDUCED]: "none" },
-    animationDuration: { default: drawMotion.tick, [REDUCED]: motion.instant },
-    animationTimingFunction: { default: "steps(6)", [REDUCED]: "ease" },
-    animationDelay: { default: "100ms", [REDUCED]: "0s" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationName: { default: label, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: drawMotion.tick,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: "steps(6)",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationDelay: {
+      default: drawDelay.labelEdgeQuick,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   labelEdge: {
-    animationName: { default: label, [REDUCED]: "none" },
-    animationDuration: { default: drawMotion.beat, [REDUCED]: motion.instant },
-    animationTimingFunction: { default: "steps(8)", [REDUCED]: "ease" },
-    animationDelay: { default: "300ms", [REDUCED]: "0s" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationName: { default: label, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: drawMotion.beat,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: "steps(8)",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationDelay: {
+      default: drawDelay.labelEdge,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   labelStep: {
-    animationName: { default: label, [REDUCED]: "none" },
-    animationDuration: { default: drawMotion.label, [REDUCED]: motion.instant },
-    animationTimingFunction: { default: "steps(8)", [REDUCED]: "ease" },
-    animationDelay: { default: "120ms", [REDUCED]: "0s" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationName: { default: label, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: drawMotion.label,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: "steps(8)",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationDelay: {
+      default: drawDelay.labelStep,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   // A lens row wipes in behind the slot, or is erased.
   rowLanding: {
-    maskImage: { default: wipeMask, [REDUCED]: "none" },
-    animationName: { default: wipe, [REDUCED]: "none" },
+    maskImage: { default: wipeMask, [stylex.env.reducedMotion]: "none" },
+    animationName: { default: wipe, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: drawMotion.rowLand,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: ease, [REDUCED]: "ease" },
-    animationDelay: { default: "180ms", [REDUCED]: "0s" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationTimingFunction: {
+      default: motion.enter,
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationDelay: {
+      default: drawDelay.rowLand,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   rowErasing: {
-    animationName: { default: erase, [REDUCED]: "none" },
+    animationName: { default: erase, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: drawMotion.rowErase,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "linear", [REDUCED]: "ease" },
-    animationFillMode: { default: "forwards", [REDUCED]: "none" },
+    animationTimingFunction: {
+      default: "linear",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: {
+      default: "forwards",
+      [stylex.env.reducedMotion]: "none",
+    },
     opacity: 0,
   },
   // A sequence step's dot pops once its line is drawn.
   stepPop: {
-    animationName: { default: stepPop, [REDUCED]: "none" },
-    animationDuration: { default: drawMotion.line, [REDUCED]: motion.instant },
-    animationTimingFunction: { default: ease, [REDUCED]: "ease" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationName: { default: stepPop, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: drawMotion.line,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: motion.enter,
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
 });

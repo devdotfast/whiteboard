@@ -22,3 +22,17 @@ export const drawMotion = stylex.defineConsts({
   lensLand: "520ms",
   land: "680ms",
 });
+
+// When each beat starts once its phase begins. A list delays each animation of
+// a multi-part beat.
+export const drawDelay = stylex.defineConsts({
+  labelQuick: "60ms",
+  labelFill: "90ms",
+  labelEdgeQuick: "100ms",
+  labelStep: "120ms",
+  rowLand: "180ms",
+  labelEdge: "300ms",
+  dot: "260ms, 680ms",
+  rewrite: "0s, 200ms, 600ms",
+  erase: "0s, 0s, 400ms",
+});

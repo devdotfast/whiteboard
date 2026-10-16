@@ -7,8 +7,6 @@ import { tokens } from "./tokens.stylex";
 // The app shell: grid, side-panel dividers, top bar and view regions.
 const narrowCanvas = "@container review-canvas (max-width: 929px)";
 
-const narrowViewport = "@media (max-width: 720px)";
-
 const narrowContent = "@container review-content (max-width: 720px)";
 
 const peekOpen = () => stylex.when.ancestor("[data-peek-open]", appMarker);
@@ -30,9 +28,9 @@ export const shellStyles = stylex.create({
       default: "minmax(0, 1fr) 10px var(--side-peek-width, 560px)",
       [narrowCanvas]: {
         default: "minmax(0, 1fr) 0 0",
-        [narrowViewport]: "minmax(0, 1fr)",
+        [stylex.env.narrow]: "minmax(0, 1fr)",
       },
-      [narrowViewport]: "minmax(0, 1fr)",
+      [stylex.env.narrow]: "minmax(0, 1fr)",
     },
   },
   // Lit on the separator itself: a condition on the root would restyle the
@@ -78,7 +76,7 @@ export const shellStyles = stylex.create({
     display: {
       default: "grid",
       [narrowCanvas]: "contents",
-      [narrowViewport]: "contents",
+      [stylex.env.narrow]: "contents",
     },
     minWidth: 0,
     height: "100%",
@@ -93,7 +91,7 @@ export const shellStyles = stylex.create({
       [peekOpen()]: {
         default: null,
         [narrowCanvas]: "none",
-        [narrowViewport]: "none",
+        [stylex.env.narrow]: "none",
       },
     },
     width: "10px",
@@ -164,7 +162,7 @@ export const shellStyles = stylex.create({
     display: {
       default: "none",
       [narrowCanvas]: "block",
-      [narrowViewport]: "block",
+      [stylex.env.narrow]: "block",
     },
     flex: "0 0 auto",
     height: "10px",
@@ -309,10 +307,11 @@ export const shellStyles = stylex.create({
         default: `${tokens.reviewPageTop} 42px 120px`,
         "@container review-content (max-width: 1080px)": {
           default: `${tokens.reviewPageTop} 24px 120px`,
-          [narrowViewport]: "22px 8px calc(96px + var(--review-toc-tail, 0px))",
+          [stylex.env.narrow]:
+            "22px 8px calc(96px + var(--review-toc-tail, 0px))",
         },
       },
-      [narrowViewport]: "22px 8px calc(96px + var(--review-toc-tail, 0px))",
+      [stylex.env.narrow]: "22px 8px calc(96px + var(--review-toc-tail, 0px))",
     },
   },
   documentView: {

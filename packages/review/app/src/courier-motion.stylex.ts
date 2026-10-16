@@ -12,4 +12,6 @@ export const courierMotion = stylex.defineConsts({
   bounce: "520ms",
   doze: "5s",
   ponder: "2.4s",
+  jumpEase: "cubic-bezier(0.3, 0, 0.2, 1)",
+  leaveEase: "cubic-bezier(0.4, 0, 1, 1)",
 });

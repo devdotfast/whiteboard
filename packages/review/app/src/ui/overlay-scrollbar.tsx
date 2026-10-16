@@ -14,8 +14,6 @@ const HIDE_AFTER_MS = 800;
 
 const MIN_THUMB = 32;
 
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
 /**
  * A vertical scrollbar laid over `scroller`'s right edge that takes no layout
  * width: it shows while the scroller scrolls, while the pointer is over its
@@ -185,7 +183,7 @@ const styles = stylex.create({
     transitionProperty: "opacity",
     transitionDuration: {
       default: motion.slow,
-      [reducedMotion]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
     transitionTimingFunction: motion.ease,
   },
@@ -196,7 +194,7 @@ const styles = stylex.create({
     opacity: 1,
     transitionDuration: {
       default: motion.fast,
-      [reducedMotion]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
   },
   // A 6px pill centered in the lane, as the canvas's native scrollbars are.

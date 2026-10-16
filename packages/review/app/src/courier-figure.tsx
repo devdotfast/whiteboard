@@ -94,8 +94,6 @@ export function CourierFigure({
   );
 }
 
-const REDUCED = "@media (prefers-reduced-motion: reduce)";
-
 const marchLeft = stylex.keyframes({
   "0%, 100%": { transform: "translateY(0)" },
   "50%": { transform: "translateY(-4px)" },
@@ -158,26 +156,38 @@ const styles = stylex.create({
   },
   // On the board, reduced motion keeps him still.
   still: {
-    transition: { default: null, [REDUCED]: "none" },
+    transition: { default: null, [stylex.env.reducedMotion]: "none" },
   },
   // Idle: march in place, then sit.
   marchLeft: {
-    animationName: { default: marchLeft, [REDUCED]: "none" },
+    animationName: { default: marchLeft, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: courierMotion.march,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "ease-in-out", [REDUCED]: "ease" },
-    animationIterationCount: { default: "infinite", [REDUCED]: 1 },
+    animationTimingFunction: {
+      default: "ease-in-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationIterationCount: {
+      default: "infinite",
+      [stylex.env.reducedMotion]: 1,
+    },
   },
   marchRight: {
-    animationName: { default: marchRight, [REDUCED]: "none" },
+    animationName: { default: marchRight, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: courierMotion.march,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "ease-in-out", [REDUCED]: "ease" },
-    animationIterationCount: { default: "infinite", [REDUCED]: 1 },
+    animationTimingFunction: {
+      default: "ease-in-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationIterationCount: {
+      default: "infinite",
+      [stylex.env.reducedMotion]: 1,
+    },
   },
   // Sitting eases in, reduced motion included.
   sitLeft: {
@@ -191,31 +201,49 @@ const styles = stylex.create({
     transition: `transform ${motion.slow} ${motion.ease}`,
   },
   dozing: {
-    animationName: { default: doze, [REDUCED]: "none" },
+    animationName: { default: doze, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: courierMotion.doze,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "steps(1)", [REDUCED]: "ease" },
-    animationIterationCount: { default: "infinite", [REDUCED]: 1 },
+    animationTimingFunction: {
+      default: "steps(1)",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationIterationCount: {
+      default: "infinite",
+      [stylex.env.reducedMotion]: 1,
+    },
   },
   pondering: {
-    animationName: { default: ponder, [REDUCED]: "none" },
+    animationName: { default: ponder, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: courierMotion.ponder,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "steps(1)", [REDUCED]: "ease" },
-    animationIterationCount: { default: "infinite", [REDUCED]: 1 },
+    animationTimingFunction: {
+      default: "steps(1)",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationIterationCount: {
+      default: "infinite",
+      [stylex.env.reducedMotion]: 1,
+    },
   },
   // Happy eyes on a jump.
   happy: {
-    animationName: { default: happy, [REDUCED]: "none" },
+    animationName: { default: happy, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: courierMotion.bounce,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "steps(1)", [REDUCED]: "ease" },
-    animationFillMode: { default: "forwards", [REDUCED]: "none" },
+    animationTimingFunction: {
+      default: "steps(1)",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: {
+      default: "forwards",
+      [stylex.env.reducedMotion]: "none",
+    },
   },
 });

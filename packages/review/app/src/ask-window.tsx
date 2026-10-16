@@ -1002,8 +1002,6 @@ function useAskCanvas(): AskCanvas {
   return canvas;
 }
 
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
 // The list rises out of the pill it opens from.
 const listIn = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(6px) scale(0.98)" },
@@ -1151,16 +1149,16 @@ const styles = stylex.create({
     overflowY: "auto",
     overscrollBehavior: "contain",
     transformOrigin: "bottom right",
-    animationName: { default: listIn, [reducedMotion]: "none" },
+    animationName: { default: listIn, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: motion.fast,
-      [reducedMotion]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
     animationTimingFunction: "ease-out",
   },
   listBelow: {
     transformOrigin: "top right",
-    animationName: { default: listInBelow, [reducedMotion]: "none" },
+    animationName: { default: listInBelow, [stylex.env.reducedMotion]: "none" },
   },
   listHeader: {
     display: "flex",

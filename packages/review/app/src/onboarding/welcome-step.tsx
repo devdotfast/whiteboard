@@ -2,6 +2,7 @@ import {
   elevation,
   fontSize,
   fontWeight,
+  motion,
   radius,
   tracking,
 } from "@canvas/scale.stylex";
@@ -101,8 +102,6 @@ function FlowArrow({ xstyle }: { xstyle?: stylex.StyleXStyles }) {
   );
 }
 
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
 // The board is as wide as the window leaves it; its flow drops its last
 // step when the three no longer fit.
 const narrowBoard = "@container (max-width: 520px)";
@@ -144,9 +143,9 @@ const styles = stylex.create({
     borderRadius: radius.surface,
     boxShadow: elevation.popover,
     transform: "rotate(var(--tilt))",
-    animationName: { default: drop, [reducedMotion]: "none" },
+    animationName: { default: drop, [stylex.env.reducedMotion]: "none" },
     animationDuration: onboardingMotion.screen,
-    animationTimingFunction: onboardingMotion.enter,
+    animationTimingFunction: motion.enter,
     animationFillMode: "both",
   },
   summary: {
@@ -158,7 +157,7 @@ const styles = stylex.create({
     maxWidth: "400px",
     gap: "12px",
     padding: "24px 28px 28px",
-    animationDelay: "200ms",
+    animationDelay: onboardingMotion.summaryCard,
   },
   flow: {
     "--tilt": "1.2deg",
@@ -170,7 +169,7 @@ const styles = stylex.create({
     marginInlineStart: { default: "96px", [narrowBoard]: "0" },
     gap: "18px",
     padding: "22px 24px 26px",
-    animationDelay: "420ms",
+    animationDelay: onboardingMotion.flowCard,
   },
   meta: {
     color: tokens.inkFaint,
@@ -198,13 +197,16 @@ const styles = stylex.create({
     strokeDasharray: 1,
     strokeLinecap: "round",
     strokeLinejoin: "round",
-    animationName: { default: draw, [reducedMotion]: "none" },
+    animationName: { default: draw, [stylex.env.reducedMotion]: "none" },
     animationDuration: onboardingMotion.screen,
     animationTimingFunction: "ease-out",
     animationFillMode: "both",
   },
-  underlineStroke: { strokeWidth: 2.4, animationDelay: "700ms" },
-  arrowStroke: { strokeWidth: 1.8, animationDelay: "1000ms" },
+  underlineStroke: {
+    strokeWidth: 2.4,
+    animationDelay: onboardingMotion.underline,
+  },
+  arrowStroke: { strokeWidth: 1.8, animationDelay: onboardingMotion.arrow },
   flowRow: { display: "flex", alignItems: "center" },
   node: {
     paddingBlock: "10px",

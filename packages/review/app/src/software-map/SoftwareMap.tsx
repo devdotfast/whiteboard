@@ -18,6 +18,7 @@ import {
 } from "@canvas/markers.stylex";
 import { useReviewContainer } from "@canvas/review-root-context";
 import {
+  elevation,
   fontSize,
   fontWeight,
   motion,
@@ -1704,30 +1705,30 @@ function C4MapCanvas({
                   <Background
                     {...stylex.props(styles.background)}
                     gap={24}
-                    color="var(--canvas-grid)"
+                    color={tokens.canvasGrid}
                   />
                   {expanded && (
                     <MiniMap
                       pannable
                       zoomable
                       position="top-right"
-                      maskColor="var(--minimap-mask)"
-                      maskStrokeColor="var(--rule-soft)"
+                      maskColor={tokens.minimapMask}
+                      maskStrokeColor={tokens.ruleSoft}
                       maskStrokeWidth={1}
                       nodeColor={(node) =>
                         node.id === displayedSnapshot.selectedNodeId
-                          ? "var(--minimap-node-selected)"
-                          : "var(--minimap-node)"
+                          ? tokens.minimapNodeSelected
+                          : tokens.minimapNode
                       }
                       nodeStrokeColor={(node) =>
                         node.id === displayedSnapshot.selectedNodeId
-                          ? "var(--selection)"
-                          : "var(--rule-soft)"
+                          ? tokens.selection
+                          : tokens.ruleSoft
                       }
                       nodeBorderRadius={4}
                       style={{
-                        backgroundColor: "var(--surface)",
-                        border: "1px solid var(--rule)",
+                        backgroundColor: tokens.surface,
+                        border: `1px solid ${tokens.rule}`,
                         borderRadius: 8,
                       }}
                     />
@@ -2726,11 +2727,7 @@ const peekOpen = () => stylex.when.ancestor("[data-peek-open]", appMarker);
 
 const stacked = "@media (max-width: 900px)";
 
-const narrow = "@media (max-width: 720px)";
-
 const geistMono = '"Geist Mono", ui-monospace, monospace';
-
-const settle = "cubic-bezier(0.2, 0.8, 0.2, 1)";
 
 const groupBloom = stylex.keyframes({
   from: { opacity: 0.72, transform: "scale(0.88)" },
@@ -2749,13 +2746,10 @@ const noBorder = {
 } as const;
 
 const styles = stylex.create({
-  // The expanded map: a fixed layer over the canvas. The layer variable lives
-  // on .review-app, outside this portal, so the fallback keeps it above the
-  // sticky topbar.
   overlay: {
     position: "fixed",
     inset: 0,
-    zIndex: "var(--review-debug-layer, 2147483000)",
+    zIndex: tokens.reviewDebugLayer,
     display: "grid",
     boxSizing: "border-box",
     minWidth: 0,
@@ -2899,16 +2893,16 @@ const styles = stylex.create({
   },
   // Narrow layouts stack the inspector under the map, then float it over.
   bodyWithInspector: {
-    position: { default: null, [narrow]: "relative" },
+    position: { default: null, [stylex.env.narrow]: "relative" },
     gridTemplateRows: {
       default: null,
       [stacked]: "minmax(0, 1fr) minmax(220px, 42%)",
-      [narrow]: "minmax(0, 1fr)",
+      [stylex.env.narrow]: "minmax(0, 1fr)",
     },
     gridTemplateColumns: {
       default: "minmax(0, 1fr) 10px var(--software-map-inspector-width, 420px)",
       [stacked]: "minmax(0, 1fr)",
-      [narrow]: "minmax(0, 1fr)",
+      [stylex.env.narrow]: "minmax(0, 1fr)",
     },
   },
   bodyResizing: {
@@ -2958,51 +2952,51 @@ const styles = stylex.create({
       [peekOpen()]: {
         default: null,
         "@container review-canvas (max-width: 929px)": "none",
-        [narrow]: "none",
+        [stylex.env.narrow]: "none",
       },
     },
   },
   inspectorBackdrop: {
-    display: { default: "none", [narrow]: "block" },
-    position: { default: null, [narrow]: "absolute" },
-    inset: { default: null, [narrow]: 0 },
-    zIndex: { default: null, [narrow]: flowLayer.inspectorBackdrop },
-    padding: { default: null, [narrow]: 0 },
-    borderWidth: { default: null, [narrow]: 0 },
-    borderStyle: { default: null, [narrow]: "none" },
-    borderColor: { default: null, [narrow]: "currentcolor" },
-    backgroundColor: { default: null, [narrow]: tokens.backdrop },
+    display: { default: "none", [stylex.env.narrow]: "block" },
+    position: { default: null, [stylex.env.narrow]: "absolute" },
+    inset: { default: null, [stylex.env.narrow]: 0 },
+    zIndex: { default: null, [stylex.env.narrow]: flowLayer.inspectorBackdrop },
+    padding: { default: null, [stylex.env.narrow]: 0 },
+    borderWidth: { default: null, [stylex.env.narrow]: 0 },
+    borderStyle: { default: null, [stylex.env.narrow]: "none" },
+    borderColor: { default: null, [stylex.env.narrow]: "currentcolor" },
+    backgroundColor: { default: null, [stylex.env.narrow]: tokens.backdrop },
   },
   inspector: {
     ...noBorder,
-    position: { default: null, [narrow]: "absolute" },
-    right: { default: null, [narrow]: "8px" },
-    bottom: { default: null, [narrow]: "8px" },
-    left: { default: null, [narrow]: "8px" },
-    zIndex: { default: null, [narrow]: flowLayer.inspector },
+    position: { default: null, [stylex.env.narrow]: "absolute" },
+    right: { default: null, [stylex.env.narrow]: "8px" },
+    bottom: { default: null, [stylex.env.narrow]: "8px" },
+    left: { default: null, [stylex.env.narrow]: "8px" },
+    zIndex: { default: null, [stylex.env.narrow]: flowLayer.inspector },
     display: "grid",
     gridTemplateRows: "auto minmax(0, 1fr)",
     minWidth: 0,
-    height: { default: null, [narrow]: "min(72%, 560px)" },
-    minHeight: { default: 0, [narrow]: "240px" },
+    height: { default: null, [stylex.env.narrow]: "min(72%, 560px)" },
+    minHeight: { default: 0, [stylex.env.narrow]: "240px" },
     overflow: "hidden",
-    borderRadius: { default: null, [narrow]: radius.surface },
+    borderRadius: { default: null, [stylex.env.narrow]: radius.surface },
     backgroundColor: tokens.bg,
     boxShadow: "none",
   },
   inspectorHeader: {
-    position: { default: null, [narrow]: "sticky" },
-    top: { default: null, [narrow]: 0 },
-    zIndex: { default: null, [narrow]: 2 },
+    position: { default: null, [stylex.env.narrow]: "sticky" },
+    top: { default: null, [stylex.env.narrow]: 0 },
+    zIndex: { default: null, [stylex.env.narrow]: 2 },
     display: "flex",
     gap: "10px",
     alignItems: "center",
     justifyContent: "space-between",
     minWidth: 0,
-    padding: { default: "7px 8px 3px", [narrow]: "8px" },
-    borderBottomWidth: { default: null, [narrow]: "1px" },
-    borderBottomStyle: { default: null, [narrow]: "solid" },
-    borderBottomColor: { default: null, [narrow]: tokens.rule },
+    padding: { default: "7px 8px 3px", [stylex.env.narrow]: "8px" },
+    borderBottomWidth: { default: null, [stylex.env.narrow]: "1px" },
+    borderBottomStyle: { default: null, [stylex.env.narrow]: "solid" },
+    borderBottomColor: { default: null, [stylex.env.narrow]: tokens.rule },
     backgroundColor: tokens.bg,
   },
   inspectorTitle: {
@@ -3070,7 +3064,7 @@ const styles = stylex.create({
     ...noBorder,
     backgroundColor: tokens.transparent,
     boxShadow: "none",
-    transition: `transform ${motion.medium} ${settle}, width ${motion.medium} ${settle}, height ${motion.medium} ${settle}, opacity ${motion.medium} ${motion.ease}`,
+    transition: `transform ${motion.medium} ${motion.settle}, width ${motion.medium} ${motion.settle}, height ${motion.medium} ${motion.settle}, opacity ${motion.medium} ${motion.ease}`,
     userSelect: "text",
   },
   flowEdge: {
@@ -3192,7 +3186,7 @@ const styles = stylex.create({
     height: "100%",
     animationName: cardBloom,
     animationDuration: motion.medium,
-    animationTimingFunction: settle,
+    animationTimingFunction: motion.settle,
   },
   groupShell: {
     position: "relative",
@@ -3219,7 +3213,7 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
     animationName: groupBloom,
     animationDuration: motion.medium,
-    animationTimingFunction: settle,
+    animationTimingFunction: motion.settle,
   },
   // Hover outranks a change's border; selection outranks hover.
   groupAdded: {
@@ -3253,7 +3247,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: tokens.accent,
     backgroundColor: tokens.markerTint,
-    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+    boxShadow: elevation.markerRing,
   },
   groupTitle: {
     position: "absolute",
@@ -3386,7 +3380,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: tokens.accent,
     backgroundColor: tokens.markerTint,
-    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+    boxShadow: elevation.markerRing,
   },
   nodeStoreMarked: {
     borderWidth: 0,

@@ -264,7 +264,7 @@ const ARROW = {
   type: MarkerType.ArrowClosed,
   width: 14,
   height: 14,
-  color: "var(--ink-muted)",
+  color: tokens.inkMuted,
 };
 
 /**

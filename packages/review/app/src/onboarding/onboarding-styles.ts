@@ -15,8 +15,6 @@ import {
   onboardingType,
 } from "./onboarding.stylex";
 
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
 // Below this the copy column stacks above the screen's panel.
 const stacked = "@media (max-width: 1100px)";
 
@@ -31,9 +29,9 @@ const spin = stylex.keyframes({
 });
 
 const enter = {
-  animationName: { default: rise, [reducedMotion]: "none" },
+  animationName: { default: rise, [stylex.env.reducedMotion]: "none" },
   animationDuration: onboardingMotion.screen,
-  animationTimingFunction: onboardingMotion.enter,
+  animationTimingFunction: motion.enter,
   animationFillMode: "both",
 } as const;
 
@@ -97,9 +95,9 @@ export const onboardingStyles = stylex.create({
     transitionProperty: "transform",
     transitionDuration: {
       default: onboardingMotion.screen,
-      [reducedMotion]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    transitionTimingFunction: onboardingMotion.enter,
+    transitionTimingFunction: motion.enter,
   },
   railLabel: {
     color: {
@@ -263,7 +261,7 @@ export const onboardingStyles = stylex.create({
     color: tokens.changeRemoved,
     fontSize: fontSize.ui,
   },
-  enter0: { ...enter, animationDelay: "0ms" },
+  enter0: { ...enter, animationDelay: motion.instant },
   enter1: { ...enter, animationDelay: onboardingMotion.stagger },
   enter2: { ...enter, animationDelay: `calc(${onboardingMotion.stagger} * 2)` },
   enter3: { ...enter, animationDelay: `calc(${onboardingMotion.stagger} * 3)` },
@@ -271,8 +269,8 @@ export const onboardingStyles = stylex.create({
     width: "20px",
     height: "20px",
     flexShrink: 0,
-    animationName: { default: spin, [reducedMotion]: "none" },
-    animationDuration: onboardingMotion.spin,
+    animationName: { default: spin, [stylex.env.reducedMotion]: "none" },
+    animationDuration: motion.spin,
     animationIterationCount: "infinite",
     animationTimingFunction: "linear",
   },

@@ -3,8 +3,6 @@ import * as stylex from "@stylexjs/stylex";
 import { fontSize, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
 const sweep = stylex.keyframes({
   from: { backgroundPosition: "100% 0" },
   to: { backgroundPosition: "-100% 0" },
@@ -85,7 +83,7 @@ export const askPanelStyles = stylex.create({
   },
   // A loading shimmer; sites set the gradient and its size.
   sweep: {
-    animationName: { default: sweep, [reducedMotion]: "none" },
+    animationName: { default: sweep, [stylex.env.reducedMotion]: "none" },
     animationDuration: motion.pulse,
     animationTimingFunction: "linear",
     animationIterationCount: "infinite",

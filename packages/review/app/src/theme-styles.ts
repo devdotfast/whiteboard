@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 
+import { fontSize, radius, tracking } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 // The palette for everything below the canvas root. The root's own box and
@@ -26,7 +27,7 @@ export const themeStyles = stylex.create({
     "--chrome-font-weight-strong": "var(--vscode-fontWeight-semiBold, 600)",
     // One tracking value, used only by the uppercase micro-labels. The
     // sentence-case buttons stay untracked, as the workbench's own buttons are.
-    "--chrome-tracking": "0.04em",
+    "--chrome-tracking": tracking.chrome,
     "--chrome-icon-size": "14px",
     "--chrome-fg": "var(--vscode-foreground, var(--ink))",
     // --ink-muted already bridges descriptionForeground, so this is just an alias.
@@ -64,9 +65,9 @@ export const themeStyles = stylex.create({
     // switcher included; two type sizes: the label size for anything you read,
     // the small size for badges and tallies.
     "--chrome-control-height": "24px",
-    "--chrome-control-radius": "6px",
-    "--chrome-font-size": "12px",
-    "--chrome-font-size-small": "11px",
+    "--chrome-control-radius": radius.control,
+    "--chrome-font-size": fontSize.body,
+    "--chrome-font-size-small": fontSize.small,
     "--chrome-hover-bg": "var(--well)",
     "--chrome-border": "var(--rule)",
   },
@@ -124,6 +125,12 @@ export const themeStyles = stylex.create({
       "var(--vscode-scrollbarSlider-activeBackground, #5d6472)",
     "--rule": "var(--vscode-panel-border, #d8dbe1)",
     "--rule-soft": "var(--vscode-editorWidget-border, #b9bec7)",
+    "--toolbar-hover-bg": "var(--vscode-toolbar-hoverBackground, #e9ebef)",
+    "--input-option-active-bg":
+      "var(--vscode-inputOption-activeBackground, #f3f4f6)",
+    "--input-option-active-fg":
+      "var(--vscode-inputOption-activeForeground, #15181e)",
+    "--error-fg": "var(--vscode-errorForeground, #a1260d)",
     "--selection": "var(--accent)",
     "--selection-shadow": "color-mix(in srgb, var(--accent) 40%, transparent)",
     "--map-storage-border": "#4a7685",

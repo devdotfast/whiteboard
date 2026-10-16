@@ -607,8 +607,6 @@ function compareDocumentOrder(left: Node, right: Node): number {
 
 const compact = "@media (max-width: 620px)";
 
-const hoverBackground = "var(--vscode-toolbar-hoverBackground, var(--tray))";
-
 const button = {
   display: "flex",
   alignItems: "center",
@@ -658,7 +656,7 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",
-    backgroundColor: "transparent",
+    backgroundColor: tokens.transparent,
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
@@ -690,10 +688,10 @@ const styles = stylex.create({
     width: "22px",
     height: "20px",
     padding: 0,
-    borderColor: "transparent",
+    borderColor: tokens.transparent,
     backgroundColor: {
-      default: "transparent",
-      ":hover:not(:disabled)": hoverBackground,
+      default: tokens.transparent,
+      ":hover:not(:disabled)": tokens.toolbarHoverBg,
     },
     color: { default: tokens.inkMuted, ":hover:not(:disabled)": tokens.ink },
     fontFamily: tokens.chromeFont,
@@ -703,11 +701,11 @@ const styles = stylex.create({
   togglePressed: {
     borderColor: tokens.accent,
     backgroundColor: {
-      default: "var(--vscode-inputOption-activeBackground, var(--tray))",
-      ":hover:not(:disabled)": hoverBackground,
+      default: tokens.inputOptionActiveBg,
+      ":hover:not(:disabled)": tokens.toolbarHoverBg,
     },
     color: {
-      default: "var(--vscode-inputOption-activeForeground, var(--ink))",
+      default: tokens.inputOptionActiveFg,
       ":hover:not(:disabled)": tokens.ink,
     },
   },

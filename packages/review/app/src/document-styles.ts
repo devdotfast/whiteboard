@@ -30,8 +30,6 @@ const afterProseItem = () => `${inProse()}:is(li + *)`;
 const scratchpadOpening = () =>
   `${inDocument()}:is([data-kind="scratchpad"] > [data-review-node-id]:first-child *):first-child`;
 
-const narrow = "@media (max-width: 720px)";
-
 const compact = "@container review-content (max-width: 1080px)";
 
 // Not :has(): it restyled the whole document on every node insertion.
@@ -71,12 +69,12 @@ export const documentStyles = stylex.create({
     },
     "--review-document-padding-inline": {
       default: "clamp(20px, calc((100cqi - 720px) * 0.122 + 20px), 64px)",
-      [narrow]: "clamp(12px, 4vw, 20px)",
+      [stylex.env.narrow]: "clamp(12px, 4vw, 20px)",
     },
     "--review-document-padding-block-start": "28px",
     "--review-document-padding-block-end": {
       default: "72px",
-      [narrow]: "48px",
+      [stylex.env.narrow]: "48px",
     },
     "--review-prose-max-width": {
       default: "720px",
@@ -92,20 +90,20 @@ export const documentStyles = stylex.create({
       default: "100%",
       [withLens()]: "min(1360px, calc(100% - 32px))",
       [full()]: { default: null, [roomy]: "100%" },
-      [narrow]: "100%",
+      [stylex.env.narrow]: "100%",
     },
     maxWidth: {
       default: "860px",
       [withHeader()]: "900px",
       [wide()]: { default: null, [roomy]: "1360px" },
       [full()]: { default: null, [roomy]: "1800px" },
-      [narrow]: { default: "none", [withHeader()]: "900px" },
+      [stylex.env.narrow]: { default: "none", [withHeader()]: "900px" },
     },
     minWidth: 0,
     margin: {
       default: "0 auto 96px",
-      [compact]: { default: "0 auto", [narrow]: 0 },
-      [narrow]: 0,
+      [compact]: { default: "0 auto", [stylex.env.narrow]: 0 },
+      [stylex.env.narrow]: 0,
     },
     padding: {
       default: `${tokens.reviewDocumentPaddingBlockStart} ${tokens.reviewDocumentPaddingInline} ${tokens.reviewDocumentPaddingBlockEnd}`,
@@ -127,14 +125,14 @@ export const documentStyles = stylex.create({
     width: {
       default: "100%",
       [withLens()]: "calc(100% - 24px)",
-      [narrow]: "100%",
+      [stylex.env.narrow]: "100%",
     },
     maxWidth: {
       default: "860px",
       [withHeader()]: "900px",
       [wide()]: { default: null, [roomy]: "1360px" },
       [full()]: { default: null, [roomy]: "1800px" },
-      [narrow]: {
+      [stylex.env.narrow]: {
         default: "none",
         [withHeader()]: { default: "900px", [withLens()]: "none" },
       },

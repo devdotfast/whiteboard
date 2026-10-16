@@ -912,7 +912,7 @@ const scopeBarStyles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",
-    backgroundColor: "transparent",
+    backgroundColor: tokens.transparent,
     color: tokens.accent,
     fontSize: fontSize.micro,
   },

@@ -1,7 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
 
 // Stacking inside the React Flow canvases (the software map and diagrams),
-// above React Flow's own node and edge layers.
+// above React Flow's own node and edge layers. Ordering inside those
+// canvases only, so it stays out of `layer`.
 export const flowLayer = stylex.defineConsts({
   actions: "20",
   // An edge's endpoints sit just under its label.

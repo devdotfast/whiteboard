@@ -852,7 +852,7 @@ const styles = stylex.create({
   },
   // Over the line's end.
   rowOpen: {
-    filter: "drop-shadow(0 2px 6px rgb(0 0 0 / 0.16))",
+    filter: `drop-shadow(0 2px 6px ${tokens.shadowColorSoft})`,
   },
   // In the article's padding, centred on the line; its hit area reaches the
   // edge.
@@ -868,7 +868,7 @@ const styles = stylex.create({
     height: `${PIN_HEIGHT}px`,
     padding: 0,
     borderWidth: 0,
-    backgroundColor: "transparent",
+    backgroundColor: tokens.transparent,
     visibility: "visible",
     cursor: "pointer",
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },

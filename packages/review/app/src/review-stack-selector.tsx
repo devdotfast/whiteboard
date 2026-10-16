@@ -271,7 +271,7 @@ const styles = stylex.create({
     borderStyle: "none",
     borderColor: "currentcolor",
     borderRadius: radius.control,
-    backgroundColor: "transparent",
+    backgroundColor: tokens.transparent,
     color: tokens.ink,
     font: "inherit",
     textAlign: "left",
@@ -284,7 +284,7 @@ const styles = stylex.create({
   },
   rowButton: {
     backgroundColor: {
-      default: "transparent",
+      default: tokens.transparent,
       ":hover:not(:disabled)": tokens.tray,
     },
     cursor: { default: "pointer", ":disabled": "default" },

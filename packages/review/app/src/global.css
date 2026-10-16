@@ -49,6 +49,11 @@
   --ink-faint: var(--vscode-disabledForeground, #5f6776);
   --rule: var(--vscode-panel-border, #262c37);
   --rule-soft: var(--vscode-editorWidget-border, #39404d);
+  /* Workbench controls the canvas mirrors: find toggles and error text. */
+  --toolbar-hover-bg: var(--vscode-toolbar-hoverBackground, #1a1f29);
+  --input-option-active-bg: var(--vscode-inputOption-activeBackground, #12161e);
+  --input-option-active-fg: var(--vscode-inputOption-activeForeground, #eef0f4);
+  --error-fg: var(--vscode-errorForeground, #f48771);
   /* The canvas shares the workbench DOM, but selection already reads through
      its background and row highlights, so suppress the inherited
      focus/list/input chrome. The map is the exception: its selection ring is
@@ -87,6 +92,8 @@
   --diff-removed-bg: #211517;
   --shadow-color: rgb(0 0 0 / 45%);
   --shadow-color-strong: rgba(0, 0, 0, 0.55);
+  --shadow-color-soft: rgb(0 0 0 / 0.16);
+  --quote-mark: rgba(255, 230, 0, 0.35);
   --backdrop: rgba(0, 0, 0, 0.56);
   --accent-shadow: rgba(91, 124, 255, 0.2);
   --accent-stripe: rgba(91, 124, 255, 0.18);

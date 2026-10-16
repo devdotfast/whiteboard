@@ -288,7 +288,7 @@ const styles = stylex.create({
     borderColor: "currentcolor",
     padding: "0 12px 0 14px",
     backgroundColor: {
-      default: "transparent",
+      default: tokens.transparent,
       ":hover:not(:disabled)": `color-mix(in srgb, ${tokens.ink} 3%, transparent)`,
     },
     font: `${fontSize.body}/26px ${tokens.fontMono}`,
@@ -345,7 +345,7 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   edgeHit: {
-    stroke: "transparent",
+    stroke: tokens.transparent,
     strokeWidth: "10px",
   },
   edgeHighlight: {

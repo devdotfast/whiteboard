@@ -23,7 +23,10 @@ const radiusCheck: ScaleCheck = {
   matches: (text) => (/\dpx|%/.test(text) || number.test(text)) && !zero.test(text),
 };
 
-const durationCheck: ScaleCheck = { scale: "motion", matches: (text) => duration.test(text) };
+const motionCheck: ScaleCheck = {
+  scale: "motion",
+  matches: (text) => duration.test(text) || text.includes("cubic-bezier("),
+};
 
 // In the `font` shorthand, a size is the px word before any `/line-height`, and
 // a weight is a bare three-digit word.
@@ -44,10 +47,14 @@ const checks = new Map<string, ScaleCheck>([
   ["borderBottomLeftRadius", radiusCheck],
   ["borderBottomRightRadius", radiusCheck],
   ["zIndex", { scale: "layer", matches: (text) => number.test(text) && Number(text) >= 10 }],
-  ["transition", durationCheck],
-  ["transitionDuration", durationCheck],
-  ["animation", durationCheck],
-  ["animationDuration", durationCheck],
+  ["transition", motionCheck],
+  ["transitionDuration", motionCheck],
+  ["transitionDelay", motionCheck],
+  ["transitionTimingFunction", motionCheck],
+  ["animation", motionCheck],
+  ["animationDuration", motionCheck],
+  ["animationDelay", motionCheck],
+  ["animationTimingFunction", motionCheck],
   ["boxShadow", { scale: "elevation", matches: (text) => dropShadow.test(text) }],
   [
     "letterSpacing",

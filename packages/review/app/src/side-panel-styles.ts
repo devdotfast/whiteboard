@@ -13,11 +13,7 @@ import { tokens } from "./tokens.stylex";
 
 const narrowCanvas = "@container review-canvas (max-width: 929px)";
 
-const narrow = "@media (max-width: 720px)";
-
 const short = "@media (max-height: 560px)";
-
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 
 // The panel's own grid cell in App's detail host.
 const inDetailHost = () => stylex.when.ancestor(":is(*)", detailHostMarker);
@@ -40,39 +36,42 @@ export const panelStyles = stylex.create({
     position: {
       default: "relative",
       [narrowCanvas]: "absolute",
-      [narrow]: "absolute",
+      [stylex.env.narrow]: "absolute",
     },
     inset: {
       default: null,
       [narrowCanvas]: { default: "auto 0 0 0", [short]: 0 },
-      [narrow]: { default: "auto 0 0 0", [short]: 0 },
+      [stylex.env.narrow]: { default: "auto 0 0 0", [short]: 0 },
       [short]: 0,
     },
     zIndex: {
       default: null,
       [narrowCanvas]: layer.sheet,
-      [narrow]: layer.sheet,
+      [stylex.env.narrow]: layer.sheet,
     },
     height: {
       default: "100%",
       [narrowCanvas]: { default: sheetHeight, [short]: "100%" },
-      [narrow]: { default: sheetHeight, [short]: "100%" },
+      [stylex.env.narrow]: { default: sheetHeight, [short]: "100%" },
     },
     maxHeight: {
       default: null,
       [narrowCanvas]: { default: "100%", [short]: "none" },
-      [narrow]: { default: "100%", [short]: "none" },
+      [stylex.env.narrow]: { default: "100%", [short]: "none" },
       [short]: "none",
     },
     gridArea: { default: null, [inDetailHost()]: "1 / 1" },
     overflow: "hidden",
     backgroundColor: tokens.bg,
-    animationName: { default: slideIn, [reducedMotion]: "none" },
+    animationName: { default: slideIn, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: motion.medium,
-      [reducedMotion]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "ease-out", [reducedMotion]: "ease" },
+    animationTimingFunction: {
+      default: "ease-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
   },
   restored: {
     animationName: "none",
@@ -157,7 +156,7 @@ export const panelStyles = stylex.create({
   },
   peekBody: {
     minWidth: 0,
-    padding: { default: "12px", [narrow]: "8px" },
+    padding: { default: "12px", [stylex.env.narrow]: "8px" },
   },
   peekActions: {
     display: "flex",
@@ -170,10 +169,10 @@ export const panelStyles = stylex.create({
   // Peek content runs to the column's edges; text and actions keep the
   // panel's inset.
   peekText: {
-    paddingInline: { default: "16px", [narrow]: "8px" },
+    paddingInline: { default: "16px", [stylex.env.narrow]: "8px" },
   },
   inset: {
-    padding: { default: "12px 12px 0", [narrow]: "8px 8px 0" },
+    padding: { default: "12px 12px 0", [stylex.env.narrow]: "8px 8px 0" },
   },
 });
 
@@ -197,12 +196,12 @@ export const tourStyles = stylex.create({
   floatingFooter: {
     position: "absolute",
     right: 0,
-    bottom: { default: "12px", [narrow]: "8px" },
+    bottom: { default: "12px", [stylex.env.narrow]: "8px" },
     left: 0,
     zIndex: 4,
     display: "flex",
     justifyContent: "center",
-    padding: { default: "0 12px", [narrow]: "0 8px" },
+    padding: { default: "0 12px", [stylex.env.narrow]: "0 8px" },
     pointerEvents: "none",
   },
   pill: {
@@ -246,7 +245,10 @@ export const tourStyles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: "12px",
-    margin: { default: "16px 16px 16px 52px", [narrow]: "16px 8px 16px 38px" },
+    margin: {
+      default: "16px 16px 16px 52px",
+      [stylex.env.narrow]: "16px 8px 16px 38px",
+    },
     padding: "12px 16px",
     borderWidth: "1px",
     borderStyle: "dashed",
@@ -275,12 +277,12 @@ export const tourStyles = stylex.create({
     display: "grid",
     gridTemplateColumns: {
       default: "56px minmax(0, 1fr)",
-      [narrow]: "38px minmax(0, 1fr)",
+      [stylex.env.narrow]: "38px minmax(0, 1fr)",
     },
-    paddingRight: { default: "16px", [narrow]: "8px" },
+    paddingRight: { default: "16px", [stylex.env.narrow]: "8px" },
     // The rail's x in the stop, for the rail and its faint runs between a
     // step's code cards.
-    "--review-tour-rail-x": { default: "29px", [narrow]: "19px" },
+    "--review-tour-rail-x": { default: "29px", [stylex.env.narrow]: "19px" },
   },
   rail: {
     position: "relative",
@@ -323,7 +325,7 @@ export const tourStyles = stylex.create({
     paddingTop: "16px",
     paddingRight: 0,
     paddingBottom: 0,
-    paddingLeft: { default: "4px", [narrow]: 0 },
+    paddingLeft: { default: "4px", [stylex.env.narrow]: 0 },
   },
   mainActive: {
     borderRadius: radius.surface,
@@ -333,8 +335,11 @@ export const tourStyles = stylex.create({
   content: {
     position: "relative",
     zIndex: 2,
-    width: { default: "calc(100% + 76px)", [narrow]: "calc(100% + 46px)" },
-    marginLeft: { default: "-60px", [narrow]: "-38px" },
+    width: {
+      default: "calc(100% + 76px)",
+      [stylex.env.narrow]: "calc(100% + 46px)",
+    },
+    marginLeft: { default: "-60px", [stylex.env.narrow]: "-38px" },
     backgroundColor: tokens.bg,
     // A step's code cards stand apart; a lone peek's stay flush.
     "--review-code-card-gap": "12px",

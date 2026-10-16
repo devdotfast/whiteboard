@@ -6,8 +6,6 @@ import * as stylex from "@stylexjs/stylex";
 
 const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
-const narrow = "@media (max-width: 720px)";
-
 const documentWidth = `calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline})`;
 
 /**
@@ -33,14 +31,14 @@ const styles = stylex.create({
       default: null,
       [inDocument()]: {
         default: "fit-content",
-        [narrow]: "calc(100cqi - 16px)",
+        [stylex.env.narrow]: "calc(100cqi - 16px)",
       },
     },
     maxWidth: {
       default: null,
       [inDocument()]: {
         default: `min(${tokens.reviewInlineDiagramMaxWidth}, ${documentWidth})`,
-        [narrow]: "none",
+        [stylex.env.narrow]: "none",
       },
     },
     minWidth: {

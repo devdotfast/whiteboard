@@ -8,8 +8,6 @@ export function Spinner({ xstyle }: { xstyle?: StyleArg }) {
   return <span aria-hidden="true" {...stylex.props(styles.ring, xstyle)} />;
 }
 
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
 const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
 
 const styles = stylex.create({
@@ -24,7 +22,7 @@ const styles = stylex.create({
     borderColor: tokens.ruleSoft,
     borderTopColor: tokens.accent,
     borderRadius: radius.round,
-    animationName: { default: spin, [reducedMotion]: "none" },
+    animationName: { default: spin, [stylex.env.reducedMotion]: "none" },
     animationDuration: motion.spin,
     animationTimingFunction: "linear",
     animationIterationCount: "infinite",

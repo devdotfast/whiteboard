@@ -1,5 +1,4 @@
-import { tocLayer } from "@canvas/review-toc.stylex";
-import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, layer, motion } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
@@ -413,14 +412,10 @@ function isVisibleHeadingForActiveTracking(heading: HTMLElement): boolean {
   return rect.width !== 0 || rect.height !== 0;
 }
 
-const narrow = "@media (max-width: 720px)";
-
 const currentEntry = ":is([aria-current])";
 
 const inCurrentEntry = () =>
   stylex.when.ancestor(":is([aria-current])", tocEntryMarker);
-
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 
 // On a narrow shell the nav is the pill and the card in one: a 32px square at
 // the pill's anchor that grows in place, top-left corner pinned, into the
@@ -433,8 +428,8 @@ const styles = stylex.create({
     position: "absolute",
     // Sits 16px above the content top so it clears the page title.
     top: `calc(32px + ${tokens.reviewPageTop})`,
-    left: { default: "24px", [narrow]: "8px" },
-    zIndex: tocLayer.card,
+    left: { default: "24px", [stylex.env.narrow]: "8px" },
+    zIndex: layer.toc,
     display: "block",
     flex: "none",
     width: "32px",
@@ -445,16 +440,19 @@ const styles = stylex.create({
     fontFamily: tokens.fontSerif,
     interpolateSize: "allow-keywords",
     transition: {
-      default: `width ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1) ${motion.fast}, height ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1) ${motion.fast}`,
-      [reducedMotion]: "none",
+      default: `width ${motion.medium} ${motion.enter} ${motion.fast}, height ${motion.medium} ${motion.enter} ${motion.fast}`,
+      [stylex.env.reducedMotion]: "none",
     },
   },
   tocOpen: {
-    width: { default: "248px", [narrow]: "min(248px, calc(100cqi - 16px))" },
+    width: {
+      default: "248px",
+      [stylex.env.narrow]: "min(248px, calc(100cqi - 16px))",
+    },
     height: "auto",
     transition: {
-      default: `width ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1), height ${motion.medium} cubic-bezier(0.2, 0.7, 0.2, 1)`,
-      [reducedMotion]: "none",
+      default: `width ${motion.medium} ${motion.enter}, height ${motion.medium} ${motion.enter}`,
+      [stylex.env.reducedMotion]: "none",
     },
   },
   // A wide shell renders the contents as a plain rail beside the prose,
@@ -466,9 +464,12 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     pointerEvents: "none",
-    left: { default: "24px", [narrow]: "8px" },
-    zIndex: tocLayer.rail,
-    width: { default: "248px", [narrow]: "min(248px, calc(100cqi - 16px))" },
+    left: { default: "24px", [stylex.env.narrow]: "8px" },
+    zIndex: layer.tocRail,
+    width: {
+      default: "248px",
+      [stylex.env.narrow]: "min(248px, calc(100cqi - 16px))",
+    },
     overflow: "visible",
     padding: "20px 18px 22px 20px",
     transition: "none",
@@ -506,7 +507,7 @@ const styles = stylex.create({
     pointerEvents: "none",
     transition: {
       default: `opacity ${motion.fast} ${motion.ease}`,
-      [reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
+      [stylex.env.reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
     },
   },
   bodyOpen: {
@@ -514,7 +515,7 @@ const styles = stylex.create({
     pointerEvents: "auto",
     transition: {
       default: `opacity ${motion.fast} ${motion.ease} ${motion.fast}`,
-      [reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
+      [stylex.env.reducedMotion]: `opacity ${motion.fast} ${motion.ease}`,
     },
   },
   bodyRail: {

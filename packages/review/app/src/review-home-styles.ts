@@ -4,8 +4,6 @@ import { homeGroupMarker, homeRowMarker } from "./markers.stylex";
 import { fontSize, fontWeight, layer, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
 const drop = stylex.keyframes({
   from: { opacity: 0, transform: "translateY(-8px)" },
   to: { opacity: 1, transform: "translateY(0)" },
@@ -223,10 +221,10 @@ export const styles = stylex.create({
     transitionProperty: "background-color",
     transitionDuration: {
       default: motion.fast,
-      [reducedMotion]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
     transitionTimingFunction: motion.ease,
-    animationName: { default: drop, [reducedMotion]: "none" },
+    animationName: { default: drop, [stylex.env.reducedMotion]: "none" },
     animationDuration: motion.slow,
     animationTimingFunction: motion.ease,
     animationFillMode: "backwards",
@@ -243,7 +241,7 @@ export const styles = stylex.create({
       transitionProperty: "background-color",
       transitionDuration: {
         default: motion.fast,
-        [reducedMotion]: motion.instant,
+        [stylex.env.reducedMotion]: motion.instant,
       },
       transitionTimingFunction: motion.ease,
     },
@@ -349,7 +347,7 @@ export const styles = stylex.create({
     height: "6px",
     borderRadius: radius.round,
     backgroundColor: "currentColor",
-    animationName: { default: pulse, [reducedMotion]: "none" },
+    animationName: { default: pulse, [stylex.env.reducedMotion]: "none" },
     animationDuration: motion.pulse,
     animationTimingFunction: motion.ease,
     animationIterationCount: "infinite",

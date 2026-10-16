@@ -135,13 +135,11 @@ export function useDiagramTourShell(open: boolean, onClose: () => void) {
 // diagram collapses before the tour panel becomes unreadable.
 const narrow = "@container review-canvas (max-width: 1080px)";
 
-// Portals inside .review-canvas-root but outside .review-app, where
-// --review-debug-layer lives, hence the literal fallback.
 const styles = stylex.create({
   overlay: {
     position: "fixed",
     inset: 0,
-    zIndex: "var(--review-debug-layer, 2147483000)",
+    zIndex: tokens.reviewDebugLayer,
     boxSizing: "border-box",
     display: "grid",
     gridTemplateColumns: {

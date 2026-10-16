@@ -416,8 +416,6 @@ function mergedCodePeekRanges(
   return merged;
 }
 
-const narrow = "@media (max-width: 720px)";
-
 const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 // A block in a Review document shares the prose column.
@@ -443,11 +441,11 @@ const styles = stylex.create({
     overflow: { default: null, [inMapInspector()]: "visible" },
     padding: {
       default: null,
-      [inMapInspector()]: { default: 0, [narrow]: "0 8px 8px" },
+      [inMapInspector()]: { default: 0, [stylex.env.narrow]: "0 8px 8px" },
     },
     overscrollBehavior: {
       default: null,
-      [inMapInspector()]: { default: null, [narrow]: "contain" },
+      [inMapInspector()]: { default: null, [stylex.env.narrow]: "contain" },
     },
     color: tokens.ink,
     fontFamily: tokens.fontMono,

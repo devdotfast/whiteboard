@@ -919,9 +919,6 @@ function MagnifierIcon() {
 // in, a retitle recomposes the name, a removed row is erased and the list
 // closes over it. Reduced motion shows each phase's finished frame. The row's
 // wipe and erase share the document's keyframes in draw-styles.ts.
-const EASE = "cubic-bezier(0.2, 0.7, 0.2, 1)";
-
-const REDUCED = "@media (prefers-reduced-motion: reduce)";
 
 const landSlot = stylex.keyframes({
   "0%": {
@@ -1033,7 +1030,7 @@ const styles = stylex.create({
     padding: 0,
     color: tokens.inkMuted,
     cursor: "pointer",
-    backgroundColor: { default: "transparent", ":hover": tokens.well },
+    backgroundColor: { default: tokens.transparent, ":hover": tokens.well },
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "-2px" },
   },
@@ -1053,7 +1050,7 @@ const styles = stylex.create({
     textAlign: "center",
     whiteSpace: "nowrap",
     cursor: "pointer",
-    backgroundColor: { default: "transparent", ":hover": tokens.well },
+    backgroundColor: { default: tokens.transparent, ":hover": tokens.well },
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "-2px" },
   },
@@ -1176,7 +1173,7 @@ const styles = stylex.create({
     font: "inherit",
     color: "inherit",
     cursor: "pointer",
-    backgroundColor: { default: "transparent", ":hover": tokens.well },
+    backgroundColor: { default: tokens.transparent, ":hover": tokens.well },
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: { default: null, ":focus-visible": "-2px" },
   },
@@ -1184,12 +1181,12 @@ const styles = stylex.create({
   toggleEmpty: {
     color: tokens.inkFaint,
     cursor: "default",
-    backgroundColor: "transparent",
+    backgroundColor: tokens.transparent,
   },
   toggleActive: {
     color: tokens.ink,
     fontWeight: fontWeight.semibold,
-    backgroundColor: "transparent",
+    backgroundColor: tokens.transparent,
   },
   // The filter outranks the viewed fade; the checkbox beside it says viewed.
   faded: {
@@ -1226,13 +1223,16 @@ const styles = stylex.create({
     textOverflow: "ellipsis",
   },
   nameRelabel: {
-    animationName: { default: relabel, [REDUCED]: "none" },
+    animationName: { default: relabel, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: drawMotion.stroke,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: "steps(14)", [REDUCED]: "ease" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationTimingFunction: {
+      default: "steps(14)",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   clear: {
     display: "inline-flex",
@@ -1326,32 +1326,50 @@ const sectionMotion = stylex.create({
     visibility: "hidden",
   },
   landing: {
-    animationName: { default: landSlot, [REDUCED]: "none" },
+    animationName: { default: landSlot, [stylex.env.reducedMotion]: "none" },
     animationDuration: {
       default: drawMotion.lensLand,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
-    animationTimingFunction: { default: EASE, [REDUCED]: "ease" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationTimingFunction: {
+      default: motion.enter,
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   attention: {
     outline: `1px solid ${tokens.accent}`,
     outlineOffset: "-1px",
     backgroundColor: tokens.markerTint,
-    animationName: { default: attention, [REDUCED]: "none" },
-    animationDuration: { default: drawMotion.ring, [REDUCED]: motion.instant },
-    animationTimingFunction: { default: "ease-out", [REDUCED]: "ease" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationName: { default: attention, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: drawMotion.ring,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: "ease-out",
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   erasing: {
     overflow: "clip",
     interpolateSize: "allow-keywords",
-    animationName: { default: collapse, [REDUCED]: "none" },
-    animationDuration: { default: drawMotion.beat, [REDUCED]: motion.instant },
-    animationTimingFunction: { default: EASE, [REDUCED]: "ease" },
-    animationDelay: { default: "320ms", [REDUCED]: "0s" },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
-    display: { default: null, [REDUCED]: "none" },
+    animationName: { default: collapse, [stylex.env.reducedMotion]: "none" },
+    animationDuration: {
+      default: drawMotion.beat,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationTimingFunction: {
+      default: motion.enter,
+      [stylex.env.reducedMotion]: "ease",
+    },
+    animationDelay: {
+      default: drawMotion.rowErase,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
+    display: { default: null, [stylex.env.reducedMotion]: "none" },
   },
 });
 

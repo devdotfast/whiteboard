@@ -1,4 +1,5 @@
 import { loadElk } from "@canvas/elk";
+import { tokens } from "@canvas/tokens.stylex";
 import {
   type ElkGraph as LibavoidElkGraph,
   init as initLibavoidEdgeRouter,
@@ -301,9 +302,9 @@ export function createC4MapFlowFromLayout(
       const operationActive = operationState === "active";
 
       const color = attachedToSelectedNode
-        ? "var(--accent)"
+        ? tokens.accent
         : operationActive
-          ? "var(--selection)"
+          ? tokens.selection
           : c4EdgeColor();
 
       const label = relationship.hideLabel
@@ -341,9 +342,7 @@ export function createC4MapFlowFromLayout(
           // The line is quiet unless it touches the selected node; the
           // arrowhead also marks an active operation.
           style: {
-            stroke: attachedToSelectedNode
-              ? "var(--accent)"
-              : "var(--ink-faint)",
+            stroke: attachedToSelectedNode ? tokens.accent : tokens.inkFaint,
             strokeWidth: 1.5,
             strokeDasharray: c4EdgeDasharray(
               kind,
@@ -2528,7 +2527,7 @@ function estimateC4NodeHeight(node: SoftwareMapNodeSnapshot): number {
 }
 
 function c4EdgeColor(): string {
-  return "var(--ink-faint)";
+  return tokens.inkFaint;
 }
 
 function c4EdgeDasharray(

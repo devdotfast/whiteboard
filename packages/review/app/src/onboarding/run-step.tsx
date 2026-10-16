@@ -60,8 +60,6 @@ function searchable(target: ReviewOnboardingTarget): string {
     .toLowerCase();
 }
 
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
 const breathe = stylex.keyframes({
   "0%, 100%": { opacity: 1 },
   "50%": { opacity: 0.45 },
@@ -754,7 +752,7 @@ const styles = stylex.create({
     marginBlock: "3px",
     borderRadius: radius.control,
     backgroundColor: tokens.ruleSoft,
-    animationName: { default: breathe, [reducedMotion]: "none" },
+    animationName: { default: breathe, [stylex.env.reducedMotion]: "none" },
     animationDuration: motion.pulse,
     animationTimingFunction: motion.ease,
     animationIterationCount: "infinite",

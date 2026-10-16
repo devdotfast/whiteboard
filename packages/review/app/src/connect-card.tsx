@@ -454,7 +454,7 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: "none",
     borderColor: "currentcolor",
-    backgroundColor: "transparent",
+    backgroundColor: tokens.transparent,
     color: { default: tokens.inkMuted, ":hover": tokens.ink },
     font: `${fontSize.body}/22px ${tokens.fontMono}`,
     cursor: "pointer",
