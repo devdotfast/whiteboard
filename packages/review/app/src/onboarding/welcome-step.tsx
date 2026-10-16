@@ -1,4 +1,3 @@
-import { ArrowRightIcon } from "@canvas/icons";
 import {
   elevation,
   fontSize,
@@ -8,6 +7,7 @@ import {
 } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Button } from "@canvas/ui/button";
+import { Kbd } from "@canvas/ui/kbd";
 import { textStyles } from "@canvas/ui/text";
 import * as stylex from "@stylexjs/stylex";
 
@@ -34,9 +34,8 @@ export function WelcomeStep({ onStart }: { onStart(): void }) {
           autoFocus
         >
           Get started
-          <ArrowRightIcon />
+          <Kbd xstyle={onboardingStyles.primaryKey}>↵</Kbd>
         </Button>
-        <span {...stylex.props(onboardingStyles.keyHint)}>↵ Return</span>
       </ScreenCopy>
       <BoardSketch />
     </div>

@@ -1,11 +1,12 @@
 import { cliInstallReady } from "@canvas/cli-install-status";
-import { ArrowRightIcon, DrawnCheckIcon, PlusIcon } from "@canvas/icons";
+import { DrawnCheckIcon, PlusIcon } from "@canvas/icons";
 import { installRowMarker } from "@canvas/markers.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { CopyIcon, useCopy } from "@canvas/ui/copy";
+import { Kbd } from "@canvas/ui/kbd";
 import { useTooltip } from "@canvas/use-tooltip";
 import type {
   ReviewCanvasSetupActions,
@@ -290,11 +291,8 @@ export function InstallStep({
           onClick={ready ? onContinue : () => void install()}
         >
           {ready ? "Continue" : "Install"}
-          <ArrowRightIcon />
+          <Kbd xstyle={onboardingStyles.primaryKey}>↵</Kbd>
         </Button>
-        {busy ? null : (
-          <span {...stylex.props(onboardingStyles.keyHint)}>↵ Return</span>
-        )}
       </ScreenHeader>
       <div {...stylex.props(onboardingStyles.panel, styles.list)}>
         {rows.map((row) => {

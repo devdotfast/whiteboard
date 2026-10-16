@@ -255,10 +255,10 @@ export const onboardingStyles = stylex.create({
     paddingInline: "16px 14px",
     fontSize: fontSize.ui,
   },
-  keyHint: {
-    color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
-    fontSize: fontSize.body,
+  primaryKey: {
+    borderColor: tokens.transparent,
+    backgroundColor: tokens.onAccentWash,
+    color: tokens.onAccent,
   },
   error: {
     margin: 0,

@@ -19,7 +19,7 @@ export function Spinner() {
   );
 }
 
-/** Return presses the screen's one button, as the hint beside it says. */
+/** Return presses the screen's one button, as the key on it says. */
 export function useReturnKey(enabled: boolean, onReturn: () => void) {
   useEffect(() => {
     if (!enabled) return;
