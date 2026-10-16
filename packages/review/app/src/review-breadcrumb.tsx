@@ -2,7 +2,7 @@ import { fontSize, radius } from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { Popover } from "@canvas/ui/popover";
 import {
   type BoardIconKind,
   type PullRequestState,
@@ -14,6 +14,7 @@ import {
   type MouseEvent,
   type ReactElement,
   type ReactNode,
+  type RefObject,
   useEffect,
   useRef,
   useState,
@@ -22,8 +23,6 @@ import {
 import { BoardIcon, PullRequestStateIcon } from "./board-icons";
 import { useReviewSession } from "./host/review-session";
 import { tokens } from "./tokens.stylex";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
 
 type OpenEvent = Pick<
   MouseEvent,
@@ -66,9 +65,6 @@ export function ReviewBreadcrumb({
   const session = useReviewSession();
   const [open, setOpen] = useState(false);
   const control = useRef<HTMLSpanElement>(null);
-  const popoverRef = useAnchoredPopover(open, control);
-
-  useDismissOnOutside(control, open, setOpen);
 
   const { parent, siblings, board, children = [] } = place;
 
@@ -158,7 +154,12 @@ export function ReviewBreadcrumb({
           </svg>
         </button>
         {open ? (
-          <PlaceList popover={popoverRef} rows={rows} within={within} />
+          <PlaceList
+            anchor={control}
+            rows={rows}
+            within={within}
+            onDismiss={() => setOpen(false)}
+          />
         ) : null}
       </span>
     </span>
@@ -254,15 +255,18 @@ export function ReviewBreadcrumb({
 /** The places a switcher jumps between, in order, the one on screen
  * marked. */
 function PlaceList({
-  popover,
+  anchor,
   rows,
   within,
+  onDismiss,
 }: {
-  popover: ReturnType<typeof useAnchoredPopover<HTMLDivElement>>;
+  anchor: RefObject<HTMLElement | null>;
   rows: readonly PlaceRow[];
   /** What they belong to. */
   within: string;
+  onDismiss(): void;
 }): ReactElement {
+  const popover = useRef<HTMLDivElement>(null);
   // Desktop shows one board at a time, so it opens every board in front.
   const background = useReviewSession().bridge.reportSidebar === undefined;
 
@@ -271,16 +275,17 @@ function PlaceList({
     popover.current
       ?.querySelector("[aria-current]")
       ?.scrollIntoView({ block: "nearest" });
-  }, [popover]);
+  }, []);
 
   return (
-    <div
+    <Popover
       ref={popover}
-      popover="manual"
+      anchor={anchor}
+      onDismiss={onDismiss}
       role="menu"
       tabIndex={-1}
       aria-label={`In ${within}`}
-      {...stylex.props(surfaceStyles.popover, menuStyles.popover, styles.menu)}
+      xstyle={[menuStyles.popover, styles.menu]}
       onKeyDown={(event) => moveMenuFocus(event)}
     >
       {rows.map((row, index) => (
@@ -323,7 +328,7 @@ function PlaceList({
           ) : null}
         </button>
       ))}
-    </div>
+    </Popover>
   );
 }
 
