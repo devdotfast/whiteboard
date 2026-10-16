@@ -4,6 +4,7 @@ import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CloseIcon, FileIcon, SearchIcon } from "@canvas/ui/icons";
+import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCommitScope,
@@ -319,12 +320,7 @@ export function ReviewDiffView({
                 {lenses.progress && lenses.progress.complete !== false ? (
                   <DiffCounts progress={global} />
                 ) : (
-                  <span
-                    {...stylex.props(diffCountStyles.counts)}
-                    aria-label="Counting changes"
-                  >
-                    …
-                  </span>
+                  <Spinner label="Counting changes" />
                 )}
               </>
             )}
@@ -425,7 +421,7 @@ export function ReviewDiffView({
                           )}
                           aria-label="Counting changes"
                         >
-                          …
+                          <Spinner />
                         </span>
                       ) : empty ? (
                         <span
@@ -488,22 +484,26 @@ export function ReviewDiffView({
               )}
             >
               Files <span aria-hidden="true">·</span>{" "}
-              {lenses.progress
-                ? lens
-                  ? new Set(
-                      lens.ranges.map(
-                        (source) =>
-                          lenses.progress!.files.find(
-                            (file) =>
-                              source.file ===
-                              (source.side === "base"
-                                ? (file.previousPath ?? file.path)
-                                : file.path),
-                          )?.path ?? source.file,
-                      ),
-                    ).size + ` of ${lenses.progress.files.length}`
-                  : lenses.progress.files.length
-                : "…"}
+              {lenses.progress ? (
+                lens ? (
+                  new Set(
+                    lens.ranges.map(
+                      (source) =>
+                        lenses.progress!.files.find(
+                          (file) =>
+                            source.file ===
+                            (source.side === "base"
+                              ? (file.previousPath ?? file.path)
+                              : file.path),
+                        )?.path ?? source.file,
+                    ),
+                  ).size + ` of ${lenses.progress.files.length}`
+                ) : (
+                  lenses.progress.files.length
+                )
+              ) : (
+                <Spinner label="Counting files" xstyle={iconStyles.glyph} />
+              )}
             </div>
             <div
               {...withClass("diff-native-tree", styles.nativeTree)}

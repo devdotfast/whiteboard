@@ -20,7 +20,7 @@ import { askFileCode, askFileLink } from "./ask-files";
 import { askPanelStyles } from "./ask-styles";
 import { CourierFigure } from "./courier-figure";
 import { chevronMarker } from "./markers.stylex";
-import { fontSize, motion, radius } from "./scale.stylex";
+import { fontSize, radius } from "./scale.stylex";
 import { settleStreamingMarkdown } from "./streaming-markdown";
 import { tokens } from "./tokens.stylex";
 import { useTooltip } from "./use-tooltip";
@@ -282,7 +282,7 @@ function ActivityStatusIcon({ status }: { status: ActivityStatus }) {
       ) : status === "failed" ? (
         <CloseIcon xstyle={iconStyles.inline} />
       ) : status === "in_progress" ? (
-        <Spinner />
+        <Spinner tone="accent" />
       ) : (
         <span
           {...stylex.props(styles.dot, status === "waiting" && styles.waiting)}

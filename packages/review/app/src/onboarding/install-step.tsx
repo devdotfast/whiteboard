@@ -8,6 +8,7 @@ import { useCopy } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { CopyIcon, DrawnCheckIcon, PlusIcon } from "@canvas/ui/icons";
 import { Kbd } from "@canvas/ui/kbd";
+import { Spinner } from "@canvas/ui/spinner";
 import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/use-tooltip";
 import type {
@@ -20,7 +21,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import type { OnboardingClient } from "./onboarding-client";
-import { ScreenHeader, Spinner, useReturnKey } from "./onboarding-parts";
+import { ScreenHeader, useReturnKey } from "./onboarding-parts";
 import { onboardingStyles } from "./onboarding-styles";
 
 type RowState = "waiting" | "running" | "done" | "approve" | "failed";
@@ -527,7 +528,7 @@ function InstallRow({
 }
 
 function RowStatus({ state }: { state: RowState }) {
-  if (state === "running") return <Spinner />;
+  if (state === "running") return <Spinner size="large" tone="accent" />;
 
   if (state === "done")
     return (
