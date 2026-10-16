@@ -1,10 +1,10 @@
+import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { CopyableText, copyText } from "@canvas/ui/copy";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { dividerStyles } from "@canvas/ui/divider";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
-  BoardIcon,
   BranchIcon,
   ChevronDownIcon,
   ClearFiltersIcon,
@@ -45,10 +45,6 @@ import {
   useState,
 } from "react";
 
-import {
-  BoardIcon as BoardTargetIcon,
-  PullRequestStateIcon,
-} from "./board-icons";
 import { ChangedBadge } from "./changed-badge";
 import { useHostActionButton } from "./connection-chip";
 import { countLabel, formatRelativeTime } from "./format";
@@ -1286,9 +1282,7 @@ export function ReviewHome({
                               state={review.pullRequestState}
                             />
                           ) : (
-                            <BoardTargetIcon
-                              icon={boardIconKind(review.target)}
-                            />
+                            <BoardIcon icon={boardIconKind(review.target)} />
                           )}
                           {review.changed ? <ChangedBadge onIcon /> : null}
                         </span>

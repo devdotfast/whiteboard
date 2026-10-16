@@ -1,4 +1,5 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { BranchIcon, ChevronDownIcon, PullRequestIcon } from "@canvas/ui/icons";
@@ -21,7 +22,6 @@ import {
   useState,
 } from "react";
 
-import { PullRequestStateIcon } from "./board-icons";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { useReviewSession } from "./host/review-session";
 import { tokens } from "./tokens.stylex";

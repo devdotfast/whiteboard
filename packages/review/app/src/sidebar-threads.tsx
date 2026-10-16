@@ -1,3 +1,4 @@
+import { BoardIcon } from "@canvas/ui/board-icons";
 import { AgentLogo } from "@canvas/ui/brand-icons";
 import {
   type ReviewProjectThread,
@@ -8,7 +9,6 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
-import { BoardIcon } from "./board-icons";
 import { FolderLabel } from "./folder-label";
 import { fontSize, fontWeight, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";

@@ -5,6 +5,7 @@ import {
   radius,
   tracking,
 } from "@canvas/scale.stylex";
+import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { surfaceStyles } from "@canvas/ui/surface";
 import {
   type BoardIconKind,
@@ -22,7 +23,6 @@ import {
   useState,
 } from "react";
 
-import { BoardIcon, PullRequestStateIcon } from "./board-icons";
 import { formatRelativeTime } from "./format";
 import { useOptionalReviewSession } from "./host/review-session";
 import { tokens } from "./tokens.stylex";

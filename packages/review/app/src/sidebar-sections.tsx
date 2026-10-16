@@ -1,3 +1,4 @@
+import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { TooltipHostContext, useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewApiSummary,
@@ -17,7 +18,6 @@ import {
   useState,
 } from "react";
 
-import { BoardIcon, PullRequestStateIcon } from "./board-icons";
 import { ChangedBadge } from "./changed-badge";
 import { CommitChanges, CommitPicker } from "./commit-picker";
 import { FolderLabel } from "./folder-label";

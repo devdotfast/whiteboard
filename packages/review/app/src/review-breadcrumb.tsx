@@ -1,4 +1,5 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
+import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
@@ -20,7 +21,6 @@ import {
   useState,
 } from "react";
 
-import { BoardIcon, PullRequestStateIcon } from "./board-icons";
 import { useReviewSession } from "./host/review-session";
 import { tokens } from "./tokens.stylex";
 

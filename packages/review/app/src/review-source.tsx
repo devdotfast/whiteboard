@@ -1,3 +1,4 @@
+import { PullRequestStateIcon } from "@canvas/ui/board-icons";
 import type {
   ReviewBoardPlace,
   ReviewDiffStats,
@@ -5,7 +6,6 @@ import type {
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
-import { PullRequestStateIcon } from "./board-icons";
 import { DiffCountHalves, diffCountStyles } from "./diff-count";
 import type { ReviewSessionData } from "./host/review-session-data";
 import { tokens } from "./tokens.stylex";

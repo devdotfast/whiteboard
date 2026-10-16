@@ -1,9 +1,9 @@
+import { BoardIcon } from "@canvas/ui/board-icons";
 import { boardTitle } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect, useState } from "react";
 import { z } from "zod";
 
-import { BoardIcon } from "./board-icons";
 import { useReviewSession } from "./host/review-session";
 import { fontSize } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";

@@ -282,16 +282,6 @@ export function FolderIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
-/** A whiteboard: a framed page of lines. */
-export function BoardIcon({ xstyle }: IconProps = {}): ReactElement {
-  return (
-    <Icon xstyle={xstyle}>
-      <rect x="3" y="4.5" width="18" height="15" rx="2.25" />
-      <path d="M7.5 9h9M7.5 13.5h6" />
-    </Icon>
-  );
-}
-
 export function ImageIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <Icon xstyle={xstyle}>
