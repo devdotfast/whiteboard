@@ -418,7 +418,6 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: tokens.warningOutline,
     backgroundColor: tokens.warningWash,
-    fontFamily: tokens.chromeFont,
   },
   outdatedInline: {
     marginLeft: "6px",

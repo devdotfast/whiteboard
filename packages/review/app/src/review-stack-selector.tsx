@@ -304,7 +304,6 @@ const styles = stylex.create({
     justifyContent: "space-between",
     padding: "6px 10px 8px",
     color: tokens.inkFaint,
-    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
   },
   row: { gap: "10px", minHeight: "34px", paddingInline: "10px" },
@@ -360,7 +359,6 @@ const styles = stylex.create({
     minHeight: "30px",
     paddingInline: "10px",
     color: tokens.inkFaint,
-    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
   },
 });

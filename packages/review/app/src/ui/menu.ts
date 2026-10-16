@@ -55,6 +55,7 @@ export const menuStyles = stylex.create({
     margin: 0,
     padding: "4px",
     overflowY: "auto",
+    fontFamily: tokens.chromeFont,
     overscrollBehavior: "contain",
     // Its trigger's row may not wrap; the menu does.
     whiteSpace: "normal",
