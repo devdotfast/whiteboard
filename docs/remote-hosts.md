@@ -252,12 +252,3 @@ or a process you started from the install is running.
 
 On the remote, `whiteboard remote uninstall --keep-reviews` does the same;
 `--delete-reviews` also deletes reviews.
-
-## Developing
-
-A development Desktop pins no archive. Set `DEV_FAST_REVIEW_REMOTE_RELEASES` to
-a URL serving the archives and their `.sha256` files, or install this
-checkout's archive with
-`node apps/review-desktop/scripts/remote-dev-install.mjs <alias>`. With
-`DEV_FAST_REVIEW_REMOTE_PUBLISH=1` and Cloudflare credentials, the script
-publishes the archives and prints the URL to export.

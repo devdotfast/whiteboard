@@ -101,6 +101,15 @@ The manual end-to-end journeys live in `scripts/e2e/`; each one drives the
 built Desktop through the installed CLI and the JSON review API. See
 `scripts/e2e/TESTING.md` for how to stage a runtime and run them.
 
+### Remote hosts
+
+A development Desktop pins no archive. Set `DEV_FAST_REVIEW_REMOTE_RELEASES` to
+a URL serving the archives and their `.sha256` files, or install this
+checkout's archive with
+`node apps/review-desktop/scripts/remote-dev-install.mjs <alias>`. With
+`DEV_FAST_REVIEW_REMOTE_PUBLISH=1` and Cloudflare credentials, the script
+publishes the archives and prints the URL to export.
+
 ## Packaging and releases
 
 macOS (arm64 and x64) is the only packaged platform with release channels;

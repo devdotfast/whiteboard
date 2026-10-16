@@ -9,8 +9,6 @@ CLI telemetry.
 For a shorter overview of all product data, including local files, coding
 agents, and bug reports, see [Privacy](privacy.md).
 
-Last checked against this repository: 2026-09-24.
-
 ## The short version
 
 - Anonymous telemetry is on by default and can be turned off at any time.
