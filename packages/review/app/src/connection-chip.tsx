@@ -104,7 +104,7 @@ export function LanguageServerChip({ host }: { host: string }) {
       role="status"
     >
       <span {...stylex.props(styles.text)}>
-        Starting language server on {host}
+        Loading language features on {host}
       </span>
       <Spinner />
     </span>
