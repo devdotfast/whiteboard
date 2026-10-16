@@ -320,8 +320,6 @@ export const shellStyles = stylex.create({
     minWidth: 0,
     overflowX: "hidden",
     overflowY: "auto",
-    // Let macOS hide the document scrollbar when idle.
-    scrollbarWidth: "thin",
     padding: {
       default: `${tokens.reviewPageTop} 52px calc(max(120px, var(--review-bottom-scroll-padding, 0px)) + var(--review-toc-tail, 0px))`,
       "@container review-content (max-width: 1180px)": {

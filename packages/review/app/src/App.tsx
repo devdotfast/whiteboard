@@ -1,4 +1,8 @@
 import { Button, IconButton } from "@canvas/ui/button";
+import {
+  OverlayScrollbar,
+  overlayScrollbarStyles,
+} from "@canvas/ui/overlay-scrollbar";
 import { StatusBanner } from "@canvas/ui/status-banner";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
@@ -18,6 +22,7 @@ import {
   type ComponentType,
   type ReactElement,
   type RefObject,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -312,6 +317,17 @@ function ReviewLayoutContent({
   // Too narrow for the contents rail: the ⋯ menu offers the contents.
   const [contentsRailHidden, setContentsRailHidden] = useState(false);
   const bugReport = useRef<{ open(): void }>(null);
+
+  // The board's scroller, for the overlay scrollbar that replaces its own.
+  const [scrollRegion, setScrollRegion] = useState<HTMLElement | null>(null);
+
+  const attachScrollRegion = useCallback(
+    (node: HTMLElement | null) => {
+      scrollRegionRef.current = node;
+      setScrollRegion(node);
+    },
+    [scrollRegionRef],
+  );
 
   const joinDiscord = () => {
     captureUiEvent(session, "discord_clicked", { via: "topbar" });
@@ -943,13 +959,14 @@ function ReviewLayoutContent({
         </header>
         {banner}
         <section
-          ref={scrollRegionRef}
+          ref={attachScrollRegion}
           // The contents rail returns focus here when its card closes.
           tabIndex={-1}
           {...withClass(
             `review-view-region review-view-region--${activeView}`,
             shellStyles.viewRegion,
             activeView === "review" && shellStyles.reviewRegion,
+            activeView === "review" && overlayScrollbarStyles.scroller,
             activeView === "review" &&
               tocEntries.length > 0 &&
               shellStyles.reviewRegionRail,
@@ -1078,6 +1095,9 @@ function ReviewLayoutContent({
             />
           )}
         </section>
+        {activeView === "review" && (
+          <OverlayScrollbar scroller={scrollRegion} />
+        )}
         {activeView === "review" && (
           <ContentsRail
             entries={tocEntries}
