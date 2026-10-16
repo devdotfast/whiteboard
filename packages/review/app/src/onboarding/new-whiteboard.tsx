@@ -1,4 +1,5 @@
 import { withClass } from "@canvas/stylex-props";
+import { textStyles } from "@canvas/ui/text";
 import type { ReviewCanvasSetupActions } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 
@@ -28,7 +29,7 @@ export function NewWhiteboard({
   const { client, unavailable } = useOnboardingClient(setupActions);
 
   const content = unavailable ? (
-    <p role="alert" {...stylex.props(styles.error)}>
+    <p role="alert" {...stylex.props(textStyles.error, styles.error)}>
       Whiteboard could not reach its server: {unavailable}
     </p>
   ) : client ? (

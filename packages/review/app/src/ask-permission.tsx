@@ -81,7 +81,7 @@ export function AskPermission({
         </code>
         <span
           ref={placeTooltip}
-          {...stylex.props(permissionStyles.targetPlace)}
+          {...stylex.props(textStyles.truncate, permissionStyles.targetPlace)}
         >
           in {shortPath(thread.cwd)}@{thread.head.slice(0, 7)}
         </span>
@@ -192,13 +192,10 @@ const permissionStyles = stylex.create({
     overflowWrap: "anywhere",
   },
   targetPlace: {
-    overflow: "hidden",
     color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.micro,
     lineHeight: "14px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   options: {
     display: "flex",

@@ -1,4 +1,4 @@
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { surfaceStyles } from "@canvas/ui/surface";
@@ -201,7 +201,7 @@ export function ReviewTraceView({
           <p {...stylex.props(styles.note)}>Resolving agent sessions…</p>
         )}
         {list.status === "error" && (
-          <p {...stylex.props(styles.note, styles.noteError)}>{list.error}</p>
+          <p {...stylex.props(styles.note, textStyles.error)}>{list.error}</p>
         )}
         {sourceChoices.length > 1 && (
           <label {...stylex.props(styles.source)}>
@@ -273,7 +273,9 @@ export function ReviewTraceView({
               <span {...stylex.props(textStyles.eyebrow, styles.pickerHarness)}>
                 {harnessTag(activeHarness, activeTarget.isSubagent)}
               </span>
-              <span {...stylex.props(styles.pickerTitle)}>{activeTitle}</span>
+              <span {...stylex.props(textStyles.truncate, styles.pickerTitle)}>
+                {activeTitle}
+              </span>
               <span
                 {...stylex.props(
                   styles.pickerChevron,
@@ -300,6 +302,7 @@ export function ReviewTraceView({
                       role="option"
                       aria-selected={isActive}
                       {...stylex.props(
+                        buttonStyles.reset,
                         styles.pickerItem,
                         isActive
                           ? styles.pickerItemActive
@@ -326,6 +329,7 @@ export function ReviewTraceView({
                         </span>
                         <span
                           {...stylex.props(
+                            textStyles.truncate,
                             styles.pickerItemTitle,
                             isActive && styles.pickerItemTitleActive,
                           )}
@@ -349,7 +353,7 @@ export function ReviewTraceView({
           <p {...stylex.props(styles.note)}>Loading trace…</p>
         )}
         {detail.status === "error" && (
-          <p {...stylex.props(styles.note, styles.noteError)}>{detail.error}</p>
+          <p {...stylex.props(styles.note, textStyles.error)}>{detail.error}</p>
         )}
         {detail.status === "loaded" &&
           detail.trace.cacheStatus &&

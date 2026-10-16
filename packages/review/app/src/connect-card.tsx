@@ -1,6 +1,8 @@
 import { fontSize, radius } from "@canvas/scale.stylex";
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { CopyIcon, copyText } from "@canvas/ui/copy";
+import { focusStyles } from "@canvas/ui/focus";
+import { textStyles } from "@canvas/ui/text";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
   type ReviewCanvasInstallContent,
@@ -199,7 +201,7 @@ export function ConnectCard({
             {collapsible && expanded ? (
               <button
                 type="button"
-                {...stylex.props(styles.collapse)}
+                {...stylex.props(buttonStyles.reset, styles.collapse)}
                 aria-expanded={true}
                 onClick={() => setExpanded(false)}
               >
@@ -208,7 +210,7 @@ export function ConnectCard({
             ) : null}
             <button
               type="button"
-              {...stylex.props(promptStyles.copy)}
+              {...stylex.props(focusStyles.ring, promptStyles.copy)}
               aria-live="polite"
               aria-label={`${copied ? "Copied" : "Copy"} ${noun} for ${agent}`}
               onClick={() => copy(text)}
@@ -231,7 +233,7 @@ export function ConnectCard({
           </p>
           <div {...stylex.props(promptStyles.actions)}>
             <a
-              {...stylex.props(promptStyles.copy)}
+              {...stylex.props(focusStyles.ring, promptStyles.copy)}
               href={plugin.url}
               {...newTabLinkProps(plugin.url)}
             >
@@ -245,7 +247,9 @@ export function ConnectCard({
         </p>
       )}
       {status.error ? (
-        <p {...stylex.props(promptStyles.error)}>{status.error}</p>
+        <p {...stylex.props(textStyles.error, promptStyles.error)}>
+          {status.error}
+        </p>
       ) : null}
     </section>
   );
@@ -275,6 +279,8 @@ function OtherAgentMenu({
       })}
       onChange={onSelect}
       triggerStyle={[
+        focusStyles.ringInset,
+        buttonStyles.reset,
         segmentStyles.segment,
         segmentStyles.segmentLarge,
         styles.otherTrigger,
@@ -394,7 +400,15 @@ export function LegacySkillsRow({
         </>
       ) : null}
       {error ? (
-        <p {...stylex.props(promptStyles.error, styles.legacyText)}>{error}</p>
+        <p
+          {...stylex.props(
+            textStyles.error,
+            promptStyles.error,
+            styles.legacyText,
+          )}
+        >
+          {error}
+        </p>
       ) : null}
     </section>
   );
@@ -451,10 +465,6 @@ const styles = stylex.create({
   collapse: {
     marginRight: "auto",
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     color: { default: tokens.inkMuted, ":hover": tokens.ink },
     font: `${fontSize.body}/22px ${tokens.fontMono}`,
     cursor: "pointer",

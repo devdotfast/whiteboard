@@ -1,4 +1,6 @@
-import { Button, IconButton } from "@canvas/ui/button";
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import { StatusBanner } from "@canvas/ui/status-banner";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
@@ -36,7 +38,6 @@ import {
 } from "./authoring-activity";
 import { BugReportControl } from "./bug-report-dialog";
 import { LanguageServerChip } from "./connection-chip";
-import { controlStyles } from "./controls-styles";
 import {
   ReviewDebugSettingsProvider,
   type ReviewNodeTint,
@@ -573,6 +574,8 @@ function ReviewLayoutContent({
                   {...withClass(
                     "review-segment",
                     segmentMarker,
+                    focusStyles.ringInset,
+                    buttonStyles.reset,
                     segmentStyles.segment,
                     segmentStyles.segmentTopbar,
                     activeView === view && segmentStyles.segmentActive,
@@ -681,7 +684,7 @@ function ReviewLayoutContent({
                 session.surface.post({ name: "joinDiscord", args: {} });
               }}
             >
-              <DiscordIcon xstyle={controlStyles.chromeIcon} />
+              <DiscordIcon xstyle={iconStyles.chrome} />
             </IconButton>
             <BugReportControl />
             <ReviewBatonChip outcome={review.submissionOutcome} />
@@ -850,6 +853,7 @@ function ReviewLayoutContent({
       {rightPanelOpen && (
         <div
           {...stylex.props(
+            buttonStyles.reset,
             shellStyles.resizer,
             shellStyles.peekResizer,
             shellStyles.resizerGrabPanel,
@@ -877,7 +881,7 @@ function CommitDiffScopeBar({
     <div {...stylex.props(scopeBarStyles.bar)}>
       <button
         type="button"
-        {...stylex.props(scopeBarStyles.back)}
+        {...stylex.props(buttonStyles.reset, scopeBarStyles.back)}
         onClick={onBack}
       >
         <span aria-hidden="true">←</span> Commits
@@ -885,7 +889,10 @@ function CommitDiffScopeBar({
       <code {...stylex.props(scopeBarStyles.sha)} title={commit.commit}>
         {commit.commit.slice(0, 8)}
       </code>
-      <span {...stylex.props(scopeBarStyles.subject)} title={commit.subject}>
+      <span
+        {...stylex.props(textStyles.truncate, scopeBarStyles.subject)}
+        title={commit.subject}
+      >
         {commit.subject}
       </span>
     </div>
@@ -909,10 +916,6 @@ const scopeBarStyles = stylex.create({
     height: "20px",
     flex: "0 0 auto",
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     color: tokens.accent,
     fontSize: fontSize.micro,
   },
@@ -922,11 +925,8 @@ const scopeBarStyles = stylex.create({
   },
   subject: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.ink,
     fontSize: fontSize.small,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
 });
 

@@ -1,3 +1,6 @@
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import * as stylex from "@stylexjs/stylex";
 import {
   type PointerEvent,
@@ -13,7 +16,6 @@ import {
 import { createPortal } from "react-dom";
 
 import { logos } from "./ask-agent-picker";
-import { controlStyles } from "./controls-styles";
 import { useReviewDebugSettings } from "./debug-settings";
 import { ChatIcon, CloseIcon, DockIcon, GripIcon, MinusIcon } from "./icons";
 import { appMarker } from "./markers.stylex";
@@ -301,9 +303,7 @@ export function AskWindow({
               aria-label="Dock Ask in the side panel"
               onClick={() => store.getState().dockAsk(askKey)}
             >
-              <DockIcon
-                xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-              />
+              <DockIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
             </IconButton>
             <IconButton
               ref={minimizeTooltip}
@@ -311,9 +311,7 @@ export function AskWindow({
               aria-label="Minimize Ask"
               onClick={() => store.getState().minimizeAsk(askKey)}
             >
-              <MinusIcon
-                xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-              />
+              <MinusIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
             </IconButton>
             <IconButton
               ref={closeRef}
@@ -321,7 +319,7 @@ export function AskWindow({
               aria-label="Close Ask"
               onClick={onClose}
             >
-              <CloseIcon xstyle={controlStyles.inertIcon} />
+              <CloseIcon xstyle={iconStyles.inert} />
             </IconButton>
           </div>
         </div>
@@ -473,6 +471,7 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
       type="button"
       {...stylex.props(
         surfaceStyles.popover,
+        focusStyles.ring,
         styles.pill,
         needsYou > 0 && styles.pillWaiting,
         live && styles.pillLifted,
@@ -485,11 +484,19 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
       <ChatIcon xstyle={[styles.logo, styles.askGlyph]} />
       <span {...stylex.props(styles.name)}>{asks.length} Asks</span>
       {needsYou ? (
-        <span {...stylex.props(styles.status, styles.statusWaiting)}>
+        <span
+          {...stylex.props(
+            textStyles.truncate,
+            styles.status,
+            styles.statusWaiting,
+          )}
+        >
           {needsYou} needs you
         </span>
       ) : answering ? (
-        <span {...stylex.props(styles.status)}>{answering} answering</span>
+        <span {...stylex.props(textStyles.truncate, styles.status)}>
+          {answering} answering
+        </span>
       ) : null}
       <Chip
         variant="pill"
@@ -552,6 +559,7 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
                 type="button"
                 {...stylex.props(
                   surfaceStyles.popover,
+                  focusStyles.ring,
                   styles.pill,
                   waiting && styles.pillWaiting,
                   live && styles.pillLifted,
@@ -564,7 +572,13 @@ export function AskPills({ asks }: { asks: AskPanel[] }): ReactElement {
                 {/* The logo says which agent; what it was asked says which
                     Ask. */}
                 {asked ? (
-                  <span {...stylex.props(styles.passage, styles.pillPassage)}>
+                  <span
+                    {...stylex.props(
+                      textStyles.truncate,
+                      styles.passage,
+                      styles.pillPassage,
+                    )}
+                  >
                     {asked}
                   </span>
                 ) : (
@@ -602,9 +616,10 @@ function PresenceStatus({ presence }: { presence: AskPresence }) {
   return (
     <span
       {...stylex.props(
+        textStyles.truncate,
         styles.status,
         presence.tone === "waiting" && styles.statusWaiting,
-        presence.tone === "failed" && styles.statusFailed,
+        presence.tone === "failed" && textStyles.error,
       )}
     >
       {presence.status}
@@ -672,7 +687,12 @@ function AskList({
           <button
             key={key}
             type="button"
-            {...stylex.props(menuStyles.item, styles.row)}
+            {...stylex.props(
+              focusStyles.ringInset,
+              buttonStyles.reset,
+              menuStyles.item,
+              styles.row,
+            )}
             aria-label={`Open Ask: ${presence.agentName}, ${presence.status}`}
             onClick={() => onOpen(key)}
           >
@@ -685,7 +705,9 @@ function AskList({
                 <PresenceStatus presence={presence} />
               </span>
               {asked ? (
-                <span {...stylex.props(styles.passage)}>{asked}</span>
+                <span {...stylex.props(textStyles.truncate, styles.passage)}>
+                  {asked}
+                </span>
               ) : null}
             </span>
           </button>
@@ -1086,8 +1108,6 @@ const styles = stylex.create({
     cursor: "pointer",
     touchAction: "none",
     userSelect: "none",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   // Beside the window, it moves with the window.
   pillFixed: {
@@ -1118,18 +1138,12 @@ const styles = stylex.create({
   },
   status: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.inkMuted,
     fontSize: fontSize.body,
     lineHeight: "16px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   statusWaiting: {
     color: tokens.changeModified,
-  },
-  statusFailed: {
-    color: tokens.changeRemoved,
   },
   open: {
     color: tokens.ink,
@@ -1199,13 +1213,10 @@ const styles = stylex.create({
   },
   passage: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.ui,
     lineHeight: "17px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   pillPassage: {
     flex: "0 1 auto",

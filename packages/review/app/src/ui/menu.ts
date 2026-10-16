@@ -82,9 +82,6 @@ export const menuStyles = stylex.create({
     width: "100%",
     minHeight: "28px",
     padding: "5px 8px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.control,
     backgroundColor: {
       default: tokens.transparent,
@@ -98,8 +95,6 @@ export const menuStyles = stylex.create({
     textAlign: "left",
     cursor: { default: "pointer", ":disabled": "default" },
     opacity: { default: null, ":disabled": 0.5 },
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-1px" },
   },
   // Keyboard-highlighted in a list driven from a search field.
   itemHighlighted: {

@@ -1,4 +1,5 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
 import type { DiffSelection } from "@review/lens-selection";
 import type { CallStackDiffBlock } from "@review/review-api/blocks/call_stack_diff";
 import * as stylex from "@stylexjs/stylex";
@@ -78,6 +79,7 @@ export function CallTree({
                   opacity: unavailable ? 0.45 : undefined,
                 }}
                 {...stylex.props(
+                  buttonStyles.reset,
                   styles.row,
                   stop.id === active && styles.rowCurrent,
                 )}
@@ -283,9 +285,6 @@ const styles = stylex.create({
     alignItems: "center",
     width: "100%",
     height: "26px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     padding: "0 12px 0 14px",
     backgroundColor: {
       default: tokens.transparent,

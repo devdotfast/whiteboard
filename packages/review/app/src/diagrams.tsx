@@ -1,5 +1,6 @@
 import { flowLayer } from "@canvas/flow-layers.stylex";
 import { elevation, fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { textStyles } from "@canvas/ui/text";
 import { type DiffSelection, anchorSelection } from "@review/lens-selection";
 import {
   type SourcePins,
@@ -648,7 +649,7 @@ function SequenceParticipantNode({
     <div {...stylex.props(styles.participant)} style={{ height }}>
       <div {...stylex.props(styles.participantLabelAnchor)}>
         <span
-          {...stylex.props(styles.participantLabel)}
+          {...stylex.props(textStyles.truncate, styles.participantLabel)}
           title={participant.label}
         >
           {participant.label}
@@ -1132,7 +1133,6 @@ const styles = stylex.create({
     boxSizing: "border-box",
     width: "100%",
     padding: "6px 10px",
-    overflow: "hidden",
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
@@ -1144,8 +1144,6 @@ const styles = stylex.create({
     fontSize: fontSize.small,
     fontWeight: fontWeight.bold,
     textAlign: "center",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
     pointerEvents: "all",
   },
   lifeline: {

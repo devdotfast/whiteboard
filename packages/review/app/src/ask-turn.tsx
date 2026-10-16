@@ -1,4 +1,8 @@
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import { Spinner } from "@canvas/ui/spinner";
+import { textStyles } from "@canvas/ui/text";
 import type { AskEntry, AskThreadState } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -13,7 +17,6 @@ import { AGENT_LOGOS } from "./agent-logos";
 import { AgentMarkdown } from "./agent-markdown";
 import { askFileCode, askFileLink } from "./ask-files";
 import { askPanelStyles } from "./ask-styles";
-import { controlStyles } from "./controls-styles";
 import { CourierFigure } from "./courier-figure";
 import { CheckIcon, CloseIcon, DisclosureChevron } from "./icons";
 import { chevronMarker } from "./markers.stylex";
@@ -271,13 +274,13 @@ export function summarize(activities: readonly Activity[]) {
 function ActivityStatusIcon({ status }: { status: ActivityStatus }) {
   return (
     <span
-      {...stylex.props(styles.status, status === "failed" && styles.failed)}
+      {...stylex.props(styles.status, status === "failed" && textStyles.error)}
       aria-label={status}
     >
       {status === "completed" ? (
-        <CheckIcon xstyle={controlStyles.inlineIcon} />
+        <CheckIcon xstyle={iconStyles.inline} />
       ) : status === "failed" ? (
-        <CloseIcon xstyle={controlStyles.inlineIcon} />
+        <CloseIcon xstyle={iconStyles.inline} />
       ) : status === "in_progress" ? (
         <Spinner />
       ) : (
@@ -298,7 +301,10 @@ function AskToolItem({ activity }: { activity: Activity }): ReactElement {
   const head = (
     <>
       <ActivityStatusIcon status={activity.status} />
-      <span ref={labelTooltip} {...stylex.props(styles.toolLabel)}>
+      <span
+        ref={labelTooltip}
+        {...stylex.props(textStyles.truncate, styles.toolLabel)}
+      >
         {activity.label}
       </span>
     </>
@@ -311,7 +317,9 @@ function AskToolItem({ activity }: { activity: Activity }): ReactElement {
           type="button"
           {...stylex.props(
             chevronMarker,
+            buttonStyles.reset,
             styles.toolHead,
+            focusStyles.ringInset,
             styles.toolHeadButton,
           )}
           aria-expanded={open}
@@ -321,7 +329,7 @@ function AskToolItem({ activity }: { activity: Activity }): ReactElement {
           <DisclosureChevron expanded={open} />
         </button>
       ) : (
-        <div {...stylex.props(styles.toolHead)}>{head}</div>
+        <div {...stylex.props(buttonStyles.reset, styles.toolHead)}>{head}</div>
       )}
       {open ? (
         <div {...stylex.props(styles.toolBody)}>
@@ -359,6 +367,8 @@ function AskToolGroup({
         type="button"
         {...stylex.props(
           chevronMarker,
+          focusStyles.ring,
+          buttonStyles.reset,
           styles.summary,
           failed && styles.summaryFailed,
         )}
@@ -480,7 +490,7 @@ export function AskAgentTurn({
             role="note"
             {...stylex.props(
               styles.notice,
-              entry.severity === "error" && styles.failed,
+              entry.severity === "error" && textStyles.error,
             )}
           >
             {entry.description
@@ -634,7 +644,13 @@ export function AskWorking({
         marching={writing}
         thinking={!writing}
       />
-      <span {...stylex.props(styles.workingLabel, askPanelStyles.sweep)}>
+      <span
+        {...stylex.props(
+          textStyles.truncate,
+          styles.workingLabel,
+          askPanelStyles.sweep,
+        )}
+      >
         {doing}…
       </span>
       <span {...stylex.props(styles.workingTime)}>{elapsed(since, now)}</span>
@@ -696,11 +712,7 @@ const styles = stylex.create({
     alignSelf: "flex-start",
     gap: "6px",
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.small,
-    backgroundColor: tokens.transparent,
     color: {
       default: tokens.inkMuted,
       ":hover": tokens.ink,
@@ -712,8 +724,6 @@ const styles = stylex.create({
     // Buttons center their text, which shows once a long summary wraps.
     textAlign: "left",
     cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   // Centered on the summary's first 20px line.
   summaryChevron: {
@@ -746,10 +756,6 @@ const styles = stylex.create({
     width: "100%",
     minWidth: 0,
     padding: "7px 12px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.ui,
@@ -763,24 +769,16 @@ const styles = stylex.create({
       ":focus-visible": tokens.ink,
     },
     cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-1px" },
   },
   toolLabel: {
     flex: "1 1 auto",
     minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   status: {
     display: "flex",
     flex: "0 0 14px",
     justifyContent: "center",
     color: tokens.inkFaint,
-  },
-  failed: {
-    color: tokens.changeRemoved,
   },
   notice: {
     margin: 0,
@@ -853,7 +851,6 @@ const styles = stylex.create({
   },
   workingLabel: {
     minWidth: 0,
-    overflow: "hidden",
     backgroundImage: {
       default: `linear-gradient(90deg, ${tokens.inkMuted} 0%, ${tokens.inkMuted} 40%, ${tokens.ink} 50%, ${tokens.inkMuted} 60%, ${tokens.inkMuted} 100%)`,
       [stylex.env.reducedMotion]: "none",
@@ -870,8 +867,6 @@ const styles = stylex.create({
       default: tokens.transparent,
       [stylex.env.reducedMotion]: tokens.inkMuted,
     },
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   workingTime: {
     flex: "0 0 auto",

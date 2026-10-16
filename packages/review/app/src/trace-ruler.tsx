@@ -1,5 +1,6 @@
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { surfaceStyles } from "@canvas/ui/surface";
+import { textStyles } from "@canvas/ui/text";
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
 import { extractTraceEventText } from "@dev.fast/trace-protocol";
 import * as stylex from "@stylexjs/stylex";
@@ -400,7 +401,9 @@ export function TraceRuler({
             {...stylex.props(surfaceStyles.popover, styles.card)}
             style={{ top: cardTop }}
           >
-            <span {...stylex.props(styles.cardTitle)}>{preview.title}</span>
+            <span {...stylex.props(textStyles.clamp2, styles.cardTitle)}>
+              {preview.title}
+            </span>
             {preview.snippet && (
               <span {...stylex.props(styles.cardSnippet)}>
                 {preview.snippet}
@@ -462,10 +465,6 @@ const styles = stylex.create({
     lineHeight: "19px",
     fontWeight: fontWeight.semibold,
     color: tokens.ink,
-    display: "-webkit-box",
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: "vertical",
-    overflow: "hidden",
   },
   cardSnippet: {
     fontFamily: tokens.fontSerif,

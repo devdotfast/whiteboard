@@ -1,3 +1,6 @@
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import {
   type AskAgentId,
   type AskChoiceKind,
@@ -26,7 +29,6 @@ import {
 import { z } from "zod";
 
 import { AGENT_LOGOS } from "./agent-logos";
-import { controlStyles } from "./controls-styles";
 import type { ReviewSession } from "./host/review-session";
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
 import { fontSize } from "./scale.stylex";
@@ -381,6 +383,8 @@ export function AskAgentMenu({
             role="menuitemradio"
             aria-checked={candidate.id === current}
             {...stylex.props(
+              focusStyles.ringInset,
+              buttonStyles.reset,
               menuStyles.item,
               candidate.id === current && menuStyles.itemCurrent,
             )}
@@ -391,9 +395,7 @@ export function AskAgentMenu({
             </span>
             <span {...stylex.props(styles.name)}>{candidate.name}</span>
             {candidate.id === current ? (
-              <CheckIcon
-                xstyle={[controlStyles.inlineIcon, menuStyles.check]}
-              />
+              <CheckIcon xstyle={[iconStyles.inline, menuStyles.check]} />
             ) : null}
           </button>
         ))}
@@ -551,7 +553,7 @@ export function AskChoicePicker({
         onClick={() => setOpen((value) => !value)}
       >
         {icon}
-        <span {...stylex.props(styles.choiceName)}>
+        <span {...stylex.props(textStyles.truncate, styles.choiceName)}>
           {chosen?.name ?? current}
         </span>
         {/* Under the composer it reads as text; pointing at it shows it
@@ -639,6 +641,8 @@ function AskChoiceItem({
       aria-checked={checked}
       data-highlighted={highlighted || undefined}
       {...stylex.props(
+        focusStyles.ringInset,
+        buttonStyles.reset,
         menuStyles.item,
         checked && menuStyles.itemCurrent,
         highlighted && menuStyles.itemHighlighted,
@@ -648,7 +652,7 @@ function AskChoiceItem({
     >
       <span {...stylex.props(styles.name)}>{option.name}</span>
       {checked ? (
-        <CheckIcon xstyle={[controlStyles.inlineIcon, menuStyles.check]} />
+        <CheckIcon xstyle={[iconStyles.inline, menuStyles.check]} />
       ) : null}
     </button>
   );
@@ -701,7 +705,7 @@ function AskChoiceSearch({
       <label
         {...stylex.props(fieldStyles.box, fieldStyles.shell, styles.search)}
       >
-        <SearchIcon xstyle={[controlStyles.inlineIcon, styles.searchIcon]} />
+        <SearchIcon xstyle={[iconStyles.inline, styles.searchIcon]} />
         <input
           {...stylex.props(styles.searchInput)}
           value={query}
@@ -875,8 +879,5 @@ const styles = stylex.create({
   },
   choiceName: {
     minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
 });

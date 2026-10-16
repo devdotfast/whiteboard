@@ -1,4 +1,5 @@
 import { CopyButton, CopyIcon } from "@canvas/ui/copy";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import type { AgentSelection } from "@review/agent-selection";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
@@ -6,7 +7,6 @@ import type { ReactElement } from "react";
 import { type AskAgent, logos } from "./ask-agent-picker";
 import { AskSelectionQuote } from "./ask-panel-shared";
 import { askPanelStyles } from "./ask-styles";
-import { controlStyles } from "./controls-styles";
 import { copyAgentContext } from "./copy-agent-context";
 import { useReviewSession } from "./host/review-session";
 import { useNotify } from "./notify";
@@ -80,7 +80,7 @@ export function AskSetup({
           xstyle={setupStyles.copy}
           onClick={() => void copy()}
         >
-          <CopyIcon xstyle={[controlStyles.inlineIcon, setupStyles.copyIcon]} />
+          <CopyIcon xstyle={[iconStyles.inline, setupStyles.copyIcon]} />
           Copy selection for your agent
         </Button>
       </div>
@@ -116,7 +116,7 @@ export function AskSignIn({
         <CopyButton
           text={command}
           label="Copy the sign-in command"
-          iconStyle={controlStyles.chromeIcon}
+          iconStyle={iconStyles.chrome}
         />
       </div>
       <Button variant="primary" size="large" onClick={onRetry}>

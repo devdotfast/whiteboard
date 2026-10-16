@@ -1,6 +1,7 @@
 import { radius } from "@canvas/scale.stylex";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
+import { textStyles } from "@canvas/ui/text";
 import { type JsonValue, isStringValue } from "@dev.fast/review-protocol";
 import { type DiffSelection, anchorSelection } from "@review/lens-selection";
 import type {
@@ -485,7 +486,10 @@ export function DatabaseLens(block: DatabaseLensProps) {
       <header {...stylex.props(diagramStyles.header, styles.header)}>
         <div {...stylex.props(diagramStyles.headerMain)}>
           <Chip>DB</Chip>
-          <span {...stylex.props(diagramStyles.title)} data-review-copy-prose>
+          <span
+            {...stylex.props(textStyles.truncate, diagramStyles.title)}
+            data-review-copy-prose
+          >
             {title ?? "Database lens"}
           </span>
         </div>

@@ -276,12 +276,9 @@ export const styles = stylex.create({
   },
   title: {
     display: "block",
-    overflow: "hidden",
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
     lineHeight: 1.45,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   metadata: {
     display: "flex",

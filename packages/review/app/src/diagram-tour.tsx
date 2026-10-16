@@ -1,3 +1,4 @@
+import { buttonStyles } from "@canvas/ui/button";
 import * as stylex from "@stylexjs/stylex";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { useEffect, useRef } from "react";
@@ -85,6 +86,7 @@ export function DiagramTourOverlay({
       </div>
       <div
         {...stylex.props(
+          buttonStyles.reset,
           shellStyles.resizer,
           shellStyles.resizerGrabPanel,
           styles.resizer,

@@ -1,4 +1,5 @@
 import { Button } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import { TextField, fieldStyles } from "@canvas/ui/text-field";
 import { isStringValue } from "@dev.fast/json";
 import {
@@ -451,7 +452,7 @@ export function DiffrConfigSection({
       </details>
       {busy && <p role="status">Working…</p>}
       {error && (
-        <p role="alert" {...stylex.props(styles.error)}>
+        <p role="alert" {...stylex.props(textStyles.error, styles.error)}>
           {error}
         </p>
       )}

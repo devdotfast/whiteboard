@@ -1,4 +1,5 @@
 import { fontSize } from "@canvas/scale.stylex";
+import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
 import type {
   ReviewCanvasInstallContent,
@@ -218,7 +219,9 @@ export function TraceCaptureSection({
               : "Enable"}
         </button>
       )}
-      {error ? <p {...stylex.props(promptStyles.error)}>{error}</p> : null}
+      {error ? (
+        <p {...stylex.props(textStyles.error, promptStyles.error)}>{error}</p>
+      ) : null}
     </div>
   );
 }

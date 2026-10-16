@@ -1,6 +1,7 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { EmptyState } from "@canvas/ui/empty-state";
+import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
 import { welcomeType } from "@canvas/welcome-page.stylex";
 import {
@@ -210,7 +211,10 @@ export function WelcomePage({
           ) : null}
         </div>
         {setupError ? (
-          <p role="alert" {...stylex.props(promptStyles.error)}>
+          <p
+            role="alert"
+            {...stylex.props(textStyles.error, promptStyles.error)}
+          >
             {setupError}
           </p>
         ) : null}
@@ -391,7 +395,12 @@ export function WelcomePage({
                   >
                     <button
                       type="button"
-                      {...stylex.props(chevronMarker, styles.stepHeader)}
+                      {...stylex.props(
+                        chevronMarker,
+                        focusStyles.ringInset,
+                        buttonStyles.reset,
+                        styles.stepHeader,
+                      )}
                       disabled={step.disabled}
                       aria-expanded={open}
                       aria-label={`${open ? "Collapse" : "Expand"} ${step.label ?? step.title}`}
@@ -610,18 +619,12 @@ const styles = stylex.create({
     gap: "12px",
     width: "100%",
     padding: "16px 20px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: { default: null, ":focus-visible": radius.surface },
     color: "inherit",
-    backgroundColor: tokens.transparent,
     cursor: { default: "pointer", ":disabled": "not-allowed" },
     opacity: { default: null, ":disabled": 0.5 },
     textAlign: "left",
     font: "inherit",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-2px" },
   },
   // The chevron closes the row: it sits in the trailing lane, after the note.
   stepChevron: {

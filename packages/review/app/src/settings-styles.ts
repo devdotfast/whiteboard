@@ -87,7 +87,6 @@ export const settingsStyles = stylex.create({
   },
   error: {
     margin: "4px 0 0",
-    color: tokens.changeRemoved,
     fontSize: fontSize.body,
     whiteSpace: "pre-wrap",
   },

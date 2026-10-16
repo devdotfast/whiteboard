@@ -35,14 +35,11 @@ export const diagramStyles = stylex.create({
   },
   title: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.ink,
     fontSize: fontSize.body,
     fontStyle: "normal",
     fontWeight: fontWeight.semibold,
     lineHeight: "18px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   // A quiet count ("5 stops", "4 nodes"), not a chip.
   meta: {

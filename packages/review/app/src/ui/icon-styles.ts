@@ -1,20 +1,19 @@
+import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 
-import { tokens } from "./tokens.stylex";
-
-// Controls shared across the canvas.
-export const controlStyles = stylex.create({
+// Icon sizes and behavior shared across the canvas.
+export const iconStyles = stylex.create({
   // The icon never takes the pointer from its button.
-  inertIcon: {
+  inert: {
     pointerEvents: "none",
   },
   // Icons in top bar chrome buttons.
-  chromeIcon: {
+  chrome: {
     width: tokens.chromeIconSize,
     height: tokens.chromeIconSize,
   },
   // Icons beside a label, in a button or chip.
-  inlineIcon: {
+  inline: {
     width: "12px",
     height: "12px",
   },

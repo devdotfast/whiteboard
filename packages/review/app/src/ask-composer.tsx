@@ -1,4 +1,8 @@
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import { Spinner } from "@canvas/ui/spinner";
+import { textStyles } from "@canvas/ui/text";
 import {
   type AskCommand,
   type AskQuestion,
@@ -22,7 +26,6 @@ import {
   useState,
 } from "react";
 
-import { controlStyles } from "./controls-styles";
 import { ArrowUpIcon, CloseIcon, ImageIcon } from "./icons";
 import { fontSize, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
@@ -513,6 +516,8 @@ export function AskComposer({
                 tabIndex={-1}
                 aria-selected={index === shown}
                 {...stylex.props(
+                  focusStyles.ringInset,
+                  buttonStyles.reset,
                   menuStyles.item,
                   styles.option,
                   index === shown && menuStyles.itemHighlighted,
@@ -522,11 +527,13 @@ export function AskComposer({
                 onPointerMove={() => setActive(index)}
                 onClick={() => pick(index)}
               >
-                <span {...stylex.props(styles.optionLabel)}>
+                <span {...stylex.props(textStyles.truncate)}>
                   {option.label}
                 </span>
                 {option.detail ? (
-                  <span {...stylex.props(styles.optionDetail)}>
+                  <span
+                    {...stylex.props(textStyles.truncate, styles.optionDetail)}
+                  >
                     {option.detail}
                   </span>
                 ) : null}
@@ -596,9 +603,7 @@ export function AskComposer({
                 xstyle={styles.square}
                 disabled={!draft.trim() || !canAsk}
               >
-                <ArrowUpIcon
-                  xstyle={[controlStyles.inlineIcon, styles.submitIcon]}
-                />
+                <ArrowUpIcon xstyle={[iconStyles.inline, styles.submitIcon]} />
               </Button>
             )}
           </span>
@@ -632,7 +637,9 @@ export function AskComposer({
           </>
         ) : null}
         {permissions}
-        <span {...stylex.props(styles.status)}>{note ?? status}</span>
+        <span {...stylex.props(textStyles.truncate, styles.status)}>
+          {note ?? status}
+        </span>
         {share === undefined || share < CONTEXT_SHOWN_FROM ? null : (
           <span
             ref={usageTooltip}
@@ -676,7 +683,7 @@ function AttachedImage({
         aria-label={label}
         onClick={onRemove}
       >
-        <CloseIcon xstyle={controlStyles.inlineIcon} />
+        <CloseIcon xstyle={iconStyles.inline} />
       </IconButton>
     </li>
   );
@@ -720,18 +727,10 @@ const styles = stylex.create({
     flex: "none",
     fontFamily: tokens.fontMono,
   },
-  optionLabel: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
   optionDetail: {
-    overflow: "hidden",
     color: tokens.inkMuted,
     fontSize: fontSize.micro,
     lineHeight: "14px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   images: {
     display: "flex",
@@ -805,9 +804,6 @@ const styles = stylex.create({
     color: tokens.inkMuted,
     fontSize: fontSize.small,
     lineHeight: "16px",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   actions: {
     display: "inline-flex",

@@ -1,5 +1,6 @@
 import { layer } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import { SegmentedControl, labeledOptions } from "@canvas/ui/segmented";
 import { surfaceStyles } from "@canvas/ui/surface";
 import type {
@@ -16,7 +17,6 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
 import { SlidersIcon } from "./icons";
 import { shellStyles } from "./shell-styles";
@@ -54,7 +54,7 @@ export function DiffLayoutControl(): ReactElement {
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <SlidersIcon xstyle={controlStyles.chromeIcon} />
+        <SlidersIcon xstyle={iconStyles.chrome} />
       </IconButton>
       {open && (
         <div

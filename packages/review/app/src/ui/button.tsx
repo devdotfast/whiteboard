@@ -1,6 +1,7 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
+import { focusStyles } from "@canvas/ui/focus";
 import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps } from "react";
 
@@ -31,12 +32,16 @@ export function Button({
   type = "button",
   ...props
 }: ButtonProps) {
+  const filled = variant === "primary" || variant === "warning";
+
   return (
     <button
       type={type}
       {...props}
       {...withClass(
         className,
+        filled ? focusStyles.ring : focusStyles.ringInset,
+        buttonStyles.reset,
         buttonStyles.base,
         buttonStyles[variant],
         size === "large" && buttonStyles.large,
@@ -59,6 +64,8 @@ export function IconButton({
       {...props}
       {...withClass(
         className,
+        focusStyles.ringInset,
+        buttonStyles.reset,
         buttonStyles.base,
         buttonStyles.icon,
         size === "small" && buttonStyles.iconSmall,
@@ -72,8 +79,15 @@ export function IconButton({
 // Only popup triggers: disclosure toggles also carry aria-expanded.
 const expanded = ':is([aria-haspopup][aria-expanded="true"])';
 
-// Exported only for a button another component renders (an OptionMenu trigger).
+// Exported for a button another component renders (an OptionMenu trigger),
+// and `reset` for anything drawn without the native button box.
 export const buttonStyles = stylex.create({
+  reset: {
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    backgroundColor: tokens.transparent,
+  },
   base: {
     display: "inline-flex",
     flex: "0 0 auto",
@@ -82,9 +96,6 @@ export const buttonStyles = stylex.create({
     gap: "6px",
     height: tokens.chromeControlHeight,
     padding: "0 10px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.control,
     // A trigger whose menu or popover is showing stays held down.
     backgroundColor: {
@@ -99,8 +110,6 @@ export const buttonStyles = stylex.create({
     whiteSpace: "nowrap",
     cursor: { default: "pointer", ":disabled": "default" },
     opacity: { default: null, ":disabled": 0.5 },
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-1px" },
   },
   ghost: {
     color: {
@@ -119,14 +128,12 @@ export const buttonStyles = stylex.create({
     backgroundColor: tokens.accent,
     color: tokens.onAccent,
     filter: { default: null, ":hover:not(:disabled)": "brightness(1.1)" },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   // The one action a warning asks for, like allowing an agent's command.
   warning: {
     backgroundColor: tokens.changeModified,
     color: tokens.onWarning,
     filter: { default: null, ":hover:not(:disabled)": "brightness(1.1)" },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   large: {
     height: "28px",

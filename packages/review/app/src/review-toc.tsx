@@ -1,5 +1,5 @@
 import { fontSize, fontWeight, layer, motion } from "@canvas/scale.stylex";
-import { IconButton } from "@canvas/ui/button";
+import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import type { ReviewDocumentWidthChoice } from "@dev.fast/review-protocol";
@@ -358,6 +358,7 @@ export function ReviewToc({
                 aria-current={active === entry.id ? "location" : undefined}
                 {...stylex.props(
                   tocEntryMarker,
+                  buttonStyles.reset,
                   styles.link,
                   showRail && besideHeader && styles.linkRailBesideHeader,
                 )}
@@ -566,10 +567,6 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "baseline",
     width: "100%",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     fontWeight: {
       default: fontWeight.regular,
       [currentEntry]: fontWeight.semibold,

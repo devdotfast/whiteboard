@@ -1,3 +1,4 @@
+import { iconStyles } from "@canvas/ui/icon-styles";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
@@ -10,7 +11,6 @@ import {
 } from "react";
 
 import { useAskHistory } from "./ask-history";
-import { controlStyles } from "./controls-styles";
 import { TrashIcon } from "./icons";
 import { useNotify } from "./notify";
 import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
@@ -96,7 +96,7 @@ export function AskDeleteButton({
       }}
       onBlur={() => setArmed(false)}
     >
-      <TrashIcon xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]} />
+      <TrashIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
       {armed ? <span>Delete</span> : null}
     </IconButton>
   );

@@ -1,6 +1,8 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
 import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps, ReactNode } from "react";
 
@@ -46,6 +48,8 @@ export function SegmentedControl<T extends string>({
           aria-pressed={option.value === value}
           disabled={disabled}
           {...stylex.props(
+            focusStyles.ringInset,
+            buttonStyles.reset,
             segmentStyles.segment,
             size === "large" && segmentStyles.segmentLarge,
             option.value === value && segmentStyles.segmentActive,
@@ -101,10 +105,6 @@ export const segmentStyles = stylex.create({
   segment: {
     display: "inline-flex",
     alignItems: "center",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     fontFamily: tokens.chromeFont,
     whiteSpace: "nowrap",
     position: "relative",
@@ -117,8 +117,6 @@ export const segmentStyles = stylex.create({
     fontWeight: fontWeight.medium,
     opacity: { default: null, ":disabled": 0.5 },
     cursor: { default: null, ":disabled": "default" },
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-1px" },
   },
   // Segments set in prose (the welcome page) grow a step.
   segmentLarge: {

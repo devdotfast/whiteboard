@@ -1,3 +1,4 @@
+import { buttonStyles } from "@canvas/ui/button";
 import { Chip, chipStyles } from "@canvas/ui/chip";
 import { textStyles } from "@canvas/ui/text";
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
@@ -386,6 +387,7 @@ export function TraceToolRow({
         <span {...stylex.props(styles.toolVerb)}>{event.verb}</span>
         <span
           {...stylex.props(
+            textStyles.truncate,
             styles.toolTitle,
             Boolean(event.filePath) && styles.toolTitleFile,
           )}
@@ -403,7 +405,13 @@ export function TraceToolRow({
           <span {...stylex.props(styles.removed)}>−{event.deletions}</span>
         )}
         {event.error && (
-          <span {...stylex.props(textStyles.eyebrow, styles.errorFlag)}>
+          <span
+            {...stylex.props(
+              textStyles.eyebrow,
+              textStyles.error,
+              styles.errorFlag,
+            )}
+          >
             failed
           </span>
         )}
@@ -710,7 +718,7 @@ export function TraceGapChip({
     <button
       key={`gap-${from}`}
       type="button"
-      {...stylex.props(styles.lensRow, traceRowMarker)}
+      {...stylex.props(buttonStyles.reset, styles.lensRow, traceRowMarker)}
       data-trace-gap={from}
       onClick={onExpand}
     >
@@ -744,7 +752,7 @@ export function TraceCollapseRow({
   return (
     <button
       type="button"
-      {...stylex.props(styles.lensRow, traceRowMarker)}
+      {...stylex.props(buttonStyles.reset, styles.lensRow, traceRowMarker)}
       onClick={onCollapse}
     >
       <span {...stylex.props(styles.lensLine, styles.lensLineSolid)} />

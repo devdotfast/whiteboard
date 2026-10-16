@@ -7,6 +7,7 @@ import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { CopyIcon, useCopy } from "@canvas/ui/copy";
 import { Kbd } from "@canvas/ui/kbd";
+import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/use-tooltip";
 import type {
   ReviewCanvasSetupActions,
@@ -321,7 +322,11 @@ export function InstallStep({
         {error ? (
           <p
             role="alert"
-            {...stylex.props(onboardingStyles.error, styles.note)}
+            {...stylex.props(
+              textStyles.error,
+              onboardingStyles.error,
+              styles.note,
+            )}
           >
             {error}
           </p>
@@ -376,7 +381,9 @@ function OtherAgentRow({
       </span>
       <span {...stylex.props(styles.text)}>
         <span {...stylex.props(styles.name)}>Any other agent</span>
-        <span {...stylex.props(styles.detail, styles.prose)}>
+        <span
+          {...stylex.props(textStyles.truncate, styles.detail, styles.prose)}
+        >
           Add Whiteboard to its MCP config
         </span>
       </span>
@@ -471,6 +478,7 @@ function InstallRow({
         <span {...stylex.props(styles.detailLine)}>
           <span
             {...stylex.props(
+              textStyles.truncate,
               styles.detail,
               row.id === "cursor" && styles.prose,
             )}
@@ -625,12 +633,9 @@ const styles = stylex.create({
   nameChoosing: { cursor: "pointer" },
   detail: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   prose: {
     color: tokens.inkMuted,

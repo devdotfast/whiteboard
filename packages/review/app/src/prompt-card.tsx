@@ -1,4 +1,5 @@
 import { CopyIcon, copyText } from "@canvas/ui/copy";
+import { focusStyles } from "@canvas/ui/focus";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useRef, useState } from "react";
 
@@ -89,7 +90,7 @@ export function PromptCard() {
       <div {...stylex.props(promptStyles.actions)}>
         <button
           type="button"
-          {...stylex.props(promptStyles.copy)}
+          {...stylex.props(focusStyles.ring, promptStyles.copy)}
           aria-live="polite"
           aria-label={copied ? "Prompt copied" : "Copy prompt"}
           onClick={copyPrompt}

@@ -1,5 +1,6 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
 import type { ActivitySurface } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -284,7 +285,12 @@ export function Courier({
     >
       <button
         type="button"
-        {...withClass("courier-figure", courierMarker, styles.figure)}
+        {...withClass(
+          "courier-figure",
+          courierMarker,
+          buttonStyles.reset,
+          styles.figure,
+        )}
         aria-label={
           description
             ? `The agent's courier: ${description}. Press to make him jump.`
@@ -422,11 +428,7 @@ const styles = stylex.create({
     width: "100%",
     height: "100%",
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: { default: null, ":focus-visible": radius.surface },
-    backgroundColor: tokens.transparent,
     backgroundImage: "none",
     color: "inherit",
     cursor: "pointer",

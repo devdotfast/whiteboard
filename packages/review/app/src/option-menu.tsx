@@ -1,3 +1,5 @@
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
@@ -128,6 +130,8 @@ export function OptionMenu<T extends string>({
               aria-checked={option.value === value}
               tabIndex={option.value === value ? 0 : -1}
               {...stylex.props(
+                focusStyles.ringInset,
+                buttonStyles.reset,
                 menuStyles.item,
                 option.value === value && menuStyles.itemCurrent,
               )}

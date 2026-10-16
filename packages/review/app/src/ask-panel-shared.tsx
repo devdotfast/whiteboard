@@ -21,12 +21,14 @@ export function AskSelectionQuote({
         {...stylex.props(
           textStyles.eyebrow,
           askPanelStyles.caps,
-          askPanelStyles.selectionCaption,
+          textStyles.truncate,
         )}
       >
         {target.kind === "text" ? "Selection" : "Code"}
       </figcaption>
-      <blockquote {...stylex.props(askPanelStyles.selectionQuote)}>
+      <blockquote
+        {...stylex.props(textStyles.clamp2, askPanelStyles.selectionQuote)}
+      >
         {target.kind === "text" ? target.quote : selection.title}
       </blockquote>
     </figure>

@@ -95,9 +95,6 @@ export const traceStyles = stylex.create({
     flexShrink: 0,
   },
   pickerTitle: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
     fontWeight: fontWeight.medium,
     color: tokens.ink,
   },
@@ -135,9 +132,6 @@ export const traceStyles = stylex.create({
     width: "100%",
     padding: "6px 10px",
     borderRadius: radius.small,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     backgroundColor: {
       default: tokens.transparent,
       ":hover": tokens.chromeHoverBg,
@@ -173,9 +167,6 @@ export const traceStyles = stylex.create({
     color: tokens.accent,
   },
   pickerItemTitle: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
     fontWeight: fontWeight.regular,
   },
   pickerItemTitleActive: {
@@ -269,9 +260,6 @@ export const traceStyles = stylex.create({
   },
   toolTitle: {
     color: tokens.inkMuted,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
   },
   toolTitleFile: {
     color: tokens.accent,
@@ -291,7 +279,6 @@ export const traceStyles = stylex.create({
     flexShrink: 0,
   },
   errorFlag: {
-    color: tokens.changeRemoved,
     flexShrink: 0,
   },
   toolChevronIcon: {
@@ -445,9 +432,6 @@ export const traceStyles = stylex.create({
     lineHeight: "19px",
     color: tokens.inkFaint,
   },
-  noteError: {
-    color: tokens.changeRemoved,
-  },
   // The empty notice starts where a trace's header would.
   empty: {
     paddingTop: "48px",
@@ -461,10 +445,6 @@ export const traceStyles = stylex.create({
     gap: "10px",
     margin: "4px 0",
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     cursor: "pointer",
     width: "100%",
   },

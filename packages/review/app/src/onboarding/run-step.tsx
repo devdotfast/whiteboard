@@ -11,6 +11,7 @@ import {
 import { tokens } from "@canvas/tokens.stylex";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { CopyIcon } from "@canvas/ui/copy";
+import { focusStyles } from "@canvas/ui/focus";
 import { Shortcut } from "@canvas/ui/kbd";
 import { SegmentedControl, segmentStyles } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
@@ -390,7 +391,12 @@ export function RunStep({
                 <OptionMenu
                   ariaLabel="Project"
                   align="start"
-                  triggerStyle={[buttonStyles.base, styles.projectTrigger]}
+                  triggerStyle={[
+                    focusStyles.ringInset,
+                    buttonStyles.reset,
+                    buttonStyles.base,
+                    styles.projectTrigger,
+                  ]}
                   value={project?.path}
                   options={projectOptions}
                   onChange={(value) => {
@@ -412,6 +418,7 @@ export function RunStep({
               ) : null}
               <span
                 {...stylex.props(
+                  textStyles.truncate,
                   styles.projectPath,
                   project && styles.projectPathEnd,
                 )}
@@ -581,7 +588,11 @@ export function RunStep({
         {error ? (
           <p
             role="alert"
-            {...stylex.props(onboardingStyles.error, styles.alert)}
+            {...stylex.props(
+              textStyles.error,
+              onboardingStyles.error,
+              styles.alert,
+            )}
           >
             {error}
           </p>
@@ -616,7 +627,12 @@ export function RunStep({
                 {canChooseAgent ? (
                   <OptionMenu
                     ariaLabel="Draw with another agent"
-                    triggerStyle={[buttonStyles.base, styles.chipMenu]}
+                    triggerStyle={[
+                      focusStyles.ringInset,
+                      buttonStyles.reset,
+                      buttonStyles.base,
+                      styles.chipMenu,
+                    ]}
                     value={agent}
                     options={agents.map((candidate) => {
                       const Logo = AGENT_LOGOS[candidate.id];
@@ -673,11 +689,15 @@ function TargetRow({
       >
         {target.kind === "pr" ? `PR #${target.number}` : target.kind}
       </span>
-      <span {...stylex.props(styles.targetTitle)}>
+      <span {...stylex.props(textStyles.truncate, styles.targetTitle)}>
         {target.kind === "pr" ? target.title : target.branch}
       </span>
       <span
-        {...stylex.props(styles.targetMeta, selected && styles.targetMetaOn)}
+        {...stylex.props(
+          textStyles.truncate,
+          styles.targetMeta,
+          selected && styles.targetMetaOn,
+        )}
       >
         {target.kind === "pr"
           ? [target.author && `@${target.author}`, target.branch]
@@ -730,12 +750,9 @@ const styles = stylex.create({
   projectPathEnd: { textAlign: "end" },
   projectPath: {
     flex: 1,
-    overflow: "hidden",
     color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   projectPlaceholder: {
     display: "flex",
@@ -849,21 +866,15 @@ const styles = stylex.create({
     flex: "0 1 auto",
     minWidth: 0,
     maxWidth: "60%",
-    overflow: "hidden",
     fontSize: fontSize.ui,
     fontWeight: fontWeight.medium,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   targetMeta: {
     flex: 1,
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   targetMetaOn: { color: tokens.inkMuted },
   diff: {

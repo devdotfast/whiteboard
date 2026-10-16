@@ -1,6 +1,7 @@
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
+import { textStyles } from "@canvas/ui/text";
 import type { ReviewStackLayer } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useQuery } from "@tanstack/react-query";
@@ -93,7 +94,7 @@ export function ReviewStackSelector(): ReactElement | null {
         onClick={() => setOpen(!open)}
       >
         <StackIcon xstyle={styles.triggerIcon} />
-        <span {...stylex.props(styles.triggerNumber, styles.ellipsis)}>
+        <span {...stylex.props(styles.triggerNumber, textStyles.truncate)}>
           {label(layers[index]!)}
         </span>
         <span {...stylex.props(styles.triggerPosition)}>
@@ -119,7 +120,9 @@ export function ReviewStackSelector(): ReactElement | null {
             styles.menu,
           )}
         >
-          <div {...stylex.props(styles.row, styles.baseRow)}>
+          <div
+            {...stylex.props(buttonStyles.reset, styles.row, styles.baseRow)}
+          >
             <span {...stylex.props(styles.branch)}>main</span>
           </div>
           {layers.map((layer) => (
@@ -166,7 +169,7 @@ function LayerRow({
       <span {...stylex.props(styles.copy)}>
         <span
           {...stylex.props(
-            styles.ellipsis,
+            textStyles.truncate,
             styles.title,
             current && styles.titleCurrent,
             disabled && styles.faint,
@@ -177,7 +180,7 @@ function LayerRow({
         {detail && (
           <span
             {...stylex.props(
-              styles.ellipsis,
+              textStyles.truncate,
               styles.branch,
               current && styles.branchCurrent,
             )}
@@ -191,7 +194,10 @@ function LayerRow({
 
   if (current) {
     return (
-      <div {...stylex.props(styles.row, styles.rowCurrent)} aria-current="true">
+      <div
+        {...stylex.props(buttonStyles.reset, styles.row, styles.rowCurrent)}
+        aria-current="true"
+      >
         {content}
       </div>
     );
@@ -199,7 +205,7 @@ function LayerRow({
 
   return (
     <button
-      {...stylex.props(styles.row, styles.rowButton)}
+      {...stylex.props(buttonStyles.reset, styles.row, styles.rowButton)}
       type="button"
       data-relation={layer.relation}
       disabled={disabled}
@@ -267,11 +273,7 @@ const styles = stylex.create({
     width: "100%",
     minHeight: "40px",
     padding: "5px 8px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.control,
-    backgroundColor: tokens.transparent,
     color: tokens.ink,
     font: "inherit",
     textAlign: "left",
@@ -295,11 +297,6 @@ const styles = stylex.create({
     flexDirection: "column",
     gap: "2px",
     minWidth: 0,
-  },
-  ellipsis: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   title: {
     fontSize: fontSize.small,

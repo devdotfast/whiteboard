@@ -1,5 +1,7 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
 import type { ActivityPresence } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
 import { useContext, useState } from "react";
@@ -50,7 +52,11 @@ export function AuthoringActivityBadge({
   if (activity === "unknown")
     return (
       <span
-        {...withClass("host-authoring-activity", styles.badge)}
+        {...withClass(
+          "host-authoring-activity",
+          buttonStyles.reset,
+          styles.badge,
+        )}
         role="status"
         aria-live="polite"
         ref={tooltip}
@@ -124,7 +130,9 @@ function AgentPill({
       type="button"
       {...withClass(
         "host-authoring-activity",
+        buttonStyles.reset,
         styles.badge,
+        focusStyles.ring,
         styles.badgeActive,
         agentColor(presence.slot),
       )}
@@ -224,11 +232,7 @@ const styles = stylex.create({
     height: tokens.chromeControlHeight,
     marginInline: "4px",
     padding: "0 10px 0 6px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.pill,
-    backgroundColor: tokens.transparent,
     color: tokens.inkMuted,
     font: `${fontWeight.medium} ${fontSize.small} ${tokens.fontMono}`,
     whiteSpace: "nowrap",
@@ -242,8 +246,6 @@ const styles = stylex.create({
     },
     color: tokens.accent,
     fontWeight: fontWeight.semibold,
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   // A long update ends in an ellipsis inside the pill; the tooltip has it all.
   text: {

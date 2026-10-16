@@ -1,4 +1,5 @@
 import { CopyableText, copyText } from "@canvas/ui/copy";
+import { textStyles } from "@canvas/ui/text";
 import {
   REVIEW_DISCORD_URL,
   type ReviewApiSummary,
@@ -1260,6 +1261,7 @@ export function ReviewHome({
                                 : reviewTitle(review)
                             }
                             {...stylex.props(
+                              textStyles.truncate,
                               styles.title,
                               inTrash && styles.muted,
                             )}

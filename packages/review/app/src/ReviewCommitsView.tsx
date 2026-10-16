@@ -1,6 +1,7 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
-import { IconButton } from "@canvas/ui/button";
+import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { CopyButton } from "@canvas/ui/copy";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCommitSummary,
@@ -11,7 +12,6 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { canvasQueryKeys } from "./canvas-query";
-import { controlStyles } from "./controls-styles";
 import { DiffCount } from "./diff-count";
 import { FileMark } from "./file-mark";
 import { countLabel } from "./format";
@@ -48,7 +48,7 @@ export function ReviewCommitsView({
             {countLabel(commits.length, "commit")}
           </strong>
           <span
-            {...stylex.props(styles.rangeRefs)}
+            {...stylex.props(textStyles.truncate, styles.rangeRefs)}
             title={`${range.baseCommit}..${range.headCommit}`}
           >
             {shortRef(range.baseRef || range.baseCommit)} →{" "}
@@ -135,20 +135,22 @@ function CommitRow({
       <div {...stylex.props(styles.header, expanded && styles.headerExpanded)}>
         <button
           type="button"
-          {...stylex.props(chevronMarker, styles.toggle)}
+          {...stylex.props(chevronMarker, buttonStyles.reset, styles.toggle)}
           aria-expanded={expanded}
           onClick={toggleExpanded}
           title={commit.subject}
         >
           <DisclosureChevron expanded={expanded} xstyle={styles.chevron} />
-          <strong {...stylex.props(styles.subject)}>{commit.subject}</strong>
+          <strong {...stylex.props(textStyles.truncate, styles.subject)}>
+            {commit.subject}
+          </strong>
         </button>
         <span {...stylex.props(styles.actions)}>
           <span {...stylex.props(styles.sha)}>{commit.commit.slice(0, 8)}</span>
           <CopyButton
             text={commit.commit}
             label="Copy commit SHA"
-            iconStyle={controlStyles.chromeIcon}
+            iconStyle={iconStyles.chrome}
           />
           <IconButton
             ref={openTooltip}
@@ -156,7 +158,7 @@ function CommitRow({
             aria-label="Open commit diff"
             onClick={() => onOpenDiff(commit, "row")}
           >
-            <CodeIcon xstyle={controlStyles.chromeIcon} />
+            <CodeIcon xstyle={iconStyles.chrome} />
           </IconButton>
         </span>
         <span {...stylex.props(styles.meta)}>
@@ -179,12 +181,14 @@ function CommitRow({
           {visibleFiles?.files.map((file) => (
             <button
               type="button"
-              {...stylex.props(styles.file)}
+              {...stylex.props(buttonStyles.reset, styles.file)}
               key={file.path}
               onClick={() => onOpenDiff(commit, "file", file.path)}
             >
               <FileMark status={file.status} />
-              <span {...stylex.props(styles.filePath)}>{file.path}</span>
+              <span {...stylex.props(textStyles.truncate, styles.filePath)}>
+                {file.path}
+              </span>
               <DiffCount
                 additions={file.additions}
                 deletions={file.deletions}
@@ -195,7 +199,7 @@ function CommitRow({
           {omittedFileCount > 0 ? (
             <button
               type="button"
-              {...stylex.props(styles.filesFooter)}
+              {...stylex.props(buttonStyles.reset, styles.filesFooter)}
               onClick={() => onOpenDiff(commit, "row")}
             >
               {countLabel(omittedFileCount, "more file")}
@@ -304,11 +308,8 @@ const styles = stylex.create({
   },
   rangeRefs: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.inkMuted,
     font: `${fontSize.small} ${tokens.fontMono}`,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   date: {
     display: "flex",
@@ -383,10 +384,6 @@ const styles = stylex.create({
     minWidth: 0,
     alignItems: "center",
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     color: "inherit",
     gap: "10px",
     textAlign: "left",
@@ -398,12 +395,9 @@ const styles = stylex.create({
     },
   },
   subject: {
-    overflow: "hidden",
     color: tokens.ink,
     fontSize: fontSize.body,
     fontWeight: fontWeight.medium,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   actions: {
     position: "relative",
@@ -439,9 +433,6 @@ const styles = stylex.create({
     alignItems: "center",
     gap: "10px",
     padding: "6px 12px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     backgroundColor: {
       default: tokens.transparent,
       ":hover": tokens.controlBg,
@@ -453,16 +444,9 @@ const styles = stylex.create({
   filePath: {
     minWidth: 0,
     flex: 1,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   filesFooter: {
     padding: "6px 12px 4px 38px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     color: { default: tokens.inkFaint, ":hover": tokens.accent },
     fontSize: fontSize.micro,
   },

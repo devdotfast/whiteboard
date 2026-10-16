@@ -1,5 +1,7 @@
 import { drawMotion } from "@canvas/draw-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
 import type {
   ReviewCommitScope,
@@ -88,7 +90,11 @@ function LensName({ title, phase }: { title: string; phase?: MotionPhase }) {
   return (
     <span
       ref={ref}
-      {...stylex.props(styles.name, phase === "relabel" && styles.nameRelabel)}
+      {...stylex.props(
+        textStyles.truncate,
+        styles.name,
+        phase === "relabel" && styles.nameRelabel,
+      )}
     >
       {title}
     </span>
@@ -371,6 +377,8 @@ export function ReviewDiffView({
                   >
                     <button
                       {...stylex.props(
+                        focusStyles.ringInset,
+                        buttonStyles.reset,
                         styles.toggle,
                         empty && styles.toggleEmpty,
                         selected && styles.toggleActive,
@@ -468,6 +476,7 @@ export function ReviewDiffView({
           <div
             {...cabinetsResize.separatorProps}
             {...stylex.props(
+              buttonStyles.reset,
               shellStyles.sheetResizer,
               styles.cabinetsResizer,
               cabinetsResize.isResizing && styles.resizing,
@@ -478,7 +487,7 @@ export function ReviewDiffView({
               {...stylex.props(
                 textStyles.eyebrow,
                 styles.heading,
-                styles.filesHeading,
+                textStyles.truncate,
               )}
             >
               Files <span aria-hidden="true">·</span>{" "}
@@ -525,6 +534,7 @@ export function ReviewDiffView({
       <div
         {...sidebarResize.separatorProps}
         {...stylex.props(
+          buttonStyles.reset,
           shellStyles.resizer,
           styles.sidebarResizer,
           sidebarResize.isResizing && styles.resizing,
@@ -568,7 +578,7 @@ export function ReviewDiffView({
           />
         )}
         {lenses.error && (
-          <div {...stylex.props(styles.error)} role="alert">
+          <div {...stylex.props(textStyles.error, styles.error)} role="alert">
             {lenses.error}
           </div>
         )}
@@ -826,6 +836,8 @@ function RailLens({
   return (
     <button
       {...stylex.props(
+        focusStyles.ringInset,
+        buttonStyles.reset,
         styles.railLens,
         empty && styles.toggleEmpty,
         selected && styles.railLensActive,
@@ -868,7 +880,11 @@ function RailButton({
   return (
     <button
       ref={tooltip}
-      {...stylex.props(styles.railButton)}
+      {...stylex.props(
+        focusStyles.ringInset,
+        buttonStyles.reset,
+        styles.railButton,
+      )}
       aria-label={label}
       onClick={onClick}
     >
@@ -1023,16 +1039,11 @@ const styles = stylex.create({
     flexShrink: 0,
     width: "28px",
     height: "28px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.control,
     padding: 0,
     color: tokens.inkMuted,
     cursor: "pointer",
     backgroundColor: { default: tokens.transparent, ":hover": tokens.well },
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-2px" },
   },
   // 5ch is five letters in Geist Mono.
   railLens: {
@@ -1041,9 +1052,6 @@ const styles = stylex.create({
     width: "5ch",
     height: "24px",
     padding: "0 5px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.pill,
     font: "inherit",
     color: "inherit",
@@ -1051,8 +1059,6 @@ const styles = stylex.create({
     whiteSpace: "nowrap",
     cursor: "pointer",
     backgroundColor: { default: tokens.transparent, ":hover": tokens.well },
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-2px" },
   },
   railLensActive: {
     color: tokens.ink,
@@ -1125,11 +1131,6 @@ const styles = stylex.create({
     justifyContent: "space-between",
     paddingBottom: "2px",
   },
-  filesHeading: {
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
   hint: {
     padding: "0 14px 6px 16px",
     color: tokens.inkFaint,
@@ -1165,17 +1166,12 @@ const styles = stylex.create({
     minWidth: 0,
     alignItems: "center",
     gap: "8px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     textAlign: "left",
     padding: "3px 4px 3px 8px",
     font: "inherit",
     color: "inherit",
     cursor: "pointer",
     backgroundColor: { default: tokens.transparent, ":hover": tokens.well },
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-2px" },
   },
   // A lens with no changes (usually Uncategorized) has nothing to filter to.
   toggleEmpty: {
@@ -1218,9 +1214,6 @@ const styles = stylex.create({
     minWidth: 0,
     flex: "0 1 auto",
     lineHeight: 1.5,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
   },
   nameRelabel: {
     animationName: { default: relabel, [stylex.env.reducedMotion]: "none" },
@@ -1317,7 +1310,6 @@ const styles = stylex.create({
   },
   error: {
     padding: "8px 12px",
-    color: tokens.changeRemoved,
   },
 });
 

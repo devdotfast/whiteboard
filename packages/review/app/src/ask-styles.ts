@@ -37,16 +37,9 @@ export const askPanelStyles = stylex.create({
     gap: "8px",
     margin: 0,
   },
-  selectionCaption: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
   selectionQuote: {
-    display: "-webkit-box",
     margin: 0,
     paddingLeft: "12px",
-    overflow: "hidden",
     borderLeftWidth: "2px",
     borderLeftStyle: "solid",
     borderLeftColor: tokens.accent,
@@ -55,12 +48,9 @@ export const askPanelStyles = stylex.create({
     fontSize: fontSize.reading,
     fontStyle: "italic",
     lineHeight: "22px",
-    WebkitBoxOrient: "vertical",
-    WebkitLineClamp: 2,
   },
   error: {
     margin: 0,
-    color: tokens.changeRemoved,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
     lineHeight: "18px",
@@ -68,18 +58,12 @@ export const askPanelStyles = stylex.create({
   },
   errorAction: {
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
     color: tokens.ink,
     font: "inherit",
     textDecorationLine: "underline",
     textUnderlineOffset: "3px",
     cursor: "pointer",
     borderRadius: radius.small,
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   // A loading shimmer; sites set the gradient and its size.
   sweep: {

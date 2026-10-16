@@ -130,7 +130,6 @@ export const themeStyles = stylex.create({
       "var(--vscode-inputOption-activeBackground, #f3f4f6)",
     "--input-option-active-fg":
       "var(--vscode-inputOption-activeForeground, #15181e)",
-    "--error-fg": "var(--vscode-errorForeground, #a1260d)",
     "--selection": "var(--accent)",
     "--selection-shadow": "color-mix(in srgb, var(--accent) 40%, transparent)",
     "--map-storage-border": "#4a7685",

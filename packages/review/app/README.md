@@ -28,7 +28,7 @@ hand-written fetch effects; keep local UI state out of it.
 Canvas styles are StyleX, written with `stylex.create` next to the component
 that renders the element (`src`). Shared pieces:
 `tokens.stylex.ts` (typed references to the theme's custom properties),
-`scale.stylex.ts`, `theme-styles.ts`, `controls-styles.ts`,
+`scale.stylex.ts`, `theme-styles.ts`,
 `markers.stylex.ts` and the `ui/` components.
 
 - Use `tokens.*`, not raw colors.

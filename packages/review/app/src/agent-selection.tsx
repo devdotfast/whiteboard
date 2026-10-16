@@ -1,4 +1,5 @@
 import { CopyIcon } from "@canvas/ui/copy";
+import { iconStyles } from "@canvas/ui/icon-styles";
 import type { AgentSelection } from "@review/agent-selection";
 import type { AskAgentId } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
@@ -20,7 +21,6 @@ import {
   useAskAgents,
 } from "./ask-agent-picker";
 import { askAnchor } from "./ask-anchor";
-import { controlStyles } from "./controls-styles";
 import { copyAgentContext } from "./copy-agent-context";
 import { useReviewSession } from "./host/review-session";
 import { ChatIcon, ChevronDownIcon } from "./icons";
@@ -337,7 +337,7 @@ export function AgentSelectionProvider({
                       onClick={() => ask()}
                       xstyle={canChooseAgent && styles.splitMain}
                     >
-                      <ChatIcon xstyle={controlStyles.inlineIcon} />
+                      <ChatIcon xstyle={iconStyles.inline} />
                       <span>Ask {askAgent.name}</span>
                       <Shortcut aria-hidden="true" xstyle={styles.key}>
                         ⌘L
@@ -378,7 +378,7 @@ export function AgentSelectionProvider({
                 aria-label="Copy ref"
                 onClick={() => void copy()}
               >
-                <CopyIcon xstyle={controlStyles.inlineIcon} />
+                <CopyIcon xstyle={iconStyles.inline} />
                 <span>Copy ref</span>
                 <Shortcut aria-hidden="true" xstyle={styles.key}>
                   ⇧⌘C
