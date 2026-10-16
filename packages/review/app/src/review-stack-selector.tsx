@@ -136,9 +136,7 @@ export function ReviewStackSelector(): ReactElement | null {
           onKeyDown={(event) => moveMenuFocus(event)}
         >
           <div {...stylex.props(menuStyles.label, styles.heading)}>
-            <span {...stylex.props(textStyles.eyebrow, styles.headingName)}>
-              Stack
-            </span>
+            <span {...stylex.props(textStyles.sectionTitle)}>Stack</span>
             <span>
               {layers.some((layer) => layer.base)
                 ? "from branch bases"
@@ -292,7 +290,6 @@ const styles = stylex.create({
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
   },
-  headingName: { color: tokens.inkMuted, fontSize: fontSize.small },
   row: { gap: "10px", minHeight: "34px", paddingInline: "10px" },
   rowCurrent: {
     backgroundColor: tokens.markerTint,

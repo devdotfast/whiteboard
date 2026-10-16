@@ -13,6 +13,15 @@ export const textStyles = stylex.create({
     letterSpacing: tracking.caps,
     textTransform: "uppercase",
   },
+  // A sidebar section's or menu group's title, as the workbench's panes
+  // write theirs.
+  sectionTitle: {
+    color: tokens.inkMuted,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.semibold,
+    letterSpacing: tracking.caps,
+    textTransform: "uppercase",
+  },
   // A count that changes in place; its digits keep their width.
   count: {
     fontVariantNumeric: "tabular-nums",

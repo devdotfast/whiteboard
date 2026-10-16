@@ -1,5 +1,6 @@
 import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { CrumbSeparator } from "@canvas/ui/crumbs";
+import { textStyles } from "@canvas/ui/text";
 import { TooltipHostContext, useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewApiSummary,
@@ -28,7 +29,7 @@ import { LensProgress, LensRows } from "./lens-list";
 import { type ReviewTocEntry, headingDepth } from "./review-document-headings";
 import { worktreeLabel } from "./review-home-model";
 import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
-import { fontSize, fontWeight, radius, tracking } from "./scale.stylex";
+import { fontSize, fontWeight, radius } from "./scale.stylex";
 import { ThreadsSectionBody } from "./sidebar-threads";
 import { tokens } from "./tokens.stylex";
 import {
@@ -587,8 +588,20 @@ function GroupHeader({
 }): ReactElement {
   return (
     <div {...stylex.props(styles.groupHeader)}>
-      <span {...stylex.props(styles.groupTitle)}>{title}</span>
-      {count ? <span {...stylex.props(styles.groupCount)}>{count}</span> : null}
+      <span {...stylex.props(textStyles.sectionTitle, styles.groupTitle)}>
+        {title}
+      </span>
+      {count ? (
+        <span
+          {...stylex.props(
+            textStyles.count,
+            textStyles.truncate,
+            styles.groupCount,
+          )}
+        >
+          {count}
+        </span>
+      ) : null}
       {children ? (
         <span {...stylex.props(styles.groupAction)}>{children}</span>
       ) : null}
@@ -984,21 +997,9 @@ const styles = stylex.create({
     fontSize: fontSize.small,
     lineHeight: "14px",
   },
-  groupTitle: {
-    fontWeight: fontWeight.semibold,
-    letterSpacing: tracking.caps,
-    textTransform: "uppercase",
-    whiteSpace: "nowrap",
-  },
+  groupTitle: { whiteSpace: "nowrap" },
   // A count in Inter; a branch range in it is code.
-  groupCount: {
-    minWidth: 0,
-    overflow: "hidden",
-    color: tokens.inkFaint,
-    fontVariantNumeric: "tabular-nums",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
+  groupCount: { minWidth: 0, color: tokens.inkFaint },
   groupAction: { display: "flex", marginLeft: "auto" },
   headerAction: {
     display: "flex",

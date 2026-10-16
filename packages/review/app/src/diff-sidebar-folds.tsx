@@ -1,3 +1,4 @@
+import { textStyles } from "@canvas/ui/text";
 import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -11,7 +12,7 @@ import { z } from "zod";
 
 import { useReviewSession } from "./host/review-session";
 import type { ReviewTocEntry } from "./review-document-headings";
-import { fontSize, fontWeight, tracking } from "./scale.stylex";
+import { fontSize } from "./scale.stylex";
 import {
   ContentsList,
   type ProjectBoards,
@@ -147,8 +148,8 @@ function Header({
       <svg viewBox="0 0 12 12" aria-hidden {...stylex.props(styles.chevron)}>
         <path d={open ? "M3 4.5 L6 7.5 L9 4.5" : "M4.5 3 L7.5 6 L4.5 9"} />
       </svg>
-      <span {...stylex.props(styles.title)}>{title}</span>
-      <span {...stylex.props(styles.faint)}>{count}</span>
+      <span {...stylex.props(textStyles.sectionTitle)}>{title}</span>
+      <span {...stylex.props(textStyles.count, styles.faint)}>{count}</span>
       {project ? (
         <>
           <span {...stylex.props(styles.ghost)}>·</span>
@@ -190,12 +191,6 @@ const styles = stylex.create({
     strokeWidth: 1.3,
     strokeLinecap: "round",
     strokeLinejoin: "round",
-  },
-  title: {
-    color: tokens.inkMuted,
-    fontWeight: fontWeight.semibold,
-    letterSpacing: tracking.caps,
-    textTransform: "uppercase",
   },
   faint: { color: tokens.inkFaint },
   ghost: { color: tokens.ghost },
