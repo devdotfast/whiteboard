@@ -36,8 +36,9 @@ export const panelStyles = stylex.create({
     display: "flex",
     flexDirection: "column",
     minWidth: 0,
+    // Positioned at every width: the body's overlay scrollbar sits in it.
     position: {
-      default: null,
+      default: "relative",
       [narrowCanvas]: "absolute",
       [narrow]: "absolute",
     },
@@ -78,16 +79,9 @@ export const panelStyles = stylex.create({
     animationDuration: motion.instant,
     animationTimingFunction: "ease",
   },
-  tour: {
-    position: {
-      default: "relative",
-      [narrowCanvas]: "absolute",
-      [narrow]: "absolute",
-    },
-  },
   // Inside a diagram tour the panel keeps its column at every width.
   docked: {
-    position: "static",
+    position: "relative",
     inset: "auto",
     width: "100%",
     height: "100%",

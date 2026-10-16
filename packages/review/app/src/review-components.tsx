@@ -1,6 +1,10 @@
 import { documentType } from "@canvas/document-type.stylex";
 import { fontSize, fontWeight } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
+import {
+  OverlayScrollbar,
+  overlayScrollbarStyles,
+} from "@canvas/ui/overlay-scrollbar";
 import { textStyles } from "@canvas/ui/text";
 import { extractTraceEventText } from "@dev.fast/trace-protocol";
 import * as stylex from "@stylexjs/stylex";
@@ -10,6 +14,7 @@ import type {
   ReactElement,
   ReactNode,
   Ref,
+  RefObject,
 } from "react";
 import {
   useCallback,
@@ -124,7 +129,7 @@ function ReviewPanelFrame({
   /** Buttons beside the close button. */
   headerActions?: ReactNode;
   floatingFooter?: ReactNode;
-  bodyRef?: Ref<HTMLDivElement>;
+  bodyRef?: RefObject<HTMLDivElement | null>;
   onBodyScroll?: () => void;
   tour?: boolean;
   docked?: boolean;
@@ -134,6 +139,22 @@ function ReviewPanelFrame({
 }) {
   const appRef = useReviewRoots()?.appRef;
   const panelMotion = useReviewPanel((state) => state.motion);
+  const [body, setBody] = useState<HTMLDivElement | null>(null);
+
+  const attachBody = useCallback(
+    (node: HTMLDivElement | null) => {
+      setBody(node);
+
+      if (bodyRef) bodyRef.current = node;
+
+      return () => {
+        setBody(null);
+
+        if (bodyRef) bodyRef.current = null;
+      };
+    },
+    [bodyRef],
+  );
 
   const sheet = useBottomSheetResize({
     stateKey: "bottomSheetFraction",
@@ -166,7 +187,6 @@ function ReviewPanelFrame({
         "side-panel",
         panelStyles.panel,
         panelMotion === "restored" && panelStyles.restored,
-        tour && panelStyles.tour,
         docked && panelStyles.docked,
         tray && panelStyles.tray,
       )}
@@ -207,12 +227,17 @@ function ReviewPanelFrame({
         </div>
       </header>
       <div
-        ref={bodyRef}
-        {...stylex.props(panelStyles.body, tray && panelStyles.trayBody)}
+        ref={attachBody}
+        {...stylex.props(
+          panelStyles.body,
+          overlayScrollbarStyles.scroller,
+          tray && panelStyles.trayBody,
+        )}
         onScroll={onBodyScroll}
       >
         {children}
       </div>
+      <OverlayScrollbar scroller={body} />
       {floatingFooter}
     </aside>
   );

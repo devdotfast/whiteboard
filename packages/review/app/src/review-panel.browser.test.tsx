@@ -268,6 +268,44 @@ describe("Guided tour panel", () => {
   });
 });
 
+describe("Side panel scrollbar", () => {
+  it("overlays the scrollbar so tour content runs to the column's right edge", async () => {
+    const container = document.createElement("div");
+    container.style.cssText = "display: flex; width: 360px; height: 160px";
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      renderWithSession(
+        <ReviewDebugSettingsProvider>
+          <ReviewProvider>
+            <ReviewPanelProvider>
+              <TourPanel />
+            </ReviewPanelProvider>
+          </ReviewProvider>
+        </ReviewDebugSettingsProvider>,
+      );
+      await Promise.resolve();
+    });
+
+    const panel = container.querySelector<HTMLElement>(".side-panel")!;
+    const body = container.querySelector<HTMLElement>(panelBodySelector)!;
+
+    const stopContent = container.querySelector<HTMLElement>(
+      "section[data-review-anchor-id] > :last-child > :last-child",
+    )!;
+
+    // Headless Chromium hides native scrollbars, so a gutter would not show
+    // in the widths here; check the scroller opts out of the native bar.
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    expect(getComputedStyle(body).scrollbarWidth).toBe("none");
+    expect(body.offsetWidth - body.clientWidth).toBe(0);
+    expect(stopContent.getBoundingClientRect().right).toBe(
+      panel.getBoundingClientRect().right,
+    );
+  });
+});
+
 function OpenReplacingPanel() {
   const openPeek = useReviewPanel((state) => state.openPeek);
   useEffect(() => {
