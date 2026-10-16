@@ -110,6 +110,102 @@ checkout's archive with
 `DEV_FAST_REVIEW_REMOTE_PUBLISH=1` and Cloudflare credentials, the script
 publishes the archives and prints the URL to export.
 
+How remote hosts work (the user guide is `docs/remote-hosts.md`):
+
+#### Connection
+
+On macOS and Linux, Desktop opens one SSH master connection per host
+(`ControlMaster`) and runs every command and port forward over it. On Windows,
+which has no `ControlMaster`, a master connection serves a loopback SOCKS port
+for forwards, and each command opens its own `BatchMode` connection.
+
+The remote review server listens only on the remote's loopback interface.
+Desktop's local review server reaches it through an SSH port forward and acts
+as a gateway: the canvas talks only to the local server, which proxies remote
+reviews with the remote server's token. Language features use a second
+forward, to a VS Code server also on loopback.
+
+#### Install and updates
+
+Desktop first probes the host and writes nothing. With no install it
+recognises, it asks once, then installs as your user; a host with a
+recognised install gets new versions without asking. The host downloads the
+archive from `install.dev.fast` and verifies Desktop's pinned checksum before
+unpacking. Desktop runs the same `install.sh` you can run by hand.
+
+On update, Desktop installs its new version (also over a hand install),
+restarts the server it started, and keeps the previous version and any
+version still running. A server you started yourself keeps running.
+
+`review.remote.install` controls this:
+
+| Value | Behavior |
+|---|---|
+| `ask` (default) | Ask once per host, unless it has a recognised install. |
+| `always` | Install without asking. |
+| `never` | Never install; use `whiteboard` on the host's `PATH`. |
+
+What Desktop writes on the remote:
+
+| Path | What it is |
+|---|---|
+| `~/.dev/whiteboard-remote/versions/<version>/` | One version, ~250 MB, with its own Node. |
+| `~/.dev/whiteboard-remote/install.lock/` | Present while an install runs. |
+| `~/.local/bin/whiteboard` | Launcher for the newest version, if that path is free or already Desktop's. |
+
+With `DEV_REVIEW_HOME` set on the remote, `whiteboard-remote/` lives under it.
+Reviews are kept in `~/.dev`.
+
+#### Language features
+
+Hover and go to definition in remote reviews are answered on the remote by
+the same extensions a local review uses. Desktop runs one VS Code server and
+extension host per connected remote; the server exits 5 minutes after the
+last window leaves.
+
+- **Languages:** TypeScript, JavaScript, JSON, CSS and HTML always; Python
+  with ty; Go, Rust, Swift and C# when their group is on (Settings → Tools →
+  Extensions).
+- **First connect:** the remote downloads its extensions from Open VSX (a few
+  seconds to a minute), each checked against a checksum Whiteboard pins.
+  Whiteboard redistributes none of them. Without Open VSX access, reviews
+  still open, without hovers.
+- **Memory:** ~1 GB for one TypeScript plus one Python project, ~0.8 GB for
+  TypeScript alone, ~1 GB for a small Rust project.
+- **Version:** both ends must run the same Whiteboard version. Otherwise the
+  host stays `online` without language features.
+
+Optional groups are installed on each remote at its next connection, at your
+laptop's version. Groups you never turned on are never installed; turning one
+off leaves it on the remote, unused.
+
+| Group | Needs on the remote's login `PATH` | Downloads |
+|---|---|---|
+| Go | `go` | Go |
+| Rust | `cargo`, `rustc` | rust-analyzer, ~16 MB |
+| Swift | `swift` | Swift, LLDB DAP, ~16 MB |
+| C# | `dotnet` (.NET SDK) | C#, .NET Runtime, ~80 MB; OmniSharp from Microsoft on first start |
+
+Swift and C# install but do not answer hovers yet, locally or remotely: Swift
+needs the task API, and on remotes `node-pty`. Their debuggers never start;
+reviews are read-only.
+
+#### Source windows
+
+"Open file", the source tree and Ask's file links open a read-only Source
+window on the host, with search and language features. Each window runs its
+own extension host on the host; close ones you are done with. When the host
+stops answering, the status bar offers Retry and the window reconnects when
+the host is back.
+
+Source windows have no terminals or source control. On musl hosts such as
+Alpine, the explorer refreshes on focus instead of live.
+
+#### Ask
+
+Ask threads are kept on the host, so every laptop connected to it sees the
+same history.
+
 ## Packaging and releases
 
 macOS (arm64 and x64) is the only packaged platform with release channels;

@@ -76,48 +76,23 @@ The full event-by-event list begins at [Event reference](#event-reference).
 
 ## Identity and storage
 
-On first use, Whiteboard creates a random installation UUID and stores it at
-`${DEV_REVIEW_HOME:-~/.dev}/telemetry/progressive-review.json`. It does not call
-PostHog's `identify()` API. Events carry `$process_person_profile: false`, so
-PostHog keeps no person profile.
+On first use, Whiteboard creates a random installation ID in
+`~/.dev/telemetry/`. Whiteboard Preview keeps its own. Events carry
+`$process_person_profile: false`, so PostHog keeps no person profile.
 
-**Account alias.** The first GitHub sign-in (in the app or with
-`whiteboard login`) sends one `$create_alias` linking the installation ID to
-`gh_` plus a one-way HMAC of the account ID. The account ID, login, and email
-never leave the machine. After that, events carry
-`$process_person_profile: true`, so installations signed into the same account
-share one PostHog person. Later sign-ins to other accounts and sign-outs change
-nothing.
+**Signing in with GitHub** (in the app or with `whiteboard login`) sends one
+`$create_alias` linking the installation ID to `gh_` plus a one-way hash of
+your account ID. Your account ID, login and email never leave the machine.
+Installations signed into the same account then share one PostHog person.
 
-Whiteboard Preview keeps a separate installation ID in
-`telemetry/progressive-review.preview.json`. The standalone CLI always uses the
-stable ID.
+Events that concern one whiteboard carry `review_id` and `presentation_id`,
+one-way hashes keyed by the installation ID. The same whiteboard gets a
+different ID on another installation, and the raw IDs are never sent. Each CLI
+run has a random `command_run_id`.
 
-Pending events are kept in a local queue under
-`${DEV_REVIEW_HOME:-~/.dev}/telemetry/events`. The queue holds at most 1,000
-events, retries temporary failures, and deletes events after seven days. Each
-event keeps one random `uuid` across retries, so PostHog ingests a resent event
-once, and its `timestamp` is when it happened, not when it was sent. A
-`review_telemetry_dropped` count is queued the same way, so a resent count
-lands once too.
-Telemetry is best-effort and never blocks Whiteboard from working.
-
-Three identifiers support exact lifecycle correlation without PostHog identity
-or group profiles:
-
-- `command_run_id` is a new random UUID for each CLI invocation.
-- `review_id` is `rv_` plus 128 bits of a namespaced HMAC of the whiteboard's
-  ID.
-- `presentation_id` is `pr_` plus 128 bits of a namespaced HMAC of the ID of
-  one opening of a whiteboard in the app.
-
-The HMAC key is the random installation ID. The same whiteboard therefore has
-a stable `review_id` only on one installation; another installation produces a
-different value. The raw IDs are used only inside the local server and never
-reach the capture client.
-
-Whiteboard disables the built-in Microsoft telemetry inherited from Code -
-OSS.
+Unsent events wait in a local queue of at most 1,000 events and are deleted
+after seven days. Telemetry never blocks Whiteboard from working. Whiteboard
+disables the Microsoft telemetry built into Code - OSS.
 
 ## How events leave the app
 
