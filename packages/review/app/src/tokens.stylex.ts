@@ -82,6 +82,7 @@ export const tokens = stylex.defineConsts({
   reviewFindMatchBackground: "var(--review-find-match-background)",
   reviewHeaderHeight: "var(--review-header-height)",
   reviewInlineDiagramMaxWidth: "var(--review-inline-diagram-max-width)",
+  reviewPageBarHeight: "var(--review-page-bar-height)",
   reviewPageTop: "var(--review-page-top)",
   reviewProseMaxWidth: "var(--review-prose-max-width)",
   reviewScrollbarSize: "var(--review-scrollbar-size)",

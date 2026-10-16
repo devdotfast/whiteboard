@@ -208,7 +208,7 @@ export const shellStyles = stylex.create({
     "--review-fullscreen-inset": "var(--review-page-bar-inset, 0px)",
   },
   pageBar: {
-    height: "40px",
+    height: tokens.reviewPageBarHeight,
     paddingLeft: "calc(16px + var(--review-page-bar-inset, 0px))",
     borderBottomWidth: 0,
   },

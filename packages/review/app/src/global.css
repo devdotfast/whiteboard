@@ -25,6 +25,8 @@
   --agent-2-glow: rgba(43, 179, 173, 0.3);
   --board-grid: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='1' cy='1' r='0.8' fill='%231A1F2A'/></svg>");
   --review-header-height: 35px;
+  /* The page bar, as tall as Desktop's window controls. */
+  --review-page-bar-height: 40px;
   /* Three faces, each with one role: Inter for the app's own interface
      (sidebar, tabs, page bar, Home, menus, buttons, tooltips and lists),
      Newsreader for a board's prose, its tables and thread quotes, and Geist
