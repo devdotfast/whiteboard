@@ -70,34 +70,41 @@ export function launchApplication(application: string, filePath: string, options
 	return launchDetached(applicationOpener(options.platform ?? process.platform, application, filePath), options);
 }
 
-export interface ZedLaunchOptions extends ExternalEditorLaunchOptions {
-	/** The app bundle that handles `zed://`, which carries the command line. */
-	readonly zedApplication?: () => Promise<string | undefined>;
+export interface EditorWorkspaceLaunchOptions extends ExternalEditorLaunchOptions {
+	/** The app bundle that handles the editor's URL scheme, which carries its command line. */
+	readonly editorApplication?: (scheme: string) => Promise<string | undefined>;
 	readonly exists?: (path: string) => boolean;
 }
 
+/** Each editor's command line inside its macOS app, and how it takes a folder and a file at a position. */
+const EDITOR_COMMAND_LINES: Readonly<Record<string, { scheme: string; path: string[]; args: (folder: string, file: string) => string[] }>> = {
+	vscode: { scheme: "vscode", path: ["Contents", "Resources", "app", "bin", "code"], args: (folder, file) => [folder, "--goto", file] },
+	cursor: { scheme: "cursor", path: ["Contents", "Resources", "app", "bin", "cursor"], args: (folder, file) => [folder, "--goto", file] },
+	zed: { scheme: "zed", path: ["Contents", "MacOS", "cli"], args: (folder, file) => [folder, file] },
+};
+
 /**
- * Opens a checkout and a file in one Zed window through Zed's command line.
- * Its URLs cannot: `zed://file/<folder>` and `zed://file/<file>` each open a
- * window of their own. Resolves false where the command line is not found,
- * which is anywhere but macOS: elsewhere `zed` on `PATH` may be another
- * program, such as the ZFS event daemon on Linux.
+ * Opens a checkout and a file, `<path>:<line>:<column>`, in one editor window
+ * through the editor's command line. Its URLs cannot: Zed opens each in a
+ * window of its own, and Cursor drops a file URL that arrives while it is
+ * still opening the folder's. Resolves false where the command line is not
+ * found, which is anywhere but macOS: elsewhere a `zed` or `code` on `PATH`
+ * may be another program, such as the ZFS event daemon on Linux.
  */
-export async function launchZedWorkspace(folder: string, file: string, options: ZedLaunchOptions = {}): Promise<boolean> {
-	const { zedApplication = protocolApplication("zed://"), exists = existsSync } = options;
-	if ((options.platform ?? process.platform) !== "darwin") return false;
-	const application = await zedApplication();
-	const cli = application && join(application, "Contents", "MacOS", "cli");
+export async function launchEditorWorkspace(editor: string, folder: string, file: string, options: EditorWorkspaceLaunchOptions = {}): Promise<boolean> {
+	const { editorApplication = protocolApplication, exists = existsSync } = options;
+	const commandLine = Object.hasOwn(EDITOR_COMMAND_LINES, editor) ? EDITOR_COMMAND_LINES[editor] : undefined;
+	if (!commandLine || (options.platform ?? process.platform) !== "darwin") return false;
+	const application = await editorApplication(commandLine.scheme);
+	const cli = application && join(application, ...commandLine.path);
 	if (!cli || !exists(cli)) return false;
-	await launchDetached([cli, [folder, file]], options);
+	await launchDetached([cli, commandLine.args(folder, file)], options);
 	return true;
 }
 
-function protocolApplication(url: string) {
-	return async () => {
-		const { app } = await import("electron");
-		return (await app.getApplicationInfoForProtocol(url).catch(() => undefined))?.path || undefined;
-	};
+async function protocolApplication(scheme: string): Promise<string | undefined> {
+	const { app } = await import("electron");
+	return (await app.getApplicationInfoForProtocol(`${scheme}://`).catch(() => undefined))?.path || undefined;
 }
 
 /**

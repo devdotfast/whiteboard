@@ -48,14 +48,14 @@ test("matches a review by the storage segment the host names its directory with"
 	assert.deepEqual(closed, ["shared"]);
 });
 
-function launchingChannel(picked: string | null = null, zedCli = true) {
+function launchingChannel(picked: string | null = null, commandLine = true) {
 	const launched: unknown[] = [];
 	const launcher = {
 		async openUrl(url: string) { launched.push(url); },
 		async openInApplication(application: string, filePath: string) { launched.push({ application, filePath }); },
-		async openZedWorkspace(folder: string, file: string) {
-			if (zedCli) launched.push({ zed: [folder, file] });
-			return zedCli;
+		async openEditorWorkspace(editor: string, folder: string, file: string) {
+			if (commandLine) launched.push({ [editor]: [folder, file] });
+			return commandLine;
 		},
 	};
 	const dialogs = { async showOpenDialog() { return { canceled: picked === null, filePaths: picked ? [picked] : [] }; } };
@@ -74,25 +74,23 @@ test("opens only a known editor's file URL from the main process", async () => {
 	assert.deepEqual(launched, ["cursor://file/repo/a.ts:3:2"]);
 });
 
-test("an editor opens the checkout folder before the file, so the file arrives in that window", async () => {
+test("an editor's command line gets the checkout and file together", async () => {
 	const { channel, launched } = launchingChannel();
+
+	for (const editor of ["vscode", "cursor", "zed"])
+		await channel.call("", "openInExternalEditor", { editor, filePath: "/repo/src/a.ts", line: 3, folder: "/repo" });
+
+	assert.deepEqual(launched, ["vscode", "cursor", "zed"].map((editor) => ({ [editor]: ["/repo", "/repo/src/a.ts:3:1"] })));
+});
+
+test("without its command line, an editor gets the folder's URL before the file's, and Zed only the file's", async () => {
+	const { channel, launched } = launchingChannel(null, false);
 
 	await channel.call("", "openInExternalEditor", { editor: "vscode", filePath: "/repo/src/a.ts", line: 3, folder: "/repo" });
 	await channel.call("", "openInExternalEditor", { editor: "vscode", filePath: "/repo/src/b.ts", folder: "relative" });
+	await channel.call("", "openInExternalEditor", { editor: "zed", filePath: "/repo/src/a.ts", line: 3, folder: "/repo" });
 
-	assert.deepEqual(launched, ["vscode://file/repo", "vscode://file/repo/src/a.ts:3:1", "vscode://file/repo/src/b.ts"]);
-});
-
-test("Zed gets the checkout and file together, or just the file without its command line", async () => {
-	const target = { editor: "zed", filePath: "/repo/src/a.ts", line: 3, folder: "/repo" };
-
-	const withCli = launchingChannel();
-	await withCli.channel.call("", "openInExternalEditor", target);
-	assert.deepEqual(withCli.launched, [{ zed: ["/repo", "/repo/src/a.ts:3:1"] }]);
-
-	const withoutCli = launchingChannel(null, false);
-	await withoutCli.channel.call("", "openInExternalEditor", target);
-	assert.deepEqual(withoutCli.launched, ["zed://file/repo/src/a.ts:3:1"]);
+	assert.deepEqual(launched, ["vscode://file/repo", "vscode://file/repo/src/a.ts:3:1", "vscode://file/repo/src/b.ts", "zed://file/repo/src/a.ts:3:1"]);
 });
 
 test("opens a file in a picked application only by absolute paths", async () => {

@@ -8,7 +8,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 
-import { launchApplication, launchExternalEditorUrl, launchZedWorkspace } from "./reviewExternalEditorLauncher.js";
+import { launchApplication, launchEditorWorkspace, launchExternalEditorUrl } from "./reviewExternalEditorLauncher.js";
 
 const whiteboardEnv = {
 	PATH: "/usr/bin:/opt/homebrew/bin",
@@ -74,28 +74,36 @@ test("a picked application gets the file with the same clean environment", async
 	assert.deepEqual(opener.calls[0].args.slice(-2), ["/Applications/TextEdit.app", "/repo/my file.ts"]);
 });
 
-test("Zed's command line from the app that handles zed:// gets the folder and the file", async () => {
+test("each editor's command line from the app that handles its scheme gets the folder and the file", async () => {
 	const opener = fakeOpener({ code: 0 });
-	const launched = await launchZedWorkspace("/repo", "/repo/a.ts:4:1", {
+	const asked: string[] = [];
+	const options = {
 		spawn: opener.spawn,
-		platform: "darwin",
+		platform: "darwin" as const,
 		env: whiteboardEnv,
-		zedApplication: async () => "/Applications/Zed Preview.app",
+		editorApplication: async (scheme: string) => { asked.push(scheme); return `/Applications/${scheme} app.app`; },
 		exists: () => true,
-	});
+	};
 
-	assert.equal(launched, true);
-	assert.equal(opener.calls[0].command, "/Applications/Zed Preview.app/Contents/MacOS/cli");
-	assert.deepEqual(opener.calls[0].args, ["/repo", "/repo/a.ts:4:1"]);
+	for (const editor of ["vscode", "cursor", "zed"])
+		assert.equal(await launchEditorWorkspace(editor, "/repo", "/repo/a.ts:4:1", options), true);
+
+	assert.deepEqual(asked, ["vscode", "cursor", "zed"]);
+	assert.deepEqual(opener.calls.map(({ command, args }) => [command, ...args]), [
+		["/Applications/vscode app.app/Contents/Resources/app/bin/code", "/repo", "--goto", "/repo/a.ts:4:1"],
+		["/Applications/cursor app.app/Contents/Resources/app/bin/cursor", "/repo", "--goto", "/repo/a.ts:4:1"],
+		["/Applications/zed app.app/Contents/MacOS/cli", "/repo", "/repo/a.ts:4:1"],
+	]);
 	assert.equal(opener.calls[0].env.VSCODE_DEV, undefined);
 });
 
-test("without Zed's command line nothing starts", async () => {
+test("without an editor's command line nothing starts", async () => {
 	const opener = fakeOpener({ code: 0 });
 	const options = { spawn: opener.spawn, env: whiteboardEnv, exists: () => false };
 
-	assert.equal(await launchZedWorkspace("/repo", "/repo/a.ts", { ...options, platform: "darwin", zedApplication: async () => undefined }), false);
-	assert.equal(await launchZedWorkspace("/repo", "/repo/a.ts", { ...options, platform: "darwin", zedApplication: async () => "/Applications/Zed.app" }), false);
-	assert.equal(await launchZedWorkspace("/repo", "/repo/a.ts", { ...options, platform: "linux", exists: () => true }), false);
+	assert.equal(await launchEditorWorkspace("zed", "/repo", "/repo/a.ts", { ...options, platform: "darwin", editorApplication: async () => undefined }), false);
+	assert.equal(await launchEditorWorkspace("cursor", "/repo", "/repo/a.ts", { ...options, platform: "darwin", editorApplication: async () => "/Applications/Cursor.app" }), false);
+	assert.equal(await launchEditorWorkspace("vscode", "/repo", "/repo/a.ts", { ...options, platform: "linux", exists: () => true }), false);
+	assert.equal(await launchEditorWorkspace("toString", "/repo", "/repo/a.ts", { ...options, platform: "darwin", exists: () => true }), false);
 	assert.equal(opener.calls.length, 0);
 });

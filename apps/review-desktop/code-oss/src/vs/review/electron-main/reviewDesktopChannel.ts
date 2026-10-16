@@ -16,20 +16,20 @@ import {
   type ReviewSshPromptRelay,
 } from "./remote/reviewSshPromptRelay.js";
 import type { ReviewDesktopHost } from "./reviewDesktopHost.js";
-import { applicationPickerOptions, launchApplication, launchExternalEditorUrl, launchZedWorkspace } from "./reviewExternalEditorLauncher.js";
+import { applicationPickerOptions, launchApplication, launchEditorWorkspace, launchExternalEditorUrl } from "./reviewExternalEditorLauncher.js";
 
 /** How the channel reaches outside Whiteboard; tests replace it. */
 export interface ReviewExternalLauncher {
   openUrl(url: string): Promise<void>;
   openInApplication(application: string, filePath: string): Promise<void>;
-  /** False where Zed's command line is not found. */
-  openZedWorkspace(folder: string, file: string): Promise<boolean>;
+  /** False where the editor's command line is not found. */
+  openEditorWorkspace(editor: string, folder: string, file: string): Promise<boolean>;
 }
 
 const externalLauncher: ReviewExternalLauncher = {
   openUrl: (url) => launchExternalEditorUrl(url),
   openInApplication: (application, filePath) => launchApplication(application, filePath),
-  openZedWorkspace: (folder, file) => launchZedWorkspace(folder, file),
+  openEditorWorkspace: (editor, folder, file) => launchEditorWorkspace(editor, folder, file),
 };
 
 export { REVIEW_DESKTOP_CHANNEL } from "../common/reviewDesktopBootstrap.js";
@@ -77,16 +77,13 @@ export class ReviewDesktopChannel implements IServerChannel {
       const url = externalEditorUrl(target);
       if (!url) throw new Error("Not a file Whiteboard can open in an external editor.");
       const folder = typeof target.folder === "string" && isAbsolute(target.folder) ? target.folder : undefined;
-      if (folder && target.editor === "zed") {
-        // Zed opens each URL in a window of its own, so its command line
-        // takes the folder and file together when it can.
-        if (await this.launcher.openZedWorkspace(folder, target.filePath + editorPosition(target.line, target.column))) return undefined as T;
-      } else {
-        // The folder first: the editor then puts the file in the window that
-        // has its checkout open, with the file tree beside it.
-        const folderUrl = folder && externalEditorUrl({ editor: target.editor, filePath: folder });
-        if (folderUrl) await this.launcher.openUrl(folderUrl);
-      }
+      // The command line takes the folder and file together, into one window.
+      if (folder && await this.launcher.openEditorWorkspace(target.editor, folder, target.filePath + editorPosition(target.line, target.column))) return undefined as T;
+      // Without it, the folder's URL first, so the editor puts the file in
+      // the window that has its checkout open. Zed would open the folder in
+      // a window of its own, so it gets only the file.
+      const folderUrl = folder && target.editor !== "zed" && externalEditorUrl({ editor: target.editor, filePath: folder });
+      if (folderUrl) await this.launcher.openUrl(folderUrl);
       await this.launcher.openUrl(url);
       return undefined as T;
     }
