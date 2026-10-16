@@ -1,4 +1,9 @@
 import { PullRequestStateIcon } from "@canvas/ui/board-icons";
+import { buttonLook } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CommitIcon } from "@canvas/ui/icons";
+import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewBoardPlace,
   ReviewDiffStats,
@@ -63,7 +68,11 @@ export function PullRequestLink({
       href={review.pullRequestUrl}
       target="_blank"
       rel="noopener noreferrer"
-      {...stylex.props(styles.pullRequest, styles.link)}
+      {...stylex.props(
+        styles.pullRequest,
+        buttonLook({ variant: "link", tone: "accent" }),
+        styles.pullRequestLink,
+      )}
     >
       {content}
     </a>
@@ -83,24 +92,23 @@ export function ComparedSides({
   review: ReviewSessionData;
   place: ReviewBoardPlace;
 }): ReactElement | null {
-  if (!review.pins) return null;
   const { base, head } = comparedSides(review, place);
+  const baseTooltip = useTooltip<HTMLSpanElement>(base ?? "");
+  const headTooltip = useTooltip<HTMLSpanElement>(head ?? "");
+
+  if (!review.pins) return null;
 
   return (
     <span {...stylex.props(styles.compare)}>
       {review.pullRequestNumber ? null : (
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 14 14"
-          {...stylex.props(styles.smallIcon, styles.commitIcon)}
-        >
-          <circle cx="7" cy="7" r="2.3" />
-          <path d="M1.5 7 H4.7 M9.3 7 H12.5" />
-        </svg>
+        <CommitIcon xstyle={iconStyles.inline} />
       )}
       {base === head ? null : (
         <>
-          <span title={base} {...stylex.props(styles.branch, styles.base)}>
+          <span
+            ref={baseTooltip}
+            {...stylex.props(textStyles.truncate, styles.branch, styles.base)}
+          >
             {base}
           </span>
           <span aria-label="against" {...stylex.props(styles.arrow)}>
@@ -108,7 +116,10 @@ export function ComparedSides({
           </span>
         </>
       )}
-      <span title={head} {...stylex.props(styles.branch, styles.head)}>
+      <span
+        ref={headTooltip}
+        {...stylex.props(textStyles.truncate, styles.branch, styles.head)}
+      >
         {head}
       </span>
     </span>
@@ -134,11 +145,7 @@ const styles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.fontMono,
   },
-  // The app's link: the link color, underlined on hover.
-  link: {
-    color: tokens.accent,
-    textDecoration: { default: "none", ":hover": "underline" },
-  },
+  pullRequestLink: { gap: "4px" },
   compare: {
     display: "inline-flex",
     alignItems: "center",
@@ -147,19 +154,8 @@ const styles = stylex.create({
     overflow: "hidden",
     color: tokens.inkMuted,
   },
-  commitIcon: {
-    fill: "none",
-    stroke: tokens.inkMuted,
-    strokeWidth: 1.2,
-    strokeLinecap: "round",
-  },
   // Each name keeps a few characters, so a squeezed side still reads.
-  branch: {
-    minWidth: "4ch",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    fontFamily: tokens.fontMono,
-  },
+  branch: { minWidth: "4ch", fontFamily: tokens.fontMono },
   // Shrink weights: the head's name gives way well before the base's.
   base: { flex: "0 1 auto" },
   head: { flex: "0 100 auto" },
