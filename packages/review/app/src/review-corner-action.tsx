@@ -1,7 +1,7 @@
 import { fontSize, fontWeight } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { TrashIcon } from "@canvas/ui/icons";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useRef, useState } from "react";
@@ -10,7 +10,6 @@ import { useReviewSession } from "./host/review-session";
 import { useReviewActions, useReviewState } from "./review-context";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
-import { useAnchoredPopover } from "./use-anchored-popover";
 
 export function ReviewCornerAction(): ReactElement | null {
   const { dismissReview } = useReviewActions();
@@ -19,7 +18,6 @@ export function ReviewCornerAction(): ReactElement | null {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const control = useRef<HTMLDivElement>(null);
-  const errorPopover = useAnchoredPopover<HTMLSpanElement>(failed, control);
 
   // A finished review has nothing left to submit or dismiss.
   if (submissionOutcome === "dismissed" || session.review?.trashedAt)
@@ -47,19 +45,13 @@ export function ReviewCornerAction(): ReactElement | null {
         <span>Move to Trash</span>
       </Button>
       {failed && (
-        <span
-          ref={errorPopover}
-          popover="manual"
-          {...stylex.props(
-            shellStyles.topbarPopover,
-            surfaceStyles.popover,
-            textStyles.error,
-            styles.error,
-          )}
+        <Popover
+          anchor={control}
+          xstyle={[shellStyles.topbarPopover, textStyles.error, styles.error]}
           role="alert"
         >
           Could not move the whiteboard to Trash. Try again.
-        </span>
+        </Popover>
       )}
     </div>
   );

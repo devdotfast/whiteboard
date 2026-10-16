@@ -3,7 +3,7 @@ import { Button, IconButton } from "@canvas/ui/button";
 import { copyText } from "@canvas/ui/copy";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ShareIcon } from "@canvas/ui/icons";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
 import {
@@ -25,8 +25,6 @@ import { topbarActionsMarker } from "./markers.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
 
 export const SharingContext = createContext<{
@@ -67,8 +65,7 @@ export function ShareControl() {
   const [target, setTarget] = useState<ShareTarget>();
   const [copyError, setCopyError] = useState<string>();
   const [copied, setCopied] = useState(false);
-  const popover = useRef<HTMLDivElement>(null);
-  const popoverRef = useAnchoredPopover(open, popover);
+  const control = useRef<HTMLDivElement>(null);
   const shared = context?.reviewId.startsWith("shared-");
   const accountKey = canvasQueryKeys.sharingAccount();
 
@@ -158,8 +155,6 @@ export function ShareControl() {
     });
   };
 
-  useDismissOnOutside(popover, open, setOpen);
-
   // Upload once per opening; a failure waits for Retry or a new sign-in.
   useEffect(() => {
     if (open && signedIn && target && publish.isIdle && !link) upload(target);
@@ -194,7 +189,7 @@ export function ShareControl() {
 
   return (
     <div
-      ref={popover}
+      ref={control}
       {...stylex.props(shellStyles.topbarItem)}
       style={{ position: "relative" }}
     >
@@ -225,16 +220,12 @@ export function ShareControl() {
         <ShareIcon xstyle={iconStyles.chrome} />
       </IconButton>
       {open && (
-        <div
-          ref={popoverRef}
-          popover="manual"
+        <Popover
+          anchor={control}
+          onDismiss={() => setOpen(false)}
           role="dialog"
           aria-label={shared ? "Shared review" : "Share review"}
-          {...stylex.props(
-            shellStyles.topbarPopover,
-            surfaceStyles.popover,
-            styles.popover,
-          )}
+          xstyle={[shellStyles.topbarPopover, styles.popover]}
         >
           {(error || accountError || account?.error) && (
             <p
@@ -297,7 +288,7 @@ export function ShareControl() {
               </>
             )
           )}
-        </div>
+        </Popover>
       )}
     </div>
   );

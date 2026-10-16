@@ -5,8 +5,7 @@ import { type ReactElement, type RefObject, useEffect, useRef } from "react";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { menuStyles } from "./ui/menu";
-import { surfaceStyles } from "./ui/surface";
-import { useAnchoredPopover } from "./use-anchored-popover";
+import { Popover } from "./ui/popover";
 
 /** Asked from the close button of an Ask whose agent is working: closing
  * stops it, and minimizing keeps it going out of the way. */
@@ -24,45 +23,18 @@ export function AskCloseWarning({
   onClose: () => void;
   onKeep: () => void;
 }): ReactElement {
-  const popover = useAnchoredPopover(true, anchor);
   const minimize = useRef<HTMLButtonElement>(null);
 
   useEffect(() => minimize.current?.focus(), []);
 
   // A press anywhere else keeps the Ask; the close button asks again.
-  useEffect(() => {
-    const outside = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        (popover.current?.contains(event.target) ||
-          anchor.current?.contains(event.target))
-      )
-        return;
-      onKeep();
-    };
-
-    document.addEventListener("pointerdown", outside);
-
-    return () => document.removeEventListener("pointerdown", outside);
-  }, [popover, anchor, onKeep]);
-
   return (
-    <div
-      ref={popover}
-      popover="manual"
-      {...stylex.props(
-        menuStyles.popover,
-        menuStyles.end,
-        surfaceStyles.popover,
-        styles.warning,
-      )}
+    <Popover
+      anchor={anchor}
+      onDismiss={onKeep}
+      xstyle={[menuStyles.popover, menuStyles.end, styles.warning]}
       role="alertdialog"
       aria-label={`Stop ${agentName}?`}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        event.stopPropagation();
-        onKeep();
-      }}
     >
       <p {...stylex.props(styles.title)}>Stop {agentName}?</p>
       <p {...stylex.props(styles.text)}>
@@ -76,7 +48,7 @@ export function AskCloseWarning({
           Minimize
         </Button>
       </span>
-    </div>
+    </Popover>
   );
 }
 

@@ -2,8 +2,8 @@ import { layer } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { SlidersIcon } from "@canvas/ui/icons";
+import { Popover } from "@canvas/ui/popover";
 import { SegmentedControl, labeledOptions } from "@canvas/ui/segmented";
-import { surfaceStyles } from "@canvas/ui/surface";
 import type {
   ReviewDiffLayout,
   ReviewDiffLayoutScope,
@@ -22,8 +22,6 @@ import { useReviewSession } from "./host/review-session";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureClientError, captureUiEvent } from "./ui-telemetry";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
 
 const LAYOUT_OPTIONS = labeledOptions<ReviewDiffLayout>({
@@ -36,11 +34,8 @@ export function DiffLayoutControl(): ReactElement {
 
   const control = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const popoverRef = useAnchoredPopover(open, control);
   const diff = useDiffLayout("diff");
   const peek = useDiffLayout("peek");
-
-  useDismissOnOutside(control, open, setOpen, true, true);
 
   return (
     <div
@@ -57,16 +52,12 @@ export function DiffLayoutControl(): ReactElement {
         <SlidersIcon xstyle={iconStyles.chrome} />
       </IconButton>
       {open && (
-        <div
-          ref={popoverRef}
-          popover="manual"
+        <Popover
+          anchor={control}
+          onDismiss={() => setOpen(false)}
           role="dialog"
           aria-label="Diff settings"
-          {...stylex.props(
-            shellStyles.topbarPopover,
-            surfaceStyles.popover,
-            styles.popover,
-          )}
+          xstyle={[shellStyles.topbarPopover, styles.popover]}
         >
           {(
             [
@@ -84,7 +75,7 @@ export function DiffLayoutControl(): ReactElement {
               />
             </div>
           ))}
-        </div>
+        </Popover>
       )}
     </div>
   );

@@ -7,8 +7,9 @@ import {
   ExternalLinkIcon,
   SlidersIcon,
 } from "@canvas/ui/icons";
+import { menuStyles } from "@canvas/ui/menu";
+import { Popover } from "@canvas/ui/popover";
 import { StatusBanner } from "@canvas/ui/status-banner";
-import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCanvasRange,
@@ -939,43 +940,37 @@ function MapSettingsControl(): ReactElement {
     setNodeTint,
   } = useReviewDebugSettings();
 
-  const controlRef = useRef<HTMLDivElement | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const [isOpen, setIsOpen] = useState(false);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const closeOnOutsidePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-
-      if (target instanceof Node && controlRef.current?.contains(target))
-        return;
-      setIsOpen(false);
-    };
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-    };
-
-    document.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
-    document.addEventListener("keydown", closeOnEscape);
-
-    return () => {
-      document.removeEventListener(
-        "pointerdown",
-        closeOnOutsidePointerDown,
-        true,
-      );
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [isOpen]);
-
   return (
-    <div ref={controlRef} {...stylex.props(mapSettingsStyles.control)}>
+    <div {...stylex.props(mapSettingsStyles.control)}>
+      <IconButton
+        ref={trigger}
+        size="large"
+        xstyle={[
+          mapSettingsStyles.trigger,
+          isOpen && mapSettingsStyles.triggerActive,
+        ]}
+        aria-label="Map settings"
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        <SlidersIcon />
+      </IconButton>
       {isOpen && (
-        <section
-          {...stylex.props(surfaceStyles.popover, mapSettingsStyles.popover)}
+        <Popover
+          anchor={trigger}
+          onDismiss={() => setIsOpen(false)}
+          role="dialog"
           aria-label="Map settings"
+          xstyle={[
+            menuStyles.popover,
+            menuStyles.above,
+            menuStyles.end,
+            mapSettingsStyles.popover,
+          ]}
         >
           <DebugSwitch
             label="Show modified nodes only"
@@ -1003,20 +998,8 @@ function MapSettingsControl(): ReactElement {
               onChange={setNodeTint}
             />
           </div>
-        </section>
+        </Popover>
       )}
-      <IconButton
-        size="large"
-        xstyle={[
-          mapSettingsStyles.trigger,
-          isOpen && mapSettingsStyles.triggerActive,
-        ]}
-        aria-label="Map settings"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((open) => !open)}
-      >
-        <SlidersIcon />
-      </IconButton>
     </div>
   );
 }
@@ -1101,10 +1084,6 @@ const mapSettingsStyles = stylex.create({
     right: "16px",
     bottom: "16px",
     zIndex: 3,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-end",
-    gap: "8px",
   },
   // A floating corner control, so it keeps a border and lifts off the map.
   trigger: {
@@ -1120,9 +1099,9 @@ const mapSettingsStyles = stylex.create({
     color: tokens.ink,
   },
   popover: {
-    display: "flex",
+    gap: 0,
     width: "268px",
-    flexDirection: "column",
+    padding: 0,
   },
   switch: {
     position: "relative",

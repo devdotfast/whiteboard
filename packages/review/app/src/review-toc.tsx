@@ -1,11 +1,12 @@
 import { fontSize, fontWeight, layer, motion } from "@canvas/scale.stylex";
 import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { ContentsIcon } from "@canvas/ui/icons";
+import { useDismissOnOutside } from "@canvas/ui/popover";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import type { ReviewDocumentWidthChoice } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { type ReactElement, useEffect, useState } from "react";
+import { type ReactElement, useEffect, useRef, useState } from "react";
 
 import { tocEntryMarker } from "./markers.stylex";
 import type { ReviewTocEntry } from "./review-document-headings";
@@ -68,6 +69,9 @@ export function ReviewToc({
   const [active, setActive] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isWide, setIsWide] = useState(false);
+  const nav = useRef<HTMLElement>(null);
+
+  useDismissOnOutside(nav, isDrawerOpen, () => setIsDrawerOpen(false));
 
   // A wide shell keeps the rail beside the prose for the whole document; the
   // rail sits outside the scroll region, so it stays put while the reader
@@ -92,26 +96,6 @@ export function ReviewToc({
   useEffect(() => {
     if (isWide) setIsDrawerOpen(false);
   }, [isWide]);
-
-  useEffect(() => {
-    if (!isDrawerOpen) return;
-
-    const closeOnOutsidePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-
-      if (!(target instanceof Node)) return;
-
-      if (target instanceof Element && target.closest("#review-toc")) return;
-
-      setIsDrawerOpen(false);
-    };
-
-    document.addEventListener("pointerdown", closeOnOutsidePointerDown);
-
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
-    };
-  }, [isDrawerOpen]);
 
   useEffect(() => {
     setActive((current) =>
@@ -289,6 +273,7 @@ export function ReviewToc({
   return (
     <nav
       key={showRail ? "rail" : "pill"}
+      ref={nav}
       id="review-toc"
       {...stylex.props(
         surfaceStyles.popover,
@@ -302,12 +287,6 @@ export function ReviewToc({
           styles.tocRailBesideWideHeader,
       )}
       aria-label="Contents"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.preventDefault();
-          setIsDrawerOpen(false);
-        }
-      }}
     >
       <IconButton
         size="large"

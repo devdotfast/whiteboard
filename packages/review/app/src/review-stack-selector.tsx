@@ -2,7 +2,7 @@ import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
 import { Button, buttonStyles } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ChevronDownIcon, StackIcon } from "@canvas/ui/icons";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
 import type { ReviewStackLayer } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
@@ -20,8 +20,6 @@ import { DisplayedReviewVersionContext } from "./displayed-review-version-contex
 import { useReviewSession } from "./host/review-session";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
 
 type OpenEvent = Pick<
   MouseEvent,
@@ -35,9 +33,6 @@ export function ReviewStackSelector(): ReactElement | null {
   const review = session.review!;
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLDivElement>(null);
-  const popoverRef = useAnchoredPopover(open, container);
-
-  useDismissOnOutside(container, open, setOpen);
 
   // The stack is optional context; a failed read is not shown.
   const layers =
@@ -104,16 +99,12 @@ export function ReviewStackSelector(): ReactElement | null {
         <ChevronDownIcon xstyle={[styles.chevron, open && iconStyles.flip]} />
       </Button>
       {open && (
-        <div
-          ref={popoverRef}
-          popover="manual"
+        <Popover
+          anchor={container}
+          onDismiss={() => setOpen(false)}
           role="menu"
           aria-label="Stack"
-          {...stylex.props(
-            shellStyles.topbarPopover,
-            surfaceStyles.popover,
-            styles.menu,
-          )}
+          xstyle={[shellStyles.topbarPopover, styles.menu]}
         >
           <div
             {...stylex.props(buttonStyles.reset, styles.row, styles.baseRow)}
@@ -127,7 +118,7 @@ export function ReviewStackSelector(): ReactElement | null {
               onOpen={(layer, event) => void openLayer(layer, event)}
             />
           ))}
-        </div>
+        </Popover>
       )}
     </div>
   );

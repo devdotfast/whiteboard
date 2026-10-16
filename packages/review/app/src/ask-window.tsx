@@ -42,9 +42,9 @@ import { tokens } from "./tokens.stylex";
 import { IconButton } from "./ui/button";
 import { Chip } from "./ui/chip";
 import { menuStyles } from "./ui/menu";
+import { useDismissOnOutside } from "./ui/popover";
 import { surfaceStyles } from "./ui/surface";
 import { textStyles } from "./ui/text";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
 import { useTooltip } from "./use-tooltip";
 
 export type { AskPresence };

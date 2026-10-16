@@ -13,9 +13,7 @@ import {
 } from "react";
 
 import { menuStyles, moveMenuFocus } from "./ui/menu";
-import { surfaceStyles } from "./ui/surface";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
+import { Popover } from "./ui/popover";
 
 /** A single-choice menu; the caller renders the trigger's content. */
 export function OptionMenu<T extends string>({
@@ -41,7 +39,7 @@ export function OptionMenu<T extends string>({
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const container = useRef<HTMLDivElement>(null);
+  const popup = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
 
   const setTrigger = useCallback(
@@ -53,9 +51,7 @@ export function OptionMenu<T extends string>({
     [triggerRef],
   );
 
-  const popup = useAnchoredPopover(open, trigger);
   const selectedIndex = options.findIndex((option) => option.value === value);
-  useDismissOnOutside(container, open, () => setOpen(false));
 
   const close = () => {
     setOpen(false);
@@ -73,7 +69,7 @@ export function OptionMenu<T extends string>({
   }, [open, popup, selectedIndex]);
 
   return (
-    <div ref={container} {...stylex.props(styles.menu)}>
+    <div {...stylex.props(styles.menu)}>
       <button
         {...stylex.props(triggerStyle)}
         type="button"
@@ -94,27 +90,22 @@ export function OptionMenu<T extends string>({
         <ChevronDownIcon xstyle={open && iconStyles.flip} />
       </button>
       {open && (
-        <div
+        <Popover
           ref={popup}
-          popover="manual"
+          anchor={trigger}
+          onDismiss={close}
           role="menu"
           tabIndex={-1}
           aria-label={ariaLabel}
-          {...stylex.props(
-            surfaceStyles.popover,
+          xstyle={[
             menuStyles.popover,
             align === "end" && menuStyles.end,
             styles.options,
-          )}
+          ]}
           onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              event.stopPropagation();
-              close();
-            } else if (event.key === "Tab") {
-              // Restore the trigger before the browser advances to the next control.
-              close();
-            } else moveMenuFocus(event);
+            // Restore the trigger before the browser advances to the next control.
+            if (event.key === "Tab") close();
+            else moveMenuFocus(event);
           }}
         >
           {options.map((option) => (
@@ -142,7 +133,7 @@ export function OptionMenu<T extends string>({
               )}
             </button>
           ))}
-        </div>
+        </Popover>
       )}
     </div>
   );

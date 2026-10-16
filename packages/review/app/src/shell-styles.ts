@@ -215,8 +215,6 @@ export const shellStyles = stylex.create({
   topbarItem: {
     flex: { default: null, [inTopbarActions()]: "0 0 auto" },
   },
-  // Popovers in the action row hang below their control, anchored by
-  // useAnchoredPopover.
   topbarPopover: {
     position: { default: null, [inTopbarActions()]: "fixed" },
     top: { default: null, [inTopbarActions()]: "calc(anchor(bottom) + 4px)" },
