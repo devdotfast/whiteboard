@@ -10,6 +10,7 @@ import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
 import { FolderLabel } from "./folder-label";
+import { formatRelativeTime } from "./format";
 import { fontSize, fontWeight, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { SegmentedControl, segmentStyles } from "./ui/segmented";
@@ -23,28 +24,6 @@ export function threadOnBoard(
     thread.anchor.board.reviewId === reviewId ||
     thread.edited.some((board) => board.reviewId === reviewId)
   );
-}
-
-/** "2m", "1h", "Yesterday", then the date. */
-function age(updatedAt: string, now = Date.now()): string {
-  const minutes = Math.floor(Math.max(0, now - Date.parse(updatedAt)) / 60_000);
-
-  if (!Number.isFinite(minutes)) return "";
-
-  if (minutes < 1) return "now";
-
-  if (minutes < 60) return `${minutes}m`;
-
-  const hours = Math.floor(minutes / 60);
-
-  if (hours < 24) return `${hours}h`;
-
-  if (hours < 48) return "Yesterday";
-
-  return new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric",
-  }).format(Date.parse(updatedAt));
 }
 
 const statusText = {
@@ -193,7 +172,9 @@ export function ThreadsSectionBody({
                     </span>
                     <span {...stylex.props(styles.spacer)} />
                     <span {...stylex.props(styles.status)}>
-                      {age(thread.updatedAt)}
+                      {formatRelativeTime(thread.updatedAt, Date.now(), {
+                        short: true,
+                      })}
                     </span>
                   </span>
                   <span

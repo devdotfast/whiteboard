@@ -15,7 +15,7 @@ import {
 } from "react";
 
 import { DiffCount } from "./diff-count";
-import { relativeTimeLabel } from "./review-doc-meta";
+import { formatRelativeTime } from "./format";
 import { tokens } from "./tokens.stylex";
 
 /**
@@ -259,7 +259,7 @@ function CommitMenu({
                 </code>
                 <span {...stylex.props(styles.subject)}>{commit.subject}</span>
                 <span {...stylex.props(styles.when)}>
-                  {relativeTimeLabel(Date.parse(commit.authoredAt), now)}
+                  {formatRelativeTime(commit.authoredAt, now, { short: true })}
                 </span>
               </button>
             </div>

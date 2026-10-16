@@ -102,7 +102,9 @@ export function ReviewDocumentMetaLine({
 
   const updatedLabel =
     Number.isFinite(review.updatedAtMs) && relativeTimeNowMs != null
-      ? relativeTimeLabel(review.updatedAtMs, relativeTimeNowMs)
+      ? formatRelativeTime(review.updatedAtMs, relativeTimeNowMs, {
+          short: true,
+        })
       : null;
 
   // The branch stack leads, a pill hidden unless the board is in one.
@@ -201,30 +203,6 @@ function reviewDiffStats(diff: {
   if (!diff.files?.length) return null;
 
   return summarizeReviewDiffFiles(diff.files);
-}
-
-/** "6d ago": a time not long past, else its date. */
-export function relativeTimeLabel(
-  timeMs: number,
-  nowMs: number,
-): string | null {
-  if (!Number.isFinite(timeMs)) return null;
-  const minutes = Math.floor(Math.max(0, nowMs - timeMs) / 60_000);
-
-  if (minutes < 1) return "just now";
-
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-
-  if (days < 7) return `${days}d ago`;
-
-  return new Date(timeMs).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
 }
 
 const styles = stylex.create({

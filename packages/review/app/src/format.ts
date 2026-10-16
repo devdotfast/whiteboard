@@ -2,10 +2,12 @@ export function countLabel(count: number, singular: string): string {
   return `${count} ${singular}${count === 1 ? "" : "s"}`;
 }
 
-/** An ISO timestamp or epoch milliseconds, as "5 min ago" or "Oct 3". */
+/** An ISO timestamp or epoch milliseconds, as "5 min ago" or "Oct 3";
+ * `short` writes "5m ago" for a narrow row. */
 export function formatRelativeTime(
   timestamp: string | number | null | undefined,
   now = Date.now(),
+  { short = false }: { short?: boolean } = {},
 ): string {
   if (timestamp == null) return "unknown";
   const then = new Date(timestamp).getTime();
@@ -16,13 +18,19 @@ export function formatRelativeTime(
   if (elapsed < 60_000) return "just now";
   const minutes = Math.floor(elapsed / 60_000);
 
-  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 60) return short ? `${minutes}m ago` : `${minutes} min ago`;
   const hours = Math.floor(minutes / 60);
 
-  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
+  if (hours < 24)
+    return short
+      ? `${hours}h ago`
+      : `${hours} ${hours === 1 ? "hour" : "hours"} ago`;
   const days = Math.floor(hours / 24);
 
-  if (days < 7) return `${days} ${days === 1 ? "day" : "days"} ago`;
+  if (days < 7)
+    return short
+      ? `${days}d ago`
+      : `${days} ${days === 1 ? "day" : "days"} ago`;
 
   return new Intl.DateTimeFormat(undefined, {
     month: "short",

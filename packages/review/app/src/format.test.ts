@@ -18,3 +18,12 @@ it("says unknown for a missing or unreadable time", () => {
   expect(formatRelativeTime("not a date", now)).toBe("unknown");
   expect(formatRelativeTime(Number.NaN, now)).toBe("unknown");
 });
+
+it("writes hours and days in short for a narrow row", () => {
+  expect(formatRelativeTime(now - 3 * 3_600_000, now, { short: true })).toBe(
+    "3h ago",
+  );
+  expect(formatRelativeTime(now - 2 * 86_400_000, now, { short: true })).toBe(
+    "2d ago",
+  );
+});
