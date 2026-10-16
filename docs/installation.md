@@ -4,10 +4,13 @@
 Install and open the app. [Preview builds](https://dev.fast/install/preview)
 install alongside the stable app.
 
+The first time you open Whiteboard, the **Install Whiteboard** screen installs
+the `whiteboard` command and [connects your agents](connect-your-agent.md).
+
 ## Enable the command
 
-Open Whiteboard. Select Settings → Command line to install the launcher. Open a
-new terminal and run:
+If you skipped that screen, open Settings and select **Install** under Command
+line. Open a new terminal and run:
 
 ```sh
 whiteboard --version
