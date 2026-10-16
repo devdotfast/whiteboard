@@ -40,6 +40,7 @@ import {
 } from "@review/desktop-discovery";
 import { readReviewPackageVersion } from "@review/package-paths";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
+import { pullRequestProvider } from "@review/review-api/provider.js";
 import type { ReviewStore } from "@review/review-api/store.js";
 import {
   devReviewHome,
@@ -319,12 +320,14 @@ export function createGlobalReviewServer(
 
         const rawContext = isJsonObject(payload.context) ? payload.context : {};
 
-        const sourceKind = sessionStartedSourceKind(
-          reviewStore,
-          jsonString(rawContext.reviewUuid),
+        const reviewUuid = jsonString(rawContext.reviewUuid);
+
+        Object.assign(
+          eventProperties,
+          sessionStartedSource(reviewStore, reviewUuid),
         );
 
-        if (sourceKind) eventProperties.source_kind = sourceKind;
+        if (reviewUuid) eventProperties.remote = gateway.isRemote(reviewUuid);
       }
 
       await captureSanitizedUiTelemetry(
@@ -567,26 +570,45 @@ function watchSessionOpen(
 }
 
 /**
- * `session_started`'s `source_kind`: the opened review's target kind, or
- * `scratchpad` for the one scratchpad. Undefined when the review is gone (a
- * shared review this store never had, or one deleted between open and the
- * event arriving) or was left without a target.
+ * `session_started`'s `source_kind` and `pr_provider`. Empty when the review
+ * is not in this store: a shared or remote review, or one deleted between open
+ * and the event arriving.
  */
-export function sessionStartedSourceKind(
+export function sessionStartedSource(
   reviewStore: ReviewStore,
   reviewUuid: string | undefined,
-): string | undefined {
-  if (!reviewUuid) return undefined;
+) {
+  if (!reviewUuid) return {};
 
   try {
     const snapshot = reviewStore.read(reviewUuid);
 
-    return snapshot.kind === "scratchpad"
-      ? snapshot.kind
-      : snapshot.target?.kind;
+    const sourceKind =
+      snapshot.kind === "scratchpad" ? snapshot.kind : snapshot.target?.kind;
+
+    const pullRequestUrl = snapshot.origin?.pullRequestUrl;
+
+    const prProvider = pullRequestUrl && prProviderOf(pullRequestUrl);
+
+    return {
+      ...(sourceKind && { source_kind: sourceKind }),
+      ...(prProvider && { pr_provider: prProvider }),
+    };
   } catch {
-    return undefined;
+    return {};
   }
+}
+
+function prProviderOf(url: string) {
+  const resolved = pullRequestProvider(url);
+
+  if (!resolved) return undefined;
+
+  if (resolved.provider.id === "azure-devops") return "azure_devops";
+
+  return resolved.address.host === "github.com"
+    ? "github"
+    : "github_enterprise";
 }
 
 function listen(server: Server, port: number): Promise<number> {

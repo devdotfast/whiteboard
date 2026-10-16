@@ -69,6 +69,7 @@ import type { AskPresence, AskReport } from "./review-panel-model";
 import { fontSize, radius } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
+import { captureUiEvent } from "./ui-telemetry";
 import { IconButton } from "./ui/button";
 import { Chip } from "./ui/chip";
 import { StatusBanner } from "./ui/status-banner";
@@ -302,6 +303,13 @@ export function AskPanelContent({
         rememberAskAgent(session, agent);
         setThreadId(id);
       }
+
+      captureUiEvent(session, "ask_sent", {
+        agent,
+        follow_up: threadId !== null,
+        selection: selection.selectedDiff ? "diff" : selection.target.kind,
+        remote: session.review?.host !== undefined,
+      });
 
       // Asking returns to the newest, where the answer will be.
       latest.jump("instant");

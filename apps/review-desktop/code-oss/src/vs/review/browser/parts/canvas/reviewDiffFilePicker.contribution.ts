@@ -22,6 +22,7 @@ import { inQuickPickContext } from "../../../../workbench/browser/quickaccess.js
 import { ActiveEditorContext } from "../../../../workbench/common/contextkeys.js";
 import { IEditorService } from "../../../../workbench/services/editor/common/editorService.js";
 import { orderReviewDiffFiles } from "../../../common/reviewChangedFilesModel.js";
+import { IReviewTelemetryService } from "../../../services/reviewTelemetryService.js";
 import { ReviewCanvasEditorInput } from "./reviewCanvasEditorInput.js";
 import { ReviewCanvasEditorPane } from "./reviewCanvasPart.js";
 
@@ -46,6 +47,7 @@ class ReviewGoToDiffFileAction extends Action2 {
 		const quickInput = accessor.get(IQuickInputService);
 		const modelService = accessor.get(IModelService);
 		const languageService = accessor.get(ILanguageService);
+		const telemetry = accessor.get(IReviewTelemetryService);
 		const active = accessor.get(IEditorService).activeEditorPane;
 		const pane = active instanceof ReviewCanvasEditorPane ? active : undefined;
 		const files = pane?.diffFiles();
@@ -77,7 +79,9 @@ class ReviewGoToDiffFileAction extends Action2 {
 		disposables.add(picker.onDidAccept(() => {
 			const [item] = picker.selectedItems;
 			picker.hide();
-			if (item) pane.revealDiffFile(item.path);
+			if (!item) return;
+			pane.revealDiffFile(item.path);
+			telemetry.capture("diff_opened", { kind: "structural", via: "file_picker" });
 		}));
 		disposables.add(picker.onDidHide(() => disposables.dispose()));
 		picker.show();

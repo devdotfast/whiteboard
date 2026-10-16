@@ -1,6 +1,7 @@
 import { withClass } from "@canvas/stylex-props";
 import type { ReviewCanvasSetupActions } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
+import { useEffect } from "react";
 
 import { DrawFlow, useOnboardingClient } from "./draw-flow";
 import { onboardingStyles as styles } from "./onboarding-styles";
@@ -15,17 +16,23 @@ const LEAD =
 export function NewWhiteboard({
   setupActions,
   embedded = false,
+  via,
   onClose,
   onCopied,
 }: {
   setupActions: ReviewCanvasSetupActions;
   embedded?: boolean;
+  via?: "button" | "command";
   /** Back to the list; the full-window screen only. */
   onClose?(): void;
   /** The prompt went to the clipboard, for the reader's own agent. */
   onCopied?(): void;
 }) {
   const { client, unavailable } = useOnboardingClient(setupActions);
+
+  useEffect(() => {
+    if (via) client?.capture("new_whiteboard_opened", { via });
+  }, [client, via]);
 
   const content = unavailable ? (
     <p role="alert" {...stylex.props(styles.error)}>
@@ -38,6 +45,13 @@ export function NewWhiteboard({
       embedded={embedded}
       onStarted={onClose}
       onCopied={onCopied}
+      onRunStarted={(mode, agent) =>
+        client.capture("new_whiteboard_started", {
+          mode,
+          embedded,
+          ...(agent && { agent }),
+        })
+      }
       intro={
         embedded
           ? undefined

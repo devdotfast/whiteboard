@@ -12,6 +12,7 @@ import {
   ReviewOnboardingTargetsResponseSchema,
 } from "@dev.fast/review-protocol";
 import { askAgentIds } from "@review/ask/thread-state";
+import type { UiTelemetryEventName } from "@review/ui-telemetry-events";
 import { z } from "zod";
 
 export interface OnboardingConnection {
@@ -79,6 +80,17 @@ export class OnboardingClient {
     init?: RequestInit,
   ): Promise<T> {
     return schema.parse(await (await this.request(path, init)).json());
+  }
+
+  capture(
+    name: UiTelemetryEventName,
+    properties: Record<string, string | boolean>,
+  ) {
+    void this.request("/telemetry/event", {
+      method: "POST",
+      body: JSON.stringify({ name, properties }),
+      keepalive: true,
+    }).catch(() => undefined);
   }
 
   async agents(): Promise<ReviewConnectAgent[]> {

@@ -28,6 +28,7 @@ import {
 } from "@dev.fast/review-protocol";
 import { z } from "zod";
 
+import { askAgentIds } from "./ask/thread-state";
 import { containsFilePath, hasPossibleUserInfo } from "./telemetry-clean-text";
 
 /** Property value validators: an enum of allowed strings, or a scalar type. */
@@ -64,6 +65,7 @@ const PEEK_VIA = [
   "map",
   "db_lens",
   "call_stack_frame",
+  "diff_definition",
 ] as const;
 
 export const PEEK_ROOT_KIND = ["range"] as const;
@@ -241,10 +243,42 @@ export const INSTALL_LOCATION = [
   "other",
 ] as const;
 
-export const DIFF_OPENED_VIA = ["topbar", "lens", "locate"] as const;
+export const DIFF_OPENED_VIA = [
+  "topbar",
+  "lens",
+  "locate",
+  "file_picker",
+] as const;
 
 /** Which diff opened: a commit's, or a file diff drawn plain or structural. */
 export const DIFF_OPENED_KIND = ["commit", "structural"] as const;
+
+/** GitHub Enterprise is any GitHub host but github.com. */
+export const PR_PROVIDER = [
+  "github",
+  "github_enterprise",
+  "azure_devops",
+] as const;
+
+export const REMOTE_HOST_PROBLEM = [
+  "unreachable",
+  "not_installed",
+  "auth_failed",
+  "unsupported",
+  "incompatible",
+] as const;
+
+export const REMOTE_HOST_TARGET = ["linux-x64", "linux-arm64"] as const;
+
+export const ASK_SELECTION = ["text", "code", "diff", "review"] as const;
+
+export const ONBOARDING_STEP = ["welcome", "install", "run"] as const;
+
+export const RUN_MODE = ["draw", "copy"] as const;
+
+export const NEW_WHITEBOARD_VIA = ["button", "command"] as const;
+
+export const FIND_SURFACE = ["review", "diff"] as const;
 
 export const DISCORD_VIA = ["topbar", "dialog", "docs"] as const;
 
@@ -514,6 +548,8 @@ export const UI_TELEMETRY_EVENTS = {
     properties: {
       source_kind: SESSION_SOURCE_KIND,
       agent_kind: SESSION_AGENT_KIND,
+      remote: "boolean",
+      pr_provider: PR_PROVIDER,
     },
   },
   session_ended: {
@@ -584,6 +620,55 @@ export const UI_TELEMETRY_EVENTS = {
   },
   // The reader copied the review's share link.
   review_shared: { event: "review_review_shared", properties: {} },
+  find_opened: {
+    event: "review_find_opened",
+    properties: { surface: FIND_SURFACE },
+  },
+  ask_sent: {
+    event: "review_ask_sent",
+    properties: {
+      agent: askAgentIds,
+      follow_up: "boolean",
+      selection: ASK_SELECTION,
+      remote: "boolean",
+    },
+  },
+  onboarding_step_viewed: {
+    event: "review_onboarding_step_viewed",
+    properties: { step: ONBOARDING_STEP },
+  },
+  onboarding_skipped: {
+    event: "review_onboarding_skipped",
+    properties: { step: ONBOARDING_STEP },
+  },
+  onboarding_run_started: {
+    event: "review_onboarding_run_started",
+    properties: { mode: RUN_MODE, agent: askAgentIds },
+  },
+  new_whiteboard_opened: {
+    event: "review_new_whiteboard_opened",
+    properties: { via: NEW_WHITEBOARD_VIA },
+  },
+  new_whiteboard_started: {
+    event: "review_new_whiteboard_started",
+    properties: { mode: RUN_MODE, embedded: "boolean", agent: askAgentIds },
+  },
+  remote_host_installed: {
+    event: "review_remote_host_installed",
+    properties: {
+      ok: "boolean",
+      target: REMOTE_HOST_TARGET,
+      duration_ms: "number",
+    },
+  },
+  remote_host_connected: {
+    event: "review_remote_host_connected",
+    properties: {
+      ok: "boolean",
+      problem: REMOTE_HOST_PROBLEM,
+      direct: "boolean",
+    },
+  },
 } as const satisfies Record<
   string,
   { event: string; properties: Record<string, UiTelemetryPropertySpec> }

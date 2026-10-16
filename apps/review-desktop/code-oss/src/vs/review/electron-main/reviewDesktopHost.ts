@@ -53,7 +53,7 @@ import type {
   ReviewRemoteInstallFlow,
   ReviewRemoteInstallMode,
 } from "./remote/reviewRemoteHost.js";
-import { closeRemoteHostWindows, ReviewRemoteHosts } from "./remote/reviewRemoteHosts.js";
+import { closeRemoteHostWindows, ReviewRemoteHosts, type ReviewRemoteHostsOptions } from "./remote/reviewRemoteHosts.js";
 import {
   openRemoteInstallConsent,
   reviewRemoteInstallConsentPath,
@@ -177,7 +177,11 @@ export class ReviewDesktopHost extends Disposable {
     );
     void this.lifecycleMainService
       .when(LifecycleMainPhase.AfterWindowOpen)
-      .then(() => this.startRemoteHosts(shellEnvironment));
+      .then(() =>
+        this.startRemoteHosts(shellEnvironment, (name, properties) =>
+          errorTelemetry?.capture(name, properties),
+        ),
+      );
     // Main-process errors report through the embedded server, so they pass the
     // same opt-out checks and the same redaction step as every other event.
     errorTelemetry = new ReviewMainErrorTelemetry({
@@ -356,6 +360,7 @@ export class ReviewDesktopHost extends Disposable {
 
   private startRemoteHosts(
     shellEnvironment: () => Promise<NodeJS.ProcessEnv>,
+    capture: ReviewRemoteHostsOptions["capture"],
   ): void {
     if (this.disposed) return;
     let version: Promise<string> | undefined;
@@ -385,6 +390,7 @@ export class ReviewDesktopHost extends Disposable {
       groups: () =>
         reviewEnabledExtensionGroups(this.environmentMainService.extensionsPath),
       send: (hosts) => this.supervisor.setRemoteHosts(hosts),
+      capture,
       log: (message) => this.logService.info(`[Remote hosts] ${message}`),
       install: this.remoteInstallFlow(),
       removed: (serverId) =>

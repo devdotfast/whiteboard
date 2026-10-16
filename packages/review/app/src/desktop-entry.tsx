@@ -163,7 +163,7 @@ function Home({
 
   const install = useInstall(data.installStatus, host.install);
   const [skipped, setSkipped] = useState(readOnboardingSkipped);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<"button" | "command">();
 
   // Drawing here closes New whiteboard once the run starts. A copied prompt
   // is drawn by the reader's own agent, so the screen closes when the next
@@ -174,15 +174,15 @@ function Home({
   useEffect(() => {
     if (copied.current && data.reviews.length > listed.current) {
       copied.current = false;
-      setCreating(false);
+      setCreating(undefined);
     }
 
     listed.current = data.reviews.length;
   }, [data.reviews.length]);
 
-  const startCreating = () => {
+  const startCreating = (via: "button" | "command") => {
     copied.current = false;
-    setCreating(true);
+    setCreating(via);
   };
 
   // Until the first whiteboard is published, Home is first run, unless the
@@ -199,7 +199,7 @@ function Home({
       newWhiteboard() {
         if (!canCreate || firstRun) return false;
 
-        if (!creating) startCreating();
+        if (!creating) startCreating("command");
 
         return true;
       },
@@ -222,7 +222,8 @@ function Home({
     return (
       <NewWhiteboard
         setupActions={setupActions}
-        onClose={() => setCreating(false)}
+        via={creating}
+        onClose={() => setCreating(undefined)}
         onCopied={() => {
           copied.current = true;
         }}
@@ -252,7 +253,7 @@ function Home({
       onboarding={data.onboarding}
       onOpenSettings={host.openSettings}
       onOpenSetup={host.openSetup}
-      onNewWhiteboard={setupActions ? startCreating : undefined}
+      onNewWhiteboard={setupActions ? () => startCreating("button") : undefined}
       emptyState={
         setupActions ? (
           <NewWhiteboard setupActions={setupActions} embedded />

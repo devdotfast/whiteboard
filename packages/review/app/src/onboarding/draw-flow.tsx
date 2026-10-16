@@ -3,7 +3,7 @@ import { copyText } from "@canvas/ui/copy";
 import type { ReviewCanvasSetupActions } from "@dev.fast/review-protocol";
 import { useCallback, useEffect, useState } from "react";
 
-import { OnboardingClient } from "./onboarding-client";
+import { OnboardingClient, type OnboardingRunAgent } from "./onboarding-client";
 import { RunStep, type StepIntro } from "./run-step";
 
 /** The Desktop server's client, once its connection resolves. */
@@ -40,11 +40,13 @@ export function DrawFlow({
   embedded,
   onStarted,
   onCopied,
+  onRunStarted,
 }: {
   client: OnboardingClient;
   setupActions: ReviewCanvasSetupActions;
   intro?: StepIntro;
   embedded?: boolean;
+  onRunStarted?(mode: "draw" | "copy", agent?: OnboardingRunAgent["id"]): void;
   onStarted?(reviewId: string): void;
   onCopied?(): void;
 }) {
@@ -55,7 +57,10 @@ export function DrawFlow({
     async (prompt: string) => {
       const copied = await copyText(prompt);
 
-      if (copied) onCopied?.();
+      if (copied) {
+        onRunStarted?.("copy");
+        onCopied?.();
+      }
 
       notify(
         copied
@@ -69,7 +74,7 @@ export function DrawFlow({
             },
       );
     },
-    [notify, onCopied],
+    [notify, onCopied, onRunStarted],
   );
 
   return (
@@ -78,7 +83,10 @@ export function DrawFlow({
       setupActions={setupActions}
       intro={intro}
       embedded={embedded}
-      onStarted={onStarted}
+      onStarted={(reviewId, agent) => {
+        onRunStarted?.("draw", agent);
+        onStarted?.(reviewId);
+      }}
       onCopy={(prompt) => void copy(prompt)}
     />
   );

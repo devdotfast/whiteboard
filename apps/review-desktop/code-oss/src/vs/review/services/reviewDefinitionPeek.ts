@@ -24,6 +24,7 @@ import { registerWorkbenchContribution2, WorkbenchPhase } from "../../workbench/
 import { IEditorService } from "../../workbench/services/editor/common/editorService.js";
 import { REVIEW_PEEK_SIDE_BY_SIDE_SETTING } from "../common/reviewConfigurationDefaults.js";
 import { REVIEW_API_SOURCE_SCHEME, sourceLocation } from "../common/reviewSourceView.js";
+import { IReviewTelemetryService } from "./reviewTelemetryService.js";
 
 const ReviewDefinitionPeekVisible = new RawContextKey<boolean>("reviewDefinitionPeekVisible", false);
 
@@ -154,7 +155,10 @@ class ReviewDefinitionPeekWidget extends PeekViewWidget {
 export class ReviewDefinitionPeek extends Disposable {
 	static readonly ID = "review.definitionPeek";
 
-	constructor(@ICodeEditorService codeEditors: ICodeEditorService) {
+	constructor(
+		@ICodeEditorService codeEditors: ICodeEditorService,
+		@IReviewTelemetryService telemetry: IReviewTelemetryService,
+	) {
 		super();
 		this._register(codeEditors.registerCodeEditorOpenHandler(async (input, source, sideBySide) => {
 			const range = (input.options as { selection?: IRange } | undefined)?.selection;
@@ -162,7 +166,9 @@ export class ReviewDefinitionPeek extends Disposable {
 			const peek = peeks.get(source);
 			if (peek?.editors.includes(source)) return peek.setInput(input.resource, range);
 			const diffs = hostDiffs(source);
-			return diffs ? open(source, diffs, input.resource, range) : null;
+			if (!diffs) return null;
+			telemetry.capture("peek_opened", { via: "diff_definition" });
+			return open(source, diffs, input.resource, range);
 		}));
 	}
 }

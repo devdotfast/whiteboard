@@ -123,7 +123,7 @@ export function RunStep({
   intro?: StepIntro;
   embedded?: boolean;
   /** The whiteboard is made and opening, with its agent at work. */
-  onStarted?(reviewId: string): void;
+  onStarted?(reviewId: string, agent: OnboardingRunAgent["id"]): void;
   onCopy(prompt: string): void;
 }) {
   const [projects, setProjects] = useState<ReviewOnboardingProject[]>([]);
@@ -303,7 +303,7 @@ export function RunStep({
         prompt: prompt.trim(),
       });
 
-      onStarted?.(reviewId);
+      onStarted?.(reviewId, agent);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {

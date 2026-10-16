@@ -1107,3 +1107,24 @@ test("connecting runs the agents' commands with the installed CLI, and refuses a
 	assert.match(connect.input!, new RegExp(`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' 'connect' '--yes' '--json' 'pi'\n$`));
 	assert.deepEqual(await host.detectAgents(), [{ id: "pi", connected: true }]);
 });
+
+test("telemetry gets each change of connect outcome once", async (t) => {
+	const port = await healthServer(t);
+	const events: [string, Record<string, unknown>][] = [];
+	const { host, ssh, clock, last } = hostFor(t, {}, port, "wb-test-a", "/tmp/wb-ssh-test", undefined, "0.1.6", {
+		capture: (name, properties) => events.push([name, properties]),
+	});
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	ssh.master("wb-test-a")!.finish(255, { stderr: "Connection to 127.0.0.1 closed by remote host.\n" });
+	await until(() => last()?.problem !== undefined);
+	assert.ok(clock.next());
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.deepEqual(events, [
+		["remote_host_connected", { ok: true, direct: false }],
+		["remote_host_connected", { ok: false, problem: "unreachable", direct: false }],
+		["remote_host_connected", { ok: true, direct: false }],
+	]);
+});

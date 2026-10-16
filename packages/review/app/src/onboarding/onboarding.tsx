@@ -4,7 +4,7 @@ import { Button } from "@canvas/ui/button";
 import { Kbd } from "@canvas/ui/kbd";
 import type { ReviewCanvasSetupActions } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { DrawFlow, useOnboardingClient } from "./draw-flow";
 import { InstallStep } from "./install-step";
@@ -37,6 +37,15 @@ export function Onboarding({
   const [installProgress, setInstallProgress] = useState(0);
   // Run needs an agent with Whiteboard, which Install finds out.
   const [connected, setConnected] = useState(false);
+  useEffect(() => {
+    client?.capture("onboarding_step_viewed", { step });
+  }, [client, step]);
+
+  const skip = useCallback(() => {
+    client?.capture("onboarding_skipped", { step });
+    onSkip();
+  }, [client, onSkip, step]);
+
   // Escape leaves for Home, unless a field or menu has it.
   useEffect(() => {
     const keydown = (event: KeyboardEvent) => {
@@ -50,13 +59,13 @@ export function Onboarding({
         )
       )
         return;
-      onSkip();
+      skip();
     };
 
     window.addEventListener("keydown", keydown);
 
     return () => window.removeEventListener("keydown", keydown);
-  }, [onSkip]);
+  }, [skip]);
 
   const current = RAIL.findIndex((rail) => rail.step === step);
 
@@ -101,7 +110,7 @@ export function Onboarding({
           ))}
         </ol>
         <span {...stylex.props(styles.railSide)}>
-          <Button xstyle={railStyles.skip} onClick={onSkip}>
+          <Button xstyle={railStyles.skip} onClick={skip}>
             Skip to Home
             <Kbd>esc</Kbd>
           </Button>
@@ -126,6 +135,12 @@ export function Onboarding({
       ) : (
         <DrawFlow
           client={client}
+          onRunStarted={(mode, agent) =>
+            client.capture("onboarding_run_started", {
+              mode,
+              ...(agent && { agent }),
+            })
+          }
           setupActions={setupActions}
           intro={{
             heading: "Draw your first whiteboard.",
