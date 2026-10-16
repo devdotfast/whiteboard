@@ -483,7 +483,6 @@ export interface ReviewSidebarCommit {
 }
 
 export interface ReviewSidebarState {
-  contents: { id: string; text: string; level: "h2" | "h3"; depth?: number }[];
   view: string;
   /** The board's commits, newest first in ancestry order, as git lists
    * them; absent or empty without any. */
@@ -492,10 +491,8 @@ export interface ReviewSidebarState {
   commit?: string;
   /** The compared branches, as "main ← feature". */
   compare?: string;
-  /** The heading in view, which Contents tints. */
-  activeHeading?: string;
   /** The change's counts are still loading: Lenses and Files keep what
-   * they show until a report has them. Contents never waits for them. */
+   * they show until a report has them. */
   countsPending?: boolean;
   /** For the folded Lenses and Files headers; absent without a change. */
   lenses?: number;
@@ -560,7 +557,6 @@ export interface ReviewSidebarSectionProps {
   section:
     | "whiteboards"
     | "family"
-    | "contents"
     | "recent"
     | "threads"
     | "commitPicker"
@@ -569,12 +565,7 @@ export interface ReviewSidebarSectionProps {
   connection: { serverUrl: string; token: string };
   /** The board in the active tab. */
   reviewId: string;
-  /** Its document's headings, as its canvas reports them. */
-  contents: ReviewSidebarState["contents"];
   onOpenBoard(reviewId: string, active: boolean): void;
-  onOpenHeading(headingId: string): void;
-  /** The heading in view, tinted in Contents. */
-  activeHeading?: string;
   /** Whiteboards: the board's project and its boards, from Desktop's
    * catalog. */
   project?: {
@@ -1971,13 +1962,6 @@ export const ReviewSurfaceEventSchema = z.discriminatedUnion("event", [
     view: reviewViewSchema,
     /** The board to switch, from its sidebar; else the one asking. */
     reviewId: requiredString.optional(),
-  }),
-  /** Scroll to a heading of the board on screen, from its sidebar's
-   * Contents. */
-  z.strictObject({
-    event: z.literal("revealHeading"),
-    reviewId: requiredString,
-    headingId: requiredString,
   }),
   /** Show one block of a board, once that board is on screen. */
   z.strictObject({

@@ -21,19 +21,23 @@ export interface PageMoreFolded {
 }
 
 /**
- * The page bar's "⋯": the board's less frequent actions. The icons the bar
- * had no room for, Move to Trash, the views the sidebar
- * has no tab for, and the full source.
+ * The page bar's "⋯": the board's less frequent actions. The board's
+ * contents while the board is too narrow for their rail, the icons the bar
+ * had no room for, Move to Trash, the views the sidebar has no tab for, and
+ * the full source.
  */
 export function PageMoreMenu({
   views,
   onShowView,
   folded = [],
+  onOpenContents,
 }: {
   /** Offered views without a sidebar tab, such as Trace. */
   views: readonly { view: ReviewView; label: string }[];
   onShowView(view: ReviewView): void;
   folded?: readonly PageMoreFolded[];
+  /** Opens the board's contents, while their rail is hidden. */
+  onOpenContents?(): void;
 }): ReactElement {
   const session = useReviewSession();
   const { dismissReview } = useReviewActions();
@@ -49,6 +53,7 @@ export function PageMoreMenu({
 
   const menu = useCanvasMenu({
     items: [
+      ...(onOpenContents ? [{ id: "contents", label: "Contents" }] : []),
       ...folded.map(({ id, label }) => ({ id: `folded:${id}`, label })),
       ...(!historical && !finished
         ? [{ id: "trash", label: "Move to Trash", enabled: !busy }]
@@ -62,6 +67,8 @@ export function PageMoreMenu({
       },
     ],
     onSelect: async (id) => {
+      if (id === "contents") onOpenContents?.();
+
       folded.find((item) => id === `folded:${item.id}`)?.onSelect();
 
       if (id === "trash" && !dismissing.current) {

@@ -35,8 +35,8 @@ export const mapFrameMarker = stylex.defineMarker();
 /** A flow diagram node; its outline takes the marker while it has focus. */
 export const flowNodeMarker = stylex.defineMarker();
 
-/** A contents entry; its number inks while it is the current section. */
-export const tocEntryMarker = stylex.defineMarker();
+/** A contents rail tick's hit area; its tick lengthens while hovered. */
+export const tocTickMarker = stylex.defineMarker();
 
 /** A review document block; its heading recomposes while it is retitled. */
 export const documentNodeMarker = stylex.defineMarker();

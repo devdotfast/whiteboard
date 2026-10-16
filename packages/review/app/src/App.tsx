@@ -37,6 +37,7 @@ import {
 import { BugReportControl } from "./bug-report-dialog";
 import { CommitPicker } from "./commit-picker";
 import { LanguageServerChip } from "./connection-chip";
+import { ContentsRail } from "./contents-rail";
 import { controlStyles } from "./controls-styles";
 import {
   ReviewDebugSettingsProvider,
@@ -85,7 +86,6 @@ import {
 import {
   scrollToReviewBlock,
   scrollToReviewHeading,
-  useHeadingInView,
 } from "./review-heading-scroll";
 import { useReviewLenses } from "./review-lenses";
 import {
@@ -308,6 +308,9 @@ function ReviewLayoutContent({
   const fold = usePageBarFold(pageBar, sidebarLeads);
   const canShare = useCanShare();
   const share = useRef<{ open(): void }>(null);
+  const contents = useRef<{ open(): void }>(null);
+  // Too narrow for the contents rail: the ⋯ menu offers the contents.
+  const [contentsRailHidden, setContentsRailHidden] = useState(false);
   const bugReport = useRef<{ open(): void }>(null);
 
   const joinDiscord = () => {
@@ -555,18 +558,11 @@ function ReviewLayoutContent({
     [tocEntries, panelStore, articleRef, scrollRegionRef],
   );
 
-  // Report headings, the view, and change counts to Desktop's sidebar.
-  const activeHeading = useHeadingInView(
-    tocEntries,
-    articleRef,
-    scrollRegionRef,
-    activeView === "review",
-  );
-
+  // Report the view and change counts to Desktop's sidebar.
   const lensStats = lenses?.progress ? lenses.stats() : undefined;
 
   // The change's counts come from the diff, which can take seconds; the
-  // board's headings and view are reported at once, and the sidebar keeps
+  // board's view is reported at once, and the sidebar keeps
   // its Lenses and Files counts until these arrive.
   const countsPending =
     hasChangeRange &&
@@ -576,7 +572,6 @@ function ReviewLayoutContent({
 
   useEffect(() => {
     session.bridge.reportSidebar?.({
-      contents: tocEntries,
       view: activeView,
       ...(countsPending && { countsPending }),
       ...(hasCommits && {
@@ -593,7 +588,6 @@ function ReviewLayoutContent({
         compare: `${shortRef(range.baseRef || range.baseCommit)} ← ${shortRef(range.headRef || range.headCommit)}`,
       }),
       ...(diffScope && { commit: diffScope.commit.commit }),
-      ...(activeHeading && { activeHeading }),
       ...(hasChangeRange && lenses && { lenses: lenses.authored.length }),
       ...(hasChangeRange &&
         filesTabFileCount !== null &&
@@ -616,9 +610,7 @@ function ReviewLayoutContent({
   }, [
     session.bridge,
     countsPending,
-    tocEntries,
     activeView,
-    activeHeading,
     hasChangeRange,
     lenses,
     filesTabFileCount,
@@ -652,20 +644,6 @@ function ReviewLayoutContent({
     let stopReveal: (() => void) | undefined;
 
     const unsubscribe = session.surface.subscribe((event) => {
-      if (event.event === "revealHeading") {
-        stopReveal?.();
-        panelStore.getState().showView("review");
-        stopReveal = revealWhenDrawn(() =>
-          scrollToReviewHeading(
-            event.headingId,
-            articleRef.current,
-            scrollRegionRef.current,
-          ),
-        );
-
-        return;
-      }
-
       if (event.event === "revealBlock") {
         stopReveal?.();
         panelStore.getState().showView("review");
@@ -938,6 +916,13 @@ function ReviewLayoutContent({
                   }))}
                 onShowView={showView}
                 folded={folded}
+                onOpenContents={
+                  activeView === "review" &&
+                  contentsRailHidden &&
+                  tocEntries.length > 0
+                    ? () => contents.current?.open()
+                    : undefined
+                }
               />
             ) : (
               <>
@@ -959,10 +944,15 @@ function ReviewLayoutContent({
         {banner}
         <section
           ref={scrollRegionRef}
+          // The contents rail returns focus here when its card closes.
+          tabIndex={-1}
           {...withClass(
             `review-view-region review-view-region--${activeView}`,
             shellStyles.viewRegion,
             activeView === "review" && shellStyles.reviewRegion,
+            activeView === "review" &&
+              tocEntries.length > 0 &&
+              shellStyles.reviewRegionRail,
             activeView === "trace" && traceStyles.region,
           )}
         >
@@ -1088,6 +1078,16 @@ function ReviewLayoutContent({
             />
           )}
         </section>
+        {activeView === "review" && (
+          <ContentsRail
+            entries={tocEntries}
+            articleRef={articleRef}
+            scrollRegionRef={scrollRegionRef}
+            barAnchor={pageBar}
+            handle={contents}
+            onHiddenChange={setContentsRailHidden}
+          />
+        )}
       </main>
       {rightPanelOpen && (
         <div

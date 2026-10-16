@@ -5,9 +5,12 @@ import type {
   ReviewThreadsFilter,
 } from "@dev.fast/review-protocol";
 import { act } from "react";
+import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { mountReviewSidebarSection } from "./desktop-entry";
+import type { ReviewTocEntry } from "./review-document-headings";
+import { ContentsList } from "./sidebar-sections";
 
 const board = (overrides: Partial<ReviewApiSummary>): ReviewApiSummary => ({
   reviewId: "board",
@@ -32,9 +35,7 @@ const props = (
   section: "family",
   connection: { serverUrl: "http://review.test", token: "t" },
   reviewId: "pr",
-  contents: [],
   onOpenBoard: () => {},
-  onOpenHeading: () => {},
   ...overrides,
 });
 
@@ -397,24 +398,26 @@ it("lists the board's threads, the project's, or every project's", async () => {
   await act(async () => handle!.dispose());
 });
 
-it("indents each section level of Contents one step under its parent", async () => {
+const mountContents = async (entries: ReviewTocEntry[]) => {
   const container = document.createElement("div");
 
   document.body.append(container);
   await act(async () => {
-    mountReviewSidebarSection(
-      container,
-      props({
-        section: "contents",
-        contents: [
-          { id: "a", text: "Top", level: "h2", depth: 1 },
-          { id: "b", text: "Sub", level: "h3", depth: 2 },
-          { id: "c", text: "Subsub", level: "h3", depth: 3 },
-          { id: "d", text: "Next", level: "h2", depth: 1 },
-        ],
-      }),
+    createRoot(container).render(
+      <ContentsList entries={entries} onOpen={() => {}} />,
     );
   });
+
+  return container;
+};
+
+it("indents each section level of Contents one step under its parent", async () => {
+  const container = await mountContents([
+    { id: "a", text: "Top", level: "h2", depth: 1 },
+    { id: "b", text: "Sub", level: "h3", depth: 2 },
+    { id: "c", text: "Subsub", level: "h3", depth: 3 },
+    { id: "d", text: "Next", level: "h2", depth: 1 },
+  ]);
 
   const rows = [...container.querySelectorAll("button")];
 
@@ -435,21 +438,10 @@ it("indents each section level of Contents one step under its parent", async () 
 });
 
 it("reads entries without a depth as before: an h3 under the h2 above it", async () => {
-  const container = document.createElement("div");
-
-  document.body.append(container);
-  await act(async () => {
-    mountReviewSidebarSection(
-      container,
-      props({
-        section: "contents",
-        contents: [
-          { id: "a", text: "Section", level: "h2" },
-          { id: "b", text: "Sub", level: "h3" },
-        ],
-      }),
-    );
-  });
+  const container = await mountContents([
+    { id: "a", text: "Section", level: "h2" },
+    { id: "b", text: "Sub", level: "h3" },
+  ]);
 
   const rows = [...container.querySelectorAll("button")];
 
