@@ -8,6 +8,7 @@ import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { pillStyles } from "@canvas/ui/pill";
 import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   PULL_REQUEST_STATE_LABELS,
   type ReviewStackLayer,
@@ -167,7 +168,13 @@ export function ReviewStackSelector(): ReactElement | null {
               />
               <div {...stylex.props(styles.baseRow)}>
                 <span {...stylex.props(styles.slot)} />
-                <span {...stylex.props(styles.branch, styles.faint)}>
+                <span
+                  {...stylex.props(
+                    textStyles.truncate,
+                    styles.branch,
+                    styles.faint,
+                  )}
+                >
                   {base}
                 </span>
                 <span>base</span>
@@ -195,26 +202,28 @@ function LayerRow({
   const reviewed = Boolean(layer.reviewUuid);
   const disabled = !current && !openable(layer);
 
+  const tooltip = useTooltip(
+    current
+      ? ""
+      : disabled
+        ? "No whiteboard of this pull request yet"
+        : reviewed
+          ? "Open whiteboard (Cmd/Ctrl-click to open in the background)"
+          : "Create a whiteboard of this branch (Cmd/Ctrl-click to open in the background)",
+  );
+
   const open = (event: OpenEvent) => {
     if (!current) onOpen(layer, event);
   };
 
   return (
     <button
+      ref={tooltip}
       type="button"
       role="menuitem"
       aria-current={current || undefined}
       data-relation={layer.relation}
       disabled={disabled}
-      title={
-        current
-          ? undefined
-          : disabled
-            ? "No whiteboard of this pull request yet"
-            : reviewed
-              ? "Open whiteboard (Cmd/Ctrl-click to open in the background)"
-              : "Create a whiteboard of this branch (Cmd/Ctrl-click to open in the background)"
-      }
       {...stylex.props(
         focusStyles.ringInset,
         buttonStyles.reset,
@@ -237,11 +246,18 @@ function LayerRow({
       ) : (
         <span aria-hidden="true" {...stylex.props(styles.unreviewed)} />
       )}
-      <span {...stylex.props(styles.branch, current && styles.branchCurrent)}>
+      <span
+        {...stylex.props(
+          textStyles.truncate,
+          styles.branch,
+          current && styles.branchCurrent,
+        )}
+      >
         {layer.branch}
       </span>
       <span
         {...stylex.props(
+          textStyles.truncate,
           styles.title,
           current && styles.titleCurrent,
           !reviewed && styles.faint,
@@ -309,22 +325,16 @@ const styles = stylex.create({
   branch: {
     flexShrink: 0,
     width: "136px",
-    overflow: "hidden",
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   branchCurrent: { color: tokens.ink },
   title: {
     flex: "1 1 0",
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.ink,
     fontSize: fontSize.ui,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   titleCurrent: { fontWeight: fontWeight.medium },
   faint: { color: tokens.inkFaint },
