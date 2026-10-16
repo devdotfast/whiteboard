@@ -1,5 +1,10 @@
 import { drawMotion } from "@canvas/draw-motion.stylex";
 import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
+import { CloseIcon } from "@canvas/ui/icons";
+import { pillStyles } from "@canvas/ui/pill";
+import { Spinner } from "@canvas/ui/spinner";
 import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewSidebarCoverage,
@@ -148,12 +153,7 @@ export function LensProgress({
             {lenses.remaining ? (
               <DiffCounts progress={lenses.remaining} />
             ) : (
-              <span
-                {...stylex.props(diffCountStyles.counts)}
-                aria-label="Counting changes"
-              >
-                …
-              </span>
+              <Spinner label="Counting changes" />
             )}
           </>
         )}
@@ -209,6 +209,8 @@ export function LensRows({
             >
               <button
                 {...stylex.props(
+                  focusStyles.ringInset,
+                  buttonStyles.reset,
                   styles.toggle,
                   inset && styles.toggleInset,
                   empty && lensRowStyles.toggleEmpty,
@@ -227,8 +229,9 @@ export function LensRows({
                 <span
                   {...stylex.props(
                     lensChipMarker,
+                    pillStyles.pill,
                     styles.chip,
-                    selected && styles.chipActive,
+                    selected && [pillStyles.active, styles.chipActive],
                   )}
                   data-tour-target="lens-chip"
                   title={
@@ -239,12 +242,7 @@ export function LensRows({
                   <LensName title={item.title} phase={phase} />
                   {selected && (
                     <span {...stylex.props(styles.clear)} aria-hidden="true">
-                      <svg width="10" height="10" viewBox="0 0 10 10">
-                        <path
-                          {...stylex.props(styles.clearMark)}
-                          d="M2 2l6 6M8 2L2 8"
-                        />
-                      </svg>
+                      <CloseIcon xstyle={styles.clearMark} />
                     </span>
                   )}
                 </span>
@@ -254,9 +252,8 @@ export function LensRows({
                       diffCountStyles.counts,
                       styles.toggleCounts,
                     )}
-                    aria-label="Counting changes"
                   >
-                    …
+                    <Spinner label="Counting changes" />
                   </span>
                 ) : empty ? (
                   <span
@@ -338,7 +335,7 @@ export const lensRowStyles = stylex.create({
   toggleEmpty: {
     color: tokens.inkFaint,
     cursor: "default",
-    backgroundColor: "transparent",
+    backgroundColor: tokens.transparent,
   },
   // The filter outranks the viewed fade; the checkbox beside it says viewed.
   faded: {
@@ -398,17 +395,11 @@ const styles = stylex.create({
     minWidth: 0,
     alignItems: "center",
     gap: "8px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     textAlign: "left",
     padding: "3px 4px 3px 8px",
-    font: "inherit",
     color: "inherit",
     cursor: "pointer",
-    backgroundColor: { default: "transparent", ":hover": tokens.well },
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-2px" },
+    backgroundColor: { default: tokens.transparent, ":hover": tokens.well },
   },
   // Lines the name up with the sidebar's other rows.
   toggleInset: { paddingLeft: "18px" },
@@ -423,7 +414,7 @@ const styles = stylex.create({
   toggleActive: {
     color: tokens.ink,
     fontWeight: fontWeight.semibold,
-    backgroundColor: "transparent",
+    backgroundColor: tokens.transparent,
   },
   toggleCounts: {
     marginLeft: "auto",
@@ -437,12 +428,8 @@ const styles = stylex.create({
     gap: "8px",
     height: "24px",
     padding: "0 8px",
-    borderRadius: radius.pill,
   },
-  chipActive: {
-    paddingRight: "4px",
-    backgroundColor: tokens.markerTint,
-  },
+  chipActive: { paddingRight: "4px" },
   name: {
     minWidth: 0,
     flex: "0 1 auto",
@@ -476,12 +463,8 @@ const styles = stylex.create({
       [stylex.when.ancestor(":hover", lensChipMarker)]: tokens.markerGlow,
     },
   },
-  clearMark: {
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: "1.4",
-    strokeLinecap: "round",
-  },
+  // The kit's × drawn 6px across at a 1.4px line.
+  clearMark: { width: "14px", height: "14px", strokeWidth: "2.4px" },
 });
 
 const sectionMotion = stylex.create({
