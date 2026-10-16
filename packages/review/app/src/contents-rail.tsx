@@ -1,6 +1,6 @@
 import { tocTickMarker } from "@canvas/markers.stylex";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { Popover } from "@canvas/ui/popover";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
@@ -21,7 +21,6 @@ import {
 import { tocRail } from "./review-toc.stylex";
 import { fontSize, fontWeight, layer, motion, radius } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
-import { useAnchoredPopover } from "./use-anchored-popover";
 
 /** Ticks this far apart, until they would run past the column's cap. */
 const PITCH_PX = 12;
@@ -69,7 +68,7 @@ export function ContentsRail({
   const place = useRef<HTMLDivElement>(null);
   const rail = useRef<HTMLDivElement>(null);
   const column = useRef<HTMLDivElement>(null);
-  const card = useAnchoredPopover(!!open, open === "bar" ? barAnchor : rail);
+  const card = useRef<HTMLDivElement>(null);
   const timer = useRef<number>(undefined);
   // Opened from the keyboard or the page bar: it holds focus, and closes
   // when focus leaves it rather than when the pointer does.
@@ -231,19 +230,18 @@ export function ContentsRail({
         </div>
       </div>
       {open && (
-        <div
+        <Popover
           ref={card}
-          popover="manual"
+          anchor={open === "bar" ? barAnchor : rail}
           role="menu"
           aria-label="Contents"
           tabIndex={-1}
-          {...stylex.props(
-            surfaceStyles.popover,
+          xstyle={[
             menuStyles.popover,
             menuStyles.end,
             styles.card,
             open === "bar" && styles.cardUnderBar,
-          )}
+          ]}
           onKeyDown={(event) => {
             if (event.key === "Escape") {
               event.preventDefault();
@@ -273,7 +271,7 @@ export function ContentsRail({
               <span {...stylex.props(styles.rowText)}>{entry.text}</span>
             </button>
           ))}
-        </div>
+        </Popover>
       )}
     </div>
   );
