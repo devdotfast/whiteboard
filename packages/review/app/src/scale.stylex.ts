@@ -13,8 +13,6 @@ export const fontSize = stylex.defineConsts({
   title: "14px",
   reading: "15px",
   heading: "18px",
-  // A board's title in its link preview.
-  headline: "21px",
   display: "22px",
 });
 

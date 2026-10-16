@@ -467,7 +467,7 @@ const styles = stylex.create({
   title: {
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
-    fontSize: fontSize.headline,
+    fontSize: fontSize.display,
     fontWeight: fontWeight.medium,
     letterSpacing: tracking.tight,
     lineHeight: "26px",
