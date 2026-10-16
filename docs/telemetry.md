@@ -58,8 +58,6 @@ The desktop app sets `DEV_FAST_REVIEW_TELEMETRY_DISABLED` for its own server
 from the in-app setting, so setting that one variable in your shell does not
 turn off app telemetry. Use `DO_NOT_TRACK` or the setting instead.
 
-Tests also turn telemetry off with `VITEST=1` or `NODE_ENV=test`.
-
 An explicit bug report is still sent if you choose **Send** in the bug-report
 dialog. Bug reports do not pass through the passive telemetry system.
 
@@ -121,7 +119,7 @@ different value. The raw IDs are used only inside the local server and never
 reach the capture client.
 
 Whiteboard disables the built-in Microsoft telemetry inherited from Code -
-OSS. A hardening test enforces that rule.
+OSS.
 
 ## How events leave the app
 
@@ -141,23 +139,6 @@ User-initiated bug reports take a separate path:
 Whiteboard ─→ local server ─→ bug.dev.fast ─→ private Cloudflare R2
                                       └─→ attachment-free PostHog metadata
 ```
-
-## Inspect events during development
-
-Set `DEV_FAST_REVIEW_TELEMETRY_DEBUG` to `1` or `true` to see the events that
-Whiteboard emits. Whiteboard then prints one line for each event to stderr:
-
-```
-[review-telemetry] {"event":"review_command_succeeded","distinctId":"…","properties":{…}}
-```
-
-The sink replaces PostHog. Whiteboard sends nothing to PostHog while the switch
-is on. Set the variable before you start Whiteboard, because most events come
-from the local server, not from the CLI.
-
-The sink ignores the opt-out rules above, because the sink does not send the
-events. The sink also does not record the `review_installation_created` event as
-sent, so the real event still goes out on the next normal run.
 
 ## Event reference
 
@@ -183,15 +164,9 @@ Every event from the Whiteboard telemetry API includes these properties:
 | `$session_id`             | The same ID as `app_session_id`, so PostHog groups a launch's events into one session; absent when the ID is not a UUIDv7 |
 | `$process_person_profile` | `false` until this installation is aliased to a GitHub account (see "Identity and storage"), then `true`                  |
 
-`environment` is the first that applies: `smoke` or `e2e` (test harness), `ci`
-(`CI` set), `internal`, `production`. These variables set it and `channel`:
-
-- `DEV_FAST_REVIEW_TELEMETRY_ENV`: `e2e` or `smoke` for a test harness. Other
-  values are ignored.
-- `DEV_FAST_REVIEW_CHANNEL`: set by the app for its server to `stable`,
-  `preview`, or `dev`.
-- `PROGRESSIVE_REVIEW_TELEMETRY_INTERNAL`: `1` marks telemetry as internal and
-  `0` as external, overriding the stored marker and workspace detection.
+`environment` is `production` unless Whiteboard runs in CI (`ci`, when `CI` is
+set), in a test harness (`e2e` or `smoke`), or as a dev.fast team build
+(`internal`).
 
 The event names predate the Whiteboard name and are unchanged. UI events also
 include `source: review_app`.
@@ -234,8 +209,7 @@ dropped the events.
 | `$create_alias`                 | `alias`, `$process_person_profile: true`                                                                                                       | The first GitHub sign-in on this installation; see "Identity and storage"                    |
 
 `source_kind` is `worktree`, `commits`, or `scratchpad`, set by the server from
-the opened whiteboard. `agent_kind` is allowlisted for session events but not
-yet sent.
+the opened whiteboard.
 
 `agent_kind` comes from the agent's session environment (`CODEX_THREAD_ID`,
 `CLAUDE_CODE_SESSION_ID`, `PI_SESSION_ID`). Over MCP, the client name the agent
@@ -262,10 +236,6 @@ sends no arguments, refs, tokens, or storage credentials. `surface` is
 `headless` for `server.start`, `mcp` for `mcp`, `api` for `api`, and `cli`
 otherwise, on every event the command's process sends.
 
-The CLI writes `review_command_started` to the disk queue before entering the
-command handler. The queue normally begins its background flush after five
-seconds; Whiteboard does not wait for network delivery before starting the command.
-
 Error names and categories are closed enums. A failed command sends no exception
 message, stack, path, process output, project identifier, or remediation text.
 Only the `review_client_error` and `review_update_failed` events carry message
@@ -281,9 +251,6 @@ text, and only as described in "Error reports".
 - Agent kinds: `codex`, `claude`, `cursor`, `opencode`, `pi`, `omp`, and `other`.
 
 ### Desktop and canvas events
-
-The server checks all properties in this table against
-`packages/review/src/ui-telemetry-events.ts`.
 
 | Event                             | Additional properties                                                                                                                                                          | When                                                                                                       |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
@@ -332,9 +299,7 @@ The server checks all properties in this table against
 The canvas sends `review_review_dismissed`, `review_review_restored`, and
 `review_review_deleted` from Home's actions, with `via` set to `home`.
 `review_review_dismissed` also comes from the whiteboard's top bar, with `via`
-set to `review_topbar`. `review_review_restored`'s `open` (the implicit undo,
-where opening a dismissed whiteboard brings it back) is allowlisted but not yet
-sent.
+set to `review_topbar`.
 
 ### Hangs
 
@@ -420,9 +385,7 @@ as `ENOENT: no such file or directory, open '<REDACTED: user-file-path>'`.
 
 The cleaner is Microsoft's, taken from VS Code, which Whiteboard is built on.
 Whiteboard uses it rather than a rule of its own so that you can check it against a known
-implementation. The copy is in
-`packages/review/src/telemetry-clean-text.ts`, and its header lists
-every difference from the original.
+implementation.
 
 Two rules sit on top of the cleaner:
 
@@ -532,26 +495,5 @@ An explicit bug report submission overrides the passive telemetry opt-out.
 The local server sends this report even when Whiteboard telemetry is off. The
 passive event allowlist and telemetry disk queue do not process bug reports.
 
-## Code locations
-
-| Concern                     | File                                                                                           |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| Telemetry API and identity  | `packages/review/src/review-telemetry.ts`                                                      |
-| Batch queue                 | `packages/review/src/posthog-capture-client.ts`                                                |
-| Opt-out rules               | `packages/review/src/telemetry-config.ts`                                                      |
-| Developer sink              | `packages/review/src/telemetry-debug-sink.ts`                                                  |
-| UI allowlist                | `packages/review/src/ui-telemetry-events.ts`                                                   |
-| Error message and frames    | `packages/review/src/error-telemetry.ts`                                                       |
-| Message cleaner (VS Code)   | `packages/review/src/telemetry-clean-text.ts`                                                  |
-| Error reporting rules       | `apps/review-desktop/code-oss/src/vs/review/common/reviewErrorReport.ts`                       |
-| Pre-start crash note        | `apps/review-desktop/code-oss/src/vs/review/node/reviewBootstrapBreadcrumb.ts`                 |
-| Desktop setting             | `apps/review-desktop/code-oss/src/vs/review/common/reviewConfiguration.ts`                     |
-| Settings screen             | `packages/review/app/src/settings-page.tsx`                                                    |
-| First-use notice            | `apps/review-desktop/code-oss/src/vs/review/contrib/telemetry/reviewTelemetry.contribution.ts` |
-| Error budget and bursts     | `packages/review/src/server/client-error-budget.ts`                                            |
-| Account alias               | `packages/review/src/server/account-alias.ts`                                                  |
-| Whiteboard lifecycle events | `packages/review/src/server/review-lifecycle-telemetry.ts`                                     |
-| Open-timeout watchdog       | `packages/review/src/server/review-open-watchdog.ts`                                           |
-| Crash dump upload           | `packages/review/src/server/crash-report.ts`                                                   |
-| Crash and hang listeners    | `apps/review-desktop/code-oss/src/vs/review/electron-main/reviewCrashTelemetry.ts`             |
-| Crash dump reconciliation   | `apps/review-desktop/code-oss/src/vs/review/electron-main/reviewCrashDumps.ts`                 |
+To change telemetry or inspect events while developing Whiteboard, see
+[Contributing](https://github.com/devdotfast/whiteboard/blob/main/CONTRIBUTING.md#telemetry).

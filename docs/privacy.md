@@ -2,7 +2,7 @@
 
 <!--
 Outline: Local data -> Anonymous telemetry -> Errors -> Explicit bug reports
--> Sharing -> Hosted trace store -> Opt-out -> Developer inspection.
+-> Sharing -> Hosted trace store -> Opt-out.
 -->
 
 Whiteboard reads source code and agent-authored documents from your machine.
@@ -12,7 +12,7 @@ reports, sharing, and hosted traces.
 Read the [dev.fast privacy policy](https://dev.fast/privacy) for the public
 policy governing Whiteboard.
 
-For the exact event schemas and implementation references, see the full
+For every event and property, see the full
 [telemetry reference](telemetry.md).
 
 ## What stays local
@@ -179,15 +179,3 @@ DO_NOT_TRACK=1 whiteboard info
 
 `DNT=1` and the other variables listed in the
 [telemetry reference](telemetry.md#turn-telemetry-off) are also supported.
-
-## Inspect events during development
-
-Set the debug sink before launching Whiteboard:
-
-```sh
-DEV_FAST_REVIEW_TELEMETRY_DEBUG=1 whiteboard app launch
-```
-
-Whiteboard prints each event to stderr instead of sending it to PostHog. See
-[Inspect events during development](telemetry.md#inspect-events-during-development)
-for its exact behavior.
