@@ -3,6 +3,7 @@ import { PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { BranchIcon, ChevronDownIcon, PullRequestIcon } from "@canvas/ui/icons";
+import { listRowStyles } from "@canvas/ui/list-row";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
@@ -212,7 +213,7 @@ function LayerRow({
         buttonStyles.reset,
         menuStyles.item,
         styles.row,
-        current && styles.rowCurrent,
+        current && [listRowStyles.current, styles.rowCurrent],
       )}
       onClick={open}
       onAuxClick={(event) => {
@@ -294,10 +295,7 @@ const styles = stylex.create({
     fontSize: fontSize.small,
   },
   row: { gap: "10px", minHeight: "34px", paddingInline: "10px" },
-  rowCurrent: {
-    backgroundColor: tokens.markerTint,
-    cursor: "default",
-  },
+  rowCurrent: { cursor: "default" },
   branchIcon: { width: "14px", height: "14px", color: tokens.inkMuted },
   // A branch with no whiteboard: an empty, dashed place.
   unreviewed: {

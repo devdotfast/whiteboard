@@ -1,5 +1,7 @@
 import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
+import { buttonStyles } from "@canvas/ui/button";
 import { CrumbSeparator } from "@canvas/ui/crumbs";
+import { listRowStyles } from "@canvas/ui/list-row";
 import { textStyles } from "@canvas/ui/text";
 import { TooltipHostContext, useTooltip } from "@canvas/ui/tooltip";
 import {
@@ -199,7 +201,13 @@ export function WhiteboardsList({
             type="button"
             aria-expanded={showAll}
             data-show-more=""
-            {...stylex.props(styles.row, styles.treeRow, styles.more)}
+            {...stylex.props(
+              buttonStyles.reset,
+              listRowStyles.row,
+              listRowStyles.wash,
+              styles.treeRow,
+              styles.more,
+            )}
             onClick={() => setShowAll(!showAll)}
           >
             <span {...stylex.props(styles.chevronSlot)} />
@@ -246,10 +254,11 @@ function BoardRow({
   return (
     <div
       {...stylex.props(
-        styles.row,
+        listRowStyles.row,
+        listRowStyles.wash,
         styles.treeRow,
         nested && styles.nestedRow,
-        (isCurrent || holdsCurrent) && styles.rowCurrent,
+        (isCurrent || holdsCurrent) && listRowStyles.current,
       )}
     >
       {expanded === undefined ? (
@@ -362,11 +371,13 @@ export function ContentsList({
             type="button"
             aria-current={entry.id === active ? "location" : undefined}
             {...stylex.props(
-              styles.row,
+              buttonStyles.reset,
+              listRowStyles.row,
+              listRowStyles.wash,
               styles.entry,
               depth(entry) > 1 && styles.nested,
               depth(entry) > 1 && styles.indent(depth(entry) - 2),
-              entry.id === active && styles.rowCurrent,
+              entry.id === active && listRowStyles.current,
             )}
             onClick={() => onOpen(entry.id)}
           >
@@ -814,7 +825,13 @@ function RecentBoards({
               type="button"
               aria-expanded={showAll}
               data-show-more=""
-              {...stylex.props(styles.row, styles.treeRow, styles.more)}
+              {...stylex.props(
+                buttonStyles.reset,
+                listRowStyles.row,
+                listRowStyles.wash,
+                styles.treeRow,
+                styles.more,
+              )}
               onClick={() => setShowAll(!showAll)}
             >
               <span {...stylex.props(styles.chevronSlot)} />
@@ -886,25 +903,6 @@ const styles = stylex.create({
     padding: "2px 8px 8px",
     listStyle: "none",
   },
-  row: {
-    display: "flex",
-    alignItems: "center",
-    gap: "10px",
-    width: "100%",
-    height: "24px",
-    paddingBlock: 0,
-    paddingInline: "8px",
-    borderWidth: 0,
-    borderRadius: radius.small,
-    backgroundColor: { default: "transparent", ":hover": tokens.markerTint },
-    color: tokens.ink,
-    fontFamily: tokens.chromeFont,
-    fontSize: fontSize.body,
-    lineHeight: "16px",
-    textAlign: "left",
-    cursor: "pointer",
-  },
-  rowCurrent: { backgroundColor: tokens.markerTint },
   // From the pane's edge: the chevron slot at 8px, a top-level icon at
   // 26px and its title at 46px; a child's icon at 42px and title at 62px.
   treeRow: { gap: 0, paddingInline: "0 8px", cursor: "default" },
@@ -1027,15 +1025,7 @@ const styles = stylex.create({
   nested: { height: "24px", paddingLeft: "30px" },
   // Each level below a subsection indents one more step.
   indent: (steps: number) => ({ paddingLeft: `${30 + 16 * steps}px` }),
-  more: {
-    height: "24px",
-    cursor: "pointer",
-    backgroundColor: { default: "transparent", ":hover": tokens.markerTint },
-    color: tokens.inkFaint,
-    fontFamily: tokens.chromeFont,
-    fontSize: fontSize.body,
-    lineHeight: "16px",
-  },
+  more: { cursor: "pointer", color: tokens.inkFaint },
   entryNumber: {
     flexShrink: 0,
     width: "12px",

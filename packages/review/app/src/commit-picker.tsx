@@ -2,6 +2,7 @@ import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { CheckIcon, CloseIcon } from "@canvas/ui/icons";
+import { listRowStyles } from "@canvas/ui/list-row";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { Popover } from "@canvas/ui/popover";
 import type { ReviewSidebarCommit } from "@dev.fast/review-protocol";
@@ -250,7 +251,7 @@ function CommitMenu({
                   buttonStyles.reset,
                   menuStyles.item,
                   styles.row,
-                  here && styles.rowPicked,
+                  here && listRowStyles.current,
                 )}
                 onClick={() => onPick(commit.commit)}
               >
@@ -501,7 +502,6 @@ const styles = stylex.create({
     borderRadius: radius.small,
     fontSize: fontSize.body,
   },
-  rowPicked: { backgroundColor: tokens.markerTint },
   dot: {
     flexShrink: 0,
     boxSizing: "border-box",

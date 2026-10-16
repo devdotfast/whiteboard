@@ -1,5 +1,7 @@
 import { BoardIcon } from "@canvas/ui/board-icons";
 import { AgentLogo } from "@canvas/ui/brand-icons";
+import { buttonStyles } from "@canvas/ui/button";
+import { listRowStyles } from "@canvas/ui/list-row";
 import { StatusDot } from "@canvas/ui/status-dot";
 import {
   type ReviewProjectThread,
@@ -150,8 +152,10 @@ export function ThreadsSectionBody({
                   type="button"
                   aria-current={threads.open?.includes(thread.id) || undefined}
                   {...stylex.props(
+                    buttonStyles.reset,
+                    listRowStyles.wash,
                     styles.row,
-                    threads.open?.includes(thread.id) && styles.rowOpen,
+                    threads.open?.includes(thread.id) && listRowStyles.current,
                   )}
                   onClick={() => onOpenThread?.(thread.id)}
                 >
@@ -314,14 +318,11 @@ const styles = stylex.create({
     width: "100%",
     minWidth: 0,
     padding: "8px",
-    borderWidth: 0,
     borderRadius: radius.control,
-    backgroundColor: { default: "transparent", ":hover": tokens.markerTint },
     color: tokens.ink,
     textAlign: "start",
     cursor: "pointer",
   },
-  rowOpen: { backgroundColor: tokens.markerTint },
   line: {
     display: "flex",
     alignItems: "center",

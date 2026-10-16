@@ -3,6 +3,7 @@ import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { buttonStyles } from "@canvas/ui/button";
 import { CrumbSeparator } from "@canvas/ui/crumbs";
 import { focusStyles } from "@canvas/ui/focus";
+import { listRowStyles } from "@canvas/ui/list-row";
 import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { Popover } from "@canvas/ui/popover";
 import {
@@ -296,7 +297,7 @@ function PlaceList({
             buttonStyles.reset,
             menuStyles.item,
             row.here && menuStyles.itemCurrent,
-            row.here && styles.rowCurrent,
+            row.here && [listRowStyles.current, styles.rowCurrent],
           )}
           onClick={(event) => {
             if (!row.here) row.open(event);
@@ -410,7 +411,7 @@ const styles = stylex.create({
   },
   // Kept inside a narrow window; the rest is the shared menu.
   menu: { width: "min(330px, calc(100vw - 16px))" },
-  rowCurrent: { backgroundColor: tokens.tray, cursor: "default" },
+  rowCurrent: { cursor: "default" },
   number: {
     flexShrink: 0,
     width: "12px",
