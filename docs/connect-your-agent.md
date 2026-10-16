@@ -4,7 +4,7 @@ Whiteboard connects to your coding agent through
 [MCP](https://modelcontextprotocol.io/). It sets up Claude Code, Codex, Cursor,
 OpenCode, Pi, oh-my-pi, and Copilot CLI for you.
 
-Keep Whiteboard open and [enable the command](installation.md#enable-the-command)
+Keep Whiteboard open and [enable the command](quick-start.md#enable-the-command)
 before setup.
 
 ## Connect from Whiteboard

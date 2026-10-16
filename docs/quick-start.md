@@ -1,6 +1,8 @@
 # Quick start
 
-1. [Download Whiteboard](https://dev.fast/install) and open it.
+1. [Download Whiteboard](https://dev.fast/install) for macOS, Windows, or Linux
+   and open it. [Preview builds](https://dev.fast/install/preview) install
+   alongside the stable app.
 2. On the **Install Whiteboard** screen, check the coding agents you use and
    select **Install**. Whiteboard installs the `whiteboard` command and connects
    each agent. See [Connect your agent](connect-your-agent.md) to do this later
@@ -12,3 +14,14 @@
    ```
 
 See [Create a review](create-a-review.md) for what happens next.
+
+## Enable the command
+
+If you skipped the **Install Whiteboard** screen, open Settings and select
+**Install** under Command line. Open a new terminal and run:
+
+```sh
+whiteboard --version
+```
+
+On macOS and Linux, make sure that `~/.local/bin` is on your shell's PATH.
