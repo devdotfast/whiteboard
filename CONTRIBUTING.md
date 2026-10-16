@@ -116,70 +116,11 @@ If your change adds or changes telemetry, update
 
 ## Telemetry
 
-[docs/telemetry.md](docs/telemetry.md) is the public list of what Whiteboard
-sends. This section covers working on it.
+Run `DEV_FAST_REVIEW_TELEMETRY_DEBUG=1 whiteboard app launch` to print each
+event to stderr instead of sending it. Tests disable telemetry
+(`VITEST=1`, `NODE_ENV=test`); harnesses set `DEV_FAST_REVIEW_TELEMETRY_ENV` to
+`e2e` or `smoke`.
 
-### Inspect events
-
-Set `DEV_FAST_REVIEW_TELEMETRY_DEBUG` to `1` or `true` before you start
-Whiteboard, because most events come from the local server, not from the CLI:
-
-```sh
-DEV_FAST_REVIEW_TELEMETRY_DEBUG=1 whiteboard app launch
-```
-
-Whiteboard then prints one line for each event to stderr and sends nothing to
-PostHog:
-
-```
-[review-telemetry] {"event":"review_command_succeeded","distinctId":"…","properties":{…}}
-```
-
-The sink ignores the opt-out rules, because it does not send the events. It
-also does not record `review_installation_created` as sent, so the real event
-still goes out on the next normal run.
-
-### Environment and channel
-
-`environment` is the first that applies: `smoke` or `e2e` (test harness), `ci`
-(`CI` set), `internal`, `production`. These variables set it and `channel`:
-
-- `DEV_FAST_REVIEW_TELEMETRY_ENV`: `e2e` or `smoke` for a test harness. Other
-  values are ignored.
-- `DEV_FAST_REVIEW_CHANNEL`: set by the app for its server to `stable`,
-  `preview`, or `dev`.
-- `PROGRESSIVE_REVIEW_TELEMETRY_INTERNAL`: `1` marks telemetry as internal and
-  `0` as external, overriding the stored marker and workspace detection.
-
-Tests turn telemetry off with `VITEST=1` or `NODE_ENV=test`. A hardening test
-keeps the Microsoft telemetry inherited from Code - OSS disabled.
-
-### Allowlisted but not sent yet
-
-- `agent_kind` on session events.
-- `review_review_restored` with `via: open`, the implicit undo when opening a
-  dismissed whiteboard.
-
-### Code locations
-
-| Concern                     | File                                                                                           |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| Telemetry API and identity  | `packages/review/src/review-telemetry.ts`                                                      |
-| Batch queue                 | `packages/review/src/posthog-capture-client.ts`                                                |
-| Opt-out rules               | `packages/review/src/telemetry-config.ts`                                                      |
-| Developer sink              | `packages/review/src/telemetry-debug-sink.ts`                                                  |
-| UI allowlist                | `packages/review/src/ui-telemetry-events.ts`                                                   |
-| Error message and frames    | `packages/review/src/error-telemetry.ts`                                                       |
-| Message cleaner (VS Code)   | `packages/review/src/telemetry-clean-text.ts`; its header lists every change                   |
-| Error reporting rules       | `apps/review-desktop/code-oss/src/vs/review/common/reviewErrorReport.ts`                       |
-| Pre-start crash note        | `apps/review-desktop/code-oss/src/vs/review/node/reviewBootstrapBreadcrumb.ts`                 |
-| Desktop setting             | `apps/review-desktop/code-oss/src/vs/review/common/reviewConfiguration.ts`                     |
-| Settings screen             | `packages/review/app/src/settings-page.tsx`                                                    |
-| First-use notice            | `apps/review-desktop/code-oss/src/vs/review/contrib/telemetry/reviewTelemetry.contribution.ts` |
-| Error budget and bursts     | `packages/review/src/server/client-error-budget.ts`                                            |
-| Account alias               | `packages/review/src/server/account-alias.ts`                                                  |
-| Whiteboard lifecycle events | `packages/review/src/server/review-lifecycle-telemetry.ts`                                     |
-| Open-timeout watchdog       | `packages/review/src/server/review-open-watchdog.ts`                                           |
-| Crash dump upload           | `packages/review/src/server/crash-report.ts`                                                   |
-| Crash and hang listeners    | `apps/review-desktop/code-oss/src/vs/review/electron-main/reviewCrashTelemetry.ts`             |
-| Crash dump reconciliation   | `apps/review-desktop/code-oss/src/vs/review/electron-main/reviewCrashDumps.ts`                 |
+Events and their allowed properties live in
+`packages/review/src/ui-telemetry-events.ts` and
+`packages/review/src/review-telemetry.ts`.
