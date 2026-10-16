@@ -1,11 +1,11 @@
 import { documentType } from "@canvas/document-type.stylex";
 import { fontSize, fontWeight } from "@canvas/scale.stylex";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
+import { DisclosureChevron } from "@canvas/ui/disclosure";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
   ChevronDownIcon,
   CloseIcon,
-  DisclosureChevron,
   ExternalLinkIcon,
   MapPinIcon,
   MinusIcon,
@@ -313,7 +313,7 @@ export function ReviewSection({
           aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
           onClick={toggleCollapsed}
         >
-          <DisclosureChevron expanded={!collapsed} />
+          <DisclosureChevron />
         </IconButton>
         <div {...withClass("review-section-heading", sectionStyles.heading)}>
           <h2

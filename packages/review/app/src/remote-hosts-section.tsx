@@ -1,10 +1,11 @@
 import { fontSize } from "@canvas/scale.stylex";
-import { Button, IconButton } from "@canvas/ui/button";
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { CopyableText, useCopy } from "@canvas/ui/copy";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { useUiTooltip } from "@canvas/ui/host";
 import { iconStyles } from "@canvas/ui/icon-styles";
-import { DisclosureChevron, RefreshIcon } from "@canvas/ui/icons";
+import { RefreshIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
 import {
@@ -260,13 +261,18 @@ function HostRow({
         type="button"
         aria-expanded={expanded}
         aria-controls={body}
-        {...stylex.props(chevronMarker, local.toggle)}
+        {...stylex.props(
+          chevronMarker,
+          buttonStyles.reset,
+          disclosureStyles.toggle,
+          local.toggle,
+        )}
         onClick={() => {
           expandedHosts.set(name, !expanded);
           setChosen(!expanded);
         }}
       >
-        <DisclosureChevron expanded={expanded} />
+        <DisclosureChevron />
         <span {...stylex.props(styles.rowText)}>
           <span {...stylex.props(styles.rowLabel)}>{name}</span>
           {loaded ? (
@@ -644,16 +650,7 @@ const local = stylex.create({
     display: "flex",
     minWidth: 0,
     alignItems: "center",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: "transparent",
-    color: "inherit",
-    cursor: "pointer",
-    font: "inherit",
     gap: "8px",
-    textAlign: "left",
   },
   body: {
     display: "flex",

@@ -1,4 +1,6 @@
 import { Button } from "@canvas/ui/button";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
+import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
 import { TextField, fieldStyles } from "@canvas/ui/text-field";
 import { isStringValue } from "@dev.fast/json";
@@ -12,6 +14,7 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
+import { chevronMarker } from "./markers.stylex";
 import { settingsStyles as styles } from "./settings-styles";
 import { SegmentedControl } from "./ui/segmented";
 
@@ -173,9 +176,15 @@ export function DiffrConfigSection({
     <div {...stylex.props(styles.diffr)}>
       <details>
         <summary
-          {...stylex.props(styles.diffrSummary)}
+          {...stylex.props(
+            chevronMarker,
+            disclosureStyles.toggle,
+            focusStyles.ring,
+            styles.diffrSummary,
+          )}
           onClick={() => setOpened(true)}
         >
+          <DisclosureChevron />
           Diff display and AI summaries
         </summary>
         {opened && (

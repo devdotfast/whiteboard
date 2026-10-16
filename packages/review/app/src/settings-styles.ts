@@ -78,7 +78,9 @@ export const settingsStyles = stylex.create({
     borderLeftColor: tokens.ruleSoft,
   },
   diffrSummary: {
-    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    gap: "6px",
     paddingBlock: "8px",
   },
   unavailable: {

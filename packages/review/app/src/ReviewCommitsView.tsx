@@ -1,8 +1,9 @@
 import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { CopyButton } from "@canvas/ui/copy";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { iconStyles } from "@canvas/ui/icon-styles";
-import { ArrowRightIcon, CodeIcon, DisclosureChevron } from "@canvas/ui/icons";
+import { ArrowRightIcon, CodeIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCommitSummary,
@@ -136,12 +137,17 @@ function CommitRow({
       <div {...stylex.props(styles.header, expanded && styles.headerExpanded)}>
         <button
           type="button"
-          {...stylex.props(chevronMarker, buttonStyles.reset, styles.toggle)}
+          {...stylex.props(
+            chevronMarker,
+            buttonStyles.reset,
+            disclosureStyles.toggle,
+            styles.toggle,
+          )}
           aria-expanded={expanded}
           onClick={toggleExpanded}
           title={commit.subject}
         >
-          <DisclosureChevron expanded={expanded} xstyle={styles.chevron} />
+          <DisclosureChevron xstyle={styles.chevron} />
           <strong {...stylex.props(textStyles.truncate, styles.subject)}>
             {commit.subject}
           </strong>
@@ -387,7 +393,6 @@ const styles = stylex.create({
     padding: 0,
     color: "inherit",
     gap: "10px",
-    textAlign: "left",
     outline: { default: null, ":focus-visible": "none" },
     "::after": {
       position: "absolute",

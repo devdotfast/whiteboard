@@ -167,13 +167,6 @@ export const traceStyles = stylex.create({
   tool: {
     minWidth: 0,
   },
-  summary: {
-    listStyle: "none",
-    cursor: "pointer",
-    "::-webkit-details-marker": {
-      display: "none",
-    },
-  },
   toolRow: {
     display: "grid",
     gridTemplateColumns: "20px minmax(0, 1fr) 16px",
@@ -224,14 +217,6 @@ export const traceStyles = stylex.create({
   },
   errorFlag: {
     flexShrink: 0,
-  },
-  toolChevronIcon: {
-    color: tokens.ruleSoft,
-    transform: {
-      default: "rotate(-90deg)",
-      [stylex.when.ancestor(":is([open])", traceToolMarker)]: "rotate(0deg)",
-    },
-    transition: `transform ${motion.fast} ${motion.ease}`,
   },
 
   // The embedded workbench Chromium does not hide closed details content.
@@ -306,14 +291,6 @@ export const traceStyles = stylex.create({
     display: "inline-flex",
     alignItems: "center",
   },
-  workedChevronIcon: {
-    color: tokens.inkFaint,
-    transform: {
-      default: "rotate(-90deg)",
-      [stylex.when.ancestor(":is([open])", traceWorkedMarker)]: "rotate(0deg)",
-    },
-    transition: `transform ${motion.fast} ${motion.ease}`,
-  },
   line: {
     flexGrow: 1,
     height: "1px",
@@ -345,14 +322,6 @@ export const traceStyles = stylex.create({
   toolGroupCount: {
     color: tokens.inkFaint,
     fontSize: fontSize.small,
-  },
-  toolGroupChevronIcon: {
-    color: tokens.ruleSoft,
-    transform: {
-      default: "rotate(-90deg)",
-      [stylex.when.ancestor(":is([open])", traceGroupMarker)]: "rotate(0deg)",
-    },
-    transition: `transform ${motion.fast} ${motion.ease}`,
   },
   toolGroupBody: {
     display: {

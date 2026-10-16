@@ -1,4 +1,6 @@
 import { CopyableText, copyText } from "@canvas/ui/copy";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
+import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
   BoardIcon,
@@ -7,7 +9,6 @@ import {
   ClearFiltersIcon,
   CloseIcon,
   CodeIcon,
-  DisclosureChevron,
   FilterIcon,
   FolderIcon,
   GearIcon,
@@ -44,7 +45,11 @@ import { useHostActionButton } from "./connection-chip";
 import { countLabel, formatRelativeTime } from "./format";
 import { homeStyles } from "./home-styles";
 import { CanvasUiContext, useCanvasMenu } from "./host/canvas-ui";
-import { homeGroupMarker, homeRowMarker } from "./markers.stylex";
+import {
+  chevronMarker,
+  homeGroupMarker,
+  homeRowMarker,
+} from "./markers.stylex";
 import { useNotify } from "./notify";
 import { useReviewHostDown } from "./remote-host-state";
 import type { ReviewFindHost } from "./review-find";
@@ -1154,10 +1159,15 @@ export function ReviewHome({
                       <button
                         type="button"
                         aria-expanded={!isCollapsed(group.id)}
-                        {...stylex.props(styles.groupToggle)}
+                        {...stylex.props(
+                          chevronMarker,
+                          disclosureStyles.toggle,
+                          focusStyles.ring,
+                          styles.groupToggle,
+                        )}
                         onClick={() => toggleGroup(group.id)}
                       >
-                        <DisclosureChevron expanded={!isCollapsed(group.id)} />
+                        <DisclosureChevron />
                         <span {...stylex.props(styles.slot)}>
                           {group.id === "unread" && (
                             <span {...stylex.props(styles.dot)} />

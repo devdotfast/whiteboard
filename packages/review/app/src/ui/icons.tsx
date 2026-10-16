@@ -1,4 +1,3 @@
-import { chevronMarker } from "@canvas/markers.stylex";
 import { motion } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { spinStyles } from "@canvas/ui/spinner";
@@ -448,42 +447,14 @@ export function SparkleIcon({ xstyle }: IconProps = {}): ReactElement {
 }
 
 /**
- * The one chevron glyph, pointing down. Callers rotate it with `iconStyles.flip`
- * or their own transform. `tokens.chevronDown` draws the same path.
+ * The one chevron glyph, pointing down. Callers rotate it with `iconStyles.flip`;
+ * `DisclosureChevron` turns it. `tokens.chevronDown` draws the same path.
  */
 export function ChevronDownIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <Icon base={styles.chevron} xstyle={xstyle}>
       <path d="M5 8.5 12 16l7-7.5" />
     </Icon>
-  );
-}
-
-/**
- * The disclosure glyph: the chevron in a 16px slot, pointing right when closed
- * and turning down when open. The workbench masks its codicon twisties to the
- * same path (review.css). Its button carries `chevronMarker`.
- */
-export function DisclosureChevron({
-  expanded,
-  xstyle,
-}: IconProps & {
-  expanded: boolean;
-}): ReactElement {
-  return (
-    <svg
-      {...stylex.props(
-        styles.chevron,
-        styles.disclosure,
-        expanded && styles.disclosureOpen,
-        xstyle,
-      )}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-      data-open={expanded || undefined}
-    >
-      <path d="M8.5 5 16 12l-7.5 7" />
-    </svg>
   );
 }
 
@@ -532,18 +503,6 @@ const styles = stylex.create({
     strokeLinecap: "round",
     strokeLinejoin: "round",
     strokeWidth: "3px",
-  },
-  disclosure: {
-    margin: "2px",
-    color: {
-      default: tokens.inkFaint,
-      [stylex.when.ancestor(":hover", chevronMarker)]: tokens.ink,
-      [stylex.when.ancestor(":focus-visible", chevronMarker)]: tokens.ink,
-    },
-    transition: `transform ${motion.fast} ${motion.ease}, color ${motion.fast} ${motion.ease}`,
-  },
-  disclosureOpen: {
-    transform: "rotate(90deg)",
   },
   drawnCheck: {
     width: "12px",

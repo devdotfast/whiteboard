@@ -1,5 +1,7 @@
 import { buttonStyles } from "@canvas/ui/button";
 import { Chip, chipStyles } from "@canvas/ui/chip";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
+import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
   ChevronDownIcon,
@@ -32,6 +34,7 @@ import {
   findWhitespaceNormalizedSpan,
 } from "./highlighted-text";
 import {
+  chevronMarker,
   traceGroupMarker,
   traceRowMarker,
   traceToolMarker,
@@ -256,7 +259,14 @@ export function TraceToolGroup({
       open={hasTarget}
       data-trace-event={items[0]?.index}
     >
-      <summary {...stylex.props(styles.summary, styles.toolGroupSummary)}>
+      <summary
+        {...stylex.props(
+          chevronMarker,
+          disclosureStyles.toggle,
+          focusStyles.ring,
+          styles.toolGroupSummary,
+        )}
+      >
         <span {...stylex.props(styles.centered)}>
           <StepsIcon xstyle={[iconStyles.chrome, styles.icon]} />
         </span>
@@ -267,7 +277,7 @@ export function TraceToolGroup({
           {events.length} steps
         </span>
         <span {...stylex.props(styles.inlineCentered)} aria-hidden="true">
-          <ChevronDownIcon xstyle={styles.toolGroupChevronIcon} />
+          <DisclosureChevron />
         </span>
       </summary>
       <div {...stylex.props(styles.toolGroupBody)}>
@@ -401,7 +411,7 @@ export function TraceToolRow({
       </span>
       {expandable && (
         <span {...stylex.props(styles.centered)} aria-hidden="true">
-          <ChevronDownIcon xstyle={styles.toolChevronIcon} />
+          <DisclosureChevron />
         </span>
       )}
     </span>
@@ -413,7 +423,15 @@ export function TraceToolRow({
 
   return (
     <details {...stylex.props(styles.tool, traceToolMarker)}>
-      <summary {...stylex.props(styles.summary)}>{row}</summary>
+      <summary
+        {...stylex.props(
+          chevronMarker,
+          disclosureStyles.toggle,
+          focusStyles.ring,
+        )}
+      >
+        {row}
+      </summary>
       <figure {...stylex.props(styles.figure)}>
         <figcaption {...stylex.props(textStyles.eyebrow, styles.figureHead)}>
           <span>{event.command ? "Shell" : event.tool}</span>
@@ -437,14 +455,20 @@ export function TraceToolRow({
 /** The summary row of a thinking block. */
 function ThinkingSummary() {
   return (
-    <summary {...stylex.props(styles.summary)}>
+    <summary
+      {...stylex.props(
+        chevronMarker,
+        disclosureStyles.toggle,
+        focusStyles.ring,
+      )}
+    >
       <span {...stylex.props(styles.toolRow)}>
         <span {...stylex.props(styles.centered)}>{toolIcon("Thinking")}</span>
         <span {...stylex.props(styles.toolLabel)}>
           <span {...stylex.props(styles.toolVerb)}>Thinking</span>
         </span>
         <span {...stylex.props(styles.centered)} aria-hidden="true">
-          <ChevronDownIcon xstyle={styles.toolChevronIcon} />
+          <DisclosureChevron />
         </span>
       </span>
     </summary>
@@ -1024,14 +1048,16 @@ export function TraceTurn({
         <details {...stylex.props(traceWorkedMarker)} open={openWorked}>
           <summary
             {...stylex.props(
-              styles.summary,
+              chevronMarker,
+              disclosureStyles.toggle,
+              focusStyles.ring,
               textStyles.eyebrow,
               styles.workedSummary,
             )}
           >
             <span>{workedLabel}</span>
             <span {...stylex.props(styles.inlineCentered)} aria-hidden="true">
-              <ChevronDownIcon xstyle={styles.workedChevronIcon} />
+              <DisclosureChevron />
             </span>
             <span {...stylex.props(styles.line)} />
           </summary>
