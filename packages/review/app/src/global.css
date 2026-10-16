@@ -94,10 +94,6 @@
   --accent-outline: rgb(91 124 255 / 32%);
   --link-open-wash: rgba(91, 124, 255, 0.15);
   --rpc-wash: rgba(143, 166, 255, 0.12);
-  --review-home-bg: var(--bg);
-  --review-home-rule: #262c37;
-  --review-home-rule-soft: #39404d;
-  --review-home-meta: #9199a8;
   /* Code (Whiteboard Dark): ink at three strengths, the marker for keywords,
      sky and periwinkle for types and functions, straw strings, orchid
      numbers. Every value clears WCAG AA on the editor background. */

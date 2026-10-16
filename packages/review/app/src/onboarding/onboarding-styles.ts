@@ -46,7 +46,7 @@ export const onboardingStyles = stylex.create({
     minHeight: 0,
     overflow: "auto",
     color: tokens.ink,
-    backgroundColor: tokens.reviewHomeBg,
+    backgroundColor: tokens.bg,
   },
   rail: {
     display: "flex",

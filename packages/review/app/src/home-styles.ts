@@ -18,7 +18,7 @@ export const homeStyles = stylex.create({
     minHeight: 0,
     overflow: "hidden",
     color: tokens.ink,
-    backgroundColor: tokens.reviewHomeBg,
+    backgroundColor: tokens.bg,
     font: `${fontSize.body}/16px ${tokens.fontMono}`,
   },
   scroll: {

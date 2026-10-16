@@ -12,7 +12,7 @@ export const settingsStyles = stylex.create({
   },
   lede: {
     margin: "0 0 28px",
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.ui,
   },
   section: {
@@ -23,8 +23,8 @@ export const settingsStyles = stylex.create({
     paddingBottom: "6px",
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
-    borderBottomColor: tokens.reviewHomeRule,
-    color: tokens.reviewHomeMeta,
+    borderBottomColor: tokens.rule,
+    color: tokens.inkMuted,
   },
   connect: {
     paddingBlock: "14px",
@@ -38,7 +38,7 @@ export const settingsStyles = stylex.create({
     padding: "14px 0",
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
-    borderBottomColor: tokens.reviewHomeRuleSoft,
+    borderBottomColor: tokens.ruleSoft,
   },
   rowText: {
     display: "flex",
@@ -51,7 +51,7 @@ export const settingsStyles = stylex.create({
     fontSize: fontSize.ui,
   },
   rowDescription: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   rowControl: {
@@ -63,7 +63,7 @@ export const settingsStyles = stylex.create({
     display: "flex",
     alignItems: "center",
     gap: "8px",
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
     cursor: "pointer",
   },
@@ -75,14 +75,14 @@ export const settingsStyles = stylex.create({
     paddingLeft: "12px",
     borderLeftWidth: "2px",
     borderLeftStyle: "solid",
-    borderLeftColor: tokens.reviewHomeRuleSoft,
+    borderLeftColor: tokens.ruleSoft,
   },
   diffrSummary: {
     cursor: "pointer",
     paddingBlock: "8px",
   },
   unavailable: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   error: {

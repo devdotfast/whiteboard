@@ -403,7 +403,7 @@ export function LegacySkillsRow({
 const styles = stylex.create({
   note: {
     margin: "0 0 8px",
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   // The prompt card's tabs, one agent at a time.
@@ -439,7 +439,7 @@ const styles = stylex.create({
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: {
-      default: tokens.reviewHomeRuleSoft,
+      default: tokens.ruleSoft,
       ":hover": tokens.inkMuted,
     },
     borderRadius: radius.pill,
@@ -473,7 +473,7 @@ const styles = stylex.create({
     margin: 0,
     padding: 0,
     listStyle: "none",
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
   },
   legacyCode: {
     fontFamily: tokens.fontMono,

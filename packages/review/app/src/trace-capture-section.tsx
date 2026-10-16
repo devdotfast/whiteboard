@@ -233,7 +233,7 @@ const styles = stylex.create({
     paddingTop: "10px",
     borderTopWidth: "1px",
     borderTopStyle: "solid",
-    borderTopColor: tokens.reviewHomeRuleSoft,
+    borderTopColor: tokens.ruleSoft,
   },
   info: {
     display: "flex",
@@ -251,7 +251,7 @@ const styles = stylex.create({
   state: {
     flex: 1,
     minWidth: 0,
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   // Enabled is the one state worth colouring.
@@ -259,7 +259,7 @@ const styles = stylex.create({
     color: tokens.changeAdded,
   },
   detail: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   fields: {
