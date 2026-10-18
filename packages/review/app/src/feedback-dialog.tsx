@@ -39,7 +39,7 @@ const featureChoices: readonly (readonly [Feature, string])[] = [
   ],
   [
     "planning_editing",
-    "Help with the planning / edit-related lifecycle of code (e.g. plan mode in Whiteboard, IDE capabilities)",
+    "Help with the planning / edit-related lifecycle of code (e.g. plan mode in Whiteboard, code editing in IDE, Cursor-tab-style autocomplete)",
   ],
   [
     "collaboration",

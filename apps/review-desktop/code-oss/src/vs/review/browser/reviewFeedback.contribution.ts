@@ -29,7 +29,7 @@ function showFeedbackInvitation(notifications: INotificationService, commands: I
   const handle = notifications.notify({
     severity: Severity.Info,
     sticky: true,
-    message: 'Hi, a quick note from Whiteboard’s developers: Whiteboard’s telemetry is completely anonymous, so we don’t see any of your code or data. This is a good thing, but we want to make Whiteboard work better for you! Could you fill out a short survey which lets us know how we can improve your experience with Whiteboard (takes <5 minutes)',
+    message: 'Hey! a note from the developers: we want to make Whiteboard work better for you. Could you fill out a short, 2-min survey to let us know how we can improve your experience?',
     actions: { primaryActionLast: true, primary: [
       toAction({ id: 'review.feedback.answer', label: 'Answer', run: () => {
         handle.close();
