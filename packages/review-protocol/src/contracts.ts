@@ -383,6 +383,8 @@ export interface ReviewCanvasBridge {
 }
 
 export interface ReviewCanvasSetupActions {
+  /** First-run UI only; ordinary New whiteboard must not enroll an email ask. */
+  onboarding?(event: "started" | "skipped"): void;
   load(): Promise<ReviewCanvasInstallContent>;
   installCli(): Promise<void>;
   /** The desktop server, which first run calls directly to connect agents
@@ -880,6 +882,8 @@ export interface ReviewCanvasHandle extends ReviewDisposable {
   newWhiteboard(): boolean;
   /** Opens the voluntary feedback form in the current canvas. */
   showFeedback(): void;
+  showEmail(): void;
+  isDialogOpen(): boolean;
 }
 
 export const REVIEW_CANVAS_RESUME_EVENT = "dev-fast-review-canvas-resume";
@@ -901,6 +905,7 @@ export interface ReviewMenuRequest {
 export interface ReviewCanvasUi {
   feedback?: {
     environment?: ReviewFeedback["environment"];
+    hasSharedEmail(): boolean;
     submit(
       response: Omit<ReviewFeedback, "id">,
     ): Promise<ReviewFeedbackSubmissionResult>;

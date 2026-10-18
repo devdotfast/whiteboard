@@ -26,6 +26,7 @@ import { createRoot } from "react-dom/client";
 
 import { ApiCanvas } from "./api-canvas";
 import { type DiffFilePicker, DiffFilePickerContext } from "./diff-file-picker";
+import { EmailDialog } from "./email-dialog";
 import { FeedbackDialog } from "./feedback-dialog";
 import { CanvasUiContext } from "./host/canvas-ui";
 import { FirstRun, readOnboardingSkipped } from "./onboarding/first-run";
@@ -302,6 +303,7 @@ export function mountReviewCanvas(
 ): ReviewCanvasHandle {
   let content = initialContent;
   let feedbackOpen = false;
+  let emailOpen = false;
 
   let disposed = false;
   let themeSubscription: { dispose(): void } | null = null;
@@ -384,6 +386,15 @@ export function mountReviewCanvas(
                   }}
                 />
               )}
+              {emailOpen && ui?.feedback && (
+                <EmailDialog
+                  host={ui.feedback}
+                  onClose={() => {
+                    emailOpen = false;
+                    render();
+                  }}
+                />
+              )}
             </DiffFilePickerContext.Provider>
           </UiHostProvider>
         </CanvasUiContext.Provider>
@@ -422,8 +433,17 @@ export function mountReviewCanvas(
     },
     showFeedback() {
       if (disposed || !ui?.feedback) return;
+      emailOpen = false;
       feedbackOpen = true;
       render();
+    },
+    showEmail() {
+      if (disposed || !ui?.feedback || feedbackOpen) return;
+      emailOpen = true;
+      render();
+    },
+    isDialogOpen() {
+      return emailOpen || feedbackOpen;
     },
     dispose() {
       if (disposed) return;

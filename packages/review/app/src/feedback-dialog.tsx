@@ -204,7 +204,7 @@ function FeedbackForm({ host, onClose }: { host: Host; onClose(): void }) {
   const submit = useMutation({
     mutationFn: async (response: Omit<ReviewFeedback, "id">) =>
       requireFeedbackSaved(await host.submit(response)),
-    onSuccess: () => setStep("contact"),
+    onSuccess: () => setStep(host.hasSharedEmail() ? "thanks" : "contact"),
   });
 
   const contact = useMutation({

@@ -38,13 +38,18 @@ export function Onboarding({
   // Run needs an agent with Whiteboard, which Install finds out.
   const [connected, setConnected] = useState(false);
   useEffect(() => {
+    setupActions.onboarding?.("started");
+  }, [setupActions]);
+
+  useEffect(() => {
     client?.capture("onboarding_step_viewed", { step });
   }, [client, step]);
 
   const skip = useCallback(() => {
+    setupActions.onboarding?.("skipped");
     client?.capture("onboarding_skipped", { step });
     onSkip();
-  }, [client, onSkip, step]);
+  }, [client, onSkip, setupActions, step]);
 
   // Escape leaves for Home, unless a field or menu has it.
   useEffect(() => {

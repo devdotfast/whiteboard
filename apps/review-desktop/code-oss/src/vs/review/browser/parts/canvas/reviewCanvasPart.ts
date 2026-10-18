@@ -29,6 +29,7 @@ import { IOpenerService } from "../../../../platform/opener/common/opener.js";
 import { IWorkbenchEnvironmentService } from "../../../../workbench/services/environment/common/environmentService.js";
 import { IEditorProgressService, LongRunningOperation } from "../../../../platform/progress/common/progress.js";
 import { IStorageService, StorageScope } from "../../../../platform/storage/common/storage.js";
+import { beginReviewEmailOnboarding, hasSharedReviewEmail, readReviewInvitationState, updateReviewInvitationState } from "../../../common/reviewInvitationState.js";
 import { ITelemetryService } from "../../../../platform/telemetry/common/telemetry.js";
 import { ColorScheme } from "../../../../platform/theme/common/theme.js";
 import { IThemeService } from "../../../../platform/theme/common/themeService.js";
@@ -727,6 +728,14 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		this.canvas.value?.showFeedback();
 	}
 
+	showEmail(): void {
+		this.canvas.value?.showEmail();
+	}
+
+	isDialogOpen(): boolean {
+		return this.canvas.value?.isDialogOpen() ?? false;
+	}
+
 	revealDiffFile(path: string): void {
 		this.canvas.value?.revealDiffFile(path);
 	}
@@ -813,6 +822,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	   New whiteboard reconnects, refetching its targets, when this changes. */
 	private setupActions(): ReviewCanvasSetupActions {
 		return this.cachedSetupActions ??= {
+			onboarding: event => {
+				if (event === 'started') beginReviewEmailOnboarding(this.storageService);
+				else if (readReviewInvitationState(this.storageService).email === 'onboarding') {
+					updateReviewInvitationState(this.storageService, { email: 'retired' });
+				}
+			},
 			load: () => this.loadInstallContent(),
 			installCli: async () => { await this.commandService.executeCommand("review.installCliInPath"); },
 			connection: async () => {
@@ -1113,6 +1128,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		} else {
 			this.canvas.value = assets.mountReviewCanvas(this.canvasMount, content, {
 				feedback: {
+					hasSharedEmail: () => hasSharedReviewEmail(this.storageService),
 					environment: !this.workbenchEnvironment.isBuilt ? "development" : this.productService.quality === "preview" ? "preview" : "production",
 					submit: response => this.desktopConnection.submitFeedback(response),
 					submitContact: contact => this.desktopConnection.submitFeedbackContact(contact),

@@ -18,16 +18,16 @@ export function reviewFeedbackInstallReadyAt(storage: IStorageService): number {
 
 /** Only campaign status is stored here; age and activity are read separately. */
 export type ReviewFeedbackState =
-  | { status: 'pending'; lastPromptSessionId?: string }
+  | { status: 'pending'; lastPromptSessionId?: string; lastPromptAt?: number }
   | { status: 'submitted' };
 
 export function readReviewFeedbackState(storage: IStorageService): ReviewFeedbackState {
   return storage.getObject<ReviewFeedbackState>(REVIEW_FEEDBACK_STATE_KEY, StorageScope.APPLICATION, { status: 'pending' });
 }
 
-/** Skip, close, and manual opening suppress further invitations in this app run. */
-export function markReviewFeedbackPrompted(storage: IStorageService, appSessionId: string): void {
-  storage.store(REVIEW_FEEDBACK_STATE_KEY, { status: 'pending', lastPromptSessionId: appSessionId }, StorageScope.APPLICATION, StorageTarget.MACHINE);
+/** Skip, close, and manual opening defer the campaign for seven days. */
+export function markReviewFeedbackPrompted(storage: IStorageService, appSessionId: string, now = Date.now()): void {
+  storage.store(REVIEW_FEEDBACK_STATE_KEY, { status: 'pending', lastPromptSessionId: appSessionId, lastPromptAt: now }, StorageScope.APPLICATION, StorageTarget.MACHINE);
 }
 
 /** Call only after the receiver confirms that it saved the response. */

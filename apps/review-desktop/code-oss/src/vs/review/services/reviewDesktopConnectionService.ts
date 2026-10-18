@@ -8,6 +8,7 @@ import { Disposable } from "../../base/common/lifecycle.js";
 import { createDecorator } from "../../platform/instantiation/common/instantiation.js";
 import { IStorageService } from "../../platform/storage/common/storage.js";
 import { markReviewFeedbackSubmitted } from "../common/reviewFeedbackState.js";
+import { updateReviewInvitationState } from "../common/reviewInvitationState.js";
 import { IMainProcessService } from "../../platform/ipc/common/mainProcessService.js";
 import {
 REVIEW_DESKTOP_CHANNEL,
@@ -204,7 +205,9 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 	}
 
 	async submitFeedbackContact(input: Omit<ReviewFeedbackContact, "id">): Promise<ReviewFeedbackSubmissionResult> {
-		return this.postFeedback("/feedback/contact", input);
+		const result = await this.postFeedback("/feedback/contact", input);
+		if (result.ok) updateReviewInvitationState(this.storageService, { contactSavedAt: Date.now() });
+		return result;
 	}
 
 	private async postFeedback(path: string, input: Omit<ReviewFeedback, "id"> | Omit<ReviewFeedbackContact, "id">): Promise<ReviewFeedbackSubmissionResult> {
