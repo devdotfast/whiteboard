@@ -33,6 +33,21 @@ export function Checkbox({
   );
 }
 
+/** Native radio behavior, with the same dimensions and palette as Checkbox. */
+export function Radio({
+  className,
+  xstyle,
+  ...props
+}: Omit<CheckboxProps, "indeterminate">) {
+  return (
+    <input
+      type="radio"
+      {...props}
+      {...withClass(className, styles.box, styles.radio, xstyle)}
+    />
+  );
+}
+
 /** The box alone, for a row that is itself the checkbox (a menuitemcheckbox). */
 export function CheckboxMark({
   state,
@@ -89,6 +104,26 @@ const styles = stylex.create({
     borderColor: tokens.accent,
     backgroundColor: tokens.accent,
     backgroundImage: tokens.checkMark,
+  },
+  radio: {
+    borderRadius: radius.round,
+    // An unanswered radio group is also :indeterminate, but has no mixed mark.
+    borderColor: {
+      default: tokens.ruleSoft,
+      ":checked": tokens.accent,
+      ":indeterminate": tokens.ruleSoft,
+    },
+    backgroundColor: {
+      default: tokens.surface,
+      ":checked": tokens.accent,
+      ":indeterminate": tokens.surface,
+    },
+    backgroundImage: {
+      default: "none",
+      ":checked": `radial-gradient(circle, ${tokens.onAccent} 3px, ${tokens.transparent} 3px)`,
+      ":indeterminate": "none",
+    },
+    backgroundSize: { default: "100% 100%", ":indeterminate": "100% 100%" },
   },
   mixed: {
     borderColor: tokens.accent,

@@ -5,13 +5,27 @@ import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps } from "react";
 
 type TextFieldProps = Omit<ComponentProps<"input">, "className" | "style"> & {
+  variant?: "default" | "form";
   className?: string;
   xstyle?: StyleArg;
 };
 
-export function TextField({ className, xstyle, ...props }: TextFieldProps) {
+export function TextField({
+  variant = "default",
+  className,
+  xstyle,
+  ...props
+}: TextFieldProps) {
   return (
-    <input {...props} {...withClass(className, fieldStyles.box, xstyle)} />
+    <input
+      {...props}
+      {...withClass(
+        className,
+        fieldStyles.box,
+        variant === "form" && fieldStyles.form,
+        xstyle,
+      )}
+    />
   );
 }
 
@@ -33,6 +47,15 @@ export const fieldStyles = stylex.create({
     fontSize: fontSize.body,
     outline: "none",
     opacity: { default: null, ":disabled": 0.5 },
+  },
+  form: {
+    height: "32px",
+    padding: "0 10px",
+    borderRadius: radius.control,
+    fontFamily: tokens.fontSans,
+    fontSize: fontSize.ui,
+    lineHeight: 1.5,
+    "::placeholder": { color: tokens.inkMuted, opacity: 1 },
   },
   // The input inside draws no box of its own.
   shell: {

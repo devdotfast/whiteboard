@@ -4,9 +4,12 @@ import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps } from "react";
 
+import { Spinner } from "./spinner";
+
 type NativeButtonProps = Omit<ComponentProps<"button">, "className" | "style">;
 
 type ButtonProps = NativeButtonProps & {
+  loading?: boolean;
   variant?: "ghost" | "secondary" | "primary" | "warning";
   // Large is for canvas and dialog actions; default matches the chrome.
   size?: "default" | "large";
@@ -29,20 +32,36 @@ export function Button({
   className,
   xstyle,
   type = "button",
+  loading = false,
+  disabled,
+  children,
   ...props
 }: ButtonProps) {
   return (
     <button
       type={type}
       {...props}
+      disabled={disabled || loading}
       {...withClass(
         className,
         buttonStyles.base,
         buttonStyles[variant],
         size === "large" && buttonStyles.large,
+        loading && buttonStyles.loading,
         xstyle,
       )}
-    />
+    >
+      {loading ? (
+        <>
+          <span {...stylex.props(buttonStyles.loadingLabel)}>{children}</span>
+          <span {...stylex.props(buttonStyles.loadingIndicator)}>
+            <Spinner xstyle={buttonStyles.loadingSpinner} />
+          </span>
+        </>
+      ) : (
+        children
+      )}
+    </button>
   );
 }
 
@@ -130,6 +149,24 @@ export const buttonStyles = stylex.create({
   },
   large: {
     height: "28px",
+  },
+  loading: {
+    position: "relative",
+    opacity: { default: null, ":disabled": 1 },
+  },
+  loadingLabel: { opacity: 0 },
+  loadingIndicator: {
+    position: "absolute",
+    inset: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    pointerEvents: "none",
+  },
+  loadingSpinner: {
+    width: "14px",
+    height: "14px",
+    borderTopColor: "currentcolor",
   },
   icon: {
     width: tokens.chromeControlHeight,
