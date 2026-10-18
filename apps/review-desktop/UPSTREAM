@@ -597,6 +597,10 @@ one of these entries:
   `scripts/curated-extensions.mjs` materializes under `extensions/`.
 - `src/vs/review/`: Review-owned workbench, protocol, and tests. These files
   carry a dev.fast copyright header rather than Microsoft's.
+- `src/vs/platform/notification/common/notification.ts`,
+  `src/vs/workbench/common/notifications.ts`, and
+  `src/vs/workbench/browser/parts/notifications/notificationsViewer.ts`:
+  allow the default notification action to appear after the other buttons.
 - `src/vs/platform/agentHost/` planning documents (deleted): the upstream
   commit vendored internal phase plans and design notes
   (`node/claude/phase*-plan.md`, `roadmap.md`, `smoke.md`, `CONTEXT.md`,

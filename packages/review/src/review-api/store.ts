@@ -1074,6 +1074,26 @@ export class ReviewStore {
       if (!this.has(SCRATCHPAD_ID)) throw error;
     }
   }
+  /** Two saved board/day pairs in the last fourteen days. */
+  feedbackEligible(now = Date.now()): boolean {
+    const row = this.db
+      .prepare(`SELECT count(*) AS pairs FROM (
+        SELECT DISTINCT review_id, date(json_extract(snapshot, '$.createdAt')) AS utc_date
+        FROM versions
+        WHERE (version = 0 OR json_type(snapshot, '$.lastEdit') = 'object')
+          AND json_extract(snapshot, '$.kind') IS NOT 'scratchpad'
+          AND json_extract(snapshot, '$.origin.tutorial') IS NOT 1
+          AND julianday(json_extract(snapshot, '$.createdAt')) BETWEEN julianday(?) AND julianday(?)
+        LIMIT 2
+      )`)
+      .get(
+        new Date(now - 14 * 24 * 60 * 60 * 1000).toISOString(),
+        new Date(now).toISOString(),
+      );
+
+    return Number(row?.pairs) >= 2;
+  }
+
   history(id: string) {
     return this.db
       .prepare(

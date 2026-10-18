@@ -30,6 +30,7 @@ import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
 
+import { mountFeedback } from "./feedback";
 import type { ReviewDesktopVerbRelay } from "./global-verb-relay";
 import {
   type ReviewHonoEnv,
@@ -92,6 +93,7 @@ export function createReviewServerApp(input: {
     await next();
   });
   app.get("/control", (context) => openControlEvents(context, input.relay));
+  mountFeedback(app);
   app.post("/control/result", async (context) => {
     const accepted = input.relay.acceptResult(
       await readBoundedRequestJson(context.req.raw),

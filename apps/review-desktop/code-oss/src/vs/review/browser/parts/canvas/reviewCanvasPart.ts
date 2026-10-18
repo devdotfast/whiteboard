@@ -25,6 +25,8 @@ import { ILogService } from "../../../../platform/log/common/log.js";
 import { FocusMode } from "../../../../platform/native/common/native.js";
 import { INotificationService } from "../../../../platform/notification/common/notification.js";
 import { IProductService } from "../../../../platform/product/common/productService.js";
+import { IOpenerService } from "../../../../platform/opener/common/opener.js";
+import { IWorkbenchEnvironmentService } from "../../../../workbench/services/environment/common/environmentService.js";
 import { IEditorProgressService, LongRunningOperation } from "../../../../platform/progress/common/progress.js";
 import { IStorageService, StorageScope } from "../../../../platform/storage/common/storage.js";
 import { ITelemetryService } from "../../../../platform/telemetry/common/telemetry.js";
@@ -188,6 +190,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		@IThemeService private readonly reviewThemeService: IThemeService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IProductService private readonly productService: IProductService,
+		@IOpenerService private readonly openerService: IOpenerService,
+		@IWorkbenchEnvironmentService private readonly workbenchEnvironment: IWorkbenchEnvironmentService,
 		@IReviewDesktopConnectionService
 		private readonly desktopConnection: IReviewDesktopConnectionService,
 		@IReviewApiSourceService private readonly apiSource: IReviewApiSourceService,
@@ -719,6 +723,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return this.canvas.value?.newWhiteboard() ?? false;
 	}
 
+	showFeedback(): void {
+		this.canvas.value?.showFeedback();
+	}
+
 	revealDiffFile(path: string): void {
 		this.canvas.value?.revealDiffFile(path);
 	}
@@ -1104,6 +1112,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			this.canvas.value.update(content);
 		} else {
 			this.canvas.value = assets.mountReviewCanvas(this.canvasMount, content, {
+				feedback: {
+					environment: !this.workbenchEnvironment.isBuilt ? "development" : this.productService.quality === "preview" ? "preview" : "production",
+					submit: response => this.desktopConnection.submitFeedback(response),
+					submitContact: contact => this.desktopConnection.submitFeedbackContact(contact),
+					openReleaseNotes: () => { void this.openerService.open("https://github.com/devdotfast/whiteboard/releases", { openExternal: true }); },
+				},
 				setupTooltip: this.setupTooltip,
 				notify: (notification) => showReviewNotification(this.notificationService, notification),
 				confirmDelete: titles => {

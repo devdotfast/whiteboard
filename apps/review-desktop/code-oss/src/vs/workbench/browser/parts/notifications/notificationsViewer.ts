@@ -525,12 +525,14 @@ export class NotificationTemplateRenderer extends Disposable {
 			}());
 
 			const buttonToolbar = this.inputDisposables.add(new ButtonBar(this.template.buttonsContainer));
-			for (let i = 0; i < primaryActions.length; i++) {
-				const action = primaryActions[i];
+			const orderedActions = notification.actions?.primaryActionLast
+				? [...primaryActions.slice(1), primaryActions[0]]
+				: primaryActions;
+			for (const action of orderedActions) {
 
 				const options: IButtonOptions = {
 					title: true,  // assign titles to buttons in case they overflow
-					secondary: i > 0,
+					secondary: action !== primaryActions[0],
 					...defaultButtonStyles
 				};
 

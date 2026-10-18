@@ -317,6 +317,10 @@ export function createReviewApi(
     return context.json(catalog());
   });
 
+  app.get("/feedback-eligibility", (context) =>
+    context.json({ eligible: store.feedbackEligible() }),
+  );
+
   // Server-owned state only: asking the Desktop canvas would let a stalled
   // renderer block tool listing and the first instructions call.
   const instructionContext = async () => ({

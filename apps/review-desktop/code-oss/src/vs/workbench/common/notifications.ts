@@ -564,6 +564,7 @@ export class NotificationViewItem extends Disposable implements INotificationVie
 
 	private setActions(actions: INotificationActions = { primary: [], secondary: [] }): void {
 		this._actions = {
+			primaryActionLast: actions.primaryActionLast,
 			primary: Array.isArray(actions.primary) ? actions.primary : [],
 			secondary: Array.isArray(actions.secondary) ? actions.secondary : []
 		};

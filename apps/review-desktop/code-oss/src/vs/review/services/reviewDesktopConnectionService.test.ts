@@ -9,7 +9,7 @@ import test from "node:test";
 import { ReviewDesktopConnectionService } from "./reviewDesktopConnectionService.js";
 
 function serviceWith(): ReviewDesktopConnectionService {
-	const service = new ReviewDesktopConnectionService({} as never);
+	const service = new ReviewDesktopConnectionService({} as never, {} as never);
 	Object.assign(service, {
 		connection: {
 			version: 1,

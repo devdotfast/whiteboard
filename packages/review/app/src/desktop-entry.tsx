@@ -26,6 +26,7 @@ import { createRoot } from "react-dom/client";
 
 import { ApiCanvas } from "./api-canvas";
 import { type DiffFilePicker, DiffFilePickerContext } from "./diff-file-picker";
+import { FeedbackDialog } from "./feedback-dialog";
 import { CanvasUiContext } from "./host/canvas-ui";
 import { FirstRun, readOnboardingSkipped } from "./onboarding/first-run";
 import { NewWhiteboard } from "./onboarding/new-whiteboard";
@@ -300,6 +301,7 @@ export function mountReviewCanvas(
   ui?: ReviewCanvasUi,
 ): ReviewCanvasHandle {
   let content = initialContent;
+  let feedbackOpen = false;
 
   let disposed = false;
   let themeSubscription: { dispose(): void } | null = null;
@@ -373,6 +375,15 @@ export function mountReviewCanvas(
                 findHost={findHost}
                 homeCommands={homeCommands}
               />
+              {feedbackOpen && ui?.feedback && (
+                <FeedbackDialog
+                  host={ui.feedback}
+                  onClose={() => {
+                    feedbackOpen = false;
+                    render();
+                  }}
+                />
+              )}
             </DiffFilePickerContext.Provider>
           </UiHostProvider>
         </CanvasUiContext.Provider>
@@ -409,6 +420,11 @@ export function mountReviewCanvas(
         (homeCommands.current?.newWhiteboard() ?? false)
       );
     },
+    showFeedback() {
+      if (disposed || !ui?.feedback) return;
+      feedbackOpen = true;
+      render();
+    },
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -432,6 +448,8 @@ const styles = stylex.create({
   // Layout-neutral: it only carries the theme inside the scope boundary.
   themeHost: {
     display: "contents",
+    // Match native form controls to the canvas. themeStyles.light overrides it.
+    colorScheme: "dark",
   },
   // The Source tab's VS Code-like watermark: quiet text centered in the
   // empty editor area, next to the native file tree.

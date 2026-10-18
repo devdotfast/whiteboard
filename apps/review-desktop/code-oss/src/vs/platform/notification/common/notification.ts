@@ -173,6 +173,9 @@ export interface INotification extends INotificationProperties {
 
 export interface INotificationActions {
 
+	/** Place the default primary action after the other buttons. */
+	readonly primaryActionLast?: boolean;
+
 	/**
 	 * Primary actions show up as buttons as part of the message and will close
 	 * the notification once clicked.

@@ -878,6 +878,8 @@ export interface ReviewCanvasHandle extends ReviewDisposable {
   /** Opens New whiteboard; false when the canvas is not on a Home that can
    * draw one (Trash, first run, another tab). */
   newWhiteboard(): boolean;
+  /** Opens the voluntary feedback form in the current canvas. */
+  showFeedback(): void;
 }
 
 export const REVIEW_CANVAS_RESUME_EVENT = "dev-fast-review-canvas-resume";
@@ -897,6 +899,16 @@ export interface ReviewMenuRequest {
 }
 
 export interface ReviewCanvasUi {
+  feedback?: {
+    environment?: ReviewFeedback["environment"];
+    submit(
+      response: Omit<ReviewFeedback, "id">,
+    ): Promise<ReviewFeedbackSubmissionResult>;
+    submitContact(
+      contact: Omit<ReviewFeedbackContact, "id">,
+    ): Promise<ReviewFeedbackSubmissionResult>;
+    openReleaseNotes(): void;
+  };
   setupTooltip?: ReviewCanvasBridge["setupTooltip"];
   confirmDelete?(titles: readonly string[]): Promise<boolean>;
   notify?: ReviewCanvasBridge["notify"];
@@ -1725,3 +1737,86 @@ export const ReviewAgentTraceResponseSchema = z.discriminatedUnion("ok", [
 export type ReviewAgentTraceResponse = z.infer<
   typeof ReviewAgentTraceResponseSchema
 >;
+
+export const REVIEW_FEEDBACK_CAMPAIGN = "whiteboard-feedback-2026-10";
+
+/** The host supplies its persistent installation ID, not a form or launch ID. */
+const feedbackId = z
+  .string()
+  .min(1)
+  .max(128)
+  .regex(/^[A-Za-z0-9_-]+$/);
+
+const feedbackSelections = <T extends [string, ...string[]]>(values: T) =>
+  z
+    .array(z.enum(values))
+    .max(values.length)
+    .refine((items) => new Set(items).size === items.length);
+
+/** Required survey answers and optional contact are separate submissions. */
+export const ReviewFeedbackSchema = z
+  .strictObject({
+    id: feedbackId,
+    campaign: z.literal(REVIEW_FEEDBACK_CAMPAIGN),
+    environment: z
+      .enum(["production", "preview", "development", "test"])
+      .optional(),
+    contexts: feedbackSelections([
+      "work",
+      "personal_projects",
+      "open_source_projects",
+      "other",
+    ]).refine((items) => items.length > 0),
+    contextsOther: z.string().trim().max(500).optional(),
+    benefit: z.string().trim().min(1).max(4000),
+    feature: z.enum([
+      "code_understanding",
+      "planning_editing",
+      "collaboration",
+      "other",
+    ]),
+    featureOther: z.string().trim().max(500).optional(),
+    rating: z.number().int().min(1).max(5),
+    roles: feedbackSelections([
+      "developer",
+      "engineering_manager",
+      "founder",
+      "other",
+    ]).refine((items) => items.length > 0),
+    rolesOther: z.string().trim().max(500).optional(),
+  })
+  .superRefine((response, context) => {
+    for (const [selected, other] of [
+      [response.contexts.includes("other"), "contextsOther"],
+      [response.feature === "other", "featureOther"],
+      [response.roles.includes("other"), "rolesOther"],
+    ] as const) {
+      if (selected ? !response[other]?.trim() : response[other] !== undefined) {
+        context.addIssue({
+          code: "custom",
+          path: [other],
+          message: selected
+            ? "Describe Other."
+            : "Select Other before supplying its text.",
+        });
+      }
+    }
+  });
+
+export const ReviewFeedbackContactSchema = z.strictObject({
+  kind: z.literal("contact"),
+  id: feedbackId,
+  campaign: z.literal(REVIEW_FEEDBACK_CAMPAIGN),
+  environment: z
+    .enum(["production", "preview", "development", "test"])
+    .optional(),
+  email: z.email().max(254),
+});
+
+export type ReviewFeedbackContact = z.infer<typeof ReviewFeedbackContactSchema>;
+
+export type ReviewFeedback = z.infer<typeof ReviewFeedbackSchema>;
+
+export type ReviewFeedbackSubmissionResult =
+  | { ok: true }
+  | { ok: false; error: "network" | "receiver" };
