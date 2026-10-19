@@ -50,6 +50,7 @@ Everything below lives in `packages/review/app/src/ui/` unless a path says other
 - **Off-scale values.** Don't silence lint with a new step or an inline `calc()`. Snap to the nearest step, and name a geometry-coupled offset once. Reduced-motion and narrow-width media queries become `stylex.env.reducedMotion` / `stylex.env.narrow`; a one-off layout breakpoint may stay local. Replace local `spin` keyframes and easings with `motion.*` and `spinStyles`.
 - **Every animation stills under reduced motion.** Check each `animationName` and `transition` has a `stylex.env.reducedMotion` branch.
 - **Focus.** Look for anything that sets `disabled` on the button that was just pressed (Send, Retry, an opener while it loads). Replace it with a guard in the handler. Popovers and dialogs must close on Escape and give focus back to their trigger.
+- **Scrollbars.** `global.css` already styles every native scrollbar in the canvas. Delete local `::-webkit-scrollbar` rules. Setting `scrollbarWidth` or `scrollbarColor` turns that styling off, and `scrollbarColor` inherits, so set them only for a scroller that hides its bar on purpose. A main scroller whose bar must not take layout width gets `OverlayScrollbar` and `overlayScrollbarStyles.scroller`.
 - **Portals.** UI portaled outside `.review-app` needs `themeStyles.vars`, or kit controls lose their chrome tokens and collapse.
 - **Feedback placement.** Errors inside a modal render inline with `role="alert"`. Transient success after a surface closes uses `useNotify`. Don't do both.
 - **Slop in styles.** Delete:
