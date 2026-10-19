@@ -259,7 +259,9 @@ export class ReviewSidebarPart extends Part {
 	 * choice follows the sidebar's width alone and can't flip back on
 	 * itself. */
 	private foldTabs(width: number): void {
-		const folded = width < this.tabsRow.get().labelled;
+		const tabs = this.tabsRow.get();
+		if (!tabs) return;
+		const folded = width < tabs.labelled;
 		if (this.tabRow?.classList.contains("folded") === folded) return;
 		this.tabRow?.classList.toggle("folded", folded);
 		this.describeTabs();
@@ -283,7 +285,7 @@ export class ReviewSidebarPart extends Part {
 	private fitControls(): void {
 		const controls = this.layoutService.mainContainer.querySelector(".part.titlebar .titlebar-left");
 		if (!controls || !this.element) return;
-		const width = sidebarMinimumWidth(controls.getBoundingClientRect().right, this.element.getBoundingClientRect().left, this.tabsRow.get().folded);
+		const width = sidebarMinimumWidth(controls.getBoundingClientRect().right, this.element.getBoundingClientRect().left, this.tabsRow.get()?.folded);
 		if (width === this.fitWidth) return;
 		this.fitWidth = width;
 		this._onDidChange.fire(undefined);
@@ -297,10 +299,11 @@ export class ReviewSidebarPart extends Part {
 	 * the row's width with all of them labelled, and with all of them folded
 	 * to an icon and count. Each is measured in a hidden copy of the row,
 	 * with its count at full width. */
-	private tabsWidth(): { labelled: number; folded: number } {
+	private tabsWidth(): { labelled: number; folded: number } | undefined {
 		const row = this.tabRow;
 		const first = this.panes[0]?.tab;
-		if (!row || !first) return { labelled: 0, folded: 0 };
+		// A hidden sidebar has nothing to measure yet.
+		if (!row?.offsetWidth || !first) return undefined;
 		const probe = $(".review-sidebar-tabs-probe", { "aria-hidden": "true" });
 		const foldedProbe = $(".review-sidebar-tabs-probe.folded", { "aria-hidden": "true" });
 		const tab = (noun: string | undefined, title?: string) => {

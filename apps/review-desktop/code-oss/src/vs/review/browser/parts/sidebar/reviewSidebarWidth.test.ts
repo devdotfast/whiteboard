@@ -21,3 +21,12 @@ test("the tabs are measured once, and again only after the zoom or fonts change"
 	assert.equal(tabs.get(), 2);
 	assert.equal(measured, 2);
 });
+
+test("the tabs are measured again until they can be measured", () => {
+	let shown = false;
+	const tabs = measuredOnce(() => (shown ? 120 : undefined));
+
+	assert.equal(tabs.get(), undefined);
+	shown = true;
+	assert.equal(tabs.get(), 120);
+});
