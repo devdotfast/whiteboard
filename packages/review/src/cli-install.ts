@@ -699,11 +699,16 @@ export async function writePathShim(
   cliPath: string,
   runtimePath: string | undefined,
   devHome: string,
+  previewHome = devHome,
 ): Promise<void> {
   if (process.platform === "win32") {
     await writeFileAtomicAsync(
       shimPath,
-      windowsCliShim(cliPath, runtimePath ?? process.execPath, devHome),
+      windowsCliShim(
+        cliPath,
+        runtimePath ?? process.execPath,
+        devHome === previewHome ? devHome : undefined,
+      ),
       { replaceSymlink: true },
     );
 
@@ -716,6 +721,8 @@ export async function writePathShim(
 FALLBACK_CLI=${shSingleQuote(cliPath)}
 FALLBACK_RUNTIME=${shSingleQuote(runtimePath ?? "")}
 DEFAULT_HOME=${shSingleQuote(devHome)}
+channel="\${DEV_FAST_REVIEW_CHANNEL:-\${DEV_REVIEW_INSTANCE:-}}"
+[ "$channel" = preview ] && DEFAULT_HOME=${shSingleQuote(previewHome)}
 export DEV_REVIEW_HOME="\${DEV_REVIEW_HOME:-$DEFAULT_HOME}"
 DESKTOP="$DEV_REVIEW_HOME/review-desktop"
 
@@ -836,7 +843,11 @@ export async function installReviewCommand(input: {
     shimPath,
     input.cliPath,
     input.cliRuntimePath,
-    devReviewHome(env, homeDir),
+    devReviewHome({ DEV_REVIEW_HOME: env.DEV_REVIEW_HOME }, homeDir),
+    devReviewHome(
+      { DEV_REVIEW_HOME: env.DEV_REVIEW_HOME, DEV_REVIEW_INSTANCE: "preview" },
+      homeDir,
+    ),
   );
 
   if (await traceMachineEnabled({ homeDir, env })) {
