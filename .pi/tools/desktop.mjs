@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Drives one isolated dev Desktop for the pi ui-feature workflow. The app has
-// no HMR, so every change goes through `restart`. State, logs and screenshots
-// live in .pi-subagents/desktop/ (gitignored).
+// no HMR, so every change goes through `restart`, which starts it the only
+// supported way: `pnpm dev` (build + run). State, logs and screenshots live in
+// .pi-subagents/desktop/ (gitignored).
 //
-//   node .pi/tools/desktop.mjs restart [--no-build] [--timeout 240]
+//   node .pi/tools/desktop.mjs restart [--timeout 600]
 //   node .pi/tools/desktop.mjs stop
 //   node .pi/tools/desktop.mjs status
 //   node .pi/tools/desktop.mjs theme light|dark|<theme id>
@@ -14,7 +15,7 @@
 // emulation, runs the steps, captures, then detaches (which drops the
 // emulation). Steps: {"press":"Tab"}, {"hover":"css"}, {"click":"css"},
 // {"focus":"css"}, {"wait":ms}, {"shot":"suffix"} for a mid-sequence capture.
-import { spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { closeSync, openSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
@@ -34,8 +35,7 @@ const [command, ...rest] = process.argv.slice(2);
 const { values: opts } = parseArgs({
   args: rest,
   options: {
-    "no-build": { type: "boolean", default: false },
-    timeout: { type: "string", default: "240" },
+    timeout: { type: "string", default: "600" },
     name: { type: "string" },
     size: { type: "string" },
     motion: { type: "string" },
@@ -70,7 +70,7 @@ async function freePort() {
 async function stop() {
   const state = await readState();
   if (!state?.pid || !alive(state.pid)) return false;
-  // run.sh execs Electron in its own process group; take the whole group down.
+  // `pnpm dev` and the Electron it ends in share one process group.
   process.kill(-state.pid, "SIGTERM");
   for (let i = 0; i < 40 && alive(state.pid); i++) await sleep(250);
   if (alive(state.pid)) process.kill(-state.pid, "SIGKILL");
@@ -91,31 +91,15 @@ async function workbenchReady(port) {
 async function restart() {
   await mkdir(root, { recursive: true });
   const stopped = await stop();
-  const buildLog = path.join(root, "build.log");
   const launchLog = path.join(root, "launch.log");
   const started = Date.now();
-
-  if (!opts["no-build"]) {
-    const build = spawnSync("pnpm", ["desktop:build"], {
-      cwd: repo,
-      env: { ...process.env, REVIEW_DESKTOP_DEV_FAST: "1" },
-      encoding: "utf8",
-      maxBuffer: 256 * 1024 * 1024,
-    });
-    await writeFile(buildLog, `${build.stdout ?? ""}${build.stderr ?? ""}`);
-    if (build.status !== 0) {
-      print({ status: "build-failed", exitCode: build.status, buildLog });
-      process.exitCode = 1;
-      return;
-    }
-  }
 
   const port = await freePort();
   // A file descriptor, not a pipe: the Desktop outlives this process and keeps
   // logging to launch.log.
   const log = openSync(launchLog, "w");
-  const child = spawn("bash", [path.join(appDir, "scripts/run.sh")], {
-    cwd: appDir,
+  const child = spawn("pnpm", ["dev"], {
+    cwd: repo,
     detached: true,
     stdio: ["ignore", log, log],
     env: {
@@ -156,7 +140,6 @@ async function restart() {
     port,
     elapsedMs: Date.now() - started,
     launchLog,
-    buildLog: opts["no-build"] ? null : buildLog,
     vscodeLogs: path.join(root, "state-root/user-data/logs"),
   });
   if (status !== "ready") process.exitCode = 1;

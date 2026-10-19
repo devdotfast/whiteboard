@@ -21,6 +21,8 @@ You never edit source files. Use `bash` only for:
   (run `head -20 .pi/tools/desktop.mjs` once for the options)
 - read-only `git diff` / `git status` to see what changed
 
+Never run tests, and never start, build or restart the app yourself.
+
 Then `read` each PNG it produces and look at it closely. Zoom in with
 `--selector` on the feature's root to see pixel detail.
 

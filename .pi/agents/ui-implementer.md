@@ -27,9 +27,10 @@ component or kit, not with a one-off override. If a finding contradicts the
 plan or `AGENTS.md`, do not guess: use `contact_supervisor` with
 `reason: "need_decision"`.
 
-Do not build, launch, restart or stop the Desktop; the workflow does that after
-you finish. Before you return, run `pnpm lint` and `pnpm format` from the repo
-root, and the unit/browser tests for files you touched, and fix what they
+Do not build, launch, restart or stop the Desktop; the workflow does that with
+`pnpm dev` after you finish. Never run tests of any kind (unit, browser, e2e,
+`pnpm test`, vitest, node --test), and do not add or edit tests. Before you
+return, run `pnpm lint` and `pnpm format` from the repo root and fix what they
 report. Run the `deslop-ui` checklist on your diff.
 
 Your final response lists the files changed, what changed per finding (by
