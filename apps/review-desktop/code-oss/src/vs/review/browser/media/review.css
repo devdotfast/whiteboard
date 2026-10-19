@@ -1598,13 +1598,26 @@ body
 }
 
 .monaco-workbench .review-sidebar-tabs {
+  --review-tabs-trough: color-mix(in srgb, var(--vscode-sideBar-background), black 35%);
+  --review-tab-raised: color-mix(in srgb, var(--vscode-foreground) 10%, var(--vscode-sideBar-background));
+  --review-tab-raised-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
   box-sizing: border-box;
   display: flex;
   flex-shrink: 0;
   align-items: center;
-  gap: 2px;
-  height: 44px;
-  padding: 0 10px;
+  height: 36px;
+  margin: 4px 10px;
+  padding: 3px;
+  border: 1px solid var(--vscode-widget-border, transparent);
+  border-radius: 8px;
+  background-color: var(--review-tabs-trough);
+}
+
+.monaco-workbench.vs .review-sidebar-tabs,
+.monaco-workbench.hc-light .review-sidebar-tabs {
+  --review-tabs-trough: color-mix(in srgb, var(--vscode-sideBar-background), black 6%);
+  --review-tab-raised: var(--vscode-editor-background);
+  --review-tab-raised-shadow: 0 1px 2px rgba(21, 24, 30, 0.12), inset 0 0 0 1px rgba(21, 24, 30, 0.06);
 }
 
 /* Which commits the diff shows, between the Changes header and its
@@ -1651,8 +1664,8 @@ body
   flex: 1 1 auto;
   min-width: 0;
   box-sizing: border-box;
-  height: 30px;
-  padding: 0 5px;
+  height: 28px;
+  padding: 0 4px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -1701,7 +1714,8 @@ body
 }
 
 .monaco-workbench .review-sidebar-tab.active {
-  background-color: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+  background-color: var(--review-tab-raised);
+  box-shadow: var(--review-tab-raised-shadow);
   color: var(--vscode-foreground);
 }
 

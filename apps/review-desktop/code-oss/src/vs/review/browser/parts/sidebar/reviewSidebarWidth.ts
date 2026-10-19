@@ -22,9 +22,10 @@ export function sidebarMinimumWidth(controlsRight: number, sidebarLeft: number, 
 	return Math.max(REVIEW_SIDEBAR_MINIMUM_WIDTH, Math.ceil(controlsRight - sidebarLeft + CONTROLS_GAP), Math.ceil(tabsWidth));
 }
 
-/** The tabs row with all its tabs: their widths, the gaps, and padding. */
-export function tabsRowWidth(tabWidths: readonly number[], gap: number, rowPadding: number): number {
-	return tabWidths.reduce((sum, width) => sum + width, 0) + gap * Math.max(0, tabWidths.length - 1) + 2 * rowPadding;
+/** The tabs row with all its tabs: their widths, the gaps, and the row's
+ * inset on each side (margin, border and padding). */
+export function tabsRowWidth(tabWidths: readonly number[], gap: number, inset: number): number {
+	return tabWidths.reduce((sum, width) => sum + width, 0) + gap * Math.max(0, tabWidths.length - 1) + 2 * inset;
 }
 
 /**

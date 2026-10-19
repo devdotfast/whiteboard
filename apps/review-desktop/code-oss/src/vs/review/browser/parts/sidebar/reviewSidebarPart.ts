@@ -324,8 +324,8 @@ export class ReviewSidebarPart extends Part {
 		foldedProbe.remove();
 		const style = getComputedStyle(row);
 		const gap = parseFloat(style.columnGap) || 0;
-		const padding = parseFloat(style.paddingLeft) || 0;
-		return { labelled: tabsRowWidth(labelled, gap, padding), folded: tabsRowWidth(folded.map(() => Math.max(...folded)), gap, padding) };
+		const inset = [style.marginLeft, style.borderLeftWidth, style.paddingLeft].reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
+		return { labelled: tabsRowWidth(labelled, gap, inset), folded: tabsRowWidth(folded.map(() => Math.max(...folded)), gap, inset) };
 	}
 
 	override create(parent: HTMLElement): void {
