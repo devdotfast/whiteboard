@@ -5,7 +5,7 @@ import { parseShareLink, shareIdSchema } from "@dev.fast/review-share-protocol";
 import {
   DEFAULT_STORE_ORIGIN,
   clearStoreAuth,
-  openUrlInBrowser,
+  type openUrlInBrowser,
   readStoreAuth,
   runStoreLogin,
 } from "@dev.fast/trace-core";
@@ -29,6 +29,7 @@ import { readShareRepository, verifyShareRepository } from "./repository.js";
 interface LoginState {
   pending: boolean;
   url?: string;
+  userCode?: string;
   error?: string;
 }
 
@@ -65,7 +66,6 @@ export function mountSharingHost(
   options: SharingHostOptions = {},
 ) {
   const startLogin = options.login ?? runStoreLogin;
-  const openUrl = options.openUrl ?? openUrlInBrowser;
 
   let login: LoginState = {
     pending: false,
@@ -96,9 +96,9 @@ export function mountSharingHost(
         traces: false,
         stdout: discard,
         stderr: discard,
-        openUrl: async (url) => {
-          login.url = url;
-          await openUrl(url);
+        openUrl: options.openUrl,
+        onDeviceCode: (device) => {
+          Object.assign(login, device);
         },
       })
         .then((code) => {

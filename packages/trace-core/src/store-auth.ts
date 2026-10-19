@@ -137,6 +137,7 @@ export async function runStoreLogin(input: {
   stdout: Writable;
   stderr: Writable;
   openUrl?: (url: string) => Promise<void>;
+  onDeviceCode?: (device: { url: string; userCode: string }) => void;
   sleep?: (ms: number) => Promise<void>;
   fetch?: typeof fetch;
   env?: NodeJS.ProcessEnv;
@@ -190,14 +191,15 @@ export async function runStoreLogin(input: {
     );
   }
 
-  humanStream(output).write(`Open ${device.verification_uri_complete}\n`);
-  humanStream(output).write(`Code: ${device.user_code}\n`);
-  emitJsonEvent(output, {
-    event: "login",
-    status: "pending",
+  const pending = {
     url: device.verification_uri_complete,
     userCode: device.user_code,
-  });
+  };
+
+  humanStream(output).write(`Open ${device.verification_uri_complete}\n`);
+  humanStream(output).write(`Code: ${device.user_code}\n`);
+  emitJsonEvent(output, { event: "login", status: "pending", ...pending });
+  input.onDeviceCode?.(pending);
 
   if (!input.noBrowser) {
     await openUrl(device.verification_uri_complete);
