@@ -343,30 +343,36 @@ const styles = stylex.create({
   slotTight: {
     height: "8px",
   },
+  // Ticks scale to length: a width transition lays out the board.
   tick: {
-    width: {
-      default: "12px",
-      [stylex.when.ancestor(":hover", tocTickMarker)]: "15px",
-    },
+    width: "17px",
     height: "2px",
     borderRadius: radius.hairline,
+    transformOrigin: "right",
+    transform: {
+      default: "scaleX(calc(12 / 17))",
+      [stylex.when.ancestor(":hover", tocTickMarker)]: "scaleX(calc(15 / 17))",
+    },
     backgroundColor: {
       default: tokens.ghost,
       [stylex.when.ancestor(":hover", tocTickMarker)]: tokens.inkMuted,
     },
-    transitionProperty: "width, background-color",
-    transitionDuration: motion.fast,
+    transitionProperty: "transform, background-color",
+    transitionDuration: {
+      default: motion.fast,
+      [stylex.env.reducedMotion]: motion.instant,
+    },
   },
   tickNested: {
-    width: {
-      default: "7px",
-      [stylex.when.ancestor(":hover", tocTickMarker)]: "10px",
+    transform: {
+      default: "scaleX(calc(7 / 17))",
+      [stylex.when.ancestor(":hover", tocTickMarker)]: "scaleX(calc(10 / 17))",
     },
   },
   tickCurrent: {
-    width: {
-      default: "14px",
-      [stylex.when.ancestor(":hover", tocTickMarker)]: "17px",
+    transform: {
+      default: "scaleX(calc(14 / 17))",
+      [stylex.when.ancestor(":hover", tocTickMarker)]: "none",
     },
     backgroundColor: tokens.ink,
   },
