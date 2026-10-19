@@ -21,6 +21,7 @@ export function NewWhiteboard({
   projectPath,
   onClose,
   onCopied,
+  onCreate,
 }: {
   setupActions: ReviewCanvasSetupActions;
   embedded?: boolean;
@@ -30,6 +31,7 @@ export function NewWhiteboard({
   onClose?(): void;
   /** The prompt went to the clipboard, for the reader's own agent. */
   onCopied?(): void;
+  onCreate?(repositoryPath: string): Promise<void>;
 }) {
   const { client, unavailable } = useOnboardingClient(setupActions);
 
@@ -48,6 +50,14 @@ export function NewWhiteboard({
       embedded={embedded}
       projectPath={projectPath}
       onStarted={onClose}
+      onStartEmpty={
+        onCreate &&
+        (async (path) => {
+          await onCreate(path);
+          client.capture("new_whiteboard_started", { mode: "empty", embedded });
+          onClose?.();
+        })
+      }
       onCopied={onCopied}
       onRunStarted={(mode, agent) =>
         client.capture("new_whiteboard_started", {

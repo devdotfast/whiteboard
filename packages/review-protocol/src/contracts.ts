@@ -1071,6 +1071,8 @@ export interface ReviewCanvasHomeHost {
   openSourceTree?(uuid: string): void;
   install?: ReviewCanvasInstallActions;
   setupActions?: ReviewCanvasSetupActions;
+  /** Makes an empty whiteboard and opens it. */
+  createWhiteboard?(repositoryPath: string): Promise<void>;
 }
 
 /** What the Welcome tab shows; a new snapshot on every change. */

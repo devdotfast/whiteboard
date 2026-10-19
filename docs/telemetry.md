@@ -265,7 +265,7 @@ text, and only as described in "Error reports".
 | `review_onboarding_skipped` | `step` in welcome, install, run | A user leaves first run for Home |
 | `review_onboarding_run_started` | `mode` in draw, copy; `agent` (draw only) | First run's last step: an agent starts drawing the first whiteboard in the app, or its prompt is copied |
 | `review_new_whiteboard_opened` | `via` in button, command, sidebar | A user opens New whiteboard from Home's New button, or with ⌘N or the menu |
-| `review_new_whiteboard_started` | `mode` in draw, copy; `embedded`; `agent` (draw only) | An agent starts drawing a whiteboard from New whiteboard, or its prompt is copied; `embedded` is Home's empty state |
+| `review_new_whiteboard_started` | `mode` in draw, copy, empty; `embedded`; `agent` (draw only) | An agent starts drawing a whiteboard from New whiteboard, or its prompt is copied; `embedded` is Home's empty state |
 | `review_remote_host_installed` | `ok`; `target` in linux-x64, linux-arm64; `duration_ms` | Installing Whiteboard on a remote host ends; a version already there is not counted |
 | `review_remote_host_connected` | `ok`; `problem` in unreachable, not_installed, auth_failed, unsupported, incompatible; `direct` | A remote host's connection outcome changes; a host retrying while down reports once |
 

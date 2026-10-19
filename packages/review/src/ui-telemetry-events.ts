@@ -292,6 +292,8 @@ export const RUN_MODE = ["draw", "copy"] as const;
 
 export const NEW_WHITEBOARD_VIA = ["button", "command", "sidebar"] as const;
 
+export const NEW_WHITEBOARD_MODE = [...RUN_MODE, "empty"] as const;
+
 export const FIND_SURFACE = ["review", "diff"] as const;
 
 export const DISCORD_VIA = ["topbar", "dialog", "docs"] as const;
@@ -668,7 +670,11 @@ export const UI_TELEMETRY_EVENTS = {
   },
   new_whiteboard_started: {
     event: "review_new_whiteboard_started",
-    properties: { mode: RUN_MODE, embedded: "boolean", agent: askAgentIds },
+    properties: {
+      mode: NEW_WHITEBOARD_MODE,
+      embedded: "boolean",
+      agent: askAgentIds,
+    },
   },
   remote_host_installed: {
     event: "review_remote_host_installed",

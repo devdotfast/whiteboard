@@ -574,6 +574,11 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				},
 				install: this.installActions(),
 				setupActions: this.setupActions(),
+				createWhiteboard: async (repositoryPath) => {
+					const reviewId = await this.apiCatalog.createReview(repositoryPath);
+					// Unnamed: the tab reads "Untitled" until a title is typed.
+					await this.tabsService.openApiReview(reviewId, "");
+				},
 			};
 			const renderHome = async () => {
 				const seq = ++renderSeq;

@@ -146,6 +146,7 @@ function Home({
     restoreReview,
     markReviewRead,
     setupActions,
+    createWhiteboard,
   } = host;
 
   const install = useInstall(data.installStatus, host.install);
@@ -209,6 +210,7 @@ function Home({
         setupActions={setupActions}
         via={creating.via}
         projectPath={creating.projectPath}
+        onCreate={createWhiteboard}
         onClose={() => setCreating(undefined)}
         onCopied={() => {
           copied.current = true;
@@ -249,7 +251,11 @@ function Home({
       }
       emptyState={
         setupActions ? (
-          <NewWhiteboard setupActions={setupActions} embedded />
+          <NewWhiteboard
+            setupActions={setupActions}
+            embedded
+            onCreate={createWhiteboard}
+          />
         ) : undefined
       }
     />

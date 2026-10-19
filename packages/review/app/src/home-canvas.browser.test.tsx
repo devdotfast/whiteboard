@@ -249,6 +249,48 @@ describe("Home's New whiteboard", () => {
     expect(container.textContent).not.toContain("New whiteboard.");
   });
 
+  it("starts an empty whiteboard in the chosen project", async () => {
+    const { respond } = server();
+
+    vi.stubGlobal("fetch", respond);
+
+    const createWhiteboard = vi.fn<
+      NonNullable<ReviewCanvasHomeHost["createWhiteboard"]>
+    >(async () => {});
+
+    const host: ReviewCanvasHomeHost = {
+      openReview: vi.fn<ReviewCanvasHomeHost["openReview"]>(),
+      setupActions: setupActions(),
+      createWhiteboard,
+    };
+
+    await act(async () => {
+      canvas = mountReviewCanvas(
+        container,
+        {
+          kind: "home",
+          data: {
+            reviews: [summary("Plan")],
+            newWhiteboard: { via: "command" },
+          },
+          host,
+        },
+        testCanvasUi().ui,
+      );
+    });
+    await settle();
+
+    const empty = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Empty whiteboard",
+    );
+
+    await act(async () => empty?.click());
+    await settle();
+
+    expect(createWhiteboard).toHaveBeenCalledExactlyOnceWith(PROJECT.path);
+    expect(container.textContent).not.toContain("New whiteboard.");
+  });
+
   it("shows a chosen project at once, before its targets load", async () => {
     const { respond, release } = server();
 
