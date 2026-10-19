@@ -13,6 +13,8 @@ export interface StructuralFileResult {
 	hidden?: string;
 }
 
+export type StructuralFailureReason = "missing_binary" | "process_exit" | "stream_ended" | "aborted" | "file_error" | "other";
+
 export interface StructuralSessionChange {
 	/** Files whose diff or fold state changed. */
 	readonly files: ReadonlySet<string>;
@@ -62,6 +64,18 @@ export class StructuralDiffSession extends Disposable {
 			this.abort.signal.addEventListener("abort", cancel, { once: true });
 			finish();
 		});
+	}
+	/** Why this comparison failed, or `undefined` when every file has a diff. */
+	failure(): { reason: StructuralFailureReason; files: number } | undefined {
+		if (!this.finished || this.disposed) return undefined;
+		const files = [...this.manifest ?? []].filter(path => !this.results.get(path)?.diff).length;
+		const error = this.error;
+		if (!error) return files ? { reason: "file_error", files } : undefined;
+		const reason = error.includes("executable is missing") ? "missing_binary"
+			: error.startsWith("diffr exited with") ? "process_exit"
+				: error.includes("ended before completion") ? "stream_ended"
+					: error.startsWith("diffr stopped early") ? "aborted" : "other";
+		return { reason, files };
 	}
 	private missingResult(): StructuralFileResult { return { error: this.error ?? "diffr did not supply a result for this file." }; }
 	getTextDiff(path: string): StructuralTextDiff | undefined {

@@ -250,6 +250,15 @@ export const DIFF_OPENED_VIA = [
 /** Which diff opened: a commit's, or a file diff drawn plain or structural. */
 export const DIFF_OPENED_KIND = ["commit", "structural"] as const;
 
+export const DIFF_FAILED_REASON = [
+  "missing_binary",
+  "process_exit",
+  "stream_ended",
+  "aborted",
+  "file_error",
+  "other",
+] as const;
+
 /** GitHub Enterprise is any GitHub host but github.com. */
 export const PR_PROVIDER = [
   "github",
@@ -589,6 +598,10 @@ export const UI_TELEMETRY_EVENTS = {
   diff_opened: {
     event: "review_diff_opened",
     properties: { kind: DIFF_OPENED_KIND, via: DIFF_OPENED_VIA },
+  },
+  diff_failed: {
+    event: "review_diff_failed",
+    properties: { reason: DIFF_FAILED_REASON, files: "number" },
   },
   discord_clicked: {
     event: "review_discord_clicked",

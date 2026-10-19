@@ -89,7 +89,7 @@ test('per-file failures and run abortion remain observable after the stream fini
 			yield { ...complete, aborted: { code: 'cancel', message: 'stopped' } } as StructuralEvent;
 		}
 	});
-	try { await session.start(); assert.equal(session.getFileResult('a.ts')?.error, 'bad file'); assert.match(session.error!, /stopped/); }
+	try { await session.start(); assert.equal(session.getFileResult('a.ts')?.error, 'bad file'); assert.match(session.error!, /stopped/); assert.deepEqual(session.failure(), { reason: 'aborted', files: 1 }); }
 	finally { session.dispose(); }
 });
 
