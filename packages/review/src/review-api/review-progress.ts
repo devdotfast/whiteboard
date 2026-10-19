@@ -305,7 +305,7 @@ export async function reviewProgress(
   });
 
   const progress: ReviewProgress = {
-    complete: !counting,
+    complete: !counting && !pendingSources.size,
     files,
     referenceFiles,
     lenses,
