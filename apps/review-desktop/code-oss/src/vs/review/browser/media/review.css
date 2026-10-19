@@ -48,6 +48,33 @@
   overflow: hidden;
 }
 
+/* Native scrollers take the canvas's scrollbar pill. */
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar-track,
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar-thumb {
+  min-width: 32px;
+  min-height: 32px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--vscode-scrollbarSlider-background) padding-box;
+}
+
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground) padding-box;
+}
+
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar-thumb:active {
+  background: var(--vscode-scrollbarSlider-activeBackground) padding-box;
+}
+
 /* The sidebar meets the board at a plain hairline: no depth shadow on the
    editor's edges, which light themes draw. */
 .monaco-workbench .part.editor::after {
