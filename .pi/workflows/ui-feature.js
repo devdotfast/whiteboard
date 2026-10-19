@@ -7,7 +7,8 @@
 // args.maxRounds  implement/restart/inspect rounds, default 4
 // args.plan       path of an existing plan to skip planning
 //
-// Models live in the agent files under .pi/agents/.
+// Models live in the agent files under .pi/agents/. The app starts only via
+// `pnpm dev`, and no step runs tests.
 if (!args.task && !args.plan) throw new Error("args.task is required");
 
 const dir = ".pi-subagents/ui-feature";
@@ -16,7 +17,7 @@ const maxRounds = args.maxRounds ?? 4;
 const restartSchema = {
   type: "object",
   properties: {
-    status: { enum: ["ready", "build-failed", "exited", "timeout"] },
+    status: { enum: ["ready", "exited", "timeout"] },
     errors: {
       type: "array",
       items: {
