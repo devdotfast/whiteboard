@@ -255,7 +255,7 @@ function build(
 
 /** Whether a transaction only edited text inside lines that aren't
  * headings, leaving every heading and the document's shape as they were. */
-function textOnly(tr: Transaction) {
+export function textOnly(tr: Transaction) {
   if (tr.before.childCount !== tr.doc.childCount) return false;
 
   return tr.steps.every((step, index) => {

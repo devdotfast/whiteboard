@@ -35,11 +35,38 @@ import {
 const className = (...styles: StyleArg[]) =>
   stylex.props(...styles).className ?? "";
 
+const settledLine =
+  ":is([data-board-settled] > [data-board-section], [data-board-settled] > [data-board-markdown] > *)";
+
+const settledHeading =
+  ':is([data-board-settled] > [data-board-section]:not([data-motion="erasing"]), [data-board-settled] > [data-board-markdown] > *)';
+
+// Off screen, these keep their last size and skip layout. Quotes and tables
+// would change their margins.
+const containStyles = stylex.create({
+  offscreen: {
+    containIntrinsicBlockSize: `auto ${space.s40}`,
+    contentVisibility: { default: null, [settledLine]: "auto" },
+  },
+  // The chevron sits left of its heading.
+  heading: {
+    overflowClipMargin: { default: null, [settledHeading]: space.s40 },
+  },
+});
+
 const block = className(drawStyles.blockChild);
 
-const paragraph = className(doc.paragraph, drawStyles.blockChild);
+const paragraph = className(
+  doc.paragraph,
+  drawStyles.blockChild,
+  containStyles.offscreen,
+);
 
-const column = className(doc.column, drawStyles.blockChild);
+const column = className(
+  doc.column,
+  drawStyles.blockChild,
+  containStyles.offscreen,
+);
 
 // Every heading, a section's or one in a Markdown block, looks the same at
 // its level.
@@ -74,9 +101,27 @@ const headingStyles = stylex.create({
 });
 
 const heading = [
-  className(headingStyles.heading, headingStyles.level1, drawStyles.blockChild),
-  className(headingStyles.heading, headingStyles.level2, drawStyles.blockChild),
-  className(headingStyles.heading, headingStyles.level3, drawStyles.blockChild),
+  className(
+    headingStyles.heading,
+    headingStyles.level1,
+    drawStyles.blockChild,
+    containStyles.offscreen,
+    containStyles.heading,
+  ),
+  className(
+    headingStyles.heading,
+    headingStyles.level2,
+    drawStyles.blockChild,
+    containStyles.offscreen,
+    containStyles.heading,
+  ),
+  className(
+    headingStyles.heading,
+    headingStyles.level3,
+    drawStyles.blockChild,
+    containStyles.offscreen,
+    containStyles.heading,
+  ),
 ];
 
 /** The visual level (1–3) of a section, or of a Markdown heading at `depth`:

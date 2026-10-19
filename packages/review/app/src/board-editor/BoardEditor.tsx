@@ -48,7 +48,7 @@ import {
 
 import { blockIndex, isNewBoard, storedBlocks } from "./board-doc";
 import { createBoardState } from "./editor-state";
-import { headings, headingsKey, revealLine } from "./headings";
+import { headings, headingsKey, revealLine, textOnly } from "./headings";
 import { httpBoardTransport } from "./http-transport";
 import { captureRemoved, motion, motionKey } from "./motion";
 import { type OpenLink, openLinkKey, openLinks } from "./open-links";
@@ -210,6 +210,20 @@ export function BoardEditor({
       setSlash(menu.open ? { state: menu, view: editor } : null);
     };
 
+    // Blocks skip layout off screen only after they render once, so each
+    // keeps its real size.
+    let settling = 0;
+
+    const remeasure = () => {
+      cancelAnimationFrame(settling);
+      editor.dom.removeAttribute("data-board-settled");
+      settling = requestAnimationFrame(() => {
+        settling = requestAnimationFrame(() =>
+          editor.dom.setAttribute("data-board-settled", ""),
+        );
+      });
+    };
+
     const editor: EditorView = new EditorView(
       { mount: mount.current! },
       {
@@ -231,6 +245,13 @@ export function BoardEditor({
               ?.removeAttribute("data-review-copy-ignore");
 
           publish(next);
+
+          if (
+            (tr.docChanged && !textOnly(tr)) ||
+            headingsKey.getState(before)?.collapsed !==
+              headingsKey.getState(next)?.collapsed
+          )
+            remeasure();
 
           if (ghosts.length)
             editor.dispatch(
@@ -386,8 +407,23 @@ export function BoardEditor({
         })
       : undefined;
 
+    // Shown again or resized, every block renders once at its new width.
+    let width = 0;
+
+    const laidOut = new ResizeObserver(([entry]) => {
+      const next = entry?.contentRect.width ?? 0;
+
+      if (next && next !== width) remeasure();
+      width = next;
+    });
+
+    laidOut.observe(editor.dom);
+
     return () => {
       if (naming !== undefined) cancelAnimationFrame(naming);
+
+      cancelAnimationFrame(settling);
+      laidOut.disconnect();
       editor.dom.removeEventListener("review-section-expand", reveal, true);
       // Everything typed is saved before the board lets go of its hold, so
       // a discard on close can never beat the last save.
