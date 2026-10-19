@@ -332,6 +332,7 @@ function BoardRow({
               textStyles.truncate,
               styles.title,
               isCurrent && styles.titleCurrent,
+              Boolean(folder) && styles.titleBeforeFolder,
             )}
           >
             {boardTitle(board.title)}
@@ -355,7 +356,7 @@ function BoardRow({
             ) : null}
           </span>
         )}
-        {folder ? <FolderLabel name={folder} /> : null}
+        {folder ? <FolderLabel name={folder} shrinks /> : null}
       </button>
     </div>
   );
@@ -1008,6 +1009,8 @@ const styles = stylex.create({
     height: "14px",
   },
   title: { flex: "1 1 auto", minWidth: 0 },
+  // Never under 112px; past that the folder gives way.
+  titleBeforeFolder: { flex: "1 0 112px" },
   titleCurrent: { fontWeight: fontWeight.medium },
   meta: {
     display: "flex",
