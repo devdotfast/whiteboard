@@ -5,7 +5,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { git, gitCommonDir } from "@dev.fast/local-vcs";
-import { errorMessage, processIsAlive } from "@dev.fast/trace-core";
+import {
+  errorMessage,
+  pidReused,
+  processIsAlive,
+  processStartIdentity,
+} from "@dev.fast/trace-core";
 import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
 import {
   ensureReviewPinnedCheckout,
@@ -75,11 +80,21 @@ export class ReviewWorkspaces {
     this.db.exec(
       "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS pinned_environments(id TEXT PRIMARY KEY, value TEXT NOT NULL)",
     );
+
     // Desktops sharing a profile each own the reviews they prepare; the
     // lease stops a second process from preparing or collecting them. The
     // profile-wide lock it replaces only ever shipped in preview builds.
+    // Older leases have no start identity and may name a reused pid.
+    if (
+      !this.db
+        .prepare(
+          "SELECT 1 FROM pragma_table_info('workspace_leases') WHERE name='started'",
+        )
+        .get()
+    )
+      this.db.exec("DROP TABLE IF EXISTS workspace_leases");
     this.db.exec(
-      "DROP TABLE IF EXISTS workspace_owner; CREATE TABLE IF NOT EXISTS workspace_leases(review_id TEXT PRIMARY KEY,owner TEXT NOT NULL,pid INTEGER NOT NULL)",
+      "DROP TABLE IF EXISTS workspace_owner; CREATE TABLE IF NOT EXISTS workspace_leases(review_id TEXT PRIMARY KEY,owner TEXT NOT NULL,pid INTEGER NOT NULL,started TEXT)",
     );
     this.db.exec("BEGIN IMMEDIATE");
 
@@ -297,9 +312,19 @@ export class ReviewWorkspaces {
   }
 
   private lease(reviewId: string) {
-    return this.db
-      .prepare("SELECT owner,pid FROM workspace_leases WHERE review_id=?")
+    const row = this.db
+      .prepare(
+        "SELECT owner,pid,started FROM workspace_leases WHERE review_id=?",
+      )
       .get(reviewId);
+
+    return (
+      row && {
+        owner: String(row.owner),
+        pid: Number(row.pid),
+        started: String(row.started ?? ""),
+      }
+    );
   }
 
   private leasedElsewhere(reviewId: string): boolean {
@@ -308,7 +333,8 @@ export class ReviewWorkspaces {
     return Boolean(
       lease &&
       lease.owner !== this.ownerId &&
-      processIsAlive(Number(lease.pid)),
+      processIsAlive(lease.pid) &&
+      !pidReused(lease.pid, lease.started),
     );
   }
 
@@ -323,8 +349,13 @@ export class ReviewWorkspaces {
 
       if (free)
         this.db
-          .prepare("INSERT OR REPLACE INTO workspace_leases VALUES(?,?,?)")
-          .run(reviewId, this.ownerId, process.pid);
+          .prepare("INSERT OR REPLACE INTO workspace_leases VALUES(?,?,?,?)")
+          .run(
+            reviewId,
+            this.ownerId,
+            process.pid,
+            processStartIdentity(process.pid),
+          );
       this.db.exec("COMMIT");
 
       return free;

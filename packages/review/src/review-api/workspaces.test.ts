@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 
 import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
 import { runPrepareCommand } from "@review/review-prepare.js";
@@ -301,6 +302,21 @@ it("reports a missing repository before first acquisition and recovers after it 
   expect(
     readFileSync(path.join(restored.rootPath!, "value.ts"), "utf8"),
   ).toContain("42");
+});
+
+it.each([
+  ["has exited", spawnSync(process.execPath, ["-e", ""]).pid, null],
+  ["is now another process", process.pid, "an earlier start"],
+])("reclaims a lease whose holder %s", async (_holder, pid, started) => {
+  const leases = new DatabaseSync(`${database}.workspaces`);
+  leases
+    .prepare("INSERT INTO workspace_leases VALUES(?,'gone',?,?)")
+    .run(reviewId, pid, started);
+  leases.close();
+
+  expect(
+    (await local.data.workspaces.source(reviewId, pins, "head")).state,
+  ).toBe("unconfigured");
 });
 
 it("claims unowned workspaces before removing them", async () => {
