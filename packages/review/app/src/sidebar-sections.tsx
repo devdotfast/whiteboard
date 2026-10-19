@@ -233,6 +233,7 @@ function BoardRow({
   board,
   current,
   nested = false,
+  flat = false,
   expanded,
   changed = Boolean(board.changed) && board.reviewId !== current,
   holdsCurrent = false,
@@ -244,6 +245,8 @@ function BoardRow({
   board: ReviewApiSummary;
   current: string;
   nested?: boolean;
+  /** No chevron lane. */
+  flat?: boolean;
   /** A parent's state; undefined for a board without children. */
   expanded?: boolean;
   changed?: boolean;
@@ -265,10 +268,11 @@ function BoardRow({
         listRowStyles.wash,
         styles.treeRow,
         nested && styles.nestedRow,
+        flat && styles.flatRow,
         (isCurrent || holdsCurrent) && listRowStyles.current,
       )}
     >
-      {expanded === undefined ? (
+      {flat ? null : expanded === undefined ? (
         <span {...stylex.props(styles.chevronSlot)} />
       ) : (
         <button
@@ -825,6 +829,7 @@ function RecentBoards({
             <BoardRow
               board={board}
               current={current}
+              flat
               // Home's worktree label, else its project's name.
               folder={worktreeLabel(board) || board.project?.name}
               onOpen={onOpen}
@@ -842,12 +847,12 @@ function RecentBoards({
                 listRowStyles.row,
                 listRowStyles.wash,
                 styles.treeRow,
+                styles.flatRow,
                 styles.more,
               )}
               onClick={() => setShowAll(!showAll)}
             >
-              <span {...stylex.props(styles.chevronSlot)} />
-              <span {...stylex.props(styles.moreText)}>
+              <span {...stylex.props(styles.moreTextFlat)}>
                 {showAll ? "Show less" : `Show ${hidden} more`}
               </span>
             </button>
@@ -904,6 +909,7 @@ const styles = stylex.create({
   // 26px and its title at 46px; a child's icon at 42px and title at 62px.
   treeRow: { gap: 0, paddingInline: `0 ${space.s8}`, cursor: "default" },
   nestedRow: { paddingInline: `${space.s16} ${space.s8}` },
+  flatRow: { paddingInline: `${space.s4} ${space.s8}` },
   rowMain: {
     display: "flex",
     flex: 1,
@@ -982,6 +988,7 @@ const styles = stylex.create({
   groupCount: { minWidth: 0, color: tokens.inkFaint },
   groupAction: { display: "flex", marginLeft: "auto" },
   moreText: { marginLeft: space.s6 },
+  moreTextFlat: { marginLeft: space.s2 },
   entry: { height: "24px" },
   nested: { height: "24px", paddingLeft: NESTED_INSET },
   // Each level below a subsection indents one more step.
