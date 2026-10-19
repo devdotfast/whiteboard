@@ -1,3 +1,8 @@
+import { stat } from "node:fs/promises";
+import { homedir } from "node:os";
+import path from "node:path";
+
+import { git, gitCommonDir } from "@dev.fast/local-vcs";
 import type { StructuralDiffEvent } from "@dev.fast/review-protocol";
 
 import {
@@ -18,6 +23,7 @@ export class StructuralComparisons {
 
     const key = JSON.stringify([
       configGeneration,
+      await classificationStamp(input.repositoryPath),
       input.repositoryPath,
       input.comparison,
       input.paths,
@@ -65,6 +71,47 @@ export class StructuralComparisons {
 }
 
 let configGeneration = 0;
+
+const classificationFiles = new Map<string, Promise<string[]>>();
+
+/** Git attribute and diffr config files that diffr's classifier reads. */
+function classificationInputs(root: string): Promise<string[]> {
+  let files = classificationFiles.get(root);
+
+  if (!files) {
+    const config =
+      process.env.XDG_CONFIG_HOME || path.join(homedir(), ".config");
+
+    const diffrDirectory =
+      process.env.DIFFR_CONFIG_DIR || path.join(config, "diffr");
+
+    files = Promise.all([
+      gitCommonDir(root),
+      git(root, ["config", "--path", "core.attributesFile"], {
+        allowFailure: true,
+      }),
+    ]).then(([common, user]) => [
+      ...(common ? [path.join(common, "info", "attributes")] : []),
+      path.join(root, ".gitattributes"),
+      user.stdout.trim() || path.join(config, "git", "attributes"),
+      path.join(diffrDirectory, "config.toml"),
+    ]);
+    classificationFiles.set(root, files);
+  }
+
+  return files;
+}
+
+async function classificationStamp(root: string) {
+  return Promise.all(
+    (await classificationInputs(root)).map((file) =>
+      stat(file).then(
+        ({ mtimeMs, size }) => [mtimeMs, size],
+        () => null,
+      ),
+    ),
+  );
+}
 
 export function invalidateStructuralComparisons(): void {
   configGeneration++;

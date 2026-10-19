@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -377,6 +378,41 @@ test("keeps the ten most recently read idle comparisons", async () => {
     expect(await runs()).toBe(11);
     await read("head-0");
     expect(await runs()).toBe(12);
+  } finally {
+    cache.close();
+  }
+});
+
+test.each([
+  ".git/info/attributes",
+  ".gitattributes",
+  "config/diffr/config.toml",
+])("editing %s reclassifies a cached comparison", async (file) => {
+  const { StructuralComparisons } = await import("./structural-comparisons.js");
+
+  const root = await executable(`
+      require('node:fs').appendFileSync('runs', 'x');
+      ${emit(START)} ${emit(BINARY)} ${emit(COMPLETE)}
+    `);
+
+  execFileSync("git", ["init", "-q", root]);
+  const cache = new StructuralComparisons();
+
+  const read = async () => {
+    for await (const _event of cache.stream(request(root))) {
+      /* drain */
+    }
+
+    return (await readFile(path.join(root, "runs"), "utf8")).length;
+  };
+
+  try {
+    expect(await read()).toBe(1);
+    expect(await read()).toBe(1);
+    await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+    await writeFile(path.join(root, file), "edited\n");
+    expect(await read()).toBe(2);
+    expect(await read()).toBe(2);
   } finally {
     cache.close();
   }
