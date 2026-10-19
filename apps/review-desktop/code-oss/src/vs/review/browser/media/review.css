@@ -1779,14 +1779,35 @@ body
   overflow-y: auto;
 }
 
-/* Search, This board and Recent: one scroll, each list at its own
-   height, each section a step below the one above. */
+/* Search, This board and Recent, each a step below the one above. Only
+   Recent scrolls, unless a search lists matches. */
+.monaco-workbench .review-sidebar-pane-body.review-sidebar-stack {
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+}
+
 .monaco-workbench .review-sidebar-stack-body.review-canvas-root {
+  flex: none;
   height: auto;
   min-height: 0;
   /* The canvas root's size containment would collapse a list in a stack. */
   container-type: normal;
   background-color: transparent;
+}
+
+.monaco-workbench .review-sidebar-stack-body.review-sidebar-recent {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.monaco-workbench .review-sidebar-pane-body.review-sidebar-stack:has([data-searching]) {
+  overflow-y: auto;
+}
+
+.monaco-workbench .review-sidebar-stack:has([data-searching]) > .review-sidebar-stack-body.review-sidebar-recent {
+  flex: none;
+  overflow-y: visible;
 }
 
 /* This board under Search, a section's step below it; it steps aside
