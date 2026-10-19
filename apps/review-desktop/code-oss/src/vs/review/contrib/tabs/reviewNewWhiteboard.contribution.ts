@@ -5,18 +5,18 @@
 
 import { KeyCode, KeyMod } from "../../../base/common/keyCodes.js";
 import { Disposable } from "../../../base/common/lifecycle.js";
-import { localize, localize2 } from "../../../nls.js";
+import { localize2 } from "../../../nls.js";
 import { Action2, registerAction2 } from "../../../platform/actions/common/actions.js";
 import type { ServicesAccessor } from "../../../platform/instantiation/common/instantiation.js";
 import { EditorContextKeys } from "../../../editor/common/editorContextKeys.js";
 import { KeybindingWeight } from "../../../platform/keybinding/common/keybindingsRegistry.js";
 import { ILogService } from "../../../platform/log/common/log.js";
-import { INotificationService } from "../../../platform/notification/common/notification.js";
 import { type IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from "../../../workbench/common/contributions.js";
 import { EditorCloseContext, EditorsOrder } from "../../../workbench/common/editor.js";
 import type { EditorInput } from "../../../workbench/common/editor/editorInput.js";
 import { IEditorService } from "../../../workbench/services/editor/common/editorService.js";
 import { ReviewCanvasEditorInput } from "../../browser/parts/canvas/reviewCanvasEditorInput.js";
+import { ReviewCanvasEditorPane } from "../../browser/parts/canvas/reviewCanvasPart.js";
 import { newWhiteboardRepositoryPath, REVIEW_NEW_WHITEBOARD_COMMAND_ID } from "../../common/reviewNewWhiteboard.js";
 import { IReviewApiCatalogService } from "../../services/reviewApiCatalogService.js";
 import { IReviewCanvasEditorTabsService } from "../../services/reviewCanvasEditorTabsService.js";
@@ -42,26 +42,17 @@ registerAction2(class extends Action2 {
 		});
 	}
 
-	override async run(accessor: ServicesAccessor): Promise<void> {
+	override async run(accessor: ServicesAccessor, via?: "sidebar"): Promise<void> {
 		const catalog = accessor.get(IReviewApiCatalogService);
 		const editors = accessor.get(IEditorService);
 		const tabs = accessor.get(IReviewCanvasEditorTabsService);
-		const notifications = accessor.get(INotificationService);
-		try {
-			await catalog.initialize();
-			// The active board first, then the boards open most recently.
-			const recent = editors.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE).map(({ editor }) => boardOf(editor)).filter((id) => id !== undefined);
-			const repositoryPath = newWhiteboardRepositoryPath(catalog.reviews, recent);
-			if (!repositoryPath) {
-				notifications.info(localize("review.newWhiteboard.noProject", "Open a whiteboard in a project to start a new one there."));
-				return;
-			}
-			const reviewId = await catalog.createReview(repositoryPath);
-			// Unnamed: the tab reads "Untitled" until a title is typed.
-			await tabs.openApiReview(reviewId, "");
-		} catch (error) {
-			notifications.error(localize("review.newWhiteboard.failed", "Could not start a new whiteboard: {0}", error instanceof Error ? error.message : String(error)));
-		}
+		// The active board first, then the boards open most recently.
+		const recent = editors.getEditors(EditorsOrder.MOST_RECENTLY_ACTIVE).map(({ editor }) => boardOf(editor)).filter((id) => id !== undefined);
+		// Home shows the catalog's own failure.
+		const projectPath = await catalog.initialize().then(() => newWhiteboardRepositoryPath(catalog.reviews, recent), () => undefined);
+		await tabs.openHome(true);
+		const pane = editors.activeEditorPane;
+		if (pane instanceof ReviewCanvasEditorPane) pane.newWhiteboard({ via: via ?? "command", ...(projectPath && { projectPath }) });
 	}
 });
 

@@ -65,6 +65,7 @@ import type {
 	ReviewCanvasHomeHost,
 	ReviewCanvasInstallActions,
 	ReviewCanvasInstallContent,
+	ReviewCanvasNewWhiteboardRequest,
 	ReviewCanvasOnboarding,
 	ReviewCanvasSettingsContent,
 	ReviewCanvasSetupActions,
@@ -143,6 +144,8 @@ function embeddedSelectionChangeReason(event: ICursorPositionChangedEvent): Edit
 export class ReviewCanvasEditorPane extends EditorPane {
 	private homeView: "active" | "trash" = "active";
 	private renderHome: (() => Promise<void>) | undefined;
+	/** Sent with Home's next render only. */
+	private newWhiteboardRequest: ReviewCanvasNewWhiteboardRequest | undefined;
 	static readonly ID = ReviewCanvasEditorInput.EDITOR_ID;
 
 	private readonly canvas = this._register(new MutableDisposable<ReviewCanvasHandle>());
@@ -580,6 +583,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				// Small catalogs can show setup progress on Home.
 				const installStatus = reviews.length < 5 ? await this.resolveInstallStatus() : undefined;
 				if (seq !== renderSeq) return;
+				const newWhiteboard = this.newWhiteboardRequest;
+				this.newWhiteboardRequest = undefined;
 				if (isEmpty && !emptyStateVisible) {
 					this.reviewTelemetryService.capture("home_empty_state_viewed");
 				}
@@ -592,6 +597,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 							reviews,
 							installStatus,
 							onboarding: installStatus ? this.resolveOnboarding(installStatus) : undefined,
+							newWhiteboard,
 						},
 						host,
 					},
@@ -741,9 +747,16 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return this.canvas.value?.diffFiles();
 	}
 
-	/** False when the canvas is not on a Home that can draw one. */
-	newWhiteboard(): boolean {
-		return this.canvas.value?.newWhiteboard() ?? false;
+	/** False when this pane is not Home. */
+	newWhiteboard(request: ReviewCanvasNewWhiteboardRequest): boolean {
+		if (!this.renderHome || !(this.input instanceof ReviewCanvasEditorInput) || this.input.target.kind !== "home") return false;
+		if (this.homeView !== "active") {
+			this.homeView = "active";
+			this._onDidChangeSelection.fire({ reason: EditorPaneSelectionChangeReason.NAVIGATION });
+		}
+		this.newWhiteboardRequest = request;
+		void this.renderHome();
+		return true;
 	}
 
 	showFeedback(): void {

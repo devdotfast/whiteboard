@@ -123,6 +123,7 @@ export function RunStep({
   setupActions,
   intro,
   embedded = false,
+  projectPath,
   onStarted,
   onCopy,
 }: {
@@ -130,6 +131,7 @@ export function RunStep({
   setupActions: ReviewCanvasSetupActions;
   intro?: StepIntro;
   embedded?: boolean;
+  projectPath?: string;
   /** The whiteboard is made and opening, with its agent at work. */
   onStarted?(reviewId: string, agent: OnboardingRunAgent["id"]): void;
   onCopy(prompt: string): void;
@@ -246,7 +248,14 @@ export function RunStep({
         setAgents(available);
         setAgent((current) => current ?? available[0]?.id);
 
-        if (known[0]) void open(known[0]);
+        const first = projectPath
+          ? (known.find((candidate) => candidate.path === projectPath) ?? {
+              path: projectPath,
+              name: folderName(projectPath),
+            })
+          : known[0];
+
+        if (first) void open(first);
         else setLoading(false);
       },
       (cause: unknown) => {
@@ -259,7 +268,7 @@ export function RunStep({
     return () => {
       live = false;
     };
-  }, [client, open]);
+  }, [client, open, projectPath]);
 
   const targets = discovered?.targets ?? [];
 

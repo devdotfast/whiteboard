@@ -16,7 +16,6 @@ ImplicitActivationEvents.setRewrite(rewriteReviewActivationEvents);
 import "./browser/parts/canvas/reviewCanvasEditor.contribution.js";
 import "./browser/parts/canvas/reviewDiffFilePicker.contribution.js";
 import "./browser/parts/canvas/reviewFind.contribution.js";
-import "./browser/parts/canvas/reviewNewWhiteboard.contribution.js";
 import "./browser/reviewCommunity.contribution.js";
 import "./browser/reviewFeedback.contribution.js";
 import "./browser/reviewTheme.contribution.js";

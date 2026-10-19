@@ -38,6 +38,7 @@ export function DrawFlow({
   setupActions,
   intro,
   embedded,
+  projectPath,
   onStarted,
   onCopied,
   onRunStarted,
@@ -46,6 +47,7 @@ export function DrawFlow({
   setupActions: ReviewCanvasSetupActions;
   intro?: StepIntro;
   embedded?: boolean;
+  projectPath?: string;
   onRunStarted?(mode: "draw" | "copy", agent?: OnboardingRunAgent["id"]): void;
   onStarted?(reviewId: string): void;
   onCopied?(): void;
@@ -83,6 +85,7 @@ export function DrawFlow({
       setupActions={setupActions}
       intro={intro}
       embedded={embedded}
+      projectPath={projectPath}
       onStarted={(reviewId, agent) => {
         onRunStarted?.("draw", agent);
         onStarted?.(reviewId);

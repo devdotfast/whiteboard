@@ -8,6 +8,7 @@ import type {
   ReviewCanvasHomeHost,
   ReviewCanvasInstallActions,
   ReviewCanvasInstallContent,
+  ReviewCanvasNewWhiteboardRequest,
   ReviewCanvasUi,
   ReviewCliInstallStatus,
   ReviewDisposable,
@@ -17,10 +18,8 @@ import type {
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
-  type RefObject,
   createRef,
   useEffect,
-  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -46,19 +45,12 @@ import "./styles.css";
 
 export { clearPersistedReviewViewState as clearReviewViewState } from "./review-view-state";
 
-/** What the workbench can ask of Home through the canvas handle. */
-interface HomeCommands {
-  newWhiteboard(): boolean;
-}
-
 function ReviewCanvas({
   content,
   findHost,
-  homeCommands,
 }: {
   content: ReviewCanvasContent;
   findHost: ReviewFindHost;
-  homeCommands: RefObject<HomeCommands | null>;
 }) {
   if (content.kind === "api")
     return (
@@ -72,14 +64,7 @@ function ReviewCanvas({
     );
 
   if (content.kind === "home")
-    return (
-      <Home
-        data={content.data}
-        host={content.host}
-        findHost={findHost}
-        commands={homeCommands}
-      />
-    );
+    return <Home data={content.data} host={content.host} findHost={findHost} />;
 
   if (content.kind === "source") {
     if (content.error) {
@@ -150,12 +135,10 @@ function Home({
   data,
   host,
   findHost,
-  commands,
 }: {
   data: ReviewCanvasHomeData;
   host: ReviewCanvasHomeHost;
   findHost: ReviewFindHost;
-  commands: RefObject<HomeCommands | null>;
 }) {
   const {
     trashReview,
@@ -167,7 +150,11 @@ function Home({
 
   const install = useInstall(data.installStatus, host.install);
   const [skipped, setSkipped] = useState(readOnboardingSkipped);
-  const [creating, setCreating] = useState<"button" | "command">();
+
+  const [creating, setCreating] = useState<{
+    via: "button" | ReviewCanvasNewWhiteboardRequest["via"];
+    projectPath?: string;
+  }>();
 
   // Drawing here closes New whiteboard once the run starts. A copied prompt
   // is drawn by the reader's own agent, so the screen closes when the next
@@ -184,32 +171,26 @@ function Home({
     listed.current = data.reviews.length;
   }, [data.reviews.length]);
 
-  const startCreating = (via: "button" | "command") => {
-    copied.current = false;
-    setCreating(via);
-  };
-
   // Until the first whiteboard is published, Home is first run, unless the
   // reader skipped it.
   const firstRun =
     data.view !== "trash" && data.onboarding?.published === false && !skipped;
 
-  // ⌘N: wherever the New button would show.
+  // ⌘N and the sidebar's +: wherever the New button would show.
+  const request = data.newWhiteboard;
+  const handled = useRef<ReviewCanvasNewWhiteboardRequest>(undefined);
   const canCreate = setupActions !== undefined && data.view !== "trash";
 
-  useImperativeHandle(
-    commands,
-    () => ({
-      newWhiteboard() {
-        if (!canCreate || firstRun) return false;
+  useEffect(() => {
+    if (!request || request === handled.current || !canCreate || firstRun)
+      return;
 
-        if (!creating) startCreating("command");
+    handled.current = request;
 
-        return true;
-      },
-    }),
-    [canCreate, firstRun, creating],
-  );
+    if (creating) return;
+    copied.current = false;
+    setCreating(request);
+  }, [request, canCreate, firstRun, creating]);
 
   if (firstRun)
     return (
@@ -226,7 +207,8 @@ function Home({
     return (
       <NewWhiteboard
         setupActions={setupActions}
-        via={creating}
+        via={creating.via}
+        projectPath={creating.projectPath}
         onClose={() => setCreating(undefined)}
         onCopied={() => {
           copied.current = true;
@@ -257,7 +239,14 @@ function Home({
       onboarding={data.onboarding}
       onOpenSettings={host.openSettings}
       onOpenSetup={host.openSetup}
-      onNewWhiteboard={setupActions ? () => startCreating("button") : undefined}
+      onNewWhiteboard={
+        setupActions
+          ? () => {
+              copied.current = false;
+              setCreating({ via: "button" });
+            }
+          : undefined
+      }
       emptyState={
         setupActions ? (
           <NewWhiteboard setupActions={setupActions} embedded />
@@ -378,7 +367,6 @@ export function mountReviewCanvas(
   let themeSubscription: { dispose(): void } | null = null;
   const findHost = createReviewFindHost();
   const diffFilePicker = createRef<DiffFilePicker>();
-  const homeCommands = createRef<HomeCommands>();
   container.classList.add("review-canvas-root");
   // The canvas stylesheet is compiled inside @scope (.review-canvas-root),
   // where the scope root itself is only matched by :scope — a theme class on
@@ -440,11 +428,7 @@ export function mountReviewCanvas(
       <ReviewContainerProvider container={container}>
         <CanvasUiContext.Provider value={ui}>
           <DiffFilePickerContext.Provider value={diffFilePicker}>
-            <ReviewCanvas
-              content={content}
-              findHost={findHost}
-              homeCommands={homeCommands}
-            />
+            <ReviewCanvas content={content} findHost={findHost} />
             {feedbackOpen && ui?.feedback && (
               <FeedbackDialog
                 host={ui.feedback}
@@ -482,12 +466,6 @@ export function mountReviewCanvas(
     },
     revealDiffFile(path) {
       diffFilePicker.current?.reveal(path);
-    },
-    newWhiteboard() {
-      return (
-        content.kind === "home" &&
-        (homeCommands.current?.newWhiteboard() ?? false)
-      );
     },
     showFeedback() {
       if (disposed || !ui?.feedback) return;

@@ -733,7 +733,7 @@ export class ReviewSidebarPart extends Part {
 				},
 			}),
 			onPickCommit: (commit) => this.emitSurfaceEvent({ event: "pickCommit", reviewId, commit }),
-			onNewWhiteboard: () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID),
+			onNewWhiteboard: () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID, "sidebar"),
 			...(newWhiteboardShortcut && { newWhiteboardShortcut }),
 		};
 

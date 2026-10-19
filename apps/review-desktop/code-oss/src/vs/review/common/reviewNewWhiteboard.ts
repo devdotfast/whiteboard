@@ -10,7 +10,7 @@ export const REVIEW_NEW_WHITEBOARD_COMMAND_ID = "review.newWhiteboard";
 type Board = Pick<ReviewApiSummary, "reviewId" | "project" | "repositoryPath" | "viewedAt" | "createdAt" | "trashedAt">;
 
 /**
- * The checkout a new whiteboard is a plan in: the project of the board open
+ * The checkout New whiteboard starts in: the project of the board open
  * most recently (the active tab first), else of the board viewed last. The
  * board's own checkout when it has one here, else another of the project's.
  * Undefined when no board belongs to a project with a checkout here.

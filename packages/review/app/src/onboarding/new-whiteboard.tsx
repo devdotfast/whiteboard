@@ -18,12 +18,14 @@ export function NewWhiteboard({
   setupActions,
   embedded = false,
   via,
+  projectPath,
   onClose,
   onCopied,
 }: {
   setupActions: ReviewCanvasSetupActions;
   embedded?: boolean;
-  via?: "button" | "command";
+  via?: "button" | "command" | "sidebar";
+  projectPath?: string;
   /** Back to the list; the full-window screen only. */
   onClose?(): void;
   /** The prompt went to the clipboard, for the reader's own agent. */
@@ -44,6 +46,7 @@ export function NewWhiteboard({
       client={client}
       setupActions={setupActions}
       embedded={embedded}
+      projectPath={projectPath}
       onStarted={onClose}
       onCopied={onCopied}
       onRunStarted={(mode, agent) =>

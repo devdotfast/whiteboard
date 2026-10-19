@@ -290,7 +290,7 @@ export const ONBOARDING_STEP = ["welcome", "install", "run"] as const;
 
 export const RUN_MODE = ["draw", "copy"] as const;
 
-export const NEW_WHITEBOARD_VIA = ["button", "command"] as const;
+export const NEW_WHITEBOARD_VIA = ["button", "command", "sidebar"] as const;
 
 export const FIND_SURFACE = ["review", "diff"] as const;
 
