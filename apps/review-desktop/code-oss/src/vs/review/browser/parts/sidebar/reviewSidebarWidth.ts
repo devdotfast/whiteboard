@@ -30,8 +30,8 @@ export function tabsRowWidth(tabWidths: readonly number[], gap: number, inset: n
 
 /**
  * A measurement taken once and kept until `stale()`: the tabs' widths change
- * only with the zoom or the fonts, not at every layout, and measuring forces
- * one. A measurement that comes back undefined is not kept.
+ * with the tabs, the zoom or the fonts, not at every layout, and measuring
+ * forces one. A measurement that comes back undefined is not kept.
  */
 export function measuredOnce<T>(measure: () => T | undefined): { get(): T | undefined; stale(): void } {
 	let kept: { value: T } | undefined;

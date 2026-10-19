@@ -254,14 +254,14 @@ export class ReviewSidebarPart extends Part {
 		this.foldTabs(width);
 	}
 
-	/** Narrower than the labelled tabs need, they fold to icons and counts.
-	 * The labelled width is measured once, apart from the layout, so the
-	 * choice follows the sidebar's width alone and can't flip back on
-	 * itself. */
+	/** Narrower than the shown tabs need labelled, they fold to icons and
+	 * counts. The labels are measured apart from the layout, so the choice
+	 * can't flip back on itself. */
 	private foldTabs(width: number): void {
 		const tabs = this.tabsRow.get();
 		if (!tabs) return;
-		const folded = width < tabs.labelled;
+		const shown = REVIEW_SIDEBAR_PANES.flatMap(({ id }, index) => this.offers(id) ? [tabs.labelled[index]] : []);
+		const folded = width < tabsRowWidth(shown, tabs.gap, tabs.inset);
 		if (this.tabRow?.classList.contains("folded") === folded) return;
 		this.tabRow?.classList.toggle("folded", folded);
 		this.describeTabs();
@@ -291,30 +291,31 @@ export class ReviewSidebarPart extends Part {
 		this._onDidChange.fire(undefined);
 	}
 
-	/** The tabs row's width, measured once; again when the zoom or the fonts
-	 * change. */
+	/** The tabs' widths, measured once; again when the tabs, the zoom or the
+	 * fonts change. */
 	private readonly tabsRow = measuredOnce(() => this.tabsWidth());
 
-	/** The row's width with every tab labelled, and with every tab folded to
+	/** Each tab's width labelled, and the row's width with every tab folded to
 	 * an icon and count, each folded tab as wide as the widest. Each is
-	 * measured in a hidden copy of the row, with its count at full width. */
-	private tabsWidth(): { labelled: number; folded: number } | undefined {
+	 * measured in a hidden copy of the row, folded with its count at full
+	 * width. */
+	private tabsWidth(): { labelled: number[]; gap: number; inset: number; folded: number } | undefined {
 		const row = this.tabRow;
 		// A hidden sidebar has nothing to measure yet.
 		if (!row?.offsetWidth || !this.panes.length) return undefined;
 		const probe = $(".review-sidebar-tabs-probe", { "aria-hidden": "true" });
 		const foldedProbe = $(".review-sidebar-tabs-probe.folded", { "aria-hidden": "true" });
-		const tab = (noun: string | undefined, title?: string) => {
+		const tab = (count: string, title?: string) => {
 			const label = $("span.review-sidebar-tab-label");
 			if (title) label.append($("span.review-sidebar-tab-title", undefined, title));
-			if (noun) label.append($("span.review-sidebar-tab-count", undefined, "9".repeat(TAB_COUNT_DIGITS)));
+			if (count) label.append($("span.review-sidebar-tab-count", undefined, count));
 			const icon = $("span.review-sidebar-tab-icon");
 			icon.append(svgIcon(REVIEW_SIDEBAR_TAB_ICONS.whiteboard, 16));
 			return $("span.review-sidebar-tab", undefined, icon, label);
 		};
-		for (const { title, noun } of REVIEW_SIDEBAR_PANES) {
-			probe.append(tab(noun, title));
-			foldedProbe.append(tab(noun));
+		for (const { id, title, noun } of REVIEW_SIDEBAR_PANES) {
+			probe.append(tab(this.panes.find((pane) => pane.id === id)?.count.textContent ?? "", title));
+			foldedProbe.append(tab(noun ? "9".repeat(TAB_COUNT_DIGITS) : ""));
 		}
 		row.append(probe, foldedProbe);
 		const widths = (tabs: HTMLElement) => [...tabs.children].map((child) => Math.ceil(child.getBoundingClientRect().width));
@@ -325,7 +326,7 @@ export class ReviewSidebarPart extends Part {
 		const style = getComputedStyle(row);
 		const gap = parseFloat(style.columnGap) || 0;
 		const inset = [style.marginLeft, style.borderLeftWidth, style.paddingLeft].reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
-		return { labelled: tabsRowWidth(labelled, gap, inset), folded: tabsRowWidth(folded.map(() => Math.max(...folded)), gap, inset) };
+		return { labelled, gap, inset, folded: tabsRowWidth(folded.map(() => Math.max(...folded)), gap, inset) };
 	}
 
 	override create(parent: HTMLElement): void {
@@ -365,11 +366,15 @@ export class ReviewSidebarPart extends Part {
 			this._register(addDisposableListener(tab, "click", () => this.pick(id)));
 		}
 
-		// A count or a tab that comes or goes moves the minimum.
-		this._register(this.onDidChangeTabs(() => this.fitControls()));
+		// A count or a tab that comes or goes moves the minimum and the fold.
+		this._register(this.onDidChangeTabs(() => {
+			this.tabsRow.stale();
+			this.fitControls();
+			if (this.element) this.foldTabs(this.element.getBoundingClientRect().width);
+		}));
 
-		// The tabs are measured once the row exists, and again only when the
-		// zoom or the fonts change their size.
+		// The tabs are measured once the row exists, and again when the zoom
+		// or the fonts change their size.
 		this.tabsRow.stale();
 		const remeasure = () => {
 			this.tabsRow.stale();
