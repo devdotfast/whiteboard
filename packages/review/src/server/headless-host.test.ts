@@ -1291,7 +1291,9 @@ it("leaves a review's checkouts to a live lease owner and takes over a dead owne
   try {
     for (const id of [reviewId, deleted])
       leases
-        .prepare("INSERT OR REPLACE INTO workspace_leases VALUES(?,?,?)")
+        .prepare(
+          "INSERT OR REPLACE INTO workspace_leases(review_id,owner,pid) VALUES(?,?,?)",
+        )
         .run(id, randomUUID(), owner.pid!);
   } finally {
     leases.close();
