@@ -1,4 +1,5 @@
 import { buttonStyles } from "@canvas/ui/button";
+import { CrumbSeparator } from "@canvas/ui/crumbs";
 import { focusStyles } from "@canvas/ui/focus";
 import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { fuzzyMatches } from "@review/fuzzy-match";
@@ -584,7 +585,7 @@ function PickerRow({
       </span>
       <span {...stylex.props(styles.label)}>{label}</span>
       <span {...stylex.props(styles.faint, textStyles.count)}>{count}</span>
-      {onRight && <span aria-hidden="true">›</span>}
+      {onRight && <CrumbSeparator />}
     </button>
   );
 }

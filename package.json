@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@oxlint/plugins": "1.63.0",
+    "@stylexjs/eslint-plugin": "0.19.1",
     "@types/node": "24.12.2",
     "oxfmt": "0.48.0",
     "oxlint": "1.63.0",

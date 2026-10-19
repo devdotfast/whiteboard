@@ -1,7 +1,7 @@
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { textStyles } from "@canvas/ui/text";
-import { fieldStyles } from "@canvas/ui/text-field";
+import { Select } from "@canvas/ui/text-field";
 import type {
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
@@ -387,8 +387,7 @@ function OpenFilesInSelect({
   onChange: (choice: ReviewOpenFilesInChoice) => void;
 }) {
   return (
-    <select
-      {...stylex.props(fieldStyles.box)}
+    <Select
       aria-label="Open files in"
       title={value.application?.path}
       value={value.choice}
@@ -414,6 +413,6 @@ function OpenFilesInSelect({
           ? "Choose another application…"
           : "Choose application…"}
       </option>
-    </select>
+    </Select>
   );
 }

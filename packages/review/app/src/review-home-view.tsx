@@ -1,5 +1,6 @@
 import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { CopyableText, copyText } from "@canvas/ui/copy";
+import { CrumbSeparator } from "@canvas/ui/crumbs";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { dividerStyles } from "@canvas/ui/divider";
 import { focusStyles } from "@canvas/ui/focus";
@@ -1032,9 +1033,7 @@ export function ReviewHome({
                 <Button variant="link" onClick={() => showView("active")}>
                   Whiteboards
                 </Button>
-                <span aria-hidden="true" {...stylex.props(styles.faint)}>
-                  ›
-                </span>
+                <CrumbSeparator xstyle={styles.trailChevron} />
                 Trash
                 <span {...stylex.props(styles.faint)}>{trashed.length}</span>
               </h1>

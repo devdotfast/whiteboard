@@ -965,8 +965,6 @@ const styles = stylex.create({
   pathLeaf: { flex: "0 0 auto", maxWidth: "80%" },
   moreIcon: { marginLeft: space.s2 },
   metaBeforeFolder: { width: "auto" },
-  // What a terminal would print: a commit id, a branch, a folder.
-  code: { fontFamily: tokens.fontMono },
   groupHeader: {
     display: "flex",
     alignItems: "center",

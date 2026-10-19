@@ -39,6 +39,7 @@ export const styles = stylex.create({
   // Set apart from the list's own controls: it adds to the list.
   newWhiteboard: { marginInlineStart: space.s8 },
   trail: { display: "flex", alignItems: "baseline", gap: space.s12 },
+  trailChevron: { alignSelf: "center", width: "20px", height: "20px" },
   corner: {
     position: "fixed",
     zIndex: layer.overlay,

@@ -18,9 +18,11 @@ Everything below lives in `packages/review/app/src/ui/` unless a path says other
 
 ## Checklist
 
+`pnpm lint` already rejects off-scale literals, `!important`, bare `transparent`, raw colors, glyph icons, `<select>` outside the kit, unused `stylex.create` keys, Code OSS imports and app imports from `src/ui/`. The checklist is what lint cannot see.
+
 - **Hand-rolled controls.** Search the kit before keeping any of these, and swap in the kit piece:
   - a `<button>` with its own padding, border, background and font: `Button`, `IconButton` or `buttonStyles.reset`
-  - a local `<input>`, `<textarea>` or `<select>` look: `TextField`, `TextArea`, `Select`, `Checkbox`, `Radio` or `Switch`
+  - a local `<input>` or `<textarea>` look: `TextField`, `TextArea`, `Checkbox`, `Radio` or `Switch`
   - a click-outside effect: `Popover` or `useDismissOnOutside`
   - a fixed overlay: `Dialog`
   - a single-choice menu: `OptionMenu`
@@ -34,7 +36,7 @@ Everything below lives in `packages/review/app/src/ui/` unless a path says other
   - `title=` on an icon control: `useTooltip`
 - **Menu and list rows.** A row rendered as a `<button>` stacks `focusStyles.ringInset`, `buttonStyles.reset`, then `menuStyles.item` (or `listRowStyles.row` + `wash`). Without the reset the browser's 2px border shows and the row grows.
 - **Locked checkboxes.** `Checkbox` dims to half opacity when disabled. A locked-on option (a required item) is `checked` + `disabled` with a `useTooltip` on its wrapper that says why, as `onboarding/install-step.tsx` does. A dimmed box with no reason reads as broken.
-- **Local icons.** An inline `<svg>` or a glyph used as an icon (`×`, `›`, `▾`, `✓`, `…`) belongs in `icons.tsx`, drawn on its 24 grid and sized with `iconStyles`. Agent marks go through `AgentLogo`.
+- **Local icons.** An inline `<svg>` belongs in `icons.tsx`, drawn on its 24 grid and sized with `iconStyles`. Agent marks go through `AgentLogo`.
 - **Repeated fragments.** These become kit fragments:
   - `overflow: hidden` + `textOverflow: ellipsis` + `whiteSpace: nowrap`: `textStyles.truncate`
   - two-line clamps: `textStyles.clamp2`
@@ -45,18 +47,16 @@ Everything below lives in `packages/review/app/src/ui/` unless a path says other
   - hairlines between menu groups: `menuStyles.separator`
 
   A pattern that appears a third time goes in the kit.
-- **Off-scale values.** `pnpm lint` catches literals. Don't silence it with a new step or an inline `calc()`. Snap to the nearest step, and name a geometry-coupled offset once. Reduced-motion and narrow-width media queries become `stylex.env.reducedMotion` / `stylex.env.narrow`; a one-off layout breakpoint may stay local. Replace local `spin` keyframes and easings with `motion.*` and `spinStyles`.
+- **Off-scale values.** Don't silence lint with a new step or an inline `calc()`. Snap to the nearest step, and name a geometry-coupled offset once. Reduced-motion and narrow-width media queries become `stylex.env.reducedMotion` / `stylex.env.narrow`; a one-off layout breakpoint may stay local. Replace local `spin` keyframes and easings with `motion.*` and `spinStyles`.
 - **Every animation stills under reduced motion.** Check each `animationName` and `transition` has a `stylex.env.reducedMotion` branch.
 - **Focus.** Look for anything that sets `disabled` on the button that was just pressed (Send, Retry, an opener while it loads). Replace it with a guard in the handler. Popovers and dialogs must close on Escape and give focus back to their trigger.
 - **Portals.** UI portaled outside `.review-app` needs `themeStyles.vars`, or kit controls lose their chrome tokens and collapse.
 - **Feedback placement.** Errors inside a modal render inline with `role="alert"`. Transient success after a surface closes uses `useNotify`. Don't do both.
 - **Slop in styles.** Delete:
   - comment-per-property styles
-  - `!important`
   - descendant selectors (use markers or variants)
   - `zIndex` literals that stack across surfaces (use `layer`; order inside one component may stay local)
   - shadows outside `elevation`
-  - `transparent` literals (use `tokens.transparent`)
   - duplicate `stylex.create` blocks that differ by one property (use a variant)
 - **Tests.** Don't add tests that assert class names, CSS text or style objects. Test behaviour (roles, focus, dismissal) and check the visuals in the Desktop.
 - **Style-only refactors.** Prove no pixel changed with computed-style diffs before and after, with the pointer moved off the page. Not by eye.

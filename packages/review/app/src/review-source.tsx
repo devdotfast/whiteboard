@@ -2,7 +2,7 @@ import { space } from "@canvas/scale.stylex";
 import { PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { buttonLook } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
-import { CommitIcon } from "@canvas/ui/icons";
+import { ArrowLeftIcon, CommitIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
 import type {
@@ -113,7 +113,7 @@ export function ComparedSides({
             {base}
           </span>
           <span aria-label="against" {...stylex.props(styles.arrow)}>
-            ←
+            <ArrowLeftIcon xstyle={iconStyles.inline} />
           </span>
         </>
       )}
@@ -160,6 +160,6 @@ const styles = stylex.create({
   // Shrink weights: the head's name gives way well before the base's.
   base: { flex: "0 1 auto" },
   head: { flex: "0 100 auto" },
-  arrow: { flexShrink: 0, color: tokens.inkFaint },
+  arrow: { display: "inline-flex", flexShrink: 0, color: tokens.inkFaint },
   changes: { display: "inline-flex", flexShrink: 0, gap: space.s8 },
 });

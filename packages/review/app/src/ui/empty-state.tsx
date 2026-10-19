@@ -1,4 +1,3 @@
-import { documentStyles } from "@canvas/document-styles";
 import {
   fontSize,
   fontWeight,
@@ -15,12 +14,10 @@ type EmptyStateProps = Omit<
   ComponentProps<"div">,
   "className" | "style" | "title" | "role"
 > & {
-  // A document reads it as its own heading and prose; inline is a quiet note
-  // in a pane; boxed stands in for a figure.
-  variant?: "document" | "inline" | "boxed";
+  // Inline is a quiet note in a pane; boxed stands in for a figure.
+  variant?: "inline" | "boxed";
   title?: ReactNode;
   message: ReactNode;
-  // Defaults to alert in a document, status elsewhere.
   role?: "alert" | "status";
   action?: ReactNode;
   className?: string;
@@ -31,22 +28,12 @@ export function EmptyState({
   variant = "inline",
   title,
   message,
-  role = variant === "document" ? "alert" : "status",
+  role = "status",
   action,
   className,
   xstyle,
   ...props
 }: EmptyStateProps): ReactElement {
-  if (variant === "document") {
-    return (
-      <div role={role} {...props} {...withClass(className, xstyle)}>
-        {title ? <h2 {...stylex.props(documentStyles.h2)}>{title}</h2> : null}
-        <p {...stylex.props(documentStyles.note)}>{message}</p>
-        {action}
-      </div>
-    );
-  }
-
   const boxed = variant === "boxed";
   const Title = boxed ? "h3" : "p";
 

@@ -1,11 +1,11 @@
 import { tokens } from "@canvas/tokens.stylex";
-import { ChevronDownIcon } from "@canvas/ui/icons";
+import { ChevronDownIcon, type IconProps } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
 /** The chevron between the crumbs of a path: Parent › Board. */
-export function CrumbSeparator(): ReactElement {
-  return <ChevronDownIcon xstyle={styles.separator} />;
+export function CrumbSeparator({ xstyle }: IconProps = {}): ReactElement {
+  return <ChevronDownIcon xstyle={[styles.separator, xstyle]} />;
 }
 
 const styles = stylex.create({

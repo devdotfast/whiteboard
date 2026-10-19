@@ -33,6 +33,9 @@ importers:
       '@oxlint/plugins':
         specifier: 1.63.0
         version: 1.63.0
+      '@stylexjs/eslint-plugin':
+        specifier: 0.19.1
+        version: 0.19.1
       '@types/node':
         specifier: 24.12.2
         version: 24.12.2
@@ -93,7 +96,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -130,7 +133,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
       zod:
         specifier: 4.6.5
         version: 4.6.5
@@ -195,7 +198,7 @@ importers:
         version: 5.9.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
 
   packages/agent-plugins/pi: {}
 
@@ -228,7 +231,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
 
   packages/review:
     dependencies:
@@ -346,7 +349,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
 
   packages/review-protocol:
     dependencies:
@@ -368,7 +371,7 @@ importers:
         version: 0.28.1
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
 
   packages/review-share-protocol:
     dependencies:
@@ -378,7 +381,7 @@ importers:
     devDependencies:
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
 
   packages/review/app:
     dependencies:
@@ -481,7 +484,7 @@ importers:
         version: 8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0)
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
 
   packages/trace-core:
     dependencies:
@@ -515,7 +518,7 @@ importers:
         version: 6.0.3
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
 
   packages/trace-protocol:
     dependencies:
@@ -525,7 +528,7 @@ importers:
     devDependencies:
       vitest:
         specifier: 4.1.11
-        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+        version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
 
 packages:
 
@@ -698,6 +701,10 @@ packages:
     peerDependenciesMeta:
       css-tree:
         optional: true
+
+  '@csstools/css-tokenizer@3.0.4':
+    resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
+    engines: {node: '>=18'}
 
   '@csstools/css-tokenizer@4.0.0':
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
@@ -1580,6 +1587,9 @@ packages:
   '@stylexjs/babel-plugin@0.19.1':
     resolution: {integrity: sha512-Ig3crX6MuGWDEAx+f89aLxTQUWVeEc2Aco2moIdcObyvo7hZJgU26rxJN3k7geFjhi+5dfna6TNR8iTRK0PQGA==}
 
+  '@stylexjs/eslint-plugin@0.19.1':
+    resolution: {integrity: sha512-875KpR4M71F5rTSTfDoGWbs09u8atZvVGWBN5bWt3svIEmuNwTMRZGdY8iHiaPrL+W49/tifc6pouKcn3t8d+A==}
+
   '@stylexjs/shared@0.19.1':
     resolution: {integrity: sha512-oFBtW0NPNLJOT1gLweWRNKrIJHjJMwOmSV7fgd6ewok4fwb/Nh95PEaYGKu+ZONk0nNghjLFfOwiIsxJdvh3TQ==}
 
@@ -2067,6 +2077,10 @@ packages:
     resolution: {integrity: sha512-2cGmJupaNgg+QUwVLAucDuWuoMZ6EX9iHDRswZ5lsNYEmwPaRknMPCLZz07yTzVq/83p4o/wzbDZbBrTvGGTIw==}
     engines: {node: '>=18'}
 
+  braces@3.0.3:
+    resolution: {integrity: sha512-yQbXgO/OSZVD2IsiLlro+7Hf6Q18EJrKSEsdoMzKePKXct3gvD8oLcOQdIzGupr5Fj+EDe8gO/lxc1BzfMpxvA==}
+    engines: {node: '>=8'}
+
   browserslist@4.29.0:
     resolution: {integrity: sha512-3GSvyjvDI4Dur1Meg2BekJquu5uF+9R9a1+5M1Mde192eZoXbeXjzgOsgqPS2V8D5wrrip0gR5Hf/GhWQ9ZzaA==}
     engines: {node: ^6 || ^7 || ^8 || ^9 || ^10 || ^11 || ^12 || >=13.7}
@@ -2391,6 +2405,10 @@ packages:
       picomatch:
         optional: true
 
+  fill-range@7.1.1:
+    resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
+    engines: {node: '>=8'}
+
   finalhandler@2.1.1:
     resolution: {integrity: sha512-S8KoZgRZN+a5rNwqTxlZZePjT/4cnm0ROV70LedRHZ0p8u9fRID0hJUZQpkKLzro8LfmC8sx23bY6tVNxv8pQA==}
     engines: {node: '>= 18.0.0'}
@@ -2524,6 +2542,10 @@ packages:
     resolution: {integrity: sha512-KIYLCCJghfHZxqjYBE7rEy0OBuTd5xCHS7tHVgvCLkx7StIoaxwNW3hCALgEUjFfeRk+MG/Qxmp/vtETEF3tRA==}
     engines: {node: '>=14.16'}
     hasBin: true
+
+  is-number@7.0.0:
+    resolution: {integrity: sha512-41Cifkg6e8TylSpdtTpeLVMqvSBEVzTttHvERD741+pnZ8ANv0004MRL43QKPDlK9cGvNp6NZWZUBlbGXYxxng==}
+    engines: {node: '>=0.12.0'}
 
   is-potential-custom-element-name@1.0.1:
     resolution: {integrity: sha512-bCYeRA2rVibKZd+s2625gGnGF/t7DSqDs4dP7CrLA1m7jKWz6pps0LpYLJN8Q64HtmPKJ1hrN3nzPNKFEKOUiQ==}
@@ -2824,6 +2846,10 @@ packages:
   micromark@4.0.2:
     resolution: {integrity: sha512-zpe98Q6kvavpCr1NPVSCMebCKfD7CA2NqZ+rykeNhONIJBpc1tFKt9hucLGwha3jNTNI8lHpctWJWoimVF4PfA==}
 
+  micromatch@4.0.8:
+    resolution: {integrity: sha512-PXwfBhYu0hBCPw8Dn0E+WDYb7af3dSLVWKi3HGv84IdF4TyFoC0ysxFd0Goxw7nSv4T/PzEJQxsYsEiFCKo2BA==}
+    engines: {node: '>=8.6'}
+
   mime-db@1.54.0:
     resolution: {integrity: sha512-aU5EJuIN2WDemCcAp2vFBfp/m4EAhWJnUNSSw0ixs7/kXbd6Pg64EmwJkNdFhB8aWt1sH2CTXrLxo/iAGV3oPQ==}
     engines: {node: '>= 0.6'}
@@ -2937,6 +2963,10 @@ packages:
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
+
+  picomatch@2.3.2:
+    resolution: {integrity: sha512-V7+vQEJ06Z+c5tSye8S+nHUfI51xoXIXjHQ99cQtKUkQqqO1kO/KCJUfZXuB47h/YBlDhah2H3hdUGXn8ie0oA==}
+    engines: {node: '>=8.6'}
 
   picomatch@4.0.7:
     resolution: {integrity: sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA==}
@@ -3314,6 +3344,10 @@ packages:
     resolution: {integrity: sha512-WylhSDKVeYnWXL3a+vKTaOxjnOeEGw938hImY8zoRWJjRRK/Jp1K+IihBzIONpUmW4e3WmXT6q5FW6vlESVZCA==}
     hasBin: true
 
+  to-regex-range@5.0.1:
+    resolution: {integrity: sha512-65P7iz6X5yEr1cwcgvQxbbIw7Uk3gOy5dIdtZ4rDveLqhrdJP+Li/Hx6tyK0NEb+2GCyneCMJiGqrADCSNk8sQ==}
+    engines: {node: '>=8.0'}
+
   toidentifier@1.0.1:
     resolution: {integrity: sha512-o5sSPKEkg/DIQNmH43V0/uerLrpzVedkUh8tGNvaeXpfpuwjKenlSox/2O/BTlZUtEe+JG7s5YhEz608PlAHRA==}
     engines: {node: '>=0.6'}
@@ -3506,7 +3540,6 @@ packages:
       '@vitest/ui': 4.1.11
       happy-dom: '*'
       jsdom: '*'
-      vite: 8.0.16
     peerDependenciesMeta:
       '@edge-runtime/vm':
         optional: true
@@ -3882,6 +3915,8 @@ snapshots:
   '@csstools/css-syntax-patches-for-csstree@1.1.12(css-tree@3.2.1)':
     optionalDependencies:
       css-tree: 3.2.1
+
+  '@csstools/css-tokenizer@3.0.4': {}
 
   '@csstools/css-tokenizer@4.0.0': {}
 
@@ -4429,6 +4464,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@stylexjs/eslint-plugin@0.19.1':
+    dependencies:
+      '@csstools/css-tokenizer': 3.0.4
+      '@stylexjs/shared': 0.19.1
+      micromatch: 4.0.8
+      postcss-value-parser: 4.2.0
+
   '@stylexjs/shared@0.19.1': {}
 
   '@stylexjs/stylex@0.19.1':
@@ -4633,7 +4675,7 @@ snapshots:
       '@vitest/mocker': 4.1.11(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
       playwright: 1.62.1
       tinyrainbow: 3.1.1
-      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
     transitivePeerDependencies:
       - bufferutil
       - msw
@@ -4649,7 +4691,7 @@ snapshots:
       pngjs: 7.0.0
       sirv: 3.0.2
       tinyrainbow: 3.1.1
-      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
+      vitest: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
       ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
@@ -4840,6 +4882,10 @@ snapshots:
       type-is: 2.1.0
     transitivePeerDependencies:
       - supports-color
+
+  braces@3.0.3:
+    dependencies:
+      fill-range: 7.1.1
 
   browserslist@4.29.0:
     dependencies:
@@ -5145,6 +5191,10 @@ snapshots:
     optionalDependencies:
       picomatch: 4.0.7
 
+  fill-range@7.1.1:
+    dependencies:
+      to-regex-range: 5.0.1
+
   finalhandler@2.1.1:
     dependencies:
       debug: 4.4.3
@@ -5268,6 +5318,8 @@ snapshots:
   is-inside-container@1.0.0:
     dependencies:
       is-docker: 3.0.0
+
+  is-number@7.0.0: {}
 
   is-potential-custom-element-name@1.0.1: {}
 
@@ -5725,6 +5777,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  micromatch@4.0.8:
+    dependencies:
+      braces: 3.0.3
+      picomatch: 2.3.2
+
   mime-db@1.54.0: {}
 
   mime-types@3.0.2:
@@ -5850,6 +5907,8 @@ snapshots:
       zod: 3.25.76
 
   picocolors@1.1.1: {}
+
+  picomatch@2.3.2: {}
 
   picomatch@4.0.7: {}
 
@@ -6293,6 +6352,10 @@ snapshots:
     dependencies:
       tldts-core: 7.4.12
 
+  to-regex-range@5.0.1:
+    dependencies:
+      is-number: 7.0.0
+
   toidentifier@1.0.1: {}
 
   totalist@3.0.1: {}
@@ -6444,7 +6507,7 @@ snapshots:
       fsevents: 2.3.3
       tsx: 4.21.0
 
-  vitest@4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(jsdom@29.1.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0)):
+  vitest@4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0):
     dependencies:
       '@vitest/expect': 4.1.11
       '@vitest/mocker': 4.1.11(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))
@@ -6471,7 +6534,18 @@ snapshots:
       '@vitest/browser-playwright': 4.1.11(playwright@1.62.1)(vite@8.0.16(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0))(vitest@4.1.11)
       jsdom: 29.1.1
     transitivePeerDependencies:
+      - '@vitejs/devtools'
+      - esbuild
+      - jiti
+      - less
       - msw
+      - sass
+      - sass-embedded
+      - stylus
+      - sugarss
+      - terser
+      - tsx
+      - yaml
 
   vscode-jsonrpc@9.0.2: {}
 

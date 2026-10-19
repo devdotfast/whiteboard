@@ -324,6 +324,7 @@ const styles = stylex.create({
 // one warm pencil for strings and one plum for numbers. Comments are quiet and
 // italic. Diff green and red are reserved for the diff language. The editor
 // themes carry the same values.
+/* oxlint-disable stylex/no-unused -- read by token name through syntaxByToken */
 const syntaxStyles = stylex.create({
   kwd: { color: tokens.accent },
   type: { color: tokens.syntaxType },
@@ -344,6 +345,7 @@ const syntaxStyles = stylex.create({
     textDecorationStyle: "wavy",
   },
 });
+/* oxlint-enable stylex/no-unused */
 
 const syntaxByToken = new Map<string, stylex.StyleXStyles>(
   Object.entries(syntaxStyles),

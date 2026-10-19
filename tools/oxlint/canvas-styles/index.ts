@@ -246,9 +246,127 @@ const scaleLiteralsRule = defineRule({
   },
 });
 
+// The text of a string or template leaf; nested objects visit as their own properties.
+function leafText(value: ESTree.Node): string | null {
+  if (value.type === "Literal") return value.raw?.replace(/^["']|["']$/g, "") ?? null;
+
+  if (value.type === "TemplateLiteral") {
+    return value.quasis.map((quasi) => quasi.value.raw).join("${}");
+  }
+
+  return null;
+}
+
+type LeafVisitor = (node: ESTree.ObjectProperty, name: string | null, text: string) => void;
+
+// Visits each string leaf of a stylex.create call.
+function leafValues(context: { sourceCode: SourceCode }, visit: LeafVisitor) {
+  return {
+    Property(node: ESTree.ObjectProperty) {
+      const text = leafText(node.value);
+
+      if (text !== null && insideStylexCreate(context.sourceCode, node)) {
+        visit(node, propertyName(node), text);
+      }
+    },
+  };
+}
+
+/** Flag `!important` in stylex.create values. */
+const noImportantRule = defineRule({
+  meta: {
+    type: "suggestion",
+    docs: { description: "Raise a style with a variant or stylex.when.ancestor, not !important." },
+    messages: {
+      important: "Drop `!important`; use a variant or `stylex.when.ancestor` instead.",
+    },
+  },
+  createOnce(context) {
+    return leafValues(context, (node, _name, text) => {
+      if (text.includes("!important")) context.report({ node: node.value, messageId: "important" });
+    });
+  },
+});
+
+/** Flag a bare `transparent` in stylex.create values; inside a gradient or color-mix it stays. */
+const noBareTransparentRule = defineRule({
+  meta: {
+    type: "suggestion",
+    docs: { description: "Use tokens.transparent instead of a transparent literal." },
+    messages: { transparent: "Use `tokens.transparent` instead of `transparent`." },
+  },
+  createOnce(context) {
+    return leafValues(context, (node, _name, text) => {
+      if (bareWords(text).includes("transparent")) {
+        context.report({ node: node.value, messageId: "transparent" });
+      }
+    });
+  },
+});
+
+const rawColor = /#[0-9a-f]{3,8}\b|\b(rgba?|hsla?|oklch|oklab)\([^)]*\)/i;
+
+/** Flag hex and functional colors in stylex.create values; mask gradients keep theirs. */
+const noRawColorsRule = defineRule({
+  meta: {
+    type: "suggestion",
+    docs: { description: "Use the colors in tokens.stylex.ts instead of literal colors." },
+    messages: { color: "Use a `tokens.*` color instead of `{{value}}`." },
+  },
+  createOnce(context) {
+    return leafValues(context, (node, name, text) => {
+      const match = name === "maskImage" || name === "WebkitMaskImage" ? null : rawColor.exec(text);
+
+      if (match !== null) {
+        context.report({ node: node.value, messageId: "color", data: { value: match[0] } });
+      }
+    });
+  },
+});
+
+const glyph = /^[×✕›‹▾✓→←…]$/;
+
+// The text of a child that is a string: JSX text or a `{"…"}` container.
+function childText(child: ESTree.Node): string | null {
+  if (child.type === "JSXText") return child.value;
+
+  if (child.type === "JSXExpressionContainer" && child.expression.type === "Literal") {
+    return String(child.expression.value);
+  }
+
+  return null;
+}
+
+/** Flag a Unicode glyph as an element's only content. */
+const noGlyphIconsRule = defineRule({
+  meta: {
+    type: "suggestion",
+    docs: { description: "Icons are SVG from ui/icons.tsx, not Unicode characters." },
+    messages: { glyph: "Use an icon from ui/icons.tsx instead of `{{glyph}}`." },
+  },
+  createOnce(context) {
+    return {
+      JSXElement(node) {
+        const children = node.children.filter((child) => childText(child)?.trim() !== "");
+        const text = children.length === 1 ? childText(children[0])?.trim() : undefined;
+
+        if (text !== undefined && glyph.test(text)) {
+          context.report({ node: children[0], messageId: "glyph", data: { glyph: text } });
+        }
+      },
+    };
+  },
+});
+
 const canvasStylesPlugin = eslintCompatPlugin({
   meta: { name: "canvas-styles" },
-  rules: { "scale-literals": scaleLiteralsRule },
+  rules: {
+    "scale-literals": scaleLiteralsRule,
+    "no-important": noImportantRule,
+    "no-bare-transparent": noBareTransparentRule,
+    "no-raw-colors": noRawColorsRule,
+    "no-glyph-icons": noGlyphIconsRule,
+  },
 });
 
 export default canvasStylesPlugin;
