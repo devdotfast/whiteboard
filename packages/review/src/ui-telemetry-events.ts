@@ -29,6 +29,7 @@ import {
 import { z } from "zod";
 
 import { askAgentIds } from "./ask/thread-state";
+import { SELECTION_UNAVAILABLE_REASONS } from "./lens-selection";
 import { containsFilePath, hasPossibleUserInfo } from "./telemetry-clean-text";
 
 /** Property value validators: an enum of allowed strings, or a scalar type. */
@@ -69,6 +70,13 @@ const PEEK_VIA = [
 ] as const;
 
 export const PEEK_ROOT_KIND = ["range"] as const;
+
+/** `unresolved`: progress finished without this selection; `error`: progress failed. */
+export const PEEK_FAILURE_REASON = [
+  ...SELECTION_UNAVAILABLE_REASONS,
+  "error",
+  "unresolved",
+] as const;
 
 export const LSP_FEATURE = [
   "hover",
@@ -621,7 +629,7 @@ export const UI_TELEMETRY_EVENTS = {
   },
   peek_resolve_failed: {
     event: "review_peek_resolve_failed",
-    properties: { root_kind: PEEK_ROOT_KIND },
+    properties: { root_kind: PEEK_ROOT_KIND, reason: PEEK_FAILURE_REASON },
   },
   review_deleted: {
     event: "review_review_deleted",

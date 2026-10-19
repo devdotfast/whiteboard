@@ -158,12 +158,16 @@ export function CodePeekCard({
 
   const key = selectionKey(source);
 
+  const unavailable = lenses?.progress?.unavailableSelections?.[key];
+
   const outcome = peekResolutionOutcome({
     resolvedCount: ranges.length,
     complete: Boolean(lenses?.progress?.complete),
-    unavailable: Boolean(lenses?.progress?.unavailableSelections?.[key]),
+    unavailable: Boolean(unavailable),
     error: Boolean(lenses?.error),
   });
+
+  const reason = unavailable ?? (lenses?.error ? "error" : "unresolved");
 
   const reportedKey = useRef<string | null>(null);
 
@@ -171,12 +175,15 @@ export function CodePeekCard({
     if (!reportOutcome || outcome === "pending" || reportedKey.current === key)
       return;
     reportedKey.current = key;
-    captureUiEvent(
-      session,
-      outcome === "resolved" ? "peek_resolved" : "peek_resolve_failed",
-      { root_kind: "range" },
-    );
-  }, [key, outcome, reportOutcome, session]);
+
+    if (outcome === "resolved")
+      captureUiEvent(session, "peek_resolved", { root_kind: "range" });
+    else
+      captureUiEvent(session, "peek_resolve_failed", {
+        root_kind: "range",
+        reason,
+      });
+  }, [key, outcome, reason, reportOutcome, session]);
 
   if (!ranges.length)
     return (

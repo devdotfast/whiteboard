@@ -1,5 +1,7 @@
 import {
   type LensSource,
+  SelectionUnavailableError,
+  type SelectionUnavailableReason,
   comparisonKey,
   resolveDiffSelection,
   selectionKey,
@@ -47,7 +49,7 @@ export const progressUpdateSchema = z.strictObject({
 
 export interface ReviewProgress {
   complete?: boolean;
-  unavailableSelections?: Record<string, string>;
+  unavailableSelections?: Record<string, SelectionUnavailableReason>;
   files: CoverageFile[];
   /** Changed files of the comparisons that references with their own pins
    * named, by `comparisonKey` and then path. They are not the document's
@@ -137,7 +139,7 @@ export async function reviewProgress(
   const alignments = new Map(comparison.alignments);
   const resolvedSelections: Record<string, FileLineRange[]> = {};
 
-  const unavailableSelections: Record<string, string> = {};
+  const unavailableSelections: Record<string, SelectionUnavailableReason> = {};
   const pendingSources = new Set<string>();
 
   const resolve = async (source: LensSource): Promise<FileLineRange[]> => {
@@ -199,10 +201,16 @@ export async function reviewProgress(
       );
 
       if (base === null && head === null)
-        throw new Error("File is unavailable at these pins.");
+        throw new SelectionUnavailableError(
+          "missing_file",
+          "File is unavailable at these pins.",
+        );
 
       if (base !== null && head !== null && base !== head)
-        throw new Error("Changed context file has no alignment.");
+        throw new SelectionUnavailableError(
+          "no_alignment",
+          "Changed context file has no alignment.",
+        );
       rows = textualRows(
         source.file,
         "",
@@ -211,7 +219,11 @@ export async function reviewProgress(
       );
     }
 
-    if (!rows) throw new Error("File has no text alignment.");
+    if (!rows)
+      throw new SelectionUnavailableError(
+        "no_alignment",
+        "File has no text alignment.",
+      );
 
     const result = resolveDiffSelection(
       source,
@@ -227,9 +239,9 @@ export async function reviewProgress(
   const resolveAvailable = async (source: LensSource) => {
     try {
       return await resolve(source);
-    } catch {
+    } catch (error) {
       unavailableSelections[selectionKey(source)] =
-        "Source links need updating at these pins";
+        error instanceof SelectionUnavailableError ? error.reason : "other";
 
       return [];
     }

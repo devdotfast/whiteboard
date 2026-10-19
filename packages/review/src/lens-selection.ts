@@ -210,6 +210,26 @@ export function sourceAnchor(source: LensSource): FileLineRange {
   return sourceAnchors(source)[0]!;
 }
 
+/** Why a selection cannot be resolved at its pins, as telemetry reports it. */
+export const SELECTION_UNAVAILABLE_REASONS = [
+  "missing_file",
+  "no_alignment",
+  "outside_lines",
+  "other",
+] as const;
+
+export type SelectionUnavailableReason =
+  (typeof SELECTION_UNAVAILABLE_REASONS)[number];
+
+export class SelectionUnavailableError extends Error {
+  constructor(
+    readonly reason: SelectionUnavailableReason,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 /** Resolve once against the renderer's rows. No matching or context expansion. */
 export function resolveDiffSelection(
   source: LensSource,
@@ -225,7 +245,8 @@ export function resolveDiffSelection(
   const end = locate(source.end);
 
   if (start < 0 || end < start)
-    throw new Error(
+    throw new SelectionUnavailableError(
+      "outside_lines",
       "Lens endpoints do not identify an ordered interval in this diff.",
     );
   const selected = rows.slice(start, end + 1);
