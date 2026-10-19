@@ -9,7 +9,7 @@ import type {
   ReviewConnectResult,
 } from "@dev.fast/review-protocol";
 
-import { findExecutable } from "./ask/agents.js";
+import { executableCommand, findExecutable } from "./ask/agents.js";
 import {
   type McpLaunch,
   WHITEBOARD_PLUGIN as PLUGIN,
@@ -72,12 +72,18 @@ export type ConnectRun = (
   args: string[],
 ) => Promise<{ code: number; output: string }>;
 
-const runProcess: ConnectRun = (file, args) =>
+const runProcess: ConnectRun = (executable, executableArgs) =>
   new Promise((resolve) => {
+    const { file, args, windowsVerbatimArguments } = executableCommand(
+      executable,
+      executableArgs,
+    );
+
     execFile(
       file,
       args,
       {
+        windowsVerbatimArguments,
         timeout: STEP_TIMEOUT_MS,
         maxBuffer: 4 * 1024 * 1024,
         // A plugin install must never wait on a prompt nobody can see.
