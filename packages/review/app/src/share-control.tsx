@@ -46,6 +46,7 @@ export const SharingContext = createContext<{
 interface SharingAccount {
   account: { login: string; origin: string } | null;
   pending: boolean;
+  userCode?: string;
   error?: string;
 }
 
@@ -287,6 +288,15 @@ export function ShareControl({
           ) : (
             account && (
               <>
+                {account.userCode && (
+                  <p {...stylex.props(styles.paragraph, styles.status)}>
+                    Confirm code{" "}
+                    <code {...stylex.props(styles.code)}>
+                      {account.userCode}
+                    </code>{" "}
+                    in your browser.
+                  </p>
+                )}
                 <Button
                   variant="primary"
                   disabled={
@@ -351,5 +361,10 @@ const styles = stylex.create({
   },
   link: {
     width: "100%",
+  },
+  code: {
+    color: tokens.chromeFg,
+    fontFamily: tokens.fontMono,
+    fontWeight: tokens.chromeFontWeightStrong,
   },
 });
