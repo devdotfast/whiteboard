@@ -2049,50 +2049,33 @@ body
   display: none;
 }
 
-/* A thread in the project waits on the reader. */
 /* The Threads tab: amber needs the reader, blue is an answer unseen, and
-   while an agent answers a spinner takes the dot's place. */
+   while an agent answers the icon pulses blue in the dot's place. */
 .monaco-workbench .review-sidebar-tab-badge-threads[data-mark="waiting"] {
   background-color: var(--vscode-charts-yellow);
 }
 
-.monaco-workbench .review-sidebar-tab-badge-threads[data-mark="answering"] {
-  top: -4px;
-  right: -6px;
-  width: 11px;
-  height: 11px;
-  border: 0;
-  background-color: var(--vscode-sideBar-background, var(--vscode-editorGroupHeader-tabsBackground));
-}
-
-.monaco-workbench .review-sidebar-tab-spinner {
+.monaco-workbench .review-sidebar-tab-badge-threads[data-mark="answering"],
+.monaco-workbench .review-sidebar-rail-badge[data-mark="answering"] {
   display: none;
 }
 
-.monaco-workbench .review-sidebar-tab-badge-threads[data-mark="answering"] .review-sidebar-tab-spinner {
-  display: block;
-  animation: review-sidebar-tab-spin 0.8s linear infinite;
+.monaco-workbench .review-sidebar-tab-icon:has(> .review-sidebar-tab-badge-threads[data-mark="answering"]) > svg,
+.monaco-workbench .review-sidebar-rail-tab:has(> .review-sidebar-rail-badge[data-mark="answering"]) > svg {
+  animation: review-sidebar-answering 1.4s ease-in-out infinite;
 }
 
-.monaco-workbench .review-sidebar-tab-spinner-track {
-  fill: none;
-  stroke: var(--vscode-editorWidget-border, var(--vscode-disabledForeground));
-  stroke-width: 1.4;
-}
-
-.monaco-workbench .review-sidebar-tab-spinner-arc {
-  fill: none;
-  stroke: var(--vscode-charts-blue);
-  stroke-linecap: round;
-  stroke-width: 1.4;
-}
-
-@keyframes review-sidebar-tab-spin {
-  to { transform: rotate(360deg); }
+@keyframes review-sidebar-answering {
+  50% {
+    color: var(--vscode-charts-blue);
+    filter: drop-shadow(0 0 3px var(--vscode-charts-blue));
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .monaco-workbench .review-sidebar-tab-badge-threads[data-mark="answering"] .review-sidebar-tab-spinner {
+  .monaco-workbench .review-sidebar-tab-icon:has(> .review-sidebar-tab-badge-threads[data-mark="answering"]) > svg,
+  .monaco-workbench .review-sidebar-rail-tab:has(> .review-sidebar-rail-badge[data-mark="answering"]) > svg {
+    color: var(--vscode-charts-blue);
     animation: none;
   }
 }
