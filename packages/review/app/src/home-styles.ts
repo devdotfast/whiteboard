@@ -22,15 +22,16 @@ export const homeStyles = stylex.create({
     flexDirection: "column",
     height: "100%",
     minHeight: 0,
+    paddingTop: { default: space.s36, [narrow]: space.s32 },
     overflow: "hidden",
     color: tokens.ink,
     backgroundColor: tokens.bg,
+    WebkitAppRegion: "drag",
     font: `${fontSize.body}/${leading.px16} ${tokens.chromeFont}`,
   },
   scroll: {
     flex: "1 1 auto",
     minHeight: 0,
-    paddingTop: { default: space.s36, [narrow]: space.s32 },
     paddingInline: {
       default: "clamp(36px, calc(12.5cqw - 60px), 120px)",
       [wide]: space.s36,
@@ -39,6 +40,7 @@ export const homeStyles = stylex.create({
     paddingBottom: "max(56px, var(--review-bottom-scroll-padding, 0px))",
     overflow: "auto",
     scrollbarGutter: "stable",
+    WebkitAppRegion: "no-drag",
   },
   content: {
     display: "flex",

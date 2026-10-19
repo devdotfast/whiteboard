@@ -200,6 +200,7 @@ export const shellStyles = stylex.create({
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
     backgroundColor: tokens.surface,
+    WebkitAppRegion: "drag",
   },
   // Notion's page bar: where you are at the far left, what you can do at
   // the far right, on the page's own surface with no rule under it.

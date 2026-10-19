@@ -40,6 +40,9 @@ export function useTooltip<T extends HTMLElement = HTMLButtonElement>(
     (target: T | null) => {
       if (!target) return;
 
+      // Window drag regions swallow hover.
+      target.style.setProperty("-webkit-app-region", "no-drag");
+
       if (setupTooltip) {
         const tooltip = setupTooltip(target, text, { instant, quick, detail });
 

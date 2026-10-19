@@ -175,6 +175,11 @@ button {
   cursor: pointer;
 }
 
+/* Keep controls clickable inside window drag regions. */
+:is(button, a, input, select, textarea, label, [role], [tabindex]) {
+  -webkit-app-region: no-drag;
+}
+
 /* One scrollbar for every native scroller in the canvas: a 6px pill centered
    in a 10px lane, with no visible track. Chromium ignores these rules on an
    element with a non-auto `scrollbar-width` or `scrollbar-color` (and the

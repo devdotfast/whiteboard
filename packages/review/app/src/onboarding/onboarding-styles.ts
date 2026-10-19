@@ -49,6 +49,7 @@ export const onboardingStyles = stylex.create({
     flexShrink: 0,
     height: "56px",
     paddingInline: space.s24,
+    WebkitAppRegion: "drag",
   },
   railSide: {
     display: "flex",
