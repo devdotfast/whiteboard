@@ -33,6 +33,8 @@ export interface ReviewMultiDiffHeaderEntry {
 	readonly noteTooltip?: ReviewTooltipContent;
 	/** The commit an embedded quote is read at, when not the board's own. */
 	readonly commit?: { readonly label: string; readonly tooltip?: ReviewTooltipContent };
+	/** diffr could not diff the file; the note is its error. */
+	readonly failed?: boolean;
 	/** A file with no text to diff: it stays folded and its header never opens it. */
 	readonly collapseLocked?: boolean;
 	/** Tooltip for the counts: what is left of the file, then its whole. */
@@ -251,6 +253,7 @@ export class ReviewMultiDiffUIElementFactory
 			commitTooltip.content = current.commit?.tooltip;
 			note.hidden = !current.note;
 			note.textContent = current.note ?? "";
+			note.classList.toggle("error", !!current.failed);
 			noteTooltip.content = current.noteTooltip;
         openContainer.hidden = !current.onDidOpen;
 		};

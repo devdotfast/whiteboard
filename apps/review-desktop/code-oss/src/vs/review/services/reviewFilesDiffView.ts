@@ -97,7 +97,7 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 					entry.original,
 					entry.modified,
 					entry.goToFileResource,
-					entry.file.status !== "unchanged" && structural.getFileResult(entry.file.path)?.diff?.type !== "binary"
+					entry.file.status !== "unchanged" && structural.getTextDiff(entry.file.path)
 						? structural.fileCollapse(entry.file.path)
 						: observableValue("collapsed", false),
 					undefined,
@@ -191,7 +191,8 @@ export class ReviewFilesDiffView extends Disposable {
 	private viewModel: MultiDiffEditorViewModel | undefined;
 	private input: ReviewFilesEditorInput | undefined;
 	private readonly readyFiles = new Set<string>();
-	private readonly fileStates = new Map<string, string>();
+	private readonly loadingFiles = new Set<string>();
+	private readonly failedFiles = new Map<string, string>();
 	private readonly settleHold = this._register(new MutableDisposable<DisposableStore>());
 	private readonly documentLayout = this._register(new MutableDisposable());
 	/** Full structural counts for views without persisted coverage. */
@@ -250,7 +251,7 @@ export class ReviewFilesDiffView extends Disposable {
 							modified: entry.modified,
 							additions: entry.file.status === "unchanged" || this.isBinary(entry) ? undefined : this.entryProgress(entry)?.remaining.additions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.added),
 							deletions: entry.file.status === "unchanged" || this.isBinary(entry) ? undefined : this.entryProgress(entry)?.remaining.deletions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.removed),
-							collapseLocked: this.isBinary(entry),
+							collapseLocked: this.isBinary(entry) || this.failedFiles.has(entry.file.path),
 						countsTooltip: this.progressTooltip(entry) ?? this.streamStats.get(entry.file.path)?.tooltip,
 						viewedState: this.entryProgress(entry)?.state,
 						viewedScope: this.viewedScope,
@@ -261,8 +262,9 @@ export class ReviewFilesDiffView extends Disposable {
 						section: entry.sectionStart ? this.progress?.sections?.find(section => section.id === entry.sectionId) : undefined,
 						onToggleSection: () => entry.sectionId && this.onToggleSection?.(entry.sectionId),
 						// A binary is folded like a hidden file, with its size as the reason.
-						note: entry.file.status === "unchanged" ? (this.document ? undefined : "Unchanged") : this.isBinary(entry) ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path),
-						noteTooltip: this.isBinary(entry) ? { label: "No text to show · binary files stay folded" } : undefined,
+						note: this.failedFiles.get(entry.file.path) ?? (entry.file.status === "unchanged" ? (this.document ? undefined : "Unchanged") : this.isBinary(entry) ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path)),
+						noteTooltip: this.failedFiles.has(entry.file.path) ? { label: this.failedFiles.get(entry.file.path)! } : this.isBinary(entry) ? { label: "No text to show · binary files stay folded" } : undefined,
+						failed: this.failedFiles.has(entry.file.path),
 						commit: document?.commit,
 							// A binary has no text to open.
 							onDidOpen: this.isBinary(entry) || !(document ? document.onDidOpen : openFile) ? undefined : () => {
@@ -455,7 +457,7 @@ export class ReviewFilesDiffView extends Disposable {
 	startLoading(entries: readonly ReviewFilesEditorEntry[]): void {
 		this.changedFilesTree?.setFiles(Array.from(new Map(entries.map(entry => [entry.file.path, entry.file])).values()));
 		for (const entry of entries) {
-			this.fileStates.set(entry.file.path, "Loading diff…");
+			this.loadingFiles.add(entry.file.path);
 			this.changedFilesTree?.setFileState(entry.file.path, "loading");
 		}
 		this.showStreamStatus();
@@ -465,15 +467,12 @@ export class ReviewFilesDiffView extends Disposable {
 		path: string,
 		error?: string,
 	): void {
-		if (error) {
-			this.fileStates.set(path, error);
-			this.changedFilesTree?.setFileState(path, "error", error);
-		} else {
-			this.fileStates.delete(path);
-			this.readyFiles.add(path);
-			this.changedFilesTree?.setFileState(path, undefined);
-		}
-		this.input?.setReadyFiles(this.readyFiles, [...this.fileStates.values()].some(state => state === "Loading diff…"));
+		// A failed file still gets a section, so the tree can reveal its error.
+		this.loadingFiles.delete(path);
+		this.readyFiles.add(path);
+		if (error) this.failedFiles.set(path, error);
+		this.changedFilesTree?.setFileState(path, error ? "error" : undefined, error);
+		this.input?.setReadyFiles(this.readyFiles, this.loadingFiles.size > 0);
 		this.showStreamStatus();
 	}
 
@@ -583,7 +582,7 @@ export class ReviewFilesDiffView extends Disposable {
 		if (!entry) return;
 		if (entry.sectionId && this.collapsedSections.delete(entry.sectionId)) this.headerFactory.refreshHeaders();
 		this.pendingSource = source; this.pendingSectionId = sectionId; this.pendingReveal = options;
-		if (this.fileStates.has(entry.file.path)) { this.pendingPath = entry.file.path; return; }
+		if (this.loadingFiles.has(entry.file.path)) { this.pendingPath = entry.file.path; return; }
 		this.itemFor(entry)?.collapsed.set(false, undefined);
 		this.reveal(entry, { highlight: true, side: source.side === 'base' && entry.file.status !== 'unchanged' ? 'original' : 'modified', range: options?.range ?? new Range(source.fromLine, 1, source.toLine, 1), select: options?.select });
 		this.pendingSource = undefined; this.pendingReveal = undefined;
@@ -611,32 +610,24 @@ export class ReviewFilesDiffView extends Disposable {
 		this.settleHold.clear();
 		const entry = this.input?.entries.find((entry) => entry.file.path === path);
 		if (!entry) return;
-		this.pendingPath = this.fileStates.has(path) ? path : undefined;
+		this.pendingPath = this.loadingFiles.has(path) ? path : undefined;
 		this.showStreamStatus();
 		if (!this.pendingPath) this.reveal(entry);
 	}
 
 	loadingFailed(message: string): void {
-		for (const [path, state] of this.fileStates)
-			if (state === "Loading diff…") this.fileLoaded(path, message);
+		for (const path of this.loadingFiles) this.fileLoaded(path, message);
 		this.showStreamStatus();
 	}
 
 	private showStreamStatus(): void {
-		const message = this.pendingPath
-			? this.fileStates.get(this.pendingPath)
-			: undefined;
-		this.streamStatus.hidden =
-			(!message && this.readyFiles.size > 0) || this.fileStates.size === 0;
-		this.streamStatus.textContent = message
-			? `${this.pendingPath}: ${message}`
-			: this.readyFiles.size === 0
-				? ([...this.fileStates.values()][0] ?? "")
-				: "";
-		this.streamStatus.classList.toggle(
-			"loading",
-			[...this.fileStates.values()].some((s) => s === "Loading diff…"),
-		);
+		const loading = this.loadingFiles.size > 0;
+		const pending = this.pendingPath && this.loadingFiles.has(this.pendingPath) ? this.pendingPath : undefined;
+		this.streamStatus.hidden = !loading || (!pending && this.readyFiles.size > 0);
+		this.streamStatus.textContent = pending
+			? `${pending}: Loading diff…`
+			: this.readyFiles.size === 0 ? "Loading diff…" : "";
+		this.streamStatus.classList.toggle("loading", loading);
 	}
 
 	getViewState(): IMultiDiffEditorViewState | undefined {

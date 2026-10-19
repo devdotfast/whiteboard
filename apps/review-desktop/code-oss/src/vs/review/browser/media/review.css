@@ -1067,6 +1067,14 @@ body
   font-size: 12px;
 }
 
+.review-multidiff-note.error {
+  max-width: 48ch;
+  overflow: hidden;
+  color: var(--vscode-errorForeground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .review-multidiff-note[hidden] {
   display: none;
 }

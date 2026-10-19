@@ -76,7 +76,6 @@ export function createStructuralDiffEditors(
 				text = await read;
 			} else {
 				const result = await session.fileResult(source.path);
-				if (result.error) throw new Error(result.error);
 				// diffr's binary check is stricter than git's.
 				text = result.diff?.type === "text" ? result.diff[source.side]?.text ?? "" : "";
 			}
@@ -131,7 +130,7 @@ export class StructuralDiffProvider implements IDocumentDiffProvider {
 			if (original.getValue() !== modified.getValue()) throw new Error("Referenced context file changed; reload the session.");
 			return { changes: [], moves: [], identical: true, quitEarly: false };
 		}
-		if (path !== undefined && this.session.getFileResult(path)?.diff?.type === "binary") {
+		if (path !== undefined && this.session.getFileResult(path)?.diff?.type !== "text") {
 			return { changes: [], moves: [], identical: false, quitEarly: false, changeHighlights: { original: [], modified: [] } };
 		}
 		const diff = path === undefined ? undefined : this.session.getTextDiff(path);
