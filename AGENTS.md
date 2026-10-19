@@ -2,55 +2,32 @@ IMPORTANT: ASK FOR PERMISSION BEFORE EDITING README.md. YOU PROBABLY DON'T NEED 
 
 ## Design system and UI
 
-These conventions apply to the React canvas in `packages/review/app`. `pnpm lint`
-enforces the scales; the `deslop-ui` skill (`.agents/skills/deslop-ui`) checks
-the rest before review.
+These rules apply to the React canvas in `packages/review/app`. The `deslop-ui`
+skill (`.agents/skills/deslop-ui`) holds the detailed checklist. Run it before
+review.
 
-- Build from `src/ui/` before writing markup or styles. Extend a kit piece with
-  a variant instead of copying it; a second local copy of anything belongs in
-  the kit. Kit modules never import app code.
-  - Controls: `Button` (`variant`, `tone`; `buttonLook` for anchors),
-    `IconButton` (`aria-pressed` for toggles), `SegmentedControl`, `Checkbox`,
-    `Switch`, `TextField`, `TextArea`, `Select`, `fieldStyles.bare`.
-  - Overlays: `Popover`, `Dialog`, `option-menu.tsx`; disclosures use
-    `DisclosureChevron` with `disclosureStyles.toggle` and `chevronMarker` on
-    the toggle.
-  - Feedback: `Spinner` (`spinStyles.turning` for a turning icon),
-    `EmptyState`, `StatusBanner`, `StatusDot`, `useCopy`, `useTooltip`,
-    `notify.ts`.
-  - Glyphs: icons live in `ui/icons.tsx`, board and PR-state marks in
-    `ui/board-icons.tsx`, agent marks in `ui/brand-icons.tsx` (`AgentLogo`),
-    sized with `iconStyles`. Draw icons as
-    SVG, not Unicode characters.
-  - Fragments: `textStyles` (`truncate`, `clamp2`, `error`, `eyebrow`,
-    `sectionTitle`, `count`), `focusStyles.ring`/`ringInset`,
-    `buttonStyles.reset`, `dividerStyles`, `surfaceStyles`, `listRowStyles`
-    for sidebar and menu rows, `pillStyles`, `menuStyles.separator`,
-    `CrumbSeparator`. Settings use `Section`/`Row` from `settings-section.tsx`;
-    times, durations and counts use `format.ts`.
-- Use StyleX with `tokens.*` and the steps in `scale.stylex.ts` (`space`,
-  `leading`, `fontSize`, `fontWeight`, `radius`, `motion`, `layer`,
-  `elevation`); no raw colors, screen-only tokens or steps. Snap a value to the
-  nearest step instead of adding one. Keep `stylex.create` values static: no
-  spreads or helper calls.
-- Reduced motion and the shared narrow breakpoint come from `stylex.env`; only a
-  one-off layout breakpoint stays local. Every animation and transition has a
-  reduced-motion branch. Stacking across surfaces uses `layer`.
+- Build from the kit in `src/ui/`. Search it before you write markup or styles.
+  Extend a kit piece with a variant instead of copying it. A second local copy
+  of anything belongs in the kit. Kit modules never import app code.
+- Use StyleX with `tokens.*` and the steps in `scale.stylex.ts`. No raw colors,
+  screen-only tokens or steps. Snap to the nearest step; do not add one. Keep
+  `stylex.create` values static: no spreads or helper calls.
+- Reduced motion and the narrow breakpoint come from `stylex.env`. Every
+  animation and transition has a reduced-motion branch. Stacking across
+  surfaces uses `layer`.
 - Keep styles beside the component. Use variants or `stylex.when.ancestor` with
   markers for contextual styling, not descendant selectors. Global CSS is only
   for resets, scope roots, and DOM the canvas does not render.
-- Menus, confirmations, notifications, and tooltips use workbench host services
-  through `session.bridge`, or `CanvasUiContext` on Home and onboarding. Reuse
-  `useTooltip` and `notify`; keep Code OSS imports out of the canvas.
-- Keep rich content, forms, and inline feedback in React. Add a UI library only
-  for a concrete behavior existing host or browser primitives cannot cover.
-  In-page popovers use `Popover` from `ui/popover.tsx`, placed with
-  `menuStyles.popover` or `shellStyles.topbarPopover`; browser fallbacks must
-  not become a second Desktop UI.
-- Never disable a control while it has focus and works; guard the handler
-  instead, or focus drops to the body. Overlays close on Escape and return focus
-  to their trigger. DOM portaled outside `.review-app` takes `themeStyles.vars`.
-- Errors inside a modal render inline with `role="alert"`: host notifications
+- Menus, confirmations, notifications and tooltips use host services through
+  `session.bridge`, or `CanvasUiContext` on Home and onboarding. Keep Code OSS
+  imports out of the canvas.
+- Keep rich content, forms and inline feedback in React. Add a UI library only
+  for a behavior host or browser primitives cannot cover. Browser fallbacks
+  must not become a second Desktop UI.
+- Never disable a control while it has focus and works; guard the handler.
+  Overlays close on Escape and return focus to their trigger. DOM portaled
+  outside `.review-app` takes `themeStyles.vars`.
+- Errors inside a modal render inline with `role="alert"`. Host notifications
   sit under its backdrop.
 
 ## Stack conventions
@@ -76,6 +53,4 @@ Do not add [Change Detector Tests](https://testing.googleblog.com/2015/01/testin
   keyboard navigation, hover/focus, and reduced motion. For host controls, also
   check cancellation, focus restoration, disposal, and zoom. Browser tests do
   not load workbench CSS or host services. Do not test CSS text.
-- A style refactor that should not change pixels proves it with computed-style
-  diffs before and after, with the pointer moved off the page, not by eye.
 - Run `pnpm lint` and `pnpm format` from the repo root for code changes.
