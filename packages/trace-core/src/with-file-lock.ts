@@ -168,7 +168,7 @@ async function readLockOwner(lockPath: string) {
 }
 
 /** Only a recorded start that differs proves reuse; unknown is the same process. */
-function pidReused(pid: number, started: string | undefined) {
+export function pidReused(pid: number, started: string | undefined) {
   if (!started) return false;
   const current = processStartIdentity(pid);
 
