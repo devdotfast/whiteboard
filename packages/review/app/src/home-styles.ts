@@ -22,7 +22,7 @@ export const homeStyles = stylex.create({
     flexDirection: "column",
     height: "100%",
     minHeight: 0,
-    paddingTop: { default: space.s36, [narrow]: space.s32 },
+    paddingTop: { default: space.s48, [narrow]: space.s40 },
     overflow: "hidden",
     color: tokens.ink,
     backgroundColor: tokens.bg,
