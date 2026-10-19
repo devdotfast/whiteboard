@@ -14,6 +14,7 @@ import { ReviewBreadcrumb } from "./review-breadcrumb";
 import {
   BoardSaveRetryContext,
   BoardSaveStatusContext,
+  BoardUpdatedAt,
   ReviewDocumentMetaLine,
   useBoardPlace,
 } from "./review-doc-meta";
@@ -88,7 +89,7 @@ describe("ReviewDocumentMetaLine", () => {
     const tree = (
       <TestCanvasQuery>
         <ReviewSessionProvider session={session}>
-          <ReviewDocumentMetaLine />
+          <BoardUpdatedAt />
         </ReviewSessionProvider>
       </TestCanvasQuery>
     );
@@ -147,6 +148,7 @@ describe("ReviewDocumentMetaLine", () => {
             <ReviewSessionProvider session={session}>
               <DisplayedReviewVersionContext.Provider value={version}>
                 <ReviewDocumentMetaLine />
+                <BoardUpdatedAt />
               </DisplayedReviewVersionContext.Provider>
             </ReviewSessionProvider>
           </TestCanvasQuery>,
@@ -441,7 +443,6 @@ describe("ReviewDocumentMetaLine", () => {
     );
 
     expect(container.textContent).toContain("Not saved · Retry");
-    expect(container.textContent).not.toContain("saving…");
     await act(async () => container.querySelector("button")!.click());
     expect(retry).toHaveBeenCalled();
   });

@@ -89,7 +89,7 @@ import {
 import { ReviewCornerAction } from "./review-corner-action";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { ReviewDiffFilesProvider } from "./review-diff-files-context";
-import { useBoardPlace } from "./review-doc-meta";
+import { BoardUpdatedAt, useBoardPlace } from "./review-doc-meta";
 import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
 import {
@@ -799,6 +799,7 @@ function ReviewLayoutContent({
                 place={place}
                 reviewId={session.review.reviewId}
                 counted={fold < 1}
+                status={<BoardUpdatedAt />}
               />
             ) : null}
             {sidebarLeads ? null : (

@@ -200,12 +200,12 @@ it("exposes JSON section and Markdown headings plus imported PR and its place un
 
   const top = await crumbOf(parent);
 
-  expect(top.textContent).toBe("Stack2 boards");
+  expect(top.textContent).toMatch(/^Stack2 boards/);
   expect(top.querySelector('[aria-label="2 boards in Stack"]')).not.toBeNull();
 
   const lone = await crumbOf(await board("Alone"));
 
-  expect(lone.textContent).toBe("Alone");
+  expect(lone.textContent).toMatch(/^Alone/);
   expect(lone.querySelector("[aria-haspopup=menu]")).toBeNull();
 });
 

@@ -61,6 +61,7 @@ export function ReviewBreadcrumb({
   place,
   reviewId,
   counted = true,
+  status,
 }: {
   place: ReviewBoardPlace;
   reviewId: string;
@@ -68,6 +69,7 @@ export function ReviewBreadcrumb({
    * board's menu button, where the bar has no room; the name and the
    * chevron stay. */
   counted?: boolean;
+  status?: ReactNode;
 }): ReactElement | null {
   const session = useReviewSession();
   const [open, setOpen] = useState(false);
@@ -215,6 +217,7 @@ export function ReviewBreadcrumb({
               ) : null,
             )
           : null}
+        {status}
       </nav>
     );
   }
@@ -252,6 +255,7 @@ export function ReviewBreadcrumb({
             boardTitle(siblings[index]!.title).length,
           )
         : null}
+      {status}
     </nav>
   );
 }

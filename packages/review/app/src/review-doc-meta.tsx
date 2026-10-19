@@ -69,7 +69,7 @@ export const BoardSaveRetryContext = createContext<(() => void) | undefined>(
 /**
  * The board's header: for a child, its parent and its place among the
  * parent's children; the title; then one faint line with the PR, the
- * compared branches, the diff and when the board was updated.
+ * compared branches and the diff.
  */
 export function ReviewDocumentMetaLine({
   children,
@@ -80,7 +80,6 @@ export function ReviewDocumentMetaLine({
   editable?: boolean;
 }): ReactElement {
   const session = useReviewSession();
-  const displayedVersion = useContext(DisplayedReviewVersionContext);
   const diffFiles = useReviewDiffFiles();
   const place = useBoardPlace();
   const saveStatus = useContext(BoardSaveStatusContext);
@@ -88,24 +87,9 @@ export function ReviewDocumentMetaLine({
 
   const review = session.review!;
 
-  const [relativeTimeNowMs, setRelativeTimeNowMs] = useState<number | null>(
-    null,
-  );
-
-  useEffect(() => {
-    setRelativeTimeNowMs(Date.now());
-  }, [displayedVersion]);
-
   const diff =
     review.pins && diffFiles.status === "loaded"
       ? reviewDiffStats(diffFiles)
-      : null;
-
-  const updatedLabel =
-    Number.isFinite(review.updatedAtMs) && relativeTimeNowMs != null
-      ? formatRelativeTime(review.updatedAtMs, relativeTimeNowMs, {
-          short: true,
-        })
       : null;
 
   // The branch stack leads, a pill hidden unless the board is in one.
@@ -133,14 +117,6 @@ export function ReviewDocumentMetaLine({
   if (diff && diff.additions + diff.deletions > 0)
     facts.push({ key: "diff", node: <DiffChanges diff={diff} /> });
 
-  // A new board says nothing about time until its first edit.
-  const time =
-    saveStatus === "saving"
-      ? "saving…"
-      : updatedLabel && saveStatus !== "new"
-        ? `updated ${updatedLabel}`
-        : null;
-
   if (saveStatus === "failed")
     facts.push({
       key: "updated",
@@ -157,11 +133,6 @@ export function ReviewDocumentMetaLine({
           )}
         </span>
       ),
-    });
-  else if (time)
-    facts.push({
-      key: "updated",
-      node: <span {...stylex.props(styles.fixed)}>{time}</span>,
     });
 
   return (
@@ -194,6 +165,30 @@ export function ReviewDocumentMetaLine({
   );
 }
 
+/** When the board was last updated, for the page bar. */
+export function BoardUpdatedAt(): ReactElement | null {
+  const updatedAtMs = useReviewSession().review?.updatedAtMs;
+  const displayedVersion = useContext(DisplayedReviewVersionContext);
+  const [nowMs, setNowMs] = useState<number | null>(null);
+
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, [displayedVersion]);
+
+  if (
+    updatedAtMs === undefined ||
+    !Number.isFinite(updatedAtMs) ||
+    nowMs == null
+  )
+    return null;
+
+  return (
+    <span {...stylex.props(styles.updatedAt)}>
+      Updated {formatRelativeTime(updatedAtMs, nowMs, { short: true })}
+    </span>
+  );
+}
+
 function reviewDiffStats(diff: {
   files?: { additions?: number; deletions?: number }[];
 }): ReviewDiffStats | null {
@@ -222,6 +217,15 @@ const styles = stylex.create({
     whiteSpace: "nowrap",
   },
   fixed: { flexShrink: 0 },
+  updatedAt: {
+    flexShrink: 0,
+    paddingInlineStart: space.s4,
+    color: tokens.inkFaint,
+    fontFamily: tokens.chromeFont,
+    fontSize: fontSize.ui,
+    lineHeight: leading.px18,
+    whiteSpace: "nowrap",
+  },
   failed: { color: tokens.changeRemoved },
   retry: { color: "inherit", textDecorationLine: "underline" },
 });
