@@ -53,9 +53,6 @@ interface Environment extends WorkspaceStatus {
   role: "base" | "head";
 }
 
-const OWNED_ELSEWHERE =
-  "Another Whiteboard server is managing this review's language workspaces. Retry once it stops.";
-
 /** Local lifecycle only: source and authored history never depend on preparation.
  * Status/queue/process lifecycle follows #334, retaining the legacy prepare config
  * and per-review managed checkout layout instead of a new settings system.
@@ -299,7 +296,8 @@ export class ReviewWorkspaces {
   }
 
   async remove(reviewId: string) {
-    if (!this.claim(reviewId)) throw new ReviewInputError(OWNED_ELSEWHERE, 409);
+    if (!this.claim(reviewId))
+      throw new ReviewInputError(this.ownedElsewhere(reviewId), 409);
     await Promise.all(this.requests.values());
     this.collect(undefined, reviewId);
     await this.cleanup;
@@ -336,6 +334,15 @@ export class ReviewWorkspaces {
       processIsAlive(lease.pid) &&
       !pidReused(lease.pid, lease.started),
     );
+  }
+
+  /** The holder may release its lease after `claim` fails. */
+  private ownedElsewhere(reviewId: string) {
+    const pid = this.lease(reviewId)?.pid;
+
+    return pid
+      ? `Whiteboard process ${pid} is managing this review's language workspaces. Quit that Whiteboard Desktop or run \`whiteboard server stop\`, then retry.`
+      : "Another Whiteboard process was managing this review's language workspaces. Retry.";
   }
 
   /** Takes the review's lease unless another live Desktop holds it. */
@@ -468,7 +475,7 @@ export class ReviewWorkspaces {
               rootPath: null,
               generation: "",
               state: "pending",
-              log: OWNED_ELSEWHERE,
+              log: this.ownedElsewhere(reviewId),
             },
       );
     }
@@ -638,7 +645,8 @@ export class ReviewWorkspaces {
 
     if (this.jobs.has(id)) return this.status(environment);
 
-    if (!this.claim(reviewId)) throw new ReviewInputError(OWNED_ELSEWHERE, 409);
+    if (!this.claim(reviewId))
+      throw new ReviewInputError(this.ownedElsewhere(reviewId), 409);
 
     if (environment.state === "cleanup-failed") {
       this.collect();
