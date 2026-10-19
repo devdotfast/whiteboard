@@ -1603,7 +1603,7 @@ body
   flex-shrink: 0;
   align-items: center;
   gap: 2px;
-  height: 48px;
+  height: 44px;
   padding: 0 10px;
 }
 
@@ -1638,22 +1638,21 @@ body
   flex: none;
 }
 
-/* An icon over its label, the count faint after the label. Every tab is the
-   same width, set to the widest label with a 3-digit count; the tabs sit at
-   the left and what is left over stays on the right. A hidden tab leaves no
-   gap. Narrower than that, the labels fold away (below); the sidebar's
-   minimum holds all three folded. */
+/* An icon beside its label, the count faint after the label. Each tab is as
+   wide as its label, and the tabs share what is left over. A hidden tab
+   leaves no gap. Narrower than that, the labels fold away (below); the
+   sidebar's minimum holds all three folded. */
 .monaco-workbench .review-sidebar-tab {
   position: relative;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
-  flex: 0 0 var(--review-sidebar-tab-width, auto);
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
   box-sizing: border-box;
-  height: 42px;
-  padding: 0 4px;
+  height: 30px;
+  padding: 0 5px;
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -1664,16 +1663,8 @@ body
 
 /* Narrower than the labelled tabs need: each is its icon with its count
    beside it, and the tabs share the row. Named in full by its tooltip. */
-.monaco-workbench .review-sidebar-tabs.folded > .review-sidebar-tab,
-.monaco-workbench .review-sidebar-tabs-probe.folded > .review-sidebar-tab {
-  flex-direction: row;
-  gap: 5px;
-  height: 32px;
-}
-
 .monaco-workbench .review-sidebar-tabs.folded > .review-sidebar-tab {
-  flex: 1 1 0;
-  min-width: 0;
+  flex-basis: 0;
 }
 
 .monaco-workbench .review-sidebar-tabs.folded > .review-sidebar-tab .review-sidebar-tab-title {
@@ -1690,14 +1681,14 @@ body
   gap: 4px;
   align-items: baseline;
   font-family: var(--review-chrome-font);
-  font-size: 11px;
-  line-height: 13px;
+  font-size: 12px;
+  line-height: 16px;
   white-space: nowrap;
 }
 
 .monaco-workbench .review-sidebar-tab-count {
   color: var(--vscode-disabledForeground);
-  font: 10px/13px var(--review-chrome-font);
+  font: 11px/16px var(--review-chrome-font);
   font-variant-numeric: tabular-nums;
 }
 

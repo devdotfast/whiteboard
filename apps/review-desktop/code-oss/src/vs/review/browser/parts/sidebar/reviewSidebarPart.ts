@@ -24,7 +24,7 @@ import type { EditorInput } from "../../../../workbench/common/editor/editorInpu
 import { IEditorService } from "../../../../workbench/services/editor/common/editorService.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import { REVIEW_CHROME_HEIGHT } from "../../../common/reviewChrome.js";
-import { REVIEW_SIDEBAR_MINIMUM_WIDTH, TAB_COUNT_DIGITS, measuredOnce, sidebarMinimumWidth, sidebarTabWidth, tabsRowWidth } from "./reviewSidebarWidth.js";
+import { REVIEW_SIDEBAR_MINIMUM_WIDTH, TAB_COUNT_DIGITS, measuredOnce, sidebarMinimumWidth, tabsRowWidth } from "./reviewSidebarWidth.js";
 import type {
 	ReviewAskState,
 	ReviewProjectThreads,
@@ -295,15 +295,13 @@ export class ReviewSidebarPart extends Part {
 	 * change. */
 	private readonly tabsRow = measuredOnce(() => this.tabsWidth());
 
-	/** Sizes every labelled tab alike, hidden ones included, and returns
-	 * the row's width with all of them labelled, and with all of them folded
-	 * to an icon and count. Each is measured in a hidden copy of the row,
-	 * with its count at full width. */
+	/** The row's width with every tab labelled, and with every tab folded to
+	 * an icon and count, each folded tab as wide as the widest. Each is
+	 * measured in a hidden copy of the row, with its count at full width. */
 	private tabsWidth(): { labelled: number; folded: number } | undefined {
 		const row = this.tabRow;
-		const first = this.panes[0]?.tab;
 		// A hidden sidebar has nothing to measure yet.
-		if (!row?.offsetWidth || !first) return undefined;
+		if (!row?.offsetWidth || !this.panes.length) return undefined;
 		const probe = $(".review-sidebar-tabs-probe", { "aria-hidden": "true" });
 		const foldedProbe = $(".review-sidebar-tabs-probe.folded", { "aria-hidden": "true" });
 		const tab = (noun: string | undefined, title?: string) => {
@@ -314,23 +312,20 @@ export class ReviewSidebarPart extends Part {
 			icon.append(svgIcon(REVIEW_SIDEBAR_TAB_ICONS.whiteboard, 16));
 			return $("span.review-sidebar-tab", undefined, icon, label);
 		};
-		const labels = REVIEW_SIDEBAR_PANES.map(({ title, noun }) => {
-			const labelled = tab(noun, title);
-			probe.append(labelled);
+		for (const { title, noun } of REVIEW_SIDEBAR_PANES) {
+			probe.append(tab(noun, title));
 			foldedProbe.append(tab(noun));
-			return labelled.querySelector(".review-sidebar-tab-label")!;
-		});
+		}
 		row.append(probe, foldedProbe);
-		const widths = labels.map((label) => label.getBoundingClientRect().width);
-		const foldedWidth = Math.ceil(Math.max(0, ...[...foldedProbe.children].map((child) => child.getBoundingClientRect().width)));
+		const widths = (tabs: HTMLElement) => [...tabs.children].map((child) => Math.ceil(child.getBoundingClientRect().width));
+		const labelled = widths(probe);
+		const folded = widths(foldedProbe);
 		probe.remove();
 		foldedProbe.remove();
-		const width = sidebarTabWidth(widths, parseFloat(getComputedStyle(first).paddingLeft) || 0);
-		row.style.setProperty("--review-sidebar-tab-width", `${width}px`);
 		const style = getComputedStyle(row);
 		const gap = parseFloat(style.columnGap) || 0;
 		const padding = parseFloat(style.paddingLeft) || 0;
-		return { labelled: tabsRowWidth(width, gap, padding), folded: tabsRowWidth(foldedWidth, gap, padding) };
+		return { labelled: tabsRowWidth(labelled, gap, padding), folded: tabsRowWidth(folded.map(() => Math.max(...folded)), gap, padding) };
 	}
 
 	override create(parent: HTMLElement): void {

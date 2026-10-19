@@ -9,9 +9,9 @@ export const REVIEW_SIDEBAR_MINIMUM_WIDTH = 170;
 /** The space between the last window control and the sidebar's edge. */
 const CONTROLS_GAP = 12;
 
-/** The digits a tab's count is given room for, so a count can grow to 999
+/** The digits a tab's count is given room for, so a count can grow to 99
  * without the minimum moving. */
-export const TAB_COUNT_DIGITS = 3;
+export const TAB_COUNT_DIGITS = 2;
 
 /**
  * The sidebar's minimum width: wide enough for the window controls over its
@@ -22,20 +22,9 @@ export function sidebarMinimumWidth(controlsRight: number, sidebarLeft: number, 
 	return Math.max(REVIEW_SIDEBAR_MINIMUM_WIDTH, Math.ceil(controlsRight - sidebarLeft + CONTROLS_GAP), Math.ceil(tabsWidth));
 }
 
-/** The tabs the sidebar can show, which its minimum always holds. */
-export const SIDEBAR_TABS = 3;
-
-/**
- * The one width every tab gets, whichever tabs a board shows: the widest
- * label, each with its count at `TAB_COUNT_DIGITS` digits, and padding.
- */
-export function sidebarTabWidth(labels: readonly number[], padding: number): number {
-	return Math.ceil(Math.max(0, ...labels) + 2 * padding);
-}
-
 /** The tabs row with all its tabs: their widths, the gaps, and padding. */
-export function tabsRowWidth(tabWidth: number, gap: number, rowPadding: number, tabs = SIDEBAR_TABS): number {
-	return tabWidth * tabs + gap * Math.max(0, tabs - 1) + 2 * rowPadding;
+export function tabsRowWidth(tabWidths: readonly number[], gap: number, rowPadding: number): number {
+	return tabWidths.reduce((sum, width) => sum + width, 0) + gap * Math.max(0, tabWidths.length - 1) + 2 * rowPadding;
 }
 
 /**
