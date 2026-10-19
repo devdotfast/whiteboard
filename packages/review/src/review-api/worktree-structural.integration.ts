@@ -318,3 +318,75 @@ it("compares a staged file in an unborn repository with empty source", async () 
     rmSync(root, { recursive: true, force: true });
   }
 }, 30_000);
+
+it("shows a peek on an untracked file as head lines", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "worktree-untracked-"));
+  const repository = path.join(root, "repository");
+  mkdirSync(repository);
+
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-C", repository, ...args], {
+      encoding: "utf8",
+    }).trim();
+
+  git("init", "-q", "-b", "main");
+  writeFileSync(path.join(repository, "value.ts"), "export const value = 1;\n");
+  git("add", "value.ts");
+  git(
+    "-c",
+    "user.name=Test",
+    "-c",
+    "user.email=test@example.invalid",
+    "commit",
+    "-qm",
+    "Base",
+  );
+  writeFileSync(path.join(repository, "new.ts"), "export const a = 1;\n");
+
+  const local = openLocalReviewStore(path.join(root, "reviews.db"));
+
+  const selection = {
+    file: "new.ts",
+    start: { side: "head" as const, line: 1 },
+    end: { side: "head" as const, line: 1 },
+  };
+
+  try {
+    const { id } = await local.data.register(repository);
+
+    const { reviewId } = await local.store.execute({
+      operation: {
+        type: "create",
+        title: "Live",
+        target: { kind: "worktree", repositoryId: id },
+      },
+    });
+
+    await local.store.execute({
+      operation: {
+        type: "edit",
+        reviewId,
+        edit: {
+          type: "insert",
+          content: { type: "code_peek", source: formatAnchor(selection) },
+        },
+      },
+    });
+
+    const progress = await (
+      await createReviewApi(local.store, local.data).request(
+        `/${reviewId}/progress`,
+      )
+    ).json();
+
+    expect(progress.untrackedFiles).toBe(1);
+    expect(progress.unavailableSelections).toEqual({});
+    expect(progress.resolvedSelections[selectionKey(selection)]).toEqual([
+      { file: "new.ts", side: "head", fromLine: 1, toLine: 1 },
+    ]);
+  } finally {
+    await local.data.close();
+    await local.store.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
