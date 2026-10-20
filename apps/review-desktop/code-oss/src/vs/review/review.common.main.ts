@@ -18,6 +18,7 @@ import "./browser/parts/canvas/reviewDiffFilePicker.contribution.js";
 import "./browser/parts/canvas/reviewFind.contribution.js";
 import "./browser/reviewCommunity.contribution.js";
 import "./browser/reviewFeedback.contribution.js";
+import "./browser/reviewAppearance.contribution.js";
 import "./browser/reviewTheme.contribution.js";
 import "./contrib/boardTabs/reviewBoardTabs.contribution.js";
 import "./contrib/explorer/reviewFileTree.contribution.js";

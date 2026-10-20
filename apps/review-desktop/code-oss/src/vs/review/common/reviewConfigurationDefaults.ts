@@ -39,7 +39,16 @@ export const REVIEW_READY_NOTIFICATION_CHOICES = ['notificationAndBadge', 'notif
 export const REVIEW_DOCUMENT_WIDTH_SETTING = 'review.documentWidth';
 export const REVIEW_PEEK_SIDE_BY_SIDE_SETTING = 'review.peeks.renderSideBySide';
 export const REVIEW_DOCUMENT_WIDTH_CHOICES = ['standard', 'wide', 'full'] as const;
+export const REVIEW_DOCUMENT_FONT_SIZE_SETTING = 'review.document.fontSize';
+export const REVIEW_DOCUMENT_FONT_SIZE_BASE = 15;
+export const REVIEW_READING_FONT_SETTING = 'review.readingFont';
+export const REVIEW_READING_FONTS = ['serif', 'sans'] as const;
 export const EDITOR_FONT_SIZE_SETTING = 'editor.fontSize';
+export const EDITOR_FONT_FAMILY_SETTING = 'editor.fontFamily';
+export const EDITOR_FONT_LIGATURES_SETTING = 'editor.fontLigatures';
+export const DIFF_EDITOR_FONT_SIZE_SETTING = 'diffEditor.fontSize';
+export const DIFF_EDITOR_WORD_WRAP_SETTING = 'diffEditor.wordWrap';
+export const DIFF_EDITOR_IGNORE_TRIM_WHITESPACE_SETTING = 'diffEditor.ignoreTrimWhitespace';
 
 export const reviewConfigurationDefaults = {
 	[REVIEW_SOFTWARE_MAP_SETTING]: false,
@@ -88,9 +97,11 @@ export const reviewConfigurationDefaults = {
 	// the editors share the chrome and code face of the whiteboard design. The
 	// tail is Monaco's own macOS default stack.
 	'editor.fontFamily': '"Geist Mono", Menlo, Monaco, "Courier New", monospace',
-	// Matches the chrome. Listing it here also keeps the first-run import from
-	// carrying over a VS Code size; Settings exposes it instead.
-	[EDITOR_FONT_SIZE_SETTING]: 12,
+	// Matches the canvas's code blocks. Listing it here also keeps the
+	// first-run import from carrying over a VS Code size; Settings exposes it
+	// instead.
+	[EDITOR_FONT_SIZE_SETTING]: 13,
+	[DIFF_EDITOR_FONT_SIZE_SETTING]: 12,
 	'editor.minimap.enabled': false,
 	// A 10px lane on both axes, as in the canvas; review.css insets the slider
 	// to the same 6px pill.
