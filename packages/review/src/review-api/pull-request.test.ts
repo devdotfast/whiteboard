@@ -286,6 +286,7 @@ describe("creating a review from a pull request URL alone", () => {
   });
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     await local.store.close();
     await local.data.close();
     rmSync(directory, { recursive: true, force: true });
@@ -570,6 +571,64 @@ describe("creating a review from a pull request URL alone", () => {
     expect(layers).toMatchObject([
       { branch: "lower", pullRequestNumber: 8, relation: "earlier" },
       { branch: "upper", pullRequestNumber: 9, relation: "current" },
+    ]);
+  });
+
+  it("stacks a PR's boards from every project its repository is in", async () => {
+    const up = gitIn(upstream);
+    up("update-ref", "refs/pull/8/head", "refs/pull/7/head");
+    const { id: repositoryId } = await local.data.register(checkout);
+
+    const notes = path.join(directory, "notes");
+    gitIn(directory)("init", "-q", notes);
+
+    const { reviewId: elsewhere } = await local.store.execute(
+      command({
+        type: "create",
+        title: "Notes",
+        target: {
+          kind: "project",
+          repositoryId: (await local.data.register(notes)).id,
+        },
+      }),
+    );
+
+    const create = (number: number, projectId?: string) =>
+      local.store.execute(
+        command({
+          type: "create",
+          pullRequestUrl: `https://github.com/acme/widget/pull/${number}`,
+          repositoryId,
+          ...(projectId && { projectId }),
+        }),
+      );
+
+    const lower = await create(7);
+    const upper = await create(8, local.store.summary(elsewhere)!.project!.id);
+
+    const bin = path.join(directory, "bin");
+    mkdirSync(bin);
+    writeFileSync(
+      path.join(bin, "gh"),
+      `#!/bin/sh\necho '${JSON.stringify([
+        {
+          pull_requests: [
+            { number: 7, head: { ref: "lower" } },
+            { number: 8, head: { ref: "upper" } },
+          ],
+        },
+      ])}'\n`,
+      { mode: 0o755 },
+    );
+    vi.stubEnv("PATH", `${bin}${path.delimiter}${process.env.PATH}`);
+
+    const response = await createReviewApi(local.store, local.data).request(
+      `/${upper.reviewId}/stack`,
+    );
+
+    expect((await response.json()).layers).toMatchObject([
+      { pullRequestNumber: 7, reviewUuid: lower.reviewId },
+      { pullRequestNumber: 8, reviewUuid: upper.reviewId },
     ]);
   });
 

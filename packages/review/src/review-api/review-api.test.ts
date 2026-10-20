@@ -2613,16 +2613,31 @@ describe("snapshot authoring", () => {
       ).reviewId;
 
     const plan = await board("Plan", checkout);
-    await board("Notes", checkout);
+    const notes = await board("Notes", checkout);
+    const old = await board("Old", checkout);
     await board("Elsewhere", other);
+    await store.execute(
+      request({ type: "set_parent", reviewId: notes, parentId: plan }),
+    );
+    await store.execute(
+      request({ type: "lifecycle", state: "trash", reviewId: old }),
+    );
 
     const api = createReviewApi(store);
     const listed = await (await api.request(`/${plan}/project`)).json();
 
     expect(listed.project).toMatchObject({ name: "checkout" });
     expect(
-      listed.boards.map((entry: { title: string }) => entry.title).sort(),
-    ).toEqual(["Notes", "Plan"]);
+      listed.boards
+        .map((entry: { title: string; children?: string[] }) => [
+          entry.title,
+          entry.children ?? [],
+        ])
+        .sort(),
+    ).toEqual([
+      ["Notes", []],
+      ["Plan", [notes]],
+    ]);
   });
 
   it("counts every board as viewed on upgrade, so only later changes badge it", async () => {

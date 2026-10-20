@@ -1352,11 +1352,14 @@ export class ReviewStore {
   list(): ReviewApiSummary[] {
     return this.summaries();
   }
+  listProject(projectId: string): ReviewApiSummary[] {
+    return this.summaries("reviews.project_id=?", projectId);
+  }
   /** One review's catalog entry, as review_list shows it. */
   summary(id: string): ReviewApiSummary | undefined {
-    return this.summaries(id)[0];
+    return this.summaries("reviews.id=?", id)[0];
   }
-  private summaries(id?: string): ReviewApiSummary[] {
+  private summaries(where = "1", ...params: string[]): ReviewApiSummary[] {
     // One query, and the document never leaves SQLite: every catalog watcher
     // re-lists on every command.
 
@@ -1371,10 +1374,10 @@ export class ReviewStore {
         JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
         LEFT JOIN review_attention ON review_attention.review_id=reviews.id
         LEFT JOIN repositories ON repositories.id=${BOARD_REPOSITORY_ID_SQL}
-        ${id === undefined ? "" : "WHERE reviews.id=?"}
+        WHERE ${where}
         ORDER BY reviews.rowid`,
       )
-      .all(...(id === undefined ? [] : [id]))
+      .all(...params)
       .map((row) => {
         // SAFETY: versions contains only snapshots validated by execute before committing.
         const summary = JSON.parse(String(row.summary)) as Omit<

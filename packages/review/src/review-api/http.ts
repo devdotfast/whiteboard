@@ -2006,6 +2006,7 @@ export function createReviewApi(
         (repository) => repository.id === snapshot.pins!.repositoryId,
       )?.path;
 
+    // A GitHub stack's boards may sit in any project.
     const layers = await resolveReviewStackLayers(snapshot, store.list(), {
       repositoryPath,
     });
@@ -2038,10 +2039,8 @@ export function createReviewApi(
       project,
       boards: project
         ? store
-            .list()
-            .filter(
-              (board) => board.project?.id === project.id && !board.trashedAt,
-            )
+            .listProject(project.id)
+            .filter((board) => !board.trashedAt)
             .map(withPullRequestState)
         : [],
     });
