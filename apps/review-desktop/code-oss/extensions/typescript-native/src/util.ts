@@ -417,7 +417,8 @@ export function getUseTsgo(): boolean | undefined {
         return jsTsTarget === mostSpecific ? jsTsValue : tsValue;
     }
 
-    return undefined;
+    // Whiteboard: honor the product default instead of onboarding into user settings.
+    return vscode.workspace.getConfiguration("js/ts").get<boolean>("experimental.useTsgo");
 }
 
 export function getExplicitConfigTarget(

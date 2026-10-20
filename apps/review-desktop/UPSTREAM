@@ -239,7 +239,10 @@ at tag `typescript/v7.0.2` (`2bd066d87f5bafd315be9f40889d0a60b9e58e0b`).
 Review changes:
 
 - adds in-tree build files and rewrites the `package.json` build fields;
-- installs the server binary per target with `scripts/typescript-native.mjs`.
+- installs the server binary per target with `scripts/typescript-native.mjs`;
+- `src/util.ts` `getUseTsgo`: falls back to the default value;
+- `src/extension.ts` `warnAboutTsServerPlugins`: returns when no setting is
+  explicit.
 
 To update, copy a newer tag and bump the pins in the script together.
 

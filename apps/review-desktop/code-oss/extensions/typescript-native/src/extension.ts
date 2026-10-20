@@ -176,7 +176,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<Extens
         }
 
         const settingName = getWinningTsgoConfigKey();
-        assert(settingName !== undefined, "Expected some useTsgo configuration to be explicitly set.");
+        // Whiteboard: on by product default, with no plugin extensions to warn about.
+        if (settingName === undefined) {
+            return;
+        }
 
         const target = getExplicitConfigTarget(vscode.workspace.getConfiguration(), settingName);
         assert(target !== undefined, "Expected an explicit configuration target.");
