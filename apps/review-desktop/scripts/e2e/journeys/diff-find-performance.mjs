@@ -9,10 +9,6 @@ export const name = "diff-find-performance";
 
 export const phase = 1;
 
-export const options = {
-  env: { DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "1" },
-};
-
 const TITLE = "Find across the diff";
 
 const FILES = Number(process.env.DIFF_FIND_FILES ?? 300);

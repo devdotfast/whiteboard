@@ -9,7 +9,6 @@ export const name = "fold-colors";
 export const phase = 1;
 
 export const options = {
-  env: { DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "1" },
   settings: {
     "window.autoDetectColorScheme": false,
     "workbench.colorTheme": "Review Dark",

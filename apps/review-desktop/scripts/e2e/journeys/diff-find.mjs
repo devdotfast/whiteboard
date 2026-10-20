@@ -9,10 +9,6 @@ export const name = "diff-find";
 
 export const phase = 1;
 
-export const options = {
-  env: { DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "1" },
-};
-
 const TITLE = "Find what you see";
 
 const lines = (count, line) =>

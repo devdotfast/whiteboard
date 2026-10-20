@@ -13,10 +13,6 @@ export const name = "diff-performance";
 
 export const phase = 1;
 
-export const options = {
-  env: { DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "1" },
-};
-
 const TITLE = "Diff performance";
 
 const FILES = 24;

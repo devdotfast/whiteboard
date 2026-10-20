@@ -90,6 +90,8 @@ export async function createHarness({
     DEV_FAST_REVIEW_TELEMETRY_DISABLED: "1",
     DEV_FAST_REVIEW_TELEMETRY_ENV: "e2e",
     DEV_REVIEW_EXTENSIONS: extensions,
+    // Never takes focus, even for Source windows or a forced focus.
+    DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "always",
   };
 
   for (const key of [

@@ -9,10 +9,6 @@ export const name = "find-peek-performance";
 
 export const phase = 1;
 
-export const options = {
-  env: { DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "1" },
-};
-
 const TITLE = "Find across peeks";
 
 const FILES = 30;
