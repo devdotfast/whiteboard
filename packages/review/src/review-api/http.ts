@@ -1227,6 +1227,9 @@ export function createReviewApi(
           .join("\n");
     }
 
+    if (target.kind === "block")
+      excerpt = documentText(snapshot, target.blockId, true);
+
     const diff = selection.selectedDiff;
 
     const text = selectionMarkdown(

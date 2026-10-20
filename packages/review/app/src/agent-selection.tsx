@@ -39,6 +39,8 @@ type Selection = Omit<AgentSelection, "revision"> & {
   anchorContainer?: HTMLElement;
   /** The selected document text, read for its context only when asked. */
   range?: Range;
+  /** Clears the editor selection represented by these actions. */
+  onDismiss?: () => void;
 };
 
 type Select = (selection: Selection | null) => void;
@@ -48,6 +50,7 @@ function payloadOf({
   anchorElement: _anchorElement,
   anchorContainer: _anchorContainer,
   range: _range,
+  onDismiss: _onDismiss,
   ...payload
 }: Selection) {
   return payload;
@@ -90,6 +93,7 @@ export function AgentSelectionProvider({
   }, []);
 
   const [selection, setSelection] = useState<Selection | null>(null);
+  const currentSelection = useRef<Selection | null>(null);
   const [copiedSelection, setCopiedSelection] = useState<string | null>(null);
   const [choosing, setChoosing] = useState(false);
   const actions = useRef<HTMLDivElement>(null);
@@ -153,7 +157,22 @@ export function AgentSelectionProvider({
         };
       }
 
+      const previous = currentSelection.current;
+
+      const sameBlock =
+        previous?.target.kind === "block" &&
+        value?.target.kind === "block" &&
+        previous.target.blockId === value.target.blockId;
+
+      if (previous?.onDismiss && !sameBlock) {
+        currentSelection.current = null;
+        previous.onDismiss();
+      }
+
+      currentSelection.current = value;
+
       if (!value) setCopiedSelection(null);
+
       setChoosing(false);
       setSelection(value);
     },
@@ -161,8 +180,8 @@ export function AgentSelectionProvider({
   );
 
   useEffect(() => {
-    setSelection(null);
-  }, [revision]);
+    select(null);
+  }, [revision, select]);
   useEffect(
     () =>
       session.surface.subscribe((event) => {
@@ -276,7 +295,17 @@ export function AgentSelectionProvider({
         ask();
       }
 
-      if (event.key === "Escape") select(null);
+      if (event.key === "Escape") {
+        if (
+          selection?.target.kind === "block" &&
+          actions.current?.contains(document.activeElement)
+        )
+          selection.anchorElement
+            ?.closest<HTMLElement>(".review-board-editor")
+            ?.focus({ preventScroll: true });
+
+        select(null);
+      }
     };
 
     window.addEventListener("keydown", keydown, true);

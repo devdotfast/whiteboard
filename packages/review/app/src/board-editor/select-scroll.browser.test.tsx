@@ -106,7 +106,12 @@ it("selects a code peek and hands it the scroll on one click, wherever the click
   await act(async () => {
     for (const type of ["mousedown", "mouseup", "click"])
       block.dispatchEvent(
-        new MouseEvent(type, { bubbles: true, cancelable: true }),
+        new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          detail: 1,
+          buttons: type === "mousedown" ? 1 : 0,
+        }),
       );
   });
   await vi.waitFor(() =>
@@ -165,9 +170,15 @@ it("selects the block even when what was clicked keeps its mousedown to itself",
   // As a code editor does with a click in its text.
   peek.addEventListener("mousedown", (event) => event.stopPropagation());
   await act(async () => {
-    peek.dispatchEvent(
-      new MouseEvent("mousedown", { bubbles: true, cancelable: true }),
-    );
+    for (const type of ["mousedown", "mouseup", "click"])
+      peek.dispatchEvent(
+        new MouseEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          detail: 1,
+          buttons: type === "mousedown" ? 1 : 0,
+        }),
+      );
   });
 
   await vi.waitFor(() =>

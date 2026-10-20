@@ -2407,6 +2407,52 @@ it("copies prose with the displayed version's title and immutable review identit
   });
 });
 
+it("copies the selected rich block from the displayed version and rejects missing block ids", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Block context",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  await insert(reviewId, {
+    type: "code",
+    language: "ts",
+    text: "runJob();",
+    caption: "Job entry",
+  });
+  const saved = local.store.read(reviewId);
+  const version = saved.version;
+  const blockId = saved.document[0].id!;
+  await insert(reviewId, {
+    type: "markdown",
+    markdown: "Unrelated later text",
+  });
+  const app = createReviewApi(local.store, local.data);
+
+  const copy = (blockId: string) =>
+    app.request(`/${reviewId}/copy-context`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: { kind: "block", blockId },
+        title: "Job entry",
+        apiSource: { reviewId, version },
+      }),
+    });
+
+  const response = await copy(blockId);
+  expect(response.status).toBe(200);
+  const { text } = await response.json();
+  expect(text).toContain(`Version: ${version}`);
+  expect(text).toContain("Selected block:");
+  expect(text).toContain(`[${blockId}] code`);
+  expect(text).toContain("runJob();");
+  expect(text).not.toContain("Unrelated later text");
+  expect((await copy("missing")).status).toBe(404);
+});
+
 it("copies code from historical pins after a repin, never from working-tree contents", async () => {
   const { reviewId } = await local.store.execute(
     command({

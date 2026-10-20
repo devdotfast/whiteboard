@@ -1,3 +1,4 @@
+import { useAgentSelection } from "@canvas/agent-selection";
 import type { ApiDocumentData } from "@canvas/api-document";
 import { DocumentNode, useEditingBlock } from "@canvas/api-document";
 import { Courier } from "@canvas/courier";
@@ -28,8 +29,10 @@ import * as stylex from "@stylexjs/stylex";
 import type { Mark, ResolvedPos } from "@tiptap/pm/model";
 import {
   type EditorState,
+  NodeSelection,
   Plugin,
   PluginKey,
+  Selection,
   TextSelection,
   type Transaction,
 } from "@tiptap/pm/state";
@@ -129,6 +132,9 @@ export function BoardEditor({
   const host = useContext(BoardEditorHostContext)!;
   const roots = useReviewRoots();
   const session = useReviewSession();
+  const selectForAgent = useAgentSelection();
+  const agentSelection = useRef(selectForAgent);
+  agentSelection.current = selectForAgent;
   const openPeek = useReviewPanel((state) => state.openPeek);
   const phases = useMotionPhases();
 
@@ -236,6 +242,73 @@ export function BoardEditor({
           const ghosts = captureRemoved(editor, tr);
           const next = before.apply(tr);
           editor.updateState(next);
+
+          if (tr.selectionSet || tr.docChanged) {
+            const selected = next.selection;
+
+            if (
+              selected instanceof NodeSelection &&
+              selected.node.type.name === "atom"
+            ) {
+              const block = selected.node.attrs.json;
+              const element = editor.nodeDOM(selected.from);
+
+              if (element instanceof HTMLElement) {
+                const rect = element.getBoundingClientRect();
+                agentSelection.current({
+                  target: { kind: "block", blockId: block.id },
+                  title: (
+                    block.title ||
+                    block.caption ||
+                    block.type.replaceAll("_", " ")
+                  ).slice(0, 500),
+                  apiSource: {
+                    reviewId,
+                    version: latest.current.snapshot.version,
+                  },
+                  anchorElement: element,
+                  anchor: {
+                    x: rect.left,
+                    y: Math.max(
+                      rect.top,
+                      (editor.dom
+                        .closest(".review-view-region")
+                        ?.getBoundingClientRect().top ?? 0) + 36,
+                    ),
+                  },
+                  onDismiss: () => {
+                    if (editor.isDestroyed) return;
+                    const current = editor.state.selection;
+
+                    if (
+                      current instanceof NodeSelection &&
+                      current.node.attrs.json?.id === block.id
+                    ) {
+                      const caret =
+                        Selection.findFrom(
+                          editor.state.doc.resolve(current.to),
+                          1,
+                          true,
+                        ) ??
+                        Selection.findFrom(
+                          editor.state.doc.resolve(current.from),
+                          -1,
+                          true,
+                        );
+
+                      if (caret)
+                        editor.dispatch(editor.state.tr.setSelection(caret));
+                    }
+                  },
+                });
+              }
+            } else if (
+              before.selection instanceof NodeSelection &&
+              before.selection.node.type.name === "atom"
+            ) {
+              agentSelection.current(null);
+            }
+          }
 
           own.tell({ tr });
 

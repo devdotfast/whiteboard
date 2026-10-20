@@ -135,6 +135,9 @@ abstract class ReactView implements NodeView {
 
 class RichBlockView extends ReactView {
   private selected = false;
+  private gesture?: AbortController;
+  private selectionTimer?: ReturnType<typeof setTimeout>;
+  private pendingSelection?: AbortController;
 
   constructor(
     node: PMNode,
@@ -144,23 +147,126 @@ class RichBlockView extends ReactView {
   ) {
     super(node, store, "div");
     this.dom.className = "review-board-atom";
-    // A click anywhere on the block selects it, once what was clicked has
-    // handled it: an editor inside, which keeps its mousedown to itself,
-    // takes the focus (and the scroll) on the same click, and selecting
-    // after it leaves that focus where it is.
+    // Select after the click completes. Selecting during mousedown lets
+    // a later native selection drag restore the previous prose caret.
+    // Inner editors keep their focus; drags do not select the outer block.
+    let press: { x: number; y: number; dragged: boolean } | undefined;
     this.dom.addEventListener(
       "mousedown",
-      () =>
-        setTimeout(() => {
+      (event) => {
+        this.cancelSelection();
+        this.gesture?.abort();
+        press = undefined;
+
+        if (event.button !== 0 || event.buttons !== 1) return;
+        const start = { x: event.clientX, y: event.clientY, dragged: false };
+        press = start;
+        const tracking = new AbortController();
+        this.gesture = tracking;
+        const document = this.dom.ownerDocument;
+        const options = { capture: true, signal: tracking.signal };
+        document.addEventListener(
+          "mousemove",
+          (move) => {
+            if (move.buttons !== 1) {
+              press = undefined;
+              tracking.abort();
+
+              return;
+            }
+
+            // Match the 4px click tolerance used by Ask's passage marks.
+            if (Math.hypot(move.clientX - start.x, move.clientY - start.y) > 4)
+              start.dragged = true;
+          },
+          options,
+        );
+        document.addEventListener(
+          "mouseup",
+          (release) => {
+            tracking.abort();
+
+            if (
+              release.button !== 0 ||
+              release.buttons !== 0 ||
+              !(release.target instanceof Node) ||
+              !this.dom.contains(release.target)
+            )
+              press = undefined;
+          },
+          options,
+        );
+        document.addEventListener(
+          "pointercancel",
+          () => {
+            press = undefined;
+            this.cancelSelection();
+            tracking.abort();
+          },
+          options,
+        );
+      },
+      true,
+    );
+    this.dom.addEventListener(
+      "click",
+      (event) => {
+        const start = press;
+        press = undefined;
+        this.gesture?.abort();
+
+        if (
+          event.button !== 0 ||
+          event.detail === 0 ||
+          event.shiftKey ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey ||
+          !start ||
+          start.dragged ||
+          (event.detail > 1 &&
+            event.target instanceof Element &&
+            event.target.closest(".monaco-editor"))
+        )
+          return;
+        const pending = new AbortController();
+        this.pendingSelection = pending;
+        const cancel = () => this.cancelSelection();
+        const options = { capture: true, signal: pending.signal };
+        const document = this.dom.ownerDocument;
+        document.addEventListener("mousedown", cancel, options);
+        document.addEventListener("pointercancel", cancel, options);
+        document.addEventListener("keydown", cancel, options);
+        document.addEventListener("wheel", cancel, {
+          ...options,
+          passive: true,
+        });
+        document.defaultView?.addEventListener("blur", cancel, {
+          signal: pending.signal,
+        });
+        this.selectionTimer = setTimeout(() => {
+          this.cancelSelection();
+
+          if (this.view.isDestroyed) return;
+          const selection = this.dom.ownerDocument.getSelection();
+
+          if (
+            selection &&
+            !selection.isCollapsed &&
+            this.dom.contains(selection.anchorNode) &&
+            this.dom.contains(selection.focusNode)
+          )
+            return;
           const pos = this.getPos();
 
-          if (pos === undefined || this.selected) return;
+          if (pos === undefined || this.view.isDestroyed) return;
           this.view.dispatch(
             this.view.state.tr.setSelection(
               NodeSelection.create(this.view.state.doc, pos),
             ),
           );
-        }),
+        });
+      },
       true,
     );
     this.show();
@@ -168,6 +274,19 @@ class RichBlockView extends ReactView {
 
   protected render() {
     return <RichBlock block={this.node.attrs.json} selected={this.selected} />;
+  }
+
+  private cancelSelection() {
+    clearTimeout(this.selectionTimer);
+    this.selectionTimer = undefined;
+    this.pendingSelection?.abort();
+    this.pendingSelection = undefined;
+  }
+
+  destroy() {
+    this.cancelSelection();
+    this.gesture?.abort();
+    super.destroy();
   }
 
   selectNode() {
