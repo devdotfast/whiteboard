@@ -70,6 +70,7 @@ if [[ "$(cat "$EXTENSIONS_SELECTION_STAMP" 2>/dev/null)" != "$EXTENSIONS_SELECTI
   node "$APP_DIR/scripts/curated-extensions.mjs" --only="$EXTENSIONS_SELECTION"
   echo "$EXTENSIONS_SELECTION" >"$EXTENSIONS_SELECTION_STAMP"
 fi
+node "$APP_DIR/scripts/typescript-native.mjs"
 
 rebuild_review_desktop_outputs "$MONOREPO_ROOT" "$REVIEW_PACKAGE"
 # Names this Desktop as the checkout's dev instance, packaged or not.

@@ -38,6 +38,9 @@ node "$APP_DIR/scripts/copy-canvas.mjs" --packaged-root "$PACKAGED_ROOT"
 node "$APP_DIR/scripts/curated-extensions.mjs" \
   --target=linux-x64 \
   --copy-to "$PACKAGED_ROOT/resources/app/extensions"
+node "$APP_DIR/scripts/typescript-native.mjs" \
+  --target=linux-x64 \
+  --extension-dir "$PACKAGED_ROOT/resources/app/extensions/typescript-native"
 
 # The installed app embeds its own Review server runtime (server, CLI, and
 # docs) so it never reaches back into this checkout.

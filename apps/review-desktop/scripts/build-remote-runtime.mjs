@@ -45,6 +45,7 @@ const OPTIONAL_NATIVE_PACKAGES = [
 
 export const REMOTE_BUILTIN_EXTENSIONS = [
   "typescript-language-features",
+  "typescript-native",
   "json-language-features",
   "css-language-features",
   "html-language-features",

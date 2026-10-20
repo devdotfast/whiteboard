@@ -28,6 +28,7 @@ import {
   pruneVscodeServerArch,
   stageVscodeServer,
 } from "./stage-vscode-server.mjs";
+import { installTypeScriptNative } from "./typescript-native.mjs";
 
 export const REMOTE_TARGETS = ["linux-x64", "linux-arm64"];
 
@@ -352,6 +353,13 @@ export async function buildRemoteTarball({
     if (!prebuilt) await buildRemoteRuntime({ commit });
     await stageVscodeServer(stage, { commit });
     await pruneVscodeServerArch(stage, target);
+    await installTypeScriptNative({
+      target,
+      extensionDir: path.join(
+        stage,
+        "vscode-server/extensions/typescript-native",
+      ),
+    });
 
     await stageNode(stage, target, cacheDir);
     await stagePackageData(stage);
