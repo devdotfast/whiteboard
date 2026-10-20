@@ -20,6 +20,7 @@ import {
   gitCommonDir,
   listCommitRange,
   listTrackedFilesAtCommit,
+  parseGitRemote,
   readFileAtCommit,
   resolveRepoContext,
   runVcs,
@@ -39,6 +40,10 @@ import type {
 } from "@parcel/watcher";
 import { textIncludesQuote } from "@review/evidence.js";
 import { isMissingFileError } from "@review/fs-utils.js";
+import {
+  type GitHubPullRequest,
+  readGitHubPullRequests,
+} from "@review/github-pr-graph.js";
 import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
 import { ensureReviewPinnedCheckout } from "@review/review-head-checkout.js";
 import { StructuralComparisons } from "@review/server/structural-comparisons.js";
@@ -1052,22 +1057,99 @@ export class LocalReviewData {
 
     return snapshot.pins;
   }
+  /** Optional forge context; never changes the comparison's pins. */
+  private readonly readGitHubApi = (host: string, endpoint: string) =>
+    (this.options.pullRequests ?? defaultPullRequestDeps).run(
+      "gh",
+      ["api", "--hostname", { value: host }, { value: endpoint }],
+      { timeoutMs: 10_000 },
+    );
+
+  async findPullRequest(
+    pins: Pins,
+    branch: string,
+  ): Promise<GitHubPullRequest | undefined> {
+    const context = await resolveRepoContext(
+      this.store.repositoryPath(pins.repositoryId),
+    );
+
+    if (!context?.githubSlug || !context.originUrl) return undefined;
+    const remote = parseGitRemote(context.originUrl);
+
+    if (!remote) return undefined;
+    const name = branch.replace(/^origin\//, "");
+
+    const matches = (
+      await readGitHubPullRequests(
+        remote.host,
+        context.githubSlug,
+        this.readGitHubApi,
+      )
+    ).filter((pr) => pr.headBranch === name);
+
+    return matches.length === 1 ? matches[0] : undefined;
+  }
+
+  /** Enrich current display metadata without repinning or rewriting history. */
+  async discoverPullRequest(snapshot: Snapshot): Promise<Snapshot> {
+    const { origin, pins } = snapshot;
+
+    if (!pins || !origin?.branch || origin.pullRequestDetached) return snapshot;
+
+    const found = await this.findPullRequest(pins, origin.branch).catch(
+      () => undefined,
+    );
+
+    if (!found) return snapshot;
+
+    // A manually selected PR must not be replaced by a branch-name match.
+    if (
+      origin.pullRequestUrl &&
+      origin.pullRequestUrl.toLowerCase() !== found.url.toLowerCase()
+    )
+      return snapshot;
+
+    return {
+      ...snapshot,
+      origin: {
+        ...origin,
+        pullRequestUrl: found.url,
+        pullRequestNumber: found.number,
+        pullRequestTitle: found.title,
+        pullRequestBaseBranch: found.baseBranch,
+      },
+    };
+  }
+
   /** Capture a label only when its ref still resolves to these exact pins. */
   async headBranch(pins: Pins, headRef?: string): Promise<string | undefined> {
+    const context = await resolveRepoContext(
+      this.store.repositoryPath(pins.repositoryId),
+    );
+
+    if (!context) return undefined;
+
     const vcs = await this.vcs(pins.repositoryId);
 
-    if (!vcs || vcs.kind !== "git") return undefined;
+    const named =
+      headRef &&
+      headRef !== "HEAD" &&
+      headRef !== "@" &&
+      !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(headRef);
+
+    if (!named && vcs?.kind !== "git") return undefined;
+
+    const location: VcsArg[] = named
+      ? ["--git-dir", context.commonDir]
+      : ["-C", vcs!.rootPath];
 
     try {
       const { stdout } = await runVcs("git", [
-        "-C",
-        vcs.rootPath,
+        ...location,
         "rev-parse",
         "--symbolic-full-name",
         "--verify",
-        !headRef || /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(headRef)
-          ? "HEAD"
-          : { rev: headRef },
+        named ? { rev: headRef! } : "HEAD",
       ]);
 
       const ref = stdout.trim();
@@ -1075,13 +1157,18 @@ export class LocalReviewData {
       if (!ref.startsWith("refs/heads/") && !ref.startsWith("refs/remotes/"))
         return undefined;
 
-      const resolved = await vcs.resolveRevision(ref);
+      const { stdout: commit } = await runVcs("git", [
+        ...location,
+        "rev-parse",
+        { rev: ref },
+      ]);
 
-      if (resolved?.commit !== pins.head) return undefined;
+      if (commit.trim() !== pins.head) return undefined;
 
-      return ref.replace(/^refs\/(heads|remotes)\//, "");
+      return ref
+        .replace(/^refs\/remotes\/origin\//, "")
+        .replace(/^refs\/(heads|remotes)\//, "");
     } catch {
-      // Optional provenance must not block authoring in a detached checkout.
       return undefined;
     }
   }
@@ -2215,6 +2302,7 @@ export function openLocalReviewStore(
       resolvePullRequest: (url, repository) =>
         data.resolvePullRequest(url, repository),
       pullRequestTitle: (url) => data.pullRequestTitle(url),
+      findPullRequest: (pins, branch) => data.findPullRequest(pins, branch),
       headBranch: (pins, headRef) => data.headBranch(pins, headRef),
       sourcePins: (snapshot) => data.sourcePins(snapshot),
       unavailableAnchors: (snapshot) => data.unavailableAnchors(snapshot),

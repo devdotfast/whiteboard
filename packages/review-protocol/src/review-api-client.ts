@@ -22,7 +22,7 @@ export interface ReviewApiSummary {
   createdAt: string;
   /** Timestamp of the earliest retained review version, when known. */
   firstCreatedAt?: string;
-  /** Present on reviews imported from the legacy MDX store. */
+  /** The branch and PR the review is of; see SnapshotOrigin. */
   origin?: {
     branch?: string;
     baseRef?: string;
@@ -30,6 +30,8 @@ export interface ReviewApiSummary {
     pullRequestNumber?: number;
     pullRequestUrl?: string;
     pullRequestTitle?: string;
+    pullRequestBaseBranch?: string;
+    pullRequestDetached?: true;
     revision?: string;
   };
   /** The PR's state on GitHub, when the host has read it. */

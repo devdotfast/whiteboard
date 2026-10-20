@@ -295,6 +295,7 @@ describe("snapshot authoring", () => {
       branch: "feature",
       baseRef: "main",
       revision: "legacy-revision",
+      pullRequestDetached: true,
     });
   });
 

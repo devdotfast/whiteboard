@@ -89,6 +89,8 @@ export const sharedSnapshotSchema = z.strictObject({
       pullRequestNumber: z.number().int().positive().optional(),
       pullRequestUrl: pullRequestUrl.optional(),
       pullRequestTitle: z.string().optional(),
+      pullRequestBaseBranch: z.string().optional(),
+      pullRequestDetached: z.literal(true).optional(),
       revision: z.string().optional(),
     })
     .optional(),

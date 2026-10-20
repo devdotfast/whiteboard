@@ -12,6 +12,7 @@ import {
   boardIconKind,
   boardTitle,
 } from "@dev.fast/review-protocol";
+import type { GitHubPullRequest } from "@review/github-pr-graph.js";
 import { sourceAnchors } from "@review/lens-selection.js";
 import {
   migrateStoredLenses,
@@ -76,7 +77,12 @@ import {
   summarizeEdit,
 } from "./document.js";
 import { type BoardLinkPreview, boardLinkPreview } from "./link-preview.js";
-import { pullRequestKey, pullRequestUrl, setPullRequest } from "./origin.js";
+import {
+  pullRequestKey,
+  pullRequestUrl,
+  setPullRequest,
+  sourceBranchName,
+} from "./origin.js";
 import { upgradeStore } from "./store-migrations.js";
 import {
   BOARD_REPOSITORY_ID_SQL,
@@ -168,7 +174,8 @@ export const commandSchema = z.strictObject({
     z.strictObject({
       type: z.literal("set_target"),
       reviewId,
-      target: reviewTargetSchema,
+      target: reviewTargetSchema.optional(),
+      repositoryId: z.string().min(1).optional(),
       pullRequestUrl: pullRequestUrl.nullable().optional(),
     }),
     z.strictObject({
@@ -250,6 +257,10 @@ export interface SnapshotOrigin {
   pullRequestUrl?: string;
   /** As the forge reported it when the PR was attached. */
   pullRequestTitle?: string;
+  /** The branch the PR merges into, which can differ from baseBranch. */
+  pullRequestBaseBranch?: string;
+  /** The user removed the PR: its branch must not find one again. */
+  pullRequestDetached?: true;
   /** The legacy review revision this version was imported from. */
   revision?: string;
 }
@@ -425,6 +436,10 @@ export interface ResolvedPullRequest {
 }
 
 export interface ReviewProviders {
+  findPullRequest?(
+    pins: Pins,
+    branch: string,
+  ): Promise<GitHubPullRequest | undefined>;
   headBranch?(pins: Pins, headRef?: string): Promise<string | undefined>;
   projectSource?(snapshot: Snapshot, pins: Pins): Promise<Snapshot>;
   /** Fetch a PR into the registered checkout the caller names. */
@@ -474,6 +489,7 @@ export class ReviewStore {
   readonly askHistory: AskHistory;
   private readonly db: DatabaseSync;
   private pending: Promise<unknown> = Promise.resolve();
+  private readonly preparing = new Set<Promise<unknown>>();
   private closing = false;
   private readonly liveSources = new Map<string, Snapshot>();
   private refreshTimer?: ReturnType<typeof setInterval>;
@@ -1026,6 +1042,11 @@ export class ReviewStore {
   /** Forgets a checkout no board uses, after every write queued before it,
    * so a board being made with it keeps it. */
   unregisterRepository(id: string): Promise<void> {
+    if (this.preparing.size)
+      return Promise.allSettled([...this.preparing]).then(() =>
+        this.unregisterRepository(id),
+      );
+
     const run = this.pending.then(async () => {
       this.db.exec("BEGIN IMMEDIATE");
 
@@ -1143,6 +1164,7 @@ export class ReviewStore {
     clearInterval(this.externalChanges);
     clearInterval(this.refreshTimer);
     clearInterval(this.purgeTimer);
+    await Promise.allSettled([...this.preparing]);
     await this.pending;
     this.listeners.clear();
     this.catalogListeners.clear();
@@ -1522,50 +1544,140 @@ export class ReviewStore {
         )
       : this.startPullRequestTitle(command);
 
+    const prepared = this.prepareCommand(
+      command,
+      pullRequest,
+      pullRequestTitle,
+      author,
+    ).then((source) => this.applyPreparedCommand(source, initial, author));
+
+    this.preparing.add(prepared);
+    void prepared
+      .finally(() => this.preparing.delete(prepared))
+      .catch(() => {});
+
+    return prepared;
+  }
+
+  /** Resolve optional network context before entering the write queue. */
+  private async prepareCommand(
+    command: z.infer<typeof commandSchema>,
+    pullRequest: Promise<ResolvedPullRequest> | undefined,
+    pullRequestTitle: Promise<string | undefined>,
+    author: Author,
+  ) {
+    const op = command.operation;
+
+    if (op.type === "create") {
+      if (!op.target && !op.pullRequestUrl)
+        throw new ReviewInputError("Supply a target or a pullRequestUrl.");
+
+      if (op.repositoryId && op.target)
+        throw new ReviewInputError(
+          "A checkout for the PR applies only to a create from pullRequestUrl alone; name it in the target instead.",
+        );
+
+      if (!op.title && op.target && author.kind !== "person")
+        throw new ReviewInputError("Supply a title.");
+    }
+
+    if (op.type === "set_target" && !op.target && !op.pullRequestUrl)
+      throw new ReviewInputError("Supply a target or a pullRequestUrl.");
+
+    const requestedTarget =
+      op.type === "create" || op.type === "set_target" ? op.target : undefined;
+
+    const fromPullRequest = await pullRequest;
+
+    // No commits to resolve; repositoryPath throws if it is unregistered.
+    const resolvedTarget: { target: ReviewTarget; pins?: Pins } | undefined =
+      requestedTarget?.kind === "project"
+        ? (this.repositoryPath(requestedTarget.repositoryId),
+          { target: requestedTarget })
+        : requestedTarget
+          ? await (this.providers.resolveTarget?.(requestedTarget) ??
+              namedCommits(requestedTarget))
+          : fromPullRequest;
+
+    if (requestedTarget && !resolvedTarget)
+      throw new ReviewInputError("Review targets are unavailable.");
+
+    const resolvedBranch = fromPullRequest
+      ? fromPullRequest.branch
+      : resolvedTarget?.pins && this.providers.headBranch
+        ? await this.providers.headBranch(
+            resolvedTarget.pins,
+            requestedTarget?.kind === "commits"
+              ? requestedTarget.head
+              : undefined,
+          )
+        : undefined;
+
+    const discoveredPullRequest =
+      resolvedTarget?.pins &&
+      resolvedBranch &&
+      (op.type === "create" || op.type === "set_target") &&
+      op.pullRequestUrl === undefined
+        ? await this.providers
+            .findPullRequest?.(resolvedTarget.pins, resolvedBranch)
+            .catch(() => undefined)
+        : undefined;
+
+    const resolvedTitle = await pullRequestTitle;
+
+    return {
+      op,
+      requestedTarget,
+      fromPullRequest,
+      resolvedTarget,
+      resolvedBranch,
+      discoveredPullRequest,
+      resolvedTitle,
+    };
+  }
+
+  private applyPreparedCommand(
+    prepared: Awaited<ReturnType<ReviewStore["prepareCommand"]>>,
+    initial: { document: Block[]; origin: SnapshotOrigin } | undefined,
+    author: Author,
+  ) {
+    const {
+      op,
+      requestedTarget,
+      fromPullRequest,
+      resolvedTarget,
+      resolvedBranch,
+      discoveredPullRequest,
+      resolvedTitle,
+    } = prepared;
+
     return this.enqueue(async () => {
-      const op = command.operation;
-
-      if (op.type === "create") {
-        if (!op.target && !op.pullRequestUrl)
-          throw new ReviewInputError("Supply a target or a pullRequestUrl.");
-
-        if (op.repositoryId && op.target)
-          throw new ReviewInputError(
-            "A checkout for the PR applies only to a create from pullRequestUrl alone; name it in the target instead.",
-          );
-
-        if (!op.title && op.target && author.kind !== "person")
-          throw new ReviewInputError("Supply a title.");
-      }
-
-      const requestedTarget =
-        op.type === "create" || op.type === "set_target"
-          ? op.target
-          : undefined;
-
-      const fromPullRequest = await pullRequest;
-
-      // No commits to resolve; repositoryPath throws if it is unregistered.
-      const resolvedTarget: { target: ReviewTarget; pins?: Pins } | undefined =
-        requestedTarget?.kind === "project"
-          ? (this.repositoryPath(requestedTarget.repositoryId),
-            { target: requestedTarget })
-          : requestedTarget
-            ? await (this.providers.resolveTarget?.(requestedTarget) ??
-                namedCommits(requestedTarget))
-            : fromPullRequest;
-
-      if (requestedTarget && !resolvedTarget)
-        throw new ReviewInputError("Review targets are unavailable.");
-
       if (
         op.type === "create" &&
         op.pullRequestUrl &&
         op.reuseExisting !== false
       ) {
-        const [found, ...others] = this.reviewsForPullRequest(
-          op.pullRequestUrl,
-        );
+        const known = this.reviewsForPullRequest(op.pullRequestUrl);
+        const branch = fromPullRequest?.branch;
+        const repository = resolvedTarget?.target.repositoryId;
+        const project = repository && this.projectOfRepository(repository);
+
+        const matching =
+          !known.length && branch && project
+            ? this.list()
+                .filter(
+                  (review) =>
+                    review.project?.id === project &&
+                    sourceBranchName(review.origin?.branch) ===
+                      sourceBranchName(branch) &&
+                    !review.origin?.pullRequestDetached &&
+                    !review.origin?.pullRequestUrl,
+                )
+                .reverse()
+                .map((review) => review.reviewId)
+            : [];
+
+        const [found, ...others] = [...known, ...matching];
 
         if (found) {
           const result = this.existingReview(
@@ -1594,7 +1706,9 @@ export class ReviewStore {
         });
 
       if (op.type === "lifecycle")
-        return this.commitBoardFacts(op.reviewId, author, { state: op.state });
+        return this.commitBoardFacts(op.reviewId, author, {
+          state: op.state,
+        });
 
       if (op.type === "attention")
         return this.commitBoardFacts(op.reviewId, author, { viewed: true });
@@ -1642,21 +1756,10 @@ export class ReviewStore {
 
       if (
         (op.type === "create" || op.type === "set_target") &&
-        this.providers.headBranch
-      ) {
-        const pins = resolvedTarget?.pins ?? snapshot.pins;
-
-        if (pins) {
-          const headRef =
-            requestedTarget?.kind === "commits"
-              ? requestedTarget.head
-              : undefined;
-
-          const branch = await this.providers.headBranch(pins, headRef);
-
-          snapshot.origin = { ...snapshot.origin, branch };
-        }
-      }
+        resolvedTarget?.pins &&
+        (this.providers.headBranch || fromPullRequest)
+      )
+        snapshot.origin = { ...snapshot.origin, branch: resolvedBranch };
 
       if (!requestedTarget && fromPullRequest)
         snapshot.origin = {
@@ -1694,7 +1797,7 @@ export class ReviewStore {
               assignFreshIds(block, (prefix) => `${prefix}-${++nextId}`);
           }
 
-          setPullRequest(snapshot, op.pullRequestUrl, await pullRequestTitle);
+          setPullRequest(snapshot, op.pullRequestUrl, resolvedTitle);
           break;
         case "rename":
           snapshot.title = op.title;
@@ -1708,7 +1811,7 @@ export class ReviewStore {
                 resolvedTarget!.target.repositoryId
                 ? null
                 : undefined),
-            await pullRequestTitle,
+            resolvedTitle,
           );
           snapshot.staleSources = [];
 
@@ -1778,6 +1881,39 @@ export class ReviewStore {
           // commitVersion normalizes it, as it does every version.
           break;
         }
+      }
+
+      if ((op.type === "create" || op.type === "set_target") && snapshot.pins) {
+        const branch = sourceBranchName(snapshot.origin?.branch);
+
+        const sameBranch =
+          previous?.pins?.repositoryId === snapshot.pins.repositoryId &&
+          sourceBranchName(previous.origin?.branch) === branch;
+
+        // The user removed this branch's PR; discovery must not restore it.
+        const keepDetached =
+          sameBranch && previous?.origin?.pullRequestDetached;
+
+        // Explicit PR input is resolved once for create and retarget alike.
+        if (op.pullRequestUrl === null) {
+          setPullRequest(snapshot, null);
+          snapshot.origin = { ...snapshot.origin, pullRequestDetached: true };
+        } else if (op.pullRequestUrl)
+          setPullRequest(
+            snapshot,
+            op.pullRequestUrl,
+            fromPullRequest?.title,
+            fromPullRequest?.baseBranch,
+          );
+        else if (branch && discoveredPullRequest && !keepDetached)
+          setPullRequest(
+            snapshot,
+            discoveredPullRequest.url,
+            discoveredPullRequest.title,
+            discoveredPullRequest.baseBranch,
+          );
+        // An explicit binding survives an unavailable optional lookup.
+        else if (previous && !sameBranch) setPullRequest(snapshot, null);
       }
 
       const warnings = unpinnedWorktree
@@ -3026,7 +3162,11 @@ export class ReviewStore {
   ): Promise<ResolvedPullRequest> | undefined {
     const op = command.operation;
 
-    if (op.type !== "create" || op.target || !op.pullRequestUrl)
+    if (
+      (op.type !== "create" && op.type !== "set_target") ||
+      op.target ||
+      !op.pullRequestUrl
+    )
       return undefined;
 
     if (!this.providers.resolvePullRequest)
@@ -3043,7 +3183,7 @@ export class ReviewStore {
 
     // A PR whose review is in Trash is refused before it is fetched.
     const [existing] =
-      op.reuseExisting === false
+      op.type !== "create" || op.reuseExisting === false
         ? []
         : this.reviewsForPullRequest(op.pullRequestUrl);
 

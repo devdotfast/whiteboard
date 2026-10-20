@@ -16,11 +16,18 @@ export function pullRequestKey(url: string): string {
   return url.toLowerCase();
 }
 
-/** Omission preserves identity; null detaches it without changing import metadata. */
+/** Older snapshots kept origin/ on remote branch labels. */
+export const sourceBranchName = (branch: string | undefined) =>
+  branch?.replace(/^origin\//, "");
+
+/** Omission preserves identity; null removes the PR without changing import
+ * metadata. A new url clears a detach and keeps the title and PR base when the
+ * caller omits them for the same PR. */
 export function setPullRequest(
   snapshot: Pick<Snapshot, "origin">,
   url: string | null | undefined,
   title?: string,
+  baseBranch?: string,
 ) {
   if (url === undefined) return;
 
@@ -29,19 +36,22 @@ export function setPullRequest(
       delete snapshot.origin.pullRequestUrl;
       delete snapshot.origin.pullRequestNumber;
       delete snapshot.origin.pullRequestTitle;
+      delete snapshot.origin.pullRequestBaseBranch;
+      delete snapshot.origin.pullRequestDetached;
     }
 
     return;
   }
 
+  const same = snapshot.origin?.pullRequestUrl === url;
+  const { pullRequestDetached: _detached, ...origin } = snapshot.origin ?? {};
   snapshot.origin = {
-    ...snapshot.origin,
+    ...origin,
     pullRequestUrl: url,
     pullRequestNumber: Number(url.split("/").at(-1)),
     pullRequestTitle:
-      title ??
-      (snapshot.origin?.pullRequestUrl === url
-        ? snapshot.origin.pullRequestTitle
-        : undefined),
+      title ?? (same ? snapshot.origin?.pullRequestTitle : undefined),
+    pullRequestBaseBranch:
+      baseBranch ?? (same ? snapshot.origin?.pullRequestBaseBranch : undefined),
   };
 }

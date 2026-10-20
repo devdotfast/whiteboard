@@ -1996,9 +1996,11 @@ export function createReviewApi(
   app.get("/:id/stack", async (context) => {
     const query = readQuerySchemas.get.parse(context.req.query());
     const id = context.req.param("id");
-    const snapshot = readReview(id, query.version);
+    let snapshot = readReview(id, query.version);
 
     if (isShared(id) || !snapshot.pins) return context.json({ layers: [] });
+
+    if (data) snapshot = await data.discoverPullRequest(snapshot);
 
     const repositoryPath = store
       .repositories()
@@ -2163,7 +2165,15 @@ export function createReviewApi(
   app.get("/:id", async (context) => {
     const query = readQuerySchemas.get.parse(context.req.query());
 
-    const snapshot = { ...readReview(context.req.param("id"), query.version) };
+    let snapshot = { ...readReview(context.req.param("id"), query.version) };
+
+    if (
+      data &&
+      query.full &&
+      query.version === undefined &&
+      !isShared(snapshot.reviewId)
+    )
+      snapshot = await data.discoverPullRequest(snapshot);
 
     if (data && query.full) {
       try {
@@ -2223,17 +2233,7 @@ export function createReviewApi(
 
     const request = withBoardRepository(
       await locateRepositories(
-        await pullRequestTargets(
-          body,
-          register,
-          (url, repositoryId) => {
-            if (!data)
-              throw new ReviewInputError("Repositories are unavailable.");
-
-            return data.resolvePullRequest(url, { id: repositoryId });
-          },
-          (id) => store.read(id),
-        ),
+        await pullRequestTargets(body, register, (id) => store.read(id)),
         register,
       ),
       (id) => (store.has(id) ? store.read(id) : undefined),
@@ -2433,10 +2433,6 @@ async function pullRequestTargets(
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Request body boundary: commandSchema parses the result.
   body: unknown,
   register: (path: string) => Promise<{ id: string }>,
-  resolve: (
-    url: string,
-    repositoryId: string,
-  ) => Promise<{ target: ReviewTarget }>,
   board: (id: string) => void,
 ) {
   const target = z.strictObject({
@@ -2480,7 +2476,7 @@ async function pullRequestTargets(
     ...located.data,
     operation: {
       ...operation,
-      target: (await resolve(url, repositoryId)).target,
+      repositoryId,
       pullRequestUrl: url,
     },
   };
