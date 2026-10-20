@@ -1,6 +1,6 @@
 ---
 name: whiteboard
-description: "Explain code in Whiteboard, the architecture-visualization tool: author Whiteboards of branches, changes and pull requests, or research why code exists from past agent sessions."
+description: "Explain code in Whiteboard, the architecture-visualization tool: author plans and linked reviews of branches, changes and pull request stacks, or research why code exists from past agent sessions."
 ---
 
 # dev.fast Whiteboard

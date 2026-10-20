@@ -31,7 +31,7 @@ const RELOAD_TOOLS =
 
 function mcpAuthoringGuidance(context: { traceEnabled: boolean }): string {
   return [
-    "Whiteboard explains code in documents the user reads in Whiteboard Desktop. Call session_get_instructions before creating or editing a Whiteboard and follow it. Read session_capabilities before authoring; session_create opens the new review in Desktop when it is available, so call session_open only for an existing review, and generate software maps only when softwareMapEnabled is true. When the user asks for a Whiteboard or to use Whiteboard (for example to review a branch, a change or a pull request, or to explain a system in Whiteboard), author a Whiteboard with the default topic.",
+    "Whiteboard explains code in documents the user reads in Whiteboard Desktop. Call session_get_instructions before creating or editing a Whiteboard and follow it. Read session_capabilities before authoring; session_create opens the new review in Desktop when it is available, so call session_open only for an existing review, and generate software maps only when softwareMapEnabled is true. When the user asks for a Whiteboard or to use Whiteboard (for example to plan work, review a branch or PR stack, or explain a system in Whiteboard), author a Whiteboard with the default topic.",
     ...(context.traceEnabled
       ? [
           'For why code exists, what an agent was thinking, or whether an agent solved something before, call session_get_instructions({topic:"trace-archaeology"}).',
