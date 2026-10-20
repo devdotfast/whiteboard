@@ -59,7 +59,7 @@
     "@dev.fast/diffr": "workspace:*",
     "@hono/node-server": "2.0.12",
     "@img/sharp-wasm32": "0.35.5",
-    "@modelcontextprotocol/sdk": "1.31.0",
+    "@modelcontextprotocol/sdk": "1.32.0",
     "@parcel/watcher": "catalog:",
     "commander": "14.0.3",
     "fuzzysort": "4.0.2",
