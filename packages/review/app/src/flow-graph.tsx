@@ -7,7 +7,6 @@ import {
 } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { Spinner } from "@canvas/ui/spinner";
-import { textStyles } from "@canvas/ui/text";
 import type { DiffSelection } from "@review/lens-selection";
 import {
   type FlowDiagramBlock,
@@ -72,7 +71,7 @@ export function FlowGraph({
   requireReady?: boolean;
   /** Pan and zoom by hand, for the fullscreen tour. */
   interactive?: boolean;
-  height?: number | string;
+  height?: number | "100%";
   onSelect(node: FlowDiagramNode): void;
 }) {
   const { theme } = useReviewDebugSettings();
@@ -90,6 +89,20 @@ export function FlowGraph({
       : cachedLayouts.get(block)?.get(direction);
 
   const frame = useRef<HTMLDivElement>(null);
+  const [frameWidth, setFrameWidth] = useState(0);
+
+  useEffect(() => {
+    const element = frame.current;
+
+    if (!element) return;
+
+    const measure = () => setFrameWidth(element.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [layout]);
 
   // The layout the reader has zoomed or panned by hand. A new layout is a
   // new drawing, so it starts from its fit again.
@@ -131,7 +144,8 @@ export function FlowGraph({
                 id: node.key,
                 type: "flowNode",
                 position,
-                ...SIZE,
+                width: SIZE.width,
+                height: position.height,
                 draggable: false,
                 selectable: false,
                 className: stylex.props(styles.nodeWrapper).className,
@@ -201,7 +215,20 @@ export function FlowGraph({
     <div
       ref={frame}
       {...withClass("lens-flow", styles.flow)}
-      style={{ height }}
+      style={{
+        height:
+          !interactive && height !== "100%" && frameWidth
+            ? Math.max(
+                height,
+                layout.height *
+                  Math.min(
+                    1,
+                    Math.max(1, frameWidth - PADDING * 2) / layout.width,
+                  ) +
+                  PADDING * 2,
+              )
+            : height,
+      }}
       aria-label={block.title}
     >
       <ReactFlowProvider>
@@ -249,7 +276,12 @@ export function FlowGraph({
               </Button>
             </Panel>
           ) : (
-            <FitToLayout layout={layout} frame={frame} />
+            <FitToLayout
+              layout={layout}
+              frame={frame}
+              interactive={interactive}
+              selectedKey={selectedKey}
+            />
           )}
           {!interactive && (
             <MetaWheelZoom
@@ -288,12 +320,17 @@ const ARROW = {
 function FitToLayout({
   layout,
   frame,
+  interactive,
+  selectedKey,
 }: {
   layout: Layout;
   frame: RefObject<HTMLDivElement | null>;
+  interactive: boolean;
+  selectedKey?: string | null;
 }) {
   const flow = useReactFlow();
   const fitted = useRef(false);
+  const selected = selectedKey ? layout.nodes.get(selectedKey) : undefined;
 
   useEffect(() => {
     const element = frame.current;
@@ -305,19 +342,32 @@ function FitToLayout({
 
       if (!width || !height) return;
 
-      const zoom = Math.min(
+      const fitZoom = Math.min(
         1,
         (width - PADDING * 2) / Math.max(1, layout.width),
         (height - PADDING * 2) / Math.max(1, layout.height),
       );
 
+      // The tour can pan. Start near its selected node at a readable scale
+      // instead of shrinking three lines of text into a tiny overview.
+      const zoom = interactive ? Math.max(0.75, fitZoom) : fitZoom;
+      const focus = zoom > fitZoom && selected;
+      const centerX = focus ? focus.x + SIZE.width / 2 : layout.width / 2;
+      const centerY = focus ? focus.y + focus.height / 2 : layout.height / 2;
+
       void flow.setViewport(
         {
-          x: (width - layout.width * zoom) / 2,
-          y: (height - layout.height * zoom) / 2,
+          x: width / 2 - centerX * zoom,
+          y: height / 2 - centerY * zoom,
           zoom,
         },
-        { duration: fitted.current ? 300 : 0 },
+        {
+          duration:
+            fitted.current &&
+            !matchMedia("(prefers-reduced-motion: reduce)").matches
+              ? 300
+              : 0,
+        },
       );
       fitted.current = true;
     };
@@ -327,7 +377,7 @@ function FitToLayout({
     observer.observe(element);
 
     return () => observer.disconnect();
-  }, [flow, frame, layout]);
+  }, [flow, frame, layout, interactive, selected]);
 
   return null;
 }
@@ -335,7 +385,7 @@ function FitToLayout({
 interface Layout {
   width: number;
   height: number;
-  nodes: Map<string, { x: number; y: number }>;
+  nodes: Map<string, { x: number; y: number; height: number }>;
   edges: {
     index: number;
     section: number;
@@ -365,6 +415,32 @@ async function layoutFlow(
   direction: "down" | "right" | undefined,
 ): Promise<Layout> {
   const elk = await loadElk();
+  // Measure with the same font, wrapping and clamp as the rendered node.
+  // ELK needs these sizes before it can route edges around the labels.
+  const measure = document.createElement("div");
+  Object.assign(measure, stylex.props(styles.node, styles.measure));
+  const label = document.createElement("span");
+  Object.assign(label, stylex.props(styles.label));
+  measure.style.width = `${SIZE.width}px`;
+  measure.append(label);
+  (document.querySelector(".review-app") ?? document.body).append(measure);
+  const heights = new Map<string, number>();
+
+  try {
+    await document.fonts.load(getComputedStyle(label).font);
+    label.textContent = "M";
+    const singleLineHeight = label.offsetHeight;
+
+    for (const node of block.nodes) {
+      label.textContent = node.label;
+      heights.set(
+        node.key,
+        SIZE.height + Math.max(0, label.offsetHeight - singleLineHeight),
+      );
+    }
+  } finally {
+    measure.remove();
+  }
 
   const result = await elk.layout<ElkNode>({
     id: "flow",
@@ -374,7 +450,11 @@ async function layoutFlow(
       "elk.spacing.nodeNode": "28",
       "elk.layered.spacing.nodeNodeBetweenLayers": "44",
     },
-    children: block.nodes.map((node) => ({ id: node.key, ...SIZE })),
+    children: block.nodes.map((node) => ({
+      id: node.key,
+      width: SIZE.width,
+      height: heights.get(node.key)!,
+    })),
     edges: block.edges.map((edge, index) => {
       const text = edge.label && labelText(edge.label);
 
@@ -404,7 +484,7 @@ async function layoutFlow(
     nodes: new Map(
       result.children?.map((node) => [
         node.id,
-        { x: node.x ?? 0, y: node.y ?? 0 },
+        { x: node.x ?? 0, y: node.y ?? 0, height: node.height ?? SIZE.height },
       ]),
     ),
     edges: (result.edges ?? []).flatMap((edge) =>
@@ -458,7 +538,7 @@ const change = (progress: CoverageProgress) =>
         ? "removed"
         : "unchanged";
 
-function FlowNode({ data }: NodeProps<FlowNodeType>) {
+function FlowNode({ data, height = SIZE.height }: NodeProps<FlowNodeType>) {
   const { node, sources, requireReady, selected } = data;
   const lenses = useReviewLenses();
   const motion = useMotionPhase(node.id);
@@ -484,7 +564,7 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
         progress.state === "viewed" && styles.viewed,
         motion === "queued" && drawStyles.hidden,
       )}
-      style={{ width: SIZE.width, height: SIZE.height }}
+      style={{ width: SIZE.width, height }}
       role="button"
       tabIndex={unavailable ? -1 : 0}
       aria-disabled={unavailable}
@@ -520,7 +600,7 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
       />
       <svg
         {...stylex.props(styles.drawing)}
-        viewBox={`0 0 ${SIZE.width} ${SIZE.height}`}
+        viewBox={`0 0 ${SIZE.width} ${height}`}
         preserveAspectRatio="none"
         aria-hidden="true"
       >
@@ -543,8 +623,8 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
           x={0.5}
           y={0.5}
           width={SIZE.width - 1}
-          height={SIZE.height - 1}
-          rx={node.kind === "terminal" ? SIZE.height / 2 : 6}
+          height={height - 1}
+          rx={node.kind === "terminal" ? height / 2 : 6}
         />
       </svg>
       <div
@@ -555,9 +635,7 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
           (motion === "fill" || motion === "relabel") && drawStyles.labelFill,
         )}
       >
-        <span {...stylex.props(textStyles.truncate, styles.label)}>
-          {node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label}
-        </span>
+        <span {...stylex.props(styles.label)}>{node.label}</span>
         <span {...stylex.props(styles.caption)}>
           {unavailable ? (
             availability === "pending" ? (
@@ -726,7 +804,18 @@ const styles = stylex.create({
     minWidth: 0,
     padding: `0 ${space.s12}`,
   },
+  measure: {
+    padding: `0 ${space.s12}`,
+    position: "absolute",
+    visibility: "hidden",
+    pointerEvents: "none",
+  },
   label: {
+    display: "-webkit-box",
+    overflow: "hidden",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: 3,
+    overflowWrap: "anywhere",
     fontWeight: fontWeight.medium,
   },
   caption: {
