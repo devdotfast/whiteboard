@@ -132,12 +132,26 @@ const isEmptyMarkdown = (node: PMNode) => {
   return empty;
 };
 
+const boards = new WeakMap<PMNode, { base: Board; board: SavedBoard }>();
+
 /**
  * The board a document saves as, against `base`, the version it was loaded
  * from or last saved as. An emptied heading is no section: what follows it
  * belongs to the section above. An empty Markdown block is dropped.
+ * Memoized per document and base.
  */
 export function docToBoard(doc: PMNode, base: Board): SavedBoard {
+  const kept = boards.get(doc);
+
+  if (kept?.base === base) return kept.board;
+  const board = buildBoard(doc, base);
+
+  boards.set(doc, { base, board });
+
+  return board;
+}
+
+function buildBoard(doc: PMNode, base: Board): SavedBoard {
   const index = blockIndex(base.document);
   const document: SavedBlock[] = [];
 
@@ -240,12 +254,25 @@ export function docToBoard(doc: PMNode, base: Board): SavedBoard {
   return { title: doc.firstChild!.textContent.trim(), document };
 }
 
+const written = new WeakMap<PMNode, { source?: string; markdown: string }>();
+
 /**
  * A Markdown container's source. Unchanged content keeps `source` verbatim;
  * otherwise each paragraph, list or quote the edit left alone keeps its own
- * source, and only the rest is written fresh.
+ * source, and only the rest is written fresh. Cached per node and source.
  */
 export function markdownOf(node: PMNode, source?: string): string {
+  const kept = written.get(node);
+
+  if (kept && kept.source === source) return kept.markdown;
+  const markdown = writeMarkdown(node, source);
+
+  written.set(node, { source, markdown });
+
+  return markdown;
+}
+
+function writeMarkdown(node: PMNode, source?: string): string {
   const original = source === undefined ? undefined : parseCached(source);
 
   if (source !== undefined && node.content.eq(Fragment.from(original!.nodes)))
