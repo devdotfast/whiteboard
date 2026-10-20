@@ -66,7 +66,7 @@ class ReviewFeedbackContribution extends Disposable {
     const { appSessionId } = await this.connection.getConnection();
     const state = readReviewFeedbackState(this.storage);
     if (state.status === 'pending' && state.lastPromptSessionId === appSessionId) return;
-    const eligible = state.status === 'pending' && Date.now() >= reviewFeedbackInstallReadyAt(this.storage) && await this.connection.feedbackEligible();
+    const eligible = state.status === 'pending' && !state.lastPromptSessionId && Date.now() >= reviewFeedbackInstallReadyAt(this.storage) && await this.connection.feedbackEligible();
     if (this._store.isDisposed) return;
     if (!eligible) {
       this.instantiationService.createInstance(ReviewCommunityContribution);
