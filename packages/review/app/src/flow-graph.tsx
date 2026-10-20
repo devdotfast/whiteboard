@@ -33,7 +33,6 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
-  useStoreApi,
 } from "@xyflow/react";
 import type { ElkNode } from "elkjs/lib/elk.bundled.js";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
@@ -45,6 +44,7 @@ import { drawStyles } from "./draw-styles";
 import { loadElk } from "./elk";
 import { ElementCountsText } from "./lens-counts";
 import { documentMarker, flowNodeMarker } from "./markers.stylex";
+import { MetaWheelZoom } from "./meta-wheel-zoom";
 import { useReviewLenses } from "./review-lenses";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -328,75 +328,6 @@ function FitToLayout({
 
     return () => observer.disconnect();
   }, [flow, frame, layout]);
-
-  return null;
-}
-
-/**
- * Cmd+wheel zooms about the pointer, as Ctrl+wheel does. React Flow reads a
- * wheel as a zoom only when it carries Ctrl, which is also how a pinch
- * arrives, so Cmd is handled here.
- */
-function MetaWheelZoom({
-  frame,
-  onZoom,
-}: {
-  frame: RefObject<HTMLDivElement | null>;
-  onZoom(): void;
-}) {
-  const store = useStoreApi();
-  const zoomed = useRef(onZoom);
-  zoomed.current = onZoom;
-
-  useEffect(() => {
-    const element = frame.current;
-
-    if (!element) return;
-
-    const zoom = (event: WheelEvent) => {
-      if (!event.metaKey || event.ctrlKey) return;
-
-      event.preventDefault();
-
-      const {
-        panZoom,
-        transform: [x, y, from],
-        width,
-        height,
-        translateExtent,
-      } = store.getState();
-
-      const box = element.getBoundingClientRect();
-
-      const pointer = {
-        x: event.clientX - box.left,
-        y: event.clientY - box.top,
-      };
-
-      const to = Math.min(
-        MAX_ZOOM,
-        Math.max(MIN_ZOOM, from * 2 ** (-event.deltaY * 0.002)),
-      );
-
-      void panZoom?.setViewportConstrained(
-        {
-          x: pointer.x - ((pointer.x - x) * to) / from,
-          y: pointer.y - ((pointer.y - y) * to) / from,
-          zoom: to,
-        },
-        [
-          [0, 0],
-          [width, height],
-        ],
-        translateExtent,
-      );
-      zoomed.current();
-    };
-
-    element.addEventListener("wheel", zoom, { passive: false });
-
-    return () => element.removeEventListener("wheel", zoom);
-  }, [store, frame]);
 
   return null;
 }
