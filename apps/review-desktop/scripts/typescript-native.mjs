@@ -68,7 +68,11 @@ export async function installTypeScriptNative({
   const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "wb-typescript-native-"));
 
   try {
-    execFileSync("tar", ["-xzf", tarball, "-C", scratch]);
+    // Git Bash's GNU tar misreads Windows paths, so pass none.
+    execFileSync("tar", ["-xzf", "-"], {
+      cwd: scratch,
+      input: fs.readFileSync(tarball),
+    });
     fs.rmSync(lib, { recursive: true, force: true });
     fs.cpSync(path.join(scratch, "package", "lib"), lib, { recursive: true });
 
