@@ -1547,7 +1547,6 @@ export class ReviewStore {
 
     return this.enqueue(async () => {
       const op = command.operation;
-      this.purgeExpired();
 
       if (op.type === "create") {
         if (!op.target && !op.pullRequestUrl)

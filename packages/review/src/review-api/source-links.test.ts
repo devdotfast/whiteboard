@@ -1,11 +1,7 @@
 import { rangeAnchor } from "@review/lens-selection.js";
 import { expect, it } from "vitest";
 
-import {
-  ReviewInputError,
-  boardLinks,
-  sourceReferences,
-} from "./document.js";
+import { ReviewInputError, boardLinks, sourceReferences } from "./document.js";
 
 const sources = (markdown: string) =>
   sourceReferences([{ type: "markdown", id: "n-1", markdown }]);
