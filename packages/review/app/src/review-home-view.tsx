@@ -6,19 +6,18 @@ import { dividerStyles } from "@canvas/ui/divider";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
-  BranchIcon,
   ChevronDownIcon,
   ClearFiltersIcon,
   CloseIcon,
   CodeIcon,
   FilterIcon,
-  FolderIcon,
   GearIcon,
   HelpIcon,
+  MoreIcon,
   PlusIcon,
-  PullRequestIcon,
   SearchIcon,
   SortIcon,
+  StackIcon,
 } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import { fieldStyles } from "@canvas/ui/text-field";
@@ -34,6 +33,7 @@ import {
 } from "@dev.fast/review-protocol";
 import { fuzzySegments } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
+import { QueryClientProvider } from "@tanstack/react-query";
 import {
   type ReactNode,
   useCallback,
@@ -46,12 +46,15 @@ import {
   useState,
 } from "react";
 
+import { AddChildWhiteboard } from "./add-child-whiteboard";
+import { createCanvasQueryClient } from "./canvas-query";
 import { ChangedBadge } from "./changed-badge";
 import { useHostActionButton } from "./connection-chip";
 import { countLabel, formatRelativeTime } from "./format";
 import { homeStyles } from "./home-styles";
 import { CanvasUiContext, useCanvasMenu } from "./host/canvas-ui";
 import {
+  boardRowMarker,
   chevronMarker,
   homeGroupMarker,
   homeRowMarker,
@@ -71,7 +74,8 @@ import {
   type HomeSort,
   activeHomeChips,
   defaultHomeFilters,
-  groupFor,
+  homeBoardTree,
+  homeBranchGroup,
   homeFacetLabels,
   homeFacetValues,
   homeGroups,
@@ -87,7 +91,8 @@ import {
 } from "./review-home-model";
 import { styles } from "./review-home-styles";
 import { withClass } from "./stylex-props";
-import { Button, IconButton } from "./ui/button";
+import { BoardDisclosure, boardControlStyles } from "./ui/board-disclosure";
+import { Button, IconButton, buttonStyles } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
 import { Dialog } from "./ui/dialog";
 import { EmptyState } from "./ui/empty-state";
@@ -95,6 +100,13 @@ import { Shortcut } from "./ui/kbd";
 import { useDismissOnOutside } from "./ui/popover";
 import { StatusBanner } from "./ui/status-banner";
 import { surfaceStyles } from "./ui/surface";
+import { useWhiteboardExpansion } from "./whiteboard-expansion";
+import {
+  type WhiteboardBranch,
+  canAddChildWhiteboard,
+  canExpandWhiteboard,
+  showsChanged,
+} from "./whiteboard-tree";
 
 interface ReviewHomeProps {
   findHost?: ReviewFindHost;
@@ -112,6 +124,7 @@ interface ReviewHomeProps {
   onOpenSetup?(): void;
   /** Opens New whiteboard; absent where Home cannot draw one. */
   onNewWhiteboard?(): void;
+  onNewChildWhiteboard?(parentId: string): Promise<void>;
   /** Shown in place of "No whiteboards yet" while there is nothing to list. */
   emptyState?: ReactNode;
 }
@@ -150,7 +163,17 @@ function withEntries<V>(
   return next;
 }
 
-export function ReviewHome({
+export function ReviewHome(props: ReviewHomeProps) {
+  const [client] = useState(createCanvasQueryClient);
+
+  return (
+    <QueryClientProvider client={client}>
+      <ReviewHomeBody {...props} />
+    </QueryClientProvider>
+  );
+}
+
+function ReviewHomeBody({
   findHost,
   view,
   onViewChange,
@@ -165,6 +188,7 @@ export function ReviewHome({
   onOpenSettings,
   onOpenSetup,
   onNewWhiteboard,
+  onNewChildWhiteboard,
   emptyState,
 }: ReviewHomeProps) {
   const helpTooltip = useTooltip("Help", { instant: true });
@@ -199,6 +223,8 @@ export function ReviewHome({
     section: HomeFilterSection;
   } | null>(null);
 
+  const { expanded: expandedParents, setExpanded } = useWhiteboardExpansion();
+  const [filteredCollapsed, setFilteredCollapsed] = useState(new Set<string>());
   const [sort, setSort] = useState<HomeSort>("updated");
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [selected, setSelected] = useState(new Set<string>());
@@ -208,6 +234,7 @@ export function ReviewHome({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState("");
+  const [childErrors, setChildErrors] = useState<Record<string, string>>({});
   // The unavailable review last opened; it opens once its host is back.
   const [waiting, setWaiting] = useState<ReviewApiSummary>();
 
@@ -392,27 +419,51 @@ export function ReviewHome({
     searchTerms,
   );
 
+  const searching = searchTerms.length > 0;
+
+  const filtering =
+    activeHomeChips(appliedFilters).length > 0 || Boolean(query.trim());
+
+  const branches = inTrash
+    ? visible.map((board) => ({ board, children: [] }))
+    : homeBoardTree(listed, appliedFilters, query.trim(), sort);
+
+  const branchById = new Map(
+    branches.map((branch) => [branch.board.reviewId, branch]),
+  );
+
+  const expanded = (branch: WhiteboardBranch) =>
+    filtering
+      ? !filteredCollapsed.has(branch.board.reviewId)
+      : expandedParents(branch.board.project?.id).has(branch.board.reviewId);
+
   const groups = (
     inTrash ? [{ id: "earlier" as const, label: "Trash" }] : homeGroups
   )
-    .map((group) => ({
-      ...group,
-      reviews: inTrash
-        ? visible
-        : visible.filter((r) => groupFor(r, now) === group.id),
-    }))
+    .map((group) => {
+      const families = branches.filter(
+        (branch) => inTrash || homeBranchGroup(branch, now) === group.id,
+      );
+
+      return {
+        ...group,
+        reviews: families.flatMap((branch) => [
+          branch.board,
+          ...(expanded(branch) ? branch.children : []),
+        ]),
+      };
+    })
     .filter((group) => group.reviews.length > 0);
 
   const ordered = groups.flatMap((group) => group.reviews);
   const selectedReviews = ordered.filter((r) => selected.has(r.reviewId));
   const selectionMode = selectedReviews.length > 0;
-  const searching = searchTerms.length > 0;
 
   const isCollapsed = (id: HomeGroup) =>
     !inTrash && !searching && collapsed[id];
 
   // A filter change must never leave invisible destructive targets selected.
-  const visibleIds = visible
+  const visibleIds = ordered
     .map((r) => r.reviewId)
     .sort()
     .join(",");
@@ -798,14 +849,14 @@ export function ReviewHome({
     } else if (!editing && command && key === "a") {
       event.preventDefault();
       event.stopPropagation();
-      setSelected(new Set(visible.map((r) => r.reviewId)));
+      setSelected(new Set(ordered.map((review) => review.reviewId)));
     } else if (!editing && command && key === "backspace" && !event.repeat) {
       const rowId =
         target instanceof HTMLElement
           ? target.closest<HTMLElement>("[data-home-row]")?.dataset.homeRow
           : undefined;
 
-      const focused = visible.find((review) => review.reviewId === rowId);
+      const focused = ordered.find((review) => review.reviewId === rowId);
 
       if (selectionMode || focused) {
         event.preventDefault();
@@ -1185,6 +1236,19 @@ export function ReviewHome({
                 >
                   {!inTrash && (
                     <div {...stylex.props(styles.groupHeader)}>
+                      <Checkbox
+                        ref={selectGroupTooltip}
+                        aria-label={`Select ${group.label}`}
+                        checked={count === group.reviews.length}
+                        indeterminate={
+                          count > 0 && count < group.reviews.length
+                        }
+                        xstyle={[
+                          styles.rowCheck,
+                          count === 0 && styles.hiddenGroupCheck,
+                        ]}
+                        onChange={() => selectGroup(group.reviews)}
+                      />
                       <button
                         type="button"
                         aria-expanded={!isCollapsed(group.id)}
@@ -1197,15 +1261,7 @@ export function ReviewHome({
                         onClick={() => toggleGroup(group.id)}
                       >
                         <DisclosureChevron />
-                        <span {...stylex.props(styles.slot)}>
-                          {group.id === "unread" && (
-                            <span {...stylex.props(styles.dot)} />
-                          )}
-                        </span>
                         <span>{group.label}</span>
-                        <span {...stylex.props(styles.faint, styles.regular)}>
-                          {group.reviews.length}
-                        </span>
                       </button>
                       <div {...stylex.props(styles.groupSelection)}>
                         {count > 0 && (
@@ -1215,166 +1271,218 @@ export function ReviewHome({
                               : `${count} of ${group.reviews.length} selected`}
                           </span>
                         )}
-                        <Checkbox
-                          ref={selectGroupTooltip}
-                          aria-label={`Select ${group.label}`}
-                          checked={count === group.reviews.length}
-                          indeterminate={
-                            count > 0 && count < group.reviews.length
-                          }
-                          xstyle={count === 0 && styles.hiddenGroupCheck}
-                          onChange={() => selectGroup(group.reviews)}
-                        />
                       </div>
                     </div>
                   )}
                   {!isCollapsed(group.id) &&
-                    group.reviews.map((review, index) => (
-                      <div
-                        key={review.reviewId}
-                        data-home-row={review.reviewId}
-                        {...stylex.props(
-                          homeRowMarker,
-                          styles.row,
-                          styles.waterfall(index),
-                          unavailable(review) && styles.unavailableRow,
-                          isSelected(index) && styles.selected,
-                          isSelected(index) &&
-                            isSelected(index - 1) &&
-                            styles.selectedAfter,
-                          isSelected(index) &&
-                            isSelected(index + 1) &&
-                            styles.selectedBefore,
-                        )}
-                        data-unavailable={unavailable(review) ? "" : undefined}
-                        onClick={() =>
-                          inTrash ? toggleRow(review.reviewId) : open(review)
-                        }
-                        onKeyDown={(event) => {
-                          if (
-                            event.key.toLowerCase() === "x" &&
-                            !event.metaKey &&
-                            !event.ctrlKey &&
-                            !event.altKey
-                          ) {
-                            event.preventDefault();
-                            toggleRow(review.reviewId);
-                          }
-                        }}
-                      >
-                        <Checkbox
-                          ref={selectTooltip}
-                          aria-label={`Select ${boardTitle(review.title)}`}
-                          checked={isSelected(index)}
-                          xstyle={!isSelected(index) && styles.hiddenCheck}
-                          onChange={() => {}}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleRow(review.reviewId, event.shiftKey);
-                          }}
-                        />
-                        {/* A PR's state, else the board's target. */}
-                        <span {...stylex.props(styles.kindIcon)}>
-                          {review.origin?.pullRequestNumber ? (
-                            <PullRequestStateIcon
-                              number={review.origin.pullRequestNumber}
-                              state={review.pullRequestState}
-                            />
-                          ) : (
-                            <BoardIcon icon={boardIconKind(review.target)} />
-                          )}
-                          {review.changed ? <ChangedBadge /> : null}
-                        </span>
-                        <button
-                          type="button"
-                          aria-label={`${inTrash ? "Select" : "Open"} ${boardTitle(review.title)}`}
-                          aria-disabled={unavailable(review) || undefined}
-                          {...stylex.props(styles.rowOpen)}
-                          onClick={(event) => {
-                            event.stopPropagation();
+                    group.reviews.map((review, index) => {
+                      const branch = branchById.get(review.reviewId);
 
-                            if (inTrash) toggleRow(review.reviewId);
-                            else open(review);
+                      const parent =
+                        !inTrash &&
+                        branch &&
+                        canExpandWhiteboard(
+                          branch,
+                          Boolean(onNewChildWhiteboard),
+                        );
+
+                      const isExpanded = Boolean(branch && expanded(branch));
+
+                      const nested =
+                        !inTrash && Boolean(review.parentId) && !branch;
+
+                      const firstChild =
+                        nested &&
+                        group.reviews[index - 1]?.parentId !== review.parentId;
+
+                      const lastChild =
+                        nested &&
+                        group.reviews[index + 1]?.parentId !== review.parentId;
+
+                      return (
+                        <div
+                          key={review.reviewId}
+                          data-home-row={review.reviewId}
+                          {...stylex.props(
+                            homeRowMarker,
+                            boardRowMarker,
+                            styles.row,
+                            nested && styles.nestedRow,
+                            styles.waterfall(index),
+                            unavailable(review) && styles.unavailableRow,
+                            isSelected(index) && styles.selected,
+                            isSelected(index) &&
+                              isSelected(index - 1) &&
+                              styles.selectedAfter,
+                            isSelected(index) &&
+                              isSelected(index + 1) &&
+                              styles.selectedBefore,
+                          )}
+                          data-unavailable={
+                            unavailable(review) ? "" : undefined
+                          }
+                          onClick={() =>
+                            inTrash ? toggleRow(review.reviewId) : open(review)
+                          }
+                          onKeyDown={(event) => {
+                            if (
+                              event.key.toLowerCase() === "x" &&
+                              !event.metaKey &&
+                              !event.ctrlKey &&
+                              !event.altKey
+                            ) {
+                              event.preventDefault();
+                              toggleRow(review.reviewId);
+                            }
                           }}
                         >
+                          <Checkbox
+                            ref={selectTooltip}
+                            aria-label={`Select ${boardTitle(review.title)}`}
+                            checked={isSelected(index)}
+                            xstyle={[
+                              styles.rowCheck,
+                              !isSelected(index) && styles.hiddenCheck,
+                            ]}
+                            onChange={() => {}}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleRow(review.reviewId, event.shiftKey);
+                            }}
+                          />
+                          <BoardDisclosure
+                            title={boardTitle(review.title)}
+                            expanded={parent ? isExpanded : undefined}
+                            onToggle={() => {
+                              if (filtering)
+                                setFilteredCollapsed((previous) => {
+                                  const next = new Set(previous);
+
+                                  if (isExpanded) next.add(review.reviewId);
+                                  else next.delete(review.reviewId);
+
+                                  return next;
+                                });
+                              else
+                                setExpanded(
+                                  review.project?.id,
+                                  review.reviewId,
+                                  !isExpanded,
+                                );
+                            }}
+                          />
+                          {nested ? (
+                            <span
+                              aria-hidden="true"
+                              {...stylex.props(
+                                styles.nestedConnector,
+                                firstChild && styles.firstConnector,
+                                lastChild && styles.lastConnector,
+                              )}
+                            />
+                          ) : null}
+                          {/* A PR's state, else the board's target. */}
                           <span
-                            title={
-                              unavailable(review)
-                                ? hostStatus(review).label
-                                : boardTitle(review.title)
-                            }
                             {...stylex.props(
-                              textStyles.truncate,
-                              styles.title,
-                              inTrash && styles.muted,
+                              styles.kindIcon,
+                              nested && styles.nestedIcon,
                             )}
                           >
-                            <MatchedText
-                              text={boardTitle(review.title)}
-                              queries={searchTerms}
+                            {branch?.children.length ? (
+                              <StackIcon xstyle={styles.boardGlyph} />
+                            ) : review.origin?.pullRequestNumber ? (
+                              <PullRequestStateIcon
+                                number={review.origin.pullRequestNumber}
+                                state={review.pullRequestState}
+                                xstyle={styles.boardGlyph}
+                              />
+                            ) : (
+                              <BoardIcon
+                                icon={boardIconKind(review.target)}
+                                xstyle={styles.boardGlyph}
+                              />
+                            )}
+                            {(
+                              branch
+                                ? showsChanged(branch, "", !isExpanded)
+                                : review.changed
+                            ) ? (
+                              <ChangedBadge />
+                            ) : null}
+                          </span>
+                          <HomeBoardTitle
+                            review={review}
+                            parent={Boolean(branch)}
+                            inTrash={inTrash}
+                            onOpen={() =>
+                              inTrash
+                                ? toggleRow(review.reviewId)
+                                : open(review)
+                            }
+                            queries={searchTerms}
+                          />
+                          <span {...stylex.props(styles.rowActions)}>
+                            {!inTrash &&
+                            onNewChildWhiteboard &&
+                            canAddChildWhiteboard(review) &&
+                            !unavailable(review) ? (
+                              <AddChildWhiteboard
+                                board={review}
+                                onCreate={onNewChildWhiteboard}
+                                onError={(message) =>
+                                  setChildErrors((previous) => ({
+                                    ...previous,
+                                    [review.reviewId]: message,
+                                  }))
+                                }
+                              />
+                            ) : null}
+                            <HomeRowMenu
+                              review={review}
+                              inTrash={inTrash}
+                              filters={appliedFilters}
+                              onFilter={(facet, key) =>
+                                setFilters((current) => ({
+                                  ...current,
+                                  [facet]: [
+                                    ...new Set([...current[facet], key]),
+                                  ],
+                                }))
+                              }
+                              onMarkRead={
+                                !inTrash && onMarkRead
+                                  ? () => markRead([review])
+                                  : undefined
+                              }
                             />
                           </span>
-                        </button>
-                        <span {...stylex.props(styles.metadata)}>
-                          {reviewMetadataPills(review, appliedFilters)
-                            .filter(
-                              (pill) => !inTrash || pill.facet !== "branches",
-                            )
-                            .map((pill) =>
-                              pill.facet === "pullRequest" ? (
-                                <PullRequestPill
-                                  key={pill.facet}
-                                  url={pill.key}
-                                  label={pill.label}
-                                  title={pill.title}
-                                  queries={searchTerms}
-                                />
-                              ) : (
-                                <button
-                                  key={pill.facet}
-                                  type="button"
-                                  aria-label={`Filter ${pill.facet === "branches" ? "branch" : "worktree"}: ${pill.label}`}
-                                  title={pill.label}
-                                  {...stylex.props(styles.metadataPill)}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setFilters((current) => ({
-                                      ...current,
-                                      [pill.facet]: [
-                                        ...new Set([
-                                          ...current[pill.facet],
-                                          pill.key,
-                                        ]),
-                                      ],
-                                    }));
-                                  }}
-                                >
-                                  {pill.facet === "branches" ? (
-                                    <>
-                                      <BranchIcon xstyle={iconStyles.inline} />
-                                      <MiddleTruncatedText
-                                        text={pill.label}
-                                        queries={searchTerms}
-                                      />
-                                    </>
-                                  ) : (
-                                    <>
-                                      <FolderIcon xstyle={iconStyles.inline} />
-                                      <span {...stylex.props(styles.ellipsis)}>
-                                        <MatchedText
-                                          text={pill.label}
-                                          queries={searchTerms}
-                                        />
-                                      </span>
-                                    </>
-                                  )}
-                                </button>
-                              ),
-                            )}
-                        </span>
-                        <RowTime review={review} now={now} inTrash={inTrash} />
-                      </div>
-                    ))}
+                          <RowTime
+                            review={review}
+                            now={now}
+                            inTrash={inTrash}
+                          />
+                          {parent &&
+                          isExpanded &&
+                          branch.children.length === 0 ? (
+                            <EmptyState
+                              message="No child whiteboards"
+                              xstyle={styles.emptyChildren}
+                            />
+                          ) : null}
+                          {childErrors[review.reviewId] ? (
+                            <p
+                              role="alert"
+                              {...stylex.props(
+                                textStyles.error,
+                                styles.rowError,
+                              )}
+                            >
+                              {childErrors[review.reviewId]}
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                 </section>
               );
             })}
@@ -1645,65 +1753,123 @@ function HostNotice({
   );
 }
 
-function PullRequestPill({
-  url,
-  label,
-  title,
+function HomeBoardTitle({
+  review,
+  parent,
+  inTrash,
+  onOpen,
   queries,
 }: {
-  url: string;
-  label: string;
-  title?: string;
+  review: ReviewApiSummary;
+  inTrash: boolean;
+  parent: boolean;
+  onOpen(): void;
   queries: string[];
 }) {
-  const tooltip = useTooltip<HTMLAnchorElement>(
-    title ? `${label} ${title}` : label,
-    { quick: true },
-  );
+  const tooltip = useTooltip(boardTitle(review.title), {
+    detail: unavailable(review)
+      ? hostStatus(review).label
+      : [review.project?.name, review.origin?.branch, review.repositoryPath]
+          .filter(Boolean)
+          .join(" · "),
+  });
 
   return (
-    <a
+    <button
       ref={tooltip}
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      {...stylex.props(styles.metadataPill)}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <PullRequestIcon xstyle={iconStyles.inline} />
-      {label}
-      {title && (
-        <span {...stylex.props(styles.ellipsis, styles.pullRequestTitle)}>
-          <MatchedText text={title} queries={queries} />
-        </span>
+      type="button"
+      aria-label={`${inTrash ? "Select" : "Open"} ${boardTitle(review.title)}`}
+      aria-disabled={unavailable(review) || undefined}
+      {...stylex.props(
+        focusStyles.ringInset,
+        buttonStyles.reset,
+        styles.rowOpen,
       )}
-    </a>
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+    >
+      <span
+        {...stylex.props(
+          textStyles.clamp2,
+          styles.title,
+          parent && styles.parentTitle,
+          inTrash && styles.muted,
+        )}
+      >
+        <MatchedText text={boardTitle(review.title)} queries={queries} />
+      </span>
+    </button>
   );
 }
 
-function MiddleTruncatedText({
-  text,
-  queries,
+function HomeRowMenu({
+  review,
+  inTrash,
+  filters,
+  onFilter,
+  onMarkRead,
 }: {
-  text: string;
-  queries: string[];
+  review: ReviewApiSummary;
+  inTrash: boolean;
+  filters: HomeFilters;
+  onFilter(facet: HomeFacet, key: string): void;
+  onMarkRead?(): void;
 }) {
-  // The prefix elides first so the branch keeps its last path component.
-  const split = text.includes("/")
-    ? text.lastIndexOf("/") + 1
-    : Math.ceil(text.length * 0.75);
+  const tooltip = useTooltip(`More actions for ${boardTitle(review.title)}`, {
+    detail: [review.project?.name, review.origin?.branch, review.repositoryPath]
+      .filter(Boolean)
+      .join(" · "),
+  });
+
+  const pills = reviewMetadataPills(review, filters).filter(
+    (pill) => !inTrash || pill.facet !== "branches",
+  );
+
+  const items = [
+    ...pills.map((pill) => ({
+      id: pill.facet,
+      label:
+        pill.facet === "pullRequest"
+          ? `Open pull request ${pill.label}`
+          : `Filter ${pill.facet === "branches" ? "branch" : "worktree"}: ${pill.label}`,
+    })),
+    ...(onMarkRead && isUnread(review)
+      ? [{ id: "read", label: "Mark as read" }]
+      : []),
+  ];
+
+  const menu = useCanvasMenu({
+    items,
+    onSelect: (id) => {
+      if (id === "read") return onMarkRead?.();
+      const pill = pills.find((item) => item.facet === id);
+
+      if (!pill) return;
+
+      if (pill.facet === "pullRequest")
+        window.open(pill.key, "_blank", "noopener,noreferrer");
+      else onFilter(pill.facet, pill.key);
+    },
+  });
+
+  if (!items.length) return null;
 
   return (
-    <span {...stylex.props(styles.middle)}>
-      <span {...stylex.props(styles.ellipsis)}>
-        <MatchedText text={text} queries={queries} to={split} />
-      </span>
-      <span {...stylex.props(styles.middleSuffix)}>
-        <bdi>
-          <MatchedText text={text} queries={queries} from={split} />
-        </bdi>
-      </span>
-    </span>
+    <IconButton
+      ref={tooltip}
+      size="small"
+      aria-label={`More actions for ${boardTitle(review.title)}`}
+      xstyle={boardControlStyles.reveal}
+      {...menu.triggerProps}
+      onClick={(event) => {
+        event.stopPropagation();
+        menu.triggerProps.onClick(event);
+      }}
+    >
+      <MoreIcon xstyle={iconStyles.inline} />
+    </IconButton>
   );
 }
 

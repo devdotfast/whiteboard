@@ -237,6 +237,7 @@ function Home({
       onRestore={
         restoreReview ? (review) => restoreReview(review.reviewId) : undefined
       }
+      onNewChildWhiteboard={host.createChildWhiteboard}
       remoteHosts={host.remoteHosts}
       onboarding={data.onboarding}
       onOpenSettings={host.openSettings}

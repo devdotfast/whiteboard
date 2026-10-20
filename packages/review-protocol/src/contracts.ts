@@ -1094,6 +1094,8 @@ export interface ReviewCanvasHomeHost {
   setupActions?: ReviewCanvasSetupActions;
   /** Makes an empty whiteboard and opens it. */
   createWhiteboard?(repositoryPath: string): Promise<void>;
+  /** Creates and opens a project whiteboard under a top-level board. */
+  createChildWhiteboard?(parentId: string): Promise<void>;
 }
 
 /** What the Welcome tab shows; a new snapshot on every change. */

@@ -1,7 +1,8 @@
+import { BoardDisclosure } from "@canvas/ui/board-disclosure";
 import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
 import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { CrumbSeparator } from "@canvas/ui/crumbs";
-import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
+import { EmptyState } from "@canvas/ui/empty-state";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { PlusIcon, SearchIcon, StackIcon } from "@canvas/ui/icons";
@@ -16,7 +17,7 @@ import {
   boardTitle,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { QueryClientProvider, useMutation } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import {
   type MouseEvent,
   type ReactElement,
@@ -28,23 +29,28 @@ import {
   useState,
 } from "react";
 
+import { AddChildWhiteboard } from "./add-child-whiteboard";
 import { createCanvasQueryClient } from "./canvas-query";
 import { ChangedBadge } from "./changed-badge";
 import { CommitChanges, CommitPicker } from "./commit-picker";
 import { countLabel } from "./format";
-import { reviewPreferenceKey } from "./host/review-client";
 import { LensProgress, LensRows } from "./lens-list";
-import { boardRowMarker, chevronMarker } from "./markers.stylex";
+import { boardRowMarker } from "./markers.stylex";
 import { type ReviewTocEntry, headingDepth } from "./review-document-headings";
 import { worktreeLabel } from "./review-home-model";
-import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
 import { fontSize, fontWeight, leading, radius, space } from "./scale.stylex";
 import { ThreadsSectionBody } from "./sidebar-threads";
 import { tokens } from "./tokens.stylex";
 import {
+  useExpandedParents,
+  useWhiteboardExpansion,
+} from "./whiteboard-expansion";
+import {
   RECENT_SHOWN,
   type WhiteboardBranch,
   boardFamily,
+  canAddChildWhiteboard,
+  canExpandWhiteboard,
   cappedTree,
   recentTree,
   showsChanged,
@@ -62,41 +68,6 @@ function newestFirst(boards: readonly ReviewApiSummary[]) {
   return [...boards].sort(
     (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt),
   );
-}
-
-const readExpanded = (key: string | undefined) =>
-  new Set(key ? (readReviewUiState<string[]>("reader", key) ?? []) : []);
-
-/** The parents the reader expanded in one project, remembered across
- * windows and relaunches. */
-function useExpandedParents(
-  projectId: string | undefined,
-): [ReadonlySet<string>, (parentId: string, expanded: boolean) => void] {
-  const key =
-    projectId && reviewPreferenceKey("whiteboards-expanded", projectId);
-
-  const [state, setState] = useState(() => ({ key, ids: readExpanded(key) }));
-  const ids = state.key === key ? state.ids : readExpanded(key);
-
-  const setExpanded = useCallback(
-    (parentId: string, expanded: boolean) =>
-      setState((previous) => {
-        const base = previous.key === key ? previous.ids : readExpanded(key);
-
-        if (base.has(parentId) === expanded) return { key, ids: base };
-        const next = new Set(base);
-
-        if (expanded) next.add(parentId);
-        else next.delete(parentId);
-
-        if (key) writeReviewUiState("reader", key, [...next]);
-
-        return { key, ids: next };
-      }),
-    [key],
-  );
-
-  return [ids, setExpanded];
 }
 
 /**
@@ -241,6 +212,7 @@ function BoardRow({
   onToggle?(): void;
   onOpen(reviewId: string, event: MouseEvent): void;
 }): ReactElement {
+  const [childError, setChildError] = useState("");
   const isCurrent = board.reviewId === current;
   const tooltip = useTooltip(boardTitle(board.title), { detail });
 
@@ -268,12 +240,6 @@ function BoardRow({
     return () => observer.disconnect();
   }, [titleElement, board.title]);
 
-  const addChild = useMutation({
-    mutationFn: async () => onNewChild?.(board.reviewId),
-  });
-
-  const addTooltip = useTooltip("Add child whiteboard");
-
   return (
     <>
       <div
@@ -288,27 +254,11 @@ function BoardRow({
           (isCurrent || holdsCurrent) && listRowStyles.current,
         )}
       >
-        {expanded === undefined ? (
-          <span {...stylex.props(styles.chevronSlot)} />
-        ) : (
-          <button
-            type="button"
-            aria-expanded={expanded}
-            aria-label={`${expanded ? "Collapse" : "Expand"} ${boardTitle(board.title)}`}
-            {...stylex.props(
-              chevronMarker,
-              focusStyles.ringInset,
-              buttonStyles.reset,
-              disclosureStyles.toggle,
-              styles.chevronSlot,
-              styles.chevron,
-              expanded && styles.chevronExpanded,
-            )}
-            onClick={onToggle}
-          >
-            <DisclosureChevron />
-          </button>
-        )}
+        <BoardDisclosure
+          title={boardTitle(board.title)}
+          expanded={expanded}
+          onToggle={onToggle}
+        />
         <button
           ref={titleTruncated ? tooltip : undefined}
           type="button"
@@ -379,24 +329,17 @@ function BoardRow({
             />
           ) : null}
         </button>
-        {onNewChild && !board.parentId && board.repositoryPath ? (
-          <IconButton
-            ref={addTooltip}
-            size="small"
-            aria-label={`Add child whiteboard to ${boardTitle(board.title)}`}
-            aria-busy={addChild.isPending}
-            xstyle={styles.rowAction}
-            onClick={() => {
-              if (!addChild.isPending) addChild.mutate();
-            }}
-          >
-            <PlusIcon xstyle={iconStyles.inline} />
-          </IconButton>
+        {onNewChild && canAddChildWhiteboard(board) ? (
+          <AddChildWhiteboard
+            board={board}
+            onCreate={onNewChild}
+            onError={setChildError}
+          />
         ) : null}
       </div>
-      {addChild.error ? (
+      {childError ? (
         <p role="alert" {...stylex.props(textStyles.error, styles.rowError)}>
-          {addChild.error.message}
+          {childError}
         </p>
       ) : null}
     </>
@@ -628,6 +571,7 @@ function FamilySectionBody({
         <BoardFamily
           key={family.board.reviewId}
           family={family}
+          projectId={project?.project?.id}
           onNewChild={onNewChildWhiteboard}
           current={reviewId}
           onOpen={open}
@@ -711,20 +655,30 @@ function NewWhiteboardButton({
  * children in order. */
 function BoardFamily({
   family,
+  projectId,
   current,
   onNewChild,
   onOpen,
 }: {
   family: WhiteboardBranch;
+  projectId?: string;
   current: string;
   onNewChild?(parentId: string): Promise<void>;
   onOpen(reviewId: string, event: MouseEvent): void;
 }): ReactElement {
-  const [expanded, setExpanded] = useState(family.children.length > 0);
+  const { isExpanded, setExpanded } = useWhiteboardExpansion();
+  const project = projectId ?? family.board.project?.id;
+
+  const expanded = isExpanded(
+    project,
+    family.board.reviewId,
+    family.children.length > 0,
+  );
 
   useEffect(() => {
-    if (current !== family.board.reviewId) setExpanded(true);
-  }, [current, family.board.reviewId]);
+    if (current !== family.board.reviewId)
+      setExpanded(project, family.board.reviewId, true);
+  }, [current, project, family.board.reviewId, setExpanded]);
 
   return (
     <ul aria-label="This board" {...stylex.props(styles.list)}>
@@ -733,7 +687,7 @@ function BoardFamily({
         onNewChild={onNewChild}
         current={current}
         expanded={expanded}
-        onToggle={() => setExpanded(!expanded)}
+        onToggle={() => setExpanded(project, family.board.reviewId, !expanded)}
         onOpen={onOpen}
       />
     </ul>
@@ -772,8 +726,7 @@ function BoardBranch({
             : undefined
         }
         expanded={
-          parent ||
-          (onNewChild && !branch.board.parentId && branch.board.repositoryPath)
+          canExpandWhiteboard(branch, Boolean(onNewChild))
             ? expanded
             : undefined
         }
@@ -790,9 +743,11 @@ function BoardBranch({
       ) : !parent &&
         expanded &&
         onNewChild &&
-        !branch.board.parentId &&
-        branch.board.repositoryPath ? (
-        <p {...stylex.props(styles.emptyChildren)}>No child whiteboards</p>
+        canAddChildWhiteboard(branch.board) ? (
+        <EmptyState
+          xstyle={styles.emptyChildren}
+          message="No child whiteboards"
+        />
       ) : null}
     </li>
   );
@@ -810,6 +765,7 @@ function FamilyChildren({
   onOpen,
 }: {
   family: WhiteboardBranch;
+  projectId?: string;
   current: string;
   onOpen(reviewId: string, event: MouseEvent): void;
 }): ReactElement {
@@ -916,7 +872,7 @@ function RecentBoards({
   onOpen(reviewId: string, event: MouseEvent): void;
 }): ReactElement | null {
   const [showAll, setShowAll] = useState(false);
-  const [expanded, setExpanded] = useExpandedParents("recent");
+  const { expanded, setExpanded } = useWhiteboardExpansion();
   const tree = recentTree(boards, current);
 
   if (!tree.length) return null;
@@ -932,12 +888,15 @@ function RecentBoards({
             branch={branch}
             onNewChild={onNewChild}
             current={current}
-            expanded={expanded.has(branch.board.reviewId)}
+            expanded={expanded(branch.board.project?.id).has(
+              branch.board.reviewId,
+            )}
             recent
             onToggle={() =>
               setExpanded(
+                branch.board.project?.id,
                 branch.board.reviewId,
-                !expanded.has(branch.board.reviewId),
+                !expanded(branch.board.project?.id).has(branch.board.reviewId),
               )
             }
             onOpen={onOpen}
@@ -1048,23 +1007,6 @@ const styles = stylex.create({
     display: "flex",
     width: "16px",
     height: "16px",
-  },
-  chevron: {
-    padding: 0,
-    borderRadius: radius.small,
-    opacity: {
-      default: 0,
-      [stylex.when.ancestor(":hover", boardRowMarker)]: 1,
-      [stylex.when.ancestor(":focus-within", boardRowMarker)]: 1,
-    },
-  },
-  chevronExpanded: { opacity: 1 },
-  rowAction: {
-    opacity: {
-      default: 0,
-      [stylex.when.ancestor(":hover", boardRowMarker)]: 1,
-      [stylex.when.ancestor(":focus-within", boardRowMarker)]: 1,
-    },
   },
   rowError: { margin: space.s8, fontSize: fontSize.small },
   emptyChildren: {

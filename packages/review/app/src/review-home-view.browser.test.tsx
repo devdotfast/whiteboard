@@ -12,6 +12,7 @@ import { testCanvasUi } from "./canvas-ui-test-utils";
 import { CanvasUiContext } from "./host/canvas-ui";
 import { createReviewFindHost } from "./review-find";
 import { ReviewHome } from "./review-home-view";
+import { ReviewSidebarSection, WhiteboardsList } from "./sidebar-sections";
 
 const now = Date.parse("2026-10-11T12:00:00Z");
 
@@ -144,9 +145,206 @@ describe("Home interactions", () => {
       : container;
 
     return [
-      ...parent.querySelectorAll("[data-home-row] button span[title]"),
-    ].map((el) => el.getAttribute("title"));
+      ...parent.querySelectorAll(
+        '[data-home-row] button[aria-label^="Open "], [data-home-row] button[aria-label^="Select "]',
+      ),
+    ].map((el) =>
+      el.getAttribute("aria-label")!.replace(/^(Open|Select) /, ""),
+    );
   }
+
+  it("keeps children in sidebar order under one date group and rolls changed state up only while collapsed", async () => {
+    const reviews = [
+      summary("Plan", {
+        ...read,
+        createdAt: "2026-09-01T00:00:00Z",
+        children: ["First", "Second"],
+      }),
+      summary("Second", { parentId: "Plan", changed: true }),
+      summary("First", { parentId: "Plan", ...read }),
+    ];
+
+    const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
+    await render(reviews, { onOpen });
+    expect(titles("Unread")).toEqual(["Plan"]);
+    expect(
+      container.querySelectorAll(
+        '[aria-label="Changed since you last viewed it"]',
+      ),
+    ).toHaveLength(1);
+    await click("Expand Plan");
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(titles("Unread")).toEqual(["Plan", "First", "Second"]);
+    expect(
+      container.querySelector(
+        '[data-home-row="Plan"] [aria-label="Changed since you last viewed it"]',
+      ),
+    ).toBeNull();
+    await click("Open First");
+    expect(onOpen).toHaveBeenCalledWith(reviews[2]);
+    await click("Collapse Plan");
+    expect(titles()).toEqual(["Plan"]);
+  });
+
+  it("shares expansion live with the sidebar and remembers it after remount", async () => {
+    const reviews = [
+      summary("Plan", { children: ["Child"] }),
+      summary("Child", { parentId: "Plan" }),
+    ];
+
+    await act(async () =>
+      root.render(
+        <CanvasUiContext.Provider value={host.ui}>
+          <ReviewHome reviews={reviews} onOpen={() => {}} />
+          <aside>
+            <WhiteboardsList
+              project={{ project: reviews[0].project!, boards: reviews }}
+              current=""
+              onOpen={() => {}}
+            />
+          </aside>
+        </CanvasUiContext.Provider>,
+      ),
+    );
+    const sidebar = container.querySelector("aside")!;
+    await act(async () =>
+      sidebar
+        .querySelector<HTMLButtonElement>('[aria-label="Expand Plan"]')!
+        .click(),
+    );
+    expect(titles()).toEqual(["Plan", "Child"]);
+    await click("Collapse Plan");
+    expect(sidebar.querySelector('[aria-label="Expand Plan"]')).not.toBeNull();
+    await click("Expand Plan");
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await render(reviews);
+    expect(titles()).toEqual(["Plan", "Child"]);
+  });
+
+  it("shares explicit expansion with both This board and Recent", async () => {
+    const reviews = [
+      summary("Plan", { ...read, children: ["Child"] }),
+      summary("Child", { ...read, parentId: "Plan" }),
+    ];
+
+    const project = { project: reviews[0].project!, boards: reviews };
+    const connection = { serverUrl: "http://review.test", token: "test" };
+    await act(async () =>
+      root.render(
+        <CanvasUiContext.Provider value={host.ui}>
+          <ReviewHome reviews={reviews} onOpen={() => {}} />
+          <aside data-testid="family">
+            <ReviewSidebarSection
+              section="family"
+              connection={connection}
+              project={project}
+              reviewId="Plan"
+              onOpenBoard={() => {}}
+            />
+          </aside>
+          <aside data-testid="recent">
+            <ReviewSidebarSection
+              section="recent"
+              connection={connection}
+              project={project}
+              recent={reviews}
+              reviewId="elsewhere"
+              onOpenBoard={() => {}}
+            />
+          </aside>
+        </CanvasUiContext.Provider>,
+      ),
+    );
+    const family = container.querySelector('[data-testid="family"]')!;
+    const recent = container.querySelector('[data-testid="recent"]')!;
+    await click("Expand Plan");
+    expect(family.querySelector('[aria-label="Collapse Plan"]')).not.toBeNull();
+    expect(recent.querySelector('[aria-label="Collapse Plan"]')).not.toBeNull();
+    await act(async () =>
+      recent
+        .querySelector<HTMLButtonElement>('[aria-label="Collapse Plan"]')!
+        .click(),
+    );
+    expect(titles()).toEqual(["Plan"]);
+    expect(family.querySelector('[aria-label="Expand Plan"]')).not.toBeNull();
+  });
+
+  it("explains empty families and keeps Trash flat", async () => {
+    const onNewChildWhiteboard = vi.fn<(parentId: string) => Promise<void>>();
+    await render([summary("Empty plan")], { onNewChildWhiteboard });
+    await click("Expand Empty plan");
+    expect(container.textContent).toContain("No child whiteboards");
+    await render(
+      [summary("Trashed plan", { trashedAt: "2026-10-10T00:00:00Z" })],
+      { view: "trash", onNewChildWhiteboard },
+    );
+    expect(
+      container.querySelector('[aria-label="Expand Trashed plan"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[aria-label="Add child whiteboard to Trashed plan"]',
+      ),
+    ).toBeNull();
+  });
+
+  it("searches a child with its parent context and does not select hidden siblings", async () => {
+    await render([
+      summary("Plan", { children: ["Needle", "Other"] }),
+      summary("Needle", { parentId: "Plan" }),
+      summary("Other", { parentId: "Plan" }),
+    ]);
+    await search("Needle");
+    expect(titles()).toEqual(["Plan", "Needle"]);
+    await key("Escape", {}, searchField());
+    // Escape discards the draft search; a committed query keeps the result family.
+    await search("Needle");
+    await key("Enter", {}, searchField());
+    await key("a", { metaKey: true });
+    expect(container.textContent).toContain("2 selected");
+    expect(container.textContent).not.toContain("Other");
+  });
+
+  it("keeps child creation focused while pending, prevents duplicates and retries an inline failure", async () => {
+    let fail!: (reason: Error) => void;
+
+    const onCreate = vi
+      .fn<(parentId: string) => Promise<void>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject;
+          }),
+      )
+      .mockResolvedValue(undefined);
+
+    await render([summary("Plan"), summary("Child", { parentId: "Plan" })], {
+      onNewChildWhiteboard: onCreate,
+    });
+    const add = button("Add child whiteboard to Plan");
+    await act(async () => {
+      add.focus();
+      add.click();
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    await act(async () => add.click());
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(add);
+    expect(add.disabled).toBe(false);
+    await act(async () => fail(new Error("Could not create this child")));
+    await vi.waitFor(() =>
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "Could not create this child",
+      ),
+    );
+    await act(async () => add.click());
+    await vi.waitFor(() => expect(onCreate).toHaveBeenCalledTimes(2));
+    expect(onCreate).toHaveBeenLastCalledWith("Plan");
+    expect(
+      container.querySelector('[aria-label="Add child whiteboard to Child"]'),
+    ).toBeNull();
+  });
 
   it("focuses title search through the native host Find command and releases the controller", async () => {
     const findHost = createReviewFindHost();
@@ -234,7 +432,7 @@ describe("Home interactions", () => {
     ]);
     expect(titles("Unread")).toEqual(["Board"]);
   });
-  it("adds exact filters from pills without opening the board, and edits the branch facet", async () => {
+  it("adds exact filters from the row menu without opening the board, and edits the branch facet", async () => {
     const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
     await render(
       [
@@ -247,13 +445,8 @@ describe("Home interactions", () => {
       ],
       { onOpen },
     );
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>(
-          '[aria-label="Filter branch: feature/exact"]',
-        )!
-        .click(),
-    );
+    await click("More actions for One");
+    await act(async () => host.select("branches"));
     expect(onOpen).not.toHaveBeenCalled();
     expect(titles()).toEqual(["One", "Three"]);
     expect(
@@ -265,13 +458,8 @@ describe("Home interactions", () => {
     );
     await click("feature/exact");
     expect(titles()).toEqual(["One", "Two", "Three"]);
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>(
-          '[aria-label="Filter worktree: main"]',
-        )!
-        .click(),
-    );
+    await click("More actions for One");
+    await act(async () => host.select("worktrees"));
     expect(titles()).toEqual(["One", "Two"]);
     expect(
       container.querySelector('[aria-label="Filter worktree: main"]'),
@@ -1008,11 +1196,7 @@ describe("Home interactions", () => {
       expect(row.hasAttribute("data-unavailable")).toBe(true);
       expect(row.textContent).toContain(words);
       expect(button("Open Remote").getAttribute("aria-disabled")).toBe("true");
-      expect(
-        button("Open Remote")
-          .querySelector("span[title]")!
-          .getAttribute("title"),
-      ).toBe(label);
+      expect(button("Open Remote").getAttribute("title")).toContain(label);
       await click("Open Remote");
       expect(onOpen).not.toHaveBeenCalled();
       await vi.waitFor(() =>

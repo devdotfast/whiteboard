@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { openChildWhiteboard } from "../../reviewChildWhiteboard.js";
+
 import { reviewBottomScrollPadding } from "../../reviewScrollPadding.js";
 import { $, addDisposableListener, getWindow, type Dimension } from "../../../../base/browser/dom.js";
 import { mainWindow } from "../../../../base/browser/window.js";
@@ -580,6 +582,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				},
 				install: this.installActions(),
 				setupActions: this.setupActions(),
+				createChildWhiteboard: (parentId) => openChildWhiteboard(this.apiCatalog, this.tabsService, parentId),
 				createWhiteboard: async (repositoryPath) => {
 					const reviewId = await this.apiCatalog.createReview(repositoryPath);
 					// Unnamed: the tab reads "Untitled" until a title is typed.

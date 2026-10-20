@@ -1,6 +1,8 @@
 import { type ReviewApiSummary, boardTitle } from "@dev.fast/review-protocol";
 import { fuzzyMatches } from "@review/fuzzy-match";
 
+import { type WhiteboardBranch, whiteboardTree } from "./whiteboard-tree";
+
 export type HomeSort = "updated" | "created" | "title" | "trash";
 
 export type HomeGroup = "unread" | "week" | "earlier";
@@ -419,4 +421,55 @@ export function toggleHomeWorktree(
     },
     catalog,
   );
+}
+
+/** Filter families without losing a matching child's parent or sibling order. */
+export function homeBoardTree(
+  boards: readonly ReviewApiSummary[],
+  filters: HomeFilters,
+  query: string,
+  sort: HomeSort,
+): WhiteboardBranch[] {
+  const queries = [...filters.searches, query].filter(Boolean);
+
+  const families = whiteboardTree(boards).flatMap((branch) => {
+    const children = branch.children.filter((child) =>
+      matchesHomeFilters(child, filters, query),
+    );
+
+    return matchesHomeFilters(branch.board, filters, query) || children.length
+      ? [{ board: branch.board, children }]
+      : [];
+  });
+
+  const representative = (branch: WhiteboardBranch) =>
+    sort === "title" || sort === "created"
+      ? branch.board
+      : sortHomeReviews([branch.board, ...branch.children], sort, queries)[0];
+
+  const ranks = new Map(
+    sortHomeReviews(families.map(representative), sort, queries).map(
+      (board, index) => [board.reviewId, index],
+    ),
+  );
+
+  return families.sort(
+    (left, right) =>
+      ranks.get(representative(left).reviewId)! -
+      ranks.get(representative(right).reviewId)!,
+  );
+}
+
+/** A family lives in one date group, using its latest member and unread state. */
+export function homeBranchGroup(
+  branch: WhiteboardBranch,
+  now: number,
+): HomeGroup {
+  const members = [branch.board, ...branch.children];
+
+  if (members.some(isUnread)) return "unread";
+
+  return members.some((member) => groupFor(member, now) === "week")
+    ? "week"
+    : "earlier";
 }

@@ -118,3 +118,20 @@ export function recentTree(
     )
     .sort((left, right) => viewed(right) - viewed(left));
 }
+
+/** Only local, active top-level boards can accept a project child. */
+export function canAddChildWhiteboard(board: ReviewApiSummary): boolean {
+  return Boolean(
+    board.repositoryPath && !board.parentId && !board.trashedAt && !board.host,
+  );
+}
+
+export function canExpandWhiteboard(
+  branch: WhiteboardBranch,
+  canCreate: boolean,
+): boolean {
+  return (
+    branch.children.length > 0 ||
+    (canCreate && canAddChildWhiteboard(branch.board))
+  );
+}
