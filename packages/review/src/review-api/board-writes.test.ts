@@ -508,7 +508,6 @@ describe("a board in Trash", () => {
 
     await trashThenDelete(reviewId);
     expect(store.askHistory.get("thread")).toBeUndefined();
-    expect(store.askHistory.viewedAt(["thread"]).size).toBe(0);
   });
 
   it("is the only place a board is deleted from", async () => {

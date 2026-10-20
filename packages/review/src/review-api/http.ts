@@ -1532,7 +1532,6 @@ export function createReviewApi(
 
       const ids = entries.map((entry) => entry.id);
       const edited = store.boardsChangedByThreads(ids);
-      const viewed = store.askHistory.viewedAt(ids);
 
       const boards = new Map<string, ReviewThreadBoard>();
 
@@ -1557,7 +1556,7 @@ export function createReviewApi(
         threads: entries.map((entry) => {
           const anchor = entry.anchor ?? { board: reviewId };
           const status = ask.threads.get(entry.id)?.status;
-          const viewedAt = viewed.get(entry.id);
+          const { viewedAt } = entry;
 
           // A turn finished since the reviewer last saw the thread.
           const unread =

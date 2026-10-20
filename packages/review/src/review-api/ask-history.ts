@@ -300,13 +300,13 @@ export class AskHistory {
   private entries(
     where: string,
     ...params: (string | null)[]
-  ): (AskHistoryEntry & { projectId?: string })[] {
+  ): (AskHistoryEntry & { projectId?: string; viewedAt?: string })[] {
     // A transcript can be long: SQLite finds its first question, and the
     // rest of it is left unread.
     return this.db
       .prepare(
         `SELECT id, anchor_board, anchor_block, ${THREAD_PROJECT_SQL} AS project_id, agent, session_id, version, head, cwd, selection, title,
-          created_at, updated_at, NULL AS entries, bypass, permissions,
+          created_at, updated_at, NULL AS entries, bypass, permissions, viewed_at,
           (SELECT json_extract(value,'$.text') FROM json_each(entries)
             WHERE json_extract(value,'$.kind')='user' LIMIT 1) AS question
         FROM ask_conversations WHERE ${where} ORDER BY updated_at DESC`,
@@ -327,7 +327,9 @@ export class AskHistory {
 
         if (question.trim()) entry.question = question;
 
-        return { ...entry, anchor };
+        const viewedAt = z.string().nullable().parse(row.viewed_at);
+
+        return { ...entry, anchor, ...(viewedAt !== null && { viewedAt }) };
       });
   }
 
@@ -346,22 +348,6 @@ export class AskHistory {
       .prepare("UPDATE ask_conversations SET viewed_at=? WHERE id=?")
       .run(at, id);
     this.changed();
-  }
-
-  /** When each of these threads was last viewed, where it ever was.
-   * Threads from before views were kept have none, and none is unread. */
-  viewedAt(ids: readonly string[]): Map<string, string> {
-    const select = this.db.prepare(
-      "SELECT viewed_at FROM ask_conversations WHERE id=? AND viewed_at IS NOT NULL",
-    );
-
-    return new Map(
-      ids.flatMap((id) => {
-        const row = select.get(id);
-
-        return row ? [[id, String(row.viewed_at)] as const] : [];
-      }),
-    );
   }
 
   /** Forgets the threads that started on a board gone for good. */

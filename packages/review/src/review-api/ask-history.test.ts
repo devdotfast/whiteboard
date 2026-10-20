@@ -812,10 +812,13 @@ it("keeps when a thread was seen through its saves, and seeing it moves nothing"
     ...record(reviewId, "older", "2026-09-01T09:00:00.000Z"),
     sessionId: "another-session",
   });
-  expect(history.viewedAt(["older", "newer"])).toEqual(
-    new Map([["older", "2026-09-01T11:00:00.000Z"]]),
-  );
+  expect(
+    history.list(reviewId).map(({ id, viewedAt }) => [id, viewedAt]),
+  ).toEqual([
+    ["newer", undefined],
+    ["older", "2026-09-01T11:00:00.000Z"],
+  ]);
 
   history.delete("older");
-  expect(history.viewedAt(["older"])).toEqual(new Map());
+  expect(history.list(reviewId).map(({ id }) => id)).toEqual(["newer"]);
 });
