@@ -1,5 +1,6 @@
 import { MarkdownString } from "../../base/common/htmlContent.js";
 import type { IDialogService } from "../../platform/dialogs/common/dialogs.js";
+import { boardTitle } from "../common/reviewProtocol.js";
 
 /** A whiteboard the delete confirmation names. */
 export interface ReviewDeleteListedBoard {
@@ -13,8 +14,6 @@ export interface ReviewDeleteNamed {
   linkedFrom: readonly ReviewDeleteListedBoard[];
   movesUp?: readonly ReviewDeleteListedBoard[];
 }
-
-const boardTitle = (title: string) => title.trim() || "Untitled whiteboard";
 
 /** One line per board, with its PR number. */
 const listed = (boards: readonly ReviewDeleteListedBoard[]) =>

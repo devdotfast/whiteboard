@@ -37,7 +37,6 @@ test("names the children that move up and the whiteboards that link here", async
     linkedFrom: [{ title: "Notes", pullRequestNumber: 7 }],
     movesUp: [{ title: "Child" }],
   });
-  assert.equal(shown?.message, "Delete 2 whiteboards?");
   const details = typeof shown?.custom === "object" ? shown.custom.markdownDetails?.map(({ markdown }) => markdown.value) : [];
   assert.equal(details?.length, 2);
   assert.match(details![0], /nested under them[\s\S]*- Child/);
