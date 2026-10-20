@@ -93,6 +93,7 @@ export function SettingsPage({
   );
 
   const [theme, setTheme] = useState(settings.theme);
+  const [colorThemes, setColorThemes] = useState(settings.colorThemes);
   const [keymap, setKeymap] = useState(settings.keymap);
   const [openFilesIn, setOpenFilesIn] = useState(settings.openFilesIn);
   const [documentWidth, setDocumentWidth] = useState(settings.documentWidth);
@@ -219,12 +220,31 @@ export function SettingsPage({
           <Section label="Editor">
             <Row label="Theme" description="How Whiteboard looks.">
               <ThemeSelect
-                themes={settings.colorThemes}
+                themes={colorThemes}
                 value={theme}
                 onChange={(id) =>
                   void run(() => settings.setTheme(id), setTheme)
                 }
               />
+            </Row>
+            <Row
+              label="Import a theme"
+              description="A VS Code theme extension (.vsix) or theme file (.json)."
+            >
+              <Button
+                onClick={() =>
+                  void run(
+                    () => settings.importColorTheme(),
+                    (imported) => {
+                      if (!imported) return;
+                      setColorThemes(imported.colorThemes);
+                      setTheme(imported.theme);
+                    },
+                  )
+                }
+              >
+                Choose file…
+              </Button>
             </Row>
             <Row
               label="Document width"

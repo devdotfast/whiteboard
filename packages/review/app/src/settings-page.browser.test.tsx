@@ -28,6 +28,7 @@ function settings(): ReviewCanvasSettingsContent {
       { id: "Tokyo Night", label: "Tokyo Night", kind: "dark" },
       { id: "Review Light", label: "Whiteboard Light", kind: "light" },
     ],
+    importColorTheme: unexpected,
     keymap: "none",
     setKeymap: async (choice) => choice,
     documentWidth: "standard",

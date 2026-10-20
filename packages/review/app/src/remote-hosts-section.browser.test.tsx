@@ -49,6 +49,7 @@ async function render(hosts: ReviewRemoteHostsSettings) {
     theme: "Review Dark",
     setTheme: reject,
     colorThemes: [],
+    importColorTheme: reject,
     keymap: "none",
     setKeymap: reject,
     documentWidth: "standard",

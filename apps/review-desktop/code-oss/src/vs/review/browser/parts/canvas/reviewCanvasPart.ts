@@ -43,6 +43,7 @@ import { EditorPaneSelectionChangeReason } from "../../../../workbench/common/ed
 import type { IEditorGroup } from "../../../../workbench/services/editor/common/editorGroupsService.js";
 import { IHostService } from "../../../../workbench/services/host/browser/host.js";
 import { IWorkbenchThemeService } from "../../../../workbench/services/themes/common/workbenchThemeService.js";
+import { importColorThemes } from "../../reviewThemeImport.js";
 import { isMacintosh } from "../../../../base/common/platform.js";
 import { ILifecycleService, ShutdownReason } from "../../../../workbench/services/lifecycle/common/lifecycle.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
@@ -70,6 +71,7 @@ import type {
 	ReviewCanvasNewWhiteboardRequest,
 	ReviewCanvasOnboarding,
 	ReviewCanvasSettingsContent,
+	ReviewColorTheme,
 	ReviewCanvasSetupActions,
 	ReviewCanvasWelcomeHost,
 	ReviewCliInstallStatus,
@@ -191,7 +193,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		@IReviewCanvasEditorTabsService
 		private readonly tabsService: IReviewCanvasEditorTabsService,
 		@IInstantiationService
-		reviewInstantiationService: IInstantiationService,
+		private readonly reviewInstantiationService: IInstantiationService,
 		@IHostService private readonly hostService: IHostService,
 		@IWorkbenchLayoutService
 		private readonly layoutService: IWorkbenchLayoutService,
@@ -961,14 +963,14 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						value: themeKind(picked.type),
 					});
 				}
-				await this.configurationService.updateValue("window.autoDetectColorScheme", false, ConfigurationTarget.USER);
-				await this.configurationService.updateValue("workbench.colorTheme", id, ConfigurationTarget.USER);
-				return this.configurationService.getValue<string>("workbench.colorTheme");
+				return this.applyColorTheme(id);
 			},
-			// Whiteboard's own themes first, then the rest by name.
-			colorThemes: (await this.reviewThemeService.getColorThemes())
-				.map((theme) => ({ id: theme.settingsId, label: theme.label, kind: themeKind(theme.type) }))
-				.sort((a, b) => Number(!a.label.startsWith("Whiteboard")) - Number(!b.label.startsWith("Whiteboard")) || a.label.localeCompare(b.label)),
+			colorThemes: await this.colorThemeOptions(),
+			importColorTheme: async () => {
+				const [imported] = (await this.reviewInstantiationService.invokeFunction(importColorThemes)) ?? [];
+				if (!imported) return undefined;
+				return { theme: await this.applyColorTheme(imported.settingsId), colorThemes: await this.colorThemeOptions() };
+			},
 			keymap: this.currentKeymap(),
 			setKeymap: async (choice) => {
 				this.reviewTelemetryService.capture("setting_changed", {
@@ -1057,6 +1059,19 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			importVsCodeSettings: () => void this.commandService.executeCommand("review.importUserConfig"),
 			uninstallApp: () => void this.commandService.executeCommand("review.uninstallApp"),
 		};
+	}
+
+	private async applyColorTheme(id: string): Promise<string> {
+		await this.configurationService.updateValue("window.autoDetectColorScheme", false, ConfigurationTarget.USER);
+		await this.configurationService.updateValue("workbench.colorTheme", id, ConfigurationTarget.USER);
+		return this.configurationService.getValue<string>("workbench.colorTheme");
+	}
+
+	/** Whiteboard's own themes first, then the rest by name. */
+	private async colorThemeOptions(): Promise<ReviewColorTheme[]> {
+		return (await this.reviewThemeService.getColorThemes())
+			.map((theme) => ({ id: theme.settingsId, label: theme.label, kind: themeKind(theme.type) }))
+			.sort((a, b) => Number(!a.label.startsWith("Whiteboard")) - Number(!b.label.startsWith("Whiteboard")) || a.label.localeCompare(b.label));
 	}
 
 	private currentKeymap(): ReviewKeymapChoice {
