@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -654,6 +656,37 @@ it("refuses to publish a link to a commit GitHub doesn't have", async () => {
   await expect(
     verifyShareRepository(repo, undefined, [unpushed]),
   ).rejects.toThrow("Push the reviewed commits to GitHub before sharing.");
+});
+
+it("says Git needs its own credentials when origin refuses them", async () => {
+  const { root, repo } = await fixture();
+
+  const server = createServer((_request, response) =>
+    response
+      .writeHead(401, { "WWW-Authenticate": 'Basic realm="GitHub"' })
+      .end(),
+  );
+
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  cleanup.push(() => new Promise((resolve) => server.close(() => resolve())));
+  const { port } = server.address() as AddressInfo;
+  vi.stubEnv("HOME", root);
+  execFileSync("git", [
+    "-C",
+    repo,
+    "remote",
+    "add",
+    "origin",
+    `http://127.0.0.1:${port}/org/repo.git`,
+  ]);
+
+  const head = execFileSync("git", ["-C", repo, "rev-parse", "HEAD"], {
+    encoding: "utf8",
+  }).trim();
+
+  await expect(verifyShareRepository(repo, undefined, [head])).rejects.toThrow(
+    "doesn't grant repository access",
+  );
 });
 
 it("repairs a missing checkout and removes owned workspaces before reimport", async () => {

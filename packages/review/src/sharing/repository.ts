@@ -53,6 +53,16 @@ function fetchError(stderr: string, publishing: boolean): ReviewInputError {
       409,
     );
 
+  if (
+    /could not read (?:username|password)|authentication failed|permission denied \(publickey|repository not found|returned error: 40[13]|\bSAML\b/i.test(
+      stderr,
+    )
+  )
+    return new ReviewInputError(
+      "Git couldn't access this GitHub repository. Your Whiteboard sign-in doesn't grant repository access, so set up Git credentials for it, then retry.",
+      409,
+    );
+
   return new ReviewInputError(
     "Could not fetch the GitHub repository. Check your connection and Git credentials for this repository, then retry.",
     409,
