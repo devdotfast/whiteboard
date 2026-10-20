@@ -32,7 +32,7 @@ import {
   dependencyCycle,
   orderSiblings,
 } from "./board-order.js";
-import { CheckoutGroups } from "./checkout-groups.js";
+import { CheckoutGroups, remoteGroup } from "./checkout-groups.js";
 import {
   type Lens,
   applyLensEdit,
@@ -1043,7 +1043,9 @@ export class ReviewStore {
   }
   /** Checkouts whose remote is cloneUrl, most recently used first. */
   checkoutsOf(cloneUrl: string): string[] {
-    const key = `remote:${cloneUrl.toLowerCase()}`;
+    const key = remoteGroup(cloneUrl)?.key;
+
+    if (!key) return [];
 
     const used = (repositoryId: string) =>
       String(

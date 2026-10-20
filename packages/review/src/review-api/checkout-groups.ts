@@ -104,26 +104,31 @@ function originUrlOf(commonDir: string): string | null | undefined {
     : null;
 }
 
-/** Clones of one repository share its origin's host and path, on any forge
- * and over any protocol; a checkout with no usable origin is its own. */
-function groupOf(commonDir: string, origin: string | null): RepositoryGroup {
+/** Undefined for a URL no forge parses. */
+export function remoteGroup(url: string): RepositoryGroup | undefined {
   // Azure DevOps: separate ssh host; org/project/repo paths.
-  const azure = origin ? azureRepositoryOf(origin) : undefined;
+  const azure = azureRepositoryOf(url);
 
   if (azure)
     return { key: `remote:dev.azure.com/${azure.toLowerCase()}`, label: azure };
 
-  const remote = origin ? parseGitRemote(origin) : null;
+  const remote = parseGitRemote(url);
 
   return remote
     ? {
         key: `remote:${remote.host}/${remote.slug.toLowerCase()}`,
         label: remote.slug,
       }
-    : {
-        key: `git:${commonDir}`,
-        label: path.basename(path.dirname(commonDir)),
-      };
+    : undefined;
+}
+
+function groupOf(commonDir: string, origin: string | null): RepositoryGroup {
+  return (
+    (origin && remoteGroup(origin)) || {
+      key: `git:${commonDir}`,
+      label: path.basename(path.dirname(commonDir)),
+    }
+  );
 }
 
 /** A checkout's repository group; undefined if it isn't a readable git

@@ -301,6 +301,9 @@ describe("a board's project", () => {
     expect(store.projectOfRepository(port)).toBe(project);
     expect(store.projectOfRepository(fork)).not.toBe(project);
     expect(store.checkoutProject(ssh)?.name).toBe("Team/Service");
+    expect(
+      store.checkoutsOf("https://gitlab.example.com/Team/Service.git").sort(),
+    ).toEqual([ssh, https, port].sort());
   });
 
   it("files Azure DevOps clones by organization, project and repository", () => {
