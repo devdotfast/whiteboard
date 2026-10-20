@@ -18,13 +18,25 @@ import type { Snapshot } from "@review/review-api/store";
 import { VersionCache } from "@review/review-api/version-cache";
 import type { NormalizedSoftwareModel } from "@review/software-map-model";
 import * as stylex from "@stylexjs/stylex";
-import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { agentColor } from "./agent-colors";
 import { markdownHasTitle } from "./agent-markdown";
 import { type ApiHeadingIds, apiHeadingIds } from "./api-document-headings";
 import { AuthoringActivityContext } from "./authoring-activity-context";
-import { scopeLive, scopePresence } from "./authoring-cursor";
+import {
+  type AuthoringCursor,
+  scopeLive,
+  scopePresence,
+} from "./authoring-cursor";
 import {
   BlockErrorBoundary,
   type StoredBlock,
@@ -308,11 +320,12 @@ export function ApiDocument({
  * writing; the courier sits down at the same moment. */
 const WRITING_MS = 3000;
 
-/** The top-level block the agent is editing, the one holding the courier,
- * while the document lease is live: writing while the courier keeps moving,
- * idle once he sits. */
-function useEditingRegion(
-  document: Block[],
+const ownBlock = (cursor: AuthoringCursor) => cursor.blockId;
+
+/** The agent's block while the document lease is live; `blockOf` maps the
+ * courier to a block. */
+export function useEditingBlock(
+  blockOf: (cursor: AuthoringCursor) => string | undefined = ownBlock,
 ): { id: string; writing: boolean; slot?: number } | null {
   const cursor = useContext(AuthoringCursorContext);
   const activity = useContext(AuthoringActivityContext);
@@ -327,15 +340,10 @@ function useEditingRegion(
     return () => clearTimeout(timer);
   }, [seq]);
 
-  const id = useMemo(() => {
-    if (!cursor) return undefined;
-
-    return document.find((top) =>
-      elements([top]).some(
-        (node) => node.id === cursor.blockId || node.id === cursor.targetId,
-      ),
-    )?.id;
-  }, [document, cursor]);
+  const id = useMemo(
+    () => (cursor ? blockOf(cursor) : undefined),
+    [cursor, blockOf],
+  );
 
   if (!live || !cursor || id === undefined) return null;
 
@@ -346,34 +354,18 @@ function useEditingRegion(
   };
 }
 
-/** The block the agent is writing in, for the board editor, where each
- * block is its own element: writing while the courier moves, idle once he
- * sits, and null without a live document lease. */
-export function useEditingBlock(): {
-  id: string;
-  writing: boolean;
-  slot?: number;
-} | null {
-  const cursor = useContext(AuthoringCursorContext);
-  const activity = useContext(AuthoringActivityContext);
-  const live = scopeLive(activity, "document");
-  const [quietSeq, setQuietSeq] = useState<number>();
-  const seq = cursor?.seq;
+function useEditingRegion(document: Block[]) {
+  const topOf = useCallback(
+    (cursor: AuthoringCursor) =>
+      document.find((top) =>
+        elements([top]).some(
+          (node) => node.id === cursor.blockId || node.id === cursor.targetId,
+        ),
+      )?.id,
+    [document],
+  );
 
-  useEffect(() => {
-    if (seq === undefined) return;
-    const timer = setTimeout(() => setQuietSeq(seq), WRITING_MS);
-
-    return () => clearTimeout(timer);
-  }, [seq]);
-
-  if (!live || !cursor) return null;
-
-  return {
-    id: cursor.blockId,
-    writing: quietSeq !== cursor.seq,
-    slot: scopePresence(activity, "document")?.slot,
-  };
+  return useEditingBlock(topOf);
 }
 
 /** Follows a `#fragment` link to one of the document's headings, which can sit
