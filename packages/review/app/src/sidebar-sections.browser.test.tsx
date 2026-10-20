@@ -69,6 +69,7 @@ const mount = async (initial: ReviewSidebarSectionProps) => {
     act(async () => container.querySelector<HTMLElement>(selector)!.click());
 
   return {
+    container,
     rows,
     click,
     update: (next: ReviewSidebarSectionProps) =>
@@ -76,6 +77,53 @@ const mount = async (initial: ReviewSidebarSectionProps) => {
     dispose: () => act(async () => handle!.dispose()),
   };
 };
+
+it("only offers a board title tooltip while its title is truncated", async () => {
+  const title = "A whiteboard about making uncertain decisions together";
+  const tooltips = new Map<HTMLElement, string>();
+
+  const sidebar = (title: string) =>
+    props({
+      section: "recent",
+      project: {
+        project: { id: "tooltip", name: "Tooltip" },
+        boards: [board({ title, viewedAt: day(1) })],
+      },
+      setupTooltip(target, text) {
+        tooltips.set(target, text);
+
+        return { dispose: () => tooltips.delete(target) };
+      },
+    });
+
+  const view = await mount(sidebar(title));
+
+  const button = view.container.querySelector<HTMLButtonElement>("li button")!;
+
+  const resize = (width: number) =>
+    act(async () => {
+      view.container.style.width = `${width}px`;
+      await new Promise(requestAnimationFrame);
+      await new Promise(requestAnimationFrame);
+    });
+
+  try {
+    await resize(800);
+    await vi.waitFor(() => expect(tooltips.has(button)).toBe(false));
+    await resize(180);
+    await vi.waitFor(() => expect(tooltips.get(button)).toBe(title));
+    await resize(800);
+    await vi.waitFor(() => expect(tooltips.has(button)).toBe(false));
+    await resize(180);
+    await vi.waitFor(() => expect(tooltips.get(button)).toBe(title));
+    await view.update(sidebar("Short title"));
+    await vi.waitFor(() => expect(tooltips.has(button)).toBe(false));
+  } finally {
+    await view.dispose();
+  }
+
+  expect(tooltips.size).toBe(0);
+});
 
 it("shows the open board's family with its place, the boards opened last, and a flat search", async () => {
   const project = {

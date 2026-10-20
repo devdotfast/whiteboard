@@ -244,13 +244,35 @@ function BoardRow({
   const isCurrent = board.reviewId === current;
   const tooltip = useTooltip(boardTitle(board.title), { detail });
 
+  const [titleElement, setTitleElement] = useState<HTMLSpanElement | null>(
+    null,
+  );
+
+  const [titleTruncated, setTitleTruncated] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!titleElement) return;
+
+    const measure = () =>
+      setTitleTruncated(
+        titleElement.scrollWidth > titleElement.clientWidth ||
+          titleElement.scrollHeight > titleElement.clientHeight,
+      );
+
+    measure();
+
+    const observer = new ResizeObserver(measure);
+
+    observer.observe(titleElement);
+
+    return () => observer.disconnect();
+  }, [titleElement, board.title]);
+
   const addChild = useMutation({
     mutationFn: async () => onNewChild?.(board.reviewId),
   });
 
-  const addTooltip = useTooltip(
-    `Add child whiteboard to ${boardTitle(board.title)}`,
-  );
+  const addTooltip = useTooltip("Add child whiteboard");
 
   return (
     <>
@@ -288,7 +310,7 @@ function BoardRow({
           </button>
         )}
         <button
-          ref={tooltip}
+          ref={titleTruncated ? tooltip : undefined}
           type="button"
           aria-current={isCurrent ? "page" : undefined}
           {...stylex.props(
@@ -332,6 +354,7 @@ function BoardRow({
                     styles.pathLeaf,
                     isCurrent && styles.titleCurrent,
                   )}
+                  ref={setTitleElement}
                 >
                   {boardTitle(board.title)}
                 </span>
@@ -343,6 +366,7 @@ function BoardRow({
                   styles.title,
                   isCurrent && styles.titleCurrent,
                 )}
+                ref={setTitleElement}
               >
                 {boardTitle(board.title)}
               </span>
