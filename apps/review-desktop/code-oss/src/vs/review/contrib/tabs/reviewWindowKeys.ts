@@ -60,13 +60,21 @@ KeybindingsRegistry.registerKeybindingRule({
 	weight: above,
 });
 
-// ⌘\ splits nothing: a window shows one board at a time.
+// One board per window: no ⌘\ split, no Open Nth Editor.
 KeybindingsRegistry.registerCommandAndKeybindingRule({
 	id: 'review.keepOneBoard',
 	primary: KeyMod.CtrlCmd | KeyCode.Backslash,
 	weight: above,
 	handler: () => undefined,
 });
+for (const digit of [KeyCode.Digit1, KeyCode.Digit2, KeyCode.Digit3, KeyCode.Digit4, KeyCode.Digit5, KeyCode.Digit6, KeyCode.Digit7, KeyCode.Digit8, KeyCode.Digit9]) {
+	KeybindingsRegistry.registerKeybindingRule({
+		id: 'review.keepOneBoard',
+		primary: KeyMod.Alt | digit,
+		mac: { primary: KeyMod.WinCtrl | digit },
+		weight: above,
+	});
+}
 
 // ⌥⌘B puts the right column away or brings it back, everywhere, over
 // upstream's secondary side bar toggle: Review has no secondary side bar.

@@ -634,7 +634,37 @@ function registerOpenEditorAtIndexCommands(): void {
 		handler: openEditorAtIndex
 	});
 
-	// Whiteboard has no tab strip, so no shortcut goes to the Nth tab.
+	// Keybindings to focus a specific index in the tab folder if tabs are enabled
+	for (let i = 0; i < 9; i++) {
+		const editorIndex = i;
+		const visibleIndex = i + 1;
+
+		KeybindingsRegistry.registerCommandAndKeybindingRule({
+			id: OPEN_EDITOR_AT_INDEX_COMMAND_ID + visibleIndex,
+			weight: KeybindingWeight.WorkbenchContrib,
+			when: undefined,
+			primary: KeyMod.Alt | toKeyCode(visibleIndex),
+			mac: { primary: KeyMod.WinCtrl | toKeyCode(visibleIndex) },
+			handler: accessor => openEditorAtIndex(accessor, editorIndex)
+		});
+	}
+
+	function toKeyCode(index: number): KeyCode {
+		switch (index) {
+			case 0: return KeyCode.Digit0;
+			case 1: return KeyCode.Digit1;
+			case 2: return KeyCode.Digit2;
+			case 3: return KeyCode.Digit3;
+			case 4: return KeyCode.Digit4;
+			case 5: return KeyCode.Digit5;
+			case 6: return KeyCode.Digit6;
+			case 7: return KeyCode.Digit7;
+			case 8: return KeyCode.Digit8;
+			case 9: return KeyCode.Digit9;
+		}
+
+		throw new Error('invalid index');
+	}
 }
 
 function registerFocusEditorGroupAtIndexCommands(): void {

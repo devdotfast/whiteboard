@@ -16,6 +16,7 @@ import { USLayoutResolvedKeybinding } from '../../../platform/keybinding/common/
 import { REVIEW_BOARD_ACTIVE, REVIEW_HOME_ACTIVE } from './reviewWindowKeys.js';
 
 const ctrl = OS === OperatingSystem.Macintosh ? KeyMod.WinCtrl : KeyMod.CtrlCmd;
+const tab = OS === OperatingSystem.Macintosh ? KeyMod.WinCtrl : KeyMod.Alt;
 
 // Upstream's bindings on the same chords, registered last so they would win
 // any tie on weight.
@@ -26,6 +27,8 @@ for (const [id, primary] of [
 	['workbench.action.quickOpenPreviousRecentlyUsedEditorInGroup', ctrl | KeyCode.Tab],
 	['workbench.action.quickOpenLeastRecentlyUsedEditorInGroup', ctrl | KeyMod.Shift | KeyCode.Tab],
 	['workbench.action.toggleAuxiliaryBar', KeyMod.CtrlCmd | KeyMod.Alt | KeyCode.KeyB],
+	['workbench.action.openEditorAtIndex1', tab | KeyCode.Digit1],
+	['workbench.action.openEditorAtIndex9', tab | KeyCode.Digit9],
 ] as const) {
 	KeybindingsRegistry.registerKeybindingRule({ id, weight: KeybindingWeight.WorkbenchContrib, primary });
 }
@@ -67,4 +70,10 @@ test('⌥⌘B toggles the Ask column, never the secondary side bar', () => {
 	assert.equal(commandFor(chord, { [REVIEW_BOARD_ACTIVE]: true }), 'review.toggleAskColumn');
 	assert.equal(commandFor(chord, { [REVIEW_HOME_ACTIVE]: true }), 'review.toggleAskColumn');
 	assert.equal(commandFor(chord), 'review.toggleAskColumn');
+});
+
+test('⌥1–⌥9 (⌃1–⌃9 on macOS) go to no tab: the window has no tab strip', () => {
+	assert.equal(commandFor(tab | KeyCode.Digit1), 'review.keepOneBoard');
+	assert.equal(commandFor(tab | KeyCode.Digit9), 'review.keepOneBoard');
+	assert.equal(commandFor(tab | KeyCode.Digit1, { [REVIEW_BOARD_ACTIVE]: true }), 'review.keepOneBoard');
 });
