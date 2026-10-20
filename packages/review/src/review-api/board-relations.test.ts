@@ -631,3 +631,36 @@ it("won't name a board in Trash as a parent or a dependency", async () => {
   expect(store.place(step).parent).toBeUndefined();
   expect(store.relations(step).dependsOn).toEqual([]);
 });
+
+it("keeps an untouched board whose only child is in Trash: Delete… would move the child up", async () => {
+  const { id: repositoryId } = store.registerRepository(
+    path.join(directory, "repo"),
+  );
+
+  const { reviewId: plan } = await store.execute(
+    {
+      operation: {
+        type: "create",
+        title: "",
+        target: { kind: "project", repositoryId },
+      },
+    },
+    undefined,
+    { kind: "person" },
+  );
+
+  const step = await board("Step");
+
+  await setParent(step, plan);
+  await store.execute({
+    operation: { type: "lifecycle", state: "trash", reviewId: step },
+  });
+
+  expect(await store.discard(plan)).toEqual({ deleted: false });
+  expect(store.has(plan)).toBe(true);
+
+  await store.execute({
+    operation: { type: "lifecycle", state: "active", reviewId: step },
+  });
+  expect(store.relations(step).parentId).toBe(plan);
+});

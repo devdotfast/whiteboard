@@ -2237,7 +2237,7 @@ export class ReviewStore {
         this.activity.isWorking(reviewId) ||
         snapshot.title !== "" ||
         snapshot.document.length ||
-        this.relations(reviewId).children.length
+        this.relationGraph(true).children.get(reviewId)?.length
       )
         return { deleted: false };
 
