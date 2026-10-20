@@ -78,7 +78,6 @@ import {
   captureReviewUiEvent,
   createJsonReviewReporting,
 } from "./json-review-reporting";
-import { removeLegacyTutorial } from "./legacy-tutorial-cleanup";
 import { createReviewGateway } from "./review-gateway";
 import { reviewLifecycleTelemetry } from "./review-lifecycle-telemetry";
 import { ReviewOpenWatchdog } from "./review-open-watchdog";
@@ -493,10 +492,6 @@ export function createGlobalReviewServer(
     },
     listen: async () => {
       await migrateDiffrConfig();
-      await removeLegacyTutorial({
-        store: reviewStore,
-        data: input.reviewData,
-      });
       boundPort = await listen(httpServer, input.port);
       discovery.url = urlForBoundPort();
 

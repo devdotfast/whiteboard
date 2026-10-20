@@ -1329,26 +1329,6 @@ export class ReviewStore {
     }
   }
 
-  /** Deletes the tutorial earlier versions shipped. Like any board, each
-   * goes to Trash first, then is deleted from there. */
-  async removeLegacyTutorials(): Promise<void> {
-    const tutorials = this.db
-      .prepare(
-        `SELECT reviews.id FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version WHERE json_extract(versions.snapshot,'$.origin.tutorial') = 1`,
-      )
-      .all()
-      .map((row) => String(row.id));
-
-    for (const reviewId of tutorials) {
-      if (!this.trashTime(reviewId))
-        await this.execute({
-          operation: { type: "lifecycle", reviewId, state: "trash" },
-        });
-
-      await this.execute({ operation: { type: "delete", reviewId } });
-    }
-  }
-
   list(): ReviewApiSummary[] {
     return this.summaries();
   }
@@ -1473,8 +1453,6 @@ export class ReviewStore {
         SELECT DISTINCT review_id, date(json_extract(snapshot, '$.createdAt')) AS utc_date
         FROM versions
         WHERE (version = 0 OR json_type(snapshot, '$.lastEdit') = 'object')
-          AND json_extract(snapshot, '$.kind') IS NOT 'scratchpad'
-          AND json_extract(snapshot, '$.origin.tutorial') IS NOT 1
           AND julianday(json_extract(snapshot, '$.createdAt')) BETWEEN julianday(?) AND julianday(?)
         LIMIT 2
       )`)
