@@ -52,6 +52,8 @@ export const reviewConfigurationDefaults = {
 	'telemetry.enableCrashReporter': false,
 	'telemetry.editStats.enabled': false,
 	'security.workspace.trust.enabled': false,
+	'js/ts.experimental.useTsgo': true,
+	'typescript.experimental.useTsgo': true,
 	'workbench.enableExperiments': false,
 	'workbench.commandPalette.experimental.enableNaturalLanguageSearch': false,
 	'workbench.settings.enableNaturalLanguageSearch': false,

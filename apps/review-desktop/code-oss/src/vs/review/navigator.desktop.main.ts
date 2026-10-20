@@ -165,6 +165,8 @@ Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerDefaultCon
 		'workbench.colorTheme': reviewConfigurationDefaults['workbench.colorTheme'],
 		'workbench.preferredDarkColorTheme': reviewConfigurationDefaults['workbench.preferredDarkColorTheme'],
 		'workbench.preferredLightColorTheme': reviewConfigurationDefaults['workbench.preferredLightColorTheme'],
+		'js/ts.experimental.useTsgo': reviewConfigurationDefaults['js/ts.experimental.useTsgo'],
+		'typescript.experimental.useTsgo': reviewConfigurationDefaults['typescript.experimental.useTsgo'],
 	},
 }]);
 
