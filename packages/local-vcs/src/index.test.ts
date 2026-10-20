@@ -27,7 +27,6 @@ import {
   parseJjDiffSummary,
   readFileAtCommit,
   resolveRepoContext,
-  resolveRepoContextSync,
   setLocalVcsCommandObserver,
   splitGitPatchFiles,
 } from ".";
@@ -193,6 +192,18 @@ describe("local vcs", () => {
 
     expect(detectLocalVcsSync(rootPath)).toMatchObject({ kind: "git" });
     expect(listTrackedFilesSync({ rootPath })).toEqual(["src/app.ts"]);
+
+    const vcs = (await detectLocalVcs(rootPath))!;
+    await expect(vcs.listTrackedFiles()).resolves.toEqual(["src/app.ts"]);
+    await expect(vcs.readFileAtRef("HEAD", "src/app.ts")).resolves.toBe(
+      "export const app = 1;\n",
+    );
+    await expect(
+      vcs.readFileAtRef("HEAD", "src/missing.ts"),
+    ).resolves.toBeNull();
+    await expect(
+      vcs.readFileAtRef("no-such-ref", "src/app.ts"),
+    ).resolves.toBeNull();
   });
 
   it("limits git diffs to requested paths", async () => {
@@ -773,12 +784,6 @@ describe("local vcs", () => {
     );
 
     await expect(resolveRepoContext(rootPath)).resolves.toEqual({
-      commonDir: innerGitDir,
-      originUrl: "https://github.com/Fix-Fast/dev.git",
-      githubSlug: "Fix-Fast/dev",
-    });
-
-    expect(resolveRepoContextSync(rootPath)).toEqual({
       commonDir: innerGitDir,
       originUrl: "https://github.com/Fix-Fast/dev.git",
       githubSlug: "Fix-Fast/dev",

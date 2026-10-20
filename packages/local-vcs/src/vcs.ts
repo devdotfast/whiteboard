@@ -301,42 +301,6 @@ export async function resolveRepoContext(
   return context;
 }
 
-export function resolveRepoContextSync(rootPath: string): RepoContext | null {
-  const key = path.resolve(rootPath);
-
-  const commonDir = gitCommonDirSync(key);
-
-  if (!commonDir) return null;
-
-  const originUrl =
-    commandOutputSync("git", [
-      "--git-dir",
-      commonDir,
-      "config",
-      "--get",
-      "remote.origin.url",
-    ]) || null;
-
-  const resolvedOriginUrl =
-    commandOutputSync("git", [
-      "--git-dir",
-      commonDir,
-      "remote",
-      "get-url",
-      "origin",
-    ]) || null;
-
-  const context = {
-    commonDir,
-    originUrl,
-    githubSlug:
-      (resolvedOriginUrl ? parseGitRemoteSlug(resolvedOriginUrl) : null) ??
-      (originUrl ? parseGitRemoteSlug(originUrl) : null),
-  };
-
-  return context;
-}
-
 /** git argv for the object store: a jj workspace reads through its backing store. */
 export async function objectStoreArgs(input: {
   rootPath: string;
@@ -476,18 +440,18 @@ function createLocalVcs(kind: LocalVcsKind, rootPath: string): LocalVcs {
         kind,
       }),
     listTrackedFiles: (revision) =>
-      Promise.resolve(
-        listTrackedFilesForKind({ rootPath, ref: revision, kind }),
-      ),
-    readFileAtRef: (ref, relativePath) =>
-      Promise.resolve(
-        readFileAtRevisionForKind({
-          rootPath,
-          ref,
-          relativePath,
-          kind,
-        })?.source ?? null,
-      ),
+      listTrackedFilesOf({ rootPath, kind }, revision),
+    readFileAtRef: async (ref, relativePath) => {
+      const commit = await resolveRevisionCommitByPreference(
+        rootPath,
+        ref,
+        kind,
+      );
+
+      return commit
+        ? readFileAtCommit({ rootPath, kind, commit, relativePath })
+        : null;
+    },
     diff: (input) =>
       diffForKind({
         rootPath,
@@ -686,8 +650,13 @@ export async function listTrackedFiles(input: {
 }): Promise<string[]> {
   const vcs = await detectLocalVcs(input.rootPath);
 
-  if (!vcs) return [];
+  return vcs ? listTrackedFilesOf(vcs, input.ref) : [];
+}
 
+async function listTrackedFilesOf(
+  vcs: { rootPath: string; kind: LocalVcsKind },
+  ref?: string,
+): Promise<string[]> {
   const run = (command: VcsTool, args: readonly VcsArg[]) =>
     commandOutput(command, args, { cwd: vcs.rootPath }).catch(() => null);
 
@@ -700,7 +669,7 @@ export async function listTrackedFiles(input: {
       "--ignore-working-copy",
     ];
 
-    if (input.ref) args.push("-r", { rev: input.ref });
+    if (ref) args.push("-r", { rev: ref });
     const output = await run("jj", args);
 
     if (output !== null) return splitLines(output);
@@ -721,16 +690,8 @@ export async function listTrackedFiles(input: {
 
   const output = await run(
     "git",
-    input.ref
-      ? [
-          "-C",
-          vcs.rootPath,
-          "ls-tree",
-          "-r",
-          "-z",
-          "--name-only",
-          { rev: input.ref },
-        ]
+    ref
+      ? ["-C", vcs.rootPath, "ls-tree", "-r", "-z", "--name-only", { rev: ref }]
       : ["-C", vcs.rootPath, "ls-files", "-z"],
   );
 
@@ -930,20 +891,6 @@ async function jjCommitIsConflicted(
   known.set(commit, probe);
 
   return probe;
-}
-
-function readFileAtRevisionForKind(input: {
-  rootPath: string;
-  ref: string;
-  relativePath: string;
-  kind: LocalVcsKind;
-}): { commit: string; source: string } | null {
-  return input.kind === "jj"
-    ? (readJjFileAtRevisionSync(input) ??
-        (canUseGitFallbackSync(input.rootPath, input.kind)
-          ? readGitFileAtRevisionSync(input)
-          : null))
-    : (readGitFileAtRevisionSync(input) ?? readJjFileAtRevisionSync(input));
 }
 
 export async function diff(input: {
@@ -1355,8 +1302,8 @@ async function diffForKind(input: {
   literalPaths?: boolean;
 }): Promise<string> {
   if (input.kind === "jj") {
-    return readJjDiff(input).catch((cause: unknown) => {
-      if (!canUseGitFallbackSync(input.rootPath, input.kind)) throw cause;
+    return readJjDiff(input).catch(async (cause: unknown) => {
+      if (!(await canUseGitFallback(input.rootPath, input.kind))) throw cause;
 
       return readGitDiff(input);
     });
@@ -1378,7 +1325,7 @@ async function diffFileSummariesForKind(input: {
   let summaries: LocalVcsDiffFileSummary[];
 
   if (input.kind === "jj") {
-    if (canUseGitFallbackSync(input.rootPath, input.kind)) {
+    if (await canUseGitFallback(input.rootPath, input.kind)) {
       try {
         summaries = await readGitDiffFileSummaries(unfilteredInput);
 
@@ -1427,8 +1374,8 @@ async function diffNameStatusForKind(input: {
   kind: LocalVcsKind;
 }): Promise<DiffNameStatus> {
   if (input.kind === "jj") {
-    return readJjDiffNameStatus(input).catch((cause: unknown) => {
-      if (!canUseGitFallbackSync(input.rootPath, input.kind)) throw cause;
+    return readJjDiffNameStatus(input).catch(async (cause: unknown) => {
+      if (!(await canUseGitFallback(input.rootPath, input.kind))) throw cause;
 
       return readGitDiffNameStatus(input);
     });
@@ -1682,7 +1629,7 @@ async function resolveRevisionCommitByPreference(
 
   return (
     (await primary(rootPath, revision).catch(() => null)) ??
-    (canUseGitFallbackSync(rootPath, preferred)
+    ((await canUseGitFallback(rootPath, preferred))
       ? await secondary(rootPath, revision).catch(() => null)
       : null)
   );
@@ -1701,7 +1648,7 @@ async function mergeBaseByPreference(
 
   return (
     (await primary(rootPath, baseRef, headRef).catch(() => null)) ??
-    (canUseGitFallbackSync(rootPath, preferred)
+    ((await canUseGitFallback(rootPath, preferred))
       ? await secondary(rootPath, baseRef, headRef).catch(() => null)
       : null)
   );
@@ -1712,19 +1659,6 @@ async function resolveGitRevisionCommit(
   revision: string,
 ): Promise<string> {
   return commandOutput("git", [
-    "-C",
-    rootPath,
-    "rev-parse",
-    "--verify",
-    { rev: `${revision}^{commit}` },
-  ]);
-}
-
-function resolveGitRevisionCommitSync(
-  rootPath: string,
-  revision: string,
-): string | null {
-  return commandOutputSync("git", [
     "-C",
     rootPath,
     "rev-parse",
@@ -1754,29 +1688,6 @@ async function resolveJjRevisionCommit(
   );
 
   return oneResolvedCommit(output, revision);
-}
-
-function resolveJjRevisionCommitSync(
-  rootPath: string,
-  revision: string,
-): string | null {
-  const output = commandOutputSync(
-    "jj",
-    [
-      "-R",
-      rootPath,
-      "log",
-      "--no-graph",
-      "-r",
-      { rev: revision },
-      "-T",
-      'commit_id ++ "\\n"',
-      "--ignore-working-copy",
-    ],
-    { cwd: rootPath },
-  );
-
-  return output ? oneResolvedCommit(output, revision) : null;
 }
 
 function oneResolvedCommit(output: string, revision: string): string {
@@ -1825,52 +1736,6 @@ async function resolveJjMergeBase(
   );
 
   return splitLines(output)[0] ?? null;
-}
-
-function readGitFileAtRevisionSync(input: {
-  rootPath: string;
-  ref: string;
-  relativePath: string;
-}): { commit: string; source: string } | null {
-  const commit = resolveGitRevisionCommitSync(input.rootPath, input.ref);
-
-  if (!commit) return null;
-
-  const source = commandOutputSync(
-    "git",
-    ["-C", input.rootPath, "show", { rev: `${commit}:${input.relativePath}` }],
-    { maxBuffer: 10 * 1024 * 1024, trim: false },
-  );
-
-  return source === null ? null : { commit, source };
-}
-
-function readJjFileAtRevisionSync(input: {
-  rootPath: string;
-  ref: string;
-  relativePath: string;
-}): { commit: string; source: string } | null {
-  const commit = resolveJjRevisionCommitSync(input.rootPath, input.ref);
-
-  if (!commit) return null;
-
-  const source = commandOutputSync(
-    "jj",
-    [
-      "-R",
-      input.rootPath,
-      "file",
-      "show",
-      "-r",
-      { rev: input.ref },
-      "--ignore-working-copy",
-      "--",
-      toJjRootFilePattern(input.relativePath),
-    ],
-    { cwd: input.rootPath, maxBuffer: 10 * 1024 * 1024, trim: false },
-  );
-
-  return source === null ? null : { commit, source };
 }
 
 async function readGitDiff(input: {
