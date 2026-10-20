@@ -194,18 +194,18 @@ jobs:
             # `+` so a tag already in this checkout cannot block the fetch, and
             # `^{commit}` peels a lightweight and an annotated tag alike.
             git fetch --no-tags origin "+refs/tags/${PREVIEW_TAG}:refs/tags/${PREVIEW_TAG}"
-            PREVIEW_COMMIT=$(git rev-parse "refs/tags/${PREVIEW_TAG}^{commit}")
+            SOURCE_COMMIT=$(git rev-parse "refs/tags/${PREVIEW_TAG}^{commit}")
 
             # Whatever merged since the preview published stays out of this
             # release: promotion ships the commit that was actually tested. It
             # must still be on ${GITHUB_REF_NAME}, so a branch that never landed
             # cannot be released. Asked over the API because this checkout is
             # shallow and has no history to walk.
-            STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${GITHUB_REF_NAME}...${PREVIEW_COMMIT}" --jq .status)
+            STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${GITHUB_REF_NAME}...${SOURCE_COMMIT}" --jq .status)
             case "$STATUS" in
               identical | behind) ;;
               *)
-                echo "::error::${PREVIEW_TAG} was built from ${PREVIEW_COMMIT}, which is not on ${GITHUB_REF_NAME} (${STATUS}). Only a preview built from a commit that landed can be promoted."
+                echo "::error::${PREVIEW_TAG} was built from ${SOURCE_COMMIT}, which is not on ${GITHUB_REF_NAME} (${STATUS}). Only a preview built from a commit that landed can be promoted."
                 exit 1
                 ;;
             esac
@@ -217,7 +217,7 @@ jobs:
               exit 1
             fi
 
-            echo "Promoting ${PREVIEW_TAG} (${PREVIEW_COMMIT}) to Whiteboard ${TAG}."
+            echo "Promoting ${PREVIEW_TAG} (${SOURCE_COMMIT}) to Whiteboard ${TAG}."
           else
             echo "Releasing Whiteboard ${TAG} from ${GITHUB_REF_NAME}."
           fi
@@ -240,7 +240,7 @@ jobs:
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "preview_commit=$PREVIEW_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
 
       - name: Bump version and create tag
         if: ${{ !inputs.dry_run && !inputs.version }}
@@ -249,7 +249,7 @@ jobs:
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
           TAG: ${{ steps.resolve.outputs.tag }}
-          PREVIEW_COMMIT: ${{ steps.resolve.outputs.preview_commit }}
+          SOURCE_COMMIT: ${{ steps.resolve.outputs.source_commit }}
         run: |
           # product.json carries the same number to the running app, which shows
           # it in the About panel, alongside the stable channel identity.
@@ -268,7 +268,7 @@ jobs:
           # the version onto that tree, the way the preview run stamped its own.
           # The bump still lands on ${GITHUB_REF_NAME} because the next release
           # derives its version from there.
-          TARGET="${PREVIEW_COMMIT:-$(git rev-parse HEAD)}"
+          TARGET="${SOURCE_COMMIT:-$(git rev-parse HEAD)}"
           git tag "$TAG" "$TARGET"
           # Atomic: the previous release left an orphan tag on origin because
           # the branch push was rejected after the tag push had already landed.
@@ -285,7 +285,7 @@ jobs:
         env:
           RELEASE_SOURCE: ${{ inputs.release_source }}
           RESOLVED_VERSION: ${{ steps.resolve.outputs.version }}
-          PREVIEW_COMMIT: ${{ steps.resolve.outputs.preview_commit }}
+          SOURCE_COMMIT: ${{ steps.resolve.outputs.source_commit }}
         run: |
           if [ "$RELEASE_SOURCE" = "preview" ]; then
             # The build jobs stamp the promoted version into this same commit,
@@ -297,7 +297,7 @@ jobs:
             VERSION=$(node -p "require('./apps/review-desktop/package.json').version")
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "commit=${PREVIEW_COMMIT:-$(git rev-parse HEAD)}" >> "$GITHUB_OUTPUT"
+          echo "commit=${SOURCE_COMMIT:-$(git rev-parse HEAD)}" >> "$GITHUB_OUTPUT"
 
       - name: Create draft GitHub Release
         if: ${{ !inputs.dry_run && !inputs.version }}
