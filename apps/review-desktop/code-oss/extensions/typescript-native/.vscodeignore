@@ -1,0 +1,9 @@
+src/**
+out/**
+l10n/bundle.l10n.qps-ploc.json
+package.nls.qps-ploc.json
+tsconfig*.json
+**/*.tsbuildinfo
+esbuild*.mts
+package-lock.json
+lib/**

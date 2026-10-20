@@ -24,6 +24,7 @@ export const dirs = [
 	'extensions/media-preview',
 	'extensions/references-view',
 	'extensions/typescript-language-features',
+	'extensions/typescript-native',
 ];
 
 if (existsSync(`${import.meta.dirname}/../../.build/distro/npm`)) {

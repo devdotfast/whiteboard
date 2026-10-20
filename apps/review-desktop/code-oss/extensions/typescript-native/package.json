@@ -6,7 +6,8 @@
     "description": "%description%",
     "icon": "logo.png",
     "private": true,
-    "version": "0.0.0",
+    "version": "7.0.2",
+    "bundledTypeScriptVersion": "7.0.2",
     "type": "commonjs",
     "l10n": "./l10n",
     "repository": {
@@ -327,24 +328,9 @@
             ]
         }
     },
-    "main": "./dist/extension.bundle.js",
-    "files": [
-        "dist/extension.bundle.js",
-        "lib",
-        "LICENSE",
-        "NOTICE.txt",
-        "logo.png",
-        "l10n/bundle.l10n.json",
-        "package.nls.json"
-    ],
+    "main": "./out/extension",
     "scripts": {
-        "build": "tsc && npm run bundle",
-        "bundle": "esbuild src/extension.ts --bundle --external:vscode --platform=node --format=cjs --outfile=dist/extension.bundle.js --sourcemap",
-        "watch": "npm run bundle -- --watch",
-        "generateLocTest": "npx @vscode/l10n-dev generate-pseudo -o ./l10n/ ./l10n/bundle.l10n.json ./package.nls.json",
-        "generateLocBundle": "npx @vscode/l10n-dev export --outDir ./l10n ./src",
-        "//vscode:prepublish": "we do not use this hook; the Herebyfile runs bundle:release once instead",
-        "bundle:release": "npm run bundle -- --minify"
+        "vscode:prepublish": "node ../../node_modules/gulp/bin/gulp.js --gulpfile ../../build/gulpfile.extensions.mjs compile-extension:typescript-native"
     },
     "dependencies": {
         "@vscode/extension-telemetry": "^1.5.2",
@@ -352,8 +338,6 @@
         "vscode-tas-client": "^0.2.1"
     },
     "devDependencies": {
-        "@types/vscode": "~1.125.0",
-        "@vscode/vsce": "^3.9.2",
-        "esbuild": "^0.28.1"
+        "@types/node": "24.x"
     }
 }

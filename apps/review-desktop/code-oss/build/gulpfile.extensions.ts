@@ -64,6 +64,7 @@ const compilations = [
 	'extensions/references-view/tsconfig.json',
 	'extensions/typescript-language-features/web/tsconfig.json',
 	'extensions/typescript-language-features/tsconfig.json',
+	'extensions/typescript-native/tsconfig.json',
 ];
 
 const getBaseUrl = (out: string) => `https://main.vscode-cdn.net/sourcemaps/${commit}/${out}`;

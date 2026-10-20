@@ -232,6 +232,16 @@ Their npm scripts, ESLint import rules, hygiene filters and ignore entries are
 removed with them. Restore them from the upstream tag the same way as the
 extensions above.
 
+## Vendored TypeScript 7 client
+
+`extensions/typescript-native/` is `_extension/` from `microsoft/typescript-go`
+at tag `typescript/v7.0.2` (`2bd066d87f5bafd315be9f40889d0a60b9e58e0b`).
+Review changes:
+
+- adds in-tree build files and rewrites the `package.json` build fields.
+
+To update, copy a newer tag.
+
 ## Pruned Agents window
 
 Review deletes all 605 upstream files under `src/vs/sessions/` and the Agents
@@ -453,7 +463,7 @@ one of these entries:
 - `build/filters.ts`
 - `build/gulpfile.ts`: drop the advisory `monaco-typecheck` pass from the
   `compile` task (the task itself remains runnable on demand).
-- `build/gulpfile.extensions.ts`
+- `build/gulpfile.extensions.ts` (also compiles `typescript-native`)
 - `build/gulpfile.hygiene.ts`
 - `build/gulpfile.reh.ts`
 - `build/gulpfile.vscode.ts` and `build/next/index.ts`: also skip the welcome
@@ -471,7 +481,7 @@ one of these entries:
   eventsource-parser).
 - `build/npm/dirs.ts`: also drops the `build/rspack` and `build/vite`
   dev-server experiment installs; run `npm install` in those directories
-  manually to use them.
+  manually to use them. Adds `extensions/typescript-native`.
 - `build/npm/postinstall.ts`
 - `build/copilot-migrate-pr.ts` (deleted)
 - `build/lib/copilot.ts` (deleted)
