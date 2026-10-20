@@ -40,7 +40,7 @@ export function ReviewCornerAction(): ReactElement | null {
 
   return (
     <div ref={control} {...stylex.props(shellStyles.topbarItem, styles.action)}>
-      <Button disabled={busy} onClick={() => void dismiss()}>
+      <Button aria-busy={busy || undefined} onClick={() => void dismiss()}>
         <TrashIcon />
         <span>Move to Trash</span>
       </Button>

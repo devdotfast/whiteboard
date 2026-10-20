@@ -281,7 +281,8 @@ export function LensRows({
               </button>
               <ViewedButton
                 progress={progress}
-                disabled={lenses.busy || !!item.unavailable || !!item.pending}
+                disabled={!!item.unavailable || !!item.pending}
+                busy={lenses.busy}
                 label={item.title}
                 onClick={() => onMark(item.id)}
               />

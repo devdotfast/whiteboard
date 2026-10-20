@@ -10,6 +10,7 @@ import { CanvasUiContext } from "./host/canvas-ui";
 import { ReviewSessionProvider } from "./host/review-session";
 import { PageMoreMenu } from "./page-more-menu";
 import { ReviewProvider } from "./review-context";
+import { ReviewCornerAction } from "./review-corner-action";
 import { testReviewSession } from "./review-session-test-utils";
 
 let root: Root | null = null;
@@ -88,4 +89,35 @@ it("moves to Trash once at a time from ⋯, and says so when it fails", async ()
     kind: "error",
     text: "Could not move the whiteboard to Trash. Try again.",
   });
+});
+
+it("keeps the corner's Move to Trash enabled and focused while the move is in flight", async () => {
+  const session = testReviewSession();
+  const dismiss = vi.fn<() => Promise<boolean>>(() => new Promise(() => {}));
+
+  session.review = { ...session.review!, dismiss };
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+
+  await act(async () =>
+    root?.render(
+      <ReviewSessionProvider session={session}>
+        <ReviewProvider>
+          <ReviewCornerAction />
+        </ReviewProvider>
+      </ReviewSessionProvider>,
+    ),
+  );
+
+  const button = container.querySelector("button")!;
+  button.focus();
+  await act(async () => button.click());
+  await act(async () => button.click());
+
+  expect(dismiss).toHaveBeenCalledOnce();
+  expect(button.disabled).toBe(false);
+  expect(button.getAttribute("aria-busy")).toBe("true");
+  expect(document.activeElement).toBe(button);
 });

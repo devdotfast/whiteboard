@@ -81,11 +81,10 @@ export function AskHistoryButton({ view }: { view: AskView }): ReactElement {
     <IconButton
       ref={tooltip}
       size="large"
-      xstyle={allShown && styles.historyButtonOn}
       aria-label="Saved conversations"
       aria-pressed={allShown}
-      disabled={!(showThreads ?? openHistory) || allShown}
-      onClick={showThreads ?? openHistory}
+      disabled={!(showThreads ?? openHistory)}
+      onClick={allShown ? undefined : (showThreads ?? openHistory)}
     >
       <HistoryIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
     </IconButton>
@@ -336,11 +335,6 @@ const styles = stylex.create({
     alignSelf: "flex-start",
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-  },
-  // Showing the list it opens: pressed, not dimmed as disabled.
-  historyButtonOn: {
-    color: tokens.ink,
-    opacity: 1,
   },
   historyHeader: {
     display: "flex",

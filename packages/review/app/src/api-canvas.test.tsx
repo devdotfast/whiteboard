@@ -1356,7 +1356,10 @@ it("shows a lost remote host as a top-bar chip that retries the host and the str
     },
   );
 
+  let answer: (() => void) | undefined;
+
   const retry = vi.fn<(alias: string) => Promise<void>>(async () => {
+    await new Promise<void>((resolve) => (answer = resolve));
     down = false;
   });
 
@@ -1411,8 +1414,17 @@ it("shows a lost remote host as a top-bar chip that retries the host and the str
   );
 
   const before = watches;
+  chip.focus();
   await act(async () => chip.click());
   expect(retry).toHaveBeenCalledWith("wb-a");
+
+  await act(async () => chip.click());
+  expect(retry).toHaveBeenCalledOnce();
+  expect(chip.disabled).toBe(false);
+  expect(chip.getAttribute("aria-busy")).toBe("true");
+  expect(document.activeElement).toBe(chip);
+
+  await act(async () => answer!());
   await act(() =>
     vi.waitFor(() => {
       expect(container.querySelector(".connection-chip")).toBeNull();

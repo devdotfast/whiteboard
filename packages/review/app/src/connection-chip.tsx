@@ -85,7 +85,6 @@ export function ConnectionChip() {
       {...withClass("connection-chip", styles.chip, styles.button)}
       aria-label={`${label}. ${ACTION_WORDS[action]}.`}
       aria-busy={pending || undefined}
-      disabled={pending}
       ref={tooltip}
       onClick={() => run(action)}
     >
@@ -129,7 +128,7 @@ export function useHostActionButton(
 
   const button =
     action && hosts ? (
-      <Button disabled={pending} onClick={() => run(action)}>
+      <Button aria-busy={pending || undefined} onClick={() => run(action)}>
         {ACTION_WORDS[action]}
       </Button>
     ) : null;

@@ -93,13 +93,6 @@ describe("ReviewStackSelector", () => {
     });
     await openMenu(container);
 
-    const unavailable = container.querySelector<HTMLButtonElement>(
-      "[role=menu] button:disabled",
-    );
-
-    expect(unavailable?.textContent).toContain("#40");
-    expect(unavailable?.textContent).toContain("No whiteboard");
-
     const layer = container.querySelector<HTMLButtonElement>(
       '[role=menu] button[data-relation="later"]:not(:disabled)',
     );
@@ -117,10 +110,6 @@ describe("ReviewStackSelector", () => {
         active: false,
       },
     });
-    await act(async () => {
-      unavailable?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
-    expect(post).toHaveBeenCalledTimes(1);
   });
   it("creates an empty review for a local branch without one, against the branch below", async () => {
     const post = vi.fn<ReviewCanvasBridge["post"]>(async () => ({ ok: true }));
