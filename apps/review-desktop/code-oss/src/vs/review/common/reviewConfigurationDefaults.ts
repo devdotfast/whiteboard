@@ -63,6 +63,8 @@ export const reviewConfigurationDefaults = {
 	'security.workspace.trust.enabled': false,
 	'js/ts.experimental.useTsgo': true,
 	'typescript.experimental.useTsgo': true,
+	// Review files are read-only: a squiggle names an error the reader cannot fix.
+	'problems.visibility': false,
 	'workbench.enableExperiments': false,
 	'workbench.commandPalette.experimental.enableNaturalLanguageSearch': false,
 	'workbench.settings.enableNaturalLanguageSearch': false,

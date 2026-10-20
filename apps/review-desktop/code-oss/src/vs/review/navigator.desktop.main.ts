@@ -167,6 +167,7 @@ Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerDefaultCon
 		'workbench.preferredLightColorTheme': reviewConfigurationDefaults['workbench.preferredLightColorTheme'],
 		'js/ts.experimental.useTsgo': reviewConfigurationDefaults['js/ts.experimental.useTsgo'],
 		'typescript.experimental.useTsgo': reviewConfigurationDefaults['typescript.experimental.useTsgo'],
+		'problems.visibility': reviewConfigurationDefaults['problems.visibility'],
 	},
 }, {
 	overrides: curatedExtensionConfigurationDefaults,

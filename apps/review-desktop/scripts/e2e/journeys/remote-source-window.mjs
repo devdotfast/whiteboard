@@ -378,16 +378,23 @@ async function journey(ctx) {
     `7. the hover on one read "function one(): number" after ${hover.ms} ms`,
   );
 
-  // 8. The host's TypeScript offers a quick fix in the window.
+  // 8. The host's TypeScript offers a quick fix in the window, and the
+  // read-only window draws no squiggle for its error.
   const action = await until(
     () => inSource(source, codeAction, state.active.resource),
     "TypeScript's Add import code action",
     60000,
   );
 
+  await source.waitForTimeout(1000);
+  assert.equal(
+    await source.locator(".squiggly-error").count(),
+    0,
+    "the read-only Source window drew an error squiggle",
+  );
   check(
     ctx,
-    `8. TypeScript on the host offered "${action.title}" for "${action.diagnostic}"`,
+    `8. TypeScript on the host offered "${action.title}" for "${action.diagnostic}"; the window draws no squiggle for it`,
   );
 
   // 9. An added file's diff opens in the same window, its empty side the laptop's.
