@@ -15,6 +15,7 @@ import {
   documentMarker,
   mapFrameMarker,
 } from "@canvas/markers.stylex";
+import { MetaWheelZoom } from "@canvas/meta-wheel-zoom";
 import { useReviewContainer } from "@canvas/review-root-context";
 import {
   elevation,
@@ -1750,6 +1751,9 @@ function C4MapCanvas({
                         borderRadius: 8,
                       }}
                     />
+                  )}
+                  {interactionMode !== "standalone" && (
+                    <MetaWheelZoom frame={keyboardTargetRef} />
                   )}
                 </ReactFlow>
               </C4HoveredNodeContext.Provider>
