@@ -10,7 +10,7 @@ import { ITextModelService } from "../../editor/common/services/resolverService.
 import { ILanguageService } from "../../editor/common/languages/language.js";
 import { URI } from "../../base/common/uri.js";
 import { Event } from "../../base/common/event.js";
-import { DisposableMap, DisposableStore, MutableDisposable } from "../../base/common/lifecycle.js";
+import { DisposableMap, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
 import { CancellationError } from "../../base/common/errors.js";
 import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
 import { ServiceCollection } from "../../platform/instantiation/common/serviceCollection.js";
@@ -92,9 +92,13 @@ export function createStructuralDiffEditors(
 	}));
 	const unchanged = new Set(entries.filter(e => e.file.status === "unchanged").map(e => e.file.path));
 	const pairs = new Map(resolvedEntries.map(e => [e.original!.toString() + "\n" + e.modified!.toString(), e.file.path]));
+	// One provider per file, so they share one session listener.
+	const providers = new Set<(files: ReadonlySet<string>) => void>();
+	lifetime.add(session.onDidChange(change => { for (const notify of [...providers]) notify(change.files); }));
+	const onDidChangeFiles: Event<ReadonlySet<string>> = notify => { providers.add(notify); return toDisposable(() => providers.delete(notify)); };
 	const factory: IDiffProviderFactoryService = {
 		_serviceBrand: undefined,
-		createDiffProvider: () => new StructuralDiffProvider(session, pairs, unchanged),
+		createDiffProvider: () => new StructuralDiffProvider(session, pairs, unchanged, onDidChangeFiles),
 	};
 	const child = lifetime.add(
 		instantiation.createChild(new ServiceCollection([IDiffProviderFactoryService, factory])),
@@ -109,8 +113,8 @@ let structuralViewId = 0;
 export class StructuralDiffProvider implements IDocumentDiffProvider {
 	private path: string | undefined;
 	readonly onDidChange: Event<void>;
-	constructor(private readonly session: StructuralDiffSession, private readonly pairs: ReadonlyMap<string, string>, private readonly unchanged: ReadonlySet<string>) {
-		this.onDidChange = Event.map(Event.filter(session.onDidChange, change => this.path !== undefined && change.files.has(this.path)), () => undefined);
+	constructor(private readonly session: StructuralDiffSession, private readonly pairs: ReadonlyMap<string, string>, private readonly unchanged: ReadonlySet<string>, onDidChangeFiles: Event<ReadonlySet<string>>) {
+		this.onDidChange = Event.map(Event.filter(onDidChangeFiles, files => this.path !== undefined && files.has(this.path)), () => undefined);
 	}
 	/** A lens can expose a child of a collapsed outer scope, so include both until it clips the outer gap. */
 	contextGapsForLens(): IDocumentDiff['contextGaps'] {

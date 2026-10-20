@@ -109,6 +109,7 @@ test('structural editor models retain diffr bytes across a live file save', asyn
 	const { URI } = await import('../../base/common/uri.js');
 	const { DisposableStore } = await import('../../base/common/lifecycle.js');
 	const { CancellationToken } = await import('../../base/common/cancellation.js');
+	const { Event } = await import('../../base/common/event.js');
 	const { IModelService } = await import('../../editor/common/services/model.js');
 	const { ITextModelService } = await import('../../editor/common/services/resolverService.js');
 	const { ILanguageService } = await import('../../editor/common/languages/language.js');
@@ -163,7 +164,7 @@ test('structural editor models retain diffr bytes across a live file save', asyn
 		live.value = 'saved B\n';
 		assert.equal(right.getValue(), 'saved A\n');
 		const pairs = new Map([[`${left.uri}\n${right.uri}`, 'a.ts']]);
-		const provider = new StructuralDiffProvider(session, pairs, new Set());
+		const provider = new StructuralDiffProvider(session, pairs, new Set(), Event.None);
 		await assert.doesNotReject(provider.computeDiff(left as never, right as never,
 			{ ignoreTrimWhitespace: false, maxComputationTimeMs: 0, computeMoves: false }, CancellationToken.None));
 		await task;
