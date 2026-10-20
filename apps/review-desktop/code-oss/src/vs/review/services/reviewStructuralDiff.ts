@@ -10,7 +10,7 @@ import { ITextModelService } from "../../editor/common/services/resolverService.
 import { ILanguageService } from "../../editor/common/languages/language.js";
 import { URI } from "../../base/common/uri.js";
 import { Event } from "../../base/common/event.js";
-import { DisposableMap, DisposableStore } from "../../base/common/lifecycle.js";
+import { DisposableMap, DisposableStore, MutableDisposable } from "../../base/common/lifecycle.js";
 import { CancellationError } from "../../base/common/errors.js";
 import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
 import { ServiceCollection } from "../../platform/instantiation/common/serviceCollection.js";
@@ -206,27 +206,39 @@ function attachStructuralEditors(
 	const editors = instantiation.invokeFunction((a) => a.get(ICodeEditorService));
 	const sides = new Map(entries.flatMap((e) => [[e.original!.toString(), e.file.path], [e.modified!.toString(), e.file.path]] as const));
 	const watched = lifetime.add(new DisposableMap<IDiffEditor, DisposableStore>());
+	const pathIn = (model: ITextModel | null | undefined) => model ? sides.get(model.uri.with({ fragment: "" }).toString()) : undefined;
 	function watch(editor: IDiffEditor) {
 		const widget = editor as unknown as { unchangedRegions?: IObservable<readonly UnchangedRegion[]> };
 		if (!widget.unchangedRegions) return;
 		const store = new DisposableStore();
 		watched.set(editor, store);
+		// Every diff editor in the window arrives here; only the comparison's get controls.
+		const attached = store.add(new MutableDisposable<DisposableStore>());
+		const sync = () => {
+			const model = editor.getModel();
+			if (!pathIn(model?.original) && !pathIn(model?.modified)) attached.clear();
+			else attached.value ??= attach(editor, widget.unchangedRegions!);
+		};
+		store.add(editor.onDidChangeModel(sync));
+		sync();
+	}
+	function attach(editor: IDiffEditor, unchangedRegions: IObservable<readonly UnchangedRegion[]>): DisposableStore {
+		const store = new DisposableStore();
 		// A reused editor swaps one side's model at a time.
-		const pathIn = (model: ITextModel | null) => model ? sides.get(model.uri.with({ fragment: "" }).toString()) : undefined;
 		const pathOf = () => {
 			const model = editor.getModel();
-			const path = pathIn(model?.original ?? null);
-			return path === pathIn(model?.modified ?? null) ? path : undefined;
+			const path = pathIn(model?.original);
+			return path === pathIn(model?.modified) ? path : undefined;
 		};
 		const sideOf = (side: ICodeEditor) => () => pathIn(side.getModel());
 		const hover = new StructuralFoldHover();
-		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", sideOf(editor.getOriginalEditor()), session, widget.unchangedRegions, hover, viewed));
-		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", sideOf(editor.getModifiedEditor()), session, widget.unchangedRegions, hover, viewed));
+		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", sideOf(editor.getOriginalEditor()), session, unchangedRegions, hover, viewed));
+		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", sideOf(editor.getModifiedEditor()), session, unchangedRegions, hover, viewed));
 		let revealed = new Set<UnchangedRegion>();
 		store.add(
 			autorun((reader) => {
 				const path = pathOf();
-				const regions = widget.unchangedRegions!.read(reader);
+				const regions = unchangedRegions.read(reader);
 				if (!path || !session.getTextDiff(path)) return;
 				let gaps: StructuralGap[] | undefined;
 				const next = new Set<UnchangedRegion>();
@@ -257,6 +269,7 @@ function attachStructuralEditors(
 				revealed = next;
 			}),
 		);
+		return store;
 	}
 
 	lifetime.add(editors.onDiffEditorRemove(editor => watched.deleteAndDispose(editor)));
