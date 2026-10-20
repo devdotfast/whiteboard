@@ -1,6 +1,5 @@
-import { documentType } from "@canvas/document-type.stylex";
+import { codeType, documentType } from "@canvas/document-type.stylex";
 import {
-  fontSize,
   fontWeight,
   leading,
   radius,
@@ -79,6 +78,7 @@ export const documentStyles = stylex.create({
     // With the view's own top padding, the header's first line sits 36px
     // under the top bar.
     "--review-document-padding-block-start": "16px",
+    "--document-scale": "var(--review-document-scale, 1)",
     "--review-document-padding-block-end": {
       default: "72px",
       [stylex.env.narrow]: "48px",
@@ -197,7 +197,7 @@ export const documentStyles = stylex.create({
     marginInline: { default: null, [inDocumentBlock()]: "auto" },
     color: { default: null, [inProse()]: tokens.ink },
     fontFamily: { default: null, [inProse()]: tokens.fontSerif },
-    fontSize: { default: null, [inProse()]: fontSize.reading },
+    fontSize: { default: null, [inProse()]: documentType.reading },
     lineHeight: { default: null, [inProse()]: leading.prose },
     textAlign: { default: null, [inProse()]: "left" },
   },
@@ -216,7 +216,7 @@ export const documentStyles = stylex.create({
     marginTop: { default: null, [afterProseItem()]: space.s8 },
     color: { default: null, [inProse()]: tokens.ink },
     fontFamily: { default: null, [inProse()]: tokens.fontSerif },
-    fontSize: { default: null, [inProse()]: fontSize.reading },
+    fontSize: { default: null, [inProse()]: documentType.reading },
     lineHeight: { default: null, [inProse()]: leading.prose },
     textAlign: { default: null, [inProse()]: "left" },
   },
@@ -226,7 +226,7 @@ export const documentStyles = stylex.create({
     margin: { default: null, [inDocument()]: `${space.s14} 0` },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument()]: fontSize.reading },
+    fontSize: { default: null, [inDocument()]: documentType.reading },
     lineHeight: { default: null, [inDocument()]: leading.prose },
     textAlign: { default: null, [inDocument()]: "left" },
   },
@@ -260,8 +260,9 @@ export const documentStyles = stylex.create({
       [inDocument()]: tokens.ink,
       [inDocumentLink()]: tokens.accent,
     },
-    fontFamily: { default: null, [inDocument()]: tokens.fontMono },
+    fontFamily: { default: null, [inDocument()]: tokens.fontCode },
     fontSize: { default: null, [inDocument()]: "0.85em" },
+    fontVariantLigatures: { default: null, [inDocument()]: codeType.ligatures },
   },
   table: {
     width: { default: null, [inDocument()]: "min(100%, 600px)" },
@@ -270,7 +271,7 @@ export const documentStyles = stylex.create({
     color: { default: null, [inDocument()]: tokens.ink },
     // The board's prose face; code chips in cells keep their own.
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument()]: fontSize.ui },
+    fontSize: { default: null, [inDocument()]: documentType.small },
     lineHeight: { default: null, [inDocument()]: leading.normal },
     tableLayout: { default: null, [inDocument()]: "fixed" },
   },

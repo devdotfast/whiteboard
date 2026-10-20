@@ -32,8 +32,9 @@
      Newsreader for a board's prose, its tables and thread quotes, and Geist
      Mono for code, commit ids, paths, line numbers and counts. */
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-serif: "Newsreader", Georgia, serif;
+  --font-serif: var(--review-reading-font, "Newsreader", Georgia, serif);
   --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-code: var(--review-code-font, var(--font-mono));
   --font-display: var(--font-sans);
   --transparent: transparent;
   /* Ground bridge. Same principle as the --chrome-* tokens on .review-app: the
@@ -525,7 +526,9 @@ button {
   padding: 12px 14px;
   border-radius: 6px;
   background: var(--well);
-  font: 13px/20px var(--font-mono);
+  font: var(--review-code-font-size, 13px) /
+    calc(var(--review-code-font-size, 13px) * 20 / 13) var(--font-code);
+  font-variant-ligatures: var(--review-code-ligatures, normal);
   white-space: pre-wrap;
 }
 

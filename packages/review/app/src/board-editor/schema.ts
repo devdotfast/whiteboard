@@ -2,7 +2,7 @@ import { documentStyles as doc } from "@canvas/document-styles";
 import { documentType } from "@canvas/document-type.stylex";
 import { drawStyles } from "@canvas/draw-styles";
 import { documentNodeMarker, proseMarker } from "@canvas/markers.stylex";
-import { fontWeight, leading, space } from "@canvas/scale.stylex";
+import { fontWeight, space } from "@canvas/scale.stylex";
 import type { StyleArg } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import { boardLink, traceQuoteLink } from "@review/review-api/document";
@@ -84,19 +84,19 @@ const headingStyles = stylex.create({
     marginBlock: `${space.s40} ${space.s12}`,
     fontSize: documentType.h2,
     fontWeight: fontWeight.medium,
-    lineHeight: leading.px32,
+    lineHeight: documentType.h2Leading,
   },
   level2: {
     marginBlock: `${space.s32} ${space.s10}`,
     fontSize: documentType.h3,
     fontWeight: fontWeight.medium,
-    lineHeight: leading.px28,
+    lineHeight: documentType.h3EditorLeading,
   },
   level3: {
     marginBlock: `${space.s24} ${space.s8}`,
     fontSize: documentType.body,
     fontWeight: fontWeight.semibold,
-    lineHeight: leading.px26,
+    lineHeight: documentType.bodyEditorLeading,
   },
 });
 

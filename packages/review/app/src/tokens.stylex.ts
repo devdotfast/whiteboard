@@ -49,6 +49,7 @@ export const tokens = stylex.defineConsts({
   diffsBgHoverOverride: "var(--diffs-bg-hover-override)",
   diffsBgSeparatorOverride: "var(--diffs-bg-separator-override)",
   edgeMuted: "var(--edge-muted)",
+  fontCode: "var(--font-code)",
   fontDisplay: "var(--font-display)",
   fontMono: "var(--font-mono)",
   fontSans: "var(--font-sans)",

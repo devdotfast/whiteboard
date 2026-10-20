@@ -1,10 +1,5 @@
-import {
-  fontSize,
-  fontWeight,
-  leading,
-  radius,
-  space,
-} from "@canvas/scale.stylex";
+import { codeType } from "@canvas/document-type.stylex";
+import { fontWeight, radius, space } from "@canvas/scale.stylex";
 import { CopyButton } from "@canvas/ui/copy";
 import {
   type ShjLanguage,
@@ -289,7 +284,8 @@ const styles = stylex.create({
     margin: 0,
     overflowX: "auto",
     color: tokens.ink,
-    font: `${fontSize.ui}/${leading.px20} ${tokens.fontMono}`,
+    font: `${codeType.size}/${codeType.leading} ${tokens.fontCode}`,
+    fontVariantLigatures: codeType.ligatures,
     textAlign: "left",
   },
   code: {
