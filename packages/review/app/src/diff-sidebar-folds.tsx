@@ -4,6 +4,7 @@ import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
 import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   type ReactElement,
   createContext,
@@ -13,6 +14,7 @@ import {
 } from "react";
 import { z } from "zod";
 
+import { canvasQueryKeys } from "./canvas-query";
 import { useReviewSession } from "./host/review-session";
 import { chevronMarker } from "./markers.stylex";
 import type { ReviewTocEntry } from "./review-document-headings";
@@ -47,40 +49,31 @@ export function DiffSidebarFolds(): ReactElement {
     DocumentContentsContext,
   );
 
-  const [project, setProject] = useState<ProjectBoards | null>(null);
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState<"whiteboards" | "contents" | null>(null);
-  const [reads, setReads] = useState(0);
 
-  // The project's boards change elsewhere: read them again when the window
-  // comes back.
-  useEffect(() => {
-    const reread = () => setReads((count) => count + 1);
+  const { data: project = null } = useQuery({
+    queryKey: canvasQueryKeys.projectBoards(),
+    queryFn: async (): Promise<ProjectBoards | null> => {
+      const response = await session.fetch("/project");
 
-    window.addEventListener("focus", reread);
-
-    return () => window.removeEventListener("focus", reread);
-  }, []);
+      return response.ok ? projectSchema.parse(await response.json()) : null;
+    },
+  });
 
   const listing = open === "whiteboards";
 
   useEffect(() => {
-    let current = true;
-
-    void session
-      .fetch("/project")
-      .then(async (response) =>
-        response.ok ? projectSchema.parse(await response.json()) : null,
-      )
-      .catch(() => null)
-      .then((value) => {
-        if (current) setProject(value);
+    const reread = () =>
+      void queryClient.invalidateQueries({
+        queryKey: canvasQueryKeys.projectBoards(),
       });
 
-    return () => {
-      current = false;
-    };
-    // Opening the list reads it again too.
-  }, [session, reads, listing]);
+    if (listing) reread();
+    window.addEventListener("focus", reread);
+
+    return () => window.removeEventListener("focus", reread);
+  }, [queryClient, listing]);
 
   const label = project?.project?.name.split("/").at(-1);
 
