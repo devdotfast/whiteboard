@@ -3,6 +3,7 @@ import type { MotionPhase } from "@canvas/draw-queue";
 import { drawStyles } from "@canvas/draw-styles";
 import type { StyleArg } from "@canvas/stylex-props";
 import * as stylex from "@stylexjs/stylex";
+import type { Node as PMNode } from "@tiptap/pm/model";
 import { Plugin, PluginKey, type Transaction } from "@tiptap/pm/state";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 
@@ -35,6 +36,7 @@ interface MotionState {
   phases: Map<string, MotionPhase>;
   region: EditingRegion | null;
   ghosts: Ghost[];
+  decorations: DecorationSet;
 }
 
 export const motionKey = new PluginKey<MotionState>("boardMotion");
@@ -110,11 +112,81 @@ export function captureRemoved(view: EditorView, tr: Transaction): Ghost[] {
   return ghosts;
 }
 
+function draw(
+  doc: PMNode,
+  { phases, region, ghosts }: Omit<MotionState, "decorations">,
+): DecorationSet {
+  if (!phases.size && !region && !ghosts.length) return DecorationSet.empty;
+  const found: Decoration[] = [];
+
+  doc.forEach((node, pos, index) => {
+    if (index === 0 || node.type === nodes.atom) return;
+    const id: string | null = node.attrs.id;
+    const phase = id ? phases.get(id) : undefined;
+
+    const ring = region
+      ? region.id === id
+        ? region.writing
+          ? "writing"
+          : "idle"
+        : "off"
+      : undefined;
+
+    if (!phase && !ring) return;
+
+    // ProseMirror writes an undefined attribute as the text "undefined".
+    const attrs = Object.fromEntries(
+      Object.entries({
+        class: [
+          phase && phaseClass(phase),
+          ring && regionClass(ring, region?.slot),
+        ]
+          .filter(Boolean)
+          .join(" "),
+        "data-motion": phase,
+        "data-region": ring,
+      }).filter(([, value]) => value !== undefined),
+    );
+
+    found.push(
+      Decoration.node(pos, pos + node.nodeSize, attrs, { phase, ring }),
+    );
+  });
+
+  for (const ghost of ghosts) {
+    const phase = phases.get(ghost.id) ?? "queued";
+
+    found.push(
+      Decoration.widget(
+        ghost.pos,
+        () => {
+          ghost.dom.dataset.motion = phase;
+          ghost.dom.className = `${ghost.classes} ${phaseClass(phase)}`;
+
+          return ghost.dom;
+        },
+        {
+          key: `ghost:${ghost.id}:${phase}`,
+          side: -1,
+          ignoreSelection: true,
+        },
+      ),
+    );
+  }
+
+  return DecorationSet.create(doc, found);
+}
+
 export const motion = () =>
   new Plugin<MotionState>({
     key: motionKey,
     state: {
-      init: () => ({ phases: new Map(), region: null, ghosts: [] }),
+      init: () => ({
+        phases: new Map(),
+        region: null,
+        ghosts: [],
+        decorations: DecorationSet.empty,
+      }),
       apply(tr, value) {
         const meta: Partial<MotionState> | undefined = tr.getMeta(motionKey);
         const next = { ...value, ...meta };
@@ -128,72 +200,21 @@ export const motion = () =>
           },
         );
 
+        // Rebuilt on a phase, region, ghost or document change; mapped
+        // otherwise.
+        next.decorations =
+          meta || tr.docChanged || next.ghosts.length !== value.ghosts.length
+            ? draw(tr.doc, next)
+            : value.decorations.map(tr.mapping, tr.doc);
+
         return next;
       },
     },
     props: {
-      decorations(state) {
-        const { phases, region, ghosts } = motionKey.getState(state)!;
+      decorations: (state) => {
+        const { decorations } = motionKey.getState(state)!;
 
-        if (!phases.size && !region && !ghosts.length) return null;
-        const found: Decoration[] = [];
-
-        state.doc.forEach((node, pos, index) => {
-          if (index === 0 || node.type === nodes.atom) return;
-          const id: string | null = node.attrs.id;
-          const phase = id ? phases.get(id) : undefined;
-
-          const ring = region
-            ? region.id === id
-              ? region.writing
-                ? "writing"
-                : "idle"
-              : "off"
-            : undefined;
-
-          if (!phase && !ring) return;
-
-          // ProseMirror writes an undefined attribute as the text "undefined".
-          const attrs = Object.fromEntries(
-            Object.entries({
-              class: [
-                phase && phaseClass(phase),
-                ring && regionClass(ring, region?.slot),
-              ]
-                .filter(Boolean)
-                .join(" "),
-              "data-motion": phase,
-              "data-region": ring,
-            }).filter(([, value]) => value !== undefined),
-          );
-
-          found.push(
-            Decoration.node(pos, pos + node.nodeSize, attrs, { phase, ring }),
-          );
-        });
-
-        for (const ghost of ghosts) {
-          const phase = phases.get(ghost.id) ?? "queued";
-
-          found.push(
-            Decoration.widget(
-              ghost.pos,
-              () => {
-                ghost.dom.dataset.motion = phase;
-                ghost.dom.className = `${ghost.classes} ${phaseClass(phase)}`;
-
-                return ghost.dom;
-              },
-              {
-                key: `ghost:${ghost.id}:${phase}`,
-                side: -1,
-                ignoreSelection: true,
-              },
-            ),
-          );
-        }
-
-        return DecorationSet.create(state.doc, found);
+        return decorations === DecorationSet.empty ? null : decorations;
       },
     },
   });
