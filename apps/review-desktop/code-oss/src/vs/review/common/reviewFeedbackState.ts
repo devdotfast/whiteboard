@@ -25,7 +25,7 @@ export function readReviewFeedbackState(storage: IStorageService): ReviewFeedbac
   return storage.getObject<ReviewFeedbackState>(REVIEW_FEEDBACK_STATE_KEY, StorageScope.APPLICATION, { status: 'pending' });
 }
 
-/** Skip, close, and manual opening suppress further invitations in this app run. */
+/** Skip, close, and manual opening suppress further invitations. */
 export function markReviewFeedbackPrompted(storage: IStorageService, appSessionId: string): void {
   storage.store(REVIEW_FEEDBACK_STATE_KEY, { status: 'pending', lastPromptSessionId: appSessionId }, StorageScope.APPLICATION, StorageTarget.MACHINE);
 }
