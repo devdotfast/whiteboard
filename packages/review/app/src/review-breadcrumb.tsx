@@ -414,7 +414,11 @@ const styles = stylex.create({
     paddingBlock: 0,
     paddingInline: space.s4,
     borderRadius: radius.small,
-    backgroundColor: tokens.tray,
+    backgroundColor: {
+      default: tokens.transparent,
+      ":hover": tokens.chromeHoverBg,
+      ':is([aria-expanded="true"])': tokens.chromeHoverBg,
+    },
     color: tokens.ink,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.ui,
