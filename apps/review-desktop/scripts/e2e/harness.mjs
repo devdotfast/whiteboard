@@ -914,14 +914,11 @@ export async function installExtensionGroup(
   );
 }
 
-/** Brings the Home canvas to the front by activating its editor tab; falls back to a restart. */
+/** Brings the Home canvas to the front with the titlebar's Home button; falls back to a restart. */
 export async function openHome(ctx) {
-  const tab = ctx.page
-    .locator(".tabs-container .tab")
-    .filter({ hasText: /^Home$/ })
-    .first();
+  const home = ctx.page.locator(".review-titlebar-home").first();
 
-  if (await tab.count()) await tab.click();
+  if (await home.isVisible()) await home.click();
   else await ctx.restartDesktop();
   await ctx.page.locator("main.review-home").waitFor({ timeout: 60000 });
 }
