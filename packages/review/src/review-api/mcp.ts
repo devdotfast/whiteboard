@@ -121,7 +121,7 @@ export async function serveReviewMcp(
 
     return {
       tools: [...always, ...tools.filter((tool) => !always.includes(tool))].map(
-        ({ name, description, inputSchema }) => ({
+        ({ name, description, inputSchema, method }) => ({
           name,
           // Some clients prepend server instructions to every tool. Keep shared
           // guidance on the discovery tool instead, including before Desktop starts.
@@ -130,6 +130,8 @@ export async function serveReviewMcp(
               ? `${mcpAuthoringGuidance({ traceEnabled })}\n\n${description}`
               : description,
           inputSchema,
+          // GET routes only read.
+          ...(method === "GET" && { annotations: { readOnlyHint: true } }),
         }),
       ),
     };

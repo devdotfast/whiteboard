@@ -244,6 +244,13 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
       properties: expect.objectContaining({ activityId: expect.anything() }),
     });
 
+    const annotations = (name: string) =>
+      list.result.tools.find((tool: AuthoringTool) => tool.name === name)
+        .annotations;
+
+    expect(annotations("session_get")).toEqual({ readOnlyHint: true });
+    expect(annotations("session_delete")).toBeUndefined();
+
     const error = await request(3, "tools/call", {
       name: "session_get",
       arguments: { sessionId: "missing" },
