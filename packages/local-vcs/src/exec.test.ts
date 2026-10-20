@@ -108,3 +108,40 @@ describe("default timeout", () => {
     expect(fetch).toBeGreaterThan(read);
   });
 });
+
+describe("the subcommand decides", () => {
+  it("gives ls-remote the network's time, and a commit message is not a push", () => {
+    const fetch = defaultVcsTimeout("git", ["-C", "/repo", "fetch", "origin"]);
+    const quick = defaultVcsTimeout("git", [
+      "-C",
+      "/repo",
+      "rev-parse",
+      "HEAD",
+    ]);
+
+    expect(
+      defaultVcsTimeout("git", ["-C", "/repo", "ls-remote", "origin"]),
+    ).toBe(fetch);
+    expect(
+      defaultVcsTimeout("git", ["-C", "/repo", "commit", "-m", "push"]),
+    ).toBe(quick);
+  });
+
+  it("keeps a read from fetching lazily when only an operand is spelt like a push", async () => {
+    const repository = mkdtempSync(path.join(tmpdir(), "vcs-exec-"));
+
+    execFileSync("git", ["init", "-q", repository]);
+
+    // `#` drops the operand git appends to the alias.
+    const { stdout } = await runVcs("git", [
+      "-C",
+      repository,
+      "-c",
+      'alias.env=!printf %s "$GIT_NO_LAZY_FETCH" #',
+      "env",
+      { value: "push" },
+    ]);
+
+    expect(stdout).toBe("1");
+  });
+});

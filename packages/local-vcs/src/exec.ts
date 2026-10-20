@@ -6,7 +6,7 @@
 //     read (GIT_NO_LAZY_FETCH=1; a fetch or clone still fetches);
 //   - every call has a timeout unless the caller sets its own: 30 seconds
 //     for a quick query, 5 minutes for a read that can be large or a jj
-//     call (which may first rebuild a cold index), 10 minutes for a fetch;
+//     call (which may first rebuild a cold index), 10 minutes for a remote;
 //   - a value that didn't come from the code (a commit, ref, path, remote,
 //     anything read from a board, a share or GitHub) is passed as an
 //     `Operand`: it is checked before anything runs, can never be read as
@@ -60,7 +60,13 @@ const LARGE_READ_TIMEOUT_MS = 5 * 60_000;
 /** Talking to a remote. */
 const NETWORK_TIMEOUT_MS = 10 * 60_000;
 
-const NETWORK_COMMANDS = new Set(["fetch", "clone", "pull", "push"]);
+const NETWORK_COMMANDS = new Set([
+  "fetch",
+  "clone",
+  "pull",
+  "push",
+  "ls-remote",
+]);
 
 const LARGE_READS = new Set([
   "archive",
@@ -77,16 +83,24 @@ const LARGE_READS = new Set([
   "show",
 ]);
 
-/** The subcommand, past git's global options and their values. */
-function subcommand(args: readonly string[]): string | undefined {
+const VALUED_OPTIONS = ["-C", "-c", "--git-dir", "--work-tree", "-R"];
+
+/** The subcommand's index; `args.length` if none. */
+function subcommandIndex(args: readonly string[]): number {
   for (let i = 0; i < args.length; i++) {
     const arg = args[i]!;
 
-    if (["-C", "-c", "--git-dir", "--work-tree", "-R"].includes(arg)) i++;
-    else if (!arg.startsWith("-")) return arg;
+    if (VALUED_OPTIONS.includes(arg)) i++;
+    else if (!arg.startsWith("-")) return i;
   }
 
-  return undefined;
+  return args.length;
+}
+
+function talksToRemote(args: readonly string[]): boolean {
+  const command = args[subcommandIndex(args)];
+
+  return command !== undefined && NETWORK_COMMANDS.has(command);
 }
 
 /** How long a call may run when its caller doesn't say. */
@@ -94,9 +108,9 @@ export function defaultVcsTimeout(
   tool: VcsTool,
   args: readonly string[],
 ): number {
-  const command = subcommand(args);
+  if (talksToRemote(args)) return NETWORK_TIMEOUT_MS;
 
-  if (command && NETWORK_COMMANDS.has(command)) return NETWORK_TIMEOUT_MS;
+  const command = args[subcommandIndex(args)];
 
   if (tool === "jj" || (command && LARGE_READS.has(command)))
     return LARGE_READ_TIMEOUT_MS;
@@ -229,11 +243,7 @@ function vcsEnvironment(
         : process.env)),
   };
 
-  const fetching = args.some((arg) =>
-    ["fetch", "clone", "pull", "push"].includes(arg),
-  );
-
-  if (!fetching) next.GIT_NO_LAZY_FETCH = "1";
+  if (!talksToRemote(args)) next.GIT_NO_LAZY_FETCH = "1";
   next.GIT_TERMINAL_PROMPT = "0";
   next.GH_PROMPT_DISABLED = "1";
 
