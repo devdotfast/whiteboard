@@ -4,7 +4,7 @@ import { CrumbSeparator } from "@canvas/ui/crumbs";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
-import { PlusIcon, SearchIcon } from "@canvas/ui/icons";
+import { PlusIcon, SearchIcon, StackIcon } from "@canvas/ui/icons";
 import { listRowStyles } from "@canvas/ui/list-row";
 import { textStyles } from "@canvas/ui/text";
 import { fieldStyles } from "@canvas/ui/text-field";
@@ -29,11 +29,10 @@ import {
 
 import { ChangedBadge } from "./changed-badge";
 import { CommitChanges, CommitPicker } from "./commit-picker";
-import { FolderLabel } from "./folder-label";
 import { countLabel } from "./format";
 import { reviewPreferenceKey } from "./host/review-client";
 import { LensProgress, LensRows } from "./lens-list";
-import { chevronMarker } from "./markers.stylex";
+import { boardRowMarker, chevronMarker } from "./markers.stylex";
 import { type ReviewTocEntry, headingDepth } from "./review-document-headings";
 import { worktreeLabel } from "./review-home-model";
 import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
@@ -45,7 +44,7 @@ import {
   type WhiteboardBranch,
   boardFamily,
   cappedTree,
-  recentBoards,
+  recentTree,
   showsChanged,
   whiteboardTree,
 } from "./whiteboard-tree";
@@ -163,44 +162,21 @@ export function WhiteboardsList({
 
   return (
     <ul aria-label="Whiteboards" {...stylex.props(styles.list)}>
-      {shown.map((branch) => {
-        const parent = branch.children.length > 0;
-        const isExpanded = parent && expanded.has(branch.board.reviewId);
-
-        return (
-          <li key={branch.board.reviewId}>
-            <BoardRow
-              board={branch.board}
-              current={current}
-              expanded={parent ? isExpanded : undefined}
-              changed={showsChanged(branch, current, !isExpanded)}
-              holdsCurrent={
-                !isExpanded &&
-                branch.children.some((child) => child.reviewId === current)
-              }
-              onToggle={() => setExpanded(branch.board.reviewId, !isExpanded)}
-              onOpen={open}
-            />
-            {isExpanded ? (
-              <ul
-                aria-label={`In ${boardTitle(branch.board.title)}`}
-                {...stylex.props(styles.children)}
-              >
-                {branch.children.map((child) => (
-                  <li key={child.reviewId}>
-                    <BoardRow
-                      board={child}
-                      current={current}
-                      nested
-                      onOpen={open}
-                    />
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-          </li>
-        );
-      })}
+      {shown.map((branch) => (
+        <BoardBranch
+          key={branch.board.reviewId}
+          branch={branch}
+          current={current}
+          expanded={expanded.has(branch.board.reviewId)}
+          onToggle={() =>
+            setExpanded(
+              branch.board.reviewId,
+              !expanded.has(branch.board.reviewId),
+            )
+          }
+          onOpen={open}
+        />
+      ))}
       {showAll || hidden > 0 ? (
         <li>
           <button
@@ -233,20 +209,19 @@ function BoardRow({
   board,
   current,
   nested = false,
-  flat = false,
+  recent = false,
   expanded,
   changed = Boolean(board.changed) && board.reviewId !== current,
   holdsCurrent = false,
   parentTitle,
-  folder,
+  detail,
   onToggle,
   onOpen,
 }: {
   board: ReviewApiSummary;
   current: string;
   nested?: boolean;
-  /** No chevron lane. */
-  flat?: boolean;
+  recent?: boolean;
   /** A parent's state; undefined for a board without children. */
   expanded?: boolean;
   changed?: boolean;
@@ -254,25 +229,27 @@ function BoardRow({
   holdsCurrent?: boolean;
   /** In search results, a child's parent, named before it. */
   parentTitle?: string | false;
-  /** In Recent, the folder of the board's checkout, at the row's end. */
-  folder?: string;
+  detail?: string;
   onToggle?(): void;
   onOpen(reviewId: string, event: MouseEvent): void;
 }): ReactElement {
   const isCurrent = board.reviewId === current;
+  const tooltip = useTooltip(boardTitle(board.title), { detail });
 
   return (
     <div
       {...stylex.props(
+        boardRowMarker,
         listRowStyles.row,
         listRowStyles.wash,
         styles.treeRow,
+        styles.boardRow,
         nested && styles.nestedRow,
-        flat && styles.flatRow,
+        recent && styles.recentRow,
         (isCurrent || holdsCurrent) && listRowStyles.current,
       )}
     >
-      {flat ? null : expanded === undefined ? (
+      {expanded === undefined ? (
         <span {...stylex.props(styles.chevronSlot)} />
       ) : (
         <button
@@ -286,6 +263,7 @@ function BoardRow({
             disclosureStyles.toggle,
             styles.chevronSlot,
             styles.chevron,
+            expanded && styles.chevronExpanded,
           )}
           onClick={onToggle}
         >
@@ -293,6 +271,7 @@ function BoardRow({
         </button>
       )}
       <button
+        ref={tooltip}
         type="button"
         aria-current={isCurrent ? "page" : undefined}
         {...stylex.props(
@@ -303,64 +282,58 @@ function BoardRow({
         onClick={(event) => onOpen(board.reviewId, event)}
       >
         <span {...stylex.props(styles.iconSlot)}>
-          <BoardIcon icon={boardIconKind(board.target)} current={isCurrent} />
+          {board.children?.length ? (
+            <StackIcon
+              xstyle={[styles.stackIcon, isCurrent && styles.metaCurrent]}
+            />
+          ) : (
+            <BoardIcon icon={boardIconKind(board.target)} current={isCurrent} />
+          )}
           {changed ? <ChangedBadge /> : null}
         </span>
-        {parentTitle ? (
-          <span {...stylex.props(styles.path)}>
-            <span
-              {...stylex.props(
-                textStyles.truncate,
-                styles.title,
-                styles.pathParent,
-                styles.faint,
-              )}
-            >
-              {parentTitle}
+        <span {...stylex.props(styles.rowText)}>
+          {parentTitle ? (
+            <span {...stylex.props(styles.path)}>
+              <span
+                {...stylex.props(
+                  textStyles.truncate,
+                  styles.title,
+                  styles.pathParent,
+                  styles.faint,
+                )}
+              >
+                {parentTitle}
+              </span>
+              <CrumbSeparator />
+              <span
+                {...stylex.props(
+                  textStyles.truncate,
+                  styles.title,
+                  styles.pathLeaf,
+                  isCurrent && styles.titleCurrent,
+                )}
+              >
+                {boardTitle(board.title)}
+              </span>
             </span>
-            <CrumbSeparator />
+          ) : (
             <span
               {...stylex.props(
-                textStyles.truncate,
+                textStyles.clamp2,
                 styles.title,
-                styles.pathLeaf,
                 isCurrent && styles.titleCurrent,
               )}
             >
               {boardTitle(board.title)}
             </span>
-          </span>
-        ) : (
-          <span
-            {...stylex.props(
-              textStyles.truncate,
-              styles.title,
-              isCurrent && styles.titleCurrent,
-              Boolean(folder) && styles.titleBeforeFolder,
-            )}
-          >
-            {boardTitle(board.title)}
-          </span>
-        )}
-        {/* With a folder at the end, a PR's state sits before it and no
-            empty lane is kept. */}
-        {folder && !board.origin?.pullRequestNumber ? null : (
-          <span
-            {...stylex.props(
-              styles.meta,
-              isCurrent && styles.metaCurrent,
-              Boolean(folder) && styles.metaBeforeFolder,
-            )}
-          >
-            {board.origin?.pullRequestNumber ? (
-              <PullRequestStateIcon
-                number={board.origin.pullRequestNumber}
-                state={board.pullRequestState}
-              />
-            ) : null}
-          </span>
-        )}
-        {folder ? <FolderLabel name={folder} shrinks /> : null}
+          )}
+        </span>
+        {board.origin?.pullRequestNumber ? (
+          <PullRequestStateIcon
+            number={board.origin.pullRequestNumber}
+            state={board.pullRequestState}
+          />
+        ) : null}
       </button>
     </div>
   );
@@ -494,10 +467,7 @@ function SectionBody(props: ReviewSidebarSectionProps): ReactElement | null {
   if (props.section === "recent")
     return (
       <RecentBoards
-        boards={recentBoards(
-          props.recent ?? props.project?.boards ?? [],
-          props.reviewId,
-        )}
+        boards={props.recent ?? props.project?.boards ?? []}
         current={props.reviewId}
         onOpen={(id, event) =>
           props.onOpenBoard(
@@ -676,28 +646,61 @@ function BoardFamily({
   onOpen(reviewId: string, event: MouseEvent): void;
 }): ReactElement {
   const [expanded, setExpanded] = useState(true);
-  const parent = family.children.length > 0;
 
   return (
     <ul aria-label="This board" {...stylex.props(styles.list)}>
-      <li>
-        <BoardRow
-          board={family.board}
-          current={current}
-          expanded={parent ? expanded : undefined}
-          changed={showsChanged(family, current, !expanded)}
-          holdsCurrent={
-            !expanded &&
-            family.children.some((child) => child.reviewId === current)
-          }
-          onToggle={() => setExpanded(!expanded)}
-          onOpen={onOpen}
-        />
-        {parent && expanded ? (
-          <FamilyChildren family={family} current={current} onOpen={onOpen} />
-        ) : null}
-      </li>
+      <BoardBranch
+        branch={family}
+        current={current}
+        expanded={expanded}
+        onToggle={() => setExpanded(!expanded)}
+        onOpen={onOpen}
+      />
     </ul>
+  );
+}
+
+function BoardBranch({
+  branch,
+  current,
+  expanded,
+  recent,
+  onToggle,
+  onOpen,
+}: {
+  branch: WhiteboardBranch;
+  current: string;
+  expanded: boolean;
+  recent?: boolean;
+  onToggle(): void;
+  onOpen(reviewId: string, event: MouseEvent): void;
+}): ReactElement {
+  const parent = branch.children.length > 0;
+
+  return (
+    <li>
+      <BoardRow
+        board={branch.board}
+        current={current}
+        recent={recent}
+        detail={
+          recent
+            ? worktreeLabel(branch.board) || branch.board.project?.name
+            : undefined
+        }
+        expanded={parent ? expanded : undefined}
+        changed={showsChanged(branch, current, !expanded)}
+        holdsCurrent={
+          !expanded &&
+          branch.children.some((child) => child.reviewId === current)
+        }
+        onToggle={onToggle}
+        onOpen={onOpen}
+      />
+      {parent && expanded ? (
+        <FamilyChildren family={branch} current={current} onOpen={onOpen} />
+      ) : null}
+    </li>
   );
 }
 
@@ -817,25 +820,31 @@ function RecentBoards({
   onOpen(reviewId: string, event: MouseEvent): void;
 }): ReactElement | null {
   const [showAll, setShowAll] = useState(false);
+  const [expanded, setExpanded] = useExpandedParents("recent");
+  const tree = recentTree(boards, current);
 
-  if (!boards.length) return null;
-  const hidden = boards.length - RECENT_SHOWN;
+  if (!tree.length) return null;
+  const hidden = tree.length - RECENT_SHOWN;
 
   return (
     <>
       <GroupHeader title="Recent" />
       <ul aria-label="Recent" {...stylex.props(styles.list)}>
-        {(showAll ? boards : boards.slice(0, RECENT_SHOWN)).map((board) => (
-          <li key={board.reviewId}>
-            <BoardRow
-              board={board}
-              current={current}
-              flat
-              // Home's worktree label, else its project's name.
-              folder={worktreeLabel(board) || board.project?.name}
-              onOpen={onOpen}
-            />
-          </li>
+        {(showAll ? tree : tree.slice(0, RECENT_SHOWN)).map((branch) => (
+          <BoardBranch
+            key={branch.board.reviewId}
+            branch={branch}
+            current={current}
+            expanded={expanded.has(branch.board.reviewId)}
+            recent
+            onToggle={() =>
+              setExpanded(
+                branch.board.reviewId,
+                !expanded.has(branch.board.reviewId),
+              )
+            }
+            onOpen={onOpen}
+          />
         ))}
         {hidden > 0 ? (
           <li>
@@ -848,7 +857,6 @@ function RecentBoards({
                 listRowStyles.row,
                 listRowStyles.wash,
                 styles.treeRow,
-                styles.flatRow,
                 styles.more,
               )}
               onClick={() => setShowAll(!showAll)}
@@ -865,7 +873,7 @@ function RecentBoards({
 }
 
 /** A board row's height, which the family's cap counts in. */
-const FAMILY_ROW = "24px";
+const FAMILY_ROW = space.s28;
 
 // A subsection's text lines up with its section's, past the number.
 const NESTED_INSET = "30px";
@@ -910,7 +918,21 @@ const styles = stylex.create({
   // 26px and its title at 46px; a child's icon at 42px and title at 62px.
   treeRow: { gap: 0, paddingInline: `0 ${space.s8}`, cursor: "default" },
   nestedRow: { paddingInline: `${space.s16} ${space.s8}` },
-  flatRow: { paddingInline: `${space.s4} ${space.s8}` },
+  boardRow: {
+    height: "auto",
+    minHeight: space.s28,
+    paddingBlock: space.s4,
+    fontSize: fontSize.ui,
+  },
+  recentRow: { minHeight: space.s40 },
+  rowText: {
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+    minWidth: 0,
+    gap: space.s2,
+  },
+  stackIcon: { width: space.s14, height: space.s14, color: tokens.inkMuted },
   rowMain: {
     display: "flex",
     flex: 1,
@@ -930,7 +952,16 @@ const styles = stylex.create({
     width: "16px",
     height: "16px",
   },
-  chevron: { padding: 0, borderRadius: radius.small },
+  chevron: {
+    padding: 0,
+    borderRadius: radius.small,
+    opacity: {
+      default: 0,
+      [stylex.when.ancestor(":hover", boardRowMarker)]: 1,
+      [stylex.when.ancestor(":focus-within", boardRowMarker)]: 1,
+    },
+  },
+  chevronExpanded: { opacity: 1 },
   path: {
     display: "flex",
     flex: "1 1 auto",
@@ -971,7 +1002,6 @@ const styles = stylex.create({
   // The parent's title gives way first; the board's own keeps most of the row.
   pathLeaf: { flex: "0 0 auto", maxWidth: "80%" },
   moreIcon: { marginLeft: space.s2 },
-  metaBeforeFolder: { width: "auto" },
   groupHeader: {
     display: "flex",
     alignItems: "center",
@@ -1016,18 +1046,6 @@ const styles = stylex.create({
     height: "14px",
   },
   title: { flex: "1 1 auto", minWidth: 0 },
-  // Never under 112px; past that the folder gives way.
-  titleBeforeFolder: { flex: "1 0 112px" },
   titleCurrent: { fontWeight: fontWeight.medium },
-  meta: {
-    display: "flex",
-    justifyContent: "flex-end",
-    flexShrink: 0,
-    width: "34px",
-    textAlign: "right",
-    color: tokens.inkFaint,
-    fontSize: fontSize.small,
-    lineHeight: leading.px14,
-  },
   metaCurrent: { color: tokens.accent },
 });

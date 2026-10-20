@@ -131,10 +131,10 @@ it("shows the open board's family with its place, the boards opened last, and a 
     "Board 3",
     "Board 4",
     "Board 5",
-    "Show 2 more",
+    "Show 1 more",
   ]);
   await recent.click("[data-show-more]");
-  expect(recent.rows().slice(5, 7)).toEqual(["Board 6", "Plan"]);
+  expect(recent.rows().slice(5, 6)).toEqual(["Board 6"]);
   await recent.dispose();
 
   // A search lists every match flat, a child after its parent's name.
@@ -554,33 +554,53 @@ it("lists a short family whole, with no cap and no fades", async () => {
   await view.dispose();
 });
 
-it("ends every Recent row in its checkout's folder, as Home names it, else its project", async () => {
-  const recent = await mount(
-    props({
-      section: "recent",
-      reviewId: "open",
-      recent: [
-        board({
-          reviewId: "here",
-          title: "Here",
-          viewedAt: day(3),
-          repositoryPath: "/work/review-skills",
-          project: { id: "skills", name: "acme/skills" },
-        }),
-        board({
-          reviewId: "plan",
-          title: "Plan",
-          viewedAt: day(2),
-          project: { id: "caps", name: "acme/caps" },
-        }),
-      ],
+it("expands a recent stack without opening it, then opens a child with modifier keys", async () => {
+  const onOpenBoard = vi.fn<ReviewSidebarSectionProps["onOpenBoard"]>();
+
+  const recent = [
+    board({
+      reviewId: "overview",
+      title: "Stack overview",
+      children: ["first", "second"],
     }),
+    board({
+      reviewId: "first",
+      title: "First change",
+      parentId: "overview",
+      viewedAt: day(3),
+    }),
+    board({
+      reviewId: "second",
+      title: "Second change",
+      parentId: "overview",
+      dependsOn: ["first"],
+    }),
+  ];
+
+  const view = await mount(
+    props({ section: "recent", reviewId: "elsewhere", recent, onOpenBoard }),
   );
 
-  const folders = [
-    ...document.querySelectorAll<HTMLElement>("li [title]:has(svg)"),
-  ].map((folder) => folder.textContent);
+  expect(view.rows()).toEqual(["Stack overview"]);
+  await view.click('[aria-label="Expand Stack overview"]');
+  expect(onOpenBoard).not.toHaveBeenCalled();
+  expect(view.rows()).toEqual([
+    "Stack overview",
+    "  First change",
+    "  Second change",
+  ]);
 
-  expect(folders).toEqual(["review-skills", "acme/caps"]);
-  await recent.dispose();
+  const second = [...document.querySelectorAll("button")].find(
+    (button) => button.textContent === "Second change",
+  )!;
+
+  await act(async () =>
+    second.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, metaKey: true }),
+    ),
+  );
+  expect(onOpenBoard).toHaveBeenLastCalledWith("second", false);
+  await view.click('[aria-label="Collapse Stack overview"]');
+  expect(view.rows()).toEqual(["Stack overview"]);
+  await view.dispose();
 });

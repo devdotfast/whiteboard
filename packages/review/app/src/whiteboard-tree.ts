@@ -95,18 +95,26 @@ export function boardFamily(
 /** How many boards Recent lists before "Show N more". */
 export const RECENT_SHOWN = 5;
 
-/** The boards opened last in any project, newest first, without the open
- * one or any in Trash. */
-export function recentBoards(
+/** Recent families rank by their last opened member, even if the parent
+ * itself has not been opened. The current family has its own section. */
+export function recentTree(
   boards: readonly ReviewApiSummary[],
   current: string,
-): ReviewApiSummary[] {
-  return boards
-    .filter(
-      (board) =>
-        board.reviewId !== current && board.viewedAt && !board.trashedAt,
-    )
-    .sort(
-      (left, right) => Date.parse(right.viewedAt!) - Date.parse(left.viewedAt!),
+): WhiteboardBranch[] {
+  const active = boards.filter((board) => !board.trashedAt);
+  const family = boardFamily(active, current);
+
+  const viewed = (branch: WhiteboardBranch) =>
+    Math.max(
+      ...[branch.board, ...branch.children].map((board) =>
+        board.viewedAt ? Date.parse(board.viewedAt) : 0,
+      ),
     );
+
+  return whiteboardTree(active)
+    .filter(
+      (branch) =>
+        branch.board.reviewId !== family?.board.reviewId && viewed(branch) > 0,
+    )
+    .sort((left, right) => viewed(right) - viewed(left));
 }

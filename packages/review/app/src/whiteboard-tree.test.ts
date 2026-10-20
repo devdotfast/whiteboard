@@ -1,7 +1,7 @@
 import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { expect, it } from "vitest";
 
-import { recentBoards } from "./whiteboard-tree";
+import { recentTree } from "./whiteboard-tree";
 
 const board = (
   reviewId: string,
@@ -19,7 +19,7 @@ const board = (
 
 it("lists the boards opened last in every project, newest first, without the open one or any in Trash", () => {
   expect(
-    recentBoards(
+    recentTree(
       [
         board("plan", "app", "2026-10-01T10:00:00Z"),
         board("model", "data-model", "2026-10-03T10:00:00Z"),
@@ -29,6 +29,30 @@ it("lists the boards opened last in every project, newest first, without the ope
         board("notes", "docs", "2026-10-02T10:00:00Z"),
       ],
       "open",
-    ).map(({ reviewId }) => reviewId),
+    ).map(({ board }) => board.reviewId),
   ).toEqual(["model", "notes", "plan"]);
+});
+
+it("groups a recently opened child under its unvisited parent and keeps dependency order", () => {
+  const plan = { ...board("plan", "app", null), children: ["first", "second"] };
+  const first = { ...board("first", "app", "2026-10-01"), parentId: "plan" };
+
+  const second = {
+    ...board("second", "app", "2026-10-05"),
+    parentId: "plan",
+    dependsOn: ["first"],
+  };
+
+  const other = board("other", "other", "2026-10-03");
+  const tree = recentTree([plan, first, second, other], "unlisted");
+  expect(tree.map(({ board }) => board.reviewId)).toEqual(["plan", "other"]);
+  expect(tree[0]!.children.map(({ reviewId }) => reviewId)).toEqual([
+    "first",
+    "second",
+  ]);
+  expect(
+    recentTree([plan, first, second, other], "second").map(
+      ({ board }) => board.reviewId,
+    ),
+  ).toEqual(["other"]);
 });

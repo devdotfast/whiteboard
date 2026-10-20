@@ -84,3 +84,6 @@ export const installRowMarker = stylex.defineMarker();
 
 /** An onboarding rail step; its label inks while it is hovered. */
 export const railStepMarker = stylex.defineMarker();
+
+/** A board row reveals its disclosure on hover or keyboard focus. */
+export const boardRowMarker = stylex.defineMarker();
