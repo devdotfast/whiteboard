@@ -154,6 +154,9 @@ export const curatedExtensionConfigurationDefaults = {
 	'rust-analyzer.checkOnSave': false,
 	'rust-analyzer.lens.run.enable': false,
 	'rust-analyzer.lens.debug.enable': false,
+	// These run the checkout's build scripts and proc macros; proc macros imply build scripts.
+	'rust-analyzer.cargo.buildScripts.enable': false,
+	'rust-analyzer.procMacro.enable': false,
 
 	// The Swift extension can offer to install Swiftly. Review uses the Swift
 	// toolchain that the user installed and made available on the shell PATH.
