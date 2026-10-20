@@ -9,6 +9,7 @@ import { expect, it, vi } from "vitest";
 
 import { AskCodePins, askedText } from "./ask-code-pins";
 import { AskHistoryProvider } from "./ask-history";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelProvider, useReviewPanel } from "./review-panel";
 import { testReviewSession } from "./review-session-test-utils";
@@ -110,10 +111,12 @@ async function render(commit?: string) {
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <AskCodePins handle={view.handle} commit={commit} />
-            <Probe />
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <AskCodePins handle={view.handle} commit={commit} />
+              <Probe />
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),

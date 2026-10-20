@@ -184,8 +184,8 @@ function askCanvas({
 
   /** Mounts a board's canvas, with the threads its project last left on
    * screen, as a tab switched to or a reload does. */
-  const mount = (projectId = "payments") =>
-    act(async () =>
+  const mount = async (projectId = "payments") => {
+    await act(async () =>
       root.render(
         <TestCanvasQuery>
           <ReviewSessionProvider session={session}>
@@ -224,6 +224,8 @@ function askCanvas({
         </TestCanvasQuery>,
       ),
     );
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
+  };
 
   /** The canvas goes, as for another tab. */
   const unmount = async () => {

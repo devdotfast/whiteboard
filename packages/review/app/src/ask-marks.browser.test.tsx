@@ -11,6 +11,7 @@ import { AskHistoryList } from "./ask-history-list";
 import { AskThreadMarks } from "./ask-marks";
 import type { Board } from "./board-editor/board-doc";
 import { createBoardState } from "./board-editor/editor-state";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { documentStyles } from "./document-styles";
 import { drawStyles } from "./draw-styles";
 import { ReviewSessionProvider } from "./host/review-session";
@@ -214,12 +215,14 @@ it("marks each asked-about passage beside it and reopens its conversation", asyn
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">
-              <Blocks blocks={blocks} />
-            </Document>
-            <Probe />
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">
+                <Blocks blocks={blocks} />
+              </Document>
+              <Probe />
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -313,12 +316,14 @@ it("follows the words asked about through later versions, and calls them outdate
       root.render(
         <ReviewSessionProvider session={session}>
           <ReviewPanelProvider>
-            <AskHistoryProvider>
-              <Document revision={revision}>
-                <Blocks blocks={blocks} />
-              </Document>
-              <Probe />
-            </AskHistoryProvider>
+            <TestCanvasQuery>
+              <AskHistoryProvider>
+                <Document revision={revision}>
+                  <Blocks blocks={blocks} />
+                </Document>
+                <Probe />
+              </AskHistoryProvider>
+            </TestCanvasQuery>
           </ReviewPanelProvider>
         </ReviewSessionProvider>,
       ),
@@ -429,9 +434,11 @@ it("pins every passage in one lane, side by side on a shared line, and pairs a p
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">{document_}</Document>
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">{document_}</Document>
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -543,9 +550,11 @@ it("pins a passage beside its own line of a paragraph, and follows it as the doc
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">{document_}</Document>
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">{document_}</Document>
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -625,10 +634,12 @@ it("rests a pin as a tick in the margin when the column leaves no gutter, and op
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">{document_}</Document>
-            <Probe />
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">{document_}</Document>
+              <Probe />
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -718,9 +729,11 @@ it("rests every pin as a tick once one row has no room, never mixing the two", a
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">{document_}</Document>
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">{document_}</Document>
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -780,10 +793,12 @@ it("folds a line of more than two passages into its first pin and a +N chip", as
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">{document_}</Document>
-            <Probe />
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">{document_}</Document>
+              <Probe />
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -910,9 +925,11 @@ it("scrolls to a history passage on hover, keyboard focus, and activation", asyn
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <HistoryDocument />
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <HistoryDocument />
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -1012,11 +1029,13 @@ it("pins and washes a passage in a board's editor, and keeps both as the board i
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">
-              <BoardInEditor board={board} />
-            </Document>
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">
+                <BoardInEditor board={board} />
+              </Document>
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -1123,13 +1142,15 @@ describe("a click on a passage's words in a board's editor", () => {
       root.render(
         <ReviewSessionProvider session={session}>
           <ReviewPanelProvider>
-            <AskHistoryProvider>
-              <Document revision="1">
-                <BoardInEditor board={board} />
-              </Document>
-              <Probe />
-              <StoreProbe />
-            </AskHistoryProvider>
+            <TestCanvasQuery>
+              <AskHistoryProvider>
+                <Document revision="1">
+                  <BoardInEditor board={board} />
+                </Document>
+                <Probe />
+                <StoreProbe />
+              </AskHistoryProvider>
+            </TestCanvasQuery>
           </ReviewPanelProvider>
         </ReviewSessionProvider>,
       ),

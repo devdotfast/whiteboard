@@ -322,16 +322,18 @@ it("lists saved conversations, reopens one, and deletes another once confirmed",
     updatedAt: "2026-09-01T10:05:00.000Z",
   });
 
+  let threads = [
+    saved("first", "Is this safe on replicas?"),
+    saved("second", "Why a new index?"),
+  ];
+
   const fetch = vi
     .spyOn(session, "fetch")
     .mockImplementation(async (endpoint, init) => {
-      if (endpoint === "/ask/threads")
-        return Response.json({
-          threads: [
-            saved("first", "Is this safe on replicas?"),
-            saved("second", "Why a new index?"),
-          ],
-        });
+      if (endpoint === "/ask/threads") return Response.json({ threads });
+
+      if (init?.method === "DELETE")
+        threads = threads.filter(({ id }) => endpoint !== `/ask/${id}`);
 
       return Response.json({ ok: true }, { status: init?.method ? 200 : 404 });
     });
@@ -367,6 +369,7 @@ it("lists saved conversations, reopens one, and deletes another once confirmed",
         </TestCanvasQuery>,
       ),
     );
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
 
     const titles = () =>
       [...container.querySelectorAll("li")].map((row) =>
@@ -401,6 +404,7 @@ it("lists saved conversations, reopens one, and deletes another once confirmed",
     expect(deleteButton().textContent).toBe("Delete");
 
     await act(async () => deleteButton().click());
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
 
     expect(
       fetch.mock.calls
