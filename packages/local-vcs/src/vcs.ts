@@ -384,6 +384,30 @@ export function gitArgsSync(
   return ["--git-dir", gitDir, ...args];
 }
 
+/** execFile's rejection: utf8 output, `killed` on timeout. */
+type ExecFailure = Error & {
+  stdout?: string;
+  stderr?: string;
+  killed?: boolean;
+  signal?: string;
+};
+
+/** A timed-out child said nothing, so report the kill. */
+function failure(cause: unknown) {
+  // SAFETY: execFile rejects with ExecFailure's optional fields.
+  const error = cause as ExecFailure;
+
+  return {
+    ok: false,
+    stdout: error.stdout ?? "",
+    stderr:
+      error.stderr ||
+      (error.killed
+        ? `git timed out and was killed (${error.signal ?? "SIGTERM"})`
+        : String(error)),
+  };
+}
+
 /** Run git against the repo's shared git dir, optionally tolerating failure. */
 export async function git(
   rootPath: string,
@@ -399,17 +423,7 @@ export async function git(
 
     return { ok: true, stdout, stderr };
   } catch (error) {
-    if (options.allowFailure) {
-      // SAFETY: execFile rejects with an ExecFileException that carries the
-      // child's captured stdout and stderr as utf8 strings.
-      const err = error as { stdout?: string; stderr?: string };
-
-      return {
-        ok: false,
-        stdout: err.stdout ?? "",
-        stderr: err.stderr ?? String(error),
-      };
-    }
+    if (options.allowFailure) return failure(error);
 
     throw error;
   }
@@ -440,17 +454,7 @@ export async function gitAt(
 
     return { ok: true, stdout, stderr };
   } catch (error) {
-    if (options.allowFailure) {
-      // SAFETY: execFile rejects with an ExecFileException that carries the
-      // child's captured stdout and stderr as utf8 strings.
-      const err = error as { stdout?: string; stderr?: string };
-
-      return {
-        ok: false,
-        stdout: err.stdout ?? "",
-        stderr: err.stderr ?? String(error),
-      };
-    }
+    if (options.allowFailure) return failure(error);
 
     throw error;
   }

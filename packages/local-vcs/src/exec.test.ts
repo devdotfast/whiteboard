@@ -113,6 +113,7 @@ describe("default timeout", () => {
 describe("the subcommand decides", () => {
   it("gives ls-remote the network's time, and a commit message is not a push", () => {
     const fetch = defaultVcsTimeout("git", ["-C", "/repo", "fetch", "origin"]);
+
     const quick = defaultVcsTimeout("git", [
       "-C",
       "/repo",

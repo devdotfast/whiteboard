@@ -37,6 +37,20 @@ describe("local vcs", () => {
     setLocalVcsCommandObserver(null);
   });
 
+  it("says a call timed out instead of reporting nothing", async () => {
+    const repository = await mkdtemp(path.join(tmpdir(), "vcs-timeout-"));
+
+    execFileSync("git", ["init", "-q", repository]);
+
+    const result = await gitAt(repository, ["cat-file", "--batch"], {
+      allowFailure: true,
+      timeout: 50,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toMatch(/timed out.*SIGTERM/);
+  });
+
   it("runs git in the linked worktree that owns the working directory", async () => {
     const rootPath = await mkdtemp(path.join(tmpdir(), "local-vcs-git-at-"));
     const worktreePath = `${rootPath}-linked`;
