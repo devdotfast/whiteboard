@@ -611,3 +611,23 @@ it("refuses a dependency that closes a cycle through a board in Trash", async ()
   expect(store.relations(c).dependsOn).toEqual([]);
   expect(store.relations(a).dependsOn).toEqual([b]);
 });
+
+it("won't name a board in Trash as a parent or a dependency", async () => {
+  const plan = await board("Plan");
+  const step = await board("Step");
+  const gone = await board("Gone");
+
+  await store.execute({
+    operation: { type: "lifecycle", state: "trash", reviewId: gone },
+  });
+
+  const refusal = await setParent(step, gone).catch((error) => error);
+
+  expect(refusal).toBeInstanceOf(ReviewInputError);
+  expect(refusal.message).toMatch(/Trash/);
+  expect(refusal.message).toContain(gone);
+  await expect(setDependencies(step, [plan, gone])).rejects.toThrow(/Trash/);
+
+  expect(store.place(step).parent).toBeUndefined();
+  expect(store.relations(step).dependsOn).toEqual([]);
+});

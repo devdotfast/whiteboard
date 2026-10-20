@@ -2615,12 +2615,13 @@ export class ReviewStore {
   private boardName(id: string) {
     return `"${boardTitle(this.read(id).title)}" (${id})`;
   }
-  /** The other board exists and is in the same project. */
+  /** Exists, out of Trash, same project. */
   private checkRelated(id: string, other: string) {
     if (!this.has(other))
       throw new ReviewInputError(
         `Whiteboard ${other} does not exist. Name a whiteboard by its sessionId from session_list.`,
       );
+    this.assertOutOfTrash(other);
 
     if (this.projectOf(id) !== this.projectOf(other))
       throw new ReviewInputError(
