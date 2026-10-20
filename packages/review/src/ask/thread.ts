@@ -88,6 +88,15 @@ const steeringSchema = z.object({
 
 const steerOutcomeSchema = z.object({ outcome: z.string() });
 
+/** A review Codex couldn't run; one it ran has a risk level. */
+const failedReviewSchema = z.object({
+  review: z.object({
+    status: z.literal("denied"),
+    riskLevel: z.null(),
+    rationale: z.string(),
+  }),
+});
+
 /** MCP servers the reviewer's own agent may bring whose tools only read,
  * so their calls run without asking, like the agent reading files. */
 const READ_ONLY_MCP_SERVERS = new Set([
@@ -215,6 +224,8 @@ export class AskThread {
   private needsContext: boolean;
   /** The reviewer changed what the agent may do since it was last told. */
   private permitted = false;
+  /** Why the agent's automatic approval review failed this turn. */
+  private reviewFailure?: string;
   /** The agent could not reopen the session, for a reason signing in would
    * not fix, so trying again starts a new one. */
   private unloadable = false;
@@ -1068,6 +1079,20 @@ export class AskThread {
         title: `${this.state.agentName} finished without replying.`,
       });
 
+    // Every action would fail review again; read-only asks Whiteboard instead.
+    const reviewFailed =
+      this.reviewFailure !== undefined && this.state.permissions === "auto";
+
+    if (reviewFailed)
+      this.push({
+        kind: "notice",
+        id: randomUUID(),
+        severity: "warning",
+        title: `${this.state.agentName}'s automatic approval review failed, so this conversation is now read-only. Ask again to continue.`,
+        description: this.reviewFailure,
+      });
+    this.reviewFailure = undefined;
+
     this.emit({
       type: "set",
       status: "idle",
@@ -1080,6 +1105,8 @@ export class AskThread {
     });
     this.home.onTurn?.();
     this.home.onSave?.(this.state.entries);
+
+    if (reviewFailed) await this.permit("read-only");
     this.askQueued();
   }
 
@@ -1258,6 +1285,7 @@ export class AskThread {
 
       case "tool_call":
         this.noteMcpServer(update);
+        this.noteReview(update);
         this.push({
           kind: "tool",
           id: update.toolCallId,
@@ -1271,6 +1299,7 @@ export class AskThread {
         return;
       case "tool_call_update":
         this.noteMcpServer(update);
+        this.noteReview(update);
 
         // An agent may report a tool call's first state as an update.
         if (
@@ -1368,6 +1397,14 @@ export class AskThread {
     const server = mcpServerOf(update);
 
     if (server) this.mcpCalls.set(update.toolCallId, server);
+  }
+
+  private noteReview(update: ToolCallUpdate) {
+    const failed = failedReviewSchema.safeParse(
+      update.rawOutput ?? update.rawInput,
+    ).data;
+
+    if (failed && !this.replaying) this.reviewFailure = failed.review.rationale;
   }
 
   /**

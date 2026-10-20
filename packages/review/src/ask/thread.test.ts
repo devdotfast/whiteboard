@@ -1425,6 +1425,89 @@ it("says so when the agent leaves its read-only mode", async () => {
   thread.close();
 });
 
+it("leaves Codex's auto mode for read-only once its approval review fails, not when it denies an action", async () => {
+  const prompts: string[] = [];
+
+  // As codex-acp reports Codex's review of an action.
+  const review = async (
+    client: AgentContext,
+    reviewId: string,
+    riskLevel: string | null,
+    rationale: string,
+  ) => {
+    const event = (status: string) => ({
+      reviewId,
+      action: { type: "mcpToolCall", server: "whiteboard", toolName: "x" },
+      review: { status, riskLevel, userAuthorization: null, rationale },
+    });
+
+    await client.notify(methods.client.session.update, {
+      sessionId: "session",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: `guardian_assessment:${reviewId}`,
+        title: "Guardian Review",
+        kind: "think",
+        status: "in_progress",
+        rawInput: event("inProgress"),
+      },
+    });
+    await client.notify(methods.client.session.update, {
+      sessionId: "session",
+      update: {
+        sessionUpdate: "tool_call_update",
+        toolCallId: `guardian_assessment:${reviewId}`,
+        status: "failed",
+        rawOutput: event("denied"),
+      },
+    });
+  };
+
+  const { launch, launches } = fakeAgent(
+    async (client, prompt) => {
+      prompts.push(prompt);
+
+      if (prompts.length === 1) await review(client, "1", "high", "Unsafe.");
+      else if (prompts.length === 2)
+        await review(
+          client,
+          "2",
+          null,
+          "Automatic approval review failed: unexpected status 403 Forbidden",
+        );
+    },
+    async () => {},
+  );
+
+  const thread = openThread(launch, () => [], {
+    agent: "codex",
+    permissions: "auto",
+  });
+
+  await until(thread, ({ status }) => status === "idle");
+  expect(thread.read().permissions).toBe("auto");
+
+  await thread.ask({ text: "Read the board." });
+
+  const state = await until(
+    thread,
+    ({ status, permissions }) =>
+      status === "idle" && permissions === "read-only",
+  );
+
+  expect(launches()).toBe(2);
+  expect(state.entries.at(-1)).toMatchObject({
+    kind: "notice",
+    description:
+      "Automatic approval review failed: unexpected status 403 Forbidden",
+  });
+
+  await thread.ask({ text: "Again." });
+  await until(thread, ({ status }) => status === "idle");
+  expect(prompts[2]).toContain("Do not change files in the checkout.");
+  thread.close();
+});
+
 it("leaves the greeting Pi opens a session with out of the answer", async () => {
   const { launch } = fakeAgent(
     (client) => say(client, "It is safe."),
