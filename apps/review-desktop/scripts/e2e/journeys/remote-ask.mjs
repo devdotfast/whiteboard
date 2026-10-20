@@ -95,7 +95,7 @@ export const sessionRow = (ctx, title) =>
 export async function openRemoteReview(ctx, title) {
   await openHome(ctx);
   await sessionRow(ctx, title).waitFor({ timeout: 60000 });
-  await sessionRow(ctx, title).getByTitle(title, { exact: true }).click();
+  await sessionRow(ctx, title).getByRole("button", { name: `Open ${title}`, exact: true }).click();
   await reviewCanvas(ctx).getByRole("heading", { name: title }).waitFor({
     timeout: 60000,
   });

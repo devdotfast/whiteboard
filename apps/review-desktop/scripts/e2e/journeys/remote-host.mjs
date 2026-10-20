@@ -293,7 +293,7 @@ async function journey(ctx, page, until) {
   const peek = canvas.locator('[data-review-inline-editor="f.ts"]');
   const opened = Date.now();
 
-  await row(title).getByTitle(title, { exact: true }).click();
+  await row(title).getByRole("button", { name: `Open ${title}`, exact: true }).click();
   await canvas
     .getByRole("heading", { name: title })
     .waitFor({ timeout: 60000 });

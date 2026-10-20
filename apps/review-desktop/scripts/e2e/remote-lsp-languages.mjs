@@ -391,13 +391,11 @@ async function journey(ctx, id, language) {
   await openHome(ctx);
 
   const row = page
-    .locator("main.review-home")
-    .getByRole("region", { name: "Sessions", exact: true })
-    .locator("tbody tr")
+    .locator("main.review-home [data-home-row]")
     .filter({ hasText: title });
 
   await row.waitFor({ timeout: 60000 });
-  await row.getByTitle(title, { exact: true }).click();
+  await row.getByRole("button", { name: `Open ${title}`, exact: true }).click();
   await visibleCanvas(page)
     .getByRole("heading", { name: title })
     .waitFor({ timeout: 60000 });

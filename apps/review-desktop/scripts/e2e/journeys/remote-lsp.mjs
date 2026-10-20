@@ -406,7 +406,7 @@ async function journey(ctx) {
     const row = rows.filter({ hasText: text });
 
     await row.waitFor({ timeout: 60000 });
-    await row.getByTitle(text, { exact: true }).click();
+    await row.getByRole("button", { name: `Open ${text}`, exact: true }).click();
     await visibleCanvas(page)
       .getByRole("heading", { name: text })
       .waitFor({ timeout: 60000 });
@@ -825,7 +825,7 @@ export async function showDiff(ctx, title, file, review) {
   await ctx.page
     .locator("main.review-home [data-home-row]")
     .filter({ hasText: title })
-    .getByTitle(title, { exact: true })
+    .getByRole("button", { name: `Open ${title}`, exact: true })
     .click();
 
   const diff = ctx.page
