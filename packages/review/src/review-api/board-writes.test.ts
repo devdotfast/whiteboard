@@ -303,6 +303,24 @@ describe("a board's project", () => {
     expect(store.checkoutProject(ssh)?.name).toBe("Team/Service");
   });
 
+  it("files Azure DevOps clones by organization, project and repository", () => {
+    const https = clone("https", "https://Org@dev.azure.com/Org/Shop/_git/Api");
+    const ssh = clone("ssh", "git@ssh.dev.azure.com:v3/org/shop/api");
+
+    const legacy = clone(
+      "legacy",
+      "https://org.visualstudio.com/Shop/_git/Api",
+    );
+
+    const other = clone("other", "https://dev.azure.com/other/Shop/_git/Api");
+
+    const project = store.projectOfRepository(https);
+
+    expect(store.projectOfRepository(ssh)).toBe(project);
+    expect(store.projectOfRepository(legacy)).toBe(project);
+    expect(store.projectOfRepository(other)).not.toBe(project);
+  });
+
   it("takes the project named on create, and refuses one that doesn't exist", async () => {
     const app = checkout("app");
     const other = await create(checkout("other"), "Other");

@@ -16,6 +16,8 @@ import {
   runVcsSync,
 } from "@dev.fast/local-vcs";
 
+import { azureRepositoryOf } from "./azure-remote.js";
+
 /** Worktrees and same-origin clones share a group. */
 export interface RepositoryGroup {
   key: string;
@@ -105,6 +107,12 @@ function originUrlOf(commonDir: string): string | null | undefined {
 /** Clones of one repository share its origin's host and path, on any forge
  * and over any protocol; a checkout with no usable origin is its own. */
 function groupOf(commonDir: string, origin: string | null): RepositoryGroup {
+  // Azure DevOps: separate ssh host; org/project/repo paths.
+  const azure = origin ? azureRepositoryOf(origin) : undefined;
+
+  if (azure)
+    return { key: `remote:dev.azure.com/${azure.toLowerCase()}`, label: azure };
+
   const remote = origin ? parseGitRemote(origin) : null;
 
   return remote

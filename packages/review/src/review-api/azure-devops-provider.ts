@@ -1,6 +1,7 @@
 import { errorMessage } from "@dev.fast/trace-core";
 import { z } from "zod";
 
+import { azureRepositoryOf, slugOf } from "./azure-remote.js";
 import { ReviewInputError } from "./document.js";
 import type { PullRequestProvider } from "./provider.js";
 import { firstLine } from "./pull-request.js";
@@ -10,13 +11,6 @@ const AZ_TIMEOUT_MS = 30_000;
 const PULL_REQUEST_URLS = [
   /^https:\/\/dev\.azure\.com\/([A-Za-z0-9-]+)\/([^/]+)\/_git\/([^/]+)\/pullrequest\/([1-9]\d*)$/,
   /^https:\/\/([A-Za-z0-9-]+)\.visualstudio\.com\/(?:DefaultCollection\/)?([^/]+)\/_git\/([^/]+)\/pullrequest\/([1-9]\d*)$/,
-];
-
-const REMOTE_URLS = [
-  /^https:\/\/(?:[^@]+@)?dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+?)(?:\.git)?\/?$/,
-  /^https:\/\/([^.]+)\.visualstudio\.com\/(?:DefaultCollection\/)?([^/]+)\/_git\/([^/]+?)(?:\.git)?\/?$/,
-  /^git@ssh\.dev\.azure\.com:v3\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/,
-  /^[^@]+@vs-ssh\.visualstudio\.com:v3\/([^/]+)\/([^/]+)\/([^/]+?)(?:\.git)?\/?$/,
 ];
 
 const metadataSchema = z.object({
@@ -30,17 +24,6 @@ const metadataSchema = z.object({
     project: z.object({ name: z.string() }),
   }),
 });
-
-/** org/project/repository, decoded; undefined for malformed escapes. */
-function slugOf(patterns: RegExp[], url: string) {
-  const match = patterns.map((pattern) => pattern.exec(url)).find(Boolean);
-
-  try {
-    return match && match.slice(1, 4).map(decodeURIComponent).join("/");
-  } catch {
-    return undefined;
-  }
-}
 
 function azFailure(url: string, failure: string) {
   const unreadable = (hint: string) =>
@@ -162,8 +145,7 @@ export const azureDevOpsProvider: PullRequestProvider = {
 
   matchesRemote(remoteUrl, address) {
     return (
-      slugOf(REMOTE_URLS, remoteUrl.trim())?.toLowerCase() ===
-      address.slug.toLowerCase()
+      azureRepositoryOf(remoteUrl)?.toLowerCase() === address.slug.toLowerCase()
     );
   },
 };
