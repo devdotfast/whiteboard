@@ -169,12 +169,8 @@ export function readReviewNavigationRestore(
       activeAnchor: stored.panel.activeAnchor,
     });
 
-  // Commits became a picker in Diff: a saved Commits view reopens Diff.
-  const storedView =
-    stored.activeView === "commits" ? "diff" : stored.activeView;
-
   const scoped =
-    storedView === "diff" &&
+    stored.activeView === "diff" &&
     stored.diffScope &&
     canvas.commits.some(
       (summary) => summary.commit === stored.diffScope!.commit,
@@ -183,7 +179,7 @@ export function readReviewNavigationRestore(
       : undefined;
 
   return {
-    view: storedView ?? "review",
+    view: stored.activeView ?? "review",
     // Traces are listed after mount; the canvas narrows this once they are.
     availableViews: offeredReviewViews({
       hasDiff: canvas.hasChangeRange,

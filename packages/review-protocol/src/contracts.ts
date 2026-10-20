@@ -53,13 +53,7 @@ const reviewDiffSideSchema = z.enum(["base", "head"], {
   error: "must be base or head",
 });
 
-export const reviewViewSchema = z.enum([
-  "review",
-  "commits",
-  "diff",
-  "map",
-  "trace",
-]);
+export const reviewViewSchema = z.enum(["review", "diff", "map", "trace"]);
 
 export type ReviewView = z.infer<typeof reviewViewSchema>;
 

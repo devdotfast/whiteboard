@@ -166,7 +166,6 @@ describe("Review navigation", () => {
       active: null,
     });
 
-    store.getState().showView("commits");
     store.getState().showView("diff");
     expect(store.getState().diffScope).toMatchObject({ commit });
 
@@ -193,7 +192,7 @@ describe("Review navigation", () => {
 
   it("opens a trace on the whiteboard when the canvas has no traces", () => {
     const store = createReviewPanelStore();
-    store.getState().setAvailableViews(["review", "commits", "diff"]);
+    store.getState().setAvailableViews(["review", "diff"]);
 
     store.getState().openTrace({ sessionId: "session-1" });
     expect(store.getState().view).toBe("review");
@@ -209,7 +208,7 @@ describe("Review navigation", () => {
   it("resumes on the whiteboard when the stored view is not offered", () => {
     const store = createReviewPanelStore({
       view: "map",
-      availableViews: ["review", "commits", "diff"],
+      availableViews: ["review", "diff"],
     });
 
     expect(store.getState().view).toBe("review");

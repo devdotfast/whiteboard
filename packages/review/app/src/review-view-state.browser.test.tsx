@@ -240,7 +240,7 @@ describe("review view state", () => {
     storeState(session, { scrollTop: 320 });
     const harness = renderViewState({ session, metrics });
 
-    act(() => harness.store.getState().showView("commits"));
+    act(() => harness.store.getState().showView("diff"));
     metrics.scrollHeight = 700;
     triggerResize();
 
@@ -415,17 +415,19 @@ describe("review view state", () => {
   it("restores every view the switcher offers, and nothing else", () => {
     const session = testReviewSession();
 
-    for (const view of ["review", "commits", "map", "diff", "trace"] as const) {
+    for (const view of ["review", "map", "diff", "trace"] as const) {
       storeState(session, { activeView: view });
       expect(readPersistedReviewViewState(session.config).activeView).toBe(
         view,
       );
     }
 
-    storeState(session, { activeView: "files" });
-    expect(
-      readPersistedReviewViewState(session.config).activeView,
-    ).toBeUndefined();
+    for (const retired of ["commits", "files"]) {
+      storeState(session, { activeView: retired });
+      expect(
+        readPersistedReviewViewState(session.config).activeView,
+      ).toBeUndefined();
+    }
   });
 
   it("keys state by review identity", () => {

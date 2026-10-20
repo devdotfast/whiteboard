@@ -164,12 +164,10 @@ it("resumes the view and lens a reader left, on the version they left them", asy
     );
 
   await open();
-  // An older host's Commits view opens Diff, where commits are picked.
   await act(async () => {
     for (const listener of listeners)
-      listener({ event: "showReviewView", view: "commits" });
+      listener({ event: "showReviewView", view: "diff" });
   });
-  expect(tab(container, "Commits")).toBeFalsy();
   expect(tab(container, "Diff")?.getAttribute("aria-pressed")).toBe("true");
 
   // A host-opened view survives a reload.

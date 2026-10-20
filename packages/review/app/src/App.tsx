@@ -505,7 +505,7 @@ function ReviewLayoutContent({
     reviewFind?.setSurface(
       activeView === "review"
         ? "review"
-        : activeView === "diff" || activeView === "commits"
+        : activeView === "diff"
           ? "diff"
           : null,
     );
@@ -698,8 +698,7 @@ function ReviewLayoutContent({
         diffScope: scope,
       } = panelStore.getState();
 
-      // Commits became a picker in Diff: an older caller's "commits" opens it.
-      const view = event.view === "commits" ? "diff" : event.view;
+      const view = event.view;
 
       if (!availableViews.includes(view)) return;
 

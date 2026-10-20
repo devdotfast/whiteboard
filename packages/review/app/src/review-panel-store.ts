@@ -608,9 +608,7 @@ function viewTransition(
   state: ReviewPanelState & ReviewNavigationState,
   requested: ReviewView,
 ): Partial<ReviewPanelState & ReviewNavigationState> {
-  // Commits became a picker in Diff; an older caller's "commits" opens it.
-  const wanted = requested === "commits" ? "diff" : requested;
-  const view = state.availableViews.includes(wanted) ? wanted : "review";
+  const view = state.availableViews.includes(requested) ? requested : "review";
 
   return {
     view,
