@@ -18,9 +18,9 @@
 
 import {
   type JsonObject,
+  REVIEW_COLOR_THEME_KINDS,
   REVIEW_DIFF_LAYOUTS,
   REVIEW_DIFF_LAYOUT_SCOPES,
-  REVIEW_THEME_CHOICES,
   isJsonObject,
   jsonBoolean,
   jsonNumber,
@@ -549,11 +549,11 @@ export const UI_TELEMETRY_EVENTS = {
   },
   setting_changed: {
     event: "review_setting_changed",
-    // value carries the chosen option for the one multi-valued setting, theme.
+    // value carries whether the chosen theme is dark or light.
     properties: {
       setting: SETTING_NAME,
       enabled: "boolean",
-      value: REVIEW_THEME_CHOICES,
+      value: REVIEW_COLOR_THEME_KINDS,
     },
   },
   review_opened: {

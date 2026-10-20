@@ -21,8 +21,13 @@ function settings(): ReviewCanvasSettingsContent {
   return {
     telemetryEnabled: false,
     setTelemetryEnabled: async (enabled) => enabled,
-    theme: "dark",
-    setTheme: async (choice) => choice,
+    theme: "Review Dark",
+    setTheme: async (id) => id,
+    colorThemes: [
+      { id: "Review Dark", label: "Whiteboard Dark", kind: "dark" },
+      { id: "Tokyo Night", label: "Tokyo Night", kind: "dark" },
+      { id: "Review Light", label: "Whiteboard Light", kind: "light" },
+    ],
     keymap: "none",
     setKeymap: async (choice) => choice,
     documentWidth: "standard",
@@ -75,11 +80,9 @@ test("preferences stay enabled while overlapping saves settle independently", as
 
   const wide = page.getByRole("button", { name: "Wide", exact: true });
   const fontSize = page.getByRole("button", { name: "14", exact: true });
-  const dark = page.getByRole("button", { name: "Dark", exact: true });
   await act(async () => wide.click());
   await expect.element(wide).toBeEnabled();
   await expect.element(fontSize).toBeEnabled();
-  await expect.element(dark).toBeEnabled();
   await act(async () => fontSize.click());
   await expect.element(fontSize).toBeEnabled();
 

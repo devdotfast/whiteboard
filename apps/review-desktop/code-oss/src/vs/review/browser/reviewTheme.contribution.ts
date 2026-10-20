@@ -4,11 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Color } from '../../base/common/color.js';
-import { localize, localize2 } from '../../nls.js';
-import { Action2, MenuId, MenuRegistry, registerAction2 } from '../../platform/actions/common/actions.js';
-import { IConfigurationService } from '../../platform/configuration/common/configuration.js';
-import type { ServicesAccessor } from '../../platform/instantiation/common/instantiation.js';
-import { IQuickInputService, type IQuickPickItem } from '../../platform/quickinput/common/quickInput.js';
+import { localize } from '../../nls.js';
+import { MenuId, MenuRegistry } from '../../platform/actions/common/actions.js';
+import { ConfigurationTarget, IConfigurationService } from '../../platform/configuration/common/configuration.js';
+import { ILogService } from '../../platform/log/common/log.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../platform/storage/common/storage.js';
 import { registerColor } from '../../platform/theme/common/colorRegistry.js';
 import { ACTIVITY_BAR_BADGE_BACKGROUND } from '../../workbench/common/theme.js';
 import { focusBorder, textLinkForeground } from '../../platform/theme/common/colors/baseColors.js';
@@ -17,54 +17,51 @@ import { buttonBackground } from '../../platform/theme/common/colors/inputColors
 import { listHighlightForeground } from '../../platform/theme/common/colors/listColors.js';
 import { progressBarBackground } from '../../platform/theme/common/colors/miscColors.js';
 import { isDark } from '../../platform/theme/common/theme.js';
-import { type IColorTheme, IThemeService, registerThemingParticipant } from '../../platform/theme/common/themeService.js';
-import { type ReviewThemeChoice, applyReviewThemeChoice, currentReviewThemeChoice } from './reviewThemeChoice.js';
-
-interface IReviewThemeQuickPickItem extends IQuickPickItem {
-	readonly choice: ReviewThemeChoice;
-}
-
-class SelectReviewThemeAction extends Action2 {
-	constructor() {
-		super({
-			id: 'review.selectTheme',
-			title: localize2('review.selectTheme', "Whiteboard: Theme"),
-			f1: true
-		});
-	}
-
-	override async run(accessor: ServicesAccessor): Promise<void> {
-		const configurationService = accessor.get(IConfigurationService);
-		const quickInputService = accessor.get(IQuickInputService);
-		const themeService = accessor.get(IThemeService);
-		const currentChoice = currentReviewThemeChoice(configurationService, themeService);
-		const items: IReviewThemeQuickPickItem[] = [
-			{ choice: 'light', label: localize('review.theme.light', "Light"), picked: currentChoice === 'light' },
-			{ choice: 'dark', label: localize('review.theme.dark', "Dark"), picked: currentChoice === 'dark' },
-			{ choice: 'system', label: localize('review.theme.system', "System"), picked: currentChoice === 'system' }
-		];
-
-		const picked = await quickInputService.pick(items, {
-			title: localize('review.theme.title', "Whiteboard: Theme"),
-			placeHolder: localize('review.theme.placeholder', "Select a theme")
-		});
-		if (!picked) {
-			return;
-		}
-
-		await applyReviewThemeChoice(configurationService, picked.choice);
-	}
-}
-
-registerAction2(SelectReviewThemeAction);
+import { type IColorTheme, registerThemingParticipant } from '../../platform/theme/common/themeService.js';
+import { type IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../workbench/common/contributions.js';
+import { IHostColorSchemeService } from '../../workbench/services/themes/common/hostColorSchemeService.js';
 
 MenuRegistry.appendMenuItem(MenuId.MenubarPreferencesMenu, {
 	command: {
-		id: 'review.selectTheme',
+		id: 'workbench.action.selectTheme',
 		title: localize('review.selectTheme.menu', "Theme...")
 	},
 	order: 0
 });
+
+const THEME_MIGRATED_KEY = 'review.theme.pinnedFromAutoDetect';
+
+/** Pins the theme auto-detect shows, once, so Whiteboard has one theme setting. */
+class ReviewThemeMigration implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.reviewThemeMigration';
+
+	constructor(
+		@IConfigurationService configurationService: IConfigurationService,
+		@IHostColorSchemeService hostColorSchemeService: IHostColorSchemeService,
+		@IStorageService storageService: IStorageService,
+		@ILogService logService: ILogService,
+	) {
+		if (storageService.getBoolean(THEME_MIGRATED_KEY, StorageScope.APPLICATION)) {
+			return;
+		}
+		pinAutoDetectedTheme(configurationService, hostColorSchemeService).then(
+			() => storageService.store(THEME_MIGRATED_KEY, true, StorageScope.APPLICATION, StorageTarget.MACHINE),
+			error => logService.warn('Could not pin the color theme; will retry next launch', error),
+		);
+	}
+}
+
+async function pinAutoDetectedTheme(configurationService: IConfigurationService, hostColorSchemeService: IHostColorSchemeService): Promise<void> {
+	if (!configurationService.getValue<boolean>('window.autoDetectColorScheme')) {
+		return;
+	}
+	// The theme service may still hold a placeholder; resolve the theme as it does.
+	const theme = configurationService.getValue<string>(hostColorSchemeService.dark ? 'workbench.preferredDarkColorTheme' : 'workbench.preferredLightColorTheme');
+	await configurationService.updateValue('workbench.colorTheme', theme, ConfigurationTarget.USER);
+	await configurationService.updateValue('window.autoDetectColorScheme', false, ConfigurationTarget.USER);
+}
+
+registerWorkbenchContribution2(ReviewThemeMigration.ID, ReviewThemeMigration, WorkbenchPhase.AfterRestored);
 
 const reviewAccent = registerColor('review.accent', null, localize('review.accent', "Whiteboard's accent color. When unset, Whiteboard picks one from the theme."));
 

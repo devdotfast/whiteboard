@@ -42,6 +42,7 @@ import type {
 import { EditorPaneSelectionChangeReason } from "../../../../workbench/common/editor.js";
 import type { IEditorGroup } from "../../../../workbench/services/editor/common/editorGroupsService.js";
 import { IHostService } from "../../../../workbench/services/host/browser/host.js";
+import { IWorkbenchThemeService } from "../../../../workbench/services/themes/common/workbenchThemeService.js";
 import { isMacintosh } from "../../../../base/common/platform.js";
 import { ILifecycleService, ShutdownReason } from "../../../../workbench/services/lifecycle/common/lifecycle.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
@@ -112,7 +113,6 @@ import { IReviewTelemetryService } from "../../../services/reviewTelemetryServic
 
 import "../../media/review.css";
 import { ReviewSessionTelemetry } from "../../reviewSessionTelemetry.js";
-import { applyReviewThemeChoice, currentReviewThemeChoice } from "../../reviewThemeChoice.js";
 import { type ReviewCanvasAssetsModule, loadReviewCanvasAssets } from "./reviewCanvasAssets.js";
 import { ReviewCanvasEditorInput } from "./reviewCanvasEditorInput.js";
 import { remoteEntry, withRemoteEntry } from "./reviewRemoteEntry.js";
@@ -175,7 +175,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	constructor(
 		group: IEditorGroup,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IThemeService private readonly reviewThemeService: IThemeService,
+		@IWorkbenchThemeService private readonly reviewThemeService: IWorkbenchThemeService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IProductService private readonly productService: IProductService,
 		@IOpenerService private readonly openerService: IOpenerService,
@@ -949,15 +949,26 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_TELEMETRY_SETTING, enabled, ConfigurationTarget.USER);
 				return this.currentTelemetryEnabled();
 			},
-			theme: currentReviewThemeChoice(this.configurationService, this.reviewThemeService),
-			setTheme: async (choice) => {
-				this.reviewTelemetryService.capture("setting_changed", {
-					setting: "theme",
-					value: choice,
-				});
-				await applyReviewThemeChoice(this.configurationService, choice);
-				return currentReviewThemeChoice(this.configurationService, this.reviewThemeService);
+			// Auto-detect can come back with imported VS Code settings; then show the theme on screen.
+			theme: this.configurationService.getValue<boolean>("window.autoDetectColorScheme")
+				? this.reviewThemeService.getColorTheme().settingsId
+				: this.configurationService.getValue<string>("workbench.colorTheme"),
+			setTheme: async (id) => {
+				const picked = (await this.reviewThemeService.getColorThemes()).find((theme) => theme.settingsId === id);
+				if (picked) {
+					this.reviewTelemetryService.capture("setting_changed", {
+						setting: "theme",
+						value: themeKind(picked.type),
+					});
+				}
+				await this.configurationService.updateValue("window.autoDetectColorScheme", false, ConfigurationTarget.USER);
+				await this.configurationService.updateValue("workbench.colorTheme", id, ConfigurationTarget.USER);
+				return this.configurationService.getValue<string>("workbench.colorTheme");
 			},
+			// Whiteboard's own themes first, then the rest by name.
+			colorThemes: (await this.reviewThemeService.getColorThemes())
+				.map((theme) => ({ id: theme.settingsId, label: theme.label, kind: themeKind(theme.type) }))
+				.sort((a, b) => Number(!a.label.startsWith("Whiteboard")) - Number(!b.label.startsWith("Whiteboard")) || a.label.localeCompare(b.label)),
 			keymap: this.currentKeymap(),
 			setKeymap: async (choice) => {
 				this.reviewTelemetryService.capture("setting_changed", {
@@ -1386,9 +1397,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	private colorScheme(): ReviewTheme {
-		const type = this.reviewThemeService.getColorTheme().type;
-		return type === ColorScheme.LIGHT || type === ColorScheme.HIGH_CONTRAST_LIGHT ? "light" : "dark";
+		return themeKind(this.reviewThemeService.getColorTheme().type);
 	}
+}
+
+function themeKind(type: ColorScheme): ReviewTheme {
+	return type === ColorScheme.LIGHT || type === ColorScheme.HIGH_CONTRAST_LIGHT ? "light" : "dark";
 }
 
 class ReviewCanvasPlaceholderPart extends Part {

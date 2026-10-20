@@ -46,8 +46,9 @@ async function render(hosts: ReviewRemoteHostsSettings) {
   const settings: ReviewCanvasSettingsContent = {
     telemetryEnabled: false,
     setTelemetryEnabled: reject,
-    theme: "dark",
+    theme: "Review Dark",
     setTheme: reject,
+    colorThemes: [],
     keymap: "none",
     setKeymap: reject,
     documentWidth: "standard",

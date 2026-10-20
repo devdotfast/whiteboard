@@ -5,12 +5,13 @@ import { Select } from "@canvas/ui/text-field";
 import type {
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
+  ReviewColorTheme,
+  ReviewColorThemeKind,
   ReviewDocumentWidthChoice,
   ReviewKeymapChoice,
   ReviewOpenFilesIn,
   ReviewOpenFilesInChoice,
   ReviewReadyNotificationChoice,
-  ReviewThemeChoice,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { useEffect, useState } from "react";
@@ -25,11 +26,10 @@ import { withClass } from "./stylex-props";
 import { TraceCaptureSection } from "./trace-capture-section";
 import { SegmentedControl, labeledOptions } from "./ui/segmented";
 
-const THEME_LABELS: Record<ReviewThemeChoice, string> = {
-  light: "Light",
-  dark: "Dark",
-  system: "System",
-};
+const COLOR_THEME_GROUPS: [ReviewColorThemeKind, string][] = [
+  ["dark", "Dark"],
+  ["light", "Light"],
+];
 
 const KEYMAP_LABELS: Record<ReviewKeymapChoice, string> = {
   none: "Default",
@@ -218,12 +218,11 @@ export function SettingsPage({
 
           <Section label="Editor">
             <Row label="Theme" description="How Whiteboard looks.">
-              <SegmentedControl
-                label="Theme"
+              <ThemeSelect
+                themes={settings.colorThemes}
                 value={theme}
-                options={labeledOptions(THEME_LABELS)}
-                onChange={(choice) =>
-                  void run(() => settings.setTheme(choice), setTheme)
+                onChange={(id) =>
+                  void run(() => settings.setTheme(id), setTheme)
                 }
               />
             </Row>
@@ -391,6 +390,36 @@ export function SettingsPage({
         </div>
       </div>
     </main>
+  );
+}
+
+function ThemeSelect({
+  themes,
+  value,
+  onChange,
+}: {
+  themes: ReviewColorTheme[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <Select
+      aria-label="Theme"
+      value={value}
+      onChange={(event) => onChange(event.currentTarget.value)}
+    >
+      {COLOR_THEME_GROUPS.map(([kind, label]) => (
+        <optgroup key={kind} label={label}>
+          {themes
+            .filter((option) => option.kind === kind)
+            .map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+        </optgroup>
+      ))}
+    </Select>
   );
 }
 

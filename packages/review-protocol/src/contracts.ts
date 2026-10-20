@@ -667,14 +667,21 @@ export interface ReviewCanvasOnboarding {
   published: boolean;
 }
 
+/** `id` is the theme's `workbench.colorTheme` value. */
+export interface ReviewColorTheme {
+  id: string;
+  label: string;
+  kind: ReviewColorThemeKind;
+}
+
+export const REVIEW_COLOR_THEME_KINDS = ["dark", "light"] as const;
+
+export type ReviewColorThemeKind = (typeof REVIEW_COLOR_THEME_KINDS)[number];
+
 // The workbench owns the theme and the keymap; the canvas only names a choice.
-// These lists mirror the workbench side (`reviewThemeChoice.ts`, and
-// `REVIEW_KEYMAPS`, `REVIEW_DOCUMENT_WIDTH_CHOICES` and `REVIEW_OPEN_FILES_IN_CHOICES`
+// These lists mirror the workbench side (`REVIEW_KEYMAPS`,
+// `REVIEW_DOCUMENT_WIDTH_CHOICES` and `REVIEW_OPEN_FILES_IN_CHOICES`
 // in `reviewConfigurationDefaults.ts`).
-export const REVIEW_THEME_CHOICES = ["dark", "light", "system"] as const;
-
-export type ReviewThemeChoice = (typeof REVIEW_THEME_CHOICES)[number];
-
 export const REVIEW_KEYMAP_CHOICES = [
   "none",
   "vim",
@@ -789,8 +796,10 @@ export interface ReviewCanvasSettingsContent {
   // review server and the CLI both read.
   telemetryEnabled: boolean;
   setTelemetryEnabled(enabled: boolean): Promise<boolean>;
-  theme: ReviewThemeChoice;
-  setTheme(choice: ReviewThemeChoice): Promise<ReviewThemeChoice>;
+  // A `colorThemes` id.
+  theme: string;
+  setTheme(id: string): Promise<string>;
+  colorThemes: ReviewColorTheme[];
   keymap: ReviewKeymapChoice;
   // A keymap only takes effect after the extension host restarts, so the
   // workbench offers the window reload. The page never forces one.
