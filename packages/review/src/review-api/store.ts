@@ -2655,7 +2655,7 @@ export class ReviewStore {
   }
   private setDependencies(id: string, dependsOn: readonly string[]) {
     const unique = [...new Set(dependsOn)];
-    const graph = this.relationGraph();
+    const graph = this.relationGraph(true);
 
     for (const dependency of unique) {
       if (dependency === id)

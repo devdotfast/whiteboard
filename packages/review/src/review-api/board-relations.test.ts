@@ -591,3 +591,23 @@ it("keeps nesting one level deep across Trash, so a restore never makes a grandc
   expect(store.relations(plan).children).toEqual([]);
   expect(store.relations(step).parentId).toBe(other);
 });
+
+it("refuses a dependency that closes a cycle through a board in Trash", async () => {
+  const a = await board("Alpha");
+  const b = await board("Bravo");
+  const c = await board("Charlie");
+
+  await setDependencies(a, [b]);
+  await setDependencies(b, [c]);
+  await store.execute({
+    operation: { type: "lifecycle", state: "trash", reviewId: b },
+  });
+
+  await expect(setDependencies(c, [a])).rejects.toThrow(ReviewInputError);
+
+  await store.execute({
+    operation: { type: "lifecycle", state: "active", reviewId: b },
+  });
+  expect(store.relations(c).dependsOn).toEqual([]);
+  expect(store.relations(a).dependsOn).toEqual([b]);
+});
