@@ -1374,13 +1374,9 @@ body
   color: var(--vscode-descriptionForeground);
 }
 
-/* Scope chevrons, rails and braces in structural diffs. The marker blue is
-   fixed because some themes make focusBorder transparent. */
+/* Scope chevrons, rails and braces in structural diffs, in the accent. */
 .review-workbench .monaco-editor {
-  --review-scope-marker: #2B55E6;
-}
-.review-workbench .monaco-editor:is(.vs-dark, .hc-black) {
-  --review-scope-marker: #5B7CFF;
+  --review-scope-marker: var(--review-accent);
 }
 .review-workbench .monaco-editor .review-fold-chevron {
   display: flex;
