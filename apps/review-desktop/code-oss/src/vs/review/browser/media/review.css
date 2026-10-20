@@ -266,13 +266,6 @@
   -webkit-app-region: drag;
 }
 
-/* Flex rather than `calc(100% - <chrome>)`: the row above is the only fixed
-   height, so the tree takes whatever is left and the height is written once. */
-.monaco-workbench .part.review-explorer > .review-explorer-tree {
-  flex: 1;
-  min-height: 0;
-}
-
 /* The workbench outlines every focused element, so a click leaves a ring.
    Here the ring shows only for keyboard focus. */
 .monaco-workbench .review-titlebar-container :focus:not(:focus-visible),
@@ -1991,11 +1984,11 @@ body
 }
 
 .monaco-workbench .review-sidebar-additions {
-  color: var(--vscode-gitDecoration-addedResourceForeground, #1b9a57);
+  color: var(--vscode-gitDecoration-addedResourceForeground);
 }
 
 .monaco-workbench .review-sidebar-deletions {
-  color: var(--vscode-gitDecoration-deletedResourceForeground, #d8402c);
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
 }
 
 /* Mounted lists show the sidebar background, not the board's. */
@@ -2134,7 +2127,8 @@ body
 }
 
 /* The tab's own mark, as the sidebar draws it: changed boards, or threads
-   that want the reader. */
+   that want the reader. Ringed in what it sits on, so it reads apart from
+   the tab's chip. */
 .monaco-workbench .review-sidebar-rail-badge {
   position: absolute;
   top: 5px;
@@ -2143,10 +2137,6 @@ body
   height: 6px;
   border-radius: 999px;
   background-color: var(--vscode-charts-blue);
-}
-
-/* Ringed in what it sits on, so it reads apart from the tab's chip. */
-.monaco-workbench .review-sidebar-rail-badge {
   box-shadow: 0 0 0 1px var(--vscode-editor-background);
 }
 
