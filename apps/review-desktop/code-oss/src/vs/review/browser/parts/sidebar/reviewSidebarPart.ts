@@ -156,6 +156,8 @@ export class ReviewSidebarPart extends Part {
 	/** Kept wide enough for the window controls over the top row; the
 	 * sash stops there. */
 	private fitWidth = REVIEW_SIDEBAR_MINIMUM_WIDTH;
+	/** Tabs measured; until then every layout refits. */
+	private fitted = false;
 	private tabRow: HTMLElement | undefined;
 
 	override get minimumWidth(): number {
@@ -229,7 +231,8 @@ export class ReviewSidebarPart extends Part {
 
 	override layout(width: number, height: number, top: number, left: number): void {
 		super.layout(width, height, top, left);
-		this.fitControls();
+		// Controls move with zoom and full screen, not layout.
+		if (!this.fitted) this.fitControls();
 		this.foldTabs(width);
 	}
 
@@ -264,7 +267,9 @@ export class ReviewSidebarPart extends Part {
 	private fitControls(): void {
 		const controls = this.layoutService.mainContainer.querySelector(".part.titlebar .titlebar-left");
 		if (!controls || !this.element) return;
-		const width = sidebarMinimumWidth(controls.getBoundingClientRect().right, this.element.getBoundingClientRect().left, this.tabsRow.get()?.folded);
+		const tabs = this.tabsRow.get();
+		this.fitted = tabs !== undefined;
+		const width = sidebarMinimumWidth(controls.getBoundingClientRect().right, this.element.getBoundingClientRect().left, tabs?.folded);
 		if (width === this.fitWidth) return;
 		this.fitWidth = width;
 		this._onDidChange.fire(undefined);
@@ -359,6 +364,8 @@ export class ReviewSidebarPart extends Part {
 		};
 		this._register(onDidChangeZoomLevel(() => requestAnimationFrame(remeasure)));
 		this._register(addDisposableListener(parent.ownerDocument.fonts, "loadingdone", remeasure));
+		// The workbench lays out for full screen first; refit next frame.
+		this._register(onDidChangeFullscreen(() => requestAnimationFrame(() => this.fitControls())));
 
 		const header = (pane: HTMLElement, title: string) => {
 			const row = $(".review-sidebar-pane-header");
