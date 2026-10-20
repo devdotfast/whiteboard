@@ -65,6 +65,10 @@ export function CommitPicker({
   const picked = index >= 0 ? oldestFirst[index] : undefined;
   const listed = newestFirst ? commits : oldestFirst;
 
+  const listTooltip = useTooltip(countLabel(commits.length, "commit"), {
+    detail: commitLines(oldestFirst),
+  });
+
   if (commits.length === 0) return null;
 
   const pick = (commit: string | null) => {
@@ -91,7 +95,11 @@ export function CommitPicker({
         />
       ) : (
         <button
-          ref={pill}
+          ref={(element) => {
+            pill.current = element;
+
+            return listTooltip(element);
+          }}
           type="button"
           aria-haspopup="menu"
           aria-expanded={open}
@@ -144,6 +152,20 @@ export function CommitPicker({
       ) : null}
     </div>
   );
+}
+
+// The tooltip lists this many; the menu has the rest.
+const LISTED = 10;
+
+/** "8d52426 Subject", one per line, oldest first. */
+function commitLines(commits: readonly ReviewSidebarCommit[]): string {
+  const lines = commits
+    .slice(0, LISTED)
+    .map(({ commit, subject }) => `${commit.slice(0, 7)} ${subject}`);
+
+  if (commits.length > LISTED) lines.push(`${commits.length - LISTED} more`);
+
+  return lines.join("\n");
 }
 
 /** "Commit 8d52426 ×": the menu's trigger, and the × back to all. */

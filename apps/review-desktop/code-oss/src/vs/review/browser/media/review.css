@@ -1265,7 +1265,7 @@ body
 .monaco-hover.workbench-hover.review-tooltip .hover-contents { padding: 4px 8px; }
 .review-tooltip-label,
 .review-tooltip-detail { display: block; }
-.review-tooltip-detail { color: var(--review-tooltip-fg-muted); }
+.review-tooltip-detail { color: var(--review-tooltip-fg-muted); white-space: pre-line; }
 .review-tooltip-shortcut { margin-left: 8px; color: var(--vscode-disabledForeground); font: 11px/16px var(--review-chrome-font); }
 .workbench-hover-container:has(> .review-tooltip) > .workbench-hover-pointer::after {
   background-color: var(--review-tooltip-bg);
