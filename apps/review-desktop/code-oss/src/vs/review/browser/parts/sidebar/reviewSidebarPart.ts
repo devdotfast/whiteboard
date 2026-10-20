@@ -10,7 +10,7 @@ import { renderIcon } from "../../../../base/browser/ui/iconLabel/iconLabels.js"
 import { onDidChangeFullscreen, onDidChangeZoomLevel } from "../../../../base/browser/browser.js";
 import { Codicon } from "../../../../base/common/codicons.js";
 import { Emitter, Event } from "../../../../base/common/event.js";
-import { ThrottledDelayer, timeout } from "../../../../base/common/async.js";
+import { ThrottledDelayer } from "../../../../base/common/async.js";
 import { isCancellationError } from "../../../../base/common/errors.js";
 import { Disposable, type IDisposable, MutableDisposable, toDisposable } from "../../../../base/common/lifecycle.js";
 import { localize, localize2 } from "../../../../nls.js";
@@ -27,6 +27,7 @@ import type { EditorInput } from "../../../../workbench/common/editor/editorInpu
 import { IEditorService } from "../../../../workbench/services/editor/common/editorService.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import { REVIEW_CHROME_HEIGHT } from "../../../common/reviewChrome.js";
+import { reconnectUntilAborted } from "../../../common/reviewReconnect.js";
 import { REVIEW_SIDEBAR_MINIMUM_WIDTH, TAB_COUNT_DIGITS, measuredOnce, sidebarMinimumWidth, tabsRowWidth } from "./reviewSidebarWidth.js";
 import type {
 	ReviewAskState,
@@ -536,7 +537,7 @@ export class ReviewSidebarPart extends Part {
 		this.render();
 	}
 
-	/** Follows the board's project threads while the sidebar shows it. */
+	/** Backs off between failures like the control channel. */
 	private follow(reviewId: string | undefined): void {
 		this.following.clear();
 		if (!reviewId) return;
@@ -546,28 +547,25 @@ export class ReviewSidebarPart extends Part {
 			this.threads.set(reviewId, update);
 			if (reviewId === this.reviewId) this.render();
 		};
-		void (async () => {
-			while (!abort.signal.aborted) {
-				try {
-					const client = new ReviewApiClient(await this.connection.getConnection());
-					const response = await client.response(`/${encodeURIComponent(reviewId)}/ask/threads?watch`, { signal: abort.signal });
-					const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
-					let pending = "";
-					for (let read = await reader.read(); !read.done; read = await reader.read()) {
-						pending += read.value;
-						for (let end = pending.indexOf("\n"); end !== -1; end = pending.indexOf("\n")) {
-							// SAFETY: the server sends ReviewProjectThreads lines on this route.
-							accept(JSON.parse(pending.slice(0, end)) as ReviewProjectThreads);
-							pending = pending.slice(end + 1);
-						}
-					}
-				} catch (error) {
-					if (abort.signal.aborted) return;
-					this.logService.warn("[Whiteboard] Sidebar threads disconnected:", error);
+		void reconnectUntilAborted(abort.signal, async (onConnected) => {
+			const client = new ReviewApiClient(await this.connection.getConnection());
+			const response = await client.response(`/${encodeURIComponent(reviewId)}/ask/threads?watch`, { signal: abort.signal });
+			onConnected();
+			const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+			let pending = "";
+			for (let read = await reader.read(); !read.done; read = await reader.read()) {
+				pending += read.value;
+				for (let end = pending.indexOf("\n"); end !== -1; end = pending.indexOf("\n")) {
+					// SAFETY: the server sends ReviewProjectThreads lines on this route.
+					accept(JSON.parse(pending.slice(0, end)) as ReviewProjectThreads);
+					pending = pending.slice(end + 1);
 				}
-				await timeout(2000);
 			}
-		})();
+			if (abort.signal.aborted) return;
+			throw new Error("The threads stream ended.");
+		}, {
+			onRetry: (error) => this.logService.warn("[Whiteboard] Sidebar threads disconnected:", error),
+		});
 	}
 
 	/** What the board's Diff view reports for Lenses. */
