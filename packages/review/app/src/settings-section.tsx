@@ -4,6 +4,10 @@ import type { ReactNode, Ref } from "react";
 
 import { settingsStyles as styles } from "./settings-styles";
 
+export function sectionId(label: string): string {
+  return `settings-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+}
+
 export function Section({
   label,
   ref,
@@ -15,7 +19,10 @@ export function Section({
 }) {
   return (
     <section ref={ref} {...stylex.props(styles.section)} aria-label={label}>
-      <h2 {...stylex.props(textStyles.eyebrow, styles.sectionLabel)}>
+      <h2
+        id={sectionId(label)}
+        {...stylex.props(textStyles.eyebrow, styles.sectionLabel)}
+      >
         {label}
       </h2>
       {children}

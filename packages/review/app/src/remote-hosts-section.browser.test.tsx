@@ -88,6 +88,8 @@ async function render(hosts: ReviewRemoteHostsSettings) {
   };
 
   const container = document.createElement("div");
+  // Desktop gives Settings a fixed height.
+  container.style.height = "700px";
   document.body.append(container);
   root = createRoot(container);
   await act(async () => root!.render(<SettingsPage settings={settings} />));

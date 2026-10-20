@@ -1,7 +1,8 @@
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { focusStyles } from "@canvas/ui/focus";
+import { listRowStyles } from "@canvas/ui/list-row";
 import { textStyles } from "@canvas/ui/text";
 import { Select, TextField } from "@canvas/ui/text-field";
 import type {
@@ -17,14 +18,18 @@ import type {
   ReviewReadyNotificationChoice,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useEffect, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { DiffrConfigSection } from "./diffr-config-section";
 import { homeStyles } from "./home-styles";
 import { chevronMarker } from "./markers.stylex";
-import { RemoteHostsSection } from "./remote-hosts-section";
-import { Row, Section } from "./settings-section";
+import { REMOTE_HOSTS_LABEL, RemoteHostsSection } from "./remote-hosts-section";
+import {
+  scrollToReviewHeading,
+  useHeadingInView,
+} from "./review-heading-scroll";
+import { Row, Section, sectionId } from "./settings-section";
 import { settingsStyles as styles } from "./settings-styles";
 import { withClass } from "./stylex-props";
 import { TraceCaptureSection } from "./trace-capture-section";
@@ -141,6 +146,32 @@ export function SettingsPage({
     }
   };
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const columnRef = useRef<HTMLDivElement>(null);
+
+  const agents = Boolean(install);
+  const commandLine = Boolean(install?.status.cli);
+
+  const contents = useMemo(
+    () =>
+      [
+        ...(agents ? ["Agents"] : []),
+        ...(commandLine ? ["Command line"] : []),
+        "Privacy",
+        "Appearance",
+        "Editor",
+        "Notifications",
+        "Tools",
+        REMOTE_HOSTS_LABEL,
+        "Experimental Features",
+        "Uninstall",
+      ].map((label) => ({
+        id: sectionId(label),
+        text: label.replace(" (Experimental)", ""),
+      })),
+    [agents, commandLine],
+  );
+
   const changeAppearance = <Key extends keyof ReviewAppearance>(
     key: Key,
     value: ReviewAppearance[Key],
@@ -148,381 +179,431 @@ export function SettingsPage({
 
   return (
     <main {...withClass("review-home", homeStyles.page)}>
-      <div {...stylex.props(homeStyles.scroll)}>
-        <div {...stylex.props(homeStyles.content, styles.page)}>
-          <div {...stylex.props(homeStyles.header)}>
-            <h1 {...stylex.props(homeStyles.heading)}>Settings</h1>
-          </div>
-          <p {...stylex.props(styles.lede)}>
-            Settings apply to Whiteboard on this machine.
-          </p>
+      <div ref={scrollRef} {...stylex.props(homeStyles.scroll, styles.scroll)}>
+        <div {...stylex.props(homeStyles.content, styles.layout)}>
+          <SettingsContents
+            entries={contents}
+            columnRef={columnRef}
+            scrollRef={scrollRef}
+          />
+          <div ref={columnRef} {...stylex.props(styles.page)}>
+            <div {...stylex.props(homeStyles.header)}>
+              <h1 {...stylex.props(homeStyles.heading)}>Settings</h1>
+            </div>
+            <p {...stylex.props(styles.lede)}>
+              Settings apply to Whiteboard on this machine.
+            </p>
 
-          {install ? (
-            <Section label="Agents">
-              <LegacySkillsRow
-                install={install}
-                onStatusChange={setInstallStatus}
-              />
-              <div {...stylex.props(styles.connect)}>
-                <ConnectCard install={install} />
-              </div>
-            </Section>
-          ) : null}
+            {install ? (
+              <Section label="Agents">
+                <LegacySkillsRow
+                  install={install}
+                  onStatusChange={setInstallStatus}
+                />
+                <div {...stylex.props(styles.connect)}>
+                  <ConnectCard install={install} />
+                </div>
+              </Section>
+            ) : null}
 
-          {install?.status.cli ? (
-            <Section label="Command line">
+            {install?.status.cli ? (
+              <Section label="Command line">
+                <Row
+                  label="whiteboard command"
+                  description={
+                    install.status.shim.installed
+                      ? `Installed at ${install.status.shim.path}. Your agents and trace capture run it.`
+                      : "Adds whiteboard to your shell PATH. Your agents and trace capture run it."
+                  }
+                >
+                  {install.status.shim.installer ? null : (
+                    <Button
+                      disabled={installingCli}
+                      onClick={async () => {
+                        setInstallingCli(true);
+                        await run(
+                          () =>
+                            install.status.shim.installed
+                              ? install.remove({ shim: true })
+                              : install.apply({ shim: true }),
+                          setInstallStatus,
+                        );
+                        setInstallingCli(false);
+                      }}
+                    >
+                      {install.status.shim.installed ? "Remove" : "Install"}
+                    </Button>
+                  )}
+                </Row>
+              </Section>
+            ) : null}
+
+            <Section label="Privacy">
               <Row
-                label="whiteboard command"
-                description={
-                  install.status.shim.installed
-                    ? `Installed at ${install.status.shim.path}. Your agents and trace capture run it.`
-                    : "Adds whiteboard to your shell PATH. Your agents and trace capture run it."
-                }
+                label="Share anonymous usage data"
+                description="Counts and timings only. Never code, file paths, or repository names."
               >
-                {install.status.shim.installer ? null : (
-                  <Button
-                    disabled={installingCli}
-                    onClick={async () => {
-                      setInstallingCli(true);
-                      await run(
-                        () =>
-                          install.status.shim.installed
-                            ? install.remove({ shim: true })
-                            : install.apply({ shim: true }),
-                        setInstallStatus,
+                <label
+                  {...stylex.props(styles.toggle)}
+                  aria-label="Share anonymous usage data"
+                >
+                  <Checkbox
+                    checked={telemetryEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      void run(
+                        () => settings.setTelemetryEnabled(enabled),
+                        setTelemetryEnabled,
                       );
-                      setInstallingCli(false);
                     }}
-                  >
-                    {install.status.shim.installed ? "Remove" : "Install"}
-                  </Button>
-                )}
+                  />
+                </label>
               </Row>
             </Section>
-          ) : null}
 
-          <Section label="Privacy">
-            <Row
-              label="Share anonymous usage data"
-              description="Counts and timings only. Never code, file paths, or repository names."
-            >
-              <label
-                {...stylex.props(styles.toggle)}
-                aria-label="Share anonymous usage data"
-              >
-                <Checkbox
-                  checked={telemetryEnabled}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
-                    void run(
-                      () => settings.setTelemetryEnabled(enabled),
-                      setTelemetryEnabled,
-                    );
-                  }}
+            <Section label="Appearance">
+              <Row label="Theme" description="How Whiteboard looks.">
+                <ThemeSelect
+                  themes={colorThemes}
+                  value={theme}
+                  onChange={(id) =>
+                    void run(() => settings.setTheme(id), setTheme)
+                  }
                 />
-              </label>
-            </Row>
-          </Section>
-
-          <Section label="Appearance">
-            <Row label="Theme" description="How Whiteboard looks.">
-              <ThemeSelect
-                themes={colorThemes}
-                value={theme}
-                onChange={(id) =>
-                  void run(() => settings.setTheme(id), setTheme)
-                }
-              />
-            </Row>
-            <Row
-              label="Import a theme"
-              description="A VS Code theme extension (.vsix) or theme file (.json)."
-            >
-              <Button
-                onClick={() =>
-                  void run(
-                    () => settings.importColorTheme(),
-                    (imported) => {
-                      if (!imported) return;
-                      setColorThemes(imported.colorThemes);
-                      setTheme(imported.theme);
-                    },
-                  )
-                }
+              </Row>
+              <Row
+                label="Import a theme"
+                description="A VS Code theme extension (.vsix) or theme file (.json)."
               >
-                Choose file…
-              </Button>
-            </Row>
-            <Row
-              label="Document width"
-              description="Wide and Full give diagrams and code more room. Text keeps a reading width."
-            >
-              <SegmentedControl
+                <Button
+                  onClick={() =>
+                    void run(
+                      () => settings.importColorTheme(),
+                      (imported) => {
+                        if (!imported) return;
+                        setColorThemes(imported.colorThemes);
+                        setTheme(imported.theme);
+                      },
+                    )
+                  }
+                >
+                  Choose file…
+                </Button>
+              </Row>
+              <Row
                 label="Document width"
-                value={documentWidth}
-                options={labeledOptions(DOCUMENT_WIDTH_LABELS)}
-                onChange={(choice) =>
-                  void run(
-                    () => settings.setDocumentWidth(choice),
-                    setDocumentWidth,
-                  )
-                }
-              />
-            </Row>
-            <div {...stylex.props(styles.nested)}>
-              <details>
-                <summary
-                  {...stylex.props(
-                    chevronMarker,
-                    disclosureStyles.toggle,
-                    focusStyles.ring,
-                    styles.nestedSummary,
-                  )}
-                >
-                  <DisclosureChevron />
-                  Specifics
-                </summary>
-                <Row
-                  label="Text size"
-                  description="Whiteboard text. Headings scale with it."
-                >
-                  <SizeSelect
+                description="Wide and Full give diagrams and code more room. Text keeps a reading width."
+              >
+                <SegmentedControl
+                  label="Document width"
+                  value={documentWidth}
+                  options={labeledOptions(DOCUMENT_WIDTH_LABELS)}
+                  onChange={(choice) =>
+                    void run(
+                      () => settings.setDocumentWidth(choice),
+                      setDocumentWidth,
+                    )
+                  }
+                />
+              </Row>
+              <div {...stylex.props(styles.nested)}>
+                <details>
+                  <summary
+                    {...stylex.props(
+                      chevronMarker,
+                      disclosureStyles.toggle,
+                      focusStyles.ring,
+                      styles.nestedSummary,
+                    )}
+                  >
+                    <DisclosureChevron />
+                    Specifics
+                  </summary>
+                  <Row
                     label="Text size"
-                    sizes={DOCUMENT_FONT_SIZES}
-                    value={appearance.documentFontSize}
-                    onChange={(size) =>
-                      changeAppearance("documentFontSize", size)
-                    }
-                  />
-                </Row>
-                <Row
-                  label="Reading typeface"
-                  description="Whiteboard text, Ask answers, and trace notes."
-                >
-                  <SegmentedControl
+                    description="Whiteboard text. Headings scale with it."
+                  >
+                    <SizeSelect
+                      label="Text size"
+                      sizes={DOCUMENT_FONT_SIZES}
+                      value={appearance.documentFontSize}
+                      onChange={(size) =>
+                        changeAppearance("documentFontSize", size)
+                      }
+                    />
+                  </Row>
+                  <Row
                     label="Reading typeface"
-                    value={appearance.readingFont}
-                    options={labeledOptions(READING_FONT_LABELS)}
-                    onChange={(choice) =>
-                      changeAppearance("readingFont", choice)
-                    }
-                  />
-                </Row>
-                <Row
-                  label="Code font"
-                  description="Code blocks, diffs, peeks, and source tabs. Clear it for Geist Mono."
-                >
-                  <FontFamilyField
-                    value={appearance.codeFontFamily}
-                    onChange={(family) =>
-                      changeAppearance("codeFontFamily", family)
-                    }
-                  />
-                </Row>
-                <Row
-                  label="Code font size"
-                  description="Code blocks and source tabs."
-                >
-                  <SizeSelect
+                    description="Whiteboard text, Ask answers, and trace notes."
+                  >
+                    <SegmentedControl
+                      label="Reading typeface"
+                      value={appearance.readingFont}
+                      options={labeledOptions(READING_FONT_LABELS)}
+                      onChange={(choice) =>
+                        changeAppearance("readingFont", choice)
+                      }
+                    />
+                  </Row>
+                  <Row
+                    label="Code font"
+                    description="Code blocks, diffs, peeks, and source tabs. Clear it for Geist Mono."
+                  >
+                    <FontFamilyField
+                      value={appearance.codeFontFamily}
+                      onChange={(family) =>
+                        changeAppearance("codeFontFamily", family)
+                      }
+                    />
+                  </Row>
+                  <Row
                     label="Code font size"
-                    sizes={CODE_FONT_SIZES}
-                    value={appearance.codeFontSize}
-                    onChange={(size) => changeAppearance("codeFontSize", size)}
-                  />
-                </Row>
-                <Row
-                  label="Font ligatures"
-                  description="Code blocks, diffs, peeks, and source tabs."
-                >
-                  <label {...stylex.props(styles.toggle)}>
-                    <Checkbox
-                      aria-label="Font ligatures"
-                      checked={appearance.fontLigatures}
-                      onChange={(event) =>
-                        changeAppearance("fontLigatures", event.target.checked)
+                    description="Code blocks and source tabs."
+                  >
+                    <SizeSelect
+                      label="Code font size"
+                      sizes={CODE_FONT_SIZES}
+                      value={appearance.codeFontSize}
+                      onChange={(size) =>
+                        changeAppearance("codeFontSize", size)
                       }
                     />
-                  </label>
-                </Row>
-                <Row
-                  label="Diff font size"
-                  description="The Diff tab, diff blocks, and code peeks."
-                >
-                  <SizeSelect
+                  </Row>
+                  <Row
+                    label="Font ligatures"
+                    description="Code blocks, diffs, peeks, and source tabs."
+                  >
+                    <label {...stylex.props(styles.toggle)}>
+                      <Checkbox
+                        aria-label="Font ligatures"
+                        checked={appearance.fontLigatures}
+                        onChange={(event) =>
+                          changeAppearance(
+                            "fontLigatures",
+                            event.target.checked,
+                          )
+                        }
+                      />
+                    </label>
+                  </Row>
+                  <Row
                     label="Diff font size"
-                    sizes={CODE_FONT_SIZES}
-                    value={appearance.diffFontSize}
-                    onChange={(size) => changeAppearance("diffFontSize", size)}
-                  />
-                </Row>
-                <Row
-                  label="Wrap long lines in diffs"
-                  description="The Diff tab and diff blocks."
-                >
-                  <label {...stylex.props(styles.toggle)}>
-                    <Checkbox
-                      aria-label="Wrap long lines in diffs"
-                      checked={appearance.diffWordWrap}
-                      onChange={(event) =>
-                        changeAppearance("diffWordWrap", event.target.checked)
+                    description="The Diff tab, diff blocks, and code peeks."
+                  >
+                    <SizeSelect
+                      label="Diff font size"
+                      sizes={CODE_FONT_SIZES}
+                      value={appearance.diffFontSize}
+                      onChange={(size) =>
+                        changeAppearance("diffFontSize", size)
                       }
                     />
-                  </label>
-                </Row>
-                <Row
-                  label="Hide whitespace changes"
-                  description="Leading and trailing whitespace, in diffs and peeks."
-                >
-                  <label {...stylex.props(styles.toggle)}>
-                    <Checkbox
-                      aria-label="Hide whitespace changes"
-                      checked={appearance.diffIgnoreWhitespace}
-                      onChange={(event) =>
-                        changeAppearance(
-                          "diffIgnoreWhitespace",
-                          event.target.checked,
-                        )
-                      }
-                    />
-                  </label>
-                </Row>
-              </details>
-            </div>
-          </Section>
+                  </Row>
+                  <Row
+                    label="Wrap long lines in diffs"
+                    description="The Diff tab and diff blocks."
+                  >
+                    <label {...stylex.props(styles.toggle)}>
+                      <Checkbox
+                        aria-label="Wrap long lines in diffs"
+                        checked={appearance.diffWordWrap}
+                        onChange={(event) =>
+                          changeAppearance("diffWordWrap", event.target.checked)
+                        }
+                      />
+                    </label>
+                  </Row>
+                  <Row
+                    label="Hide whitespace changes"
+                    description="Leading and trailing whitespace, in diffs and peeks."
+                  >
+                    <label {...stylex.props(styles.toggle)}>
+                      <Checkbox
+                        aria-label="Hide whitespace changes"
+                        checked={appearance.diffIgnoreWhitespace}
+                        onChange={(event) =>
+                          changeAppearance(
+                            "diffIgnoreWhitespace",
+                            event.target.checked,
+                          )
+                        }
+                      />
+                    </label>
+                  </Row>
+                </details>
+              </div>
+            </Section>
 
-          <Section label="Editor">
-            <Row
-              label="Keymap"
-              description="Vim, Emacs, and Sublime Text keys come from a bundled extension. A change needs a reload."
-            >
-              <SegmentedControl
+            <Section label="Editor">
+              <Row
                 label="Keymap"
-                value={keymap}
-                options={labeledOptions(KEYMAP_LABELS)}
-                onChange={(choice) => {
-                  void run(() => settings.setKeymap(choice), setKeymap);
-                }}
-              />
-            </Row>
-          </Section>
+                description="Vim, Emacs, and Sublime Text keys come from a bundled extension. A change needs a reload."
+              >
+                <SegmentedControl
+                  label="Keymap"
+                  value={keymap}
+                  options={labeledOptions(KEYMAP_LABELS)}
+                  onChange={(choice) => {
+                    void run(() => settings.setKeymap(choice), setKeymap);
+                  }}
+                />
+              </Row>
+            </Section>
 
-          <Section label="Notifications">
-            <Row
-              label="Review ready"
-              description="When an agent finishes a review you aren't looking at."
-            >
-              <SegmentedControl
+            <Section label="Notifications">
+              <Row
                 label="Review ready"
-                value={readyNotification}
-                options={labeledOptions(READY_NOTIFICATION_LABELS)}
-                onChange={(choice) =>
-                  void run(
-                    () => settings.setReadyNotification(choice),
-                    setReadyNotification,
-                  )
-                }
-              />
-            </Row>
-          </Section>
-
-          <Section label="Tools">
-            <Row
-              label="Extensions"
-              description="Install or turn on language extensions."
-            >
-              <Button onClick={settings.manageExtensions}>Manage…</Button>
-            </Row>
-            <Row
-              label="VS Code settings"
-              description="Copy settings and keybindings from VS Code or Cursor again. Replaces Whiteboard's."
-            >
-              <Button onClick={settings.importVsCodeSettings}>Import…</Button>
-            </Row>
-            <DiffrConfigSection
-              actions={settings.diffrConfig}
-              reloadWindow={settings.reloadWindow}
-            />
-          </Section>
-
-          <RemoteHostsSection hosts={settings.remoteHosts} />
-
-          <Section label="Experimental Features">
-            <Row
-              label="Software Map"
-              description="Show the experimental Software Map view in sessions."
-            >
-              <label {...stylex.props(styles.toggle)}>
-                <Checkbox
-                  aria-label="Software Map"
-                  checked={softwareMapEnabled}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
+                description="When an agent finishes a review you aren't looking at."
+              >
+                <SegmentedControl
+                  label="Review ready"
+                  value={readyNotification}
+                  options={labeledOptions(READY_NOTIFICATION_LABELS)}
+                  onChange={(choice) =>
                     void run(
-                      () => settings.setSoftwareMapEnabled(enabled),
-                      setSoftwareMapEnabled,
-                    );
-                  }}
+                      () => settings.setReadyNotification(choice),
+                      setReadyNotification,
+                    )
+                  }
                 />
-              </label>
-            </Row>
-            <Row label="Sharing" description="Show Share on whiteboards.">
-              <label {...stylex.props(styles.toggle)}>
-                <Checkbox
-                  aria-label="Sharing"
-                  checked={sharingEnabled}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
+              </Row>
+            </Section>
+
+            <Section label="Tools">
+              <Row
+                label="Extensions"
+                description="Install or turn on language extensions."
+              >
+                <Button onClick={settings.manageExtensions}>Manage…</Button>
+              </Row>
+              <Row
+                label="VS Code settings"
+                description="Copy settings and keybindings from VS Code or Cursor again. Replaces Whiteboard's."
+              >
+                <Button onClick={settings.importVsCodeSettings}>Import…</Button>
+              </Row>
+              <DiffrConfigSection
+                actions={settings.diffrConfig}
+                reloadWindow={settings.reloadWindow}
+              />
+            </Section>
+
+            <RemoteHostsSection hosts={settings.remoteHosts} />
+
+            <Section label="Experimental Features">
+              <Row
+                label="Software Map"
+                description="Show the experimental Software Map view in sessions."
+              >
+                <label {...stylex.props(styles.toggle)}>
+                  <Checkbox
+                    aria-label="Software Map"
+                    checked={softwareMapEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      void run(
+                        () => settings.setSoftwareMapEnabled(enabled),
+                        setSoftwareMapEnabled,
+                      );
+                    }}
+                  />
+                </label>
+              </Row>
+              <Row label="Sharing" description="Show Share on whiteboards.">
+                <label {...stylex.props(styles.toggle)}>
+                  <Checkbox
+                    aria-label="Sharing"
+                    checked={sharingEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      void run(
+                        () => settings.setSharingEnabled(enabled),
+                        setSharingEnabled,
+                      );
+                    }}
+                  />
+                </label>
+              </Row>
+              <Row
+                label="Open files in"
+                description="Where Open file sends a file. Diffs stay in Whiteboard."
+              >
+                <OpenFilesInSelect
+                  value={openFilesIn}
+                  onChoose={() =>
                     void run(
-                      () => settings.setSharingEnabled(enabled),
-                      setSharingEnabled,
-                    );
-                  }}
+                      () => settings.chooseOpenFilesInApplication(),
+                      setOpenFilesIn,
+                    )
+                  }
+                  onChange={(choice) =>
+                    void run(
+                      () => settings.setOpenFilesIn(choice),
+                      setOpenFilesIn,
+                    )
+                  }
                 />
-              </label>
-            </Row>
-            <Row
-              label="Open files in"
-              description="Where Open file sends a file. Diffs stay in Whiteboard."
-            >
-              <OpenFilesInSelect
-                value={openFilesIn}
-                onChoose={() =>
-                  void run(
-                    () => settings.chooseOpenFilesInApplication(),
-                    setOpenFilesIn,
-                  )
-                }
-                onChange={(choice) =>
-                  void run(
-                    () => settings.setOpenFilesIn(choice),
-                    setOpenFilesIn,
-                  )
-                }
-              />
-            </Row>
-            {install ? (
-              <TraceCaptureSection
-                install={install}
-                onStatusChange={setInstallStatus}
-              />
+              </Row>
+              {install ? (
+                <TraceCaptureSection
+                  install={install}
+                  onStatusChange={setInstallStatus}
+                />
+              ) : null}
+            </Section>
+
+            <Section label="Uninstall">
+              <Row
+                label="Uninstall Whiteboard"
+                description="Removes the whiteboard command and trace setup. Your sessions stay on disk."
+              >
+                <Button onClick={settings.uninstallApp}>Uninstall…</Button>
+              </Row>
+            </Section>
+
+            {error ? (
+              <p {...stylex.props(textStyles.error, styles.error)}>{error}</p>
             ) : null}
-          </Section>
-
-          <Section label="Uninstall">
-            <Row
-              label="Uninstall Whiteboard"
-              description="Removes the whiteboard command and trace setup. Your sessions stay on disk."
-            >
-              <Button onClick={settings.uninstallApp}>Uninstall…</Button>
-            </Row>
-          </Section>
-
-          {error ? (
-            <p {...stylex.props(textStyles.error, styles.error)}>{error}</p>
-          ) : null}
+          </div>
         </div>
       </div>
     </main>
+  );
+}
+
+function SettingsContents({
+  entries,
+  columnRef,
+  scrollRef,
+}: {
+  entries: { id: string; text: string }[];
+  columnRef: RefObject<HTMLElement | null>;
+  scrollRef: RefObject<HTMLElement | null>;
+}) {
+  const current = useHeadingInView(entries, columnRef, scrollRef, true);
+
+  return (
+    <nav aria-label="Settings contents" {...stylex.props(styles.toc)}>
+      {entries.map(({ id, text }) => (
+        <button
+          key={id}
+          type="button"
+          aria-current={id === current ? "location" : undefined}
+          {...stylex.props(
+            focusStyles.ringInset,
+            buttonStyles.reset,
+            listRowStyles.row,
+            listRowStyles.wash,
+            id === current && listRowStyles.current,
+          )}
+          onClick={() =>
+            scrollToReviewHeading(id, columnRef.current, scrollRef.current)
+          }
+        >
+          {text}
+        </button>
+      ))}
+    </nav>
   );
 }
 

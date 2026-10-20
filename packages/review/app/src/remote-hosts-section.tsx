@@ -30,6 +30,8 @@ import { Section } from "./settings-section";
 import { settingsStyles as styles } from "./settings-styles";
 import { tokens } from "./tokens.stylex";
 
+export const REMOTE_HOSTS_LABEL = "Remote Hosts (Experimental)";
+
 export function RemoteHostsSection({
   hosts,
 }: {
@@ -94,7 +96,7 @@ export function RemoteHostsSection({
   };
 
   return (
-    <Section ref={section} label="Remote Hosts (Experimental)">
+    <Section ref={section} label={REMOTE_HOSTS_LABEL}>
       {configured.map((name) => (
         <HostRow
           key={name}

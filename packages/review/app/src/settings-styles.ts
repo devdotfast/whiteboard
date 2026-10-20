@@ -3,12 +3,37 @@ import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
 
+const narrow = "@container review-canvas (max-width: 980px)";
+
 // Settings page: flat rows, no cards. One narrow column, a small-caps label per
 // section, and a fixed right lane so every control lines up. Shared with the
 // diffr section, which lays its rows out the same way.
 export const settingsStyles = stylex.create({
+  layout: {
+    display: "grid",
+    gridTemplateColumns: {
+      default: "160px minmax(0, 820px)",
+      [narrow]: "minmax(0, 820px)",
+    },
+    justifyContent: "center",
+    alignItems: "start",
+    gap: space.s40,
+  },
+  // Lets Contents scroll the last section to the top.
+  scroll: {
+    paddingBottom:
+      "calc(max(56px, var(--review-bottom-scroll-padding, 0px)) + var(--review-toc-tail, 0px))",
+  },
   page: {
     width: "min(820px, 100%)",
+  },
+  toc: {
+    display: { default: "flex", [narrow]: "none" },
+    flexDirection: "column",
+    gap: space.s2,
+    position: "sticky",
+    top: 0,
+    paddingTop: space.s8,
   },
   lede: {
     margin: `0 0 ${space.s28}`,

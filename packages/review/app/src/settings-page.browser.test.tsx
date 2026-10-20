@@ -87,6 +87,8 @@ test("preferences stay enabled while overlapping saves settle independently", as
   content.setDocumentWidth = () => width.promise;
   content.setAppearance = () => appearance.promise;
   const container = document.createElement("div");
+  // Desktop gives Settings a fixed height.
+  container.style.height = "700px";
   document.body.append(container);
   root = createRoot(container);
   await act(async () => root.render(<SettingsPage settings={content} />));
