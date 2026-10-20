@@ -55,7 +55,7 @@
                             "messages",
                             "verbose"
                         ],
-                        "default": "verbose",
+                        "default": "off",
                         "description": "%native-preview.trace.server.description%",
                         "tags": [
                             "experimental"
@@ -112,7 +112,7 @@
                             "messages",
                             "verbose"
                         ],
-                        "default": "verbose",
+                        "default": "off",
                         "description": "%native-preview.trace.server.description%",
                         "deprecationMessage": "%native-preview.trace.server.deprecation%",
                         "tags": [
