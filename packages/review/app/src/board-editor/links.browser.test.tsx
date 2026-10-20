@@ -1,4 +1,5 @@
 import { sourceAnchor } from "@canvas/api-document";
+import { TestCanvasQuery } from "@canvas/canvas-query-test-utils";
 import { ReviewSessionProvider } from "@canvas/host/review-session";
 import { ReviewPanelProvider, useReviewPanelStore } from "@canvas/review-panel";
 import type { ReviewPanelStore } from "@canvas/review-panel-store";
@@ -63,14 +64,16 @@ async function mountBoard() {
 
   await act(async () =>
     root?.render(
-      <ReviewSessionProvider session={testReviewSession()}>
-        <ReviewPanelProvider>
-          <Store />
-          <BoardEditorHostContext.Provider value={host}>
-            <BoardEditor data={data} softwareMapEnabled={false} />
-          </BoardEditorHostContext.Provider>
-        </ReviewPanelProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={testReviewSession()}>
+          <ReviewPanelProvider>
+            <Store />
+            <BoardEditorHostContext.Provider value={host}>
+              <BoardEditor data={data} softwareMapEnabled={false} />
+            </BoardEditorHostContext.Provider>
+          </ReviewPanelProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 
@@ -143,13 +146,15 @@ it("scrolls to a heading or block on this board in place, without a caret", asyn
   root = createRoot(page);
   await act(async () =>
     root?.render(
-      <ReviewSessionProvider session={testReviewSession()}>
-        <ReviewPanelProvider>
-          <BoardEditorHostContext.Provider value={host}>
-            <BoardEditor data={data} softwareMapEnabled={false} />
-          </BoardEditorHostContext.Provider>
-        </ReviewPanelProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={testReviewSession()}>
+          <ReviewPanelProvider>
+            <BoardEditorHostContext.Provider value={host}>
+              <BoardEditor data={data} softwareMapEnabled={false} />
+            </BoardEditorHostContext.Provider>
+          </ReviewPanelProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 

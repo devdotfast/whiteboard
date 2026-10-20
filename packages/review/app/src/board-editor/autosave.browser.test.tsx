@@ -1,3 +1,4 @@
+import { TestCanvasQuery } from "@canvas/canvas-query-test-utils";
 import { documentStyles } from "@canvas/document-styles";
 import { ReviewSessionProvider } from "@canvas/host/review-session";
 import { documentMarker } from "@canvas/markers.stylex";
@@ -101,13 +102,15 @@ it("saves a block the moment the caret leaves it, holds it until the save lands,
 
     return act(async () =>
       root?.render(
-        <ReviewSessionProvider session={testReviewSession()}>
-          <ReviewPanelProvider>
-            <BoardEditorHostContext.Provider value={host}>
-              <BoardEditor data={data} softwareMapEnabled={false} />
-            </BoardEditorHostContext.Provider>
-          </ReviewPanelProvider>
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={testReviewSession()}>
+            <ReviewPanelProvider>
+              <BoardEditorHostContext.Provider value={host}>
+                <BoardEditor data={data} softwareMapEnabled={false} />
+              </BoardEditorHostContext.Provider>
+            </ReviewPanelProvider>
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
   };
@@ -171,13 +174,15 @@ function mountEditor() {
   const render = (data: ReturnType<typeof testApiDocumentData>) =>
     act(async () =>
       root?.render(
-        <ReviewSessionProvider session={testReviewSession()}>
-          <ReviewPanelProvider>
-            <BoardEditorHostContext.Provider value={host}>
-              <BoardEditor data={data} softwareMapEnabled={false} />
-            </BoardEditorHostContext.Provider>
-          </ReviewPanelProvider>
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={testReviewSession()}>
+            <ReviewPanelProvider>
+              <BoardEditorHostContext.Provider value={host}>
+                <BoardEditor data={data} softwareMapEnabled={false} />
+              </BoardEditorHostContext.Provider>
+            </ReviewPanelProvider>
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
 
@@ -262,16 +267,18 @@ it("keeps a new board's first paragraph in the prose column before and after its
   root = createRoot(page);
   await act(async () =>
     root?.render(
-      <ReviewSessionProvider session={testReviewSession()}>
-        <ReviewPanelProvider>
-          <BoardEditorHostContext.Provider value={host}>
-            <BoardEditor
-              data={testApiDocumentData([])}
-              softwareMapEnabled={false}
-            />
-          </BoardEditorHostContext.Provider>
-        </ReviewPanelProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={testReviewSession()}>
+          <ReviewPanelProvider>
+            <BoardEditorHostContext.Provider value={host}>
+              <BoardEditor
+                data={testApiDocumentData([])}
+                softwareMapEnabled={false}
+              />
+            </BoardEditorHostContext.Provider>
+          </ReviewPanelProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 

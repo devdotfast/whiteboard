@@ -227,12 +227,14 @@ describe("ReviewDocumentMetaLine", () => {
     document.body.append(container);
     root = createRoot(container);
 
-    const render = () =>
+    const render = (version: number) =>
       act(async () =>
         root?.render(
           <TestCanvasQuery>
             <ReviewSessionProvider session={session}>
-              <PlaceAndFacts />
+              <DisplayedReviewVersionContext.Provider value={version}>
+                <PlaceAndFacts />
+              </DisplayedReviewVersionContext.Provider>
             </ReviewSessionProvider>
           </TestCanvasQuery>,
         ),
@@ -241,7 +243,7 @@ describe("ReviewDocumentMetaLine", () => {
     const click = (selector: string) =>
       act(async () => container.querySelector<HTMLElement>(selector)!.click());
 
-    await render();
+    await render(1);
 
     const count = '[aria-label="Links, 2 of 3 in Linked whiteboards"]';
 
@@ -287,7 +289,7 @@ describe("ReviewDocumentMetaLine", () => {
     // A lone child names its parent and no count.
     place.siblings = [sibling("test-review", "Links")];
     session.review = { ...session.review!, place: async () => place };
-    await render();
+    await render(2);
     await vi.waitFor(() =>
       expect(container.querySelector("[aria-haspopup=menu]")).toBeNull(),
     );
@@ -301,7 +303,7 @@ describe("ReviewDocumentMetaLine", () => {
     };
 
     session.review = { ...session.review!, place: async () => top };
-    await render();
+    await render(3);
 
     const boards = '[aria-label="2 boards in Stack"]';
 
@@ -330,7 +332,7 @@ describe("ReviewDocumentMetaLine", () => {
     // One child is "1 board".
     top.children = [sibling("links", "Links")];
     session.review = { ...session.review!, place: async () => ({ ...top }) };
-    await render();
+    await render(4);
     await vi.waitFor(() =>
       expect(
         container.querySelector('[aria-label="1 board in Stack"]'),
@@ -342,7 +344,7 @@ describe("ReviewDocumentMetaLine", () => {
       ...session.review!,
       place: async () => ({ ...top, children: undefined }),
     };
-    await render();
+    await render(5);
     await vi.waitFor(() =>
       expect(container.querySelector("[aria-haspopup=menu]")).toBeNull(),
     );

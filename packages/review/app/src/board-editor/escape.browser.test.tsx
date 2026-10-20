@@ -1,3 +1,4 @@
+import { TestCanvasQuery } from "@canvas/canvas-query-test-utils";
 import { ReviewSessionProvider } from "@canvas/host/review-session";
 import { ReviewPanelProvider } from "@canvas/review-panel";
 import {
@@ -56,13 +57,15 @@ async function mountBoard() {
 
   await act(async () =>
     root?.render(
-      <ReviewSessionProvider session={testReviewSession()}>
-        <ReviewPanelProvider>
-          <BoardEditorHostContext.Provider value={host}>
-            <BoardEditor data={data} softwareMapEnabled={false} />
-          </BoardEditorHostContext.Provider>
-        </ReviewPanelProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={testReviewSession()}>
+          <ReviewPanelProvider>
+            <BoardEditorHostContext.Provider value={host}>
+              <BoardEditor data={data} softwareMapEnabled={false} />
+            </BoardEditorHostContext.Provider>
+          </ReviewPanelProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 

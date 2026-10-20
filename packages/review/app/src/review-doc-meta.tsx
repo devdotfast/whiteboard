@@ -6,6 +6,7 @@ import {
   summarizeReviewDiffFiles,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   Fragment,
   type ReactElement,
@@ -16,6 +17,7 @@ import {
   useState,
 } from "react";
 
+import { canvasQueryKeys } from "./canvas-query";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { drawStyles } from "./draw-styles";
 import { formatRelativeTime } from "./format";
@@ -25,30 +27,20 @@ import { ComparedSides, DiffChanges, PullRequestLink } from "./review-source";
 import { ReviewStackSelector } from "./review-stack-selector";
 import { tokens } from "./tokens.stylex";
 
-/** Where the board sits and its source's facts; empty until read. */
 export function useBoardPlace(): ReviewBoardPlace {
-  const session = useReviewSession();
-  const displayedVersion = useContext(DisplayedReviewVersionContext);
-  const review = session.review;
-  const [place, setPlace] = useState<ReviewBoardPlace>(NO_PLACE);
+  const review = useReviewSession().review;
+  const version = useContext(DisplayedReviewVersionContext);
 
-  useEffect(() => {
-    if (!review) return;
+  // Optional context: a failed read shows none.
+  const { data } = useQuery({
+    queryKey: canvasQueryKeys.place(version),
+    queryFn: ({ signal }) => review!.place(signal),
+    enabled: review !== undefined,
+    staleTime: Infinity,
+    placeholderData: keepPreviousData,
+  });
 
-    const abort = new AbortController();
-
-    // Optional context: a failed read shows none.
-    review
-      .place()
-      .then((read) => {
-        if (!abort.signal.aborted) setPlace(read);
-      })
-      .catch(() => {});
-
-    return () => abort.abort();
-  }, [review, displayedVersion]);
-
-  return place;
+  return data ?? NO_PLACE;
 }
 
 const NO_PLACE: ReviewBoardPlace = { siblings: [] };

@@ -51,7 +51,11 @@ import {
   type BoardEditorHost,
   BoardEditorHostContext,
 } from "./board-editor/BoardEditor";
-import { CanvasQueryProvider, useCanvasQueryScope } from "./canvas-query";
+import {
+  CanvasQueryProvider,
+  canvasQueryKeys,
+  useCanvasQueryScope,
+} from "./canvas-query";
 import { ConnectionContext, HostWaiting } from "./connection-chip";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { DrawQueueProvider } from "./draw-queue-provider";
@@ -123,9 +127,6 @@ export function ApiCanvas({
 
   const [version, setVersion] = useState(content.version);
   const [coverageRevision, setCoverageRevision] = useState(0);
-  // Bumped when the board's parent or siblings change, so its header
-  // reads them again.
-  const [placeRevision, setPlaceRevision] = useState(0);
   const [activity, setActivity] = useState<ActivitySnapshot | "unknown">();
   const [cursor, setCursor] = useState<AuthoringCursor | null>(null);
   const [lensCursor, setLensCursor] = useState<AuthoringCursor | null>(null);
@@ -139,6 +140,7 @@ export function ApiCanvas({
   const [error, setError] = useState<string>();
   const [lost, setLost] = useState<string>();
   useEffect(() => {
+    const { queryClient } = queries;
     const abort = new AbortController();
     const loader = createDocumentLoader(client);
     setData(undefined);
@@ -197,6 +199,7 @@ export function ApiCanvas({
 
       let shownVersion: string | undefined;
       let shownLinks = 0;
+      let placeRevision = 0;
       await client.follow<
         Snapshot & {
           activity: ActivitySnapshot;
@@ -215,7 +218,15 @@ export function ApiCanvas({
             nextCursor(current, lensMemory, snapshot, "lenses"),
           );
           setCoverageRevision(snapshot.coverageRevision ?? 0);
-          setPlaceRevision(snapshot.placeRevision ?? 0);
+          // A reconnected stream restarts at 0, which also rereads.
+          const place = snapshot.placeRevision ?? 0;
+
+          if (place !== placeRevision) {
+            placeRevision = place;
+            void queryClient.invalidateQueries({
+              queryKey: canvasQueryKeys.allPlace(),
+            });
+          }
 
           if (version !== undefined) return;
 
@@ -290,7 +301,7 @@ export function ApiCanvas({
       abort.abort();
       loader.dispose();
     };
-  }, [client, content.reviewId, version]);
+  }, [client, content.reviewId, version, queries]);
 
   // Read at create, so a host going offline keeps the open editors.
   const openFile = useRef(true);
@@ -353,10 +364,6 @@ export function ApiCanvas({
 
   const ui = useContext(CanvasUiContext);
 
-  // The header's reads, one per what they read: the page bar and the meta
-  // line share them, and a new snapshot of the same board reads nothing.
-  const headerReads = useMemo(() => sharedReads(), [client, content.reviewId]);
-
   const session = useMemo(() => {
     if (!data) return baseSession;
     const snapshot = data.snapshot;
@@ -392,19 +399,15 @@ export function ApiCanvas({
         traces: new Map(
           [...data.traces].map(([id, trace]) => [id, retainedTrace(id, trace)]),
         ),
-        placeRevision,
-        place: () =>
-          headerReads(`place:${snapshot.version}:${placeRevision}`, async () =>
-            parseReviewBoardPlace(
-              await client.read(`/${snapshot.reviewId}/place`),
-            ),
+        place: async (signal?: AbortSignal) =>
+          parseReviewBoardPlace(
+            await client.read(`/${snapshot.reviewId}/place`, signal),
           ),
-        stack: () =>
-          headerReads(`stack:${snapshot.version}:${placeRevision}`, async () =>
-            parseReviewStackResponse(
-              await client.read(
-                `/${snapshot.reviewId}/stack?version=${snapshot.version}`,
-              ),
+        stack: async (signal?: AbortSignal) =>
+          parseReviewStackResponse(
+            await client.read(
+              `/${snapshot.reviewId}/stack?version=${snapshot.version}`,
+              signal,
             ),
           ),
         createBranchReview: async (
@@ -455,8 +458,6 @@ export function ApiCanvas({
     content.remoteHosts,
     content.available,
     data,
-    headerReads,
-    placeRevision,
     version,
     ui,
   ]);
@@ -810,24 +811,3 @@ const styles = stylex.create({
     font: `${fontSize.reading}/${leading.relaxed} ${tokens.chromeFont}`,
   },
 });
-
-/** Reads shared by key: the first caller's request answers every caller,
- * and a failed one is read again next time. The last few are kept. */
-function sharedReads() {
-  const reads = new Map<string, Promise<unknown>>();
-
-  return <T,>(key: string, read: () => Promise<T>): Promise<T> => {
-    // SAFETY: a key always names one read, so its promise is that read's T.
-    let pending = reads.get(key) as Promise<T> | undefined;
-
-    if (!pending) {
-      pending = read();
-      pending.catch(() => reads.delete(key));
-      reads.set(key, pending);
-
-      if (reads.size > 8) reads.delete(reads.keys().next().value!);
-    }
-
-    return pending;
-  };
-}

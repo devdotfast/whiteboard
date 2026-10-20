@@ -22,6 +22,7 @@ import {
   boardTitle,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
   type MouseEvent,
   type ReactElement,
@@ -31,6 +32,7 @@ import {
   useState,
 } from "react";
 
+import { canvasQueryKeys } from "./canvas-query";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { useReviewSession } from "./host/review-session";
 import { tokens } from "./tokens.stylex";
@@ -40,33 +42,21 @@ type OpenEvent = Pick<
   "metaKey" | "ctrlKey" | "shiftKey" | "button"
 >;
 
-/** The displayed version's branch stack; empty until read,
- * and a read for a version left behind never lands. */
 function useStack(): ReviewStackResponse {
   const review = useReviewSession().review!;
-  const displayedVersion = useContext(DisplayedReviewVersionContext);
-  const [stack, setStack] = useState<ReviewStackResponse>(NO_STACK);
+  const version = useContext(DisplayedReviewVersionContext);
   const inStack = Boolean(review.pullRequestNumber || review.headBranch);
 
-  useEffect(() => {
-    setStack(NO_STACK);
+  // Optional context: a failed read shows none.
+  const { data } = useQuery({
+    queryKey: canvasQueryKeys.stack(version),
+    queryFn: ({ signal }) => review.stack(signal),
+    enabled: inStack,
+    staleTime: Infinity,
+    placeholderData: keepPreviousData,
+  });
 
-    if (!inStack) return;
-
-    const abort = new AbortController();
-
-    // Optional context: a failed read shows none.
-    review
-      .stack()
-      .then((read) => {
-        if (!abort.signal.aborted) setStack(read);
-      })
-      .catch(() => {});
-
-    return () => abort.abort();
-  }, [review, displayedVersion, inStack]);
-
-  return stack;
+  return (inStack && data) || NO_STACK;
 }
 
 const NO_STACK: ReviewStackResponse = { layers: [] };

@@ -1,5 +1,6 @@
 import { AuthoringActivityContext } from "@canvas/authoring-activity-context";
 import type { AuthoringCursor } from "@canvas/authoring-cursor";
+import { TestCanvasQuery } from "@canvas/canvas-query-test-utils";
 import { AuthoringCursorContext } from "@canvas/courier";
 import { ReviewSessionProvider } from "@canvas/host/review-session";
 import { ReviewPanelProvider } from "@canvas/review-panel";
@@ -71,19 +72,21 @@ it("stands the courier on the block the agent holds", async () => {
 
   await act(async () =>
     root?.render(
-      <ReviewSessionProvider session={testReviewSession()}>
-        <ReviewRootsProvider roots={roots}>
-          <ReviewPanelProvider>
-            <AuthoringActivityContext.Provider value={working}>
-              <AuthoringCursorContext.Provider value={cursor}>
-                <BoardEditorHostContext.Provider value={host}>
-                  <BoardEditor data={data} softwareMapEnabled={false} />
-                </BoardEditorHostContext.Provider>
-              </AuthoringCursorContext.Provider>
-            </AuthoringActivityContext.Provider>
-          </ReviewPanelProvider>
-        </ReviewRootsProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={testReviewSession()}>
+          <ReviewRootsProvider roots={roots}>
+            <ReviewPanelProvider>
+              <AuthoringActivityContext.Provider value={working}>
+                <AuthoringCursorContext.Provider value={cursor}>
+                  <BoardEditorHostContext.Provider value={host}>
+                    <BoardEditor data={data} softwareMapEnabled={false} />
+                  </BoardEditorHostContext.Provider>
+                </AuthoringCursorContext.Provider>
+              </AuthoringActivityContext.Provider>
+            </ReviewPanelProvider>
+          </ReviewRootsProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     ),
   );
 

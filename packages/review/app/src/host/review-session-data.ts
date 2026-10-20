@@ -28,12 +28,9 @@ export interface ReviewSessionData {
   pullRequestNumber?: number;
   pullRequestUrl?: string;
   traces: ReadonlyMap<string, LoadedAgentTrace>;
-  /** Its parent, siblings and PR facts, read for its header. */
-  place(): Promise<ReviewBoardPlace>;
-  /** Changes whenever `place` would read something new. */
-  placeRevision?: number;
+  place(signal?: AbortSignal): Promise<ReviewBoardPlace>;
   /** Its branch stack, apart from its place among boards. */
-  stack(): Promise<ReviewStackResponse>;
+  stack(signal?: AbortSignal): Promise<ReviewStackResponse>;
   /** Creates an empty review of `branch` against `base` and returns its id:
    * a branch in the board's stack that has no whiteboard yet. */
   createBranchReview(

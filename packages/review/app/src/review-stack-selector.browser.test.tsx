@@ -216,6 +216,55 @@ describe("ReviewStackSelector", () => {
     });
     expect(container.textContent).not.toContain("First");
   });
+  it("shows no stack for a version that is in none", async () => {
+    const session = testReviewSession();
+
+    session.review = {
+      ...session.review!,
+      pullRequestNumber: 20,
+      stack: async () => ({
+        layers: [20, 30].map((pullRequestNumber, index) => ({
+          branch: `branch-${pullRequestNumber}`,
+          relation: index === 0 ? ("current" as const) : ("later" as const),
+          pullRequestNumber,
+          pullRequestUrl: `https://github.com/o/r/pull/${pullRequestNumber}`,
+          base: null,
+          subject: null,
+          reviewUuid: null,
+          reviewTitle: null,
+        })),
+      }),
+    };
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+
+    const render = (version: number) =>
+      act(async () => {
+        root?.render(
+          <TestCanvasQuery>
+            <ReviewSessionProvider session={session}>
+              <DisplayedReviewVersionContext.Provider value={version}>
+                <ReviewStackSelector />
+              </DisplayedReviewVersionContext.Provider>
+            </ReviewSessionProvider>
+          </TestCanvasQuery>,
+        );
+      });
+
+    await render(1);
+    await vi.waitFor(() => expect(container.textContent).toContain("1 of 2"));
+
+    session.review = {
+      ...session.review!,
+      pullRequestNumber: undefined,
+      headBranch: undefined,
+    };
+    await render(2);
+    expect(container.textContent).toBe("");
+  });
+
   it("lists the stack newest first down to its base, the board on screen opening nothing", async () => {
     const post = vi.fn<ReviewCanvasBridge["post"]>(async () => ({ ok: true }));
     const session = testReviewSession({}, { post });
