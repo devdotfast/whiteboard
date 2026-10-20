@@ -19,7 +19,6 @@ import {
   remoteMemory,
   runDir,
   showDiff,
-  tab,
   visibleCanvas,
   waitFor,
   windowCall,
@@ -402,7 +401,6 @@ async function journey(ctx, id, language) {
   await visibleCanvas(page)
     .getByRole("heading", { name: title })
     .waitFor({ timeout: 60000 });
-  await tab(page, title).waitFor();
 
   const content = await readFile(
     path.join(fixtures, language.fixture, language.file),

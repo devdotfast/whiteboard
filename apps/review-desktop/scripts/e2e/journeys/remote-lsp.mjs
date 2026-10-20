@@ -413,10 +413,9 @@ async function journey(ctx) {
     await openHome(ctx);
   }
 
-  for (const text of Object.values(title)) await tab(page, text).waitFor();
   check(
     ctx,
-    "2. the laptop's review, two on A and one on B are open in tabs at once",
+    "2. the laptop's review, two on A and one on B are open at once",
   );
 
   const timeOrigin = await page.evaluate(() => performance.timeOrigin);
@@ -821,32 +820,26 @@ export const visibleCanvas = (page) =>
     .locator(".review-canvas-root [data-review-api]")
     .filter({ visible: true });
 
-export const tab = (page, text) =>
-  page.locator(".tabs-container .tab").filter({ hasText: text });
-
 export async function showDiff(ctx, title, file, review) {
-  await tab(ctx.page, title).click();
-  await ctx.until(
-    async () =>
-      /\bactive\b/.test(
-        (await tab(ctx.page, title).getAttribute("class")) ?? "",
-      ),
-    `the ${title} tab to be active`,
-  );
+  await openHome(ctx);
+  await ctx.page
+    .locator("main.review-home [data-home-row]")
+    .filter({ hasText: title })
+    .getByTitle(title, { exact: true })
+    .click();
 
   const diff = ctx.page
-    .locator('[aria-label="Session views"] button[aria-label="Diff"]')
+    .locator('.review-sidebar-tabs [role="tab"][aria-label^="Diff"]')
     .filter({ visible: true });
 
-  // The shared canvas shows the previous review briefly after the tab turns active.
+  // The sidebar lights Diff from the last board until this one reports its view.
   await ctx.until(async () => {
-    if ((await diff.getAttribute("aria-pressed")) !== "true") {
+    try {
+      return await windowCall(ctx, "shown", review, file);
+    } catch (error) {
       await diff.click();
-
-      return false;
+      throw error;
     }
-
-    return windowCall(ctx, "shown", review, file);
   }, `the Diff view of ${title} to show ${file}`);
 }
 

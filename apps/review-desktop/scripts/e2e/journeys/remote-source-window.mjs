@@ -160,7 +160,7 @@ async function journey(ctx) {
   async function openFile(text) {
     await openReview(text);
     await ctx.page
-      .locator('[aria-label="Session views"] button[aria-label="Diff"]')
+      .locator('.review-sidebar-tabs [role="tab"][aria-label^="Diff"]')
       .filter({ visible: true })
       .click();
     await until(
@@ -420,7 +420,7 @@ async function journey(ctx) {
   await inSource(source, focusFile, state.active.resource);
   await inSource(source, cursorLine, 1);
   await ctx.page
-    .locator('[aria-label="Session views"] button[aria-label="Whiteboard"]')
+    .locator('.review-sidebar-tabs [role="tab"][aria-label^="Whiteboard"]')
     .filter({ visible: true })
     .click();
 
