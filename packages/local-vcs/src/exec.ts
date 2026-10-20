@@ -103,6 +103,11 @@ function talksToRemote(args: readonly string[]): boolean {
   return command !== undefined && NETWORK_COMMANDS.has(command);
 }
 
+const namesRepository = (args: readonly string[]) =>
+  args
+    .slice(0, subcommandIndex(args))
+    .some((arg) => arg === "-C" || arg === "--git-dir");
+
 /** How long a call may run when its caller doesn't say. */
 export function defaultVcsTimeout(
   tool: VcsTool,
@@ -238,7 +243,7 @@ function vcsEnvironment(
 ): NodeJS.ProcessEnv | undefined {
   const next: NodeJS.ProcessEnv = {
     ...(env ??
-      (tool === "git" && (args[0] === "-C" || args[0] === "--git-dir")
+      (tool === "git" && namesRepository(args)
         ? localGitEnvironment()
         : process.env)),
   };

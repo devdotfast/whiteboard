@@ -127,21 +127,27 @@ describe("the subcommand decides", () => {
     ).toBe(quick);
   });
 
-  it("keeps a read from fetching lazily when only an operand is spelt like a push", async () => {
+  it("drops a hook's GIT_DIR for a call that names its repository after a leading flag", async () => {
     const repository = mkdtempSync(path.join(tmpdir(), "vcs-exec-"));
 
     execFileSync("git", ["init", "-q", repository]);
+    const saved = process.env.GIT_DIR;
 
-    // `#` drops the operand git appends to the alias.
-    const { stdout } = await runVcs("git", [
-      "-C",
-      repository,
-      "-c",
-      'alias.env=!printf %s "$GIT_NO_LAZY_FETCH" #',
-      "env",
-      { value: "push" },
-    ]);
+    process.env.GIT_DIR = "/nonexistent";
 
-    expect(stdout).toBe("1");
+    try {
+      const { stdout } = await runVcs("git", [
+        "--literal-pathspecs",
+        "-C",
+        repository,
+        "rev-parse",
+        "--git-dir",
+      ]);
+
+      expect(stdout.trim()).toBe(".git");
+    } finally {
+      if (saved === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = saved;
+    }
   });
 });
