@@ -1,4 +1,9 @@
-import { type JsonValue, isStringValue } from "@dev.fast/json";
+import {
+  type JsonValue,
+  isJsonArray,
+  isJsonObject,
+  isStringValue,
+} from "@dev.fast/json";
 import {
   type Anchor,
   type LensSource,
@@ -8,6 +13,7 @@ import {
   sourceAnchors,
 } from "@review/lens-selection.js";
 import {
+  type MarkdownNode,
   markdownNodes,
   markdownText,
   parseMarkdown,
@@ -203,16 +209,25 @@ export function canonicalLink(href: string): string {
 const linkDestination = (target: string) =>
   new RegExp(String.raw`(\]\(\s*<?|^\s*\[[^\]\n]+\]:\s*<?)` + target, "gim");
 
-/** Every Markdown text in `value`, rewritten. */
 function rewriteMarkdown<T>(
   value: T,
   rewrite: (markdown: string) => string,
 ): T {
-  // SAFETY: a JSON round trip of stored or parsed JSON, rewriting only
-  // Markdown text.
-  return JSON.parse(JSON.stringify(value), (key, field: JsonValue) =>
-    key === "markdown" && isStringValue(field) ? rewrite(field) : field,
-  ) as T;
+  const visit = (node: JsonValue) => {
+    if (isJsonArray(node)) node.forEach(visit);
+    else if (isJsonObject(node))
+      for (const [key, field] of Object.entries(node))
+        if (key === "markdown" && isStringValue(field)) {
+          const rewritten = rewrite(field);
+
+          if (rewritten !== field) node[key] = rewritten;
+        } else visit(field);
+  };
+
+  // SAFETY: documents and edits are JSON; only Markdown text changes.
+  visit(value as JsonValue);
+
+  return value;
 }
 
 const retiredLinks = linkDestination("review-(source|trace):");
@@ -264,11 +279,30 @@ export interface BoardLinkRef {
   to: BoardRef;
 }
 
+const parsedBlocks = new WeakMap<
+  object,
+  { markdown: string; nodes: MarkdownNode[] }
+>();
+
+/** Parsed once per text; a save reads links, sources and resources from
+ * it. */
+function blockNodes(block: { markdown: string }): MarkdownNode[] {
+  const cached = parsedBlocks.get(block);
+
+  if (cached?.markdown === block.markdown) return cached.nodes;
+
+  const nodes = [...markdownNodes(parseMarkdown(block.markdown))];
+
+  parsedBlocks.set(block, { markdown: block.markdown, nodes });
+
+  return nodes;
+}
+
 /** Every board link in a document. Malformed links are skipped; writes reject them. */
 export function boardLinks(board: string, document: Block[]): BoardLinkRef[] {
   return elements(document).flatMap((element) =>
     element.type === "markdown"
-      ? [...markdownNodes(parseMarkdown(element.markdown))].flatMap((node) => {
+      ? blockNodes(element).flatMap((node) => {
           const to =
             node.type === "link" ? boardLink(node.url ?? "") : undefined;
 
@@ -316,20 +350,18 @@ export function resourceReferences(document: Block[]): Block[] {
         ? [block]
         : [];
 
-    return [...markdownNodes(parseMarkdown(block.markdown))].flatMap(
-      (node): Block[] => {
-        if (
-          node.type !== "link" ||
-          !canonicalLink(node.url ?? "").startsWith("whiteboard:trace/")
-        )
-          return [];
-        const quote = traceQuoteLink(node.url ?? "");
+    return blockNodes(block).flatMap((node): Block[] => {
+      if (
+        node.type !== "link" ||
+        !canonicalLink(node.url ?? "").startsWith("whiteboard:trace/")
+      )
+        return [];
+      const quote = traceQuoteLink(node.url ?? "");
 
-        if (!quote) throw new ReviewInputError("Invalid trace quote link.");
+      if (!quote) throw new ReviewInputError("Invalid trace quote link.");
 
-        return [{ type: "trace_quote", ...quote, text: markdownText(node) }];
-      },
-    );
+      return [{ type: "trace_quote", ...quote, text: markdownText(node) }];
+    });
   });
 }
 
@@ -383,72 +415,68 @@ function documentReferences(
     if (element.type === "markdown" && !markdown) return [];
 
     if (element.type === "markdown")
-      return [...markdownNodes(parseMarkdown(element.markdown))].flatMap(
-        (node) => {
-          if (node.type !== "link") return [];
-          const href = canonicalLink(node.url ?? "");
+      return blockNodes(element).flatMap((node) => {
+        if (node.type !== "link") return [];
+        const href = canonicalLink(node.url ?? "");
 
-          if (!href.startsWith("whiteboard:source/")) {
-            // Trace links are checked by resourceReferences.
-            if (href.startsWith("whiteboard:trace/")) return [];
+        if (!href.startsWith("whiteboard:source/")) {
+          // Trace links are checked by resourceReferences.
+          if (href.startsWith("whiteboard:trace/")) return [];
 
-            // Board links are checked against the store on write.
-            if (href.startsWith("whiteboard:board/"))
-              return boardLink(href)
-                ? []
-                : reject(
-                    `Use whiteboard:board/<sessionId> or whiteboard:board/<sessionId>#<blockId> to link a board, in block ${element.id}.`,
-                  );
-
-            if (/^(?:https?:\/\/|mailto:|#)/i.test(href)) return [];
-
-            return reject(
-              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](whiteboard:source/head/path#L10-L24) or whiteboard:source/base/path#L10-L24 for repository files, whiteboard:source/diff/path#L84-R90 across sides, or whiteboard:source/<commit>/path#L10-L24 at a commit of the board's repository, with a repository-relative path and verified line numbers. Link another board as whiteboard:board/<sessionId>, or one of its blocks as whiteboard:board/<sessionId>#<blockId>. External links must use https://, http://, or mailto:; document anchors use #heading.`,
-            );
-          }
-
-          let target: string;
-
-          try {
-            target = decodeURIComponent(
-              href.slice("whiteboard:source/".length),
-            );
-          } catch {
-            return reject("Invalid URL encoding in source link.");
-          }
-
-          // A commit of the board's repository: the commit is the link's pins.
-          const commit = commitLinkTarget(target);
-
-          if (commit)
-            return repositoryId
-              ? select(commit.anchor, {
-                  repositoryId,
-                  head: commit.commit,
-                }).map((source) => ({
-                  id: `${element.id}:${node.url}`,
-                  source,
-                }))
+          // Board links are checked against the store on write.
+          if (href.startsWith("whiteboard:board/"))
+            return boardLink(href)
+              ? []
               : reject(
-                  `A commit link names a commit of the board's repository, and this board has none, in block ${element.id}.`,
+                  `Use whiteboard:board/<sessionId> or whiteboard:board/<sessionId>#<blockId> to link a board, in block ${element.id}.`,
                 );
 
-          // Links share the anchor grammar blocks use.
-          const anchor = target.replace(/^(head|base|diff)\//i, (side) =>
-            side.toLowerCase(),
+          if (/^(?:https?:\/\/|mailto:|#)/i.test(href)) return [];
+
+          return reject(
+            `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](whiteboard:source/head/path#L10-L24) or whiteboard:source/base/path#L10-L24 for repository files, whiteboard:source/diff/path#L84-R90 across sides, or whiteboard:source/<commit>/path#L10-L24 at a commit of the board's repository, with a repository-relative path and verified line numbers. Link another board as whiteboard:board/<sessionId>, or one of its blocks as whiteboard:board/<sessionId>#<blockId>. External links must use https://, http://, or mailto:; document anchors use #heading.`,
+          );
+        }
+
+        let target: string;
+
+        try {
+          target = decodeURIComponent(href.slice("whiteboard:source/".length));
+        } catch {
+          return reject("Invalid URL encoding in source link.");
+        }
+
+        // A commit of the board's repository: the commit is the link's pins.
+        const commit = commitLinkTarget(target);
+
+        if (commit)
+          return repositoryId
+            ? select(commit.anchor, {
+                repositoryId,
+                head: commit.commit,
+              }).map((source) => ({
+                id: `${element.id}:${node.url}`,
+                source,
+              }))
+            : reject(
+                `A commit link names a commit of the board's repository, and this board has none, in block ${element.id}.`,
+              );
+
+        // Links share the anchor grammar blocks use.
+        const anchor = target.replace(/^(head|base|diff)\//i, (side) =>
+          side.toLowerCase(),
+        );
+
+        if (!parseAnchor(anchor))
+          return reject(
+            "Use whiteboard:source/head/path#L10-L24 (or base, diff/path#L84-R90 across sides, or <commit>/path#L10-L24 at a commit of the board's repository) for a source link.",
           );
 
-          if (!parseAnchor(anchor))
-            return reject(
-              "Use whiteboard:source/head/path#L10-L24 (or base, diff/path#L84-R90 across sides, or <commit>/path#L10-L24 at a commit of the board's repository) for a source link.",
-            );
-
-          return select(anchor, element.pins).map((source) => ({
-            id: `${element.id}:${node.url}`,
-            source,
-          }));
-        },
-      );
+        return select(anchor, element.pins).map((source) => ({
+          id: `${element.id}:${node.url}`,
+          source,
+        }));
+      });
 
     if (element.type === "code_peek")
       return select(element.source, element.pins).map((source) => ({

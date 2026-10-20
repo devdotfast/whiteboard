@@ -1,7 +1,11 @@
 import { rangeAnchor } from "@review/lens-selection.js";
 import { expect, it } from "vitest";
 
-import { ReviewInputError, sourceReferences } from "./document.js";
+import {
+  ReviewInputError,
+  boardLinks,
+  sourceReferences,
+} from "./document.js";
 
 const sources = (markdown: string) =>
   sourceReferences([{ type: "markdown", id: "n-1", markdown }]);
@@ -236,4 +240,23 @@ it("reads a commit link at that commit of the board's repository", () => {
   ]);
   // A board with no repository has no commit to read.
   expect(() => sources(markdown)).toThrow(Error);
+});
+
+it("re-reads a block's links after its text changes in place", () => {
+  const block = {
+    type: "markdown" as const,
+    id: "b1",
+    markdown: "[plan](whiteboard:board/11111111-1111-4111-8111-111111111111)",
+  };
+
+  expect(boardLinks("x", [block]).map((link) => link.to.board)).toEqual([
+    "11111111-1111-4111-8111-111111111111",
+  ]);
+
+  block.markdown =
+    "[other](whiteboard:board/22222222-2222-4222-8222-222222222222)";
+
+  expect(boardLinks("x", [block]).map((link) => link.to.board)).toEqual([
+    "22222222-2222-4222-8222-222222222222",
+  ]);
 });
