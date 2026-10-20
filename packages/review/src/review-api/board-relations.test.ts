@@ -562,3 +562,32 @@ it("leaves a board in Trash out of its parent's children and others' dependencie
   expect(store.relations(plan).children).toEqual([step]);
   expect(store.relations(after).dependsOn).toEqual([step]);
 });
+
+it("keeps nesting one level deep across Trash, so a restore never makes a grandchild", async () => {
+  const plan = await board("Plan");
+  const step = await board("Step");
+  const detail = await board("Detail");
+  const other = await board("Other");
+
+  await setParent(step, plan);
+
+  const lifecycle = (reviewId: string, state: "trash" | "active") =>
+    store.execute({ operation: { type: "lifecycle", state, reviewId } });
+
+  await lifecycle(plan, "trash");
+  await expect(setParent(detail, step)).rejects.toThrow(ReviewInputError);
+  await lifecycle(plan, "active");
+  expect(store.relations(plan).children).toEqual([step]);
+  expect(store.relations(detail).parentId).toBeNull();
+
+  await lifecycle(step, "trash");
+  await expect(setParent(plan, other)).rejects.toThrow(ReviewInputError);
+  await lifecycle(step, "active");
+  expect(store.relations(step).parentId).toBe(plan);
+
+  await lifecycle(plan, "trash");
+  await setParent(step, other);
+  await lifecycle(plan, "active");
+  expect(store.relations(plan).children).toEqual([]);
+  expect(store.relations(step).parentId).toBe(other);
+});

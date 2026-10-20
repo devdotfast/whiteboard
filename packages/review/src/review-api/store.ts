@@ -2628,13 +2628,13 @@ export class ReviewStore {
       );
   }
   /** One parent, one level: a parent is top-level and a child has no
-   * children. Null makes the board top-level. */
+   * children, Trash included. Null makes the board top-level. */
   private setParent(id: string, parentId: string | null) {
     if (parentId !== null) {
       if (parentId === id)
         throw new ReviewInputError("A whiteboard can't be its own parent.");
       this.checkRelated(id, parentId);
-      const { parents, children } = this.relationGraph();
+      const { parents, children } = this.relationGraph(true);
       const grandparent = parents.get(parentId);
 
       if (grandparent)
