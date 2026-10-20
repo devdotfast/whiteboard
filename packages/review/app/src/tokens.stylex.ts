@@ -121,6 +121,7 @@ export const tokens = stylex.defineConsts({
   syntaxDeleted: "var(--syntax-deleted)",
   syntaxFunction: "var(--syntax-function)",
   syntaxInserted: "var(--syntax-inserted)",
+  syntaxKeyword: "var(--syntax-keyword)",
   syntaxNumber: "var(--syntax-number)",
   syntaxOperator: "var(--syntax-operator)",
   syntaxString: "var(--syntax-string)",

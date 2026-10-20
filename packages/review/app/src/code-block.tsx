@@ -319,14 +319,12 @@ const styles = stylex.create({
   },
 });
 
-// Syntax tokens (@speed-highlight/core). The Whiteboard palette: ink at three
-// strengths, the marker for keywords, two more blues for types and functions,
-// one warm pencil for strings and one plum for numbers. Comments are quiet and
-// italic. Diff green and red are reserved for the diff language. The editor
-// themes carry the same values.
+// Syntax tokens (@speed-highlight/core), colored by the active theme's token
+// colors. Comments are quiet and italic. Diff green and red are reserved for
+// the diff language.
 /* oxlint-disable stylex/no-unused -- read by token name through syntaxByToken */
 const syntaxStyles = stylex.create({
-  kwd: { color: tokens.accent },
+  kwd: { color: tokens.syntaxKeyword },
   type: { color: tokens.syntaxType },
   class: { color: tokens.syntaxType, fontWeight: fontWeight.medium },
   func: { color: tokens.syntaxFunction },
