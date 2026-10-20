@@ -348,6 +348,7 @@ export class ReviewServerSupervisor extends Disposable {
         this.readyTimer.cancel();
         this.port = Number(new URL(connection.url).port);
         this.restartCount = 0;
+        this.startupError = undefined;
         if (!this.connected.isSettled) {
           this.options.logInfo(
             `[Review Desktop] server ready at ${connection.url}`,

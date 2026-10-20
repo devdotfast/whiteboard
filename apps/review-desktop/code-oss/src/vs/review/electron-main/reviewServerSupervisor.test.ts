@@ -89,7 +89,8 @@ class FakeServerProcess implements IReviewServerProcess {
 	private readonly stdout = new Emitter<string>();
 	private readonly exit = new Emitter<{ readonly code: number; readonly signal: string }>();
 	readonly onStdout = this.stdout.event;
-	readonly onStderr = new Emitter<string>().event;
+	private readonly stderr = new Emitter<string>();
+	readonly onStderr = this.stderr.event;
 	readonly onExit = this.exit.event;
 	private readonly crashed = new Emitter<{ readonly code: number; readonly reason: string }>();
 	readonly onCrash = this.crashed.event;
@@ -109,6 +110,9 @@ class FakeServerProcess implements IReviewServerProcess {
 			token: this.env.DEV_FAST_REVIEW_SERVER_TOKEN,
 			instanceId: this.env.DEV_FAST_REVIEW_INSTANCE_ID,
 		})}\n`);
+	}
+	fail(message: string): void {
+		this.stderr.fire(`${message}\n`);
 	}
 	crash(): void {
 		this.exit.fire({ code: 1, signal: 'SIGKILL' });
@@ -286,6 +290,69 @@ test('a server that never announces readiness still times out', async (t) => {
 	t.mock.timers.tick(119_999);
 	assert.deepEqual(errors, []);
 	t.mock.timers.tick(1);
+	await rejected;
+});
+
+function crashLoop(processes: FakeServerProcess[], t: { mock: { timers: { tick(ms: number): void } } }): void {
+	for (const delay of [250, 1_000, 2_000]) {
+		processes.at(-1)!.crash();
+		t.mock.timers.tick(delay);
+	}
+	processes.at(-1)!.crash();
+}
+
+test('an upgrade failure seen before a server was ready is forgotten once one is', (t) => {
+	t.mock.timers.enable({ apis: ['setTimeout'] });
+	const processes: FakeServerProcess[] = [];
+	const errors: string[] = [];
+	const supervisor = new ReviewServerSupervisor({
+		appRoot: '/app',
+		appVersion: '0.0.34',
+		isBuilt: true,
+		channel: 'stable',
+		logInfo: () => { },
+		logError: (message) => errors.push(message),
+		createProcess: () => {
+			const serverProcess = new FakeServerProcess();
+			processes.push(serverProcess);
+			return serverProcess;
+		},
+	});
+	t.after(() => supervisor.dispose());
+
+	supervisor.start();
+	processes[0].fail('Could not upgrade the whiteboard store: the file is locked');
+	processes[0].crash();
+	t.mock.timers.tick(250);
+	processes[1].announceReady();
+	crashLoop(processes, t);
+
+	assert.match(errors.at(-1)!, /exhausted its restart budget/);
+});
+
+test('an upgrade failure is what a crash loop reports when no server becomes ready', async (t) => {
+	t.mock.timers.enable({ apis: ['setTimeout'] });
+	const processes: FakeServerProcess[] = [];
+	const supervisor = new ReviewServerSupervisor({
+		appRoot: '/app',
+		appVersion: '0.0.34',
+		isBuilt: true,
+		channel: 'stable',
+		logInfo: () => { },
+		logError: () => { },
+		createProcess: () => {
+			const serverProcess = new FakeServerProcess();
+			processes.push(serverProcess);
+			return serverProcess;
+		},
+	});
+	t.after(() => supervisor.dispose());
+	const rejected = assert.rejects(supervisor.whenConnected(), /the file is locked/);
+
+	supervisor.start();
+	processes[0].fail('Could not upgrade the whiteboard store: the file is locked');
+	crashLoop(processes, t);
+
 	await rejected;
 });
 
