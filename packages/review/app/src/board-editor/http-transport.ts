@@ -1,4 +1,5 @@
 import type { ApiDocumentData } from "@canvas/api-document";
+import { REVIEW_BOARDS_FLUSH_EVENT } from "@dev.fast/review-protocol";
 import type { ReviewApiClient } from "@review/review-api/client";
 import { ReviewApiError } from "@review/review-api/client";
 
@@ -12,10 +13,6 @@ import {
 
 // The board-sync seam's production adapter: the Whiteboard server, the
 // window and this browser's storage.
-
-/** Desktop's ask, as its window closes, that every board save now; each
- * passes its save to `detail.waitFor`. */
-export const BOARDS_FLUSH_EVENT = "review-boards-flush";
 
 /** How long the server holds the block a person is in without a word. */
 const FOCUS_HEARTBEAT_MS = 5_000;
@@ -90,11 +87,11 @@ export function httpBoardTransport(
         if (event instanceof CustomEvent) event.detail?.waitFor?.(saved);
       };
 
-      window.addEventListener(BOARDS_FLUSH_EVENT, asked);
+      window.addEventListener(REVIEW_BOARDS_FLUSH_EVENT, asked);
       window.addEventListener("pagehide", asked);
 
       return () => {
-        window.removeEventListener(BOARDS_FLUSH_EVENT, asked);
+        window.removeEventListener(REVIEW_BOARDS_FLUSH_EVENT, asked);
         window.removeEventListener("pagehide", asked);
       };
     },

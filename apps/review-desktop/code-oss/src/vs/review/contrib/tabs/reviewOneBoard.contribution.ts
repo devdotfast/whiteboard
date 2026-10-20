@@ -17,6 +17,7 @@ import { IEditorGroupsService } from '../../../workbench/services/editor/common/
 import { IEditorService } from '../../../workbench/services/editor/common/editorService.js';
 import { ILifecycleService } from '../../../workbench/services/lifecycle/common/lifecycle.js';
 import { ReviewCanvasEditorInput } from '../../browser/parts/canvas/reviewCanvasEditorInput.js';
+import { REVIEW_BOARDS_FLUSH_EVENT } from '../../common/reviewProtocol.js';
 import { IReviewApiCatalogService } from '../../services/reviewApiCatalogService.js';
 import { IReviewCanvasEditorTabsService } from '../../services/reviewCanvasEditorTabsService.js';
 import { boardsToClose, keepOneGroup, letGoOfUntitled } from './reviewOneBoard.js';
@@ -29,10 +30,6 @@ import { REVIEW_BOARD_ACTIVE, REVIEW_OPEN_RECENT_BOARD, REVIEW_OPEN_RECENT_BOARD
  * history, so back and forward return to them; the oldest close past a
  * limit. Home stays open behind its own hidden tab.
  */
-
-/** The canvas's ask that every open board save now (BoardEditor's
- * BOARDS_FLUSH_EVENT). */
-const REVIEW_BOARDS_FLUSH_EVENT = 'review-boards-flush';
 
 function boardOf(editor: EditorInput | undefined): string | undefined {
 	return editor instanceof ReviewCanvasEditorInput && editor.target.kind === 'api' ? editor.target.reviewId : undefined;

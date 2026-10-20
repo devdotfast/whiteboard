@@ -7,6 +7,7 @@ import {
   testApiDocumentData,
   testReviewSession,
 } from "@canvas/review-session-test-utils";
+import { REVIEW_BOARDS_FLUSH_EVENT } from "@dev.fast/review-protocol";
 import { ReviewApiClient } from "@review/review-api/client";
 import * as stylex from "@stylexjs/stylex";
 import { act } from "react";
@@ -15,7 +16,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 
 import { BoardEditor, BoardEditorHostContext } from "./BoardEditor";
-import { BOARDS_FLUSH_EVENT } from "./http-transport";
 
 let root: Root | null = null;
 
@@ -237,7 +237,7 @@ it("saves what's typed when the window asks every board to, and lets it wait for
   const waits: Promise<unknown>[] = [];
 
   window.dispatchEvent(
-    new CustomEvent(BOARDS_FLUSH_EVENT, {
+    new CustomEvent(REVIEW_BOARDS_FLUSH_EVENT, {
       detail: { waitFor: (saved: Promise<unknown>) => waits.push(saved) },
     }),
   );
@@ -295,7 +295,7 @@ it("keeps a new board's first paragraph in the prose column before and after its
 
   await userEvent.click(first());
   await userEvent.keyboard("First.");
-  window.dispatchEvent(new CustomEvent(BOARDS_FLUSH_EVENT));
+  window.dispatchEvent(new CustomEvent(REVIEW_BOARDS_FLUSH_EVENT));
   await vi.waitFor(() => expect(saves).toHaveLength(1));
   const key = saves[0]!.document[0]!.clientKey!;
 

@@ -1153,6 +1153,10 @@ export interface ReviewCanvasHandle extends ReviewDisposable {
 
 export const REVIEW_CANVAS_RESUME_EVENT = "dev-fast-review-canvas-resume";
 
+/** Sent as a window closes; each board passes its save to
+ * `detail.waitFor`. */
+export const REVIEW_BOARDS_FLUSH_EVENT = "review-boards-flush";
+
 export interface ReviewMenuItem {
   id: string;
   label: string;
