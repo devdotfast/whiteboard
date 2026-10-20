@@ -20,52 +20,71 @@ export const DEFAULT_EXTENSION_DIR = path.join(
 
 const CACHE_DIR = path.join(CHECKOUT, ".build", "typescript-native");
 
-const VERSION = "7.0.2";
+const npmTarball = (name, version) =>
+  `https://registry.npmjs.org/${name}/-/${name.split("/").pop()}-${version}.tgz`;
 
-const PINS = {
-  "darwin-arm64":
+const tsgo = (target, sha256) => ({
+  url: npmTarball(`@typescript/typescript-${target}`, "7.0.2"),
+  sha256,
+});
+
+const SERVERS = {
+  "darwin-arm64": tsgo(
+    "darwin-arm64",
     "902e2fe1cf0799198ef902c6b8c310a450fef629a6baba41d45641ef75c04ebd",
-  "darwin-x64":
+  ),
+  "darwin-x64": tsgo(
+    "darwin-x64",
     "eba158cb54050f723d5ff781438f33de5640054440bb4f2bd170cfe9bc2eb551",
-  "linux-x64":
+  ),
+  "linux-x64": tsgo(
+    "linux-x64",
     "7ecad6f67377e831856367ab062ef394f21506a611405bf8ac0ff039348637d3",
-  "linux-arm64":
+  ),
+  "linux-arm64": tsgo(
+    "linux-arm64",
     "c83d931ac9dd7549cde6e71246aa9d6a9812843023df3e277fe3b5dcf41dd0ea",
-  "win32-x64":
+  ),
+  "win32-x64": tsgo(
+    "win32-x64",
     "61fc4e141d2bc687db580e71bbfa63b9c209f0310645d82ca1b457eb3a24fd19",
-  "win32-arm64":
+  ),
+  "win32-arm64": tsgo(
+    "win32-arm64",
     "0a73534e6ee50cdbb2a29ac48657ca0ad13cf0f424cf63808e4df7baeb87b8be",
+  ),
 };
 
-const exeName = (target) =>
-  target.startsWith("win32-") ? "tsc.exe" : "tsc";
+const exeName = (target) => (target.startsWith("win32-") ? "tsc.exe" : "tsc");
 
 export async function installTypeScriptNative({
   target = `${os.platform()}-${os.arch()}`,
   extensionDir = DEFAULT_EXTENSION_DIR,
   cacheDir = CACHE_DIR,
 } = {}) {
-  const sha256 = PINS[target];
+  const server = SERVERS[target];
 
-  if (!sha256) throw new Error(`no TypeScript ${VERSION} binary for ${target}`);
+  if (!server) throw new Error(`no TypeScript 7 server for ${target}`);
 
   const lib = path.join(extensionDir, "lib");
   const stamp = path.join(lib, ".pin");
 
-  if (fs.existsSync(stamp) && fs.readFileSync(stamp, "utf8").trim() === sha256)
+  if (
+    fs.existsSync(stamp) &&
+    fs.readFileSync(stamp, "utf8").trim() === server.sha256
+  )
     return lib;
 
-  const name = `typescript-${target}`;
-  const tarball = path.join(cacheDir, `${sha256}-${name}-${VERSION}.tgz`);
-  await downloadPinned(
-    {
-      url: `https://registry.npmjs.org/@typescript/${name}/-/${name}-${VERSION}.tgz`,
-      sha256,
-    },
-    tarball,
+  const tarball = path.join(
+    cacheDir,
+    `${server.sha256}-${path.basename(server.url)}`,
   );
 
-  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "wb-typescript-native-"));
+  await downloadPinned(server, tarball);
+
+  const scratch = fs.mkdtempSync(
+    path.join(os.tmpdir(), "wb-typescript-native-"),
+  );
 
   try {
     execFileSync("tar", ["-xzf", tarball, "-C", scratch]);
@@ -83,9 +102,10 @@ export async function installTypeScriptNative({
 
   const exe = path.join(lib, exeName(target));
 
-  if (!fs.existsSync(exe)) throw new Error(`${name} has no lib/${exeName(target)}`);
+  if (!fs.existsSync(exe))
+    throw new Error(`${server.url} has no lib/${exeName(target)}`);
   fs.chmodSync(exe, 0o755);
-  fs.writeFileSync(stamp, `${sha256}\n`);
+  fs.writeFileSync(stamp, `${server.sha256}\n`);
 
   return lib;
 }
