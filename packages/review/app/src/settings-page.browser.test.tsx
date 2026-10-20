@@ -1,4 +1,7 @@
-import type { ReviewCanvasSettingsContent } from "@dev.fast/review-protocol";
+import type {
+  ReviewAppearance,
+  ReviewCanvasSettingsContent,
+} from "@dev.fast/review-protocol";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, test } from "vitest";
@@ -33,8 +36,17 @@ function settings(): ReviewCanvasSettingsContent {
     setKeymap: async (choice) => choice,
     documentWidth: "standard",
     setDocumentWidth: async (choice) => choice,
-    codeFontSize: 12,
-    setCodeFontSize: async (size) => size,
+    appearance: {
+      documentFontSize: 15,
+      readingFont: "serif",
+      codeFontSize: 13,
+      codeFontFamily: "Geist Mono",
+      fontLigatures: false,
+      diffFontSize: 12,
+      diffWordWrap: false,
+      diffIgnoreWhitespace: true,
+    },
+    setAppearance: unexpected,
     readyNotification: "off",
     setReadyNotification: async (choice) => choice,
     openFilesIn: { choice: "whiteboard", application: null },
@@ -71,25 +83,28 @@ function settings(): ReviewCanvasSettingsContent {
 test("preferences stay enabled while overlapping saves settle independently", async () => {
   const content = settings();
   const width = Promise.withResolvers<"wide">();
-  const font = Promise.withResolvers<number>();
+  const appearance = Promise.withResolvers<ReviewAppearance>();
   content.setDocumentWidth = () => width.promise;
-  content.setCodeFontSize = () => font.promise;
+  content.setAppearance = () => appearance.promise;
   const container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
   await act(async () => root.render(<SettingsPage settings={content} />));
 
   const wide = page.getByRole("button", { name: "Wide", exact: true });
-  const fontSize = page.getByRole("button", { name: "14", exact: true });
+  await act(async () => page.getByText("Specifics").click());
+  const fontSize = page.getByRole("combobox", { name: "Code font size" });
   await act(async () => wide.click());
   await expect.element(wide).toBeEnabled();
   await expect.element(fontSize).toBeEnabled();
-  await act(async () => fontSize.click());
+  await act(async () => fontSize.selectOptions("14px"));
   await expect.element(fontSize).toBeEnabled();
 
-  await act(async () => font.resolve(14));
+  await act(async () =>
+    appearance.resolve({ ...content.appearance, codeFontSize: 14 }),
+  );
   await expect.element(fontSize).toBeEnabled();
-  await expect.element(fontSize).toHaveAttribute("aria-pressed", "true");
+  await expect.element(fontSize).toHaveValue("14");
   await expect.element(wide).toBeEnabled();
   await act(async () => width.reject(new Error("Could not save width")));
   await expect.element(wide).toBeEnabled();

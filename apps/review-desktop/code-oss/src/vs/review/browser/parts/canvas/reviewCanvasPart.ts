@@ -48,7 +48,14 @@ import { isMacintosh } from "../../../../base/common/platform.js";
 import { ILifecycleService, ShutdownReason } from "../../../../workbench/services/lifecycle/common/lifecycle.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import {
+	DIFF_EDITOR_FONT_SIZE_SETTING,
+	DIFF_EDITOR_IGNORE_TRIM_WHITESPACE_SETTING,
+	DIFF_EDITOR_WORD_WRAP_SETTING,
+	EDITOR_FONT_FAMILY_SETTING,
+	EDITOR_FONT_LIGATURES_SETTING,
 	EDITOR_FONT_SIZE_SETTING,
+	REVIEW_DOCUMENT_FONT_SIZE_SETTING,
+	REVIEW_READING_FONT_SETTING,
 	REVIEW_OPEN_FILES_IN_APPLICATION_SETTING,
 	REVIEW_OPEN_FILES_IN_CHOICES,
 	REVIEW_OPEN_FILES_IN_SETTING,
@@ -70,6 +77,7 @@ import type {
 	ReviewCanvasInstallContent,
 	ReviewCanvasNewWhiteboardRequest,
 	ReviewCanvasOnboarding,
+	ReviewAppearance,
 	ReviewCanvasSettingsContent,
 	ReviewColorTheme,
 	ReviewCanvasSetupActions,
@@ -128,6 +136,17 @@ interface ReviewCanvasLoadLifecycle {
 }
 
 type ReviewCanvasState = "home" | "connecting" | "active" | "completed" | "error";
+
+const APPEARANCE_SETTINGS = {
+	documentFontSize: { key: REVIEW_DOCUMENT_FONT_SIZE_SETTING, setting: "document_font_size" },
+	readingFont: { key: REVIEW_READING_FONT_SETTING, setting: "reading_font" },
+	codeFontSize: { key: EDITOR_FONT_SIZE_SETTING, setting: "code_font_size" },
+	codeFontFamily: { key: EDITOR_FONT_FAMILY_SETTING, setting: "code_font_family" },
+	fontLigatures: { key: EDITOR_FONT_LIGATURES_SETTING, setting: "font_ligatures" },
+	diffFontSize: { key: DIFF_EDITOR_FONT_SIZE_SETTING, setting: "diff_font_size" },
+	diffWordWrap: { key: DIFF_EDITOR_WORD_WRAP_SETTING, setting: "diff_word_wrap" },
+	diffIgnoreWhitespace: { key: DIFF_EDITOR_IGNORE_TRIM_WHITESPACE_SETTING, setting: "diff_ignore_whitespace" },
+} as const satisfies Record<keyof ReviewAppearance, { key: string; setting: string }>;
 
 const requestReviewApi: typeof fetch = (url, init) => fetch(url, init);
 
@@ -1001,14 +1020,16 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_DOCUMENT_WIDTH_SETTING, choice, ConfigurationTarget.USER);
 				return this.currentDocumentWidth();
 			},
-			codeFontSize: this.currentCodeFontSize(),
-			setCodeFontSize: async (size) => {
+			appearance: this.currentAppearance(),
+			setAppearance: async (name, value) => {
+				const { key, setting } = APPEARANCE_SETTINGS[name];
+				const written = name === "diffWordWrap" ? (value ? "on" : "off") : value === "" ? undefined : value;
 				this.reviewTelemetryService.capture("setting_changed", {
-					setting: "code_font_size",
-					enabled: size !== 12,
+					setting,
+					enabled: written !== undefined && written !== this.configurationService.inspect(key).defaultValue,
 				});
-				await this.configurationService.updateValue(EDITOR_FONT_SIZE_SETTING, size, ConfigurationTarget.USER);
-				return this.currentCodeFontSize();
+				await this.configurationService.updateValue(key, written, ConfigurationTarget.USER);
+				return this.currentAppearance();
 			},
 			readyNotification: this.currentReadyNotification(),
 			setReadyNotification: async (choice) => {
@@ -1103,8 +1124,19 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return choice === "wide" || choice === "full" ? choice : "standard";
 	}
 
-	private currentCodeFontSize(): number {
-		return this.configurationService.getValue<number>(EDITOR_FONT_SIZE_SETTING);
+	private currentAppearance(): ReviewAppearance {
+		const value = <T,>(name: keyof ReviewAppearance) => this.configurationService.getValue<T>(APPEARANCE_SETTINGS[name].key);
+		return {
+			documentFontSize: value<number>("documentFontSize"),
+			readingFont: value("readingFont") === "sans" ? "sans" : "serif",
+			codeFontSize: value<number>("codeFontSize"),
+			codeFontFamily: value<string>("codeFontFamily"),
+			// `editor.fontLigatures` also takes font-feature-settings.
+			fontLigatures: value<boolean | string>("fontLigatures") !== false,
+			diffFontSize: value<number>("diffFontSize"),
+			diffWordWrap: value("diffWordWrap") === "on",
+			diffIgnoreWhitespace: value<boolean>("diffIgnoreWhitespace") !== false,
+		};
 	}
 
 	private currentReadyNotification(): ReviewReadyNotificationChoice {

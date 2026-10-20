@@ -175,14 +175,14 @@ export function DiffrConfigSection({
   const hiddenTags = config && setting(config, hideKey);
 
   return (
-    <div {...stylex.props(styles.diffr)}>
+    <div {...stylex.props(styles.nested)}>
       <details>
         <summary
           {...stylex.props(
             chevronMarker,
             disclosureStyles.toggle,
             focusStyles.ring,
-            styles.diffrSummary,
+            styles.nestedSummary,
           )}
           onClick={() => setOpened(true)}
         >

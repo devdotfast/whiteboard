@@ -153,6 +153,13 @@ export const SETTING_NAME = [
   "ready_notification",
   "document_width",
   "code_font_size",
+  "document_font_size",
+  "reading_font",
+  "code_font_family",
+  "font_ligatures",
+  "diff_font_size",
+  "diff_word_wrap",
+  "diff_ignore_whitespace",
 ] as const;
 
 export const REVIEW_OPENED_VIA = ["home", "cli", "other"] as const;

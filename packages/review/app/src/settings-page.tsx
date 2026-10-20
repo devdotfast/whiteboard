@@ -1,8 +1,11 @@
 import { Button } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
+import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
-import { Select } from "@canvas/ui/text-field";
+import { Select, TextField } from "@canvas/ui/text-field";
 import type {
+  ReviewAppearance,
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
   ReviewColorTheme,
@@ -19,6 +22,7 @@ import { useEffect, useState } from "react";
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { DiffrConfigSection } from "./diffr-config-section";
 import { homeStyles } from "./home-styles";
+import { chevronMarker } from "./markers.stylex";
 import { RemoteHostsSection } from "./remote-hosts-section";
 import { Row, Section } from "./settings-section";
 import { settingsStyles as styles } from "./settings-styles";
@@ -57,16 +61,14 @@ const DOCUMENT_WIDTH_LABELS: Record<ReviewDocumentWidthChoice, string> = {
   full: "Full",
 };
 
-const CODE_FONT_SIZES = [11, 12, 13, 14, 16];
+const READING_FONT_LABELS: Record<ReviewAppearance["readingFont"], string> = {
+  serif: "Serif",
+  sans: "Sans",
+};
 
-// A size set elsewhere, such as one imported from VS Code, gets its own segment.
-function codeFontSizeLabels(current: number) {
-  const sizes = [...new Set([...CODE_FONT_SIZES, current])].sort(
-    (left, right) => left - right,
-  );
+const DOCUMENT_FONT_SIZES = [13, 14, 15, 16, 17, 18, 20];
 
-  return Object.fromEntries(sizes.map((size) => [String(size), String(size)]));
-}
+const CODE_FONT_SIZES = [11, 12, 13, 14, 15, 16, 18];
 
 const READY_NOTIFICATION_LABELS: Record<ReviewReadyNotificationChoice, string> =
   {
@@ -97,7 +99,7 @@ export function SettingsPage({
   const [keymap, setKeymap] = useState(settings.keymap);
   const [openFilesIn, setOpenFilesIn] = useState(settings.openFilesIn);
   const [documentWidth, setDocumentWidth] = useState(settings.documentWidth);
-  const [codeFontSize, setCodeFontSize] = useState(settings.codeFontSize);
+  const [appearance, setAppearance] = useState(settings.appearance);
 
   const [readyNotification, setReadyNotification] = useState(
     settings.readyNotification,
@@ -138,6 +140,11 @@ export function SettingsPage({
       setError(cause instanceof Error ? cause.message : String(cause));
     }
   };
+
+  const changeAppearance = <Key extends keyof ReviewAppearance>(
+    key: Key,
+    value: ReviewAppearance[Key],
+  ) => void run(() => settings.setAppearance(key, value), setAppearance);
 
   return (
     <main {...withClass("review-home", homeStyles.page)}>
@@ -217,7 +224,7 @@ export function SettingsPage({
             </Row>
           </Section>
 
-          <Section label="Editor">
+          <Section label="Appearance">
             <Row label="Theme" description="How Whiteboard looks.">
               <ThemeSelect
                 themes={colorThemes}
@@ -262,22 +269,128 @@ export function SettingsPage({
                 }
               />
             </Row>
-            <Row
-              label="Code font size"
-              description="Text size in diffs, code peeks, and source tabs."
-            >
-              <SegmentedControl
-                label="Code font size"
-                value={String(codeFontSize)}
-                options={labeledOptions(codeFontSizeLabels(codeFontSize))}
-                onChange={(choice) =>
-                  void run(
-                    () => settings.setCodeFontSize(Number(choice)),
-                    setCodeFontSize,
-                  )
-                }
-              />
-            </Row>
+            <div {...stylex.props(styles.nested)}>
+              <details>
+                <summary
+                  {...stylex.props(
+                    chevronMarker,
+                    disclosureStyles.toggle,
+                    focusStyles.ring,
+                    styles.nestedSummary,
+                  )}
+                >
+                  <DisclosureChevron />
+                  Specifics
+                </summary>
+                <Row
+                  label="Text size"
+                  description="Whiteboard text. Headings scale with it."
+                >
+                  <SizeSelect
+                    label="Text size"
+                    sizes={DOCUMENT_FONT_SIZES}
+                    value={appearance.documentFontSize}
+                    onChange={(size) =>
+                      changeAppearance("documentFontSize", size)
+                    }
+                  />
+                </Row>
+                <Row
+                  label="Reading typeface"
+                  description="Whiteboard text, Ask answers, and trace notes."
+                >
+                  <SegmentedControl
+                    label="Reading typeface"
+                    value={appearance.readingFont}
+                    options={labeledOptions(READING_FONT_LABELS)}
+                    onChange={(choice) =>
+                      changeAppearance("readingFont", choice)
+                    }
+                  />
+                </Row>
+                <Row
+                  label="Code font"
+                  description="Code blocks, diffs, peeks, and source tabs. Clear it for Geist Mono."
+                >
+                  <FontFamilyField
+                    value={appearance.codeFontFamily}
+                    onChange={(family) =>
+                      changeAppearance("codeFontFamily", family)
+                    }
+                  />
+                </Row>
+                <Row
+                  label="Code font size"
+                  description="Code blocks and source tabs."
+                >
+                  <SizeSelect
+                    label="Code font size"
+                    sizes={CODE_FONT_SIZES}
+                    value={appearance.codeFontSize}
+                    onChange={(size) => changeAppearance("codeFontSize", size)}
+                  />
+                </Row>
+                <Row
+                  label="Font ligatures"
+                  description="Code blocks, diffs, peeks, and source tabs."
+                >
+                  <label {...stylex.props(styles.toggle)}>
+                    <Checkbox
+                      aria-label="Font ligatures"
+                      checked={appearance.fontLigatures}
+                      onChange={(event) =>
+                        changeAppearance("fontLigatures", event.target.checked)
+                      }
+                    />
+                  </label>
+                </Row>
+                <Row
+                  label="Diff font size"
+                  description="The Diff tab, diff blocks, and code peeks."
+                >
+                  <SizeSelect
+                    label="Diff font size"
+                    sizes={CODE_FONT_SIZES}
+                    value={appearance.diffFontSize}
+                    onChange={(size) => changeAppearance("diffFontSize", size)}
+                  />
+                </Row>
+                <Row
+                  label="Wrap long lines in diffs"
+                  description="The Diff tab and diff blocks."
+                >
+                  <label {...stylex.props(styles.toggle)}>
+                    <Checkbox
+                      aria-label="Wrap long lines in diffs"
+                      checked={appearance.diffWordWrap}
+                      onChange={(event) =>
+                        changeAppearance("diffWordWrap", event.target.checked)
+                      }
+                    />
+                  </label>
+                </Row>
+                <Row
+                  label="Hide whitespace changes"
+                  description="Leading and trailing whitespace, in diffs and peeks."
+                >
+                  <label {...stylex.props(styles.toggle)}>
+                    <Checkbox
+                      aria-label="Hide whitespace changes"
+                      checked={appearance.diffIgnoreWhitespace}
+                      onChange={(event) =>
+                        changeAppearance(
+                          "diffIgnoreWhitespace",
+                          event.target.checked,
+                        )
+                      }
+                    />
+                  </label>
+                </Row>
+              </details>
+            </div>
+          </Section>
+
+          <Section label="Editor">
             <Row
               label="Keymap"
               description="Vim, Emacs, and Sublime Text keys come from a bundled extension. A change needs a reload."
@@ -410,6 +523,64 @@ export function SettingsPage({
         </div>
       </div>
     </main>
+  );
+}
+
+// A size set elsewhere, such as one imported from VS Code, gets its own option.
+function SizeSelect({
+  label,
+  sizes,
+  value,
+  onChange,
+}: {
+  label: string;
+  sizes: number[];
+  value: number;
+  onChange: (size: number) => void;
+}) {
+  return (
+    <Select
+      aria-label={label}
+      value={String(value)}
+      onChange={(event) => onChange(Number(event.currentTarget.value))}
+    >
+      {[...new Set([...sizes, value])]
+        .sort((left, right) => left - right)
+        .map((size) => (
+          <option key={size} value={size}>
+            {size}px
+          </option>
+        ))}
+    </Select>
+  );
+}
+
+function FontFamilyField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (family: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => setDraft(value), [value]);
+
+  const commit = () => {
+    if (draft.trim() !== value) onChange(draft.trim());
+  };
+
+  return (
+    <TextField
+      aria-label="Code font"
+      spellCheck={false}
+      value={draft}
+      onChange={(event) => setDraft(event.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") commit();
+      }}
+    />
   );
 }
 

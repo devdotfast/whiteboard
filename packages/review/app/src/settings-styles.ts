@@ -70,14 +70,14 @@ export const settingsStyles = stylex.create({
   input: {
     minWidth: "200px",
   },
-  diffr: {
+  nested: {
     marginTop: space.s8,
     paddingLeft: space.s12,
     borderLeftWidth: "2px",
     borderLeftStyle: "solid",
     borderLeftColor: tokens.ruleSoft,
   },
-  diffrSummary: {
+  nestedSummary: {
     display: "flex",
     alignItems: "center",
     gap: space.s6,

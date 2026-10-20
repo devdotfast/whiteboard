@@ -716,6 +716,19 @@ export interface ReviewOpenFilesIn {
 
 export type ReviewDocumentWidthChoice = "standard" | "wide" | "full";
 
+export interface ReviewAppearance {
+  documentFontSize: number;
+  readingFont: "serif" | "sans";
+  // `editor.*`: code blocks and source tabs.
+  codeFontSize: number;
+  codeFontFamily: string;
+  fontLigatures: boolean;
+  // `diffEditor.*`: the Diff tab, diff blocks and code peeks.
+  diffFontSize: number;
+  diffWordWrap: boolean;
+  diffIgnoreWhitespace: boolean;
+}
+
 export type ReviewReadyNotificationChoice =
   | "notificationAndBadge"
   | "notification"
@@ -821,9 +834,11 @@ export interface ReviewCanvasSettingsContent {
   setDocumentWidth(
     choice: ReviewDocumentWidthChoice,
   ): Promise<ReviewDocumentWidthChoice>;
-  // `editor.fontSize`, which every diff, peek and source editor reads.
-  codeFontSize: number;
-  setCodeFontSize(size: number): Promise<number>;
+  appearance: ReviewAppearance;
+  setAppearance<Key extends keyof ReviewAppearance>(
+    key: Key,
+    value: ReviewAppearance[Key],
+  ): Promise<ReviewAppearance>;
   readyNotification: ReviewReadyNotificationChoice;
   setReadyNotification(
     choice: ReviewReadyNotificationChoice,
