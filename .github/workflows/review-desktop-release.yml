@@ -24,20 +24,26 @@ on:
           - major
         default: patch
       release_source:
-        description: "Release main's tip, or promote a published preview tag."
+        description: "Release main's tip, promote a published preview tag, or release any tag on origin."
         required: true
         type: choice
         options:
           - main
           - preview
+          - tag
         default: main
       preview_tag:
         description: "Preview tag to promote, e.g. v0.0.32-preview.20260907.7. Required when release_source is preview."
         required: false
         type: string
         default: ""
+      source_tag:
+        description: "Tag to release as is, e.g. a hotfix cherry-picked onto an earlier release. Required when release_source is tag."
+        required: false
+        type: string
+        default: ""
       version:
-        description: "Existing release tag to build again for the selected platforms, e.g. v0.2.4. Skips the bump; bump, release_source and preview_tag are ignored."
+        description: "Existing release tag to build again for the selected platforms, e.g. v0.2.4. Skips the bump; bump, release_source, preview_tag and source_tag are ignored."
         required: false
         type: string
         default: ""
@@ -136,15 +142,21 @@ jobs:
           BUMP: ${{ inputs.bump }}
           RELEASE_SOURCE: ${{ inputs.release_source }}
           PREVIEW_TAG_INPUT: ${{ inputs.preview_tag }}
+          SOURCE_TAG_INPUT: ${{ inputs.source_tag }}
           DRY_RUN: ${{ inputs.dry_run }}
           GH_TOKEN: ${{ github.token }}
         run: |
           # A dispatch form field left with stale text arrives as a non-empty
           # string, so trim before testing for emptiness.
           PREVIEW_TAG="$(printf '%s' "$PREVIEW_TAG_INPUT" | tr -d '[:space:]')"
+          SOURCE_TAG="$(printf '%s' "$SOURCE_TAG_INPUT" | tr -d '[:space:]')"
 
           if [ "$RELEASE_SOURCE" != "preview" ] && [ -n "$PREVIEW_TAG" ]; then
             echo "::error::preview_tag only applies when release_source is 'preview'. Clear the field, or set release_source to 'preview'."
+            exit 1
+          fi
+          if [ "$RELEASE_SOURCE" != "tag" ] && [ -n "$SOURCE_TAG" ]; then
+            echo "::error::source_tag only applies when release_source is 'tag'. Clear the field, or set release_source to 'tag'."
             exit 1
           fi
 
@@ -218,6 +230,18 @@ jobs:
             fi
 
             echo "Promoting ${PREVIEW_TAG} (${SOURCE_COMMIT}) to Whiteboard ${TAG}."
+          elif [ "$RELEASE_SOURCE" = "tag" ]; then
+            if [ -z "$SOURCE_TAG" ]; then
+              echo "::error::release_source 'tag' requires source_tag."
+              exit 1
+            fi
+            if ! git ls-remote --exit-code --tags origin "refs/tags/${SOURCE_TAG}" >/dev/null 2>&1; then
+              echo "::error::${SOURCE_TAG} does not exist on origin."
+              exit 1
+            fi
+            git fetch --no-tags origin "+refs/tags/${SOURCE_TAG}:refs/tags/${SOURCE_TAG}"
+            SOURCE_COMMIT=$(git rev-parse "refs/tags/${SOURCE_TAG}^{commit}")
+            echo "Releasing ${SOURCE_TAG} (${SOURCE_COMMIT}) as Whiteboard ${TAG}."
           else
             echo "Releasing Whiteboard ${TAG} from ${GITHUB_REF_NAME}."
           fi
@@ -287,7 +311,7 @@ jobs:
           RESOLVED_VERSION: ${{ steps.resolve.outputs.version }}
           SOURCE_COMMIT: ${{ steps.resolve.outputs.source_commit }}
         run: |
-          if [ "$RELEASE_SOURCE" = "preview" ]; then
+          if [ "$RELEASE_SOURCE" != "main" ]; then
             # The build jobs stamp the promoted version into this same commit,
             # so the artifacts a promotion dry run validates carry it too.
             VERSION="$RESOLVED_VERSION"
