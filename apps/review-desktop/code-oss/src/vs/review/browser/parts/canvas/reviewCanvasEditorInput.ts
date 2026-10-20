@@ -117,3 +117,8 @@ export class ReviewCanvasEditorInput extends EditorInput {
 		);
 	}
 }
+
+/** The board in a tab, when the tab is a board. */
+export function boardOf(editor: EditorInput | undefined): string | undefined {
+	return editor instanceof ReviewCanvasEditorInput && editor.target.kind === "api" ? editor.target.reviewId : undefined;
+}

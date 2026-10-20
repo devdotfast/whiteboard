@@ -23,7 +23,6 @@ import { ILogService } from "../../../../platform/log/common/log.js";
 import { IStorageService, StorageScope, StorageTarget } from "../../../../platform/storage/common/storage.js";
 import { IThemeService } from "../../../../platform/theme/common/themeService.js";
 import { Part } from "../../../../workbench/browser/part.js";
-import type { EditorInput } from "../../../../workbench/common/editor/editorInput.js";
 import { IEditorService } from "../../../../workbench/services/editor/common/editorService.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import { REVIEW_CHROME_HEIGHT } from "../../../common/reviewChrome.js";
@@ -46,7 +45,7 @@ import { IReviewDesktopConnectionService } from "../../../services/reviewDesktop
 
 import "../../media/review.css";
 import { loadReviewCanvasAssets } from "../canvas/reviewCanvasAssets.js";
-import { ReviewCanvasEditorInput } from "../canvas/reviewCanvasEditorInput.js";
+import { boardOf } from "../canvas/reviewCanvasEditorInput.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
 import { type ReviewSidebarPaneId, ReviewSidebarTabs } from "./reviewSidebarTabs.js";
 import { REVIEW_SIDEBAR_TAB_COMMANDS } from "../../../contrib/tabs/reviewWindowKeys.js";
@@ -55,11 +54,6 @@ import { REVIEW_NEW_WHITEBOARD_COMMAND_ID } from "../../../common/reviewNewWhite
 /** Whether a thread started on the board or edited it. */
 function onBoard(thread: ReviewProjectThreads["threads"][number], reviewId: string): boolean {
 	return thread.anchor.board.reviewId === reviewId || thread.edited.some((board) => board.reviewId === reviewId);
-}
-
-/** The board in a tab, when the tab is a board. */
-function boardOf(input: EditorInput | undefined): string | undefined {
-	return input instanceof ReviewCanvasEditorInput && input.target.kind === "api" ? input.target.reviewId : undefined;
 }
 
 /** A collapsible group inside the Changes pane. */

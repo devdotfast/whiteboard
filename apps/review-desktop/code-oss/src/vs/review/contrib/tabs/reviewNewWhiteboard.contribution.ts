@@ -13,18 +13,12 @@ import { KeybindingWeight } from "../../../platform/keybinding/common/keybinding
 import { ILogService } from "../../../platform/log/common/log.js";
 import { type IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from "../../../workbench/common/contributions.js";
 import { EditorCloseContext, EditorsOrder } from "../../../workbench/common/editor.js";
-import type { EditorInput } from "../../../workbench/common/editor/editorInput.js";
 import { IEditorService } from "../../../workbench/services/editor/common/editorService.js";
-import { ReviewCanvasEditorInput } from "../../browser/parts/canvas/reviewCanvasEditorInput.js";
+import { boardOf } from "../../browser/parts/canvas/reviewCanvasEditorInput.js";
 import { ReviewCanvasEditorPane } from "../../browser/parts/canvas/reviewCanvasPart.js";
 import { newWhiteboardRepositoryPath, REVIEW_NEW_WHITEBOARD_COMMAND_ID } from "../../common/reviewNewWhiteboard.js";
 import { IReviewApiCatalogService } from "../../services/reviewApiCatalogService.js";
 import { IReviewCanvasEditorTabsService } from "../../services/reviewCanvasEditorTabsService.js";
-
-/** The board in a tab, when the tab is a board. */
-function boardOf(editor: EditorInput | undefined): string | undefined {
-	return editor instanceof ReviewCanvasEditorInput && editor.target.kind === "api" ? editor.target.reviewId : undefined;
-}
 
 registerAction2(class extends Action2 {
 	constructor() {

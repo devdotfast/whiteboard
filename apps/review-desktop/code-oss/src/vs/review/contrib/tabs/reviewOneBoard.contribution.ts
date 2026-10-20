@@ -16,7 +16,7 @@ import type { EditorInput } from '../../../workbench/common/editor/editorInput.j
 import { IEditorGroupsService } from '../../../workbench/services/editor/common/editorGroupsService.js';
 import { IEditorService } from '../../../workbench/services/editor/common/editorService.js';
 import { ILifecycleService } from '../../../workbench/services/lifecycle/common/lifecycle.js';
-import { ReviewCanvasEditorInput } from '../../browser/parts/canvas/reviewCanvasEditorInput.js';
+import { boardOf } from '../../browser/parts/canvas/reviewCanvasEditorInput.js';
 import { REVIEW_BOARDS_FLUSH_EVENT } from '../../common/reviewProtocol.js';
 import { IReviewApiCatalogService } from '../../services/reviewApiCatalogService.js';
 import { IReviewCanvasEditorTabsService } from '../../services/reviewCanvasEditorTabsService.js';
@@ -30,10 +30,6 @@ import { REVIEW_BOARD_ACTIVE, REVIEW_OPEN_RECENT_BOARD, REVIEW_OPEN_RECENT_BOARD
  * history, so back and forward return to them; the oldest close past a
  * limit. Home stays open behind its own hidden tab.
  */
-
-function boardOf(editor: EditorInput | undefined): string | undefined {
-	return editor instanceof ReviewCanvasEditorInput && editor.target.kind === 'api' ? editor.target.reviewId : undefined;
-}
 
 class ReviewOneBoard extends Disposable implements IWorkbenchContribution {
 	static readonly ID = 'workbench.contrib.devfast.reviewOneBoard';
