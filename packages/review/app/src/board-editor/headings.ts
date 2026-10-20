@@ -376,8 +376,10 @@ export const headings = (options: HeadingsOptions) =>
       decorations: (state) => headingsKey.getState(state)?.decorations,
     },
     view: () => ({
-      update(view) {
+      update(view, previous) {
         const { collapsed } = headingsKey.getState(view.state)!;
+
+        if (collapsed === headingsKey.getState(previous)?.collapsed) return;
 
         for (const button of view.dom.querySelectorAll<HTMLElement>(
           ".review-board-chevron",
