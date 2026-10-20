@@ -1,6 +1,7 @@
 import { space } from "@canvas/scale.stylex";
 import { AgentLogo } from "@canvas/ui/brand-icons";
 import { buttonStyles } from "@canvas/ui/button";
+import { useEscape } from "@canvas/ui/escape";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
@@ -27,7 +28,7 @@ import { useReviewDebugSettings } from "./debug-settings";
 import { appMarker } from "./markers.stylex";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { AskAnchor, AskSize } from "./review-panel-model";
-import { useReviewContainer } from "./review-root-context";
+import { useReviewContainer, useReviewRoots } from "./review-root-context";
 import { panelStyles } from "./side-panel-styles";
 import { withClass } from "./stylex-props";
 import { themeStyles } from "./theme-styles";
@@ -123,6 +124,7 @@ export function AskWindow({
   titleAccessory,
   onHide,
   onClose,
+  onEscape,
   closeRef,
   children,
 }: {
@@ -133,6 +135,7 @@ export function AskWindow({
   /** Hides the window; the agent runs on, and Threads lists it. */
   onHide: () => void;
   onClose: () => void;
+  onEscape: () => void;
   closeRef?: Ref<HTMLButtonElement>;
   children: ReactNode;
 }): ReactElement {
@@ -142,6 +145,32 @@ export function AskWindow({
   const canvas = useAskCanvas();
   const dockTooltip = useTooltip("Dock in the side panel");
   const hideTooltip = useTooltip("Hide · keeps running");
+
+  const windowRef = useRef<HTMLDivElement>(null);
+  useEscape(onEscape, { within: windowRef });
+
+  // Its thread can unmount first and take focus, so track where focus went.
+  const scrollRegionRef = useReviewRoots()?.scrollRegionRef;
+
+  useLayoutEffect(() => {
+    const element = windowRef.current;
+    let inside = !!element?.contains(document.activeElement);
+
+    const focusin = (event: FocusEvent) => {
+      inside =
+        event.target instanceof Node && !!element?.contains(event.target);
+    };
+
+    document.addEventListener("focusin", focusin);
+
+    return () => {
+      document.removeEventListener("focusin", focusin);
+      const active = document.activeElement;
+
+      if (inside && (active === document.body || element?.contains(active)))
+        scrollRegionRef?.current?.focus();
+    };
+  }, [scrollRegionRef]);
 
   const [live, setLive] = useState<{
     frame: Frame;
@@ -245,6 +274,7 @@ export function AskWindow({
     <AskLayer>
       <div
         {...stylex.props(surfaceStyles.dialog, panelStyles.tray, styles.window)}
+        ref={windowRef}
         role="dialog"
         aria-label="Ask"
         style={{

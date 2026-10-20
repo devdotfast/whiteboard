@@ -181,7 +181,7 @@ function ReviewPanelFrame({
   });
 
   // A hidden dock keeps its peek; Escape must not close it.
-  useEscape(onEscape, !useContext(DockHidden));
+  useEscape(onEscape, { enabled: !useContext(DockHidden) });
 
   // SAFETY: `--side-panel-bottom-fraction` is a CSS custom property, which
   // React forwards to style.setProperty; the CSSProperties typings only omit
@@ -716,6 +716,7 @@ function OpenAsk({ askKey }: { askKey: number }) {
             }
             onHide={hide}
             onClose={close}
+            onEscape={warning ? () => setWarning(false) : close}
             closeRef={closeButton}
           >
             {closeWarning}

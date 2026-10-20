@@ -324,6 +324,12 @@ it("asks before closing a working thread, and floats one that something replaces
 
   expect(floating()).not.toBeNull();
 
+  await pressEscape(floating()!.querySelector("textarea")!);
+  expect(button(/^Stop and close$/)).not.toBeNull();
+  await pressEscape(button(/^Keep running$/)!);
+  expect(button(/^Stop and close$/)).toBeNull();
+  expect(floating()).not.toBeNull();
+
   // Stopping it is a choice made twice.
   await act(async () =>
     floating()!
@@ -333,6 +339,7 @@ it("asks before closing a working thread, and floats one that something replaces
   await act(async () => button(/^Stop and close$/)!.click());
   expect(closed()).toEqual(["/ask/thread-2/close"]);
   expect(floating()).toBeNull();
+  expect(document.activeElement).toBe(canvas.scrollRegion());
 
   // Once its agent has answered, a thread closes at once.
   await act(async () => store.getState().openAsk(selection));
@@ -600,6 +607,38 @@ it("asks about the whole board when it has no threads, and starts none", async (
   expect(column()).not.toBeNull();
   expect(canvas.requested("/ask")).toEqual([]);
   expect(canvas.requested("/open")).toEqual([]);
+});
+
+it("closes the peek, not the Ask floating beside it, on an Escape outside the window", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  await using canvas = askCanvas();
+  const { streams, askQuestion } = canvas;
+
+  await canvas.mount();
+  const store = canvas.store();
+
+  await act(async () => store.getState().openAsk(selection));
+  await askQuestion("Is this safe on replicas?");
+  await act(async () =>
+    streams.get("thread-1")!({ seq: 1, snapshot: running("thread-1") }),
+  );
+  await act(async () =>
+    store.getState().openPeek({
+      kind: "peek",
+      anchor: { id: "start", title: "start()" },
+      content: { kind: "inline-code", text: "start();" },
+    }),
+  );
+  expect(
+    document.querySelector('[role="dialog"][aria-label="Ask"]'),
+  ).not.toBeNull();
+
+  await pressEscape();
+  expect(store.getState().active).toBeNull();
+  expect(button(/^Stop and close$/)).toBeNull();
+  expect(
+    document.querySelector('[role="dialog"][aria-label="Ask"]'),
+  ).not.toBeNull();
 });
 
 it("puts a peek away too, and brings it back, and only a shown peek closes on Escape", async () => {
