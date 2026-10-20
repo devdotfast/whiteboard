@@ -15,6 +15,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { AskDesktopSync } from "./ask-dock";
 import { AskHistoryProvider } from "./ask-history";
 import { AskProjectContext, readOpenAsks } from "./ask-open-state";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelHost } from "./review-components";
@@ -186,39 +187,41 @@ function askCanvas({
   const mount = (projectId = "payments") =>
     act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewRootsProvider roots={roots}>
-            <div
-              ref={(element) => {
-                roots.appRef.current = element;
-              }}
-            >
-              <section
-                tabIndex={-1}
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewRootsProvider roots={roots}>
+              <div
                 ref={(element) => {
-                  roots.scrollRegionRef.current = element;
+                  roots.appRef.current = element;
                 }}
-              />
-              <ReviewDebugSettingsProvider>
-                <AskProjectContext.Provider value={projectId}>
-                  <ReviewPanelProvider
-                    restore={() => ({
-                      asks: readOpenAsks(session.config, projectId),
-                    })}
-                  >
-                    <ReviewProvider>
-                      <AskHistoryProvider>
-                        <AskDesktopSync />
-                        <Probe />
-                        <ReviewPanelHost />
-                      </AskHistoryProvider>
-                    </ReviewProvider>
-                  </ReviewPanelProvider>
-                </AskProjectContext.Provider>
-              </ReviewDebugSettingsProvider>
-            </div>
-          </ReviewRootsProvider>
-        </ReviewSessionProvider>,
+              >
+                <section
+                  tabIndex={-1}
+                  ref={(element) => {
+                    roots.scrollRegionRef.current = element;
+                  }}
+                />
+                <ReviewDebugSettingsProvider>
+                  <AskProjectContext.Provider value={projectId}>
+                    <ReviewPanelProvider
+                      restore={() => ({
+                        asks: readOpenAsks(session.config, projectId),
+                      })}
+                    >
+                      <ReviewProvider>
+                        <AskHistoryProvider>
+                          <AskDesktopSync />
+                          <Probe />
+                          <ReviewPanelHost />
+                        </AskHistoryProvider>
+                      </ReviewProvider>
+                    </ReviewPanelProvider>
+                  </AskProjectContext.Provider>
+                </ReviewDebugSettingsProvider>
+              </div>
+            </ReviewRootsProvider>
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
 

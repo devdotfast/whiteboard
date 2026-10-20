@@ -2,9 +2,11 @@ import { BoardIcon } from "@canvas/ui/board-icons";
 import { Button } from "@canvas/ui/button";
 import { boardTitle } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { type ReactElement, useEffect, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import { z } from "zod";
 
+import { canvasQueryKeys } from "./canvas-query";
 import { countLabel } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { fontSize, leading, space } from "./scale.stylex";
@@ -31,28 +33,20 @@ export function AskChangedBoards({
 }): ReactElement | null {
   const session = useReviewSession();
 
-  const [boards, setBoards] = useState<z.infer<typeof boardsSchema>["boards"]>(
-    [],
-  );
+  const { data } = useQuery({
+    queryKey: canvasQueryKeys.askBoards(threadId, turns),
+    enabled: threadId !== null,
+    queryFn: async () => {
+      const response = await session.fetch(`/ask/${threadId}/boards`);
 
-  useEffect(() => {
-    if (threadId === null) return setBoards([]);
-    let current = true;
+      return response.ok
+        ? boardsSchema.parse(await response.json()).boards
+        : [];
+    },
+    placeholderData: keepPreviousData,
+  });
 
-    void session
-      .fetch(`/ask/${threadId}/boards`)
-      .then(async (response) =>
-        response.ok ? boardsSchema.parse(await response.json()).boards : [],
-      )
-      .catch(() => [])
-      .then((read) => {
-        if (current) setBoards(read);
-      });
-
-    return () => {
-      current = false;
-    };
-  }, [session, threadId, turns]);
+  const boards = (threadId !== null && data) || [];
 
   if (!boards.length) return null;
 
