@@ -132,10 +132,14 @@ function leftEmptyHeading(
   return newState.tr.delete(pos, pos + node.nodeSize);
 }
 
+// An empty board still takes its first line.
 export const structure = () =>
   new Plugin({
     appendTransaction: (transactions, oldState, newState) =>
-      leftEmptyHeading(transactions, oldState, newState) ?? normalize(newState),
+      leftEmptyHeading(transactions, oldState, newState) ??
+      (transactions.some((tr) => tr.docChanged) || newState.doc.childCount === 1
+        ? normalize(newState)
+        : null),
   });
 
 /** The block the caret or selection is in: the one a person is editing. */

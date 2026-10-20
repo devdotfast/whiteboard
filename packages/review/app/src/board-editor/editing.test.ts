@@ -3,7 +3,7 @@ import { describe, expect, test } from "vitest";
 
 import type { Board } from "./board-doc";
 import { docToBoard } from "./board-doc";
-import { pastedCopies } from "./editor-state";
+import { createBoardState, pastedCopies } from "./editor-state";
 import { applyVersion } from "./merge";
 import { slashKey } from "./slash";
 import { focusedBlock } from "./structure";
@@ -202,6 +202,12 @@ describe("headings", () => {
         { id: "block-5" },
       ],
     });
+  });
+
+  test("an empty board still takes its first line", () => {
+    expect(createBoardState({ title: "", document: [] }).doc.childCount).toBe(
+      2,
+    );
   });
 });
 
