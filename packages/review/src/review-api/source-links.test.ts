@@ -1,7 +1,13 @@
 import { rangeAnchor } from "@review/lens-selection.js";
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { ReviewInputError, boardLinks, sourceReferences } from "./document.js";
+import {
+  ReviewInputError,
+  boardLinks,
+  respellCommitLinks,
+  respellLinks,
+  sourceReferences,
+} from "./document.js";
 
 const sources = (markdown: string) =>
   sourceReferences([{ type: "markdown", id: "n-1", markdown }]);
@@ -255,4 +261,54 @@ it("re-reads a block's links after its text changes in place", () => {
   expect(boardLinks("x", [block]).map((link) => link.to.board)).toEqual([
     "22222222-2222-4222-8222-222222222222",
   ]);
+});
+
+describe("link rewriting", () => {
+  const sha = "0123456789abcdef0123456789abcdef01234567";
+
+  const markdown = [
+    "See [it](review-source:head/src/a.ts#L1) and `[not](review-source:head/src/b.ts#L1)`.",
+    "",
+    "```md",
+    "[nor](review-source:head/src/c.ts#L1)",
+    "```",
+    "",
+    "Read [the trace][ref].",
+    "",
+    "[ref]: review-trace:t1/e1",
+  ].join("\n");
+
+  it("respells retired links in prose and in definitions, never in code", () => {
+    expect(respellLinks(markdown)).toBe(
+      markdown
+        .replace("[it](review-source:", "[it](whiteboard:source/")
+        .replace("[ref]: review-trace:", "[ref]: whiteboard:trace/"),
+    );
+  });
+
+  it("names and respells the commits of commit links in prose, not in code samples", () => {
+    const quoted = `\`[x](whiteboard:source/${"e".repeat(12)}/a.ts#L1)\``;
+
+    const document = [
+      {
+        type: "markdown" as const,
+        id: "n-1",
+        markdown: `[old](whiteboard:source/${sha}/a.ts#L1) and ${quoted}`,
+      },
+    ];
+
+    const full = "f".repeat(40);
+
+    expect(
+      respellCommitLinks(
+        document,
+        new Map([
+          [sha, full],
+          ["e".repeat(12), "d".repeat(40)],
+        ]),
+      )[0],
+    ).toMatchObject({
+      markdown: `[old](whiteboard:source/${full}/a.ts#L1) and ${quoted}`,
+    });
+  });
 });

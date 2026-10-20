@@ -14,9 +14,11 @@ import {
 } from "@review/lens-selection.js";
 import {
   type MarkdownNode,
+  linkDestinations,
   markdownNodes,
   markdownText,
   parseMarkdown,
+  rewriteLinkDestinations,
 } from "@review/markdown.js";
 import {
   type FileLineRange,
@@ -232,12 +234,16 @@ function rewriteMarkdown<T>(
 
 const retiredLinks = linkDestination("review-(source|trace):");
 
-/** Rewrites old link prefixes in Markdown link destinations and definitions. */
+/** Rewrites old link prefixes in link destinations only, not code. */
 export function respellLinks(markdown: string): string {
-  return markdown.replace(
-    retiredLinks,
-    (_, before: string, kind: string) =>
-      `${before}whiteboard:${kind.toLowerCase()}/`,
+  if (!/review-(source|trace):/i.test(markdown)) return markdown;
+
+  return rewriteLinkDestinations(markdown, (span) =>
+    span.replace(
+      retiredLinks,
+      (_, before: string, kind: string) =>
+        `${before}whiteboard:${kind.toLowerCase()}/`,
+    ),
   );
 }
 
@@ -584,17 +590,19 @@ const commitLinkDestination = linkDestination(
   String.raw`whiteboard:source\/([0-9a-f]{7,40})\/`,
 );
 
-/** The commits a document's Markdown commit links name, as written. */
+const hasCommitLink = /whiteboard:source\//i;
+
+/** Commits named by commit links, not by code samples. */
 export function commitLinkCommits(document: Block[]): string[] {
   const commits = new Set<string>();
 
-  JSON.stringify(document, (key, value: JsonValue) => {
-    if (key === "markdown" && isStringValue(value))
-      for (const match of value.matchAll(commitLinkDestination))
-        commits.add(match[2]!);
-
-    return value;
-  });
+  for (const element of elements(document))
+    if (element.type === "markdown" && hasCommitLink.test(element.markdown))
+      for (const { from, to } of linkDestinations(blockNodes(element)))
+        for (const match of element.markdown
+          .slice(from, to)
+          .matchAll(commitLinkDestination))
+          commits.add(match[2]!);
 
   return [...commits];
 }
@@ -606,11 +614,15 @@ export function respellCommitLinks(
   commits: ReadonlyMap<string, string>,
 ): Block[] {
   return rewriteMarkdown(document, (markdown) =>
-    markdown.replace(
-      commitLinkDestination,
-      (link, before: string, commit: string) =>
-        `${before}whiteboard:source/${commits.get(commit) ?? commit}/`,
-    ),
+    hasCommitLink.test(markdown)
+      ? rewriteLinkDestinations(markdown, (span) =>
+          span.replace(
+            commitLinkDestination,
+            (_, before: string, commit: string) =>
+              `${before}whiteboard:source/${commits.get(commit) ?? commit}/`,
+          ),
+        )
+      : markdown,
   );
 }
 
@@ -623,6 +635,8 @@ const pinnedBlockTypes = new Set([
   "call_stack_diff",
   "database_lens",
 ]);
+
+const hasSideLink = /whiteboard:source\/(head|base)\//i;
 
 const sideLinkDestination = linkDestination(
   String.raw`whiteboard:source\/(head|base)\/`,
@@ -652,12 +666,18 @@ export function pinDocumentReferences(document: Block[], pins: Pins): Block[] {
 
     if (block.pins) continue;
 
-    if (block.type === "markdown")
-      block.markdown = respellLinks(block.markdown).replace(
-        sideLinkDestination,
-        (_, before: string, side: string) =>
-          `${before}whiteboard:source/${side.toLowerCase() === "base" ? pins.base : pins.head}/`,
-      );
+    if (block.type === "markdown") {
+      block.markdown = respellLinks(block.markdown);
+
+      if (hasSideLink.test(block.markdown))
+        block.markdown = rewriteLinkDestinations(block.markdown, (span) =>
+          span.replace(
+            sideLinkDestination,
+            (_, before: string, side: string) =>
+              `${before}whiteboard:source/${side.toLowerCase() === "base" ? pins.base : pins.head}/`,
+          ),
+        );
+    }
 
     if (
       documentReferences([block], { tolerant: true }).some(

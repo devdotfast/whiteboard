@@ -35,6 +35,46 @@ export function markdownText(node: MarkdownNode): string {
   return [...markdownNodes(node)].map((child) => child.value ?? "").join("");
 }
 
+/** Link destination spans in source order; never inside code. */
+export function linkDestinations(
+  nodes: Iterable<MarkdownNode>,
+): { from: number; to: number }[] {
+  const spans: { from: number; to: number }[] = [];
+
+  for (const node of nodes) {
+    const from = node.position?.start.offset;
+    const to = node.position?.end.offset;
+
+    if (from === undefined || to === undefined) continue;
+
+    if (node.type === "link")
+      spans.push({
+        from: node.children?.at(-1)?.position?.end.offset ?? from + 1,
+        to,
+      });
+    else if (node.type === "image" || node.type === "definition")
+      spans.push({ from, to });
+  }
+
+  // An image inside a link comes after the link's tail in the walk.
+  return spans.toSorted((a, b) => a.from - b.from);
+}
+
+export function rewriteLinkDestinations(
+  markdown: string,
+  rewrite: (span: string) => string,
+): string {
+  let result = markdown;
+
+  for (const { from, to } of linkDestinations(
+    markdownNodes(parseMarkdown(markdown)),
+  ).toReversed())
+    result =
+      result.slice(0, from) + rewrite(result.slice(from, to)) + result.slice(to);
+
+  return result;
+}
+
 /** Shared syntax for submit-time source checks and safe Markdown rendering. */
 export function parseMarkdown(source: string): MarkdownNode {
   const tree: MarkdownNode = fromMarkdown(source, {

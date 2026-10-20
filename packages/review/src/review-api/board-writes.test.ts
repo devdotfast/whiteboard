@@ -430,6 +430,17 @@ describe("links", () => {
     commits.add("c".repeat(40));
   });
 
+  it("ignores a commit that only a code sample names", async () => {
+    const reviewId = await create(checkout("app"));
+
+    await insert(reviewId, {
+      type: "markdown",
+      markdown: `Not a link: \`[it](whiteboard:source/${"e".repeat(12)}/a.ts#L1)\`.`,
+    });
+
+    expect(store.read(reviewId).document).toHaveLength(1);
+  });
+
   it("keeps the link index with every write, a delete included", async () => {
     const app = checkout("app");
     const target = await create(app, "Target");
