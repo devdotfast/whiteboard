@@ -1,13 +1,5 @@
-// Grammar-only languages built into Whiteboard Desktop.
-//
-// Each entry names a grammar from the pinned `tm-grammars` devDependency and
-// the language it colors. `license` overrides tm-grammars when it has none;
-// GPL grammars are refused. Entries without `grammar` add file names to a
-// language Code OSS already highlights.
-//
-// To add a language or bump tm-grammars, edit this file, then run
-//   pnpm --filter @dev.fast/review-desktop grammars:sync
-// which regenerates code-oss/extensions/review-grammars.
+// Entries without `grammar` add file names to a language Code OSS already
+// colors. After editing, run `pnpm --filter @dev.fast/review-desktop grammars:sync`.
 
 const slash = { lineComment: "//", blockComment: ["/*", "*/"] };
 

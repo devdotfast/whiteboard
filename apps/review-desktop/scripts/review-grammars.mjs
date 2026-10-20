@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-// Regenerates code-oss/extensions/review-grammars from review-grammars.manifest.mjs
-// and the pinned tm-grammars package.
-
 import fs from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";

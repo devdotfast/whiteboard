@@ -13,14 +13,13 @@ const GUESS_LANGUAGE = path.join(
   "../../diffr/crates/diffr-core/src/parse/guess_language.rs",
 );
 
-/** diffr globs Code OSS deliberately leaves uncolored. */
 const KNOWN_GAPS = new Set([
   // GPL grammars.
   "*.ada",
   "*.adb",
   "*.ads",
   "*.rkt",
-  // 800 KB grammar.
+  // Grammar too large.
   "*.el",
   ".emacs",
   "_emacs",
