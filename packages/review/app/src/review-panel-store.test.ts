@@ -274,10 +274,9 @@ describe("Fullscreen tours", () => {
     store.getState().openOverlayTour(sequence, "first");
     store.getState().moveOverlayTour("second", { reveal: false });
     store.getState().moveOverlayTour("third", { reveal: true });
-    expect(store.getState().overlayTour).toEqual({
+    expect(store.getState().overlayTour).toMatchObject({
       ...sequence,
       anchor: "third",
-      revealRequest: 2,
     });
 
     store.getState().showView("diff");

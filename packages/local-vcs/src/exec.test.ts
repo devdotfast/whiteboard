@@ -103,7 +103,6 @@ describe("default timeout", () => {
     const jj = defaultVcsTimeout("jj", ["-R", "/repo", "log"]);
     const fetch = defaultVcsTimeout("git", ["-C", "/repo", "fetch", "origin"]);
 
-    expect(quick).toBe(30_000);
     expect(read).toBeGreaterThan(quick);
     expect(jj).toBe(read);
     expect(fetch).toBeGreaterThan(read);

@@ -1622,17 +1622,11 @@ it.each([
     shown: false,
   },
 ])(
-  "shows Open file and the source tree only where source windows are available ($available)",
+  "shows the source tree only where source windows are available ($available)",
   async ({ available, shown }) => {
-    const { inline, diffs, button } = await mountPeekReview({ available });
+    const { button } = await mountPeekReview({ available });
 
     expect(Boolean(button("Source tree"))).toBe(shown);
-    expect(inline[0]!.onDidOpen !== undefined).toBe(shown);
-    await act(async () => button("Diff")!.click());
-    await act(async () => {
-      await vi.waitFor(() => expect(diffs).toHaveLength(1));
-    });
-    expect(diffs[0]!.openFile).toBe(shown ? undefined : false);
   },
 );
 

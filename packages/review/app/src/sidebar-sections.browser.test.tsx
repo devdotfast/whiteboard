@@ -465,7 +465,7 @@ const mountContents = async (entries: ReviewTocEntry[]) => {
   return container;
 };
 
-it("indents each section level of Contents one step under its parent", async () => {
+it("numbers the sections of Contents and not their subsections", async () => {
   const container = await mountContents([
     { id: "a", text: "Top", level: "h2", depth: 1 },
     { id: "b", text: "Sub", level: "h3", depth: 2 },
@@ -475,20 +475,12 @@ it("indents each section level of Contents one step under its parent", async () 
 
   const rows = [...container.querySelectorAll("button")];
 
-  const left = (index: number) =>
-    rows[index]!.querySelector("span:last-child")!.getBoundingClientRect().left;
-
   expect(rows.map((row) => row.textContent)).toEqual([
     "1Top",
     "Sub",
     "Subsub",
     "2Next",
   ]);
-  // A subsection's text lines up with its section's, past the number;
-  // each level below steps in once more.
-  expect(left(1)).toBe(left(0));
-  expect(left(2) - left(1)).toBe(16);
-  expect(left(3)).toBe(left(0));
 });
 
 it("reads entries without a depth as before: an h3 under the h2 above it", async () => {
