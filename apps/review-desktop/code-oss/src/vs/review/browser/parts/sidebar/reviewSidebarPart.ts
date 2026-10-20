@@ -344,11 +344,8 @@ export class ReviewSidebarPart extends Part {
 			this._register(addDisposableListener(tab, "click", () => this.pick(id)));
 		}
 
-		// A count or a tab that comes or goes moves the minimum and the fold.
 		this._register(this.onDidChangeTabs(() => {
-			this.tabsRow.stale();
-			this.fitControls();
-			if (this.element) this.foldTabs(this.element.getBoundingClientRect().width);
+			if (this.dimension) this.foldTabs(this.dimension.width);
 		}));
 
 		// The tabs are measured once the row exists, and again when the zoom
@@ -459,6 +456,7 @@ export class ReviewSidebarPart extends Part {
 		const view = this.lit.pick(id, this.state.view);
 		if (view && this.reviewId) this.emitSurfaceEvent({ event: "showReviewView", view, reviewId: this.reviewId });
 		this.applyPane();
+		this._onDidChangeTabs.fire();
 	}
 
 	/** Whether the board has the tab: Diff needs a change. */
@@ -475,7 +473,6 @@ export class ReviewSidebarPart extends Part {
 			pane.tab.hidden = !this.offers(pane.id);
 			pane.element.hidden = !selected;
 		}
-		this._onDidChangeTabs.fire();
 	}
 
 	/** The tabs as the collapsed rail draws them. */
@@ -646,7 +643,14 @@ export class ReviewSidebarPart extends Part {
 			diff: this.state.files?.count,
 			threads: boardThreads.length || undefined,
 		};
-		for (const pane of this.panes) pane.count.textContent = counts[pane.id] === undefined ? "" : String(counts[pane.id]);
+		let recounted = false;
+		for (const pane of this.panes) {
+			const count = counts[pane.id] === undefined ? "" : String(counts[pane.id]);
+			if (pane.count.textContent === count) continue;
+			pane.count.textContent = count;
+			recounted = true;
+		}
+		if (recounted) this.tabsRow.stale();
 		this.describeTabs();
 		// The blue dot: another board in the project changed since last viewed.
 		const badge = this.panes.find((pane) => pane.id === "whiteboard")?.tab.querySelector(".review-sidebar-tab-badge");
