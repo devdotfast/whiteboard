@@ -41,7 +41,7 @@ import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
 
 import { AskCloseWarning } from "./ask-close";
-import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
+import { AskDeleteThreadButton } from "./ask-delete";
 import {
   AskDock,
   DockHidden,
@@ -653,77 +653,73 @@ function OpenAsk({ askKey }: { askKey: number }) {
 
   return (
     <AskKeyContext.Provider value={askKey}>
-      <AskOpenThreadProvider>
-        {createPortal(
-          view.type === "history" ? (
-            <AskHistoryList passage={view.passage} />
-          ) : view.type === "saved" && (checkoutGone || deleted) ? (
-            <AskReadOnlyThread
-              selection={view.selection}
-              threadId={view.threadId}
-              onReport={report}
-            />
-          ) : (
-            <AskPanelContent
-              selection={view.selection}
-              agent={view.agent}
-              savedThreadId={view.type === "saved" ? view.threadId : undefined}
-              onReport={report}
-              header={header}
-              stopping={stopping}
-            />
-          ),
-          node,
-        )}
-        {shown === "panel" ? (
-          <AskDock host={nativeHost}>
-            <ReviewPanelFrame
-              tray
-              label="Ask"
-              titleAccessory={
-                <div ref={setHeader} {...stylex.props(panelStyles.title)} />
-              }
-              onClose={close}
-              onEscape={warning ? () => setWarning(false) : close}
-              closeLabel="Close Ask"
-              closeRef={closeButton}
-              headerActions={
-                <>
-                  {actions}
-                  <IconButton
-                    ref={popOutTooltip}
-                    size="large"
-                    aria-label="Pop out Ask"
-                    onClick={() => store.getState().popOutAsk(askKey)}
-                  >
-                    <PopOutIcon
-                      xstyle={[iconStyles.inert, iconStyles.chrome]}
-                    />
-                  </IconButton>
-                </>
-              }
-            >
-              {closeWarning}
-              <AskSlot node={node} />
-            </ReviewPanelFrame>
-          </AskDock>
-        ) : shown === "window" ? (
-          <AskWindow
-            askKey={askKey}
-            actions={actions}
+      {createPortal(
+        view.type === "history" ? (
+          <AskHistoryList passage={view.passage} />
+        ) : view.type === "saved" && (checkoutGone || deleted) ? (
+          <AskReadOnlyThread
+            selection={view.selection}
+            threadId={view.threadId}
+            onReport={report}
+          />
+        ) : (
+          <AskPanelContent
+            selection={view.selection}
+            agent={view.agent}
+            savedThreadId={view.type === "saved" ? view.threadId : undefined}
+            onReport={report}
+            header={header}
+            stopping={stopping}
+          />
+        ),
+        node,
+      )}
+      {shown === "panel" ? (
+        <AskDock host={nativeHost}>
+          <ReviewPanelFrame
+            tray
+            label="Ask"
             titleAccessory={
               <div ref={setHeader} {...stylex.props(panelStyles.title)} />
             }
-            onHide={hide}
             onClose={close}
             onEscape={warning ? () => setWarning(false) : close}
+            closeLabel="Close Ask"
             closeRef={closeButton}
+            headerActions={
+              <>
+                {actions}
+                <IconButton
+                  ref={popOutTooltip}
+                  size="large"
+                  aria-label="Pop out Ask"
+                  onClick={() => store.getState().popOutAsk(askKey)}
+                >
+                  <PopOutIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
+                </IconButton>
+              </>
+            }
           >
             {closeWarning}
             <AskSlot node={node} />
-          </AskWindow>
-        ) : null}
-      </AskOpenThreadProvider>
+          </ReviewPanelFrame>
+        </AskDock>
+      ) : shown === "window" ? (
+        <AskWindow
+          askKey={askKey}
+          actions={actions}
+          titleAccessory={
+            <div ref={setHeader} {...stylex.props(panelStyles.title)} />
+          }
+          onHide={hide}
+          onClose={close}
+          onEscape={warning ? () => setWarning(false) : close}
+          closeRef={closeButton}
+        >
+          {closeWarning}
+          <AskSlot node={node} />
+        </AskWindow>
+      ) : null}
     </AskKeyContext.Provider>
   );
 }

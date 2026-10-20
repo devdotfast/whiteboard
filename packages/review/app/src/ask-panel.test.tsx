@@ -4,11 +4,6 @@ import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
 
-import {
-  AskDeleteThreadButton,
-  AskOpenThreadProvider,
-  useShowOpenThread,
-} from "./ask-delete";
 import { AskHistoryProvider, useAskHistory } from "./ask-history";
 import { AskHistoryList } from "./ask-history-list";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";

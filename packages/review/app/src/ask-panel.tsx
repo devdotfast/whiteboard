@@ -53,7 +53,6 @@ import {
 } from "./ask-agent-picker";
 import { AskChangedBoards } from "./ask-changed-boards";
 import { AskComposer } from "./ask-composer";
-import { useShowOpenThread } from "./ask-delete";
 import { AskFilesProvider } from "./ask-files";
 import { useAskHistory } from "./ask-history";
 import { AskOutdatedNote } from "./ask-history-list";
@@ -143,8 +142,6 @@ export function AskPanelContent({
     !requestError &&
     !lost &&
     (!thread || (thread.status === "starting" && !thread.entries.length));
-
-  useShowOpenThread(threadId ?? savedThreadId ?? null);
 
   const offered = useOffer(
     session,
@@ -827,19 +824,15 @@ export function AskReadOnlyThread({
     },
   });
 
-  useShowOpenThread(threadId);
-
   const agentName = thread?.agentName ?? "Ask";
 
-  // Nothing runs on a read-only conversation, and it opens no thread to
-  // close.
   useEffect(() => {
     onReport?.({
-      threadId: null,
+      threadId,
       busy: false,
       presence: { agent: thread?.agent, agentName },
     });
-  }, [onReport, thread?.agent, agentName]);
+  }, [onReport, threadId, thread?.agent, agentName]);
 
   return (
     <div {...stylex.props(askPanelStyles.body)}>
