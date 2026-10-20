@@ -7,11 +7,11 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { StrictMode, act } from "react";
+import { type ReactNode, StrictMode, act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { CanvasQueryProvider } from "./canvas-query";
+import { CanvasQueryProvider, useCanvasQueryScope } from "./canvas-query";
 
 let root: Root | undefined;
 
@@ -40,6 +40,20 @@ function mount() {
   return container;
 }
 
+function Canvas({
+  client,
+  reviewId,
+  children,
+}: {
+  client: ReviewApiClient;
+  reviewId: string;
+  children: ReactNode;
+}) {
+  const scope = useCanvasQueryScope(client, reviewId);
+
+  return <CanvasQueryProvider scope={scope}>{children}</CanvasQueryProvider>;
+}
+
 function Probe({
   name,
   read,
@@ -63,9 +77,9 @@ it("keeps its cache through a Strict Mode replay and drops it on unmount", async
   await act(async () =>
     root!.render(
       <StrictMode>
-        <CanvasQueryProvider client={apiClient()} reviewId="review">
+        <Canvas client={apiClient()} reviewId="review">
           <Probe name="a" read={read} onClient={(next) => (client = next)} />
-        </CanvasQueryProvider>
+        </Canvas>
       </StrictMode>,
     ),
   );
@@ -88,12 +102,12 @@ it("gives each canvas and each backend its own cache", async () => {
     act(async () =>
       root!.render(
         <>
-          <CanvasQueryProvider client={backend} reviewId="review">
+          <Canvas client={backend} reviewId="review">
             <Probe name="a" read={async () => reads[0]!} />
-          </CanvasQueryProvider>
-          <CanvasQueryProvider client={first} reviewId="other">
+          </Canvas>
+          <Canvas client={first} reviewId="other">
             <Probe name="b" read={async () => reads[1]!} />
-          </CanvasQueryProvider>
+          </Canvas>
         </>,
       ),
     );
@@ -128,9 +142,9 @@ it("reads and writes the local API while the browser reports offline", async () 
 
   await act(async () =>
     root!.render(
-      <CanvasQueryProvider client={apiClient()} reviewId="review">
+      <Canvas client={apiClient()} reviewId="review">
         <Offline />
-      </CanvasQueryProvider>,
+      </Canvas>,
     ),
   );
   await settle();

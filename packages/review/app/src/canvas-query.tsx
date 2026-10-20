@@ -48,6 +48,19 @@ export const canvasQueryKeys = {
     ["diff-files", documentKey, source, revision] as const,
   lensProgress: (version: number) => ["lens-progress", version] as const,
   allLensProgress: () => ["lens-progress"] as const,
+  place: (version: number | undefined) => ["place", "board", version] as const,
+  stack: (version: number | undefined) => ["place", "stack", version] as const,
+  allPlace: () => ["place"] as const,
+  projectBoards: () => ["project-boards"] as const,
+  askThreads: () => ["ask-threads"] as const,
+  askBoards: (threadId: string | null, turns: number) =>
+    ["ask-boards", threadId, turns] as const,
+  linkStates: () => ["link-states"] as const,
+  linkPeek: (
+    board: string,
+    block: string | undefined,
+    updatedAt: string | undefined,
+  ) => ["link-peek", board, block ?? null, updatedAt ?? null] as const,
 };
 
 const pendingDisposals = new WeakMap<
@@ -57,15 +70,16 @@ const pendingDisposals = new WeakMap<
 
 let nextScope = 0;
 
-export function CanvasQueryProvider({
-  client,
-  reviewId,
-  children,
-}: {
-  client: ReviewApiClient;
-  reviewId: string;
-  children: ReactNode;
-}) {
+export interface CanvasQueryScope {
+  id: number;
+  queryClient: QueryClient;
+}
+
+/** Clearing is deferred so a Strict Mode replay keeps its client. */
+export function useCanvasQueryScope(
+  client: ReviewApiClient,
+  reviewId: string,
+): CanvasQueryScope {
   const scope = useMemo(
     () => ({ id: nextScope++, queryClient: createCanvasQueryClient() }),
     [client, reviewId],
@@ -73,8 +87,6 @@ export function CanvasQueryProvider({
 
   const { queryClient } = scope;
 
-  // Clearing cancels in-flight reads and drops the cache. Deferring it lets a
-  // Strict Mode effect replay keep the client it immediately remounts.
   useEffect(() => {
     clearTimeout(pendingDisposals.get(queryClient));
 
@@ -86,9 +98,19 @@ export function CanvasQueryProvider({
     };
   }, [queryClient]);
 
-  // Queries bind to the client they mount with, so a new scope remounts them.
+  return scope;
+}
+
+/** A new scope remounts its queries. */
+export function CanvasQueryProvider({
+  scope,
+  children,
+}: {
+  scope: CanvasQueryScope;
+  children: ReactNode;
+}) {
   return (
-    <QueryClientProvider key={scope.id} client={queryClient}>
+    <QueryClientProvider key={scope.id} client={scope.queryClient}>
       {children}
     </QueryClientProvider>
   );

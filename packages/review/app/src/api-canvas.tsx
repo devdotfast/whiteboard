@@ -51,7 +51,7 @@ import {
   type BoardEditorHost,
   BoardEditorHostContext,
 } from "./board-editor/BoardEditor";
-import { CanvasQueryProvider } from "./canvas-query";
+import { CanvasQueryProvider, useCanvasQueryScope } from "./canvas-query";
 import { ConnectionContext, HostWaiting } from "./connection-chip";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { DrawQueueProvider } from "./draw-queue-provider";
@@ -118,6 +118,8 @@ export function ApiCanvas({
     () => new ReviewApiClient(content.bridge.config, content.bridge.request),
     [content.bridge],
   );
+
+  const queries = useCanvasQueryScope(client, content.reviewId);
 
   const [version, setVersion] = useState(content.version);
   const [coverageRevision, setCoverageRevision] = useState(0);
@@ -587,7 +589,7 @@ export function ApiCanvas({
   // Without data there is no top bar for the connection chip.
   if (!data)
     return (
-      <CanvasQueryProvider client={client} reviewId={content.reviewId}>
+      <CanvasQueryProvider scope={queries}>
         {trashBanner}
         {error === undefined && host && remoteHosts ? (
           <HostWaiting
@@ -615,7 +617,7 @@ export function ApiCanvas({
 
   return (
     <div {...stylex.props(styles.canvasSurface)}>
-      <CanvasQueryProvider client={client} reviewId={content.reviewId}>
+      <CanvasQueryProvider scope={queries}>
         <SharingContext.Provider value={sharing}>
           <ReviewSessionProvider session={session}>
             <AskProjectContext.Provider value={content.projectId}>
