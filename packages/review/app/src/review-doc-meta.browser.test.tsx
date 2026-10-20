@@ -252,6 +252,9 @@ describe("ReviewDocumentMetaLine", () => {
     expect(container.querySelector(count)!.textContent).toBe("Links·2 of 3");
 
     await click(count);
+    expect(document.activeElement).toBe(
+      container.querySelector("[role=menuitem][aria-current]"),
+    );
     expect(
       [...container.querySelectorAll("[role=menuitem]")].map(
         (row) => row.textContent,
@@ -307,6 +310,9 @@ describe("ReviewDocumentMetaLine", () => {
     );
     expect(container.querySelector('nav button[title="Stack"]')).toBeNull();
     await click(boards);
+    expect(document.activeElement).toBe(
+      container.querySelector("[role=menuitem]"),
+    );
     expect(
       [...container.querySelectorAll("[role=menuitem]")].map(
         (row) => row.textContent,

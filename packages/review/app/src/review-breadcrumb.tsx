@@ -6,7 +6,7 @@ import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ChevronDownIcon } from "@canvas/ui/icons";
 import { listRowStyles } from "@canvas/ui/list-row";
-import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
+import { focusMenuStart, menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
@@ -278,12 +278,7 @@ function PlaceList({
   // Desktop shows one board at a time, so it opens every board in front.
   const background = useReviewSession().bridge.reportSidebar === undefined;
 
-  // A long list opens scrolled to the board on screen.
-  useEffect(() => {
-    popover.current
-      ?.querySelector("[aria-current]")
-      ?.scrollIntoView({ block: "nearest" });
-  }, []);
+  useEffect(() => focusMenuStart(popover.current, "[aria-current]"), []);
 
   return (
     <Popover

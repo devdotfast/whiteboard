@@ -269,6 +269,7 @@ describe("ReviewStackSelector", () => {
 
     const rows = [...container.querySelectorAll("[role=menuitem]")];
 
+    expect(document.activeElement).toBe(rows[1]);
     expect(rows.map((row) => row.textContent)).toEqual([
       expect.stringContaining("Review c"),
       expect.stringContaining("Review b"),

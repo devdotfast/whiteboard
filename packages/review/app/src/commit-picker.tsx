@@ -17,7 +17,7 @@ import {
   SortDescendingIcon,
 } from "@canvas/ui/icons";
 import { listRowStyles } from "@canvas/ui/list-row";
-import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
+import { focusMenuStart, menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { pillStyles } from "@canvas/ui/pill";
 import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
@@ -249,17 +249,15 @@ function CommitMenu({
   const popover = useRef<HTMLDivElement>(null);
 
   // The menu opens on what is picked, so arrows start from there.
-  useEffect(() => {
-    const menu = popover.current;
-
-    const current =
-      menu?.querySelector<HTMLElement>(
-        "[role=menuitemradio][aria-checked=true]",
-      ) ?? menu?.querySelector<HTMLElement>("[role=menuitemradio]");
-
-    current?.focus();
-    current?.scrollIntoView?.({ block: "nearest" });
-  }, []);
+  useEffect(
+    () =>
+      focusMenuStart(
+        popover.current,
+        "[aria-checked=true]",
+        "[role=menuitemradio]",
+      ),
+    [],
+  );
 
   return (
     <Popover

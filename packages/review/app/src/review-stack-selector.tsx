@@ -10,7 +10,7 @@ import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { BranchIcon, ChevronDownIcon, PullRequestIcon } from "@canvas/ui/icons";
 import { listRowStyles } from "@canvas/ui/list-row";
-import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
+import { focusMenuStart, menuStyles, moveMenuFocus } from "@canvas/ui/menu";
 import { pillStyles } from "@canvas/ui/pill";
 import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
@@ -83,6 +83,12 @@ export function ReviewStackSelector(): ReactElement | null {
   const review = session.review!;
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLSpanElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (open) focusMenuStart(popover.current, "[aria-current]");
+  }, [open]);
+
   const { layers, base } = useStack();
 
   if (layers.length < 2) return null;
@@ -142,6 +148,7 @@ export function ReviewStackSelector(): ReactElement | null {
       </button>
       {open ? (
         <Popover
+          ref={popover}
           anchor={container}
           onDismiss={() => setOpen(false)}
           role="menu"

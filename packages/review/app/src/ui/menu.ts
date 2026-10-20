@@ -44,6 +44,20 @@ export function moveMenuFocus(
   enabled[index]?.focus();
 }
 
+/** Focuses `picked`, else the first enabled item. */
+export function focusMenuStart(
+  menu: HTMLElement | null,
+  picked: string,
+  items = '[role^="menuitem"]',
+) {
+  const item =
+    menu?.querySelector<HTMLElement>(`:is(${items})${picked}`) ??
+    menu?.querySelector<HTMLElement>(`:is(${items}):not(:disabled)`);
+
+  item?.focus();
+  item?.scrollIntoView?.({ block: "nearest" });
+}
+
 // An in-page menu's placement, under its trigger, for a Popover; sites set
 // their own width.
 export const menuStyles = stylex.create({
