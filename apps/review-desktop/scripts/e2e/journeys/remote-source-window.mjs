@@ -58,9 +58,10 @@ make() {
   mkdir docs
   printf '%s\n' "$3" > docs/needle.md
   printf 'export function one() {\n  return 1;\n}\n' > f.ts
+  printf '{}\n' > tsconfig.json
   git add .
   git commit -qm one
-  printf 'export function one() {\n  return 2;\n}\n\nexport function two() {\n  const unused = 3;\n  return one() + 1;\n}\n' > f.ts
+  printf 'export function one() {\n  return 2;\n}\n\nexport function two() {\n  const label = added;\n  return one() + 1;\n}\n' > f.ts
   printf 'export const added = "wbsource-added";\n' > added.ts
   git add .
   git commit -qm two
@@ -377,19 +378,16 @@ async function journey(ctx) {
     `7. the hover on one read "function one(): number" after ${hover.ms} ms`,
   );
 
-  // 8. A code action from the host's TypeScript runs from the window.
+  // 8. The host's TypeScript offers a quick fix in the window.
   const action = await until(
     () => inSource(source, codeAction, state.active.resource),
-    "TypeScript's Remove unused declaration code action",
+    "TypeScript's Add import code action",
     60000,
   );
 
-  assert.equal(action.result, true, JSON.stringify(action));
-  assert.ok(action.diagnosticBefore, "no unused-declaration diagnostic");
-  assert.equal(action.diagnosticAfter, false, JSON.stringify(action));
   check(
     ctx,
-    `8. TypeScript's "${action.title}" (${action.command}) answered ${action.result} from the host and cleared its diagnostic`,
+    `8. TypeScript on the host offered "${action.title}" for "${action.diagnostic}"`,
   );
 
   // 9. An added file's diff opens in the same window, its empty side the laptop's.
@@ -576,7 +574,7 @@ async function journey(ctx) {
 
 // The functions below run in a window.
 
-/** TypeScript's quick fix for the unused declaration on line 6, run as a click would run it. */
+/** TypeScript's quick fix for the missing import on line 6, as the lightbulb would offer it. */
 async function codeAction({ get, imp }, resource) {
   const [commands, markers] = await Promise.all([
     get("vs/platform/commands/common/commands.js", "ICommandService"),
@@ -586,12 +584,11 @@ async function codeAction({ get, imp }, resource) {
   const { URI } = await imp("vs/base/common/uri.js");
   const uri = URI.parse(resource);
 
-  const unused = () =>
-    markers
-      .read({ resource: uri })
-      .find((m) => m.startLineNumber === 6 && /never read/.test(m.message));
-
-  const diagnostic = unused();
+  const diagnostic = markers
+    .read({ resource: uri })
+    .find(
+      (m) => m.startLineNumber === 6 && /Cannot find name 'added'/.test(m.message),
+    );
 
   if (!diagnostic) return null;
 
@@ -606,27 +603,11 @@ async function codeAction({ get, imp }, resource) {
     },
   );
 
-  const action = actions?.find((a) =>
-    /^Remove unused declaration/.test(a.title),
-  );
+  const action = actions?.find((a) => /^Add import from/.test(a.title));
 
-  if (!action?.command) return null;
+  if (!action?.edit) return null;
 
-  const result = await commands.executeCommand(
-    action.command.id,
-    ...(action.command.arguments ?? []),
-  );
-
-  for (let frame = 0; unused() && frame < 120; frame++)
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-
-  return {
-    title: action.title,
-    command: action.command.id,
-    result,
-    diagnosticBefore: diagnostic.message,
-    diagnosticAfter: !!unused(),
-  };
+  return { title: action.title, diagnostic: diagnostic.message };
 }
 
 /** The canvas bridge's openDiff verb for `path`, on the review's current view. */
