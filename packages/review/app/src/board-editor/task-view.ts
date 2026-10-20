@@ -40,10 +40,7 @@ export class TaskItemView implements NodeView {
       }
 
       view.dispatch(
-        view.state.tr.setNodeMarkup(pos, undefined, {
-          ...this.node.attrs,
-          checked: this.box.checked,
-        }),
+        view.state.tr.setNodeAttribute(pos, "checked", this.box.checked),
       );
     });
     this.draw(node);

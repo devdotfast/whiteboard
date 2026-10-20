@@ -13,7 +13,12 @@ import {
   PluginKey,
   type Transaction,
 } from "@tiptap/pm/state";
-import { ReplaceStep } from "@tiptap/pm/transform";
+import {
+  AddMarkStep,
+  AttrStep,
+  RemoveMarkStep,
+  ReplaceStep,
+} from "@tiptap/pm/transform";
 import { Decoration, DecorationSet, type EditorView } from "@tiptap/pm/view";
 
 import { markdownHeadingLevel, nodes } from "./schema";
@@ -253,22 +258,38 @@ function build(
   return { entries, decorations: DecorationSet.create(state.doc, found) };
 }
 
+const plainLine = (node: PMNode) =>
+  node.isTextblock &&
+  node.type !== nodes.section &&
+  node.type !== nodes.heading;
+
+function inOneLine(doc: PMNode, from: number, to: number) {
+  const $from = doc.resolve(from);
+
+  return $from.sameParent(doc.resolve(to)) && plainLine($from.parent);
+}
+
 /** Whether a transaction only edited text inside lines that aren't
- * headings, leaving every heading and the document's shape as they were. */
+ * headings, leaving every heading and the document's shape as they were.
+ * A block's own attributes redraw it. */
 export function textOnly(tr: Transaction) {
   if (tr.before.childCount !== tr.doc.childCount) return false;
 
   return tr.steps.every((step, index) => {
-    if (!(step instanceof ReplaceStep)) return false;
     const doc = tr.docs[index]!;
-    const $from = doc.resolve(step.from);
-    const $to = doc.resolve(step.to);
+
+    if (step instanceof AttrStep)
+      return (
+        doc.resolve(step.pos).depth >= 1 &&
+        doc.nodeAt(step.pos)?.type !== nodes.heading
+      );
+
+    if (step instanceof AddMarkStep || step instanceof RemoveMarkStep)
+      return inOneLine(doc, step.from, step.to);
 
     return (
-      $from.sameParent($to) &&
-      $from.parent.isTextblock &&
-      $from.parent.type !== nodes.section &&
-      $from.parent.type !== nodes.heading &&
+      step instanceof ReplaceStep &&
+      inOneLine(doc, step.from, step.to) &&
       step.slice.content.childCount <= 1 &&
       (step.slice.content.firstChild?.isInline ?? true)
     );
