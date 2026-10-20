@@ -567,6 +567,21 @@ it("keeps the column away across a reload, and brings back what it held", async 
   expect(canvas.requested("/ask/thread-1/open")).toHaveLength(1);
 });
 
+it("marks a thread viewed when it comes on screen with the app focused", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.spyOn(document, "hasFocus").mockReturnValue(true);
+
+  await using canvas = askCanvas({
+    threads: [entry("latest", "board", "2026-10-13T11:00:00Z")],
+  });
+
+  await canvas.mount();
+  await canvas.toggle();
+  await vi.waitFor(() =>
+    expect(canvas.requested("/viewed")).toEqual(["/ask/latest/viewed"]),
+  );
+});
+
 it("brings back the board's latest thread when the column held nothing", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 

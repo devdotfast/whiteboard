@@ -1,3 +1,4 @@
+import { useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
 
 import { useOptionalReviewSession } from "./host/review-session";
@@ -15,19 +16,21 @@ export function useMarkThreadViewed(
 ): void {
   const session = useOptionalReviewSession();
 
+  const { mutate: mark } = useMutation({
+    mutationFn: (id: string) =>
+      session!.fetch(`/ask/${id}/viewed`, { method: "POST" }),
+  });
+
   useEffect(() => {
     if (!session || !threadId || !shown) return;
 
-    const mark = () => {
-      if (!document.hasFocus()) return;
-      void session
-        .fetch(`/ask/${threadId}/viewed`, { method: "POST" })
-        .catch(() => {});
+    const viewed = () => {
+      if (document.hasFocus()) mark(threadId);
     };
 
-    mark();
-    window.addEventListener("focus", mark);
+    viewed();
+    window.addEventListener("focus", viewed);
 
-    return () => window.removeEventListener("focus", mark);
-  }, [session, threadId, shown, busy]);
+    return () => window.removeEventListener("focus", viewed);
+  }, [session, threadId, shown, busy, mark]);
 }
