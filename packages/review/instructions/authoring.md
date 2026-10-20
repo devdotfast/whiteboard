@@ -2,14 +2,16 @@ you are writing an interactive rfc-style whiteboard, for consumption by a staff 
 
 **plans and stacks**
 
-Organize related work automatically; do not wait for the user to request grouping, child boards, or dependency order. Choose the board structure before the authoring flow below. Use `session_list` to find an existing plan or stack overview in this project before creating one.
+Keep plans and their implementation reviews together, and group reviews of an actual PR stack. Create these relationships automatically when supported by the work's history; the user need not request nesting. Choose the board structure before the authoring flow below. Use `session_list` to find the plan governing this work or the overview of this PR stack before creating one.
 
+- Before assigning a parent, identify the plan requirement this change implements or the actual PR stack it belongs to. A plan may be authored by the user or developed with the agent during this work. A PR stack must have established branch or dependency relationships. If the change neither implements part of an established plan nor belongs to an actual PR stack, leave its review top-level.
+- Shared subject matter, repository, conversation, or resemblance to an earlier change is insufficient reason to nest boards. Related follow-ups remain top-level; link to earlier boards for context.
 - For a plan with no changes yet, create a board with `target:{kind:"project", repositoryPath}`. Do not use a worktree or commit target for a plan: those attach code and show the code-board icon.
 - When implementing a plan in several changes, keep the plan as the top-level board. Create one child board per PR or change with `parentId` set to the plan's session ID. Keep the plan's project target; do not replace it with one child's diff.
 - When reviewing an existing PR stack without a plan, create one project-target board for the overview, then one child per PR. Explain the whole change on the overview and each layer's own diff on its child.
-- Set each child's `dependsOn` to the session IDs it builds on. For a linear stack, each child after the first depends on the previous child. `parentId` groups boards; `dependsOn` orders them. Git bases alone do not create these relationships.
+- Set each child's `dependsOn` only to the session IDs it actually builds on, not to impose a convenient reading order. For a linear PR stack, each child after the first depends on the previous child; independent pieces of a plan need no dependencies. `parentId` groups boards; `dependsOn` records dependencies and orders them. Git bases alone do not create these relationships.
 - For commit targets, use the branch below each layer as its `base`. For PR targets, use the PR itself; its GitHub base selects that layer's diff.
-- Nest only one level: plan or overview → change boards. Update existing boards after rebases instead of creating duplicates. If `session_create` returns an existing PR board, use `session_set_parent` and `session_set_dependencies` to set its relationships.
+- Nest only one level: plan or overview → change boards. Update existing boards after rebases instead of creating duplicates. If `session_create` returns an existing PR board, preserve its relationships unless the current task establishes a reason to change them. Use `session_set_parent` and `session_set_dependencies` only for the supported relationships above.
 - Link the children from the overview and link the parent from each child with `[label](whiteboard:board/<sessionId>)`. Read the overview and all children back to check their targets, parent, dependency order, and links.
 
 **flow**
