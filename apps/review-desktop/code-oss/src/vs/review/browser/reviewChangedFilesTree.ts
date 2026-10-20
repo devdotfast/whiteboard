@@ -23,6 +23,7 @@ import { Emitter, type Event } from "../../base/common/event.js";
 import { Disposable } from "../../base/common/lifecycle.js";
 import { ThemeIcon } from "../../base/common/themables.js";
 import { localize } from "../../nls.js";
+import { IConfigurationService } from "../../platform/configuration/common/configuration.js";
 import { IHoverService } from "../../platform/hover/browser/hover.js";
 import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
 import { WorkbenchCompressibleObjectTree } from "../../platform/list/browser/listService.js";
@@ -245,6 +246,7 @@ export class ReviewChangedFilesTree extends Disposable {
     container: HTMLElement,
     @IInstantiationService instantiationService: IInstantiationService,
     @IHoverService hoverService: IHoverService,
+    @IConfigurationService configurationService: IConfigurationService,
   ) {
     super();
     container.classList.add("review-changed-files");
@@ -276,7 +278,7 @@ export class ReviewChangedFilesTree extends Disposable {
                 ? element.file.path
                 : `dir:${element.path}`,
           },
-          indent: 12,
+          defaultIndent: 21,
           keyboardNavigationLabelProvider: {
             getKeyboardNavigationLabel: (element) => element.name,
             getCompressedNodeKeyboardNavigationLabel: (elements) =>
@@ -288,6 +290,15 @@ export class ReviewChangedFilesTree extends Disposable {
           renderIndentGuides: RenderIndentGuides.None,
         },
       ),
+    );
+    // The tree takes its indent from `workbench.tree.indent`, not its
+    // options; set it after.
+    const indent = () => this.tree.updateOptions({ indent: 16 });
+    indent();
+    this._register(
+      configurationService.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration("workbench.tree.indent")) indent();
+      }),
     );
     this._register(
       this.tree.onDidOpen((event) => {
