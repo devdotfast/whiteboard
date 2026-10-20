@@ -71,6 +71,20 @@ test("a forced focus releases the gate", () => {
 	assert.equal(launch.suppressesFocus, false);
 });
 
+test("an always launch keeps every window in the background", () => {
+	const launch = new ReviewBackgroundLaunch({ DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "always" });
+	const { win, calls, focusFromUser } = fakeWindow();
+	launch.attach(win);
+	focusFromUser();
+	assert.equal(launch.allowsFocus(FocusMode.Force), false);
+	assert.equal(launch.allowsFocus(FocusMode.Notify), false);
+	const later = { show: true };
+	launch.prepare(later);
+	assert.equal(later.show, false);
+	launch.show(win);
+	assert.deepEqual(calls, ["showInactive"]);
+});
+
 test("only the value 1 marks a background launch", () => {
 	assert.equal(new ReviewBackgroundLaunch({ DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "0" }).suppressesFocus, false);
 	assert.equal(new ReviewBackgroundLaunch({ DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "" }).suppressesFocus, false);
