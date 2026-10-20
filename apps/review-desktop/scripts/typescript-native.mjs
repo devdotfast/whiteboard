@@ -23,27 +23,37 @@ const CACHE_DIR = path.join(CHECKOUT, ".build", "typescript-native");
 const npmTarball = (name, version) =>
   `https://registry.npmjs.org/${name}/-/${name.split("/").pop()}-${version}.tgz`;
 
+// tsrs, the Rust port, where it publishes a binary; Go's tsgo elsewhere.
+const tsrs = (platform, sha256) => ({
+  url: npmTarball(`@tsrs/${platform}`, "0.18.0-ts7.1.0-dev.20260929"),
+  sha256,
+  lib: ".",
+  exe: "tsrs",
+});
+
 const tsgo = (target, sha256) => ({
   url: npmTarball(`@typescript/typescript-${target}`, "7.0.2"),
   sha256,
+  lib: "lib",
+  exe: target.startsWith("win32-") ? "tsc.exe" : "tsc",
 });
 
 const SERVERS = {
-  "darwin-arm64": tsgo(
+  "darwin-arm64": tsrs(
     "darwin-arm64",
-    "902e2fe1cf0799198ef902c6b8c310a450fef629a6baba41d45641ef75c04ebd",
+    "f096a65c201a8dab481417a724e1cc3dbfafb253788401b88d2a8b0040f10e28",
   ),
   "darwin-x64": tsgo(
     "darwin-x64",
     "eba158cb54050f723d5ff781438f33de5640054440bb4f2bd170cfe9bc2eb551",
   ),
-  "linux-x64": tsgo(
-    "linux-x64",
-    "7ecad6f67377e831856367ab062ef394f21506a611405bf8ac0ff039348637d3",
+  "linux-x64": tsrs(
+    "linux-x64-gnu",
+    "8ce88ce11ca20b3d4270e2d4c4fcf15743688fc46812779ef909e6202a1bd311",
   ),
-  "linux-arm64": tsgo(
-    "linux-arm64",
-    "c83d931ac9dd7549cde6e71246aa9d6a9812843023df3e277fe3b5dcf41dd0ea",
+  "linux-arm64": tsrs(
+    "linux-arm64-gnu",
+    "af448b186e3237fa95bbf5b4438007a4c8fdd302dc2131f4ec767eda4af4e2cb",
   ),
   "win32-x64": tsgo(
     "win32-x64",
@@ -54,8 +64,6 @@ const SERVERS = {
     "0a73534e6ee50cdbb2a29ac48657ca0ad13cf0f424cf63808e4df7baeb87b8be",
   ),
 };
-
-const exeName = (target) => (target.startsWith("win32-") ? "tsc.exe" : "tsc");
 
 export async function installTypeScriptNative({
   target = `${os.platform()}-${os.arch()}`,
@@ -82,14 +90,14 @@ export async function installTypeScriptNative({
 
   await downloadPinned(server, tarball);
 
-  const scratch = fs.mkdtempSync(
-    path.join(os.tmpdir(), "wb-typescript-native-"),
-  );
+  const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "wb-typescript-native-"));
 
   try {
     execFileSync("tar", ["-xzf", tarball, "-C", scratch]);
     fs.rmSync(lib, { recursive: true, force: true });
-    fs.cpSync(path.join(scratch, "package", "lib"), lib, { recursive: true });
+    fs.cpSync(path.join(scratch, "package", server.lib), lib, {
+      recursive: true,
+    });
 
     for (const notice of ["LICENSE", "NOTICE.txt"])
       fs.copyFileSync(
@@ -100,10 +108,16 @@ export async function installTypeScriptNative({
     fs.rmSync(scratch, { recursive: true, force: true });
   }
 
-  const exe = path.join(lib, exeName(target));
+  for (const extra of ["package.json", "README.md"])
+    fs.rmSync(path.join(lib, extra), { force: true });
 
-  if (!fs.existsSync(exe))
-    throw new Error(`${server.url} has no lib/${exeName(target)}`);
+  // The client starts lib/tsc.
+  const exe = path.join(lib, target.startsWith("win32-") ? "tsc.exe" : "tsc");
+
+  if (path.basename(exe) !== server.exe)
+    fs.renameSync(path.join(lib, server.exe), exe);
+
+  if (!fs.existsSync(exe)) throw new Error(`${server.url} has no ${server.exe}`);
   fs.chmodSync(exe, 0o755);
   fs.writeFileSync(stamp, `${server.sha256}\n`);
 
