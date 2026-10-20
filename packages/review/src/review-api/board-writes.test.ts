@@ -8,6 +8,7 @@ import { rangeAnchor } from "@review/lens-selection.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ReviewApiClient } from "./client.js";
+import { ReviewInputError } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { type Author, ReviewStore } from "./store.js";
 
@@ -300,6 +301,51 @@ describe("a board's project", () => {
     expect(store.projectOfRepository(port)).toBe(project);
     expect(store.projectOfRepository(fork)).not.toBe(project);
     expect(store.checkoutProject(ssh)?.name).toBe("Team/Service");
+  });
+
+  it("takes the project named on create, and refuses one that doesn't exist", async () => {
+    const app = checkout("app");
+    const other = await create(checkout("other"), "Other");
+    const named = store.projectOf(other);
+
+    const { reviewId } = await store.execute({
+      operation: {
+        type: "create",
+        title: "Filed elsewhere",
+        target: { kind: "project", repositoryId: app },
+        projectId: named,
+      },
+    });
+
+    expect(store.projectOf(reviewId)).toBe(named);
+    expect(store.projectOf(reviewId)).not.toBe(store.projectOfRepository(app));
+
+    await expect(
+      store.execute({
+        operation: {
+          type: "create",
+          title: "Lost",
+          target: { kind: "project", repositoryId: app },
+          projectId: "no-such-project",
+        },
+      }),
+    ).rejects.toThrow(ReviewInputError);
+    expect(store.list().map((board) => board.title)).not.toContain("Lost");
+  });
+
+  it("files a board whose checkout isn't registered under Whiteboards, never under the board opened last", async () => {
+    const away = await create(checkout("away"), "Away");
+
+    await run({ type: "attention", reviewId: away, action: "view" });
+
+    const loose = await create("never-registered", "Loose");
+    const again = await create("never-registered", "Loose again");
+
+    expect(store.projectOf(loose)).not.toBe(store.projectOf(away));
+    expect(store.projectOf(again)).toBe(store.projectOf(loose));
+    expect(
+      store.list().find((board) => board.reviewId === loose)?.project?.name,
+    ).toBe("Whiteboards");
   });
 });
 

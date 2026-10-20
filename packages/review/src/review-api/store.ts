@@ -146,6 +146,13 @@ export const commandSchema = z.strictObject({
         .describe(
           "Default true: return the existing review for pullRequestUrl. false creates a separate review.",
         ),
+      projectId: z
+        .string()
+        .min(1)
+        .optional()
+        .describe(
+          "The project to file the whiteboard in: a project.id from session_list. Defaults to its checkout's.",
+        ),
       parentId: parentId.optional(),
       dependsOn: dependsOn.optional(),
     }),
@@ -717,7 +724,13 @@ export class ReviewStore {
       fallbackProject: () => this.fallbackProject(),
       rewriteVersion: (reviewId, version, snapshot) =>
         this.rewriteVersion(reviewId, version, snapshot),
-      firstRepositoryProject: () => this.firstRepositoryProject(),
+      firstRepositoryProject: () => {
+        const [first] = this.repositories();
+
+        return first
+          ? this.projectOfRepository(first.id)
+          : this.fallbackProject();
+      },
     });
     this.activity = new ReviewActivity(this.db, (id) =>
       this.assertWritable(id),
@@ -774,33 +787,14 @@ export class ReviewStore {
     return projectOfCheckout(this.db, repositoryId, this.checkouts);
   }
 
-  /** For a board with no repository: the project of the board opened last,
-   * else of the first registered checkout, else one with no repository. */
   private fallbackProject(): string {
-    const recent = this.db
+    const found = this.db
       .prepare(
-        `SELECT reviews.project_id FROM reviews
-        JOIN review_attention ON review_attention.review_id=reviews.id
-        WHERE review_attention.viewed_at IS NOT NULL
-        ORDER BY review_attention.viewed_at DESC LIMIT 1`,
+        "SELECT id FROM projects WHERE name='Whiteboards' AND id NOT IN (SELECT project_id FROM repositories WHERE project_id IS NOT NULL) ORDER BY rowid LIMIT 1",
       )
       .get();
 
-    return recent ? String(recent.project_id) : this.firstRepositoryProject();
-  }
-
-  private firstRepositoryProject(): string {
-    const [first] = this.repositories();
-
-    if (first) return this.projectOfRepository(first.id);
-
-    const empty = this.db
-      .prepare(
-        "SELECT id FROM projects WHERE id NOT IN (SELECT project_id FROM repositories WHERE project_id IS NOT NULL) LIMIT 1",
-      )
-      .get();
-
-    if (empty) return String(empty.id);
+    if (found) return String(found.id);
 
     const projectId = randomUUID();
 
@@ -1817,6 +1811,7 @@ export class ReviewStore {
           ...(applied?.children && { children: applied.children }),
         },
         ...(op.type === "create" && {
+          projectId: op.projectId,
           relations: { parentId: op.parentId, dependsOn: op.dependsOn },
         }),
         ...((op.type === "edit" || op.type === "lens_edit") && {
@@ -1858,6 +1853,7 @@ export class ReviewStore {
     /** A save that, normalized, changes nothing saves no version. */
     unchangedSavesNothing?: boolean;
     result?: Omit<Result, "reviewId" | "version">;
+    projectId?: string;
     relations?: { parentId?: string | null; dependsOn?: readonly string[] };
     courier?: { surface: ActivitySurface; activityId?: string };
   }): Promise<Result> {
@@ -1921,7 +1917,7 @@ export class ReviewStore {
 
     if (warnings.length) result.warnings = warnings;
 
-    const projectId = this.projectFor(snapshot, previous);
+    const projectId = this.projectFor(snapshot, previous, change.projectId);
 
     const previousProject = previous ? this.projectOf(id) : undefined;
 
@@ -1969,10 +1965,22 @@ export class ReviewStore {
 
     return result;
   }
-  /** The project a version puts its board in: a new board's repository's,
-   * or, for a board that has one, its own unless the version moves it to
-   * another registered repository. */
-  private projectFor(snapshot: Snapshot, previous: Snapshot | undefined) {
+  /** A create's named project, else its repository's; an edit keeps its
+   * project unless it moves repository. */
+  private projectFor(
+    snapshot: Snapshot,
+    previous: Snapshot | undefined,
+    named?: string,
+  ) {
+    if (named !== undefined) {
+      if (!this.db.prepare("SELECT 1 FROM projects WHERE id=?").get(named))
+        throw new ReviewInputError(
+          `Unknown project ${named}; use a project.id from session_list.`,
+        );
+
+      return named;
+    }
+
     const repository = snapshot.target?.repositoryId;
 
     if (

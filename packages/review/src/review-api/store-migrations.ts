@@ -33,12 +33,10 @@ export interface StoreUpgradeContext {
   fileAtCommit: ReadAtCommit;
   /** A checkout's project, made on first use. */
   projectOfRepository(repositoryId: string): string;
-  /** The project of the board opened last, else firstRepositoryProject's. */
   fallbackProject(): string;
   /** Saves a version over what it was; the current one re-indexes its
    * board's links, as every written version does. */
   rewriteVersion(reviewId: string, version: number, snapshot: JsonValue): void;
-  /** The first checkout's project, else one with no repository. */
   firstRepositoryProject(): string;
 }
 
