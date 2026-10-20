@@ -162,6 +162,15 @@ export function AskPanelContent({
     if (agents && !agent) setAgent(preferredAskAgent(session, agents)?.id);
   }, [agents, agent, session]);
 
+  // A new thread's mode is remembered as if picked, including Codex's
+  // fallback to read-only; a saved one's is its own.
+  const threadPermissions = thread?.permissions;
+
+  useEffect(() => {
+    if (agent && threadPermissions && savedThreadId === undefined)
+      rememberPermissions(session, agent, threadPermissions);
+  }, [agent, threadPermissions, savedThreadId, session]);
+
   const latestSession = useLatest(session);
   const mounted = useRef(true);
 
