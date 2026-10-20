@@ -18,8 +18,10 @@ import { AskProjectContext, readOpenAsks } from "./ask-open-state";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { ReviewSessionProvider } from "./host/review-session";
 import { ReviewPanelHost } from "./review-components";
+import { ReviewProvider } from "./review-context";
 import { ReviewPanelProvider, useReviewPanelStore } from "./review-panel";
 import type { ReviewPanelStore } from "./review-panel-store";
+import { ReviewRootsProvider } from "./review-root-context";
 import { testReviewSession } from "./review-session-test-utils";
 
 // jsdom lays nothing out, so nothing resizes or scrolls.
@@ -168,6 +170,14 @@ function askCanvas({
   }
 
   const container = document.createElement("div");
+
+  const roots = {
+    appRef: { current: null as HTMLDivElement | null },
+    shellRef: { current: null },
+    scrollRegionRef: { current: null as HTMLElement | null },
+    articleRef: { current: null },
+  };
+
   document.body.append(container);
   let root = createRoot(container);
 
@@ -177,21 +187,37 @@ function askCanvas({
     act(async () =>
       root.render(
         <ReviewSessionProvider session={session}>
-          <ReviewDebugSettingsProvider>
-            <AskProjectContext.Provider value={projectId}>
-              <ReviewPanelProvider
-                restore={() => ({
-                  asks: readOpenAsks(session.config, projectId),
-                })}
-              >
-                <AskHistoryProvider>
-                  <AskDesktopSync />
-                  <Probe />
-                  <ReviewPanelHost />
-                </AskHistoryProvider>
-              </ReviewPanelProvider>
-            </AskProjectContext.Provider>
-          </ReviewDebugSettingsProvider>
+          <ReviewRootsProvider roots={roots}>
+            <div
+              ref={(element) => {
+                roots.appRef.current = element;
+              }}
+            >
+              <section
+                tabIndex={-1}
+                ref={(element) => {
+                  roots.scrollRegionRef.current = element;
+                }}
+              />
+              <ReviewDebugSettingsProvider>
+                <AskProjectContext.Provider value={projectId}>
+                  <ReviewPanelProvider
+                    restore={() => ({
+                      asks: readOpenAsks(session.config, projectId),
+                    })}
+                  >
+                    <ReviewProvider>
+                      <AskHistoryProvider>
+                        <AskDesktopSync />
+                        <Probe />
+                        <ReviewPanelHost />
+                      </AskHistoryProvider>
+                    </ReviewProvider>
+                  </ReviewPanelProvider>
+                </AskProjectContext.Provider>
+              </ReviewDebugSettingsProvider>
+            </div>
+          </ReviewRootsProvider>
         </ReviewSessionProvider>,
       ),
     );
@@ -221,6 +247,7 @@ function askCanvas({
 
   return {
     store: () => store,
+    scrollRegion: () => roots.scrollRegionRef.current,
     streams,
     /** Whether Desktop was last told the column is open. */
     docked: () => reports.at(-1)?.docked,
@@ -449,6 +476,13 @@ it("starts a conversation about the whole review from its saved conversations", 
 /** The column's Ask. */
 const column = () => document.querySelector('aside[aria-label="Ask"]');
 
+const pressEscape = (target: Element = document.body) =>
+  act(async () => {
+    target.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+  });
+
 /** Types into the open Ask's composer without sending it. */
 async function draft(text: string) {
   const textarea = document.querySelector("textarea")!;
@@ -568,7 +602,7 @@ it("asks about the whole board when it has no threads, and starts none", async (
   expect(canvas.requested("/open")).toEqual([]);
 });
 
-it("puts a peek away too, and brings it back", async () => {
+it("puts a peek away too, and brings it back, and only a shown peek closes on Escape", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   await using canvas = askCanvas();
 
@@ -579,6 +613,7 @@ it("puts a peek away too, and brings it back", async () => {
       .getState()
       .openPeek({
         kind: "peek",
+        anchor: { id: "start", title: "start()" },
         content: { kind: "inline-code", text: "start();" },
       }),
   );
@@ -588,7 +623,13 @@ it("puts a peek away too, and brings it back", async () => {
   expect(canvas.docked()).toBe(false);
   expect(column()).toBeNull();
 
+  await pressEscape();
+  expect(canvas.store().getState().active).not.toBeNull();
+
   await canvas.toggle();
   expect(canvas.docked()).toBe(true);
   expect(canvas.store().getState().active).not.toBeNull();
+
+  await pressEscape();
+  expect(canvas.store().getState().active).toBeNull();
 });

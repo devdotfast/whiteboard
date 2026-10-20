@@ -33,6 +33,8 @@ export function useAskPanelHost(): HTMLElement | undefined {
  * controls. */
 export const InRightColumn = createContext(false);
 
+export const DockHidden = createContext(false);
+
 /** Opens Desktop's Threads tab, where there is one. */
 export function useShowThreads(): (() => void) | undefined {
   const bridge = useOptionalReviewSession()?.bridge;
@@ -53,7 +55,11 @@ export function AskDock({
 }) {
   const { theme } = useReviewDebugSettings();
 
-  if (!host) return hidden ? <div hidden>{children}</div> : children;
+  const content = (
+    <DockHidden.Provider value={hidden}>{children}</DockHidden.Provider>
+  );
+
+  if (!host) return hidden ? <div hidden>{content}</div> : content;
 
   return createPortal(
     <InRightColumn.Provider value>
@@ -66,7 +72,7 @@ export function AskDock({
           hidden && styles.hidden,
         )}
       >
-        {children}
+        {content}
       </div>
     </InRightColumn.Provider>,
     host,

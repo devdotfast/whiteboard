@@ -2,6 +2,7 @@ import { documentType } from "@canvas/document-type.stylex";
 import { fontSize, fontWeight, leading, space } from "@canvas/scale.stylex";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { DisclosureChevron } from "@canvas/ui/disclosure";
+import { useEscape } from "@canvas/ui/escape";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import {
   ChevronDownIcon,
@@ -41,7 +42,12 @@ import { useShallow } from "zustand/react/shallow";
 
 import { AskCloseWarning } from "./ask-close";
 import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
-import { AskDock, InRightColumn, useAskPanelHost } from "./ask-dock";
+import {
+  AskDock,
+  DockHidden,
+  InRightColumn,
+  useAskPanelHost,
+} from "./ask-dock";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
 import {
   AskProjectContext,
@@ -174,17 +180,8 @@ function ReviewPanelFrame({
     containerRef: appRef,
   });
 
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !appRef?.current) return;
-      event.preventDefault();
-      onEscape();
-    };
-
-    document.addEventListener("keydown", closeOnEscape);
-
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [appRef, onEscape]);
+  // A hidden dock keeps its peek; Escape must not close it.
+  useEscape(onEscape, !useContext(DockHidden));
 
   // SAFETY: `--side-panel-bottom-fraction` is a CSS custom property, which
   // React forwards to style.setProperty; the CSSProperties typings only omit
