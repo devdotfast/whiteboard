@@ -21,14 +21,9 @@ import {
 import type { BoardLinkPreview } from "@review/review-api/link-preview";
 import * as stylex from "@stylexjs/stylex";
 import { useQuery } from "@tanstack/react-query";
-import {
-  type MouseEvent,
-  type ReactNode,
-  useEffect,
-  useRef,
-  useState,
-} from "react";
+import { type MouseEvent, type ReactNode, useRef, useState } from "react";
 
+import { canvasQueryKeys } from "./canvas-query";
 import { formatRelativeTime } from "./format";
 import { useOptionalReviewSession } from "./host/review-session";
 import { tokens } from "./tokens.stylex";
@@ -224,7 +219,7 @@ function useLateState(target: BoardLinkTarget): PullRequestState | undefined {
     );
 
   const { data } = useQuery({
-    queryKey: ["board-link-pull-request-states"],
+    queryKey: canvasQueryKeys.linkStates(),
     enabled: missing,
     staleTime: Number.POSITIVE_INFINITY,
     queryFn: async (): Promise<LinkStates> =>
@@ -263,9 +258,6 @@ function Badge({
   );
 }
 
-// Hover cards read once per link and version of the board they are on.
-const peeks = new Map<string, Promise<BoardLinkPreview>>();
-
 /** The hover card, which reads what it shows of the target when it opens:
  * a board's links carry only titles and icons. */
 function Peek({
@@ -278,41 +270,28 @@ function Peek({
   blockId?: string;
 }): ReactNode {
   const session = useOptionalReviewSession();
-  const [preview, setPreview] = useState(target.preview);
 
-  useEffect(() => {
-    if (!session || target.preview) return;
+  const endpoint = `/links/peek?${new URLSearchParams({
+    board: reviewId,
+    ...(blockId !== undefined && { block: blockId }),
+  })}` as const;
 
-    const endpoint = `/links/peek?${new URLSearchParams({
-      board: reviewId,
-      ...(blockId !== undefined && { block: blockId }),
-    })}` as const;
+  // A card that can't read its preview shows the title alone.
+  const { data } = useQuery({
+    queryKey: canvasQueryKeys.linkPeek(reviewId, blockId, target.updatedAt),
+    enabled: session !== undefined && target.preview === undefined,
+    staleTime: Number.POSITIVE_INFINITY,
+    queryFn: async (): Promise<BoardLinkPreview> => {
+      const response = await session!.fetch(endpoint);
 
-    const key = session.apiUrl(endpoint);
-    let read = peeks.get(key);
+      if (!response.ok) throw new Error("No preview");
 
-    if (!read) {
-      read = session.fetch(endpoint).then(async (response) => {
-        if (!response.ok) throw new Error("No preview");
+      // SAFETY: /links/peek answers with the card's preview.
+      return (await response.json()) as BoardLinkPreview;
+    },
+  });
 
-        // SAFETY: /links/peek answers with the card's preview.
-        return (await response.json()) as BoardLinkPreview;
-      });
-      read.catch(() => peeks.delete(key));
-      peeks.set(key, read);
-    }
-
-    let live = true;
-
-    // A card that can't read its preview shows the title alone.
-    read.then((next) => live && setPreview(next)).catch(() => {});
-
-    return () => {
-      live = false;
-    };
-  }, [session, target.preview, reviewId, blockId]);
-
-  const shown = { ...target, preview };
+  const shown = { ...target, preview: target.preview ?? data };
 
   return blockId === undefined ? (
     <PagePeek target={shown} />

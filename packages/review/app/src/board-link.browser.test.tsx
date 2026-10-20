@@ -65,3 +65,55 @@ it("reads a link's hover card when it opens, once", async () => {
     "/links/peek?board=22222222-2222-4222-8222-222222222222",
   );
 });
+
+it("reads a link's hover card again once its target was updated", async () => {
+  const request = vi.fn<ReviewCanvasBridge["request"]>(
+    async () =>
+      new Response(JSON.stringify({ prose: ["Opening words."] }), {
+        headers: { "content-type": "application/json" },
+      }),
+  );
+
+  const session = testReviewSession({}, { request });
+  const container = document.createElement("div");
+
+  document.body.append(container);
+  root = createRoot(container);
+
+  const show = (updatedAt: string) =>
+    act(async () =>
+      root?.render(
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <BoardLink
+              reviewId="22222222-2222-4222-8222-222222222222"
+              target={{ title: "The plan", missing: false, updatedAt }}
+            >
+              the plan
+            </BoardLink>
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
+      ),
+    );
+
+  const link = () => container.querySelector("a")!;
+
+  const hover = async () => {
+    await userEvent.hover(link());
+    await vi.waitFor(() =>
+      expect(container.querySelector("[role=tooltip]")?.textContent).toContain(
+        "Opening words.",
+      ),
+    );
+    await userEvent.unhover(link());
+  };
+
+  await show("2026-10-01T00:00:00.000Z");
+  await hover();
+  await hover();
+  expect(request).toHaveBeenCalledOnce();
+
+  await show("2026-10-02T00:00:00.000Z");
+  await hover();
+  expect(request).toHaveBeenCalledTimes(2);
+});
