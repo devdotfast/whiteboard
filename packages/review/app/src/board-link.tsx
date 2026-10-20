@@ -48,7 +48,7 @@ export interface BoardLinkTarget {
   updatedAt?: string;
 }
 
-function missingLabel(
+export function missingLabel(
   target: BoardLinkTarget | undefined,
   blockId: string | undefined,
 ): string {

@@ -70,7 +70,9 @@ export function rewriteLinkDestinations(
     markdownNodes(parseMarkdown(markdown)),
   ).toReversed())
     result =
-      result.slice(0, from) + rewrite(result.slice(from, to)) + result.slice(to);
+      result.slice(0, from) +
+      rewrite(result.slice(from, to)) +
+      result.slice(to);
 
   return result;
 }

@@ -34,9 +34,7 @@ function strike(
         return;
       const from = offset + 1 + pos;
 
-      struck.push(
-        Decoration.inline(from, from + node.nodeSize, struckAttrs),
-      );
+      struck.push(Decoration.inline(from, from + node.nodeSize, struckAttrs));
     });
   });
 

@@ -7,6 +7,10 @@ import {
   testApiDocumentData,
   testReviewSession,
 } from "@canvas/review-session-test-utils";
+import type {
+  ReviewNotification,
+  ReviewVerbRequest,
+} from "@dev.fast/review-protocol";
 import { ReviewApiClient } from "@review/review-api/client";
 import { selectionReferences } from "@review/review-api/document";
 import { act } from "react";
@@ -190,4 +194,87 @@ it("scrolls to a heading or block on this board in place, without a caret", asyn
   await userEvent.click(link(editor, "the last line"));
   await vi.waitFor(() => expect(inView(block)).toBe(true));
   expect(editor.contains(document.activeElement)).toBe(false);
+});
+
+it("strikes a link to a deleted board and refuses to open it", async () => {
+  const gone = "22222222-2222-4222-8222-222222222222";
+  const other = "33333333-3333-4333-8333-333333333333";
+
+  const data = testApiDocumentData([
+    {
+      id: "p1",
+      type: "markdown",
+      markdown: `See [the old plan](whiteboard:board/${gone}) and [the other](whiteboard:board/${other}).\n`,
+    },
+  ]);
+
+  data.boards.set(`${gone}#`, {
+    missing: true,
+    deletedAt: "2026-10-19T12:00:00.000Z",
+  });
+  data.boards.set(`${other}#`, { title: "The other", missing: false });
+
+  const posts: ReviewVerbRequest[] = [];
+  const notified: ReviewNotification[] = [];
+
+  const session = testReviewSession(
+    {},
+    {
+      post: async (request) => {
+        posts.push(request);
+
+        return { ok: true };
+      },
+      notify: (notification) => {
+        notified.push(notification);
+
+        return { dispose() {} };
+      },
+    },
+  );
+
+  const page = document.createElement("div");
+
+  document.body.append(page);
+  root = createRoot(page);
+  await act(async () =>
+    root?.render(
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={session}>
+          <ReviewPanelProvider>
+            <BoardEditorHostContext.Provider value={host}>
+              <BoardEditor data={data} softwareMapEnabled={false} />
+            </BoardEditorHostContext.Provider>
+          </ReviewPanelProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
+    ),
+  );
+
+  const editor = await vi.waitFor(() => {
+    const found = page.querySelector<HTMLElement>(".ProseMirror");
+
+    if (!found) throw new Error("No editor yet");
+
+    return found;
+  });
+
+  const struck = link(editor, "the old plan");
+
+  expect(struck.querySelector("[data-unavailable]")).not.toBeNull();
+  expect(link(editor, "the other").querySelector("[data-unavailable]")).toBe(
+    null,
+  );
+
+  await userEvent.click(struck);
+  expect(posts).toEqual([]);
+  expect(notified.map(({ kind, text }) => [kind, text])).toEqual([
+    ["error", expect.stringMatching(/^Board deleted/)],
+  ]);
+  expect(editor.contains(document.activeElement)).toBe(false);
+
+  await userEvent.click(link(editor, "the other"));
+  await vi.waitFor(() =>
+    expect(posts.map(({ name }) => name)).toEqual(["openReview"]),
+  );
 });

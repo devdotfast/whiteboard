@@ -1,11 +1,13 @@
 import { useAgentSelection } from "@canvas/agent-selection";
 import type { ApiDocumentData } from "@canvas/api-document";
 import { DocumentNode, useEditingBlock } from "@canvas/api-document";
+import { missingLabel } from "@canvas/board-link";
 import { Courier } from "@canvas/courier";
 import type { MotionPhase } from "@canvas/draw-queue";
 import { useMotionPhases } from "@canvas/draw-queue-provider";
 import { drawStyles } from "@canvas/draw-styles";
 import { useReviewSession } from "@canvas/host/review-session";
+import { useNotify } from "@canvas/notify";
 import {
   BoardSaveRetryContext,
   type BoardSaveStatus,
@@ -59,6 +61,7 @@ import { type SlashState, slashKey } from "./slash";
 import { SlashMenu } from "./SlashMenu";
 import { REMOTE } from "./structure";
 import { type BoardSync, openBoardSync } from "./sync";
+import { unavailableLinkKey, unavailableLinks } from "./unavailable-links";
 import { PortalStore, Portals, RichBlockContext, nodeViews } from "./views";
 
 // A board on the canvas, editable in place: the editor document, its
@@ -137,6 +140,9 @@ export function BoardEditor({
   agentSelection.current = selectForAgent;
   const openPeek = useReviewPanel((state) => state.openPeek);
   const phases = useMotionPhases();
+  const notify = useNotify();
+  const notifier = useRef(notify);
+  notifier.current = notify;
 
   const [status, setStatus] = useState<BoardSaveStatus | undefined>(() =>
     isNewBoard(data.snapshot) ? "new" : undefined,
@@ -199,6 +205,7 @@ export function BoardEditor({
       }),
       motion(),
       openLinks(() => latest.current),
+      unavailableLinks(() => latest.current),
     ]);
 
     // Contents changes only when a heading does, not at every keystroke.
@@ -416,11 +423,24 @@ export function BoardEditor({
         return true;
       }
 
-      // A heading on this board, by its anchor, or a block on this board:
-      // scrolled to in place, as the read-only page does.
       const fragment = href.startsWith("#") ? href.slice(1) : undefined;
       const board = boardLink(href);
 
+      const target =
+        board &&
+        latest.current.boards.get(`${board.board}#${board.block ?? ""}`);
+
+      if (board && target?.missing) {
+        notifier.current({
+          kind: "error",
+          text: missingLabel(target, board.block),
+        });
+
+        return true;
+      }
+
+      // A heading on this board, by its anchor, or a block on this board:
+      // scrolled to in place, as the read-only page does.
       if (fragment !== undefined || board?.board === reviewId) {
         const article = roots?.articleRef.current ?? current.dom;
         const region = roots?.scrollRegionRef.current ?? null;
@@ -569,6 +589,15 @@ export function BoardEditor({
           .setMeta(REMOTE, true),
       );
   }, [openKey]);
+
+  useEffect(() => {
+    const editor = view.current;
+
+    if (editor)
+      editor.dispatch(
+        editor.state.tr.setMeta(unavailableLinkKey, true).setMeta(REMOTE, true),
+      );
+  }, [data.boards]);
 
   const retry = useCallback(() => sync.current?.tell("retry"), []);
 
