@@ -2276,11 +2276,6 @@ export function createReviewApi(
           );
         else await shared.setAttention(parsed.operation.reviewId);
 
-        const reviewId = parsed.operation.reviewId;
-
-        if (shared.get(reviewId).snapshot.trashedAt)
-          ask?.threads.closeDeletedReviews((id) => id === reviewId);
-
         return context.json({
           reviewId: parsed.operation.reviewId,
           version: shared.get(parsed.operation.reviewId).snapshot.version,
@@ -2308,12 +2303,6 @@ export function createReviewApi(
           };
 
     const result = await store.execute(input, undefined, author);
-
-    if (
-      result.deleted ||
-      (result.lifecycle && store.read(result.reviewId).trashedAt)
-    )
-      ask?.threads.closeDeletedReviews((id) => id === result.reviewId);
 
     if (input.operation.type === "edit" && data && !result.deleted) {
       const { quotes, unquoted } = await anchorQuotes(

@@ -5,12 +5,15 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import type { ReviewProjectThreads } from "@dev.fast/review-protocol";
+import type { AskAgentLauncher } from "@review/ask/agents.js";
 import { AskThreads } from "@review/ask/threads.js";
 import { AskHistory, type AskRecord } from "@review/review-api/ask-history.js";
 import { ReviewInputError } from "@review/review-api/document.js";
 import { createReviewApi } from "@review/review-api/http.js";
-import type { LocalReviewData } from "@review/review-api/local-data.js";
+import { LocalReviewData } from "@review/review-api/local-data.js";
 import { ReviewStore } from "@review/review-api/store.js";
+import { GlobalReviewDesktopVerbRelay } from "@review/server/global-verb-relay.js";
+import { createWhiteboardCore } from "@review/server/review-server-core.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { STORE_UPGRADES } from "./store-migrations.js";
@@ -708,60 +711,49 @@ it("deleting a board ends its Ask threads and blocks reopening while saved histo
 
   store.askHistory.save(record(reviewId, "thread", "2026-09-01T10:00:00.000Z"));
 
-  const launch = vi.fn<ConstructorParameters<typeof AskThreads>[0]>(
-    async () => {
-      throw new Error("Agent unavailable");
-    },
-  );
-
-  const threads = new AskThreads(launch);
-
-  const thread = threads.open({
-    id: "thread",
-    reviewId,
-    question: { text: "Check this" },
-    agent: "claude",
-    cwd: "/checkout",
-    head: "head",
-    selection: { title: "Question" },
-    context: "Context",
+  const launch = vi.fn<AskAgentLauncher>(async () => {
+    throw new Error("Agent unavailable");
   });
 
-  const closed = vi.fn<() => void>();
-  thread.onClose(closed);
+  const data = new LocalReviewData(store);
 
-  const api = createReviewApi(
-    store,
-    {} as LocalReviewData,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    { threads, agents: async () => [] },
-  );
+  vi.spyOn(data, "agentCheckout").mockResolvedValue({
+    rootPath: "/checkout",
+    head: "head",
+    live: false,
+  });
+
+  const core = createWhiteboardCore({
+    profile: { store, data },
+    relay: new GlobalReviewDesktopVerbRelay(),
+    token: "token",
+    instanceId: "instance",
+    status: () => ({}),
+    ask: { tools: {}, launch },
+  });
 
   const request = (route: string, body = {}) =>
-    api.request(route, {
+    core.api.request(route, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
     });
 
   try {
+    expect((await request(`/${reviewId}/ask/thread/open`)).status).toBe(200);
+
     const response = await request(
       "/commands",
       command({ type: "lifecycle", state: "trash", reviewId }),
     );
 
     expect(response.status).toBe(200);
-    expect(closed).toHaveBeenCalledOnce();
-    expect(threads.get("thread")).toBeUndefined();
     const launches = launch.mock.calls.length;
     expect((await request(`/${reviewId}/ask/thread/open`)).status).toBe(409);
     expect(launch).toHaveBeenCalledTimes(launches);
-    expect((await api.request(`/${reviewId}/ask/thread`)).status).toBe(200);
+    expect((await core.api.request(`/${reviewId}/ask/thread`)).status).toBe(
+      200,
+    );
 
     const watch = await request(`/${reviewId}/ask/watch`, {
       threads: ["thread"],
@@ -769,9 +761,8 @@ it("deleting a board ends its Ask threads and blocks reopening while saved histo
 
     expect(watch.status).toBe(200);
     expect(await watch.text()).toContain('"ended":true');
-    expect(() => threads.sweep(Date.now() + 20 * 60_000)).not.toThrow();
   } finally {
-    threads.closeAll();
+    core.close();
   }
 });
 

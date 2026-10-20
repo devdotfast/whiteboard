@@ -19,8 +19,7 @@ import { ReviewInputError } from "./document.js";
 export const askRecordSchema = askHistoryEntrySchema.extend({
   /** The board the conversation started on, and the block if any. */
   anchor: z.object({ board: z.string(), block: z.string().optional() }),
-  /** The project of the board it started on, read from that board, or its
-   * tombstone once deleted; absent for a shared board. */
+  /** Absent for a shared board. */
   projectId: z.string().optional(),
   /** The ACP session the agent keeps the transcript under. */
   sessionId: z.string(),
@@ -78,12 +77,9 @@ const rowSchema = z
     }),
   );
 
-/** A thread's project: its anchor board's, or a deleted board's from its
- * tombstone. The one place a thread's project comes from, so it can never
- * disagree with its board's. */
-const THREAD_PROJECT_SQL = `COALESCE(
-  (SELECT project_id FROM reviews WHERE reviews.id=ask_conversations.anchor_board),
-  (SELECT project_id FROM deleted_boards WHERE deleted_boards.id=ask_conversations.anchor_board))`;
+/** A thread's project is always its anchor board's. */
+const THREAD_PROJECT_SQL =
+  "(SELECT project_id FROM reviews WHERE reviews.id=ask_conversations.anchor_board)";
 
 /** Every column of a thread, with its project. */
 const THREAD_COLUMNS = `ask_conversations.*, ${THREAD_PROJECT_SQL} AS project_id`;
@@ -285,9 +281,8 @@ export class AskHistory {
     // The project's boards by their index on project_id, then their
     // threads by ask_conversations_review.
     return this.entries(
-      "anchor_board=? OR anchor_board IN (SELECT id FROM reviews WHERE project_id=? UNION ALL SELECT id FROM deleted_boards WHERE project_id=?)",
+      "anchor_board=? OR anchor_board IN (SELECT id FROM reviews WHERE project_id=?)",
       board,
-      projectId ?? null,
       projectId ?? null,
     );
   }

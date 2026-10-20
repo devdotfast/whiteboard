@@ -109,8 +109,6 @@ const READ_ONLY_MCP_SERVERS = new Set([
  * the reviewer. */
 export type AskMcpServers = (threadId: string) => McpServer[];
 
-/** Where a thread saves what happens to it, which moves with the thread
- * when another review adopts it. */
 export interface AskThreadHooks {
   /** The agent created a session: the id a later reopen loads. A new one
    * replaces a session the agent could not reopen. */
@@ -239,9 +237,6 @@ export class AskThread {
   private steerable = false;
   /** Follow-ups waiting for the turn under way to end, oldest first. */
   private queue: { id: string; question: AskQuestion }[] = [];
-  /** The review the thread answers in, and where it saves; adopting moves
-   * both. */
-  private home: AskThreadHooks & { reviewId: string };
 
   constructor(
     private readonly launch: AskAgentLauncher,
@@ -252,15 +247,6 @@ export class AskThread {
     this.id = start.id ?? randomUUID();
     this.mcpServers = mcpServers(this.id);
     this.picks = { ...start.picks };
-    this.home = {
-      reviewId: start.reviewId,
-      onSession: start.onSession,
-      onTurn: start.onTurn,
-      onSave: start.onSave,
-      onPermissions: start.onPermissions,
-      onOffer: start.onOffer,
-      onTitle: start.onTitle,
-    };
     this.state = {
       id: this.id,
       agent: start.agent,
@@ -280,16 +266,7 @@ export class AskThread {
   }
 
   get reviewId() {
-    return this.home.reviewId;
-  }
-
-  /** Moves the thread to another review, as when its agent creates the
-   * review it was asked for, and saves it there as it stands. */
-  adopt(reviewId: string, hooks: AskThreadHooks) {
-    this.home = { reviewId, ...hooks };
-
-    if (this.sessionId) hooks.onSession?.(this.sessionId);
-    hooks.onSave?.(this.state.entries);
+    return this.start.reviewId;
   }
 
   read(): AskThreadState {
@@ -529,7 +506,7 @@ export class AskThread {
         this.state.status !== "starting" &&
         this.state.status !== "failed"
       )
-        this.home.onSave?.(settled(this.state.entries));
+        this.start.onSave?.(settled(this.state.entries));
     } finally {
       for (const resolve of this.decisions.values())
         resolve({ outcome: { outcome: "cancelled" } });
@@ -875,7 +852,7 @@ export class AskThread {
     if (commands) offer.commands = commands;
 
     if (accepts) offer.accepts = accepts;
-    this.home.onOffer?.(offer);
+    this.start.onOffer?.(offer);
   }
 
   /** Changes what the agent may do from the next answer: it starts again
@@ -898,7 +875,7 @@ export class AskThread {
 
     this.emit({ type: "set", permissions });
     this.permitted = true;
-    this.home.onPermissions?.(permissions);
+    this.start.onPermissions?.(permissions);
     this.disconnect();
     // Its mode is Whiteboard's change, not one to announce as the agent's.
     this.settings.clear();
@@ -947,7 +924,7 @@ export class AskThread {
       if (this.closed) throw new Error("This conversation has ended.");
 
       this.sessionId = response.sessionId;
-      this.home.onSession?.(response.sessionId);
+      this.start.onSession?.(response.sessionId);
 
       this.greeting = piGreetingSchema.safeParse(
         response._meta,
@@ -1103,8 +1080,8 @@ export class AskThread {
             ? `${this.state.agentName} stopped before finishing.`
             : null,
     });
-    this.home.onTurn?.();
-    this.home.onSave?.(this.state.entries);
+    this.start.onTurn?.();
+    this.start.onSave?.(this.state.entries);
 
     if (reviewFailed) await this.permit("read-only");
     this.askQueued();
@@ -1382,7 +1359,7 @@ export class AskThread {
 
         if (title && title !== this.state.title) {
           this.emit({ type: "set", title });
-          this.home.onTitle?.(title);
+          this.start.onTitle?.(title);
         }
 
         return true;
