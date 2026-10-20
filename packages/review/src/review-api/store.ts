@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { isDeepStrictEqual } from "node:util";
@@ -65,7 +65,6 @@ import {
   editSchema,
   elements,
   explicitPins,
-  isUnit,
   pinDocumentReferences,
   pinnedRepositoryIds,
   resourceReferences,

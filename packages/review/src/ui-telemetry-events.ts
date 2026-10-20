@@ -413,10 +413,6 @@ export const UI_TELEMETRY_EVENTS = {
     event: "review_map_expanded",
     properties: { level: MAP_LEVEL },
   },
-  commit_expanded: {
-    event: "review_commit_expanded",
-    properties: { expanded: "boolean" },
-  },
   commit_diff_opened: {
     event: "review_commit_diff_opened",
     properties: { via: COMMIT_DIFF_VIA },

@@ -42,21 +42,14 @@ export function DiffCount({
   additions,
   deletions,
   binary = false,
-  large = false,
 }: {
   additions: number;
   deletions: number;
   binary?: boolean;
-  /** The review header's size. */
-  large?: boolean;
 }): ReactElement {
   return (
     <span
-      {...stylex.props(
-        diffCountStyles.counts,
-        binary && diffCountStyles.words,
-        large && styles.large,
-      )}
+      {...stylex.props(diffCountStyles.counts, binary && diffCountStyles.words)}
     >
       {binary ? (
         "Binary"
@@ -83,12 +76,5 @@ export const diffCountStyles = stylex.create({
   },
   removed: {
     color: tokens.changeRemoved,
-  },
-});
-
-const styles = stylex.create({
-  large: {
-    fontSize: fontSize.ui,
-    gap: space.s10,
   },
 });

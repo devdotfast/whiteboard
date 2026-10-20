@@ -30,7 +30,6 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
-  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -40,9 +39,7 @@ import {
 import { createPortal } from "react-dom";
 
 import { AskCodePins } from "./ask-code-pins";
-import { AuthoringActivityContext } from "./authoring-activity-context";
-import { scopeLive } from "./authoring-cursor";
-import { Courier, LensCursorContext, lensRowElement } from "./courier";
+import { Courier, lensRowElement } from "./courier";
 import { DiffSidebarFolds } from "./diff-sidebar-folds";
 import { type MotionPhase, withErasedBlocks } from "./draw-queue";
 import { useMotionPhases } from "./draw-queue-provider";
@@ -126,9 +123,7 @@ export function ReviewDiffView({
 
   const [lensList, setLensList] = useState<HTMLDivElement | null>(null);
   const rows = useLensRows(lenses?.lenses ?? []);
-  const lensCursor = useContext(LensCursorContext);
 
-  const lensesLive = scopeLive(useContext(AuthoringActivityContext), "lenses");
   const [fullTree, setFullTree] = useState<HTMLDivElement | null>(null);
   const [lensTree, setLensTree] = useState<HTMLDivElement | null>(null);
   const [scopeTree, setScopeTree] = useState<HTMLDivElement | null>(null);
