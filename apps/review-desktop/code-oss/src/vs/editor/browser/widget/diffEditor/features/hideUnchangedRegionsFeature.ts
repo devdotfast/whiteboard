@@ -262,7 +262,7 @@ export class HideUnchangedRegionsFeature extends Disposable {
 		}));
 
 		this._register(this._editors.modified.onMouseUp(event => {
-			if (!event.event.rightButton && event.target.position && event.target.element?.className.includes('fold-unchanged')) {
+			if (!event.event.rightButton && event.target.position && event.target.element?.classList.contains('fold-unchanged')) {
 				const lineNumber = event.target.position.lineNumber;
 				const model = this._diffModel.get();
 				if (!model) { return; }
@@ -275,7 +275,7 @@ export class HideUnchangedRegionsFeature extends Disposable {
 		}));
 
 		this._register(this._editors.original.onMouseUp(event => {
-			if (!event.event.rightButton && event.target.position && event.target.element?.className.includes('fold-unchanged')) {
+			if (!event.event.rightButton && event.target.position && event.target.element?.classList.contains('fold-unchanged')) {
 				const lineNumber = event.target.position.lineNumber;
 				const model = this._diffModel.get();
 				if (!model) { return; }
