@@ -326,7 +326,7 @@ export const shellStyles = stylex.create({
   reviewRegionRail: {
     "--review-rail-gutter": {
       default: tocRail.gutter,
-      [tocRail.hidden]: "0px",
+      [stylex.env.tocRailHidden]: "0px",
     },
   },
   documentView: {

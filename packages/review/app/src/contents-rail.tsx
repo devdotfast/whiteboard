@@ -18,7 +18,6 @@ import {
   scrollToReviewHeading,
   useHeadingInView,
 } from "./review-heading-scroll";
-import { tocRail } from "./review-toc.stylex";
 import {
   fontSize,
   fontWeight,
@@ -295,7 +294,7 @@ const styles = stylex.create({
   // window's while the right column is open. The page keeps
   // tocRail.gutter clear for them.
   place: {
-    display: { default: null, [tocRail.hidden]: "none" },
+    display: { default: null, [stylex.env.tocRailHidden]: "none" },
     gridRow: "-2 / -1",
     gridColumn: "1",
     justifySelf: "end",

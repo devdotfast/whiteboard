@@ -3,6 +3,7 @@
 export const stylexEnv = {
   reducedMotion: "@media (prefers-reduced-motion: reduce)",
   narrow: "@media (max-width: 720px)",
+  tocRailHidden: "@container review-content (max-width: 720px)",
 } as const;
 
 declare module "@stylexjs/stylex/lib/types/StyleXTypes" {
