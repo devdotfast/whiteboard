@@ -8,7 +8,7 @@
 // own entry point; the editor/extension-host services are shared.
 import './editor.common.main.js';
 import './editor.desktop.main.js';
-import { reviewConfigurationDefaults } from './common/reviewConfigurationDefaults.js';
+import { curatedExtensionConfigurationDefaults, reviewConfigurationDefaults } from './common/reviewConfigurationDefaults.js';
 import '../workbench/browser/workbench.zenMode.contribution.js';
 import '../workbench/browser/actions/layoutActions.js';
 import '../workbench/browser/parts/editor/editorParts.js';
@@ -165,6 +165,9 @@ Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerDefaultCon
 		'workbench.colorTheme': reviewConfigurationDefaults['workbench.colorTheme'],
 		'workbench.preferredDarkColorTheme': reviewConfigurationDefaults['workbench.preferredDarkColorTheme'],
 		'workbench.preferredLightColorTheme': reviewConfigurationDefaults['workbench.preferredLightColorTheme'],
+		'kotlin.debugAdapter.enabled': curatedExtensionConfigurationDefaults['kotlin.debugAdapter.enabled'],
+		'kotlin.scripts.enabled': curatedExtensionConfigurationDefaults['kotlin.scripts.enabled'],
+		'kotlin.scripts.buildScriptsEnabled': curatedExtensionConfigurationDefaults['kotlin.scripts.buildScriptsEnabled'],
 	},
 }]);
 

@@ -3,12 +3,15 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { ReviewWorkspaceHostExtensions } from "../../common/reviewWorkspaceLanguageActivation.js";
 import { DeferredPromise, raceTimeout, TimeoutTimer } from "../../../base/common/async.js";
 import { toErrorMessage } from "../../../base/common/errorMessage.js";
 import { CancellationError } from "../../../base/common/errors.js";
 import { Disposable, type IDisposable } from "../../../base/common/lifecycle.js";
 import * as platform from "../../../base/common/platform.js";
 import type { Mutable } from "../../../base/common/types.js";
+import { hash } from "../../../base/common/hash.js";
+import { isEqualOrParent } from "../../../base/common/resources.js";
 import { URI } from "../../../base/common/uri.js";
 import type { ILanguageFeaturesService } from "../../../editor/common/services/languageFeatures.js";
 import { LanguageFeaturesService } from "../../../editor/common/services/languageFeaturesService.js";
@@ -36,7 +39,6 @@ import { ExtensionHostManager } from "../../../workbench/services/extensions/com
 import { RemoteRunningLocation } from "../../../workbench/services/extensions/common/extensionRunningLocation.js";
 import {
 	ActivationKind,
-	ExtensionHostExtensions,
 	type IInternalExtensionService,
 } from "../../../workbench/services/extensions/common/extensions.js";
 import { RemoteExtensionHost } from "../../../workbench/services/extensions/common/remoteExtensionHost.js";
@@ -48,6 +50,7 @@ import { ownsRemoteResource } from "./reviewRemoteAuthority.js";
 import { ReviewRemoteWorkspace, reviewRemoteResolver, reviewRemoteScope } from "./reviewRemoteScope.js";
 
 export interface IReviewRemoteHost {
+	readonly closed?: boolean;
 	readonly authority: string;
 	readonly languageFeatures: ILanguageFeaturesService;
 	addRoot(root: URI): Promise<IDisposable>;
@@ -87,10 +90,17 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 		private readonly open: (host: ReviewRemoteHost) => Promise<IReviewRemoteSession | undefined>,
 		private readonly endpoint: () => Promise<string | undefined>,
 		private readonly logService: ILogService,
+		readonly snapshotRoot?: URI,
+		private readonly onClosed?: () => void,
 	) {
 		super();
-		this.workspace = this._register(new ReviewRemoteWorkspace(`whiteboard-remote-${serverId}`));
+		this.workspace = this._register(new ReviewRemoteWorkspace(`whiteboard-remote-${serverId}${snapshotRoot ? `-${hash(snapshotRoot.toString()).toString(16)}` : ""}`));
+		if (snapshotRoot) this.idle = setTimeout(() => void this.close(), 30_000);
 	}
+
+	get closed(): boolean { return this._store.isDisposed; }
+	private rootUsers = 0;
+	private idle?: ReturnType<typeof setTimeout>;
 
 	connect(): Promise<boolean> {
 		if (this.session) return Promise.resolve(true);
@@ -157,7 +167,17 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 
 	async addRoot(root: URI): Promise<IDisposable> {
 		if (!ownsRemoteResource(this.authority, root)) throw new Error("That root is not on this remote host.");
-		return this.workspace.add(root);
+		if (this.snapshotRoot && root.toString() !== this.snapshotRoot.toString()) throw new Error("A snapshot host cannot add another checkout.");
+		clearTimeout(this.idle);
+		this.rootUsers++;
+		const reference = this.workspace.add(root);
+		let released = false;
+		return { dispose: () => {
+			if (released) return;
+			released = true;
+			reference.dispose();
+			if (--this.rootUsers === 0 && this.snapshotRoot) this.idle = setTimeout(() => void this.close(), 30_000);
+		} };
 	}
 
 	async activateByEvent(event: string): Promise<void> {
@@ -179,6 +199,8 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	}
 
 	override dispose(): void {
+		clearTimeout(this.idle);
+		this.onClosed?.();
 		this.session?.dispose();
 		this.session = undefined;
 		super.dispose();
@@ -276,6 +298,8 @@ export class ReviewRemoteSession extends Disposable implements IReviewRemoteSess
 			activate: (event) => this.activateByEvent(event),
 			languageFeatures: this.host.languageFeatures,
 			workspace: this.host.workspace,
+			storageId: this.host.workspace.getWorkspace().id,
+			owns: resource => ownsRemoteResource(authority, resource) && (!this.host.snapshotRoot || isEqualOrParent(resource, this.host.snapshotRoot)),
 			resolver: reviewRemoteResolver(this.resolverService, authority, () => this.address()),
 		}, window))));
 		const extensionHost = scope.createInstance(ReviewRemoteExtensionHost, new RemoteRunningLocation(), {
@@ -286,8 +310,8 @@ export class ReviewRemoteSession extends Disposable implements IReviewRemoteSess
 				appRoot: environment.appRoot,
 				extensionHostLogsPath: environment.extensionHostLogsPath,
 				globalStorageHome: environment.globalStorageHome,
-				workspaceStorageHome: environment.workspaceStorageHome,
-				extensions: new ExtensionHostExtensions(1, extensions, extensions.filter((extension) => extension.main).map((extension) => extension.identifier)),
+				workspaceStorageHome: this.host.snapshotRoot ? URI.joinPath(environment.workspaceStorageHome, this.host.workspace.getWorkspace().id) : environment.workspaceStorageHome,
+				extensions: new ReviewWorkspaceHostExtensions(1, extensions, extensions.filter((extension) => extension.main).map((extension) => extension.identifier)),
 			}),
 		});
 		const manager = (this.manager = this._register(scope.createInstance(ExtensionHostManager, extensionHost, [], this.internalExtensionService())));

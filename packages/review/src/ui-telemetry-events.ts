@@ -93,6 +93,7 @@ export const LSP_LANGUAGE = [
   "rust",
   "swift",
   "csharp",
+  "kotlin",
   "json",
   "css",
   "html",
@@ -104,7 +105,14 @@ export const LSP_LANGUAGE = [
   "other",
 ] as const;
 
-export const LS_GROUP = ["python", "go", "rust", "swift", "csharp"] as const;
+export const LS_GROUP = [
+  "python",
+  "go",
+  "rust",
+  "swift",
+  "csharp",
+  "kotlin",
+] as const;
 
 export const EXTENSION_ID = [
   "vscodevim.vim",
@@ -114,6 +122,7 @@ export const EXTENSION_ID = [
   "astral-sh.ty",
   "charliermarsh.ruff",
   "golang.go",
+  "fwcd.kotlin",
   "rust-lang.rust-analyzer",
   "swiftlang.swift-vscode",
   "llvm-vs-code-extensions.lldb-dap",

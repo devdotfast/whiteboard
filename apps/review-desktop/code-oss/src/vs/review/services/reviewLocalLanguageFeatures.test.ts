@@ -75,7 +75,7 @@ function codeEditors() {
 	};
 }
 
-function setup(input: ReturnType<typeof model> | ReturnType<typeof model>[]) {
+function setup(input: ReturnType<typeof model> | ReturnType<typeof model>[], snapshotHosts = {} as any) {
 	const sourceModels = Array.isArray(input) ? input : [input];
 	const added = event<any>();
 	const modelService = { getModels: () => sourceModels, onModelAdded: added.event, createModelReference: async () => { throw new Error("unexpected model reference"); } };
@@ -85,6 +85,9 @@ function setup(input: ReturnType<typeof model> | ReturnType<typeof model>[]) {
 	}])) as any;
 	const local = {
 		uri: URI.file("/project/src/file.ts"),
+		getLanguageId: () => "typescript",
+		isTooLargeForSyncing: () => false,
+		onDidChangeContent: () => Disposable.None,
 		isDisposed: () => false,
 		getVersionId: () => 1,
 		getTextBuffer: () => "same pinned source",
@@ -97,8 +100,7 @@ function setup(input: ReturnType<typeof model> | ReturnType<typeof model>[]) {
 		{ createModelReference: async (uri: URI) => ({ object: { textEditorModel: { ...local, uri } }, dispose() { } }) } as any,
 		modelService as any,
 		languages,
-		{ activateByEvent: async () => undefined } as any,
-		{} as any,
+		snapshotHosts,
 		{ files: { models: [], resolve: async () => undefined } } as any,
 		{ onDidFilesChange: () => Disposable.None, exists: async () => true } as any,
 		{ debug() { } } as any,
@@ -249,7 +251,6 @@ function remoteSetup(connect?: () => Promise<unknown>) {
 		{ createModelReference: async (uri: URI) => ({ object: { textEditorModel: textModel(uri) }, dispose() { } }) } as any,
 		{ getModels: () => [], onModelAdded: () => Disposable.None } as any,
 		window,
-		{ activateByEvent: async (event: string) => { windowActivations.push(event); } } as any,
 		{ addFolders: async () => { throw new Error("a remote root never enters the window's workspace"); } } as any,
 		{ files: { models: [], resolve: async () => undefined } } as any,
 		{ onDidFilesChange: () => Disposable.None, exists: async () => true } as any,
@@ -345,4 +346,33 @@ test("a remote review's in-repository definition opens its host's file at the ra
 	assert.equal(await laptop.opening.open({ resource: target, options: { selection } }), null);
 	assert.deepEqual(laptop.opening.sourceWindows, [target.toString()]);
 	assert.deepEqual(laptop.opening.opened, []);
+});
+
+test("base and head hover use separate snapshot clients even when both contain the same symbol", async t => {
+	const base = model();
+	const head = model();
+	base.uri = base.uri.with({ query: "side=base" });
+	head.uri = head.uri.with({ query: "side=head" });
+	const asked: string[] = [];
+	const released: string[] = [];
+	const snapshotHosts = {
+		acquire: async (root: URI) => {
+			const side = root.path.split("/").pop()!;
+			asked.push(side);
+			const features = new LanguageFeaturesService();
+			features.hoverProvider.register({ language: "typescript" }, { provideHover: () => ({ range: new Range(1, 1, 1, 5), contents: [{ value: side === "base" ? "value(): string" : "value(): number" }] }) });
+			return {
+				object: { authority: "", languageFeatures: features, activateByEvent: async () => {}, addRoot: async (candidate: URI) => { assert.equal(candidate.toString(), root.toString()); return Disposable.None; } },
+				dispose: () => released.push(side),
+			};
+		},
+	};
+	const result = setup([base, head], snapshotHosts);
+	t.after(() => result.service.dispose());
+	const internal = result.service as any;
+	internal.environment = async (review: typeof base) => ({ rootPath: `/snapshots/${new URLSearchParams(review.uri.query).get("side")}`, identity: review.uri.query });
+	const hovers = await Promise.all([base, head].map(review => internal.hover(review, new Position(1, 2), CancellationToken.None)));
+	assert.deepEqual(hovers.map(hover => hover.contents[0].value), ["value(): string", "value(): number"]);
+	assert.deepEqual(asked.sort(), ["base", "head"]);
+	assert.deepEqual(released.sort(), ["base", "head"], "detached review readers release their snapshot hosts");
 });

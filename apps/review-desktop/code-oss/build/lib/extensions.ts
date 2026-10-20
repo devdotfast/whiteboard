@@ -323,6 +323,7 @@ const excludedExtensions = [
 	'astral-sh.ty',
 	'charliermarsh.ruff',
 	'golang.go',
+	'fwcd.kotlin',
 ];
 
 const marketplaceWebExtensionsExclude = new Set([

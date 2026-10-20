@@ -1,0 +1,18 @@
+{
+  "registrations": [
+    {
+      "component": {
+        "type": "git",
+        "git": {
+          "name": "vscode-kotlin",
+          "repositoryUrl": "https://github.com/fwcd/vscode-kotlin",
+          "commitHash": "99e5ab9fc9ea7d951c0c693eb93d19a3ac3577ca"
+        }
+      },
+      "license": "MIT",
+      "description": "Kotlin TextMate grammar and language configuration.",
+      "version": "0.2.36"
+    }
+  ],
+  "version": 1
+}

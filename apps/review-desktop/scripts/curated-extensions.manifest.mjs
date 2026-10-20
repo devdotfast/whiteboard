@@ -328,6 +328,27 @@ export const curatedExtensions = Object.freeze([
     stripExtensionPack: false,
   },
   {
+    // Downloads its server on first use and uses the installed Java runtime.
+    id: "fwcd.kotlin",
+    tier: "optional",
+    role: "primary",
+    namespace: "fwcd",
+    name: "kotlin",
+    version: "0.2.36",
+    group: "kotlin",
+    label: "Kotlin language server",
+    targets: {
+      universal: {
+        url: "https://open-vsx.org/api/fwcd/kotlin/0.2.36/file/fwcd.kotlin-0.2.36.vsix",
+        sha256:
+          "79be50d4de08f29e0fabe30e9ee094eb86ce5eeae28bdd02bcc6dc6593453a2d",
+        size: 1062899,
+      },
+    },
+    executables: [],
+    stripExtensionPack: false,
+  },
+  {
     // Ships no server: on activation it runs `go install` for gopls and vscgo
     // against the reader's own Go toolchain, with no prompt and no setting that
     // stops it. There are no official gopls prebuilts to bundle, so the group is
@@ -370,6 +391,7 @@ export const remoteExtensionIds = Object.freeze([
   "astral-sh.ty",
   "charliermarsh.ruff",
   "golang.go",
+  "fwcd.kotlin",
   "rust-lang.rust-analyzer",
   "swiftlang.swift-vscode",
   "llvm-vs-code-extensions.lldb-dap",
@@ -384,6 +406,7 @@ export const curatedGroups = Object.freeze([
   "csharp",
   "python",
   "go",
+  "kotlin",
   "vim",
   "emacs",
   "sublime",

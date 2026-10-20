@@ -652,7 +652,7 @@ export abstract class AbstractExtHostExtensionService extends Disposable impleme
 		setTimeout0(() => {
 			for (let i = start; i < extensions.length; i += 1) {
 				const desc = extensions[i];
-				for (const activationEvent of (desc.activationEvents ?? [])) {
+				for (const activationEvent of this._activationEventsReader.readActivationEvents(desc)) {
 					if (activationEvent === 'onStartupFinished') {
 						if (Date.now() - startTime > timeBudget) {
 							// time budget for current task has been exceeded
@@ -679,11 +679,9 @@ export abstract class AbstractExtHostExtensionService extends Disposable impleme
 				this._activateAllStartupFinishedDeferred(allExtensionDescriptions);
 			} else {
 				for (const desc of allExtensionDescriptions) {
-					if (desc.activationEvents) {
-						for (const activationEvent of desc.activationEvents) {
-							if (activationEvent === 'onStartupFinished') {
-								this._activateOneStartupFinished(desc, activationEvent);
-							}
+					for (const activationEvent of this._activationEventsReader.readActivationEvents(desc)) {
+						if (activationEvent === 'onStartupFinished') {
+							this._activateOneStartupFinished(desc, activationEvent);
 						}
 					}
 				}
@@ -736,7 +734,7 @@ export abstract class AbstractExtHostExtensionService extends Disposable impleme
 			checkExists: (folders, includes, token) => this._mainThreadWorkspaceProxy.$checkExists(folders, includes, token)
 		};
 
-		const result = await checkActivateWorkspaceContainsExtension(host, desc);
+		const result = await checkActivateWorkspaceContainsExtension(host, { ...desc, activationEvents: this._activationEventsReader.readActivationEvents(desc) });
 		if (!result) {
 			return;
 		}

@@ -10,6 +10,7 @@ import { IExtHostContext, extHostNamedCustomer } from '../../services/extensions
 import { IExtensionService } from '../../services/extensions/common/extensions.js';
 import { Dto, SerializableObjectWithBuffers } from '../../services/extensions/common/proxyIdentifier.js';
 import { ExtHostCommandsShape, ExtHostContext, MainContext, MainThreadCommandsShape } from '../common/extHost.protocol.js';
+import { IExtensionHostCommands } from '../../services/extensions/common/extensionHostCommands.js';
 import { isString } from '../../../base/common/types.js';
 
 
@@ -24,6 +25,7 @@ export class MainThreadCommands implements MainThreadCommandsShape {
 		extHostContext: IExtHostContext,
 		@ICommandService private readonly _commandService: ICommandService,
 		@IExtensionService private readonly _extensionService: IExtensionService,
+		@IExtensionHostCommands private readonly _hostCommands: IExtensionHostCommands,
 	) {
 		this._proxy = extHostContext.getProxy(ExtHostContext.ExtHostCommands);
 
@@ -57,11 +59,7 @@ export class MainThreadCommands implements MainThreadCommandsShape {
 	$registerCommand(id: string): void {
 		this._commandRegistrations.set(
 			id,
-			CommandsRegistry.registerCommand(id, (accessor, ...args) => {
-				return this._proxy.$executeContributedCommand(id, ...args).then(result => {
-					return revive(result);
-				});
-			})
+			this._hostCommands.register(id, async (...args) => revive(await this._proxy.$executeContributedCommand(id, ...args)))
 		);
 	}
 
@@ -85,7 +83,7 @@ export class MainThreadCommands implements MainThreadCommandsShape {
 		for (let i = 0; i < args.length; i++) {
 			args[i] = revive(args[i]);
 		}
-		if (retry && args.length > 0 && !CommandsRegistry.getCommand(id)) {
+		if (retry && args.length > 0 && !CommandsRegistry.getCommand(id) && !this._hostCommands.commands.has(id)) {
 			await this._extensionService.activateByEvent(`onCommand:${id}`);
 			throw new Error('$executeCommand:retry');
 		}
@@ -93,7 +91,7 @@ export class MainThreadCommands implements MainThreadCommandsShape {
 	}
 
 	$getCommands(): Promise<string[]> {
-		return Promise.resolve([...CommandsRegistry.getCommands().keys()]);
+		return Promise.resolve([...new Set([...CommandsRegistry.getCommands().keys(), ...this._hostCommands.commands.keys()])]);
 	}
 }
 

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { createRequire, registerHooks } from "node:module";
 import test from "node:test";
 import { Emitter, Event } from "../../../base/common/event.js";
+import { isEqualOrParent } from "../../../base/common/resources.js";
+import { IExtensionHostCommands } from "../../../workbench/services/extensions/common/extensionHostCommands.js";
 import { URI } from "../../../base/common/uri.js";
 import { Range } from "../../../editor/common/core/range.js";
 import { SymbolKind, type DocumentSymbol, type Hover } from "../../../editor/common/languages.js";
@@ -211,4 +213,43 @@ test("a host's vscode.executeHoverProvider and executeDocumentSymbolProvider run
 	assert.deepEqual(symbols?.map((item) => item.name), ["fromHostA"]);
 	assert.deepEqual(workspaceSymbols?.map((item) => item.location.uri.toString()), [onA.toString()]);
 	assert.deepEqual(activated, ["_executeHoverProvider", "_executeDocumentSymbolProvider", "_executeWorkspaceSymbolProvider"].map((id) => `host onCommand:${id}`));
+	const other = parent.createChild(parent.invokeFunction(accessor => reviewRemoteScope({
+		authority: B, extensions: [], activate: async () => {}, languageFeatures: new LanguageFeaturesService(),
+		workspace: new ReviewRemoteWorkspace("other"), resolver: {} as IRemoteAuthorityResolverService,
+	}, accessor)));
+	const firstCommand = scope.invokeFunction(accessor => accessor.get(IExtensionHostCommands)).register("kotlin.restart", async () => "base");
+	const secondCommand = other.invokeFunction(accessor => accessor.get(IExtensionHostCommands)).register("kotlin.restart", async () => "head");
+	assert.equal(await commands.executeCommand("kotlin.restart"), "base");
+	assert.equal(await other.invokeFunction(accessor => accessor.get(ICommandService)).executeCommand("kotlin.restart"), "head");
+	secondCommand.dispose();
+	assert.equal(await commands.executeCommand("kotlin.restart"), "base", "closing another host cannot unregister this host's command");
+	firstCommand.dispose();
+	other.dispose();
+	scope.dispose();
+	parent.dispose();
+});
+
+test("snapshots on the same machine isolate model events and diagnostic clearing by checkout", () => {
+	const roots = [URI.file("/saved/base"), URI.file("/saved/head")];
+	const models = roots.map(root => ({ uri: URI.joinPath(root, "file.kt") }));
+	const added = new Emitter<{ uri: URI }>();
+	const base = { getModels: () => models, onModelAdded: added.event, onModelRemoved: Event.None, onModelLanguageChanged: Event.None } as unknown as IModelService;
+	const markers = new MarkerService();
+	const scopes = roots.map((root, index) => ({
+		models: reviewRemoteModelService(base, "", uri => isEqualOrParent(uri, root)),
+		markers: reviewRemoteMarkerService(markers, `snapshot-${index}`, uri => isEqualOrParent(uri, root)),
+	}));
+	const seen: string[] = [];
+	const listener = scopes[0].models.onModelAdded(model => seen.push(model.uri.toString()));
+	for (const model of models) added.fire(model);
+	assert.deepEqual(seen, [models[0].uri.toString()]);
+	for (const [index, scope] of scopes.entries()) {
+		assert.deepEqual(scope.models.getModels(), [models[index]]);
+		scope.markers.changeAll("kotlin", [{ resource: models[index].uri, marker: { message: `snapshot ${index}`, severity: MarkerSeverity.Error, startLineNumber: 1, startColumn: 1, endLineNumber: 1, endColumn: 2 } }]);
+	}
+	scopes[0].markers.changeAll("kotlin", []);
+	assert.deepEqual(markers.read().map(marker => marker.message), ["snapshot 1"]);
+	listener.dispose();
+	added.dispose();
+	markers.dispose();
 });

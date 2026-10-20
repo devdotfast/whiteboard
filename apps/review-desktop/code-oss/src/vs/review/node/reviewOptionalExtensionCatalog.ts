@@ -8,6 +8,19 @@
 
 export const reviewOptionalExtensionCatalog = [
 	{
+		id: 'fwcd.kotlin',
+		role: 'primary',
+		group: 'kotlin',
+		version: '0.2.36',
+		targets: {
+			universal: {
+				url: 'https://open-vsx.org/api/fwcd/kotlin/0.2.36/file/fwcd.kotlin-0.2.36.vsix',
+				sha256: '79be50d4de08f29e0fabe30e9ee094eb86ce5eeae28bdd02bcc6dc6593453a2d',
+				size: 1062899
+			}
+		}
+	},
+	{
 		id: 'rust-lang.rust-analyzer',
 		role: 'primary',
 		group: 'rust',

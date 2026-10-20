@@ -1,0 +1,3 @@
+#!/bin/sh
+# The fixture uses only Kotlin's built-in types, with no Gradle downloads.
+exit 0

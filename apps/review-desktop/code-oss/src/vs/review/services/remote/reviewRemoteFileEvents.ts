@@ -9,8 +9,7 @@ import { FileChangesEvent, FileChangeType, type IFileService } from "../../../pl
 import { override, ownsRemoteResource } from "./reviewRemoteAuthority.js";
 
 /** Only this host's file events: upstream's URI transformer drops the authority, so another host's change to the same path would look like its own. */
-export function reviewRemoteFileEvents(base: IFileService, authority: string): IFileService {
-	const mine = (resource: URI) => ownsRemoteResource(authority, resource);
+export function reviewRemoteFileEvents(base: IFileService, authority: string, mine = (resource: URI) => ownsRemoteResource(authority, resource)): IFileService {
 	return override(base, {
 		onDidFilesChange: Event.filter(Event.map(base.onDidFilesChange, (e) => new FileChangesEvent([
 			...e.rawAdded.filter(mine).map((resource) => ({ resource, type: FileChangeType.ADDED })),

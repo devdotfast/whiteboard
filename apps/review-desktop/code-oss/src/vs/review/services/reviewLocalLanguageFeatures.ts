@@ -17,9 +17,7 @@ import { IFileService } from "../../platform/files/common/files.js";
 import { ILogService } from "../../platform/log/common/log.js";
 import { registerWorkbenchContribution2, WorkbenchPhase } from "../../workbench/common/contributions.js";
 import { ACTIVE_GROUP, IEditorService, SIDE_GROUP } from "../../workbench/services/editor/common/editorService.js";
-import { IExtensionService } from "../../workbench/services/extensions/common/extensions.js";
 import { ITextFileService } from "../../workbench/services/textfile/common/textfiles.js";
-import { IWorkspaceEditingService } from "../../workbench/services/workspaces/common/workspaceEditing.js";
 import { reviewSourceQuery, type ReviewLanguageEnvironment, type ReviewRemoteLanguageEnvironment } from "../common/reviewProtocol.js";
 import { sourceLocation } from "../common/reviewSourceView.js";
 import { reviewWorkspaceLanguageEvent } from "../common/reviewWorkspaceLanguageActivation.js";
@@ -27,7 +25,8 @@ import { REVIEW_LANGUAGE_SOURCE_SCHEME } from "../common/reviewReadonlySource.js
 import { REVIEW_API_SOURCE_SCHEME } from "./reviewApiSourceService.js";
 import { IReviewDesktopConnectionService } from "./reviewDesktopConnectionService.js";
 import { withCurrentLocalContext } from "./reviewLocalRequest.js";
-import { acquireReviewLanguageRoot, reviewLanguageRoot } from "./reviewLocalWorkspace.js";
+import { reviewLanguageRoot } from "./reviewLocalWorkspace.js";
+import { IReviewSnapshotLanguageHosts } from "./reviewLanguageHosts.js";
 import { ReviewLanguageEnvironmentRequests } from "./reviewLanguageEnvironmentRequests.js";
 import { watchAttachedReviewModels, withRetainedSource } from "./reviewSourceModelLifecycle.js";
 import { ownsRemoteResource } from "./remote/reviewRemoteAuthority.js";
@@ -42,7 +41,7 @@ const RELEASE_DELAY_MS = 15_000;
 interface LocalSource {
 	identity: string;
 	root: URI;
-	remote?: IReviewRemoteHost;
+	host?: IReviewRemoteHost;
 	reference: IReference<IResolvedTextEditorModel>;
 	retain(): IDisposable | undefined;
 	dispose(): void;
@@ -64,8 +63,7 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 		@ITextModelService private readonly models: ITextModelService,
 		@IModelService modelService: IModelService,
 		@ILanguageFeaturesService private readonly languages: ILanguageFeaturesService,
-		@IExtensionService private readonly extensions: IExtensionService,
-		@IWorkspaceEditingService private readonly workspace: IWorkspaceEditingService,
+		@IReviewSnapshotLanguageHosts private readonly snapshotHosts: IReviewSnapshotLanguageHosts,
 		@ITextFileService private readonly textFiles: ITextFileService,
 		@IFileService private readonly files: IFileService,
 		@ILogService private readonly log: ILogService,
@@ -160,7 +158,10 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 			if (target?.serverId !== undefined) this.remoteRoots.set(side, target.root);
 			else if (context) this.remoteRoots.delete(side);
 			const cached = this.sources.get(model);
-			if (cached && cached.identity === context?.identity && cached.root === target?.root.toString()) return cached.pending;
+			if (cached && cached.identity === context?.identity && cached.root === target?.root.toString()) {
+				const source = await cached.pending;
+				if (!source?.host?.closed) return source;
+			}
 			if (cached) {
 				this.uncertainRoots.add(cached.root);
 				void cached.pending.then(source => source?.dispose());
@@ -191,12 +192,13 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 		if (!relative || relative.split(/[\\/]/).some(part => part === "..")) return undefined;
 		if (serverId !== undefined && model.uri.scheme === REVIEW_LANGUAGE_SOURCE_SCHEME) return undefined;
 		const resource = model.uri.scheme === REVIEW_LANGUAGE_SOURCE_SCHEME ? URI.file(model.uri.path) : URI.joinPath(root, relative);
-		const host = serverId === undefined ? undefined : await raceTimeout(this.remoteHosts.host(serverId), REMOTE_ANSWER_MS);
+		const host = serverId === undefined ? undefined : await raceTimeout(this.remoteHosts.host(serverId, root), REMOTE_ANSWER_MS);
 		if (serverId !== undefined && !host) return undefined;
 		if (!await this.files.exists(resource) || model.isDisposed()) return undefined;
 		const owned = new DisposableStore();
 		try {
-			owned.add(host ? await host.addRoot(root) : await acquireReviewLanguageRoot(this.workspace, root));
+			const languageHost = host ?? owned.add(await this.snapshotHosts.acquire(root)).object;
+			owned.add(await languageHost.addRoot(root));
 			this.roots.set(root.toString(), (this.roots.get(root.toString()) ?? 0) + 1);
 			owned.add({
 				dispose: () => {
@@ -207,18 +209,16 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 			});
 			const reference = owned.add(await this.models.createModelReference(resource));
 			owned.add(reference.object.textEditorModel.onDidChangeContent(() => this.generation++));
-		if (model.isDisposed()) { owned.dispose(); return undefined; }
+			if (model.isDisposed()) { owned.dispose(); return undefined; }
 			const languageId = reference.object.textEditorModel.getLanguageId();
 			const events = [`onLanguage:${languageId}`, reviewWorkspaceLanguageEvent(languageId)];
-			if (host) await raceTimeout((async () => { for (const event of events) await host.activateByEvent(event); })(), REMOTE_ANSWER_MS);
-			// Folder changes reach the extension host before this activation request.
-			else for (const event of events) await this.extensions.activateByEvent(event);
+			await raceTimeout((async () => { for (const event of events) await languageHost.activateByEvent(event); })(), serverId === undefined ? 30_000 : REMOTE_ANSWER_MS);
 			if (model.isDisposed()) { owned.dispose(); return undefined; }
 			const lifetime = new RefCountedDisposable(owned);
 			const owner = toDisposable(() => lifetime.release());
 			return {
 				root, reference, identity,
-				remote: host,
+				host: languageHost,
 				retain: () => {
 					if (owned.isDisposed) return undefined;
 					lifetime.acquire();
@@ -286,7 +286,7 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 	}
 
 	private registry(source: LocalSource | undefined): ILanguageFeaturesService {
-		return source?.remote?.languageFeatures ?? this.languages;
+		return source?.host?.languageFeatures ?? this.languages;
 	}
 
 	private hover(model: ITextModel, position: Position, token: CancellationToken): Promise<Hover | undefined> {
@@ -325,7 +325,7 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 		const mapped = new Map<T, T>();
 		await Promise.all([...groups.values()].map(async group => {
 			const target = group[0].uri;
-			const remote = source.remote;
+			const remote = source.host?.authority ? source.host : undefined;
 			if (remote ? !ownsRemoteResource(remote.authority, target) : target.scheme !== "file") return;
 			const inside = (remote || target.authority === source.root.authority) && target.path.startsWith(prefix);
 			const onHost = () => { for (const location of group) mapped.set(location, location); };

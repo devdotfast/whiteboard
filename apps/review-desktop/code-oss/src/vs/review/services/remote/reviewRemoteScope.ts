@@ -32,26 +32,27 @@ import {
 import type { IWorkspaceSymbol } from "../../../workbench/contrib/search/common/search.js";
 import { CommandService } from "../../../workbench/services/commands/common/commandService.js";
 import { IExtensionService } from "../../../workbench/services/extensions/common/extensions.js";
+import { ExtensionHostCommands, IExtensionHostCommands } from "../../../workbench/services/extensions/common/extensionHostCommands.js";
 import { ISearchService } from "../../../workbench/services/search/common/search.js";
 import { SearchService } from "../../../workbench/services/search/common/searchService.js";
 import { override, ownsRemoteResource } from "./reviewRemoteAuthority.js";
 import { reviewRemoteExtensionService } from "./reviewRemoteExtensionService.js";
 import { reviewRemoteFileEvents } from "./reviewRemoteFileEvents.js";
 
-export function reviewRemoteModelService(base: IModelService, authority: string): IModelService {
-	const mine = (model: ITextModel) => ownsRemoteResource(authority, model.uri);
+export function reviewRemoteModelService(base: IModelService, authority: string, owns = (uri: URI) => ownsRemoteResource(authority, uri)): IModelService {
+	const mine = (model: ITextModel) => owns(model.uri);
 	return override(base, {
 		getModels: () => base.getModels().filter(mine),
-		getModel: (resource: URI) => (ownsRemoteResource(authority, resource) ? base.getModel(resource) : null),
+		getModel: (resource: URI) => (owns(resource) ? base.getModel(resource) : null),
 		onModelAdded: Event.filter(base.onModelAdded, mine),
 		onModelRemoved: Event.filter(base.onModelRemoved, mine),
 		onModelLanguageChanged: Event.filter(base.onModelLanguageChanged, (event) => mine(event.model)),
 	});
 }
 
-export function reviewRemoteMarkerService(base: IMarkerService, authority: string): IMarkerService {
+export function reviewRemoteMarkerService(base: IMarkerService, authority: string, owns = (uri: URI) => ownsRemoteResource(authority, uri)): IMarkerService {
 	const owner = (name: string) => `${authority}/${name}`;
-	const mine = (resource: URI) => ownsRemoteResource(authority, resource);
+	const mine = owns;
 	return override(base, {
 		changeOne: (name, resource, markers) => {
 			if (mine(resource)) base.changeOne(owner(name), resource, markers);
@@ -97,18 +98,20 @@ export function reviewRemoteResolver(
 /** Every host registers into the one workspace-symbol registry, so a host keeps only its own files' symbols. */
 class ReviewRemoteCommandService extends CommandService {
 	constructor(
-		private readonly authority: string,
+		private readonly owns: (uri: URI) => boolean,
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IExtensionService extensionService: IExtensionService,
 		@ILogService logService: ILogService,
+		@IExtensionHostCommands private readonly hostCommands: IExtensionHostCommands,
 	) {
 		super(instantiationService, extensionService, logService);
 	}
 
 	override async executeCommand<T>(id: string, ...args: unknown[]): Promise<T> {
-		const result = await super.executeCommand<T>(id, ...args);
+		const handler = this.hostCommands.commands.get(id);
+		const result = handler ? await handler(...args) as T : await super.executeCommand<T>(id, ...args);
 		if (id !== "_executeWorkspaceSymbolProvider") return result;
-		return (result as IWorkspaceSymbol[]).filter((symbol) => ownsRemoteResource(this.authority, symbol.location.uri)) as T;
+		return (result as IWorkspaceSymbol[]).filter((symbol) => this.owns(symbol.location.uri)) as T;
 	}
 }
 
@@ -201,20 +204,24 @@ export function reviewRemoteScope(input: {
 	languageFeatures: ILanguageFeaturesService;
 	workspace: ReviewRemoteWorkspace;
 	resolver: IRemoteAuthorityResolverService;
+	owns?: (uri: URI) => boolean;
+	storageId?: string;
 }, window: ServicesAccessor): ServiceCollection {
 	const { authority } = input;
+	const owns = input.owns ?? ((uri: URI) => ownsRemoteResource(authority, uri));
 	return new ServiceCollection(
 		[ILanguageFeaturesService, input.languageFeatures],
-		[IModelService, reviewRemoteModelService(window.get(IModelService), authority)],
+		[IExtensionHostCommands, new ExtensionHostCommands()],
+		[IModelService, reviewRemoteModelService(window.get(IModelService), authority, owns)],
 		[IWorkspaceContextService, input.workspace],
-		[IMarkerService, reviewRemoteMarkerService(window.get(IMarkerService), authority)],
-		[IExtensionStorageService, reviewRemoteExtensionStorage(window.get(IExtensionStorageService), authority)],
+		[IMarkerService, reviewRemoteMarkerService(window.get(IMarkerService), input.storageId ?? authority, owns)],
+		[IExtensionStorageService, reviewRemoteExtensionStorage(window.get(IExtensionStorageService), input.storageId ?? authority)],
 		[ISearchService, new SyncDescriptor(SearchService)],
 		[IRemoteAuthorityResolverService, input.resolver],
 		[IExtensionService, reviewRemoteExtensionService(window.get(IExtensionService), input.extensions, input.activate)],
 		// So a host's `vscode.execute*Provider` calls use this scope's registry and models.
-		[ICommandService, new SyncDescriptor(ReviewRemoteCommandService, [authority])],
+		[ICommandService, new SyncDescriptor(ReviewRemoteCommandService, [owns])],
 		[IOutlineModelService, new SyncDescriptor(OutlineModelService)],
-		[IFileService, reviewRemoteFileEvents(window.get(IFileService), authority)],
+		[IFileService, reviewRemoteFileEvents(window.get(IFileService), authority, owns)],
 	);
 }

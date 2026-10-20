@@ -40,6 +40,7 @@ const LANGUAGE_MAP: Record<string, string> = {
 	rust: 'rust',
 	swift: 'swift',
 	csharp: 'csharp',
+	kotlin: 'kotlin',
 	json: 'json',
 	jsonc: 'json',
 	css: 'css',
@@ -89,6 +90,7 @@ const LS_EXTENSIONS: Record<string, string> = {
 	rust: 'rust-lang.rust-analyzer',
 	swift: 'swiftlang.swift-vscode',
 	csharp: 'muhammad-sammy.csharp',
+	kotlin: 'fwcd.kotlin',
 };
 
 class ReviewLspTelemetryContribution extends Disposable implements IWorkbenchContribution {

@@ -1,4 +1,4 @@
-/** One reader path, four languages: a code peek, an LSP hover and Go to Definition; the table below is the whole difference. */
+/** One reader path across languages: a code peek, an LSP hover and Go to Definition. */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { accessSync, constants } from "node:fs";
@@ -61,6 +61,19 @@ async function hideToolFromPath(ctx, hide, keep) {
 }
 
 export const LANGUAGES = {
+  kotlin: {
+    extensions: "none",
+    peekFile: "orders.kt",
+    symbol: "saveOrder",
+    definitionFile: "storage.kt",
+    hoverText: /fun saveOrder\(order: OrderRecord\): OrderRecord/,
+    needsToolchain: "java",
+    toolchainVersionArgs: ["-version"],
+    hoverTimeout: 300000,
+    activationPrompt: "The Kotlin extension will automatically download",
+    checksReferences: true,
+    optionalExtension: { label: "Kotlin", extensionId: "fwcd.kotlin" },
+  },
   typescript: {
     extensions: "none",
     peekFile: "orders.ts",
@@ -157,10 +170,10 @@ export function lspOptions(id) {
 }
 
 /** Skips the journey when `tool` is missing or cannot answer under the isolated HOME. */
-async function requireToolchain(ctx, tool) {
+async function requireToolchain(ctx, tool, versionArgs = ["version"]) {
   for (const [command, ...args] of [
     ["which", tool],
-    [tool, "version"],
+    [tool, ...versionArgs],
   ])
     try {
       await exec(command, args, { env: ctx.env, cwd: ctx.repo });
@@ -298,7 +311,11 @@ export async function runLspJourney(ctx, id) {
     throw new Error(`skip: ${id} needs REVIEW_E2E_NETWORK=1`);
 
   if (language.needsToolchain)
-    await requireToolchain(ctx, language.needsToolchain);
+    await requireToolchain(
+      ctx,
+      language.needsToolchain,
+      language.toolchainVersionArgs,
+    );
 
   // Before the review exists: the picker ends in a window reload that would take the open review with it.
   if (language.optionalExtension) {
@@ -394,7 +411,7 @@ export async function runLspJourney(ctx, id) {
 }
 
 /** The reader's half: from the open review to the Source window Go to Definition opens. */
-async function hoverAndJump(
+export async function hoverAndJump(
   ctx,
   id,
   language,
@@ -434,6 +451,16 @@ async function hoverAndJump(
     `the ${language.peekFile} peek`,
     120000,
   );
+
+  if (language.activationPrompt) {
+    const prompt = page
+      .locator(".notification-list-item")
+      .filter({ hasText: language.activationPrompt });
+
+    await prompt
+      .getByRole("button", { name: "Ok, continue", exact: true })
+      .click({ timeout: 60000 });
+  }
 
   // The peek opens the language's first document, so the extension activates only once it is on screen.
   if (language.installsTool) {
@@ -500,6 +527,45 @@ async function hoverAndJump(
     ctx,
     path.basename(language.definitionFile),
   );
+
+  if (language.checksReferences) {
+    // fwcd resolves references from declarations; F12 leaves the cursor there.
+    await source.keyboard.press("Shift+F12");
+
+    const references = source.locator(".reference-zone-widget");
+
+    const call = lines[callLine - 1]
+      .slice(lines[callLine - 1].indexOf(language.symbol))
+      .trim();
+
+    await ctx.until(
+      async () => {
+        const rows = await references
+          .locator(".monaco-list-row")
+          .allTextContents();
+
+        if (rows.some((text) => text.includes(call))) return true;
+
+        // VS Code can jump directly when the declaration has only one reference.
+        const activeFile = await source
+          .locator(".tabs-container .tab.active")
+          .innerText();
+
+        const selection = await source
+          .locator('[id="status.editor.selection"]')
+          .innerText();
+
+        return (
+          activeFile.includes(path.basename(language.peekFile)) &&
+          selection.startsWith(`Ln ${callLine},`)
+        );
+      },
+      `the call in ${language.peekFile} among the declaration's references`,
+      60000,
+    );
+    await source.keyboard.press("Escape");
+    ctx.check(`${id}: references find the call in ${language.peekFile}${pass}`);
+  }
 
   if (id === "typescript") {
     await ctx.watchPage(source);

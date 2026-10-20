@@ -350,7 +350,7 @@ session with `outcome: "app_quit"`, the same as quitting.
 | Event                             | Additional properties                                                                                                                                                                                                                       | When                                        |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
 | `review_lsp_used`                 | `feature` in hover, goto_definition, peek_definition, goto_type_definition, goto_implementation, references, rename, format, code_action, symbol_search; `via` in command, mouse; `language`; `editor_kind` in files_tab, inline_peek, diff | A user invokes an LSP feature               |
-| `review_ls_activated`             | `group` in python, go, rust, swift, csharp; `ok`                                                                                                                                                                                            | A language server activation check ends     |
+| `review_ls_activated`             | `group` in python, go, rust, swift, csharp, kotlin; `ok`                                                                                                                                                                                            | A language server activation check ends     |
 | `review_extension_installed`      | Allowlisted `extension_id`; `trigger` in user, auto_upgrade, startup_seed, keymap, rollback; `cached`; `duration_ms`                                                                                                                        | An optional extension installs              |
 | `review_extension_install_failed` | Allowlisted `extension_id`; allowlisted `trigger`; `phase` in download, install                                                                                                                                                             | An optional extension install fails         |
 | `review_extension_enabled`        | Allowlisted `extension_id`; allowlisted `trigger`                                                                                                                                                                                           | Whiteboard enables an optional extension    |
@@ -358,11 +358,11 @@ session with `outcome: "app_quit"`, the same as quitting.
 | `review_extension_uninstalled`    | Allowlisted `extension_id`; allowlisted `trigger`                                                                                                                                                                                           | Whiteboard uninstalls an optional extension |
 
 The `language` property is one of typescript, javascript, python, go, rust,
-swift, csharp, json, css, html, markdown, yaml, toml, shell, sql, or other.
+swift, csharp, kotlin, json, css, html, markdown, yaml, toml, shell, sql, or other.
 The allowlisted extension identifiers are `vscodevim.vim`,
 `tuttieee.emacs-mcx`, `ms-vscode.sublime-keybindings`, `ms-python.python`,
 `astral-sh.ty`,
-`charliermarsh.ruff`, `golang.go`, `rust-lang.rust-analyzer`,
+`charliermarsh.ruff`, `golang.go`, `fwcd.kotlin`, `rust-lang.rust-analyzer`,
 `swiftlang.swift-vscode`, `llvm-vs-code-extensions.lldb-dap`,
 `muhammad-sammy.csharp`, and `ms-dotnettools.vscode-dotnet-runtime`.
 Whiteboard does not send an extension version.

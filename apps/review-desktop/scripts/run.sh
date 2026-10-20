@@ -58,7 +58,7 @@ mkdir -p "$STATE_ROOT/user-data" "$STATE_ROOT/extensions" "$STATE_ROOT/logs"
 # groups before launch. `all` is the bundled set. Explicit optional groups are
 # available for development launches. Set DEV_REVIEW_EXTENSIONS to all
 # (default), none, or a comma-separated subset of
-# rust,swift,csharp,python,go,vim,emacs. Enablement is a persisted in-app choice.
+# rust,swift,csharp,python,go,kotlin,vim,emacs. Enablement is a persisted in-app choice.
 # `pnpm dev` runs build.sh (which also materializes this selection) right
 # before this script; skip the repeat call when the manifest is unchanged and
 # the selection matches the one already materialized.

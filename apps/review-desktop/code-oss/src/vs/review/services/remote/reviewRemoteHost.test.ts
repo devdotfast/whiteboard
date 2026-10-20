@@ -160,3 +160,27 @@ test("after a server restart, a request connects as soon as main has a new endpo
 	assert.equal(await target.connect(), true);
 	target.dispose();
 });
+
+test("a remote snapshot refuses another checkout and closes only after its final reader is idle", async t => {
+	t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+	const connected = session();
+	const root = URI.parse(`vscode-remote://${AUTHORITY}/saved/base`);
+	const target = new ReviewRemoteHost("aaaa-1111", AUTHORITY, async () => connected.value, async () => undefined, new NullLogService(), root);
+	t.after(() => target.dispose());
+	await target.connect();
+	const first = await target.addRoot(root);
+	const second = await target.addRoot(root);
+	await assert.rejects(target.addRoot(root.with({ path: "/saved/head" })), /another checkout/);
+	first.dispose(); first.dispose();
+	t.mock.timers.tick(30_000);
+	await settle();
+	assert.equal(target.closed, false);
+	second.dispose();
+	t.mock.timers.tick(29_999);
+	await settle();
+	assert.equal(target.closed, false);
+	t.mock.timers.tick(1);
+	await settle();
+	assert.equal(target.closed, true);
+	assert.equal(connected.value.closed, true);
+});

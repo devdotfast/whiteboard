@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import type { URI } from "../../../base/common/uri.js";
 import { hash } from "../../../base/common/hash.js";
 import { Disposable, DisposableMap } from "../../../base/common/lifecycle.js";
 import { Schemas } from "../../../base/common/network.js";
@@ -22,7 +23,7 @@ export const IReviewRemoteHostsService = createDecorator<IReviewRemoteHostsServi
 
 export interface IReviewRemoteHostsService {
 	readonly _serviceBrand: undefined;
-	host(serverId: string): Promise<IReviewRemoteHost | undefined>;
+	host(serverId: string, root?: URI): Promise<IReviewRemoteHost | undefined>;
 }
 
 export function reviewRemoteLabel(serverId: string, alias: string | undefined): string {
@@ -50,13 +51,14 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 			event.join(this.closeAll(), { id: "join.reviewRemoteHosts", label: "Disconnecting remote hosts" })));
 	}
 
-	async host(serverId: string): Promise<IReviewRemoteHost | undefined> {
+	async host(serverId: string, root?: URI): Promise<IReviewRemoteHost | undefined> {
 		const authority = reviewRemoteAuthority(serverId);
 		if (!authority || this.closing) return undefined;
-		let host = this.hosts.get(authority);
-		if (!host) {
-			host = new ReviewRemoteHost(serverId, authority, (target) => this.open(target), () => this.endpoint(serverId), this.logService);
-			this.hosts.set(authority, host);
+		const key = root ? `${authority}|${root.toString()}` : authority;
+		let host = this.hosts.get(key);
+		if (!host || host.closed) {
+			host = new ReviewRemoteHost(serverId, authority, (target) => this.open(target), () => this.endpoint(serverId), this.logService, root, () => { if (this.hosts.get(key) === host) this.hosts.delete(key); });
+			this.hosts.set(key, host);
 		}
 		return (await host.connect()) ? host : undefined;
 	}

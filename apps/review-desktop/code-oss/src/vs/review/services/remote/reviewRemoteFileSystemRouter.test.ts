@@ -94,3 +94,16 @@ test("changes from a host are passed on until that host is removed, and a newer 
 	assert.equal(text(await router.readFile(URI.parse(`vscode-remote://${A}/p`))), "second:/p");
 	router.dispose();
 });
+
+
+test("closing one snapshot's connection leaves another snapshot on the same machine usable", async () => {
+	const router = new ReviewRemoteFileSystemRouter();
+	const first = router.add(A, remote("first").provider, [storage(A)]);
+	const second = router.add(A, remote("second").provider, [storage(A)]);
+	second.dispose();
+	assert.equal(text(await router.readFile(URI.parse(`vscode-remote://${A}/repo/file.kt`))), "first:/repo/file.kt");
+	assert.equal(((await router.stat(URI.joinPath(storage(A), "base/state.json"))).permissions ?? 0) & FilePermission.Readonly, 0);
+	first.dispose();
+	assert.equal(await code(router.stat(URI.parse(`vscode-remote://${A}/repo/file.kt`))), FileSystemProviderErrorCode.FileNotFound);
+	router.dispose();
+});

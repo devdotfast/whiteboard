@@ -33,8 +33,13 @@ export class ReviewRemoteFileSystemRouter extends Disposable implements IFileSys
 	readonly onDidWatchError = this.watchErrors.event;
 	private readonly hosts = new Map<string, IFileSystemProviderWithFileReadWriteCapability>();
 	private readonly writable = new Map<string, readonly URI[]>();
+	private readonly connections = new Map<string, { provider: IFileSystemProviderWithFileReadWriteCapability; writable: readonly URI[] }[]>();
 
 	add(authority: string, provider: IFileSystemProviderWithFileReadWriteCapability, writable: readonly URI[]): IDisposable {
+		const entries = this.connections.get(authority) ?? [];
+		const entry = { provider, writable };
+		entries.push(entry);
+		this.connections.set(authority, entries);
 		this.hosts.set(authority, provider);
 		this.writable.set(authority, writable);
 		const changes = provider.onDidChangeFile((e) => this.changed.fire(e));
@@ -42,9 +47,12 @@ export class ReviewRemoteFileSystemRouter extends Disposable implements IFileSys
 		return toDisposable(() => {
 			changes.dispose();
 			errors?.dispose();
-			if (this.hosts.get(authority) !== provider) return;
-			this.hosts.delete(authority);
-			this.writable.delete(authority);
+			const index = entries.indexOf(entry);
+			if (index < 0) return;
+			entries.splice(index, 1);
+			const active = entries.at(-1);
+			if (active) { this.hosts.set(authority, active.provider); this.writable.set(authority, active.writable); }
+			else { this.connections.delete(authority); this.hosts.delete(authority); this.writable.delete(authority); }
 		});
 	}
 

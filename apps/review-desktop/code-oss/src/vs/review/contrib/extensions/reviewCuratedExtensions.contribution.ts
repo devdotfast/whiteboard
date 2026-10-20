@@ -67,6 +67,11 @@ const BUNDLED_EXTENSIONS: readonly { id: string; label: string }[] = [
 ];
 
 const OPTIONAL_GROUPS: readonly { group: string; label: string; detail?: string }[] = [
+	{
+		group: 'kotlin',
+		label: localize('review.curated.kotlin', "Kotlin"),
+		detail: localize('review.curated.kotlin.requiresJava', "Requires Java Development Kit 11 or newer. Downloads the language server on first use.")
+	},
 	{ group: 'rust', label: localize('review.curated.rust', "Rust (rust-analyzer)") },
 	{ group: 'swift', label: localize('review.curated.swift', "Swift") },
 	{

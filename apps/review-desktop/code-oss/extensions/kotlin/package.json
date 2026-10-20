@@ -1,0 +1,41 @@
+{
+  "name": "kotlin",
+  "displayName": "Kotlin Language Basics",
+  "description": "Language configuration and syntax highlighting for Kotlin and Gradle Kotlin DSL.",
+  "version": "1.0.0",
+  "publisher": "vscode",
+  "license": "MIT",
+  "engines": {
+    "vscode": "*"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "kotlin",
+        "aliases": [
+          "Kotlin",
+          "kotlin"
+        ],
+        "extensions": [
+          ".kt",
+          ".kts"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "kotlin",
+        "scopeName": "source.kotlin",
+        "path": "./syntaxes/kotlin.tmLanguage.json"
+      }
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devdotfast/whiteboard.git"
+  }
+}

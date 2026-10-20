@@ -13,6 +13,7 @@ const TOOLCHAINS = {
   swift: [["swift", "--version"]],
   csharp: [["dotnet", "--version"]],
   go: [["go", "version"]],
+  kotlin: [["java", "-version"]],
 } satisfies Toolchains;
 
 type Outcome = "found" | "missing" | string;

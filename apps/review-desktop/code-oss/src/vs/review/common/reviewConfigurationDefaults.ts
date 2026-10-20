@@ -160,7 +160,12 @@ export const curatedExtensionConfigurationDefaults = {
 	// These download packages or build the project.
 	'dotnet.projects.enableAutomaticRestore': false,
 	'csharp.suppressDotnetRestoreNotification': true,
-	'dotnet.codeLens.enableTestsCodeLens': false
+	'dotnet.codeLens.enableTestsCodeLens': false,
+
+	// Avoid downloading a debug adapter for reviews.
+	'kotlin.debugAdapter.enabled': false,
+	'kotlin.scripts.enabled': true,
+	'kotlin.scripts.buildScriptsEnabled': true
 
 	// charliermarsh.ruff already defaults `ruff.showNotifications` to "off".
 	// astral-sh.ty, vscodevim.vim and tuttieee.emacs-mcx contribute no prompts.
