@@ -715,6 +715,17 @@ export class ReviewSidebarPart extends Part {
 			}),
 			onPickCommit: (commit) => this.emitSurfaceEvent({ event: "pickCommit", reviewId, commit }),
 			onNewWhiteboard: () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID, "sidebar"),
+			onNewChildWhiteboard: async (parentId) => {
+				const parent = this.catalog.reviews.find((board) => board.reviewId === parentId);
+				if (!parent?.repositoryPath || parent.parentId || parent.trashedAt) throw new Error("The parent whiteboard is no longer available.");
+				const id = await this.catalog.createReview(parent.repositoryPath, parentId);
+				try {
+					await this.tabs.openApiReview(id, "Untitled");
+				} catch (error) {
+					await this.catalog.discardReview(id);
+					throw error;
+				}
+			},
 			...(newWhiteboardShortcut && { newWhiteboardShortcut }),
 		};
 

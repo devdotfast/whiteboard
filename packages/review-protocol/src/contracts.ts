@@ -594,6 +594,8 @@ export interface ReviewSidebarSectionProps {
   onPickCommit?(commit: string | null): void;
   /** Whiteboard: start a new whiteboard, as its shortcut does. */
   onNewWhiteboard?(): void;
+  /** Create and open an empty child of a top-level board. */
+  onNewChildWhiteboard?(parentId: string): Promise<void>;
   newWhiteboardShortcut?: string;
   onOpenThread?(threadId: string): void;
   /** Lenses: the Diff view's, as its canvas reports them. */

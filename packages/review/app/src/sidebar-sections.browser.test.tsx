@@ -604,3 +604,64 @@ it("expands a recent stack without opening it, then opens a child with modifier 
   expect(view.rows()).toEqual(["Stack overview"]);
   await view.dispose();
 });
+
+it("adds a child only at the top level, preserves focus while pending, and permits retry", async () => {
+  let reject: (error: Error) => void = () => {};
+
+  const onNewChildWhiteboard = vi
+    .fn<NonNullable<ReviewSidebarSectionProps["onNewChildWhiteboard"]>>()
+    .mockImplementationOnce(
+      () =>
+        new Promise<void>((_, fail) => {
+          reject = fail;
+        }),
+    )
+    .mockResolvedValue(undefined);
+
+  const project = {
+    project: { id: "manual", name: "app" },
+    boards: [
+      board({
+        reviewId: "parent",
+        title: "Parent",
+        repositoryPath: "/work/app",
+        children: ["child"],
+      }),
+      board({
+        reviewId: "child",
+        title: "Child",
+        repositoryPath: "/work/app",
+        parentId: "parent",
+      }),
+    ],
+  };
+
+  const view = await mount(
+    props({ reviewId: "child", project, onNewChildWhiteboard }),
+  );
+
+  const add = document.querySelector<HTMLButtonElement>(
+    '[aria-label="Add child whiteboard to Parent"]',
+  )!;
+
+  expect(
+    document.querySelector('[aria-label="Add child whiteboard to Child"]'),
+  ).toBeNull();
+  add.focus();
+  await view.click('[aria-label="Add child whiteboard to Parent"]');
+  await view.click('[aria-label="Add child whiteboard to Parent"]');
+  expect(onNewChildWhiteboard).toHaveBeenCalledExactlyOnceWith("parent");
+  expect(document.activeElement).toBe(add);
+  await act(async () => reject(new Error("Cannot create a child right now")));
+  await vi.waitFor(() =>
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+      "Cannot create a child right now",
+    ),
+  );
+  await view.click('[aria-label="Add child whiteboard to Parent"]');
+  await vi.waitFor(() =>
+    expect(document.querySelector('[role="alert"]')).toBeNull(),
+  );
+  expect(onNewChildWhiteboard).toHaveBeenCalledTimes(2);
+  await view.dispose();
+});
