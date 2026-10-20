@@ -11,14 +11,12 @@ import type { DatabaseSync } from "node:sqlite";
 import {
   type VcsArg,
   gitCommonDirSync,
-  parseGitRemoteSlug,
-  resolveRepoContextSync,
+  parseGitRemote,
   runVcs,
   runVcsSync,
 } from "@dev.fast/local-vcs";
 
-/** Checkouts of one repository share a group: worktrees, or clones of one
- * GitHub repository. */
+/** Worktrees and same-origin clones share a group. */
 export interface RepositoryGroup {
   key: string;
   label: string;
@@ -104,6 +102,22 @@ function originUrlOf(commonDir: string): string | null | undefined {
     : null;
 }
 
+/** Clones of one repository share its origin's host and path, on any forge
+ * and over any protocol; a checkout with no usable origin is its own. */
+function groupOf(commonDir: string, origin: string | null): RepositoryGroup {
+  const remote = origin ? parseGitRemote(origin) : null;
+
+  return remote
+    ? {
+        key: `remote:${remote.host}/${remote.slug.toLowerCase()}`,
+        label: remote.slug,
+      }
+    : {
+        key: `git:${commonDir}`,
+        label: path.basename(path.dirname(commonDir)),
+      };
+}
+
 /** A checkout's repository group; undefined if it isn't a readable git
  * checkout. Reads `.git` and its config directly where it can, so many
  * checkouts group in a moment; git answers the rest. */
@@ -114,22 +128,21 @@ export function repositoryGroupAt(root: string): RepositoryGroup | undefined {
   const commonDir = commonDirOf(root);
   const origin = commonDir ? originUrlOf(commonDir) : undefined;
 
-  const context =
-    commonDir && origin !== undefined
-      ? { commonDir, githubSlug: origin ? parseGitRemoteSlug(origin) : null }
-      : resolveRepoContextSync(root);
+  if (commonDir && origin !== undefined) return groupOf(commonDir, origin);
 
-  if (!context) return undefined;
+  const resolved = gitCommonDirSync(root);
 
-  return context.githubSlug
-    ? {
-        key: `remote:https://github.com/${context.githubSlug.toLowerCase()}.git`,
-        label: context.githubSlug,
-      }
-    : {
-        key: `git:${context.commonDir}`,
-        label: path.basename(path.dirname(context.commonDir)),
-      };
+  if (!resolved) return undefined;
+
+  const url = quietly("git", [
+    "--git-dir",
+    resolved,
+    "remote",
+    "get-url",
+    "origin",
+  ]);
+
+  return groupOf(resolved, url?.trim() || null);
 }
 
 /** What grouping asks of one checkout on disk: one call each. */

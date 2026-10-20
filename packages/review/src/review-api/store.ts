@@ -761,7 +761,7 @@ export class ReviewStore {
   }
 
   /** The project of a registered checkout, made on first use. Checkouts of
-   * one repository (worktrees, or clones of one GitHub repository) share it. */
+   * one repository (worktrees, or clones with one origin) share it. */
   projectOfRepository(repositoryId: string): string {
     const row = this.db
       .prepare("SELECT project_id FROM repositories WHERE id=?")
@@ -2787,7 +2787,7 @@ export class ReviewStore {
     return this.linkPreview(this.read(to.board), to.block);
   }
 
-  /** "owner / repo" for a board in a GitHub repository, else its folder. */
+  /** "owner / repo" for a board whose origin names one, else its folder. */
   private repositoryLabel(board: Snapshot): string | undefined {
     const repositoryId = board.target?.repositoryId;
 

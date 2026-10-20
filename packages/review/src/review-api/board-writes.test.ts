@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -42,6 +43,15 @@ const checkout = (name: string) => {
   const root = path.join(directory, name);
 
   mkdirSync(root, { recursive: true });
+
+  return store.registerRepository(root).id;
+};
+
+const clone = (name: string, origin: string) => {
+  const root = path.join(directory, name);
+
+  execFileSync("git", ["init", "-q", root]);
+  execFileSync("git", ["-C", root, "remote", "add", "origin", origin]);
 
   return store.registerRepository(root).id;
 };
@@ -271,6 +281,25 @@ describe("a board's project", () => {
       target: { kind: "project", repositoryId: checkout("next") },
     });
     expect(store.projectOf(child)).not.toBe(project);
+  });
+
+  it("files checkouts of one repository on any forge together, by the origin they share", () => {
+    const ssh = clone("ssh", "git@gitlab.example.com:Team/Service.git");
+    const https = clone("https", "https://gitlab.example.com/team/service");
+
+    const port = clone(
+      "port",
+      "ssh://git@gitlab.example.com:2222/Team/service.git",
+    );
+
+    const fork = clone("fork", "git@gitlab.example.com:other/service.git");
+
+    const project = store.projectOfRepository(ssh);
+
+    expect(store.projectOfRepository(https)).toBe(project);
+    expect(store.projectOfRepository(port)).toBe(project);
+    expect(store.projectOfRepository(fork)).not.toBe(project);
+    expect(store.checkoutProject(ssh)?.name).toBe("Team/Service");
   });
 });
 
