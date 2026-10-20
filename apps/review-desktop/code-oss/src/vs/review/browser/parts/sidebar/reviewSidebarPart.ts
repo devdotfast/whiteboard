@@ -10,7 +10,8 @@ import { renderIcon } from "../../../../base/browser/ui/iconLabel/iconLabels.js"
 import { onDidChangeFullscreen, onDidChangeZoomLevel } from "../../../../base/browser/browser.js";
 import { Codicon } from "../../../../base/common/codicons.js";
 import { Emitter, Event } from "../../../../base/common/event.js";
-import { timeout } from "../../../../base/common/async.js";
+import { ThrottledDelayer, timeout } from "../../../../base/common/async.js";
+import { isCancellationError } from "../../../../base/common/errors.js";
 import { Disposable, type IDisposable, MutableDisposable, toDisposable } from "../../../../base/common/lifecycle.js";
 import { localize, localize2 } from "../../../../nls.js";
 import { Action2, registerAction2 } from "../../../../platform/actions/common/actions.js";
@@ -196,7 +197,7 @@ export class ReviewSidebarPart extends Part {
 	 * switching back shows them without rebuilding the diff. */
 	private readonly fileTrees = new Map<string, HTMLElement>();
 	private filesNote: HTMLElement | undefined;
-	private rendering: Promise<void> = Promise.resolve();
+	private readonly mounting = this._register(new ThrottledDelayer<void>(0));
 	private readonly _onDidChangeTabs = this._register(new Emitter<void>());
 	/** A tab was picked, shown, hidden, or recounted. */
 	readonly onDidChangeTabs = this._onDidChangeTabs.event;
@@ -674,9 +675,9 @@ export class ReviewSidebarPart extends Part {
 		// After the counts and badges, so the rail copies this render's.
 		this._onDidChangeTabs.fire();
 
-		this.rendering = this.rendering
-			.then(() => this.mountSections())
-			.catch((error) => this.logService.warn("[Whiteboard] Sidebar sections failed:", error));
+		this.mounting.trigger(() => this.mountSections()).catch((error) => {
+			if (!isCancellationError(error)) this.logService.warn("[Whiteboard] Sidebar sections failed:", error);
+		});
 	}
 
 	private async mountSections(): Promise<void> {
