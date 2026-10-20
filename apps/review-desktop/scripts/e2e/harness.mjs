@@ -44,6 +44,7 @@ const watchedPages = new WeakSet();
 
 const defaultSettings = {
   "review.experimental.softwareMap.enabled": true,
+  "review.experimental.sharing.enabled": true,
   "security.workspace.trust.enabled": false,
   "telemetry.telemetryLevel": "off",
   "workbench.startupEditor": "none",

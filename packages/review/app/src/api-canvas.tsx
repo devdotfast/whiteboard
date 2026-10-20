@@ -512,7 +512,10 @@ export function ApiCanvas({
 
   const sharing = useMemo(
     () =>
-      data && !content.host && !data.snapshot.trashedAt
+      data &&
+      content.sharingEnabled === true &&
+      !content.host &&
+      !data.snapshot.trashedAt
         ? {
             client,
             reviewId: content.reviewId,
@@ -520,7 +523,7 @@ export function ApiCanvas({
             sender: data.snapshot.shared?.login,
           }
         : null,
-    [client, content.reviewId, content.host, data],
+    [client, content.reviewId, content.sharingEnabled, content.host, data],
   );
 
   const pins = data?.snapshot.pins;

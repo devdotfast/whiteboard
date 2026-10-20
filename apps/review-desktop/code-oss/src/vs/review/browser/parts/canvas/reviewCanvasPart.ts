@@ -53,6 +53,7 @@ import {
 	REVIEW_DOCUMENT_WIDTH_SETTING,
 	REVIEW_KEYMAP_SETTING,
 	REVIEW_READY_NOTIFICATION_SETTING,
+	REVIEW_SHARING_SETTING,
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_TELEMETRY_SETTING,
 } from "../../../common/reviewConfigurationDefaults.js";
@@ -306,6 +307,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			configurationService.onDidChangeConfiguration((event) => {
 				if (
 					!event.affectsConfiguration(REVIEW_SOFTWARE_MAP_SETTING) &&
+					!event.affectsConfiguration(REVIEW_SHARING_SETTING) &&
 					!event.affectsConfiguration(REVIEW_DOCUMENT_WIDTH_SETTING)
 				)
 					return;
@@ -313,6 +315,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 					this.apiContent = {
 						...this.apiContent,
 						softwareMapEnabled: this.currentSoftwareMapEnabled(),
+						sharingEnabled: this.currentSharingEnabled(),
 						documentWidth: this.currentDocumentWidth(),
 					};
 					this.canvas.value?.update(this.apiContent);
@@ -461,6 +464,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						remoteHosts: this.remoteHostActions(),
 						projectId: this.apiCatalog.reviews.find((review) => review.reviewId === reviewId)?.project?.id,
 						softwareMapEnabled: this.currentSoftwareMapEnabled(),
+						sharingEnabled: this.currentSharingEnabled(),
 						documentWidth: this.currentDocumentWidth(),
 						setTitle: (title) => input.setApiTitle(title),
 						setSourceView: (selection, next) => {
@@ -1011,6 +1015,15 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_SOFTWARE_MAP_SETTING, enabled, ConfigurationTarget.USER);
 				return this.currentSoftwareMapEnabled();
 			},
+			sharingEnabled: this.currentSharingEnabled(),
+			setSharingEnabled: async (enabled) => {
+				this.reviewTelemetryService.capture("setting_changed", {
+					setting: "sharing_enabled",
+					enabled,
+				});
+				await this.configurationService.updateValue(REVIEW_SHARING_SETTING, enabled, ConfigurationTarget.USER);
+				return this.currentSharingEnabled();
+			},
 			remoteHosts: reviewRemoteHostsSettings({
 				get: (key) => this.configurationService.getValue(key),
 				update: (key, value) => this.configurationService.updateValue(key, value, ConfigurationTarget.APPLICATION),
@@ -1074,6 +1087,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	private currentSoftwareMapEnabled(): boolean {
 		return this.configurationService.getValue<boolean>(REVIEW_SOFTWARE_MAP_SETTING) === true;
+	}
+
+	private currentSharingEnabled(): boolean {
+		return this.configurationService.getValue<boolean>(REVIEW_SHARING_SETTING) === true;
 	}
 
 	// The setting ships as true, so only an explicit false means opted out.

@@ -36,6 +36,8 @@ function settings(): ReviewCanvasSettingsContent {
     chooseOpenFilesInApplication: unexpected,
     softwareMapEnabled: false,
     setSoftwareMapEnabled: async (enabled) => enabled,
+    sharingEnabled: false,
+    setSharingEnabled: async (enabled) => enabled,
     diffrConfig: {
       read: unexpected,
       set: unexpected,

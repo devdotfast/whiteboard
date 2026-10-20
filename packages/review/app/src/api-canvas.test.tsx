@@ -1579,6 +1579,7 @@ async function mountPeekReview(content: {
     reviewId: review.reviewId,
     bridge,
     setSourceView: () => {},
+    sharingEnabled: true,
     ...content,
   };
 

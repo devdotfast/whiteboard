@@ -812,6 +812,8 @@ export interface ReviewCanvasSettingsContent {
   ): Promise<ReviewReadyNotificationChoice>;
   softwareMapEnabled: boolean;
   setSoftwareMapEnabled(enabled: boolean): Promise<boolean>;
+  sharingEnabled: boolean;
+  setSharingEnabled(enabled: boolean): Promise<boolean>;
   // Shared CLI configuration, read when its disclosure opens.
   diffrConfig: ReviewDiffrConfigActions;
   reloadWindow(): Promise<void>;
@@ -992,6 +994,7 @@ export type ReviewCanvasContent =
   | {
       kind: "api";
       softwareMapEnabled?: boolean;
+      sharingEnabled?: boolean;
       documentWidth?: ReviewDocumentWidthChoice;
       reviewId: string;
       /** The board's project: its boards share the threads on screen. */
