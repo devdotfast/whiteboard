@@ -387,7 +387,14 @@ function ReviewLayoutContent({
 
   const panelMotion = useReviewPanel((state) => state.motion);
   const activeView = useReviewPanel((state) => state.view);
-  const diffScope = useReviewPanel((state) => state.diffScope);
+  const pickedScope = useReviewPanel((state) => state.diffScope);
+
+  // Facts come from the board's commits; an unlisted sha scopes nothing.
+  const scopedCommit = pickedScope
+    ? commits.find((each) => each.commit === pickedScope.commit)
+    : undefined;
+
+  const diffScope = scopedCommit ? pickedScope : null;
 
   // The full diff stays mounted while another view shows, at the width it
   // had when it was hidden: following the column through a side peek's
@@ -512,7 +519,7 @@ function ReviewLayoutContent({
   const diffFilePicker = useMemo<DiffFilePicker>(
     () => ({
       files: async () => {
-        const commit = panelStore.getState().diffScope?.commit.commit;
+        const commit = panelStore.getState().diffScope?.commit;
 
         const files = await session.bridge.diffView.files(
           commit ? { commit } : undefined,
@@ -533,8 +540,8 @@ function ReviewLayoutContent({
       storedList.status !== "loaded" ||
       storedList.sessions.length > 0);
 
-  const filesTabFileCount = diffScope
-    ? diffScope.commit.fileCount
+  const filesTabFileCount = scopedCommit
+    ? scopedCommit.fileCount
     : diffFiles.status === "loaded"
       ? diffFiles.files.length
       : null;
@@ -612,7 +619,7 @@ function ReviewLayoutContent({
         ),
         compare: `${shortRef(range.baseRef || range.baseCommit)} ← ${shortRef(range.headRef || range.headCommit)}`,
       }),
-      ...(diffScope && { commit: diffScope.commit.commit }),
+      ...(diffScope && { commit: diffScope.commit }),
       ...(hasChangeRange && lenses && { lenses: lenses.authored.length }),
       ...(hasChangeRange &&
         filesTabFileCount !== null &&
@@ -620,11 +627,11 @@ function ReviewLayoutContent({
           files: {
             count: filesTabFileCount,
             // A picked commit's own changes; else the board's.
-            additions: diffScope
-              ? diffScope.commit.additions
+            additions: scopedCommit
+              ? scopedCommit.additions
               : lensStats.total.additions,
-            deletions: diffScope
-              ? diffScope.commit.deletions
+            deletions: scopedCommit
+              ? scopedCommit.deletions
               : lensStats.total.deletions,
             ...(lenses?.progress?.untrackedFiles && {
               untracked: lenses.progress.untrackedFiles,
@@ -651,17 +658,9 @@ function ReviewLayoutContent({
     diffScope,
   ]);
 
-  const commitsRef = useRef(commits);
-  commitsRef.current = commits;
-
-  // A picked commit holds for the session, until the board's commits change.
-  const commitKey = commits.map(({ commit }) => commit).join(" ");
-  const seenCommits = useRef(commitKey);
   useEffect(() => {
-    if (seenCommits.current === commitKey) return;
-    seenCommits.current = commitKey;
-    panelStore.getState().pickCommit(null);
-  }, [commitKey, panelStore]);
+    if (pickedScope && !scopedCommit) panelStore.getState().pickCommit(null);
+  }, [pickedScope, scopedCommit, panelStore]);
 
   // Subscribe before the canvas signals ready so a reveal immediately after
   // mounting cannot outrun the listener.
@@ -684,11 +683,9 @@ function ReviewLayoutContent({
       }
 
       if (event.event === "pickCommit") {
-        const commit = commitsRef.current.find(
-          (each) => each.commit === event.commit,
-        );
-
-        panelStore.getState().pickCommit(commit ? { commit } : null);
+        panelStore
+          .getState()
+          .pickCommit(event.commit ? { commit: event.commit } : null);
 
         return;
       }
@@ -1041,9 +1038,7 @@ function ReviewLayoutContent({
             {diffOpened && (
               <DocumentContentsContext.Provider value={documentContents}>
                 <ReviewDiffView
-                  scope={
-                    diffScope ? { commit: diffScope.commit.commit } : undefined
-                  }
+                  scope={diffScope ? { commit: diffScope.commit } : undefined}
                   revealFile={diffScope?.file}
                   restoreFile={diffScope?.restoreFile}
                   picker={
@@ -1051,16 +1046,12 @@ function ReviewLayoutContent({
                     sidebarLeads ? undefined : (
                       <CommitPicker
                         commits={commits}
-                        selected={diffScope?.commit.commit}
-                        onPick={(sha) => {
-                          const commit = commits.find(
-                            (each) => each.commit === sha,
-                          );
-
+                        selected={diffScope?.commit}
+                        onPick={(sha) =>
                           panelStore
                             .getState()
-                            .pickCommit(commit ? { commit } : null);
-                        }}
+                            .pickCommit(sha ? { commit: sha } : null)
+                        }
                       />
                     )
                   }

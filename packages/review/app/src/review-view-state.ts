@@ -100,10 +100,7 @@ export function useReviewViewStateSync({
           // Written on every change: a scope a restore dropped must not
           // come back on another version.
           diffScope: state.diffScope
-            ? {
-                commit: state.diffScope.commit.commit,
-                file: state.diffScope.file,
-              }
+            ? { commit: state.diffScope.commit, file: state.diffScope.file }
             : undefined,
           ...(state.traceSelection !== previous.traceSelection && {
             trace: state.traceSelection
@@ -176,11 +173,13 @@ export function readReviewNavigationRestore(
   const storedView =
     stored.activeView === "commits" ? "diff" : stored.activeView;
 
-  const scopedCommit =
-    storedView === "diff" && stored.diffScope
-      ? canvas.commits.find(
-          (summary) => summary.commit === stored.diffScope!.commit,
-        )
+  const scoped =
+    storedView === "diff" &&
+    stored.diffScope &&
+    canvas.commits.some(
+      (summary) => summary.commit === stored.diffScope!.commit,
+    )
+      ? stored.diffScope
       : undefined;
 
   return {
@@ -192,12 +191,8 @@ export function readReviewNavigationRestore(
       hasTraceSessions: true,
     }),
     lens: stored.lens?.version === canvas.version ? stored.lens : null,
-    diffScope: scopedCommit
-      ? {
-          commit: scopedCommit,
-          file: stored.diffScope!.file,
-          restoreFile: true,
-        }
+    diffScope: scoped
+      ? { commit: scoped.commit, file: scoped.file, restoreFile: true }
       : null,
     traceSelection: stored.trace,
     traceStorage: stored.traceStorage ?? null,

@@ -1,8 +1,4 @@
-import {
-  type ReviewCommitSummary,
-  type ReviewView,
-  reviewViewSchema,
-} from "@dev.fast/review-protocol";
+import { type ReviewView, reviewViewSchema } from "@dev.fast/review-protocol";
 import type { AgentSelection } from "@review/agent-selection";
 import type { AskAgentId } from "@review/ask/thread-state";
 import { type StateCreator, createStore } from "zustand/vanilla";
@@ -60,7 +56,8 @@ export interface ReviewLensSelection {
 }
 
 export interface ReviewDiffScope {
-  commit: ReviewCommitSummary;
+  /** Facts come from the board's commits. */
+  commit: string;
   file?: string;
   /** `file` came from a reload; a saved diff position wins over it. */
   restoreFile?: boolean;

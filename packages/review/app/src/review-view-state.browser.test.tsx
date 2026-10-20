@@ -69,7 +69,7 @@ afterEach(() => {
 });
 
 describe("review view state", () => {
-  it("restores a selected commit and file using current commit metadata", () => {
+  it("restores a selected commit and file while the version lists it", () => {
     const session = testReviewSession();
     const store = createReviewPanelStore();
 
@@ -85,7 +85,11 @@ describe("review view state", () => {
     };
 
     renderViewState({ session, store });
-    act(() => store.getState().openCommitDiff({ commit, file: "file.ts" }));
+    act(() =>
+      store
+        .getState()
+        .openCommitDiff({ commit: commit.commit, file: "file.ts" }),
+    );
     unmount();
 
     const restored = createReviewPanelStore(
@@ -97,7 +101,7 @@ describe("review view state", () => {
 
     expect(restored.getState().view).toBe("diff");
     expect(restored.getState().diffScope).toEqual({
-      commit: { ...commit, subject: "Current metadata" },
+      commit: commit.commit,
       file: "file.ts",
       restoreFile: true,
     });

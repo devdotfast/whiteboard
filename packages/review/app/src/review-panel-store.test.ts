@@ -1,4 +1,3 @@
-import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
 import { describe, expect, it } from "vitest";
 
 import type { PeekAnchor } from "./review-panel-model";
@@ -19,11 +18,7 @@ const content: ReviewPeekContent = {
   text: "start();",
 };
 
-const commit = {
-  commit: "abc123",
-  subject: "Add startup",
-  fileCount: 2,
-} as ReviewCommitSummary;
+const commit = "a".repeat(40);
 
 const selection = {
   title: "Startup",
