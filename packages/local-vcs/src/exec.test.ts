@@ -11,6 +11,7 @@ import {
   renderVcsArgs,
   runVcs,
   setLocalVcsCommandObserver,
+  spawnPiped,
 } from "./exec";
 
 const started: string[][] = [];
@@ -149,5 +150,33 @@ describe("the subcommand decides", () => {
       if (saved === undefined) delete process.env.GIT_DIR;
       else process.env.GIT_DIR = saved;
     }
+  });
+});
+
+describe("spawnPiped", () => {
+  const waitingChild = (timeout: number) => {
+    const repository = mkdtempSync(path.join(tmpdir(), "vcs-exec-"));
+
+    execFileSync("git", ["init", "-q", repository]);
+
+    return spawnPiped("git", ["cat-file", "--batch"], {
+      cwd: repository,
+      timeout,
+    });
+  };
+
+  const closed = (child: ReturnType<typeof spawnPiped>) =>
+    new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
+      (resolve) =>
+        child.once("close", (code, signal) => resolve({ code, signal })),
+    );
+
+  it("kills a child that never exits once its timeout runs out", async () => {
+    const child = waitingChild(50);
+
+    await expect(closed(child)).resolves.toEqual({
+      code: null,
+      signal: "SIGTERM",
+    });
   });
 });

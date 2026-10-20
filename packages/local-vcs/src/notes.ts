@@ -197,9 +197,13 @@ async function catFileBatch(
     child.stdin.on("error", (error) =>
       reject(new Error(`git cat-file --batch stdin failed: ${String(error)}`)),
     );
-    child.once("close", (code) => {
+    child.once("close", (code, signal) => {
       if (code !== 0) {
-        reject(new Error(`git cat-file --batch failed: ${stderr}`));
+        reject(
+          new Error(
+            `git cat-file --batch failed: ${stderr || String(signal ?? code)}`,
+          ),
+        );
 
         return;
       }
@@ -504,9 +508,11 @@ async function unreachableCommits(
       child.once("error", (error) =>
         resolve({ ok: false, stdout: String(error) }),
       );
-      child.once("close", (code) =>
+      child.once("close", (code, signal) =>
         resolve(
-          code === 0 ? { ok: true, stdout } : { ok: false, stdout: stderr },
+          code === 0
+            ? { ok: true, stdout }
+            : { ok: false, stdout: stderr || String(signal ?? code) },
         ),
       );
       child.stdin.on("error", () => {});

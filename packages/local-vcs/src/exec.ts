@@ -349,12 +349,12 @@ export function runVcsSync(
 }
 
 /** A child with all three streams piped, under the same rules, for a
- * caller that streams input and output itself. Its timeout is the caller's
- * to enforce. */
+ * caller that streams input and output itself. Killed at its timeout like
+ * runVcs's. */
 export function spawnPiped(
   tool: VcsTool,
   vcsArgs: readonly VcsArg[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv } = {},
+  options: { cwd?: string; env?: NodeJS.ProcessEnv; timeout?: number } = {},
 ): ChildProcessWithoutNullStreams {
   const args = renderVcsArgs(vcsArgs);
 
@@ -366,8 +366,17 @@ export function spawnPiped(
     stdio: ["pipe", "pipe", "pipe"],
   });
 
+  const timer = setTimeout(
+    () => child.kill(),
+    options.timeout ?? defaultVcsTimeout(tool, args),
+  );
+
   child.once("spawn", () => finish?.({ ok: true }));
-  child.once("error", () => finish?.({ ok: false }));
+  child.once("error", () => {
+    clearTimeout(timer);
+    finish?.({ ok: false });
+  });
+  child.once("close", () => clearTimeout(timer));
 
   return child;
 }
