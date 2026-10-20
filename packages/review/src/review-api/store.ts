@@ -388,6 +388,17 @@ export interface Result {
   warnings?: string[];
 }
 
+export interface StoreChange extends Result {
+  titleChanged?: true;
+  /** Project, repository or kind (icon) changed. */
+  placeChanged?: true;
+  threadId?: string;
+  /** Saved by another process; changes unknown. */
+  external?: true;
+}
+
+type ShownChange = Omit<StoreChange, keyof Result>;
+
 /** A board as its place in a project shows it. */
 export interface PlacedBoard {
   reviewId: string;
@@ -673,7 +684,7 @@ export class ReviewStore {
 
     return this.refreshPending;
   }
-  private readonly listeners = new Set<(result: Result) => void>();
+  private readonly listeners = new Set<(change: StoreChange) => void>();
   private readonly catalogListeners = new Set<() => void>();
   private readonly externalChanges: ReturnType<typeof setInterval>;
   private observedDataVersion: number;
@@ -686,7 +697,7 @@ export class ReviewStore {
       this.catalogListeners.delete(listener);
     };
   }
-  subscribe(listener: (result: Result) => void) {
+  subscribe(listener: (change: StoreChange) => void) {
     this.listeners.add(listener);
 
     return () => {
@@ -901,7 +912,7 @@ export class ReviewStore {
 
     for (const [reviewId, savedVersion] of current) {
       if (previous.get(reviewId) !== savedVersion)
-        this.notify({ reviewId, version: savedVersion });
+        this.notify({ reviewId, version: savedVersion, external: true });
       else if (previousDeletions.get(reviewId) !== deletions.get(reviewId))
         this.notify({
           reviewId,
@@ -1922,6 +1933,20 @@ export class ReviewStore {
     const projectId = this.projectFor(snapshot, previous, change.projectId);
 
     const previousProject = previous ? this.projectOf(id) : undefined;
+    const threadId = versionThread(snapshot);
+
+    const shown: ShownChange = {
+      ...(previous &&
+        snapshot.title !== previous.title && { titleChanged: true }),
+      ...(previous &&
+        (projectId !== previousProject ||
+          boardRepositoryId(snapshot) !== boardRepositoryId(previous) ||
+          boardIconKind(snapshot.target) !==
+            boardIconKind(previous.target)) && {
+          placeChanged: true,
+        }),
+      ...(threadId && { threadId }),
+    };
 
     this.commitCommand(
       result,
@@ -1963,6 +1988,7 @@ export class ReviewStore {
           if (snapshot.lastEdit) snapshot.lastEdit.activityId = owner;
         },
       },
+      shown,
     );
 
     return result;
@@ -3138,6 +3164,7 @@ export class ReviewStore {
       activityId?: string;
       owned(activityId: string): void;
     },
+    shown?: ShownChange,
   ) {
     this.db.exec("BEGIN IMMEDIATE");
     let owner: string | undefined;
@@ -3169,7 +3196,7 @@ export class ReviewStore {
 
     if (result.deleted) this.activity.deleted(result.reviewId);
     else if (owner) this.activity.extended(result.reviewId);
-    this.notify(result);
+    this.notify({ ...result, ...shown });
   }
   private assertMutation(reviewId: string, version: number | undefined) {
     const current = this.db
@@ -3183,7 +3210,7 @@ export class ReviewStore {
       );
   }
 
-  private notify(result: Result) {
+  private notify(result: StoreChange) {
     if (result.deleted) this.observedVersions.delete(result.reviewId);
     else if (!result.attention)
       this.observedVersions.set(result.reviewId, result.version);

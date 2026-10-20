@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import type { ReviewProjectThreads } from "@dev.fast/review-protocol";
 import { AskThreads } from "@review/ask/threads.js";
 import { AskHistory, type AskRecord } from "@review/review-api/ask-history.js";
 import { ReviewInputError } from "@review/review-api/document.js";
@@ -111,6 +112,67 @@ const record = (
   updatedAt,
   permissions: "read-only",
 });
+
+async function threadStream(
+  api: ReturnType<typeof createReviewApi>,
+  reviewId: string,
+) {
+  const abort = new AbortController();
+
+  const response = await api.request(`/${reviewId}/ask/threads?watch`, {
+    signal: abort.signal,
+  });
+
+  const reader = response
+    .body!.pipeThrough(new TextDecoderStream())
+    .getReader();
+
+  let pending = "";
+  const frames: ReviewProjectThreads[] = [];
+
+  const frame = async () => {
+    while (!frames.length) {
+      const { value, done } = await reader.read();
+
+      if (done) throw new Error("The stream ended.");
+      pending += value;
+      let end: number;
+
+      while ((end = pending.indexOf("\n")) !== -1) {
+        frames.push(JSON.parse(pending.slice(0, end)));
+        pending = pending.slice(end + 1);
+      }
+    }
+
+    return frames.shift()!;
+  };
+
+  return {
+    frame,
+    close: async () => {
+      abort.abort();
+      await reader.cancel().catch(() => {});
+    },
+  };
+}
+
+const noAgent = () =>
+  new AskThreads(async () => {
+    throw new Error("No agent in this test.");
+  });
+
+const apiWith = (store: ReviewStore, threads: AskThreads) =>
+  createReviewApi(
+    store,
+    {} as LocalReviewData,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { threads, agents: async () => [] },
+  );
 
 it("keeps each review's conversations, newest first, until the review is deleted", async () => {
   const { reviewId } = await store.execute(
@@ -722,46 +784,14 @@ it("marks a thread unread once a turn ends after the reviewer last saw it", asyn
     }),
   );
 
-  const api = createReviewApi(
-    store,
-    {} as LocalReviewData,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    undefined,
-    {
-      threads: new AskThreads(async () => {
-        throw new Error("No agent in this test.");
-      }),
-      agents: async () => [],
-    },
-  );
+  const api = apiWith(store, noAgent());
 
   const unread = async () => {
-    const abort = new AbortController();
+    const stream = await threadStream(api, reviewId);
+    const { threads } = await stream.frame();
+    await stream.close();
 
-    const response = await api.request(`/${reviewId}/ask/threads?watch`, {
-      signal: abort.signal,
-    });
-
-    const reader = response
-      .body!.pipeThrough(new TextDecoderStream())
-      .getReader();
-
-    let line = "";
-
-    while (!line.includes("\n")) line += (await reader.read()).value ?? "";
-    abort.abort();
-    await reader.cancel().catch(() => {});
-
-    return JSON.parse(line).threads.map(
-      (thread: { id: string; unread?: boolean }) => [
-        thread.id,
-        !!thread.unread,
-      ],
-    );
+    return threads.map((thread) => [thread.id, !!thread.unread]);
   };
 
   store.askHistory.save(record(reviewId, "seen", "2026-09-01T10:00:00.000Z"));
@@ -821,4 +851,123 @@ it("keeps when a thread was seen through its saves, and seeing it moves nothing"
 
   history.delete("older");
   expect(history.list(reviewId).map(({ id }) => id)).toEqual(["newer"]);
+});
+
+it("rebuilds the project thread stream for thread changes, not for an autosave no thread shows", async () => {
+  const { reviewId } = await store.execute(
+    command({
+      type: "create",
+      title: "Payments",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  const { reviewId: other } = await store.execute(
+    command({
+      type: "create",
+      title: "Notes",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  const threads = noAgent();
+
+  store.askHistory.save(record(reviewId, "thread", "2026-09-01T10:00:00.000Z"));
+
+  const stream = await threadStream(apiWith(store, threads), reviewId);
+
+  const shown = (sent: ReviewProjectThreads) =>
+    sent.threads.map(({ id, status, edited }) => [
+      id,
+      status,
+      edited.map((board) => board.reviewId),
+    ]);
+
+  try {
+    expect(shown(await stream.frame())).toEqual([["thread", undefined, []]]);
+
+    const next = stream.frame();
+
+    threads.open({
+      id: "thread",
+      reviewId,
+      question: { text: "Check this" },
+      agent: "claude",
+      cwd: "/checkout",
+      head: "head",
+      selection: { title: "Question" },
+      context: "Context",
+    });
+    expect(shown(await next)).toEqual([["thread", expect.any(String), []]]);
+
+    await store.execute(
+      command({
+        type: "edit",
+        reviewId: other,
+        edit: {
+          type: "insert",
+          content: { type: "markdown", markdown: "By the agent" },
+        },
+      }),
+      undefined,
+      { kind: "agent", threadId: "thread" },
+    );
+    expect(shown(await stream.frame())).toEqual([
+      ["thread", expect.any(String), [other]],
+    ]);
+  } finally {
+    await stream.close();
+    threads.closeAll();
+  }
+});
+
+it("rebuilds the project thread stream for a version another process saved", async () => {
+  const file = path.join(
+    mkdtempSync(path.join(tmpdir(), "ask-")),
+    "review-api.db",
+  );
+
+  const providers = {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  };
+
+  const mine = new ReviewStore(file, providers);
+  const theirs = new ReviewStore(file, providers);
+  const threads = noAgent();
+
+  try {
+    const { reviewId } = await mine.execute(
+      command({
+        type: "create",
+        title: "Payments",
+        target: { kind: "commits", ...pins },
+      }),
+    );
+
+    mine.askHistory.save(
+      record(reviewId, "thread", "2026-09-01T10:00:00.000Z"),
+    );
+
+    const stream = await threadStream(apiWith(mine, threads), reviewId);
+
+    const title = (sent: ReviewProjectThreads) =>
+      sent.threads.map((thread) => thread.anchor.board.title);
+
+    try {
+      expect(title(await stream.frame())).toEqual(["Payments"]);
+
+      await theirs.execute(
+        command({ type: "rename", reviewId, title: "Billing" }),
+      );
+      expect(title(await stream.frame())).toEqual(["Billing"]);
+    } finally {
+      await stream.close();
+    }
+  } finally {
+    threads.closeAll();
+    await theirs.close();
+    await mine.close();
+  }
 });

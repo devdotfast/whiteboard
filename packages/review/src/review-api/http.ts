@@ -1610,15 +1610,36 @@ export function createReviewApi(
             return [line];
           },
           (notify) => {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+
+            const later = () => {
+              timer ??= setTimeout(() => {
+                timer = undefined;
+                notify();
+              }, 100);
+            };
+
             const stops = [
-              store.askHistory.subscribe(notify),
-              ask.threads.subscribeStatus(notify),
-              // An edit, title or target of any board a thread may show; a
-              // deleted board may have been a thread's anchor.
-              store.subscribe(() => notify()),
+              store.askHistory.subscribe(later),
+              ask.threads.subscribeStatus(later),
+              // Another process's version may have changed any of these.
+              store.subscribe((change) => {
+                if (
+                  change.deleted ||
+                  change.lifecycle ||
+                  change.titleChanged ||
+                  change.placeChanged ||
+                  change.threadId ||
+                  change.external
+                )
+                  later();
+              }),
             ];
 
-            return () => stops.forEach((stop) => stop());
+            return () => {
+              clearTimeout(timer);
+              stops.forEach((stop) => stop());
+            };
           },
         );
       }
@@ -2566,10 +2587,14 @@ function watch(
 ) {
   let stop = () => {};
 
+  let missed = false;
+
   const encoder = new TextEncoder();
 
   const send = (controller: ReadableStreamDefaultController<Uint8Array>) => {
-    if (controller.desiredSize === null || controller.desiredSize <= 0) return;
+    missed = controller.desiredSize === null || controller.desiredSize <= 0;
+
+    if (missed) return;
 
     try {
       const pending = lines();
@@ -2596,7 +2621,9 @@ function watch(
       });
       send(controller);
     },
-    pull: send,
+    pull(controller) {
+      if (missed) send(controller);
+    },
     cancel() {
       stop();
     },
