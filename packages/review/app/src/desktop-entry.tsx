@@ -299,14 +299,15 @@ interface ThemedRoot {
   dispose(): void;
 }
 
-/** A React root in workbench DOM that follows the workbench theme. */
-function mountThemed(container: HTMLElement): ThemedRoot {
-  let disposed = false;
+/** @scope matches its root only via :scope, so the theme class sits on an
+ * inner host. */
+function themedRoot(container: HTMLElement) {
   container.classList.add("review-canvas-root");
   const themeHost = container.ownerDocument.createElement("div");
 
-  const applyTheme = () => {
-    const light = workbenchColorTheme(container) === "light";
+  // Recomposed on every change so StyleX settles vars against light.
+  const applyTheme = (theme: "dark" | "light") => {
+    const light = theme === "light";
 
     themeHost.className = [
       light && "review-app--theme-light",
@@ -320,11 +321,30 @@ function mountThemed(container: HTMLElement): ThemedRoot {
       .join(" ");
   };
 
-  applyTheme();
   container.appendChild(themeHost);
   const root = createRoot(themeHost);
+
+  return {
+    root,
+    applyTheme,
+    dispose() {
+      root.unmount();
+      themeHost.remove();
+      container.classList.remove("review-canvas-root");
+    },
+  };
+}
+
+function followWorkbenchTheme(
+  container: HTMLElement,
+  applyTheme: (theme: "dark" | "light") => void,
+) {
+  applyTheme(workbenchColorTheme(container));
   const workbench = container.ownerDocument.querySelector(".monaco-workbench");
-  const observer = new MutationObserver(applyTheme);
+
+  const observer = new MutationObserver(() =>
+    applyTheme(workbenchColorTheme(container)),
+  );
 
   if (workbench)
     observer.observe(workbench, {
@@ -332,17 +352,24 @@ function mountThemed(container: HTMLElement): ThemedRoot {
       attributeFilter: ["class"],
     });
 
+  return { dispose: () => observer.disconnect() };
+}
+
+/** A React root in workbench DOM that follows the workbench theme. */
+function mountThemed(container: HTMLElement): ThemedRoot {
+  let disposed = false;
+  const themed = themedRoot(container);
+  const theme = followWorkbenchTheme(container, themed.applyTheme);
+
   return {
     render(element) {
-      if (!disposed) root.render(element);
+      if (!disposed) themed.root.render(element);
     },
     dispose() {
       if (disposed) return;
       disposed = true;
-      observer.disconnect();
-      root.unmount();
-      themeHost.remove();
-      container.classList.remove("review-canvas-root");
+      theme.dispose();
+      themed.dispose();
     },
   };
 }
@@ -374,34 +401,7 @@ export function mountReviewCanvas(
   let themeSubscription: { dispose(): void } | null = null;
   const findHost = createReviewFindHost();
   const diffFilePicker = createRef<DiffFilePicker>();
-  container.classList.add("review-canvas-root");
-  // The canvas stylesheet is compiled inside @scope (.review-canvas-root),
-  // where the scope root itself is only matched by :scope — a theme class on
-  // the container would never match the light token block. The theme class
-  // must live on an in-scope descendant, so all content renders inside this
-  // host element.
-  const themeHost = container.ownerDocument.createElement("div");
-
-  // Recomposed on every change so StyleX settles vars against light.
-  const applyTheme = (theme: "dark" | "light") => {
-    const light = theme === "light";
-
-    container.dataset.reviewTheme = theme;
-    themeHost.className = [
-      light && "review-app--theme-light",
-      stylex.props(
-        themeStyles.vars,
-        styles.themeHost,
-        light && themeStyles.light,
-      ).className,
-    ]
-      .filter(Boolean)
-      .join(" ");
-  };
-
-  applyTheme("dark");
-  container.appendChild(themeHost);
-  const root = createRoot(themeHost);
+  const themed = themedRoot(container);
 
   const render = () => {
     themeSubscription?.dispose();
@@ -410,28 +410,12 @@ export function mountReviewCanvas(
     resetSessionDiagnostics(container);
 
     if (content.kind === "api") {
-      applyTheme(content.bridge.currentTheme());
-      themeSubscription = content.bridge.onDidChangeTheme(applyTheme);
-    } else {
-      applyTheme(workbenchColorTheme(container));
+      themed.applyTheme(content.bridge.currentTheme());
+      themeSubscription = content.bridge.onDidChangeTheme(themed.applyTheme);
+    } else
+      themeSubscription = followWorkbenchTheme(container, themed.applyTheme);
 
-      const workbench =
-        container.ownerDocument.querySelector(".monaco-workbench");
-
-      if (workbench) {
-        const observer = new MutationObserver(() => {
-          applyTheme(workbenchColorTheme(container));
-        });
-
-        observer.observe(workbench, {
-          attributes: true,
-          attributeFilter: ["class"],
-        });
-        themeSubscription = { dispose: () => observer.disconnect() };
-      }
-    }
-
-    root.render(
+    themed.root.render(
       <ReviewContainerProvider container={container}>
         <CanvasUiContext.Provider value={ui}>
           <DiffFilePickerContext.Provider value={diffFilePicker}>
@@ -484,9 +468,7 @@ export function mountReviewCanvas(
       disposed = true;
       themeSubscription?.dispose();
       themeSubscription = null;
-      root.unmount();
-      themeHost.remove();
-      container.classList.remove("review-canvas-root");
+      themed.dispose();
     },
   };
 }
