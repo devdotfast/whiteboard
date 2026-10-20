@@ -61,7 +61,7 @@ it("uploads and opens a document without registering or fetching a repository, i
   vi.stubEnv("DEV_REVIEW_SHARE_TOKEN", "fixture");
   vi.stubEnv("DEV_REVIEW_SHARE_ORIGIN", "https://sharing.test");
   const readRepository = vi.fn<() => Promise<{ cloneUrl: string }>>();
-  const verifyRepository = vi.fn<() => Promise<{ cloneUrl: string }>>();
+  const verifyRepository = vi.fn<() => Promise<void>>();
   const shareId = randomUUID();
   const bytes = new Map<string, Uint8Array>();
   let manifest: ShareBundle["manifest"];

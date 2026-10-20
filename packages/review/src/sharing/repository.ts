@@ -234,20 +234,21 @@ export async function readShareRepository(root: string) {
   return { cloneUrl };
 }
 
+/** Fetches through origin itself, so its transport and credentials apply. */
 export async function verifyShareRepository(
   root: string,
   pins: Pins | undefined,
-  repository?: { cloneUrl: string },
   commits: readonly string[] = [],
 ) {
-  const { cloneUrl } = repository ?? (await readShareRepository(root));
+  const origin = (
+    await sharedGit(root, ["remote", "get-url", "origin"])
+  ).stdout.trim();
+
   const temporary = await mkdtemp(path.join(tmpdir(), "review-share-check-"));
 
   try {
-    await fetchPinnedRepository(temporary, cloneUrl, pins, true, commits);
+    await fetchPinnedRepository(temporary, origin, pins, true, commits);
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }
-
-  return { cloneUrl };
 }

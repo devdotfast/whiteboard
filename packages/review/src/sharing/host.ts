@@ -261,7 +261,7 @@ export function mountSharingPublisher(
     // The commits must be on GitHub for a recipient to fetch them.
     const verification =
       root && (snapshot.pins || commits.length) && repository
-        ? verifyRepository(root, snapshot.pins, repository, commits).then(
+        ? verifyRepository(root, snapshot.pins, commits).then(
             () => ({ ok: true as const }),
             (error: Error) => ({ ok: false as const, error }),
           )

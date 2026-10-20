@@ -23,7 +23,7 @@ it.each([
     const fixture = await createShareFixture(root);
     vi.stubEnv("DEV_REVIEW_HOME", root);
     vi.stubEnv("DEV_FAST_REVIEW_APP_URL_PROTOCOL", protocol);
-    const check = Promise.withResolvers<typeof fixture.repository>();
+    const check = Promise.withResolvers<void>();
     const registered = Promise.withResolvers<void>();
     const shareId = randomUUID();
     const requests: string[] = [];
@@ -111,7 +111,7 @@ it.each([
         "PUT /manifest",
       ]);
 
-      if (verified) check.resolve(fixture.repository);
+      if (verified) check.resolve();
       else
         check.reject(
           new ReviewInputError(
@@ -178,7 +178,7 @@ it("signs the user out when the share service rejects the stored token", async (
       new SharedReviewStore(path.join(root, "shared")),
       {
         readRepository: async () => fixture.repository,
-        verifyRepository: async () => fixture.repository,
+        verifyRepository: async () => {},
         fetch: async () => new Response("unauthorized", { status: 401 }),
       },
     );

@@ -643,16 +643,17 @@ it("refuses to publish a link to a commit GitHub doesn't have", async () => {
   const git = (...args: string[]) =>
     execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
 
+  git("remote", "add", "origin", remote);
   const pushed = git("rev-parse", "HEAD");
   git("commit", "-q", "--allow-empty", "-m", "unpushed");
   const unpushed = git("rev-parse", "HEAD");
 
   await expect(
-    verifyShareRepository(repo, undefined, { cloneUrl: remote }, [pushed]),
-  ).resolves.toEqual({ cloneUrl: remote });
+    verifyShareRepository(repo, undefined, [pushed]),
+  ).resolves.toBeUndefined();
   await expect(
-    verifyShareRepository(repo, undefined, { cloneUrl: remote }, [unpushed]),
-  ).rejects.toMatchObject({ status: 409 });
+    verifyShareRepository(repo, undefined, [unpushed]),
+  ).rejects.toThrow("Push the reviewed commits to GitHub before sharing.");
 });
 
 it("repairs a missing checkout and removes owned workspaces before reimport", async () => {
