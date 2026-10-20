@@ -15,7 +15,7 @@ import {
 import { EditorInput } from "../../../../workbench/common/editor/editorInput.js";
 import { IEditorGroupsService } from "../../../../workbench/services/editor/common/editorGroupsService.js";
 
-import { boardTitle, type BoardIconKind, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
+import { boardTitle, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
 import { sourceSelectionIdentity } from "../../../common/reviewSourceView.js";
 
 export type ReviewCanvasEditorTarget =
@@ -57,32 +57,6 @@ export class ReviewCanvasEditorInput extends EditorInput {
 
 	get target(): ReviewCanvasEditorTarget {
 		return this._target;
-	}
-
-	private boardIcon: BoardIconKind | undefined;
-	private changed = false;
-
-	/** Sets the tab's board icon. */
-	setBoardIcon(icon: BoardIconKind): void {
-		if (this.boardIcon === icon) return;
-		this.boardIcon = icon;
-		this._onDidChangeLabel.fire();
-	}
-
-	/** Shows or clears the changed badge on the tab. */
-	setChanged(changed: boolean): void {
-		if (this.changed === changed) return;
-		this.changed = changed;
-		this._onDidChangeLabel.fire();
-	}
-
-	override getLabelExtraClasses(): string[] {
-		if (this.target.kind !== "api") return [];
-		// review.css draws the board's icon over the codicon's slot.
-		return [
-			...(this.boardIcon ? ["review-board-icon", `review-board-icon-${this.boardIcon}`] : []),
-			...(this.changed ? ["review-tab-changed"] : []),
-		];
 	}
 
 	setApiTitle(title: string): void {
@@ -132,8 +106,6 @@ export class ReviewCanvasEditorInput extends EditorInput {
 
 	override getIcon(): ThemeIcon | undefined {
 		if (this.target.kind === "home") return Codicon.home;
-		// A placeholder slot: the board's own icon is drawn over it.
-		if (this.target.kind === "api" && this.boardIcon) return Codicon.window;
 		if (this.target.kind === "api-source") return Codicon.repo;
 		return undefined;
 	}

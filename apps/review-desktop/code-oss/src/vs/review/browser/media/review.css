@@ -636,20 +636,6 @@ body
   padding: 2px 0;
 }
 
-/* Home stays open as an editor, so back and forward pass through it, but it
-   is a window control (the house after the arrows), not a tab: the strip
-   holds only boards. Home is the one sticky editor. */
-body
-  .monaco-workbench.review-workbench
-  .part.editor
-  > .content
-  .editor-group-container
-  > .title
-  .tabs-container
-  > .tab.sticky {
-  display: none;
-}
-
 .monaco-workbench
   .part.titlebar.review-chrome-overlay
   .review-titlebar-container
@@ -2106,25 +2092,6 @@ body
 
 .monaco-workbench .review-ask-host .review-ask-chrome :is(button, a, input) {
   -webkit-app-region: no-drag;
-}
-
-/* A board tab draws the canvas's icon for its board (set as a mask by the
-   board tabs contribution) in the codicon's slot. */
-.monaco-workbench .tab .monaco-icon-label.review-board-icon::before {
-  content: "" !important;
-  width: 16px;
-  background-color: currentColor;
-  -webkit-mask: var(--review-board-icon) center / 14px 14px no-repeat;
-  mask: var(--review-board-icon) center / 14px 14px no-repeat;
-}
-
-/* The changed badge on a board tab's icon: a second mask layer lets the dot
-   show through. The tab sets the box's height, so the dot is placed from the
-   icon's centre: on its top-right corner. */
-.monaco-workbench .tab .monaco-icon-label.review-board-icon.review-tab-changed::before {
-  background-image: radial-gradient(circle at calc(50% + 6px) calc(50% - 6px), var(--vscode-charts-blue) 3px, transparent 3.5px);
-  -webkit-mask: var(--review-board-icon) center / 14px 14px no-repeat, radial-gradient(circle at calc(50% + 6px) calc(50% - 6px), #000 3.5px, transparent 4px);
-  mask: var(--review-board-icon) center / 14px 14px no-repeat, radial-gradient(circle at calc(50% + 6px) calc(50% - 6px), #000 3.5px, transparent 4px);
 }
 
 /* ---------------------------------------------------------------------------
