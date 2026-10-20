@@ -45,7 +45,6 @@ import * as stylex from "@stylexjs/stylex";
 import {
   Background,
   BaseEdge,
-  Controls,
   EdgeLabelRenderer,
   Handle,
   MiniMap,
@@ -1539,6 +1538,15 @@ function C4MapCanvas({
         return;
       }
 
+      if (event.key === "+" || event.key === "=" || event.key === "-") {
+        event.preventDefault();
+        event.stopPropagation();
+        const instance = flowRef.current;
+        void (event.key === "-" ? instance?.zoomOut() : instance?.zoomIn());
+
+        return;
+      }
+
       const direction = c4SpatialDirectionForKey(event.key);
 
       if (direction) {
@@ -1743,7 +1751,6 @@ function C4MapCanvas({
                       }}
                     />
                   )}
-                  <Controls showInteractive={false} />
                 </ReactFlow>
               </C4HoveredNodeContext.Provider>
             </>

@@ -225,6 +225,7 @@ export const C4_MAP_HOTKEY_GROUPS = [
     items: [
       { keys: ["h", "j", "k", "l", "Arrows"], label: "select" },
       { keys: ["f"], label: "fit" },
+      { keys: ["+", "-"], label: "zoom" },
     ],
   },
   {
