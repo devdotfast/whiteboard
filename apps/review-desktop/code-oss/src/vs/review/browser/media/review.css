@@ -1435,7 +1435,8 @@ body
   outline: 1px solid var(--review-scope-marker);
   border-radius: 2px;
 }
-.review-workbench .monaco-editor .review-fold-hint {
+.review-workbench .monaco-editor .review-fold-hint,
+.review-workbench .monaco-editor .review-selection-hint {
   margin-left: 2ch;
   color: var(--review-scope-marker);
   font-family: var(--review-chrome-font, inherit);

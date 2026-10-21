@@ -20,7 +20,7 @@
 import { localize } from '../../nls.js';
 import { Registry } from '../../platform/registry/common/platform.js';
 import { ConfigurationScope, Extensions, type IConfigurationRegistry } from '../../platform/configuration/common/configurationRegistry.js';
-import { DIFF_EDITOR_FONT_SIZE_SETTING, REVIEW_DOCUMENT_FONT_SIZE_BASE, REVIEW_DOCUMENT_FONT_SIZE_SETTING, REVIEW_DOCUMENT_WIDTH_CHOICES, REVIEW_DOCUMENT_WIDTH_SETTING, REVIEW_KEYMAPS, REVIEW_KEYMAP_SETTING, REVIEW_OPEN_FILES_IN_APPLICATION_SETTING, REVIEW_OPEN_FILES_IN_CHOICES, REVIEW_OPEN_FILES_IN_SETTING, REVIEW_PEEK_SIDE_BY_SIDE_SETTING, REVIEW_READING_FONTS, REVIEW_READING_FONT_SETTING, REVIEW_READY_NOTIFICATION_CHOICES, REVIEW_READY_NOTIFICATION_SETTING, REVIEW_REMOTE_HOSTS_SETTING, REVIEW_REMOTE_INSTALL_MODES, REVIEW_REMOTE_INSTALL_SETTING, REVIEW_SHARING_SETTING, REVIEW_SOFTWARE_MAP_SETTING, REVIEW_TELEMETRY_SETTING, curatedExtensionConfigurationDefaults, reviewConfigurationDefaults } from './reviewConfigurationDefaults.js';
+import { REVIEW_INLINE_LINE_NUMBERS_SETTING, DIFF_EDITOR_FONT_SIZE_SETTING, REVIEW_DOCUMENT_FONT_SIZE_BASE, REVIEW_DOCUMENT_FONT_SIZE_SETTING, REVIEW_DOCUMENT_WIDTH_CHOICES, REVIEW_DOCUMENT_WIDTH_SETTING, REVIEW_KEYMAPS, REVIEW_KEYMAP_SETTING, REVIEW_OPEN_FILES_IN_APPLICATION_SETTING, REVIEW_OPEN_FILES_IN_CHOICES, REVIEW_OPEN_FILES_IN_SETTING, REVIEW_PEEK_SIDE_BY_SIDE_SETTING, REVIEW_READING_FONTS, REVIEW_READING_FONT_SETTING, REVIEW_READY_NOTIFICATION_CHOICES, REVIEW_READY_NOTIFICATION_SETTING, REVIEW_REMOTE_HOSTS_SETTING, REVIEW_REMOTE_INSTALL_MODES, REVIEW_REMOTE_INSTALL_SETTING, REVIEW_SHARING_SETTING, REVIEW_SOFTWARE_MAP_SETTING, REVIEW_TELEMETRY_SETTING, curatedExtensionConfigurationDefaults, reviewConfigurationDefaults } from './reviewConfigurationDefaults.js';
 
 const configurationRegistry = Registry.as<IConfigurationRegistry>(Extensions.Configuration);
 
@@ -92,6 +92,11 @@ configurationRegistry.registerConfiguration({
 			default: 12,
 			description: localize('diffEditor.fontSize', "Font size in the Diff tab, diff blocks and code peeks, in pixels."),
 		},
+		[REVIEW_INLINE_LINE_NUMBERS_SETTING]: {
+            type: 'boolean',
+            default: false,
+            description: localize('review.inlineDiffs.showLineNumbers', "Show line numbers in Whiteboard document diffs and code peeks. The Diff view keeps its own line numbers."),
+        },
 		[REVIEW_PEEK_SIDE_BY_SIDE_SETTING]: {
 			type: 'boolean',
 			default: false,

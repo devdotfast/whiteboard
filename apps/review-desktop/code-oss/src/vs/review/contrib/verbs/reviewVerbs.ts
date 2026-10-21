@@ -22,6 +22,7 @@ import {
 import { IReviewApiCatalogService } from "../../services/reviewApiCatalogService.js";
 import { IReviewCanvasEditorTabsService } from "../../services/reviewCanvasEditorTabsService.js";
 import { apiSourceTarget } from "../../services/reviewApiSourceService.js";
+import { InlineLineNumbers } from "../../services/reviewLineNumbers.js";
 import { selectedMonacoDiff } from "./reviewDiffSelection.js";
 import { apiSelectionEvent } from "./reviewApiSelection.js";
 
@@ -88,7 +89,8 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 		const fromLine = start.lineNumber;
 		const toLine = Math.max(fromLine, end.lineNumber - (end.column === 1 && end.lineNumber > fromLine ? 1 : 0));
 		const rect = editor.getDomNode()?.getBoundingClientRect();
-		const cursor = selection.getPosition();
+		// Keep the action toolbar above the passage and its first-line coordinate hint.
+		const cursor = InlineLineNumbers.hasSelectionHint(editor) ? start : selection.getPosition();
 		const position = editor.getScrolledVisiblePosition(cursor.lineNumber > toLine ? { lineNumber: toLine, column: model.getLineMaxColumn(toLine) } : cursor);
 		const layout = editor.getLayoutInfo();
 		const right = layout.contentLeft + layout.contentWidth;

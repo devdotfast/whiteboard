@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { InlineLineNumbers } from "./reviewLineNumbers.js";
 import { Codicon } from "../../base/common/codicons.js";
 import { Disposable } from "../../base/common/lifecycle.js";
 import { autorun, observableValue, type IObservable } from "../../base/common/observable.js";
@@ -100,6 +101,7 @@ export class StructuralFoldControls extends Disposable {
 		}));
 		this._register(editor.onDidChangeModel(() => { this.hovered = undefined; this.render(); }));
 		this._register(editor.onDidChangeModelTokens(() => this.render()));
+		this._register(editor.onDidChangeCursorSelection(() => this.render()));
 		// These move lines without changing scope state.
 		this._register(editor.onDidContentSizeChange(() => this.layoutViewport()));
 		this._register(editor.onDidScrollChange(() => this.layoutViewport()));
@@ -261,7 +263,7 @@ export class StructuralFoldControls extends Disposable {
 				options: { description: "review-scope-brace", inlineClassName: `review-scope-brace${state}` },
 			});
 		}
-		if (targeted && foldable.rail) {
+		if (targeted && foldable.rail && !(InlineLineNumbers.hasSelectionHint(this.editor) && this.editor.getSelection()?.startLineNumber === line)) {
 			const lines = foldable.rail.end - foldable.rail.start;
 			const end = model.getLineMaxColumn(line);
 			result.push({

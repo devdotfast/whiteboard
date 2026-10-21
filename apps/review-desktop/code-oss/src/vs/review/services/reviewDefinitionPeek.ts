@@ -1,3 +1,4 @@
+import { InlineLineNumbers, ReviewLineNumbersSetting } from "./reviewLineNumbers.js";
 import { Action } from "../../base/common/actions.js";
 import type { IDimension } from "../../base/browser/dom.js";
 import { Codicon } from "../../base/common/codicons.js";
@@ -131,7 +132,11 @@ class ReviewDefinitionPeekWidget extends PeekViewWidget {
 				this.editors = [editor];
 			}
 			this.view.layout({ height: this._bodyElement!.clientHeight, width: this._bodyElement!.clientWidth });
-			for (const inner of this.editors) peeks.set(inner, this);
+			const lineNumbers = store.add(this.instantiationService.createInstance(ReviewLineNumbersSetting));
+			for (const inner of this.editors) {
+                peeks.set(inner, this);
+                store.add(new InlineLineNumbers(inner, lineNumbers));
+            }
 			this.input.value = store;
 			this.target = { resource, range };
 			this.setTitle(basename(resource), [file.slice(0, Math.max(0, file.lastIndexOf("/"))), pair ? "changed" : undefined].filter(Boolean).join(" · "));

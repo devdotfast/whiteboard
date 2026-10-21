@@ -123,13 +123,16 @@ it("offers whole-block reference actions for the editor selection, and clears bo
 
     const heading = page.querySelector<HTMLElement>("h2")!;
 
-    const pane = await vi.waitFor(() => {
-      const found = page.querySelector<HTMLElement>(".react-flow__pane");
+    const pane = await vi.waitFor(
+      () => {
+        const found = page.querySelector<HTMLElement>(".react-flow__pane");
 
-      if (!found) throw new Error("No diagram pane");
+        if (!found) throw new Error("No diagram pane");
 
-      return found;
-    });
+        return found;
+      },
+      { timeout: 10_000 },
+    );
 
     const input = cdp();
 

@@ -1352,6 +1352,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		| "subscribe"
 		| "currentTheme"
 		| "onDidChangeTheme"
+		| "currentInlineLineNumbers"
+		| "setInlineLineNumbers"
+		| "onDidChangeInlineLineNumbers"
 		| "currentDiffLayout"
 		| "setDiffLayout"
 		| "onDidChangeDiffLayout"
@@ -1372,6 +1375,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			subscribe: (listener) => this.surfaceEvents.event(listener),
 			currentTheme: () => this.colorScheme(),
 			onDidChangeTheme: (listener) => this.themeEvents.event(listener),
+			currentInlineLineNumbers: () => this.diffViews.lineNumbers.get(),
+			setInlineLineNumbers: show => this.diffViews.lineNumbers.set(show),
+			onDidChangeInlineLineNumbers: listener => this.diffViews.lineNumbers.onDidChange(listener),
 			currentDiffLayout: (scope) => this.diffViews.layout(scope).get(),
 			setDiffLayout: (scope, layout) => this.diffViews.layout(scope).set(layout),
 			onDidChangeDiffLayout: (scope, listener) => this.diffViews.layout(scope).onDidChange(listener),

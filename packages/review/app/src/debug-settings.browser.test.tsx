@@ -203,6 +203,9 @@ function createTestSession(): ReviewSession {
 
         return { dispose: () => (themeListener = undefined) };
       },
+      currentInlineLineNumbers: () => false,
+      setInlineLineNumbers: async () => {},
+      onDidChangeInlineLineNumbers: () => ({ dispose() {} }),
       currentDiffLayout: () => "split",
       async setDiffLayout() {},
       onDidChangeDiffLayout: () => ({ dispose() {} }),

@@ -30,6 +30,7 @@ import {
 } from "../common/reviewStructuralDiff.js";
 import type { ITextModel } from "../../editor/common/model.js";
 import type { ReviewFilesEditorEntry } from "./reviewFilesDiffView.js";
+import { InlineLineNumbers, type ReviewLineNumbersSetting } from "./reviewLineNumbers.js";
 import { StructuralFoldControls, StructuralFoldHover } from "./reviewStructuralFolds.js";
 import { REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
 import type { StructuralViewedState } from "./reviewStructuralViewed.js";
@@ -41,6 +42,7 @@ export function createStructuralDiffEditors(
 	lifetime: DisposableStore,
 	session: StructuralDiffSession,
 	viewed?: StructuralViewedState,
+	lineNumbers?: ReviewLineNumbersSetting,
 ): { instantiation: IInstantiationService; entries: readonly ReviewFilesEditorEntry[] } {
 	// These models belong to this comparison. A live file can change while the
 	// comparison is open, so its editor text must come from diffr's own result.
@@ -103,7 +105,7 @@ export function createStructuralDiffEditors(
 	const child = lifetime.add(
 		instantiation.createChild(new ServiceCollection([IDiffProviderFactoryService, factory])),
 	);
-	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime, viewed);
+	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime, viewed, lineNumbers);
 	return { instantiation: child, entries: resolvedEntries };
 }
 
@@ -206,6 +208,7 @@ function attachStructuralEditors(
 	session: StructuralDiffSession,
 	lifetime: DisposableStore,
 	viewed?: StructuralViewedState,
+	lineNumbers?: ReviewLineNumbersSetting,
 ): void {
 	const editors = instantiation.invokeFunction((a) => a.get(ICodeEditorService));
 	const sides = new Map(entries.flatMap((e) => [[e.original!.toString(), e.file.path], [e.modified!.toString(), e.file.path]] as const));
@@ -235,6 +238,10 @@ function attachStructuralEditors(
 			return path === pathIn(model?.modified) ? path : undefined;
 		};
 		const sideOf = (side: ICodeEditor) => () => pathIn(side.getModel());
+		if (lineNumbers) {
+            store.add(new InlineLineNumbers(editor.getOriginalEditor(), lineNumbers));
+            store.add(new InlineLineNumbers(editor.getModifiedEditor(), lineNumbers));
+        }
 		const hover = new StructuralFoldHover();
 		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", sideOf(editor.getOriginalEditor()), session, unchangedRegions, hover, viewed));
 		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", sideOf(editor.getModifiedEditor()), session, unchangedRegions, hover, viewed));

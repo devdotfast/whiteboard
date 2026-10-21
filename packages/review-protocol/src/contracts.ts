@@ -400,6 +400,11 @@ export interface ReviewCanvasBridge {
     scope: ReviewDiffLayoutScope,
     listener: (layout: ReviewDiffLayout) => void,
   ): ReviewDisposable;
+  currentInlineLineNumbers(): boolean;
+  setInlineLineNumbers(show: boolean): Promise<void>;
+  onDidChangeInlineLineNumbers(
+    listener: (show: boolean) => void,
+  ): ReviewDisposable;
   notify?(notification: ReviewNotification): ReviewDisposable;
   setupTooltip?(
     target: HTMLElement,

@@ -28,6 +28,7 @@ import type {
 	ReviewDiffViewHandle,
 	ReviewDiffViewSpec,
 } from "../common/reviewProtocol.js";
+import { ReviewLineNumbersSetting } from "./reviewLineNumbers.js";
 import { ReviewDiffLayoutSetting } from "./reviewDiffLayout.js";
 import { markReviewEmbeddedEditor } from "./reviewEmbeddedNavigation.js";
 import { markReviewDefinitionPeekHost } from "./reviewDefinitionPeek.js";
@@ -60,6 +61,7 @@ export class ReviewDiffViewService extends Disposable {
 	comparisonGeneration = 0;
 	private readonly sessions = new Map<string, { session: StructuralDiffSession; revision?: string }>();
 	readonly diffLayout: ReviewDiffLayoutSetting;
+	readonly lineNumbers: ReviewLineNumbersSetting;
 	private readonly peekLayout: ReviewDiffLayoutSetting;
 	/**
 	 * Scroll and expansion state per session document. The Diff view is a
@@ -81,6 +83,7 @@ export class ReviewDiffViewService extends Disposable {
 			for (const handle of this.handles) handle.captureViewState();
 		}));
 		this.diffLayout = this._register(instantiationService.createInstance(ReviewDiffLayoutSetting, "diffEditor.renderSideBySide"));
+		this.lineNumbers = this._register(instantiationService.createInstance(ReviewLineNumbersSetting));
 		this.peekLayout = this._register(instantiationService.createInstance(ReviewDiffLayoutSetting, REVIEW_PEEK_SIDE_BY_SIDE_SETTING));
 	}
 
@@ -119,6 +122,7 @@ export class ReviewDiffViewService extends Disposable {
 			this.viewStates,
 			() => this.handles.delete(handle),
 			source,
+			this.lineNumbers,
 		);
 		this.handles.add(handle);
 		return handle;
@@ -252,6 +256,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 		private readonly viewStates: ReviewDiffViewStateStorage,
 		private readonly onDispose: () => void,
 		private readonly source: ReviewDiffViewSource,
+		private readonly lineNumbers: ReviewLineNumbersSetting,
 	) {
 		super();
 		this.progress = spec.progress;
@@ -287,7 +292,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 			const store = this._register(new DisposableStore());
 			const viewed = this.spec.onSetViewed
 				? store.add(new StructuralViewedState(session, entries, () => this.progress, this.progressChanged.event)) : undefined;
-			const structural = createStructuralDiffEditors(this.instantiationService, entries, store, session, viewed);
+			const structural = createStructuralDiffEditors(this.instantiationService, entries, store, session, viewed, this.spec.document ? this.lineNumbers : undefined);
 			this.diffEntries = structural.entries;
 
 			if (this.disposed) return;
