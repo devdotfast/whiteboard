@@ -29,6 +29,16 @@ test("added structural files restore through the generated empty side", () => {
 	assert.equal(restored?.docStates?.[added("new")]?.collapsed, true);
 });
 
+test("collapsed files restore when the structural view is created in a different order", () => {
+	const { saved } = setup();
+	const structural = (view: number) => JSON.stringify([
+		`review-api-source://review-a/alpha.ts?side=base&version=1&structuralView=${view}`,
+		`review-api-source://review-a/alpha.ts?side=head&version=1&structuralView=${view}`,
+	]);
+	saved.set("commit", { scrollState: { top: 0, left: 0 }, docStates: { [structural(2)]: { collapsed: true } } });
+	assert.equal(saved.get("commit", [structural(1)])?.docStates?.[structural(1)]?.collapsed, true);
+});
+
 test("a new host restores position, active file, folds and selection across model generations", () => {
 	const { saved, storage } = setup();
 	const before = key("file.ts", "old");
