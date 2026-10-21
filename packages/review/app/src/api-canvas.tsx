@@ -42,7 +42,6 @@ import { hostApiClient, useReviewSession } from "./host/review-session";
 import { useBoardPlace } from "./review-doc-meta";
 import type { ReviewTocEntry } from "./review-document-headings";
 import type { ReviewFindHost } from "./review-find";
-import { ReviewLensesProvider } from "./review-lenses";
 import { SharingContext } from "./share-control";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
@@ -489,6 +488,7 @@ export function ApiCanvas({
         hostState: content.hostState,
         available: content.available,
         contents,
+        coverageRevision,
       },
     [
       data,
@@ -498,6 +498,7 @@ export function ApiCanvas({
       content.hostState,
       content.available,
       contents,
+      coverageRevision,
     ],
   );
 
@@ -554,31 +555,22 @@ export function ApiCanvas({
                             host={host}
                             settings={settings}
                           >
-                            <ReviewLensesProvider
-                              client={client}
-                              snapshot={board.snapshot}
-                              coverageRevision={coverageRevision}
-                            >
-                              {error && (
-                                <p
-                                  {...stylex.props(styles.error)}
-                                  role="status"
-                                >
-                                  {error}
-                                </p>
+                            {error && (
+                              <p {...stylex.props(styles.error)} role="status">
+                                {error}
+                              </p>
+                            )}
+                            {trashBanner}
+                            <div {...stylex.props(styles.canvasFrame)}>
+                              {version === undefined && (
+                                <NearbyBoards
+                                  painted={painted}
+                                  client={client}
+                                  loader={loader}
+                                />
                               )}
-                              {trashBanner}
-                              <div {...stylex.props(styles.canvasFrame)}>
-                                {version === undefined && (
-                                  <NearbyBoards
-                                    painted={painted}
-                                    client={client}
-                                    loader={loader}
-                                  />
-                                )}
-                                {children}
-                              </div>
-                            </ReviewLensesProvider>
+                              {children}
+                            </div>
                           </WhiteboardProvider>
                         </BoardEditorHostContext.Provider>
                       </BoardPaintedContext.Provider>

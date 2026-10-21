@@ -2,8 +2,11 @@ import type { Snapshot } from "@review/review-api/store";
 import { act } from "react";
 import { afterEach, expect, it } from "vitest";
 
-import { mountReviewCanvas as mount } from "./desktop-entry";
-import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
+import {
+  loadFixture,
+  mountWhiteboard as mount,
+  settled,
+} from "./whiteboard-fixture";
 
 let canvas: ReturnType<typeof mount> | undefined;
 
@@ -30,12 +33,7 @@ it("renders a document's task list with each checkbox beside its text", async ()
   container.style.width = "800px";
   document.body.append(container);
   await act(async () => {
-    canvas = mount(container, {
-      kind: "api",
-      reviewId: snapshot.reviewId,
-      version: 0,
-      bridge: fixtureReviewBridge({ snapshot }),
-    });
+    canvas = mount(container, loadFixture({ snapshot }));
   });
 
   const items = await settled(() =>

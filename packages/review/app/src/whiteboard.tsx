@@ -6,7 +6,9 @@ import {
   parseReviewBoardPlace,
   parseReviewStackResponse,
 } from "@dev.fast/review-protocol";
+import type { ReviewApiClient } from "@review/review-api/client";
 import { elements } from "@review/review-api/document";
+import type { ReviewProgress } from "@review/review-api/review-progress";
 import {
   type ReactNode,
   createContext,
@@ -51,6 +53,7 @@ import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
 import type { ReviewTocEntry } from "./review-document-headings";
 import { type ReviewFindHost, ReviewFindProvider } from "./review-find";
+import { ReviewLensesProvider } from "./review-lenses";
 import { ReviewPanelProvider, useReviewPanelStore } from "./review-panel";
 import { ReviewRootsProvider } from "./review-root-context";
 import { readReviewNavigationRestore } from "./review-view-state";
@@ -67,6 +70,10 @@ export interface WhiteboardData extends ApiDocumentData {
   available?: ReviewApiSummary["available"];
   /** The board editor's Contents, as the person types. */
   contents?: ReviewTocEntry[];
+  /** Bumped as coverage changes, to read the progress again. */
+  coverageRevision?: number;
+  /** The progress as loaded, where the host cannot read it. */
+  progress?: ReviewProgress;
 }
 
 /** What the host can do for the board. Features follow its methods. */
@@ -97,7 +104,8 @@ export function WhiteboardProvider({
 }) {
   const { snapshot } = data;
   const pins = snapshot.pins;
-  const session = useBoardSession(data, host);
+  const client = useMemo(() => hostApiClient(host), [host.request]);
+  const session = useBoardSession(data, host, client);
   const queries = useCanvasQueryScope(host.request, snapshot.reviewId);
 
   useEffect(() => host.ready(), [host.ready]);
@@ -147,32 +155,39 @@ export function WhiteboardProvider({
                     value={snapshot.version}
                   >
                     <BoardSettings.Provider value={settings}>
-                      <ReviewDiffFilesProvider
-                        documentKey={`/\0review:${snapshot.reviewId}`}
-                        revision={pins?.worktreeRevision}
-                        unavailable={!!snapshot.sourceUnavailable}
+                      <ReviewLensesProvider
+                        client={client}
+                        snapshot={snapshot}
+                        coverageRevision={data.coverageRevision}
+                        loaded={data.progress}
                       >
-                        <ReviewRootsProvider roots={roots}>
-                          <ReviewFindProvider
-                            articleRef={articleRef}
-                            documentKey={snapshot.reviewId}
-                            host={host.find}
-                          >
-                            <ReviewDebugSettingsProvider>
-                              <BoardReview softwareMapEnabled={mapsShown}>
-                                <AskHistoryProvider>
-                                  <AskDesktopSync />
-                                  <AgentSelectionProvider
-                                    revision={snapshot.reviewId}
-                                  >
-                                    {children}
-                                  </AgentSelectionProvider>
-                                </AskHistoryProvider>
-                              </BoardReview>
-                            </ReviewDebugSettingsProvider>
-                          </ReviewFindProvider>
-                        </ReviewRootsProvider>
-                      </ReviewDiffFilesProvider>
+                        <ReviewDiffFilesProvider
+                          documentKey={`/\0review:${snapshot.reviewId}`}
+                          revision={pins?.worktreeRevision}
+                          unavailable={!!snapshot.sourceUnavailable}
+                        >
+                          <ReviewRootsProvider roots={roots}>
+                            <ReviewFindProvider
+                              articleRef={articleRef}
+                              documentKey={snapshot.reviewId}
+                              host={host.find}
+                            >
+                              <ReviewDebugSettingsProvider>
+                                <BoardReview softwareMapEnabled={mapsShown}>
+                                  <AskHistoryProvider>
+                                    <AskDesktopSync />
+                                    <AgentSelectionProvider
+                                      revision={snapshot.reviewId}
+                                    >
+                                      {children}
+                                    </AgentSelectionProvider>
+                                  </AskHistoryProvider>
+                                </BoardReview>
+                              </ReviewDebugSettingsProvider>
+                            </ReviewFindProvider>
+                          </ReviewRootsProvider>
+                        </ReviewDiffFilesProvider>
+                      </ReviewLensesProvider>
                     </BoardSettings.Provider>
                   </DisplayedReviewVersionContext.Provider>
                 </BoardData.Provider>
@@ -190,6 +205,7 @@ export function WhiteboardProvider({
 function useBoardSession(
   data: WhiteboardData,
   host: WhiteboardHost,
+  client: ReviewApiClient,
 ): ReviewSession {
   const reviewId = data.snapshot.reviewId;
   const latest = useRef(data);
@@ -210,8 +226,6 @@ function useBoardSession(
 
     return session;
   }, [host, reviewId]);
-
-  const client = useMemo(() => hostApiClient(host), [host.request]);
 
   return useMemo(() => {
     const { snapshot, version } = data;

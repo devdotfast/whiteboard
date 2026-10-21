@@ -59,7 +59,7 @@ import type { SourcePeekAnchor } from "./review-panel-model";
 import { useReviewRoots } from "./review-root-context";
 import type { SoftwareMapResolvedDataPayload } from "./software-map/software-map-snapshot";
 
-interface Trace {
+export interface BoardTrace {
   label: string;
   events: { id: string; role: string; text: string }[];
 }
@@ -71,7 +71,7 @@ export interface ApiDocumentData {
   commits?: ReviewCommitSummary[];
   anchors: Map<string, SourcePeekAnchor>;
   images: Map<string, string>;
-  traces: Map<string, Trace>;
+  traces: Map<string, BoardTrace>;
   /** Board link targets, keyed "<boardId>#<blockId>". */
   boards: Map<string, BoardLinkTarget>;
   maps: Map<
@@ -120,10 +120,27 @@ function documentKey(snapshot: Snapshot): string {
   return key;
 }
 
-type SavedMap = Awaited<ReturnType<LocalReviewData["map"]>>;
+export type SavedMap = Awaited<ReturnType<LocalReviewData["map"]>>;
 
 type MapModel =
   ApiDocumentData["maps"] extends Map<string, infer Model> ? Model : never;
+
+/** A saved software map, as the board draws it. */
+export function savedMapModel(saved: SavedMap): MapModel {
+  return {
+    ...saved,
+    pinnedData: {
+      side: saved.side,
+      counts: new Map(Object.entries(saved.countsByElementPath)),
+      unmappedByElementPath: new Map(
+        Object.entries(saved.unmappedByElementPath),
+      ),
+    },
+    elementsByPath: new Map(
+      saved.elements.map((element) => [element.path, element]),
+    ),
+  };
+}
 
 type LinkTarget = BoardLinkTarget & { to: BoardRef };
 
@@ -210,7 +227,7 @@ export function createDocumentLoader(
       }
 
       if (node.type === "trace_quote") {
-        const trace = cached<Trace | null>(key.trace(node.traceId));
+        const trace = cached<BoardTrace | null>(key.trace(node.traceId));
 
         if (trace) data.traces.set(node.traceId, trace);
       }
@@ -277,7 +294,7 @@ export function createDocumentLoader(
         pending.push(
           read(key.trace(node.traceId), () =>
             client
-              .read<Trace>(
+              .read<BoardTrace>(
                 `/${encodeURIComponent(snapshot.reviewId)}/resources/${encodeURIComponent(node.traceId)}`,
               )
               .catch(() => null),
@@ -286,25 +303,13 @@ export function createDocumentLoader(
 
       if (node.type === "software_map")
         pending.push(
-          read(key.map(node.mapVersionId), async (): Promise<MapModel> => {
-            const saved = await client.read<SavedMap>(
-              `/${snapshot.reviewId}/maps/${encodeURIComponent(node.mapVersionId)}?version=${snapshot.version}`,
-            );
-
-            return {
-              ...saved,
-              pinnedData: {
-                side: saved.side,
-                counts: new Map(Object.entries(saved.countsByElementPath)),
-                unmappedByElementPath: new Map(
-                  Object.entries(saved.unmappedByElementPath),
-                ),
-              },
-              elementsByPath: new Map(
-                saved.elements.map((element) => [element.path, element]),
+          read(key.map(node.mapVersionId), async () =>
+            savedMapModel(
+              await client.read<SavedMap>(
+                `/${snapshot.reviewId}/maps/${encodeURIComponent(node.mapVersionId)}?version=${snapshot.version}`,
               ),
-            };
-          }),
+            ),
+          ),
         );
     }
 

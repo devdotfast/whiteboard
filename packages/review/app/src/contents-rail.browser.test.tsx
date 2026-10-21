@@ -9,13 +9,17 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 
 import { ContentsRail } from "./contents-rail";
-import { mountReviewCanvas } from "./desktop-entry";
-import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
 import type { ReviewTocEntry } from "./review-document-headings";
+import {
+  fixtureHost,
+  loadFixture,
+  mountWhiteboard,
+  settled,
+} from "./whiteboard-fixture";
 
 let root: Root | null = null;
 
-let canvas: ReturnType<typeof mountReviewCanvas> | undefined;
+let canvas: ReturnType<typeof mountWhiteboard> | undefined;
 
 afterEach(async () => {
   await act(async () => root?.unmount());
@@ -250,23 +254,17 @@ const mountBoard = async (width: number) => {
   container.style.height = "700px";
   document.body.append(container);
   await act(async () => {
-    canvas = mountReviewCanvas(
-      container,
-      {
-        kind: "api",
-        reviewId: snapshot.reviewId,
-        version: 0,
-        // Desktop's sidebar leads, so the page bar holds the ⋯ menu.
-        bridge: { ...fixtureReviewBridge({ snapshot }), reportSidebar() {} },
-      },
-      {
+    canvas = mountWhiteboard(container, loadFixture({ snapshot }), {
+      // Desktop's sidebar leads, so the page bar holds the ⋯ menu.
+      host: fixtureHost({ reportSidebar() {} }),
+      ui: {
         showMenu: (request) => {
           menu = request;
 
           return { dispose: () => {} };
         },
       },
-    );
+    });
   });
 
   const rail = () =>

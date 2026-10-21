@@ -9,10 +9,10 @@ import { userEvent } from "vitest/browser";
 
 import { BlockErrorBoundary } from "./blocks";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
-import { settled } from "./fixture-review-bridge";
 import { FlowGraph } from "./flow-graph";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
+import { settled } from "./whiteboard-fixture";
 
 import "./styles.css";
 

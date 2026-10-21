@@ -1,4 +1,4 @@
-import { type JsonValue, parseJsonText } from "@dev.fast/review-protocol";
+import type { JsonValue } from "@dev.fast/review-protocol";
 import {
   FIXTURE_IMAGE_ID,
   FIXTURE_MAP_ID,
@@ -19,13 +19,19 @@ import { type ReactNode, act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import type { SavedMap } from "./api-document";
 import {
   BlockErrorBoundary,
   type StoredBlock,
   blockComponents,
 } from "./blocks";
-import { mountReviewCanvas as mount } from "./desktop-entry";
-import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
+import type { WhiteboardHost } from "./whiteboard";
+import {
+  fixtureHost,
+  loadFixture,
+  mountWhiteboard as mount,
+  settled,
+} from "./whiteboard-fixture";
 
 type Kind = keyof typeof blockComponents;
 
@@ -72,16 +78,14 @@ const model = defineSoftwareMap({
   },
 });
 
-const savedMap = parseJsonText(
-  JSON.stringify({
-    elements: model.elements,
-    relationships: model.relationships,
-    side: "head",
-    commit: "head",
-    countsByElementPath: {},
-    unmappedByElementPath: {},
-  }),
-);
+const savedMap: SavedMap = {
+  elements: model.elements,
+  relationships: model.relationships,
+  side: "head",
+  commit: "head",
+  countsByElementPath: {},
+  unmappedByElementPath: {},
+};
 
 // The fixture compares the single status line in order.ts on both sides.
 const fixtureProgress: ReviewProgress = {
@@ -169,7 +173,11 @@ afterEach(async () => {
 
 async function mountFixture(
   kind: Kind,
-  options: { trace?: null; document?: Snapshot["document"] } = {},
+  options: {
+    trace?: null;
+    document?: Snapshot["document"];
+    host?: Partial<WhiteboardHost>;
+  } = {},
   hostStyle?: string,
 ) {
   const snapshot: Snapshot = {
@@ -189,7 +197,7 @@ async function mountFixture(
 
   const image = { bytes: png, type: "image/png" };
 
-  const bridge = fixtureReviewBridge({
+  const data = loadFixture({
     snapshot,
     progress: fixtureProgress,
     commits: [
@@ -204,33 +212,33 @@ async function mountFixture(
         deletions: 0,
       },
     ],
-    files: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }],
-    resources:
-      options.trace === null
-        ? { [FIXTURE_IMAGE_ID]: image }
-        : {
-            [FIXTURE_IMAGE_ID]: image,
-            [FIXTURE_TRACE_ID]: trace,
-          },
+    images: { [FIXTURE_IMAGE_ID]: image },
+    traces: options.trace === null ? {} : { [FIXTURE_TRACE_ID]: trace },
     maps: { [FIXTURE_MAP_ID]: savedMap },
   });
 
-  const request = vi.spyOn(bridge, "request");
   const container = document.createElement("div");
 
   if (hostStyle) container.style.cssText = hostStyle;
   document.body.append(container);
   await act(async () => {
-    canvas = mount(container, {
-      kind: "api",
+    canvas = mount(container, data, {
+      host: fixtureHost({
+        diffView: {
+          files: async () => [
+            { path: "a.ts", status: "modified", additions: 1, deletions: 0 },
+          ],
+          create: () => {
+            throw new Error("Diff is not mounted by this test.");
+          },
+        },
+        ...options.host,
+      }),
       settings: { softwareMapEnabled: true },
-      reviewId: snapshot.reviewId,
-      version: 0,
-      bridge,
     });
   });
 
-  return { container, snapshot, request };
+  return { container, snapshot };
 }
 
 describe("block components", () => {
@@ -291,8 +299,19 @@ describe("block components", () => {
               ]
             : undefined;
 
-      const { container, request } = await mountFixture(kind, {
+      // Copy ref asks the host's review API for the agent's context.
+      let reply = "";
+
+      const request = vi.fn<NonNullable<WhiteboardHost["request"]>>(
+        async (path) =>
+          path.includes("/copy-context")
+            ? Response.json({ text: reply })
+            : Response.json({ error: "Not in this test." }, { status: 404 }),
+      );
+
+      const { container } = await mountFixture(kind, {
         document: documentBlocks,
+        host: { request },
       });
 
       expect(
@@ -304,7 +323,7 @@ describe("block components", () => {
         kind === "code" || kind === "markdown" ? code : selected.textContent!;
 
       request.mockClear();
-      request.mockResolvedValueOnce(Response.json({ text: `> ${quote}` }));
+      reply = `> ${quote}`;
 
       const write = vi
         .spyOn(navigator.clipboard, "writeText")
@@ -343,7 +362,6 @@ describe("block components", () => {
         expect(write).toHaveBeenCalledWith(`> ${quote}`);
       } finally {
         selection.removeAllRanges();
-        request.mockRestore();
         write.mockRestore();
       }
     },
