@@ -159,6 +159,8 @@ export async function comparisonCoverage(
   );
 
   const remaining = new Set<string>();
+  const seen = new Set<string>();
+  let skipped = 0;
 
   for await (const event of data.structuralChanges({
     reviewId,
@@ -173,27 +175,36 @@ export async function comparisonCoverage(
       continue;
     }
 
-    if (event.type === "complete" && (event.failed || event.aborted))
+    if (event.type === "complete" && (event.failed > skipped || event.aborted))
       throw new Error(
         event.aborted?.message ?? "Structural coverage is incomplete.",
       );
 
-    if (event.type !== "file") continue;
+    if (event.type !== "file" && event.type !== "update") continue;
 
     const path = (event.file.rhs ?? event.file.lhs)!.path;
 
-    if (!remaining.delete(path))
+    if (event.type === "file") {
+      if (!remaining.delete(path))
+        throw new Error(`Unexpected structural result: ${path}`);
+
+      seen.add(path);
+    } else if (!seen.has(path))
       throw new Error(`Unexpected structural result: ${path}`);
 
     const baseIndex = event.file.lhs && baseFiles.get(event.file.lhs.path);
     const headIndex = event.file.rhs && headFiles.get(event.file.rhs.path);
 
     if (event.error) {
+      if (event.type === "update") continue;
+
       if (
         event.error.code !== "unsupported_file_type" &&
         event.error.code !== "not_utf8"
       )
         throw new Error(`Cannot count ${path}: ${event.error.message}`);
+
+      skipped++;
 
       for (const index of [baseIndex, headIndex])
         if (index !== undefined) unsupported.add(coverage.files[index].path);
@@ -246,8 +257,6 @@ export async function comparisonCoverage(
     }
 
     publish?.(current());
-
-    if (!remaining.size) break;
   }
 
   if (remaining.size) throw new Error("Structural coverage is incomplete.");

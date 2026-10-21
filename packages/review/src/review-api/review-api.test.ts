@@ -3746,7 +3746,7 @@ it("counts structural coverage without waiting for summary events", async () => 
         },
       },
     };
-    throw new Error("Counts must not wait for summary events");
+    yield { type: "complete", succeeded: 1, failed: 0 };
   });
   await data.coverage(reviewId, pins);
 
@@ -4099,7 +4099,7 @@ it("returns coverage and lenses after initial files without requesting summary e
         },
       },
     };
-    throw new Error("Coverage must not await enrichment");
+    yield { type: "complete", succeeded: 1, failed: 0 };
   });
   const progress = await reviewProgress(store, data, store.read(reviewId));
   expect(progress.files[0].changed).toEqual({ base: [], head: [[0, 1]] });

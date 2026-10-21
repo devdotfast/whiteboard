@@ -551,6 +551,84 @@ it("keeps Git's rename identity and counts when diffr emits separate deletion an
   data.close();
 });
 
+async function updateCoverage(
+  events: (file: ReturnType<typeof ref>) => StructuralDiffEvent[],
+) {
+  const data = new LocalReviewData(store);
+  const file = ref("a.ts");
+  vi.spyOn(data, "changes").mockImplementation((async (
+    _pins: typeof pins,
+    path?: string,
+  ) =>
+    path
+      ? "@@ -1 +1 @@\n-old\n+new\n"
+      : [
+          { path: "a.ts", status: "modified", additions: 1, deletions: 1 },
+        ]) as typeof data.changes);
+  vi.spyOn(data, "file").mockImplementation(async (at, side, path) => ({
+    file: path,
+    side,
+    commit: at[side],
+    text: text(2),
+  }));
+  vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
+    yield {
+      type: "start",
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
+      lhs: { type: "revision", rev: pins.base },
+      rhs: { type: "revision", rev: pins.head },
+      files: [{ file, status: "modified" }],
+    };
+    yield* events(file);
+  });
+
+  try {
+    return await comparisonCoverage(
+      data,
+      "review",
+      pins,
+      new AbortController().signal,
+    );
+  } finally {
+    data.close();
+  }
+}
+
+it("recomputes a file's folded changes from diffr's update", async () => {
+  const final = await updateCoverage((file) => [
+    { type: "file", file, diff: plainDiff(2) },
+    { type: "update", file, diff: hideFile(plainDiff(2)) },
+    { type: "complete", succeeded: 1, failed: 0 },
+  ]);
+
+  expect(coverageProgress(final.files)).toMatchObject({
+    total: { additions: 1, deletions: 1 },
+    folded: { additions: 1, deletions: 1 },
+    remaining: { additions: 0, deletions: 0 },
+  });
+});
+
+it("keeps a file's coverage when its update fails, and rejects an update with no file", async () => {
+  const error = { code: "provider_failed", message: "boom" };
+
+  const final = await updateCoverage((file) => [
+    { type: "file", file, diff: plainDiff(2) },
+    { type: "update", file, error },
+    { type: "complete", succeeded: 1, failed: 0 },
+  ]);
+
+  expect(coverageProgress(final.files)).toMatchObject({
+    folded: { additions: 0, deletions: 0 },
+    remaining: { additions: 1, deletions: 1 },
+  });
+
+  await expect(
+    updateCoverage((file) => [
+      { type: "update", file, diff: hideFile(plainDiff(2)) },
+    ]),
+  ).rejects.toThrow("Unexpected structural result: a.ts");
+});
+
 function root(children: StructuralRegion[]): StructuralRegion {
   const id = nextRoot++;
 
