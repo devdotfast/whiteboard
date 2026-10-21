@@ -57,6 +57,12 @@ Review applies these focused VS Code changes without changing the source pin:
   root, `remote/` and `remote/web/` manifests, through `c840e22106`,
   `4fd51574d3`, `f44c690a25` and `768c8ceba7`. Manifest-only upstream; stop
   at these betas when syncing.
+- JSON, CSS and HTML language servers on `vscode-languageserver`/
+  `vscode-languageclient` 10.1.1 with upstream's `main` language-service
+  versions and the CSS server's `vscode-languageserver-types` 3.18.3
+  override: `49715cfcdb`, `f3fa55c39d`, `d693278c84`, `041d1b6643` (with its
+  `languageModelCache.ts` import). Locks are upstream's less the hoisted
+  `@vscode/extension-telemetry`.
 
 October 2026 leak, race, and crash fixes, verbatim without test hunks:
 
