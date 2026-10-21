@@ -221,6 +221,15 @@ function BoardRow({
 
   const tooltip = useTooltip(boardTitle(board.title), { detail });
 
+  const kindTooltip = useTooltip<HTMLSpanElement>(
+    board.children?.length
+      ? "Stack"
+      : boardIconKind(board.target) === "code"
+        ? "Review"
+        : "Plan",
+    { instant: true },
+  );
+
   const [titleElement, setTitleElement] = useState<HTMLSpanElement | null>(
     null,
   );
@@ -276,7 +285,7 @@ function BoardRow({
           )}
           onClick={(event) => onOpen(board.reviewId, event)}
         >
-          <span {...stylex.props(styles.iconSlot)}>
+          <span ref={kindTooltip} {...stylex.props(styles.iconSlot)}>
             {board.children?.length ? (
               <StackIcon
                 xstyle={[styles.stackIcon, isCurrent && styles.metaCurrent]}
