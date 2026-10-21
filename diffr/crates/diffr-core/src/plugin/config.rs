@@ -56,6 +56,10 @@ pub struct Manifest {
     /// Each language's fold query: a file in the plugin's folder.
     #[serde(default)]
     pub(crate) queries: BTreeMap<String, String>,
+    /// Whether the plugin may run after the eager chain, changing only
+    /// visibility.
+    #[serde(default)]
+    pub(crate) deferred: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -624,6 +628,10 @@ impl Folder {
         &self.manifest.name
     }
 
+    pub fn deferred(&self) -> bool {
+        self.manifest.deferred
+    }
+
     /// The bundled plugin `name`'s embedded folder.
     fn bundled(name: &str) -> Option<Self> {
         builtin::manifest(name).map(|manifest| Self {
@@ -858,7 +866,20 @@ impl ShapeConfig {
 
 #[cfg(test)]
 mod tests {
+    use super::{builtin, Manifest};
     use crate::config::Config;
+
+    #[test]
+    fn a_manifest_can_mark_its_plugin_deferred() {
+        assert!(builtin::manifest("summarize").unwrap().deferred);
+        assert!(!builtin::manifest("context").unwrap().deferred);
+        assert!(
+            Manifest::parse("name = 'x'\ntitle = 'X'\ndeferred = true\n")
+                .unwrap()
+                .deferred
+        );
+        assert!(Manifest::parse("name = 'x'\ntitle = 'X'\ndeferred = 'yes'\n").is_err());
+    }
 
     #[test]
     fn defaults_can_follow_another_option() {

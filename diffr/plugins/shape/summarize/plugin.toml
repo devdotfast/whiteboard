@@ -1,6 +1,8 @@
 name = "summarize"
 title = "Summaries"
 description = "Pseudocode summaries for large new function bodies and tests."
+# Model calls are slow: run after the other plugins, changing only visibility.
+deferred = true
 
 # Off by default: the summarizer needs an API key.
 [enabled]

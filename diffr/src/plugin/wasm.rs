@@ -429,11 +429,34 @@ struct Component {
     pre: DiffrPluginPre<State>,
     /// JSON for the plugin's constructor.
     options: String,
+    deferred: bool,
 }
 
-/// Walk one file with every shape plugin in order.
+/// Which shape plugins a run walks the file with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Pass {
+    /// Every plugin, in order.
+    All,
+    /// Every plugin that is not deferred.
+    Eager,
+    /// Only the deferred plugins, which may only change visibility.
+    Deferred,
+}
+
+impl Pass {
+    fn runs(self, deferred: bool) -> bool {
+        match self {
+            Self::All => true,
+            Self::Eager => !deferred,
+            Self::Deferred => deferred,
+        }
+    }
+}
+
+/// Walk one file with every shape plugin in the pass, in order.
 struct Job {
     cursor: Cursor,
+    pass: Pass,
     reply: oneshot::Sender<anyhow::Result<Cursor>>,
 }
 
@@ -452,6 +475,7 @@ pub(crate) struct Pipeline {
     workers: Vec<WorkerHandle>,
     /// Choosing a worker and counting the file on it is one step.
     dispatch: Mutex<()>,
+    deferred: bool,
 }
 
 /// The host's imports: WASI, HTTP, and the `git` and `cursor` interfaces.
@@ -487,6 +511,7 @@ impl Pipeline {
                     .with_context(|| format!("plugins.shape.{name}"))
             })
             .collect::<anyhow::Result<Vec<_>>>()?;
+        let deferred = plugins.iter().any(|plugin| plugin.deferred);
         let plugins = Arc::new(plugins);
         let mut handles = Vec::with_capacity(workers.get());
         let mut started = Vec::with_capacity(workers.get());
@@ -509,22 +534,34 @@ impl Pipeline {
         Ok(Self {
             workers: handles,
             dispatch: Mutex::new(()),
+            deferred,
         })
     }
 
-    /// Run every shape plugin on one file's sides, on the worker with the
-    /// fewest files in flight. Returns the edited sides.
+    /// Whether any enabled shape plugin is deferred.
+    pub(crate) fn has_deferred(&self) -> bool {
+        self.deferred
+    }
+
+    /// Run the pass's shape plugins on one file's sides, on the worker with
+    /// the fewest files in flight. Returns the edited sides.
     pub(crate) async fn run(
         &self,
         file: &protocol::FileChange,
         sides: Pairing<protocol::Source>,
+        pass: Pass,
     ) -> anyhow::Result<Pairing<protocol::Source>> {
         let cursor = match Cursor::new(file.clone(), sides) {
+            Ok(cursor) if pass == Pass::Deferred => cursor.visibility_only(),
             Ok(cursor) => cursor,
             Err(sides) => return Ok(sides),
         };
         let (reply, result) = oneshot::channel();
-        if let Some((job, mailbox)) = self.offer(Job { cursor, reply })? {
+        if let Some((job, mailbox)) = self.offer(Job {
+            cursor,
+            pass,
+            reply,
+        })? {
             mailbox.send(job).await.map_err(|_| trapped())?;
         }
         let cursor = result.await.map_err(|_| trapped())??;
@@ -607,6 +644,7 @@ fn compile(
         reference: name.to_owned(),
         pre,
         options: Value::Object(entry.options.clone()).to_string(),
+        deferred: entry.folder().deferred(),
     })
 }
 
@@ -656,6 +694,7 @@ struct Instance {
     name: Arc<str>,
     exports: DiffrPlugin,
     configured: ResourceAny,
+    deferred: bool,
 }
 
 /// One worker's Store and its instance of every shape plugin.
@@ -687,6 +726,7 @@ impl Worker {
                         name: component.name.clone(),
                         exports,
                         configured,
+                        deferred: component.deferred,
                     });
                 }
                 Ok(instances)
@@ -756,34 +796,46 @@ impl AccessorTask<State> for Run {
         } = self;
         let _ = job
             .reply
-            .send(run_chain(accessor, &instances, job.cursor).await);
+            .send(run_chain(accessor, &instances, job.cursor, job.pass).await);
         in_flight.fetch_sub(1, Ordering::SeqCst);
         done.notify_one();
         Ok(())
     }
 }
 
-/// Walk the file with every plugin in order.
+/// Walk the file with every plugin in the pass, in order.
 async fn run_chain(
     accessor: &Accessor<State>,
     instances: &[Instance],
     cursor: Cursor,
+    pass: Pass,
 ) -> anyhow::Result<Cursor> {
     let handle = accessor.with(|mut access| access.data_mut().table.push(cursor))?;
     let mut walked = Ok(());
-    for instance in instances {
+    for instance in instances
+        .iter()
+        .filter(|instance| pass.runs(instance.deferred))
+    {
         walked = async {
             accessor.with(|mut access| -> anyhow::Result<()> {
                 access.data_mut().table.get_mut(&handle)?.rewind();
                 Ok(())
             })?;
-            walk(
+            let walked = walk(
                 accessor,
                 &instance.exports.diffr_plugin_api().plugin(),
                 instance.configured,
                 &handle,
             )
-            .await
+            .await;
+            // The plugin may have swallowed the refusal, or reported it as another error.
+            accessor.with(|mut access| -> anyhow::Result<()> {
+                match access.data_mut().table.get(&handle)?.refused() {
+                    Some(refused) => Err(refused.clone().into()),
+                    None => Ok(()),
+                }
+            })?;
+            walked
         }
         .await
         .with_context(|| MutationFailed(instance.name.to_string()));

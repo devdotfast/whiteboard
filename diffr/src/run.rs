@@ -4,7 +4,7 @@ use crate::config::Params;
 use crate::engine::DiffError;
 use crate::git::{self, FileError};
 use crate::options::DiffOptions;
-use crate::plugin::{Classifier, MutationFailed, Pipeline};
+use crate::plugin::{Classifier, MutationFailed, Pass, Pipeline};
 use crate::present::present;
 use crate::protocol::project::{self, Inputs};
 use crate::protocol::{self, Diff, Event, FileChange, Outcome, Problem, VERSION};
@@ -181,7 +181,7 @@ async fn record(file: git::File, shared: Arc<Shared>) -> anyhow::Result<Event> {
         Ok(diff) => {
             let entry = change.manifest_entry();
             let diff = present(change.hidden.as_deref(), diff, async |sides| {
-                shared.pipeline.run(&entry, sides).await
+                shared.pipeline.run(&entry, sides, Pass::All).await
             })
             .await?;
             Outcome::Diff { diff }

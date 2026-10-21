@@ -175,6 +175,8 @@ impl From<cursor::MoveError> for types::MoveError {
             cursor::MoveError::OneSided(ids) => Self::OneSided(ids),
             cursor::MoveError::NotSiblings(ids) => Self::NotSiblings(ids),
             cursor::MoveError::NoNextSibling(id) => Self::NoNextSibling(id),
+            // The WIT has no variant for it; `run_chain` reports the refusal.
+            cursor::MoveError::VisibilityOnly(id) => Self::NoRegion(id),
         }
     }
 }

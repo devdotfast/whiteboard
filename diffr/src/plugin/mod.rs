@@ -13,7 +13,7 @@ pub(crate) use classify::Classifier;
 #[cfg(test)]
 pub(crate) use diffr_core::plugin::builtin;
 pub(crate) use diffr_core::plugin::{config, cursor, MutationFailed};
-pub(crate) use wasm::Pipeline;
+pub(crate) use wasm::{Pass, Pipeline};
 
 #[cfg(test)]
 mod tests;

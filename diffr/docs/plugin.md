@@ -133,3 +133,5 @@ hide_deleted = true
 diffr config set plugins.shape.bundled.context.lines 8
 diffr config set plugins.classify.bundled.hide_deleted false
 ```
+
+A shape plugin's `plugin.toml` can set `deferred = true`. diffr may then run it after every other shape plugin, on their result, where it may only change visibility: `cut`, `join` and `link` fail with `deferred plugins may only change visibility`. Otherwise it runs in `order` like any other. The bundled summarizer is deferred, since it waits on model calls.

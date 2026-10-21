@@ -76,13 +76,22 @@ pub enum Grouping {
 pub enum MoveError {
     NoRegion(u32),
     CutFold(u32),
-    CutOutside { id: u32, offset: u32, len: u32 },
+    CutOutside {
+        id: u32,
+        offset: u32,
+        len: u32,
+    },
     UnevenSides(u32),
     TooFewRegions(Grouping),
-    Repeated { grouping: Grouping, ids: Vec<u32> },
+    Repeated {
+        grouping: Grouping,
+        ids: Vec<u32>,
+    },
     OneSided(Vec<u32>),
     NotSiblings(Vec<u32>),
     NoNextSibling(u32),
+    /// A structural edit on a visibility-only cursor.
+    VisibilityOnly(u32),
 }
 
 /// A file's trees, the next unused IDs, and where the current walk stands.
@@ -98,6 +107,9 @@ pub struct Cursor {
     places: DftHashMap<u32, Place>,
     /// The regions in each fold state.
     states: DftHashMap<u32, Vec<u32>>,
+    visibility_only: bool,
+    /// The first structural edit refused by a visibility-only cursor.
+    refused: Option<MoveError>,
 }
 
 impl Cursor {
@@ -138,7 +150,30 @@ impl Cursor {
             next_alignment_id,
             places,
             states,
+            visibility_only: false,
+            refused: None,
         })
+    }
+
+    /// The same cursor, refusing `cut`, `join` and `link`.
+    pub fn visibility_only(self) -> Self {
+        Self {
+            visibility_only: true,
+            ..self
+        }
+    }
+
+    pub fn refused(&self) -> Option<&MoveError> {
+        self.refused.as_ref()
+    }
+
+    fn refuse_structure(&mut self, id: u32) -> Result<(), MoveError> {
+        if !self.visibility_only {
+            return Ok(());
+        }
+        let error = MoveError::VisibilityOnly(id);
+        self.refused.get_or_insert(error.clone());
+        Err(error)
     }
 
     /// The edited sides, once the plugins are done.
@@ -422,6 +457,7 @@ impl Cursor {
 
     /// Split a leaf and its paired leaf at a relative line offset. Returns the new tails.
     pub fn cut(&mut self, id: u32, offset: u32) -> Result<RegionIds, MoveError> {
+        self.refuse_structure(id)?;
         let leaf = self.region(id)?;
         let Node::Leaf { pair, .. } = leaf.node else {
             return Err(MoveError::CutFold(id));
@@ -465,6 +501,7 @@ impl Cursor {
 
     /// Wrap consecutive siblings on each side in new open, unlabelled folds.
     pub fn join(&mut self, ids: &[u32]) -> Result<RegionIds, MoveError> {
+        self.refuse_structure(ids.first().copied().unwrap_or_default())?;
         check_regions(ids, Grouping::Join)?;
         let located = ids
             .iter()
@@ -545,6 +582,7 @@ impl Cursor {
 
     /// Merge the fold states of `ids` into the first's; all collapse if any was.
     pub fn link(&mut self, ids: &[u32]) -> Result<(), MoveError> {
+        self.refuse_structure(ids.first().copied().unwrap_or_default())?;
         check_regions(ids, Grouping::Link)?;
         let state = self.region(ids[0])?.fold_state_id;
         let mut collapsed = false;
@@ -697,6 +735,7 @@ impl std::fmt::Display for MoveError {
                 write!(f, "the joined regions {ids:?} are not consecutive siblings")
             }
             Self::NoNextSibling(id) => write!(f, "region {id} has no next sibling"),
+            Self::VisibilityOnly(_) => write!(f, "deferred plugins may only change visibility"),
         }
     }
 }
