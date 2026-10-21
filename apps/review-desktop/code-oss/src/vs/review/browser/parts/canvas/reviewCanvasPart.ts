@@ -1337,7 +1337,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		const pending = this.pendingReveal;
 		// Every pane gets the request. Drop it after 10s so a board opened later doesn't jump.
 		if (pending && Date.now() - pending.at > 10_000) this.pendingReveal = undefined;
-		if (!pending || !this.pendingReveal || !this.canvas.value || pending.event.reviewId !== this.apiContent?.reviewId) return;
+		// Its canvas subscribes before it reports ready.
+		const ready = this.readyInput !== undefined && this.readyInput === this.renderedInput;
+		if (!pending || !this.pendingReveal || !this.canvas.value || !ready || pending.event.reviewId !== this.apiContent?.reviewId) return;
 		this.pendingReveal = undefined;
 		this.surfaceEvents.fire(pending.event);
 	}
