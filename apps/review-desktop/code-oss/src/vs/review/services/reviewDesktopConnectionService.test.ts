@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { REVIEW_DESKTOP_CONNECTION_VERSION } from "../common/reviewDesktopBootstrap.js";
 import { ReviewDesktopConnectionService } from "./reviewDesktopConnectionService.js";
 
 function serviceWith(): ReviewDesktopConnectionService {
@@ -74,3 +75,33 @@ test("reads the remote hosts' states from the Desktop server", async (t) => {
 	assert.deepEqual(await service.readRemoteHosts(), answer);
 	assert.deepEqual(requests, ["http://127.0.0.1:5000/remote-hosts token"]);
 });
+
+for (const reachable of [true, false]) {
+	test(`hands out the https URL only when it answers (reachable ${reachable})`, async (t) => {
+		const service = new ReviewDesktopConnectionService(
+			{
+				getChannel: () => ({
+					call: async () => ({
+						version: REVIEW_DESKTOP_CONNECTION_VERSION,
+						url: "http://127.0.0.1:5000",
+						secureUrl: "https://127.0.0.1:5000",
+						token: "token",
+						instanceId: "instance",
+						appSessionId: "session",
+					}),
+				}),
+			} as never,
+			{} as never,
+		);
+		t.after(() => service.dispose());
+		mockFetch(t, async (input) => {
+			if (String(input).startsWith("https:") && !reachable) throw new TypeError("Failed to fetch");
+			return Response.json({ instanceId: "instance" });
+		});
+
+		const { serverUrl } = await service.getConnection();
+
+		assert.equal(serverUrl, reachable ? "https://127.0.0.1:5000" : "http://127.0.0.1:5000");
+		assert.equal(service.secureUrlError, reachable ? undefined : "TypeError");
+	});
+}

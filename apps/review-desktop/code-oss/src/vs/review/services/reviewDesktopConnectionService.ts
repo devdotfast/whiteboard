@@ -68,6 +68,8 @@ export interface IReviewDesktopConnectionService {
 	readonly onDidChangeConnection: Event<void>;
 	initialize(): Promise<void>;
 	getConnection(): Promise<ReviewServerConnection>;
+	/** Why this connection fell back from https to plain HTTP, if it did. */
+	readonly secureUrlError: string | undefined;
 	submitFeedback(response: Omit<ReviewFeedback, "id">): Promise<ReviewFeedbackSubmissionResult>;
 	submitFeedbackContact(contact: Omit<ReviewFeedbackContact, "id">): Promise<ReviewFeedbackSubmissionResult>;
 	feedbackEligible(): Promise<boolean>;
@@ -128,14 +130,12 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 	 * publishes them only once it has validated the server's ready event.
 	 */
 	private connection: ReviewDesktopConnection | undefined;
+	secureUrlError: string | undefined;
 	private get serverUrl(): string {
 		return reviewRendererServerUrl(this.requireConnection());
 	}
 	private get token(): string {
 		return this.requireConnection().token;
-	}
-	private get instanceId(): string {
-		return this.requireConnection().instanceId;
 	}
 
 	constructor(
@@ -161,11 +161,26 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		if (connection?.version !== REVIEW_DESKTOP_CONNECTION_VERSION) {
 			throw new Error(`Unsupported Whiteboard Desktop connection version: ${String(connection?.version)}.`);
 		}
-		this.connection = connection;
+		await this.waitForHealth(connection);
+		this.connection = await this.withWorkingSecureUrl(connection);
+	}
+
+	private async withWorkingSecureUrl(connection: ReviewDesktopConnection): Promise<ReviewDesktopConnection> {
+		if (!connection.secureUrl) return connection;
+		try {
+			await fetch(`${connection.secureUrl}/health`, {
+				headers: { "x-review-token": connection.token },
+				signal: AbortSignal.timeout(5_000),
+			});
+			return connection;
+		} catch (error) {
+			this.secureUrlError = error instanceof Error ? error.name : "unknown";
+			return { ...connection, secureUrl: undefined };
+		}
 	}
 
 	initialize(): Promise<void> {
-		this.initializePromise ??= this.initializeGlobalState().catch((error) => {
+		this.initializePromise ??= this.connect().catch((error) => {
 			this.initializePromise = null;
 			throw error;
 		});
@@ -471,11 +486,6 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		super.dispose();
 	}
 
-	private async initializeGlobalState(): Promise<void> {
-    await this.connect();
-    await this.waitForHealth();
-  }
-
 	private async initializeAndMaintainControl(
 		dispatch: (value: JsonValue) => Promise<ReviewVerbResponse>,
 	): Promise<void> {
@@ -491,15 +501,15 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		);
 	}
 
-	private async waitForHealth(): Promise<void> {
+	private async waitForHealth(connection: ReviewDesktopConnection): Promise<void> {
 		const deadline = Date.now() + REVIEW_SERVER_STARTUP_TIMEOUT_MS;
 		while (Date.now() < deadline) {
 			try {
-				const response = await fetch(`${this.serverUrl}/health`, {
+				const response = await fetch(`${connection.url}/health`, {
 					signal: AbortSignal.timeout(1_000),
 				});
 				const value = (await response.json()) as { instanceId?: unknown };
-				if (response.ok && value.instanceId === this.instanceId) return;
+				if (response.ok && value.instanceId === connection.instanceId) return;
 			} catch {
 				// The utility host may still be starting.
 			}

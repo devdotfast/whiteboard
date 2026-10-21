@@ -605,6 +605,10 @@ export const UI_TELEMETRY_EVENTS = {
     event: "review_app_ready",
     properties: { duration_ms: "number", install_location: INSTALL_LOCATION },
   },
+  loopback_tls_fallback: {
+    event: "review_loopback_tls_fallback",
+    properties: { error_name: "enum_free_short" },
+  },
   error_burst: {
     event: "review_error_burst",
     properties: { message_hash: "hash_hex", suppressed: "number" },

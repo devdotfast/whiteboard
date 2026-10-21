@@ -159,7 +159,8 @@ export class ReviewDesktopHost extends Disposable {
         onRemoteHostRestarted: (alias) => this.remoteHosts?.reattach(alias),
       }),
     );
-    const fingerprint = this.supervisor.tlsFingerprint;
+    // DEV_FAST_REVIEW_TLS_PIN_MISMATCH=1 pins the wrong cert, so renderers fall back to plain HTTP.
+    const fingerprint = process.env["DEV_FAST_REVIEW_TLS_PIN_MISMATCH"] === "1" ? "sha256/mismatch" : this.supervisor.tlsFingerprint;
     if (fingerprint)
       session.defaultSession.setCertificateVerifyProc((request, callback) =>
         callback(reviewLoopbackCertVerdict(request, fingerprint)),
