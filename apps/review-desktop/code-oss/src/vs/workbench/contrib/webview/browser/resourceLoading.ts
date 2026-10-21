@@ -8,7 +8,7 @@ import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { isUNC } from '../../../../base/common/extpath.js';
 import { Schemas } from '../../../../base/common/network.js';
 import { posix, win32 } from '../../../../base/common/path.js';
-import { OperatingSystem } from '../../../../base/common/platform.js';
+import { isWindows, OperatingSystem } from '../../../../base/common/platform.js';
 import { originalFSPath } from '../../../../base/common/resources.js';
 import { URI } from '../../../../base/common/uri.js';
 import { FileOperationError, FileOperationResult, IFileService, IWriteFileOptions } from '../../../../platform/files/common/files.js';
@@ -118,6 +118,10 @@ export function getResourceToLoad(
 		roots = roots.map(root => root.scheme === Schemas.vscodeRemote ? normalizeRemoteResource(root, remoteOS) : root);
 	}
 	const requestUriNoQueryString = requestUri.with({ query: '' });
+	if (hasWindowsParentTraversalSegment(requestUriNoQueryString)) {
+		return undefined;
+	}
+
 	const forcePosixSemantics = requestUri.scheme === Schemas.vscodeRemote
 		&& (remoteOS === OperatingSystem.Linux || remoteOS === OperatingSystem.Macintosh);
 	for (const root of roots) {
@@ -153,6 +157,14 @@ function containsResource(root: URI, resource: URI, uriIdentityService: IUriIden
 	}
 
 	return uriIdentityService.extUri.isEqualOrParent(resource, root, /* ignoreFragment */ true, forcePosixSemantics);
+}
+
+const WINDOWS_PARENT_TRAVERSAL_SEGMENT = /(?:^|[\\/])\.\. +(?=$|[\\/])/;
+
+function hasWindowsParentTraversalSegment(resource: URI): boolean {
+	return isWindows
+		&& resource.scheme === Schemas.file
+		&& WINDOWS_PARENT_TRAVERSAL_SEGMENT.test(resource.path);
 }
 
 function normalizeRemoteResource(resource: URI, remoteOS: OperatingSystem): URI {
