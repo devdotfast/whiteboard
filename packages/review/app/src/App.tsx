@@ -156,6 +156,8 @@ const MAX_SIDE_PEEK_WIDTH = 920;
 
 const MIN_DOCUMENT_WIDTH = 560;
 
+const noCommits: readonly ReviewCommitSummary[] = [];
+
 export function App({
   document,
   softwareMap,
@@ -168,7 +170,7 @@ export function App({
   softwareMap: PublishedSoftwareMap;
   softwareMapEnabled: boolean;
   range: ReviewCanvasRange;
-  commits: readonly ReviewCommitSummary[];
+  commits?: readonly ReviewCommitSummary[];
   findHost?: ReviewFindHost;
 }): ReactElement {
   return (
@@ -221,7 +223,7 @@ function ReviewLayout({
   softwareMap: PublishedSoftwareMap;
   softwareMapEnabled: boolean;
   range: ReviewCanvasRange;
-  commits: readonly ReviewCommitSummary[];
+  commits?: readonly ReviewCommitSummary[];
   findHost?: ReviewFindHost;
 }): ReactElement {
   const documentRoute = document.routePath;
@@ -298,7 +300,7 @@ function ReviewLayoutContent({
   softwareMapTopologyDiff,
   softwareMapEnabled,
   range,
-  commits,
+  commits: readCommits,
 }: {
   appRef: RefObject<HTMLDivElement | null>;
   shellRef: RefObject<HTMLElement | null>;
@@ -312,8 +314,9 @@ function ReviewLayoutContent({
   softwareMapTopologyDiff: SoftwareMapTopologyDiff | null;
   softwareMapEnabled: boolean;
   range: ReviewCanvasRange;
-  commits: readonly ReviewCommitSummary[];
+  commits?: readonly ReviewCommitSummary[];
 }): ReactElement {
+  const commits = readCommits ?? noCommits;
   const session = useReviewSession();
   const review = useReview();
   const available = session.review?.available;
@@ -669,9 +672,11 @@ function ReviewLayoutContent({
     stack,
   ]);
 
+  // Only once the commits are read.
   useEffect(() => {
-    if (pickedScope && !scopedCommit) panelStore.getState().pickCommit(null);
-  }, [pickedScope, scopedCommit, panelStore]);
+    if (readCommits && pickedScope && !scopedCommit)
+      panelStore.getState().pickCommit(null);
+  }, [readCommits, pickedScope, scopedCommit, panelStore]);
 
   // Subscribe before the canvas signals ready so a reveal immediately after
   // mounting cannot outrun the listener.

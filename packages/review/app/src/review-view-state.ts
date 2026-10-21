@@ -157,7 +157,8 @@ export function readReviewNavigationRestore(
     softwareMapEnabled: boolean;
     hasChangeRange: boolean;
     version: number;
-    commits: readonly ReviewCommitSummary[];
+    /** Undefined until read: a stored scope waits for them. */
+    commits?: readonly ReviewCommitSummary[];
   },
 ): ReviewNavigationRestore {
   const stored = readPersistedReviewViewState(config);
@@ -172,9 +173,10 @@ export function readReviewNavigationRestore(
   const scoped =
     stored.activeView === "diff" &&
     stored.diffScope &&
-    canvas.commits.some(
+    (canvas.commits?.some(
       (summary) => summary.commit === stored.diffScope!.commit,
-    )
+    ) ??
+      true)
       ? stored.diffScope
       : undefined;
 

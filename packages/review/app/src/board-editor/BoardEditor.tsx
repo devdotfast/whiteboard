@@ -112,7 +112,7 @@ function useStableData(data: ApiDocumentData): ApiDocumentData {
     [...data.traces.keys()],
     [...data.boards.keys()],
     [...data.maps.keys()],
-    data.commits.length,
+    data.commits?.length,
   ]);
 
   const keyRef = useRef(key);

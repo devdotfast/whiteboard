@@ -132,18 +132,49 @@ export function ApiCanvas({
   const [cursor, setCursor] = useState<AuthoringCursor | null>(null);
   const [lensCursor, setLensCursor] = useState<AuthoringCursor | null>(null);
   useEffect(() => setVersion(content.version), [content.version]);
+
+  const loader = useMemo(
+    () => createDocumentLoader(client, queries.queryClient),
+    [client, queries],
+  );
+
+  useEffect(() => () => loader.dispose(), [loader]);
+
+  const sourceRef = useRef<{ key: string; version: number }>(undefined);
+
+  // Native source widgets must use these pins on their first mount.
+  const present = (snapshot: Snapshot, at: number | undefined) => {
+    const key = JSON.stringify([
+      snapshot.reviewId,
+      snapshot.pins,
+      at === undefined ? "current" : at,
+    ]);
+
+    if (sourceRef.current?.key !== key)
+      sourceRef.current = { key, version: snapshot.version };
+
+    content.setSourceView?.(
+      at === undefined
+        ? { reviewId: snapshot.reviewId, kind: "current" }
+        : { reviewId: snapshot.reviewId, kind: "version", version: at },
+      resolveReviewSourceView({
+        ...snapshot,
+        version: sourceRef.current.version,
+      }),
+    );
+    content.setTitle?.(boardTitle(snapshot.title));
+  };
+
   const [data, setData] = useState<ApiDocumentData>();
   const [trashedAt, setTrashedAt] = useState<string | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
-  const sourceRef = useRef<{ key: string; version: number }>(undefined);
   const sourceVersion = sourceRef.current?.key;
   const [error, setError] = useState<string>();
   const [lost, setLost] = useState<string>();
   useEffect(() => {
     const { queryClient } = queries;
     const abort = new AbortController();
-    const loader = createDocumentLoader(client);
     setData(undefined);
     setTrashedAt(null);
     setLost(undefined);
@@ -154,40 +185,32 @@ export function ApiCanvas({
     const cursorMemory: CursorMemory = {};
     const lensMemory: CursorMemory = {};
 
+    // Only the shown snapshot's reads draw.
+    let current: Snapshot | undefined;
+
+    const update = (next: ApiDocumentData) => {
+      if (next.snapshot === current) setData(next);
+    };
+
     const show = async (snapshot: Snapshot) => {
-      setTrashedAt(snapshot.trashedAt ?? null);
-      const next = await loader.load(snapshot);
+      current = snapshot;
 
-      if (abort.signal.aborted) return;
-
-      // Native source widgets must use these pins on their first mount.
-      const key = JSON.stringify([
-        snapshot.reviewId,
-        snapshot.pins,
-        version === undefined ? "current" : version,
-      ]);
-
-      if (sourceRef.current?.key !== key)
-        sourceRef.current = { key, version: snapshot.version };
-
-      content.setSourceView?.(
-        version === undefined
-          ? { reviewId: snapshot.reviewId, kind: "current" }
-          : { reviewId: snapshot.reviewId, kind: "version", version },
-        resolveReviewSourceView({
-          ...snapshot,
-          version: sourceRef.current.version,
-        }),
-      );
-      setData(next);
-      setError(undefined);
-      content.setTitle?.(boardTitle(snapshot.title));
+      try {
+        setTrashedAt(snapshot.trashedAt ?? null);
+        present(snapshot, version);
+        setData(loader.draft(snapshot));
+        setError(undefined);
+        update(await loader.load(snapshot, update));
+      } catch (cause) {
+        // A document problem: the stream stays healthy.
+        if (current === snapshot) setError(message(cause));
+      }
     };
 
     void (async () => {
       if (version !== undefined) {
         try {
-          await show(
+          void show(
             await client.read(
               `/${content.reviewId}?full=true&version=${version}`,
               abort.signal,
@@ -249,16 +272,9 @@ export function ApiCanvas({
             return;
           }
 
-          try {
-            await show(snapshot);
-            shownVersion = shown;
-            shownLinks = links;
-          } catch (cause) {
-            // A failed resource or source fetch is a document problem. The
-            // stream and the activity signal are still healthy, so do not
-            // reconnect or report unknown activity.
-            if (!abort.signal.aborted) setError(message(cause));
-          }
+          shownVersion = shown;
+          shownLinks = links;
+          void show(snapshot);
         },
         (cause) => {
           setActivity("unknown");
@@ -301,9 +317,9 @@ export function ApiCanvas({
 
     return () => {
       abort.abort();
-      loader.dispose();
+      current = undefined;
     };
-  }, [client, content.reviewId, version, queries]);
+  }, [client, content.reviewId, version, queries, loader]);
 
   // Read at create, so a host going offline keeps the open editors.
   const openFile = useRef(true);
@@ -638,7 +654,9 @@ export function ApiCanvas({
                     ...readReviewNavigationRestore(session.config, {
                       softwareMapEnabled:
                         content.softwareMapEnabled === true &&
-                        data.maps.size > 0,
+                        elements(data.snapshot.document).some(
+                          (node) => node.type === "software_map",
+                        ),
                       hasChangeRange:
                         (data.snapshot.pins?.base ?? "") !==
                         (data.snapshot.pins?.head ?? ""),

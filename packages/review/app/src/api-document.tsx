@@ -18,6 +18,7 @@ import type { Snapshot } from "@review/review-api/store";
 import { VersionCache } from "@review/review-api/version-cache";
 import type { NormalizedSoftwareModel } from "@review/software-map-model";
 import * as stylex from "@stylexjs/stylex";
+import type { QueryClient } from "@tanstack/react-query";
 import {
   memo,
   useCallback,
@@ -66,7 +67,8 @@ interface Trace {
 export interface ApiDocumentData {
   snapshot: Snapshot;
   headings: ApiHeadingIds;
-  commits: ReviewCommitSummary[];
+  /** Undefined until read. */
+  commits?: ReviewCommitSummary[];
   anchors: Map<string, SourcePeekAnchor>;
   images: Map<string, string>;
   traces: Map<string, Trace>;
@@ -98,173 +100,241 @@ const derivations = new VersionCache(
   { capacity: 32, key: documentKey },
 );
 
+// A draft runs as each read lands; hash each snapshot once.
+const documentKeys = new WeakMap<Snapshot, string>();
+
 function documentKey(snapshot: Snapshot): string {
+  const known = documentKeys.get(snapshot);
+
+  if (known) return known;
   const text = JSON.stringify(snapshot.document);
   let hash = 0x811c9dc5;
 
   for (let index = 0; index < text.length; index++)
     hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193);
 
-  return `${snapshot.reviewId}\0${snapshot.version}\0${text.length}\0${hash >>> 0}`;
+  const key = `${snapshot.reviewId}\0${snapshot.version}\0${text.length}\0${hash >>> 0}`;
+
+  documentKeys.set(snapshot, key);
+
+  return key;
 }
 
-/** Cache only immutable resources and commit-addressed quotes, for this canvas. */
-export function createDocumentLoader(client: ReviewApiClient) {
-  const cache = new Map<string, Promise<unknown>>();
-  const urls = new Set<string>();
-  let disposed = false;
+type SavedMap = Awaited<ReturnType<LocalReviewData["map"]>>;
 
-  const once = <T,>(key: string, read: () => Promise<T>): Promise<T> => {
-    if (!cache.has(key))
-      cache.set(
-        key,
-        read().catch((error) => {
-          cache.delete(key);
-          throw error;
-        }),
-      );
+type MapModel =
+  ApiDocumentData["maps"] extends Map<string, infer Model> ? Model : never;
 
-    // SAFETY: each key identifies one immutable resource and its loader's result type.
-    return cache.get(key) as Promise<T>;
+type LinkTarget = BoardLinkTarget & { to: BoardRef };
+
+/** Drafts a board from cached reads and reads the rest into the client. */
+export function createDocumentLoader(
+  client: ReviewApiClient,
+  queryClient: QueryClient,
+) {
+  const urls = new Map<Blob, string>();
+
+  const cached = <T,>(key: string) =>
+    queryClient.getQueryData<T>(["document", key]);
+
+  const read = <T,>(
+    key: string,
+    queryFn: () => Promise<T>,
+    staleTime = Infinity,
+  ) =>
+    queryClient.fetchQuery({ queryKey: ["document", key], queryFn, staleTime });
+
+  const url = (blob: Blob) => {
+    let url = urls.get(blob);
+
+    if (!url) {
+      url = URL.createObjectURL(blob);
+      urls.set(blob, url);
+    }
+
+    return url;
   };
 
-  /** Where the board's links lead, keyed by board and block. */
-  const boardTargets = async (snapshot: Snapshot) => {
+  // Per board: the server checks each read against its board.
+  const keys = ({ reviewId, version, pins }: Snapshot) => ({
+    commits: `${reviewId}:commits:${JSON.stringify(pins)}`,
+    links: `${reviewId}:links:${version}`,
+    image: (assetId: string) => `${reviewId}:image:${assetId}`,
+    trace: (traceId: string) => `${reviewId}:trace:${traceId}`,
+    map: (mapVersionId: string) =>
+      `${reviewId}:map:${mapVersionId}:${JSON.stringify(pins ?? null)}`,
+  });
+
+  const readsCommits = (snapshot: Snapshot) =>
+    !snapshot.sourceUnavailable && snapshot.pins !== undefined;
+
+  /** The board with whatever has been read so far. */
+  const draft = (snapshot: Snapshot): ApiDocumentData => {
+    const { headings, references, resources } = derivations.get(snapshot);
+    const key = keys(snapshot);
     const boards: ApiDocumentData["boards"] = new Map();
 
-    if (!boardLinks(snapshot.reviewId, snapshot.document).length) return boards;
-
-    // On failure, leave targets unknown so links still render as links.
-    const links = await client
-      .read<{
-        outgoing: (BoardLinkTarget & { to: BoardRef })[];
-      }>(
-        `/${encodeURIComponent(snapshot.reviewId)}/links?version=${snapshot.version}`,
-      )
-      .catch(() => ({ outgoing: [] }));
-
-    for (const link of links.outgoing)
+    for (const link of cached<LinkTarget[]>(key.links) ?? [])
       boards.set(`${link.to.board}#${link.to.block ?? ""}`, link);
 
-    return boards;
+    const data: ApiDocumentData = {
+      snapshot,
+      headings,
+      commits: readsCommits(snapshot)
+        ? cached<ReviewCommitSummary[]>(key.commits)
+        : [],
+      anchors: new Map(),
+      images: new Map(),
+      traces: new Map(),
+      boards,
+      maps: new Map(),
+    };
+
+    for (const { id, source, label } of references) {
+      if (snapshot.staleSources?.includes(id)) continue;
+      data.anchors.set(
+        id,
+        sourceAnchor(
+          id,
+          source,
+          label ?? `${source.file}:${source.start.line}`,
+        ),
+      );
+    }
+
+    for (const node of resources) {
+      if (node.type === "image") {
+        const blob = cached<Blob>(key.image(node.assetId));
+
+        if (blob) data.images.set(node.assetId, url(blob));
+      }
+
+      if (node.type === "trace_quote") {
+        const trace = cached<Trace | null>(key.trace(node.traceId));
+
+        if (trace) data.traces.set(node.traceId, trace);
+      }
+
+      if (node.type === "software_map" && !data.maps.has(node.mapVersionId)) {
+        const model = cached<MapModel>(key.map(node.mapVersionId));
+
+        if (model)
+          data.maps.set(node.mapVersionId, {
+            ...model,
+            pinnedData: { ...model.pinnedData, diagramId: node.id },
+          });
+      }
+    }
+
+    return data;
+  };
+
+  // Read again each time; on failure, links render without targets.
+  const readLinks = (snapshot: Snapshot) =>
+    boardLinks(snapshot.reviewId, snapshot.document).length
+      ? read(
+          keys(snapshot).links,
+          async () =>
+            (
+              await client
+                .read<{ outgoing: LinkTarget[] }>(
+                  `/${encodeURIComponent(snapshot.reviewId)}/links?version=${snapshot.version}`,
+                )
+                .catch(() => ({ outgoing: [] }))
+            ).outgoing,
+          0,
+        )
+      : undefined;
+
+  const reads = (snapshot: Snapshot) => {
+    const { resources } = derivations.get(snapshot);
+    const key = keys(snapshot);
+    const pending: (Promise<unknown> | undefined)[] = [readLinks(snapshot)];
+
+    if (readsCommits(snapshot))
+      pending.push(
+        read(key.commits, () =>
+          client.read<ReviewCommitSummary[]>(
+            `/${snapshot.reviewId}/commits?version=${snapshot.version}`,
+          ),
+        ),
+      );
+
+    for (const node of resources) {
+      if (node.type === "image")
+        pending.push(
+          read(key.image(node.assetId), async () =>
+            (
+              await client.response(
+                `/${encodeURIComponent(snapshot.reviewId)}/resources/${encodeURIComponent(node.assetId)}`,
+              )
+            ).blob(),
+          ),
+        );
+
+      // A trace that cannot be loaded leaves its quote to render as text.
+      if (node.type === "trace_quote")
+        pending.push(
+          read(key.trace(node.traceId), () =>
+            client
+              .read<Trace>(
+                `/${encodeURIComponent(snapshot.reviewId)}/resources/${encodeURIComponent(node.traceId)}`,
+              )
+              .catch(() => null),
+          ),
+        );
+
+      if (node.type === "software_map")
+        pending.push(
+          read(key.map(node.mapVersionId), async (): Promise<MapModel> => {
+            const saved = await client.read<SavedMap>(
+              `/${snapshot.reviewId}/maps/${encodeURIComponent(node.mapVersionId)}?version=${snapshot.version}`,
+            );
+
+            return {
+              ...saved,
+              pinnedData: {
+                side: saved.side,
+                counts: new Map(Object.entries(saved.countsByElementPath)),
+                unmappedByElementPath: new Map(
+                  Object.entries(saved.unmappedByElementPath),
+                ),
+              },
+              elementsByPath: new Map(
+                saved.elements.map((element) => [element.path, element]),
+              ),
+            };
+          }),
+        );
+    }
+
+    return pending;
   };
 
   return {
+    draft,
     dispose() {
-      disposed = true;
-
-      for (const url of urls) URL.revokeObjectURL(url);
-      cache.clear();
+      for (const url of urls.values()) URL.revokeObjectURL(url);
+      urls.clear();
     },
-    async load(snapshot: Snapshot): Promise<ApiDocumentData> {
-      const { headings, references, resources } = derivations.get(snapshot);
-
-      // Its commits and its links' targets load side by side.
-      const [commits, boards] = await Promise.all([
-        snapshot.sourceUnavailable || !snapshot.pins
-          ? []
-          : once(`commits:${JSON.stringify(snapshot.pins)}`, () =>
-              client.read<ReviewCommitSummary[]>(
-                `/${snapshot.reviewId}/commits?version=${snapshot.version}`,
-              ),
-            ),
-        boardTargets(snapshot),
-      ]);
-
-      const data: ApiDocumentData = {
-        snapshot,
-        headings,
-        commits,
-        anchors: new Map(),
-        images: new Map(),
-        traces: new Map(),
-        boards,
-        maps: new Map(),
-      };
-
-      for (const { id, source, label } of references) {
-        if (snapshot.staleSources?.includes(id)) continue;
-        data.anchors.set(
-          id,
-          sourceAnchor(
-            id,
-            source,
-            label ?? `${source.file}:${source.start.line}`,
-          ),
-        );
-      }
-
+    /** Reads the rest; `update` takes each partial board. */
+    async load(
+      snapshot: Snapshot,
+      update?: (data: ApiDocumentData) => void,
+    ): Promise<ApiDocumentData> {
       await Promise.all(
-        resources.map(async (node) => {
-          if (node.type === "image") {
-            const url = await once(`image:${node.assetId}`, async () => {
-              const blob = await (
-                await client.response(
-                  `/${encodeURIComponent(snapshot.reviewId)}/resources/${encodeURIComponent(node.assetId)}`,
-                )
-              ).blob();
-
-              if (disposed) throw new Error("Canvas closed.");
-              const url = URL.createObjectURL(blob);
-              urls.add(url);
-
-              return url;
-            });
-
-            data.images.set(node.assetId, url);
-          }
-
-          // A trace that cannot be loaded leaves its quote to render as text.
-          if (node.type === "trace_quote") {
-            const loaded = await once(`trace:${node.traceId}`, () =>
-              client.read<Trace>(
-                `/${encodeURIComponent(snapshot.reviewId)}/resources/${encodeURIComponent(node.traceId)}`,
-              ),
-            ).catch(() => undefined);
-
-            if (loaded) data.traces.set(node.traceId, loaded);
-          }
-
-          if (node.type === "software_map") {
-            const model = await once(
-              `map:${node.mapVersionId}:${JSON.stringify(snapshot.pins ?? null)}`,
-              async () => {
-                const saved = await client.read<
-                  Awaited<ReturnType<LocalReviewData["map"]>>
-                >(
-                  `/${snapshot.reviewId}/maps/${encodeURIComponent(node.mapVersionId)}?version=${snapshot.version}`,
-                );
-
-                return {
-                  ...saved,
-                  pinnedData: {
-                    side: saved.side,
-                    counts: new Map(Object.entries(saved.countsByElementPath)),
-                    unmappedByElementPath: new Map(
-                      Object.entries(saved.unmappedByElementPath),
-                    ),
-                  },
-                  elementsByPath: new Map(
-                    saved.elements.map((element) => [element.path, element]),
-                  ),
-                };
-              },
-            );
-
-            if (!data.maps.has(node.mapVersionId))
-              data.maps.set(node.mapVersionId, {
-                ...model,
-                pinnedData: { ...model.pinnedData, diagramId: node.id },
-              });
-          }
-        }),
+        reads(snapshot).map((each) =>
+          each?.then(() => update?.(draft(snapshot))),
+        ),
       );
 
-      return data;
+      return draft(snapshot);
     },
     /** The same document, after a board it links to changed. */
     async relink(data: ApiDocumentData): Promise<ApiDocumentData> {
-      return { ...data, boards: await boardTargets(data.snapshot) };
+      await readLinks(data.snapshot);
+
+      return draft(data.snapshot);
     },
   };
 }

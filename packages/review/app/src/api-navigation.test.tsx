@@ -171,9 +171,14 @@ it("exposes JSON section and Markdown headings plus imported PR and its place un
   const pageBar = container.querySelector("main > header")!;
 
   expect(pageBar.querySelector('[aria-label="Session views"]')).toBeNull();
-  expect(
-    pageBar.querySelector('[aria-label$=", 2 of 2 in Stack"]'),
-  ).not.toBeNull();
+  // The text draws first; its place is read beside it.
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(
+        pageBar.querySelector('[aria-label$=", 2 of 2 in Stack"]'),
+      ).not.toBeNull(),
+    );
+  });
   expect(pageBar.querySelector('[aria-label="More"]')).not.toBeNull();
 
   // Every board names its place in the page bar: a top board with its
@@ -293,4 +298,72 @@ it("reports a board's view without waiting for its diff", async () => {
     }),
   );
   expect(reportSidebar.mock.lastCall![0].files).toBeUndefined();
+});
+
+it("draws a board's text before its commits", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    },
+  );
+  vi.stubGlobal("matchMedia", () => ({
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  store = new ReviewStore(":memory:", {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  });
+
+  const { reviewId } = await store.execute(
+    {
+      operation: {
+        type: "create",
+        title: "First",
+        target: {
+          kind: "commits",
+          repositoryId: "repo",
+          base: "base",
+          head: "head",
+        },
+      },
+    },
+    { origin: {}, document: [{ type: "markdown", markdown: "First board" }] },
+  );
+
+  let letThrough!: () => void;
+  const gate = new Promise<void>((resolve) => (letThrough = resolve));
+  const app = new Hono();
+  app.get("/reviews-api/:id/commits", async (c) => {
+    await gate;
+
+    return c.json([]);
+  });
+  app.route("/reviews-api", createReviewApi(store));
+
+  const bridge = testReviewBridge(
+    {},
+    {
+      request: async (url, init) => app.request(url, init),
+    },
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mountReviewCanvas(container, { kind: "api", reviewId, bridge });
+  });
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(container.textContent).toContain("First board");
+  });
+
+  // Its commits are still being read.
+  letThrough();
 });

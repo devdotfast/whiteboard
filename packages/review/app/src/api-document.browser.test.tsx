@@ -6,6 +6,7 @@ import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { ApiDocument, createDocumentLoader } from "./api-document";
+import { createCanvasQueryClient } from "./canvas-query";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { documentStyles } from "./document-styles";
 import { ReviewSessionProvider } from "./host/review-session";
@@ -117,6 +118,7 @@ it("renders the retained document without reading commits when the source is gon
       { serverUrl: "http://review.invalid", token: "t" },
       request,
     ),
+    createCanvasQueryClient(),
   );
 
   const degraded = await loader.load({
