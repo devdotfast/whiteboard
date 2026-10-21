@@ -51,6 +51,7 @@ import {
   type BoardEditorHost,
   BoardEditorHostContext,
 } from "./board-editor/BoardEditor";
+import { BoardPaintedContext } from "./board-painted";
 import {
   CanvasQueryProvider,
   canvasQueryKeys,
@@ -513,6 +514,13 @@ export function ApiCanvas({
     if (data) content.bridge.ready();
   }, [Boolean(data), content.bridge]);
 
+  // Set once the board has painted.
+  const [painted, setPainted] = useState(false);
+
+  useEffect(() => {
+    if (data) setPainted(true);
+  }, [Boolean(data)]);
+
   const sharing = useMemo(
     () =>
       data &&
@@ -676,28 +684,32 @@ export function ApiCanvas({
                                       <div
                                         {...stylex.props(styles.canvasFrame)}
                                       >
-                                        <BoardEditorHostContext.Provider
-                                          value={editorHost}
+                                        <BoardPaintedContext.Provider
+                                          value={painted}
                                         >
-                                          <CanvasDocument
-                                            data={data}
-                                            findHost={findHost}
-                                            softwareMapEnabled={
-                                              content.softwareMapEnabled ===
-                                              true
-                                            }
-                                            documentWidth={
-                                              content.documentWidth
-                                            }
-                                            tocEntries={
-                                              editorHost &&
-                                              editorToc?.reviewId ===
-                                                data.snapshot.reviewId
-                                                ? editorToc.entries
-                                                : undefined
-                                            }
-                                          />
-                                        </BoardEditorHostContext.Provider>
+                                          <BoardEditorHostContext.Provider
+                                            value={editorHost}
+                                          >
+                                            <CanvasDocument
+                                              data={data}
+                                              findHost={findHost}
+                                              softwareMapEnabled={
+                                                content.softwareMapEnabled ===
+                                                true
+                                              }
+                                              documentWidth={
+                                                content.documentWidth
+                                              }
+                                              tocEntries={
+                                                editorHost &&
+                                                editorToc?.reviewId ===
+                                                  data.snapshot.reviewId
+                                                  ? editorToc.entries
+                                                  : undefined
+                                              }
+                                            />
+                                          </BoardEditorHostContext.Provider>
+                                        </BoardPaintedContext.Provider>
                                       </div>
                                     </SaveMarkdown.Provider>
                                   </MapEnabled.Provider>
