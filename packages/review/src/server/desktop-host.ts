@@ -37,6 +37,7 @@ export async function runDesktopHost(
 
   const packageRoot = findReviewPackageRoot(import.meta.url);
   const toolingRoot = env.DEV_FAST_REVIEW_TOOLING_ROOT || packageRoot;
+  const tls = takeLoopbackTls(env);
   const telemetryEnv = { ...env };
   delete telemetryEnv.DEV_FAST_REVIEW_TELEMETRY_DISABLED;
 
@@ -73,6 +74,7 @@ export async function runDesktopHost(
     instanceId: env.DEV_FAST_REVIEW_INSTANCE_ID,
     identity: reviewInstanceIdentity(env),
     telemetry,
+    tls,
   };
 
   const home = devReviewHome(env);
@@ -119,7 +121,7 @@ export async function runDesktopHost(
   });
 
   process.stdout.write(
-    `${JSON.stringify({ event: "ready", ...server.discovery, installationId })}\n`,
+    `${JSON.stringify({ event: "ready", ...server.discovery, installationId, ...(server.secure && { tls: true }) })}\n`,
   );
 
   const stageRustAnalyzer = () =>
@@ -170,6 +172,17 @@ export async function runDesktopHost(
 
 function isEnabledEnvValue(value: string | undefined): boolean {
   return value === "1" || value?.toLowerCase() === "true";
+}
+
+/** Read once, then dropped so no child process inherits the private key. */
+function takeLoopbackTls(env: NodeJS.ProcessEnv) {
+  const key = env.DEV_FAST_REVIEW_SERVER_TLS_KEY;
+  const cert = env.DEV_FAST_REVIEW_SERVER_TLS_CERT;
+
+  delete env.DEV_FAST_REVIEW_SERVER_TLS_KEY;
+  delete env.DEV_FAST_REVIEW_SERVER_TLS_CERT;
+
+  return key && cert ? { key, cert } : undefined;
 }
 
 function requiredPort(value: string | undefined): number {

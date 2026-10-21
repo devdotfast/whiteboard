@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
-import { type Server, createServer } from "node:http";
-import type { AddressInfo } from "node:net";
+import type { AddressInfo, Server } from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -78,6 +77,7 @@ import {
   captureReviewUiEvent,
   createJsonReviewReporting,
 } from "./json-review-reporting";
+import { type LoopbackTls, createLoopbackServer } from "./loopback-server";
 import { createReviewGateway } from "./review-gateway";
 import { reviewLifecycleTelemetry } from "./review-lifecycle-telemetry";
 import { ReviewOpenWatchdog } from "./review-open-watchdog";
@@ -110,6 +110,7 @@ export interface GlobalReviewServerInput {
   relay?: ReviewDesktopVerbRelay;
   /** Electron's Review crash dump directory; `/crash-reports` reads only inside it. */
   crashDumpsDir?: string;
+  tls?: LoopbackTls;
   onRemoteHostRestarted?(alias: string): void;
   log?(message: string): void;
 }
@@ -117,6 +118,7 @@ export interface GlobalReviewServerInput {
 export interface GlobalReviewServer {
   readonly discovery: ReviewDesktopDiscovery;
   readonly url: string;
+  readonly secure: boolean;
   listen(): Promise<void>;
   close(reason?: "app-exit"): Promise<void>;
   setRemoteHosts(hosts: ReviewGatewayHost[]): void;
@@ -483,16 +485,21 @@ export function createGlobalReviewServer(
     );
   });
 
-  const httpServer = createServer(createNodeRequestListener(app));
+  const loopback = createLoopbackServer(
+    createNodeRequestListener(app),
+    input.tls,
+    input.log,
+  );
 
   return {
     discovery,
+    secure: loopback.secure,
     get url() {
       return urlForBoundPort();
     },
     listen: async () => {
       await migrateDiffrConfig();
-      boundPort = await listen(httpServer, input.port);
+      boundPort = await listen(loopback.server, input.port);
       discovery.url = urlForBoundPort();
 
       for (const discoveryPath of discoveryPaths)
@@ -508,7 +515,7 @@ export function createGlobalReviewServer(
       relay.close();
       openWatchdog.dispose();
 
-      await closeHttpServer(httpServer);
+      await loopback.close();
       await gateway.close();
       await telemetry.shutdown(1_500);
     },
@@ -591,18 +598,6 @@ function listen(server: Server, port: number): Promise<number> {
 
       resolve(address.port);
     });
-  });
-}
-
-function closeHttpServer(server: Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!server.listening) {
-      resolve();
-
-      return;
-    }
-
-    server.close((error) => (error ? reject(error) : resolve()));
   });
 }
 

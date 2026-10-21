@@ -1,12 +1,15 @@
 import crypto from "node:crypto";
-import type { IncomingMessage, ServerResponse } from "node:http";
 
 import {
   type JsonValue,
   REVIEW_HOST_HEADER,
   parseJsonText,
 } from "@dev.fast/review-protocol";
-import { type HttpBindings, getRequestListener } from "@hono/node-server";
+import {
+  type Http2Bindings,
+  type HttpBindings,
+  getRequestListener,
+} from "@hono/node-server";
 import { REVIEW_PERSON_HEADER } from "@review/review-api/request-origin";
 import { REVIEW_APP_SESSION_ID_HEADER } from "@review/ui-telemetry-events";
 import type { Hono } from "hono";
@@ -16,13 +19,36 @@ import { StreamLimitError, readBoundedStream } from "./bounded-stream.js";
 import { DEFAULT_MAX_REQUEST_BYTES, HttpJsonError } from "./http-json";
 
 export type ReviewHonoEnv = {
-  Bindings: HttpBindings;
+  Bindings: HttpBindings | Http2Bindings;
 };
+
+// HTTP/2 rejects connection-specific headers, such as streamSSE's chunked framing.
+const H2_FORBIDDEN_HEADERS = [
+  "connection",
+  "keep-alive",
+  "proxy-connection",
+  "transfer-encoding",
+  "upgrade",
+];
 
 export function createNodeRequestListener(
   app: Hono<ReviewHonoEnv>,
-): (request: IncomingMessage, response: ServerResponse) => Promise<void> {
-  return getRequestListener(app.fetch);
+): ReturnType<typeof getRequestListener> {
+  return getRequestListener(async (request, env) => {
+    const response = await app.fetch(request, env);
+
+    if (
+      env.incoming.httpVersionMajor !== 2 ||
+      !H2_FORBIDDEN_HEADERS.some((name) => response.headers.has(name))
+    )
+      return response;
+
+    const stripped = new Response(response.body, response);
+
+    for (const name of H2_FORBIDDEN_HEADERS) stripped.headers.delete(name);
+
+    return stripped;
+  });
 }
 
 export function jsonResponse<T>(
