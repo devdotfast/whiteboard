@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IAction } from '../../../../base/common/actions.js';
+import { IAction, toAction } from '../../../../base/common/actions.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
+import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
 import { IAccessibleViewService, AccessibleViewProviderId, AccessibleViewType, AccessibleContentProvider } from '../../../../platform/accessibility/browser/accessibleView.js';
 import { IAccessibleViewImplementation } from '../../../../platform/accessibility/browser/accessibleViewRegistry.js';
@@ -17,6 +18,8 @@ import { getNotificationFromContext } from './notificationsCommands.js';
 import { NotificationFocusedContext } from '../../../common/contextkeys.js';
 import { INotificationViewItem } from '../../../common/notifications.js';
 import { withSeverityPrefix } from '../../../../platform/notification/common/notification.js';
+import { NotificationText } from '../../../../platform/notification/common/notificationMessage.js';
+import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 
 export class NotificationAccessibleView implements IAccessibleViewImplementation {
 	readonly priority = 90;
@@ -28,6 +31,7 @@ export class NotificationAccessibleView implements IAccessibleViewImplementation
 		const listService = accessor.get(IListService);
 		const commandService = accessor.get(ICommandService);
 		const accessibilitySignalService = accessor.get(IAccessibilitySignalService);
+		const openerService = accessor.get(IOpenerService);
 
 		function getProvider() {
 			const notification = getNotificationFromContext(listService);
@@ -74,7 +78,7 @@ export class NotificationAccessibleView implements IAccessibleViewImplementation
 				() => focusList(),
 				'accessibility.verbosity.notification',
 				undefined,
-				getActionsFromNotification(notification, accessibilitySignalService),
+				getActionsFromNotification(notification, accessibilitySignalService, openerService),
 				() => {
 					if (!list) {
 						return;
@@ -98,39 +102,41 @@ export class NotificationAccessibleView implements IAccessibleViewImplementation
 }
 
 
-function getActionsFromNotification(notification: INotificationViewItem, accessibilitySignalService: IAccessibilitySignalService): IAction[] | undefined {
-	let actions = undefined;
-	if (notification.actions) {
-		actions = [];
-		if (notification.actions.primary) {
-			actions.push(...notification.actions.primary);
-		}
-		if (notification.actions.secondary) {
-			actions.push(...notification.actions.secondary);
-		}
-	}
-	if (actions) {
-		for (const action of actions) {
-			action.class = ThemeIcon.asClassName(Codicon.bell);
-			const initialAction = action.run;
-			action.run = () => {
-				initialAction();
-				notification.close();
-			};
-		}
-	}
-	const manageExtension = actions?.find(a => a.label.includes('Manage Extension'));
+function getActionsFromNotification(notification: INotificationViewItem, accessibilitySignalService: IAccessibilitySignalService, openerService: IOpenerService): IAction[] {
+	const actions = [...notification.actions?.primary ?? [], ...notification.actions?.secondary ?? []].map(action => toAction({
+		id: action.id,
+		label: action.label,
+		tooltip: action.tooltip,
+		enabled: action.enabled,
+		checked: action.checked,
+		class: ThemeIcon.asClassName(Codicon.bell),
+		run: () => {
+			const result = action.run();
+			notification.close();
+			return result;
+		},
+	}));
+	const manageExtension = actions.find(a => a.label.includes('Manage Extension'));
 	if (manageExtension) {
 		manageExtension.class = ThemeIcon.asClassName(Codicon.gear);
 	}
-	if (actions) {
-		actions.push({
-			id: 'clearNotification', label: localize('clearNotification', "Clear Notification"), tooltip: localize('clearNotification', "Clear Notification"), run: () => {
-				notification.close();
-				accessibilitySignalService.playSignal(AccessibilitySignal.clear);
-			}, enabled: true, class: ThemeIcon.asClassName(Codicon.clearAll)
-		});
+	const nodes = notification.message.original instanceof NotificationText ? notification.message.original.nodes : notification.message.linkedText.nodes;
+	for (const [index, node] of nodes.entries()) {
+		if (typeof node !== 'string') {
+			actions.push(toAction({
+				id: `notification.link.${index}`,
+				label: node.label,
+				tooltip: node.title || node.href,
+				class: ThemeIcon.asClassName(Codicon.link),
+				run: () => openerService.open(URI.parse(node.href), { allowCommands: true }),
+			}));
+		}
 	}
+	actions.push({
+		id: 'clearNotification', label: localize('clearNotification', "Clear Notification"), tooltip: localize('clearNotification', "Clear Notification"), run: () => {
+			notification.close();
+			accessibilitySignalService.playSignal(AccessibilitySignal.clear);
+		}, enabled: true, class: ThemeIcon.asClassName(Codicon.clearAll)
+	});
 	return actions;
 }
-
