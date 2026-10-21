@@ -54,6 +54,7 @@ export class ReviewMultiDiffUIElementFactory
   implements IWorkbenchUIElementFactory
 {
 
+  readonly hideResourceStatus = true;
   bottomScrollPadding = reviewBottomScrollPadding;
   alwaysShowScrollbars = false;
   scrollbarBelowResourceHeader = false;

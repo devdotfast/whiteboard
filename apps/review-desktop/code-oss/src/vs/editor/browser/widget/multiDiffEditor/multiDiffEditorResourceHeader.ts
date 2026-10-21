@@ -191,6 +191,7 @@ export class MultiDiffEditorResourceHeader extends Disposable {
 		this._elements.status.classList.toggle('deleted', isDeleted);
 		this._elements.status.classList.toggle('added', isAdded);
 		this._elements.status.innerText = flag;
+		this._elements.status.style.display = this._workbenchUIElementFactory.hideResourceStatus ? 'none' : '';
 		this._resourceLabel2?.setUri(!label && isRenamed ? originalLabelUri : undefined, { strikethrough: true });
 		this._resourceHeaderMetadata?.setUris({
 			original: data.originalUri,

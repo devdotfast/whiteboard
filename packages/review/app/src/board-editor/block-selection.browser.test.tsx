@@ -71,7 +71,7 @@ it("offers whole-block reference actions for the editor selection, and clears bo
     },
   ]);
 
-  const session = testReviewSession();
+  const session = testReviewSession({ reviewId: data.snapshot.reviewId });
 
   const listeners = new Set<Parameters<typeof session.surface.subscribe>[0]>();
 
@@ -209,6 +209,44 @@ it("offers whole-block reference actions for the editor selection, and clears bo
     expect(write).toHaveBeenCalledWith("Selected block: run();");
     await userEvent.click(block);
     await vi.waitFor(() => expect(copy()).not.toBeNull());
+    block.scrollIntoView();
+    const bounds = block.getBoundingClientRect();
+    const frame = window.frameElement?.getBoundingClientRect();
+
+    const point = {
+      x: bounds.left + (frame?.left ?? 0) + 10,
+      y: bounds.top + (frame?.top ?? 0) + 10,
+    };
+
+    await input.send("Input.dispatchMouseEvent", {
+      type: "mousePressed",
+      ...point,
+      button: "left",
+      buttons: 1,
+      clickCount: 1,
+    });
+    await act(async () => {
+      for (const report of listeners)
+        report({
+          event: "editorSelectionChanged",
+          reviewId: session.config.reviewId,
+          path: "job.ts",
+          sideContext: "head",
+          isEmpty: true,
+          range: { fromLine: 1, toLine: 1 },
+        });
+    });
+    expect(page.querySelector("[data-board-selected]")).not.toBeNull();
+    expect(copy()).not.toBeNull();
+    await input.send("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      ...point,
+      x: point.x + 1,
+      button: "left",
+      buttons: 1,
+    });
+    expect(page.querySelector("[data-board-selected]")).not.toBeNull();
+    expect(copy()).not.toBeNull();
     await act(async () => {
       for (const report of listeners)
         report({
@@ -220,8 +258,38 @@ it("offers whole-block reference actions for the editor selection, and clears bo
           range: { fromLine: 1, toLine: 2 },
         });
     });
+    await input.send("Input.dispatchMouseEvent", {
+      type: "mouseReleased",
+      ...point,
+      x: point.x + 1,
+      button: "left",
+      clickCount: 1,
+    });
+    await vi.waitFor(() => expect(copy()).not.toBeNull());
+    await new Promise((resolve) => setTimeout(resolve, 30));
     expect(page.querySelector("[data-board-selected]")).toBeNull();
     expect(copy()).not.toBeNull();
+    await userEvent.click(copy()!);
+    expect(JSON.parse(String(request.mock.lastCall?.[1]?.body))).toMatchObject({
+      target: { kind: "code", path: "job.ts", startLine: 1, endLine: 2 },
+    });
+    await act(async () => {
+      for (const report of listeners)
+        report({
+          event: "editorSelectionChanged",
+          reviewId: session.config.reviewId,
+          path: "job.ts",
+          sideContext: "head",
+          isEmpty: true,
+          range: { fromLine: 1, toLine: 1 },
+        });
+    });
+    expect(copy()).toBeNull();
+    await userEvent.click(block);
+    await vi.waitFor(() => expect(copy()).not.toBeNull());
+    await userEvent.click(heading);
+    expect(copy()).toBeNull();
+    expect(page.querySelector("[data-board-selected]")).toBeNull();
     await userEvent.keyboard("{Escape}");
     expect(copy()).toBeNull();
     expect(page.querySelector("[data-board-selected]")).toBeNull();

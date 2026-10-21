@@ -171,7 +171,7 @@ export function AgentSelectionProvider({
 
       currentSelection.current = value;
 
-      if (!value) setCopiedSelection(null);
+      if (!value || sameBlock) setCopiedSelection(null);
 
       setChoosing(false);
       setSelection(value);
@@ -194,6 +194,10 @@ export function AgentSelectionProvider({
           return;
 
         if (event.isEmpty) {
+          // A caret inside a selected block does not replace its selection.
+          // Monaco takes ownership only once it has a real text range.
+          if (currentSelection.current?.target.kind === "block") return;
+
           select(null);
 
           return;
@@ -317,8 +321,19 @@ export function AgentSelectionProvider({
     if (!selection) return;
 
     const dismiss = (event: Event) => {
-      if (!actions.current || !event.composedPath().includes(actions.current))
-        select(null);
+      const path = event.composedPath();
+
+      if (actions.current && path.includes(actions.current)) return;
+
+      if (
+        event.type === "pointerdown" &&
+        selection.target.kind === "block" &&
+        selection.anchorElement &&
+        path.includes(selection.anchorElement)
+      )
+        return;
+
+      select(null);
     };
 
     window.addEventListener("pointerdown", dismiss, true);

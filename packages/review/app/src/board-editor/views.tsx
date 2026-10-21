@@ -144,13 +144,23 @@ class RichBlockView extends ReactView {
     store: PortalStore,
     private view: EditorView,
     private getPos: () => number | undefined,
+    private sourceSelectionRevision: () => number,
   ) {
     super(node, store, "div");
     this.dom.className = "review-board-atom";
     // Select after the click completes. Selecting during mousedown lets
     // a later native selection drag restore the previous prose caret.
     // Inner editors keep their focus; drags do not select the outer block.
-    let press: { x: number; y: number; dragged: boolean } | undefined;
+
+    let press:
+      | {
+          x: number;
+          y: number;
+          dragged: boolean;
+          sourceSelectionRevision: number;
+        }
+      | undefined;
+
     this.dom.addEventListener(
       "mousedown",
       (event) => {
@@ -159,7 +169,14 @@ class RichBlockView extends ReactView {
         press = undefined;
 
         if (event.button !== 0 || event.buttons !== 1) return;
-        const start = { x: event.clientX, y: event.clientY, dragged: false };
+
+        const start = {
+          x: event.clientX,
+          y: event.clientY,
+          dragged: false,
+          sourceSelectionRevision: this.sourceSelectionRevision(),
+        };
+
         press = start;
         const tracking = new AbortController();
         this.gesture = tracking;
@@ -224,6 +241,7 @@ class RichBlockView extends ReactView {
           event.metaKey ||
           !start ||
           start.dragged ||
+          start.sourceSelectionRevision !== this.sourceSelectionRevision() ||
           (event.detail > 1 &&
             event.target instanceof Element &&
             event.target.closest(".monaco-editor"))
@@ -247,7 +265,11 @@ class RichBlockView extends ReactView {
         this.selectionTimer = setTimeout(() => {
           this.cancelSelection();
 
-          if (this.view.isDestroyed) return;
+          if (
+            this.view.isDestroyed ||
+            start.sourceSelectionRevision !== this.sourceSelectionRevision()
+          )
+            return;
           const selection = this.dom.ownerDocument.getSelection();
 
           if (
@@ -450,10 +472,14 @@ class TitleView implements NodeView {
   }
 }
 
-export function nodeViews(store: PortalStore) {
+export function nodeViews(
+  store: PortalStore,
+  sourceSelectionRevision: () => number = () => 0,
+) {
   return {
     title: (node) => new TitleView(node, store),
-    atom: (node, view, getPos) => new RichBlockView(node, store, view, getPos),
+    atom: (node, view, getPos) =>
+      new RichBlockView(node, store, view, getPos, sourceSelectionRevision),
     md_raw: (node) => new RawBlockView(node, store),
     inline_raw: (node) => new RawInlineView(node, store),
     task_item: (node, view, getPos) => new TaskItemView(node, view, getPos),
