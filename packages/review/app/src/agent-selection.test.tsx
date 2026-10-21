@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 
 import { AgentSelectionProvider, useAgentSelection } from "./agent-selection";
+import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
 
@@ -57,9 +58,11 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
   const render = (revision: string) =>
     root.render(
       <ReviewSessionProvider session={session}>
-        <AgentSelectionProvider revision={revision}>
-          <Pick />
-        </AgentSelectionProvider>
+        <ReviewDebugSettingsProvider>
+          <AgentSelectionProvider revision={revision}>
+            <Pick />
+          </AgentSelectionProvider>
+        </ReviewDebugSettingsProvider>
       </ReviewSessionProvider>,
     );
 

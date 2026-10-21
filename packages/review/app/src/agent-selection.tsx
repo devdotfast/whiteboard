@@ -22,6 +22,7 @@ import {
 } from "./ask-agent-picker";
 import { askAnchor } from "./ask-anchor";
 import { copyAgentContext } from "./copy-agent-context";
+import { useReviewDebugSettings } from "./debug-settings";
 import { useReviewSession } from "./host/review-session";
 import { useNotify } from "./notify";
 import { useReviewDiffFiles } from "./review-diff-files-context";
@@ -78,6 +79,7 @@ export function AgentSelectionProvider({
   children: ReactNode;
 }) {
   const session = useReviewSession();
+  const { theme } = useReviewDebugSettings();
   const panels = useOptionalReviewPanelStore();
   // Ask needs a panel to answer in and a host that runs agents (Desktop).
   const askAgents = useAskAgents(panels ? session : null);
@@ -356,7 +358,11 @@ export function AgentSelectionProvider({
           // The toolbar starts at the selection, after a lead that
           // gives way so it never runs past the container's edge.
           <div
-            {...stylex.props(themeStyles.vars, styles.lane)}
+            {...stylex.props(
+              themeStyles.vars,
+              theme === "light" && themeStyles.light,
+              styles.lane,
+            )}
             style={{
               top: selection.anchor?.y,
               right: selection.anchor?.right,
