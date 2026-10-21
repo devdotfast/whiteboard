@@ -101,6 +101,7 @@ export async function* structuralDiff(
   let completed = false;
   let aborted: StructuralProblem | undefined;
   let failed = 0;
+  const sent = new Set<string>();
   const lines = createInterface({ input: child.stdout, crlfDelay: Infinity });
 
   try {
@@ -131,7 +132,12 @@ export async function* structuralDiff(
 
         failed = event.failed;
         aborted = event.aborted;
-      } else if (event.type !== "file") {
+      } else if (event.type === "file") {
+        sent.add((event.file.rhs ?? event.file.lhs)!.path);
+      } else if (
+        event.type !== "update" ||
+        !sent.has((event.file.rhs ?? event.file.lhs)!.path)
+      ) {
         throw new Error(`Unexpected diffr event: ${event.type}`);
       }
 

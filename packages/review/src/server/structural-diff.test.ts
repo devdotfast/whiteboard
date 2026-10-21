@@ -53,6 +53,12 @@ const BINARY = {
   diff: { type: "binary", rhs: { size: 2 } },
 };
 
+const UPDATE = {
+  type: "update",
+  file: FILE,
+  diff: { type: "binary", rhs: { size: 3 } },
+};
+
 const COMPLETE = { type: "complete", succeeded: 1, failed: 0 };
 
 const emit = (event: JsonValue) =>
@@ -165,6 +171,60 @@ test.each([
 ])("rejects invalid or incomplete streams", async (script, message) => {
   const root = await executable(script);
   await expect(collect(request(root))).rejects.toThrow(message);
+});
+
+test("passes an update after its file", async () => {
+  const root = await executable(
+    `${emit(START)} ${emit(BINARY)} ${emit(UPDATE)} ${emit(COMPLETE)}`,
+  );
+
+  expect(await collect(request(root))).toEqual([
+    START,
+    BINARY,
+    UPDATE,
+    COMPLETE,
+  ]);
+});
+
+test("rejects an update before its file", async () => {
+  const root = await executable(
+    `${emit(START)} ${emit(UPDATE)} ${emit(BINARY)} ${emit(COMPLETE)}`,
+  );
+
+  await expect(collect(request(root))).rejects.toThrow(
+    "Unexpected diffr event: update",
+  );
+});
+
+test("rejects an update after completion", async () => {
+  const root = await executable(
+    `${emit(START)} ${emit(BINARY)} ${emit(COMPLETE)} ${emit(UPDATE)}`,
+  );
+
+  await expect(collect(request(root))).rejects.toThrow("after completion");
+});
+
+test("replays updates to a reader that joins after the run", async () => {
+  const { StructuralComparisons } = await import("./structural-comparisons.js");
+
+  const root = await executable(
+    `${emit(START)} ${emit(BINARY)} ${emit(UPDATE)} ${emit(COMPLETE)}`,
+  );
+
+  const cache = new StructuralComparisons();
+
+  try {
+    for await (const _event of cache.stream(request(root))) {
+      /* drain */
+    }
+
+    const replay = [];
+
+    for await (const event of cache.stream(request(root))) replay.push(event);
+    expect(replay).toEqual([START, BINARY, UPDATE, COMPLETE]);
+  } finally {
+    cache.close();
+  }
 });
 
 test("reports launch failures", async () => {
