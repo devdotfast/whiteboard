@@ -33,7 +33,6 @@ import {
   type CSSProperties,
   type ComponentType,
   type ReactElement,
-  type RefObject,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -42,10 +41,9 @@ import {
   useState,
 } from "react";
 
-import { AgentSelectionProvider, useAgentSelection } from "./agent-selection";
+import { useAgentSelection } from "./agent-selection";
 import { observeAgentTextSelection } from "./agent-text-selection";
-import { AskDesktopSync, useAskPanelHost } from "./ask-dock";
-import { AskHistoryProvider } from "./ask-history";
+import { useAskPanelHost } from "./ask-dock";
 import { AskThreadMarks } from "./ask-marks";
 import {
   AuthoringActivityBadge,
@@ -55,11 +53,7 @@ import { BugReportControl } from "./bug-report-dialog";
 import { CommitPicker } from "./commit-picker";
 import { LanguageServerChip } from "./connection-chip";
 import { ContentsRail } from "./contents-rail";
-import {
-  ReviewDebugSettingsProvider,
-  type ReviewNodeTint,
-  useReviewDebugSettings,
-} from "./debug-settings";
+import { type ReviewNodeTint, useReviewDebugSettings } from "./debug-settings";
 import { type DiffFilePicker, useDiffFilePicker } from "./diff-file-picker";
 import { DiffLayoutControl } from "./diff-layout-control";
 import { DocumentContentsContext } from "./diff-sidebar-folds";
@@ -81,22 +75,13 @@ import { type PageMoreFolded, PageMoreMenu } from "./page-more-menu";
 import { shortRef } from "./review-branch-range";
 import { ReviewBreadcrumb } from "./review-breadcrumb";
 import { ReviewPanelHost } from "./review-components";
-import {
-  ReviewProvider,
-  type ReviewSubmissionOutcome,
-  useReview,
-} from "./review-context";
+import { type ReviewSubmissionOutcome, useReview } from "./review-context";
 import { ReviewCornerAction } from "./review-corner-action";
 import { useReviewDiffFiles } from "./review-diff-files-context";
-import { ReviewDiffFilesProvider } from "./review-diff-files-context";
 import { BoardUpdatedAt, useBoardPlace } from "./review-doc-meta";
 import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
-import {
-  type ReviewFindHost,
-  ReviewFindProvider,
-  useReviewFindRegistration,
-} from "./review-find";
+import { useReviewFindRegistration } from "./review-find";
 import {
   scrollToReviewBlock,
   scrollToReviewHeading,
@@ -112,7 +97,7 @@ import {
   askColumnShown,
   peekShown,
 } from "./review-panel-store";
-import { ReviewRootsProvider, useReviewContainer } from "./review-root-context";
+import { useReviewContainer, useReviewRoots } from "./review-root-context";
 import {
   StackPill,
   useOpenStackLayer,
@@ -164,30 +149,31 @@ export function App({
   softwareMapEnabled,
   range,
   commits,
-  findHost,
 }: {
   document: RenderedReviewDocument;
   softwareMap: PublishedSoftwareMap;
   softwareMapEnabled: boolean;
   range: ReviewCanvasRange;
   commits?: readonly ReviewCommitSummary[];
-  findHost?: ReviewFindHost;
 }): ReactElement {
   return (
-    <ReviewDiffFilesProvider
-      documentKey={[document.routePath, document.filePath].join("\0")}
-      revision={range.worktreeRevision}
-      unavailable={!!range.sourceUnavailable}
-    >
-      <ReviewLayout
-        document={document}
-        softwareMap={softwareMap}
-        softwareMapEnabled={softwareMapEnabled}
-        range={range}
-        commits={commits}
-        findHost={findHost}
-      />
-    </ReviewDiffFilesProvider>
+    <ReviewLayoutContent
+      document={document}
+      documentRevision={document.key}
+      softwareModels={[
+        ...(softwareMap.head ? [softwareMap.head] : []),
+        ...document.documentSoftwareModels,
+      ]}
+      repoSoftwareMap={softwareMap.head ?? null}
+      baseSoftwareMap={softwareMap.base ?? null}
+      softwareMapTopologyDiff={diffSoftwareMaps(
+        softwareMap.base,
+        softwareMap.head,
+      )}
+      softwareMapEnabled={softwareMapEnabled}
+      range={range}
+      commits={commits}
+    />
   );
 }
 
@@ -211,87 +197,7 @@ export interface RenderedReviewDocument {
   width?: ReviewDocumentWidthChoice;
 }
 
-function ReviewLayout({
-  document,
-  softwareMap,
-  softwareMapEnabled,
-  range,
-  commits,
-  findHost,
-}: {
-  document: RenderedReviewDocument;
-  softwareMap: PublishedSoftwareMap;
-  softwareMapEnabled: boolean;
-  range: ReviewCanvasRange;
-  commits?: readonly ReviewCommitSummary[];
-  findHost?: ReviewFindHost;
-}): ReactElement {
-  const documentRoute = document.routePath;
-  const documentRevision = document.key;
-  const panelStore = useReviewPanelStore();
-
-  const articleRef = useRef<HTMLElement | null>(null);
-  const appRef = useRef<HTMLDivElement | null>(null);
-  const shellRef = useRef<HTMLElement | null>(null);
-  const scrollRegionRef = useRef<HTMLElement | null>(null);
-
-  const roots = useMemo(
-    () => ({ appRef, shellRef, scrollRegionRef, articleRef }),
-    [],
-  );
-
-  return (
-    <ReviewRootsProvider roots={roots}>
-      <ReviewFindProvider
-        articleRef={articleRef}
-        documentKey={documentRevision}
-        host={findHost}
-      >
-        <ReviewDebugSettingsProvider>
-          <ReviewProvider
-            key={documentRoute}
-            documentRoute={documentRoute}
-            softwareMapEnabled={softwareMapEnabled}
-            openTraceSession={panelStore.getState().openTrace}
-          >
-            <AskHistoryProvider>
-              <AskDesktopSync />
-              <AgentSelectionProvider revision={documentRevision}>
-                <ReviewLayoutContent
-                  appRef={appRef}
-                  shellRef={shellRef}
-                  scrollRegionRef={scrollRegionRef}
-                  articleRef={articleRef}
-                  document={document}
-                  documentRevision={documentRevision}
-                  softwareModels={[
-                    ...(softwareMap.head ? [softwareMap.head] : []),
-                    ...document.documentSoftwareModels,
-                  ]}
-                  repoSoftwareMap={softwareMap.head ?? null}
-                  baseSoftwareMap={softwareMap.base ?? null}
-                  softwareMapTopologyDiff={diffSoftwareMaps(
-                    softwareMap.base,
-                    softwareMap.head,
-                  )}
-                  softwareMapEnabled={softwareMapEnabled}
-                  range={range}
-                  commits={commits}
-                />
-              </AgentSelectionProvider>
-            </AskHistoryProvider>
-          </ReviewProvider>
-        </ReviewDebugSettingsProvider>
-      </ReviewFindProvider>
-    </ReviewRootsProvider>
-  );
-}
-
 function ReviewLayoutContent({
-  appRef,
-  shellRef,
-  scrollRegionRef,
-  articleRef,
   document,
   documentRevision,
   softwareModels,
@@ -302,10 +208,6 @@ function ReviewLayoutContent({
   range,
   commits: readCommits,
 }: {
-  appRef: RefObject<HTMLDivElement | null>;
-  shellRef: RefObject<HTMLElement | null>;
-  scrollRegionRef: RefObject<HTMLElement | null>;
-  articleRef: RefObject<HTMLElement | null>;
   document: RenderedReviewDocument;
   documentRevision: string;
   softwareModels: NormalizedSoftwareModel[];
@@ -317,6 +219,7 @@ function ReviewLayoutContent({
   commits?: readonly ReviewCommitSummary[];
 }): ReactElement {
   const commits = readCommits ?? noCommits;
+  const { appRef, shellRef, scrollRegionRef, articleRef } = useReviewRoots()!;
   const session = useReviewSession();
   const review = useReview();
   const available = session.review?.available;
@@ -331,8 +234,11 @@ function ReviewLayoutContent({
   const canShare = useCanShare();
   const share = useRef<{ open(): void }>(null);
   const contents = useRef<{ open(): void }>(null);
-  // Too narrow for the contents rail: the ⋯ menu offers the contents.
-  const [contentsRailHidden, setContentsRailHidden] = useState(false);
+
+  const contentsRailHidden = useReviewPanel(
+    (state) => state.contentsRailHidden,
+  );
+
   const bugReport = useRef<{ open(): void }>(null);
 
   // The board's scroller, for the overlay scrollbar that replaces its own.
@@ -1112,7 +1018,7 @@ function ReviewLayoutContent({
             scrollRegionRef={scrollRegionRef}
             barAnchor={pageBar}
             handle={contents}
-            onHiddenChange={setContentsRailHidden}
+            onHiddenChange={panelStore.getState().setContentsRailHidden}
           />
         )}
       </main>
