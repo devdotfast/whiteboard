@@ -87,6 +87,7 @@ import type {
 	ReviewCliInstallStatus,
 	ReviewDiffFileWire,
 	ReviewDiffViewFactory,
+	ReviewDiffViewHandle,
 	ReviewOpenFilesIn,
 	ReviewOpenFilesInChoice,
 	ReviewDocumentWidthChoice,
@@ -1318,13 +1319,18 @@ export class ReviewCanvasEditorPane extends EditorPane {
 					setProgress: (progress) => view.setProgress?.(progress),
 					revealSource: (source, sectionId) => view.revealSource?.(source, sectionId),
 					revealFile: (path, options) => view.revealFile?.(path, options),
+					setFindQuery: async (query) => await view.setFindQuery?.(query) ?? { matchCount: 0 },
+					revealFindMatch: (index) => view.revealFindMatch?.(index),
+					clearActiveFindMatch: () => view.clearActiveFindMatch?.(),
+					clearFind: () => view.clearFind?.(),
+					setAskMarks: (marks, mount) => view.setAskMarks?.(marks, mount),
 					onDidError: (listener) => view.onDidError(listener),
 					setFileTreeHidden: (hidden) => host.setHidden(hidden),
 					dispose: () => {
 						view.dispose();
 						host.dispose();
 					},
-				};
+				} satisfies Required<ReviewDiffViewHandle>;
 			},
 		};
 	}
