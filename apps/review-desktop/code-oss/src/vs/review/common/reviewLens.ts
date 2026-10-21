@@ -23,16 +23,20 @@ export function lensContextGaps(diff: IDocumentDiff, originalCount: number, modi
 		// the pin, and never into changed lines: diffr never folds those, so
 		// a run that holds them is not context diffr chose to keep.
 		const scopes = [diff.contextScopes.original, diff.contextScopes.modified];
-		const enclosing = scopes.map((sideScopes, side) => sideScopes.filter(([start, end]) =>
-			rows.some((row, index) => visible[index] && row[side] !== null && row[side]! >= start && row[side]! < end)));
-		const open = rows.map(row => row.every((line, side) => line === null || !(diff.contextGaps ?? []).some(gap => {
+		const shown = [new Uint32Array(originalCount + 1), new Uint32Array(modifiedCount + 1)];
+		rows.forEach((row, index) => row.forEach((line, side) => { if (visible[index] && line !== null) shown[side][line + 1] = 1; }));
+		for (const counts of shown) for (let line = 1; line < counts.length; line++) counts[line] += counts[line - 1];
+		const before = (side: number, line: number) => shown[side][Math.min(Math.max(line, 0), shown[side].length - 1)];
+		const enclosing = scopes.map((sideScopes, side) => sideScopes.filter(([start, end]) => before(side, end) > before(side, start)));
+		const folded = [new Uint8Array(originalCount), new Uint8Array(modifiedCount)];
+		for (const gap of diff.contextGaps ?? []) {
 			// An inline scope folds into its header. Its fold state must not
 			// move the lens boundary and swallow that header's reopen control.
-			if (gap.collapsed === false || gap.band === false) return false;
-			const start = side === 0 ? gap.originalStart : gap.modifiedStart;
-			const count = side === 0 ? gap.originalCount : gap.modifiedCount;
-			return line + 1 >= start && line + 1 < start + count;
-		})));
+			if (gap.collapsed === false || gap.band === false) continue;
+			folded[0].fill(1, gap.originalStart - 1, gap.originalStart - 1 + gap.originalCount);
+			folded[1].fill(1, gap.modifiedStart - 1, gap.modifiedStart - 1 + gap.modifiedCount);
+		}
+		const open = rows.map(row => row.every((line, side) => line === null || !folded[side][line]));
 		const edited = [new Uint8Array(originalCount), new Uint8Array(modifiedCount)];
 		for (const change of diff.changes) {
 			edited[0].fill(1, change.original.startLineNumber - 1, change.original.endLineNumberExclusive - 1);
@@ -47,8 +51,9 @@ export function lensContextGaps(diff: IDocumentDiff, originalCount: number, modi
 			start = end;
 		}
 		// A boundary inside a collapsed band stays folded with it.
+		const edges = enclosing.map(sideScopes => ({ start: new Set(sideScopes.map(([start]) => start)), end: new Set(sideScopes.map(([, end]) => end - 1)) }));
 		const boundary = (index: number, edge: 'start' | 'end') => open[index] && rows[index].some((line, side) =>
-			line !== null && enclosing[side].some(([start, end]) => line === (edge === 'start' ? start : end - 1)));
+			line !== null && edges[side][edge].has(line));
 		for (let index = 0; index < rows.length; index++) {
 			for (const [edge, step] of [['start', 1], ['end', -1]] as const) {
 				if (!boundary(index, edge)) continue;
