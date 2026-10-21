@@ -1112,8 +1112,37 @@ export function isNormalizedSoftwareModel(
   );
 }
 
+// Readers walk `parentPath` until there is none.
+function nestsInCycle(
+  elements: readonly { path: string; parentPath?: string }[],
+): boolean {
+  const parents = new Map(elements.map((item) => [item.path, item.parentPath]));
+  const seenBy = new Map<string, number>();
+
+  for (const [walk, { path }] of elements.entries())
+    for (
+      let at: string | undefined = path;
+      at !== undefined;
+      at = parents.get(at)
+    ) {
+      const by = seenBy.get(at);
+
+      if (by === walk) return true;
+
+      if (by !== undefined) break;
+      seenBy.set(at, walk);
+    }
+
+  return false;
+}
+
 export const softwareModelDataSchema = z.strictObject({
-  elements: z.array(normalizedSoftwareElementSchema),
+  elements: z
+    .array(normalizedSoftwareElementSchema)
+    .refine(
+      (elements) => !nestsInCycle(elements),
+      "Software map elements nest in a cycle.",
+    ),
   relationships: z.array(normalizedSoftwareRelationshipSchema),
 });
 

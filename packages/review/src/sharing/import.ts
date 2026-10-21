@@ -39,12 +39,10 @@ import {
   sourceReferences,
 } from "@review/review-api/document.js";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
+import { pullRequestUrl } from "@review/review-api/origin.js";
 import type { ReviewStore } from "@review/review-api/store.js";
 import { traceSchema } from "@review/review-api/trace-schema.js";
-import {
-  normalizedSoftwareElementSchema,
-  normalizedSoftwareRelationshipSchema,
-} from "@review/software-map-model.js";
+import { softwareModelDataSchema } from "@review/software-map-model.js";
 import {
   liftFileLenses,
   migrateStoredDocument,
@@ -88,7 +86,7 @@ export const sharedSnapshotSchema = z.strictObject({
       branch: z.string().optional(),
       baseRef: z.string().optional(),
       pullRequestNumber: z.number().int().positive().optional(),
-      pullRequestUrl: z.string().optional(),
+      pullRequestUrl: pullRequestUrl.optional(),
       pullRequestTitle: z.string().optional(),
       revision: z.string().optional(),
     })
@@ -99,11 +97,9 @@ const count = z.number().int().nonnegative();
 
 const counts = z.strictObject({ additions: count, deletions: count });
 
-const mapSchema = z.strictObject({
+const mapSchema = softwareModelDataSchema.extend({
   commit: z.string().regex(COMMIT_ID),
   side: z.enum(["base", "head"]),
-  elements: z.array(normalizedSoftwareElementSchema),
-  relationships: z.array(normalizedSoftwareRelationshipSchema),
   countsByElementPath: z.record(z.string(), counts),
   unmappedByElementPath: z.record(
     z.string(),
