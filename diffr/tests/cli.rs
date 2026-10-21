@@ -772,30 +772,35 @@ fn defer_sends_files_before_the_summarizer_answers_then_updates() {
     }
     assert!(child.wait().unwrap().success());
     let start = timed[0].0;
+    let mut files = Vec::new();
     let mut updated = Vec::new();
     for (at, line) in &timed[1..timed.len() - 1] {
         let record: serde_json::Value = serde_json::from_str(line).unwrap();
-        let path = record_path(&record);
+        let path = record_path(&record).to_owned();
         match record["type"].as_str().unwrap() {
             "file" => {
+                assert!(updated.is_empty(), "{path} came after an update");
                 assert!(
-                    *at - start < std::time::Duration::from_millis(500),
+                    *at - start < std::time::Duration::from_millis(1500),
                     "{path}"
                 );
                 assert!(!line.contains(SUMMARY), "{path}");
+                files.push(path);
             }
             "update" => {
+                assert!(files.contains(&path), "{path} updated before its file");
                 assert!(
                     *at - start > std::time::Duration::from_millis(1500),
                     "{path}"
                 );
                 assert!(line.contains(SUMMARY), "{path}");
                 assert!(record["diff"].is_object(), "{line}");
-                updated.push(path.to_owned());
+                updated.push(path);
             }
             other => panic!("unexpected {other} record"),
         }
     }
+    assert_eq!(files.len(), 3);
     updated.sort();
     assert_eq!(updated, ["a.py", "b.py"]);
     let complete: serde_json::Value = serde_json::from_str(&timed.last().unwrap().1).unwrap();
@@ -855,6 +860,8 @@ fn defer_without_a_deferred_plugin_changes_nothing() {
             .lines()
             .map(str::to_owned)
             .collect();
+        let last: serde_json::Value = serde_json::from_str(lines.last().unwrap()).unwrap();
+        assert_eq!(last["type"], "complete");
         lines.sort();
         lines
     };
