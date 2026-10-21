@@ -213,6 +213,10 @@ function selectPath(drop) {
 - `scene.peek(name, ...)`, `whiteboard.code(name)` and `<div data-wb-code="name">` all draw the real code peek over a placeholder. Give `scene.peek` a cell, and span columns (the cell's `colSpan`) when the code needs width — a one-column peek clips long lines; a raw `data-wb-code` div takes a CSS width instead. Its height follows the code, up to about 18 lines. A peek is always on top of your drawing, so do not draw or travel over it.
 - A code peek is about 40px of header plus 18px per line, up to about 400px. Rows of cards take about 90px each. With the default `height: "auto"`, the stage grows to fit them. If you intentionally use a numeric fixed height, leave enough room because overflow clips at that height.
 
+## Text inside shapes
+
+Scene cards supply their own padding. For custom HTML or SVG, keep the full rendered text bounds at least 12 CSS pixels inside the container boundary at the displayed size. Check every text-box corner against a curved boundary, not only the shape’s rectangular bounding box. Wrap or shorten the label, or enlarge the shape, while keeping the font readable. Verify this inset in each frame and supported viewport.
+
 ## Theme and motion
 
 Use the whiteboard's colors and fonts so the stage matches light and dark: `var(--wb-ink)`, `--wb-ink-muted`, `--wb-ink-faint`, `--wb-accent`, `--wb-accent-soft`, `--wb-on-accent`, `--wb-surface`, `--wb-well`, `--wb-rule`, `--wb-added`, `--wb-removed`, `--wb-modified`, `--wb-added-bg`, `--wb-removed-bg`, `--wb-modified-bg`, `--wb-font-sans`, `--wb-font-mono`, `--wb-font-serif`. `--wb-duration` (450ms) is the default fade.

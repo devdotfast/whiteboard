@@ -14,6 +14,7 @@ The user clarified the objective: a nice, flexible API for making animations tha
 - `concept-clear`: the example communicates the intended relationship/process. Simplification and original labels/data are welcome; its own captions, connections and state must agree.
 - `text-visible`: all displayed labels and code peeks are readable at normal capture scale, with sensible wrapping and font sizes.
 - `text-not-overlapping`: text avoids other text, nodes, packets, arrows, controls and code peeks in settled and representative moving states. Intentional containment is fine.
+- `container-padding`: enclosed text follows the public animation guide’s “Text inside shapes” inset requirement. Measure the full rendered text bounds against the actual container boundary, including curved borders, at the displayed size; text can fail this check even without overlap or clipping.
 - `content-not-clipped`: stage auto-sizing includes its content and code peeks. Text/controls remain reachable; intentional scroll containers have actual top/bottom reachability evidence. Distinguish a viewport crop from internal clipping. Avoid stale blank space.
 - `connections-clear`: real endpoint-bound edges follow the intended nodes, with clear direction and readable labels. Decorative shapes need no artificial edges.
 - `controls-work`: displayed controls have meaningful predictable effects. Include cancellation and replay; remove unnecessary controls rather than creating a large simulation to justify them.

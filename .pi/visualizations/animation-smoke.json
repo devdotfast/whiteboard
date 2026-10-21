@@ -5,6 +5,7 @@
     "concept-clear",
     "text-visible",
     "text-not-overlapping",
+    "container-padding",
     "content-not-clipped",
     "connections-clear",
     "controls-work",
