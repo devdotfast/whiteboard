@@ -1,5 +1,6 @@
 import type {
   CreateSourceViewer,
+  VerifySharedBoard,
   WhiteboardComponent,
 } from "@canvas/web-entry-api";
 
@@ -11,8 +12,11 @@ export type {
   WhiteboardProps,
   SourceRequest,
   SourceViewerOptions,
+  UnverifiedSharedBoard,
 } from "@canvas/web-entry-api";
 
 export declare const Whiteboard: WhiteboardComponent;
 
 export declare const createSourceViewer: CreateSourceViewer;
+
+export declare const verifySharedBoard: VerifySharedBoard;

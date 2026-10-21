@@ -4,11 +4,16 @@ Renders a shared Whiteboard board's content (`review-share/1`), read-only, in a 
 
 ```tsx
 import "@dev.fast/canvas/canvas.css";
-import { Whiteboard } from "@dev.fast/canvas";
+import { Whiteboard, verifySharedBoard } from "@dev.fast/canvas";
 import wasmUrl from "@dev.fast/canvas/libavoid.wasm?url";
 
-<Whiteboard share={{ manifest, objects }} wasmUrl={wasmUrl} />;
+const share = await verifySharedBoard({ manifest, objects });
+
+<Whiteboard share={share} wasmUrl={wasmUrl} />;
 ```
+
+A share is someone else's content: `verifySharedBoard` parses the manifest
+and checks each object's size and SHA-256, as Desktop does before it opens one.
 
 It renders the board's document only: no top bar, views or panels. `objects`
 maps each object id in the manifest to its bytes. Code peeks show as

@@ -17,6 +17,8 @@ import type { SharedBoardBundle, WhiteboardComponent } from "./web-entry-api";
 
 import "./styles.css";
 
+export { verifySharedBoard } from "./share-verify";
+
 export { createSourceViewer } from "./source-viewer";
 
 export type {
@@ -24,6 +26,7 @@ export type {
   WhiteboardProps,
   SourceRequest,
   SourceViewerOptions,
+  UnverifiedSharedBoard,
 } from "./web-entry-api";
 
 /** Reads a share into the saved version the canvas mounts. */

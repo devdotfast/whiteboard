@@ -1,1 +1,5 @@
-export { Whiteboard, createSourceViewer } from "@canvas/web-entry";
+export {
+  Whiteboard,
+  createSourceViewer,
+  verifySharedBoard,
+} from "@canvas/web-entry";

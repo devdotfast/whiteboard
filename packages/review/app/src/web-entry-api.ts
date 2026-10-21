@@ -1,4 +1,5 @@
 import type {
+  JsonValue,
   ReviewInlineEditorFactory,
   ReviewInlineFindSpec,
   ReviewTheme,
@@ -12,6 +13,12 @@ import type { ReactElement } from "react";
 /** A `review-share/1` bundle: its manifest and the objects it names. */
 export interface SharedBoardBundle {
   manifest: ShareManifest;
+  objects: ReadonlyMap<string, Uint8Array<ArrayBuffer>>;
+}
+
+/** A bundle as fetched: its manifest not yet parsed, its objects unchecked. */
+export interface UnverifiedSharedBoard {
+  manifest: JsonValue;
   objects: ReadonlyMap<string, Uint8Array<ArrayBuffer>>;
 }
 
@@ -39,3 +46,8 @@ export type WhiteboardComponent = (props: WhiteboardProps) => ReactElement;
 export type CreateSourceViewer = (
   options: SourceViewerOptions,
 ) => ReviewInlineEditorFactory;
+
+/** Parses the manifest and checks each object's size and digest. */
+export type VerifySharedBoard = (
+  share: UnverifiedSharedBoard,
+) => Promise<SharedBoardBundle>;
