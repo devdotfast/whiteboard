@@ -329,7 +329,6 @@ function FitToLayout({
   selectedKey?: string | null;
 }) {
   const flow = useReactFlow();
-  const fitted = useRef(false);
   const selected = selectedKey ? layout.nodes.get(selectedKey) : undefined;
 
   useEffect(() => {
@@ -361,15 +360,8 @@ function FitToLayout({
           y: height / 2 - centerY * zoom,
           zoom,
         },
-        {
-          duration:
-            fitted.current &&
-            !matchMedia("(prefers-reduced-motion: reduce)").matches
-              ? 300
-              : 0,
-        },
+        { duration: 0 },
       );
-      fitted.current = true;
     };
 
     fit();
