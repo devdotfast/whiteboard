@@ -979,6 +979,7 @@ export function GuidedTourPanel({
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const sectionRefs = useRef(new Map<string, HTMLElement>());
   const handledRevealRequestRef = useRef(0);
+  const revealingRef = useRef(false);
 
   const activeIndex = tour.stops.findIndex(
     (stop) => stop.anchor.id === activeAnchor,
@@ -1103,20 +1104,66 @@ export function GuidedTourPanel({
 
     if (!section || !scroller) return;
 
-    const frame = requestAnimationFrame(() => {
-      const scrollerTop = scroller.getBoundingClientRect().top;
-      const sectionTop = section.getBoundingClientRect().top;
-      // The tail's active line.
-      scroller.scrollTo({
-        top:
-          scroller.scrollTop +
-          sectionTop -
-          scrollerTop -
-          TOUR_ACTIVE_TOP_SLACK_PX,
-      });
-    });
+    // Source peeks above the requested stop resize as their native editors
+    // load. Keep the heading at the reading line until the reader takes over.
+    revealingRef.current = true;
+    let frame = 0;
+    let disposed = false;
 
-    return () => cancelAnimationFrame(frame);
+    const reveal = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (disposed) return;
+
+        const offset =
+          section.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top -
+          TOUR_ACTIVE_TOP_SLACK_PX;
+
+        if (Math.abs(offset) > 1)
+          scroller.scrollTo({ top: scroller.scrollTop + offset });
+      });
+    };
+
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reveal);
+
+    observer?.observe(scroller);
+    const content = scroller.firstElementChild;
+
+    if (content) observer?.observe(content);
+
+    for (const stop of sectionRefs.current.values()) observer?.observe(stop);
+
+    const inputEvents = [
+      "wheel",
+      "touchstart",
+      "pointerdown",
+      "keydown",
+    ] as const;
+
+    // The overlay scrollbar is beside the body, inside the same panel.
+    const inputRoot = scroller.parentElement ?? scroller;
+
+    const dispose = () => {
+      disposed = true;
+      revealingRef.current = false;
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+
+      for (const event of inputEvents)
+        inputRoot.removeEventListener(event, dispose, true);
+    };
+
+    for (const event of inputEvents)
+      inputRoot.addEventListener(event, dispose, {
+        capture: true,
+        passive: true,
+      });
+
+    reveal();
+
+    return dispose;
   }, [activeAnchor, revealRequest]);
 
   const displayIndex = Math.max(0, activeIndex);
@@ -1136,6 +1183,9 @@ export function GuidedTourPanel({
   // scroll-active-tracking.ts), the same one the contents rail uses.
   const syncActiveStopToScroll = () => {
     setHasScrolled(true);
+
+    if (revealingRef.current) return;
+
     const scroller = scrollerRef.current;
 
     if (!scroller) return;
