@@ -32,14 +32,6 @@ export interface ReviewTabDwellTrackerInput {
   maxDurationMs?: number;
 }
 
-export interface ReviewTabTelemetryTransportOptions {
-  endpoint: string;
-  fetch?: typeof fetch;
-  navigator?: Pick<Navigator, "sendBeacon">;
-}
-
-export type ReviewTabTelemetryDelivery = "beacon" | "fetch" | "none";
-
 export const MIN_REVIEW_TAB_DWELL_MS = 250;
 
 export const MAX_REVIEW_TAB_DWELL_MS = 4 * 60 * 60 * 1_000;
@@ -104,50 +96,6 @@ export function createReviewTabDwellTracker(
       flush("unmount", { pageExit: true });
     },
   };
-}
-
-export function createReviewTabTelemetryTransport(
-  options: ReviewTabTelemetryTransportOptions,
-): (
-  payload: ReviewTabDwellPayload,
-  sendOptions: { pageExit: boolean },
-) => ReviewTabTelemetryDelivery {
-  return (payload, sendOptions) =>
-    sendReviewTabTelemetryPayload(payload, {
-      ...options,
-      pageExit: sendOptions.pageExit,
-    });
-}
-
-export function sendReviewTabTelemetryPayload(
-  payload: ReviewTabDwellPayload,
-  options: ReviewTabTelemetryTransportOptions & { pageExit: boolean },
-): ReviewTabTelemetryDelivery {
-  const endpoint = options.endpoint;
-  const body = JSON.stringify(payload);
-
-  if (options.pageExit && options.navigator?.sendBeacon) {
-    try {
-      if (options.navigator.sendBeacon(endpoint, body)) {
-        return "beacon";
-      }
-    } catch {
-      // Electron's vscode-file workbench cannot originate a beacon. The
-      // keepalive fetch below remains valid for the loopback review server.
-    }
-  }
-
-  const fetchImpl = options.fetch ?? globalThis.fetch;
-
-  if (!fetchImpl) return "none";
-  void fetchImpl(endpoint, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body,
-    keepalive: options.pageExit,
-  }).catch(() => undefined);
-
-  return "fetch";
 }
 
 export function createReviewAppSessionId(

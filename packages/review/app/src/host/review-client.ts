@@ -4,15 +4,11 @@ export type ReviewClientConfig = Partial<
   Pick<ReviewRuntimeConfig, "serverUrl" | "reviewId" | "token" | "wasmUrl">
 >;
 
-export interface ReviewRequestOptions {
-  tokenInQuery?: boolean;
-}
-
 export function jsonReviewApiUrl(
   config: ReviewClientConfig,
   reviewId: string,
   endpoint: `/${string}`,
-  options: { version?: number; tokenInQuery?: boolean } = {},
+  options: { version?: number } = {},
 ): string {
   const url = new URL(
     `${config.serverUrl?.replace(/\/$/, "") ?? browserOrigin()}/reviews-api/${encodeURIComponent(reviewId)}${endpoint}`,
@@ -20,9 +16,6 @@ export function jsonReviewApiUrl(
 
   if (options.version !== undefined)
     url.searchParams.set("version", String(options.version));
-
-  if (options.tokenInQuery && config.token)
-    url.searchParams.set("token", config.token);
 
   return url.href;
 }

@@ -511,6 +511,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 								assets,
 							),
 							request: requestReviewApi,
+							beacon: (path, body) => void requestReviewApi(
+								`${connection.serverUrl}/reviews-api/${encodeURIComponent(reviewId)}${path}`,
+								{ method: "POST", keepalive: true, headers: { "content-type": "application/json", "x-review-token": connection.token }, body },
+							).catch(() => undefined),
 							post: async (request) => {
 								if (request.name === "openSourceTree") {
 									return this.openSource(() => this.tabsService.openApiSource(sourceSelection, input.getName()));

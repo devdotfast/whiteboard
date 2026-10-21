@@ -26,17 +26,12 @@ function Telemetry() {
   return null;
 }
 
-it("keeps dwell continuous through live review updates and sends the latest version", () => {
+it("keeps dwell continuous through live review updates and beacons it through the host", () => {
   let now = 0;
   vi.spyOn(performance, "now").mockImplementation(() => now);
   vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
-  const beacon = vi.spyOn(navigator, "sendBeacon").mockReturnValue(true);
-
-  const request = vi.fn<ReviewSession["bridge"]["request"]>(async () =>
-    Response.json({ ok: true }),
-  );
-
-  const base = testReviewSession({}, { request });
+  const beacon = vi.fn<NonNullable<ReviewSession["bridge"]["beacon"]>>();
+  const base = testReviewSession({}, { beacon });
 
   const review: ReviewSessionData = {
     reviewId: "test-review",
@@ -65,26 +60,16 @@ it("keeps dwell continuous through live review updates and sends the latest vers
       );
     });
 
-  render({
-    ...base,
-    review,
-    beaconUrl: () => "http://localhost/telemetry?version=1",
-  });
+  render({ ...base, review });
   now = 1000;
-  render({
-    ...base,
-    review: { ...review, updatedAtMs: 1000 },
-    beaconUrl: () => "http://localhost/telemetry?version=2",
-  });
+  render({ ...base, review: { ...review, updatedAtMs: 1000 } });
 
   expect(beacon).not.toHaveBeenCalled();
   now = 2500;
   act(() => window.dispatchEvent(new Event("pagehide")));
 
   expect(beacon).toHaveBeenCalledTimes(1);
-  expect(beacon.mock.calls[0]?.[0]).toBe(
-    "http://localhost/telemetry?version=2",
-  );
+  expect(beacon.mock.calls[0]?.[0]).toBe("/telemetry/tab");
   expect(JSON.parse(String(beacon.mock.calls[0]?.[1]))).toEqual({
     tab: "review",
     duration_ms: 2500,

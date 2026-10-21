@@ -40,7 +40,7 @@ describe("review host client", () => {
   });
 });
 
-it("routes JSON reports and authenticated beacons without legacy document parameters", () => {
+it("routes JSON reports without legacy document parameters", () => {
   const report = new URL(
     jsonReviewApiUrl(injectedConfig, "review/id", "/telemetry/bug-report", {
       version: 0,
@@ -49,21 +49,4 @@ it("routes JSON reports and authenticated beacons without legacy document parame
 
   expect(report.pathname).toBe("/reviews-api/review%2Fid/telemetry/bug-report");
   expect([...report.searchParams]).toEqual([["version", "0"]]);
-
-  const beacon = new URL(
-    jsonReviewApiUrl(
-      {
-        ...injectedConfig,
-        serverUrl: "http://localhost:5570/",
-        token: "a+b&c",
-      },
-      "review",
-      "/telemetry/tab",
-      { tokenInQuery: true },
-    ),
-  );
-
-  expect(beacon.pathname).toBe("/reviews-api/review/telemetry/tab");
-  expect(beacon.searchParams.get("token")).toBe("a+b&c");
-  expect(beacon.searchParams.has("document")).toBe(false);
 });
