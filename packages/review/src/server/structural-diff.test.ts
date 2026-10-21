@@ -105,6 +105,7 @@ test.each(["trees", "merge-base"] as const)(
       "--format",
       "ndjson",
       ...(kind === "trees" ? ["base", "head"] : ["base...head"]),
+      "--defer",
       "--",
       "space name.ts",
     ]);

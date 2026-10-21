@@ -269,6 +269,15 @@ describe("reliability and engagement events", () => {
     ).toEqual({ via: "topbar" });
   });
 
+  it("keeps diff_loaded timings and drops a missing updates_ms", () => {
+    expect(
+      sanitizeUiTelemetryEvent({
+        name: "diff_loaded",
+        properties: { first_file_ms: 80, files: 3, path: "src/app.ts" },
+      })?.properties,
+    ).toMatchObject({ first_file_ms: 80, files: 3 });
+  });
+
   it("keeps a known install location on app_ready and drops anything else", () => {
     const location = (value: string) =>
       sanitizeUiTelemetryEvent({

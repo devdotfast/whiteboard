@@ -36,6 +36,10 @@ export class StructuralDiffSession extends Disposable {
 	private manifest: Set<string> | undefined;
 	private task: Promise<void> | undefined;
 	private finished = false;
+	private readonly createdAt = Date.now();
+	private firstFileAt: number | undefined;
+	private updatedAt: number | undefined;
+	private finishedAt: number | undefined;
 	private disposed = false;
 	error: string | undefined;
 	get complete(): boolean { return this.finished; }
@@ -78,6 +82,15 @@ export class StructuralDiffSession extends Disposable {
 				: error.includes("ended before completion") ? "stream_ended"
 					: error.startsWith("diffr stopped early") ? "aborted" : "other";
 		return { reason, files };
+	}
+	/** Time to the first file, and to stream completion when diffr sent updates. */
+	loadTiming(): { firstFileMs: number; updatesMs?: number; files: number } | undefined {
+		if (!this.finished || this.disposed || this.error || this.firstFileAt === undefined) return undefined;
+		return {
+			firstFileMs: this.firstFileAt - this.createdAt,
+			updatesMs: this.updatedAt === undefined ? undefined : this.finishedAt! - this.createdAt,
+			files: this.manifest!.size,
+		};
 	}
 	private missingResult(): StructuralFileResult { return { error: this.error ?? "diffr did not supply a result for this file." }; }
 	getTextDiff(path: string): StructuralTextDiff | undefined {
@@ -140,8 +153,8 @@ export class StructuralDiffSession extends Disposable {
 		if (!this.manifest) {
 			if (event.type !== "start" || event.version !== STRUCTURAL_WIRE_VERSION) throw new Error("Unsupported diffr stream protocol.");
 			this.acceptManifest(event);
-		} else if (event.type === "file") this.storeFileResult(event);
-		else if (event.type === "update") this.applyUpdate(event);
+		} else if (event.type === "file") { this.storeFileResult(event); this.firstFileAt ??= Date.now(); }
+		else if (event.type === "update") { this.applyUpdate(event); this.updatedAt = Date.now(); }
 		else if (event.type === "complete") this.finishLoading(event);
 		else throw new Error(`Unexpected diffr event: ${(event as StructuralEvent).type}`);
 		if (event.type === "file" || event.type === "update") this.notify(structuralFilePath(event.file));
@@ -214,6 +227,7 @@ export class StructuralDiffSession extends Disposable {
 	private finishLoading(event: Extract<StructuralEvent, { type: "complete" }>): void {
 		for (const path of this.manifest!) if (!this.results.has(path)) { this.results.set(path, this.missingResult()); this.pendingFiles.add(path); }
 		this.finished = true;
+		this.finishedAt = Date.now();
 		if (event.aborted) this.error = `diffr stopped early: ${event.aborted.message}`;
 	}
 
