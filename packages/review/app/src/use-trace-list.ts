@@ -5,6 +5,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useContext } from "react";
 
+import { BoardPaintedContext } from "./board-switch";
 import { canvasQueryKeys } from "./canvas-query";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { type ReviewSession, useReviewSession } from "./host/review-session";
@@ -60,6 +61,8 @@ export function useTraceList(
   const session = useReviewSession();
   const version = useContext(DisplayedReviewVersionContext);
   const usesProvided = provided !== undefined && !storageOverride;
+  // A slow read; the board paints without it.
+  const painted = useContext(BoardPaintedContext);
 
   // The session reads the displayed version's traces, stored beside its pins.
   const query = useQuery({
@@ -70,7 +73,7 @@ export function useTraceList(
     ),
     queryFn: ({ signal }) =>
       readTraceList(session.fetch, storageOverride, signal),
-    enabled: !usesProvided && !session.review?.host,
+    enabled: painted && !usesProvided && !session.review?.host,
     staleTime: 0,
   });
 

@@ -51,7 +51,7 @@ import {
   type BoardEditorHost,
   BoardEditorHostContext,
 } from "./board-editor/BoardEditor";
-import { DrawingContext } from "./board-switch";
+import { BoardPaintedContext, DrawingContext } from "./board-switch";
 import {
   CanvasQueryProvider,
   canvasQueryKeys,
@@ -520,6 +520,14 @@ export function ApiCanvas({
     if (data && !held) content.bridge.ready();
   }, [Boolean(data), held, content.bridge]);
 
+  // Effects run once the frame that shows the board has painted.
+  const [painted, setPainted] = useState(false);
+  const shown = data !== undefined && !held;
+
+  useEffect(() => {
+    if (shown) setPainted(true);
+  }, [shown]);
+
   // Held, the page bar's place is read first, so it swaps in whole. The
   // page bar reads the same query.
   const [placeRead, setPlaceRead] = useState(false);
@@ -738,32 +746,36 @@ export function ApiCanvas({
                                       <div
                                         {...stylex.props(styles.canvasFrame)}
                                       >
-                                        <DrawingContext.Provider
-                                          value={drawingCounter}
+                                        <BoardPaintedContext.Provider
+                                          value={painted}
                                         >
-                                          <BoardEditorHostContext.Provider
-                                            value={editorHost}
+                                          <DrawingContext.Provider
+                                            value={drawingCounter}
                                           >
-                                            <CanvasDocument
-                                              data={data}
-                                              findHost={findHost}
-                                              softwareMapEnabled={
-                                                content.softwareMapEnabled ===
-                                                true
-                                              }
-                                              documentWidth={
-                                                content.documentWidth
-                                              }
-                                              tocEntries={
-                                                editorHost &&
-                                                editorToc?.reviewId ===
-                                                  data.snapshot.reviewId
-                                                  ? editorToc.entries
-                                                  : undefined
-                                              }
-                                            />
-                                          </BoardEditorHostContext.Provider>
-                                        </DrawingContext.Provider>
+                                            <BoardEditorHostContext.Provider
+                                              value={editorHost}
+                                            >
+                                              <CanvasDocument
+                                                data={data}
+                                                findHost={findHost}
+                                                softwareMapEnabled={
+                                                  content.softwareMapEnabled ===
+                                                  true
+                                                }
+                                                documentWidth={
+                                                  content.documentWidth
+                                                }
+                                                tocEntries={
+                                                  editorHost &&
+                                                  editorToc?.reviewId ===
+                                                    data.snapshot.reviewId
+                                                    ? editorToc.entries
+                                                    : undefined
+                                                }
+                                              />
+                                            </BoardEditorHostContext.Provider>
+                                          </DrawingContext.Provider>
+                                        </BoardPaintedContext.Provider>
                                       </div>
                                     </SaveMarkdown.Provider>
                                   </MapEnabled.Provider>

@@ -32,6 +32,7 @@ import {
   useState,
 } from "react";
 
+import { BoardPaintedContext } from "./board-switch";
 import { canvasQueryKeys } from "./canvas-query";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { useReviewSession } from "./host/review-session";
@@ -47,12 +48,14 @@ export function useReviewStack(): ReviewStackResponse {
   const review = useReviewSession().review;
   const version = useContext(DisplayedReviewVersionContext);
   const inStack = Boolean(review?.pullRequestNumber || review?.headBranch);
+  // A slow read; the board paints without it.
+  const painted = useContext(BoardPaintedContext);
 
   // Optional context: a failed read shows none.
   const { data } = useQuery({
     queryKey: canvasQueryKeys.stack(version),
     queryFn: ({ signal }) => review!.stack(signal),
-    enabled: inStack,
+    enabled: inStack && painted,
     staleTime: Infinity,
     placeholderData: keepPreviousData,
   });

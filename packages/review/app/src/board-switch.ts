@@ -18,3 +18,7 @@ export function useHoldsSwap(drawing: boolean): void {
     if (counter && drawing) return counter.begin();
   }, [counter, drawing]);
 }
+
+/** False until the board on screen has painted, so reads its first paint
+ * does not need to wait for it. */
+export const BoardPaintedContext = createContext(true);
