@@ -1819,7 +1819,7 @@ export class LocalReviewData {
 
       void promise.then(
         (value) => {
-          current.partial = value;
+          current.partial ??= value;
 
           if (!this.closed)
             this.store.setDiffStats(pins, {
@@ -1840,7 +1840,9 @@ export class LocalReviewData {
       );
     }
 
-    return entry.promise;
+    return entry.state === "ready" && entry.partial
+      ? Promise.resolve(entry.partial)
+      : entry.promise;
   }
 
   changes(pins: Pins): Promise<LocalVcsDiffFileSummary[]>;

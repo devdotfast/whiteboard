@@ -551,11 +551,20 @@ it("keeps Git's rename identity and counts when diffr emits separate deletion an
   data.close();
 });
 
-async function updateCoverage(
-  events: (file: ReturnType<typeof ref>) => StructuralDiffEvent[],
+async function updateApi(
+  events: (file: ReturnType<typeof ref>) => AsyncGenerator<StructuralDiffEvent>,
 ) {
   const data = new LocalReviewData(store);
   const file = ref("a.ts");
+
+  const { reviewId } = await store.execute({
+    operation: {
+      type: "create",
+      title: "Updates",
+      target: { kind: "commits", ...pins },
+    },
+  });
+
   vi.spyOn(data, "changes").mockImplementation((async (
     _pins: typeof pins,
     path?: string,
@@ -582,51 +591,105 @@ async function updateCoverage(
     yield* events(file);
   });
 
+  return { data, reviewId };
+}
+
+const folded = (comparison: ComparisonCoverage) =>
+  coverageProgress(comparison.files).folded;
+
+function gate() {
+  let open!: () => void;
+
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+
+  return { open, opened };
+}
+
+it("counts at the last file, then folds what diffr's update collapses", async () => {
+  const update = gate();
+
+  const { data, reviewId } = await updateApi(async function* (file) {
+    yield { type: "file", file, diff: plainDiff(2) };
+    await update.opened;
+    yield { type: "update", file, diff: hideFile(plainDiff(2)) };
+    yield { type: "complete", succeeded: 1, failed: 0 };
+  });
+
   try {
-    return await comparisonCoverage(
-      data,
-      "review",
-      pins,
-      new AbortController().signal,
+    const counted = await data.coverage(reviewId, pins);
+    expect(folded(counted)).toEqual({ additions: 0, deletions: 0 });
+    update.open();
+
+    await vi.waitFor(async () => {
+      const later = await data.coverage(reviewId, pins);
+      expect(folded(later)).toEqual({ additions: 1, deletions: 1 });
+      expect(coverageProgress(later.files).total).toEqual({
+        additions: 1,
+        deletions: 1,
+      });
+    });
+  } finally {
+    data.close();
+  }
+});
+
+it("counts the same without updates", async () => {
+  const { data, reviewId } = await updateApi(async function* (file) {
+    yield { type: "file", file, diff: plainDiff(2) };
+    yield { type: "complete", succeeded: 1, failed: 0 };
+  });
+
+  try {
+    expect(
+      coverageProgress((await data.coverage(reviewId, pins)).files),
+    ).toMatchObject({
+      total: { additions: 1, deletions: 1 },
+      folded: { additions: 0, deletions: 0 },
+      remaining: { additions: 1, deletions: 1 },
+    });
+  } finally {
+    data.close();
+  }
+});
+
+it("keeps a file's coverage when its update fails", async () => {
+  const error = { code: "provider_failed", message: "boom" };
+  const done = gate();
+
+  const { data, reviewId } = await updateApi(async function* (file) {
+    yield { type: "file", file, diff: hideFile(plainDiff(2)) };
+    yield { type: "update", file, error };
+    done.open();
+    yield { type: "complete", succeeded: 1, failed: 0 };
+  });
+
+  try {
+    await data.coverage(reviewId, pins);
+    await done.opened;
+
+    expect(folded(await data.coverage(reviewId, pins))).toEqual({
+      additions: 1,
+      deletions: 1,
+    });
+  } finally {
+    data.close();
+  }
+});
+
+it("rejects an update for a file it has not seen", async () => {
+  const { data, reviewId } = await updateApi(async function* (file) {
+    yield { type: "update", file, diff: hideFile(plainDiff(2)) };
+  });
+
+  try {
+    await expect(data.coverage(reviewId, pins)).rejects.toThrow(
+      "Unexpected structural result: a.ts",
     );
   } finally {
     data.close();
   }
-}
-
-it("recomputes a file's folded changes from diffr's update", async () => {
-  const final = await updateCoverage((file) => [
-    { type: "file", file, diff: plainDiff(2) },
-    { type: "update", file, diff: hideFile(plainDiff(2)) },
-    { type: "complete", succeeded: 1, failed: 0 },
-  ]);
-
-  expect(coverageProgress(final.files)).toMatchObject({
-    total: { additions: 1, deletions: 1 },
-    folded: { additions: 1, deletions: 1 },
-    remaining: { additions: 0, deletions: 0 },
-  });
-});
-
-it("keeps a file's coverage when its update fails, and rejects an update with no file", async () => {
-  const error = { code: "provider_failed", message: "boom" };
-
-  const final = await updateCoverage((file) => [
-    { type: "file", file, diff: plainDiff(2) },
-    { type: "update", file, error },
-    { type: "complete", succeeded: 1, failed: 0 },
-  ]);
-
-  expect(coverageProgress(final.files)).toMatchObject({
-    folded: { additions: 0, deletions: 0 },
-    remaining: { additions: 1, deletions: 1 },
-  });
-
-  await expect(
-    updateCoverage((file) => [
-      { type: "update", file, diff: hideFile(plainDiff(2)) },
-    ]),
-  ).rejects.toThrow("Unexpected structural result: a.ts");
 });
 
 function root(children: StructuralRegion[]): StructuralRegion {
