@@ -13,6 +13,7 @@ import {
 REVIEW_DESKTOP_CHANNEL,
 REVIEW_DESKTOP_CONNECTION_VERSION,
 type ReviewDesktopConnection,
+reviewRendererServerUrl,
 } from "../common/reviewDesktopBootstrap.js";
 import { consumeReviewEventStream } from "../common/reviewEventStream.js";
 import type { ReviewExternalEditorTarget } from "../common/reviewExternalEditor.js";
@@ -128,7 +129,7 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 	 */
 	private connection: ReviewDesktopConnection | undefined;
 	private get serverUrl(): string {
-		return this.requireConnection().url;
+		return reviewRendererServerUrl(this.requireConnection());
 	}
 	private get token(): string {
 		return this.requireConnection().token;

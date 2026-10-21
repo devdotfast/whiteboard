@@ -25,12 +25,20 @@ export interface ReviewDesktopConnection {
   readonly installationId?: string;
   readonly cliPath?: string;
   readonly cliVersion?: string;
+  /** The same port over TLS, trusted only by this app's renderers. */
+  readonly secureUrl?: string;
   /** Minted once per launch by the main process, never announced by the server. */
   readonly appSessionId: string;
 }
 
 /** What the server's ready event announces, before main adds its own fields. */
-export type ReviewServerAnnouncement = Omit<ReviewDesktopConnection, "appSessionId">;
+export type ReviewServerAnnouncement = Omit<ReviewDesktopConnection, "appSessionId" | "secureUrl"> & {
+  readonly tls?: true;
+};
+
+export function reviewRendererServerUrl(connection: ReviewDesktopConnection): string {
+  return connection.secureUrl ?? connection.url;
+}
 
 export interface ReviewDesktopCredentials {
   readonly token: string;
@@ -143,6 +151,7 @@ export class ReviewReadyEventReader {
         : {}),
       ...(typeof cliPath === "string" && cliPath ? { cliPath } : {}),
       ...(typeof cliVersion === "string" && cliVersion ? { cliVersion } : {}),
+      ...(event["tls"] === true ? { tls: true } : {}),
     };
   }
 }

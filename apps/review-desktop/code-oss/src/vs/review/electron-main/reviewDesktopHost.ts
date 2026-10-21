@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { spawn } from "node:child_process";
-import { app, BrowserWindow, powerMonitor } from "electron";
+import { app, BrowserWindow, powerMonitor, session } from "electron";
 import { Disposable, toDisposable } from "../../base/common/lifecycle.js";
 import { join } from "../../base/common/path.js";
 import { IConfigurationService } from "../../platform/configuration/common/configuration.js";
@@ -40,6 +40,7 @@ import {
   REVIEW_REMOTE_INSTALL_YES,
 } from "../common/reviewSshPrompt.js";
 import { REVIEW_CRASH_DUMPS_DIRNAME } from "../node/reviewCrashReporter.js";
+import { reviewLoopbackCertVerdict } from "../node/reviewLoopbackCert.js";
 import { ReviewCrashDumps } from "./reviewCrashDumps.js";
 import { ReviewCrashTelemetry } from "./reviewCrashTelemetry.js";
 import { ReviewMainErrorTelemetry } from "./reviewMainErrorTelemetry.js";
@@ -158,6 +159,11 @@ export class ReviewDesktopHost extends Disposable {
         onRemoteHostRestarted: (alias) => this.remoteHosts?.reattach(alias),
       }),
     );
+    const fingerprint = this.supervisor.tlsFingerprint;
+    if (fingerprint)
+      session.defaultSession.setCertificateVerifyProc((request, callback) =>
+        callback(reviewLoopbackCertVerdict(request, fingerprint)),
+      );
     this._register(
       this.configurationService.onDidChangeConfiguration((event) => {
         if (!event.affectsConfiguration(REVIEW_TELEMETRY_SETTING)) return;

@@ -102,13 +102,14 @@ class FakeServerProcess implements IReviewServerProcess {
 		this.env = configuration.env ?? {};
 		return true;
 	}
-	announceReady(): void {
+	announceReady(extra: Record<string, unknown> = {}): void {
 		this.stdout.fire(`${JSON.stringify({
 			event: 'ready',
 			version: REVIEW_DESKTOP_CONNECTION_VERSION,
 			url: 'http://127.0.0.1:4321',
 			token: this.env.DEV_FAST_REVIEW_SERVER_TOKEN,
 			instanceId: this.env.DEV_FAST_REVIEW_INSTANCE_ID,
+			...extra,
 		})}\n`);
 	}
 	fail(message: string): void {
@@ -161,6 +162,70 @@ test('a restarted server keeps the launch\'s app session id, which the connectio
 	assert.equal(second.env.DEV_FAST_REVIEW_APP_SESSION_ID, first.env.DEV_FAST_REVIEW_APP_SESSION_ID);
 	assert.equal(second.env.DEV_FAST_REVIEW_CHANNEL, 'preview');
 });
+
+test('a restarted server keeps the launch\'s TLS cert, and the connection offers its https URL', async (t) => {
+	const processes: FakeServerProcess[] = [];
+	let restarted!: () => void;
+	const whenRestarted = new Promise<void>((resolve) => restarted = resolve);
+	const supervisor = new ReviewServerSupervisor({
+		appRoot: '/app',
+		appVersion: '0.0.34',
+		isBuilt: true,
+		channel: 'preview',
+		logInfo: () => { },
+		logError: () => { },
+		createProcess: () => {
+			const serverProcess = new FakeServerProcess();
+			processes.push(serverProcess);
+			if (processes.length === 2) queueMicrotask(restarted);
+			return serverProcess;
+		},
+	});
+	t.after(() => supervisor.dispose());
+
+	supervisor.start();
+	const [first] = processes;
+	first.announceReady({ tls: true });
+	const connection = await supervisor.whenConnected();
+	first.crash();
+	await whenRestarted;
+	const second = processes[1];
+
+	assert.equal(connection.url, 'http://127.0.0.1:4321');
+	assert.equal(connection.secureUrl, 'https://127.0.0.1:4321');
+	assert.equal(second.env.DEV_FAST_REVIEW_SERVER_TLS_CERT, first.env.DEV_FAST_REVIEW_SERVER_TLS_CERT);
+});
+
+for (const [failure, createLoopbackCert, tls] of [
+	['the cert cannot be created', () => { throw new Error('no EC'); }, true],
+	['the server did not announce TLS', undefined, false],
+] as const) {
+	test(`the connection offers no https URL when ${failure}`, async (t) => {
+		const processes: FakeServerProcess[] = [];
+		const supervisor = new ReviewServerSupervisor({
+			appRoot: '/app',
+			appVersion: '0.0.34',
+			isBuilt: true,
+			channel: 'preview',
+			logInfo: () => { },
+			logError: () => { },
+			createProcess: () => {
+				const serverProcess = new FakeServerProcess();
+				processes.push(serverProcess);
+				return serverProcess;
+			},
+			...(createLoopbackCert && { createLoopbackCert }),
+		});
+		t.after(() => supervisor.dispose());
+
+		supervisor.start();
+		processes[0].announceReady(tls ? { tls: true } : {});
+		const connection = await supervisor.whenConnected();
+
+		assert.equal(connection.url, 'http://127.0.0.1:4321');
+		assert.equal(connection.secureUrl, undefined);
+	});
+}
 
 test('reports a server process death to onServerTerminated, but not a deliberate stop', async (t) => {
 	const processes: FakeServerProcess[] = [];
