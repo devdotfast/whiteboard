@@ -216,22 +216,20 @@ export function SettingsPage({
                       : "Adds whiteboard to your shell PATH. Your agents and trace capture run it."
                   }
                 >
-                  {install.status.shim.installer ? null : (
+                  {install.status.shim.installed ||
+                  install.status.shim.installer ? null : (
                     <Button
                       disabled={installingCli}
                       onClick={async () => {
                         setInstallingCli(true);
                         await run(
-                          () =>
-                            install.status.shim.installed
-                              ? install.remove({ shim: true })
-                              : install.apply({ shim: true }),
+                          () => install.apply({ shim: true }),
                           setInstallStatus,
                         );
                         setInstallingCli(false);
                       }}
                     >
-                      {install.status.shim.installed ? "Remove" : "Install"}
+                      Install
                     </Button>
                   )}
                 </Row>

@@ -256,7 +256,7 @@ class ReviewCliInstallStartup implements IWorkbenchContribution {
 				return;
 			case "resync":
 				// Without an installed command there is nothing to rewrite or announce.
-				if (!status.stamp?.shimPath || status.stamp.commandDisabled) return;
+				if (!status.stamp?.shimPath) return;
 				await this.reviewDesktopConnectionService.applyCliInstall({
 					shim: true,
 					autoUpdate: true,

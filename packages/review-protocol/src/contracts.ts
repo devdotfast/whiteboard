@@ -1488,8 +1488,6 @@ export const ReviewCliInstallStampSchema = z.object({
   }),
   fingerprint: requiredString.optional(),
   shimPath: requiredString.optional(),
-  /** The user removed the review command; the shim resync must not reinstall it. */
-  commandDisabled: z.literal(true).optional(),
   traceManaged: z.boolean().optional(),
   /** Windows: the directory the install put on the saved user PATH. A running
    * process keeps its startup PATH, so this is what says new terminals will

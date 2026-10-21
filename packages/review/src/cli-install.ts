@@ -283,7 +283,7 @@ async function resyncCliInstallUnlocked(
   let shimPath: string | undefined;
   let userPath = stamp.userPath;
 
-  if (stamp.shimPath && !stamp.commandDisabled) {
+  if (stamp.shimPath) {
     const installed = await installShim(input, chunks);
 
     if (installed.code !== 0) return installed;
@@ -371,9 +371,6 @@ async function applyCliInstallUnlocked(
   const stampShimPath = shimPath ?? (granted ? previous.shimPath : undefined);
 
   if (stampShimPath) stamp.shimPath = stampShimPath;
-
-  if (granted && previous.commandDisabled && input.shim !== true)
-    stamp.commandDisabled = true;
 
   if (input.trace !== undefined || (granted && previous.traceManaged))
     stamp.traceManaged = true;
@@ -640,8 +637,6 @@ async function removeCliInstallUnlocked(
     if (previous.fingerprint) stamp.fingerprint = previous.fingerprint;
 
     if (!input.shim && previous.shimPath) stamp.shimPath = previous.shimPath;
-
-    if (input.shim || previous.commandDisabled) stamp.commandDisabled = true;
 
     if (!input.trace && previous.traceManaged) stamp.traceManaged = true;
 
