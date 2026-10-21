@@ -83,7 +83,8 @@ export default defineConfig({
           include: ["src/**/*.browser.test.{ts,tsx}"],
           isolate: process.env.CI === "true",
           setupFiles: ["src/browser-test-setup.ts"],
-          testTimeout: 15_000,
+          // Files run in parallel in one Chromium, so real input waits its turn.
+          testTimeout: 60_000,
           browser: {
             enabled: true,
             headless: true,
