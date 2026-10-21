@@ -1,6 +1,12 @@
 import type { ReviewApiClient } from "@review/review-api/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { type ReactNode, useEffect, useMemo } from "react";
+import {
+  type ReactNode,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+} from "react";
 
 import type { AgentTraceStorage } from "./use-agent-trace";
 
@@ -25,10 +31,7 @@ export function createCanvasQueryClient(): QueryClient {
   });
 }
 
-/**
- * Each ApiCanvas owns one client, so its backend and review are the cache
- * boundary and keys name only what varies within one canvas.
- */
+/** Desktop shares one client across boards, so board keys name the board. */
 export const canvasQueryKeys = {
   sharingAccount: () => ["sharing", "account"] as const,
   shareLink: (board: string, version: number | undefined) =>
@@ -59,6 +62,7 @@ export const canvasQueryKeys = {
   allLensProgress: (board: string) => ["lens-progress", board] as const,
   place: (board: string, version: number | undefined) =>
     ["place", board, "board", version] as const,
+  placeRevision: (board: string) => ["place-revision", board] as const,
   stack: (board: string, version: number | undefined) =>
     ["place", board, "stack", version] as const,
   allPlace: (board: string) => ["place", board] as const,
@@ -86,19 +90,29 @@ export interface CanvasQueryScope {
   queryClient: QueryClient;
 }
 
-/** Clearing is deferred so a Strict Mode replay keeps its client. */
+/** Desktop's canvas client, kept across the boards it shows. */
+export const SharedCanvasQueryClient = createContext<QueryClient | null>(null);
+
+/** The shared client, else one owned by the canvas. Clearing is deferred so
+ * a Strict Mode replay keeps its client. */
 export function useCanvasQueryScope(
   client: ReviewApiClient,
   reviewId: string,
 ): CanvasQueryScope {
+  const shared = useContext(SharedCanvasQueryClient);
+
   const scope = useMemo(
-    () => ({ id: nextScope++, queryClient: createCanvasQueryClient() }),
-    [client, reviewId],
+    () => ({
+      id: nextScope++,
+      queryClient: shared ?? createCanvasQueryClient(),
+    }),
+    [shared, client, reviewId],
   );
 
   const { queryClient } = scope;
 
   useEffect(() => {
+    if (queryClient === shared) return;
     clearTimeout(pendingDisposals.get(queryClient));
 
     return () => {
@@ -107,7 +121,7 @@ export function useCanvasQueryScope(
         setTimeout(() => queryClient.clear()),
       );
     };
-  }, [queryClient]);
+  }, [queryClient, shared]);
 
   return scope;
 }

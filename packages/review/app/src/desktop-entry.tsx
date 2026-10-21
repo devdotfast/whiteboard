@@ -27,6 +27,10 @@ import {
 import { createRoot } from "react-dom/client";
 
 import { ApiCanvas } from "./api-canvas";
+import {
+  SharedCanvasQueryClient,
+  createCanvasQueryClient,
+} from "./canvas-query";
 import { type DiffFilePicker, DiffFilePickerContext } from "./diff-file-picker";
 import { FeedbackDialog } from "./feedback-dialog";
 import { CanvasUiContext } from "./host/canvas-ui";
@@ -401,6 +405,8 @@ export function mountReviewCanvas(
   let themeSubscription: { dispose(): void } | null = null;
   const findHost = createReviewFindHost();
   const diffFilePicker = createRef<DiffFilePicker>();
+  // Boards shown in turn share their reads.
+  const queryClient = createCanvasQueryClient();
   const themed = themedRoot(container);
 
   const render = () => {
@@ -419,7 +425,9 @@ export function mountReviewCanvas(
       <ReviewContainerProvider container={container}>
         <CanvasUiContext.Provider value={ui}>
           <DiffFilePickerContext.Provider value={diffFilePicker}>
-            <ReviewCanvas content={content} findHost={findHost} />
+            <SharedCanvasQueryClient.Provider value={queryClient}>
+              <ReviewCanvas content={content} findHost={findHost} />
+            </SharedCanvasQueryClient.Provider>
             {feedbackOpen && ui?.feedback && (
               <FeedbackDialog
                 host={ui.feedback}
@@ -469,6 +477,7 @@ export function mountReviewCanvas(
       themeSubscription?.dispose();
       themeSubscription = null;
       themed.dispose();
+      queryClient.clear();
     },
   };
 }

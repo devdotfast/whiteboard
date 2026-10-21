@@ -200,7 +200,6 @@ export function ApiCanvas({
 
       let shownVersion: string | undefined;
       let shownLinks = 0;
-      let placeRevision = 0;
       await client.follow<
         Snapshot & {
           activity: ActivitySnapshot;
@@ -222,8 +221,10 @@ export function ApiCanvas({
           // A reconnected stream restarts at 0, which also rereads.
           const place = snapshot.placeRevision ?? 0;
 
-          if (place !== placeRevision) {
-            placeRevision = place;
+          const placeRevision = canvasQueryKeys.placeRevision(content.reviewId);
+
+          if (place !== queryClient.getQueryData(placeRevision)) {
+            queryClient.setQueryData(placeRevision, place);
             void queryClient.invalidateQueries({
               queryKey: canvasQueryKeys.allPlace(content.reviewId),
             });

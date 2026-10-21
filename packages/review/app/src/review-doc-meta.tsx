@@ -6,7 +6,11 @@ import {
   summarizeReviewDiffFiles,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+  type QueryClient,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   Fragment,
   type ReactElement,
@@ -32,16 +36,53 @@ export function useBoardPlace(): ReviewBoardPlace {
   const review = session.review;
   const version = useContext(DisplayedReviewVersionContext);
 
+  const queryClient = useQueryClient();
+  const board = session.reviewId;
+
   // Optional context: a failed read shows none.
   const { data } = useQuery({
-    queryKey: canvasQueryKeys.place(session.reviewId, version),
+    queryKey: canvasQueryKeys.place(board, version),
     queryFn: ({ signal }) => review!.place(signal),
     enabled: review !== undefined,
     staleTime: Infinity,
-    placeholderData: keepPreviousData,
+    placeholderData: (previous) => previous ?? cachedPlace(queryClient, board),
   });
 
   return data ?? NO_PLACE;
+}
+
+/** A board's place before it is read: its own from another version, else
+ * the place of a sibling or of its parent, which lists it. */
+function cachedPlace(
+  queryClient: QueryClient,
+  board: string,
+): ReviewBoardPlace | undefined {
+  const places = queryClient
+    .getQueriesData<ReviewBoardPlace>({
+      queryKey: ["place"],
+      predicate: (query) => query.queryKey[2] === "board",
+    })
+    .flatMap(([key, place]) =>
+      place ? [{ own: key[1] === board, place }] : [],
+    );
+
+  const own = places.findLast((entry) => entry.own);
+
+  if (own) return own.place;
+
+  for (const { place } of places) {
+    const siblings = place.parent ? place.siblings : (place.children ?? []);
+
+    const self = siblings.find((sibling) => sibling.reviewId === board);
+    const parent = place.parent ?? place.board;
+
+    if (self && parent)
+      return {
+        parent,
+        siblings,
+        board: { reviewId: self.reviewId, title: self.title, icon: self.icon },
+      };
+  }
 }
 
 const NO_PLACE: ReviewBoardPlace = { siblings: [] };
