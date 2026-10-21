@@ -925,6 +925,59 @@ export async function openHome(ctx) {
   await ctx.page.locator("main.review-home").waitFor({ timeout: 60000 });
 }
 
+/** Switches the session to a view with its sidebar tab: Whiteboard, Diff or Threads. */
+export async function showView(ctx, label, page = ctx.page) {
+  await sidebarTab(page, label).click();
+  await tabSelected(ctx, label, page);
+}
+
+const sidebarTab = (page, label) =>
+  page.locator(`.review-sidebar-tabs [role="tab"][aria-label^="${label}"]`);
+
+/** Waits for the sidebar's `label` tab to be the active one. */
+export const tabSelected = (ctx, label, page = ctx.page) =>
+  ctx.until(
+    async () =>
+      (await sidebarTab(page, label).getAttribute("aria-selected")) === "true",
+    `the ${label} tab to be active`,
+  );
+
+/** Waits for the session to show `view`: review, diff or trace. */
+export const inView = (ctx, view, page = ctx.page) =>
+  ctx.until(
+    async () => (await page.locator(`.review-view-region--${view}`).count()) > 0,
+    `the ${view} view to be shown`,
+  );
+
+export const commitPill = (page) =>
+  page.locator('.review-sidebar-commit-picker button[aria-haspopup="menu"]');
+
+/** Scopes the Diff to the commit with `subject`. */
+export async function scopeToCommit(ctx, subject, page = ctx.page) {
+  await showView(ctx, "Diff", page);
+  await commitPill(page).click();
+  await page
+    .getByRole("menu", { name: "Commits" })
+    .getByRole("menuitemradio")
+    .filter({ hasText: subject })
+    .click();
+}
+
+/** Opens the Trace view from the peek of the trace quote `link`. */
+export async function openFullTrace(ctx, link, page = ctx.page) {
+  await link.click();
+  await page.getByRole("button", { name: "Full Trace" }).click();
+  await inView(ctx, "trace", page);
+}
+
+/** Dismisses the workbench's toasts, such as the usage-data notice. */
+export async function clearToasts(page) {
+  for (const clear of await page
+    .locator(".notifications-toasts .codicon-notifications-clear")
+    .all())
+    await clear.click().catch(() => {});
+}
+
 /** `--app` names a macOS bundle, or the installed executable on Linux and Windows. */
 function packagedExecutable(app) {
   return app.endsWith(".app")
