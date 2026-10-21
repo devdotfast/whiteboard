@@ -5,15 +5,17 @@
 
 import { FocusMode } from "../../platform/native/common/native.js";
 
-/** "1" on `whiteboard app` launches without --focus; "always" never takes focus (e2e runs). */
+/** "1" on `whiteboard app` launches without --focus; "always" never takes focus; "hidden" also hides windows (e2e runs). */
 export const REVIEW_DESKTOP_BACKGROUND_ENV = "DEV_FAST_REVIEW_DESKTOP_BACKGROUND";
 
 export const isBackgroundLaunch = (env: NodeJS.ProcessEnv) =>
-	env[REVIEW_DESKTOP_BACKGROUND_ENV] === "1" || env[REVIEW_DESKTOP_BACKGROUND_ENV] === "always";
+	["1", "always", "hidden"].includes(env[REVIEW_DESKTOP_BACKGROUND_ENV] ?? "");
 
 interface BackgroundWindow {
 	show(): void;
 	showInactive(): void;
+	setOpacity(opacity: number): void;
+	setIgnoreMouseEvents(ignore: boolean): void;
 	once(event: "focus", listener: () => void): unknown;
 }
 
@@ -24,10 +26,12 @@ interface BackgroundWindow {
 export class ReviewBackgroundLaunch {
 	private pending: boolean;
 	private readonly always: boolean;
+	private readonly hidden: boolean;
 	private showInactiveOnCreate = false;
 
 	constructor(env: NodeJS.ProcessEnv = process.env) {
-		this.always = env[REVIEW_DESKTOP_BACKGROUND_ENV] === "always";
+		this.hidden = env[REVIEW_DESKTOP_BACKGROUND_ENV] === "hidden";
+		this.always = this.hidden || env[REVIEW_DESKTOP_BACKGROUND_ENV] === "always";
 		this.pending = isBackgroundLaunch(env);
 	}
 
@@ -44,6 +48,10 @@ export class ReviewBackgroundLaunch {
 
 	attach(win: BackgroundWindow): void {
 		if (!this.pending) return;
+		if (this.hidden) {
+			win.setOpacity(0);
+			win.setIgnoreMouseEvents(true);
+		}
 		if (this.showInactiveOnCreate) win.showInactive();
 		win.once("focus", () => this.release());
 	}
