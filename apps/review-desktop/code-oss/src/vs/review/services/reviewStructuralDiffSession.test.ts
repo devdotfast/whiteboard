@@ -235,6 +235,7 @@ test('a failed update keeps the file\'s diff', async () => {
 	try {
 		assert.equal(bodyOf(session)?.visibility, undefined);
 		assert.equal(session.isRegionCollapsed('a.ts', 2), false);
+		assert.equal(session.loadTiming()?.updateErrors, 1);
 	} finally { session.dispose(); }
 });
 
@@ -256,6 +257,7 @@ test('load timing reports the first file, and stream completion only when an upd
 	assert.equal(plain?.files, 1);
 	assert.equal(typeof plain?.firstFileMs, 'number');
 	assert.equal(plain?.updatesMs, undefined);
+	assert.equal(plain?.updateErrors, 0);
 	const updated = await timed([start, result, update, complete]);
 	assert.equal(typeof updated?.updatesMs, 'number');
 	assert.ok(updated!.updatesMs! >= updated!.firstFileMs);

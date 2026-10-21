@@ -39,6 +39,7 @@ export class StructuralDiffSession extends Disposable {
 	private readonly createdAt = performance.now();
 	private firstFileAt: number | undefined;
 	private updatedAt: number | undefined;
+	private updateErrors = 0;
 	private finishedAt: number | undefined;
 	private disposed = false;
 	error: string | undefined;
@@ -83,13 +84,14 @@ export class StructuralDiffSession extends Disposable {
 					: error.startsWith("diffr stopped early") ? "aborted" : "other";
 		return { reason, files };
 	}
-	/** Time to the first file, and to stream completion when diffr sent updates. */
-	loadTiming(): { firstFileMs: number; updatesMs?: number; files: number } | undefined {
+	/** Time to the first file, to stream completion when diffr sent updates, and failed updates. */
+	loadTiming(): { firstFileMs: number; updatesMs?: number; files: number; updateErrors: number } | undefined {
 		if (!this.finished || this.disposed || this.error || this.firstFileAt === undefined) return undefined;
 		return {
 			firstFileMs: this.firstFileAt - this.createdAt,
 			updatesMs: this.updatedAt === undefined ? undefined : this.finishedAt! - this.createdAt,
 			files: this.manifest!.size,
+			updateErrors: this.updateErrors,
 		};
 	}
 	private missingResult(): StructuralFileResult { return { error: this.error ?? "diffr did not supply a result for this file." }; }
@@ -193,7 +195,7 @@ export class StructuralDiffSession extends Disposable {
 		const path = structuralFilePath(event.file);
 		const diff = this.getTextDiff(path);
 		if (!diff) throw new Error(`Unexpected diffr update: ${path}`);
-		if (event.error) return;
+		if (event.error) { this.updateErrors++; return; }
 		const seen = this.seen.has(path);
 		this.storeDiff(path, applyStructuralUpdate(diff, event, (region, next) => {
 			if (seen) return { ...next, collapsed: region.visibility?.collapsed };

@@ -273,9 +273,14 @@ describe("reliability and engagement events", () => {
     expect(
       sanitizeUiTelemetryEvent({
         name: "diff_loaded",
-        properties: { first_file_ms: 80, files: 3, path: "src/app.ts" },
+        properties: {
+          first_file_ms: 80,
+          files: 3,
+          update_errors: 1,
+          path: "src/app.ts",
+        },
       })?.properties,
-    ).toEqual({ first_file_ms: 80, files: 3 });
+    ).toEqual({ first_file_ms: 80, files: 3, update_errors: 1 });
   });
 
   it("keeps a known install location on app_ready and drops anything else", () => {

@@ -627,6 +627,7 @@ export const UI_TELEMETRY_EVENTS = {
       first_file_ms: "number",
       updates_ms: "number",
       files: "number",
+      update_errors: "number",
     },
   },
   discord_clicked: {
