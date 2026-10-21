@@ -28,12 +28,13 @@ import { ReviewStackSelector } from "./review-stack-selector";
 import { tokens } from "./tokens.stylex";
 
 export function useBoardPlace(): ReviewBoardPlace {
-  const review = useReviewSession().review;
+  const session = useReviewSession();
+  const review = session.review;
   const version = useContext(DisplayedReviewVersionContext);
 
   // Optional context: a failed read shows none.
   const { data } = useQuery({
-    queryKey: canvasQueryKeys.place(version),
+    queryKey: canvasQueryKeys.place(session.reviewId, version),
     queryFn: ({ signal }) => review!.place(signal),
     enabled: review !== undefined,
     staleTime: Infinity,

@@ -124,7 +124,10 @@ export function ShareControl({
 
   // Links created this canvas, so reopening a shared version skips the upload.
   const link = useQuery<string>({
-    queryKey: canvasQueryKeys.shareLink(target?.version),
+    queryKey: canvasQueryKeys.shareLink(
+      context?.reviewId ?? "",
+      target?.version,
+    ),
     queryFn: skipToken,
     staleTime: Infinity,
     gcTime: Infinity,
@@ -157,7 +160,10 @@ export function ShareControl({
         requestId,
       }),
     onSuccess: ({ url }, { version }) =>
-      queryClient.setQueryData(canvasQueryKeys.shareLink(version), url),
+      queryClient.setQueryData(
+        canvasQueryKeys.shareLink(context!.reviewId, version),
+        url,
+      ),
     onError: (error) => {
       // The host forgot a stale login; show sign-in and upload again after it.
       if (error instanceof ReviewApiError && error.status === 401)

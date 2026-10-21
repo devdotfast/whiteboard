@@ -225,7 +225,7 @@ export function ApiCanvas({
           if (place !== placeRevision) {
             placeRevision = place;
             void queryClient.invalidateQueries({
-              queryKey: canvasQueryKeys.allPlace(),
+              queryKey: canvasQueryKeys.allPlace(content.reviewId),
             });
           }
 

@@ -31,31 +31,42 @@ export function createCanvasQueryClient(): QueryClient {
  */
 export const canvasQueryKeys = {
   sharingAccount: () => ["sharing", "account"] as const,
-  shareLink: (version: number | undefined) =>
-    ["sharing", "link", version] as const,
+  shareLink: (board: string, version: number | undefined) =>
+    ["sharing", "link", board, version] as const,
   traceList: (
+    board: string,
     version: number | undefined,
     pins: { base: string; head: string } | undefined,
     storage: AgentTraceStorage | null,
-  ) => ["agent-traces", version, pins?.base, pins?.head, storage] as const,
+  ) =>
+    ["agent-traces", board, version, pins?.base, pins?.head, storage] as const,
   agentTrace: (
+    board: string,
     sessionId: string | null | undefined,
     trace: string | null | undefined,
     storage: AgentTraceStorage | null | undefined,
-  ) => ["agent-trace", sessionId, trace ?? null, storage ?? null] as const,
+  ) =>
+    ["agent-trace", board, sessionId, trace ?? null, storage ?? null] as const,
   askThread: (threadId: string) => ["ask-thread", threadId] as const,
-  diffFiles: (documentKey: string, source: number, revision?: string) =>
-    ["diff-files", documentKey, source, revision] as const,
-  lensProgress: (version: number) => ["lens-progress", version] as const,
-  allLensProgress: () => ["lens-progress"] as const,
-  place: (version: number | undefined) => ["place", "board", version] as const,
-  stack: (version: number | undefined) => ["place", "stack", version] as const,
-  allPlace: () => ["place"] as const,
-  projectBoards: () => ["project-boards"] as const,
-  askThreads: () => ["ask-threads"] as const,
+  diffFiles: (
+    board: string,
+    documentKey: string,
+    source: number,
+    revision?: string,
+  ) => ["diff-files", board, documentKey, source, revision] as const,
+  lensProgress: (board: string, version: number) =>
+    ["lens-progress", board, version] as const,
+  allLensProgress: (board: string) => ["lens-progress", board] as const,
+  place: (board: string, version: number | undefined) =>
+    ["place", board, "board", version] as const,
+  stack: (board: string, version: number | undefined) =>
+    ["place", board, "stack", version] as const,
+  allPlace: (board: string) => ["place", board] as const,
+  projectBoards: (board: string) => ["project-boards", board] as const,
+  askThreads: (board: string) => ["ask-threads", board] as const,
   askBoards: (threadId: string | null, turns: number) =>
     ["ask-boards", threadId, turns] as const,
-  linkStates: () => ["link-states"] as const,
+  linkStates: (board: string) => ["link-states", board] as const,
   linkPeek: (
     board: string,
     block: string | undefined,

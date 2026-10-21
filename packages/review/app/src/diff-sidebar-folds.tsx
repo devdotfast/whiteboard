@@ -53,7 +53,7 @@ export function DiffSidebarFolds(): ReactElement {
   const [open, setOpen] = useState<"whiteboards" | "contents" | null>(null);
 
   const { data: project = null } = useQuery({
-    queryKey: canvasQueryKeys.projectBoards(),
+    queryKey: canvasQueryKeys.projectBoards(session.reviewId),
     queryFn: async (): Promise<ProjectBoards | null> => {
       const response = await session.fetch("/project");
 
@@ -66,7 +66,7 @@ export function DiffSidebarFolds(): ReactElement {
   useEffect(() => {
     const reread = () =>
       void queryClient.invalidateQueries({
-        queryKey: canvasQueryKeys.projectBoards(),
+        queryKey: canvasQueryKeys.projectBoards(session.reviewId),
       });
 
     if (listing) reread();

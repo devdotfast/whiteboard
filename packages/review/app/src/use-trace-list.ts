@@ -67,6 +67,7 @@ export function useTraceList(
   // The session reads the displayed version's traces, stored beside its pins.
   const query = useQuery({
     queryKey: canvasQueryKeys.traceList(
+      session.reviewId,
       version,
       session.review?.pins,
       storageOverride,

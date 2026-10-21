@@ -80,7 +80,7 @@ export function AskHistoryProvider({
   const queryClient = useQueryClient();
 
   const list = useQuery({
-    queryKey: canvasQueryKeys.askThreads(),
+    queryKey: canvasQueryKeys.askThreads(session.reviewId),
     queryFn: async () => {
       const response = await session.fetch("/ask/threads");
 
@@ -93,9 +93,9 @@ export function AskHistoryProvider({
   const refresh = useCallback(
     () =>
       void queryClient.invalidateQueries({
-        queryKey: canvasQueryKeys.askThreads(),
+        queryKey: canvasQueryKeys.askThreads(session.reviewId),
       }),
-    [queryClient],
+    [queryClient, session.reviewId],
   );
 
   const remove = useMutation({
@@ -106,7 +106,7 @@ export function AskHistoryProvider({
     },
     onSuccess: () =>
       queryClient.invalidateQueries({
-        queryKey: canvasQueryKeys.askThreads(),
+        queryKey: canvasQueryKeys.askThreads(session.reviewId),
       }),
   });
 

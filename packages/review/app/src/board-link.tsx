@@ -220,7 +220,7 @@ function useLateState(target: BoardLinkTarget): PullRequestState | undefined {
     );
 
   const { data } = useQuery({
-    queryKey: canvasQueryKeys.linkStates(),
+    queryKey: canvasQueryKeys.linkStates(session?.reviewId ?? ""),
     enabled: missing,
     staleTime: Number.POSITIVE_INFINITY,
     queryFn: async (): Promise<LinkStates> =>

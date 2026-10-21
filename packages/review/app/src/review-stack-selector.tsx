@@ -53,7 +53,7 @@ export function useReviewStack(): ReviewStackResponse {
 
   // Optional context: a failed read shows none.
   const { data } = useQuery({
-    queryKey: canvasQueryKeys.stack(version),
+    queryKey: canvasQueryKeys.stack(review?.reviewId ?? "", version),
     queryFn: ({ signal }) => review!.stack(signal),
     enabled: inStack && painted,
     staleTime: Infinity,

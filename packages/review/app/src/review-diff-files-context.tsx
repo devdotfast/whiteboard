@@ -55,6 +55,7 @@ export function ReviewDiffFilesProvider({
   // The bridge read cannot be cancelled; a superseded result stays in its own key.
   const query = useQuery({
     queryKey: canvasQueryKeys.diffFiles(
+      session.reviewId,
       documentKey,
       sourceId(diffView),
       revision,
@@ -72,8 +73,8 @@ export function ReviewDiffFilesProvider({
     gcTime: 0,
     // A save refetches the same document and source; show its files meanwhile.
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[1] === documentKey &&
-      previousQuery.queryKey[2] === sourceId(diffView)
+      previousQuery?.queryKey[2] === documentKey &&
+      previousQuery.queryKey[3] === sourceId(diffView)
         ? previous
         : undefined,
   });
