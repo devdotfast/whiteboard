@@ -50,6 +50,9 @@ Review applies these focused VS Code changes without changing the source pin:
 - `@vscode/proxy-agent` 0.45.0 in the root and `remote/` manifests:
   `ca90419648a3785c1c73d59dacad43c9726d9b67`. Review moves from 0.43.0, so
   the lockfiles are regenerated rather than patched.
+- `node-pty` 1.2.0-beta.15 in the root and `remote/` manifests (ConPTY handle
+  leaks and deadlock, macOS kqueue fd leak, Windows spawn exceptions):
+  `012f594c44`.
 
 October 2026 leak, race, and crash fixes, verbatim without test hunks:
 
