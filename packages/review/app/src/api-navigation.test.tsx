@@ -344,6 +344,7 @@ it("keeps the board and its page bar on screen until the next board has loaded",
       operation: { type: "set_parent", reviewId: child, parentId: parent },
     });
 
+  const requested: string[] = [];
   // The second board answers once let through.
   let letThrough!: () => void;
   const gate = new Promise<void>((resolve) => (letThrough = resolve));
@@ -356,6 +357,7 @@ it("keeps the board and its page bar on screen until the next board has loaded",
     {
       request: async (url, init) => {
         if (String(url).includes(second)) await gate;
+        requested.push(String(url));
 
         return app.request(url, init);
       },
@@ -409,4 +411,17 @@ it("keeps the board and its page bar on screen until the next board has loaded",
       '[aria-label^="Second, "][aria-label$=" of 2 in Stack"]',
     ),
   ).not.toBeNull();
+
+  // Back on the first board, its page bar comes from what the canvas read.
+  await act(async () => {
+    canvas!.update({ kind: "api", reviewId: first, bridge });
+  });
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(container.textContent).toContain("First board");
+    expect(container.querySelector("[inert]")).toBeNull();
+  });
+  expect(
+    requested.filter((url) => url.endsWith(`/${first}/place`)),
+  ).toHaveLength(1);
 });

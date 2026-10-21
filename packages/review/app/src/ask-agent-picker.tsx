@@ -18,6 +18,7 @@ import {
 } from "@review/ask/thread-state";
 import { fuzzyRank } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
+import { useQuery } from "@tanstack/react-query";
 import {
   type ReactElement,
   type ReactNode,
@@ -30,6 +31,7 @@ import {
 } from "react";
 import { z } from "zod";
 
+import { canvasQueryKeys } from "./canvas-query";
 import type { ReviewSession } from "./host/review-session";
 import { fontSize, leading, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
@@ -58,82 +60,68 @@ const agentsSchema = z.object({
 
 export type AskAgent = z.infer<typeof agentsSchema>["agents"][number];
 
-// The last answer per canvas session, shown while the next is asked; and the
-// request under way, which the toolbar and the panel share.
-const knownAgents = new WeakMap<ReviewSession, AskAgent[] | null>();
+const hostOf = (session: ReviewSession) =>
+  [session.config.serverUrl, session.review?.host ?? ""].join("\0");
 
-// Undefined: the host could not say now.
-const askingAgents = new WeakMap<
-  ReviewSession,
-  Promise<AskAgent[] | null | undefined>
->();
-
-function askAgentsOf(
-  session: ReviewSession,
-): Promise<AskAgent[] | null | undefined> {
-  let request = askingAgents.get(session);
-
-  if (!request) {
-    request = session
-      .fetch("/ask/agents")
-      .then(async (response) => {
-        // A host without Ask refuses the request; one that is down fails it.
-        if (response.status >= 500) throw new Error(response.statusText);
-
-        return response.ok
-          ? agentsSchema.parse(await response.json()).agents
-          : null;
-      })
-      .then(
-        (agents) => {
-          knownAgents.set(session, agents);
-
-          return agents;
-        },
-        () => knownAgents.get(session),
-      )
-      .finally(() => askingAgents.delete(session));
-    askingAgents.set(session, request);
-  }
-
-  return request;
-}
-
-/** Which local agents can answer, or null where this host has no Ask. Asked
- * again each time Ask opens, each time the review comes back into focus and
- * each time its host changes state, so an agent installed during the review
- * shows up. A host that cannot answer now keeps the last answer. */
+/** Which local agents can answer, or null where this host has no Ask. The
+ * agents are the host's, so boards share the answer: asked when Ask opens
+ * unless the host answered in the last 30 seconds, each time the review
+ * comes back into focus and each time its host changes state, so an agent
+ * installed during the review shows up. A host that cannot answer now keeps
+ * the last answer. */
 export function useAskAgents(session: ReviewSession | null): AskAgent[] | null {
-  const [agents, setAgents] = useState<AskAgent[] | null>(() =>
-    session ? (knownAgents.get(session) ?? null) : null,
-  );
+  // The session changes with each snapshot; the host's agents do not.
+  const sessionRef = useRef(session);
+
+  sessionRef.current = session;
+
+  const { data, refetch } = useQuery({
+    queryKey: canvasQueryKeys.askAgents(session ? hostOf(session) : ""),
+    queryFn: async () => {
+      const response = await sessionRef.current!.fetch("/ask/agents");
+
+      // A host without Ask refuses the request; one that is down fails it.
+      if (response.status >= 500) throw new Error(response.statusText);
+
+      return response.ok
+        ? agentsSchema.parse(await response.json()).agents
+        : null;
+    },
+    enabled: session !== null,
+    staleTime: 30_000,
+  });
+
+  const active = session !== null;
+  const hostState = session?.review?.hostState;
+  const asked = useRef(hostState);
+
+  // A host that changes state is asked again; a failed read keeps the last
+  // answer.
+  useEffect(() => {
+    if (asked.current === hostState) return;
+    asked.current = hostState;
+
+    if (active) void refetch();
+  }, [active, hostState, refetch]);
 
   useEffect(() => {
-    if (!session) return;
-    let current = true;
-
-    const refresh = () => {
-      void askAgentsOf(session).then((value) => {
-        if (current && value !== undefined) setAgents(value);
-      });
-    };
+    if (!active) return;
+    const refresh = () => void refetch();
 
     const refreshIfShown = () => {
       if (document.visibilityState === "visible") refresh();
     };
 
-    refresh();
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refreshIfShown);
 
     return () => {
-      current = false;
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refreshIfShown);
     };
-  }, [session]);
+  }, [active, refetch]);
 
-  return agents;
+  return data ?? null;
 }
 
 const offeredSchema = z.object({ offer: askOfferSchema });

@@ -133,6 +133,8 @@ it("asks the chosen agent, streams its answer, relays a decision, and leaves the
         </TestCanvasQuery>,
       ),
     );
+    // The agents land a task later.
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
 
     const textarea = container.querySelector("textarea")!;
 
@@ -1343,10 +1345,12 @@ it("moves from setup to asking once an agent is installed", async () => {
         </TestCanvasQuery>,
       ),
     );
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
     expect(container.querySelector("textarea")).toBeNull();
 
     available = true;
     await act(async () => window.dispatchEvent(new Event("focus")));
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
     expect(container.querySelector("textarea")).not.toBeNull();
   } finally {
     await act(async () => root.unmount());

@@ -1,6 +1,12 @@
 import type { ReviewApiClient } from "@review/review-api/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { type ReactNode, useEffect, useMemo } from "react";
+import {
+  type ReactNode,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+} from "react";
 
 import type { AgentTraceStorage } from "./use-agent-trace";
 
@@ -26,36 +32,50 @@ export function createCanvasQueryClient(): QueryClient {
 }
 
 /**
- * Each ApiCanvas owns one client, so its backend and review are the cache
- * boundary and keys name only what varies within one canvas.
+ * Desktop's canvas keeps one client across the boards it shows, so a board
+ * opened again, or a board beside one just read, starts from what is
+ * cached. A board's keys name it first; a thread's or the account's are the
+ * same on every board.
  */
 export const canvasQueryKeys = {
   sharingAccount: () => ["sharing", "account"] as const,
-  shareLink: (version: number | undefined) =>
-    ["sharing", "link", version] as const,
+  shareLink: (board: string, version: number | undefined) =>
+    ["sharing", "link", board, version] as const,
   traceList: (
+    board: string,
     version: number | undefined,
     pins: { base: string; head: string } | undefined,
     storage: AgentTraceStorage | null,
-  ) => ["agent-traces", version, pins?.base, pins?.head, storage] as const,
+  ) =>
+    ["agent-traces", board, version, pins?.base, pins?.head, storage] as const,
   agentTrace: (
+    board: string,
     sessionId: string | null | undefined,
     trace: string | null | undefined,
     storage: AgentTraceStorage | null | undefined,
-  ) => ["agent-trace", sessionId, trace ?? null, storage ?? null] as const,
+  ) =>
+    ["agent-trace", board, sessionId, trace ?? null, storage ?? null] as const,
   askThread: (threadId: string) => ["ask-thread", threadId] as const,
-  diffFiles: (documentKey: string, source: number, revision?: string) =>
-    ["diff-files", documentKey, source, revision] as const,
-  lensProgress: (version: number) => ["lens-progress", version] as const,
-  allLensProgress: () => ["lens-progress"] as const,
-  place: (version: number | undefined) => ["place", "board", version] as const,
-  stack: (version: number | undefined) => ["place", "stack", version] as const,
-  allPlace: () => ["place"] as const,
-  projectBoards: () => ["project-boards"] as const,
-  askThreads: () => ["ask-threads"] as const,
+  diffFiles: (
+    board: string,
+    documentKey: string,
+    source: number,
+    revision?: string,
+  ) => ["diff-files", board, documentKey, source, revision] as const,
+  lensProgress: (board: string, version: number) =>
+    ["lens-progress", board, version] as const,
+  allLensProgress: (board: string) => ["lens-progress", board] as const,
+  place: (board: string, version: number | undefined) =>
+    ["place", board, "board", version] as const,
+  stack: (board: string, version: number | undefined) =>
+    ["place", board, "stack", version] as const,
+  allPlace: (board: string) => ["place", board] as const,
+  projectBoards: (board: string) => ["project-boards", board] as const,
+  askThreads: (board: string) => ["ask-threads", board] as const,
+  askAgents: (host: string) => ["ask-agents", host] as const,
   askBoards: (threadId: string | null, turns: number) =>
     ["ask-boards", threadId, turns] as const,
-  linkStates: () => ["link-states"] as const,
+  linkStates: (board: string) => ["link-states", board] as const,
   linkPeek: (
     board: string,
     block: string | undefined,
@@ -75,19 +95,29 @@ export interface CanvasQueryScope {
   queryClient: QueryClient;
 }
 
-/** Clearing is deferred so a Strict Mode replay keeps its client. */
+/** Desktop's canvas client, kept across the boards it shows. */
+export const SharedCanvasQueryClient = createContext<QueryClient | null>(null);
+
+/** The shared client, else one owned by the canvas. Clearing is deferred so
+ * a Strict Mode replay keeps its client. */
 export function useCanvasQueryScope(
   client: ReviewApiClient,
   reviewId: string,
 ): CanvasQueryScope {
+  const shared = useContext(SharedCanvasQueryClient);
+
   const scope = useMemo(
-    () => ({ id: nextScope++, queryClient: createCanvasQueryClient() }),
-    [client, reviewId],
+    () => ({
+      id: nextScope++,
+      queryClient: shared ?? createCanvasQueryClient(),
+    }),
+    [shared, client, reviewId],
   );
 
   const { queryClient } = scope;
 
   useEffect(() => {
+    if (queryClient === shared) return;
     clearTimeout(pendingDisposals.get(queryClient));
 
     return () => {
@@ -96,7 +126,7 @@ export function useCanvasQueryScope(
         setTimeout(() => queryClient.clear()),
       );
     };
-  }, [queryClient]);
+  }, [queryClient, shared]);
 
   return scope;
 }

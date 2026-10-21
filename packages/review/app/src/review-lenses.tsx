@@ -97,7 +97,12 @@ export function ReviewLensesProvider({
   const pending = useRef(false);
   const refreshAfterMark = useRef(false);
   const route = `/${snapshot.reviewId}/progress`;
-  const progressKey = canvasQueryKeys.lensProgress(snapshot.version);
+
+  const progressKey = canvasQueryKeys.lensProgress(
+    snapshot.reviewId,
+    snapshot.version,
+  );
+
   const selectedLens = useReviewPanel((state) => state.lens);
 
   // A lens chosen on another version no longer applies.
@@ -144,7 +149,7 @@ export function ReviewLensesProvider({
     // A read that started before the mark must not land after it; it is
     // repeated once the mark has landed.
     onMutate: async ({ version }) => {
-      const queryKey = canvasQueryKeys.lensProgress(version);
+      const queryKey = canvasQueryKeys.lensProgress(snapshot.reviewId, version);
 
       if (queryClient.isFetching({ queryKey })) refreshAfterMark.current = true;
       await queryClient.cancelQueries({ queryKey });
@@ -152,7 +157,7 @@ export function ReviewLensesProvider({
     // Only the version marked is updated, and only while it is still held.
     onSuccess: (next, { version }) =>
       queryClient.setQueryData<ReviewProgress>(
-        canvasQueryKeys.lensProgress(version),
+        canvasQueryKeys.lensProgress(snapshot.reviewId, version),
         (current) =>
           current && { ...next, lenses: current.lenses ?? next.lenses },
       ),
@@ -160,7 +165,7 @@ export function ReviewLensesProvider({
 
   const refreshProgress = () =>
     void queryClient.invalidateQueries({
-      queryKey: canvasQueryKeys.allLensProgress(),
+      queryKey: canvasQueryKeys.allLensProgress(snapshot.reviewId),
     });
 
   const resetMark = markViewed.reset;

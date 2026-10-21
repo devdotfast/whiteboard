@@ -234,6 +234,8 @@ function askCanvas({
   };
 
   const askQuestion = async (text: string) => {
+    // The agents land a task after Ask opens.
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
     const textarea = document.querySelector("textarea")!;
 
     await act(async () => {

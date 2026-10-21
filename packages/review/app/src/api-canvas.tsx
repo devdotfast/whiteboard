@@ -14,6 +14,7 @@ import { ReviewApiClient, ReviewApiError } from "@review/review-api/client";
 import { elements } from "@review/review-api/document";
 import type { Snapshot } from "@review/review-api/store";
 import * as stylex from "@stylexjs/stylex";
+import type { QueryClient } from "@tanstack/react-query";
 import {
   createContext,
   memo,
@@ -107,6 +108,20 @@ function DocumentBody() {
       )}
     </ReviewDocumentBoundary>
   );
+}
+
+// The place revision each board's cached reads saw, per query client.
+const placeRevisions = new WeakMap<QueryClient, Map<string, number>>();
+
+function placeRevisionsOf(queryClient: QueryClient) {
+  let revisions = placeRevisions.get(queryClient);
+
+  if (!revisions) {
+    revisions = new Map();
+    placeRevisions.set(queryClient, revisions);
+  }
+
+  return revisions;
 }
 
 const message = (cause: unknown) =>
@@ -206,7 +221,7 @@ export function ApiCanvas({
 
       let shownVersion: string | undefined;
       let shownLinks = 0;
-      let placeRevision = 0;
+      const placeRevisions = placeRevisionsOf(queryClient);
       await client.follow<
         Snapshot & {
           activity: ActivitySnapshot;
@@ -225,13 +240,14 @@ export function ApiCanvas({
             nextCursor(current, lensMemory, snapshot, "lenses"),
           );
           setCoverageRevision(snapshot.coverageRevision ?? 0);
-          // A reconnected stream restarts at 0, which also rereads.
+          // A reconnected stream restarts at 0, which also rereads; a board
+          // opened again rereads only if its place changed since.
           const place = snapshot.placeRevision ?? 0;
 
-          if (place !== placeRevision) {
-            placeRevision = place;
+          if (place !== placeRevisions.get(content.reviewId)) {
+            placeRevisions.set(content.reviewId, place);
             void queryClient.invalidateQueries({
-              queryKey: canvasQueryKeys.allPlace(),
+              queryKey: canvasQueryKeys.allPlace(content.reviewId),
             });
           }
 
@@ -540,7 +556,7 @@ export function ApiCanvas({
 
     void queries.queryClient
       .fetchQuery({
-        queryKey: canvasQueryKeys.place(shownVersion),
+        queryKey: canvasQueryKeys.place(content.reviewId, shownVersion),
         queryFn: ({ signal }) => review.place(signal),
         staleTime: Infinity,
       })
@@ -552,7 +568,7 @@ export function ApiCanvas({
     return () => {
       live = false;
     };
-  }, [held, review, queries, shownVersion]);
+  }, [held, review, queries, content.reviewId, shownVersion]);
 
   const [drawing, setDrawing] = useState(0);
 

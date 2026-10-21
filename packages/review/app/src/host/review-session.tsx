@@ -18,6 +18,8 @@ import { type ReviewSurface, createReviewSurface } from "./review-host";
 import type { ReviewSessionData } from "./review-session-data";
 
 export interface ReviewSession {
+  /** The board its requests name. */
+  reviewId: string;
   review?: ReviewSessionData;
   appSessionId: string;
   bridge: ReviewCanvasBridge;
@@ -69,6 +71,7 @@ export function createReviewSession(
     });
 
   return {
+    reviewId: options.jsonReview.id,
     appSessionId,
     bridge,
     config,
