@@ -240,6 +240,15 @@ export const markdownHasTitle = (source: string) =>
     (node) => node.type === "heading" && node.depth === 1,
   );
 
+export function renderMath(type: string, tex: string, key?: string): ReactNode {
+  if (type === "math") return <MarkdownMath key={key} tex={tex} display />;
+
+  // Like Pandoc: "$5 and $10" stays prose.
+  if (/^\s|\s$/.test(tex)) return `$${tex}$`;
+
+  return <MarkdownMath key={key} tex={tex} display={false} />;
+}
+
 /** `paragraph` styles the direct paragraph children alone. */
 function renderMarkdownChildren(
   children: MarkdownNode[],
@@ -333,12 +342,8 @@ function renderMarkdownNode(
         />
       );
     case "math":
-      return <MarkdownMath key={key} tex={node.value ?? ""} display />;
     case "inlineMath":
-      // Like Pandoc: "$5 and $10" stays prose.
-      if (/^\s|\s$/.test(node.value ?? "")) return `$${node.value}$`;
-
-      return <MarkdownMath key={key} tex={node.value ?? ""} display={false} />;
+      return renderMath(node.type, node.value ?? "", key);
     case "break":
       return <br key={key} />;
     case "thematicBreak":

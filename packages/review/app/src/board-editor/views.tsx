@@ -1,7 +1,6 @@
-import { MarkdownContent } from "@canvas/agent-markdown";
+import { MarkdownContent, renderMath } from "@canvas/agent-markdown";
 import type { ApiDocumentData } from "@canvas/api-document";
 import type { StoredBlock } from "@canvas/blocks";
-import { MarkdownMath } from "@canvas/markdown-math";
 import {
   ReviewDocumentTitleSlot,
   documentTitleClassName,
@@ -404,18 +403,19 @@ class RawInlineView extends ReactView {
   }
 
   protected render() {
-    const source: string = this.node.attrs.source;
+    const { kind, source } = this.node.attrs;
 
-    if (this.node.attrs.kind === "inlineMath") {
+    if (isMath(kind)) {
       const math = parseMarkdown(source).children?.[0]?.children?.[0];
 
-      if (math?.type === "inlineMath")
-        return <MarkdownMath tex={math.value ?? ""} display={false} />;
+      if (isMath(math?.type)) return renderMath(kind, math?.value ?? "");
     }
 
     return source;
   }
 }
+
+const isMath = (type?: string) => type === "math" || type === "inlineMath";
 
 /** The board's title, edited in place inside its header. */
 class TitleView implements NodeView {

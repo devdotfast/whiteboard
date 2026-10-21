@@ -1,7 +1,7 @@
 import { TestCanvasQuery } from "@canvas/canvas-query-test-utils";
 import { ReviewSessionProvider } from "@canvas/host/review-session";
 import { testReviewSession } from "@canvas/review-session-test-utils";
-import { TextSelection } from "@tiptap/pm/state";
+import { type EditorState, TextSelection } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
@@ -26,16 +26,14 @@ afterEach(async () => {
   document.body.replaceChildren();
 });
 
-it("keeps a new board's selected title when the page marks it", async () => {
+async function mountBoard(state: EditorState) {
   const store = new PortalStore();
   const place = document.createElement("div");
   const portals = document.createElement("div");
   document.body.append(place, portals);
 
-  view = new EditorView(place, {
-    state: createBoardState({ title: "Untitled", document: [] }),
-    nodeViews: nodeViews(store),
-  });
+  const board = new EditorView(place, { state, nodeViews: nodeViews(store) });
+  view = board;
   root = createRoot(portals);
   await act(async () =>
     root?.render(
@@ -45,6 +43,14 @@ it("keeps a new board's selected title when the page marks it", async () => {
         </ReviewSessionProvider>
       </TestCanvasQuery>,
     ),
+  );
+
+  return board;
+}
+
+it("keeps a new board's selected title when the page marks it", async () => {
+  view = await mountBoard(
+    createBoardState({ title: "Untitled", document: [] }),
   );
 
   const title = view.dom.querySelector("h1")!;
@@ -164,3 +170,25 @@ it.each(["Escape", "wheel"])(
     expect(editor.state.selection).toBeInstanceOf(TextSelection);
   },
 );
+
+it("typesets display math in a paragraph and leaves dollar amounts prose", async () => {
+  view = await mountBoard(
+    createBoardState({
+      title: "Math",
+      document: [
+        {
+          id: "math",
+          type: "markdown",
+          markdown:
+            "$$\\frac{a}{b}$$\n\n\\[\nx\n\\]\n\nIt costs $5 and $10, or $y$.\n",
+        },
+      ],
+    }),
+  );
+
+  const paragraphs = view.dom.querySelectorAll("p");
+
+  expect(view.dom.querySelectorAll(".katex-display")).toHaveLength(2);
+  expect(paragraphs[2]!.querySelectorAll(".katex")).toHaveLength(1);
+  expect(paragraphs[2]!.textContent).toMatch(/^It costs \$5 and \$10, or /);
+});
