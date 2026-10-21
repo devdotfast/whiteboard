@@ -29,6 +29,7 @@ import {
 
 import { countLabel } from "./format";
 import { useReviewSession } from "./host/review-session";
+import { useOptionalReviewPanel } from "./review-panel";
 import { tokens } from "./tokens.stylex";
 
 type OpenEvent = Pick<
@@ -72,6 +73,7 @@ export function ReviewBreadcrumb({
   status?: ReactNode;
 }): ReactElement | null {
   const session = useReviewSession();
+  const inDiff = useOptionalReviewPanel((state) => state.view) === "diff";
   const [open, setOpen] = useState(false);
   const control = useRef<HTMLSpanElement>(null);
 
@@ -97,6 +99,7 @@ export function ReviewBreadcrumb({
           event.shiftKey ||
           event.button === 1
         ),
+        ...(inDiff && { view: "diff" }),
       },
     });
   };

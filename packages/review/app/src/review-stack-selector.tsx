@@ -35,6 +35,7 @@ import {
 import { canvasQueryKeys } from "./canvas-query";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { useReviewSession } from "./host/review-session";
+import { useOptionalReviewPanel } from "./review-panel";
 import { tokens } from "./tokens.stylex";
 
 type OpenEvent = Pick<
@@ -61,12 +62,13 @@ export function useReviewStack(): ReviewStackResponse {
 
 const NO_STACK: ReviewStackResponse = { layers: [] };
 
-/** Opens a layer's whiteboard, creating it if needed. */
+/** Opens a layer's whiteboard, creating it if needed; from Diff, in Diff. */
 export function useOpenStackLayer(): (
   layer: ReviewStackLayer,
   active: boolean,
 ) => Promise<void> {
   const session = useReviewSession();
+  const inDiff = useOptionalReviewPanel((state) => state.view) === "diff";
 
   return async (layer, active) => {
     if (!openable(layer)) return;
@@ -81,7 +83,7 @@ export function useOpenStackLayer(): (
 
     void session.surface.post({
       name: "openReview",
-      args: { reviewUuid, active },
+      args: { reviewUuid, active, ...(inDiff && { view: "diff" }) },
     });
   };
 }

@@ -141,6 +141,7 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 					await this.tabsService.openApiReview(review.reviewId, review.title);
 					// The canvas scrolls to the block once the board loads.
 					if (request.args.blockId) this._onDidEmitSurfaceEvent.fire({ event: "revealBlock", reviewId: review.reviewId, blockId: request.args.blockId });
+					else if (request.args.view) this._onDidEmitSurfaceEvent.fire({ event: "showReviewView", reviewId: review.reviewId, view: request.args.view });
 					break;
 				}
 				case "openApiReview":

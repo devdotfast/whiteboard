@@ -1921,6 +1921,8 @@ export const ReviewVerbRequestSchema = z.discriminatedUnion("name", [
       active: z.boolean(),
       /** Block to scroll to after opening. */
       blockId: requiredString.optional(),
+      /** View to show once it opens. */
+      view: reviewViewSchema.optional(),
     }),
   }),
   z.strictObject({

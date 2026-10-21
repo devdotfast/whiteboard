@@ -138,6 +138,7 @@ interface ReviewCanvasLoadLifecycle {
 }
 
 type ReviewCanvasState = "home" | "connecting" | "active" | "completed" | "error";
+type PendingBoardEvent = Extract<ReviewSurfaceEvent, { event: "revealBlock" | "showReviewView" }> & { reviewId: string };
 
 const APPEARANCE_SETTINGS = {
 	documentFontSize: { key: REVIEW_DOCUMENT_FONT_SIZE_SETTING, setting: "document_font_size" },
@@ -183,8 +184,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	private canvasMount: HTMLElement | null = null;
 	private targetDocument: Document | null = null;
 	private apiContent: Extract<ReviewCanvasContent, { kind: "api" }> | undefined;
-	/** A block to scroll to once this pane's board has loaded. */
-	private pendingReveal: { event: Extract<ReviewSurfaceEvent, { event: "revealBlock" }>; at: number } | undefined;
+	private pendingReveal: { event: PendingBoardEvent; at: number } | undefined;
 	private loadGeneration = 0;
 	private openingGeneration: number | undefined;
 	private readonly refreshProgress: LongRunningOperation;
@@ -293,11 +293,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		);
 		this._register(
 			verbs.onDidEmitSurfaceEvent((event) => {
-				if (event.event === "revealBlock") {
-					this.pendingReveal = { event, at: Date.now() };
-					this.revealPending();
-					return;
-				}
+				if (event.event === "revealBlock") return this.pend(event);
+				if (event.event === "showReviewView" && event.reviewId) return this.pend({ ...event, reviewId: event.reviewId });
 				if (
 					event.event === "editorSelectionChanged" &&
 					event.reviewId !== this.apiContent?.reviewId
@@ -1330,6 +1327,11 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				};
 			},
 		};
+	}
+
+	private pend(event: PendingBoardEvent): void {
+		this.pendingReveal = { event, at: Date.now() };
+		this.revealPending();
 	}
 
 	/** Hands a pending block reveal to the canvas once it shows that board. */
