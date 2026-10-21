@@ -214,6 +214,10 @@ function BoardRow({
 }): ReactElement {
   const [childError, setChildError] = useState("");
   const isCurrent = board.reviewId === current;
+
+  const newChild =
+    onNewChild && canAddChildWhiteboard(board) ? onNewChild : undefined;
+
   const tooltip = useTooltip(boardTitle(board.title), { detail });
 
   const [titleElement, setTitleElement] = useState<HTMLSpanElement | null>(
@@ -249,6 +253,7 @@ function BoardRow({
           listRowStyles.wash,
           styles.treeRow,
           styles.boardRow,
+          newChild && styles.rowWithAction,
           nested && styles.nestedRow,
           recent && styles.recentRow,
           (isCurrent || holdsCurrent) && listRowStyles.current,
@@ -283,7 +288,9 @@ function BoardRow({
             )}
             {changed ? <ChangedBadge /> : null}
           </span>
-          <span {...stylex.props(styles.rowText)}>
+          <span
+            {...stylex.props(styles.rowText, newChild && styles.textWithAction)}
+          >
             {parentTitle ? (
               <span {...stylex.props(styles.path)}>
                 <span
@@ -329,11 +336,15 @@ function BoardRow({
             />
           ) : null}
         </button>
-        {onNewChild && canAddChildWhiteboard(board) ? (
+        {newChild ? (
           <AddChildWhiteboard
             board={board}
-            onCreate={onNewChild}
+            onCreate={newChild}
             onError={setChildError}
+            xstyle={[
+              styles.childAction,
+              !!board.origin?.pullRequestNumber && styles.childActionWithPr,
+            ]}
           />
         ) : null}
       </div>
@@ -988,6 +999,10 @@ const styles = stylex.create({
     minWidth: 0,
     gap: space.s2,
   },
+  textWithAction: { paddingInlineEnd: space.s20 },
+  rowWithAction: { position: "relative" },
+  childAction: { position: "absolute", insetInlineEnd: space.s8 },
+  childActionWithPr: { insetInlineEnd: space.s28 },
   stackIcon: { width: space.s14, height: space.s14, color: tokens.inkMuted },
   rowMain: {
     display: "flex",

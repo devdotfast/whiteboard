@@ -7,6 +7,7 @@ import type {
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
 
 import { mountReviewSidebarSection } from "./desktop-entry";
 import type { ReviewTocEntry } from "./review-document-headings";
@@ -123,6 +124,73 @@ it("only offers a board title tooltip while its title is truncated", async () =>
   }
 
   expect(tooltips.size).toBe(0);
+});
+
+it("aligns parent and child PR markers while keeping the child action separate from navigation", async () => {
+  const onNewChildWhiteboard = vi.fn<() => Promise<void>>().mockResolvedValue();
+  const onOpenBoard = vi.fn<ReviewSidebarSectionProps["onOpenBoard"]>();
+
+  const view = await mount(
+    props({
+      reviewId: "child",
+      project: {
+        project: { id: "pr-alignment", name: "app" },
+        boards: [
+          board({
+            reviewId: "parent",
+            title: "Parent",
+            repositoryPath: "/work/app",
+            children: ["child"],
+            origin: { pullRequestNumber: 10 },
+            pullRequestState: "open",
+          }),
+          board({
+            reviewId: "child",
+            title: "Child",
+            repositoryPath: "/work/app",
+            parentId: "parent",
+            origin: { pullRequestNumber: 11 },
+            pullRequestState: "merged",
+          }),
+        ],
+      },
+      onNewChildWhiteboard,
+      onOpenBoard,
+    }),
+  );
+
+  try {
+    const [parentMarker, childMarker] =
+      view.container.querySelectorAll<HTMLElement>("[data-pull-request-state]");
+
+    const add = view.container.querySelector<HTMLButtonElement>(
+      '[aria-label="Add child whiteboard to Parent"]',
+    )!;
+
+    const aligned = () =>
+      expect(parentMarker!.getBoundingClientRect().right).toBeCloseTo(
+        childMarker!.getBoundingClientRect().right,
+        1,
+      );
+
+    for (const width of [320, 180]) {
+      view.container.style.width = `${width}px`;
+      await vi.waitFor(aligned);
+      await userEvent.hover(add);
+      aligned();
+      add.focus();
+      aligned();
+      expect(document.activeElement).toBe(add);
+    }
+
+    await act(async () => userEvent.click(add));
+    expect(onNewChildWhiteboard).toHaveBeenCalledExactlyOnceWith("parent");
+    expect(onOpenBoard).not.toHaveBeenCalled();
+    await act(async () => userEvent.click(childMarker!));
+    expect(onOpenBoard).toHaveBeenCalledExactlyOnceWith("child", true);
+  } finally {
+    await view.dispose();
+  }
 });
 
 it("shows the open board's family with its place, the boards opened last, and a flat search", async () => {

@@ -1,4 +1,5 @@
 import { type ReviewApiSummary, boardTitle } from "@dev.fast/review-protocol";
+import type { StyleXStyles } from "@stylexjs/stylex";
 import { useMutation } from "@tanstack/react-query";
 import { useRef } from "react";
 
@@ -14,10 +15,12 @@ export function AddChildWhiteboard({
   board,
   onCreate,
   onError,
+  xstyle,
 }: {
   board: ReviewApiSummary;
   onCreate(parentId: string): Promise<void>;
   onError(message: string): void;
+  xstyle?: StyleXStyles;
 }) {
   const pending = useRef(false);
   const { setExpanded } = useWhiteboardExpansion();
@@ -39,7 +42,7 @@ export function AddChildWhiteboard({
       size="small"
       aria-label={`Add child whiteboard to ${boardTitle(board.title)}`}
       aria-busy={create.isPending}
-      xstyle={boardControlStyles.reveal}
+      xstyle={[boardControlStyles.reveal, xstyle]}
       onClick={(event) => {
         event.stopPropagation();
 
