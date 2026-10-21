@@ -207,9 +207,14 @@ export function canonicalLink(href: string): string {
 }
 
 /** Markdown link destinations and definitions that begin with `target`, a
- * regex source; the match's first group is what comes before it. */
+ * regex source; the match's first group is what comes before it. A
+ * definition is indented at most three spaces; `^\s*` would run across
+ * blank lines and backtrack in quadratic time. */
 const linkDestination = (target: string) =>
-  new RegExp(String.raw`(\]\(\s*<?|^\s*\[[^\]\n]+\]:\s*<?)` + target, "gim");
+  new RegExp(
+    String.raw`(\]\(\s*<?|^[ \t]{0,3}\[[^\]\n]+\]:\s*<?)` + target,
+    "gim",
+  );
 
 function rewriteMarkdown<T>(
   value: T,
