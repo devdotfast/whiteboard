@@ -14,6 +14,7 @@ import { ReviewApiClient, ReviewApiError } from "@review/review-api/client";
 import { elements } from "@review/review-api/document";
 import type { Snapshot } from "@review/review-api/store";
 import * as stylex from "@stylexjs/stylex";
+import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import {
   createContext,
   memo,
@@ -67,6 +68,7 @@ import {
   useReviewSession,
 } from "./host/review-session";
 import { checkoutUnavailable } from "./missing-checkout-banner";
+import { useBoardPlace } from "./review-doc-meta";
 import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
 import type { ReviewTocEntry } from "./review-document-headings";
@@ -165,8 +167,26 @@ export function ApiCanvas({
     content.setTitle?.(boardTitle(snapshot.title));
   };
 
-  const [data, setData] = useState<ApiDocumentData>();
-  const [trashedAt, setTrashedAt] = useState<string | null>(null);
+  const cachedBoard = (at: number | undefined) =>
+    queries.queryClient.getQueryData<Snapshot>(
+      canvasQueryKeys.board(content.reviewId, at),
+    );
+
+  // A board read before draws in its first frame. Its pins reach the host
+  // here: children's mount effects run before this one's.
+  const drawn = useRef<Snapshot>(undefined);
+
+  const [data, setData] = useState(() => {
+    const snapshot = cachedBoard(content.version);
+
+    if (!snapshot) return undefined;
+    present(snapshot, content.version);
+    drawn.current = snapshot;
+
+    return loader.draft(snapshot);
+  });
+
+  const [trashedAt, setTrashedAt] = useState(drawn.current?.trashedAt ?? null);
   const dataRef = useRef(data);
   dataRef.current = data;
   const sourceVersion = sourceRef.current?.key;
@@ -175,8 +195,13 @@ export function ApiCanvas({
   useEffect(() => {
     const { queryClient } = queries;
     const abort = new AbortController();
-    setData(undefined);
-    setTrashedAt(null);
+    // The last board's cleanup may have dropped this one's snapshot since.
+    const cached = drawn.current ?? cachedBoard(version);
+
+    drawn.current = undefined;
+
+    if (!cached) setData(undefined);
+    setTrashedAt(cached?.trashedAt ?? null);
     setLost(undefined);
     setActivity(undefined);
     setCursor(null);
@@ -196,9 +221,15 @@ export function ApiCanvas({
       current = snapshot;
 
       try {
+        queryClient.setQueryData(
+          canvasQueryKeys.board(snapshot.reviewId, version),
+          snapshot,
+        );
         setTrashedAt(snapshot.trashedAt ?? null);
         present(snapshot, version);
-        setData(loader.draft(snapshot));
+
+        if (dataRef.current?.snapshot !== snapshot)
+          setData(loader.draft(snapshot));
         setError(undefined);
         update(await loader.load(snapshot, update));
       } catch (cause) {
@@ -208,7 +239,11 @@ export function ApiCanvas({
     };
 
     void (async () => {
-      if (version !== undefined) {
+      const shownOf = (snapshot: Snapshot) =>
+        `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}:${snapshot.trashedAt ?? ""}`;
+
+      if (cached) void show(cached);
+      else if (version !== undefined) {
         try {
           void show(
             await client.read(
@@ -221,7 +256,7 @@ export function ApiCanvas({
         }
       }
 
-      let shownVersion: string | undefined;
+      let shownVersion = cached && shownOf(cached);
       let shownLinks = 0;
       await client.follow<
         Snapshot & {
@@ -255,7 +290,7 @@ export function ApiCanvas({
 
           if (version !== undefined) return;
 
-          const shown = `${snapshot.version}:${snapshot.pins?.worktreeRevision ?? ""}:${snapshot.sourceUnavailable ?? false}:${snapshot.trashedAt ?? ""}`;
+          const shown = shownOf(snapshot);
           const links = snapshot.linksRevision ?? 0;
 
           if (shownVersion === shown) {
@@ -318,6 +353,8 @@ export function ApiCanvas({
     return () => {
       abort.abort();
       current = undefined;
+
+      if (version === undefined) unfollowed(queryClient, content.reviewId);
     };
   }, [client, content.reviewId, version, queries, loader]);
 
@@ -706,6 +743,13 @@ export function ApiCanvas({
                                         <BoardPaintedContext.Provider
                                           value={painted}
                                         >
+                                          {version === undefined && (
+                                            <NearbyBoards
+                                              painted={painted}
+                                              client={client}
+                                              loader={loader}
+                                            />
+                                          )}
                                           <BoardEditorHostContext.Provider
                                             value={editorHost}
                                           >
@@ -748,6 +792,73 @@ export function ApiCanvas({
       </CanvasQueryProvider>
     </div>
   );
+}
+
+/** Drops a board's snapshot once no stream keeps it current. */
+function unfollowed(queryClient: QueryClient, reviewId: string) {
+  queryClient.removeQueries({
+    queryKey: canvasQueryKeys.board(reviewId, undefined),
+    exact: true,
+  });
+}
+
+/** Keeps the boards beside this one cached and current, once it paints. */
+function NearbyBoards({
+  painted,
+  client,
+  loader,
+}: {
+  painted: boolean;
+  client: ReviewApiClient;
+  loader: ReturnType<typeof createDocumentLoader>;
+}) {
+  const place = useBoardPlace();
+  const board = useReviewSession().reviewId;
+  const queryClient = useQueryClient();
+
+  const nearby = [place.parent, ...place.siblings, ...(place.children ?? [])]
+    .flatMap((each) => (each && each.reviewId !== board ? [each.reviewId] : []))
+    .join(" ");
+
+  useEffect(() => {
+    if (!painted || !nearby) return;
+    const abort = new AbortController();
+    const read = new Map<string, string>();
+    let reads = Promise.resolve();
+
+    for (const reviewId of nearby.split(" "))
+      void client.follow<Snapshot & { linksRevision?: number }>(
+        reviewId,
+        abort.signal,
+        (snapshot) => {
+          queryClient.setQueryData(
+            canvasQueryKeys.board(reviewId, undefined),
+            snapshot,
+          );
+          // Activity alone sends the board again; it changes no reads.
+          const key = `${snapshot.version}:${snapshot.linksRevision ?? 0}`;
+
+          if (read.get(reviewId) === key) return;
+          read.set(reviewId, key);
+          reads = reads.then(() =>
+            loader.load(snapshot).then(
+              () => {},
+              () => {},
+            ),
+          );
+        },
+        () => unfollowed(queryClient, reviewId),
+      );
+
+    return () => {
+      abort.abort();
+
+      for (const reviewId of nearby.split(" "))
+        unfollowed(queryClient, reviewId);
+    };
+  }, [painted, nearby, client, loader, queryClient]);
+
+  return null;
 }
 
 // Activity updates only the badge; keep diagram inputs stable until document data changes.

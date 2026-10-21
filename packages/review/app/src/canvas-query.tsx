@@ -60,6 +60,8 @@ export const canvasQueryKeys = {
   lensProgress: (board: string, version: number) =>
     ["lens-progress", board, version] as const,
   allLensProgress: (board: string) => ["lens-progress", board] as const,
+  board: (board: string, version: number | undefined) =>
+    ["board", board, version ?? "latest"] as const,
   place: (board: string, version: number | undefined) =>
     ["place", board, "board", version] as const,
   placeRevision: (board: string) => ["place-revision", board] as const,
