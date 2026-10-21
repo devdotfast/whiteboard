@@ -1,8 +1,9 @@
 //! The NDJSON wire protocol between diffr and its frontends.
 //!
 //! One `Event` per line: a `start` header, one `file` record per changed
-//! file in completion order, and a `complete` footer. Every enum on the
-//! wire is internally tagged with a `type` (or `kind`) key in snake_case.
+//! file in completion order, at most one `update` per file after its `file`
+//! record, and a `complete` footer. Every enum on the wire is internally
+//! tagged with a `type` (or `kind`) key in snake_case.
 //! Optional, empty, and default fields are omitted, never `null`. Consumers
 //! ignore unknown fields and tolerate unknown enum strings.
 //!
@@ -81,6 +82,14 @@ pub enum Event {
     /// One result. `file` is byte-identical to the manifest entry it
     /// answers; the path pair is the identity.
     File {
+        file: Pairing<FileRef>,
+        #[serde(flatten)]
+        outcome: Outcome,
+    },
+    /// The result of deferred plugins on a file already sent, with `--defer`.
+    /// It replaces that file's outcome. Sent only when they changed the
+    /// diff or failed; their failure leaves `complete` untouched.
+    Update {
         file: Pairing<FileRef>,
         #[serde(flatten)]
         outcome: Outcome,
@@ -609,6 +618,21 @@ mod tests {
                     error: Problem {
                         code: "not_utf8".to_owned(),
                         message: "a.txt is not valid UTF-8".to_owned(),
+                    },
+                },
+            },
+            Event::Update {
+                file: Pairing::RightOnly {
+                    rhs: FileRef {
+                        path: "a.py".to_owned(),
+                        oid: "dddddd".to_owned(),
+                        mode: "100644".to_owned(),
+                    },
+                },
+                outcome: Outcome::Error {
+                    error: Problem {
+                        code: "mutation_failed".to_owned(),
+                        message: "mutation summarize: summarizer: HTTP 400".to_owned(),
                     },
                 },
             },

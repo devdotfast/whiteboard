@@ -23,6 +23,8 @@ pub(crate) struct Options {
     pub(crate) syntax: bool,
     /// Diff without comments (`--ignore-comments`).
     pub(crate) ignore_comments: bool,
+    /// Send files before deferred plugins run, then updates (`--defer`).
+    pub(crate) defer: bool,
 }
 
 /// What the stream ended with: how many files it listed, whether any
@@ -74,6 +76,7 @@ pub(crate) fn stream(
     let files = listing.files;
     let count = files.len();
     let shared = Arc::new(Shared {
+        defer: options.defer && pipeline.has_deferred(),
         pool: rayon::ThreadPoolBuilder::new()
             .num_threads(jobs.get())
             .thread_name(|index| format!("diffr-worker-{index}"))
@@ -126,10 +129,26 @@ struct Shared {
     pipeline: Pipeline,
     params: Params,
     diff_options: DiffOptions,
+    /// Run deferred plugins after sending each file.
+    defer: bool,
 }
 
-/// The start record, each file's record as it finishes, then the footer. A
-/// run-level failure stops the files and is reported in the footer.
+/// A finished per-file task.
+enum Done {
+    /// A file's record, and its eager diff when deferred plugins still run.
+    File(Event, Option<Deferred>),
+    /// The deferred plugins' update, if they changed the diff or failed.
+    Update(Option<Event>),
+}
+
+/// A sent file that deferred plugins still shape.
+struct Deferred {
+    entry: FileChange,
+    diff: Diff,
+}
+
+/// The start record, each file's record as it finishes, any updates, then the
+/// footer. A run-level failure stops the files and is reported in the footer.
 async fn produce(
     start: Event,
     files: Vec<git::File>,
@@ -139,13 +158,24 @@ async fn produce(
     sender.send(start)?;
     let mut pending = JoinSet::new();
     for file in files {
-        pending.spawn(record(file, shared.clone()));
+        let shared = shared.clone();
+        pending.spawn(async move {
+            let (record, deferred) = record(file, shared).await?;
+            Ok(Done::File(record, deferred))
+        });
     }
     let (mut succeeded, mut failed) = (0, 0);
     let mut aborted = None;
-    while let Some(record) = pending.join_next().await {
-        let record = match record.expect("a file task does not panic") {
-            Ok(record) => record,
+    while let Some(done) = pending.join_next().await {
+        let done: anyhow::Result<Done> = done.expect("a file task does not panic");
+        let (record, deferred) = match done {
+            Ok(Done::File(record, deferred)) => (record, deferred),
+            Ok(Done::Update(update)) => {
+                if let Some(update) = update {
+                    sender.send(update)?;
+                }
+                continue;
+            }
             Err(error) => {
                 failed += 1;
                 aborted = Some(wire_error(&error));
@@ -159,6 +189,10 @@ async fn produce(
             }
         }
         sender.send(record)?;
+        if let Some(deferred) = deferred {
+            let shared = shared.clone();
+            pending.spawn(async move { Ok(Done::Update(update(deferred, &shared).await)) });
+        }
     }
     sender.send(Event::Complete {
         succeeded,
@@ -168,30 +202,60 @@ async fn produce(
     Ok(())
 }
 
-/// One file's record. Its own failure is the record's error outcome; `Err` is
-/// a run-level failure.
-async fn record(file: git::File, shared: Arc<Shared>) -> anyhow::Result<Event> {
+/// One file's record, and what deferred plugins still shape. Its own failure
+/// is the record's error outcome; `Err` is a run-level failure.
+async fn record(file: git::File, shared: Arc<Shared>) -> anyhow::Result<(Event, Option<Deferred>)> {
     let (send, receive) = tokio::sync::oneshot::channel();
     let change = file.change.clone();
     let projecting = shared.clone();
     shared.pool.spawn(move || {
         let _ = send.send(project(&file, &projecting));
     });
+    let pass = if shared.defer { Pass::Eager } else { Pass::All };
+    let mut deferred = None;
     let outcome = match receive.await.expect("Rayon task returns its result") {
         Ok(diff) => {
             let entry = change.manifest_entry();
             let diff = present(change.hidden.as_deref(), diff, async |sides| {
-                shared.pipeline.run(&entry, sides, Pass::All).await
+                shared.pipeline.run(&entry, sides, pass).await
             })
             .await?;
+            if pass == Pass::Eager && change.hidden.is_none() && matches!(diff, Diff::Text { .. }) {
+                deferred = Some(Deferred {
+                    entry,
+                    diff: diff.clone(),
+                });
+            }
             Outcome::Diff { diff }
         }
         Err(error) => Outcome::Error {
             error: wire_error(&error),
         },
     };
-    Ok(Event::File {
+    let record = Event::File {
         file: change.sides,
+        outcome,
+    };
+    Ok((record, deferred))
+}
+
+/// Run the deferred plugins on a sent file's diff. The update replaces the
+/// diff when they changed it; their failure is the update's error.
+async fn update(deferred: Deferred, shared: &Shared) -> Option<Event> {
+    let Deferred { entry, diff } = deferred;
+    let shaped = present(None, diff.clone(), async |sides| {
+        shared.pipeline.run(&entry, sides, Pass::Deferred).await
+    })
+    .await;
+    let outcome = match shaped {
+        Ok(shaped) if shaped == diff => return None,
+        Ok(diff) => Outcome::Diff { diff },
+        Err(error) => Outcome::Error {
+            error: wire_error(&error),
+        },
+    };
+    Some(Event::Update {
+        file: entry.file,
         outcome,
     })
 }

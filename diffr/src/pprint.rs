@@ -305,6 +305,7 @@ pub(crate) fn run(input: impl BufRead, output: &mut impl Write, ids: &[u32]) -> 
                     }
                 }
             }
+            Event::Update { .. } => anyhow::bail!("update records are not supported"),
             Event::Complete {
                 failed, aborted, ..
             } => {
