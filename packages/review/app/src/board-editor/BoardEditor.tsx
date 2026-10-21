@@ -177,12 +177,7 @@ export function BoardEditor({
     });
 
     const uiKey = (key: string) =>
-      reviewUiStateKey(
-        session.config,
-        "session",
-        "section",
-        `${reviewId}:${key}`,
-      );
+      reviewUiStateKey(session, "session", "section", `${reviewId}:${key}`);
 
     // Everything typed until it is saved: the hold, autosave, merging
     // other authors' versions, closing and the window's shutdown.

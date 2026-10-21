@@ -94,7 +94,7 @@ export function DiffSidebarFolds(): ReactElement {
           {open === "whiteboards" ? (
             <WhiteboardsList
               project={project}
-              current={session.config.reviewId}
+              current={session.reviewId}
               onOpen={(reviewUuid, active) =>
                 void session.surface.post({
                   name: "openReview",

@@ -1,41 +1,35 @@
-import type { ReviewRuntimeConfig } from "@dev.fast/review-protocol";
+/** What names a board's stored state. */
+export interface ReviewClientConfig {
+  reviewId?: string;
+}
 
-export type ReviewClientConfig = Partial<
-  Pick<ReviewRuntimeConfig, "serverUrl" | "reviewId" | "token" | "wasmUrl">
->;
-
-export function jsonReviewApiUrl(
-  config: ReviewClientConfig,
+/** The review API path of a board's `endpoint`, at `version` if given. */
+export function reviewApiPath(
   reviewId: string,
   endpoint: `/${string}`,
   options: { version?: number } = {},
 ): string {
   const url = new URL(
-    `${config.serverUrl?.replace(/\/$/, "") ?? browserOrigin()}/reviews-api/${encodeURIComponent(reviewId)}${endpoint}`,
+    `/reviews-api/${encodeURIComponent(reviewId)}${endpoint}`,
+    "http://review.invalid",
   );
 
   if (options.version !== undefined)
     url.searchParams.set("version", String(options.version));
 
-  return url.href;
+  return url.pathname + url.search;
 }
 
 export async function reviewFetchUrl(
-  config: ReviewClientConfig,
+  connection: { token?: string },
   url: string | URL,
   init: RequestInit = {},
 ): Promise<Response> {
   const headers = new Headers(init.headers);
 
-  if (config.token) headers.set("x-review-token", config.token);
+  if (connection.token) headers.set("x-review-token", connection.token);
 
   return fetch(url, { ...init, headers });
-}
-
-export function reviewWasmUrl(config: ReviewClientConfig): string {
-  if (!config.wasmUrl) throw new Error("Review WASM asset URL is missing.");
-
-  return config.wasmUrl;
 }
 
 export function reviewStorageKey(
@@ -63,10 +57,4 @@ export function reviewPreferenceKey(
     namespace,
     ...parts.map((part) => String(part ?? "")),
   ].join(":");
-}
-
-function browserOrigin(): string {
-  return typeof window === "undefined"
-    ? "http://127.0.0.1"
-    : window.location.origin;
 }

@@ -60,8 +60,7 @@ const agentsSchema = z.object({
 
 export type AskAgent = z.infer<typeof agentsSchema>["agents"][number];
 
-const hostOf = (session: ReviewSession) =>
-  [session.config.serverUrl, session.review?.host ?? ""].join("\0");
+const hostOf = (session: ReviewSession) => session.review?.host ?? "";
 
 /** The host's agents that can answer, or null where it has no Ask. Read
  * again on focus and when the host changes state. */

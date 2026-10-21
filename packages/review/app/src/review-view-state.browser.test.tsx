@@ -93,7 +93,7 @@ describe("review view state", () => {
     unmount();
 
     const restored = createReviewPanelStore(
-      readReviewNavigationRestore(session.config, {
+      readReviewNavigationRestore(session, {
         ...canvas,
         commits: [{ ...commit, subject: "Current metadata" }],
       }),
@@ -106,7 +106,7 @@ describe("review view state", () => {
       restoreFile: true,
     });
     expect(
-      readReviewNavigationRestore(session.config, { ...canvas, commits: [] })
+      readReviewNavigationRestore(session, { ...canvas, commits: [] })
         .diffScope,
     ).toBeNull();
   });
@@ -124,7 +124,7 @@ describe("review view state", () => {
     unmount();
 
     const restored = createReviewPanelStore(
-      readReviewNavigationRestore(session.config, canvas),
+      readReviewNavigationRestore(session, canvas),
     );
 
     expect(restored.getState().view).toBe("trace");
@@ -144,11 +144,9 @@ describe("review view state", () => {
       diffScope: { commit: "invalid", file: "file.ts" },
       trace: { sessionId: "agent", eventIndex: -5 },
     });
+    expect(readPersistedReviewViewState(session).diffScope).toBeUndefined();
     expect(
-      readPersistedReviewViewState(session.config).diffScope,
-    ).toBeUndefined();
-    expect(
-      readPersistedReviewViewState(session.config).trace?.eventIndex,
+      readPersistedReviewViewState(session).trace?.eventIndex,
     ).toBeUndefined();
   });
 
@@ -163,7 +161,7 @@ describe("review view state", () => {
       harness.element.dispatchEvent(new Event("scroll"));
     });
     flushNextFrame();
-    expect(readPersistedReviewViewState(session.config).scrollTop).toBe(300);
+    expect(readPersistedReviewViewState(session).scrollTop).toBe(300);
 
     // The next scroll frame has not persisted yet when a live edit arrives.
     act(() => {
@@ -173,7 +171,7 @@ describe("review view state", () => {
     harness.renderSession({ ...session });
     expect(harness.element.scrollTop).toBe(350);
     flushNextFrame();
-    expect(readPersistedReviewViewState(session.config).scrollTop).toBe(350);
+    expect(readPersistedReviewViewState(session).scrollTop).toBe(350);
   });
 
   it("flushes the final scroll position when cleanup cancels a pending frame", () => {
@@ -188,7 +186,7 @@ describe("review view state", () => {
 
     unmount();
 
-    expect(readPersistedReviewViewState(session.config)).toEqual({
+    expect(readPersistedReviewViewState(session)).toEqual({
       scrollTop: 180,
       scrollView: "review",
     });
@@ -228,7 +226,7 @@ describe("review view state", () => {
     flushNextFrame();
 
     expect(harness.element.scrollTop).toBe(1_450);
-    expect(readPersistedReviewViewState(session.config).scrollTop).toBe(1_450);
+    expect(readPersistedReviewViewState(session).scrollTop).toBe(1_450);
 
     act(() => vi.advanceTimersByTime(1_000));
     act(() => {
@@ -239,7 +237,7 @@ describe("review view state", () => {
     flushNextFrame();
 
     expect(harness.element.scrollTop).toBe(2_000);
-    expect(readPersistedReviewViewState(session.config).scrollTop).toBe(2_000);
+    expect(readPersistedReviewViewState(session).scrollTop).toBe(2_000);
   });
 
   it("restores the scroll only on the view it was taken on", () => {
@@ -290,7 +288,7 @@ describe("review view state", () => {
     });
     flushNextFrame();
 
-    expect(readPersistedReviewViewState(session.config).scrollTop).toBe(320);
+    expect(readPersistedReviewViewState(session).scrollTop).toBe(320);
   });
 
   it.each(["wheel", "pointerdown", "touchstart"])(
@@ -345,9 +343,7 @@ describe("review view state", () => {
 
     unmount();
 
-    expect(
-      window.localStorage.getItem(reviewViewStateKey(session.config)),
-    ).toBe(null);
+    expect(window.localStorage.getItem(reviewViewStateKey(session))).toBe(null);
   });
 
   it("persists only resumable panel modes", () => {
@@ -361,14 +357,14 @@ describe("review view state", () => {
         content: { kind: "inline-code", text: "start();" },
       }),
     );
-    expect(readPersistedReviewViewState(session.config)).toEqual({});
+    expect(readPersistedReviewViewState(session)).toEqual({});
 
     act(() =>
       store
         .getState()
         .openOverlayTour({ tourId: "flow", kind: "sequence" }, "second"),
     );
-    expect(readPersistedReviewViewState(session.config)).toEqual({
+    expect(readPersistedReviewViewState(session)).toEqual({
       overlayTour: { tourId: "flow", activeAnchor: "second", kind: "sequence" },
     });
   });
@@ -385,13 +381,13 @@ describe("review view state", () => {
         .getState()
         .openOverlayTour({ tourId: "flow", kind: "sequence" }, "second"),
     );
-    expect(readPersistedReviewViewState(session.config)).toMatchObject({
+    expect(readPersistedReviewViewState(session)).toMatchObject({
       activeView: "map",
       overlayTour: { tourId: "flow", activeAnchor: "second" },
     });
 
     act(() => store.getState().showView("diff"));
-    expect(readPersistedReviewViewState(session.config)).toEqual({
+    expect(readPersistedReviewViewState(session)).toEqual({
       activeView: "diff",
     });
   });
@@ -405,9 +401,7 @@ describe("review view state", () => {
     renderViewState({ session: legacySession, store: legacyStore });
 
     expect(legacyStore.getState().active).toBeNull();
-    expect(readPersistedReviewViewState(legacySession.config).panel).toBe(
-      undefined,
-    );
+    expect(readPersistedReviewViewState(legacySession).panel).toBe(undefined);
   });
 
   it("restores the fullscreen tour a reader left open", () => {
@@ -417,9 +411,7 @@ describe("review view state", () => {
       overlayTour: { tourId: "flow", activeAnchor: "second", kind: "sequence" },
     });
 
-    expect(
-      readReviewNavigationRestore(session.config, canvas).overlayTour,
-    ).toEqual({
+    expect(readReviewNavigationRestore(session, canvas).overlayTour).toEqual({
       tourId: "flow",
       kind: "sequence",
       anchor: "second",
@@ -433,9 +425,7 @@ describe("review view state", () => {
       panel: { kind: "tour", tourId: "flow", activeAnchor: "second" },
     });
 
-    expect(
-      readReviewNavigationRestore(session.config, canvas).overlayTour,
-    ).toEqual({
+    expect(readReviewNavigationRestore(session, canvas).overlayTour).toEqual({
       tourId: "flow",
       kind: undefined,
       anchor: "second",
@@ -448,16 +438,12 @@ describe("review view state", () => {
 
     for (const view of ["review", "map", "diff", "trace"] as const) {
       storeState(session, { activeView: view });
-      expect(readPersistedReviewViewState(session.config).activeView).toBe(
-        view,
-      );
+      expect(readPersistedReviewViewState(session).activeView).toBe(view);
     }
 
     for (const retired of ["commits", "files"]) {
       storeState(session, { activeView: retired });
-      expect(
-        readPersistedReviewViewState(session.config).activeView,
-      ).toBeUndefined();
+      expect(readPersistedReviewViewState(session).activeView).toBeUndefined();
     }
   });
 
@@ -466,11 +452,9 @@ describe("review view state", () => {
 
     const second = testReviewSession({ reviewId: "session-b" });
 
-    expect(reviewViewStateKey(first.config)).not.toBe(
-      reviewViewStateKey(second.config),
-    );
-    expect(reviewViewStateKey(first.config)).toContain("session-a");
-    expect(reviewViewStateKey(second.config)).toContain("session-b");
+    expect(reviewViewStateKey(first)).not.toBe(reviewViewStateKey(second));
+    expect(reviewViewStateKey(first)).toContain("session-a");
+    expect(reviewViewStateKey(second)).toContain("session-b");
   });
 });
 
@@ -563,7 +547,7 @@ function storeState(
   session: TestReviewSession,
   state: Parameters<typeof writeReviewUiState>[2],
 ) {
-  writeReviewUiState("session", reviewViewStateKey(session.config), state);
+  writeReviewUiState("session", reviewViewStateKey(session), state);
 }
 
 function flushNextFrame(): void {

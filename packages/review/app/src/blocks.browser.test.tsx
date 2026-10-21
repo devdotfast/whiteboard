@@ -223,7 +223,7 @@ async function mountFixture(
   await act(async () => {
     canvas = mount(container, {
       kind: "api",
-      softwareMapEnabled: true,
+      settings: { softwareMapEnabled: true },
       reviewId: snapshot.reviewId,
       version: 0,
       bridge,

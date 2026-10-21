@@ -50,7 +50,7 @@ function Canvas({
   reviewId: string;
   children: ReactNode;
 }) {
-  const scope = useCanvasQueryScope(host, reviewId);
+  const scope = useCanvasQueryScope(host.request, reviewId);
 
   return <CanvasQueryProvider scope={scope}>{children}</CanvasQueryProvider>;
 }

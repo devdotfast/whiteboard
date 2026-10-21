@@ -3,7 +3,7 @@ import { expect, it, vi } from "vitest";
 
 import { createReviewSession } from "./review-session";
 
-it("sends JSON requests to the displayed version with authentication", async () => {
+it("sends JSON requests to the displayed version through the host", async () => {
   const request = vi.fn<
     NonNullable<ReturnType<typeof testReviewBridge>["request"]>
   >(async () => Response.json({ text: "copied" }));
@@ -15,15 +15,22 @@ it("sends JSON requests to the displayed version with authentication", async () 
   });
 
   await session.fetch("/copy-context", { method: "POST" });
-  const [url, init] = request.mock.calls[0]!;
-  expect(new URL(url).pathname).toBe("/reviews-api/review%2Fid/copy-context");
-  expect(new URL(url).searchParams.get("version")).toBe("2");
-  expect(new URL(url).searchParams.has("document")).toBe(false);
-  expect(new Headers(init?.headers).get("x-review-token")).toBe("secret-token");
+  const [url] = request.mock.calls[0]!;
+  expect(new URL(url, "http://localhost").pathname).toBe(
+    "/reviews-api/review%2Fid/copy-context",
+  );
+  expect(new URL(url, "http://localhost").searchParams.get("version")).toBe(
+    "2",
+  );
+  expect(new URL(url, "http://localhost").searchParams.has("document")).toBe(
+    false,
+  );
 
   version = 3;
   await session.fetch("/telemetry/event", { method: "POST" });
-  expect(new URL(request.mock.calls[1]![0]).searchParams.get("version")).toBe(
-    "3",
-  );
+  expect(
+    new URL(request.mock.calls[1]![0], "http://localhost").searchParams.get(
+      "version",
+    ),
+  ).toBe("3");
 });

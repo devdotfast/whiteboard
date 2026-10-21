@@ -241,7 +241,7 @@ it("offers whole-block reference actions for the editor selection, and clears bo
       for (const report of listeners)
         report({
           event: "editorSelectionChanged",
-          reviewId: session.config.reviewId,
+          reviewId: session.reviewId,
           path: "job.ts",
           sideContext: "head",
           isEmpty: true,
@@ -263,7 +263,7 @@ it("offers whole-block reference actions for the editor selection, and clears bo
       for (const report of listeners)
         report({
           event: "editorSelectionChanged",
-          reviewId: session.config.reviewId,
+          reviewId: session.reviewId,
           path: "job.ts",
           sideContext: "head",
           isEmpty: false,
@@ -289,7 +289,7 @@ it("offers whole-block reference actions for the editor selection, and clears bo
       for (const report of listeners)
         report({
           event: "editorSelectionChanged",
-          reviewId: session.config.reviewId,
+          reviewId: session.reviewId,
           path: "job.ts",
           sideContext: "head",
           isEmpty: true,

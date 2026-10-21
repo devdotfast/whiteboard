@@ -170,12 +170,7 @@ function renderWithSession(node: ReactNode) {
 
 function createTestSession(): ReviewSession {
   return testReviewSession(
-    {
-      serverUrl: "http://127.0.0.1:4100",
-      reviewId: "theme-test",
-      token: "",
-      theme,
-    },
+    { reviewId: "theme-test" },
     {
       diffView: {
         files: async () => [],

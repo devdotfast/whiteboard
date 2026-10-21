@@ -39,11 +39,13 @@ import { NewWhiteboard } from "./onboarding/new-whiteboard";
 import { type ReviewFindHost, createReviewFindHost } from "./review-find";
 import { ReviewHome } from "./review-home-view";
 import { ReviewContainerProvider } from "./review-root-context";
+import { ReviewTopBar } from "./review-top-bar";
 import { SettingsPage } from "./settings-page";
 import { shellStyles } from "./shell-styles";
 import { ReviewSidebarSection } from "./sidebar-sections";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
+import { Whiteboard } from "./whiteboard";
 
 import "./styles.css";
 
@@ -59,11 +61,10 @@ function ReviewCanvas({
   if (content.kind === "api")
     return (
       <div data-review-api="" {...stylex.props(shellStyles.apiCanvas)}>
-        <ApiCanvas
-          key={content.reviewId}
-          content={content}
-          findHost={findHost}
-        />
+        <ApiCanvas key={content.reviewId} content={content} findHost={findHost}>
+          <ReviewTopBar />
+          <Whiteboard />
+        </ApiCanvas>
       </div>
     );
 

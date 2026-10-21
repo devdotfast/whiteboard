@@ -205,7 +205,7 @@ function askCanvas({
                   <AskProjectContext.Provider value={projectId}>
                     <ReviewPanelProvider
                       restore={() => ({
-                        asks: readOpenAsks(session.config, projectId),
+                        asks: readOpenAsks(session, projectId),
                       })}
                     >
                       <ReviewProvider>

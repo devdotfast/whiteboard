@@ -550,12 +550,12 @@ export function ReviewPanelHost() {
 function AskHost() {
   const store = useReviewPanelStore();
   const session = useLatest(useReviewSession());
-  const config = session.current.config;
+  const reviewId = session.current.reviewId;
   const projectId = useContext(AskProjectContext);
 
   useEffect(
-    () => syncOpenAsks(store, config, projectId),
-    [store, config, projectId],
+    () => syncOpenAsks(store, { reviewId }, projectId),
+    [store, reviewId, projectId],
   );
 
   useEffect(() => {

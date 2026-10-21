@@ -1,4 +1,3 @@
-import { ReviewApiClient } from "@review/review-api/client";
 import type { Snapshot } from "@review/review-api/store";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";
@@ -6,7 +5,7 @@ import { afterEach, expect, it } from "vitest";
 
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewDiffView } from "./DiffView";
-import { ReviewSessionProvider } from "./host/review-session";
+import { ReviewSessionProvider, hostApiClient } from "./host/review-session";
 import { ReviewLensesProvider } from "./review-lenses";
 import { ReviewPanelProvider } from "./review-panel";
 import { type ReviewRoots, ReviewRootsProvider } from "./review-root-context";
@@ -56,7 +55,7 @@ const render = async (sidebar: boolean) => {
     },
   );
 
-  const client = new ReviewApiClient(session.config, session.bridge.request);
+  const client = hostApiClient(session.bridge);
 
   app = document.createElement("div");
   document.body.append(app);

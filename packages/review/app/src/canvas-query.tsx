@@ -111,9 +111,9 @@ function createIdleQueryClient(): QueryClient {
 
 /** The shared client, else one owned by the canvas. Clearing is deferred so
  * a Strict Mode replay keeps its client. A host without `request` gets an
- * idle client of its own. */
+ * idle client of its own; a new `request` is a new backend. */
 export function useCanvasQueryScope(
-  host: Pick<ReviewCanvasBridge, "request">,
+  request: ReviewCanvasBridge["request"],
   reviewId: string,
 ): CanvasQueryScope {
   const shared = useContext(SharedCanvasQueryClient);
@@ -121,11 +121,11 @@ export function useCanvasQueryScope(
   const scope = useMemo(
     () => ({
       id: nextScope++,
-      queryClient: host.request
+      queryClient: request
         ? (shared ?? createCanvasQueryClient())
         : createIdleQueryClient(),
     }),
-    [shared, host, reviewId],
+    [shared, request, reviewId],
   );
 
   const { queryClient } = scope;

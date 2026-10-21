@@ -94,7 +94,7 @@ import type {
 	ReviewKeymapChoice,
 	ReviewReadyNotificationChoice,
 	ReviewRemoteHostActions,
-	ReviewRuntimeConfig,
+	ReviewCanvasSettings,
 	ReviewSurfaceEvent,
 	ReviewTheme,
 	ReviewVerbResponse,
@@ -333,12 +333,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				)
 					return;
 				if (this.apiContent) {
-					this.apiContent = {
-						...this.apiContent,
-						softwareMapEnabled: this.currentSoftwareMapEnabled(),
-						sharingEnabled: this.currentSharingEnabled(),
-						documentWidth: this.currentDocumentWidth(),
-					};
+					this.apiContent = { ...this.apiContent, settings: this.canvasSettings() };
 					this.canvas.value?.update(this.apiContent);
 					return;
 				}
@@ -482,18 +477,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 						kind: "api",
 						reviewId,
 						...remoteEntry(...this.catalogEntry(reviewId)),
-						remoteHosts: this.remoteHostActions(),
 						projectId: this.apiCatalog.reviews.find((review) => review.reviewId === reviewId)?.project?.id,
-						softwareMapEnabled: this.currentSoftwareMapEnabled(),
-						sharingEnabled: this.currentSharingEnabled(),
-						documentWidth: this.currentDocumentWidth(),
-						setTitle: (title) => input.setApiTitle(title),
-						setSourceView: (selection, next) => {
-							sourceSelection = selection;
-							sourceView = next;
-							source.openStructuralComparison();
-						},
-						openSource: (source, range) => this.apiSource.open(source, range),
+						settings: this.canvasSettings(),
 						bridge: {
 							...source,
 							diffView: this.withSidebarFileTree(reviewId, source.diffView),
@@ -502,15 +487,21 @@ export class ReviewCanvasEditorPane extends EditorPane {
 								this.sessionTelemetry.presented();
 							}),
 							appSessionId: connection.appSessionId,
-							config: this.reviewRuntimeConfig(
-								{
-									serverUrl: connection.serverUrl,
-									token: connection.token,
-									reviewId: reviewId,
-								},
-								assets,
-							),
-							request: requestReviewApi,
+							wasmUrl: assets.reviewWasmUrl,
+							appVersion: this.productService.reviewVersion ?? this.productService.version,
+							remoteHosts: this.remoteHostActions(),
+							setTitle: (title) => input.setApiTitle(title),
+							setSourceView: (selection, next) => {
+								sourceSelection = selection;
+								sourceView = next;
+								source.openStructuralComparison();
+							},
+							openSource: (source, range) => this.apiSource.open(source, range),
+							request: (path, init) => {
+								const headers = new Headers(init?.headers);
+								if (connection.token) headers.set("x-review-token", connection.token);
+								return requestReviewApi(`${connection.serverUrl}${path}`, { ...init, headers });
+							},
 							beacon: (path, body) => void requestReviewApi(
 								`${connection.serverUrl}/reviews-api/${encodeURIComponent(reviewId)}${path}`,
 								{ method: "POST", keepalive: true, headers: { "content-type": "application/json", "x-review-token": connection.token }, body },
@@ -1430,16 +1421,11 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		};
 	}
 
-	private reviewRuntimeConfig(
-		connection: Pick<ReviewRuntimeConfig, "serverUrl" | "reviewId" | "token">,
-		assets: ReviewCanvasAssetsModule,
-	): ReviewRuntimeConfig {
+	private canvasSettings(): ReviewCanvasSettings {
 		return {
-			...connection,
-			wasmUrl: assets.reviewWasmUrl,
-			appVersion: this.productService.reviewVersion ?? this.productService.version,
-			theme: this.colorScheme(),
-			host: "desktop",
+			softwareMapEnabled: this.currentSoftwareMapEnabled(),
+			sharingEnabled: this.currentSharingEnabled(),
+			documentWidth: this.currentDocumentWidth(),
 		};
 	}
 

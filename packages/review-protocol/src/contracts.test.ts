@@ -19,7 +19,6 @@ import {
   ReviewOpenEditorSchema,
   ReviewRangeSchema,
   ReviewRepositoryIdentitySchema,
-  ReviewRuntimeConfigSchema,
   ReviewSurfaceEventSchema,
   ReviewVerbRequestSchema,
   ReviewVerbResponseSchema,
@@ -41,19 +40,6 @@ const contracts: Array<[string, ZodType, JsonObject]> = [
     {
       consent: "skipped",
       updatedAt: "2026-08-09T00:00:00.000Z",
-    },
-  ],
-  [
-    "runtime config",
-    ReviewRuntimeConfigSchema,
-    {
-      serverUrl: "http://127.0.0.1:5570",
-      reviewId: "review-1",
-      token: "",
-      wasmUrl: "http://127.0.0.1:5570/libavoid.wasm",
-      appVersion: "0.0.13",
-      theme: "dark",
-      host: "desktop",
     },
   ],
   [

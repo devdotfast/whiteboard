@@ -71,7 +71,7 @@ export function useReviewViewStateSync({
   panelStore: ReviewPanelStore;
 }): void {
   const session = useReviewSession();
-  const key = reviewViewStateKey(session.config);
+  const key = reviewViewStateKey(session);
 
   const saved = useMemo(() => createReviewViewStateStore(key), [key]);
   const initialState = useMemo(() => saved.getState(), [saved]);

@@ -133,7 +133,7 @@ export function DocumentCodeView({
   const collapsedRef = useRef(collapsed);
   collapsedRef.current = collapsed;
   const inlineEditorFactory = session.bridge.inlineEditors;
-  const inlineEditorSessionId = session.config.reviewId;
+  const inlineEditorSessionId = session.reviewId;
   const reviewFind = useReviewFindRegistration();
 
   const ensureEditor = useCallback(async () => {

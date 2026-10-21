@@ -32,7 +32,7 @@ const client = new ReviewApiClient(
   { serverUrl: "http://review.test", token: "t" },
   async (url) =>
     Response.json(
-      new URL(String(url)).pathname.endsWith("/progress")
+      new URL(String(url), "http://localhost").pathname.endsWith("/progress")
         ? {
             files: [],
             lenses: [],

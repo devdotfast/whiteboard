@@ -142,8 +142,10 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
     canvas = mount(container, {
       kind: "api",
       reviewId: review.reviewId,
-      bridge,
-      setSourceView: (_selection, view) => displayedVersion(view.version),
+      bridge: {
+        ...bridge,
+        setSourceView: (_selection, view) => displayedVersion(view.version),
+      },
     });
   });
   await act(async () => {
@@ -278,8 +280,10 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
       kind: "api",
       reviewId: review.reviewId,
       version: inserted.version,
-      bridge,
-      setSourceView: (_selection, view) => displayedVersion(view.version),
+      bridge: {
+        ...bridge,
+        setSourceView: (_selection, view) => displayedVersion(view.version),
+      },
     });
   });
   await act(async () => {
@@ -619,8 +623,7 @@ it("renders a code peek block on its pinned side without fetching source text", 
     canvas = mount(container, {
       kind: "api",
       reviewId: review.reviewId,
-      bridge,
-      setSourceView: () => {},
+      bridge: { ...bridge, setSourceView: () => {} },
     });
   });
   await act(async () => {
@@ -759,7 +762,7 @@ it("copies prose and code from the displayed historical JSON review", async () =
 
     const selected: ReviewSurfaceEvent = {
       event: "editorSelectionChanged",
-      reviewId: bridge.config.reviewId,
+      reviewId: review.reviewId,
       path: "example.ts",
       range: { fromLine: 2, toLine: 2 },
       sideContext: "head",
@@ -1109,7 +1112,11 @@ it("offers the Diff view for a live worktree review and refreshes it on each sav
       {},
       {
         request: async (url, init) => {
-          if (new URL(String(url)).pathname.endsWith("/progress"))
+          if (
+            new URL(String(url), "http://localhost").pathname.endsWith(
+              "/progress",
+            )
+          )
             progressReads++;
 
           return app.request(url, init);
@@ -1175,7 +1182,11 @@ it("leaves window errors to the workbench it shares a window with", async () => 
     {},
     {
       request: async (url, init) => {
-        if (new URL(String(url)).pathname.endsWith("/telemetry/event"))
+        if (
+          new URL(String(url), "http://localhost").pathname.endsWith(
+            "/telemetry/event",
+          )
+        )
           telemetry.push(JSON.parse(String(init?.body)).name);
 
         return app.request(url, init);
@@ -1195,8 +1206,7 @@ it("leaves window errors to the workbench it shares a window with", async () => 
     canvas = mount(container, {
       kind: "api",
       reviewId: review.reviewId,
-      bridge,
-      setSourceView: () => {},
+      bridge: { ...bridge, setSourceView: () => {} },
     });
   });
   await act(async () => {
@@ -1281,10 +1291,13 @@ function rewrittenWatch(
   const encoder = new TextEncoder();
 
   return async (url, init) => {
-    requests.push(new URL(String(url)).pathname);
+    requests.push(new URL(String(url), "http://localhost").pathname);
     const response = await app.request(url, init);
 
-    if (!new URL(String(url)).pathname.endsWith("/watch") || !response.body)
+    if (
+      !new URL(String(url), "http://localhost").pathname.endsWith("/watch") ||
+      !response.body
+    )
       return response;
     const decoder = new TextDecoder();
     let pending = "";
@@ -1328,7 +1341,9 @@ it("shows a lost remote host as a top-bar chip that retries the host and the str
     {},
     {
       request: async (url, init) => {
-        if (!new URL(String(url)).pathname.endsWith("/watch"))
+        if (
+          !new URL(String(url), "http://localhost").pathname.endsWith("/watch")
+        )
           return app.request(url, init);
         watches++;
 
@@ -1385,9 +1400,7 @@ it("shows a lost remote host as a top-bar chip that retries the host and the str
       kind: "api",
       reviewId: review.reviewId,
       host: "wb-a",
-      remoteHosts,
-      bridge,
-      setSourceView: () => {},
+      bridge: { ...bridge, remoteHosts, setSourceView: () => {} },
     });
   });
   await act(() =>
@@ -1444,21 +1457,21 @@ it("shows why a remote review has not loaded, with its host's next step", async 
       kind: "api",
       reviewId: "11111111-1111-4111-8111-111111111111",
       host: "wb-a",
-      remoteHosts: {
-        states: async () => [
-          {
-            alias: "wb-a",
-            state: "incompatible",
-            detail: "wb-a runs Whiteboard 0.1.0; this Desktop runs 0.2.0.",
-          },
-        ],
-        retry: async () => {},
-        install,
-        openSettings: async () => {},
-      },
       bridge: testReviewBridge(
         {},
         {
+          remoteHosts: {
+            states: async () => [
+              {
+                alias: "wb-a",
+                state: "incompatible",
+                detail: "wb-a runs Whiteboard 0.1.0; this Desktop runs 0.2.0.",
+              },
+            ],
+            retry: async () => {},
+            install,
+            openSettings: async () => {},
+          },
           request: async () =>
             Response.json(
               { ok: false, error: "wb-a runs Whiteboard 0.1.0." },
@@ -1539,7 +1552,7 @@ async function mountPeekReview(content: {
     {},
     {
       request: async (url, init) => {
-        requested.push(new URL(String(url)).pathname);
+        requested.push(new URL(String(url), "http://localhost").pathname);
 
         return app.request(url, init);
       },
@@ -1589,9 +1602,8 @@ async function mountPeekReview(content: {
   const mounted = {
     kind: "api" as const,
     reviewId: review.reviewId,
-    bridge,
-    setSourceView: () => {},
-    sharingEnabled: true,
+    bridge: { ...bridge, setSourceView: () => {} },
+    settings: { sharingEnabled: true },
     ...content,
   };
 

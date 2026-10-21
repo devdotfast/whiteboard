@@ -29,7 +29,7 @@ const peek = "head/order.ts#L1";
 const client = new ReviewApiClient(
   { serverUrl: "http://review.test", token: "t" },
   async (url) => {
-    const path = new URL(String(url)).pathname;
+    const path = new URL(String(url), "http://localhost").pathname;
 
     if (!path.endsWith("/progress")) return Response.json({});
     await new Promise((resolve) => setTimeout(resolve, 30));

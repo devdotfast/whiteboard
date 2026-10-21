@@ -43,7 +43,7 @@ const holds: (string | null)[] = [];
 const client = new ReviewApiClient(
   { serverUrl: "http://review.test", token: "t" },
   async (url, init) => {
-    const path = new URL(String(url)).pathname;
+    const path = new URL(String(url), "http://localhost").pathname;
     const body = JSON.parse(String(init?.body ?? "{}"));
 
     if (path.endsWith("/focus")) {

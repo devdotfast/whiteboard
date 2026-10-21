@@ -259,7 +259,7 @@ it("reopens a stored fullscreen tour only while its diagram is in the document",
 
   const container = document.createElement("div");
   document.body.append(container);
-  const key = reviewViewStateKey(bridge.config);
+  const key = reviewViewStateKey({ reviewId: review.reviewId });
 
   const open = async (overlayTour: {
     tourId: string;
@@ -287,16 +287,18 @@ it("reopens a stored fullscreen tour only while its diagram is in the document",
 
   await open({ tourId: sequence!.id!, activeAnchor: step });
   expect(container.querySelector(".diagram-tour-overlay")).toBeTruthy();
-  expect(readPersistedReviewViewState(bridge.config)).toMatchObject({
+  expect(
+    readPersistedReviewViewState({ reviewId: review.reviewId }),
+  ).toMatchObject({
     overlayTour: { tourId: sequence!.id, activeAnchor: step },
   });
 
   // The diagram that owned this tour is gone: nothing reopens or keeps it.
   await open({ tourId: "removed", activeAnchor: step });
   expect(container.querySelector(".diagram-tour-overlay")).toBeNull();
-  expect(readPersistedReviewViewState(bridge.config)).not.toHaveProperty(
-    "overlayTour",
-  );
+  expect(
+    readPersistedReviewViewState({ reviewId: review.reviewId }),
+  ).not.toHaveProperty("overlayTour");
 });
 
 it("keeps a flow diagram's tour in the canvas navigation", async () => {
@@ -364,7 +366,9 @@ it("keeps a flow diagram's tour in the canvas navigation", async () => {
       .click(),
   );
   expect(overlay()).toBeTruthy();
-  expect(readPersistedReviewViewState(bridge.config)).toMatchObject({
+  expect(
+    readPersistedReviewViewState({ reviewId: review.reviewId }),
+  ).toMatchObject({
     overlayTour: { kind: "flow" },
   });
 

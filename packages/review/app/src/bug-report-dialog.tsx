@@ -93,7 +93,7 @@ export function BugReportControl({
         include_map: includeContext,
         include_diff: includeDiff,
         app_session_id: session.appSessionId,
-        app_version: session.config.appVersion,
+        app_version: session.bridge.appVersion,
       };
 
       if (screenshot) {

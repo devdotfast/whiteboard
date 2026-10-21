@@ -5,11 +5,11 @@
 
 import { createTrustedTypesPolicy } from "../../../../base/browser/trustedTypes.js";
 import { FileAccess } from "../../../../base/common/network.js";
-import type { ReviewCanvasModule, ReviewRuntimeConfig } from "../../../common/reviewProtocol.js";
+import type { ReviewCanvasModule } from "../../../common/reviewProtocol.js";
 
 /** The canvas bundle: the canvas and the sidebar sections mount from it. */
 export interface ReviewCanvasAssetsModule extends ReviewCanvasModule {
-	readonly clearReviewViewState: (config: ReviewRuntimeConfig) => void;
+	readonly clearReviewViewState: (board: { reviewId: string }) => void;
 	readonly reviewWasmUrl: string;
 	readonly reviewStylesheetUrls: readonly string[];
 }

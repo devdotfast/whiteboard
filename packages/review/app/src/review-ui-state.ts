@@ -41,7 +41,7 @@ export function useReviewUiState<T>(
   { scope = "reader", namespace = "ui" }: ReviewUiStateOptions = {},
 ): [T, Dispatch<SetStateAction<T>>] {
   const session = useReviewSession();
-  const key = reviewUiStateKey(session.config, scope, namespace, name);
+  const key = reviewUiStateKey(session, scope, namespace, name);
 
   const [value, setValue] = useState<T>(
     () => readReviewUiState<T>(scope, key) ?? fallback,

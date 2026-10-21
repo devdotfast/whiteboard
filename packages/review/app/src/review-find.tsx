@@ -113,7 +113,7 @@ export function ReviewFindProvider({
   const session = useOptionalReviewSession();
 
   const [controller] = useState(() =>
-    createFindController(articleRef, session?.config, (surface) => {
+    createFindController(articleRef, session ?? undefined, (surface) => {
       if (session) captureUiEvent(session, "find_opened", { surface });
     }),
   );

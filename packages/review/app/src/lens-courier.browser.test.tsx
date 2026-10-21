@@ -1,5 +1,4 @@
 import type { ActivitySnapshot } from "@review/review-api/activity";
-import { ReviewApiClient } from "@review/review-api/client";
 import type { Lens } from "@review/review-api/diff-lenses";
 import type { Snapshot } from "@review/review-api/store";
 import { act, createRef } from "react";
@@ -14,7 +13,7 @@ import { AuthoringCursorContext } from "./courier";
 import { ReviewDiffView } from "./DiffView";
 import { type DrawQueueClock, DrawQueueProvider } from "./draw-queue-provider";
 import { reviewPreferenceKey } from "./host/review-client";
-import { ReviewSessionProvider } from "./host/review-session";
+import { ReviewSessionProvider, hostApiClient } from "./host/review-session";
 import { ReviewLensesProvider } from "./review-lenses";
 import { ReviewPanelProvider } from "./review-panel";
 import { type ReviewRoots, ReviewRootsProvider } from "./review-root-context";
@@ -127,7 +126,7 @@ const session = testReviewSession(
   },
 );
 
-const client = new ReviewApiClient(session.config, session.bridge.request);
+const client = hostApiClient(session.bridge);
 
 beforeEach(() => {
   app = document.createElement("div");

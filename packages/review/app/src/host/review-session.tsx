@@ -4,15 +4,12 @@ import { createReviewAppSessionId } from "@canvas/tab-dwell-telemetry";
 import type {
   ReviewCanvasBridge,
   ReviewCanvasDiagnostic,
-  ReviewRuntimeConfig,
+  ReviewTheme,
 } from "@dev.fast/review-protocol";
+import { ReviewApiClient } from "@review/review-api/client";
 import { type ReactNode, createContext, useContext } from "react";
 
-import {
-  jsonReviewApiUrl,
-  reviewStorageKey,
-  reviewWasmUrl,
-} from "./review-client";
+import { reviewApiPath, reviewStorageKey } from "./review-client";
 import { type ReviewSurface, createReviewSurface } from "./review-host";
 import type { ReviewSessionData } from "./review-session-data";
 
@@ -22,58 +19,60 @@ export interface ReviewSession {
   review?: ReviewSessionData;
   appSessionId: string;
   bridge: ReviewCanvasBridge;
-  config: ReviewRuntimeConfig;
   surface: ReviewSurface;
   softwareMapData?(
     model: NormalizedSoftwareModel,
   ): PinnedSoftwareMapData | undefined;
-  apiUrl(endpoint: `/${string}`): string;
   fetch: (endpoint: `/${string}`, init?: RequestInit) => Promise<Response>;
-  fetchUrl(url: string | URL, init?: RequestInit): Promise<Response>;
   wasmUrl(): string;
   storageKey(
     namespace: string,
     ...parts: Array<string | number | undefined>
   ): string;
-  theme(): ReviewRuntimeConfig["theme"];
+  theme(): ReviewTheme;
   signalReady(): void;
   reportDiagnostic(diagnostic: ReviewCanvasDiagnostic): void;
+}
+
+/** The host's request, else one that says it serves none. */
+export function hostRequest(
+  bridge: Pick<ReviewCanvasBridge, "request">,
+): NonNullable<ReviewCanvasBridge["request"]> {
+  return (
+    bridge.request ??
+    (() => Promise.reject(new Error("This host serves no requests.")))
+  );
+}
+
+/** The review API through the host, whose request adds the origin and
+ * credentials. */
+export function hostApiClient(
+  bridge: Pick<ReviewCanvasBridge, "request">,
+): ReviewApiClient {
+  return new ReviewApiClient({ serverUrl: "", token: "" }, hostRequest(bridge));
 }
 
 export function createReviewSession(
   bridge: ReviewCanvasBridge,
   options: { jsonReview: { id: string; version(): number | undefined } },
 ): ReviewSession {
-  const config = bridge.config;
-  const appSessionId = bridge.appSessionId ?? createReviewAppSessionId();
-
-  const request = (url: string | URL, init: RequestInit = {}) => {
-    const headers = new Headers(init.headers);
-
-    if (config.token) headers.set("x-review-token", config.token);
-
-    return bridge.request
-      ? bridge.request(String(url), { ...init, headers })
-      : Promise.reject(new Error("This host serves no requests."));
-  };
-
-  const apiUrl = (endpoint: `/${string}`) =>
-    jsonReviewApiUrl(config, options.jsonReview.id, endpoint, {
-      version: options.jsonReview.version(),
-    });
+  const reviewId = options.jsonReview.id;
 
   return {
-    reviewId: options.jsonReview.id,
-    appSessionId,
+    reviewId,
+    appSessionId: bridge.appSessionId ?? createReviewAppSessionId(),
     bridge,
-    config,
     surface: createReviewSurface(bridge),
-    apiUrl,
-    fetch: (endpoint, init) => request(apiUrl(endpoint), init),
-    fetchUrl: request,
-    wasmUrl: () => reviewWasmUrl(config),
+    fetch: (endpoint, init) =>
+      hostRequest(bridge)(
+        reviewApiPath(reviewId, endpoint, {
+          version: options.jsonReview.version(),
+        }),
+        init,
+      ),
+    wasmUrl: () => bridge.wasmUrl,
     storageKey: (namespace, ...parts) =>
-      reviewStorageKey(config, namespace, ...parts),
+      reviewStorageKey({ reviewId }, namespace, ...parts),
     theme: () => bridge.currentTheme(),
     signalReady: () => bridge.ready(),
     reportDiagnostic: (diagnostic) => bridge.reportDiagnostic?.(diagnostic),
