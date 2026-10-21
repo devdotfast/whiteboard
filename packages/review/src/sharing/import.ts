@@ -14,26 +14,18 @@ import path from "node:path";
 
 import { parseJsonText } from "@dev.fast/json";
 import {
-  type JsonObject,
-  type JsonValue,
-  isJsonObject,
-} from "@dev.fast/review-protocol";
-import {
   MAX_SHARE_MANIFEST_BYTES,
   type ShareManifest,
   shareIdSchema,
   shareManifestSchema,
 } from "@dev.fast/review-share-protocol";
 import { textIncludesQuote } from "@review/evidence.js";
-import { lensSchema } from "@review/review-api/diff-lenses.js";
 import { ReviewInputError } from "@review/review-api/document.js";
 import {
   type FileLineRange,
   type Pins,
   anchorPins,
   checkReferences,
-  documentSchema,
-  pinsSchema,
   resourceReference,
   resourceReferences,
   sourceReferences,
@@ -41,17 +33,9 @@ import {
 import type { LocalReviewData } from "@review/review-api/local-data.js";
 import type { ReviewStore } from "@review/review-api/store.js";
 import { traceSchema } from "@review/review-api/trace-schema.js";
-import {
-  normalizedSoftwareElementSchema,
-  normalizedSoftwareRelationshipSchema,
-} from "@review/software-map-model.js";
-import {
-  liftFileLenses,
-  migrateStoredDocument,
-  migrateStoredLenses,
-} from "@review/stored-document-migration.js";
 import { z } from "zod";
 
+import { parseSharedSnapshot, sharePresentationSchema } from "./content.js";
 import {
   type ShareBundle,
   digestBytes,
@@ -59,7 +43,6 @@ import {
   validateShareSources,
 } from "./export.js";
 import {
-  COMMIT_ID,
   assertCommitIds,
   cloneSharedRepository,
   fetchPinnedRepository,
@@ -68,71 +51,6 @@ import {
   repositoryReady,
   sharedGit,
 } from "./repository.js";
-
-export const sharedSnapshotSchema = z.strictObject({
-  reviewId: z.string().min(1),
-  version: z.number().int().nonnegative(),
-  /** Empty for a board never named; it reads "Untitled". */
-  title: z.string(),
-  pins: pinsSchema
-    .extend({
-      base: z.string().regex(COMMIT_ID),
-      head: z.string().regex(COMMIT_ID),
-    })
-    .optional(),
-  document: documentSchema,
-  lenses: z.array(lensSchema).optional(),
-  createdAt: z.string(),
-  origin: z
-    .strictObject({
-      branch: z.string().optional(),
-      baseRef: z.string().optional(),
-      pullRequestNumber: z.number().int().positive().optional(),
-      pullRequestUrl: z.string().optional(),
-      pullRequestTitle: z.string().optional(),
-      revision: z.string().optional(),
-    })
-    .optional(),
-});
-
-const count = z.number().int().nonnegative();
-
-const counts = z.strictObject({ additions: count, deletions: count });
-
-const mapSchema = z.strictObject({
-  commit: z.string().regex(COMMIT_ID),
-  side: z.enum(["base", "head"]),
-  elements: z.array(normalizedSoftwareElementSchema),
-  relationships: z.array(normalizedSoftwareRelationshipSchema),
-  countsByElementPath: z.record(z.string(), counts),
-  unmappedByElementPath: z.record(
-    z.string(),
-    counts.extend({
-      files: z.array(
-        counts.extend({
-          file: z.string(),
-          hunks: z.array(
-            z.strictObject({
-              startLine: count,
-              lines: z.array(
-                z.strictObject({
-                  kind: z.enum(["add", "remove"]),
-                  oldLine: count.nullable(),
-                  newLine: count.nullable(),
-                  text: z.string(),
-                }),
-              ),
-            }),
-          ),
-        }),
-      ),
-    }),
-  ),
-});
-
-export const sharePresentationSchema = z.strictObject({
-  maps: z.record(z.string(), mapSchema),
-});
 
 export function validateShareBundle(bundle: ShareBundle) {
   const manifest = shareManifestSchema.parse(bundle.manifest);
@@ -157,16 +75,7 @@ export function validateShareBundle(bundle: ShareBundle) {
   const json = (id: string) =>
     parseJsonText(Buffer.from(bundle.objects.get(id)!).toString());
 
-  const stored = json(manifest.snapshot);
-
-  // Bundles shared before a field was retired still open; the bytes stay
-  // sealed and only the parsed document drops the retired form. Lenses
-  // shared as document blocks read as the snapshot's lenses.
-  const snapshot = sharedSnapshotSchema.parse(
-    isJsonObject(stored) && "document" in stored
-      ? liftSharedLenses(stored, migrateStoredDocument(stored.document))
-      : stored,
-  );
+  const snapshot = parseSharedSnapshot(json(manifest.snapshot));
 
   if (
     snapshot.reviewId !== manifest.reviewId ||
@@ -231,21 +140,6 @@ export function validateShareBundle(bundle: ShareBundle) {
   }
 
   return { manifest, snapshot, presentation };
-}
-
-function liftSharedLenses(stored: JsonObject, migrated: JsonValue): JsonObject {
-  const { document, lenses } = liftFileLenses(migrated);
-
-  // SAFETY: migration returns the array it was given, rewritten.
-  const kept = Array.isArray(stored.lenses)
-    ? (migrateStoredLenses(stored.lenses) as JsonValue[])
-    : [];
-
-  return {
-    ...stored,
-    document,
-    ...((kept.length || lenses.length) && { lenses: [...kept, ...lenses] }),
-  };
 }
 
 export function sharedReviewId(origin: string, shareId: string) {

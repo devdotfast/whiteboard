@@ -45,37 +45,7 @@ export function RenderedCodeBlock({
   className,
   ...props
 }: RenderedCodeBlockProps): ReactElement {
-  const normalizedLanguage = normalizeMarkdownCodeLanguage(language ?? "");
-
-  const [highlightedTokens, setHighlightedTokens] = useState<
-    HighlightedToken[] | null
-  >(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    if (!normalizedLanguage) {
-      setHighlightedTokens(null);
-
-      return;
-    }
-
-    const tokens: HighlightedToken[] = [];
-    tokenize(code, normalizedLanguage, (text, token) => {
-      tokens.push({ text, token });
-    })
-      .then(() => {
-        if (!cancelled) setHighlightedTokens(tokens);
-      })
-      .catch(() => {
-        if (!cancelled) setHighlightedTokens(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [code, normalizedLanguage]);
-
+  const normalizedLanguage = codeLanguage(language ?? "");
   const displayLanguage = normalizedLanguage ?? language?.trim() ?? undefined;
   const lineCount = countLines(code);
 
@@ -110,36 +80,95 @@ export function RenderedCodeBlock({
           />
         }
       />
-      <pre {...props} {...stylex.props(styles.body)}>
-        {lineNumbers && (
-          <span aria-hidden="true" {...stylex.props(styles.gutter)}>
-            {Array.from({ length: lineCount }, (_, index) => index + 1).join(
-              "\n",
-            )}
-          </span>
-        )}
-        <code
-          {...codeAttributes}
-          {...stylex.props(styles.code)}
-          data-review-copy-prose
-        >
-          {normalizedLanguage && highlightedTokens
-            ? highlightedTokens.map((item, index) =>
-                item.token ? (
-                  <span
-                    {...stylex.props(syntaxByToken.get(item.token))}
-                    key={index}
-                  >
-                    {item.text}
-                  </span>
-                ) : (
-                  item.text
-                ),
-              )
-            : code}
-        </code>
-      </pre>
+      <CodeText
+        {...props}
+        code={code}
+        language={normalizedLanguage}
+        lineNumbers={lineNumbers}
+        codeAttributes={codeAttributes}
+      />
     </figure>
+  );
+}
+
+export interface CodeTextProps extends ComponentProps<"pre"> {
+  code: string;
+  language: ShjLanguage | null;
+  lineNumbers?: boolean;
+  /** The gutter's first number, for an excerpt of a file. */
+  firstLine?: number;
+  codeAttributes?: Record<string, string>;
+}
+
+/** Highlighted code with an optional gutter, without a figure's frame. */
+export function CodeText({
+  code,
+  language,
+  lineNumbers = false,
+  firstLine = 1,
+  codeAttributes,
+  ...props
+}: CodeTextProps): ReactElement {
+  const [highlightedTokens, setHighlightedTokens] = useState<
+    HighlightedToken[] | null
+  >(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!language) {
+      setHighlightedTokens(null);
+
+      return;
+    }
+
+    const tokens: HighlightedToken[] = [];
+    tokenize(code, language, (text, token) => {
+      tokens.push({ text, token });
+    })
+      .then(() => {
+        if (!cancelled) setHighlightedTokens(tokens);
+      })
+      .catch(() => {
+        if (!cancelled) setHighlightedTokens(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [code, language]);
+
+  return (
+    <pre {...props} {...stylex.props(styles.body)}>
+      {lineNumbers && (
+        <span aria-hidden="true" {...stylex.props(styles.gutter)}>
+          {Array.from(
+            { length: countLines(code) },
+            (_, index) => index + firstLine,
+          ).join("\n")}
+        </span>
+      )}
+      <code
+        {...codeAttributes}
+        {...stylex.props(styles.code)}
+        data-review-copy-prose
+      >
+        {language && highlightedTokens
+          ? highlightedTokens.map((item, index) =>
+              item.token ? (
+                <span
+                  {...stylex.props(syntaxByToken.get(item.token))}
+                  key={index}
+                >
+                  {item.text}
+                </span>
+              ) : (
+                item.text
+              ),
+            )
+          : code}
+      </code>
+    </pre>
   );
 }
 
@@ -157,7 +186,8 @@ interface HighlightedToken {
   token: ShjToken | undefined;
 }
 
-function normalizeMarkdownCodeLanguage(language: string): ShjLanguage | null {
+/** The highlighter's language for a fence name or a file extension. */
+export function codeLanguage(language: string): ShjLanguage | null {
   const normalized = language.trim().toLowerCase();
 
   switch (normalized) {

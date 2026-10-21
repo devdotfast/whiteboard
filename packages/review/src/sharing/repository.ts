@@ -6,8 +6,7 @@ import { type VcsArg, gitAt } from "@dev.fast/local-vcs";
 import { normalizeGitHubRemote } from "@dev.fast/review-share-protocol";
 import { type Pins, ReviewInputError } from "@review/review-api/document.js";
 
-/** A full commit id, SHA-1 or SHA-256. */
-export const COMMIT_ID = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
+import { COMMIT_ID } from "./content.js";
 
 /** Refuses anything but full commit ids, before any of them reaches git:
  * a shared board's commits come from someone else, and one spelled as an

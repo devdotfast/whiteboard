@@ -1,0 +1,49 @@
+{
+  "name": "@dev.fast/canvas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Renders a shared Whiteboard board, read-only, in any page.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devdotfast/whiteboard.git",
+    "directory": "packages/canvas"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./canvas.css": "./dist/assets/canvas.css",
+    "./libavoid.wasm": "./dist/libavoid.wasm"
+  },
+  "scripts": {
+    "prebuild": "pnpm --filter @dev.fast/whiteboard run build:workspace-deps",
+    "build": "vite build && tsdown",
+    "typecheck": "pnpm -w exec tsc --noEmit -p packages/canvas"
+  },
+  "dependencies": {
+    "@dev.fast/review-share-protocol": "workspace:^",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@dev.fast/review-canvas": "workspace:*",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
+    "tsdown": "0.22.14",
+    "typescript": "6.0.3",
+    "vite": "8.1.6"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}

@@ -42,7 +42,7 @@ import { ReviewContainerProvider } from "./review-root-context";
 import { SettingsPage } from "./settings-page";
 import { shellStyles } from "./shell-styles";
 import { ReviewSidebarSection } from "./sidebar-sections";
-import { themeStyles } from "./theme-styles";
+import { themeHostClassName } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 
 import "./styles.css";
@@ -309,20 +309,8 @@ function themedRoot(container: HTMLElement) {
   container.classList.add("review-canvas-root");
   const themeHost = container.ownerDocument.createElement("div");
 
-  // Recomposed on every change so StyleX settles vars against light.
   const applyTheme = (theme: "dark" | "light") => {
-    const light = theme === "light";
-
-    themeHost.className = [
-      light && "review-app--theme-light",
-      stylex.props(
-        themeStyles.vars,
-        styles.themeHost,
-        light && themeStyles.light,
-      ).className,
-    ]
-      .filter(Boolean)
-      .join(" ");
+    themeHost.className = themeHostClassName(theme);
   };
 
   container.appendChild(themeHost);
@@ -490,12 +478,6 @@ function resetSessionDiagnostics(container: HTMLElement): void {
 }
 
 const styles = stylex.create({
-  // Layout-neutral: it only carries the theme inside the scope boundary.
-  themeHost: {
-    display: "contents",
-    // Match native form controls to the canvas. themeStyles.light overrides it.
-    colorScheme: "dark",
-  },
   // The Source tab's VS Code-like watermark: quiet text centered in the
   // empty editor area, next to the native file tree.
   sourceEmpty: {

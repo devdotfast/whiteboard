@@ -207,6 +207,34 @@ importers:
 
   packages/agent-plugins/pi: {}
 
+  packages/canvas:
+    dependencies:
+      '@dev.fast/review-share-protocol':
+        specifier: workspace:^
+        version: link:../review-share-protocol
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.5
+    devDependencies:
+      '@dev.fast/review-canvas':
+        specifier: workspace:*
+        version: link:../review/app
+      react:
+        specifier: 19.2.5
+        version: 19.2.5
+      react-dom:
+        specifier: 19.2.5
+        version: 19.2.5(react@19.2.5)
+      tsdown:
+        specifier: 0.22.14
+        version: 0.22.14(tsx@4.21.0)(typescript@6.0.3)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vite:
+        specifier: 8.1.6
+        version: 8.1.6(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0)
+
   packages/json:
     dependencies:
       zod:

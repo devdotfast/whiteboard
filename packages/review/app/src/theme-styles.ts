@@ -83,6 +83,13 @@ export const themeStyles = stylex.create({
     colorScheme: "dark",
     fontFamily: tokens.chromeFont,
   },
+  // An entry's root element: layout-neutral, it only carries the theme
+  // inside the scope boundary.
+  host: {
+    display: "contents",
+    // Match native form controls to the canvas. light overrides it.
+    colorScheme: "dark",
+  },
   light: {
     "--ghost": "#cdd1d8",
     "--well": "#e9ebef",
@@ -190,3 +197,17 @@ export const themeStyles = stylex.create({
     "--syntax-deleted": "#c93a27",
   },
 });
+
+/** The theme class for an entry's root, recomposed on every change so
+ * StyleX settles the vars against light. */
+export function themeHostClassName(theme: "dark" | "light"): string {
+  const light = theme === "light";
+
+  return [
+    light && "review-app--theme-light",
+    stylex.props(themeStyles.vars, themeStyles.host, light && themeStyles.light)
+      .className,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}

@@ -68,6 +68,7 @@ import {
   useReviewSession,
 } from "./host/review-session";
 import { checkoutUnavailable } from "./missing-checkout-banner";
+import { ReviewContent } from "./review-content";
 import { useBoardPlace } from "./review-doc-meta";
 import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
@@ -117,9 +118,12 @@ const message = (cause: unknown) =>
 export function ApiCanvas({
   content,
   findHost,
+  contentOnly = false,
 }: {
   content: ApiContent;
   findHost?: ReviewFindHost;
+  /** Render the board's document alone, without the app around it. */
+  contentOnly?: boolean;
 }) {
   const client = useMemo(
     () => new ReviewApiClient(content.bridge.config, content.bridge.request),
@@ -755,6 +759,7 @@ export function ApiCanvas({
                                           >
                                             <CanvasDocument
                                               data={data}
+                                              contentOnly={contentOnly}
                                               findHost={findHost}
                                               softwareMapEnabled={
                                                 content.softwareMapEnabled ===
@@ -864,12 +869,14 @@ function NearbyBoards({
 // Activity updates only the badge; keep diagram inputs stable until document data changes.
 const CanvasDocument = memo(function CanvasDocument({
   data,
+  contentOnly,
   findHost,
   softwareMapEnabled,
   documentWidth,
   tocEntries,
 }: {
   data: ApiDocumentData;
+  contentOnly: boolean;
   findHost?: ReviewFindHost;
   softwareMapEnabled: boolean;
   documentWidth?: ReviewDocumentWidthChoice;
@@ -894,6 +901,14 @@ const CanvasDocument = memo(function CanvasDocument({
     ),
     width: documentWidth,
   };
+
+  if (contentOnly)
+    return (
+      <ReviewContent
+        document={document}
+        softwareMapEnabled={softwareMapEnabled && data.maps.size > 0}
+      />
+    );
 
   return (
     <App
