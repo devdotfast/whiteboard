@@ -38,6 +38,10 @@ export type StructuralDiffEvent =
       type: "file";
       file: StructuralPairing<StructuralFileRef>;
     } & StructuralOutcome)
+  | ({
+      type: "update";
+      file: StructuralPairing<StructuralFileRef>;
+    } & StructuralOutcome)
   | {
       type: "complete";
       succeeded: number;
@@ -58,6 +62,12 @@ export const StructuralDiffEventSchema: z.ZodType<StructuralDiffEvent> = z.lazy(
       z
         .object({
           type: z.literal("file"),
+          file: structuralPairingSchema(StructuralFileRefSchema),
+        })
+        .and(StructuralOutcomeSchema),
+      z
+        .object({
+          type: z.literal("update"),
           file: structuralPairingSchema(StructuralFileRefSchema),
         })
         .and(StructuralOutcomeSchema),
