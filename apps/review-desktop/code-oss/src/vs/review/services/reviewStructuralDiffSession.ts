@@ -36,7 +36,7 @@ export class StructuralDiffSession extends Disposable {
 	private manifest: Set<string> | undefined;
 	private task: Promise<void> | undefined;
 	private finished = false;
-	private readonly createdAt = Date.now();
+	private readonly createdAt = performance.now();
 	private firstFileAt: number | undefined;
 	private updatedAt: number | undefined;
 	private finishedAt: number | undefined;
@@ -153,8 +153,8 @@ export class StructuralDiffSession extends Disposable {
 		if (!this.manifest) {
 			if (event.type !== "start" || event.version !== STRUCTURAL_WIRE_VERSION) throw new Error("Unsupported diffr stream protocol.");
 			this.acceptManifest(event);
-		} else if (event.type === "file") { this.storeFileResult(event); this.firstFileAt ??= Date.now(); }
-		else if (event.type === "update") { this.applyUpdate(event); this.updatedAt = Date.now(); }
+		} else if (event.type === "file") { this.storeFileResult(event); this.firstFileAt ??= performance.now(); }
+		else if (event.type === "update") { this.applyUpdate(event); this.updatedAt = performance.now(); }
 		else if (event.type === "complete") this.finishLoading(event);
 		else throw new Error(`Unexpected diffr event: ${(event as StructuralEvent).type}`);
 		if (event.type === "file" || event.type === "update") this.notify(structuralFilePath(event.file));
@@ -227,7 +227,7 @@ export class StructuralDiffSession extends Disposable {
 	private finishLoading(event: Extract<StructuralEvent, { type: "complete" }>): void {
 		for (const path of this.manifest!) if (!this.results.has(path)) { this.results.set(path, this.missingResult()); this.pendingFiles.add(path); }
 		this.finished = true;
-		this.finishedAt = Date.now();
+		this.finishedAt = performance.now();
 		if (event.aborted) this.error = `diffr stopped early: ${event.aborted.message}`;
 	}
 
