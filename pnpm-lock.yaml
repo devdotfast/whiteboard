@@ -207,6 +207,27 @@ importers:
 
   packages/agent-plugins/pi: {}
 
+  packages/canvas:
+    devDependencies:
+      '@dev.fast/review-canvas':
+        specifier: workspace:*
+        version: link:../review/app
+      '@types/node':
+        specifier: 24.12.2
+        version: 24.12.2
+      '@types/react':
+        specifier: 19.2.14
+        version: 19.2.14
+      tsdown:
+        specifier: 0.22.14
+        version: 0.22.14(tsx@4.21.0)(typescript@6.0.3)
+      typescript:
+        specifier: 6.0.3
+        version: 6.0.3
+      vite:
+        specifier: 8.1.6
+        version: 8.1.6(@types/node@24.12.2)(esbuild@0.28.1)(tsx@4.21.0)
+
   packages/json:
     dependencies:
       zod:
