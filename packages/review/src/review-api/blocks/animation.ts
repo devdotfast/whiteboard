@@ -53,7 +53,13 @@ export const animationSchema = defineBlock("animation", {
     .describe(
       'The stage\'s body markup: elements, <style> and <script>. It runs in a sandboxed frame with a global `whiteboard` shim; see session_get_instructions({topic:"animation"}).',
     ),
-  frames: z.array(animationFrameSchema).min(1).max(60),
+  frames: z
+    .array(animationFrameSchema)
+    .min(1)
+    .max(60)
+    .describe(
+      "Every possible frame. Stage scripts may select an ordered branch with whiteboard.setSequence(keys); keys stay unique and stable.",
+    ),
   code: z
     .record(handle, anchorSchema)
     .default({})
@@ -61,12 +67,11 @@ export const animationSchema = defineBlock("animation", {
       "Source ranges the stage shows as code peeks, by name: whiteboard.code(name).",
     ),
   height: z
-    .number()
-    .int()
-    .min(120)
-    .max(1200)
-    .default(360)
-    .describe("Stage height in CSS pixels."),
+    .union([z.literal("auto"), z.number().int().min(120).max(1200)])
+    .default("auto")
+    .describe(
+      "Fit the stage to its content by default, or set a fixed height in CSS pixels.",
+    ),
   pins: elementPins,
 });
 

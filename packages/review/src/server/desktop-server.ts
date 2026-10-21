@@ -45,7 +45,8 @@ import {
   reviewLegacyDiscoveryPath,
 } from "@review/review-home-paths";
 import {
-  readScratchpadEnabled,
+  readReviewPreferences,
+  writeAnimationsEnabled,
   writeScratchpadEnabled,
 } from "@review/review-preferences";
 import {
@@ -183,6 +184,7 @@ export function createGlobalReviewServer(
   // The scratchpad preference, read once at listen and kept current by the
   // settings endpoint below: this server is the only writer while it runs.
   let scratchpadEnabled = false;
+  let animationsEnabled = false;
 
   const discovery: ReviewDesktopDiscovery = {
     version: REVIEW_DESKTOP_DISCOVERY_VERSION,
@@ -217,6 +219,7 @@ export function createGlobalReviewServer(
     token,
     instanceId,
     scratchpad: () => scratchpadEnabled,
+    animations: () => animationsEnabled,
     status: () => {
       const { key, channel, checkout, appVersion, cliVersion, instanceId } =
         discovery;
@@ -285,6 +288,20 @@ export function createGlobalReviewServer(
     reviewStore.invalidateCatalog();
 
     return serverJson(200, { enabled: scratchpadEnabled });
+  });
+  app.get("/preferences/animations", () =>
+    serverJson(200, { enabled: animationsEnabled }),
+  );
+  app.put("/preferences/animations", async (context) => {
+    const request = z
+      .object({ enabled: z.boolean() })
+      .safeParse(await readBoundedRequestJson(context.req.raw));
+
+    if (!request.success)
+      throw new ReviewServerError("enabled must be a boolean.", 400);
+    animationsEnabled = await writeAnimationsEnabled(request.data.enabled);
+
+    return serverJson(200, { enabled: animationsEnabled });
   });
   app.post("/app/focus", async () => {
     const result = await relay.dispatch({
@@ -570,7 +587,8 @@ export function createGlobalReviewServer(
     },
     listen: async () => {
       await migrateDiffrConfig();
-      scratchpadEnabled = await readScratchpadEnabled();
+      ({ scratchpadEnabled, animationsEnabled } =
+        await readReviewPreferences());
       boundPort = await listen(httpServer, input.port);
       discovery.url = urlForBoundPort();
 

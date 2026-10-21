@@ -585,6 +585,8 @@ export interface ReviewCanvasSettingsContent {
   // hides the pad.
   scratchpadEnabled: boolean;
   setScratchpadEnabled(enabled: boolean): Promise<boolean>;
+  animationsEnabled: boolean;
+  setAnimationsEnabled(enabled: boolean): Promise<boolean>;
   // Shared CLI configuration, read when its disclosure opens.
   diffrConfig: ReviewDiffrConfigActions;
   reloadWindow(): Promise<void>;

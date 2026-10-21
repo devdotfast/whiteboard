@@ -930,6 +930,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_SOFTWARE_MAP_SETTING, enabled, ConfigurationTarget.USER);
 				return this.currentSoftwareMapEnabled();
 			},
+			animationsEnabled: await this.desktopConnection.readAnimationsEnabled().catch(() => false),
+			setAnimationsEnabled: (enabled) => this.desktopConnection.setAnimationsEnabled(enabled),
 			scratchpadEnabled,
 			setScratchpadEnabled: async (enabled) => {
 				this.reviewTelemetryService.capture("setting_changed", {

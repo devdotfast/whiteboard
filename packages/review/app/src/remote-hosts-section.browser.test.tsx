@@ -64,6 +64,8 @@ async function render(hosts: ReviewRemoteHostsSettings) {
     structuralDiffEnabled: false,
     setStructuralDiffEnabled: reject,
     scratchpadEnabled: false,
+    animationsEnabled: false,
+    setAnimationsEnabled: async (enabled) => enabled,
     setScratchpadEnabled: reject,
     diffrConfig: {
       read: reject,

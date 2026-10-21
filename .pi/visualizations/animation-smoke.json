@@ -1,0 +1,254 @@
+{
+  "sourceUrl": "https://cursor.com/blog/git-at-any-scale",
+  "purpose": "Blog-inspired examples for a flexible animation API. Judge visual quality, readable content, coherent motion and authoring friction; exact source pixels, identifiers, counters, timing and full simulations are optional.",
+  "checks": [
+    "concept-clear",
+    "text-visible",
+    "text-not-overlapping",
+    "content-not-clipped",
+    "connections-clear",
+    "controls-work",
+    "responsive-layout",
+    "theme-contrast",
+    "keyboard-access",
+    "reduced-motion",
+    "no-console-errors",
+    "mcp-only-authoring",
+    "authoring-ergonomics"
+  ],
+  "captures": [
+    {
+      "key": "light-wide",
+      "theme": "light",
+      "width": 1440,
+      "height": 1000,
+      "motion": "no-preference",
+      "interaction": "keyboard-and-pointer"
+    },
+    {
+      "key": "dark-narrow",
+      "theme": "dark",
+      "width": 390,
+      "height": 844,
+      "motion": "no-preference",
+      "interaction": "keyboard-and-pointer"
+    },
+    {
+      "key": "reduced-motion",
+      "theme": "light",
+      "width": 1440,
+      "height": 1000,
+      "motion": "reduce",
+      "interaction": "keyboard-and-pointer"
+    }
+  ],
+  "graphics": [
+    {
+      "id": "kv-history-walk",
+      "title": "Remote key/value Git history walk",
+      "selector": ".git-kv-walk-demo",
+      "states": [
+        {
+          "key": "initial",
+          "label": "Newest commit ref before remote reads",
+          "advanceMs": 0
+        },
+        {
+          "key": "history",
+          "label": "History walk after more round trips",
+          "advanceMs": 6500
+        }
+      ],
+      "checks": [
+        "meaningful-motion"
+      ]
+    },
+    {
+      "id": "packfile-history-walk",
+      "title": "Local packfile object walk",
+      "selector": ".git-object-walk-demo",
+      "states": [
+        {
+          "key": "initial",
+          "label": "Commit DAG and packfile before reading",
+          "advanceMs": 0
+        },
+        {
+          "key": "history",
+          "label": "History scroll and subsequent object reads",
+          "advanceMs": 6500
+        }
+      ],
+      "checks": [
+        "meaningful-motion"
+      ]
+    },
+    {
+      "id": "three-phase-commit",
+      "title": "Three-phase commit and participant failures",
+      "selector": ".git-3pc-protocol-demo",
+      "states": [
+        {
+          "key": "initial",
+          "label": "Default quorum with participant 3 offline"
+        },
+        {
+          "key": "coordinator-offline",
+          "label": "Coordinator disabled",
+          "restoreAll": true,
+          "offline": "COORDINATOR"
+        }
+      ],
+      "checks": [
+        "meaningful-motion"
+      ]
+    },
+    {
+      "id": "spokes-replication",
+      "title": "Spokes replica count and latency",
+      "selector": ".git-3pc-replication-demo",
+      "states": [
+        {
+          "key": "default",
+          "label": "Default replica count and latency"
+        },
+        {
+          "key": "progressing",
+          "label": "Upload and three-phase commit progressing",
+          "sliders": {
+            "Playback speed": "End"
+          },
+          "advanceMs": 900
+        }
+      ],
+      "checks": [
+        "meaningful-motion"
+      ]
+    },
+    {
+      "id": "wal-push",
+      "title": "WAL push and conditional index update",
+      "selector": ".git-wal-push-demo",
+      "states": [
+        {
+          "key": "push",
+          "label": "PUSH",
+          "phase": "PUSH"
+        },
+        {
+          "key": "ref-txn",
+          "label": "REF TXN",
+          "phase": "REF TXN"
+        }
+      ],
+      "checks": [
+        "meaningful-motion"
+      ]
+    },
+    {
+      "id": "wal-race",
+      "title": "Concurrent WAL index update race",
+      "selector": ".git-wal-race-demo",
+      "states": [
+        {
+          "key": "upload",
+          "label": "UPLOAD",
+          "phase": "UPLOAD"
+        },
+        {
+          "key": "done",
+          "label": "DONE",
+          "phase": "DONE"
+        }
+      ],
+      "checks": [
+        "meaningful-motion"
+      ]
+    },
+    {
+      "id": "wal-replication",
+      "title": "WAL gossip replication and dropped datagrams",
+      "selector": ".git-wal-replication-demo",
+      "states": [
+        {
+          "key": "push",
+          "label": "PUSH",
+          "phase": "PUSH"
+        },
+        {
+          "key": "serve-after-catch-up",
+          "label": "Fetch served after replica catches up",
+          "dropGossip": true,
+          "phase": "SERVE"
+        }
+      ],
+      "checks": [
+        "meaningful-motion"
+      ]
+    },
+    {
+      "id": "wal-scaling",
+      "title": "Traffic-scaled replicas and garbage collection",
+      "selector": ".git-wal-scale-demo",
+      "states": [
+        {
+          "key": "initial",
+          "label": "Object store, cluster nodes and clients",
+          "advanceMs": 0
+        },
+        {
+          "key": "rematerialization",
+          "label": "Replica collection and on-demand rematerialization",
+          "advanceMs": 6500
+        }
+      ],
+      "checks": [
+        "meaningful-motion"
+      ]
+    },
+    {
+      "id": "wal-compaction",
+      "title": "Incremental geometric WAL compaction",
+      "selector": ".git-wal-compaction-demo",
+      "states": [
+        {
+          "key": "initial",
+          "label": "Packs and compaction frontier",
+          "advanceMs": 0
+        },
+        {
+          "key": "base-fold",
+          "label": "Subsequent geometric compaction cycle",
+          "advanceMs": 14000
+        }
+      ],
+      "checks": [
+        "meaningful-motion"
+      ]
+    },
+    {
+      "id": "clone-throughput",
+      "title": "Clone throughput by replica count",
+      "selector": ".git-replica-throughput > .builder-mobile-chart:nth-child(1)",
+      "states": [
+        {
+          "key": "chart",
+          "label": "Clone throughput by replica count"
+        }
+      ],
+      "checks": []
+    },
+    {
+      "id": "push-throughput",
+      "title": "Push throughput by replica count",
+      "selector": ".git-replica-throughput > .builder-mobile-chart:nth-child(2)",
+      "states": [
+        {
+          "key": "chart",
+          "label": "Push throughput by replica count"
+        }
+      ],
+      "checks": []
+    }
+  ]
+}

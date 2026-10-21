@@ -10,6 +10,7 @@ export function DiagramHeader({
   meta,
   action,
   xstyle,
+  titleStyle,
   metaStyle,
 }: {
   kind: string;
@@ -17,6 +18,7 @@ export function DiagramHeader({
   meta?: string;
   action?: ReactNode;
   xstyle?: stylex.StaticStyles;
+  titleStyle?: stylex.StaticStyles;
   metaStyle?: stylex.StaticStyles;
 }) {
   return (
@@ -24,7 +26,10 @@ export function DiagramHeader({
       <div {...stylex.props(diagramStyles.headerMain)}>
         <Chip>{kind}</Chip>
         {title && (
-          <span {...stylex.props(diagramStyles.title)} data-review-copy-prose>
+          <span
+            {...stylex.props(diagramStyles.title, titleStyle)}
+            data-review-copy-prose
+          >
             {title}
           </span>
         )}

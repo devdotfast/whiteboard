@@ -15,6 +15,7 @@ export interface StageFrame {
 export interface StageInit {
   type: "init";
   html: string;
+  autoSize: boolean;
   frames: StageFrame[];
   /** The names whiteboard.code() accepts. */
   code: string[];
@@ -30,7 +31,13 @@ export interface StageInit {
 
 export type HostMessage =
   | StageInit
-  | { type: "frame"; index: number; instant: boolean }
+  | {
+      type: "frame";
+      index: number;
+      instant: boolean;
+      direction: "forward" | "backward" | "none";
+      adjacent: boolean;
+    }
   | { type: "theme"; theme: Record<string, string> }
   /** The height the host's content in a slot takes. */
   | { type: "slot-size"; slot: string; height: number };
@@ -56,6 +63,10 @@ export type SlotLayout = z.infer<typeof slotLayoutSchema>;
 export const stageMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("ready") }),
   z.strictObject({
+    type: z.literal("size"),
+    height: z.number().finite().nonnegative(),
+  }),
+  z.strictObject({
     type: z.literal("slots"),
     slots: z.array(slotLayoutSchema).max(200),
   }),
@@ -63,6 +74,10 @@ export const stageMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("settled"), index: z.number().int() }),
   z.strictObject({ type: z.literal("goto"), key: z.string() }),
   z.strictObject({ type: z.literal("step"), delta: z.literal([-1, 1]) }),
+  z.strictObject({
+    type: z.literal("sequence"),
+    keys: z.array(z.string()).min(1).max(60),
+  }),
   z.strictObject({ type: z.literal("reveal"), name: z.string() }),
   z.strictObject({
     type: z.literal("error"),

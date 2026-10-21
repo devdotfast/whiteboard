@@ -44,7 +44,7 @@ import { z } from "zod";
 import { anchorQuotes } from "./anchor-quotes.js";
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
-import { ReviewInputError } from "./document.js";
+import { ReviewInputError, elements } from "./document.js";
 import {
   instructionsQuerySchema,
   renderInstructions,
@@ -181,6 +181,7 @@ export function createReviewApi(
   hooks: ReviewApiHooks = {},
   /** Desktop's Ask: local agents answering questions about a selection. */
   ask?: AskHost,
+  animationsEnabled: () => boolean = () => false,
 ) {
   const app = new Hono();
   app.onError((error, context) => {
@@ -317,6 +318,7 @@ export function createReviewApi(
     desktopAvailable: Boolean(open),
     scratchpadEnabled: scratchpadEnabled(),
     traceEnabled: await traceEnabled(),
+    animationsEnabled: animationsEnabled(),
   });
 
   app.get("/authoring", async (context) => {
@@ -326,6 +328,7 @@ export function createReviewApi(
       authoringTools(
         scratchpadAvailable(instructions),
         instructions.traceEnabled,
+        instructions.animationsEnabled,
       ),
     );
   });
@@ -474,6 +477,7 @@ export function createReviewApi(
     context.json({
       ...(await capabilities()),
       scratchpadEnabled: scratchpadEnabled(),
+      animationsEnabled: animationsEnabled(),
     }),
   );
 
@@ -1735,6 +1739,27 @@ export function createReviewApi(
     });
 
     const input = commandSchema.parse(request);
+
+    if (!animationsEnabled() && input.operation.type === "edit") {
+      const { edit, reviewId } = input.operation;
+      const incoming = "content" in edit ? elements([edit.content]) : [];
+
+      const target =
+        "targetId" in edit
+          ? elements(readReview(reviewId).document).find(
+              (element) => element.id === edit.targetId,
+            )
+          : undefined;
+
+      if (
+        incoming.some((element) => element.type === "animation") ||
+        target?.type === "animation"
+      )
+        throw new ReviewInputError(
+          "Animation authoring is disabled. Enable Animations in Settings under Experimental Features to edit animations. Existing animations can still be viewed.",
+          409,
+        );
+    }
 
     const command = sharedCommandSchema.safeParse(input);
 

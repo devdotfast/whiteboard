@@ -21,10 +21,13 @@ export interface ReviewPreferences {
    * makes nor lists it and Review's instructions do not offer it to agents.
    */
   scratchpadEnabled: boolean;
+  /** Offer animation authoring to agents; existing animations always render. */
+  animationsEnabled: boolean;
 }
 
 const DEFAULT_REVIEW_PREFERENCES: ReviewPreferences = {
   scratchpadEnabled: false,
+  animationsEnabled: false,
 };
 
 function reviewPreferencesPath(devHome = devReviewHome()): string {
@@ -42,6 +45,7 @@ export async function readReviewPreferences(
 
     return {
       scratchpadEnabled: parseScratchpadEnabled(raw),
+      animationsEnabled: isJsonObject(raw) && raw.animationsEnabled === true,
     };
   } catch {
     return { ...DEFAULT_REVIEW_PREFERENCES };
@@ -54,6 +58,7 @@ export async function writeReviewPreferences(
 ): Promise<ReviewPreferences> {
   const next: ReviewPreferences = {
     scratchpadEnabled: preferences.scratchpadEnabled === true,
+    animationsEnabled: preferences.animationsEnabled === true,
   };
 
   await writePrivateJsonAtomic(reviewPreferencesPath(devHome), next);
@@ -85,4 +90,18 @@ export async function writeScratchpadEnabled(
 
 function parseScratchpadEnabled(raw: JsonValue): boolean {
   return isJsonObject(raw) && raw.scratchpadEnabled === true;
+}
+
+export async function writeAnimationsEnabled(
+  enabled: boolean,
+  devHome?: string,
+): Promise<boolean> {
+  const current = await readReviewPreferences(devHome);
+
+  return (
+    await writeReviewPreferences(
+      { ...current, animationsEnabled: enabled },
+      devHome,
+    )
+  ).animationsEnabled;
 }

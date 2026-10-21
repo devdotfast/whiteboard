@@ -103,6 +103,10 @@ export function SettingsPage({
     settings.scratchpadEnabled,
   );
 
+  const [animationsEnabled, setAnimationsEnabled] = useState(
+    settings.animationsEnabled,
+  );
+
   const [installStatus, setInstallStatus] = useState<
     ReviewCliInstallStatus | undefined
   >(settings.install?.status);
@@ -343,6 +347,26 @@ export function SettingsPage({
           ) : null}
 
           <Section label="Experimental Features">
+            <Row
+              label="Animations"
+              description="Let agents create and edit animations through MCP. Existing animations remain visible when off."
+            >
+              <label {...stylex.props(styles.toggle)}>
+                <Checkbox
+                  aria-label="Animations"
+                  checked={animationsEnabled}
+                  disabled={busy !== null}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    void run(
+                      "animations",
+                      () => settings.setAnimationsEnabled(enabled),
+                      setAnimationsEnabled,
+                    );
+                  }}
+                />
+              </label>
+            </Row>
             <Row
               label="Structural Diffs"
               description="Replace the standard diff view with syntax-aware diffs and linked folds."

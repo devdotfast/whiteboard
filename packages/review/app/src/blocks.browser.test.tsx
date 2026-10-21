@@ -524,6 +524,121 @@ describe("block components", () => {
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
+  it("sizes an animation to host code peeks and shrinks when content is removed", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Auto size",
+          height: "auto",
+          frames: [
+            { key: "peek", title: "Code" },
+            { key: "small", title: "Small" },
+          ],
+          code: { status: "head/order.ts#L1" },
+          html: '<style>html[data-frame="small"] [data-wb-code] { display: none; }</style><div style="padding: 24px"><div style="height: 100px">Content</div><div data-wb-code="status"></div></div>',
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    const iframe = (await settled(() => container.querySelector("iframe")))!;
+    const stage = iframe.parentElement!;
+
+    const slot = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']");
+
+    expect(
+      await settled(() => {
+        const peek = slot();
+
+        return (
+          peek &&
+          peek.offsetHeight > 0 &&
+          stage.getBoundingClientRect().bottom >=
+            peek.getBoundingClientRect().bottom + 23
+        );
+      }),
+    ).toBe(true);
+    const expanded = stage.offsetHeight;
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+        .click(),
+    );
+    expect(
+      await settled(
+        () => stage.offsetHeight === 148 && stage.offsetHeight < expanded,
+      ),
+    ).toBe(true);
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          "button[aria-label='Previous frame']",
+        )!
+        .click(),
+    );
+    expect(await settled(() => stage.offsetHeight === expanded)).toBe(true);
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("animates a later interaction after the initial instant frame", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Interactive motion",
+          height: 240,
+          frames: [{ key: "idle", title: "Ready for input" }],
+          code: { status: "head/order.ts#L1" },
+          html: [
+            '<button id="run">Move</button>',
+            '<div id="peek" data-wb-code="status" style="width:200px;margin:0 16px"></div>',
+            "<script>",
+            'document.querySelector("#run").addEventListener("click", () => {',
+            'whiteboard.animate("#peek", [{transform:"translateX(0px)"},{transform:"translateX(120px)"}], {duration:1500,easing:"linear"});',
+            "});",
+            // The sandbox receives its first frame instantly. A later DOM event
+            // must still play motion, as a slider or button interaction would.
+            'whiteboard.on("idle", () => { setTimeout(() => document.querySelector("#run").click(), 500); });',
+            "</script>",
+          ].join(""),
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    const x = () => {
+      const slot = container.querySelector<HTMLElement>(
+        "[data-animation-slot='code']",
+      );
+
+      return (
+        slot && Number(/translate\(([-\d.]+)px/.exec(slot.style.transform)?.[1])
+      );
+    };
+
+    const start = await settled(x);
+
+    expect(start).toBeGreaterThan(0);
+    expect(
+      await settled(() => {
+        const position = x();
+
+        return (
+          position !== null &&
+          position !== undefined &&
+          position > start! + 5 &&
+          position < start! + 115
+        );
+      }, 2500),
+    ).toBe(true);
+    expect(await settled(() => x() === start! + 120)).toBe(true);
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
   it("plays an animation's frame timeline forward and seeks it back", async () => {
     const { container } = await mountFixture("animation", {
       document: [
@@ -619,6 +734,221 @@ describe("block components", () => {
     expect(await settled(() => visibility() === "visible")).toBe(true);
     await next();
     expect(await settled(() => visibility() === "hidden")).toBe(true);
+  });
+
+  it("animates new frame content after the shared renderer creates it", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Rendered pack motion",
+          height: "auto",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+          frames: [
+            { key: "idle", title: "Ready" },
+            { key: "arrival", title: "Arrival", duration: 1400 },
+          ],
+          code: { proof: "head/order.ts#L1" },
+          html: [
+            '<div id="packs"></div><script>',
+            'const packs=document.querySelector("#packs");const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
+            'whiteboard.on("*",()=>{packs.innerHTML="<div class=pack>Incoming pack</div>"});',
+            'whiteboard.on("arrival",()=>{const pack=packs.querySelector(".pack");const a=whiteboard.animate(pack,[{opacity:.2},{opacity:1}],{duration:1000});setTimeout(()=>{const opacity=Number(getComputedStyle(pack).opacity);proof.style.width=pack.isConnected&&opacity>.2&&opacity<.95?"200px":"100px"},200);return a;});',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    await settled(() => container.querySelector("iframe"));
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+        .click(),
+    );
+    expect(
+      await settled(() =>
+        container.querySelector<HTMLElement>("[data-animation-slot='code']")
+          ?.style.width === "200px"
+          ? true
+          : undefined,
+      ),
+    ).toBe(true);
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("hides packets for a responsive layout until its endpoints are displayed", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Responsive packet visibility",
+          height: "auto",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+          frames: [
+            { key: "hidden", title: "Hidden layout" },
+            { key: "visible", title: "Visible layout", duration: 1000 },
+          ],
+          code: { proof: "head/order.ts#L1" },
+          html: [
+            '<div id="layout" style="display:none"><div id="a" style="width:80px;height:40px">Client</div><div id="b" style="width:80px;height:40px;margin-left:180px">Server</div></div>',
+            "<script>",
+            'const a=document.querySelector("#a"),b=document.querySelector("#b"),layout=document.querySelector("#layout");',
+            "const edge=whiteboard.arrow(a,b);const chip=whiteboard.token();",
+            'whiteboard.travel(chip,edge,"hidden",{duration:400,position:0,stay:true});whiteboard.travel(chip,edge,"visible",{duration:800,position:0,stay:true});',
+            'const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
+            'whiteboard.on("*",({frame})=>{layout.style.display=frame.key==="hidden"?"none":"block";setTimeout(()=>{const hidden=getComputedStyle(chip).visibility==="hidden";proof.style.width=hidden===(frame.key==="hidden")?(hidden?"200px":"240px"):"100px"},200)});',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    const width = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.width;
+
+    expect(await settled(() => (width() === "200px" ? true : undefined))).toBe(
+      true,
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+        .click(),
+    );
+    expect(await settled(() => (width() === "240px" ? true : undefined))).toBe(
+      true,
+    );
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("keeps an edge label clear of a travelling packet", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Readable message motion",
+          height: "auto",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+          frames: [
+            { key: "idle", title: "Ready" },
+            { key: "travel", title: "Request", duration: 1800 },
+          ],
+          code: { proof: "head/order.ts#L1" },
+          html: [
+            '<div id="diagram" style="width:320px"></div>',
+            "<script>",
+            'const s=whiteboard.scene({columns:3,container:"#diagram"});',
+            'const a=s.actor({id:"a",at:[1,1],title:"Client"});',
+            'const b=s.actor({id:"b",at:[1,2],title:"Store"});',
+            'const edge=s.link(a,b,{label:"GET c8f3"});',
+            'const chip=whiteboard.token({label:"request",only:["travel"]});',
+            'whiteboard.travel(chip,edge,"travel",{duration:1200});',
+            'const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
+            'whiteboard.on("travel",()=>{setTimeout(()=>{const l=edge.querySelector("text").getBoundingClientRect(),r=chip.getBoundingClientRect();const overlap=l.left<r.right&&l.right>r.left&&l.top<r.bottom&&l.bottom>r.top;const visible=Number(getComputedStyle(chip).opacity)>.5;proof.style.width=!overlap&&visible?"200px":"100px"},600)});',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    const width = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.width;
+
+    expect(await settled(() => width() === "10px")).toBe(true);
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+        .click(),
+    );
+    expect(
+      await settled(() =>
+        width() === "100px" || width() === "200px" ? width() : undefined,
+      ),
+    ).toBe("200px");
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("mounts a scene in its container and keeps narrow tables readable", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Responsive scene",
+          height: "auto",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+          frames: [
+            { key: "narrow", title: "Narrow" },
+            { key: "wide", title: "Wide" },
+            { key: "wide-idle", title: "Wide without future content" },
+          ],
+          code: { proof: "head/order.ts#L1" },
+          html: [
+            '<div id="scene-slot" style="width:320px"></div>',
+            "<script>",
+            'const shell=document.getElementById("scene-slot");',
+            "const s=whiteboard.scene({columns:3,container:shell});",
+            'const a=s.actor({id:"a",at:[1,1],title:"Reader",note:"Read an object response"});',
+            'const b=s.actor({id:"b",at:[2,2],title:"Tree",only:["wide"]});s.send(a,b,"GET","wide");',
+            'const files=s.table({id:"files",at:[3,1],title:"Files",columns:["path","blob"]});',
+            'files.row(["server-with-a-long-name.ts","f7a9"]);',
+            'const badge=s.badge({text:"Local repository"});',
+            'const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
+            "function luminance(color){const c=color.match(/[0-9.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4});return .2126*c[0]+.7152*c[1]+.0722*c[2]}",
+            "function readable(el){const x=luminance(getComputedStyle(el).color),y=luminance(getComputedStyle(a.element).backgroundColor);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)>=4.5}",
+            'function report(key){const bounds=files.element.getBoundingClientRect();const fits=[...files.element.querySelectorAll("th,td")].every(cell=>{const r=document.createRange();r.selectNodeContents(cell);return [...r.getClientRects()].every(b=>b.left>=bounds.left&&b.right<=bounds.right)});const stacked=bounds.top>a.element.getBoundingClientRect().bottom;const note=[...a.element.children].find(el=>el.textContent==="Read an object response");const contrast=readable(note)&&readable(files.element.querySelector("th"));const okay=shell.contains(a.element)&&shell.contains(badge)&&fits&&stacked===(key==="narrow")&&contrast&&(key!=="wide-idle"||b.element.getBoundingClientRect().height===0);proof.style.width=okay?(key==="narrow"?"200px":key==="wide"?"240px":"280px"):"100px"}',
+            'whiteboard.on("*",({frame})=>{shell.style.width=frame.key==="narrow"?"320px":"720px";setTimeout(()=>report(frame.key),100)});',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    // Report real sandbox measurements through a public code placeholder,
+    // whose host overlay is observable even with an opaque sandbox origin.
+    const width = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.width;
+
+    expect(
+      await settled(() =>
+        width() === "100px" || width() === "200px" ? width() : undefined,
+      ),
+    ).toBe("200px");
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+        .click(),
+    );
+    expect(
+      await settled(() =>
+        width() === "100px" || width() === "240px" ? width() : undefined,
+      ),
+    ).toBe("240px");
+    const iframe = container.querySelector("iframe")!;
+    const expandedHeight = iframe.getBoundingClientRect().height;
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+        .click(),
+    );
+    expect(
+      await settled(() =>
+        width() === "100px" || width() === "280px" ? width() : undefined,
+      ),
+    ).toBe("280px");
+    expect(
+      await settled(
+        () => iframe.getBoundingClientRect().height < expandedHeight - 30,
+      ),
+    ).toBe(true);
+    expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
   it("lays out a scene and shows a peek the scene reveals on a later frame", async () => {

@@ -5,7 +5,7 @@ import {
   activityEndSchema,
   activityUpdateSchema,
 } from "./activity.js";
-import { pathTargetSchema, publishedEditSchema } from "./document.js";
+import { pathTargetSchema, publishedEdits } from "./document.js";
 import { instructionsQuerySchema } from "./instructions.js";
 import { uploadSchema } from "./local-data.js";
 import { inspectQuerySchema } from "./read-schemas.js";
@@ -13,11 +13,12 @@ import { REVIEW_STATUS_TOOL } from "./status-tool.js";
 import { commandSchema } from "./store.js";
 
 /** The host publishes its input schemas, except where agents write less than
- * the host accepts (publishedEditSchema, publishedLensEditSchema) or name a
+ * the host accepts (publishedEdits, publishedLensEditSchema) or name a
  * checkout by path (pathTargetSchema); adapters validate nothing. */
 export function authoringTools(
   scratchpadAvailable = false,
   traceEnabled = false,
+  animationsEnabled = false,
 ) {
   const id = z.string().min(1);
   const review = { reviewId: id };
@@ -96,7 +97,20 @@ export function authoringTools(
         (scratchpadAvailable
           ? ' When the user asks in conversation to be shown how code works or wants a diagram, without asking for a review, draw it on the scratchpad rather than answering only in chat: call review_get_instructions({topic:"scratchpad"}) first. A request for a review or to use Whiteboard means authoring a review with the default topic.'
           : ""),
-      instructionsQuerySchema.partial(),
+      instructionsQuerySchema
+        .extend({
+          topic: animationsEnabled
+            ? instructionsQuerySchema.shape.topic
+            : z
+                .enum([
+                  "authoring",
+                  "file-lenses",
+                  "scratchpad",
+                  "trace-archaeology",
+                ])
+                .default("authoring"),
+        })
+        .partial(),
       "GET",
       "/instructions",
     ),
@@ -146,7 +160,7 @@ export function authoringTools(
             open: z.boolean().optional(),
           }),
           ...(type === "set_target" && { target: pathTargetSchema }),
-          ...(type === "edit" && { edit: publishedEditSchema }),
+          ...(type === "edit" && { edit: publishedEdits(animationsEnabled) }),
         }),
         "POST",
         "/commands",

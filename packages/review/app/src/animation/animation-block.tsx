@@ -1,8 +1,8 @@
 import type { BlockProps } from "@canvas/blocks";
 import { CodePeekCard } from "@canvas/CodePeek";
+import { useReviewDebugSettings } from "@canvas/debug-settings";
 import { DiagramHeader } from "@canvas/diagram-header";
 import { drawStyles } from "@canvas/draw-styles";
-import { useOptionalReviewSession } from "@canvas/host/review-session";
 import { useOptionalReviewPanel } from "@canvas/review-panel";
 import { fontSize, radius, tracking } from "@canvas/scale.stylex";
 import { withClass } from "@canvas/stylex-props";
@@ -108,14 +108,17 @@ export function AnimationBlock({
   data,
   children,
 }: BlockProps<"animation">) {
-  const session = useOptionalReviewSession();
+  const { theme } = useReviewDebugSettings();
   const openPeek = useOptionalReviewPanel((state) => state.openPeek);
   const figureRef = useRef<HTMLElement>(null);
   const frameRef = useRef<HTMLIFrameElement>(null);
   const portRef = useRef<MessagePort | null>(null);
   const [index, setIndex] = useState(0);
+  const [sequenceKeys, setSequenceKeys] = useState<string[] | null>(null);
+  const sequenceRef = useRef<string[] | null>(null);
   const [playing, setPlaying] = useState(false);
   const [settled, setSettled] = useState(-1);
+  const [contentHeight, setContentHeight] = useState(120);
   const [slots, setSlots] = useState<SlotLayout[]>([]);
   const [error, setError] = useState<string | null>(null);
   const indexRef = useRef(index);
@@ -127,20 +130,39 @@ export function AnimationBlock({
   );
 
   const frames = node.frames;
-  const last = frames.length - 1;
-  const frame = frames[Math.min(index, last)]!;
-  const steps = frames.every((item) => item.label) ? frames : null;
+
+  const activeFrames = useMemo(() => {
+    if (!sequenceKeys) return frames;
+    const byKey = new Map(frames.map((item) => [item.key, item]));
+
+    return sequenceKeys.flatMap((key) => {
+      const item = byKey.get(key);
+
+      return item ? [item] : [];
+    });
+  }, [frames, sequenceKeys]);
+
+  const last = activeFrames.length - 1;
+  const frame = frames[Math.min(index, frames.length - 1)]!;
+
+  const activeIndex = Math.max(
+    0,
+    activeFrames.findIndex((item) => item.key === frame.key),
+  );
+
+  const steps = activeFrames.every((item) => item.label) ? activeFrames : null;
 
   // A new stage for each edit of what it runs; frame changes reuse it.
   const stageKey = useMemo(
     () =>
       JSON.stringify([
         node.html,
+        node.height,
         node.frames,
         node.code,
         [...embeddable.keys()],
       ]),
-    [node.html, node.frames, node.code, embeddable],
+    [node.html, node.height, node.frames, node.code, embeddable],
   );
 
   const send = useCallback((message: HostMessage) => {
@@ -149,13 +171,37 @@ export function AnimationBlock({
 
   const go = useCallback(
     (target: number, instant: boolean) => {
-      const next = Math.max(0, Math.min(last, target));
+      const keys = sequenceRef.current;
 
-      if (next === indexRef.current) return;
+      const path = keys
+        ? keys.flatMap((key) => {
+            const item = frames.find((candidate) => candidate.key === key);
+
+            return item ? [item] : [];
+          })
+        : frames;
+
+      const currentKey = frames[indexRef.current]?.key;
+      const currentPosition = path.findIndex((item) => item.key === currentKey);
+      const position = Math.max(0, Math.min(path.length - 1, target));
+      const next = frames.findIndex((item) => item.key === path[position]?.key);
+
+      if (next < 0 || next === indexRef.current) return;
       setIndex(next);
-      send({ type: "frame", index: next, instant });
+      send({
+        type: "frame",
+        index: next,
+        instant,
+        direction:
+          currentPosition < 0 || position === currentPosition
+            ? "none"
+            : position > currentPosition
+              ? "forward"
+              : "backward",
+        adjacent: currentPosition >= 0 && position === currentPosition + 1,
+      });
     },
-    [last, send],
+    [frames, send],
   );
 
   const reveal = useCallback(
@@ -176,22 +222,77 @@ export function AnimationBlock({
 
   onMessage.current = (message) => {
     switch (message.type) {
+      case "size":
+        setContentHeight(Math.ceil(message.height));
+        break;
       case "slots":
         setSlots(message.slots);
         break;
       case "settled":
         setSettled(message.index);
         break;
-      case "goto":
-        go(
-          frames.findIndex((item) => item.key === message.key),
-          false,
-        );
+      case "goto": {
+        const keys = sequenceRef.current;
+        const path = keys ?? frames.map((item) => item.key);
+        const position = path.indexOf(message.key);
+        go(position, true);
         break;
-      case "step":
-        go(indexRef.current + message.delta, false);
+      }
+
+      case "step": {
+        const keys = sequenceRef.current;
+        const path = keys ?? frames.map((item) => item.key);
+        const currentKey = frames[indexRef.current]?.key;
+        go(path.indexOf(currentKey) + message.delta, false);
+        break;
+      }
+
+      case "sequence": {
+        const unique = new Set(message.keys);
+
+        const valid =
+          unique.size === message.keys.length &&
+          message.keys.every((key) =>
+            frames.some((frame) => frame.key === key),
+          );
+
+        if (!valid) break;
+
+        if (
+          sequenceRef.current?.length === message.keys.length &&
+          sequenceRef.current.every((key, index) => key === message.keys[index])
+        )
+          break;
+
+        sequenceRef.current = message.keys;
+        setSequenceKeys(message.keys);
+        setPlaying(false);
+        setTimeUp(-1);
+        const currentKey = frames[indexRef.current]?.key;
+
+        const fallback = frames.findIndex(
+          (frame) => frame.key === message.keys[0],
+        );
+
+        const next = message.keys.includes(currentKey)
+          ? indexRef.current
+          : fallback;
+
+        if (next !== indexRef.current) setIndex(next);
+
+        // Refresh even a preserved key: lifecycle ranges, held scene changes,
+        // and its timeline can differ when active order changes.
+        send({
+          type: "frame",
+          index: next,
+          instant: true,
+          direction: "none",
+          adjacent: false,
+        });
 
         break;
+      }
+
       case "reveal":
         reveal(message.name);
         break;
@@ -218,6 +319,8 @@ export function AnimationBlock({
       if (message.success) onMessage.current(message.data);
     };
 
+    sequenceRef.current = null;
+    setSequenceKeys(null);
     setSlots([]);
     setError(null);
     target.postMessage(
@@ -229,6 +332,7 @@ export function AnimationBlock({
     const init: Omit<StageInit, "libraries"> = {
       type: "init",
       html: node.html,
+      autoSize: node.height === "auto",
       frames: frames.map(({ key, title, caption }) => ({
         key,
         title,
@@ -249,24 +353,19 @@ export function AnimationBlock({
         } satisfies HostMessage),
       () => setError("The animation library could not be loaded."),
     );
-  }, [node.html, node.code, frames, embeddable]);
+  }, [node.html, node.code, node.height, frames, embeddable]);
 
   useEffect(() => () => portRef.current?.close(), []);
 
-  // The canvas theme can change under a running stage.
-  useEffect(
-    () =>
-      session?.surface.subscribe((event) => {
-        if (event.event !== "themeChanged") return;
-        requestAnimationFrame(() => {
-          if (figureRef.current)
-            send({ type: "theme", theme: readTheme(figureRef.current) });
-        });
-      }),
-    [session, send],
-  );
+  // Read after React commits the matching theme class. Listening to the host
+  // event directly can race that commit and export a mixed palette (new neutral
+  // workbench colors with the previous semantic surface colors).
+  useLayoutEffect(() => {
+    if (figureRef.current)
+      send({ type: "theme", theme: readTheme(figureRef.current) });
+  }, [theme, send]);
 
-  // Play: hold each frame for its duration and until its motion ends.
+  // Play: hold each active-sequence frame for its duration and until its motion ends.
   const [timeUp, setTimeUp] = useState(-1);
 
   useEffect(() => {
@@ -283,18 +382,18 @@ export function AnimationBlock({
   useEffect(() => {
     if (!playing || timeUp !== index || settled !== index) return;
 
-    if (index >= last) setPlaying(false);
-    else go(index + 1, false);
-  }, [playing, timeUp, settled, index, last, go]);
+    if (activeIndex >= last) setPlaying(false);
+    else go(activeIndex + 1, false);
+  }, [playing, timeUp, settled, index, activeIndex, last, go]);
 
-  // An edit can drop frames from under the current one.
+  // An edit can drop frames or a sequence selection from under the current one.
   useEffect(() => {
-    if (index > last) setIndex(last);
-  }, [index, last]);
+    if (!activeFrames.some((item) => item.key === frame.key)) go(0, true);
+  }, [activeFrames, frame.key, go]);
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "ArrowRight") go(index + 1, false);
-    else if (event.key === "ArrowLeft") go(index - 1, false);
+    if (event.key === "ArrowRight") go(activeIndex + 1, false);
+    else if (event.key === "ArrowLeft") go(activeIndex - 1, false);
     else return;
 
     event.preventDefault();
@@ -309,9 +408,13 @@ export function AnimationBlock({
       <DiagramHeader
         kind="ANIMATION"
         title={node.title}
-        meta={`${index + 1} / ${frames.length}`}
+        titleStyle={styles.headerTitle}
+        meta={`${activeIndex + 1} / ${activeFrames.length}`}
       />
-      <div {...stylex.props(styles.stage)} style={{ height: node.height }}>
+      <div
+        {...stylex.props(styles.stage)}
+        style={{ height: node.height === "auto" ? contentHeight : node.height }}
+      >
         <iframe
           key={stageKey}
           ref={frameRef}
@@ -355,11 +458,11 @@ export function AnimationBlock({
             <button
               key={item.key}
               type="button"
-              aria-current={position === index ? "step" : undefined}
-              onClick={() => go(position, Math.abs(position - index) > 1)}
+              aria-current={position === activeIndex ? "step" : undefined}
+              onClick={() => go(position, Math.abs(position - activeIndex) > 1)}
               {...stylex.props(
                 styles.step,
-                position === index && styles.stepCurrent,
+                position === activeIndex && styles.stepCurrent,
               )}
             >
               <span {...stylex.props(styles.stepIndex)}>{position + 1}</span>
@@ -371,17 +474,17 @@ export function AnimationBlock({
       <div {...stylex.props(styles.controls)} onKeyDown={onKeyDown}>
         <ControlButton
           label="Previous frame"
-          disabled={index === 0}
-          onClick={() => go(index - 1, false)}
+          disabled={activeIndex === 0}
+          onClick={() => go(activeIndex - 1, false)}
         >
           <path d="M14.5 6.5 9 12l5.5 5.5" />
         </ControlButton>
         <ControlButton
-          label={playing ? "Pause" : index >= last ? "Replay" : "Play"}
+          label={playing ? "Pause" : activeIndex >= last ? "Replay" : "Play"}
           onClick={() => {
             if (playing) return setPlaying(false);
 
-            if (index >= last) go(0, true);
+            if (activeIndex >= last) go(0, true);
 
             setPlaying(true);
           }}
@@ -394,8 +497,8 @@ export function AnimationBlock({
         </ControlButton>
         <ControlButton
           label="Next frame"
-          disabled={index >= last}
-          onClick={() => go(index + 1, false)}
+          disabled={activeIndex >= last}
+          onClick={() => go(activeIndex + 1, false)}
         >
           <path d="M9.5 6.5 15 12l-5.5 5.5" />
         </ControlButton>
@@ -407,12 +510,14 @@ export function AnimationBlock({
         </div>
         {!steps && (
           <div {...stylex.props(styles.dots)} role="group" aria-label="Frames">
-            {frames.map((item, position) => (
+            {activeFrames.map((item, position) => (
               <FrameDot
                 key={item.key}
                 title={item.title}
-                current={position === index}
-                onClick={() => go(position, Math.abs(position - index) > 1)}
+                current={position === activeIndex}
+                onClick={() =>
+                  go(position, Math.abs(position - activeIndex) > 1)
+                }
               />
             ))}
           </div>
@@ -528,6 +633,8 @@ function FrameDot({
   );
 }
 
+const narrow = "@media (max-width: 720px)";
+
 const styles = stylex.create({
   figure: {
     overflow: "hidden",
@@ -539,6 +646,11 @@ const styles = stylex.create({
     backgroundColor: tokens.surface,
     color: tokens.ink,
     font: `${fontSize.body}/1.5 ${tokens.fontMono}`,
+  },
+  headerTitle: {
+    overflow: { default: null, [narrow]: "visible" },
+    textOverflow: { default: null, [narrow]: "clip" },
+    whiteSpace: { default: null, [narrow]: "normal" },
   },
   stage: {
     position: "relative",
@@ -625,8 +737,12 @@ const styles = stylex.create({
   },
   // A named step per frame, like a progress strip, instead of plain dots.
   steps: {
-    display: "flex",
-    overflowX: "auto",
+    display: { default: "flex", [narrow]: "grid" },
+    gridTemplateColumns: {
+      default: null,
+      [narrow]: "repeat(4, minmax(0, 1fr))",
+    },
+    overflowX: { default: "auto", [narrow]: "visible" },
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
@@ -637,18 +753,19 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "center",
     gap: "5px",
-    minWidth: "fit-content",
-    padding: "6px 10px",
+    minWidth: { default: "fit-content", [narrow]: 0 },
+    padding: { default: "6px 10px", [narrow]: "6px 4px" },
     borderStyle: "none",
     borderBottomWidth: "2px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.transparent,
     backgroundColor: tokens.transparent,
-    color: tokens.inkFaint,
+    color: tokens.inkMuted,
     font: `${fontSize.micro} ${tokens.fontMono}`,
     letterSpacing: tracking.chrome,
+    textAlign: "center",
     textTransform: "uppercase",
-    whiteSpace: "nowrap",
+    whiteSpace: { default: "nowrap", [narrow]: "normal" },
     cursor: "pointer",
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: "-2px",
@@ -658,7 +775,7 @@ const styles = stylex.create({
     color: tokens.ink,
   },
   stepIndex: {
-    color: tokens.inkFaint,
+    color: "inherit",
   },
   error: {
     margin: 0,

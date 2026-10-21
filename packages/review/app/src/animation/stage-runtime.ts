@@ -81,6 +81,8 @@ export interface SceneLinkOptions {
   tone?: Tone;
   /** Dashed means async: a reply, a stream, a background send. */
   dashed?: boolean;
+  /** Whether to draw an arrowhead. Defaults to true. */
+  arrowhead?: boolean;
   enter?: string;
   exit?: string;
   only?: string[];
@@ -90,6 +92,10 @@ export interface SceneSendOptions {
   tone?: Tone;
   /** Keep the chip at the target instead of fading it out on arrival. */
   stay?: boolean;
+  enter?: string;
+  exit?: string;
+  /** The only frames in which the chip is visible. */
+  only?: string[];
 }
 
 /** A reference to a scene card: the card, its id, or its element. */
@@ -108,6 +114,14 @@ export interface SceneStore extends SceneCard {
 export interface SceneTable extends SceneCard {
   /** A row of cells, matching the table's columns. */
   row(cells: string[], options?: SceneItemOptions): HTMLTableRowElement;
+}
+
+export interface SceneOptions {
+  columns?: number;
+  /** A selector or element to put the scene inside; defaults to document.body. */
+  container?: string | HTMLElement;
+  /** Stack cards when their cells become too narrow. Defaults to true. */
+  responsive?: boolean;
 }
 
 export interface Scene {
@@ -149,6 +163,8 @@ export interface ArrowOptions {
   label?: string;
   tone?: Tone;
   dashed?: boolean;
+  /** Whether to draw an arrowhead. Defaults to true. */
+  arrowhead?: boolean;
   /** Pixels the arrow bows to its left; negative bows it right. */
   bend?: number;
   /** The frame the arrow draws in on, and the frame it leaves on. */
@@ -158,6 +174,18 @@ export interface ArrowOptions {
   only?: string[];
   /** Frames during which the arrow is highlighted. */
   highlight?: string[];
+}
+
+export interface TokenOptions {
+  label?: string;
+  tone?: Tone;
+  /** Show the token at its authored position without requiring travel(). */
+  visible?: boolean;
+  /** The frame the token appears in, and the frame it leaves in. */
+  enter?: string;
+  exit?: string;
+  /** The only frames the token shows in. */
+  only?: string[];
 }
 
 /** One frame's part of the stage timeline. Numeric positions count from the
@@ -194,7 +222,11 @@ export interface WhiteboardShim {
     keyframes: Keyframe[] | PropertyIndexedKeyframes,
     options?: number | KeyframeAnimationOptions,
   ): Animation;
-  /** Show the frame with this key. */
+  /** Select the ordered frame path used by host controls. Every key must name
+   * a declared frame. The current frame is preserved when possible; otherwise
+   * the host moves to the path's first frame. */
+  setSequence(keys: readonly string[]): void;
+  /** Show an active-sequence frame with this key. */
   goto(key: string): void;
   next(): void;
   prev(): void;
@@ -204,18 +236,15 @@ export interface WhiteboardShim {
   readonly anime: typeof Anime;
   /** A grid of cards, edges and chips with consistent spacing and routing.
    * Prefer it to arrow/token for request-flow and state diagrams. */
-  scene(options?: { columns?: number }): Scene;
+  scene(options?: SceneOptions): Scene;
   /** The frame's segment of the stage timeline: it plays when the reader
    * steps into the frame, and lands at its end on a jump. */
   timeline(key: string): FrameTimeline;
   /** An SVG arrow between two elements that follows them as they move. */
-  arrow(
-    from: Element | string,
-    to: Element | string,
-    options?: ArrowOptions,
-  ): SVGGElement;
-  /** A dot, or a pill with a label, that travel() moves along arrows. */
-  token(options?: { label?: string; tone?: Tone }): HTMLElement;
+  arrow(from: CardRef, to: CardRef, options?: ArrowOptions): SVGGElement;
+  /** A dot, or a pill with a label, that travel() moves along arrows.
+   * Pass `visible` for a static marker at its authored position. */
+  token(options?: TokenOptions): HTMLElement;
   /** Move a token along an arrow during a frame. It fades out on arrival
    * unless `stay` keeps it at the arrow's head. */
   travel(
@@ -267,20 +296,39 @@ export function stageRuntime(port: MessagePort): void {
   let current = -1;
   let showing = 0;
   let instantMode = false;
+  let activeSequence: string[] | undefined;
   const handlers = new Map<string, Set<FrameHandler>>();
   let theme: Record<string, string> = {};
   let nextSlot = 0;
   let nextSceneId = 0;
+  let nextArrowClipId = 0;
 
   // Scene parts set a value per frame; these run on every frame change so a
   // jump lands on the right one.
-  const sceneAppliers: ((index: number) => void)[] = [];
+  const sceneAppliers: ((key: string) => void)[] = [];
 
-  const frames = () =>
+  const declaredFrames = () =>
     (init?.frames ?? []).map((frame, index) => ({ ...frame, index }));
 
   const frameIndex = (key: string) =>
     (init?.frames ?? []).findIndex((frame) => frame.key === key);
+
+  const activeFrames = () => {
+    const declared = declaredFrames();
+
+    const ordered = activeSequence
+      ? activeSequence.flatMap((key) => {
+          const frame = declared.find((item) => item.key === key);
+
+          return frame ? [frame] : [];
+        })
+      : declared;
+
+    return ordered.map((frame, index) => ({ ...frame, index }));
+  };
+
+  const activeFrameIndex = (key: string) =>
+    activeFrames().findIndex((frame) => frame.key === key);
 
   const nextFrame = () =>
     new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -289,7 +337,9 @@ export function stageRuntime(port: MessagePort): void {
   style.textContent = `
 :root { --wb-duration: 450ms; color-scheme: light dark; }
 *, *::before, *::after { box-sizing: border-box; }
+button { color: inherit; font: inherit; }
 html, body { margin: 0; height: 100%; }
+html[data-wb-auto-size] body { height: auto; display: flow-root; }
 body {
   overflow: hidden;
   background: transparent;
@@ -304,6 +354,7 @@ body {
   visibility: hidden;
   transition: opacity var(--wb-duration) ease, visibility 0s linear var(--wb-duration);
 }
+.wb-arrow[data-wb-state="before"] text, .wb-arrow[data-wb-state="after"] text { visibility: hidden; }
 [data-wb-slot] { display: block; max-width: 100%; min-height: 40px; }
 .wb-row { display: flex; align-items: center; justify-content: space-around; gap: 48px; padding: 20px 24px; }
 .wb-layers { display: grid; justify-items: center; align-items: start; }
@@ -339,12 +390,14 @@ body {
 }
 .wb-arrow:not([data-dashed]) .wb-line { stroke-dasharray: var(--wb-length) var(--wb-length); }
 .wb-arrow[data-dashed] .wb-line { stroke-dasharray: 5 4; }
+.wb-arrow[data-wb-endpoint-detached] { display: none !important; }
 .wb-arrow[data-wb-state="before"]:not([data-dashed]) .wb-line { stroke-dashoffset: var(--wb-length); }
 .wb-arrow[data-tone="accent"] .wb-line, .wb-arrow[data-wb-highlit] .wb-line { stroke: var(--wb-accent); marker-end: url(#wb-head-accent); }
 .wb-arrow[data-wb-highlit] .wb-line { stroke-width: 2.5; }
 .wb-arrow[data-tone="added"] .wb-line { stroke: var(--wb-added); marker-end: url(#wb-head-added); }
 .wb-arrow[data-tone="removed"] .wb-line { stroke: var(--wb-removed); marker-end: url(#wb-head-removed); }
 .wb-arrow[data-tone="modified"] .wb-line { stroke: var(--wb-modified); marker-end: url(#wb-head-modified); }
+.wb-arrow[data-wb-headless] .wb-line { marker-end: none; }
 .wb-label {
   fill: var(--wb-ink-muted);
   font: 10px var(--wb-font-mono, monospace);
@@ -366,12 +419,23 @@ body {
   box-shadow: 0 0 0 3px var(--wb-accent-soft);
   opacity: 0;
 }
-.wb-token[data-labelled] { height: auto; padding: 2px 8px; color: var(--wb-on-accent); font: 10px/1.4 var(--wb-font-mono, monospace); white-space: nowrap; }
+.wb-token[data-visible] { opacity: 1; }
+[data-wb-travel-unrouted] { visibility: hidden !important; }
+.wb-token[data-labelled] { height: auto; padding: 2px 8px; color: var(--wb-token-accent-ink); font: 10px/1.4 var(--wb-font-mono, monospace); white-space: nowrap; }
 .wb-token[data-tone="added"] { background: var(--wb-added); }
+.wb-token[data-labelled][data-tone="added"] { color: var(--wb-token-added-ink); }
 .wb-token[data-tone="removed"] { background: var(--wb-removed); }
+.wb-token[data-labelled][data-tone="removed"] { color: var(--wb-token-removed-ink); }
 .wb-token[data-tone="modified"] { background: var(--wb-modified); }
+.wb-token[data-labelled][data-tone="modified"] { color: var(--wb-token-modified-ink); }
 .wb-token[data-tone="muted"] { background: var(--wb-ink-faint); }
-.wb-scene { display: grid; gap: 28px 44px; padding: 24px; align-items: start; justify-items: stretch; }
+.wb-token[data-labelled][data-tone="muted"] { color: var(--wb-token-muted-ink); }
+.wb-scene { display: grid; gap: 28px 44px; padding: 24px; align-items: start; justify-items: stretch; min-width: 0; }
+.wb-scene-compact { grid-template-columns: minmax(0, 1fr) !important; row-gap: 44px; }
+.wb-scene-compact > * { grid-column: 1 / -1 !important; grid-row: auto !important; }
+.wb-scene > [data-wb-state="before"], .wb-scene > [data-wb-state="after"],
+.wb-items > [data-wb-state="before"], .wb-items > [data-wb-state="after"],
+.wb-table tr[data-wb-state="before"], .wb-table tr[data-wb-state="after"] { display: none; }
 .wb-scene-top { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-bottom: 4px; }
 .wb-card {
   min-width: 0;
@@ -389,8 +453,8 @@ body {
 }
 .wb-card-head { display: flex; align-items: center; gap: 6px; }
 .wb-card-dot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--wb-ink-faint); }
-.wb-card-title { font-weight: 600; letter-spacing: .02em; }
-.wb-card-note { color: var(--wb-ink-faint); font-size: 10px; min-height: 12px; }
+.wb-card-title { min-width: 0; overflow-wrap: anywhere; font-weight: 600; letter-spacing: .02em; }
+.wb-card-note { color: var(--wb-ink-muted); overflow-wrap: anywhere; font-size: 10px; min-height: 12px; }
 .wb-card[data-tone="accent"] { border-color: var(--wb-accent); }
 .wb-card[data-tone="accent"] .wb-card-dot { background: var(--wb-accent); }
 .wb-card[data-tone="added"] { border-color: var(--wb-added); background: var(--wb-added-bg); }
@@ -399,7 +463,7 @@ body {
 .wb-card[data-tone="removed"] .wb-card-dot { background: var(--wb-removed); }
 .wb-card[data-tone="modified"] { border-color: var(--wb-modified); background: var(--wb-modified-bg); }
 .wb-card[data-tone="modified"] .wb-card-dot { background: var(--wb-modified); }
-.wb-card[data-tone="muted"] { border-style: dashed; color: var(--wb-ink-faint); }
+.wb-card[data-tone="muted"] { border-style: dashed; color: var(--wb-ink-muted); }
 .wb-card[data-wb-highlit] { border-color: var(--wb-accent); box-shadow: 0 0 0 3px var(--wb-accent-soft); }
 .wb-items { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
 .wb-item {
@@ -414,10 +478,10 @@ body {
 .wb-item[data-tone="added"] { border-color: var(--wb-added); background: var(--wb-added-bg); color: var(--wb-ink); }
 .wb-item[data-tone="removed"] { border-color: var(--wb-removed); background: var(--wb-removed-bg); }
 .wb-item[data-tone="modified"] { border-color: var(--wb-modified); background: var(--wb-modified-bg); }
-.wb-item[data-tone="muted"] { color: var(--wb-ink-faint); }
-.wb-table { width: 100%; margin-top: 2px; border-collapse: collapse; font-size: 10px; }
-.wb-table th, .wb-table td { padding: 2px 6px; text-align: left; border-bottom: 1px solid var(--wb-rule); white-space: nowrap; }
-.wb-table th { color: var(--wb-ink-faint); font-weight: 600; }
+.wb-item[data-tone="muted"] { color: var(--wb-ink-muted); }
+.wb-table { width: 100%; table-layout: fixed; margin-top: 2px; border-collapse: collapse; font-size: 10px; }
+.wb-table th, .wb-table td { padding: 2px 6px; text-align: left; border-bottom: 1px solid var(--wb-rule); white-space: normal; overflow-wrap: anywhere; }
+.wb-table th { color: var(--wb-ink-muted); font-weight: 600; }
 .wb-table td { color: var(--wb-ink-muted); }
 .wb-table tr[data-tone="added"] td { color: var(--wb-ink); background: var(--wb-added-bg); }
 .wb-table tr[data-tone="removed"] td { background: var(--wb-removed-bg); }
@@ -442,11 +506,52 @@ body {
 }`;
   document.head.append(style);
 
+  const readableForeground = (background: string) => {
+    const probe = document.createElement("span");
+    probe.hidden = true;
+    probe.style.color = background;
+    document.body.append(probe);
+
+    const channels = getComputedStyle(probe)
+      .color.match(/[\d.]+/g)
+      ?.slice(0, 3)
+      .map(Number);
+
+    probe.remove();
+
+    if (!channels || channels.length !== 3) return "#000000";
+
+    const [red, green, blue] = channels.map((channel) => {
+      const value = channel! / 255;
+
+      return value <= 0.04045
+        ? value / 12.92
+        : ((value + 0.055) / 1.055) ** 2.4;
+    });
+
+    const luminance = 0.2126 * red! + 0.7152 * green! + 0.0722 * blue!;
+
+    // Black and white are the maximum-contrast choices for any solid color.
+    return luminance > 0.179 ? "#000000" : "#ffffff";
+  };
+
   const applyTheme = (values: Record<string, string>) => {
     theme = values;
 
     for (const [name, value] of Object.entries(values))
       root.style.setProperty(`--wb-${name}`, value);
+
+    for (const [tone, background] of [
+      ["accent", "accent"],
+      ["added", "added"],
+      ["removed", "removed"],
+      ["modified", "modified"],
+      ["muted", "ink-faint"],
+    ] as const)
+      root.style.setProperty(
+        `--wb-token-${tone}-ink`,
+        readableForeground(`var(--wb-${background})`),
+      );
   };
 
   const upgrade = (element: Element) => {
@@ -508,16 +613,24 @@ body {
     document
       .querySelectorAll<HTMLElement | SVGElement>("[data-enter], [data-exit]")
       .forEach((element) => {
+        const position = activeFrameIndex(key);
+
         const enter = element.dataset.enter
-          ? frameIndex(element.dataset.enter)
+          ? activeFrameIndex(element.dataset.enter)
           : 0;
 
         const exit = element.dataset.exit
-          ? frameIndex(element.dataset.exit)
+          ? activeFrameIndex(element.dataset.exit)
           : Infinity;
 
+        // An enter boundary outside this path never occurs. An exit boundary
+        // outside it never ends an element that has already entered.
         element.dataset.wbState =
-          current < enter ? "before" : current >= exit ? "after" : "on";
+          enter < 0 || position < enter
+            ? "before"
+            : exit >= 0 && position >= exit
+              ? "after"
+              : "on";
       });
 
     document
@@ -525,14 +638,17 @@ body {
       .forEach((element) => {
         const only = (element.dataset.only ?? "").split(/\s+/);
 
+        const position = activeFrameIndex(key);
+        const activeOnly = only.map(activeFrameIndex).filter((at) => at >= 0);
+
         element.dataset.wbState = only.includes(key)
           ? "on"
-          : current < Math.min(...only.map(frameIndex))
+          : activeOnly.length && position < Math.min(...activeOnly)
             ? "before"
             : "after";
       });
 
-    for (const apply of sceneAppliers) apply(Math.max(current, 0));
+    for (const apply of sceneAppliers) apply(key);
   };
 
   const finished = (result: FrameResult): Promise<unknown>[] => {
@@ -561,9 +677,13 @@ body {
     return anime;
   };
 
-  const resolve = (target: Element | string) => {
+  const resolve = (target: CardRef) => {
     const element =
-      target instanceof Element ? target : document.querySelector(target);
+      target instanceof Element
+        ? target
+        : target instanceof Object
+          ? target.element
+          : document.querySelector(target);
 
     if (!element) throw new Error(`Nothing matches ${String(target)}.`);
 
@@ -622,6 +742,8 @@ body {
 
   const buildTimeline = () => {
     built = true;
+    timeline?.pause();
+    timeline = undefined;
 
     if (!queued.size) return;
 
@@ -635,7 +757,7 @@ body {
     // extend the timeline, so an empty frame still needs its own start.
     let start = 0;
 
-    for (const [index, frame] of (init?.frames ?? []).entries()) {
+    for (const [index, frame] of activeFrames().entries()) {
       if (index) start = Math.max(next.duration, start) + 1;
 
       next.label(frame.key, start);
@@ -660,8 +782,9 @@ body {
   let segmentToken = 0;
 
   // Land on the end of a frame's segment, or play the segment to its end.
-  const playSegment = (index: number, play: boolean): Promise<void> => {
-    const frames = init?.frames ?? [];
+  const playSegment = (key: string, play: boolean): Promise<void> => {
+    const frames = activeFrames();
+    const index = frames.findIndex((frame) => frame.key === key);
     const tl = timeline;
     const frame = frames[index];
 
@@ -705,11 +828,21 @@ body {
     group: SVGGElement;
     path: SVGPathElement;
     text?: SVGTextElement;
+    clipPath: SVGClipPathElement;
+    clipRect: SVGRectElement;
     from: Element;
     to: Element;
     bend: number;
     /** Pixels to shift the whole line sideways, for parallel edges. */
     offset: number;
+    labelRoute?: {
+      start: { x: number; y: number };
+      control: { x: number; y: number };
+      end: { x: number; y: number };
+      normal: { x: number; y: number };
+      tangent: { x: number; y: number };
+      obstacles: DOMRect[];
+    };
   }
 
   const arrows: ArrowRecord[] = [];
@@ -752,9 +885,142 @@ body {
       return element;
     });
 
+  interface ClipBounds {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+    clipped: boolean;
+  }
+
+  type AncestorClip = Omit<ClipBounds, "clipped">;
+
+  // A measure pass can route hundreds of edges through the same scroller.
+  // Cache its style and geometry only for that rAF; the next pass observes
+  // every scroll, resize, and transform again.
+  let clipGeometryCache: Map<Element, AncestorClip | null> | undefined;
+
+  const clippingAncestors = (element: Element) => {
+    const ancestors: Element[] = [];
+
+    for (
+      let ancestor = element.parentElement;
+      ancestor && ancestor !== document.body && ancestor !== root;
+      ancestor = ancestor.parentElement
+    )
+      ancestors.push(ancestor);
+
+    return ancestors;
+  };
+
+  const ancestorClip = (ancestor: Element): AncestorClip | null => {
+    if (clipGeometryCache?.has(ancestor))
+      return clipGeometryCache.get(ancestor) ?? null;
+    const style = getComputedStyle(ancestor);
+    const clipsX = style.overflowX !== "visible";
+    const clipsY = style.overflowY !== "visible";
+
+    if (!clipsX && !clipsY) {
+      clipGeometryCache?.set(ancestor, null);
+
+      return null;
+    }
+
+    const rect = ancestor.getBoundingClientRect();
+
+    // Overflow clips at the padding box. Account for transforms when
+    // converting the element's CSS-pixel client metrics to viewport space.
+    const boxWidth =
+      ancestor instanceof HTMLElement ? ancestor.offsetWidth : rect.width;
+
+    const boxHeight =
+      ancestor instanceof HTMLElement ? ancestor.offsetHeight : rect.height;
+
+    const scaleX = rect.width / (boxWidth || rect.width || 1);
+    const scaleY = rect.height / (boxHeight || rect.height || 1);
+    const left = rect.left + ancestor.clientLeft * scaleX;
+    const top = rect.top + ancestor.clientTop * scaleY;
+
+    const clip = {
+      left: clipsX ? left : -1_000_000,
+      right: clipsX ? left + ancestor.clientWidth * scaleX : 1_000_000,
+      top: clipsY ? top : -1_000_000,
+      bottom: clipsY ? top + ancestor.clientHeight * scaleY : 1_000_000,
+    };
+
+    clipGeometryCache?.set(ancestor, clip);
+
+    return clip;
+  };
+
+  // Return the visible viewport-coordinate bounds imposed by overflow
+  // ancestors shared by every element. An unconstrained axis remains large:
+  // overflow-x must not accidentally become a vertical clip, or vice versa.
+  const clipBounds = (...elements: Element[]): ClipBounds => {
+    const shared = clippingAncestors(elements[0]!);
+
+    if (elements.length > 1) {
+      const others = elements
+        .slice(1)
+        .map((element) => new Set(clippingAncestors(element)));
+
+      shared.splice(
+        0,
+        shared.length,
+        ...shared.filter((ancestor) =>
+          others.every((set) => set.has(ancestor)),
+        ),
+      );
+    }
+
+    const bounds: ClipBounds = {
+      left: -1_000_000,
+      right: 1_000_000,
+      top: -1_000_000,
+      bottom: 1_000_000,
+      clipped: false,
+    };
+
+    for (const ancestor of shared) {
+      const clip = ancestorClip(ancestor);
+
+      if (!clip) continue;
+      bounds.left = Math.max(bounds.left, clip.left);
+      bounds.right = Math.min(bounds.right, clip.right);
+      bounds.top = Math.max(bounds.top, clip.top);
+      bounds.bottom = Math.min(bounds.bottom, clip.bottom);
+      bounds.clipped = true;
+    }
+
+    return bounds;
+  };
+
+  const updateArrowClip = (arrow: ArrowRecord) => {
+    const bounds = clipBounds(arrow.from, arrow.to);
+
+    if (!bounds.clipped) {
+      arrow.group.removeAttribute("clip-path");
+
+      return;
+    }
+
+    const width = Math.max(0, bounds.right - bounds.left);
+    const height = Math.max(0, bounds.bottom - bounds.top);
+
+    arrow.clipRect.setAttribute("x", String(bounds.left));
+    arrow.clipRect.setAttribute("y", String(bounds.top));
+    arrow.clipRect.setAttribute("width", String(width));
+    arrow.clipRect.setAttribute("height", String(height));
+    arrow.group.setAttribute("clip-path", `url(#${arrow.clipPath.id})`);
+  };
+
   // Where the line from a box's center toward a point leaves the box, with
   // a small gap.
-  const edge = (rect: DOMRect, toward: { x: number; y: number }) => {
+  const edge = (
+    rect: DOMRect,
+    toward: { x: number; y: number },
+    padding = 6,
+  ) => {
     const x = rect.x + rect.width / 2;
     const y = rect.y + rect.height / 2;
     const dx = toward.x - x;
@@ -765,8 +1031,11 @@ body {
     const scale =
       1 /
       Math.max(
-        Math.abs(dx) / (rect.width / 2 + 6),
-        Math.abs(dy) / (rect.height / 2 + 6),
+        // A parallel axis adds no boundary constraint, including a point
+        // anchor's zero extent. Avoid 0/0 while retaining Infinity on the
+        // axis that reaches a zero-size boundary immediately.
+        dx === 0 ? 0 : Math.abs(dx) / (rect.width / 2 + padding),
+        dy === 0 ? 0 : Math.abs(dy) / (rect.height / 2 + padding),
       );
 
     return { x: x + dx * scale, y: y + dy * scale };
@@ -811,6 +1080,24 @@ body {
   };
 
   const route = (arrow: ArrowRecord) => {
+    const endpointDetached =
+      !arrow.from.isConnected ||
+      !arrow.to.isConnected ||
+      !arrow.from.checkVisibility() ||
+      !arrow.to.checkVisibility();
+
+    arrow.group.toggleAttribute("data-wb-endpoint-detached", endpointDetached);
+
+    if (endpointDetached) {
+      arrow.path.removeAttribute("d");
+      arrow.labelRoute = undefined;
+
+      return;
+    }
+
+    // Clipping can change while a shared scroll container moves even when the
+    // routed path itself does not, so update it before the path early-return.
+    updateArrowClip(arrow);
     const a = arrow.from.getBoundingClientRect();
     const b = arrow.to.getBoundingClientRect();
     const ax = a.x + a.width / 2;
@@ -824,9 +1111,9 @@ body {
     const ny = (bx - ax) / length;
 
     // Cards sitting on the straight line between the two ends: bow the edge
-    // clear of them, and keep their rects so the label can dodge them too.
+    // clear of them. Labels avoid every card, including their own endpoints.
     const scope = arrow.from.closest(".wb-scene");
-    const obstacles: DOMRect[] = [];
+    const obstacles: DOMRect[] = [a, b];
     let avoid = 0;
 
     if (scope) {
@@ -855,58 +1142,266 @@ body {
     const px = nx * arrow.offset;
     const py = ny * arrow.offset;
 
-    const control = {
+    let control = {
       x: (ax + bx) / 2 + ((by - ay) / length) * bend + px,
       y: (ay + by) / 2 - ((bx - ax) / length) * bend + py,
     };
 
-    const start = edge(a, control);
-    const end = edge(b, control);
+    let start = edge(a, control);
+    let end = edge(b, control);
+
+    if (bend === 0 && arrow.offset === 0) {
+      const boundaryStart = edge(a, control, 0);
+      const boundaryEnd = edge(b, control, 0);
+      const tangentX = (bx - ax) / length;
+      const tangentY = (by - ay) / length;
+
+      const gutter =
+        (boundaryEnd.x - boundaryStart.x) * tangentX +
+        (boundaryEnd.y - boundaryStart.y) * tangentY;
+
+      if (gutter > 0) {
+        // Two fixed 6px endpoint gaps can consume a narrow positive gutter,
+        // collapsing the endpoints while the centre-derived control remains
+        // behind one of them. Keep up to 8px of directed line visible and put
+        // a straight route's control between its final clipped endpoints.
+        const padding = Math.min(6, Math.max(0, (gutter - 8) / 2));
+
+        start = {
+          x: boundaryStart.x + tangentX * padding,
+          y: boundaryStart.y + tangentY * padding,
+        };
+        end = {
+          x: boundaryEnd.x - tangentX * padding,
+          y: boundaryEnd.y - tangentY * padding,
+        };
+      } else {
+        // Overlapping boxes have no visible directed gutter. Do not invent a
+        // backwards connector or a loop inside either endpoint.
+        start = end = {
+          x: (boundaryStart.x + boundaryEnd.x) / 2,
+          y: (boundaryStart.y + boundaryEnd.y) / 2,
+        };
+      }
+
+      control = {
+        x: (start.x + end.x) / 2,
+        y: (start.y + end.y) / 2,
+      };
+    }
+
     start.x += px;
     start.y += py;
     end.x += px;
     end.y += py;
     const d = `M${start.x} ${start.y}Q${control.x} ${control.y} ${end.x} ${end.y}`;
 
-    if (arrow.path.getAttribute("d") === d) return;
-    arrow.path.setAttribute("d", d);
-    arrow.group.style.setProperty(
-      "--wb-length",
-      String(arrow.path.getTotalLength()),
+    if (arrow.path.getAttribute("d") !== d) {
+      arrow.path.setAttribute("d", d);
+      arrow.group.style.setProperty(
+        "--wb-length",
+        String(arrow.path.getTotalLength()),
+      );
+    }
+
+    arrow.labelRoute = {
+      start,
+      control,
+      end,
+      normal: { x: nx, y: ny },
+      tangent: { x: (bx - ax) / length, y: (by - ay) / length },
+      obstacles,
+    };
+  };
+
+  const overlaps = (a: DOMRect, b: DOMRect, gap = 0) =>
+    a.left < b.right + gap &&
+    a.right > b.left - gap &&
+    a.top < b.bottom + gap &&
+    a.bottom > b.top - gap;
+
+  const placeArrowLabels = () => {
+    const placed: DOMRect[] = [];
+
+    // Host-like controls and overlay slots are authored outside scene cards,
+    // but an edge label crossing one is just as unreadable. Treat their full
+    // visible boxes (including a checkbox's wrapping label) as obstacles.
+    const controls = [
+      ...document.querySelectorAll<HTMLElement>(
+        "button, input, select, textarea, label, [data-wb-slot]",
+      ),
+    ].flatMap((element) =>
+      element.checkVisibility({
+        visibilityProperty: true,
+        opacityProperty: true,
+      })
+        ? [element.getBoundingClientRect()]
+        : [],
     );
 
-    if (arrow.text) {
-      let lx = (start.x + 2 * control.x + end.x) / 4;
-      let ly = (start.y + 2 * control.y + end.y) / 4 - 6;
+    const endpoints = [
+      ...new Set(arrows.flatMap(({ from, to }) => [from, to])),
+    ].flatMap((element) =>
+      element.checkVisibility({ visibilityProperty: true })
+        ? [element.getBoundingClientRect()]
+        : [],
+    );
 
-      // Push the label off any card it still lands on, along the line's normal.
-      for (const r of obstacles) {
-        const on =
-          lx >= r.left - 2 &&
-          lx <= r.right + 2 &&
-          ly >= r.top - 2 &&
-          ly <= r.bottom + 2;
+    for (const arrow of arrows) {
+      const { text, labelRoute } = arrow;
 
-        if (!on) continue;
+      // Lifecycle-hidden labels must neither reserve a gutter nor displace a
+      // visible label. Unscoped arrows have no state attribute and stay on.
+      if (
+        !text ||
+        !labelRoute ||
+        (arrow.group.dataset.wbState && arrow.group.dataset.wbState !== "on")
+      )
+        continue;
 
-        const side = Math.sign(
-          nx * (lx - r.x - r.width / 2) + ny * (ly - r.y - r.height / 2) || 1,
-        );
+      const { start, control, end, normal, tangent, obstacles } = labelRoute;
+      const baseX = (start.x + 2 * control.x + end.x) / 4;
+      const baseY = (start.y + 2 * control.y + end.y) / 4 - 6;
 
-        const push = r.height / 2 + 12;
+      const previousX = Number(text.getAttribute("x") ?? 0);
+      const previousY = Number(text.getAttribute("y") ?? 0);
+      const bounds = text.getBBox();
 
-        lx += nx * side * push;
-        ly += ny * side * push;
+      const relative = {
+        left: bounds.x - previousX,
+        top: bounds.y - previousY,
+        width: bounds.width,
+        height: bounds.height,
+      };
+
+      const clip = clipBounds(arrow.from, arrow.to);
+
+      const viewport = {
+        left: Math.max(0, clip.left),
+        right: Math.min(innerWidth, clip.right),
+        top: Math.max(0, clip.top),
+        bottom: Math.min(innerHeight, clip.bottom),
+      };
+
+      const offsets: [number, number][] = [[0, 0]];
+
+      // Search the nearest route-normal gutters first. Tangential alternatives
+      // keep multiple labels from collapsing into the same otherwise-free spot.
+      for (let distance = 14; distance <= 112; distance += 14) {
+        offsets.push([distance, 0], [-distance, 0]);
+
+        if (distance >= 28)
+          offsets.push(
+            [distance, 24],
+            [distance, -24],
+            [-distance, 24],
+            [-distance, -24],
+          );
       }
 
-      arrow.text.setAttribute("x", String(lx));
-      arrow.text.setAttribute("y", String(ly));
+      // Raw toolkit diagrams can have several endpoint cards outside a scene.
+      // A narrow gap may need a label farther along the route to remain clear.
+      for (let along = 48; along <= 144; along += 24)
+        for (let across = 0; across <= 112; across += 14)
+          offsets.push(
+            [across, along],
+            [across, -along],
+            [-across, along],
+            [-across, -along],
+          );
+
+      // Reserve the packet's swept area, not just its current position. This
+      // keeps a label still and readable throughout a trip instead of moving
+      // it out of the chip's way on every animation frame.
+      const flights: DOMRect[] = [];
+
+      for (const travel of travels) {
+        if (travel.arrow !== arrow) continue;
+        const chip = travel.element.getBoundingClientRect();
+
+        if (!chip.width || !chip.height) continue;
+        const origin = travel.owner.placed;
+        const left = chip.left - (origin?.x ?? 0);
+        const top = chip.top - (origin?.y ?? 0);
+        let previous = start;
+
+        for (let step = 1; step <= 20; step++) {
+          const t = step / 20;
+          const u = 1 - t;
+
+          const point = {
+            x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
+            y: u * u * start.y + 2 * u * t * control.y + t * t * end.y,
+          };
+
+          flights.push(
+            new DOMRect(
+              Math.min(previous.x, point.x) + left,
+              Math.min(previous.y, point.y) + top,
+              Math.abs(point.x - previous.x) + chip.width,
+              Math.abs(point.y - previous.y) + chip.height,
+            ),
+          );
+          previous = point;
+        }
+      }
+
+      const collisions = [...obstacles, ...endpoints, ...controls, ...flights];
+      let selected: { x: number; y: number; rect: DOMRect } | undefined;
+
+      for (const [normalOffset, tangentOffset] of offsets) {
+        const x = baseX + normal.x * normalOffset + tangent.x * tangentOffset;
+        const y = baseY + normal.y * normalOffset + tangent.y * tangentOffset;
+
+        const rect = new DOMRect(
+          x + relative.left - 2,
+          y + relative.top - 2,
+          relative.width + 4,
+          relative.height + 4,
+        );
+
+        const inViewport =
+          rect.left >= viewport.left &&
+          rect.right <= viewport.right &&
+          rect.top >= viewport.top &&
+          rect.bottom <= viewport.bottom;
+
+        if (
+          inViewport &&
+          !collisions.some((obstacle) => overlaps(rect, obstacle, 3)) &&
+          !placed.some((other) => overlaps(rect, other, 4))
+        ) {
+          selected = { x, y, rect };
+          break;
+        }
+      }
+
+      // Preserve the route-local fallback when a very constrained viewport has
+      // no collision-free candidate; never hide or truncate the caller label.
+      selected ??= {
+        x: baseX,
+        y: baseY,
+        rect: new DOMRect(
+          baseX + relative.left - 2,
+          baseY + relative.top - 2,
+          relative.width + 4,
+          relative.height + 4,
+        ),
+      };
+      const x = String(selected.x);
+      const y = String(selected.y);
+
+      if (text.getAttribute("x") !== x) text.setAttribute("x", x);
+
+      if (text.getAttribute("y") !== y) text.setAttribute("y", y);
+      placed.push(selected.rect);
     }
   };
 
   interface EdgeSpec {
     tone?: Tone;
     dashed?: boolean;
+    arrowhead?: boolean;
     label?: string;
     enter?: string;
     exit?: string;
@@ -921,13 +1416,23 @@ body {
   const createEdge = (from: Element, to: Element, spec: EdgeSpec) => {
     const group = document.createElementNS(svg, "g");
     const path = document.createElementNS(svg, "path");
+    const clipPath = document.createElementNS(svg, "clipPath");
+    const clipRect = document.createElementNS(svg, "rect");
+    const clipId = `wb-arrow-clip-${nextArrowClipId++}`;
+
     group.setAttribute("class", "wb-arrow");
     path.setAttribute("class", "wb-line");
+    clipPath.id = clipId;
+    clipPath.setAttribute("clipPathUnits", "userSpaceOnUse");
+    clipPath.append(clipRect);
+    arrowLayer().querySelector("defs")!.append(clipPath);
     group.append(path);
 
     if (spec.tone) group.dataset.tone = spec.tone;
 
     if (spec.dashed) group.dataset.dashed = "";
+
+    if (spec.arrowhead === false) group.dataset.wbHeadless = "";
 
     if (spec.enter) group.dataset.enter = spec.enter;
 
@@ -940,6 +1445,8 @@ body {
     const record: ArrowRecord = {
       group,
       path,
+      clipPath,
+      clipRect,
       from,
       to,
       bend: spec.bend ?? 0,
@@ -956,44 +1463,67 @@ body {
 
     arrowLayer().append(group);
     arrows.push(record);
-    route(record);
     applyStates();
+    route(record);
+    placeArrowLabels();
 
     return record;
   };
 
-  const show = async (index: number, instant: boolean) => {
-    const list = frames();
-    const frame = list[index];
+  const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
+  const prefersReducedMotion = () => motionPreference.matches;
 
-    if (!frame) return;
-    const previous = list[current];
+  const show = async (
+    index: number,
+    instant: boolean,
+    direction?: FrameChange["direction"],
+    adjacent?: boolean,
+  ) => {
+    const declared = declaredFrames();
+    const declaredFrame = declared[index];
+
+    if (!declaredFrame) return;
+    const framePosition = activeFrameIndex(declaredFrame.key);
+    const frame = { ...declaredFrame, index: framePosition };
+    const previousDeclared = declared[current];
+
+    const previousPosition = previousDeclared
+      ? activeFrameIndex(previousDeclared.key)
+      : -1;
+
+    const previous =
+      previousDeclared && previousPosition >= 0
+        ? { ...previousDeclared, index: previousPosition }
+        : undefined;
+
     const token = ++showing;
-    instantMode = instant || Boolean(init?.reducedMotion);
+    instantMode = instant || prefersReducedMotion();
 
     if (instantMode) root.setAttribute("data-wb-instant", "");
 
     current = index;
     root.dataset.frame = frame.key;
-    root.dataset.frameIndex = String(index);
+    root.dataset.frameIndex = String(frame.index);
     applyStates();
 
     const change: FrameChange = {
       frame,
       previous,
-      direction: !previous
-        ? "none"
-        : index > previous.index
-          ? "forward"
-          : index < previous.index
-            ? "backward"
-            : "none",
+      direction:
+        direction ??
+        (!previous
+          ? "none"
+          : frame.index > previous.index
+            ? "forward"
+            : frame.index < previous.index
+              ? "backward"
+              : "none"),
       instant: instantMode,
     };
 
     const waits: Promise<unknown>[] = [];
 
-    for (const key of [frame.key, "*"])
+    for (const key of ["*", frame.key])
       for (const handler of handlers.get(key) ?? []) {
         try {
           waits.push(...finished(handler(change)));
@@ -1004,8 +1534,10 @@ body {
 
     waits.push(
       playSegment(
-        index,
-        !instantMode && previous !== undefined && index === previous.index + 1,
+        frame.key,
+        !instantMode &&
+          previous !== undefined &&
+          (adjacent ?? index === previous.index + 1),
       ),
     );
 
@@ -1027,8 +1559,20 @@ body {
       await Promise.allSettled(waits);
     }
 
-    if (token === showing) post({ type: "settled", index });
+    if (token === showing) {
+      // Skipping motion belongs to this frame change. Later button/slider
+      // interactions must animate even when the reader arrived by a jump.
+      instantMode = false;
+      post({ type: "settled", index });
+    }
   };
+
+  // A stage can outlive a host or inspector preference change. Notify custom
+  // frame renderers even when the frame key stays the same, so the live
+  // whiteboard.reducedMotion getter cannot leave stale semantic content behind.
+  motionPreference.addEventListener("change", () => {
+    if (current >= 0) show(current, true).catch((error) => fail(String(error)));
+  });
 
   const makeToken = (label?: string, tone?: Tone) => {
     const element = document.createElement("div");
@@ -1046,8 +1590,63 @@ body {
     return element;
   };
 
-  // Tween an element along an edge's path during a frame. It appears at the
-  // start, rides the line, and fades out on arrival unless it should stay.
+  interface TravelOwner {
+    active: { value: number };
+    placed?: TravelBinding;
+  }
+
+  interface TravelBinding {
+    id: number;
+    element: Element;
+    arrow: ArrowRecord;
+    owner: TravelOwner;
+    progress: { value: number };
+    x?: number;
+    y?: number;
+  }
+
+  const travels: TravelBinding[] = [];
+  const travelOwners = new Map<Element, TravelOwner>();
+
+  // Motion-path helpers resolve transforms while a tween renders. Keep the
+  // normalized progress separately so a routed path can move underneath an
+  // active or retained token without replaying the frame. A reused element is
+  // placed only by the binding selected at the current timeline position.
+  const placeTravel = (travel: TravelBinding) => {
+    if (travel.owner.active.value !== travel.id) return;
+    const { path } = travel.arrow;
+    const routed = Boolean(path.getAttribute("d"));
+    travel.element.toggleAttribute("data-wb-travel-unrouted", !routed);
+
+    if (!routed) return;
+    const length = path.getTotalLength();
+
+    const point = path.getPointAtLength(
+      length * Math.max(0, Math.min(1, travel.progress.value)),
+    );
+
+    const matrix = path.getCTM();
+
+    const x = matrix
+      ? point.x * matrix.a + point.y * matrix.c + matrix.e
+      : point.x;
+
+    const y = matrix
+      ? point.x * matrix.b + point.y * matrix.d + matrix.f
+      : point.y;
+
+    if (travel.owner.placed === travel && travel.x === x && travel.y === y)
+      return;
+    travel.owner.placed = travel;
+    travel.x = x;
+    travel.y = y;
+    // Set only the motion translations. Anime retains unrelated transform
+    // components on caller-provided tokens just as createMotionPath did.
+    lib().set(travel.element, { translateX: x, translateY: y });
+  };
+
+  // Tween normalized progress along an edge during a frame. Geometry is read
+  // when the token is placed, rather than captured when the timeline is built.
   const travelAlong = (
     element: Element,
     record: ArrowRecord,
@@ -1059,17 +1658,30 @@ body {
       stay?: boolean;
     },
   ) => {
-    const motion = lib().svg.createMotionPath(record.path);
+    let owner = travelOwners.get(element);
 
-    if (!motion) throw new Error("The edge has no path yet.");
+    if (!owner) {
+      owner = { active: { value: travels.length } };
+      travelOwners.set(element, owner);
+    }
+
+    const travel: TravelBinding = {
+      id: travels.length,
+      element,
+      arrow: record,
+      owner,
+      progress: { value: 0 },
+    };
+
+    travels.push(travel);
 
     const segment = frameTimeline(frame)
-      .set(element, { opacity: 1 }, options.position)
+      .set(owner.active, { value: travel.id }, options.position)
+      .set(element, { opacity: 1 }, "<")
       .add(
-        element,
+        travel.progress,
         {
-          translateX: motion.translateX,
-          translateY: motion.translateY,
+          value: 1,
           duration: options.duration ?? 900,
           ease: options.ease ?? "inOutQuad",
         },
@@ -1104,11 +1716,41 @@ body {
 
   // A grid of cards, routed edges, and chips that ride them. The scene owns
   // spacing, edge drawing, and chip motion, so every scene reads the same.
-  const scene = (columns: number): Scene => {
+  const scene = (options: SceneOptions): Scene => {
+    const columns = options.columns ?? 3;
     const grid = document.createElement("div");
     grid.className = "wb-scene";
     grid.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
-    document.body.append(grid);
+    (options.container ? resolve(options.container) : document.body).append(
+      grid,
+    );
+
+    if (options.responsive !== false && columns > 1) {
+      // Preserve declared cells on wider layouts. In a narrow container, use
+      // reading order rather than shrinking cards, tables and labels to fit.
+      const reflow = () => {
+        const style = getComputedStyle(grid);
+
+        const padding =
+          parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+
+        const gap = parseFloat(style.columnGap);
+        grid.classList.toggle(
+          "wb-scene-compact",
+          grid.clientWidth < columns * 140 + (columns - 1) * gap + padding,
+        );
+      };
+
+      let layoutFrame: number | undefined;
+      new ResizeObserver(() => {
+        if (layoutFrame !== undefined) return;
+        layoutFrame = requestAnimationFrame(() => {
+          layoutFrame = undefined;
+          reflow();
+        });
+      }).observe(grid);
+      reflow();
+    }
 
     const nodes = new Map<string, HTMLElement>();
     const links = new Map<string, ArrowRecord>();
@@ -1135,16 +1777,22 @@ body {
       byElement.set(el, { el, base, changes: [], setText });
     };
 
-    sceneAppliers.push((index) => {
+    sceneAppliers.push((key) => {
+      const position = activeFrameIndex(key);
+
       for (const part of byElement.values()) {
         let { tone, text } = part.base;
 
-        for (const { at, change } of part.changes)
-          if (at <= index) {
+        for (const { at, change } of part.changes) {
+          const changeKey = init?.frames[at]?.key;
+          const changePosition = changeKey ? activeFrameIndex(changeKey) : -1;
+
+          if (changePosition >= 0 && changePosition <= position) {
             if (change.tone !== undefined) tone = change.tone;
 
             if (change.text !== undefined) text = change.text;
           }
+        }
 
         if (tone && tone !== "none") part.el.dataset.tone = tone;
         else delete part.el.dataset.tone;
@@ -1158,6 +1806,7 @@ body {
         ? `${column} / span ${colSpan}`
         : String(column);
       el.style.gridRow = rowSpan ? `${row} / span ${rowSpan}` : String(row);
+      el.style.order = String((row - 1) * columns + column);
     };
 
     const cardEl = (ref: CardRef): HTMLElement => {
@@ -1327,6 +1976,7 @@ body {
         const key = `${idOf(a)}>${idOf(b)}`;
         const record = links.get(key) ?? makeLink(a, b, {});
         const chip = makeToken(label, options.tone);
+        applyLifecycle(chip, options);
         const length = record.path.getTotalLength() || 1;
         const stagger = `${frame}|${key}`;
         const nth = sendCount.get(stagger) ?? 0;
@@ -1350,16 +2000,18 @@ body {
 
   const whiteboard: WhiteboardShim = {
     get frames() {
-      return frames();
+      return activeFrames();
     },
     get frame() {
-      return frames()[Math.max(current, 0)]!;
+      const key = init?.frames[Math.max(current, 0)]?.key;
+
+      return activeFrames().find((frame) => frame.key === key)!;
     },
     get theme() {
       return { ...theme };
     },
     get reducedMotion() {
-      return Boolean(init?.reducedMotion);
+      return prefersReducedMotion();
     },
     code: (name) => placeholder("wbCode", name),
     block: (id) => placeholder("wbBlock", id),
@@ -1389,12 +2041,42 @@ body {
         ...timing,
       });
 
-      if (instantMode && finite(animation)) animation.finish();
+      if ((instantMode || prefersReducedMotion()) && finite(animation))
+        animation.finish();
 
       return animation;
     },
+    setSequence(keys) {
+      const sequence = [...keys];
+
+      if (!sequence.length)
+        throw new Error("setSequence() needs at least one frame key.");
+
+      if (new Set(sequence).size !== sequence.length)
+        throw new Error("setSequence() frame keys must be unique.");
+
+      for (const key of sequence)
+        if (frameIndex(key) < 0) throw new Error(`Unknown frame "${key}".`);
+
+      if (
+        activeSequence?.length === sequence.length &&
+        activeSequence.every((key, index) => key === sequence[index])
+      )
+        return;
+
+      activeSequence = sequence;
+
+      if (built) buildTimeline();
+
+      if (current >= 0) applyStates();
+
+      post({ type: "sequence", keys: sequence });
+    },
     goto(key) {
       if (frameIndex(key) < 0) throw new Error(`Unknown frame "${key}".`);
+
+      if (activeSequence && !activeSequence.includes(key))
+        throw new Error(`Frame "${key}" is not in the active sequence.`);
       post({ type: "goto", key });
     },
     next: () => post({ type: "step", delta: 1 }),
@@ -1412,7 +2094,12 @@ body {
       return createEdge(resolve(from), resolve(to), options).group;
     },
     token(options = {}) {
-      return makeToken(options.label, options.tone);
+      const token = makeToken(options.label, options.tone);
+
+      if (options.visible) token.dataset.visible = "";
+      applyLifecycle(token, options);
+
+      return token;
     },
     travel(token, arrow, frame, options = {}) {
       const record = arrows.find((item) => item.group === arrow);
@@ -1422,7 +2109,7 @@ body {
 
       travelAlong(resolve(token), record, frame, options);
     },
-    scene: (options = {}) => scene(options.columns ?? 3),
+    scene: (options = {}) => scene(options),
   };
 
   Object.defineProperty(window, "whiteboard", { value: whiteboard });
@@ -1478,9 +2165,13 @@ body {
   // The host draws over each slot, so it needs where each one is now. Read
   // every frame and send only changes; rAF stops while the stage is hidden.
   let lastLayout = "";
+  let lastHeight = -1;
 
   const measure = () => {
+    clipGeometryCache = new Map();
     arrows.forEach(route);
+    placeArrowLabels();
+    travels.forEach(placeTravel);
     const slots: SlotLayout[] = [];
 
     document.querySelectorAll<HTMLElement>("[data-wb-slot]").forEach((el) => {
@@ -1517,11 +2208,50 @@ body {
       post({ type: "slots", slots });
     }
 
+    if (init?.autoSize) {
+      // Natural body height includes slot-size feedback from host overlays.
+      // Exclude viewport-sized drawing layers to avoid a resize feedback loop.
+      let bottom = document.body.getBoundingClientRect().bottom;
+
+      for (const element of document.body.querySelectorAll("*")) {
+        // Global drawing layers are viewport-sized. Their descendants can
+        // have geometry far outside authored overflow viewports, but neither
+        // the layers nor those descendants are layout content.
+        if (element.closest(".wb-arrows, .wb-tokens")) continue;
+
+        if (
+          !element.checkVisibility({
+            visibilityProperty: true,
+            opacityProperty: true,
+          })
+        )
+          continue;
+        const rect = element.getBoundingClientRect();
+        const clipped = clipBounds(element);
+        const left = Math.max(rect.left, clipped.left);
+        const right = Math.min(rect.right, clipped.right);
+        const top = Math.max(rect.top, clipped.top);
+        const visibleBottom = Math.min(rect.bottom, clipped.bottom);
+
+        if (right <= left || visibleBottom <= top) continue;
+        bottom = Math.max(bottom, visibleBottom);
+      }
+
+      const height = Math.max(120, Math.ceil(bottom));
+
+      if (height !== lastHeight) {
+        lastHeight = height;
+        post({ type: "size", height });
+      }
+    }
+
+    clipGeometryCache = undefined;
     requestAnimationFrame(measure);
   };
 
   const start = async (message: StageInit) => {
     init = message;
+    root.toggleAttribute("data-wb-auto-size", message.autoSize);
     applyTheme(message.theme);
     document.body.innerHTML = message.html;
     upgradeAll(document.body);
@@ -1542,7 +2272,15 @@ body {
     buildTimeline();
     post({ type: "ready" });
     requestAnimationFrame(measure);
-    await show(message.frame, true);
+    const requestedKey = message.frames[message.frame]?.key;
+    const firstActive = activeSequence?.[0];
+
+    const initial =
+      activeSequence && !activeSequence.includes(requestedKey)
+        ? frameIndex(firstActive!)
+        : message.frame;
+
+    await show(initial, true);
   };
 
   port.onmessage = (event: MessageEvent<HostMessage>) => {
@@ -1554,9 +2292,12 @@ body {
         break;
       case "frame":
         if (init)
-          show(message.index, message.instant).catch((error) =>
-            fail(String(error)),
-          );
+          show(
+            message.index,
+            message.instant,
+            message.direction,
+            message.adjacent,
+          ).catch((error) => fail(String(error)));
         break;
       case "theme":
         applyTheme(message.theme);

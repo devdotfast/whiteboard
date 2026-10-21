@@ -77,6 +77,8 @@ export interface IReviewDesktopConnectionService {
 	/** The agents answering in Ask in any review, which quitting would stop. */
 	workingAskAgents(): Promise<string[]>;
 	setScratchpadEnabled(enabled: boolean): Promise<boolean>;
+	readAnimationsEnabled(): Promise<boolean>;
+	setAnimationsEnabled(enabled: boolean): Promise<boolean>;
 	readRemoteHosts(): Promise<ReviewGatewayHostState[]>;
 	listSshAliases(): Promise<string[]>;
 	retryRemoteHost(alias: string): Promise<void>;
@@ -223,7 +225,7 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 			signal: AbortSignal.timeout(30_000),
 		});
 		await this.requireOk(response, "scratchpad preference");
-		return parseScratchpadPreference(await response.json());
+		return parseExperimentalPreference(await response.json());
 	}
 
 	async setScratchpadEnabled(enabled: boolean): Promise<boolean> {
@@ -235,7 +237,29 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 			signal: AbortSignal.timeout(120_000),
 		});
 		await this.requireOk(response, "scratchpad preference");
-		return parseScratchpadPreference(await response.json());
+		return parseExperimentalPreference(await response.json());
+	}
+
+	async readAnimationsEnabled(): Promise<boolean> {
+		await this.initialize();
+		const response = await fetch(`${this.serverUrl}/preferences/animations`, {
+			headers: this.authHeaders(),
+			signal: AbortSignal.timeout(30_000),
+		});
+		await this.requireOk(response, "animations preference");
+		return parseExperimentalPreference(await response.json());
+	}
+
+	async setAnimationsEnabled(enabled: boolean): Promise<boolean> {
+		await this.initialize();
+		const response = await fetch(`${this.serverUrl}/preferences/animations`, {
+			method: "PUT",
+			headers: { ...this.authHeaders(), "content-type": "application/json" },
+			body: JSON.stringify({ enabled }),
+			signal: AbortSignal.timeout(120_000),
+		});
+		await this.requireOk(response, "animations preference");
+		return parseExperimentalPreference(await response.json());
 	}
 
 	async readRemoteHosts(): Promise<ReviewGatewayHostState[]> {
@@ -620,9 +644,9 @@ export async function reviewResponseError(response: Response, fallback: string):
 	return new Error(typeof payload?.error === "string" && payload.error ? payload.error : fallback);
 }
 
-function parseScratchpadPreference(value: unknown): boolean {
+function parseExperimentalPreference(value: unknown): boolean {
 	if (typeof value !== "object" || value === null || !("enabled" in value) || typeof value.enabled !== "boolean") {
-		throw new Error("scratchpad preference response is malformed.");
+		throw new Error("experimental preference response is malformed.");
 	}
 	return value.enabled;
 }

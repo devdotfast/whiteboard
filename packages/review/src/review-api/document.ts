@@ -477,11 +477,17 @@ const namedByType = (types: string[]) =>
 
 /** What agents are shown: content names only its type. The host parses
  * editSchema, reporting the named kind's issues. */
-export const publishedEditSchema = edits(
-  namedByType([...writableBlockTypes, "step", "flow_node", "flow_edge"]),
-  namedByType(writableBlockTypes),
-  z.unknown(),
-);
+export function publishedEdits(animationsEnabled = true) {
+  const types = writableBlockTypes.filter(
+    (type) => animationsEnabled || type !== "animation",
+  );
+
+  return edits(
+    namedByType([...types, "step", "flow_node", "flow_edge"]),
+    namedByType(types),
+    z.unknown(),
+  );
+}
 
 /**
  * What one saved version did, for a canvas drawing the document as the

@@ -21,6 +21,7 @@ import { ReviewStore } from "./store.js";
 
 const live = {
   desktopAvailable: true,
+  animationsEnabled: true,
   scratchpadEnabled: true,
   traceEnabled: true,
 };
