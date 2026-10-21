@@ -533,12 +533,10 @@ const DELAY: std::time::Duration = std::time::Duration::from_millis(300);
 #[test]
 fn a_files_bodies_are_summarized_concurrently() {
     let (file, mut sides) = project("a.py", "", &bodies(3));
-    let (endpoint, _) = slow_server(DELAY, |_, _| (200, gemini_answer("a b c")));
-    let pipeline = concurrent_summarizer(&endpoint, json!({}));
-    let started = std::time::Instant::now();
+    let (endpoint, traffic) = slow_server(DELAY, |_, _| (200, gemini_answer("a b c")));
+    let pipeline = concurrent_summarizer(&endpoint, json!({"max_concurrent_requests": 4}));
     shape(&pipeline, &file, &mut sides).unwrap();
-    let elapsed = started.elapsed();
-    assert!(elapsed < 2 * DELAY, "{elapsed:?}");
+    assert_eq!(traffic.lock().unwrap().peak, 3);
     assert_eq!(function_folds(&sides), vec![(true, "a b c".to_owned()); 3]);
 }
 

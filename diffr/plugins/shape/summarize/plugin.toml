@@ -57,14 +57,14 @@ default = 60000
 type = "integer"
 minimum = 0
 title = "Retries"
-description = "Retries after a timeout, rate limit, or server error before the run is aborted."
+description = "Retries after a timeout, rate limit, or server error. A request that still fails fails that file's update under --defer, and aborts the run otherwise."
 default = 3
 
 [options.max_concurrent_requests]
 type = "integer"
 minimum = 1
 title = "Concurrent requests"
-description = "Most summary requests one run sends at a time per worker."
+description = "Most summary requests each worker sends at a time, so a run sends at most this times the job count (-j)."
 default = 4
 
 [options.system_prompt]
