@@ -1,5 +1,5 @@
-import { ReviewApiClient } from "@review/review-api/client";
 // @vitest-environment jsdom
+import type { ReviewCanvasBridge } from "@dev.fast/review-protocol";
 import {
   type QueryClient,
   onlineManager,
@@ -28,8 +28,9 @@ const settle = () =>
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
 
-const apiClient = () =>
-  new ReviewApiClient({ serverUrl: "http://localhost", token: "local" });
+type Host = Pick<ReviewCanvasBridge, "request">;
+
+const apiHost = (): Host => ({ request: (url, init) => fetch(url, init) });
 
 function mount() {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -41,15 +42,15 @@ function mount() {
 }
 
 function Canvas({
-  client,
+  host,
   reviewId,
   children,
 }: {
-  client: ReviewApiClient;
+  host: Host;
   reviewId: string;
   children: ReactNode;
 }) {
-  const scope = useCanvasQueryScope(client, reviewId);
+  const scope = useCanvasQueryScope(host, reviewId);
 
   return <CanvasQueryProvider scope={scope}>{children}</CanvasQueryProvider>;
 }
@@ -77,7 +78,7 @@ it("keeps its cache through a Strict Mode replay and drops it on unmount", async
   await act(async () =>
     root!.render(
       <StrictMode>
-        <Canvas client={apiClient()} reviewId="review">
+        <Canvas host={apiHost()} reviewId="review">
           <Probe name="a" read={read} onClient={(next) => (client = next)} />
         </Canvas>
       </StrictMode>,
@@ -96,16 +97,16 @@ it("keeps its cache through a Strict Mode replay and drops it on unmount", async
 
 it("gives each canvas and each backend its own cache", async () => {
   const container = mount();
-  const first = apiClient();
+  const first = apiHost();
 
-  const render = (backend: ReviewApiClient, reads: string[]) =>
+  const render = (backend: Host, reads: string[]) =>
     act(async () =>
       root!.render(
         <>
-          <Canvas client={backend} reviewId="review">
+          <Canvas host={backend} reviewId="review">
             <Probe name="a" read={async () => reads[0]!} />
           </Canvas>
-          <Canvas client={first} reviewId="other">
+          <Canvas host={first} reviewId="other">
             <Probe name="b" read={async () => reads[1]!} />
           </Canvas>
         </>,
@@ -116,7 +117,7 @@ it("gives each canvas and each backend its own cache", async () => {
   await settle();
   expect(container.textContent).toBe("a:one;b:two;");
 
-  await render(apiClient(), ["three", "four"]);
+  await render(apiHost(), ["three", "four"]);
   await settle();
   expect(container.textContent).toBe("a:three;b:two;");
 });
@@ -142,7 +143,7 @@ it("reads and writes the local API while the browser reports offline", async () 
 
   await act(async () =>
     root!.render(
-      <Canvas client={apiClient()} reviewId="review">
+      <Canvas host={apiHost()} reviewId="review">
         <Offline />
       </Canvas>,
     ),
@@ -151,4 +152,20 @@ it("reads and writes the local API while the browser reports offline", async () 
   await act(async () => container.querySelector("button")!.click());
   await settle();
   expect(container.textContent).toBe("read:written");
+});
+
+it("leaves reads idle for a host that serves no requests", async () => {
+  const container = mount();
+  const read = vi.fn<() => Promise<string>>(async () => "value");
+
+  await act(async () =>
+    root!.render(
+      <Canvas host={{}} reviewId="review">
+        <Probe name="a" read={read} />
+      </Canvas>,
+    ),
+  );
+  await settle();
+  expect(container.textContent).toBe("a:…;");
+  expect(read).not.toHaveBeenCalled();
 });

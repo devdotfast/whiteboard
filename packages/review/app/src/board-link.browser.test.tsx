@@ -18,7 +18,7 @@ afterEach(async () => {
 });
 
 it("reads a link's hover card when it opens, once", async () => {
-  const request = vi.fn<ReviewCanvasBridge["request"]>(
+  const request = vi.fn<NonNullable<ReviewCanvasBridge["request"]>>(
     async () =>
       new Response(JSON.stringify({ prose: ["Opening words."] }), {
         headers: { "content-type": "application/json" },
@@ -67,7 +67,7 @@ it("reads a link's hover card when it opens, once", async () => {
 });
 
 it("reads a link's hover card again once its target was updated", async () => {
-  const request = vi.fn<ReviewCanvasBridge["request"]>(
+  const request = vi.fn<NonNullable<ReviewCanvasBridge["request"]>>(
     async () =>
       new Response(JSON.stringify({ prose: ["Opening words."] }), {
         headers: { "content-type": "application/json" },

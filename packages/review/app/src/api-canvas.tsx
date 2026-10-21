@@ -126,7 +126,7 @@ export function ApiCanvas({
     [content.bridge],
   );
 
-  const queries = useCanvasQueryScope(client, content.reviewId);
+  const queries = useCanvasQueryScope(content.bridge, content.reviewId);
 
   const [version, setVersion] = useState(content.version);
   const [coverageRevision, setCoverageRevision] = useState(0);

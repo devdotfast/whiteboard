@@ -125,7 +125,7 @@ describe("ReviewTraceView", () => {
   it("shares an in-flight listing with the Trace view and reuses it after reopening", async () => {
     const pending = Promise.withResolvers<Response>();
 
-    const request = vi.fn<ReviewCanvasBridge["request"]>((url) =>
+    const request = vi.fn<NonNullable<ReviewCanvasBridge["request"]>>((url) =>
       url.includes("/agent-traces/session-1")
         ? Promise.resolve(Response.json(mockTraceDetail))
         : pending.promise,
@@ -167,14 +167,15 @@ describe("ReviewTraceView", () => {
   });
 
   it("keeps the trace the reader picked when they leave and come back", async () => {
-    const request = vi.fn<ReviewCanvasBridge["request"]>(async (url) =>
-      Response.json({
-        ...mockTraceDetail,
-        session: {
-          ...mockTraceDetail.session,
-          sessionId: url.includes("session-2") ? "session-2" : "session-1",
-        },
-      }),
+    const request = vi.fn<NonNullable<ReviewCanvasBridge["request"]>>(
+      async (url) =>
+        Response.json({
+          ...mockTraceDetail,
+          session: {
+            ...mockTraceDetail.session,
+            sessionId: url.includes("session-2") ? "session-2" : "session-1",
+          },
+        }),
     );
 
     const session = testReviewSession({}, { request });
@@ -229,9 +230,11 @@ describe("ReviewTraceView", () => {
   });
 
   it("renders retained subagent events without downloading them", async () => {
-    const request = vi.fn<ReviewCanvasBridge["request"]>(async () => {
-      throw new Error("offline");
-    });
+    const request = vi.fn<NonNullable<ReviewCanvasBridge["request"]>>(
+      async () => {
+        throw new Error("offline");
+      },
+    );
 
     const session = testReviewSession({}, { request });
 
@@ -277,7 +280,7 @@ describe("ReviewTraceView", () => {
     "loads stored traces with JSON review mode %s",
     async (jsonReview) => {
       const requestMock = vi
-        .fn<ReviewCanvasBridge["request"]>()
+        .fn<NonNullable<ReviewCanvasBridge["request"]>>()
         .mockImplementation((url) => {
           if (url.includes("/agent-traces/session-1")) {
             return Promise.resolve(
@@ -336,7 +339,7 @@ describe("ReviewTraceView", () => {
     const requested: string[] = [];
 
     const requestMock = vi
-      .fn<ReviewCanvasBridge["request"]>()
+      .fn<NonNullable<ReviewCanvasBridge["request"]>>()
       .mockImplementation((url) => {
         requested.push(url);
 
@@ -423,7 +426,7 @@ describe("ReviewTraceView", () => {
 
   it("shows the storage error instead of the unconfigured hint", async () => {
     const requestMock = vi
-      .fn<ReviewCanvasBridge["request"]>()
+      .fn<NonNullable<ReviewCanvasBridge["request"]>>()
       .mockImplementation((url) => {
         if (url.includes("/agent-traces")) {
           return Promise.resolve(
@@ -473,7 +476,7 @@ describe("ReviewTraceView", () => {
     };
 
     const requestMock = vi
-      .fn<ReviewCanvasBridge["request"]>()
+      .fn<NonNullable<ReviewCanvasBridge["request"]>>()
       .mockImplementation((url) => {
         if (url.includes("/agent-traces")) {
           return Promise.resolve(
@@ -552,7 +555,7 @@ describe("ReviewTraceView", () => {
     };
 
     const requestMock = vi
-      .fn<ReviewCanvasBridge["request"]>()
+      .fn<NonNullable<ReviewCanvasBridge["request"]>>()
       .mockImplementation((url) => {
         if (url.includes("/agent-traces/session-1")) {
           return Promise.resolve(

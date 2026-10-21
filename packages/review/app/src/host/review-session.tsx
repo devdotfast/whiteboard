@@ -52,7 +52,9 @@ export function createReviewSession(
 
     if (config.token) headers.set("x-review-token", config.token);
 
-    return bridge.request(String(url), { ...init, headers });
+    return bridge.request
+      ? bridge.request(String(url), { ...init, headers })
+      : Promise.reject(new Error("This host serves no requests."));
   };
 
   const apiUrl = (endpoint: `/${string}`) =>

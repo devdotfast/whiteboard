@@ -4,9 +4,9 @@ import { expect, it, vi } from "vitest";
 import { createReviewSession } from "./review-session";
 
 it("sends JSON requests to the displayed version with authentication", async () => {
-  const request = vi.fn<ReturnType<typeof testReviewBridge>["request"]>(
-    async () => Response.json({ text: "copied" }),
-  );
+  const request = vi.fn<
+    NonNullable<ReturnType<typeof testReviewBridge>["request"]>
+  >(async () => Response.json({ text: "copied" }));
 
   let version = 2;
 

@@ -1,4 +1,4 @@
-import type { ReviewApiClient } from "@review/review-api/client";
+import type { ReviewCanvasBridge } from "@dev.fast/review-protocol";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   type ReactNode,
@@ -96,10 +96,24 @@ export interface CanvasQueryScope {
 /** Desktop's canvas client, kept across the boards it shows. */
 export const SharedCanvasQueryClient = createContext<QueryClient | null>(null);
 
+/** A client whose queries stay idle, for a host that serves no requests. */
+function createIdleQueryClient(): QueryClient {
+  const client = createCanvasQueryClient();
+  const defaults = client.defaultQueryOptions.bind(client);
+
+  client.defaultQueryOptions = (options) => ({
+    ...defaults(options),
+    enabled: false,
+  });
+
+  return client;
+}
+
 /** The shared client, else one owned by the canvas. Clearing is deferred so
- * a Strict Mode replay keeps its client. */
+ * a Strict Mode replay keeps its client. A host without `request` gets an
+ * idle client of its own. */
 export function useCanvasQueryScope(
-  client: ReviewApiClient,
+  host: Pick<ReviewCanvasBridge, "request">,
   reviewId: string,
 ): CanvasQueryScope {
   const shared = useContext(SharedCanvasQueryClient);
@@ -107,9 +121,11 @@ export function useCanvasQueryScope(
   const scope = useMemo(
     () => ({
       id: nextScope++,
-      queryClient: shared ?? createCanvasQueryClient(),
+      queryClient: host.request
+        ? (shared ?? createCanvasQueryClient())
+        : createIdleQueryClient(),
     }),
-    [shared, client, reviewId],
+    [shared, host, reviewId],
   );
 
   const { queryClient } = scope;

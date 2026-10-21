@@ -378,7 +378,8 @@ export interface ReviewCanvasBridge {
   readonly config: ReviewRuntimeConfig;
   readonly inlineEditors: ReviewInlineEditorFactory;
   readonly diffView: ReviewDiffViewFactory;
-  request(url: string, init?: RequestInit): Promise<Response>;
+  /** Absent where the board is all the host serves: reads stay idle. */
+  request?(url: string, init?: RequestInit): Promise<Response>;
   /** Posts the board's telemetry to `path`, even as the page closes. */
   beacon?(path: `/${string}`, body: string): void;
   post(request: ReviewVerbRequest): Promise<ReviewVerbResponse>;
