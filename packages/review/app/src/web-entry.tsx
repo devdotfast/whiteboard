@@ -78,6 +78,10 @@ export function readSharedBoard({
   };
 }
 
+// The bridge answers every request, so this origin only names the URLs the
+// canvas builds; nothing fetches it. A constant renders on a server too.
+const SNAPSHOT_ORIGIN = "http://snapshot.invalid";
+
 /** A shared board's content, read-only: its document and nothing around it. */
 export const Whiteboard: WhiteboardComponent = ({
   share,
@@ -92,7 +96,7 @@ export const Whiteboard: WhiteboardComponent = ({
     () =>
       snapshotReviewBridge(api, {
         config: {
-          serverUrl: window.location.origin,
+          serverUrl: SNAPSHOT_ORIGIN,
           reviewId: api.snapshot.reviewId,
           token: "",
           wasmUrl,

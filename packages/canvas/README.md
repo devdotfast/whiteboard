@@ -15,6 +15,9 @@ maps each object id in the manifest to its bytes. Code peeks show as
 unavailable unless `inlineEditors` is given, for example
 `createSourceViewer({ readSource })`.
 
+It imports and renders on a server as an empty frame; the board draws once
+it mounts in the browser.
+
 The page provides React 19. Under a strict CSP:
 
 - Keep the fonts as files (`font-src 'self'`): in Vite,
