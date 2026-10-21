@@ -11,6 +11,7 @@ import { autorun, type IObservable } from '../../../../base/common/observable.js
 import { URI } from '../../../../base/common/uri.js';
 import { createActionViewItem } from '../../../../platform/actions/browser/menuEntryActionViewItem.js';
 import { MenuWorkbenchToolBar } from '../../../../platform/actions/browser/toolbar.js';
+import { localize } from '../../../../nls.js';
 import { MenuId } from '../../../../platform/actions/common/actions.js';
 import { IContextKeyService, type IScopedContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
@@ -93,9 +94,15 @@ export class MultiDiffEditorResourceHeader extends Disposable {
 		const collapseButton = this._collapseButton = this._register(new Button(this._elements.collapseButton, {}));
 		this._register(autorun(reader => {
 			collapseButton.element.className = '';
-			collapseButton.icon = collapsed.read(reader) ? Codicon.chevronRight : Codicon.chevronDown;
+			const isCollapsed = collapsed.read(reader) ?? false;
+			collapseButton.icon = isCollapsed ? Codicon.chevronRight : Codicon.chevronDown;
+			collapseButton.element.setAttribute('aria-expanded', String(!isCollapsed));
+			collapseButton.element.setAttribute('aria-label', isCollapsed ? localize('expandFile', "Expand file") : localize('collapseFile', "Collapse file"));
 		}));
-		this._register(collapseButton.onDidClick(toggleCollapsed));
+		this._register(collapseButton.onDidClick(event => {
+			event.stopPropagation();
+			if (!this._collapseLocked) toggleCollapsed();
+		}));
 
 		if (!this._workbenchUIElementFactory.hideResourceHeader && this._workbenchUIElementFactory.headerClickToCollapse) {
 			this.element.tabIndex = 0;
@@ -145,6 +152,7 @@ export class MultiDiffEditorResourceHeader extends Disposable {
 		this._collapseLocked = locked;
 		// The slot stays so the path lines up with its neighbours.
 		this._collapseButton.element.style.visibility = locked ? 'hidden' : '';
+		this._collapseButton.enabled = !locked;
 		if (!this._workbenchUIElementFactory.hideResourceHeader && this._workbenchUIElementFactory.headerClickToCollapse) {
 			if (locked) {
 				this.element.removeAttribute('role');

@@ -59,9 +59,7 @@ export class ReviewMultiDiffUIElementFactory
   alwaysShowScrollbars = false;
   scrollbarBelowResourceHeader = false;
 
-  get headerClickToCollapse(): boolean {
-    return !this.hideResourceHeader;
-  }
+  readonly headerClickToCollapse = false;
 
 
 	private readonly headers = new Set<() => void>();

@@ -168,7 +168,15 @@ class RichBlockView extends ReactView {
         this.gesture?.abort();
         press = undefined;
 
-        if (event.button !== 0 || event.buttons !== 1) return;
+        if (
+          event.button !== 0 ||
+          event.buttons !== 1 ||
+          (event.target instanceof Element &&
+            event.target.closest(
+              '[role="button"][aria-expanded], button[aria-expanded]',
+            ))
+        )
+          return;
 
         const start = {
           x: event.clientX,

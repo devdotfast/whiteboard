@@ -198,6 +198,18 @@ it("offers whole-block reference actions for the editor selection, and clears bo
       await userEvent.keyboard("{Escape}");
     }
 
+    const disclosure = document.createElement("button");
+    disclosure.setAttribute("aria-expanded", "true");
+    disclosure.textContent = "Collapse file";
+    const toggle = vi.fn<() => void>();
+    disclosure.addEventListener("click", toggle);
+    block.append(disclosure);
+    await userEvent.click(disclosure);
+    expect(toggle).toHaveBeenCalledOnce();
+    expect(page.querySelector("[data-board-selected]")).toBeNull();
+    expect(copy()).toBeNull();
+    disclosure.remove();
+
     await userEvent.click(block);
     await vi.waitFor(() => expect(copy()).not.toBeNull());
     expect(page.querySelector("[data-board-selected]")).not.toBeNull();
