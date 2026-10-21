@@ -89,9 +89,10 @@ Review applies four of them, covering four CVEs:
   configuration properties now route through a recursive `filterProperty`
   helper that validates nested objects against the registry by dotted path.
 - Webview resource path containment bypass (CVE-2026-81383, high):
-  `461bd99584a70d51f079dda93353b4b880c9d56d`. Applied verbatim.
-  `containsResource` normalizes backslashes for non-`file` schemes before the
-  containment check.
+  `461bd99584a70d51f079dda93353b4b880c9d56d`. Superseded by the October
+  fixes below: `b0240f4c` removes its backslash rewrite in `containsResource`,
+  and the dual POSIX/Windows check in `resources.ts` from `e28ec757` keeps a
+  backslash `..` from escaping a webview root.
 - MCP gallery metadata path traversal (CVE-2026-81377, moderate):
   `6a88486bf4f0033dfc5c7ff1e305d34ed200aed4`. Applied verbatim. `getLocation`
   rejects resolved paths that escape the MCP storage directory, and `uninstall`
@@ -156,6 +157,66 @@ upstream wholesale rather than porting these three commits individually.
 
 Review also keeps `@anthropic-ai/sdk` as a development-only type dependency.
 It must not appear in the packaged production dependency set.
+
+### October 2026 advisories (fixed upstream in 1.141.x)
+
+Review applies these, by reference as above:
+
+- Path traversal and Workspace Trust bypass (CVE-2026-102238, critical) and
+  remote webview resource path traversal (CVE-2026-102229, moderate): release
+  commits `e28ec75752e6eede19b0a0f47546e59099a0e4ac` and
+  `b0240f4c8e1416e866c2932f71ed4383d5bc19fa`, taken as main's roll-up
+  `0695d91131628a77143182333b5bf2a7a57245f4` for `resources.ts`, `strings.ts`,
+  `resourceLoading.ts` and the Electron `webviewElement.ts`, plus the
+  mixed-case authority follow-up `6750fe27325d65a39711ff6db88df23bb297db3b`.
+  Non-file `isEqualOrParent` also checks containment with Windows semantics;
+  webviews normalize `vscode-remote` requests and roots for the host's OS and
+  deny them when it is unknown. The browser `webviewElement.ts` hunks are
+  ported by hand (its import block predates `MutableDisposable`). Review
+  adds one fallback there: when the window's own connection does not own the
+  authority, `reviewRemoteOS` returns the OS that Home's `ReviewRemoteSession`
+  recorded for that host, so remote extension webviews in Home keep loading.
+  `0695d911`'s agent host, MCP, chat, sandbox and terminal hunks are left out;
+  they target code pruned here or covered by `2381ffb2`.
+- Webview resource loading defense in depth:
+  `9ea28e299ee1c206c25b1c6d9369d2554dd3cfbe`. Applied verbatim. Windows
+  `file` requests with a `.. ` (trailing-space) segment are denied.
+- `__proto__` prototype pollution in JSON parsing:
+  `33c90c65c7d39ba204f76023bf953a16af71dff4`. Applied verbatim, except the
+  chat `languageModelsConfigurationService.ts` hunk; that file is pruned.
+- JSON schema URLs are canonicalized before trusted-domain checks and
+  requests: `fb20064c0f4bda98ede67f594727503329370d1f`. Applied verbatim to
+  `json-language-features/client/src/jsonClient.ts` and `utils/urlMatch.ts`;
+  test and integration-script hunks are left out.
+- Workspace Trust bypass via `terminal.integrated.allowedLinkSchemes`
+  (CVE-2026-102234, high): `2381ffb2918c91b1f2084fa6defa8345dbcf3797`. Only
+  `restricted: true`; the `export` it adds is for upstream's test. Inert here
+  because Review loads no terminal contribution.
+
+#### Not applicable at this pin
+
+- Security feature bypass via notebooks (CVE-2026-78461):
+  `7422e06ada979320fbd4551013b9924f3f2a0f25` is an ancestor of the pin.
+- RCE via skipped Workspace Trust (CVE-2026-70098):
+  `010ee1aa74f8c8f0a12072f4766853ad71bc4014` patches `src/vs/sessions/`,
+  which is deleted.
+- Shared MCP sandbox permission approvals (CVE-2026-102851):
+  `34329e2f696c2ee2f0c66db9b1e56cf3e7d2e4fb`; Review registers no MCP
+  services.
+- Azure DevOps code search endpoint override (CVE-2026-102231):
+  `e57527e158f6b18cc9fa3985fd535fdc2ce49b5a` touches only
+  `extensions/copilot/`, excluded at vendor time.
+- Terminal relaunch and reuse trust bypass (CVE-2026-102233):
+  `1c89ae435d71fa27df437bbc628ed3072007eb46`; the terminal contribution is
+  not loaded.
+- RCE via terminal notifications (CVE-2026-102235):
+  `79ba0f2d5a72cbbdcb91a1067f50a9e3f48a05bc` patches
+  `terminalContrib/notification/browser/terminalNotificationHandler.ts`, which
+  is absent.
+- Custom hook edits in the Copilot harness (CVE-2026-102232):
+  `fffc9bc6481f32dc2cccca7d8760f72feea2416b` and
+  `a5af62a0330a29a2b40dad77d7435ae5569bbdce` patch the agent host; its
+  `node/` code, `src/vs/sessions/` and the chat agent sessions are deleted.
 
 ## Vendor-time exclusions
 
@@ -334,8 +395,8 @@ imports the manager, and `editor.common.main.ts` imports the two contributions
 and registers upstream's `ChatOutputRendererService`, which upstream registers
 from the chat contribution Review does not load. Both windows load these.
 Webview resources still resolve only through
-`contrib/webview/browser/resourceLoading.ts`, so the CVE-2026-81383 fix above
-still applies, and every webview still loads through the `pre/index.html` host
+`contrib/webview/browser/resourceLoading.ts`, so the webview containment fixes
+above still apply, and every webview still loads through the `pre/index.html` host
 described below.
 
 ## Intentional fork divergence
