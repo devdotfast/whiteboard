@@ -6,6 +6,7 @@
 import { CancellationToken } from "../../base/common/cancellation.js";
 import { CancellationError } from "../../base/common/errors.js";
 import { Disposable, DisposableStore, isDisposable } from "../../base/common/lifecycle.js";
+import { setTimeout0 } from "../../base/common/platform.js";
 import { URI } from "../../base/common/uri.js";
 import { IDiffProviderFactoryService } from "../../editor/browser/widget/diffEditor/diffProviderFactoryService.js";
 import { Range } from "../../editor/common/core/range.js";
@@ -86,6 +87,14 @@ interface Hit {
 
 let nextIndexId = 0;
 
+// Peeks build their indexes at once; yield so they never hold the renderer.
+let sliceStart = 0;
+const yieldSlice = async () => {
+	if (performance.now() - sliceStart < 20) return;
+	await new Promise<void>(resolve => setTimeout0(resolve));
+	sliceStart = performance.now();
+};
+
 const versions = (files: readonly { original: ITextModel | undefined; modified: ITextModel | undefined }[]) =>
 	files.map(({ original, modified }) => `${original?.getVersionId() ?? ""}/${modified?.getVersionId() ?? ""}`).join(",");
 
@@ -156,6 +165,7 @@ export class DiffFindIndex extends Disposable {
 			const files: IndexFile[] = [];
 			try {
 				for (const { entry, original, modified } of models) {
+					await yieldSlice();
 					const diff = original && modified ? await provider.computeDiff(original, modified, { ignoreTrimWhitespace: false, maxComputationTimeMs: 0, computeMoves: false }, CancellationToken.None) : undefined;
 					const ranges = this.lens ? lensRanges(this.lens, entry) : undefined;
 					const inLens = (side: DiffFindSide, line: number) => {
