@@ -1,4 +1,6 @@
+import { EmptyState } from "@canvas/ui/empty-state";
 import { type JsonValue, isJsonObject } from "@dev.fast/review-protocol";
+import { shareManifestSchema } from "@dev.fast/review-share-protocol";
 import {
   parseSharedSnapshot,
   sharePresentationSchema,
@@ -29,11 +31,13 @@ export type {
   UnverifiedSharedBoard,
 } from "./web-entry-api";
 
-/** Reads a share into the saved version the canvas mounts. */
-export function readSharedBoard({
-  manifest,
-  objects,
-}: SharedBoardBundle): SnapshotReviewApi {
+/** Reads a share into the saved version the canvas mounts. Throws when
+ * any part of it does not parse. */
+export function readSharedBoard(share: SharedBoardBundle): SnapshotReviewApi {
+  // Parsed again: a page may render a share it never verified.
+  const manifest = shareManifestSchema.parse(share.manifest);
+  const { objects } = share;
+
   const bytes = (id: string) => {
     const object = objects.get(id);
 
@@ -93,10 +97,20 @@ export const Whiteboard: WhiteboardComponent = ({
   inlineEditors,
 }) => {
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
-  const api = useMemo(() => readSharedBoard(share), [share]);
+
+  // Someone else's content: a share that does not parse, or nests deeper than
+  // the stack, shows as unreadable instead of throwing out of the page.
+  const api = useMemo(() => {
+    try {
+      return readSharedBoard(share);
+    } catch {
+      return null;
+    }
+  }, [share]);
 
   const bridge = useMemo(
     () =>
+      api &&
       snapshotReviewBridge(api, {
         config: {
           serverUrl: SNAPSHOT_ORIGIN,
@@ -129,7 +143,14 @@ export const Whiteboard: WhiteboardComponent = ({
   return (
     <div ref={setRoot} className="review-canvas-root" data-review-theme={theme}>
       <div className={themeHostClassName(theme)}>
-        {root && (
+        {!api || !bridge ? (
+          <EmptyState
+            variant="boxed"
+            role="alert"
+            title="This board can't be shown"
+            message="Its share could not be read."
+          />
+        ) : root ? (
           <ReviewContainerProvider container={root}>
             <ApiCanvas
               content={{
@@ -145,7 +166,7 @@ export const Whiteboard: WhiteboardComponent = ({
               contentOnly
             />
           </ReviewContainerProvider>
-        )}
+        ) : null}
       </div>
     </div>
   );

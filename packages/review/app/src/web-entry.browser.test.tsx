@@ -53,6 +53,24 @@ it("settles code peeks as unavailable without the sender's checkout", async () =
   expect(container.textContent).not.toContain("Loading code");
 });
 
+it("shows a share it cannot read as unreadable", async () => {
+  const sealed = await share("bug-report-dialog");
+
+  const container = await mount({
+    ...sealed,
+    objects: new Map(
+      [...sealed.objects.keys()].map((id) => [
+        id,
+        new TextEncoder().encode("{not json"),
+      ]),
+    ),
+  });
+
+  expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+    "This board can't be shown",
+  );
+});
+
 it("renders the document alone, without the app around it", async () => {
   const container = await mount(await share("three-minute-tour"));
 

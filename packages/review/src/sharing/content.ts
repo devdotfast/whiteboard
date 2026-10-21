@@ -40,7 +40,8 @@ export const sharedSnapshotSchema = z.strictObject({
       branch: z.string().optional(),
       baseRef: z.string().optional(),
       pullRequestNumber: z.number().int().positive().optional(),
-      pullRequestUrl: z.string().optional(),
+      // Shown as a link: someone else's share names it.
+      pullRequestUrl: z.url({ protocol: /^https$/ }).optional(),
       pullRequestTitle: z.string().optional(),
       revision: z.string().optional(),
     })
@@ -54,7 +55,13 @@ const counts = z.strictObject({ additions: count, deletions: count });
 const mapSchema = z.strictObject({
   commit: z.string().regex(COMMIT_ID),
   side: z.enum(["base", "head"]),
-  elements: z.array(normalizedSoftwareElementSchema),
+  // The map renderers walk parents until there are none.
+  elements: z
+    .array(normalizedSoftwareElementSchema)
+    .refine(
+      (elements) => !nestsInCycle(elements),
+      "Software map elements nest in a cycle.",
+    ),
   relationships: z.array(normalizedSoftwareRelationshipSchema),
   countsByElementPath: z.record(z.string(), counts),
   unmappedByElementPath: z.record(
@@ -81,6 +88,32 @@ const mapSchema = z.strictObject({
     }),
   ),
 });
+
+/** Whether following `parentPath` from some element never ends. Each
+ * element's chain is walked once. */
+function nestsInCycle(
+  elements: readonly { path: string; parentPath?: string }[],
+): boolean {
+  const parents = new Map(elements.map((item) => [item.path, item.parentPath]));
+  const settled = new Set<string>();
+
+  for (const { path } of elements) {
+    const chain = new Set<string>();
+
+    for (
+      let at: string | undefined = path;
+      at !== undefined && !settled.has(at);
+      at = parents.get(at)
+    ) {
+      if (chain.has(at)) return true;
+      chain.add(at);
+    }
+
+    for (const visited of chain) settled.add(visited);
+  }
+
+  return false;
+}
 
 export const sharePresentationSchema = z.strictObject({
   maps: z.record(z.string(), mapSchema),
