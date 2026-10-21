@@ -176,11 +176,20 @@ export class ReviewDiffViewService extends Disposable {
 	}
 
 	reset(): void {
+		this.retire()();
+	}
+
+	/** Starts the next canvas's comparisons; the last canvas's views stay until the returned call closes them. */
+	retire(): () => void {
 		this.comparisonGeneration++;
-		for (const handle of [...this.handles]) handle.dispose();
+		const handles = [...this.handles];
+		const sessions = [...this.sessions.values()];
 		this.handles.clear();
-		for (const { session } of this.sessions.values()) session.dispose();
 		this.sessions.clear();
+		return () => {
+			for (const handle of handles) handle.dispose();
+			for (const { session } of sessions) session.dispose();
+		};
 	}
 
 	toggleRenderSideBySide(): void {

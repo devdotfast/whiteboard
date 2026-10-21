@@ -294,3 +294,119 @@ it("reports a board's view without waiting for its diff", async () => {
   );
   expect(reportSidebar.mock.lastCall![0].files).toBeUndefined();
 });
+
+it("keeps the board and its page bar on screen until the next board has loaded", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    },
+  );
+  vi.stubGlobal("matchMedia", () => ({
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  store = new ReviewStore(":memory:", {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  });
+
+  const board = async (title: string, markdown = "") =>
+    (
+      await store.execute(
+        {
+          operation: {
+            type: "create",
+            title,
+            target: {
+              kind: "commits",
+              repositoryId: "repo",
+              base: "base",
+              head: "head",
+            },
+          },
+        },
+        { origin: {}, document: [{ type: "markdown", markdown }] },
+      )
+    ).reviewId;
+
+  const parent = await board("Stack");
+  const first = await board("First", "First board");
+  const second = await board("Second", "Second board");
+
+  for (const child of [first, second])
+    await store.execute({
+      operation: { type: "set_parent", reviewId: child, parentId: parent },
+    });
+
+  // The second board answers once let through.
+  let letThrough!: () => void;
+  const gate = new Promise<void>((resolve) => (letThrough = resolve));
+  const app = new Hono();
+  app.get("/reviews-api/:id/commits", (c) => c.json([]));
+  app.route("/reviews-api", createReviewApi(store));
+
+  const bridge = testReviewBridge(
+    {},
+    {
+      request: async (url, init) => {
+        if (String(url).includes(second)) await gate;
+
+        return app.request(url, init);
+      },
+    },
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mountReviewCanvas(container, {
+      kind: "api",
+      reviewId: first,
+      bridge,
+    });
+  });
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(
+        container.querySelector(
+          '[aria-label^="First, "][aria-label$=" of 2 in Stack"]',
+        ),
+      ).not.toBeNull(),
+    );
+  });
+
+  await act(async () => {
+    canvas!.update({ kind: "api", reviewId: second, bridge });
+  });
+
+  // The switcher already names the next board over the last one.
+  const shown = [...container.querySelectorAll("main")].find(
+    (main) => !main.closest("[inert]"),
+  )!;
+
+  expect(shown.textContent).toContain("First board");
+  expect(
+    shown.querySelector(
+      '[aria-label^="Second, "][aria-label$=" of 2 in Stack"]',
+    ),
+  ).not.toBeNull();
+
+  letThrough();
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(container.textContent).not.toContain("First board");
+  });
+  expect(container.querySelector("[inert]")).toBeNull();
+  expect(container.textContent).toContain("Second board");
+  expect(
+    container.querySelector(
+      '[aria-label^="Second, "][aria-label$=" of 2 in Stack"]',
+    ),
+  ).not.toBeNull();
+});

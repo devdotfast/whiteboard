@@ -19,6 +19,7 @@ import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
   createRef,
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -27,6 +28,7 @@ import {
 import { createRoot } from "react-dom/client";
 
 import { ApiCanvas } from "./api-canvas";
+import { BoardSwitchContext } from "./board-switch";
 import { type DiffFilePicker, DiffFilePickerContext } from "./diff-file-picker";
 import { FeedbackDialog } from "./feedback-dialog";
 import { CanvasUiContext } from "./host/canvas-ui";
@@ -53,15 +55,7 @@ function ReviewCanvas({
   findHost: ReviewFindHost;
 }) {
   if (content.kind === "api")
-    return (
-      <div data-review-api="" {...stylex.props(shellStyles.apiCanvas)}>
-        <ApiCanvas
-          key={content.reviewId}
-          content={content}
-          findHost={findHost}
-        />
-      </div>
-    );
+    return <ApiBoards content={content} findHost={findHost} />;
 
   if (content.kind === "home")
     return <Home data={content.data} host={content.host} findHost={findHost} />;
@@ -101,6 +95,67 @@ function ReviewCanvas({
   }
 
   return null;
+}
+
+/** The board on screen stays until the next one has loaded, which then
+ * replaces it whole: a switch never blanks the canvas. */
+function ApiBoards({
+  content,
+  findHost,
+}: {
+  content: Extract<ReviewCanvasContent, { kind: "api" }>;
+  findHost: ReviewFindHost;
+}) {
+  const [shown, setShown] = useState(content);
+  const latest = useRef(content);
+
+  latest.current = content;
+
+  if (shown.reviewId === content.reviewId && shown !== content)
+    setShown(content);
+
+  const next = shown.reviewId === content.reviewId ? undefined : content;
+  const nextId = next?.reviewId;
+
+  const show = useCallback((reviewId: string) => {
+    if (latest.current.reviewId === reviewId) setShown(latest.current);
+  }, []);
+
+  // A board that is slow to load shows its own waiting state.
+  useEffect(() => {
+    if (!nextId) return;
+    const timer = setTimeout(() => show(nextId), 1000);
+
+    return () => clearTimeout(timer);
+  }, [nextId, show]);
+
+  return (
+    <BoardSwitchContext.Provider value={nextId}>
+      <div
+        data-review-api=""
+        {...stylex.props(shellStyles.apiCanvas, styles.boards)}
+      >
+        {[shown, ...(next ? [next] : [])].map((board) => {
+          const held = board === next;
+
+          return (
+            <div
+              key={board.reviewId}
+              inert={held}
+              {...stylex.props(styles.board, held && styles.boardLoading)}
+            >
+              <ApiCanvas
+                content={board}
+                findHost={held ? undefined : findHost}
+                held={held}
+                onLoaded={show}
+              />
+            </div>
+          );
+        })}
+      </div>
+    </BoardSwitchContext.Provider>
+  );
 }
 
 /** Status with the host's stable actions, rebuilt only when the status is. */
@@ -481,6 +536,16 @@ function resetSessionDiagnostics(container: HTMLElement): void {
 }
 
 const styles = stylex.create({
+  boards: { position: "relative" },
+  board: { display: "contents" },
+  // Laid out, editors and all, but unseen until it replaces the board.
+  boardLoading: {
+    display: "block",
+    position: "absolute",
+    inset: 0,
+    opacity: 0,
+    pointerEvents: "none",
+  },
   // Layout-neutral: it only carries the theme inside the scope boundary.
   themeHost: {
     display: "contents",

@@ -51,6 +51,7 @@ import {
   type BoardEditorHost,
   BoardEditorHostContext,
 } from "./board-editor/BoardEditor";
+import { DrawingContext } from "./board-switch";
 import {
   CanvasQueryProvider,
   canvasQueryKeys,
@@ -114,9 +115,15 @@ const message = (cause: unknown) =>
 export function ApiCanvas({
   content,
   findHost,
+  held = false,
+  onLoaded,
 }: {
   content: ApiContent;
   findHost?: ReviewFindHost;
+  /** Loading unseen behind the board on screen. */
+  held?: boolean;
+  /** Its document, or why there is none, is ready to show. */
+  onLoaded?(reviewId: string): void;
 }) {
   const client = useMemo(
     () => new ReviewApiClient(content.bridge.config, content.bridge.request),
@@ -510,8 +517,63 @@ export function ApiCanvas({
   );
 
   useEffect(() => {
-    if (data) content.bridge.ready();
-  }, [Boolean(data), content.bridge]);
+    if (data && !held) content.bridge.ready();
+  }, [Boolean(data), held, content.bridge]);
+
+  // Held, the page bar's place is read first, so it swaps in whole. The
+  // page bar reads the same query.
+  const [placeRead, setPlaceRead] = useState(false);
+  const review = session.review;
+  const shownVersion = data?.snapshot.version;
+
+  useEffect(() => {
+    if (!held || !review) return;
+    let live = true;
+
+    void queries.queryClient
+      .fetchQuery({
+        queryKey: canvasQueryKeys.place(shownVersion),
+        queryFn: ({ signal }) => review.place(signal),
+        staleTime: Infinity,
+      })
+      .catch(() => {})
+      .then(() => {
+        if (live) setPlaceRead(true);
+      });
+
+    return () => {
+      live = false;
+    };
+  }, [held, review, queries, shownVersion]);
+
+  const [drawing, setDrawing] = useState(0);
+
+  const drawingCounter = useMemo(
+    () =>
+      held
+        ? {
+            begin() {
+              let open = true;
+              setDrawing((count) => count + 1);
+
+              return () => {
+                if (!open) return;
+                open = false;
+                setDrawing((count) => count - 1);
+              };
+            },
+          }
+        : null,
+    [held],
+  );
+
+  const loaded =
+    (data !== undefined && placeRead && drawing === 0) ||
+    (error ?? lost) !== undefined;
+
+  useEffect(() => {
+    if (held && loaded) onLoaded?.(content.reviewId);
+  }, [held, loaded, onLoaded, content.reviewId]);
 
   const sharing = useMemo(
     () =>
@@ -676,28 +738,32 @@ export function ApiCanvas({
                                       <div
                                         {...stylex.props(styles.canvasFrame)}
                                       >
-                                        <BoardEditorHostContext.Provider
-                                          value={editorHost}
+                                        <DrawingContext.Provider
+                                          value={drawingCounter}
                                         >
-                                          <CanvasDocument
-                                            data={data}
-                                            findHost={findHost}
-                                            softwareMapEnabled={
-                                              content.softwareMapEnabled ===
-                                              true
-                                            }
-                                            documentWidth={
-                                              content.documentWidth
-                                            }
-                                            tocEntries={
-                                              editorHost &&
-                                              editorToc?.reviewId ===
-                                                data.snapshot.reviewId
-                                                ? editorToc.entries
-                                                : undefined
-                                            }
-                                          />
-                                        </BoardEditorHostContext.Provider>
+                                          <BoardEditorHostContext.Provider
+                                            value={editorHost}
+                                          >
+                                            <CanvasDocument
+                                              data={data}
+                                              findHost={findHost}
+                                              softwareMapEnabled={
+                                                content.softwareMapEnabled ===
+                                                true
+                                              }
+                                              documentWidth={
+                                                content.documentWidth
+                                              }
+                                              tocEntries={
+                                                editorHost &&
+                                                editorToc?.reviewId ===
+                                                  data.snapshot.reviewId
+                                                  ? editorToc.entries
+                                                  : undefined
+                                              }
+                                            />
+                                          </BoardEditorHostContext.Provider>
+                                        </DrawingContext.Provider>
                                       </div>
                                     </SaveMarkdown.Provider>
                                   </MapEnabled.Provider>

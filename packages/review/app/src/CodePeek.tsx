@@ -13,6 +13,7 @@ import { type FileLineRange, codePeekSource } from "@review/source";
 import * as stylex from "@stylexjs/stylex";
 import { Fragment, useEffect, useMemo, useRef } from "react";
 
+import { useHoldsSwap } from "./board-switch";
 import { DocumentCodeView } from "./DocumentCodeView";
 import { drawStyles } from "./draw-styles";
 import { useReviewSession } from "./host/review-session";
@@ -168,6 +169,8 @@ export function CodePeekCard({
   });
 
   const reason = unavailable ?? (lenses?.error ? "error" : "unresolved");
+
+  useHoldsSwap(!ranges.length && outcome === "pending");
 
   const reportedKey = useRef<string | null>(null);
 

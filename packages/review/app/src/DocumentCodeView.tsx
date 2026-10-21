@@ -13,6 +13,7 @@ import * as stylex from "@stylexjs/stylex";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
 import { AskCodePins } from "./ask-code-pins";
+import { useHoldsSwap } from "./board-switch";
 import { useCodeCommit } from "./code-commit";
 import { useReviewSession } from "./host/review-session";
 import { useReviewFindRegistration } from "./review-find";
@@ -195,6 +196,11 @@ export function DocumentCodeView({
     });
   }, [clearFind, container, revealFindMatch, reviewFind, setFindQuery]);
 
+  // Drawn once it has a height, an error, or stays unmounted out of view.
+  const [drawn, setDrawn] = useState(false);
+
+  useHoldsSwap(!drawn);
+
   useLayoutEffect(() => {
     if (active) setShouldMount(true);
   }, [active]);
@@ -214,6 +220,7 @@ export function DocumentCodeView({
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) setShouldMount(true);
+        else setDrawn(true);
       },
       { rootMargin: "600px 0px" },
     );
@@ -254,6 +261,7 @@ export function DocumentCodeView({
     } catch (caught) {
       creationFailedRef.current = true;
       setError(caught instanceof Error ? caught.message : String(caught));
+      setDrawn(true);
 
       for (const resolve of handleWaitersRef.current.splice(0)) resolve(null);
 
@@ -269,8 +277,16 @@ export function DocumentCodeView({
     const findQuery = latestFindQueryRef.current;
 
     if (findQuery) void handle.setFindQuery(findQuery);
-    const heightSubscription = handle.onDidChangeHeight(setHeight);
-    const errorSubscription = handle.onDidError(setError);
+
+    const heightSubscription = handle.onDidChangeHeight((next) => {
+      setHeight(next);
+      setDrawn(true);
+    });
+
+    const errorSubscription = handle.onDidError((message) => {
+      setError(message);
+      setDrawn(true);
+    });
 
     return () => {
       if (handleRef.current === handle) handleRef.current = null;

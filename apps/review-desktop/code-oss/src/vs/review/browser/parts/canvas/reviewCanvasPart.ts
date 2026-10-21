@@ -182,6 +182,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	private readonly themeEvents = this._register(new Emitter<ReviewTheme>());
 	private container: HTMLElement | null = null;
 	private canvasMount: HTMLElement | null = null;
+	private retiredViews: (() => void) | undefined;
 	private targetDocument: Document | null = null;
 	private apiContent: Extract<ReviewCanvasContent, { kind: "api" }> | undefined;
 	private pendingReveal: { event: PendingBoardEvent; at: number } | undefined;
@@ -262,6 +263,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		);
 		this._register(toDisposable(() => this.sessionTelemetry.end("closed")));
 		this._register(toDisposable(() => this.askParts.release(this)));
+		this._register(toDisposable(() => this.releaseRetiredViews()));
 		// ⌥⌘B: the canvas on screen in the main window puts its column away
 		// or brings it back.
 		this._register(
@@ -455,7 +457,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			await this.render({ kind: "source" }, generation);
 			return;
 		}
-		if (!(await this.resetCanvasForGeneration(generation))) {
+		if (!(await this.resetCanvasForGeneration(generation, input.target.kind === "api" && this.apiContent !== undefined))) {
 			return;
 		}
 		this.modelSubscription.clear();
@@ -497,6 +499,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 							...source,
 							diffView: this.withSidebarFileTree(reviewId, source.diffView),
 							...this.sharedBridge(generation, () => {
+								this.releaseRetiredViews();
 								this.readyInput = input;
 								this.sessionTelemetry.presented();
 							}),
@@ -1434,14 +1437,24 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		};
 	}
 
-	private async resetCanvasForGeneration(generation: number): Promise<boolean> {
+	/** `held`: the board on screen keeps its diff views until the next one is ready. */
+	private async resetCanvasForGeneration(generation: number, held = false): Promise<boolean> {
 		if (generation !== this.loadGeneration) {
 			return false;
 		}
 		this.readyInput = undefined;
 		this.inlineEditors.reset();
-		this.diffViews.reset();
+		this.releaseRetiredViews();
+		const release = this.diffViews.retire();
+		if (held) this.retiredViews = release;
+		else release();
 		return generation === this.loadGeneration;
+	}
+
+	private releaseRetiredViews(): void {
+		const release = this.retiredViews;
+		this.retiredViews = undefined;
+		release?.();
 	}
 
 	private setCanvasState(state: ReviewCanvasState, reviewId?: string): void {

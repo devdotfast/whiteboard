@@ -22,11 +22,13 @@ import {
   type ReactElement,
   type ReactNode,
   type RefObject,
+  useContext,
   useEffect,
   useRef,
   useState,
 } from "react";
 
+import { BoardSwitchContext } from "./board-switch";
 import { countLabel } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { useOptionalReviewPanel } from "./review-panel";
@@ -79,13 +81,19 @@ export function ReviewBreadcrumb({
 
   const { parent, siblings, board, children = [] } = place;
   const shown = parent ?? board;
+  // A sibling being opened is marked here while this board still shows.
+  const opening = useContext(BoardSwitchContext);
+
+  const here = siblings.some((board) => board.reviewId === opening)
+    ? opening!
+    : reviewId;
 
   const nameTooltip = useTooltip<HTMLElement>(
     shown ? boardTitle(shown.title) : "",
   );
 
   if (!shown) return null;
-  const index = siblings.findIndex((board) => board.reviewId === reviewId);
+  const index = siblings.findIndex((board) => board.reviewId === here);
 
   const openBoard = (id: string, event: OpenEvent) => {
     setOpen(false);
@@ -115,7 +123,7 @@ export function ReviewBreadcrumb({
       ...(board.pullRequestState && {
         pullRequestState: board.pullRequestState,
       }),
-      here: board.reviewId === reviewId,
+      here: board.reviewId === here,
       open: (event) => openBoard(board.reviewId, event),
     }));
 
