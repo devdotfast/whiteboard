@@ -1693,6 +1693,7 @@ export class ListView<T> implements IListView<T> {
 
 		const { row } = this.cache.alloc(item.templateId);
 		row.domNode.style.height = '';
+		row.domNode.dataset.index = String(index);
 		this.rowsContainer.appendChild(row.domNode);
 
 		const renderer = this.renderers.get(item.templateId);
