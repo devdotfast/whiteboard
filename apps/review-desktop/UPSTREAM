@@ -8,8 +8,9 @@ Serialization tag: code-oss-upstream-8a7abeba
 
 Review applies these focused VS Code changes without changing the source pin:
 
-- Electron 43.7.9 (Node 24.21.0), ahead of upstream's 43.7.5; do not
-  downgrade to upstream's version when syncing:
+- Electron 43.7.9 (Node 24.21.0), ahead of upstream's 43.7.7
+  (`9592504cbb`, checked 2026-10-20); do not downgrade to upstream's version
+  when syncing:
   `4ae4d96052c5a986fe84974ed9d7b220234670b4`, `0d9ade07b6`, `d2fe6d3bf9`,
   plus the 42.10.0 authentication type update
   `28cf0a82a08a5f8e9288d19b4218ec1eb5ee46a6`. Linux dependency-list files
