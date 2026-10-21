@@ -3,9 +3,12 @@
 //!
 //! It needs an API key for most providers: without one it does nothing and
 //! says why on stderr, which is why the bundled configuration ships it off.
-//! Each selected body is summarized and edited in its own asynchronous callback.
+//! A file's selected bodies are summarized concurrently, then edited in
+//! source order.
 use anyhow::anyhow;
+use async_lock::Semaphore;
 use diffr_plugin_sdk::prelude::*;
+use futures::future::try_join_all;
 use serde::Deserialize;
 use std::time::Duration;
 mod http;
@@ -32,6 +35,7 @@ pub struct Options {
     pub endpoint: Option<String>,
     pub request_timeout_ms: u64,
     pub retries: u32,
+    pub max_concurrent_requests: usize,
     /// The system instruction sent with every request.
     pub system_prompt: String,
 }
@@ -41,6 +45,8 @@ pub struct Summarize {
     options: Options,
     api_key: Key,
     endpoint: String,
+    /// Bounds the requests in flight across every file this instance serves.
+    requests: Semaphore,
 }
 
 enum Key {
@@ -84,13 +90,16 @@ impl Summarize {
         let text: serde_json::Value = {
             let mut attempt = 0;
             loop {
-                let result = http::post(
-                    &url,
-                    &headers,
-                    &body.to_string(),
-                    self.options.request_timeout_ms,
-                )
-                .await;
+                let result = {
+                    let _permit = self.requests.acquire().await;
+                    http::post(
+                        &url,
+                        &headers,
+                        &body.to_string(),
+                        self.options.request_timeout_ms,
+                    )
+                    .await
+                };
                 let retry = match result {
                     Ok((status, body)) if (200..300).contains(&status) => {
                         break serde_json::from_slice(&body)
@@ -168,62 +177,77 @@ impl GuestPlugin for Summarize {
         let api_key = resolve_key(&options, endpoint.is_some());
         Ok(Self {
             api_key,
+            requests: Semaphore::new(options.max_concurrent_requests),
             endpoint: endpoint.unwrap_or_else(|| options.provider_details.endpoint.clone()),
             options,
         })
     }
 
+    /// Each side's root is visited alone: the after side's selected bodies
+    /// are summarized at once, and nothing below either root is visited.
     async fn visit(&self, cursor: &Cursor, phase: Visit) -> Result<bool, String> {
-        if matches!(self.api_key, Key::Missing) {
+        let root = cursor.id();
+        if matches!(self.api_key, Key::Missing)
+            || phase == Visit::Post
+            || cursor.get(root)?.side != Side::Rhs
+        {
             return Ok(false);
         }
-        if phase == Visit::Post {
-            return Ok(true);
+        let mut bodies = Vec::new();
+        let mut pending = vec![root];
+        while let Some(id) = pending.pop() {
+            let RegionView { data, children, .. } = cursor.get(id)?;
+            if self.eligible(cursor, &data)? {
+                bodies.push((id, cursor.text(id)?, data.range.start.line as usize + 1));
+            } else {
+                pending.extend(children.into_iter().rev());
+            }
         }
-        let RegionView {
-            side: Side::Rhs,
-            data,
-            ..
-        } = cursor.get(cursor.id())?
-        else {
-            return Ok(true);
-        };
-        if !self.eligible(cursor, &data)? {
-            return Ok(true);
-        }
-        let text = cursor.text(data.id)?;
         let file = cursor.file();
         let path = match &file.file {
             FileSides::Both((_, rhs)) | FileSides::RightOnly(rhs) => &rhs.path,
             FileSides::LeftOnly(lhs) => &lhs.path,
         };
-        let Some(pseudocode) = self
-            .complete(path, &text, data.range.start.line as usize + 1)
-            .await
-            .map_err(|e| format!("summarizer: {e:#}"))?
-        else {
-            return Ok(false);
-        };
-        // Pseudocode earns its place only when it is at most two thirds as
-        // long as the body; otherwise the body keeps its original visibility.
-        let size = |text: &str| text.chars().filter(|c| !c.is_whitespace()).count();
-        if size(&pseudocode) * 3 > size(&text) * 2 {
-            return Ok(false);
+        let summaries = try_join_all(
+            bodies
+                .iter()
+                .map(|(_, text, first_line)| self.complete(path, text, *first_line)),
+        )
+        .await
+        .map_err(|e| format!("summarizer: {e:#}"))?;
+        for ((id, text, _), pseudocode) in bodies.into_iter().zip(summaries) {
+            if let Some(pseudocode) = pseudocode {
+                // An earlier body's fold state may have collapsed this one.
+                if self.eligible(cursor, &cursor.get(id)?.data)? {
+                    show(cursor, id, &text, &pseudocode)?;
+                }
+            }
         }
-        cursor.set_collapsed(data.id, true)?;
-        let Some(docstring) = docstring(cursor, data.id)? else {
-            cursor.set_label(data.id, Some(&pseudocode))?;
-            return Ok(false);
-        };
-        let docstring_text = cursor.text(docstring)?;
-        let first = docstring_text
-            .lines()
-            .next()
-            .ok_or_else(|| format!("empty docstring region {docstring}"))?
-            .trim();
-        cursor.set_label(data.id, Some(&format!("{first}\n{pseudocode}")))?;
         Ok(false)
     }
+}
+
+/// Collapse body `id` behind `pseudocode`, headed by its docstring's first
+/// line. Pseudocode earns its place only when it is at most two thirds as
+/// long as the body; otherwise the body keeps its original visibility.
+fn show(cursor: &Cursor, id: u32, text: &str, pseudocode: &str) -> Result<(), String> {
+    let size = |text: &str| text.chars().filter(|c| !c.is_whitespace()).count();
+    if size(pseudocode) * 3 > size(text) * 2 {
+        return Ok(());
+    }
+    cursor.set_collapsed(id, true)?;
+    let Some(docstring) = docstring(cursor, id)? else {
+        cursor.set_label(id, Some(pseudocode))?;
+        return Ok(());
+    };
+    let docstring_text = cursor.text(docstring)?;
+    let first = docstring_text
+        .lines()
+        .next()
+        .ok_or_else(|| format!("empty docstring region {docstring}"))?
+        .trim();
+    cursor.set_label(id, Some(&format!("{first}\n{pseudocode}")))?;
+    Ok(())
 }
 
 /// The `summarize:docstring` region on `id`'s side that shares its fold state.

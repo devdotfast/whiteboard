@@ -30,6 +30,7 @@ tests = true
 test_min_lines = 20
 request_timeout_ms = 60000
 retries = 3
+max_concurrent_requests = 4
 
 [plugins.shape.bundled.test-bodies]
 enabled = true

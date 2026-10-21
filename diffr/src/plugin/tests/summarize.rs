@@ -420,3 +420,179 @@ fn deferring_the_summarizer_after_the_eager_chain_shapes_files_the_same() {
         assert_eq!(summarized, 1, "{path}");
     }
 }
+
+/// What a [`slow_server`] saw: each request's body (by its first numbered
+/// line) when it arrived, and the most requests it held at once.
+#[derive(Default)]
+struct Traffic {
+    arrivals: Vec<u32>,
+    in_flight: usize,
+    peak: usize,
+}
+
+/// A server that answers each request after `delay`, concurrently, with
+/// `answer(first numbered line, attempt)`.
+fn slow_server(
+    delay: std::time::Duration,
+    answer: impl Fn(u32, usize) -> (u16, String) + Send + Sync + 'static,
+) -> (String, std::sync::Arc<std::sync::Mutex<Traffic>>) {
+    use std::sync::{Arc, Mutex};
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    let traffic = Arc::new(Mutex::new(Traffic::default()));
+    let answer = Arc::new(answer);
+    let shared = traffic.clone();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let (traffic, answer) = (shared.clone(), answer.clone());
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(stream.unwrap());
+                let mut line = String::new();
+                reader.read_line(&mut line).unwrap();
+                let mut length = 0;
+                loop {
+                    line.clear();
+                    reader.read_line(&mut line).unwrap();
+                    if line == "\r\n" {
+                        break;
+                    }
+                    if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                        length = value.trim().parse().unwrap();
+                    }
+                }
+                let mut body = vec![0; length];
+                reader.read_exact(&mut body).unwrap();
+                let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                let prompt = body["contents"][0]["parts"][0]["text"].as_str().unwrap();
+                let first = prompt
+                    .lines()
+                    .find_map(|line| line.split_once(" | ")?.0.trim().parse::<u32>().ok())
+                    .unwrap();
+                let attempt = {
+                    let mut traffic = traffic.lock().unwrap();
+                    traffic.arrivals.push(first);
+                    traffic.in_flight += 1;
+                    traffic.peak = traffic.peak.max(traffic.in_flight);
+                    traffic
+                        .arrivals
+                        .iter()
+                        .filter(|&&seen| seen == first)
+                        .count()
+                        - 1
+                };
+                std::thread::sleep(delay);
+                let (status, response) = answer(first, attempt);
+                traffic.lock().unwrap().in_flight -= 1;
+                write!(
+                    reader.get_mut(),
+                    "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",
+                    response.len()
+                )
+                .unwrap();
+            });
+        }
+    });
+    (endpoint, traffic)
+}
+
+/// `count` new three-line function bodies, whose first lines are 2, 6, 10…
+fn bodies(count: usize) -> String {
+    (0..count)
+        .map(|i| format!("def f{i}():\n    a()\n    b()\n    c()\n"))
+        .collect()
+}
+
+/// Each function body's (collapsed, label), in source order.
+fn function_folds(sides: &Pairing<Source>) -> Vec<(bool, String)> {
+    let mut folds = Vec::new();
+    walk(std::slice::from_ref(&rhs(sides).root), &mut |region| {
+        if is_fold(region) && has_tag(region, FUNCTION) {
+            folds.push((region.visibility.collapsed, region.visibility.label.clone()));
+        }
+    });
+    folds
+}
+
+fn concurrent_summarizer(endpoint: &str, overrides: serde_json::Value) -> Pipeline {
+    let mut options = json!({
+        "api_key": "test-key",
+        "endpoint": endpoint,
+        "retries": 0,
+        "request_timeout_ms": 5000,
+        "min_lines": 3,
+    });
+    options
+        .as_object_mut()
+        .unwrap()
+        .extend(overrides.as_object().unwrap().clone());
+    summarizer_with(options)
+}
+
+const DELAY: std::time::Duration = std::time::Duration::from_millis(300);
+
+#[test]
+fn a_files_bodies_are_summarized_concurrently() {
+    let (file, mut sides) = project("a.py", "", &bodies(3));
+    let (endpoint, _) = slow_server(DELAY, |_, _| (200, gemini_answer("a b c")));
+    let pipeline = concurrent_summarizer(&endpoint, json!({}));
+    let started = std::time::Instant::now();
+    shape(&pipeline, &file, &mut sides).unwrap();
+    let elapsed = started.elapsed();
+    assert!(elapsed < 2 * DELAY, "{elapsed:?}");
+    assert_eq!(function_folds(&sides), vec![(true, "a b c".to_owned()); 3]);
+}
+
+#[test]
+fn requests_in_flight_never_exceed_max_concurrent_requests() {
+    let (file, mut sides) = project("a.py", "", &bodies(5));
+    let (endpoint, traffic) = slow_server(DELAY, |_, _| (200, gemini_answer("a b c")));
+    let pipeline = concurrent_summarizer(&endpoint, json!({"max_concurrent_requests": 2}));
+    shape(&pipeline, &file, &mut sides).unwrap();
+    assert_eq!(traffic.lock().unwrap().peak, 2);
+    assert_eq!(function_folds(&sides), vec![(true, "a b c".to_owned()); 5]);
+}
+
+#[test]
+fn concurrent_summaries_shape_files_as_serial_ones_did() {
+    // A summary, one too long to keep, an empty one, and a docstring's.
+    let after = format!(
+        "{}def g():\n    \"\"\"Does g.\n    More.\"\"\"\n    d()\n    e()\n    f()\n",
+        bodies(3)
+    );
+    let answer = |first, _| {
+        let text = match first {
+            2 => "a b c",
+            6 => "a()\nb()\nc()",
+            10 => "",
+            _ => "d e f",
+        };
+        (200, gemini_answer(text))
+    };
+    let expected = vec![
+        (true, "a b c".to_owned()),
+        (false, String::new()),
+        (false, String::new()),
+        (true, "\"\"\"Does g.\nd e f".to_owned()),
+    ];
+    let (file, sides) = project("a.py", "", &after);
+    for max in [1, 2, 4] {
+        let (endpoint, _) = slow_server(std::time::Duration::ZERO, answer);
+        let pipeline = concurrent_summarizer(&endpoint, json!({"max_concurrent_requests": max}));
+        let mut shaped = sides.clone();
+        shape(&pipeline, &file, &mut shaped).unwrap();
+        assert_eq!(function_folds(&shaped), expected, "{max}");
+    }
+}
+
+#[test]
+fn a_rate_limited_body_does_not_hold_up_the_others() {
+    let (file, mut sides) = project("a.py", "", &bodies(3));
+    let (endpoint, traffic) = slow_server(DELAY, |first, attempt| match (first, attempt) {
+        (2, 0) => (429, "{}".to_owned()),
+        _ => (200, gemini_answer("a b c")),
+    });
+    let pipeline = concurrent_summarizer(&endpoint, json!({"retries": 1}));
+    shape(&pipeline, &file, &mut sides).unwrap();
+    assert_eq!(traffic.lock().unwrap().arrivals.last(), Some(&2));
+    assert_eq!(function_folds(&sides), vec![(true, "a b c".to_owned()); 3]);
+}

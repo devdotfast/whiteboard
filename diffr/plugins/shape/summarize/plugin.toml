@@ -60,6 +60,13 @@ title = "Retries"
 description = "Retries after a timeout, rate limit, or server error before the run is aborted."
 default = 3
 
+[options.max_concurrent_requests]
+type = "integer"
+minimum = 1
+title = "Concurrent requests"
+description = "Most summary requests one run sends at a time per worker."
+default = 4
+
 [options.system_prompt]
 type = "string"
 title = "System prompt"
