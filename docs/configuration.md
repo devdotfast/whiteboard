@@ -2,6 +2,19 @@
 
 Git attributes and diffr's config file change which files a diff shows.
 
+## Follow the system theme
+
+To switch themes with your system's light or dark mode, add this to
+`User/settings.json` in the app's data folder (see
+[Troubleshooting](troubleshooting.md#logs) for where it lives):
+
+```json
+"window.autoDetectColorScheme": true
+```
+
+Then pick a theme in Settings once in dark mode and once in light mode. Each
+pick sets the theme for the mode you are in.
+
 ## Hidden files
 
 Whiteboard hides files that GitHub Linguist marks as generated or vendored.
