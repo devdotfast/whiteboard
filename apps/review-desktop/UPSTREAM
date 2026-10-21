@@ -77,6 +77,33 @@ October 2026 leak, race, and crash fixes, verbatim without test hunks:
 - Destroyed window notification cleanup (`36dc839d`); TypeScript signature
   help active overload (`69e459e4`).
 
+Late October 2026 leak, race, and crash fixes, without test hunks:
+
+- Multi-diff editor: undo native scrolling of the virtualized content, which
+  clipped headers and the viewport bottom (`bc1a5d12`). Hand-ported into the
+  fork's `multiDiffEditorWidgetImpl.ts`; upstream moved the scroll view out.
+- Extension host leaks: language selection registry listeners, paste edits,
+  hidden status bar commands, output channel listeners, cancelled tree drags,
+  pending quick picks, custom documents (`12dc71b3`, `3126b774`, `9fcc9a12`,
+  `48573218`, `e29d8355`, `76f9f309`, `80a9a6b6`); serialized unexpected
+  errors (`487a93be`).
+- Workbench leaks: native context menu, input focus tracker, search editor,
+  composite drag and drop (`a8fe2685`, `ef46e22f`, `e6aaa2ac`, `bef11baa`).
+- Custom editors forget failed documents (`c25cf167`). Hand-ported: the
+  `disposeAllModelsForResource` hunk targets a post-pin method.
+- List measurement rows update their index (`d53580f2`). Single-row path
+  only; the batched path is post-pin.
+- Search retries without `--follow` after too many ripgrep symlink loops
+  (`1b92929b`). Hand-ported around import drift and without upstream's
+  per-walker `killCmds`.
+- Editor: measured monospace detection with ligatures (`4a82da11`), undo
+  stop before multi-character autoclose (`0ae67aea`).
+- Platform: managed port-forward truncation (`6bb4ac7c`), Parcel watch
+  request dedup (`5063c553`), URI userinfo and JSON edit fixes
+  (`922ce6a4`), Windows rename retry and in-use errors (`41c470f7`).
+- Left out: the webview resource-cancellation and find-teardown fixes
+  (`2f1fe6ea`, `0185f13b`) need post-pin webview refactors.
+
 ### September 2026 advisories (all fixed upstream in 1.136.2)
 
 Microsoft published ten advisories on 2026-09-08. Each GitHub advisory cites its
