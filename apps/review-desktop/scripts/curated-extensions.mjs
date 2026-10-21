@@ -437,9 +437,12 @@ async function main() {
     return;
   }
 
-  if (!supportedTargets.includes(target)) {
+  // Remote hosts' targets let a development Desktop run on them too.
+  const localTargets = [...new Set([...supportedTargets, ...remoteTargets])];
+
+  if (!localTargets.includes(target)) {
     throw new Error(
-      `unsupported target ${target}; expected one of ${supportedTargets.join(", ")}`,
+      `unsupported target ${target}; expected one of ${localTargets.join(", ")}`,
     );
   }
 
