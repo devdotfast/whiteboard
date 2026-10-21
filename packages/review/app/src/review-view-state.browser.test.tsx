@@ -156,6 +156,7 @@ describe("review view state", () => {
     const session = testReviewSession();
     storeState(session, { scrollTop: 100 });
     const harness = renderViewState({ session });
+    act(() => vi.advanceTimersByTime(1_000));
 
     act(() => {
       harness.element.scrollTop = 300;
@@ -209,6 +210,36 @@ describe("review view state", () => {
 
     expect(harness.element.scrollTop).toBe(320);
     expect(frames.size).toBe(0);
+  });
+
+  it("keeps the target while layout above it settles, then lets go", () => {
+    const session = testReviewSession();
+    const metrics = { scrollHeight: 8_579, clientHeight: 800 };
+    storeState(session, { scrollTop: 1_450 });
+    const harness = renderViewState({ session, metrics });
+
+    // Content above shrinks and scroll anchoring moves the position with it.
+    metrics.scrollHeight = 7_495;
+    act(() => {
+      harness.element.scrollTop = 1_297;
+      harness.element.dispatchEvent(new Event("scroll"));
+    });
+    triggerResize();
+    flushNextFrame();
+
+    expect(harness.element.scrollTop).toBe(1_450);
+    expect(readPersistedReviewViewState(session.config).scrollTop).toBe(1_450);
+
+    act(() => vi.advanceTimersByTime(1_000));
+    act(() => {
+      harness.element.scrollTop = 2_000;
+      harness.element.dispatchEvent(new Event("scroll"));
+    });
+    triggerResize();
+    flushNextFrame();
+
+    expect(harness.element.scrollTop).toBe(2_000);
+    expect(readPersistedReviewViewState(session.config).scrollTop).toBe(2_000);
   });
 
   it("restores the scroll only on the view it was taken on", () => {
