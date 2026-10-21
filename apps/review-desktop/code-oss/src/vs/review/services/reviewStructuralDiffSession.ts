@@ -31,6 +31,8 @@ export class StructuralDiffSession extends Disposable {
 	private readonly abort = new AbortController();
 	private readonly results = new Map<string, StructuralFileResult>();
 	private readonly folds = new Map<string, boolean | ISettableObservable<boolean>>();
+	/** Folds the reader set; diffr updates leave them alone. */
+	private readonly touched = new Set<string>();
 	private manifest: Set<string> | undefined;
 	private task: Promise<void> | undefined;
 	private finished = false;
@@ -97,15 +99,18 @@ export class StructuralDiffSession extends Disposable {
 	setRegionCollapsed(path: string, id: number, collapsed: boolean): void {
 		const key = `${path}:${id}`;
 		if (this.disposed) return;
+		this.touched.add(key);
 		const state = this.folds.get(key);
 		if (typeof state === "object") state.set(collapsed, undefined);
 		else if (state !== collapsed) { this.folds.set(key, collapsed); this.notify(path); }
 	}
 
-	private createFold(path: string, initial: boolean): ISettableObservable<boolean> {
+	private createFold(path: string, id: number, initial: boolean): ISettableObservable<boolean> {
 		const state = observableValue(this, initial);
 		return derivedWithSetter(this, reader => state.read(reader), (collapsed, tx) => {
-			if (this.disposed || state.get() === collapsed) return;
+			if (this.disposed) return;
+			this.touched.add(`${path}:${id}`);
+			if (state.get() === collapsed) return;
 			state.set(collapsed, tx);
 			this.notify(path);
 		});
@@ -136,9 +141,10 @@ export class StructuralDiffSession extends Disposable {
 			if (event.type !== "start" || event.version !== STRUCTURAL_WIRE_VERSION) throw new Error("Unsupported diffr stream protocol.");
 			this.acceptManifest(event);
 		} else if (event.type === "file") this.storeFileResult(event);
+		else if (event.type === "update") this.applyUpdate(event);
 		else if (event.type === "complete") this.finishLoading(event);
-		else throw new Error(`Unexpected diffr event: ${event.type}`);
-		if (event.type === "file") this.notify(structuralFilePath(event.file));
+		else throw new Error(`Unexpected diffr event: ${(event as StructuralEvent).type}`);
+		if (event.type === "file" || event.type === "update") this.notify(structuralFilePath(event.file));
 		else this.notify(undefined, true);
 	}
 
@@ -166,11 +172,27 @@ export class StructuralDiffSession extends Disposable {
 		const path = structuralFilePath(event.file);
 		if (!this.manifest!.has(path) || this.results.has(path)) throw new Error(`Unexpected or repeated diffr result: ${path}`);
 		if (event.error) { this.results.set(path, { error: event.error.message }); return; }
-		const diff = event.diff;
+		this.storeDiff(path, event.diff, false);
+	}
+
+	/** Updates only change visibility; folds the reader has not touched follow them. */
+	private applyUpdate(event: Extract<StructuralEvent, { type: "update" }>): void {
+		const path = structuralFilePath(event.file);
+		if (!this.results.get(path)?.diff) throw new Error(`Unexpected diffr update: ${path}`);
+		if (!event.error) this.storeDiff(path, event.diff, true);
+	}
+
+	private storeDiff(path: string, diff: StructuralDiff, refresh: boolean): void {
 		if (diff.type === "text") {
 			const seed = (region: StructuralRegion) => {
 				const key = `${path}:${region.fold_state_id}`;
-				if (!this.folds.has(key)) this.folds.set(key, region.visibility?.collapsed === true);
+				const collapsed = region.visibility?.collapsed === true;
+				const state = this.folds.get(key);
+				if (state === undefined) this.folds.set(key, collapsed);
+				else if (refresh && !this.touched.has(key)) {
+					if (typeof state === "boolean") this.folds.set(key, collapsed);
+					else { state.set(collapsed, undefined); this.touched.delete(key); }
+				}
 				if (region.kind === "fold") region.children.forEach(seed);
 			};
 			for (const side of [diff.lhs, diff.rhs]) if (side) {
@@ -179,7 +201,7 @@ export class StructuralDiffSession extends Disposable {
 				const state = this.folds.get(key)!;
 				// Only roots need a synchronous observable for multi-diff headers;
 				// interior folds keep using the session's batched notifications.
-				if (typeof state === "boolean") this.folds.set(key, this.createFold(path, state));
+				if (typeof state === "boolean") this.folds.set(key, this.createFold(path, side.root.fold_state_id, state));
 			}
 		}
 		const visibility = diff.type === "text"
@@ -199,6 +221,7 @@ export class StructuralDiffSession extends Disposable {
 		this.abort.abort();
 		this.results.clear();
 		this.folds.clear();
+		this.touched.clear();
 		this.pendingFiles.clear();
 		super.dispose();
 	}

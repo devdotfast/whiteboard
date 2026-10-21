@@ -5,6 +5,7 @@
 import { Emitter, type Event } from '../../base/common/event.js';
 import { Disposable } from '../../base/common/lifecycle.js';
 import type { ReviewDiffProgress, ReviewDiffProgressFile } from '../common/reviewProtocol.js';
+import type { StructuralTextDiff } from '../common/reviewStructuralDiff.js';
 import { structuralViewedProgress, structuralViewedRanges, structuralViewedScopes } from '../common/reviewStructuralViewed.js';
 import type { ReviewFilesEditorEntry } from './reviewFilesDiffView.js';
 import type { StructuralDiffSession } from './reviewStructuralDiffSession.js';
@@ -17,7 +18,8 @@ const initializedScopes = new WeakMap<StructuralDiffSession, Set<string>>();
 export class StructuralViewedState extends Disposable {
 	private readonly changed = this._register(new Emitter<void>());
 	readonly onDidChange = this.changed.event;
-	private readonly scopes = new Map<string, ReturnType<typeof structuralViewedScopes>>();
+	// Keyed by diff: a diffr update replaces the file's diff.
+	private readonly scopes = new WeakMap<StructuralTextDiff, ReturnType<typeof structuralViewedScopes>>();
 	private readonly states = new Map<string, string>();
 	private memo: { files: Map<string, ReviewDiffProgressFile>; values: Map<string, ReturnType<typeof structuralViewedProgress>> } | undefined;
 
@@ -35,12 +37,10 @@ export class StructuralViewedState extends Disposable {
 	}
 
 	private getScopes(path: string) {
-		let scopes = this.scopes.get(path);
 		const diff = this.session.getTextDiff(path);
-		if (!scopes && diff) {
-			scopes = structuralViewedScopes(diff, path, this.entries.find(e => e.file.path === path)?.file.previousPath);
-			this.scopes.set(path, scopes);
-		}
+		if (!diff) return undefined;
+		let scopes = this.scopes.get(diff);
+		if (!scopes) this.scopes.set(diff, scopes = structuralViewedScopes(diff, path, this.entries.find(e => e.file.path === path)?.file.previousPath));
 		return scopes;
 	}
 
