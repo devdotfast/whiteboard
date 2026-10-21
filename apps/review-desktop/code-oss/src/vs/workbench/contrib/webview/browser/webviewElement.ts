@@ -34,6 +34,7 @@ import { ITunnelService } from '../../../../platform/tunnel/common/tunnel.js';
 import { WebviewPortMappingManager } from '../../../../platform/webview/common/webviewPortMapping.js';
 import { IWorkbenchEnvironmentService } from '../../../services/environment/common/environmentService.js';
 import { IRemoteAgentService } from '../../../services/remote/common/remoteAgentService.js';
+import { reviewRemoteOS } from '../../../../review/services/remote/reviewRemoteAuthority.js';
 import { decodeAuthority, webviewGenericCspSource, webviewRootResourceAuthority } from '../common/webview.js';
 import { loadLocalResource, WebviewResourceResponse } from './resourceLoading.js';
 import { WebviewThemeDataProvider } from './themeing.js';
@@ -802,7 +803,7 @@ export class WebviewElement extends Disposable implements IWebviewElement, Webvi
 		try {
 			const remoteOS = uri.scheme === Schemas.vscodeRemote && isEqualAuthority(this._remoteAgentService.getConnection()?.remoteAuthority, uri.authority)
 				? (await this._remoteAgentService.getEnvironment())?.os
-				: undefined;
+				: reviewRemoteOS(uri);
 			const result = await this._instantiationService.invokeFunction(loadLocalResource, uri, {
 				ifNoneMatch: options.ifNoneMatch,
 				roots: this._content.options.localResourceRoots || [],

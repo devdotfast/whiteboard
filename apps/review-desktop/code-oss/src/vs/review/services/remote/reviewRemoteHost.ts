@@ -45,7 +45,7 @@ import { RemoteExtensionEnvironmentChannelClient } from "../../../workbench/serv
 import { REMOTE_FILE_SYSTEM_CHANNEL_NAME } from "../../../workbench/services/remote/common/remoteFileSystemProviderClient.js";
 import { IReviewDesktopConnectionService, type ReviewRemoteLanguageEndpoint } from "../reviewDesktopConnectionService.js";
 import type { ReviewRemoteFileSystemRouter } from "./reviewRemoteFileSystemRouter.js";
-import { ownsRemoteResource } from "./reviewRemoteAuthority.js";
+import { ownsRemoteResource, setReviewRemoteOS } from "./reviewRemoteAuthority.js";
 import { ReviewRemoteWorkspace, reviewRemoteResolver, reviewRemoteScope } from "./reviewRemoteScope.js";
 
 export interface IReviewRemoteHost {
@@ -305,6 +305,7 @@ export class ReviewRemoteSession extends Disposable implements IReviewRemoteSess
 			undefined,
 		);
 		if (environment.reconnectionGraceTime !== undefined) management.updateGraceTime(environment.reconnectionGraceTime);
+		this._register(setReviewRemoteOS(authority, environment.os));
 		const extensions = await management.client
 			.getChannel(RemoteExtensionsScannerChannelName)
 			.call<Mutable<IExtensionDescription>[]>("scanExtensions", [platform.language, undefined, [], undefined, undefined]);
