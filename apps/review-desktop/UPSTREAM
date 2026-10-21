@@ -192,6 +192,29 @@ Review applies these, by reference as above:
   (CVE-2026-102234, high): `2381ffb2918c91b1f2084fa6defa8345dbcf3797`. Only
   `restricted: true`; the `export` it adds is for upstream's test. Inert here
   because Review loads no terminal contribution.
+- Command links in notification text (CVE-2026-69370, GHSA-xf67-g42g-pg73;
+  fixed upstream in 1.141.1): `fab0e01e6b774f8510123e6e22cca268254ba938`,
+  the same commit on `main` and `release/1.141`. Plain string and `Error`
+  notification and progress messages now render literally; links need
+  `NotificationText` (`notificationMessage.ts`). Only the extension API
+  bridges (`mainThreadMessageService.ts`, `mainThreadProgress.ts`) keep
+  `[label](href)` parsing, through `notificationLegacy.ts`. Non-test hunks
+  apply verbatim except `notificationAccessibleView.ts`, where Review takes
+  only the new `getActionsFromNotification` (copied actions plus link
+  actions opened through `IOpenerService`). Its provider rework depends on
+  upstream's listener-lifetime change `65e01167db`, which Review lacks.
+  Upstream's own caller migrations cover every core caller Review reaches:
+  `codeEditorWidget.ts` (cursor limit), `extensionsActions.ts` (install
+  failure log link), and `remoteExplorer.ts` (forwarded ports link). The
+  `markdown-language-features` and `typescript-language-features` hunks drop
+  reflected text that contains link syntax. Review's own notifications in
+  `src/vs/review/` carry no links, so canvas, error, and remote-host text
+  now render as literal text. Skipped: the `code-no-legacy-notification-parsing`
+  lint rule and its `eslint.config.js` entry (the fork's ESLint config does
+  not load: it imports the pruned `extensions/copilot` plugin),
+  the pruned `copilot`, `git`, `npm`, `php-language-features`, and
+  `microsoft-authentication` extensions, and the absent `editSessions`,
+  `remoteTunnel`, `userDataSync`, and `workspaces` contributions.
 
 #### Not applicable at this pin
 
