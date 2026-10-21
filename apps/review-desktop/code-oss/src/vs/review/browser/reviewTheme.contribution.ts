@@ -52,7 +52,8 @@ class ReviewThemeMigration implements IWorkbenchContribution {
 }
 
 async function pinAutoDetectedTheme(configurationService: IConfigurationService, hostColorSchemeService: IHostColorSchemeService): Promise<void> {
-	if (!configurationService.getValue<boolean>('window.autoDetectColorScheme')) {
+	const autoDetect = configurationService.inspect<boolean>('window.autoDetectColorScheme');
+	if (!autoDetect.value || autoDetect.userValue !== undefined) {
 		return;
 	}
 	// The theme service may still hold a placeholder; resolve the theme as it does.
