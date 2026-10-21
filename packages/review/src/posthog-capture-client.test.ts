@@ -36,7 +36,7 @@ describe("PostHogCaptureClient", () => {
     });
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe("https://us.i.posthog.com/batch/");
+    expect(url).toBe("https://e.dev.fast/batch/");
     expect(JSON.parse(String(init.body))).toEqual({
       api_key: "test-key",
       batch: [

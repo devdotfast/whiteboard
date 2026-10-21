@@ -37,7 +37,7 @@ export const PROGRESSIVE_REVIEW_POSTHOG_KEY_ENV =
 export const PROGRESSIVE_REVIEW_POSTHOG_HOST_ENV =
   "PROGRESSIVE_REVIEW_POSTHOG_HOST";
 
-const DEFAULT_POSTHOG_HOST = "https://us.i.posthog.com";
+const DEFAULT_POSTHOG_HOST = "https://e.dev.fast";
 
 const DEFAULT_CAPTURE_TIMEOUT_MS = 1_000;
 
