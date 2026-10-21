@@ -78,6 +78,58 @@ export async function resolveReviewStackLayers(
   });
 }
 
+type GitHubStacks = z.infer<typeof GitHubStacksSchema>;
+
+// One GitHub answer serves every pull request in a stack for a minute.
+const STACKS_FRESH_MS = 60_000;
+
+const stackReads = new WeakMap<
+  RunGitHubApi,
+  Map<string, { at: number; stacks: Promise<GitHubStacks> }>
+>();
+
+function readGitHubStacks(
+  runGitHubApi: RunGitHubApi,
+  host: string,
+  repository: string,
+  pullRequestNumber: number,
+): Promise<GitHubStacks> {
+  const reads = stackReads.get(runGitHubApi) ?? new Map();
+
+  stackReads.set(runGitHubApi, reads);
+
+  const keyOf = (number: number) => `${host}/${repository}#${number}`;
+  const cached = reads.get(keyOf(pullRequestNumber));
+
+  if (cached && Date.now() - cached.at < STACKS_FRESH_MS) return cached.stacks;
+
+  const read = {
+    at: Date.now(),
+    stacks: runGitHubApi(
+      host,
+      `repos/${repository}/stacks?pull_request=${pullRequestNumber}`,
+    ).then((text) => GitHubStacksSchema.parse(JSON.parse(text))),
+  };
+
+  reads.set(keyOf(pullRequestNumber), read);
+  read.stacks.then(
+    (stacks) => {
+      const stack = stacks.find((candidate) =>
+        candidate.pull_requests.some((pr) => pr.number === pullRequestNumber),
+      );
+
+      for (const pr of stack?.pull_requests ?? [])
+        reads.set(keyOf(pr.number), read);
+    },
+    () => {
+      if (reads.get(keyOf(pullRequestNumber)) === read)
+        reads.delete(keyOf(pullRequestNumber));
+    },
+  );
+
+  return read.stacks;
+}
+
 async function gitHubStack(
   subject: Subject,
   reviews: readonly Candidate[],
@@ -91,16 +143,14 @@ async function gitHubStack(
   const [, host, owner, repository, number] = binding;
   const pullRequestNumber = Number(number);
   const repoKey = `https://${host}/${owner}/${repository}`;
-  let stacks: z.infer<typeof GitHubStacksSchema>;
+  let stacks: GitHubStacks;
 
   try {
-    stacks = GitHubStacksSchema.parse(
-      JSON.parse(
-        await runGitHubApi(
-          host!,
-          `repos/${owner}/${repository}/stacks?pull_request=${number}`,
-        ),
-      ),
+    stacks = await readGitHubStacks(
+      runGitHubApi,
+      host!,
+      `${owner}/${repository}`,
+      pullRequestNumber,
     );
   } catch {
     // Stack discovery must not make the Review unavailable when GitHub or

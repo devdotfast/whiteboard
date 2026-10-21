@@ -280,6 +280,38 @@ describe("resolveReviewStackLayers", () => {
   });
 });
 
+it("asks GitHub once for a stack its pull requests share within a minute", async () => {
+  const run = vi.fn<RunGitHubApi>(async () =>
+    JSON.stringify([
+      {
+        pull_requests: [
+          { number: 1, head: { ref: "a" } },
+          { number: 2, head: { ref: "b" } },
+        ],
+      },
+    ]),
+  );
+
+  const subject = (pullRequestNumber: number) => ({
+    origin: {
+      pullRequestNumber,
+      pullRequestUrl: `https://github.com/o/cached/pull/${pullRequestNumber}`,
+    },
+  });
+
+  const layers = (number: number) =>
+    resolveReviewStackLayers(subject(number), [], { runGitHubApi: run });
+
+  await layers(1);
+  await layers(1);
+  // The other pull request in the stack reads the same answer.
+  await expect(layers(2)).resolves.toMatchObject([
+    { pullRequestNumber: 1, relation: "earlier" },
+    { pullRequestNumber: 2, relation: "current" },
+  ]);
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
 describe("local stacks", () => {
   const roots: string[] = [];
 
