@@ -68,6 +68,7 @@ export const canvasQueryKeys = {
   allPlace: (board: string) => ["place", board] as const,
   projectBoards: (board: string) => ["project-boards", board] as const,
   askThreads: (board: string) => ["ask-threads", board] as const,
+  askAgents: (host: string) => ["ask-agents", host] as const,
   askBoards: (threadId: string | null, turns: number) =>
     ["ask-boards", threadId, turns] as const,
   linkStates: (board: string) => ["link-states", board] as const,
