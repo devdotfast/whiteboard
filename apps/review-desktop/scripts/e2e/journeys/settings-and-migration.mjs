@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { openHome, openSettings } from "../harness.mjs";
+import { openSettings } from "../harness.mjs";
 import { readUserSettings } from "../storage.mjs";
 
 export const name = "settings-and-migration";
@@ -121,9 +121,8 @@ export async function run(ctx) {
   );
 
   const legacyDir = path.join(ctx.home, "reviews", LEGACY_UUID);
-  await openHome(ctx);
-  const home = ctx.page.locator("main.review-home");
-  await home.getByText("Create your first session").waitFor({ timeout: 60000 });
+  await ctx.page.locator(".review-titlebar-home").first().click();
+  await ctx.page.locator("main.review-onboarding").waitFor({ timeout: 60000 });
   const summaries = await ctx.apiOk("/reviews-api");
   assert.ok(!summaries.some((summary) => summary.reviewId === LEGACY_UUID));
   assert.deepEqual(await storedRecord(legacyDir), LEGACY_RECORD);

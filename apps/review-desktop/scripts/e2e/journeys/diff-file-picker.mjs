@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { createReview } from "../harness.mjs";
+import { createReview, inView, tabSelected } from "../harness.mjs";
 
 export const name = "diff-file-picker";
 
@@ -55,15 +55,7 @@ export async function run(ctx) {
 
   await ctx.watchPage(page);
 
-  const views = page.locator('[aria-label="Session views"]');
-
-  const pressed = (label) =>
-    views.locator(`button[aria-label="${label}"]`).getAttribute("aria-pressed");
-
-  await until(
-    async () => (await pressed("Whiteboard")) === "true",
-    "the Review tab to be active",
-  );
+  await inView(ctx, "review", page);
 
   const picker = page.locator(".quick-input-widget");
 
@@ -118,10 +110,8 @@ export async function run(ctx) {
     });
 
   const revealed = async (file) => {
-    await until(
-      async () => (await pressed("Diff")) === "true",
-      "the Diff tab to be active",
-    );
+    await tabSelected(ctx, "Diff", page);
+    await inView(ctx, "diff", page);
     await until(async () => {
       const entry = await active();
 

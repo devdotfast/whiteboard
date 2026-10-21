@@ -5,7 +5,7 @@ import { writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import path from "node:path";
 
-import { createReview } from "../harness.mjs";
+import { createReview, showView } from "../harness.mjs";
 
 const exec = promisify(execFile);
 
@@ -89,9 +89,7 @@ export async function run(ctx) {
 
   await ctx.watchPage(page);
 
-  await page
-    .locator('[aria-label="Session views"] button[aria-label="Diff"]')
-    .click();
+  await showView(ctx, "Diff", page);
 
   const rendered = page.locator(".multiDiffEntry .view-line");
 

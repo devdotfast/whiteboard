@@ -17,8 +17,9 @@ export const options = {
   },
   async beforeLaunch(ctx) {
     ctx.env.XDG_CONFIG_HOME = path.join(ctx.root, "config");
-    await mkdir(path.join(ctx.repo, "tests"), { recursive: true });
-    const file = path.join(ctx.repo, "tests/check.rs");
+    // Not under tests/: test-bodies leaves integration test files open.
+    await mkdir(path.join(ctx.repo, "src"), { recursive: true });
+    const file = path.join(ctx.repo, "src/check.rs");
 
     const source = (number) =>
       `#[test]\nfn calculates() {\n    let a = 1;\n    let b = 2;\n    let c = a + b;\n    let d = c * 2;\n    assert_eq!(d, ${number});\n}\n`;
@@ -66,7 +67,7 @@ export async function run(ctx) {
     blocks: [
       {
         type: "code_peek",
-        source: "head/tests/check.rs#L1-L8",
+        source: "head/src/check.rs#L1-L8",
       },
     ],
   });
@@ -98,13 +99,14 @@ export async function run(ctx) {
   assert.ok(testFolds(await comparison()).length > 0);
   let settings = await openSettings(ctx);
 
-  const disclosure = settings
-    .locator("details")
-    .filter({ hasText: "Diff display and AI summaries" });
+  const disclosure = () =>
+    settings
+      .locator("details")
+      .filter({ hasText: "Diff display and AI summaries" });
 
-  assert.equal(await disclosure.getAttribute("open"), null);
+  assert.equal(await disclosure().getAttribute("open"), null);
   assert.equal(await settings.getByLabel("Collapse test bodies").count(), 0);
-  await disclosure.locator("summary").click();
+  await disclosure().locator("summary").click();
   const toggle = settings.getByLabel("Collapse test bodies", { exact: true });
   await toggle.waitFor();
   assert.equal(await toggle.isChecked(), true);
@@ -119,7 +121,7 @@ export async function run(ctx) {
   await settings
     .getByRole("button", { name: "Reload window", exact: true })
     .waitFor();
-  await disclosure.locator("summary").click();
+  await disclosure().locator("summary").click();
   await ctx.page.screenshot({
     path: path.join(ctx.root, "saved-settings.png"),
   });
@@ -129,11 +131,8 @@ export async function run(ctx) {
     .click();
   await reloaded;
   settings = await openSettings(ctx);
-  assert.equal(await settings.locator("details").getAttribute("open"), null);
-  await settings
-    .locator("summary")
-    .filter({ hasText: "Diff display and AI summaries" })
-    .click();
+  assert.equal(await disclosure().getAttribute("open"), null);
+  await disclosure().locator("summary").click();
   await settings.getByLabel("Collapse test bodies", { exact: true }).waitFor();
   assert.equal(
     await settings

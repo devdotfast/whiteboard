@@ -71,12 +71,7 @@ export async function run(ctx) {
     .waitFor();
   ctx.check("telemetry notice opens Settings at the Privacy row");
 
-  const tab = page
-    .locator(".tabs-container .tab")
-    .filter({ hasText: /^Home$/ })
-    .first();
-
-  await tab.click();
+  await page.locator(".review-titlebar-home").first().click();
 
   const onboarding = page.locator("main.review-onboarding");
 

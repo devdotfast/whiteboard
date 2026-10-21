@@ -94,9 +94,7 @@ export async function run(ctx) {
     blocks: orderReviewBlocks,
   });
 
-  await created.canvas
-    .getByRole("heading", { name: "Overview", exact: true })
-    .waitFor();
+  await created.canvas.getByRole("heading", { name: "Overview" }).waitFor();
   await created.canvas
     .getByText("moves from draft to queued")
     .first()

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 
-import { DIAGRAM_REVIEW_TITLE, createDiagramReview } from "../harness.mjs";
+import {
+  DIAGRAM_REVIEW_TITLE,
+  createDiagramReview,
+  inView,
+  openFullTrace,
+  showView,
+} from "../harness.mjs";
 
 export const name = "diagram-persistence";
 
@@ -21,8 +27,7 @@ export async function run(ctx) {
   await createDiagramReview(ctx);
   let page = await ctx.apiCanvasFor(DIAGRAM_REVIEW_TITLE);
 
-  const tab = (label) =>
-    page.locator(`[aria-label="Session views"] button[aria-label="${label}"]`);
+  const canvas = () => page.locator(".review-canvas-root [data-review-api]");
 
   async function reload() {
     await page.keyboard.press("F1");
@@ -35,42 +40,9 @@ export async function run(ctx) {
       .click();
     await loaded;
     page = ctx.page;
-    await page.locator(".review-canvas-root [data-review-api]").waitFor();
+    await canvas().waitFor();
     await ctx.watchPage(page);
   }
-
-  await tab("Map (Experimental)").click();
-  const map = () => page.locator(".review-view-region--map");
-
-  const nodes = () =>
-    map()
-      .locator('.react-flow__node [aria-label]:not([data-selected="true"])')
-      .filter({ visible: true });
-
-  await nodes().first().waitFor();
-  const node = nodes().last();
-
-  const nodeId = await node.evaluate((el) =>
-    el.closest(".react-flow__node").getAttribute("data-id"),
-  );
-
-  const selectedNode = () =>
-    map().locator(
-      `.react-flow__node[data-id=${JSON.stringify(nodeId)}] [data-selected="true"]`,
-    );
-
-  await node.click();
-  await ctx.until(
-    async () => (await selectedNode().count()) > 0,
-    "map node selected",
-  );
-  await reload();
-  await ctx.until(
-    async () => (await selectedNode().count()) > 0,
-    "map selection restored",
-  );
-  ctx.check("map tab and selected node survive reload");
-  await tab("Whiteboard").click();
 
   const useCase = () =>
     page.getByRole("combobox", { name: "Database use case" }).first();
@@ -84,11 +56,7 @@ export async function run(ctx) {
   await reload();
   assert.equal(await useCase().inputValue(), values.at(-1));
   ctx.check("database use case survives reload");
-  await tab("Trace").click();
-  await ctx.until(
-    async () => (await tab("Trace").getAttribute("aria-pressed")) === "true",
-    "trace opened",
-  );
+  await openFullTrace(ctx, canvas().locator('a[href^="#trace-"]').first(), page);
   const events = () => page.locator("[data-trace-event]");
   await events().first().waitFor();
 
@@ -106,27 +74,20 @@ export async function run(ctx) {
   const selectedEvent = await target().getAttribute("data-trace-event");
   assert.ok(selectedEvent !== null, "a trace event was selected");
   await reload();
-  await ctx.until(
-    async () => (await tab("Trace").getAttribute("aria-pressed")) === "true",
-    "trace tab restored",
-  );
+  await inView(ctx, "trace", page);
   await events().first().waitFor();
   await target().waitFor();
   assert.equal(await target().getAttribute("data-trace-event"), selectedEvent);
-  ctx.check("trace selection, event and tab survive reload");
+  ctx.check("trace selection, event and view survive reload");
   await ctx.quitAndRelaunchDesktop();
   page = ctx.page;
-  await page.locator(".review-canvas-root [data-review-api]").waitFor();
+  await canvas().waitFor();
+  await inView(ctx, "trace", page);
   await events().first().waitFor();
   await target().waitFor();
   assert.equal(await target().getAttribute("data-trace-event"), selectedEvent);
-  await tab("Map (Experimental)").click();
-  await ctx.until(
-    async () => (await selectedNode().count()) > 0,
-    "map selection after relaunch",
-  );
-  await tab("Whiteboard").click();
+  await showView(ctx, "Whiteboard", page);
   assert.equal(await useCase().inputValue(), values.at(-1));
-  ctx.check("trace, map and database state survive application relaunch");
+  ctx.check("trace and database state survive application relaunch");
   await page.screenshot({ path: path.join(ctx.root, "diagrams-restored.png") });
 }

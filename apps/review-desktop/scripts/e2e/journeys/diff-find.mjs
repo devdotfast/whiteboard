@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { createReview } from "../harness.mjs";
+import { createReview, showView } from "../harness.mjs";
 
 export const name = "diff-find";
 
@@ -153,9 +153,7 @@ export async function run(ctx) {
   ctx.check("a peek counts only the lines it shows, with Skip Folded off");
   await page.keyboard.press("Escape");
 
-  await page
-    .locator('[aria-label="Session views"] button[aria-label="Diff"]')
-    .click();
+  await showView(ctx, "Diff", page);
   await until(
     async () => (await page.locator(".multiDiffEntry .view-line").count()) > 0,
     "the diff's code",

@@ -1,7 +1,7 @@
 /** One reader's path through a review: every view, the Find widget, the table of contents, and the version a rename seals. */
 import assert from "node:assert/strict";
 
-import { createReview, orderReviewBlocks } from "../harness.mjs";
+import { createReview, inView, orderReviewBlocks, showView } from "../harness.mjs";
 
 export const name = "reader-navigation";
 
@@ -49,49 +49,32 @@ export async function run(ctx) {
 
   const canvas = page.locator(".review-canvas-root [data-review-api]");
 
-  const views = page.locator('[aria-label="Session views"]');
-
-  const viewLabels = () =>
-    views
-      .locator("button")
-      .evaluateAll((buttons) =>
-        buttons.map((button) => button.getAttribute("aria-label")),
+  const tabLabels = () =>
+    page
+      .locator('.review-sidebar-tabs [role="tab"]:not([hidden])')
+      .evaluateAll((tabs) =>
+        tabs.map((tab) => tab.getAttribute("aria-label").split(" · ")[0]),
       );
 
-  const traces = await ctx.apiOk(
-    `/reviews-api/${review.reviewId}/agent-traces`,
-  );
-
-  assert.ok(
-    Array.isArray(traces.sessions),
-    `agent-traces listed no sessions: ${JSON.stringify(traces)}`,
-  );
-
-  // A two-commit range offers Commits and Diff, Map needs a software map this review has none of, Trace needs traces.
-  const offered = [
-    "Whiteboard",
-    "Commits",
-    "Diff",
-    ...(traces.sessions.length > 0 ? ["Trace"] : []),
-  ];
+  // A two-commit range offers Diff beside Whiteboard; Threads picks only its pane.
+  const offered = ["Whiteboard", "Diff", "Threads"];
 
   await until(
-    async () => (await viewLabels()).join(", ") === offered.join(", "),
-    `the review views to settle on ${offered.join(", ")}`,
+    async () => (await tabLabels()).join(", ") === offered.join(", "),
+    `the sidebar tabs to settle on ${offered.join(", ")}`,
   );
 
   // Whiteboard goes last so the reader ends on the document the rest of the journey reads.
-  for (const label of [...offered.slice(1), "Whiteboard"]) {
-    const button = views.locator(`button[aria-label="${label}"]`);
-
-    await button.click();
-    await until(
-      async () => (await button.getAttribute("aria-pressed")) === "true",
-      `the ${label} view to activate`,
-    );
+  for (const [label, view] of [
+    ["Diff", "diff"],
+    ["Threads", "diff"],
+    ["Whiteboard", "review"],
+  ]) {
+    await showView(ctx, label, page);
+    await inView(ctx, view, page);
   }
 
-  ctx.check("all offered review views activate");
+  ctx.check("every sidebar tab activates and shows its view");
 
   const find = page.locator('[role="search"][aria-label="Find in session"]');
 
@@ -173,33 +156,24 @@ export async function run(ctx) {
   await find.waitFor({ state: "hidden" });
   ctx.check("find handles plain, whole-word, regex and invalid regex, and wraps");
 
-  const toc = page.locator("nav#review-toc");
+  // Focusing the Contents rail opens its card, as the keyboard does.
+  await page.getByRole("button", { name: "Contents", exact: true }).focus();
 
-  await toc.waitFor();
+  const links = page
+    .getByRole("menu", { name: "Contents" })
+    .getByRole("menuitem");
 
-  const toggle = toc.locator('[aria-controls="review-toc-body"]');
-
-  // The rail hides the toggle.
-  const isDrawerOpen = async () =>
-    (await toggle.isHidden()) ||
-    (await toggle.getAttribute("aria-expanded")) === "true";
-
-  // The contents are an open rail only at the top of a wide shell; otherwise a shut drawer is `pointer-events: none`.
-  if (!(await isDrawerOpen())) await toggle.click();
-  await until(isDrawerOpen, "the contents drawer to open");
-
-  // Entries are buttons, not links with an `href`, so the target is found by its heading text.
-  const links = toc.locator("li > button");
-
+  await links.first().waitFor();
   assert.deepEqual(
-    (await links.locator("span:last-child").allInnerTexts()).map((text) =>
-      text.trim(),
-    ),
+    (await links.allInnerTexts()).map((text) => text.trim()),
     ["Overview", "Rollout", "Risks"],
     "the contents must list every section of the review",
   );
 
-  const target = canvas.getByRole("heading", { name: "Risks", exact: true });
+  // The heading's name includes its chevron's label.
+  const target = canvas
+    .locator("h1, h2, h3, h4, h5, h6")
+    .filter({ hasText: /^Risks$/ });
 
   const region = page.locator(".review-view-region--review");
 

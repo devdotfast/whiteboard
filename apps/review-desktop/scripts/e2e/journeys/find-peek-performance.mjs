@@ -65,6 +65,16 @@ export async function run(ctx) {
     "every code peek to register",
   );
 
+  // Until the peeks' diffs load, their decoding counts against Find.
+  const status = "[data-review-inline-editor] .review-structural-stream-status";
+
+  await until(
+    async () =>
+      (await page.locator(status).count()) > 0 &&
+      (await page.locator(`${status}.loading`).count()) === 0,
+    "the mounted code peeks to finish loading",
+  );
+
   await page.evaluate(() => {
     const probe = { longest: 0, total: 0 };
 

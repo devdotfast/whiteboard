@@ -2,7 +2,13 @@ import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { createReview } from "../harness.mjs";
+import {
+  commitPill,
+  createReview,
+  inView,
+  scopeToCommit,
+  tabSelected,
+} from "../harness.mjs";
 
 export const name = "editor-persistence";
 
@@ -54,8 +60,13 @@ export async function run(ctx) {
   let page = await ctx.apiCanvasFor(title);
   ctx.check("fixture review opened");
 
-  const tab = (label) =>
-    page.locator(`[aria-label="Session views"] button[aria-label="${label}"]`);
+  async function openCommitFile(file) {
+    await scopeToCommit(ctx, "Persistence files", page);
+    await page
+      .locator(".review-sidebar-section-files .monaco-list-row")
+      .filter({ hasText: file, visible: true })
+      .click();
+  }
 
   const region = () => page.locator(".review-view-region--review");
 
@@ -116,13 +127,13 @@ export async function run(ctx) {
   await page.keyboard.press("Escape");
   ctx.check("find query and options survive window reload");
 
-  await tab("Commits").click();
-  await page
-    .getByRole("button", { name: "Persistence files", exact: true })
-    .click();
-  await page.getByRole("button", { name: /alpha.ts/ }).click();
+  await openCommitFile("alpha.ts");
 
-  const diff = () => page.locator(".review-diff-view--scoped .multiDiffEditor");
+  // The full and the commit's diff each keep a view; one shows.
+  const diff = () =>
+    page
+      .locator(".review-diff-view-host .multiDiffEditor")
+      .filter({ visible: true });
 
   await diff().waitFor();
   await diff().locator(".view-line").first().waitFor();
@@ -130,7 +141,7 @@ export async function run(ctx) {
     async () =>
       (await page
         .locator(
-          ".review-diff-view--scoped .review-structural-stream-status.loading",
+          ".review-diff-view-host .review-structural-stream-status.loading:visible",
         )
         .count()) === 0,
     "native diff stream complete",
@@ -177,8 +188,13 @@ export async function run(ctx) {
     path: path.join(ctx.root, "diff-before-reload.png"),
   });
   await reload();
+  await tabSelected(ctx, "Diff", page);
+  await inView(ctx, "diff", page);
   await ctx.until(
-    async () => (await tab("Diff").getAttribute("aria-pressed")) === "true",
+    async () =>
+      (await commitPill(page).getAttribute("aria-label")).includes(
+        ": Persistence files.",
+      ),
     "commit diff view restored",
   );
   await ctx.until(
@@ -198,10 +214,13 @@ export async function run(ctx) {
   await page.mouse.wheel(0, -20000);
 
   const alpha = () =>
-    diff().locator(".header[aria-expanded]").filter({ hasText: "alpha.ts" });
+    diff()
+      .locator(".header")
+      .filter({ hasText: "alpha.ts" })
+      .locator(".collapse-button [aria-expanded]");
 
   await alpha().waitFor();
-  await alpha().locator(".collapse-button").click();
+  await alpha().click();
   assert.equal(await alpha().getAttribute("aria-expanded"), "false");
   await reload();
   await ctx.until(
@@ -215,11 +234,7 @@ export async function run(ctx) {
     "collapsed file after relaunch",
   );
   ctx.check("native file collapse survives reload and application relaunch");
-  await tab("Commits").click();
-  await page
-    .getByRole("button", { name: "Persistence files", exact: true })
-    .click();
-  await page.getByRole("button", { name: /gamma.ts/ }).click();
+  await openCommitFile("gamma.ts");
   await diff().locator(".header").filter({ hasText: "gamma.ts" }).waitFor();
   await ctx.until(async () => {
     const header = await diff()

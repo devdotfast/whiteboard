@@ -22,7 +22,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 - Home says nothing about a legacy review directory left behind by the JSON cutover — not-a-bug
 - Opening a Go file installs Go tools from the network without asking — fixed (#354)
 - A review's Rust language server never starts when the extension wins a race with the workspace folder — fix-pr #854
-- Home offers no way to dismiss an active review — open
+- Home offers no way to dismiss an active review — fixed (Trash replaced Dismiss, #1098)
 - Activating the Go extension opens its welcome page over the review — open
 - Peeks and tour stops never offer to show their element in the software map — open
 - A focus request that mounts the Map view loses to its default selection — fixed
@@ -134,7 +134,7 @@ Server` cannot help — the captured workspace is never re-read. The fix
 
 ## Home offers no way to dismiss an active review
 
-- **Journey:** `home-multi-review` · **Found:** 2026-09-28 · **Status:** open
+- **Journey:** `home-multi-review` · **Found:** 2026-09-28 · **Status:** fixed (Trash replaced Dismiss, #1098)
 - **Repro:** in Whiteboard Desktop with two or more reviews, open Home and open
   a row's `Actions for <title>` menu.
 - **Expected:** the row offers Dismiss, the reversible action the Dismissed
@@ -187,8 +187,8 @@ Server` cannot help — the captured workspace is never re-read. The fix
 - **Expected:** the picker lists the traces in document order and defaults to
   the first.
 - **Actual:** the order, and so the default trace, changes from load to load.
-  The journey delays the second trace's resource by 1.5 s so the first trace is
-  always the default, then asserts the reader's pick over it.
+  The journey opens the Trace view from one quote's peek, so it no longer
+  depends on the default.
 - **Notes:** `api-document.tsx:149` fills `data.traces` as each resource read
   resolves inside a `Promise.all`, and `ReviewTraceView.tsx` takes the list and
   default from that map's insertion order.
