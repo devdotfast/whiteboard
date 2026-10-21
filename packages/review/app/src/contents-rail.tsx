@@ -4,10 +4,8 @@ import { Popover } from "@canvas/ui/popover";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
-  type Ref,
   type RefObject,
   useEffect,
-  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
@@ -18,6 +16,7 @@ import {
   scrollToReviewHeading,
   useHeadingInView,
 } from "./review-heading-scroll";
+import { useOptionalReviewPanel } from "./review-panel";
 import {
   fontSize,
   fontWeight,
@@ -48,21 +47,20 @@ const CLOSE_DELAY_MS = 250;
  * The board's contents at its right edge: a tick per heading, the section
  * in view inked. Hovering the ticks, or tabbing onto them, opens the full
  * list in their place. Where the board is too narrow for the rail it hides,
- * and `handle.open()` opens the same list under `barAnchor`, the page bar.
+ * and the panel store's `openContents` opens the same list at `boardTop`,
+ * the board's top edge, just under the page bar.
  */
 export function ContentsRail({
   entries,
   articleRef,
   scrollRegionRef,
-  barAnchor,
-  handle,
+  boardTop,
   onHiddenChange,
 }: {
   entries: readonly ReviewTocEntry[];
   articleRef: RefObject<HTMLElement | null>;
   scrollRegionRef: RefObject<HTMLElement | null>;
-  barAnchor: RefObject<HTMLElement | null>;
-  handle?: Ref<{ open(): void }>;
+  boardTop: RefObject<HTMLElement | null>;
   /** Whether the board is too narrow to show the rail. */
   onHiddenChange?(hidden: boolean): void;
 }): ReactElement | null {
@@ -94,20 +92,29 @@ export function ContentsRail({
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  useImperativeHandle(handle, () => ({
-    open: () => {
-      window.clearTimeout(timer.current);
-      setOpen("bar");
-    },
-  }));
+  const contentsRequest = useOptionalReviewPanel(
+    (state) => state.contentsRequest,
+  );
 
-  // The rail hides by its container query; a hidden rail has no box.
+  const answered = useRef(contentsRequest);
+
+  useEffect(() => {
+    if (contentsRequest === answered.current) return;
+    answered.current = contentsRequest;
+    window.clearTimeout(timer.current);
+    setOpen("bar");
+  }, [contentsRequest]);
+
+  // The rail hides by its container query; a hidden rail has no box. One
+  // with no entries, or gone, hides nothing.
   const shown = entries.length > 0;
 
   useLayoutEffect(() => {
     const element = place.current;
 
-    if (!element || !onHiddenChange) return;
+    if (!onHiddenChange) return;
+
+    if (!element) return onHiddenChange(false);
 
     const report = () => onHiddenChange(element.getClientRects().length === 0);
     const resized = new ResizeObserver(report);
@@ -115,7 +122,10 @@ export function ContentsRail({
     report();
     resized.observe(element);
 
-    return () => resized.disconnect();
+    return () => {
+      resized.disconnect();
+      onHiddenChange(false);
+    };
   }, [shown, onHiddenChange]);
 
   // A capped column keeps the current tick at its middle, and fades the
@@ -239,7 +249,7 @@ export function ContentsRail({
       {open && (
         <Popover
           ref={card}
-          anchor={open === "bar" ? barAnchor : rail}
+          anchor={open === "bar" ? boardTop : rail}
           role="menu"
           aria-label="Contents"
           tabIndex={-1}
@@ -387,9 +397,10 @@ const styles = stylex.create({
     backgroundColor: tokens.surface,
     fontFamily: tokens.chromeFont,
   },
-  // From the page bar's ⋯: under the bar, at its right.
+  // From the page bar's ⋯: at the board's top edge, under the bar, at its
+  // right.
   cardUnderBar: {
-    top: "calc(anchor(bottom) + 4px)",
+    top: "calc(anchor(top) + 4px)",
     right: "calc(anchor(right) + 8px)",
   },
   row: {

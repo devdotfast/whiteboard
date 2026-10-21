@@ -42,6 +42,7 @@ import { useBoardPlace } from "./review-doc-meta";
 import type { ReviewTocEntry } from "./review-document-headings";
 import type { ReviewFindHost } from "./review-find";
 import { ReviewLensesProvider } from "./review-lenses";
+import { ReviewTopBar } from "./review-top-bar";
 import { SharingContext } from "./share-control";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
@@ -653,6 +654,7 @@ export function ApiCanvas({
                                   loader={loader}
                                 />
                               )}
+                              <ReviewTopBar />
                               <CanvasDocument
                                 documentWidth={content.documentWidth}
                                 tocEntries={
@@ -752,7 +754,12 @@ const styles = stylex.create({
     flexDirection: "column",
     minHeight: 0,
   },
-  canvasFrame: { flex: "1 1 auto", minHeight: 0 },
+  canvasFrame: {
+    display: "flex",
+    flexDirection: "column",
+    flex: "1 1 auto",
+    minHeight: 0,
+  },
   trashBanner: {
     display: "flex",
     gap: space.s12,

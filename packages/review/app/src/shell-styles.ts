@@ -47,6 +47,10 @@ export const shellStyles = stylex.create({
     height: "100%",
     minHeight: 0,
   },
+  // The board under its top bar, taking the height the bar leaves.
+  board: {
+    flex: "1 1 auto",
+  },
   documentShell: {
     position: "relative",
     display: "grid",
@@ -54,14 +58,14 @@ export const shellStyles = stylex.create({
     // min-content width (e.g. wide diagrams) when the panel narrows the
     // shell, instead of overflowing under the side panel.
     gridTemplateColumns: "minmax(0, 1fr)",
-    gridTemplateRows: "auto minmax(0, 1fr)",
+    gridTemplateRows: "minmax(0, 1fr)",
     minWidth: 0,
     height: "100%",
     overflow: "hidden",
     container: "review-content / inline-size",
   },
   documentShellBanner: {
-    gridTemplateRows: "auto auto minmax(0, 1fr)",
+    gridTemplateRows: "auto minmax(0, 1fr)",
   },
   // The host's own box lives in the collapsed third grid column on narrow
   // layouts; dissolving it lets the sheet position against the app instead
@@ -186,11 +190,14 @@ export const shellStyles = stylex.create({
     },
   },
 
+  // A sibling above the board, outside its app root: it carries its own
+  // ink, face and container.
   topbar: {
     position: "sticky",
     top: 0,
     zIndex: tokens.reviewDebugLayer,
     display: "flex",
+    flexShrink: 0,
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.s8,
@@ -200,6 +207,9 @@ export const shellStyles = stylex.create({
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
     backgroundColor: tokens.surface,
+    color: tokens.ink,
+    fontFamily: tokens.chromeFont,
+    container: "review-content / inline-size",
     WebkitAppRegion: "drag",
   },
   // Notion's page bar: where you are at the far left, what you can do at
@@ -275,9 +285,8 @@ export const shellStyles = stylex.create({
       backgroundColor: tokens.chromeBorder,
     },
   },
-  // The top bar compacts against its own column (the shell container), not
-  // the viewport: an open side panel narrows the column without resizing
-  // the window. In a narrow column this ghost Button drops its label.
+  // The top bar compacts against its own width, not the viewport. In a
+  // narrow bar this ghost Button drops its label.
   openSourceTree: {
     flexShrink: 0,
     justifyContent: { default: null, [narrowContent]: "center" },

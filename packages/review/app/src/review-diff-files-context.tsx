@@ -1,5 +1,6 @@
 import type {
   ReviewCanvasBridge,
+  ReviewCommitSummary,
   ReviewDiffFileWire,
 } from "@dev.fast/review-protocol";
 import { useQuery } from "@tanstack/react-query";
@@ -7,6 +8,7 @@ import { type ReactNode, createContext, useContext, useMemo } from "react";
 
 import { canvasQueryKeys } from "./canvas-query";
 import { useReviewSession } from "./host/review-session";
+import { useReviewPanel } from "./review-panel";
 import { useReviewContainer } from "./review-root-context";
 
 export type ReviewDiffFilesState =
@@ -120,4 +122,27 @@ function recordDiffSummaryReady(container: HTMLElement | null): void {
   if (!container) return;
   const current = Number(container.dataset.reviewDiffSummaryReadyCount ?? 0);
   container.dataset.reviewDiffSummaryReadyCount = String(current + 1);
+}
+
+/** The commit the Diff view is scoped to, and how many files its tab
+ * counts: the commit's, else the whole diff's once loaded. */
+export function useDiffScope(commits: readonly ReviewCommitSummary[]) {
+  const picked = useReviewPanel((state) => state.diffScope);
+  const diffFiles = useReviewDiffFiles();
+
+  // Facts come from the board's commits; an unlisted sha scopes nothing.
+  const scopedCommit = picked
+    ? commits.find((each) => each.commit === picked.commit)
+    : undefined;
+
+  return {
+    picked,
+    scopedCommit,
+    diffScope: scopedCommit ? picked : null,
+    fileCount: scopedCommit
+      ? scopedCommit.fileCount
+      : diffFiles.status === "loaded"
+        ? diffFiles.files.length
+        : null,
+  };
 }

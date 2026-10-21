@@ -43,6 +43,8 @@ export interface ReviewPanelState {
   motion: ReviewPanelMotion;
   /** The board is too narrow for its contents rail: "⋯" offers the list. */
   contentsRailHidden: boolean;
+  /** Bumped to open the contents list at the board's top edge. */
+  contentsRequest: number;
 }
 
 export interface TraceSelection {
@@ -126,6 +128,7 @@ export interface ReviewPanelActions {
    * nothing, `fallback` opens in it. */
   toggleColumn: (fallback: AskView) => void;
   setContentsRailHidden: (hidden: boolean) => void;
+  openContents: () => void;
 }
 
 export interface AskOpenOptions {
@@ -293,6 +296,7 @@ export function createReviewPanelStore({
     columnHidden: restored?.columnHidden ?? false,
     motion: "live",
     contentsRailHidden: false,
+    contentsRequest: 0,
     view: initialView,
     availableViews,
     diffScope,
@@ -437,6 +441,8 @@ export function createReviewPanelStore({
       ),
     closeOverlayTour: () => set({ overlayTour: null }),
     setContentsRailHidden: (contentsRailHidden) => set({ contentsRailHidden }),
+    openContents: () =>
+      set((state) => ({ contentsRequest: state.contentsRequest + 1 })),
     setAvailableViews: (views) =>
       set((state) =>
         views.includes(state.view)

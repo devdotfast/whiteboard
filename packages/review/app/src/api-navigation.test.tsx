@@ -168,7 +168,7 @@ it("exposes JSON section and Markdown headings plus imported PR and its place un
   ]);
   // Desktop's sidebar tabs pick the view, so the page bar holds only the
   // board's place and its actions.
-  const pageBar = container.querySelector("main > header")!;
+  const pageBar = container.querySelector("header")!;
 
   expect(pageBar.querySelector('[aria-label="Session views"]')).toBeNull();
   // The text draws first; its place is read beside it.
@@ -195,12 +195,12 @@ it("exposes JSON section and Markdown headings plus imported PR and its place un
     await act(async () => {
       await vi.waitFor(() =>
         expect(
-          container.querySelector("main > header [data-page-bar-crumb]"),
+          container.querySelector("header [data-page-bar-crumb]"),
         ).not.toBeNull(),
       );
     });
 
-    return container.querySelector("main > header [data-page-bar-crumb]")!;
+    return container.querySelector("header [data-page-bar-crumb]")!;
   };
 
   const top = await crumbOf(parent);

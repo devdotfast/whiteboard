@@ -1,13 +1,5 @@
-import { DiscordIcon } from "@canvas/ui/brand-icons";
 import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
-import { dividerStyles } from "@canvas/ui/divider";
-import { iconStyles } from "@canvas/ui/icon-styles";
-import {
-  ArchiveIcon,
-  ArrowLeftIcon,
-  ExternalLinkIcon,
-  SlidersIcon,
-} from "@canvas/ui/icons";
+import { ArrowLeftIcon, SlidersIcon } from "@canvas/ui/icons";
 import { menuStyles } from "@canvas/ui/menu";
 import {
   OverlayScrollbar,
@@ -17,7 +9,6 @@ import { Popover } from "@canvas/ui/popover";
 import { StatusBanner } from "@canvas/ui/status-banner";
 import { Switch } from "@canvas/ui/switch";
 import { textStyles } from "@canvas/ui/text";
-import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewCanvasRange,
   type ReviewCommitSummary,
@@ -45,40 +36,22 @@ import { useAgentSelection } from "./agent-selection";
 import { observeAgentTextSelection } from "./agent-text-selection";
 import { useAskPanelHost } from "./ask-dock";
 import { AskThreadMarks } from "./ask-marks";
-import {
-  AuthoringActivityBadge,
-  ReviewSurfaceLabel,
-} from "./authoring-activity";
-import { BugReportControl } from "./bug-report-dialog";
 import { CommitPicker } from "./commit-picker";
-import { LanguageServerChip } from "./connection-chip";
 import { ContentsRail } from "./contents-rail";
 import { type ReviewNodeTint, useReviewDebugSettings } from "./debug-settings";
 import { type DiffFilePicker, useDiffFilePicker } from "./diff-file-picker";
-import { DiffLayoutControl } from "./diff-layout-control";
 import { DocumentContentsContext } from "./diff-sidebar-folds";
 import { ReviewDiffView } from "./DiffView";
 import { useDocumentEmbedScroll } from "./document-embed-scroll";
 import { documentStyles } from "./document-styles";
 import { useReviewSession } from "./host/review-session";
 import { useKeepPlace } from "./keep-place";
-import {
-  appMarker,
-  detailHostMarker,
-  documentMarker,
-  topbarActionsMarker,
-  topbarTabsMarker,
-} from "./markers.stylex";
+import { appMarker, detailHostMarker, documentMarker } from "./markers.stylex";
 import { MissingCheckoutBanner } from "./missing-checkout-banner";
-import { usePageBarFold } from "./page-bar-fold";
-import { type PageMoreFolded, PageMoreMenu } from "./page-more-menu";
 import { shortRef } from "./review-branch-range";
-import { ReviewBreadcrumb } from "./review-breadcrumb";
 import { ReviewPanelHost } from "./review-components";
-import { type ReviewSubmissionOutcome, useReview } from "./review-context";
-import { ReviewCornerAction } from "./review-corner-action";
-import { useReviewDiffFiles } from "./review-diff-files-context";
-import { BoardUpdatedAt, useBoardPlace } from "./review-doc-meta";
+import { useReview } from "./review-context";
+import { useDiffScope, useReviewDiffFiles } from "./review-diff-files-context";
 import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
 import { useReviewFindRegistration } from "./review-find";
@@ -103,18 +76,10 @@ import {
   useOpenStackLayer,
   useReviewStack,
 } from "./review-stack-selector";
-import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
+import { offeredReviewViews } from "./review-view-route";
 import { useReviewViewStateSync } from "./review-view-state";
 import { ReviewTraceView } from "./ReviewTraceView";
-import {
-  elevation,
-  fontSize,
-  fontWeight,
-  leading,
-  radius,
-  space,
-} from "./scale.stylex";
-import { ShareControl, useCanShare } from "./share-control";
+import { elevation, fontSize, fontWeight, radius, space } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
 import { selectActiveSoftwareMapModel } from "./software-map-selection";
@@ -222,24 +187,8 @@ function ReviewLayoutContent({
   const { appRef, shellRef, scrollRegionRef, articleRef } = useReviewRoots()!;
   const session = useReviewSession();
   const review = useReview();
-  const available = session.review?.available;
-  // A remote review keeps Source tree, disabled with the reason.
-  const sourceWindows = available?.sourceWindows !== false;
-  const sourceTreeShown = sourceWindows || !!session.review?.host;
-  const place = useBoardPlace();
-  // In Desktop the sidebar's tabs pick the view, and "⋯" holds the rest.
+  // In Desktop the sidebar leads, with its own commit picker.
   const sidebarLeads = session.bridge.reportSidebar !== undefined;
-  const pageBar = useRef<HTMLElement>(null);
-  const fold = usePageBarFold(pageBar, sidebarLeads);
-  const canShare = useCanShare();
-  const share = useRef<{ open(): void }>(null);
-  const contents = useRef<{ open(): void }>(null);
-
-  const contentsRailHidden = useReviewPanel(
-    (state) => state.contentsRailHidden,
-  );
-
-  const bugReport = useRef<{ open(): void }>(null);
 
   // The board's scroller, for the overlay scrollbar that replaces its own.
   const [scrollRegion, setScrollRegion] = useState<HTMLElement | null>(null);
@@ -250,42 +199,6 @@ function ReviewLayoutContent({
       setScrollRegion(node);
     },
     [scrollRegionRef],
-  );
-
-  const joinDiscord = () => {
-    captureUiEvent(session, "discord_clicked", { via: "topbar" });
-    session.surface.post({ name: "joinDiscord", args: {} });
-  };
-
-  // Narrowest first out: Share last, after Discord and the bug report.
-  const folded: PageMoreFolded[] = [
-    ...(fold >= 3 && canShare
-      ? [
-          {
-            id: "share",
-            label: "Share…",
-            onSelect: () => share.current?.open(),
-          },
-        ]
-      : []),
-    ...(fold >= 2
-      ? [
-          { id: "discord", label: "Join our Discord", onSelect: joinDiscord },
-          {
-            id: "bug",
-            label: "Report a bug…",
-            onSelect: () => bugReport.current?.open(),
-          },
-        ]
-      : []),
-  ];
-
-  const discordTooltip = useTooltip("Join our Discord community");
-
-  const sourceTreeTooltip = useTooltip(
-    sourceWindows
-      ? "Open full read-only source"
-      : (available?.reason ?? "Source windows are unavailable."),
   );
 
   const panelStore = useReviewPanelStore();
@@ -301,14 +214,13 @@ function ReviewLayoutContent({
 
   const panelMotion = useReviewPanel((state) => state.motion);
   const activeView = useReviewPanel((state) => state.view);
-  const pickedScope = useReviewPanel((state) => state.diffScope);
 
-  // Facts come from the board's commits; an unlisted sha scopes nothing.
-  const scopedCommit = pickedScope
-    ? commits.find((each) => each.commit === pickedScope.commit)
-    : undefined;
-
-  const diffScope = scopedCommit ? pickedScope : null;
+  const {
+    picked: pickedScope,
+    scopedCommit,
+    diffScope,
+    fileCount: filesTabFileCount,
+  } = useDiffScope(commits);
 
   // The full diff stays mounted while another view shows, at the width it
   // had when it was hidden: following the column through a side peek's
@@ -337,7 +249,6 @@ function ReviewLayoutContent({
   const traceSelection = useReviewPanel((state) => state.traceSelection);
   const traceStorage = useReviewPanel((state) => state.traceStorage);
   const mapFocus = useReviewPanel((state) => state.mapFocus);
-  const showView = useReviewPanel((state) => state.showView);
 
   const debugSettings = useReviewDebugSettings();
 
@@ -453,12 +364,6 @@ function ReviewLayoutContent({
     ((session.review?.traces.size ?? 0) > 0 ||
       storedList.status !== "loaded" ||
       storedList.sessions.length > 0);
-
-  const filesTabFileCount = scopedCommit
-    ? scopedCommit.fileCount
-    : diffFiles.status === "loaded"
-      ? diffFiles.files.length
-      : null;
 
   const hasDiff =
     hasChangeRange &&
@@ -688,6 +593,7 @@ function ReviewLayoutContent({
         appMarker,
         themeStyles.vars,
         themeStyles.app,
+        shellStyles.board,
         debugSettings.theme === "light" && themeStyles.light,
         rightPanelOpen && shellStyles.appPeekOpen,
         sidePeekResize.isResizing && shellStyles.appResizing,
@@ -707,166 +613,6 @@ function ReviewLayoutContent({
           !!banner && shellStyles.documentShellBanner,
         )}
       >
-        <header
-          ref={pageBar}
-          {...stylex.props(
-            shellStyles.topbar,
-            sidebarLeads && shellStyles.pageBar,
-          )}
-        >
-          <div
-            {...stylex.props(
-              shellStyles.topbarLeft,
-              topbarTabsMarker,
-              sidebarLeads && shellStyles.pageBarLeft,
-            )}
-          >
-            {session.review ? (
-              <ReviewBreadcrumb
-                place={place}
-                reviewId={session.review.reviewId}
-                counted={fold < 1}
-                status={<BoardUpdatedAt />}
-              />
-            ) : null}
-            {sidebarLeads ? null : (
-              <SegmentedControl
-                label="Session views"
-                variant="topbar"
-                value={activeView}
-                options={reviewViews.map((view) => ({
-                  value: view,
-                  "aria-label":
-                    view === "map"
-                      ? "Map (Experimental)"
-                      : reviewViewLabel(view),
-                  title: view === "map" ? "Map (Experimental)" : undefined,
-                  label:
-                    view === "review" ? (
-                      <ReviewSurfaceLabel
-                        hasContent={document.empty === false}
-                        active={activeView === "review"}
-                      />
-                    ) : (
-                      <span>{reviewViewLabel(view)}</span>
-                    ),
-                  count:
-                    view === "diff"
-                      ? (filesTabFileCount ?? undefined)
-                      : undefined,
-                }))}
-                onChange={(view) => {
-                  if (view === "diff")
-                    captureUiEvent(session, "diff_opened", {
-                      kind: diffScope ? "commit" : "structural",
-                      via: "topbar",
-                    });
-                  showView(view);
-                }}
-              />
-            )}
-          </div>
-          <div
-            {...stylex.props(
-              shellStyles.topbarActions,
-              topbarActionsMarker,
-              sidebarLeads && shellStyles.pageBarActions,
-            )}
-          >
-            <div
-              {...stylex.props(
-                shellStyles.topbarItem,
-                shellStyles.topbarContext,
-              )}
-            >
-              {sidebarLeads || !sourceTreeShown ? null : (
-                <Button
-                  variant="ghost"
-                  xstyle={shellStyles.openSourceTree}
-                  aria-label="Source tree"
-                  disabled={!sourceWindows}
-                  ref={sourceTreeTooltip}
-                  onClick={() => {
-                    captureUiEvent(session, "source_tree_opened", {
-                      via: "topbar",
-                    });
-                    // The desktop already showed why it failed.
-                    session.surface
-                      .post({ name: "openSourceTree", args: {} })
-                      .catch(() => undefined);
-                  }}
-                >
-                  <span {...stylex.props(shellStyles.openSourceTreeLabel)}>
-                    Source tree
-                  </span>
-                  <ExternalLinkIcon xstyle={iconStyles.inline} />
-                </Button>
-              )}
-              {session.review?.available?.pending && session.review.host ? (
-                <LanguageServerChip host={session.review.host} />
-              ) : null}
-              <AuthoringActivityBadge
-                onLocate={(view) => {
-                  if (view === "diff")
-                    captureUiEvent(session, "diff_opened", {
-                      kind: diffScope ? "commit" : "structural",
-                      via: "locate",
-                    });
-                  showView(view);
-                }}
-              />
-            </div>
-            <ShareControl folded={fold >= 3} handle={share} />
-            {fold >= 2 ? null : (
-              <IconButton
-                xstyle={shellStyles.topbarItem}
-                ref={discordTooltip}
-                aria-label="Join our Discord community"
-                data-page-bar-fold="chat"
-                onClick={joinDiscord}
-              >
-                <DiscordIcon xstyle={iconStyles.chrome} />
-              </IconButton>
-            )}
-            <BugReportControl folded={fold >= 2} handle={bugReport} />
-            <ReviewBatonChip outcome={review.submissionOutcome} />
-            <DiffLayoutControl />
-            {sidebarLeads ? (
-              <PageMoreMenu
-                views={reviewViews
-                  .filter((view) => view === "trace" || view === "map")
-                  .map((view) => ({
-                    view,
-                    label:
-                      view === "map"
-                        ? "Map (Experimental)"
-                        : reviewViewLabel(view),
-                  }))}
-                onShowView={showView}
-                folded={folded}
-                onOpenContents={
-                  activeView === "review" &&
-                  contentsRailHidden &&
-                  tocEntries.length > 0
-                    ? () => contents.current?.open()
-                    : undefined
-                }
-              />
-            ) : (
-              <>
-                {!review.historicalRevision && !review.submissionOutcome && (
-                  <div
-                    aria-hidden="true"
-                    {...stylex.props(dividerStyles.vertical)}
-                  />
-                )}
-                {!review.historicalRevision && !review.submissionOutcome ? (
-                  <ReviewCornerAction />
-                ) : null}
-              </>
-            )}
-          </div>
-        </header>
         {banner}
         <section
           ref={attachScrollRegion}
@@ -1016,8 +762,7 @@ function ReviewLayoutContent({
             entries={tocEntries}
             articleRef={articleRef}
             scrollRegionRef={scrollRegionRef}
-            barAnchor={pageBar}
-            handle={contents}
+            boardTop={shellRef}
             onHiddenChange={panelStore.getState().setContentsRailHidden}
           />
         )}
@@ -1039,31 +784,6 @@ function ReviewLayoutContent({
         <ReviewPanelHost />
       </div>
     </div>
-  );
-}
-
-/**
- * Reports where the baton sits after the reader acts. It renders nothing while
- * the review is simply waiting: the corner action already says what to do, and
- * a standing "awaiting your review" chip was noise on every review.
- */
-function ReviewBatonChip({
-  outcome,
-}: {
-  outcome: ReviewSubmissionOutcome | null;
-}): ReactElement | null {
-  const tooltip = useTooltip<HTMLSpanElement>("Deleted");
-
-  if (!outcome) return null;
-
-  return (
-    <span
-      ref={tooltip}
-      {...stylex.props(shellStyles.topbarItem, batonStyles.chip)}
-    >
-      <ArchiveIcon xstyle={iconStyles.inline} />
-      <span>deleted</span>
-    </span>
   );
 }
 
@@ -1192,22 +912,6 @@ export function applySoftwareMapTopologyStatuses(
     elementsByPath: new Map(elements.map((element) => [element.path, element])),
   };
 }
-
-const batonStyles = stylex.create({
-  chip: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: space.s8,
-    color: tokens.diffRemoved,
-    fontFamily: tokens.chromeFont,
-    fontSize: tokens.chromeFontSizeSmall,
-    fontWeight: tokens.chromeFontWeightStrong,
-    lineHeight: leading.none,
-    letterSpacing: tokens.chromeTracking,
-    textTransform: "uppercase",
-    whiteSpace: "nowrap",
-  },
-});
 
 // Map settings float over the map canvas instead of sitting behind a topbar
 // gear, so map-only controls stay with the map.
