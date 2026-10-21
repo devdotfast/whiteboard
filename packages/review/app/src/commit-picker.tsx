@@ -26,6 +26,7 @@ import type { ReviewSidebarCommit } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactElement,
+  type ReactNode,
   type RefObject,
   useEffect,
   useRef,
@@ -45,11 +46,13 @@ import { tokens } from "./tokens.stylex";
  */
 export function CommitPicker({
   commits,
+  leading,
   selected,
   onPick,
   now = Date.now(),
 }: {
   commits: readonly ReviewSidebarCommit[];
+  leading?: ReactNode;
   selected?: string;
   onPick(commit: string | null): void;
   now?: number;
@@ -85,58 +88,62 @@ export function CommitPicker({
 
   return (
     <div ref={control} {...stylex.props(styles.bar)}>
-      {picked ? (
-        <PickedPill
-          commit={picked}
-          pill={pill}
-          open={open}
-          onToggle={() => setOpen(!open)}
-          onClear={() => onPick(null)}
-        />
-      ) : (
-        <button
-          ref={(element) => {
-            pill.current = element;
+      {leading}
+      {/* Wraps under the leading pill rather than squeezing it. */}
+      <span {...stylex.props(styles.commits)}>
+        {picked ? (
+          <PickedPill
+            commit={picked}
+            pill={pill}
+            open={open}
+            onToggle={() => setOpen(!open)}
+            onClear={() => onPick(null)}
+          />
+        ) : (
+          <button
+            ref={(element) => {
+              pill.current = element;
 
-            return listTooltip(element);
-          }}
-          type="button"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          aria-label={`All ${countLabel(commits.length, "commit")}. Choose commits`}
-          {...stylex.props(
-            focusStyles.ring,
-            buttonStyles.reset,
-            pillStyles.pill,
-            pillStyles.neutral,
-            pillStyles.pressable,
-            styles.pillLabel,
-            styles.all,
-          )}
-          onClick={() => setOpen(!open)}
-        >
-          <CommitIcon xstyle={styles.icon} />
-          Commits
-          <span {...stylex.props(textStyles.count, styles.count)}>
-            {commits.length}
-          </span>
-        </button>
-      )}
-      {picked ? (
-        <>
-          <StepButton
-            label="Older commit"
-            up
-            atEnd={index <= 0}
-            onClick={() => step(-1)}
-          />
-          <StepButton
-            label="Newer commit"
-            atEnd={index >= oldestFirst.length - 1}
-            onClick={() => step(1)}
-          />
-        </>
-      ) : null}
+              return listTooltip(element);
+            }}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            aria-label={`All ${countLabel(commits.length, "commit")}. Choose commits`}
+            {...stylex.props(
+              focusStyles.ring,
+              buttonStyles.reset,
+              pillStyles.pill,
+              pillStyles.neutral,
+              pillStyles.pressable,
+              styles.pillLabel,
+              styles.all,
+            )}
+            onClick={() => setOpen(!open)}
+          >
+            <CommitIcon xstyle={styles.icon} />
+            Commits
+            <span {...stylex.props(textStyles.count, styles.count)}>
+              {commits.length}
+            </span>
+          </button>
+        )}
+        {picked ? (
+          <>
+            <StepButton
+              label="Older commit"
+              up
+              atEnd={index <= 0}
+              onClick={() => step(-1)}
+            />
+            <StepButton
+              label="Newer commit"
+              atEnd={index >= oldestFirst.length - 1}
+              onClick={() => step(1)}
+            />
+          </>
+        ) : null}
+      </span>
       {open ? (
         <CommitMenu
           anchor={control}
@@ -438,11 +445,19 @@ const DOT_CENTER = "12.5px";
 const styles = stylex.create({
   bar: {
     display: "flex",
+    flexWrap: "wrap",
     alignItems: "center",
     gap: space.s6,
     minWidth: 0,
     paddingBlock: `${space.s6} ${space.s2}`,
     paddingInline: space.s12,
+  },
+  commits: {
+    display: "flex",
+    flex: "0 1 auto",
+    alignItems: "center",
+    gap: space.s6,
+    minWidth: 0,
   },
   // In a narrow sidebar the label gives way; the ×, ∧ and ∨ never do.
   pillLabel: {

@@ -38,6 +38,7 @@ import { LensProgress, LensRows } from "./lens-list";
 import { boardRowMarker } from "./markers.stylex";
 import { type ReviewTocEntry, headingDepth } from "./review-document-headings";
 import { worktreeLabel } from "./review-home-model";
+import { StackPill } from "./review-stack-selector";
 import { fontSize, fontWeight, leading, radius, space } from "./scale.stylex";
 import { ThreadsSectionBody } from "./sidebar-threads";
 import { tokens } from "./tokens.stylex";
@@ -481,6 +482,17 @@ function SectionBody(props: ReviewSidebarSectionProps): ReactElement | null {
     return props.commits ? (
       <CommitPicker
         commits={props.commits.list}
+        leading={
+          props.stack ? (
+            <StackPill
+              stack={props.stack}
+              size="bar"
+              onOpen={(layer, active) =>
+                props.onOpenStackLayer?.(layer.branch, active)
+              }
+            />
+          ) : null
+        }
         selected={props.commits.selected}
         onPick={(commit) => props.onPickCommit?.(commit)}
       />

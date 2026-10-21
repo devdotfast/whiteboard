@@ -113,6 +113,11 @@ import {
   peekShown,
 } from "./review-panel-store";
 import { ReviewRootsProvider, useReviewContainer } from "./review-root-context";
+import {
+  StackPill,
+  useOpenStackLayer,
+  useReviewStack,
+} from "./review-stack-selector";
 import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
 import { useReviewViewStateSync } from "./review-view-state";
 import { ReviewTraceView } from "./ReviewTraceView";
@@ -551,6 +556,10 @@ function ReviewLayoutContent({
     !(diffFiles.status === "loaded" && diffFiles.files.length === 0);
 
   const hasCommits = commits.length > 0;
+  const stack = useReviewStack();
+  const openStackLayer = useOpenStackLayer();
+  const stackRef = useRef({ stack, openStackLayer });
+  stackRef.current = { stack, openStackLayer };
 
   const reviewViews = useMemo(
     () =>
@@ -620,6 +629,7 @@ function ReviewLayoutContent({
         compare: `${shortRef(range.baseRef || range.baseCommit)} ← ${shortRef(range.headRef || range.headCommit)}`,
       }),
       ...(diffScope && { commit: diffScope.commit }),
+      ...(stack.layers.length > 1 && { stack }),
       ...(hasChangeRange && lenses && { lenses: lenses.authored.length }),
       ...(hasChangeRange &&
         filesTabFileCount !== null &&
@@ -656,6 +666,7 @@ function ReviewLayoutContent({
     range.headRef,
     range.headCommit,
     diffScope,
+    stack,
   ]);
 
   useEffect(() => {
@@ -678,6 +689,15 @@ function ReviewLayoutContent({
             scrollRegionRef.current,
           ),
         );
+
+        return;
+      }
+
+      if (event.event === "openStackLayer") {
+        const { stack, openStackLayer } = stackRef.current;
+        const layer = stack.layers.find((each) => each.branch === event.branch);
+
+        if (layer) void openStackLayer(layer, event.active);
 
         return;
       }
@@ -1045,6 +1065,15 @@ function ReviewLayoutContent({
                     sidebarLeads ? undefined : (
                       <CommitPicker
                         commits={commits}
+                        leading={
+                          <StackPill
+                            stack={stack}
+                            size="bar"
+                            onOpen={(layer, active) =>
+                              void openStackLayer(layer, active)
+                            }
+                          />
+                        }
                         selected={diffScope?.commit}
                         onPick={(sha) =>
                           panelStore

@@ -490,6 +490,8 @@ export interface ReviewSidebarState {
   commit?: string;
   /** The compared branches, as "main ← feature". */
   compare?: string;
+  /** The board's branch stack, if any. */
+  stack?: ReviewStackResponse;
   /** The change's counts are still loading: Lenses and Files keep what
    * they show until a report has them. */
   countsPending?: boolean;
@@ -591,6 +593,10 @@ export interface ReviewSidebarSectionProps {
   };
   /** Filter the Diff view to a commit, or to all of them with null. */
   onPickCommit?(commit: string | null): void;
+  /** The board's branch stack, if any. */
+  stack?: ReviewStackResponse;
+  /** Open a branch's whiteboard, creating it if needed. */
+  onOpenStackLayer?(branch: string, active: boolean): void;
   /** Whiteboard: start a new whiteboard, as its shortcut does. */
   onNewWhiteboard?(): void;
   /** Create and open an empty child of a top-level board. */
@@ -2037,6 +2043,13 @@ export const ReviewSurfaceEventSchema = z.discriminatedUnion("event", [
     event: z.literal("pickCommit"),
     reviewId: requiredString,
     commit: requiredString.nullable(),
+  }),
+  /** Open a branch of the board's stack, from the sidebar. */
+  z.strictObject({
+    event: z.literal("openStackLayer"),
+    reviewId: requiredString,
+    branch: requiredString,
+    active: z.boolean(),
   }),
   /** Open a saved thread in Ask, from the sidebar's Threads. */
   z.strictObject({

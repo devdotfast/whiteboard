@@ -110,9 +110,12 @@ export function ReviewStackSelector(): ReactElement | null {
 export function StackPill({
   stack: { layers, base },
   onOpen,
+  size = "small",
 }: {
   stack: ReviewStackResponse;
   onOpen(layer: ReviewStackLayer, active: boolean): void;
+  /** "bar" matches the Commits pill beside it. */
+  size?: "small" | "bar";
 }): ReactElement | null {
   const [open, setOpen] = useState(false);
   const container = useRef<HTMLSpanElement>(null);
@@ -151,6 +154,7 @@ export function StackPill({
           pillStyles.pill,
           pillStyles.accent,
           styles.pill,
+          size === "bar" && styles.pillBar,
         )}
         onClick={() => setOpen(!open)}
       >
@@ -316,6 +320,11 @@ const styles = stylex.create({
     fontSize: fontSize.ui,
     lineHeight: leading.px16,
     cursor: "pointer",
+  },
+  pillBar: {
+    height: "26px",
+    paddingInline: space.s10,
+    fontSize: fontSize.body,
   },
   pillIcon: { width: "13px", height: "13px" },
   pillName: { fontWeight: fontWeight.medium },

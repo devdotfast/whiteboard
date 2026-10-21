@@ -720,6 +720,8 @@ export class ReviewSidebarPart extends Part {
 				},
 			}),
 			onPickCommit: (commit) => this.emitSurfaceEvent({ event: "pickCommit", reviewId, commit }),
+			...(this.state.stack && { stack: this.state.stack }),
+			onOpenStackLayer: (branch, active) => this.emitSurfaceEvent({ event: "openStackLayer", reviewId, branch, active }),
 			onNewWhiteboard: () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID, "sidebar"),
 			onNewChildWhiteboard: (parentId) => openChildWhiteboard(this.catalog, this.tabs, parentId),
 			...(newWhiteboardShortcut && { newWhiteboardShortcut }),
