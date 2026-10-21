@@ -152,6 +152,8 @@ export interface IEditorOptions {
 	 * Defaults to true in vscode and to false in monaco-editor.
 	 */
 	glyphMargin?: boolean;
+	/** @internal Explicit glyph gutter width for embedded-editor layout animations; -1 uses the normal lane geometry. */
+	glyphMarginWidth?: number;
 	/**
 	 * The width reserved for line decorations (in px).
 	 * Line decorations are placed between line numbers and the editor content.
@@ -2927,7 +2929,8 @@ export class EditorLayoutInfoComputer extends ComputedEditorOption<EditorOption.
 
 		let glyphMarginWidth = 0;
 		if (showGlyphMargin) {
-			glyphMarginWidth = lineHeight * env.glyphMarginDecorationLaneCount;
+			const width = options.get(EditorOption.glyphMarginWidth);
+			glyphMarginWidth = width >= 0 ? width : lineHeight * env.glyphMarginDecorationLaneCount;
 		}
 
 		let glyphMarginLeft = 0;
@@ -5866,6 +5869,7 @@ export const enum EditorOption {
 	formatOnPaste,
 	formatOnType,
 	glyphMargin,
+	glyphMarginWidth,
 	gotoLocation,
 	hideCursorInOverviewRuler,
 	hover,
@@ -6382,6 +6386,7 @@ export const EditorOptions = {
 		EditorOption.glyphMargin, 'glyphMargin', true,
 		{ description: nls.localize('glyphMargin', "Controls whether the editor should render the vertical glyph margin. Glyph margin is mostly used for debugging.") }
 	)),
+	glyphMarginWidth: register(new EditorIntOption(EditorOption.glyphMarginWidth, 'glyphMarginWidth', -1, -1, 1000)),
 	gotoLocation: register(new EditorGoToLocation()),
 	hideCursorInOverviewRuler: register(new EditorBooleanOption(
 		EditorOption.hideCursorInOverviewRuler, 'hideCursorInOverviewRuler', false,

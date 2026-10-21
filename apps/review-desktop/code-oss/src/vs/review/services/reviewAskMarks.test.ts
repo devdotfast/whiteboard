@@ -16,7 +16,7 @@ import { apiSourceUri } from '../common/reviewSourceView.js';
 // jsdom ships no types here; the DOM globals below are all this test reads from it.
 const { JSDOM } = createRequire(import.meta.url)('jsdom');
 const dom = new JSDOM('<html><body></body></html>');
-for (const key of ['window', 'document', 'HTMLElement', 'Node'] as const) {
+for (const key of ['window', 'document', 'HTMLElement', 'Node', 'customElements'] as const) {
 	Object.defineProperty(globalThis, key, { configurable: true, value: dom.window[key] });
 }
 const { ReviewAskMarks, inlineHeadLine } = await import('./reviewAskMarks.js');
@@ -78,7 +78,7 @@ test('pins marks beside their lines in this view\'s editors showing their file a
 	for (const e of [head, base, other]) editors.add(e.fake);
 
 	const mounted = new Set<string>();
-	const marks = new ReviewAskMarks(container, editors.fake);
+	const marks = new ReviewAskMarks(container, false, editors.fake, { isMotionReduced: () => true } as never);
 	marks.set([mark('one', 'src/a.ts', 'head', 4, 6), mark('two', 'src/a.ts', 'base', 9), mark('three', 'src/b.ts', 'head', 2)], (id, node) => {
 		node.textContent = id;
 		mounted.add(id);
@@ -125,7 +125,7 @@ test('marks no lines that read otherwise than when asked about', () => {
 	const editors = service();
 	editors.add(head.fake);
 
-	const marks = new ReviewAskMarks(container, editors.fake);
+	const marks = new ReviewAskMarks(container, false, editors.fake, { isMotionReduced: () => true } as never);
 	marks.set([
 		{ ...mark('same', 'src/a.ts', 'head', 2, 3), text: ['b', 'c'] },
 		{ ...mark('edited', 'src/a.ts', 'head', 1), text: ['x'] },
@@ -136,4 +136,51 @@ test('marks no lines that read otherwise than when asked about', () => {
 	});
 	assert.deepEqual(head.pins(), ['2:same']);
 	marks.dispose();
+});
+
+test('compact lanes follow only this view’s visible pins and keep their width for additional pins', () => {
+    const container = document.createElement('div');
+    document.body.append(container);
+    const elsewhere = document.createElement('div');
+    document.body.append(elsewhere);
+    const editors = service();
+    const head = editor(source('src/a.ts', 'head'), container, ['a', 'b', 'c']);
+    const other = editor(source('src/a.ts', 'head'), elsewhere, ['a', 'b', 'c']);
+    const changed = new Emitter<{ hasChanged(): boolean }>();
+    const widths: number[] = [];
+    const hiddenChanged = new Emitter<void>();
+    let hidden: Array<{ startLineNumber: number; endLineNumber: number }> = [];
+    Object.assign(head.fake, {
+        _getViewModel: () => ({ getHiddenAreas: () => hidden }),
+        onDidChangeHiddenAreas: hiddenChanged.event,
+        updateOptions: (options: { glyphMarginWidth: number }) => widths.push(options.glyphMarginWidth),
+        getOption: () => 20,
+        onDidChangeConfiguration: changed.event,
+    });
+    editors.add(head.fake); editors.add(other.fake);
+    const motion = { isMotionReduced: () => true, onDidChangeReducedMotion: new Emitter<void>().event };
+    const marks = new ReviewAskMarks(container, true, editors.fake, motion as never);
+    const mount = (id: string, node: HTMLElement) => { node.textContent = id; return () => {}; };
+    marks.set([], mount);
+    assert.equal(widths.at(-1), 0);
+    marks.set([mark('one', 'src/a.ts', 'head', 1)], mount);
+    assert.equal(widths.at(-1), 40);
+    const afterFirst = widths.length;
+    marks.set([mark('one', 'src/a.ts', 'head', 1), mark('two', 'src/a.ts', 'head', 3)], mount);
+    assert.equal(widths.length, afterFirst);
+    marks.set([mark('two', 'src/a.ts', 'head', 3)], mount);
+    assert.equal(widths.length, afterFirst);
+    assert.deepEqual(other.pins(), []);
+    marks.set([], mount);
+    assert.equal(widths.at(-1), 0);
+    assert.deepEqual(head.pins(), []);
+    marks.set([mark('one', 'src/a.ts', 'head', 1)], mount);
+    hidden = [{ startLineNumber: 1, endLineNumber: 1 }]; hiddenChanged.fire();
+    assert.equal(widths.at(-1), 0);
+    hidden = []; hiddenChanged.fire();
+    assert.equal(widths.at(-1), 40);
+    head.swapModel(source('src/c.ts', 'head'));
+    assert.equal(widths.at(-1), 0);
+    assert.deepEqual(head.pins(), []);
+    marks.dispose(); hiddenChanged.dispose(); container.remove(); elsewhere.remove(); changed.dispose();
 });

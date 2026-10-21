@@ -80,6 +80,7 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 		source: URI,
 		readonly entries: readonly ReviewFilesEditorEntry[],
 		structural: StructuralDiffSession,
+		compactPinLane: boolean,
 		@ITextModelService textModelService: ITextModelService,
 		@ITextResourceConfigurationService
 		textResourceConfigurationService: ITextResourceConfigurationService,
@@ -106,6 +107,7 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 					// Use diffr's child folds; the file header controls the root.
 					{
 						...REVIEW_FILES_DIFF_EDITOR_OPTIONS,
+						glyphMarginWidth: compactPinLane ? 0 : -1,
 						hideOriginalLineNumbers: entry.file.status === "added" || entry.file.status === "unchanged",
 						hideUnchangedRegions: {
 							enabled: true,

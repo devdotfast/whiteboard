@@ -3,6 +3,8 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { AskPinLane } from "./reviewAskPinLane.js";
+import { IAccessibilityService } from "../../platform/accessibility/common/accessibility.js";
 import { Disposable, DisposableMap, DisposableStore, toDisposable } from "../../base/common/lifecycle.js";
 import type { ICodeEditor, IDiffEditor, IGlyphMarginWidget } from "../../editor/browser/editorBrowser.js";
 import { ICodeEditorService } from "../../editor/browser/services/codeEditorService.js";
@@ -53,12 +55,18 @@ export class ReviewAskMarks extends Disposable {
 	private readonly watched = this._register(new DisposableMap<ICodeEditor, DisposableStore>());
 	private readonly painted = this._register(new DisposableMap<ICodeEditor, DisposableStore>());
 	private readonly shown = new Map<ICodeEditor, string>();
+	private readonly lanes = this._register(new DisposableMap<ICodeEditor, AskPinLane>());
 	private readonly diffs = this._register(new DisposableMap<IDiffEditor, DisposableStore>());
 
-	constructor(private readonly container: HTMLElement, @ICodeEditorService private readonly editors: ICodeEditorService) {
+	constructor(
+        private readonly container: HTMLElement,
+        private readonly compactPinLane: boolean,
+        @ICodeEditorService private readonly editors: ICodeEditorService,
+        @IAccessibilityService private readonly accessibility: IAccessibilityService,
+    ) {
 		super();
 		this._register(editors.onCodeEditorAdd(editor => this.watch(editor)));
-		this._register(editors.onCodeEditorRemove(editor => { this.clear(editor); this.watched.deleteAndDispose(editor); }));
+		this._register(editors.onCodeEditorRemove(editor => { this.clear(editor); this.lanes.deleteAndDispose(editor); this.watched.deleteAndDispose(editor); }));
 		this._register(editors.onDiffEditorAdd(diff => this.watchDiff(diff)));
 		this._register(editors.onDiffEditorRemove(diff => this.diffs.deleteAndDispose(diff)));
 		for (const diff of editors.listDiffEditors()) this.watchDiff(diff);
@@ -100,6 +108,16 @@ export class ReviewAskMarks extends Disposable {
 
 	private paint(editor: ICodeEditor): void {
 		const placed = this.place(editor);
+        if (this.compactPinLane && this.container.contains(editor.getContainerDomNode())) {
+            let lane = this.lanes.get(editor);
+            if (!lane) {
+                lane = new AskPinLane(editor, this.accessibility);
+                this.lanes.set(editor, lane);
+            }
+            lane.setHasPins(placed.length > 0);
+        } else {
+            this.lanes.deleteAndDispose(editor);
+        }
 		// A reused editor fires model, fold and diff events in turn.
 		const key = placed.map(at => `${at.mark.id}@${at.fromLine}-${at.toLine}:${at.washed}`).join() + `|${editor.getModel()?.id}`;
 		if (this.shown.get(editor) === key) return;

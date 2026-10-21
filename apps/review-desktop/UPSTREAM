@@ -597,6 +597,10 @@ one of these entries:
   scrolling, and horizontal scrolling in inline entries (862110bb8, 0b9d0ac08,
   9af69be21, 51b1a4061, a43ec7425, 96fd6fa84, 9c152358d, 5ca7aa1fe, b1be23513,
   3c14a9e64, da9b3b546).
+- `src/vs/editor/common/config/editorOptions.ts`: an internal
+  `glyphMarginWidth` override lets compact Whiteboard editors animate the Ask
+  pin lane using real Monaco layout. Other editors retain the upstream
+  line-height-based glyph margin.
 - `src/vs/base/browser/ui/scrollbar/` (`scrollableElement.ts`,
   `scrollableElementOptions.ts`, `scrollbarState.ts`, `verticalScrollbar.ts`):
   let document scrolling pass over embedded diagrams and code peeks

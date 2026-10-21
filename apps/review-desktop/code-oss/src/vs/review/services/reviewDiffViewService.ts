@@ -242,7 +242,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 
 	private askMarks: ReviewAskMarks | undefined;
 	setAskMarks(marks: readonly ReviewAskMark[], mount: ReviewAskPinMount): void {
-		this.askMarks ??= this._register(this.instantiationService.createInstance(ReviewAskMarks, this.spec.container));
+		this.askMarks ??= this._register(this.instantiationService.createInstance(ReviewAskMarks, this.spec.container, Boolean(this.spec.document)));
 		this.askMarks.set(marks, mount);
 	}
 	refreshHeaders(): void { this.view?.refreshHeaders(); }
@@ -314,7 +314,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 			// The input owns the text-model references its view model resolves, so
 			// this handle disposes it alongside the view.
 			const input = store.add(instantiation.createInstance(ReviewFilesEditorInput, sourceUri, selected,
-				session));
+				session, Boolean(this.spec.document)));
 			const view = store.add(
 				instantiation.createInstance(
 					ReviewFilesDiffView,

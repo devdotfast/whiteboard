@@ -1576,6 +1576,8 @@ body
   background: var(--accent-wash);
 }
 .review-workbench .monaco-editor .review-ask-pin {
+  opacity: var(--review-pin-lane-opacity, 1);
+  pointer-events: var(--review-pin-lane-pointer-events, auto);
   overflow: visible;
 }
 /* The pin spans this lane too. */
