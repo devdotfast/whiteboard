@@ -3,7 +3,8 @@ use criterion::{criterion_group, criterion_main, BatchSize, Criterion, Throughpu
 use diffr_core::config::{Config, Params};
 use diffr_core::options::DiffOptions;
 use diffr_core::pairing::Pairing;
-use diffr_core::protocol::{project, Diff, FileChange, FileRef, FileStatus, Source};
+use diffr_core::present::present;
+use diffr_core::protocol::{project, Diff, FileChange, FileRef, FileStatus};
 use diffr_core::summary::{DiffResult, FileFormat};
 use diffr_core::{config, pairing, protocol};
 use std::hint::black_box;
@@ -45,7 +46,7 @@ const FILES: &[Fixture] = &[
     fixture!("packages/review/src/ask/thread.ts", "thread.ts"),
 ];
 
-fn project_file(fixture: &Fixture, params: &Params) -> (FileChange, Pairing<Source>) {
+fn project_file(fixture: &Fixture, params: &Params) -> (FileChange, Diff) {
     let result = DiffResult::from_sources_with_options(
         fixture.path,
         fixture.before,
@@ -82,10 +83,7 @@ fn project_file(fixture: &Fixture, params: &Params) -> (FileChange, Pairing<Sour
             sizes: (fixture.before.len() as u64, fixture.after.len() as u64),
         },
     );
-    let Diff::Text { sides, .. } = diff else {
-        panic!("fixture must produce a text diff")
-    };
-    (file, sides)
+    (file, diff)
 }
 
 fn pipeline(config: &Config) -> host::Pipeline {
@@ -133,20 +131,27 @@ fn benchmarks(c: &mut Criterion) {
         let pipeline = pipeline(config);
         // Fail before measuring if a plugin errors or corrupts source text.
         for fixture in FILES {
-            let (file, sides) = project_file(fixture, &params);
+            let (file, diff) = project_file(fixture, &params);
             let shaped = runtime
-                .block_on(pipeline.run(&file, sides))
+                .block_on(present(None, diff, async |sides| {
+                    pipeline.run(&file, sides).await
+                }))
                 .expect("plugins succeed");
+            let Diff::Text { sides: shaped, .. } = shaped else {
+                panic!("fixture must produce a text diff");
+            };
             assert_eq!(shaped.lhs().unwrap().text, fixture.before);
             assert_eq!(shaped.rhs().unwrap().text, fixture.after);
         }
         engine.bench_function(name, |b| {
             b.iter(|| {
                 for fixture in FILES {
-                    let (file, sides) = project_file(black_box(fixture), &params);
+                    let (file, diff) = project_file(black_box(fixture), &params);
                     black_box(
                         runtime
-                            .block_on(pipeline.run(&file, sides))
+                            .block_on(present(None, diff, async |sides| {
+                                pipeline.run(&file, sides).await
+                            }))
                             .expect("plugins succeed"),
                     );
                 }
@@ -167,7 +172,16 @@ fn benchmarks(c: &mut Criterion) {
     // Keep the same default-query trees. Clone outside the timed routine because
     // plugins mutate their input; reusing shaped output would benchmark a no-op.
     let params = default.compile().expect("queries compile");
-    let projected: Vec<_> = FILES.iter().map(|f| project_file(f, &params)).collect();
+    let projected: Vec<_> = FILES
+        .iter()
+        .map(|f| {
+            let (file, diff) = project_file(f, &params);
+            let Diff::Text { sides, .. } = diff else {
+                panic!("fixture must produce a text diff");
+            };
+            (file, sides)
+        })
+        .collect();
     let context = pipeline(&context_only);
     c.bench_function("shape/pr998/context", |b| {
         b.iter_batched(

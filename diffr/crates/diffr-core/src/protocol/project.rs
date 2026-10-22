@@ -336,7 +336,7 @@ fn side_folds<'a>(side: &'a [Fold], lines: &[&str]) -> Vec<SideFold<'a>> {
         .collect();
     side.iter()
         .zip(folds::nested_spans(&spans))
-        // A fold on a single line hides nothing; it is not a region.
+        // A fold covering no whole lines hides nothing; it is not a region.
         .filter_map(|(fold, span)| Some(SideFold { fold, lines: span? }))
         .collect()
 }
