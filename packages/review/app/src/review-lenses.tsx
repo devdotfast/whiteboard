@@ -83,7 +83,6 @@ export function ReviewLensesProvider({
   client: ReviewApiClient;
   snapshot: Snapshot;
   coverageRevision?: number;
-  /** The board's progress as loaded, for a host that cannot read it. */
   loaded?: ReviewProgress;
   children: ReactNode;
 }) {

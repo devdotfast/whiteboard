@@ -32,7 +32,6 @@ import {
   type WhiteboardSettings,
 } from "./whiteboard";
 
-/** A board and what it reads, as plain values. */
 export interface FixtureBoard {
   snapshot: Snapshot;
   images?: Record<string, FixtureBytes>;
@@ -54,7 +53,6 @@ export interface FixtureBytes {
   type: string;
 }
 
-/** The board, loaded from the fixture's values with no request. */
 export function loadFixture(fixture: FixtureBoard): WhiteboardData {
   const { snapshot } = fixture;
 
@@ -96,10 +94,7 @@ export function loadFixture(fixture: FixtureBoard): WhiteboardData {
   };
 }
 
-/**
- * A host with only what the board needs to draw: none of the optional
- * methods, and a placeholder where a code peek asks for an inline editor.
- */
+// No optional methods; a placeholder stands in for each inline editor.
 export function fixtureHost(
   overrides: Partial<WhiteboardHost> = {},
 ): WhiteboardHost {
@@ -140,7 +135,6 @@ export function fixtureHost(
   );
 }
 
-/** Renders the top bar and board in `container`, as a host would. */
 export function mountWhiteboard(
   container: HTMLElement,
   data: WhiteboardData,

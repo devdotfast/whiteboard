@@ -3,8 +3,6 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-// Packs the package and checks the tarball holds the canvas and only the
-// opaque types, never the canvas's own declarations.
 const out = mkdtempSync(path.join(tmpdir(), "canvas-pack-"));
 
 try {

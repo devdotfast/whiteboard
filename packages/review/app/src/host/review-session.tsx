@@ -34,7 +34,6 @@ export interface ReviewSession {
   reportDiagnostic(diagnostic: ReviewCanvasDiagnostic): void;
 }
 
-/** The host's request, else one that says it serves none. */
 export function hostRequest(
   bridge: Pick<ReviewCanvasBridge, "request">,
 ): NonNullable<ReviewCanvasBridge["request"]> {
@@ -44,8 +43,7 @@ export function hostRequest(
   );
 }
 
-/** The review API through the host, whose request adds the origin and
- * credentials. */
+// The host's request adds the origin and token.
 export function hostApiClient(
   bridge: Pick<ReviewCanvasBridge, "request">,
 ): ReviewApiClient {

@@ -47,8 +47,7 @@ const CLOSE_DELAY_MS = 250;
  * The board's contents at its right edge: a tick per heading, the section
  * in view inked. Hovering the ticks, or tabbing onto them, opens the full
  * list in their place. Where the board is too narrow for the rail it hides,
- * and the panel store's `openContents` opens the same list at `boardTop`,
- * the board's top edge, just under the page bar.
+ * and `openContents` opens the same list at `boardTop`.
  */
 export function ContentsRail({
   entries,
@@ -105,8 +104,7 @@ export function ContentsRail({
     setOpen("bar");
   }, [contentsRequest]);
 
-  // The rail hides by its container query; a hidden rail has no box. One
-  // with no entries, or gone, hides nothing.
+  // The rail hides by its container query; a hidden rail has no box.
   const shown = entries.length > 0;
 
   useLayoutEffect(() => {
@@ -397,8 +395,7 @@ const styles = stylex.create({
     backgroundColor: tokens.surface,
     fontFamily: tokens.chromeFont,
   },
-  // From the page bar's ⋯: at the board's top edge, under the bar, at its
-  // right.
+  // From the page bar's ⋯: under the bar, at its right.
   cardUnderBar: {
     top: "calc(anchor(top) + 4px)",
     right: "calc(anchor(right) + 8px)",

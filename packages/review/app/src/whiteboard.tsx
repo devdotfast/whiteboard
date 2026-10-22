@@ -58,25 +58,21 @@ import { ReviewPanelProvider, useReviewPanelStore } from "./review-panel";
 import { ReviewRootsProvider } from "./review-root-context";
 import { readReviewNavigationRestore } from "./review-view-state";
 
-/** A loaded board, ready to draw, and the facts about it. */
 export interface WhiteboardData extends ApiDocumentData {
   /** The version pinned on screen; undefined follows the latest. */
   version?: number;
-  /** The board's project: its boards share the threads on screen. */
   projectId?: string;
   /** The remote host the board lives on. */
   host?: string;
   hostState?: ReviewApiSummary["hostState"];
   available?: ReviewApiSummary["available"];
-  /** The board editor's Contents, as the person types. */
+  /** The board editor's Contents while it is open. */
   contents?: ReviewTocEntry[];
-  /** Bumped as coverage changes, to read the progress again. */
   coverageRevision?: number;
-  /** The progress as loaded, where the host cannot read it. */
+  /** For a host that cannot read it. */
   progress?: ReviewProgress;
 }
 
-/** What the host can do for the board. Features follow its methods. */
 export interface WhiteboardHost extends ReviewCanvasBridge {
   find?: ReviewFindHost;
 }
@@ -85,12 +81,11 @@ export type WhiteboardSettings = ReviewCanvasSettings;
 
 const BoardData = createContext<WhiteboardData | null>(null);
 
+// The document alone: it changes only when the board loads.
+const BoardDocument = createContext<ApiDocumentData | null>(null);
+
 const BoardSettings = createContext<WhiteboardSettings>({});
 
-/**
- * What the top bar and the board share: the session, the panel store, the
- * review context and find. Both render anywhere under it.
- */
 export function WhiteboardProvider({
   data,
   host,
@@ -128,6 +123,21 @@ export function WhiteboardProvider({
   const softwareMapEnabled = settings.softwareMapEnabled === true;
   const mapsShown = softwareMapEnabled && data.maps.size > 0;
   const title = boardTitle(snapshot.title);
+  const { headings, commits, anchors, images, traces, boards, maps } = data;
+
+  const document = useMemo<ApiDocumentData>(
+    () => ({
+      snapshot,
+      headings,
+      commits,
+      anchors,
+      images,
+      traces,
+      boards,
+      maps,
+    }),
+    [snapshot, headings, commits, anchors, images, traces, boards, maps],
+  );
 
   return (
     <CanvasQueryProvider scope={queries}>
@@ -151,45 +161,47 @@ export function WhiteboardProvider({
             >
               <BoardCommitsContext.Provider value={boardCommits}>
                 <BoardData.Provider value={data}>
-                  <DisplayedReviewVersionContext.Provider
-                    value={snapshot.version}
-                  >
-                    <BoardSettings.Provider value={settings}>
-                      <ReviewLensesProvider
-                        client={client}
-                        snapshot={snapshot}
-                        coverageRevision={data.coverageRevision}
-                        loaded={data.progress}
-                      >
-                        <ReviewDiffFilesProvider
-                          documentKey={`/\0review:${snapshot.reviewId}`}
-                          revision={pins?.worktreeRevision}
-                          unavailable={!!snapshot.sourceUnavailable}
+                  <BoardDocument.Provider value={document}>
+                    <DisplayedReviewVersionContext.Provider
+                      value={snapshot.version}
+                    >
+                      <BoardSettings.Provider value={settings}>
+                        <ReviewLensesProvider
+                          client={client}
+                          snapshot={snapshot}
+                          coverageRevision={data.coverageRevision}
+                          loaded={data.progress}
                         >
-                          <ReviewRootsProvider roots={roots}>
-                            <ReviewFindProvider
-                              articleRef={articleRef}
-                              documentKey={snapshot.reviewId}
-                              host={host.find}
-                            >
-                              <ReviewDebugSettingsProvider>
-                                <BoardReview softwareMapEnabled={mapsShown}>
-                                  <AskHistoryProvider>
-                                    <AskDesktopSync />
-                                    <AgentSelectionProvider
-                                      revision={snapshot.reviewId}
-                                    >
-                                      {children}
-                                    </AgentSelectionProvider>
-                                  </AskHistoryProvider>
-                                </BoardReview>
-                              </ReviewDebugSettingsProvider>
-                            </ReviewFindProvider>
-                          </ReviewRootsProvider>
-                        </ReviewDiffFilesProvider>
-                      </ReviewLensesProvider>
-                    </BoardSettings.Provider>
-                  </DisplayedReviewVersionContext.Provider>
+                          <ReviewDiffFilesProvider
+                            documentKey={`/\0review:${snapshot.reviewId}`}
+                            revision={pins?.worktreeRevision}
+                            unavailable={!!snapshot.sourceUnavailable}
+                          >
+                            <ReviewRootsProvider roots={roots}>
+                              <ReviewFindProvider
+                                articleRef={articleRef}
+                                documentKey={snapshot.reviewId}
+                                host={host.find}
+                              >
+                                <ReviewDebugSettingsProvider>
+                                  <BoardReview softwareMapEnabled={mapsShown}>
+                                    <AskHistoryProvider>
+                                      <AskDesktopSync />
+                                      <AgentSelectionProvider
+                                        revision={snapshot.reviewId}
+                                      >
+                                        {children}
+                                      </AgentSelectionProvider>
+                                    </AskHistoryProvider>
+                                  </BoardReview>
+                                </ReviewDebugSettingsProvider>
+                              </ReviewFindProvider>
+                            </ReviewRootsProvider>
+                          </ReviewDiffFilesProvider>
+                        </ReviewLensesProvider>
+                      </BoardSettings.Provider>
+                    </DisplayedReviewVersionContext.Provider>
+                  </BoardDocument.Provider>
                 </BoardData.Provider>
               </BoardCommitsContext.Provider>
             </ReviewPanelProvider>
@@ -200,8 +212,6 @@ export function WhiteboardProvider({
   );
 }
 
-/** The session the board and its bar read: the host, and the board as
- * loaded. Its reads go through the host's request. */
 function useBoardSession(
   data: WhiteboardData,
   host: WhiteboardHost,
@@ -227,8 +237,7 @@ function useBoardSession(
     return session;
   }, [host, reviewId]);
 
-  // Only what the session names: a coverage bump or the editor's headings
-  // leave it as it is.
+  // Not all of `data`: coverage and the editor's headings change often.
   const { snapshot, version, hostState, available, traces } = data;
   const remoteHost = data.host;
 
@@ -349,7 +358,6 @@ function BoardReview({
   );
 }
 
-/** The board under the nearest `WhiteboardProvider`. */
 export function useWhiteboardData(): WhiteboardData {
   const data = useContext(BoardData);
 
@@ -360,7 +368,7 @@ export function useWhiteboardData(): WhiteboardData {
 
 // A stable component type keeps sections, diagram tours and selections mounted.
 function DocumentBody() {
-  const data = useWhiteboardData();
+  const data = useContext(BoardDocument)!;
   const session = useReviewSession();
   const softwareMapEnabled = useContext(BoardSettings).softwareMapEnabled;
   const editing = useContext(BoardEditorHostContext) !== null;
@@ -389,10 +397,6 @@ function DocumentBody() {
   );
 }
 
-/**
- * The board under the nearest `WhiteboardProvider`: its views, rails, Ask
- * and peeks.
- */
 export function Whiteboard() {
   const data = useWhiteboardData();
   const settings = useContext(BoardSettings);
@@ -411,8 +415,7 @@ export function Whiteboard() {
   );
 }
 
-// Takes the board's parts, not the whole board, so activity, coverage and
-// the stream's other facts leave diagram inputs as they were.
+// Takes the board's parts so coverage changes leave its inputs as they were.
 const BoardView = memo(function BoardView({
   snapshot,
   maps,

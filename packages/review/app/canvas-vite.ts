@@ -20,7 +20,6 @@ const decodeNamedCharacterReferenceIndex = path.join(
   "index.js",
 );
 
-/** The plugins every canvas build shares: Desktop's and the package's. */
 export function canvasPlugins(): PluginOption[] {
   return [
     // Appends the collected StyleX rules to the canvas CSS asset in its own

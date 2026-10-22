@@ -187,7 +187,6 @@ function ReviewLayoutContent({
   const { appRef, shellRef, scrollRegionRef, articleRef } = useReviewRoots()!;
   const session = useReviewSession();
   const review = useReview();
-  // In Desktop the sidebar leads, with its own commit picker.
   const sidebarLeads = session.bridge.reportSidebar !== undefined;
 
   // The board's scroller, for the overlay scrollbar that replaces its own.

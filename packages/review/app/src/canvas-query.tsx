@@ -96,7 +96,6 @@ export interface CanvasQueryScope {
 /** Desktop's canvas client, kept across the boards it shows. */
 export const SharedCanvasQueryClient = createContext<QueryClient | null>(null);
 
-/** A client whose queries stay idle, for a host that serves no requests. */
 function createIdleQueryClient(): QueryClient {
   const client = createCanvasQueryClient();
   const defaults = client.defaultQueryOptions.bind(client);
@@ -111,7 +110,7 @@ function createIdleQueryClient(): QueryClient {
 
 /** The shared client, else one owned by the canvas. Clearing is deferred so
  * a Strict Mode replay keeps its client. A host without `request` gets an
- * idle client of its own; a new `request` is a new backend. */
+ * idle client. */
 export function useCanvasQueryScope(
   request: ReviewCanvasBridge["request"],
   reviewId: string,

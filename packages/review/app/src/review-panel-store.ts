@@ -41,9 +41,9 @@ export interface ReviewPanelState {
    * mounted, a working thread works on, and it all shows again as it was. */
   columnHidden: boolean;
   motion: ReviewPanelMotion;
-  /** The board is too narrow for its contents rail: "⋯" offers the list. */
+  /** Too narrow for the contents rail: "⋯" offers the list. */
   contentsRailHidden: boolean;
-  /** Bumped to open the contents list at the board's top edge. */
+  /** Bumped to open the contents list. */
   contentsRequest: number;
 }
 

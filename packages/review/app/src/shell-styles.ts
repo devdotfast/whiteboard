@@ -47,7 +47,6 @@ export const shellStyles = stylex.create({
     height: "100%",
     minHeight: 0,
   },
-  // The board under its top bar, taking the height the bar leaves.
   board: {
     flex: "1 1 auto",
   },
@@ -190,8 +189,6 @@ export const shellStyles = stylex.create({
     },
   },
 
-  // A sibling above the board, outside its app root: it carries its own
-  // ink, face and container.
   topbar: {
     position: "sticky",
     top: 0,

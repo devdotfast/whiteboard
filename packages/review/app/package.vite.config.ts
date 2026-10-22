@@ -4,14 +4,13 @@ import { defineConfig } from "vite";
 
 import { canvasAliases, canvasPlugins } from "./canvas-vite";
 
-// @dev.fast/canvas: React stays the host's, everything else ships, with its
-// fonts and the routing wasm as files beside it.
+// React stays external; fonts and wasm ship as files.
 export default defineConfig({
   root: __dirname,
   plugins: [
     ...canvasPlugins(),
     {
-      // The stylesheet's name is the package's export, not a hashed one.
+      // The package exports this path, so it takes no hash.
       name: "canvas-css-name",
       enforce: "post",
       generateBundle(_options, bundle) {

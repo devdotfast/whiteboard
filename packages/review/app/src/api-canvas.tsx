@@ -58,10 +58,7 @@ const noSettings: ReviewCanvasSettings = {};
 const message = (cause: unknown) =>
   cause instanceof Error ? cause.message : String(cause);
 
-/**
- * Desktop's host: follows the board on its stream, loads it, and renders
- * `children`, the top bar and board, under a `WhiteboardProvider`.
- */
+/** Desktop's host: follows the board's stream and builds its data and host. */
 export function ApiCanvas({
   content,
   findHost,

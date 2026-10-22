@@ -42,10 +42,6 @@ import { useWhiteboardData } from "./whiteboard";
 
 const noCommits: readonly ReviewCommitSummary[] = [];
 
-/**
- * The board's top bar: where it is, its views and what can be done with it.
- * It renders beside the board, under the same `WhiteboardProvider`.
- */
 export function ReviewTopBar(): ReactElement {
   const data = useWhiteboardData();
   const session = useReviewSession();

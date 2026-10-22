@@ -125,7 +125,6 @@ export type SavedMap = Awaited<ReturnType<LocalReviewData["map"]>>;
 type MapModel =
   ApiDocumentData["maps"] extends Map<string, infer Model> ? Model : never;
 
-/** A saved software map, as the board draws it. */
 export function savedMapModel(saved: SavedMap): MapModel {
   return {
     ...saved,

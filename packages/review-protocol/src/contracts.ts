@@ -363,16 +363,12 @@ export interface ReviewNotification {
 
 export interface ReviewCanvasBridge {
   readonly appSessionId?: string;
-  /** The routing engine's wasm. */
   readonly wasmUrl: string;
   readonly appVersion: string;
   readonly inlineEditors: ReviewInlineEditorFactory;
   readonly diffView: ReviewDiffViewFactory;
-  /** Reads the review API at `path`, as `/reviews-api/…`; the host adds its
-   * origin and credentials. Absent where the board is all the host serves:
-   * reads stay idle. */
+  /** `path` is `/reviews-api/…`; the host adds its origin and token. */
   request?(path: string, init?: RequestInit): Promise<Response>;
-  /** Posts the board's telemetry to `path`, even as the page closes. */
   beacon?(path: `/${string}`, body: string): void;
   post(request: ReviewVerbRequest): Promise<ReviewVerbResponse>;
   subscribe(listener: (event: ReviewSurfaceEvent) => void): ReviewDisposable;
@@ -431,7 +427,6 @@ export interface ReviewCanvasBridge {
   ): Promise<void>;
 }
 
-/** The person's choices for every board. */
 export interface ReviewCanvasSettings {
   softwareMapEnabled?: boolean;
   sharingEnabled?: boolean;

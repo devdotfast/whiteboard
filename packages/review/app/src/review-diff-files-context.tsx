@@ -124,8 +124,6 @@ function recordDiffSummaryReady(container: HTMLElement | null): void {
   container.dataset.reviewDiffSummaryReadyCount = String(current + 1);
 }
 
-/** The commit the Diff view is scoped to, and how many files its tab
- * counts: the commit's, else the whole diff's once loaded. */
 export function useDiffScope(commits: readonly ReviewCommitSummary[]) {
   const picked = useReviewPanel((state) => state.diffScope);
   const diffFiles = useReviewDiffFiles();

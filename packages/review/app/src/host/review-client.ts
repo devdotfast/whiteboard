@@ -1,9 +1,7 @@
-/** What names a board's stored state. */
 export interface ReviewClientConfig {
   reviewId?: string;
 }
 
-/** The review API path of a board's `endpoint`, at `version` if given. */
 export function reviewApiPath(
   reviewId: string,
   endpoint: `/${string}`,

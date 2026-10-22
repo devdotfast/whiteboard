@@ -1,7 +1,6 @@
 import { defineConfig } from "tsdown";
 
-// Declarations only, from the types-only entry: the canvas itself never
-// enters the types build.
+// Types only: the canvas must not enter the types build.
 export default defineConfig({
   entry: { index: "src/index.ts" },
   format: "esm",
