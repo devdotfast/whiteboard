@@ -46,6 +46,9 @@ export interface RichBlockRenderer {
 
 export const RichBlockContext = createContext<RichBlockRenderer | null>(null);
 
+/** Marks a block selected by a click inside it rather than on its header. */
+export const CONTENT_CLICK = "richBlockContentClick";
+
 type Portal = { container: HTMLElement; element: ReactNode };
 
 /** The portals node views ask for, rendered by <Portals>. */
@@ -254,6 +257,11 @@ class RichBlockView extends ReactView {
             event.target.closest(".monaco-editor"))
         )
           return;
+
+        const header =
+          event.target instanceof Element &&
+          !!event.target.closest("figcaption, .multiDiffEntry .header");
+
         const pending = new AbortController();
         this.pendingSelection = pending;
         const cancel = () => this.cancelSelection();
@@ -290,9 +298,9 @@ class RichBlockView extends ReactView {
 
           if (pos === undefined || this.view.isDestroyed) return;
           this.view.dispatch(
-            this.view.state.tr.setSelection(
-              NodeSelection.create(this.view.state.doc, pos),
-            ),
+            this.view.state.tr
+              .setSelection(NodeSelection.create(this.view.state.doc, pos))
+              .setMeta(CONTENT_CLICK, !header),
           );
         });
       },

@@ -62,7 +62,13 @@ import { SlashMenu } from "./SlashMenu";
 import { REMOTE } from "./structure";
 import { type BoardSync, openBoardSync } from "./sync";
 import { unavailableLinkKey, unavailableLinks } from "./unavailable-links";
-import { PortalStore, Portals, RichBlockContext, nodeViews } from "./views";
+import {
+  CONTENT_CLICK,
+  PortalStore,
+  Portals,
+  RichBlockContext,
+  nodeViews,
+} from "./views";
 
 // A board on the canvas, editable in place: the editor document, its
 // autosave, the block the person is in, and what other authors write.
@@ -237,6 +243,7 @@ export function BoardEditor({
     // Blocks skip layout off screen only after they render once, so each
     // keeps its real size.
     let settling = 0;
+    let quiet = false;
 
     const remeasure = () => {
       cancelAnimationFrame(settling);
@@ -260,6 +267,8 @@ export function BoardEditor({
           const ghosts = captureRemoved(editor, tr);
           const next = before.apply(tr);
           editor.updateState(next);
+
+          if (tr.selectionSet) quiet = tr.getMeta(CONTENT_CLICK) === true;
 
           if (tr.selectionSet || tr.docChanged) {
             const selected = next.selection;
@@ -285,6 +294,7 @@ export function BoardEditor({
                     version: latest.current.snapshot.version,
                   },
                   anchorElement: element,
+                  quiet,
                   anchor: {
                     x: rect.left,
                     y: Math.max(

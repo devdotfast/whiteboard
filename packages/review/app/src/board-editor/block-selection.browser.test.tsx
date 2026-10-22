@@ -22,7 +22,7 @@ const client = new ReviewApiClient(
 
 const host = { client, setHeadings: () => {} };
 
-it("offers whole-block reference actions for the editor selection, and clears both on Escape or deletion", async () => {
+it("offers whole-block reference actions from the header, only shortcuts from the content, and clears both on Escape or deletion", async () => {
   const page = document.createElement("div");
   page.className = "review-canvas-root review-document";
   document.body.append(page);
@@ -121,6 +121,8 @@ it("offers whole-block reference actions for the editor selection, and clears bo
     const copy = () =>
       page.querySelector<HTMLButtonElement>('[aria-label="Copy ref"]');
 
+    const header = block.querySelector<HTMLElement>("figcaption")!;
+
     const heading = page.querySelector<HTMLElement>("h2")!;
 
     const pane = await vi.waitFor(
@@ -194,7 +196,7 @@ it("offers whole-block reference actions for the editor selection, and clears bo
           ),
         ).toBe(distance <= 4),
       );
-      expect(Boolean(copy())).toBe(distance <= 4);
+      expect(copy()).toBeNull();
       await userEvent.keyboard("{Escape}");
     }
 
@@ -210,7 +212,18 @@ it("offers whole-block reference actions for the editor selection, and clears bo
     expect(copy()).toBeNull();
     disclosure.remove();
 
-    await userEvent.click(block);
+    await userEvent.click(block.querySelector("pre")!);
+    await vi.waitFor(() =>
+      expect(page.querySelector("[data-board-selected]")).not.toBeNull(),
+    );
+    expect(copy()).toBeNull();
+    await userEvent.keyboard("{Meta>}{Shift>}c{/Shift}{/Meta}");
+    expect(JSON.parse(String(request.mock.lastCall?.[1]?.body))).toMatchObject({
+      target: { kind: "block", blockId: "code" },
+    });
+    await userEvent.keyboard("{Escape}");
+
+    await userEvent.click(header);
     await vi.waitFor(() => expect(copy()).not.toBeNull());
     expect(page.querySelector("[data-board-selected]")).not.toBeNull();
     await userEvent.click(copy()!);
@@ -219,10 +232,10 @@ it("offers whole-block reference actions for the editor selection, and clears bo
       title: "Start the job",
     });
     expect(write).toHaveBeenCalledWith("Selected block: run();");
-    await userEvent.click(block);
+    await userEvent.click(header);
     await vi.waitFor(() => expect(copy()).not.toBeNull());
-    block.scrollIntoView();
-    const bounds = block.getBoundingClientRect();
+    header.scrollIntoView();
+    const bounds = header.getBoundingClientRect();
     const frame = window.frameElement?.getBoundingClientRect();
 
     const point = {
@@ -297,7 +310,7 @@ it("offers whole-block reference actions for the editor selection, and clears bo
         });
     });
     expect(copy()).toBeNull();
-    await userEvent.click(block);
+    await userEvent.click(header);
     await vi.waitFor(() => expect(copy()).not.toBeNull());
     await userEvent.click(heading);
     expect(copy()).toBeNull();
@@ -305,12 +318,12 @@ it("offers whole-block reference actions for the editor selection, and clears bo
     await userEvent.keyboard("{Escape}");
     expect(copy()).toBeNull();
     expect(page.querySelector("[data-board-selected]")).toBeNull();
-    await userEvent.click(block);
+    await userEvent.click(header);
     await vi.waitFor(() => expect(copy()).not.toBeNull());
     copy()!.focus();
     await userEvent.keyboard("{Escape}");
     expect(document.activeElement).toBe(page.querySelector(".ProseMirror"));
-    await userEvent.click(block);
+    await userEvent.click(header);
     await vi.waitFor(() => expect(copy()).not.toBeNull());
     page.querySelector<HTMLElement>(".ProseMirror")!.focus();
     await userEvent.keyboard("{Backspace}");

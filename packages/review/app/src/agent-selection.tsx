@@ -42,6 +42,8 @@ type Selection = Omit<AgentSelection, "revision"> & {
   range?: Range;
   /** Clears the editor selection represented by these actions. */
   onDismiss?: () => void;
+  /** Hides the toolbar; the shortcuts still work. */
+  quiet?: boolean;
 };
 
 type Select = (selection: Selection | null) => void;
@@ -52,6 +54,7 @@ function payloadOf({
   anchorContainer: _anchorContainer,
   range: _range,
   onDismiss: _onDismiss,
+  quiet: _quiet,
   ...payload
 }: Selection) {
   return payload;
@@ -353,6 +356,7 @@ export function AgentSelectionProvider({
       <span hidden ref={bindOverlay} />
       {overlayHost &&
         selection &&
+        !selection.quiet &&
         copiedSelection !== selectionKey(selection) &&
         createPortal(
           // The toolbar starts at the selection, after a lead that
