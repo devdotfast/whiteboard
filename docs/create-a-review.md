@@ -7,6 +7,15 @@ changes. Keep Whiteboard open and run your agent in the repository. For example:
 Review changes from my current branch against main and open the result in Whiteboard.
 ```
 
+## Bare clones and worktrees
+
+Whiteboard needs a checkout. If you use a bare clone with worktrees, your agent
+can run in the clone's folder. Ask it to review a worktree. For example:
+
+```text
+Review worktrees/feature against main and open the result in Whiteboard.
+```
+
 ## Read the review
 
 The review appears in Whiteboard as your agent writes it. Select a diagram step
