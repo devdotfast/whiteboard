@@ -132,3 +132,30 @@ it("checks every quote in a reused trace and rejects duplicate event IDs", async
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it("imports a stacked board, whose origin names its base branch", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "sharing-stacked-"));
+  const fixture = await createShareFixture(root);
+
+  try {
+    const bundle = await exportShare({
+      ...fixture,
+      store: {
+        read: (...args) => ({
+          ...fixture.store.read(...args),
+          origin: { branch: "top", baseBranch: "bottom" },
+        }),
+        resource: (...args) => fixture.store.resource(...args),
+      },
+    });
+
+    expect(validateShareBundle(bundle).snapshot.origin).toEqual({
+      branch: "top",
+      baseBranch: "bottom",
+    });
+  } finally {
+    await fixture.data.close();
+    await fixture.store.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
