@@ -1066,7 +1066,6 @@ describe("MCP self-install", () => {
         fingerprint: "old",
         targets: ["claude"],
         shimPath: shim,
-        commandDisabled: true,
         traceManaged: true,
         updatedAt: now,
       });
