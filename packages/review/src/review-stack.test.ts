@@ -165,7 +165,7 @@ describe("resolveReviewStackLayers", () => {
     ).toEqual([]);
   });
 
-  it("discovers an ordinary PR chain even when other PRs have no whiteboards", async () => {
+  describe("an inferred PR chain", () => {
     const repo = { full_name: "o/r" };
 
     const graph = [
@@ -198,9 +198,11 @@ describe("resolveReviewStackLayers", () => {
     const run: RunGitHubApi = async (_, endpoint) =>
       endpoint.includes("/stacks?") ? "[]" : JSON.stringify(graph);
 
+    const pins = { repositoryId: "repo", base: "base", head: "head" };
+
     const subject = {
       reviewId: "middle",
-      pins: { repositoryId: "repo", base: "base", head: "head" },
+      pins,
       origin: {
         branch: "b",
         baseBranch: "main",
@@ -210,19 +212,50 @@ describe("resolveReviewStackLayers", () => {
       },
     };
 
-    const layers = await resolveReviewStackLayers(
-      subject,
-      [{ ...subject, title: "Middle board", trashedAt: null }],
-      { runGitHubApi: run },
-    );
+    const middle = { ...subject, title: "Middle board", trashedAt: null };
 
-    expect(
-      layers.map((layer) => [layer.branch, layer.relation, layer.reviewUuid]),
-    ).toEqual([
-      ["a", "earlier", null],
-      ["b", "current", "middle"],
-      ["c", "later", null],
-    ]);
+    const branchBoard = (
+      reviewId: string,
+      origin: NonNullable<ReviewApiSummary["origin"]>,
+    ) => ({ reviewId, title: reviewId, trashedAt: null, pins, origin });
+
+    const rows = async (
+      reviews: Parameters<typeof resolveReviewStackLayers>[1],
+    ) =>
+      (
+        await resolveReviewStackLayers(subject, reviews, { runGitHubApi: run })
+      ).map((layer) => [layer.branch, layer.relation, layer.reviewUuid]);
+
+    it("discovers it even when other PRs have no whiteboards", async () => {
+      expect(await rows([middle])).toEqual([
+        ["a", "earlier", null],
+        ["b", "current", "middle"],
+        ["c", "later", null],
+      ]);
+    });
+
+    it("does not attach a board whose PR was removed by its branch", async () => {
+      expect(
+        await rows([
+          branchBoard("detached", { branch: "a", pullRequestDetached: true }),
+          middle,
+        ]),
+      ).toEqual([
+        ["a", "earlier", null],
+        ["b", "current", "middle"],
+        ["c", "later", null],
+      ]);
+    });
+
+    it("attaches a board by a stored origin/ branch label", async () => {
+      expect(
+        await rows([middle, branchBoard("legacy", { branch: "origin/c" })]),
+      ).toEqual([
+        ["a", "earlier", null],
+        ["b", "current", "middle"],
+        ["c", "later", "legacy"],
+      ]);
+    });
   });
 
   it("does not pick an arbitrary continuation when multiple PRs depend on one branch", async () => {

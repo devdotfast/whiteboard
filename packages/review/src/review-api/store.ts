@@ -435,6 +435,17 @@ export interface ResolvedPullRequest {
   baseBranch: string;
 }
 
+/** A command with its network context resolved, ready for the write queue. */
+interface PreparedCommand {
+  op: z.infer<typeof commandSchema>["operation"];
+  requestedTarget: ReviewTarget | undefined;
+  fromPullRequest: ResolvedPullRequest | undefined;
+  resolvedTarget: { target: ReviewTarget; pins?: Pins } | undefined;
+  resolvedBranch: string | undefined;
+  discoveredPullRequest: GitHubPullRequest | undefined;
+  resolvedTitle: string | undefined;
+}
+
 export interface ReviewProviders {
   findPullRequest?(
     pins: Pins,
@@ -1565,7 +1576,7 @@ export class ReviewStore {
     pullRequest: Promise<ResolvedPullRequest> | undefined,
     pullRequestTitle: Promise<string | undefined>,
     author: Author,
-  ) {
+  ): Promise<PreparedCommand> {
     const op = command.operation;
 
     if (op.type === "create") {
@@ -1637,7 +1648,7 @@ export class ReviewStore {
   }
 
   private applyPreparedCommand(
-    prepared: Awaited<ReturnType<ReviewStore["prepareCommand"]>>,
+    prepared: PreparedCommand,
     initial: { document: Block[]; origin: SnapshotOrigin } | undefined,
     author: Author,
   ) {
@@ -1706,9 +1717,7 @@ export class ReviewStore {
         });
 
       if (op.type === "lifecycle")
-        return this.commitBoardFacts(op.reviewId, author, {
-          state: op.state,
-        });
+        return this.commitBoardFacts(op.reviewId, author, { state: op.state });
 
       if (op.type === "attention")
         return this.commitBoardFacts(op.reviewId, author, { viewed: true });

@@ -84,6 +84,7 @@ import {
 } from "./document.js";
 import { decodeImage } from "./image-decode.js";
 import { mapInputSchema } from "./map-input.js";
+import { pullRequestKey, sourceBranchName } from "./origin.js";
 import {
   type PullRequestAddress,
   type PullRequestProvider,
@@ -1077,7 +1078,7 @@ export class LocalReviewData {
     const remote = parseGitRemote(context.originUrl);
 
     if (!remote) return undefined;
-    const name = branch.replace(/^origin\//, "");
+    const name = sourceBranchName(branch);
 
     const matches = (
       await readGitHubPullRequests(
@@ -1105,7 +1106,7 @@ export class LocalReviewData {
     // A manually selected PR must not be replaced by a branch-name match.
     if (
       origin.pullRequestUrl &&
-      origin.pullRequestUrl.toLowerCase() !== found.url.toLowerCase()
+      pullRequestKey(origin.pullRequestUrl) !== pullRequestKey(found.url)
     )
       return snapshot;
 
@@ -1131,17 +1132,19 @@ export class LocalReviewData {
 
     const vcs = await this.vcs(pins.repositoryId);
 
-    const named =
+    const symbolicRef =
       headRef &&
       headRef !== "HEAD" &&
       headRef !== "@" &&
-      !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(headRef);
+      !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(headRef)
+        ? headRef
+        : undefined;
 
-    if (!named && vcs?.kind !== "git") return undefined;
+    let location: VcsArg[];
 
-    const location: VcsArg[] = named
-      ? ["--git-dir", context.commonDir]
-      : ["-C", vcs!.rootPath];
+    if (symbolicRef) location = ["--git-dir", context.commonDir];
+    else if (vcs?.kind === "git") location = ["-C", vcs.rootPath];
+    else return undefined;
 
     try {
       const { stdout } = await runVcs("git", [
@@ -1149,7 +1152,7 @@ export class LocalReviewData {
         "rev-parse",
         "--symbolic-full-name",
         "--verify",
-        named ? { rev: headRef! } : "HEAD",
+        symbolicRef ? { rev: symbolicRef } : "HEAD",
       ]);
 
       const ref = stdout.trim();

@@ -203,6 +203,14 @@ describe("creating a review from a pull request URL alone", () => {
   let ghCalls: number;
   let openPullRequests: object[];
 
+  // The open PR #7 GitHub lists for the widgets branch.
+  const widgetsPullRequest = (title: string, baseBranch = "main") => ({
+    number: 7,
+    title,
+    head: { ref: "widgets", repo: { full_name: "acme/widget" } },
+    base: { ref: baseBranch, repo: { full_name: "acme/widget" } },
+  });
+
   const gitIn =
     (cwd: string) =>
     (...args: string[]) =>
@@ -394,14 +402,7 @@ describe("creating a review from a pull request URL alone", () => {
   it("discovers a branch's PR without replacing its explicitly chosen comparison", async () => {
     const git = gitIn(checkout);
     git("fetch", "origin", "refs/pull/7/head:refs/heads/widgets");
-    openPullRequests = [
-      {
-        number: 7,
-        title: "Add widgets",
-        head: { ref: "widgets", repo: { full_name: "acme/widget" } },
-        base: { ref: "lower-pr", repo: { full_name: "acme/widget" } },
-      },
-    ];
+    openPullRequests = [widgetsPullRequest("Add widgets", "lower-pr")];
     const registered = await local.data.register(checkout);
 
     const created = await local.store.execute(
@@ -474,14 +475,7 @@ describe("creating a review from a pull request URL alone", () => {
 
     const saved = local.store.read(created.reviewId);
     expect(saved.origin?.pullRequestUrl).toBeUndefined();
-    openPullRequests = [
-      {
-        number: 7,
-        title: "Published later",
-        head: { ref: "widgets", repo: { full_name: "acme/widget" } },
-        base: { ref: "main", repo: { full_name: "acme/widget" } },
-      },
-    ];
+    openPullRequests = [widgetsPullRequest("Published later")];
     const clock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 61_000);
 
     try {
@@ -507,14 +501,7 @@ describe("creating a review from a pull request URL alone", () => {
     git("fetch", "origin", "refs/pull/7/head:refs/heads/widgets");
     const linked = path.join(directory, "linked");
     git("worktree", "add", "--quiet", linked, "widgets");
-    openPullRequests = [
-      {
-        number: 7,
-        title: "Widgets",
-        head: { ref: "widgets", repo: { full_name: "acme/widget" } },
-        base: { ref: "main", repo: { full_name: "acme/widget" } },
-      },
-    ];
+    openPullRequests = [widgetsPullRequest("Widgets")];
     const registered = await local.data.register(linked);
 
     const target = {
@@ -571,14 +558,7 @@ describe("creating a review from a pull request URL alone", () => {
   it("clears the former branch's PR identity when moving to a different branch", async () => {
     const git = gitIn(checkout);
     git("fetch", "origin", "refs/pull/7/head:refs/heads/widgets");
-    openPullRequests = [
-      {
-        number: 7,
-        title: "Widgets",
-        head: { ref: "widgets", repo: { full_name: "acme/widget" } },
-        base: { ref: "main", repo: { full_name: "acme/widget" } },
-      },
-    ];
+    openPullRequests = [widgetsPullRequest("Widgets")];
     const registered = await local.data.register(checkout);
 
     const created = await local.store.execute(
