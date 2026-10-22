@@ -417,15 +417,7 @@ export class ReviewFilesDiffView extends Disposable {
 		// The canvas mounts this view without a user gesture, so the widget's
 		// first-change navigation must never take keyboard focus.
 		this.widget.setViewModel(viewModel, { preserveFocus: true, viewState, initialScrollPosition: this.document ? "top" : "firstChange" });
-		if (viewState) {
-			this.settle(() => {
-				this.widget.setViewState(viewState);
-				this.syncFileSelectionFromWidget();
-			}).add(toDisposable(() => {
-				this.pendingViewState = undefined;
-				this.widget.clearPendingRestorationState();
-			}));
-		}
+		if (viewState) this.restoreViewState(viewState);
 		this.changedFilesTree?.setFiles(Array.from(new Map(input.entries.map(entry => [entry.file.path, entry.file])).values()));
 		this.syncFileSelectionFromWidget();
 		this._register(
@@ -456,6 +448,19 @@ export class ReviewFilesDiffView extends Disposable {
 				});
 			}),
 		);
+	}
+
+	restoreViewState(viewState: IMultiDiffEditorViewState): void {
+		// Replacing a hold clears its state, so set this one's after.
+		const hold = this.settle(() => {
+			this.widget.setViewState(viewState);
+			this.syncFileSelectionFromWidget();
+		});
+		this.pendingViewState = viewState;
+		hold.add(toDisposable(() => {
+			this.pendingViewState = undefined;
+			this.widget.clearPendingRestorationState();
+		}));
 	}
 
 	startLoading(entries: readonly ReviewFilesEditorEntry[]): void {
