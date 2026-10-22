@@ -43,6 +43,7 @@ export function createStructuralDiffEditors(
 	session: StructuralDiffSession,
 	viewed?: StructuralViewedState,
 	lineNumbers?: ReviewLineNumbersSetting,
+	onscreen?: IObservable<boolean>,
 ): { instantiation: IInstantiationService; entries: readonly ReviewFilesEditorEntry[] } {
 	// These models belong to this comparison. A live file can change while the
 	// comparison is open, so its editor text must come from diffr's own result.
@@ -105,7 +106,7 @@ export function createStructuralDiffEditors(
 	const child = lifetime.add(
 		instantiation.createChild(new ServiceCollection([IDiffProviderFactoryService, factory])),
 	);
-	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime, viewed, lineNumbers);
+	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime, viewed, lineNumbers, onscreen);
 	return { instantiation: child, entries: resolvedEntries };
 }
 
@@ -209,6 +210,7 @@ function attachStructuralEditors(
 	lifetime: DisposableStore,
 	viewed?: StructuralViewedState,
 	lineNumbers?: ReviewLineNumbersSetting,
+	onscreen?: IObservable<boolean>,
 ): void {
 	const editors = instantiation.invokeFunction((a) => a.get(ICodeEditorService));
 	const sides = new Map(entries.flatMap((e) => [[e.original!.toString(), e.file.path], [e.modified!.toString(), e.file.path]] as const));
@@ -243,8 +245,8 @@ function attachStructuralEditors(
             store.add(new InlineLineNumbers(editor.getModifiedEditor(), lineNumbers));
         }
 		const hover = new StructuralFoldHover();
-		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", sideOf(editor.getOriginalEditor()), session, unchangedRegions, hover, viewed));
-		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", sideOf(editor.getModifiedEditor()), session, unchangedRegions, hover, viewed));
+		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", sideOf(editor.getOriginalEditor()), session, unchangedRegions, hover, viewed, onscreen));
+		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", sideOf(editor.getModifiedEditor()), session, unchangedRegions, hover, viewed, onscreen));
 		let revealed = new Set<UnchangedRegion>();
 		store.add(
 			autorun((reader) => {

@@ -11,7 +11,7 @@ import { Orientation, SplitView } from "../../base/browser/ui/splitview/splitvie
 import { disposableTimeout } from "../../base/common/async.js";
 import { Emitter, Event } from "../../base/common/event.js";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
-import { autorun, observableFromEvent, observableValue } from "../../base/common/observable.js";
+import { autorun, observableFromEvent, observableValue, type ISettableObservable } from "../../base/common/observable.js";
 import { isEqual } from "../../base/common/resources.js";
 import { URI } from "../../base/common/uri.js";
 import { ElementSizeObserver } from "../../editor/browser/config/elementSizeObserver.js";
@@ -230,6 +230,7 @@ export class ReviewFilesDiffView extends Disposable {
 		private readonly onToggleSection: ((id: string) => void) | undefined,
 		private readonly document: ReviewDiffViewSpec["document"],
 		openFile: boolean,
+		private readonly onscreen: ISettableObservable<boolean> | undefined,
 		@IInstantiationService
 		private readonly reviewInstantiationService: IInstantiationService,
 		@IEditorService private readonly editorService: IEditorService,
@@ -372,6 +373,7 @@ export class ReviewFilesDiffView extends Disposable {
 		if (document) {
 			const visibility = new IntersectionObserver(([entry]) => {
 				this.offscreen = !entry.isIntersecting;
+				this.onscreen?.set(entry.isIntersecting, undefined);
 				if (!this.offscreen && this.layoutDeferred) this.layout();
 			}, { rootMargin: "200px 0px" });
 			visibility.observe(container);

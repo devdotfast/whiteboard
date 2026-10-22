@@ -14,6 +14,7 @@ import { lensRanges, withLens } from "./reviewLens.js";
 
 import { Emitter, Event } from "../../base/common/event.js";
 import { Disposable, DisposableStore } from "../../base/common/lifecycle.js";
+import { observableValue } from "../../base/common/observable.js";
 import type { URI } from "../../base/common/uri.js";
 import type { ICodeEditor } from "../../editor/browser/editorBrowser.js";
 import { RunOnceScheduler } from "../../base/common/async.js";
@@ -292,7 +293,8 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 			const store = this._register(new DisposableStore());
 			const viewed = this.spec.onSetViewed
 				? store.add(new StructuralViewedState(session, entries, () => this.progress, this.progressChanged.event)) : undefined;
-			const structural = createStructuralDiffEditors(this.instantiationService, entries, store, session, viewed, this.spec.document ? this.lineNumbers : undefined);
+			const onscreen = this.spec.document ? observableValue<boolean>("onscreen", false) : undefined;
+			const structural = createStructuralDiffEditors(this.instantiationService, entries, store, session, viewed, this.spec.document ? this.lineNumbers : undefined, onscreen);
 			this.diffEntries = structural.entries;
 
 			if (this.disposed) return;
@@ -322,7 +324,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 					this.overflowWidgetsDomNode,
 					this.diffLayout,
 					this.spec.fileTreeContainer, this.spec.onToggleViewed, this.spec.onToggleSection, this.spec.document,
-					this.spec.openFile !== false,
+					this.spec.openFile !== false, onscreen,
 				),
 			);
 			this.view = view;

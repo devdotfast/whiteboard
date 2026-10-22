@@ -68,6 +68,8 @@ export class StructuralFoldControls extends Disposable {
 		private readonly regions: IObservable<readonly UnchangedRegion[]>,
 		private readonly sharedHover: StructuralFoldHover,
 		private readonly viewed?: StructuralViewedState,
+		/** Whether a document embed is near the viewport; undefined for views that are not embeds. */
+		private readonly onscreen?: IObservable<boolean>,
 	) {
 		super();
 		if (viewed) this._register(viewed.onDidChange(() => this.render()));
@@ -111,6 +113,7 @@ export class StructuralFoldControls extends Disposable {
 		// The pills follow what the editor hides, not the fold state.
 		this._register(autorun(reader => {
 			this.sharedHover.state.read(reader);
+			this.onscreen?.read(reader);
 			for (const region of regions.read(reader)) {
 				region.visibleLineCountTop.read(reader);
 				region.visibleLineCountBottom.read(reader);
@@ -184,8 +187,9 @@ export class StructuralFoldControls extends Disposable {
 			this.rails.hide();
 			return;
 		}
-		// The multi-diff editor attaches an editor only while its file is in view.
-		if (!this.session.fileCollapse(path).get()) this.session.markSeen(path);
+		// The multi-diff editor attaches an editor only while its file is in view,
+		// but a document embed attaches all of them, on screen or not.
+		if (this.onscreen?.get() !== false && !this.session.fileCollapse(path).get()) this.session.markSeen(path);
 		const decorations: IModelDeltaDecoration[] = [];
 		const folded = this.foldedHeaders();
 		for (const range of this.viewed?.getViewedRanges(path) ?? []) {
