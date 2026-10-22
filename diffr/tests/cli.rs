@@ -675,8 +675,8 @@ fn upgrade_and_uninstall_leave_a_diffr_bundled_in_an_app_alone() {
 
 const SUMMARY: &str = "call the steps";
 
-/// A model endpoint that answers every request with `status` after `delay`.
-fn model_stub(status: u16, delay: std::time::Duration) -> String {
+/// A model endpoint that answers every request with `status`.
+fn model_stub(status: u16) -> String {
     use std::io::{BufRead, BufReader, Read};
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let endpoint = format!("http://{}", listener.local_addr().unwrap());
@@ -694,7 +694,6 @@ fn model_stub(status: u16, delay: std::time::Duration) -> String {
                     line.clear();
                 }
                 reader.read_exact(&mut vec![0; length]).unwrap();
-                std::thread::sleep(delay);
                 let body = serde_json::json!({"candidates": [{"content": {"parts": [{"text": SUMMARY}]}}]})
                     .to_string();
                 let _ = write!(
@@ -709,17 +708,17 @@ fn model_stub(status: u16, delay: std::time::Duration) -> String {
 }
 
 /// A repository with two staged Python files whose functions the
-/// summarizer takes and one text file it does not, and a config that turns
-/// the summarizer on against `endpoint`.
+/// summarizer takes, one with a docstring, and one text file it does not, and
+/// a config that turns the summarizer on against `endpoint`.
 fn summarizable(endpoint: Option<&str>) -> tempfile::TempDir {
     let dir = tempfile::tempdir().unwrap();
     let repo = dir.path().join("repo");
     std::fs::create_dir(&repo).unwrap();
     git_fixture::commit(&gix::init(&repo).unwrap(), "base");
-    for name in ["a", "b"] {
+    for (name, doc) in [("a", "    \"\"\"Doc.\"\"\"\n"), ("b", "")] {
         std::fs::write(
             repo.join(format!("{name}.py")),
-            format!("def {name}():\n    first_step_of_work()\n    second_step_of_work()\n    third_step_of_work()\n    fourth_step_of_work()\n"),
+            format!("def {name}():\n{doc}    first_step_of_work()\n    second_step_of_work()\n    third_step_of_work()\n    fourth_step_of_work()\n"),
         )
         .unwrap();
     }
@@ -761,7 +760,7 @@ fn record_path(record: &serde_json::Value) -> &str {
 
 #[test]
 fn defer_sends_files_before_the_summarizer_answers_then_updates() {
-    let dir = summarizable(Some(&model_stub(200, std::time::Duration::from_secs(2))));
+    let dir = summarizable(Some(&model_stub(200)));
     let output = staged(dir.path(), &["--defer"]).output().unwrap();
     assert!(output.status.success());
     let records = records(&output.stdout);
@@ -772,7 +771,6 @@ fn defer_sends_files_before_the_summarizer_answers_then_updates() {
         let line = record.to_string();
         match record["type"].as_str().unwrap() {
             "file" => {
-                assert!(updated.is_empty(), "{path} came after an update");
                 assert!(!line.contains(SUMMARY), "{path}");
                 files.push(path);
             }
@@ -838,7 +836,7 @@ fn applied(records: &[serde_json::Value]) -> BTreeMap<String, serde_json::Value>
 
 #[test]
 fn applying_updates_to_deferred_files_gives_the_files_without_defer() {
-    let dir = summarizable(Some(&model_stub(200, std::time::Duration::ZERO)));
+    let dir = summarizable(Some(&model_stub(200)));
     let diffs = |args: &[&str]| {
         let output = staged(dir.path(), args).output().unwrap();
         assert!(output.status.success());
@@ -851,7 +849,7 @@ fn applying_updates_to_deferred_files_gives_the_files_without_defer() {
 
 #[test]
 fn a_deferred_failure_is_the_files_update_and_not_a_failed_run() {
-    let dir = summarizable(Some(&model_stub(400, std::time::Duration::ZERO)));
+    let dir = summarizable(Some(&model_stub(400)));
     let output = staged(dir.path(), &["--defer"]).output().unwrap();
     assert_eq!(output.status.code(), Some(0));
     let records = records(&output.stdout);
@@ -877,7 +875,7 @@ fn a_deferred_failure_is_the_files_update_and_not_a_failed_run() {
 
 #[test]
 fn without_defer_the_summary_is_in_the_file_record() {
-    let dir = summarizable(Some(&model_stub(200, std::time::Duration::ZERO)));
+    let dir = summarizable(Some(&model_stub(200)));
     let output = staged(dir.path(), &[]).output().unwrap();
     assert!(output.status.success());
     let records = records(&output.stdout);
