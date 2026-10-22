@@ -227,18 +227,21 @@ function useBoardSession(
     return session;
   }, [host, reviewId]);
 
-  return useMemo(() => {
-    const { snapshot, version } = data;
+  // Only what the session names: a coverage bump or the editor's headings
+  // leave it as it is.
+  const { snapshot, version, hostState, available, traces } = data;
+  const remoteHost = data.host;
 
+  return useMemo(() => {
     return {
       ...base,
       review: {
         trashedAt: snapshot.trashedAt,
         reviewId,
-        host: data.host,
-        hostState: data.hostState,
+        host: remoteHost,
+        hostState,
         hosts: host.remoteHosts,
-        available: data.available,
+        available,
         pins: snapshot.pins
           ? { base: snapshot.pins.base, head: snapshot.pins.head }
           : undefined,
@@ -259,7 +262,7 @@ function useBoardSession(
         pullRequestNumber: snapshot.origin?.pullRequestNumber,
         pullRequestUrl: snapshot.origin?.pullRequestUrl,
         traces: new Map(
-          [...data.traces].map(([id, trace]) => [id, retainedTrace(id, trace)]),
+          [...traces].map(([id, trace]) => [id, retainedTrace(id, trace)]),
         ),
         place: async (signal?: AbortSignal) =>
           parseReviewBoardPlace(
@@ -311,7 +314,19 @@ function useBoardSession(
         },
       },
     };
-  }, [base, client, data, host.remoteHosts, reviewId, ui]);
+  }, [
+    base,
+    client,
+    snapshot,
+    version,
+    remoteHost,
+    hostState,
+    available,
+    traces,
+    host.remoteHosts,
+    reviewId,
+    ui,
+  ]);
 }
 
 function BoardReview({
@@ -376,23 +391,49 @@ function DocumentBody() {
 
 /**
  * The board under the nearest `WhiteboardProvider`: its views, rails, Ask
- * and peeks. Activity updates only the badge, so it redraws only when the
- * board does.
+ * and peeks.
  */
-export const Whiteboard = memo(function Whiteboard() {
+export function Whiteboard() {
   const data = useWhiteboardData();
   const settings = useContext(BoardSettings);
   const host = useReviewSession().review?.host;
-  const snapshot = data.snapshot;
 
+  return (
+    <BoardView
+      snapshot={data.snapshot}
+      maps={data.maps}
+      anchors={data.anchors}
+      tocEntries={data.contents ?? data.headings.entries}
+      commits={data.commits}
+      settings={settings}
+      host={host}
+    />
+  );
+}
+
+// Takes the board's parts, not the whole board, so activity, coverage and
+// the stream's other facts leave diagram inputs as they were.
+const BoardView = memo(function BoardView({
+  snapshot,
+  maps,
+  anchors,
+  tocEntries,
+  commits,
+  settings,
+  host,
+}: Pick<WhiteboardData, "snapshot" | "maps" | "anchors" | "commits"> & {
+  tocEntries: ReviewTocEntry[];
+  settings: WhiteboardSettings;
+  host?: string;
+}) {
   const document: RenderedReviewDocument = {
     key: snapshot.reviewId,
     routePath: "/",
     filePath: `review:${snapshot.reviewId}`,
-    documentSoftwareModels: [...data.maps.values()],
-    anchors: data.anchors,
+    documentSoftwareModels: [...maps.values()],
+    anchors,
     render: DocumentBody,
-    tocEntries: data.contents ?? data.headings.entries,
+    tocEntries,
     empty: snapshot.document.length === 0,
     header: true,
     databaseLens: elements(snapshot.document).some(
@@ -406,17 +447,13 @@ export const Whiteboard = memo(function Whiteboard() {
       document={document}
       softwareMap={{
         head:
-          [...data.maps.values()].find(
-            (map) => map.pinnedData.side === "head",
-          ) ?? null,
+          [...maps.values()].find((map) => map.pinnedData.side === "head") ??
+          null,
         base:
-          [...data.maps.values()].find(
-            (map) => map.pinnedData.side === "base",
-          ) ?? null,
+          [...maps.values()].find((map) => map.pinnedData.side === "base") ??
+          null,
       }}
-      softwareMapEnabled={
-        settings.softwareMapEnabled === true && data.maps.size > 0
-      }
+      softwareMapEnabled={settings.softwareMapEnabled === true && maps.size > 0}
       // A document without pins of its own has no change range: the Diff and
       // Commits views hide, as for a review whose base is its head.
       range={{
@@ -429,7 +466,7 @@ export const Whiteboard = memo(function Whiteboard() {
         headCommit: snapshot.pins?.head ?? "",
         worktreeRevision: snapshot.pins?.worktreeRevision,
       }}
-      commits={data.commits}
+      commits={commits}
     />
   );
 });
