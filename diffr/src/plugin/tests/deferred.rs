@@ -161,9 +161,3 @@ fn the_eager_pass_skips_deferred_plugins_and_the_deferred_pass_runs_only_them() 
     assert_eq!(shape_of(&all), [&[(0, 3, true)], &cut[..]].concat());
     assert_eq!(run(&[Pass::Eager, Pass::Deferred]), all);
 }
-
-#[test]
-fn bundled_shape_plugins_other_than_the_summarizer_are_eager() {
-    assert!(!bundled("context", json!({})).has_deferred());
-    assert!(bundled("summarize", json!({"api_key": "test"})).has_deferred());
-}

@@ -4,10 +4,11 @@ use crate::config::Params;
 use crate::engine::DiffError;
 use crate::git::{self, FileError};
 use crate::options::DiffOptions;
+use crate::pairing::Pairing;
 use crate::plugin::{Classifier, MutationFailed, Pass, Pipeline};
-use crate::present::present;
+use crate::present::{present, visible};
 use crate::protocol::project::{self, Inputs};
-use crate::protocol::{self, Diff, Event, FileChange, Outcome, Problem, VERSION};
+use crate::protocol::{self, Diff, Event, FileChange, Outcome, Problem, Source, Update, VERSION};
 use crate::summary::{DiffResult, FallbackCause, FileContent, FileFormat};
 use crate::tags;
 use std::io::{BufWriter, Write};
@@ -135,16 +136,16 @@ struct Shared {
 
 /// A finished per-file task.
 enum Done {
-    /// A file's record, and its eager diff when deferred plugins still run.
+    /// A file's record, and its eager sides when deferred plugins still run.
     File(Event, Option<Deferred>),
-    /// The deferred plugins' update, if they changed the diff or failed.
+    /// The deferred plugins' update, if they changed visibility or failed.
     Update(Option<Event>),
 }
 
 /// A sent file that deferred plugins still shape.
 struct Deferred {
     entry: FileChange,
-    diff: Diff,
+    sides: Pairing<Source>,
 }
 
 /// The start record, each file's record as it finishes, any updates, then the
@@ -220,10 +221,10 @@ async fn record(file: git::File, shared: Arc<Shared>) -> anyhow::Result<(Event, 
                 shared.pipeline.run(&entry, sides, pass).await
             })
             .await?;
-            if pass == Pass::Eager && change.hidden.is_none() && matches!(diff, Diff::Text { .. }) {
+            if let (Pass::Eager, None, Diff::Text { sides, .. }) = (pass, &change.hidden, &diff) {
                 deferred = Some(Deferred {
                     entry,
-                    diff: diff.clone(),
+                    sides: sides.clone(),
                 });
             }
             Outcome::Diff { diff }
@@ -239,24 +240,23 @@ async fn record(file: git::File, shared: Arc<Shared>) -> anyhow::Result<(Event, 
     Ok((record, deferred))
 }
 
-/// Run the deferred plugins on a sent file's diff. The update replaces the
-/// diff when they changed it; their failure is the update's error.
+/// Run the deferred plugins on a sent file's sides. The update lists the
+/// regions whose visibility they changed; their failure is its error.
 async fn update(deferred: Deferred, shared: &Shared) -> Option<Event> {
-    let Deferred { entry, diff } = deferred;
-    let shaped = present(None, diff.clone(), async |sides| {
-        shared.pipeline.run(&entry, sides, Pass::Deferred).await
-    })
-    .await;
-    let outcome = match shaped {
-        Ok(shaped) if shaped == diff => return None,
-        Ok(diff) => Outcome::Diff { diff },
-        Err(error) => Outcome::Error {
+    let Deferred { entry, sides } = deferred;
+    let change = match shared.pipeline.run_deferred(&entry, sides).await {
+        Ok((_, regions)) if regions.is_empty() => return None,
+        Ok((sides, regions)) => Update::Visibility {
+            regions,
+            visible: visible(&sides),
+        },
+        Err(error) => Update::Error {
             error: wire_error(&error),
         },
     };
     Some(Event::Update {
         file: entry.file,
-        outcome,
+        change,
     })
 }
 

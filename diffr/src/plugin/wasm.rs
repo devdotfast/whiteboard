@@ -551,10 +551,33 @@ impl Pipeline {
         sides: Pairing<protocol::Source>,
         pass: Pass,
     ) -> anyhow::Result<Pairing<protocol::Source>> {
-        let cursor = match Cursor::new(file.clone(), sides) {
-            Ok(cursor) if pass == Pass::Deferred => cursor.visibility_only(),
-            Ok(cursor) => cursor,
-            Err(sides) => return Ok(sides),
+        match Cursor::new(file.clone(), sides) {
+            Ok(cursor) => Ok(self.shape(cursor, pass).await?.into_sides()),
+            Err(sides) => Ok(sides),
+        }
+    }
+
+    /// Run the deferred plugins on one file's sides. Returns the edited sides
+    /// and the regions whose visibility they changed.
+    pub(crate) async fn run_deferred(
+        &self,
+        file: &protocol::FileChange,
+        sides: Pairing<protocol::Source>,
+    ) -> anyhow::Result<(Pairing<protocol::Source>, Vec<protocol::RegionVisibility>)> {
+        match Cursor::new(file.clone(), sides) {
+            Ok(cursor) => {
+                let cursor = self.shape(cursor, Pass::Deferred).await?;
+                let changes = cursor.visibility_changes();
+                Ok((cursor.into_sides(), changes))
+            }
+            Err(sides) => Ok((sides, Vec::new())),
+        }
+    }
+
+    async fn shape(&self, cursor: Cursor, pass: Pass) -> anyhow::Result<Cursor> {
+        let cursor = match pass {
+            Pass::Deferred => cursor.visibility_only(),
+            _ => cursor,
         };
         let (reply, result) = oneshot::channel();
         if let Some((job, mailbox)) = self.offer(Job {
@@ -564,8 +587,7 @@ impl Pipeline {
         })? {
             mailbox.send(job).await.map_err(|_| trapped())?;
         }
-        let cursor = result.await.map_err(|_| trapped())??;
-        Ok(cursor.into_sides())
+        result.await.map_err(|_| trapped())?
     }
 
     /// Give the file to the least-loaded worker whose mailbox has room. When

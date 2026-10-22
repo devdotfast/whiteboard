@@ -4,7 +4,9 @@
 //! immediately.
 use crate::hash::DftHashMap;
 use crate::pairing::Pairing;
-use crate::protocol::{FileChange, Node, Region, Source, SourcePos, SourceRange, Span, Visibility};
+use crate::protocol::{
+    FileChange, Node, Region, RegionVisibility, Source, SourcePos, SourceRange, Span, Visibility,
+};
 use std::collections::BTreeSet;
 
 /// The before (`lhs`) or after (`rhs`) side of a comparison.
@@ -110,6 +112,9 @@ pub struct Cursor {
     visibility_only: bool,
     /// The first structural edit refused by a visibility-only cursor.
     refused: Option<MoveError>,
+    /// Each region's visibility before `set_collapsed` or `set_label` first
+    /// touched it.
+    before: DftHashMap<u32, Visibility>,
 }
 
 impl Cursor {
@@ -152,6 +157,7 @@ impl Cursor {
             states,
             visibility_only: false,
             refused: None,
+            before: DftHashMap::default(),
         })
     }
 
@@ -615,25 +621,41 @@ impl Cursor {
     /// Set the shared collapsed state.
     pub fn set_collapsed(&mut self, region: u32, collapsed: bool) -> Result<(), MoveError> {
         let state = self.region(region)?.fold_state_id;
-        let Cursor {
-            sides,
-            places,
-            states,
-            ..
-        } = self;
-        for id in &states[&state] {
-            let place = &places[id];
-            at_mut(tree_mut(sides, place.side), &place.path)
-                .visibility
-                .collapsed = collapsed;
+        for id in self.states[&state].clone() {
+            self.visibility_mut(id)?.collapsed = collapsed;
         }
         Ok(())
     }
 
     /// Set or clear a region's label.
     pub fn set_label(&mut self, region: u32, label: Option<String>) -> Result<(), MoveError> {
-        self.region_mut(region)?.visibility.label = label.unwrap_or_default();
+        self.visibility_mut(region)?.label = label.unwrap_or_default();
         Ok(())
+    }
+
+    /// The regions whose visibility `set_collapsed` or `set_label` changed,
+    /// by id.
+    pub fn visibility_changes(&self) -> Vec<RegionVisibility> {
+        let mut changes: Vec<RegionVisibility> = self
+            .before
+            .iter()
+            .filter_map(|(&id, before)| {
+                let visibility = &self.region(id).ok()?.visibility;
+                (visibility != before).then(|| RegionVisibility {
+                    id,
+                    visibility: visibility.clone(),
+                })
+            })
+            .collect();
+        changes.sort_by_key(|change| change.id);
+        changes
+    }
+
+    fn visibility_mut(&mut self, id: u32) -> Result<&mut Visibility, MoveError> {
+        let place = self.places.get(&id).ok_or(MoveError::NoRegion(id))?;
+        let visibility = &mut at_mut(tree_mut(&mut self.sides, place.side), &place.path).visibility;
+        self.before.entry(id).or_insert_with(|| visibility.clone());
+        Ok(visibility)
     }
 
     fn place(&self, id: u32) -> Result<&Place, MoveError> {
@@ -644,11 +666,6 @@ impl Cursor {
     fn region(&self, id: u32) -> Result<&Region, MoveError> {
         let place = self.place(id)?;
         Ok(at(top(self.source_on(place.side)), &place.path))
-    }
-
-    fn region_mut(&mut self, id: u32) -> Result<&mut Region, MoveError> {
-        let place = self.places.get(&id).ok_or(MoveError::NoRegion(id))?;
-        Ok(at_mut(tree_mut(&mut self.sides, place.side), &place.path))
     }
 
     fn source_on(&self, side: Side) -> &Source {

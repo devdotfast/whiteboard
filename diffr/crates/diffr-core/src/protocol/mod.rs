@@ -86,13 +86,13 @@ pub enum Event {
         #[serde(flatten)]
         outcome: Outcome,
     },
-    /// The result of deferred plugins on a file already sent, with `--defer`.
-    /// It replaces that file's outcome. Sent only when they changed the
-    /// diff or failed; their failure leaves `complete` untouched.
+    /// What deferred plugins changed on a file already sent, with `--defer`.
+    /// Sent only when they changed visibility or failed; their failure
+    /// leaves the file's record and `complete` untouched.
     Update {
         file: Pairing<FileRef>,
         #[serde(flatten)]
-        outcome: Outcome,
+        change: Update,
     },
     /// The footer. `aborted` is present when a run-level failure stopped
     /// the comparison early; every file already emitted stays valid.
@@ -110,6 +110,29 @@ pub enum Event {
 pub enum Outcome {
     Diff { diff: Diff },
     Error { error: Problem },
+}
+
+/// Exactly one of `regions` or `error` appears on an `update` record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Update {
+    /// The regions whose visibility changed, and the file's new
+    /// `stats.visible`. Nothing else in the diff changes.
+    Visibility {
+        regions: Vec<RegionVisibility>,
+        visible: LineCounts,
+    },
+    Error {
+        error: Problem,
+    },
+}
+
+/// A region's new visibility, by its `id`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegionVisibility {
+    pub id: u32,
+    #[serde(flatten)]
+    pub visibility: Visibility,
 }
 
 /// What one end of the comparison is.
@@ -629,10 +652,38 @@ mod tests {
                         mode: "100644".to_owned(),
                     },
                 },
-                outcome: Outcome::Error {
+                change: Update::Error {
                     error: Problem {
                         code: "mutation_failed".to_owned(),
                         message: "mutation summarize: summarizer: HTTP 400".to_owned(),
+                    },
+                },
+            },
+            Event::Update {
+                file: Pairing::RightOnly {
+                    rhs: FileRef {
+                        path: "a.py".to_owned(),
+                        oid: "dddddd".to_owned(),
+                        mode: "100644".to_owned(),
+                    },
+                },
+                change: Update::Visibility {
+                    regions: vec![
+                        RegionVisibility {
+                            id: 4,
+                            visibility: Visibility {
+                                collapsed: true,
+                                label: "sums".to_owned(),
+                            },
+                        },
+                        RegionVisibility {
+                            id: 5,
+                            visibility: Visibility::default(),
+                        },
+                    ],
+                    visible: LineCounts {
+                        added: 1,
+                        removed: 0,
                     },
                 },
             },

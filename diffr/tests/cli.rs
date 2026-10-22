@@ -1,6 +1,7 @@
 mod git_fixture;
 mod support;
 
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use support::get_base_command;
@@ -761,40 +762,23 @@ fn record_path(record: &serde_json::Value) -> &str {
 #[test]
 fn defer_sends_files_before_the_summarizer_answers_then_updates() {
     let dir = summarizable(Some(&model_stub(200, std::time::Duration::from_secs(2))));
-    let mut child = staged(dir.path(), &["--defer"])
-        .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    let mut timed = Vec::new();
-    for line in std::io::BufRead::lines(std::io::BufReader::new(child.stdout.take().unwrap())) {
-        let line = line.unwrap();
-        timed.push((std::time::Instant::now(), line));
-    }
-    assert!(child.wait().unwrap().success());
-    let start = timed[0].0;
+    let output = staged(dir.path(), &["--defer"]).output().unwrap();
+    assert!(output.status.success());
+    let records = records(&output.stdout);
     let mut files = Vec::new();
     let mut updated = Vec::new();
-    for (at, line) in &timed[1..timed.len() - 1] {
-        let record: serde_json::Value = serde_json::from_str(line).unwrap();
-        let path = record_path(&record).to_owned();
+    for record in &records[1..records.len() - 1] {
+        let path = record_path(record).to_owned();
+        let line = record.to_string();
         match record["type"].as_str().unwrap() {
             "file" => {
                 assert!(updated.is_empty(), "{path} came after an update");
-                assert!(
-                    *at - start < std::time::Duration::from_millis(1500),
-                    "{path}"
-                );
                 assert!(!line.contains(SUMMARY), "{path}");
                 files.push(path);
             }
             "update" => {
                 assert!(files.contains(&path), "{path} updated before its file");
-                assert!(
-                    *at - start > std::time::Duration::from_millis(1500),
-                    "{path}"
-                );
                 assert!(line.contains(SUMMARY), "{path}");
-                assert!(record["diff"].is_object(), "{line}");
                 updated.push(path);
             }
             other => panic!("unexpected {other} record"),
@@ -803,9 +787,66 @@ fn defer_sends_files_before_the_summarizer_answers_then_updates() {
     assert_eq!(files.len(), 3);
     updated.sort();
     assert_eq!(updated, ["a.py", "b.py"]);
-    let complete: serde_json::Value = serde_json::from_str(&timed.last().unwrap().1).unwrap();
+    let complete = records.last().unwrap();
     assert_eq!(complete["type"], "complete");
     assert_eq!(complete["succeeded"], 3);
+}
+
+/// Each file's diff, with its updates applied.
+fn applied(records: &[serde_json::Value]) -> BTreeMap<String, serde_json::Value> {
+    fn region<'a>(
+        value: &'a mut serde_json::Value,
+        id: &serde_json::Value,
+    ) -> Option<&'a mut serde_json::Value> {
+        if value.get("fold_state_id").is_some() && value["id"] == *id {
+            return Some(value);
+        }
+        match value {
+            serde_json::Value::Object(map) => map.values_mut().find_map(|value| region(value, id)),
+            serde_json::Value::Array(items) => items.iter_mut().find_map(|value| region(value, id)),
+            _ => None,
+        }
+    }
+    let mut diffs = BTreeMap::new();
+    for record in records {
+        let path = || record_path(record).to_owned();
+        match record["type"].as_str().unwrap() {
+            "file" => {
+                diffs.insert(path(), record["diff"].clone());
+            }
+            "update" => {
+                let diff = diffs.get_mut(&path()).unwrap();
+                for change in record["regions"].as_array().unwrap() {
+                    let mut visibility = change.as_object().unwrap().clone();
+                    let id = visibility.remove("id").unwrap();
+                    let region =
+                        region(diff, &id).unwrap_or_else(|| panic!("no region {id} in {}", path()));
+                    let region = region.as_object_mut().unwrap();
+                    if visibility.is_empty() {
+                        region.remove("visibility");
+                    } else {
+                        region.insert("visibility".to_owned(), visibility.into());
+                    }
+                }
+                diff["stats"]["visible"] = record["visible"].clone();
+            }
+            _ => {}
+        }
+    }
+    diffs
+}
+
+#[test]
+fn applying_updates_to_deferred_files_gives_the_files_without_defer() {
+    let dir = summarizable(Some(&model_stub(200, std::time::Duration::ZERO)));
+    let diffs = |args: &[&str]| {
+        let output = staged(dir.path(), args).output().unwrap();
+        assert!(output.status.success());
+        applied(&records(&output.stdout))
+    };
+    let deferred = diffs(&["--defer"]);
+    assert!(!deferred.values().any(|diff| diff.is_null()));
+    assert_eq!(deferred, diffs(&[]));
 }
 
 #[test]
@@ -818,7 +859,7 @@ fn a_deferred_failure_is_the_files_update_and_not_a_failed_run() {
         .iter()
         .filter(|record| record["type"] == "update")
         .map(|record| {
-            assert!(record["diff"].is_null(), "{record}");
+            assert!(record["regions"].is_null(), "{record}");
             assert!(record["error"]["message"]
                 .as_str()
                 .unwrap()

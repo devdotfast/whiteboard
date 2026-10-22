@@ -103,18 +103,17 @@ test("a record missing required fields is rejected", () => {
 describe("update records", () => {
   const file = { rhs: { path: "a.rs", oid: "", mode: "" } };
   const problem = { code: "mutation_failed", message: "no" };
-  const [fileRecord] = run(["--no-index", "--format", "ndjson", "--", ...pairs[0]]).filter(
-    (event) => event.type === "file",
-  );
+  const regions = [{ id: 4, collapsed: true, label: "sums" }, { id: 5 }];
+  const visible = { added: 1, removed: 0 };
 
-  test("an update with a diff validates", () => {
-    const record = { type: "update", file, diff: fileRecord?.diff };
-    expect(decodeStructuralDiffEvent(JSON.stringify(record))).toMatchObject({ type: "update", file });
+  test("an update with regions validates", () => {
+    const record = { type: "update", file, regions, visible };
+    expect(decodeStructuralDiffEvent(JSON.stringify(record))).toEqual(record);
   });
 
   test("an update with an error validates", () => {
     const record = { type: "update", file, error: problem };
-    expect(decodeStructuralDiffEvent(JSON.stringify(record))).toMatchObject({ type: "update", error: problem });
+    expect(decodeStructuralDiffEvent(JSON.stringify(record))).toEqual(record);
   });
 
   test("an update without a file is rejected", () => {
@@ -123,15 +122,19 @@ describe("update records", () => {
     );
   });
 
-  test("an update with neither diff nor error is rejected", () => {
+  test("an update with neither regions nor error is rejected", () => {
     expect(() => decodeStructuralDiffEvent(JSON.stringify({ type: "update", file }))).toThrow(
       "Malformed diffr protocol record.",
     );
   });
 
+  test("an update with regions but no visible counts is rejected", () => {
+    expect(() => decodeStructuralDiffEvent(JSON.stringify({ type: "update", file, regions }))).toThrow(
+      "Malformed diffr protocol record.",
+    );
+  });
+
   test("--defer output validates", () => {
-    const help = spawnSync(diffrBinary(), ["--help"], { encoding: "utf8" });
-    if (!help.stdout.includes("--defer")) return;
     const events = run(["--no-index", "--defer", "--format", "ndjson", "--", ...pairs[0]]);
     expect(events.at(-1)).toMatchObject({ type: "complete", failed: 0 });
   });
