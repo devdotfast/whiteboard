@@ -51,7 +51,7 @@ use. The bundled plugins' settings:
 | `summarize.system_prompt` | built in | The instruction sent with each body. Change it to change the style of the summaries. |
 | `summarize.request_timeout_ms` | 60000 | Timeout for each request. |
 | `summarize.retries` | 3 | Retries after a timeout, rate limit or server error. |
-| `summarize.max_concurrent_requests` | 4 | Most requests in flight at once per worker. |
+| `summarize.max_concurrent_requests` | 1 | Most requests in flight at once per worker. |
 | `classify.hide` | `["generated", "vendored"]` | A file with any of these tags starts hidden. Tags: `generated`, `vendored`, `docs`, `test`, `integration`, `e2e`. |
 | `classify.hide_deleted` | true | Hide files that were deleted outright. |
 

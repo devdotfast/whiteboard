@@ -583,13 +583,32 @@ fn concurrent_summaries_shape_files_as_serial_ones_did() {
 }
 
 #[test]
+fn a_failed_body_keeps_the_files_other_summaries() {
+    let (file, mut sides) = project("a.py", "", &bodies(3));
+    let (endpoint, _) = slow_server(std::time::Duration::ZERO, |first, _| match first {
+        6 => (400, "{}".to_owned()),
+        _ => (200, gemini_answer("a b c")),
+    });
+    let pipeline = concurrent_summarizer(&endpoint, json!({}));
+    shape(&pipeline, &file, &mut sides).unwrap();
+    let summarized = (true, "a b c".to_owned());
+    assert_eq!(
+        function_folds(&sides),
+        [summarized.clone(), (false, String::new()), summarized]
+    );
+}
+
+#[test]
 fn a_rate_limited_body_does_not_hold_up_the_others() {
     let (file, mut sides) = project("a.py", "", &bodies(3));
     let (endpoint, traffic) = slow_server(DELAY, |first, attempt| match (first, attempt) {
         (2, 0) => (429, "{}".to_owned()),
         _ => (200, gemini_answer("a b c")),
     });
-    let pipeline = concurrent_summarizer(&endpoint, json!({"retries": 1}));
+    let pipeline = concurrent_summarizer(
+        &endpoint,
+        json!({"retries": 1, "max_concurrent_requests": 4}),
+    );
     shape(&pipeline, &file, &mut sides).unwrap();
     assert_eq!(traffic.lock().unwrap().arrivals.last(), Some(&2));
     assert_eq!(function_folds(&sides), vec![(true, "a b c".to_owned()); 3]);

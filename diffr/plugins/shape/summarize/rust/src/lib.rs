@@ -8,7 +8,7 @@
 use anyhow::anyhow;
 use async_lock::Semaphore;
 use diffr_plugin_sdk::prelude::*;
-use futures::future::try_join_all;
+use futures::future::join_all;
 use serde::Deserialize;
 use std::time::Duration;
 mod http;
@@ -59,8 +59,7 @@ enum Key {
 
 impl Summarize {
     /// One request per selected body: its lines, numbered from `first_line`
-    /// (1-based). Retried on transient failures; any other failure is a
-    /// run-level failure.
+    /// (1-based). Retried on transient failures.
     async fn complete(
         &self,
         path: &str,
@@ -208,15 +207,20 @@ impl GuestPlugin for Summarize {
             FileSides::Both((_, rhs)) | FileSides::RightOnly(rhs) => &rhs.path,
             FileSides::LeftOnly(lhs) => &lhs.path,
         };
-        let summaries = try_join_all(
+        let summaries = join_all(
             bodies
                 .iter()
                 .map(|(_, text, first_line)| self.complete(path, text, *first_line)),
         )
-        .await
-        .map_err(|e| format!("summarizer: {e:#}"))?;
-        for ((id, text, _), pseudocode) in bodies.into_iter().zip(summaries) {
-            if let Some(pseudocode) = pseudocode {
+        .await;
+        // diffr drops a failed file's edits, so fail only when no body was answered.
+        if !summaries.iter().any(Result::is_ok) {
+            if let Some(Err(error)) = summaries.first() {
+                return Err(format!("summarizer: {error:#}"));
+            }
+        }
+        for ((id, text, _), summary) in bodies.into_iter().zip(summaries) {
+            if let Ok(Some(pseudocode)) = summary {
                 // An earlier body's fold state may have collapsed this one.
                 if self.eligible(cursor, &cursor.get(id)?.data)? {
                     show(cursor, id, &text, &pseudocode)?;

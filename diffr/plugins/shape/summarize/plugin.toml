@@ -64,8 +64,8 @@ default = 3
 type = "integer"
 minimum = 1
 title = "Concurrent requests"
-description = "Most summary requests each worker sends at a time, so a run sends at most this times the job count (-j)."
-default = 4
+description = "Summary requests each worker sends at once; a run sends up to this times the job count (-j)."
+default = 1
 
 [options.system_prompt]
 type = "string"
