@@ -625,7 +625,7 @@ export async function createHarness({
   });
 }
 
-/** Creates a review on spec's commits, inserts its blocks and opens it; returns { reviewId, repositoryId, title, canvas }. */
+/** Creates a review on spec's commits, or its live checkout with `worktree`, inserts its blocks and opens it; returns { reviewId, repositoryId, title, canvas }. */
 export async function createReview(ctx, spec) {
   const repository = await ctx.api("/reviews-api/repositories", "POST", {
     path: spec.repoPath ?? ctx.repo,
@@ -646,12 +646,14 @@ export async function createReview(ctx, spec) {
   const { reviewId } = await command({
     type: "create",
     title: spec.title,
-    target: {
-      kind: "commits",
-      repositoryId: repository.value.id,
-      head: spec.head ?? ctx.head,
-      base: spec.base ?? ctx.base,
-    },
+    target: spec.worktree
+      ? { kind: "worktree", repositoryId: repository.value.id }
+      : {
+          kind: "commits",
+          repositoryId: repository.value.id,
+          head: spec.head ?? ctx.head,
+          base: spec.base ?? ctx.base,
+        },
   });
 
   for (const content of spec.blocks)
