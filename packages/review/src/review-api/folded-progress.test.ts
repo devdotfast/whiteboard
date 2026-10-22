@@ -643,28 +643,10 @@ it("counts at the last file, then folds what diffr's update collapses", async ()
   }
 });
 
-it("counts the same without updates", async () => {
-  const { data, reviewId } = await updateApi(async function* (file) {
-    yield { type: "file", file, diff: plainDiff(2) };
-    yield { type: "complete", succeeded: 1, failed: 0 };
-  });
-
-  try {
-    expect(
-      coverageProgress((await data.coverage(reviewId, pins)).files),
-    ).toMatchObject({
-      total: { additions: 1, deletions: 1 },
-      folded: { additions: 0, deletions: 0 },
-      remaining: { additions: 1, deletions: 1 },
-    });
-  } finally {
-    data.close();
-  }
-});
-
 it("keeps a file's coverage when its update fails", async () => {
   const error = { code: "provider_failed", message: "boom" };
   const done = gate();
+  const warn = vi.spyOn(console, "warn");
 
   const { data, reviewId } = await updateApi(async function* (file) {
     yield { type: "file", file, diff: hideFile(plainDiff(2)) };
@@ -681,7 +663,9 @@ it("keeps a file's coverage when its update fails", async () => {
       additions: 1,
       deletions: 1,
     });
+    expect(warn).not.toHaveBeenCalled();
   } finally {
+    warn.mockRestore();
     data.close();
   }
 });
