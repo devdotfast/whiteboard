@@ -5,7 +5,6 @@
 import { Emitter, type Event } from '../../base/common/event.js';
 import { Disposable } from '../../base/common/lifecycle.js';
 import type { ReviewDiffProgress, ReviewDiffProgressFile } from '../common/reviewProtocol.js';
-import type { StructuralTextDiff } from '../common/reviewStructuralDiff.js';
 import { structuralViewedProgress, structuralViewedRanges, structuralViewedScopes } from '../common/reviewStructuralViewed.js';
 import type { ReviewFilesEditorEntry } from './reviewFilesDiffView.js';
 import type { StructuralDiffSession } from './reviewStructuralDiffSession.js';
@@ -18,8 +17,7 @@ const initializedScopes = new WeakMap<StructuralDiffSession, Set<string>>();
 export class StructuralViewedState extends Disposable {
 	private readonly changed = this._register(new Emitter<void>());
 	readonly onDidChange = this.changed.event;
-	// Keyed by diff: a diffr update replaces the file's diff.
-	private readonly scopes = new WeakMap<StructuralTextDiff, ReturnType<typeof structuralViewedScopes>>();
+	private readonly scopes = new Map<string, ReturnType<typeof structuralViewedScopes>>();
 	private readonly states = new Map<string, string>();
 	private memo: { files: Map<string, ReviewDiffProgressFile>; values: Map<string, ReturnType<typeof structuralViewedProgress>> } | undefined;
 
@@ -37,10 +35,12 @@ export class StructuralViewedState extends Disposable {
 	}
 
 	private getScopes(path: string) {
+		let scopes = this.scopes.get(path);
 		const diff = this.session.getTextDiff(path);
-		if (!diff) return undefined;
-		let scopes = this.scopes.get(diff);
-		if (!scopes) this.scopes.set(diff, scopes = structuralViewedScopes(diff, path, this.entries.find(e => e.file.path === path)?.file.previousPath));
+		if (!scopes && diff) {
+			scopes = structuralViewedScopes(diff, path, this.entries.find(e => e.file.path === path)?.file.previousPath);
+			this.scopes.set(path, scopes);
+		}
 		return scopes;
 	}
 
@@ -77,8 +77,8 @@ export class StructuralViewedState extends Disposable {
 				const enclosed = viewed.some(([other, outer]) => other !== id
 					&& ranges.every(r => outer.some(o => r.side === o.side && r.file === o.file && o.fromLine <= r.fromLine && o.toLine >= r.toLine))
 					&& !outer.every(o => ranges.some(r => r.side === o.side && r.file === o.file && r.fromLine <= o.fromLine && r.toLine >= o.toLine)));
-				if (state === 'viewed' && !initialized.has(key) && !enclosed) this.session.setRegionCollapsed(path, id, true);
-				else if (previous === 'viewed' && state !== 'viewed') this.session.setRegionCollapsed(path, id, false);
+				if (state === 'viewed' && !initialized.has(key) && !enclosed) this.session.setRegionCollapsed(path, id, true, false);
+				else if (previous === 'viewed' && state !== 'viewed') this.session.setRegionCollapsed(path, id, false, false);
 				initialized.add(key);
 			}
 		}

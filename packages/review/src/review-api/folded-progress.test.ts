@@ -597,6 +597,14 @@ async function updateApi(
 const folded = (comparison: ComparisonCoverage) =>
   coverageProgress(comparison.files).folded;
 
+const collapseLeaves = {
+  regions: [
+    { id: 1, collapsed: true },
+    { id: 2, collapsed: true },
+  ],
+  visible: { added: 0, removed: 0 },
+};
+
 function gate() {
   let open!: () => void;
 
@@ -613,7 +621,7 @@ it("counts at the last file, then folds what diffr's update collapses", async ()
   const { data, reviewId } = await updateApi(async function* (file) {
     yield { type: "file", file, diff: plainDiff(2) };
     await update.opened;
-    yield { type: "update", file, diff: hideFile(plainDiff(2)) };
+    yield { type: "update", file, ...collapseLeaves };
     yield { type: "complete", succeeded: 1, failed: 0 };
   });
 
@@ -680,7 +688,7 @@ it("keeps a file's coverage when its update fails", async () => {
 
 it("rejects an update for a file it has not seen", async () => {
   const { data, reviewId } = await updateApi(async function* (file) {
-    yield { type: "update", file, diff: hideFile(plainDiff(2)) };
+    yield { type: "update", file, ...collapseLeaves };
   });
 
   try {

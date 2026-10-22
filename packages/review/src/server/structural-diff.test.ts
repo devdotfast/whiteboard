@@ -56,7 +56,8 @@ const BINARY = {
 const UPDATE = {
   type: "update",
   file: FILE,
-  diff: { type: "binary", rhs: { size: 3 } },
+  regions: [{ id: 1, collapsed: true, label: "Sums" }],
+  visible: { added: 0, removed: 0 },
 };
 
 const COMPLETE = { type: "complete", succeeded: 1, failed: 0 };

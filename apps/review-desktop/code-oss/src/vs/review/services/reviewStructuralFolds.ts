@@ -184,6 +184,8 @@ export class StructuralFoldControls extends Disposable {
 			this.rails.hide();
 			return;
 		}
+		// The multi-diff editor attaches an editor only while its file is in view.
+		if (!this.session.fileCollapse(path).get()) this.session.markSeen(path);
 		const decorations: IModelDeltaDecoration[] = [];
 		const folded = this.foldedHeaders();
 		for (const range of this.viewed?.getViewedRanges(path) ?? []) {

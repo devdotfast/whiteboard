@@ -4,6 +4,7 @@ import {
   type StructuralDiff,
   type StructuralRegion,
   type StructuralSource,
+  applyStructuralUpdate,
   structuralRows,
 } from "@dev.fast/review-protocol";
 import type { AlignmentRow } from "@review/lens-selection.js";
@@ -169,7 +170,11 @@ export async function comparisonCoverage(
     // Deferred updates keep refining `folded` after the counts resolve.
     void (async () => {
       const remaining = new Set<string>();
-      const seen = new Set<string>();
+
+      const diffs = new Map<
+        string,
+        Extract<StructuralDiff, { type: "text" }>
+      >();
 
       for await (const event of data.structuralChanges({
         reviewId,
@@ -190,21 +195,21 @@ export async function comparisonCoverage(
         if (event.type !== "file" && event.type !== "update") continue;
 
         const path = (event.file.rhs ?? event.file.lhs)!.path;
-
-        if (event.type === "file") {
-          if (!remaining.delete(path))
-            throw new Error(`Unexpected structural result: ${path}`);
-
-          seen.add(path);
-        } else if (!seen.has(path))
-          throw new Error(`Unexpected structural result: ${path}`);
-
         const baseIndex = event.file.lhs && baseFiles.get(event.file.lhs.path);
         const headIndex = event.file.rhs && headFiles.get(event.file.rhs.path);
+        let diff: StructuralDiff | undefined;
 
-        if (event.error) {
-          if (event.type === "update") continue;
+        if (event.type === "update") {
+          const previous = diffs.get(path);
 
+          if (!previous)
+            throw new Error(`Unexpected structural result: ${path}`);
+
+          if (event.error) continue;
+          diff = applyStructuralUpdate(previous, event);
+        } else if (!remaining.delete(path))
+          throw new Error(`Unexpected structural result: ${path}`);
+        else if (event.error) {
           if (
             event.error.code !== "unsupported_file_type" &&
             event.error.code !== "not_utf8"
@@ -214,8 +219,10 @@ export async function comparisonCoverage(
           for (const index of [baseIndex, headIndex])
             if (index !== undefined)
               unsupported.add(coverage.files[index].path);
-        } else if (event.diff.type === "text") {
-          const diff = event.diff;
+        } else diff = event.diff;
+
+        if (diff?.type === "text") {
+          diffs.set(path, diff);
           const folded = foldedChanges(diff);
 
           // Match each side separately: diffr can split a Git rename into two files.
@@ -245,7 +252,7 @@ export async function comparisonCoverage(
 
           const index = headIndex ?? baseIndex;
 
-          if (index !== undefined) {
+          if (event.type === "file" && index !== undefined) {
             const sources =
               coverage.fileSources.get(coverage.files[index].path) ?? [];
 
@@ -266,13 +273,15 @@ export async function comparisonCoverage(
 
         publish?.(current());
 
-        if (!remaining.size) counted();
+        if (!remaining.size && !resolved) counted();
       }
 
       if (remaining.size) throw new Error("Structural coverage is incomplete.");
-      counted();
+
+      if (!resolved) counted();
     })().catch((error) => {
-      if (!resolved) reject(error);
+      if (resolved) console.warn("Could not refine folded coverage:", error);
+      else reject(error);
     });
   });
 }
