@@ -254,10 +254,13 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 			lists.set(key, { generation: current.generation, list });
 			return list;
 		};
-		const openComparison = (current: ReviewSourceView) => diff.openComparison(
-			JSON.stringify(reviewSourceQuery(current)), new StructuralDiffClient(this.session, current), comparisonGeneration, current.generation,
+		// The review's own comparison follows new pins and saves in place.
+		const openComparison = (current: ReviewSourceView, follow = false) => diff.openComparison(
+			follow ? JSON.stringify([current.reviewId, current.commit ?? null]) : JSON.stringify(reviewSourceQuery(current)),
+			new StructuralDiffClient(this.session, current), comparisonGeneration,
+			JSON.stringify([reviewSourceQuery(current), current.generation]),
 		);
-		const makeSource = (getView: () => ReviewSourceView): ReviewDiffViewSource => ({
+		const makeSource = (getView: () => ReviewSourceView, follow = false): ReviewDiffViewSource => ({
 			files: scope => files(reviewSourceComparison(getView(), scope?.commit)),
 			load: async (scope, lens) => {
 				if (lens && (scope || lens.reviewId !== getView().reviewId)) throw new Error("A lens must use its review comparison.");
@@ -265,7 +268,7 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 				const current = reviewSourceComparison(getView(), scope?.commit);
 				const comparisonFiles = await files(current);
 				const entries = lens ? lensDiffFiles(comparisonFiles, lens) : orderReviewDiffFiles(comparisonFiles);
-				const session = openComparison(current);
+				const session = openComparison(current, follow);
 				if (!session) throw new Error("This comparison was closed.");
 
 				return {
@@ -281,7 +284,7 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 				};
 			},
 		});
-		const diffSource = makeSource(view);
+		const diffSource = makeSource(view, true);
 		const documentScope = (spec: ReviewInlineFindSpec) => {
 			// A source with its own pins is read at them; the review comparison does not apply.
 			const current = spec.pins ? reviewSourceAnchor(view(), spec.pins) : reviewSourceComparison(view());
@@ -290,10 +293,10 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 				reviewId: current.reviewId, version: current.version,
 				ranges: spec.ranges.map(range => ({ file: spec.path, side: range.side ?? spec.side, fromLine: range.startLine, toLine: range.endLine })),
 			};
-			return { lens, source: makeSource(() => current) };
+			return { lens, source: makeSource(() => current, !spec.pins) };
 		};
 		return {
-			openStructuralComparison: () => openComparison(reviewSourceComparison(view())),
+			openStructuralComparison: () => openComparison(reviewSourceComparison(view()), true),
 			inlineEditors: {
 				create: (spec) => { const { lens, source } = documentScope(spec); return diff.createDocument(spec, lens, source); },
 				find: async (spec, query) => { const { lens, source } = documentScope(spec); return { matchCount: (await diff.findDocument(lens, source, query)).length }; },
