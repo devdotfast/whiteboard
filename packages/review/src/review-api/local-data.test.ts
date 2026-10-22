@@ -1270,6 +1270,20 @@ it("keeps a live navigator attached to the live checkout without preparing it", 
   ).rejects.toThrow("leaves the selected worktree");
 });
 
+it("names a bare clone's worktrees when asked to register the clone", async () => {
+  const clone = path.join(directory, "clone");
+  git("clone", "--quiet", "--bare", repository, path.join(clone, ".bare"));
+  writeFileSync(path.join(clone, ".git"), "gitdir: ./.bare\n");
+
+  await expect(local.data.register(clone)).rejects.toThrow("no worktrees");
+
+  execFileSync("git", ["-C", clone, "worktree", "add", "--quiet", "main"]);
+
+  await expect(local.data.register(clone)).rejects.toThrow(
+    path.join(realpathSync(clone), "main"),
+  );
+});
+
 it("names a linked worktree's source workspace after its repository", async () => {
   const worktree = path.join(directory, "autocompact-500k-f92161");
   git("worktree", "add", "--detach", worktree, pins.head);

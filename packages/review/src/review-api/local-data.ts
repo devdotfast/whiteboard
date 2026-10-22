@@ -16,6 +16,7 @@ import {
   diffFileSummariesWorkingTree,
   diffTrees,
   diffWorkingTree,
+  gitAt,
   gitCommonDir,
   listCommitRange,
   listTrackedFilesAtCommit,
@@ -998,7 +999,7 @@ export class LocalReviewData {
       throw cause;
     });
 
-    if (!vcs) throw new ReviewInputError("Choose a Git or jj repository.");
+    if (!vcs) throw new ReviewInputError(await notACheckout(resolved));
 
     const repository = this.store.registerRepository(
       await realpath(vcs.rootPath),
@@ -2143,6 +2144,27 @@ export class LocalReviewData {
         throw new ReviewInputError("Map focus element does not exist.");
     }
   }
+}
+
+async function notACheckout(folder: string) {
+  const bare = await gitAt(folder, ["rev-parse", "--is-bare-repository"], {
+    allowFailure: true,
+  });
+
+  if (bare.stdout.trim() !== "true") return "Choose a Git or jj repository.";
+
+  const listed = await gitAt(folder, ["worktree", "list", "--porcelain"], {
+    allowFailure: true,
+  });
+
+  const worktrees = listed.stdout
+    .split("\n\n")
+    .filter((entry) => !/^bare$/m.test(entry))
+    .flatMap((entry) => entry.match(/^worktree (.+)$/m)?.[1] ?? []);
+
+  return worktrees.length
+    ? `${folder} is a bare repository. Choose one of its worktrees: ${worktrees.join(", ")}.`
+    : `${folder} is a bare repository with no worktrees. Add one with git worktree add.`;
 }
 
 /** The pure source checks throw their own error; API clients see it as input. */
