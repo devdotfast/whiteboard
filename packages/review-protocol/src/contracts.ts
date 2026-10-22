@@ -290,6 +290,8 @@ export interface ReviewDiffViewHandle extends ReviewDisposable {
   /** Hides the sidebar file tree, e.g. while the lens tree replaces it. */
   setFileTreeHidden?(hidden: boolean): void;
   setProgress?(progress: ReviewDiffProgress): void;
+  /** Show the latest comparison without a loader, where the reader is. */
+  reload?(lens?: ReviewDiffLens): void;
   revealSource?(
     source: ReviewDiffLens["ranges"][number],
     sectionId?: string,

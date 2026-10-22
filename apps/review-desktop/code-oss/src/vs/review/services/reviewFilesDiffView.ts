@@ -6,7 +6,7 @@ import { Range } from "../../editor/common/core/range.js";
  *--------------------------------------------------------------------------------------------*/
 
 import "../browser/media/review.css";
-import { $, addDisposableListener, append, Dimension, getWindow, scheduleAtNextAnimationFrame } from "../../base/browser/dom.js";
+import { $, addDisposableListener, append, Dimension, getWindow, isAncestorOfActiveElement, scheduleAtNextAnimationFrame } from "../../base/browser/dom.js";
 import { Orientation, SplitView } from "../../base/browser/ui/splitview/splitview.js";
 import { disposableTimeout } from "../../base/common/async.js";
 import { Emitter, Event } from "../../base/common/event.js";
@@ -186,6 +186,7 @@ export class ReviewFilesDiffView extends Disposable {
 	private readonly diffContainer: HTMLElement;
 
 	private readonly root: HTMLElement;
+	private readonly fileTree: HTMLElement;
 	private readonly splitView: SplitView<number>;
 	private readonly changedFilesTree: ReviewChangedFilesTree | undefined;
 	private readonly widget: MultiDiffEditorWidget;
@@ -240,7 +241,7 @@ export class ReviewFilesDiffView extends Disposable {
 	) {
 		super();
 		this.root = append(container, $(".review-files-editor"));
-		const fileTree = document ? container.ownerDocument.createElement("div") : append(this.fileTreeContainer ?? this.root, $(".review-files-editor-tree"));
+		const fileTree = this.fileTree = document ? container.ownerDocument.createElement("div") : append(this.fileTreeContainer ?? this.root, $(".review-files-editor-tree"));
 		const diffContainer = append(this.root, $(".review-files-editor-diffs"));
 		this.diffContainer = diffContainer;
 		if (document) fileTree.hidden = true;
@@ -480,6 +481,7 @@ export class ReviewFilesDiffView extends Disposable {
 		this.loadingFiles.delete(path);
 		this.readyFiles.add(path);
 		if (error) this.failedFiles.set(path, error);
+		else this.failedFiles.delete(path);
 		this.changedFilesTree?.setFileState(path, error ? "error" : undefined, error);
 		this.input?.setReadyFiles(this.readyFiles, this.loadingFiles.size > 0);
 		this.showStreamStatus();
@@ -622,6 +624,18 @@ export class ReviewFilesDiffView extends Disposable {
 		this.pendingPath = this.loadingFiles.has(path) ? path : undefined;
 		this.showStreamStatus();
 		if (!this.pendingPath) this.reveal(entry);
+	}
+
+	setStaged(staged: boolean): void {
+		this.root.classList.toggle("review-files-editor-staged", staged);
+		if (this.fileTreeContainer) this.fileTree.hidden = staged;
+		if (!staged) this.layout();
+	}
+
+	get entries(): readonly ReviewFilesEditorEntry[] { return this.input?.entries ?? []; }
+
+	hasFocus(): boolean {
+		return isAncestorOfActiveElement(this.root);
 	}
 
 	loadingFailed(message: string): void {
