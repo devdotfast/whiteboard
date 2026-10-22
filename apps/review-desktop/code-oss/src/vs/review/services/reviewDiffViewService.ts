@@ -92,12 +92,19 @@ export class ReviewDiffViewService extends Disposable {
 		return scope === "peek" ? this.peekLayout : this.diffLayout;
 	}
 
-	/** Shared by every view of this comparison; reset/dispose follows the canvas lifetime. */
+	/** Shared by every view of this comparison; reset/dispose follows the canvas lifetime. A new revision refreshes it in place. */
 	openComparison(key: string, client: StructuralDiffStream, generation: number, revision?: string): StructuralDiffSession | undefined {
 		if (generation !== this.comparisonGeneration) return undefined;
 		const current = this.sessions.get(key);
-		if (current && current.revision === revision) return current.session;
-		current?.session.dispose();
+		if (current) {
+			if (current.revision !== revision) {
+				const previous = current.revision;
+				current.revision = revision;
+				// Retry a failed refresh on the next load.
+				void current.session.refresh(client).then(adopted => { if (!adopted && current.revision === revision) current.revision = previous; });
+			}
+			return current.session;
+		}
 		const session = new StructuralDiffSession(client);
 		this.sessions.set(key, { session, revision });
 		void session.start().then(() => {
@@ -362,7 +369,11 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 				const path = entry.file.path;
 				if (change && !change.files.has(path)) continue;
 				const result = entry.file.status === "unchanged" ? {} : session.getFileResult(path);
-				if (!result || rendered.has(path)) continue;
+				if (!result) continue;
+				if (rendered.has(path)) {
+					if (result.diff) view.fileCounts(path, reviewFileCounts(result.diff));
+					continue;
+				}
 				rendered.add(path);
 				if (result.hidden !== undefined) view.hideFile(path, result.hidden);
 				if (result.diff) view.fileCounts(path, reviewFileCounts(result.diff));

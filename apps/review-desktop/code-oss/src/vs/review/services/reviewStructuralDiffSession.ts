@@ -34,7 +34,13 @@ export class StructuralDiffSession extends Disposable {
 	/** Files the reader has seen or folded; diffr updates only relabel their folds. */
 	private readonly seen = new Set<string>();
 	private manifest: Set<string> | undefined;
-	private task: Promise<void> | undefined;
+	private task: Promise<unknown> | undefined;
+	private next: StructuralDiffSession | undefined;
+	/** An adopted refresh whose stream still sends diffr's deferred updates. */
+	private feed: StructuralDiffSession | undefined;
+	/** Where updates apply: this session, or the one that adopted it. */
+	private sink: StructuralDiffSession = this;
+	private onLoaded: (() => void) | undefined;
 	private finished = false;
 	private readonly createdAt = performance.now();
 	private firstFileAt: number | undefined;
@@ -43,11 +49,47 @@ export class StructuralDiffSession extends Disposable {
 	private finishedAt: number | undefined;
 	private disposed = false;
 	error: string | undefined;
-	get complete(): boolean { return this.finished; }
+	/** False while a refresh is pending, whose results may still fill missing files. */
+	get complete(): boolean { return this.finished && !this.next; }
 
 	constructor(private readonly client: StructuralDiffStream) { super(); }
 
-	start(): Promise<void> { return this.task ??= this.consume(); }
+	/** Settles once no refresh is pending. */
+	async start(): Promise<void> {
+		let task: Promise<unknown>;
+		do {
+			task = this.task ??= this.consume();
+			await task;
+		} while (task !== this.task);
+	}
+	/** Diffs again and swaps every result in once all files arrive; resolves whether it did. */
+	refresh(client: StructuralDiffStream): Promise<boolean> {
+		this.next?.dispose();
+		const next = this.next = new StructuralDiffSession(client);
+		const task = new Promise<boolean>(resolve => next.onLoaded = () => {
+			next.onLoaded = undefined;
+			if (this.next !== next) return resolve(false);
+			this.next = undefined;
+			// A failed refresh keeps the last good diff on screen.
+			if (this.disposed || next.error) {
+				this.notify(undefined, true);
+				next.dispose();
+				return resolve(false);
+			}
+			this.adopt(next);
+			// Later updates apply here, where the reader's folds are.
+			this.feed?.dispose();
+			this.feed = next;
+			next.sink = this;
+			resolve(true);
+		});
+		void next.start().then(() => {
+			next.onLoaded?.();
+			if (this.feed === next) { this.feed = undefined; next.dispose(); }
+		});
+		this.task = task;
+		return task;
+	}
 	getFileResult(path: string): StructuralFileResult | undefined { return this.results.get(path); }
 	/** Wait only for this file; a structural view can render while other files stream. */
 	fileResult(path: string): Promise<StructuralFileResult> {
@@ -134,12 +176,13 @@ export class StructuralDiffSession extends Disposable {
 	private async consume(): Promise<void> {
 		try {
 			for await (const event of this.client.streamComparison(this.abort.signal)) {
-				if (this.disposed) return;
+				if (this.disposed || this.finished) return;
 				this.applyEvent(event);
 			}
 			if (!this.finished) throw new Error("diffr stream ended before completion.");
 		} catch (error) {
-			if (!this.disposed) {
+			// A stream a refresh replaced no longer reports errors.
+			if (!this.disposed && !this.finished) {
 				this.error = error instanceof Error ? error.message : String(error);
 				this.finished = true;
 				this.notify(undefined, true);
@@ -151,15 +194,17 @@ export class StructuralDiffSession extends Disposable {
 	}
 
 	private applyEvent(event: StructuralEvent): void {
-		if (this.finished) throw new Error("diffr emitted data after completion.");
 		if (!this.manifest) {
 			if (event.type !== "start" || event.version !== STRUCTURAL_WIRE_VERSION) throw new Error("Unsupported diffr stream protocol.");
 			this.acceptManifest(event);
-		} else if (event.type === "file") { this.storeFileResult(event); this.firstFileAt ??= performance.now(); }
-		else if (event.type === "update") { this.applyUpdate(event); this.updatedAt = performance.now(); }
+		} else if (event.type === "file") {
+			this.storeFileResult(event);
+			this.firstFileAt ??= performance.now();
+			if (this.results.size === this.manifest.size) this.onLoaded?.();
+		} else if (event.type === "update") { this.sink.applyUpdate(event); this.sink.updatedAt = performance.now(); }
 		else if (event.type === "complete") this.finishLoading(event);
 		else throw new Error(`Unexpected diffr event: ${(event as StructuralEvent).type}`);
-		if (event.type === "file" || event.type === "update") this.notify(structuralFilePath(event.file));
+		if (event.type === "file" || event.type === "update") (event.type === "update" ? this.sink : this).notify(structuralFilePath(event.file));
 		else this.notify(undefined, true);
 	}
 
@@ -205,25 +250,49 @@ export class StructuralDiffSession extends Disposable {
 	}
 
 	private storeDiff(path: string, diff: StructuralDiff): void {
-		if (diff.type === "text") {
-			const seed = (region: StructuralRegion) => {
-				const key = `${path}:${region.fold_state_id}`;
-				if (!this.folds.has(key)) this.folds.set(key, region.visibility?.collapsed === true);
-				if (region.kind === "fold") region.children.forEach(seed);
-			};
-			for (const side of [diff.lhs, diff.rhs]) if (side) {
-				seed(side.root);
-				const key = `${path}:${side.root.fold_state_id}`;
-				const state = this.folds.get(key)!;
-				// Only roots need a synchronous observable for multi-diff headers;
-				// interior folds keep using the session's batched notifications.
-				if (typeof state === "boolean") this.folds.set(key, this.createFold(path, state));
-			}
-		}
+		this.seedFolds(path, diff);
 		const visibility = diff.type === "text"
 			? [diff.rhs, diff.lhs].find(side => side?.root.visibility?.collapsed)?.root.visibility
 			: undefined;
 		this.results.set(path, { diff, hidden: visibility ? visibility.label || "Hidden by default" : undefined });
+	}
+
+	private seedFolds(path: string, diff: StructuralDiff): void {
+		if (diff.type !== "text") return;
+		const seed = (region: StructuralRegion) => {
+			const key = `${path}:${region.fold_state_id}`;
+			if (!this.folds.has(key)) this.folds.set(key, region.visibility?.collapsed === true);
+			if (region.kind === "fold") region.children.forEach(seed);
+		};
+		for (const side of [diff.lhs, diff.rhs]) if (side) {
+			seed(side.root);
+			const key = `${path}:${side.root.fold_state_id}`;
+			const state = this.folds.get(key)!;
+			// Only roots need a synchronous observable for multi-diff headers;
+			// interior folds keep using the session's batched notifications.
+			if (typeof state === "boolean") this.folds.set(key, this.createFold(path, state));
+		}
+	}
+
+	private adopt(next: StructuralDiffSession): void {
+		for (const path of this.manifest ?? []) if (!next.manifest!.has(path)) { this.results.delete(path); this.pendingFiles.add(path); }
+		for (const [path, result] of next.results) {
+			const previous = this.results.get(path);
+			if (previous && previous.error === result.error && sameDiff(previous.diff, result.diff)) continue;
+			if (previous?.diff && result.diff && foldShape(previous.diff) !== foldShape(result.diff)) {
+				for (const [key, state] of this.folds) if (key.startsWith(`${path}:`) && typeof state === "boolean") this.folds.delete(key);
+			}
+			if (result.diff) this.seedFolds(path, result.diff);
+			this.results.set(path, result);
+			this.pendingFiles.add(path);
+		}
+		this.manifest = next.manifest;
+		this.error = undefined;
+		// A first stream still running is now stale.
+		this.finished = true;
+		// Synchronous, so nothing reads the new diffs against old editor text.
+		this.notification.cancel();
+		this.flushChanges();
 	}
 
 	private finishLoading(event: Extract<StructuralEvent, { type: "complete" }>): void {
@@ -236,10 +305,24 @@ export class StructuralDiffSession extends Disposable {
 	override dispose(): void {
 		this.disposed = true;
 		this.abort.abort();
+		this.next?.dispose();
+		this.feed?.dispose();
 		this.results.clear();
 		this.folds.clear();
 		this.seen.clear();
 		this.pendingFiles.clear();
 		super.dispose();
 	}
+}
+
+/** diffr's first pass depends only on the two texts. */
+function sameDiff(a: StructuralDiff | undefined, b: StructuralDiff | undefined): boolean {
+	if (a?.type === "text" && b?.type === "text") return a.lhs?.text === b.lhs?.text && a.rhs?.text === b.rhs?.text;
+	return JSON.stringify(a) === JSON.stringify(b);
+}
+
+/** diffr numbers folds in tree order, so an id names the same region only while the tree keeps its shape. */
+function foldShape(diff: StructuralDiff): string {
+	const shape = (region: StructuralRegion): unknown => region.kind === "fold" ? region.children.map(shape) : 0;
+	return diff.type === "text" ? JSON.stringify([diff.lhs?.root, diff.rhs?.root].map(root => root && shape(root))) : "";
 }
