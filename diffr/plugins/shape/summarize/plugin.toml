@@ -57,7 +57,7 @@ default = 60000
 type = "integer"
 minimum = 0
 title = "Retries"
-description = "Retries after a timeout, rate limit, or server error. A request that still fails fails that file's update under --defer, and aborts the run otherwise."
+description = "Retries after a timeout, rate limit, or server error. A file fails only when none of its requests succeed, which fails its update under --defer and aborts the run otherwise."
 default = 3
 
 [options.max_concurrent_requests]
