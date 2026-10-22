@@ -412,6 +412,29 @@ test("rendering and coverage share a stream; cancelling one reader preserves the
   }
 });
 
+test("stops a comparison whose last reader leaves before diffr completes", async () => {
+  const { StructuralComparisons } = await import("./structural-comparisons.js");
+
+  const root = await executable(`
+    require('node:fs').writeFileSync('pid', String(process.pid));
+    ${emit(START)} ${emit(BINARY)}
+    setInterval(() => {}, 1000);
+  `);
+
+  const cache = new StructuralComparisons();
+
+  try {
+    for await (const event of cache.stream(request(root, { paths: ["a.ts"] })))
+      if (event.type === "file") break;
+
+    const pid = Number(await readFile(path.join(root, "pid"), "utf8"));
+
+    await vi.waitFor(() => expect(() => process.kill(pid, 0)).toThrow("ESRCH"));
+  } finally {
+    cache.close();
+  }
+});
+
 test("keeps the ten most recently read idle comparisons", async () => {
   const { StructuralComparisons } = await import("./structural-comparisons.js");
 
