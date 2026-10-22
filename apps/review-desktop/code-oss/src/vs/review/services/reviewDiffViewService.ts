@@ -12,12 +12,14 @@ import { lensRanges, withLens } from "./reviewLens.js";
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { getWindow, scheduleAtNextAnimationFrame } from "../../base/browser/dom.js";
 import { Emitter, Event } from "../../base/common/event.js";
-import { Disposable, DisposableStore } from "../../base/common/lifecycle.js";
+import { Disposable, DisposableStore, MutableDisposable } from "../../base/common/lifecycle.js";
 import type { URI } from "../../base/common/uri.js";
 import type { ICodeEditor } from "../../editor/browser/editorBrowser.js";
 import { RunOnceScheduler } from "../../base/common/async.js";
 import { IStorageService } from "../../platform/storage/common/storage.js";
+import type { IMultiDiffEditorViewState } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js";
 import { ReviewDiffViewStateStorage } from "./reviewDiffViewState.js";
 import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
 import { REVIEW_PEEK_SIDE_BY_SIDE_SETTING } from "../common/reviewConfigurationDefaults.js";
@@ -198,6 +200,10 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 	readonly onDidError = this._onDidError.event;
 	private readonly activeControlStore = this._register(new DisposableStore());
 	private view: ReviewFilesDiffView | undefined;
+	private readonly current = this._register(new MutableDisposable<DisposableStore>());
+	private readonly staged = this._register(new MutableDisposable<DisposableStore>());
+	private loadGeneration = 0;
+	private shownComparison: { session: StructuralDiffSession; shape: string } | undefined;
 	private progress: ReviewDiffProgress | undefined;
 	private readonly progressChanged = this._register(new Emitter<void>());
 	private pendingSectionId: string | undefined;
@@ -266,7 +272,9 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 		super();
 		this.progress = spec.progress;
 		this.decorations = this._register(instantiationService.createInstance(ReviewFindDecorations));
-		this.ready = this.initialize();
+		// Not the active control: it follows scrolling, not focus.
+		if (!spec.document) this._register(markReviewDefinitionPeekHost(spec.container, resource => this.peekDiff(resource)));
+		this.ready = this.load(spec.lens);
 	}
 
 	focus(): void {
@@ -279,29 +287,41 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 		this.captureViewState();
 		// A view toggle disposes these editors. The composite must not keep one
 		// of them as its active editor afterwards.
-		for (const editor of this.adoptedEditors) {
-			this.inlineEditors.clearExternalActiveEditor(editor);
-		}
-		this.adoptedEditors = [];
+		this.releaseEditors();
 		this.view = undefined;
 		super.dispose();
 		this.onDispose();
 	}
 
-	private async initialize(): Promise<void> {
+	reload(lens?: ReviewDiffLens): void {
+		void this.load(lens);
+	}
+
+	private releaseEditors(): void {
+		for (const editor of this.adoptedEditors) this.inlineEditors.clearExternalActiveEditor(editor);
+		this.adoptedEditors = [];
+	}
+
+	/** Over the same files and lens the session refreshes the shown view; otherwise a new one builds behind it. */
+	private async load(lens: ReviewDiffLens | undefined): Promise<void> {
+		const generation = ++this.loadGeneration;
+		const stale = () => this.disposed || generation !== this.loadGeneration;
 		try {
-			const data = await this.source.load(this.spec.scope, this.spec.lens);
+			const data = await this.source.load(this.spec.scope, lens);
+			if (stale()) return;
 			const { sourceUri, entries, session } = data;
-			this.viewStateKey = `${data.stateKey ?? sourceUri.toString()}:${JSON.stringify(this.spec.lens ?? null)}:${this.spec.document ? "document" : "diff"}`;
-			if (this.disposed) return;
-			const store = this._register(new DisposableStore());
+			const viewStateKey = `${data.stateKey ?? sourceUri.toString()}:${JSON.stringify(lens ?? null)}:${this.spec.document ? "document" : "diff"}`;
+			const shape = JSON.stringify([lens ?? null, entries.map(({ file }) => [file.path, file.previousPath, file.status, file.binary])]);
+			if (this.view && session === this.shownComparison?.session && shape === this.shownComparison.shape) {
+				this.staged.clear();
+				this.viewStateKey = viewStateKey;
+				return;
+			}
+			const store = this.staged.value = new DisposableStore();
 			const viewed = this.spec.onSetViewed
 				? store.add(new StructuralViewedState(session, entries, () => this.progress, this.progressChanged.event)) : undefined;
 			const structural = createStructuralDiffEditors(this.instantiationService, entries, store, session, viewed, this.spec.document ? this.lineNumbers : undefined);
-			this.diffEntries = structural.entries;
 
-			if (this.disposed) return;
-			const lens = this.spec.lens;
 			const sections = this.progress?.sections;
 			let selected = lens && sections?.length ? sections.flatMap(section => {
 				const matches = structural.entries.filter(entry => lensRanges({ ...lens, ranges: section.sources }, entry).length > 0);
@@ -315,7 +335,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 			const instantiation = withLens(structural.instantiation, selected, lens, store, () => this.progress, this.progressChanged.event, !!viewed, !!this.spec.document);
 			// Find ignores viewed state; folds come from the view.
 			const sectionsOnly = () => this.progress?.sections && { sections: this.progress.sections, files: [] };
-			this.findIndex = store.add(new DiffFindIndex(withLens(structural.instantiation, selected, lens, store, sectionsOnly, Event.None), selected, lens));
+			const findIndex = store.add(new DiffFindIndex(withLens(structural.instantiation, selected, lens, store, sectionsOnly, Event.None), selected, lens));
 			// The input owns the text-model references its view model resolves, so
 			// this handle disposes it alongside the view.
 			const input = store.add(instantiation.createInstance(ReviewFilesEditorInput, sourceUri, selected,
@@ -330,27 +350,49 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 					this.spec.openFile !== false,
 				),
 			);
-			this.view = view;
+			const shown = this.view;
+			view.setStaged(!!shown);
 			view.viewedScope = lens && !lens.wholeFiles && !this.spec.document ? 'lens' : undefined;
-			// Not the active control: it follows scrolling, not focus.
-			if (!this.spec.document) store.add(markReviewDefinitionPeekHost(this.spec.container, resource => this.peekDiff(resource)));
 			if (this.progress) view.setProgress(this.progress);
 			view.startLoading(selected);
-			store.add(view.onDidChangeActiveControl(() => this.bindActiveControl(view)));
+			store.add(view.onDidChangeActiveControl(() => { if (this.view === view) this.bindActiveControl(view); }));
 			store.add(view.onDidScroll(() => this.saveState.schedule()));
-			const itemKeys = selected.map(entry => JSON.stringify([entry.original?.toString(), entry.modified?.toString()]));
-			const savedState = this.viewStates.get(this.viewStateKey, itemKeys);
+			const itemKeys = selected.map(itemKey);
+			const savedState = shown ? rekeyViewState(shown.getViewState(), shown.entries, selected) : this.viewStates.get(viewStateKey, itemKeys);
+			const adopt = () => {
+				const focused = shown?.hasFocus();
+				this.releaseEditors();
+				this.view = view;
+				this.shownComparison = { session, shape };
+				this.viewStateKey = viewStateKey;
+				this.diffEntries = structural.entries;
+				this.findIndex = findIndex;
+				this.current.value = this.staged.clearAndLeak();
+				view.setStaged(false);
+				if (focused) view.focus();
+			};
+			if (!shown) adopt();
 			this.hasRestoredState = !!savedState;
 			await view.setInput(input, savedState);
-			if (this.disposed) return;
+			if (stale()) return;
+			this.observeSession(session, selected, view, store);
+			if (shown) {
+				await session.start();
+				if (stale()) return;
+				// The reader may have scrolled while this built.
+				const state = rekeyViewState(shown.getViewState(), shown.entries, selected);
+				if (state) view.restoreViewState(state);
+				await new Promise(resolve => scheduleAtNextAnimationFrame(getWindow(this.spec.container), () => resolve(undefined)));
+				if (stale()) return;
+				adopt();
+			}
 			this.bindActiveControl(view);
 			if (this.spec.document) view.setCollapsed(this.collapsed);
+			if (shown) return;
 			if (this.pendingSource) view.revealSource(this.pendingSource, this.pendingSectionId);
 			else if (this.pendingFile && (!this.pendingFileRestore || !savedState)) view.revealFile(this.pendingFile);
-			this.observeSession(session, selected, view, store);
-
 		} catch (error) {
-			if (this.disposed) return;
+			if (stale()) return;
 			this._onDidError.fire(error instanceof Error ? error.message : String(error));
 		}
 	}
@@ -419,4 +461,24 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 		if (!key || !state) return;
 		this.viewStates.set(key, state);
 	}
+}
+
+function itemKey(entry: ReviewFilesEditorEntry): string {
+	return JSON.stringify([entry.original?.toString(), entry.modified?.toString()]);
+}
+
+/** Item keys carry the comparison's generation; carry each file's state to its new key. */
+function rekeyViewState(state: IMultiDiffEditorViewState | undefined, from: readonly ReviewFilesEditorEntry[], to: readonly ReviewFilesEditorEntry[]): IMultiDiffEditorViewState | undefined {
+	if (!state) return undefined;
+	const place = (entry: ReviewFilesEditorEntry) => `${entry.sectionId ?? ""}:${entry.file.path}`;
+	const next = new Map(to.map(entry => [place(entry), itemKey(entry)]));
+	const keys = new Map(from.map(entry => [itemKey(entry), next.get(place(entry))]));
+	return {
+		scrollState: state.scrollState,
+		docStates: state.docStates && Object.fromEntries(Object.entries(state.docStates).flatMap(([key, doc]) => {
+			const moved = keys.get(key);
+			return moved ? [[moved, doc]] : [];
+		})),
+		activeDiffItemKey: state.activeDiffItemKey && keys.get(state.activeDiffItemKey),
+	};
 }
