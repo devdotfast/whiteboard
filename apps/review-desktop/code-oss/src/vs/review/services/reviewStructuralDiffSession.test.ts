@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { StructuralDiffSession } from './reviewStructuralDiffSession.js';
-import { STRUCTURAL_WIRE_VERSION, type StructuralEvent } from '../common/reviewStructuralDiff.js';
+import { STRUCTURAL_WIRE_VERSION, type StructuralEvent, type StructuralRegion } from '../common/reviewStructuralDiff.js';
 import { autorun } from '../../base/common/observable.js';
 
 const file = { rhs: { path: 'a.ts', oid: 'abc', mode: '100644' } };
@@ -178,4 +178,31 @@ test('a file diffr could not diff resolves to the run\'s error', async () => {
 		await session.start();
 		assert.deepEqual(await pending, { error: 'diffr exited with 1: boom' });
 	} finally { session.dispose(); }
+});
+
+test('a refresh swaps results in place and keeps folds while the fold tree keeps its shape', async () => {
+	const pos = (line: number) => ({ line, column: 0 });
+	const leaf = (id: number, line: number): StructuralRegion => ({ kind: 'leaf', id, fold_state_id: id, alignment_id: id, start: pos(line), end: pos(line + 1) });
+	const fold = (id: number, children: StructuralRegion[]): StructuralRegion => ({ kind: 'fold', id, fold_state_id: id, indent: pos(0), start: pos(0), end: pos(9), children });
+	const diffed = (text: string, root: StructuralRegion) => ({
+		async *streamComparison() {
+			yield start;
+			yield { ...result, diff: { ...result.diff, rhs: { text, root } } } as StructuralEvent;
+			yield complete;
+		},
+	});
+	const session = new StructuralDiffSession(diffed('a', fold(1, [fold(2, [leaf(3, 0)])])));
+	await session.start();
+	session.setRegionCollapsed('a.ts', 2, true);
+	const changed: string[][] = [];
+	session.onDidChange(change => changed.push([...change.files]));
+
+	await session.refresh(diffed('b', fold(1, [fold(2, [leaf(3, 0)])])));
+	assert.equal(session.getTextDiff('a.ts')?.rhs?.text, 'b');
+	assert.deepEqual(changed, [['a.ts']]);
+	assert.equal(session.isRegionCollapsed('a.ts', 2), true);
+
+	await session.refresh(diffed('c', fold(1, [leaf(4, 0), fold(2, [leaf(3, 1)])])));
+	assert.equal(session.isRegionCollapsed('a.ts', 2), false);
+	session.dispose();
 });

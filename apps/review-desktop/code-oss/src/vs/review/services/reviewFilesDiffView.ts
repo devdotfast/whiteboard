@@ -6,7 +6,7 @@ import { Range } from "../../editor/common/core/range.js";
  *--------------------------------------------------------------------------------------------*/
 
 import "../browser/media/review.css";
-import { $, addDisposableListener, append, Dimension, getWindow, scheduleAtNextAnimationFrame } from "../../base/browser/dom.js";
+import { $, addDisposableListener, append, Dimension, getWindow, isAncestorOfActiveElement, scheduleAtNextAnimationFrame } from "../../base/browser/dom.js";
 import { Orientation, SplitView } from "../../base/browser/ui/splitview/splitview.js";
 import { disposableTimeout } from "../../base/common/async.js";
 import { Emitter, Event } from "../../base/common/event.js";
@@ -186,6 +186,7 @@ export class ReviewFilesDiffView extends Disposable {
 	private readonly diffContainer: HTMLElement;
 
 	private readonly root: HTMLElement;
+	private readonly fileTree: HTMLElement;
 	private readonly splitView: SplitView<number>;
 	private readonly changedFilesTree: ReviewChangedFilesTree | undefined;
 	private readonly widget: MultiDiffEditorWidget;
@@ -239,7 +240,7 @@ export class ReviewFilesDiffView extends Disposable {
 	) {
 		super();
 		this.root = append(container, $(".review-files-editor"));
-		const fileTree = document ? container.ownerDocument.createElement("div") : append(this.fileTreeContainer ?? this.root, $(".review-files-editor-tree"));
+		const fileTree = this.fileTree = document ? container.ownerDocument.createElement("div") : append(this.fileTreeContainer ?? this.root, $(".review-files-editor-tree"));
 		const diffContainer = append(this.root, $(".review-files-editor-diffs"));
 		this.diffContainer = diffContainer;
 		if (document) fileTree.hidden = true;
@@ -415,15 +416,7 @@ export class ReviewFilesDiffView extends Disposable {
 		// The canvas mounts this view without a user gesture, so the widget's
 		// first-change navigation must never take keyboard focus.
 		this.widget.setViewModel(viewModel, { preserveFocus: true, viewState, initialScrollPosition: this.document ? "top" : "firstChange" });
-		if (viewState) {
-			this.settle(() => {
-				this.widget.setViewState(viewState);
-				this.syncFileSelectionFromWidget();
-			}).add(toDisposable(() => {
-				this.pendingViewState = undefined;
-				this.widget.clearPendingRestorationState();
-			}));
-		}
+		if (viewState) this.restoreViewState(viewState);
 		this.changedFilesTree?.setFiles(Array.from(new Map(input.entries.map(entry => [entry.file.path, entry.file])).values()));
 		this.syncFileSelectionFromWidget();
 		this._register(
@@ -454,6 +447,19 @@ export class ReviewFilesDiffView extends Disposable {
 				});
 			}),
 		);
+	}
+
+	restoreViewState(viewState: IMultiDiffEditorViewState): void {
+		// Replacing a hold clears its state, so set this one's after.
+		const hold = this.settle(() => {
+			this.widget.setViewState(viewState);
+			this.syncFileSelectionFromWidget();
+		});
+		this.pendingViewState = viewState;
+		hold.add(toDisposable(() => {
+			this.pendingViewState = undefined;
+			this.widget.clearPendingRestorationState();
+		}));
 	}
 
 	startLoading(entries: readonly ReviewFilesEditorEntry[]): void {
@@ -615,6 +621,18 @@ export class ReviewFilesDiffView extends Disposable {
 		this.pendingPath = this.loadingFiles.has(path) ? path : undefined;
 		this.showStreamStatus();
 		if (!this.pendingPath) this.reveal(entry);
+	}
+
+	setStaged(staged: boolean): void {
+		this.root.classList.toggle("review-files-editor-staged", staged);
+		if (this.fileTreeContainer) this.fileTree.hidden = staged;
+		if (!staged) this.layout();
+	}
+
+	get entries(): readonly ReviewFilesEditorEntry[] { return this.input?.entries ?? []; }
+
+	hasFocus(): boolean {
+		return isAncestorOfActiveElement(this.root);
 	}
 
 	loadingFailed(message: string): void {

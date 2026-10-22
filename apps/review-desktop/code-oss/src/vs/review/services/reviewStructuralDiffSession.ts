@@ -33,6 +33,7 @@ export class StructuralDiffSession extends Disposable {
 	private readonly folds = new Map<string, boolean | ISettableObservable<boolean>>();
 	private manifest: Set<string> | undefined;
 	private task: Promise<void> | undefined;
+	private next: StructuralDiffSession | undefined;
 	private finished = false;
 	private disposed = false;
 	error: string | undefined;
@@ -41,6 +42,18 @@ export class StructuralDiffSession extends Disposable {
 	constructor(private readonly client: StructuralDiffStream) { super(); }
 
 	start(): Promise<void> { return this.task ??= this.consume(); }
+	/** Diffs again and swaps every result in at once. */
+	refresh(client: StructuralDiffStream): Promise<void> {
+		this.next?.dispose();
+		const next = this.next = new StructuralDiffSession(client);
+		return this.task = next.start().then(() => {
+			if (this.next !== next) return;
+			this.next = undefined;
+			// A failed refresh keeps the last good diff on screen.
+			if (!this.disposed && !next.error) this.adopt(next);
+			next.dispose();
+		});
+	}
 	getFileResult(path: string): StructuralFileResult | undefined { return this.results.get(path); }
 	/** Wait only for this file; a structural view can render while other files stream. */
 	fileResult(path: string): Promise<StructuralFileResult> {
@@ -114,7 +127,7 @@ export class StructuralDiffSession extends Disposable {
 	private async consume(): Promise<void> {
 		try {
 			for await (const event of this.client.streamComparison(this.abort.signal)) {
-				if (this.disposed) return;
+				if (this.disposed || this.finished) return;
 				this.applyEvent(event);
 			}
 			if (!this.finished) throw new Error("diffr stream ended before completion.");
@@ -131,7 +144,6 @@ export class StructuralDiffSession extends Disposable {
 	}
 
 	private applyEvent(event: StructuralEvent): void {
-		if (this.finished) throw new Error("diffr emitted data after completion.");
 		if (!this.manifest) {
 			if (event.type !== "start" || event.version !== STRUCTURAL_WIRE_VERSION) throw new Error("Unsupported diffr stream protocol.");
 			this.acceptManifest(event);
@@ -167,25 +179,49 @@ export class StructuralDiffSession extends Disposable {
 		if (!this.manifest!.has(path) || this.results.has(path)) throw new Error(`Unexpected or repeated diffr result: ${path}`);
 		if (event.error) { this.results.set(path, { error: event.error.message }); return; }
 		const diff = event.diff;
-		if (diff.type === "text") {
-			const seed = (region: StructuralRegion) => {
-				const key = `${path}:${region.fold_state_id}`;
-				if (!this.folds.has(key)) this.folds.set(key, region.visibility?.collapsed === true);
-				if (region.kind === "fold") region.children.forEach(seed);
-			};
-			for (const side of [diff.lhs, diff.rhs]) if (side) {
-				seed(side.root);
-				const key = `${path}:${side.root.fold_state_id}`;
-				const state = this.folds.get(key)!;
-				// Only roots need a synchronous observable for multi-diff headers;
-				// interior folds keep using the session's batched notifications.
-				if (typeof state === "boolean") this.folds.set(key, this.createFold(path, state));
-			}
-		}
+		this.seedFolds(path, diff);
 		const visibility = diff.type === "text"
 			? [diff.rhs, diff.lhs].find(side => side?.root.visibility?.collapsed)?.root.visibility
 			: undefined;
 		this.results.set(path, { diff, hidden: visibility ? visibility.label || "Hidden by default" : undefined });
+	}
+
+	private seedFolds(path: string, diff: StructuralDiff): void {
+		if (diff.type !== "text") return;
+		const seed = (region: StructuralRegion) => {
+			const key = `${path}:${region.fold_state_id}`;
+			if (!this.folds.has(key)) this.folds.set(key, region.visibility?.collapsed === true);
+			if (region.kind === "fold") region.children.forEach(seed);
+		};
+		for (const side of [diff.lhs, diff.rhs]) if (side) {
+			seed(side.root);
+			const key = `${path}:${side.root.fold_state_id}`;
+			const state = this.folds.get(key)!;
+			// Only roots need a synchronous observable for multi-diff headers;
+			// interior folds keep using the session's batched notifications.
+			if (typeof state === "boolean") this.folds.set(key, this.createFold(path, state));
+		}
+	}
+
+	private adopt(next: StructuralDiffSession): void {
+		for (const path of this.manifest ?? []) if (!next.manifest!.has(path)) { this.results.delete(path); this.pendingFiles.add(path); }
+		for (const [path, result] of next.results) {
+			const previous = this.results.get(path);
+			if (previous && JSON.stringify(previous.diff) === JSON.stringify(result.diff) && previous.error === result.error) continue;
+			if (previous?.diff && result.diff && foldShape(previous.diff) !== foldShape(result.diff)) {
+				for (const [key, state] of this.folds) if (key.startsWith(`${path}:`) && typeof state === "boolean") this.folds.delete(key);
+			}
+			if (result.diff) this.seedFolds(path, result.diff);
+			this.results.set(path, result);
+			this.pendingFiles.add(path);
+		}
+		this.manifest = next.manifest;
+		this.error = undefined;
+		// A first stream still running is now stale.
+		this.finished = true;
+		// Synchronous, so nothing reads the new diffs against old editor text.
+		this.notification.cancel();
+		this.flushChanges();
 	}
 
 	private finishLoading(event: Extract<StructuralEvent, { type: "complete" }>): void {
@@ -197,9 +233,16 @@ export class StructuralDiffSession extends Disposable {
 	override dispose(): void {
 		this.disposed = true;
 		this.abort.abort();
+		this.next?.dispose();
 		this.results.clear();
 		this.folds.clear();
 		this.pendingFiles.clear();
 		super.dispose();
 	}
+}
+
+/** diffr numbers folds in tree order, so an id names the same region only while the tree keeps its shape. */
+function foldShape(diff: StructuralDiff): string {
+	const shape = (region: StructuralRegion): unknown => region.kind === "fold" ? region.children.map(shape) : 0;
+	return diff.type === "text" ? JSON.stringify([diff.lhs?.root, diff.rhs?.root].map(root => root && shape(root))) : "";
 }
