@@ -40,6 +40,75 @@ const agent: Author = { kind: "agent" };
 
 const person: Author = { kind: "person" };
 
+it("drains accepted commands when closing and refuses new commands", async () => {
+  const database = path.join(directory, "closing.db");
+
+  const closing = new ReviewStore(database, {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  });
+
+  const repositoryId = closing.registerRepository(directory).id;
+
+  const { reviewId } = await closing.execute({
+    operation: {
+      type: "create",
+      title: "Before",
+      target: { kind: "project", repositoryId },
+    },
+  });
+
+  const accepted = closing.execute({
+    operation: { type: "rename", reviewId, title: "Saved before shutdown" },
+  });
+
+  const closed = closing.close();
+
+  const refused = closing.execute({
+    operation: { type: "rename", reviewId, title: "Too late" },
+  });
+
+  const refusedEdit = closing.personEdit(reviewId, {
+    baseVersion: 0,
+    title: "Too late",
+    document: [],
+  });
+
+  const refusedDiscard = closing.discard(reviewId);
+
+  const results = await Promise.allSettled([
+    accepted,
+    closed,
+    refused,
+    refusedEdit,
+    refusedDiscard,
+  ]);
+
+  expect(results[0].status).toBe("fulfilled");
+  expect(results[1].status).toBe("fulfilled");
+
+  for (const result of results.slice(2))
+    expect(result).toMatchObject({
+      status: "rejected",
+      reason: new Error("Review store is closing."),
+    });
+
+  const saved = new DatabaseSync(database, { readOnly: true });
+
+  try {
+    const row = saved
+      .prepare(
+        "SELECT json_extract(snapshot,'$.title') AS title FROM versions WHERE review_id=? ORDER BY version DESC LIMIT 1",
+      )
+      .get(reviewId)!;
+
+    expect(row.title).toBe("Saved before shutdown");
+  } finally {
+    saved.close();
+  }
+});
+
 const checkout = (name: string) => {
   const root = path.join(directory, name);
 
@@ -56,6 +125,65 @@ const clone = (name: string, origin: string) => {
 
   return store.registerRepository(root).id;
 };
+
+it("reuses a branch board from another clone of the same origin", async () => {
+  const first = clone("first", "git@github.com:acme/widget.git");
+  const second = clone("second", "https://github.com/acme/widget");
+
+  const reusing = new ReviewStore(path.join(directory, "reuse.db"), {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+    headBranch: async () => "widgets",
+    resolvePullRequest: async (_url, repository) => ({
+      target: {
+        kind: "commits",
+        repositoryId: repository.id,
+        base: "a".repeat(40),
+        head: "b".repeat(40),
+      },
+      pins: {
+        repositoryId: repository.id,
+        base: "a".repeat(40),
+        head: "b".repeat(40),
+      },
+      title: "Add widgets",
+      branch: "widgets",
+      baseBranch: "main",
+    }),
+  });
+
+  try {
+    const original = reusing.registerRepository(store.repositoryPath(first)).id;
+    const other = reusing.registerRepository(store.repositoryPath(second)).id;
+
+    const board = await reusing.execute({
+      operation: {
+        type: "create",
+        title: "Before PR",
+        target: {
+          kind: "commits",
+          repositoryId: original,
+          base: "a".repeat(40),
+          head: "b".repeat(40),
+        },
+      },
+    });
+
+    const opened = await reusing.execute({
+      operation: {
+        type: "create",
+        repositoryId: other,
+        pullRequestUrl: "https://github.com/acme/widget/pull/7",
+      },
+    });
+
+    expect(opened).toMatchObject({ created: false, reviewId: board.reviewId });
+    expect(reusing.read(board.reviewId).pins?.repositoryId).toBe(original);
+  } finally {
+    await reusing.close();
+  }
+});
 
 const create = async (repositoryId: string, title = "Plan") =>
   (

@@ -1035,6 +1035,16 @@ export class ReviewStore {
     return this.checkouts.group(root);
   }
 
+  private sameRepository(left: string, right: string): boolean {
+    if (left === right) return true;
+    const group = this.repositoryGroup(this.repositoryPath(left));
+
+    return (
+      group !== undefined &&
+      group.key === this.repositoryGroup(this.repositoryPath(right))?.key
+    );
+  }
+
   registerRepository(root: string) {
     this.db
       .prepare("INSERT OR IGNORE INTO repositories(id,path,name) VALUES(?,?,?)")
@@ -1679,7 +1689,10 @@ export class ReviewStore {
                     review.project?.id === project &&
                     sourceBranchName(review.origin?.branch) ===
                       sourceBranchName(branch) &&
-                    !review.origin?.pullRequestUrl,
+                    !review.origin?.pullRequestUrl &&
+                    review.pins !== undefined &&
+                    repository !== undefined &&
+                    this.sameRepository(review.pins.repositoryId, repository),
                 )
                 .reverse()
                 .map((review) => review.reviewId)
@@ -2146,11 +2159,10 @@ export class ReviewStore {
         .version,
     );
   }
-  /** Runs one write after every write queued before it. */
+  /** Runs an accepted write after every write queued before it. Admission
+   * checks belong at entry points: preparations accepted before close still
+   * need to enqueue their writes while close waits for them. */
   private enqueue<T>(work: () => Promise<T>): Promise<T> {
-    if (this.closing)
-      return Promise.reject(new Error("Review store is closing."));
-
     const run = this.pending.then(work);
 
     this.pending = run.catch(() => {});
@@ -2379,6 +2391,8 @@ export class ReviewStore {
     while (this.leased(reviewId) && Date.now() < deadline)
       await new Promise((resolve) => setTimeout(resolve, DISCARD_POLL_MS));
 
+    if (this.closing) throw new Error("Review store is closing.");
+
     return this.enqueue(async () => {
       if (!this.has(reviewId)) return { deleted: false };
       const snapshot = this.read(reviewId);
@@ -2468,6 +2482,9 @@ export class ReviewStore {
   // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Save boundary: personEditSchema and documentSchema parse below validate incoming JSON.
   personEdit(reviewId: string, input: unknown): Promise<PersonEditResult> {
     const body = personEditSchema.parse(input);
+
+    if (this.closing)
+      return Promise.reject(new Error("Review store is closing."));
 
     return this.enqueue(async () => {
       const previous = this.read(reviewId);

@@ -594,6 +594,41 @@ describe("creating a review from a pull request URL alone", () => {
     expect(local.store.list()).toHaveLength(1);
   });
 
+  it("does not reuse a different repository’s branch board filed in the same project", async () => {
+    const other = path.join(directory, "other");
+    gitIn(directory)("clone", "-q", upstream, other);
+    pointAtUpstream(
+      path.join(other, ".git"),
+      "https://github.com/other/widget.git",
+    );
+    gitIn(other)("fetch", "origin", "refs/pull/7/head:refs/heads/widgets");
+    const registered = await local.data.register(checkout);
+    const candidate = await local.data.register(other);
+
+    const created = await local.store.execute(
+      command({
+        type: "create",
+        title: "Before PR",
+        projectId: local.store.projectOfRepository(registered.id),
+        target: {
+          kind: "commits",
+          repositoryId: candidate.id,
+          head: "widgets",
+          base: "main",
+        },
+      }),
+    );
+
+    pr.isCrossRepository = false;
+    pr.headRefName = "widgets";
+    const opened = await createFromUrl();
+    expect(opened.created).toBe(true);
+    expect(opened.reviewId).not.toBe(created.reviewId);
+    expect(local.store.read(opened.reviewId).pins?.repositoryId).toBe(
+      registered.id,
+    );
+  });
+
   it("does not hold up unrelated saves while optional PR discovery waits", async () => {
     const existing = await createFromUrl();
     const git = gitIn(checkout);
