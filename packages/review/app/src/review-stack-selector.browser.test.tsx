@@ -265,60 +265,80 @@ describe("ReviewStackSelector", () => {
     expect(container.textContent).toBe("");
   });
 
-  it("lists the stack newest first down to its base, the board on screen opening nothing", async () => {
-    const post = vi.fn<ReviewCanvasBridge["post"]>(async () => ({ ok: true }));
-    const session = testReviewSession({}, { post });
+  it.each([
+    { kind: "GitHub", pullRequests: true, label: "from GitHub" },
+    { kind: "local", pullRequests: false, label: "from branch bases" },
+  ])(
+    "lists a $kind stack newest first down to its base, the board on screen opening nothing",
+    async ({ pullRequests, label }) => {
+      const post = vi.fn<ReviewCanvasBridge["post"]>(async () => ({
+        ok: true,
+      }));
 
-    session.review!.headBranch = "b";
-    session.review!.stack = async () => ({
-      base: "main",
-      layers: (["a", "b", "c"] as const).map((branch, index) => ({
-        branch,
-        relation: (["earlier", "current", "later"] as const)[index]!,
-        pullRequestNumber: 10 + index,
-        pullRequestUrl: `https://github.com/o/r/pull/${10 + index}`,
-        base: null,
-        subject: null,
-        reviewUuid: `${index + 1}`.repeat(8) + "-1111-4111-8111-111111111111",
-        reviewTitle: `Review ${branch}`,
-        pullRequestState: index === 0 ? "merged" : "open",
-      })),
-    });
+      const session = testReviewSession({}, { post });
 
-    const container = document.createElement("div");
-    document.body.append(container);
-    root = createRoot(container);
-    await act(async () => {
-      root?.render(
-        <TestCanvasQuery>
-          <ReviewSessionProvider session={session}>
-            <ReviewStackSelector />
-          </ReviewSessionProvider>
-        </TestCanvasQuery>,
+      session.review!.headBranch = "b";
+      session.review!.stack = async () => ({
+        base: "main",
+        layers: (["a", "b", "c"] as const).map((branch, index) => ({
+          branch,
+          relation: (["earlier", "current", "later"] as const)[index]!,
+          pullRequestNumber: pullRequests ? 10 + index : null,
+          pullRequestUrl: pullRequests
+            ? `https://github.com/o/r/pull/${10 + index}`
+            : null,
+          base: null,
+          subject: null,
+          reviewUuid: `${index + 1}`.repeat(8) + "-1111-4111-8111-111111111111",
+          reviewTitle: `Review ${branch}`,
+          pullRequestState: pullRequests
+            ? index === 0
+              ? "merged"
+              : "open"
+            : undefined,
+        })),
+      });
+
+      const container = document.createElement("div");
+      document.body.append(container);
+      root = createRoot(container);
+      await act(async () => {
+        root?.render(
+          <TestCanvasQuery>
+            <ReviewSessionProvider session={session}>
+              <ReviewStackSelector />
+            </ReviewSessionProvider>
+          </TestCanvasQuery>,
+        );
+      });
+
+      await vi.waitFor(() =>
+        expect(
+          container.querySelector("button[aria-haspopup]")?.ariaLabel,
+        ).toBe("Stack, 2 of 3"),
       );
-    });
+      await openMenu(container);
+      expect(container.querySelector("[role=menu]")?.textContent).toContain(
+        label,
+      );
 
-    await vi.waitFor(() =>
-      expect(container.querySelector("button[aria-haspopup]")?.ariaLabel).toBe(
-        "Stack, 2 of 3",
-      ),
-    );
-    await openMenu(container);
+      const rows = [...container.querySelectorAll("[role=menuitem]")];
 
-    const rows = [...container.querySelectorAll("[role=menuitem]")];
+      expect(document.activeElement).toBe(rows[1]);
+      expect(rows.map((row) => row.textContent)).toEqual([
+        expect.stringContaining("Review c"),
+        expect.stringContaining("Review b"),
+        expect.stringMatching(
+          pullRequests ? /Review a.*#10 merged/ : /Review a/,
+        ),
+      ]);
+      expect(
+        container.querySelector("[role=separator]")?.nextElementSibling
+          ?.textContent,
+      ).toContain("main");
 
-    expect(document.activeElement).toBe(rows[1]);
-    expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringContaining("Review c"),
-      expect.stringContaining("Review b"),
-      expect.stringMatching(/Review a.*#10 merged/),
-    ]);
-    expect(
-      container.querySelector("[role=separator]")?.nextElementSibling
-        ?.textContent,
-    ).toContain("main");
-
-    await act(async () => (rows[1] as HTMLElement).click());
-    expect(post).not.toHaveBeenCalled();
-  });
+      await act(async () => (rows[1] as HTMLElement).click());
+      expect(post).not.toHaveBeenCalled();
+    },
+  );
 });

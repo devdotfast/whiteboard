@@ -222,9 +222,9 @@ export function StackPill({
           <div {...stylex.props(menuStyles.label, styles.heading)}>
             <span {...stylex.props(textStyles.sectionTitle)}>Stack</span>
             <span>
-              {layers.some((layer) => layer.base)
-                ? "from branch bases"
-                : "from GitHub"}{" "}
+              {layers.some((layer) => layer.pullRequestUrl)
+                ? "from GitHub"
+                : "from branch bases"}{" "}
               · newest first
             </span>
           </div>
