@@ -21,8 +21,8 @@ export const sourceBranchName = (branch: string | undefined) =>
   branch?.replace(/^origin\//, "");
 
 /** Omission preserves identity; null removes the PR without changing import
- * metadata. A new url clears a detach and keeps the title and PR base when the
- * caller omits them for the same PR. */
+ * metadata. A new url keeps the title and PR base when the caller omits them
+ * for the same PR. */
 export function setPullRequest(
   snapshot: Pick<Snapshot, "origin">,
   url: string | null | undefined,
@@ -37,16 +37,14 @@ export function setPullRequest(
       delete snapshot.origin.pullRequestNumber;
       delete snapshot.origin.pullRequestTitle;
       delete snapshot.origin.pullRequestBaseBranch;
-      delete snapshot.origin.pullRequestDetached;
     }
 
     return;
   }
 
   const same = snapshot.origin?.pullRequestUrl === url;
-  const { pullRequestDetached: _detached, ...origin } = snapshot.origin ?? {};
   snapshot.origin = {
-    ...origin,
+    ...snapshot.origin,
     pullRequestUrl: url,
     pullRequestNumber: Number(url.split("/").at(-1)),
     pullRequestTitle:

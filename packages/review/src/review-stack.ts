@@ -268,10 +268,8 @@ async function inferredGitHubStack(
         ? review.pins?.repositoryId === subject.pins.repositoryId
         : Boolean(project && review.project?.id === project);
 
-      // A board whose PR was removed matches no PR by its branch.
       return (
         sameRepository &&
-        !review.origin?.pullRequestDetached &&
         sourceBranchName(review.origin?.branch) === pr.headBranch
       );
     }),
@@ -296,14 +294,7 @@ async function localStack(
     ? await defaultBranch(repositoryPath).catch(() => null)
     : null;
 
-  // A board whose PR was removed joins no stack by its branch, unless it is
-  // the one asking.
-  const inGroup = reviews.filter(
-    (review) =>
-      review.project?.id === group &&
-      (!review.origin?.pullRequestDetached ||
-        review.reviewId === subject.reviewId),
-  );
+  const inGroup = reviews.filter((review) => review.project?.id === group);
 
   const branchOf = (review?: Candidate) =>
     sourceBranchName(review?.origin?.branch);

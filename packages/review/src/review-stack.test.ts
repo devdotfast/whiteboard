@@ -234,19 +234,6 @@ describe("resolveReviewStackLayers", () => {
       ]);
     });
 
-    it("does not attach a board whose PR was removed by its branch", async () => {
-      expect(
-        await rows([
-          branchBoard("detached", { branch: "a", pullRequestDetached: true }),
-          middle,
-        ]),
-      ).toEqual([
-        ["a", "earlier", null],
-        ["b", "current", "middle"],
-        ["c", "later", null],
-      ]);
-    });
-
     it("attaches a board by a stored origin/ branch label", async () => {
       expect(
         await rows([middle, branchBoard("legacy", { branch: "origin/c" })]),

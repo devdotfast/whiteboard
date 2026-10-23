@@ -484,19 +484,12 @@ describe("creating a review from a pull request URL alone", () => {
       expect(projected.origin?.pullRequestNumber).toBe(7);
       expect(projected.pins).toEqual(saved.pins);
       expect(local.store.read(created.reviewId)).toEqual(saved);
-
-      const detached = {
-        ...saved,
-        origin: { ...saved.origin, pullRequestDetached: true as const },
-      };
-
-      expect(await local.data.discoverPullRequest(detached)).toEqual(detached);
     } finally {
       clock.mockRestore();
     }
   });
 
-  it("uses a linked worktree's HEAD and retains explicit detachment on retarget", async () => {
+  it("uses a linked worktree's HEAD", async () => {
     const git = gitIn(checkout);
     git("fetch", "origin", "refs/pull/7/head:refs/heads/widgets");
     const linked = path.join(directory, "linked");
@@ -535,24 +528,6 @@ describe("creating a review from a pull request URL alone", () => {
     expect(local.store.read(explicitHead.reviewId).origin?.branch).toBe(
       "widgets",
     );
-
-    await local.store.execute(
-      command({
-        type: "set_target",
-        reviewId: created.reviewId,
-        target,
-        pullRequestUrl: null,
-      }),
-    );
-    await local.store.execute(
-      command({ type: "set_target", reviewId: created.reviewId, target }),
-    );
-    expect(local.store.read(created.reviewId).origin?.pullRequestDetached).toBe(
-      true,
-    );
-    expect(
-      local.store.read(created.reviewId).origin?.pullRequestUrl,
-    ).toBeUndefined();
   });
 
   it("clears the former branch's PR identity when moving to a different branch", async () => {

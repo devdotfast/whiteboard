@@ -1095,7 +1095,7 @@ export class LocalReviewData {
   async discoverPullRequest(snapshot: Snapshot): Promise<Snapshot> {
     const { origin, pins } = snapshot;
 
-    if (!pins || !origin?.branch || origin.pullRequestDetached) return snapshot;
+    if (!pins || !origin?.branch) return snapshot;
 
     const found = await this.findPullRequest(pins, origin.branch).catch(
       () => undefined,

@@ -259,8 +259,6 @@ export interface SnapshotOrigin {
   pullRequestTitle?: string;
   /** The branch the PR merges into, which can differ from baseBranch. */
   pullRequestBaseBranch?: string;
-  /** The user removed the PR: its branch must not find one again. */
-  pullRequestDetached?: true;
   /** The legacy review revision this version was imported from. */
   revision?: string;
 }
@@ -1681,7 +1679,6 @@ export class ReviewStore {
                     review.project?.id === project &&
                     sourceBranchName(review.origin?.branch) ===
                       sourceBranchName(branch) &&
-                    !review.origin?.pullRequestDetached &&
                     !review.origin?.pullRequestUrl,
                 )
                 .reverse()
@@ -1899,22 +1896,16 @@ export class ReviewStore {
           previous?.pins?.repositoryId === snapshot.pins.repositoryId &&
           sourceBranchName(previous.origin?.branch) === branch;
 
-        // The user removed this branch's PR; discovery must not restore it.
-        const keepDetached =
-          sameBranch && previous?.origin?.pullRequestDetached;
-
         // Explicit PR input is resolved once for create and retarget alike.
-        if (op.pullRequestUrl === null) {
-          setPullRequest(snapshot, null);
-          snapshot.origin = { ...snapshot.origin, pullRequestDetached: true };
-        } else if (op.pullRequestUrl)
+        if (op.pullRequestUrl === null) setPullRequest(snapshot, null);
+        else if (op.pullRequestUrl)
           setPullRequest(
             snapshot,
             op.pullRequestUrl,
             fromPullRequest?.title,
             fromPullRequest?.baseBranch,
           );
-        else if (branch && discoveredPullRequest && !keepDetached)
+        else if (branch && discoveredPullRequest)
           setPullRequest(
             snapshot,
             discoveredPullRequest.url,

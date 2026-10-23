@@ -31,7 +31,6 @@ export interface ReviewApiSummary {
     pullRequestUrl?: string;
     pullRequestTitle?: string;
     pullRequestBaseBranch?: string;
-    pullRequestDetached?: true;
     revision?: string;
   };
   /** The PR's state on GitHub, when the host has read it. */

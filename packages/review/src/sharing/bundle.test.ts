@@ -147,7 +147,6 @@ it("imports a stacked board, whose origin names its base branch", async () => {
             branch: "top",
             baseBranch: "bottom",
             pullRequestBaseBranch: "main",
-            pullRequestDetached: true,
           },
         }),
         resource: (...args) => fixture.store.resource(...args),
@@ -158,7 +157,6 @@ it("imports a stacked board, whose origin names its base branch", async () => {
       branch: "top",
       baseBranch: "bottom",
       pullRequestBaseBranch: "main",
-      pullRequestDetached: true,
     });
   } finally {
     await fixture.data.close();
