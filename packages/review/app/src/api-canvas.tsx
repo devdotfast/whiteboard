@@ -42,6 +42,7 @@ import { hostApiClient, useReviewSession } from "./host/review-session";
 import { useBoardPlace } from "./review-doc-meta";
 import type { ReviewTocEntry } from "./review-document-headings";
 import type { ReviewFindHost } from "./review-find";
+import { useReviewStack } from "./review-stack-selector";
 import { SharingContext } from "./share-control";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
@@ -591,7 +592,7 @@ function unfollowed(queryClient: QueryClient, reviewId: string) {
   });
 }
 
-/** Keeps the boards beside this one cached and current, once it paints. */
+/** Keeps nearby and stacked boards cached and current, once it paints. */
 function NearbyBoards({
   painted,
   client,
@@ -602,11 +603,19 @@ function NearbyBoards({
   loader: ReturnType<typeof createDocumentLoader>;
 }) {
   const place = useBoardPlace();
+  const stack = useReviewStack();
   const board = useReviewSession().reviewId;
   const queryClient = useQueryClient();
 
-  const nearby = [place.parent, ...place.siblings, ...(place.children ?? [])]
-    .flatMap((each) => (each && each.reviewId !== board ? [each.reviewId] : []))
+  const nearby = [
+    ...new Set([
+      ...[place.parent, ...place.siblings, ...(place.children ?? [])].map(
+        (each) => each?.reviewId,
+      ),
+      ...stack.layers.map((layer) => layer.reviewUuid),
+    ]),
+  ]
+    .filter((each) => each && each !== board)
     .join(" ");
 
   useEffect(() => {

@@ -429,3 +429,100 @@ it("draws a board's text before its commits, and its siblings and itself again b
   expect(container.textContent).toContain("Second, edited");
   expect(container.textContent).not.toContain("Second board");
 });
+
+it("draws a board in its stack before any read", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+      unobserve() {}
+    },
+  );
+  vi.stubGlobal("matchMedia", () => ({
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+  store = new ReviewStore(":memory:", {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  });
+
+  const board = async (branch: string, markdown: string) =>
+    (
+      await store.execute(
+        {
+          operation: {
+            type: "create",
+            title: branch,
+            target: {
+              kind: "commits",
+              repositoryId: "repo",
+              base: "base",
+              head: "head",
+            },
+          },
+        },
+        { origin: { branch }, document: [{ type: "markdown", markdown }] },
+      )
+    ).reviewId;
+
+  const lower = await board("lower", "Lower board");
+  const upper = await board("upper", "Upper board");
+
+  const requested: string[] = [];
+  let held = false;
+  const app = new Hono();
+  app.get("/reviews-api/:id/stack", (c) =>
+    c.json({
+      layers: [lower, upper].map((reviewUuid, index) => ({
+        branch: index ? "upper" : "lower",
+        pullRequestNumber: null,
+        pullRequestUrl: null,
+        base: null,
+        subject: null,
+        reviewUuid,
+        reviewTitle: null,
+        relation: reviewUuid === c.req.param("id") ? "current" : "earlier",
+      })),
+    }),
+  );
+  app.route("/reviews-api", createReviewApi(store));
+
+  const bridge = testReviewBridge(
+    {},
+    {
+      request: async (url, init) => {
+        if (held) await new Promise(() => {});
+        requested.push(String(url));
+
+        return app.request(url, init);
+      },
+    },
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mountReviewCanvas(container, {
+      kind: "api",
+      reviewId: lower,
+      bridge,
+    });
+  });
+  await vi.waitFor(async () => {
+    await act(async () => {});
+    expect(requested).toContainEqual(
+      expect.stringContaining(`/${upper}/commits`),
+    );
+  });
+
+  // Nothing answers now: a board in its stack draws from what was followed.
+  held = true;
+  act(() => canvas!.update({ kind: "api", reviewId: upper, bridge }));
+
+  expect(container.textContent).toContain("Upper board");
+});
