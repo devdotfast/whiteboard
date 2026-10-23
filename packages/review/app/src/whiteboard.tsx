@@ -300,6 +300,7 @@ function useBoardSession(
                   head: branch,
                   base: baseRef,
                 },
+                reuseExisting: true,
               },
             })
           ).reviewId,

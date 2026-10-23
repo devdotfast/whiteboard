@@ -1673,11 +1673,15 @@ export class ReviewStore {
     return this.enqueue(async () => {
       if (
         op.type === "create" &&
-        op.pullRequestUrl &&
-        op.reuseExisting !== false
+        (op.pullRequestUrl
+          ? op.reuseExisting !== false
+          : op.reuseExisting && resolvedTarget?.pins)
       ) {
-        const known = this.reviewsForPullRequest(op.pullRequestUrl);
-        const branch = fromPullRequest?.branch;
+        const known = op.pullRequestUrl
+          ? this.reviewsForPullRequest(op.pullRequestUrl)
+          : [];
+
+        const branch = fromPullRequest?.branch ?? resolvedBranch;
         const repository = resolvedTarget?.target.repositoryId;
         const project = repository && this.projectOfRepository(repository);
 
@@ -1689,7 +1693,9 @@ export class ReviewStore {
                     review.project?.id === project &&
                     sourceBranchName(review.origin?.branch) ===
                       sourceBranchName(branch) &&
-                    !review.origin?.pullRequestUrl &&
+                    (op.pullRequestUrl
+                      ? !review.origin?.pullRequestUrl
+                      : !review.trashedAt) &&
                     review.pins !== undefined &&
                     repository !== undefined &&
                     this.sameRepository(review.pins.repositoryId, repository),
@@ -1704,7 +1710,7 @@ export class ReviewStore {
           const result = this.existingReview(
             found,
             others,
-            // A PR always resolves to commits, so pins are set.
+            // Both resolve to commits, so pins are set.
             resolvedTarget!.pins!,
           );
 

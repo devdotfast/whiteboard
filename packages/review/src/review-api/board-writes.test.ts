@@ -185,6 +185,59 @@ it("reuses a branch board from another clone of the same origin", async () => {
   }
 });
 
+it("opens a branch's board when asked to reuse it, however many ask at once", async () => {
+  const branches = new ReviewStore(path.join(directory, "branch.db"), {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+    headBranch: async () => "widgets",
+  });
+
+  const repositoryId = branches.registerRepository(directory).id;
+
+  const open = (reuseExisting?: boolean) =>
+    branches.execute(
+      {
+        operation: {
+          type: "create",
+          title: "widgets",
+          target: {
+            kind: "commits",
+            repositoryId,
+            base: "a".repeat(40),
+            head: "b".repeat(40),
+          },
+          ...(reuseExisting !== undefined && { reuseExisting }),
+        },
+      },
+      undefined,
+      person,
+    );
+
+  try {
+    const [first, second] = await Promise.all([open(true), open(true)]);
+
+    expect(first).toMatchObject({ created: true });
+    expect(second).toMatchObject({ created: false, reviewId: first.reviewId });
+    expect(await open()).toMatchObject({ created: true });
+
+    await branches.execute(
+      {
+        operation: {
+          type: "lifecycle",
+          state: "trash",
+          reviewId: first.reviewId,
+        },
+      },
+      undefined,
+      person,
+    );
+    expect((await open(true)).reviewId).not.toBe(first.reviewId);
+  } finally {
+    await branches.close();
+  }
+});
+
 const create = async (repositoryId: string, title = "Plan") =>
   (
     await store.execute({
