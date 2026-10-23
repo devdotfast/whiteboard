@@ -102,7 +102,9 @@ export class ReviewDiffViewService extends Disposable {
 		this.sessions.set(key, { session, revision });
 		void session.start().then(() => {
 			const failure = session.failure();
-			if (failure) this.telemetry.capture("diff_failed", failure);
+			if (failure) { this.telemetry.capture("diff_failed", failure); return; }
+			const timing = session.loadTiming();
+			if (timing) this.telemetry.capture("diff_loaded", { first_file_ms: timing.firstFileMs, files: timing.files, update_errors: timing.updateErrors, ...timing.updatesMs !== undefined && { updates_ms: timing.updatesMs } });
 		});
 		return session;
 	}
