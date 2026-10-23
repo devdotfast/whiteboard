@@ -2419,9 +2419,10 @@ describe("snapshot authoring", () => {
     };
 
     try {
-      expect(await next()).toMatchObject({ placeRevision: 0 });
+      const { placeRevision } = await next();
+
       // The first line asked GitHub; its answer moves the header.
-      expect(await next()).toMatchObject({ placeRevision: 1 });
+      expect((await next()).placeRevision).not.toBe(placeRevision);
     } finally {
       await reader.cancel();
       await data.close();

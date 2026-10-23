@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   type JsonObject,
   type JsonValue,
@@ -608,10 +610,27 @@ export function createReviewApi(
       [...reviewIds].map((reviewId) => [reviewId, linksKey(reviewId)] as const),
     );
 
-    // Bumped when a review's parent or siblings change, so its header
-    // reloads them.
-    const placeRevision = new Map<string, number>();
-    const placeKey = (id: string) => JSON.stringify(placeOf(id));
+    // A digest of a review's place and its project's branches, so a later
+    // stream's matches unless its header or stack moved.
+    const placeKey = (id: string) => {
+      const project = !isShared(id) && store.summary(id)?.project;
+
+      const branches = project
+        ? store
+            .listProject(project.id)
+            .filter(({ origin }) => origin?.branch)
+            .map(({ reviewId, origin, trashedAt }) => [
+              reviewId,
+              origin,
+              trashedAt,
+            ])
+        : [];
+
+      return createHash("sha1")
+        .update(JSON.stringify([placeOf(id), branches]))
+        .digest()
+        .readUInt32BE(0);
+    };
 
     const placeKeys = new Map(
       [...reviewIds].map((reviewId) => [reviewId, placeKey(reviewId)] as const),
@@ -627,7 +646,7 @@ export function createReviewApi(
             activity: store.activity.read(reviewId),
             coverageRevision: data?.coverageRevision ?? 0,
             linksRevision: linksRevision.get(reviewId) ?? 0,
-            placeRevision: placeRevision.get(reviewId) ?? 0,
+            placeRevision: placeKeys.get(reviewId)!,
           },
         };
       } catch (error) {
@@ -681,7 +700,6 @@ export function createReviewApi(
 
         if (next === key) continue;
         placeKeys.set(id, next);
-        placeRevision.set(id, (placeRevision.get(id) ?? 0) + 1);
         marked = markReview(id) || marked;
       }
 

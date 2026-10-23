@@ -220,7 +220,6 @@ export function ApiCanvas({
             nextCursor(current, lensMemory, snapshot, "lenses"),
           );
           setCoverageRevision(snapshot.coverageRevision ?? 0);
-          // A reconnected stream restarts at 0, which also rereads.
           const place = snapshot.placeRevision ?? 0;
 
           const placeRevision = canvasQueryKeys.placeRevision(content.reviewId);

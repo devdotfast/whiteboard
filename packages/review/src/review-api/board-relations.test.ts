@@ -24,6 +24,7 @@ beforeEach(() => {
     validatePins: async () => {},
     validateSource: async () => {},
     validateResource: async () => {},
+    headBranch: async () => "feature",
   } satisfies ReviewProviders);
 });
 
@@ -434,17 +435,10 @@ it("lets an agent nest a board on create and read its place through the session 
   });
 });
 
-it("tells a board's watchers when its parent's children change, without a version", async () => {
-  const plan = await board("Plan");
-  const step = await board("Step");
-  const later = await board("Later");
-
-  await setParent(step, plan);
-
-  const api = createReviewApi(store);
-
+/** A board's lines on the watch stream. */
+const follow = async (api: ReturnType<typeof createReviewApi>, id: string) => {
   const watch = await api.request(
-    `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId: step, mode: "textual" }]))}`,
+    `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId: id, mode: "textual" }]))}`,
   );
 
   const reader = watch.body!.pipeThrough(new TextDecoderStream()).getReader();
@@ -460,6 +454,19 @@ it("tells a board's watchers when its parent's children change, without a versio
     return JSON.parse(line).value;
   };
 
+  return { next, reader };
+};
+
+it("tells a board's watchers when its parent's children change, without a version", async () => {
+  const plan = await board("Plan");
+  const step = await board("Step");
+  const later = await board("Later");
+
+  await setParent(step, plan);
+
+  const api = createReviewApi(store);
+  const { next, reader } = await follow(api, step);
+
   const siblings = async () =>
     (
       (await (await api.request(`/${step}/place`)).json()) as {
@@ -468,16 +475,44 @@ it("tells a board's watchers when its parent's children change, without a versio
     ).siblings.map(({ reviewId }) => reviewId);
 
   try {
-    expect(await next()).toMatchObject({ version: 0, placeRevision: 0 });
+    const before = await next();
+
     expect(await siblings()).toEqual([step]);
 
     await setParent(later, plan);
 
-    expect(await next()).toMatchObject({ version: 0, placeRevision: 1 });
+    const after = await next();
+
+    expect(after.version).toBe(before.version);
+    expect(after.placeRevision).not.toBe(before.placeRevision);
     expect(await siblings()).toEqual([later, step]);
   } finally {
     await reader.cancel();
   }
+});
+
+it("tells a board's next watcher that its project gained a board while unwatched", async () => {
+  const pins = { base: "a".repeat(40), head: "b".repeat(40) };
+  const first = await board("First", pins);
+  const api = createReviewApi(store);
+
+  const placeRevision = async () => {
+    const { next, reader } = await follow(api, first);
+
+    try {
+      return (await next()).placeRevision;
+    } finally {
+      await reader.cancel();
+    }
+  };
+
+  const before = await placeRevision();
+
+  expect(await placeRevision()).toBe(before);
+
+  await board("Second", pins);
+
+  expect(await placeRevision()).not.toBe(before);
 });
 
 it("keeps a checkout registered when a board made with it is still being saved", async () => {
