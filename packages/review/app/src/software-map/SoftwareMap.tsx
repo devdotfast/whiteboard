@@ -30,7 +30,7 @@ import {
 import { shellStyles } from "@canvas/shell-styles";
 import { useRightPanelResize } from "@canvas/side-panel-resizer";
 import { withClass } from "@canvas/stylex-props";
-import { themeStyles } from "@canvas/theme-styles";
+import { themeClass, themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
 import { captureUiEvent } from "@canvas/ui-telemetry";
 import { IconButton, buttonStyles } from "@canvas/ui/button";
@@ -1139,7 +1139,7 @@ export function softwareMapOverlayProps(settings: {
     appMarker,
     themeStyles.vars,
     themeStyles.app,
-    settings.theme === "light" && themeStyles.light,
+    themeClass(settings.theme),
     styles.overlay,
   );
 }

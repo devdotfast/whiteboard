@@ -90,7 +90,7 @@ import type {
 import { SoftwareMapTopologyUnavailable } from "./software-map/software-map-absence";
 import { SoftwareMap } from "./software-map/SoftwareMap";
 import { withClass } from "./stylex-props";
-import { themeStyles } from "./theme-styles";
+import { themeClass, themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { traceStyles } from "./trace-styles";
 import { captureUiEvent } from "./ui-telemetry";
@@ -593,7 +593,7 @@ function ReviewLayoutContent({
         themeStyles.vars,
         themeStyles.app,
         shellStyles.board,
-        debugSettings.theme === "light" && themeStyles.light,
+        themeClass(debugSettings.theme),
         rightPanelOpen && shellStyles.appPeekOpen,
         sidePeekResize.isResizing && shellStyles.appResizing,
         panelMotion === "restored" && shellStyles.appRestoredPanel,

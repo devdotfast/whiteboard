@@ -10,7 +10,7 @@ import { useReviewContainer } from "./review-root-context";
 import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
 import { withClass } from "./stylex-props";
-import { themeStyles } from "./theme-styles";
+import { themeClass, themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { useCanvasScrollLock } from "./use-canvas-scroll-lock";
 
@@ -73,7 +73,7 @@ export function DiagramTourOverlay({
       {...withClass(
         `diagram-tour-overlay review-app--theme-${theme}`,
         themeStyles.vars,
-        theme === "light" && themeStyles.light,
+        themeClass(theme),
         styles.overlay,
         flow && styles.flowOverlay,
       )}

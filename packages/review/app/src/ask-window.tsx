@@ -31,7 +31,7 @@ import type { AskAnchor, AskSize } from "./review-panel-model";
 import { useReviewContainer, useReviewRoots } from "./review-root-context";
 import { panelStyles } from "./side-panel-styles";
 import { withClass } from "./stylex-props";
-import { themeStyles } from "./theme-styles";
+import { themeClass, themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { IconButton } from "./ui/button";
 import { surfaceStyles } from "./ui/surface";
@@ -445,7 +445,7 @@ function AskLayer({ children }: { children: ReactNode }): ReactElement {
         `review-app--theme-${theme}`,
         appMarker,
         themeStyles.vars,
-        theme === "light" && themeStyles.light,
+        themeClass(theme),
         styles.layer,
       )}
     >

@@ -44,7 +44,7 @@ import { ReviewTopBar } from "./review-top-bar";
 import { SettingsPage } from "./settings-page";
 import { shellStyles } from "./shell-styles";
 import { ReviewSidebarSection } from "./sidebar-sections";
-import { themeStyles } from "./theme-styles";
+import { themeClass, themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { Whiteboard, preloadBoardEditor } from "./whiteboard";
 
@@ -317,15 +317,10 @@ function themedRoot(container: HTMLElement) {
 
   // Recomposed on every change so StyleX settles vars against light.
   const applyTheme = (theme: "dark" | "light") => {
-    const light = theme === "light";
-
     themeHost.className = [
-      light && "review-app--theme-light",
-      stylex.props(
-        themeStyles.vars,
-        styles.themeHost,
-        light && themeStyles.light,
-      ).className,
+      theme === "light" && "review-app--theme-light",
+      stylex.props(themeStyles.vars, styles.themeHost, themeClass(theme))
+        .className,
     ]
       .filter(Boolean)
       .join(" ");

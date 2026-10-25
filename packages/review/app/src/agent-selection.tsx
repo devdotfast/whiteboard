@@ -28,7 +28,7 @@ import { useNotify } from "./notify";
 import { useReviewDiffFiles } from "./review-diff-files-context";
 import { useOptionalReviewPanelStore } from "./review-panel";
 import { fontSize, layer, motion, space } from "./scale.stylex";
-import { themeStyles } from "./theme-styles";
+import { themeClass, themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { Shortcut } from "./ui/kbd";
@@ -362,11 +362,7 @@ export function AgentSelectionProvider({
           // The toolbar starts at the selection, after a lead that
           // gives way so it never runs past the container's edge.
           <div
-            {...stylex.props(
-              themeStyles.vars,
-              theme === "light" && themeStyles.light,
-              styles.lane,
-            )}
+            {...stylex.props(themeStyles.vars, themeClass(theme), styles.lane)}
             style={{
               top: selection.anchor?.y,
               right: selection.anchor?.right,

@@ -34,7 +34,7 @@ import { reviewViewLabel } from "./review-view-route";
 import { leading, space } from "./scale.stylex";
 import { ShareControl, useCanShare } from "./share-control";
 import { shellStyles } from "./shell-styles";
-import { themeStyles } from "./theme-styles";
+import { themeClass, themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
 import { SegmentedControl } from "./ui/segmented";
@@ -120,7 +120,7 @@ export function ReviewTopBar(): ReactElement {
       {...stylex.props(
         appMarker,
         themeStyles.vars,
-        debugSettings.theme === "light" && themeStyles.light,
+        themeClass(debugSettings.theme),
         shellStyles.topbar,
         sidebarLeads && shellStyles.pageBar,
       )}

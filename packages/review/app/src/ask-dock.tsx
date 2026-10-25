@@ -19,7 +19,7 @@ import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { AskView } from "./review-panel-model";
 import { askColumnShown, peekShown } from "./review-panel-store";
 import { withClass } from "./stylex-props";
-import { themeStyles } from "./theme-styles";
+import { themeClass, themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 
 /** Desktop's right-column host; undefined in other hosts. */
@@ -67,7 +67,7 @@ export function AskDock({
         {...withClass(
           `review-app--theme-${theme}`,
           themeStyles.vars,
-          theme === "light" && themeStyles.light,
+          themeClass(theme),
           styles.panel,
           hidden && styles.hidden,
         )}
