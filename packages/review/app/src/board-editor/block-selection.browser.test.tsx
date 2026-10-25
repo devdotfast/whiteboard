@@ -13,7 +13,8 @@ import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { cdp, userEvent } from "vitest/browser";
 
-import { BoardEditor, BoardEditorHostContext } from "./BoardEditor";
+import { BoardEditor } from "./BoardEditor";
+import { BoardEditorHostContext } from "./host";
 
 const client = new ReviewApiClient(
   { serverUrl: "http://review.test", token: "t" },

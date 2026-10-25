@@ -18,7 +18,8 @@ import { type Root, createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 
-import { BoardEditor, BoardEditorHostContext } from "./BoardEditor";
+import { BoardEditor } from "./BoardEditor";
+import { BoardEditorHostContext } from "./host";
 
 import "@canvas/styles.css";
 

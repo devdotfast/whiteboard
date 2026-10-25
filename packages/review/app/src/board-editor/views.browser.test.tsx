@@ -1,11 +1,12 @@
 import { TestCanvasQuery } from "@canvas/canvas-query-test-utils";
 import { ReviewSessionProvider } from "@canvas/host/review-session";
+import { loadKatex } from "@canvas/markdown-math";
 import { testReviewSession } from "@canvas/review-session-test-utils";
 import { type EditorState, TextSelection } from "@tiptap/pm/state";
 import { EditorView } from "@tiptap/pm/view";
 import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, beforeAll, expect, it } from "vitest";
 
 import { createBoardState } from "./editor-state";
 import { PortalStore, Portals, nodeViews } from "./views";
@@ -13,6 +14,8 @@ import { PortalStore, Portals, nodeViews } from "./views";
 let root: Root | null = null;
 
 let view: EditorView | null = null;
+
+beforeAll(loadKatex);
 
 afterEach(async () => {
   view?.destroy();

@@ -49,7 +49,11 @@ export async function copyCanvas(targets = canvasTargets([])) {
 
   const canvas = requiredEntry(manifest, "canvas");
   const stylesheets = canvas.css ?? [];
-  const wasm = (canvas.assets ?? []).find((file) => file.endsWith(".wasm"));
+
+  // libavoid loads lazily, so its wasm belongs to a chunk, not the entry.
+  const wasm = Object.values(manifest)
+    .flatMap((chunk) => chunk.assets ?? [])
+    .find((file) => file.endsWith(".wasm"));
 
   if (!wasm)
     throw new Error("Review canvas manifest has no libavoid WASM asset.");

@@ -1,10 +1,13 @@
 import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { AgentMarkdown, MarkdownContent } from "./agent-markdown";
+import { loadKatex } from "./markdown-math";
 
 let container: HTMLDivElement, root: Root;
+
+beforeAll(loadKatex);
 
 beforeEach(() => {
   container = document.createElement("div");

@@ -1,8 +1,8 @@
 import { loadElk } from "@canvas/elk";
+import { loadLibavoid } from "@canvas/libavoid";
 import { tokens } from "@canvas/tokens.stylex";
-import {
-  type ElkGraph as LibavoidElkGraph,
-  init as initLibavoidEdgeRouter,
+import type {
+  ElkGraph as LibavoidElkGraph,
   routeEdges as routeLibavoidEdges,
 } from "@mr_mint/elkjs-libavoid";
 import {
@@ -1693,7 +1693,7 @@ async function routeC4LibavoidScopeEdges(
   axis: C4LayoutAxis,
 ) {
   if (edgeRelationships.length < C4_LIBAVOID_DENSE_EDGE_THRESHOLD) {
-    return routeLibavoidEdges(
+    return (await loadLibavoid()).routeEdges(
       c4FlatLibavoidGraphFromLayout(layoutNodes, edgeRelationships, axis),
       C4_LIBAVOID_ROUTING_OPTIONS,
     );
@@ -1719,7 +1719,9 @@ async function routeC4LibavoidScopeEdges(
       startIndex + C4_LIBAVOID_DENSE_EDGE_BATCH_SIZE,
     );
 
-    const batchRoutes = await routeLibavoidEdges(
+    const batchRoutes = await (
+      await loadLibavoid()
+    ).routeEdges(
       c4FlatLibavoidGraphFromLayout(
         layoutNodes,
         batch,
@@ -1883,13 +1885,13 @@ function ensureC4LibavoidReady(wasmUrl?: string): Promise<void> {
 
 async function initializeC4Libavoid(wasmUrl?: string): Promise<void> {
   if (typeof document === "undefined") {
-    await initLibavoidEdgeRouter();
+    await (await loadLibavoid()).init();
 
     return;
   }
 
   try {
-    await initLibavoidEdgeRouter(wasmUrl);
+    await (await loadLibavoid()).init(wasmUrl);
   } catch (error) {
     console.error("Review software-map libavoid initialization failed", error);
     throw error;

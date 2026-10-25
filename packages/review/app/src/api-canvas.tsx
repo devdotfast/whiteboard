@@ -28,7 +28,7 @@ import { SaveMarkdown } from "./blocks";
 import {
   type BoardEditorHost,
   BoardEditorHostContext,
-} from "./board-editor/BoardEditor";
+} from "./board-editor/host";
 import { BoardPaintedContext } from "./board-painted";
 import {
   CanvasQueryProvider,

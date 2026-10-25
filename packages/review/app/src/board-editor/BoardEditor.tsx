@@ -25,7 +25,6 @@ import {
   reviewUiStateKey,
   writeReviewUiState,
 } from "@canvas/review-ui-state";
-import type { ReviewApiClient } from "@review/review-api/client";
 import { boardLink, traceQuoteLink } from "@review/review-api/document";
 import * as stylex from "@stylexjs/stylex";
 import type { Mark, ResolvedPos } from "@tiptap/pm/model";
@@ -41,7 +40,6 @@ import {
 import { Decoration, DecorationSet, EditorView } from "@tiptap/pm/view";
 import {
   type ReactElement,
-  createContext,
   useCallback,
   useContext,
   useEffect,
@@ -54,6 +52,7 @@ import {
 import { blockIndex, isNewBoard, storedBlocks } from "./board-doc";
 import { createBoardState } from "./editor-state";
 import { headings, headingsKey, revealLine, textOnly } from "./headings";
+import { BoardEditorHostContext } from "./host";
 import { httpBoardTransport } from "./http-transport";
 import { captureRemoved, motion, motionKey } from "./motion";
 import { type OpenLink, openLinkKey, openLinks } from "./open-links";
@@ -72,17 +71,6 @@ import {
 
 // A board on the canvas, editable in place: the editor document, its
 // autosave, the block the person is in, and what other authors write.
-
-/** What the canvas gives its board editor. */
-export interface BoardEditorHost {
-  client: ReviewApiClient;
-  /** The editor's Contents, as the person types. */
-  setHeadings(entries: ReviewTocEntry[] | undefined): void;
-}
-
-export const BoardEditorHostContext = createContext<BoardEditorHost | null>(
-  null,
-);
 
 /** The text of the link at `$pos`, across the marks inside it. */
 function linkText($pos: ResolvedPos, link: Mark): string {

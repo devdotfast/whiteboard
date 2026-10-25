@@ -34,6 +34,7 @@ import {
 import { type DiffFilePicker, DiffFilePickerContext } from "./diff-file-picker";
 import { FeedbackDialog } from "./feedback-dialog";
 import { CanvasUiContext } from "./host/canvas-ui";
+import { loadKatex } from "./markdown-math";
 import { FirstRun, readOnboardingSkipped } from "./onboarding/first-run";
 import { NewWhiteboard } from "./onboarding/new-whiteboard";
 import { type ReviewFindHost, createReviewFindHost } from "./review-find";
@@ -45,9 +46,13 @@ import { shellStyles } from "./shell-styles";
 import { ReviewSidebarSection } from "./sidebar-sections";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
-import { Whiteboard } from "./whiteboard";
+import { Whiteboard, preloadBoardEditor } from "./whiteboard";
 
 import "./styles.css";
+
+void preloadBoardEditor();
+
+void loadKatex();
 
 export { clearPersistedReviewViewState as clearReviewViewState } from "./review-view-state";
 

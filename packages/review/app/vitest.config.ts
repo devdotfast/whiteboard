@@ -68,6 +68,7 @@ export default defineConfig({
           name: "canvas-node",
           environment: "node",
           isolate: false,
+          setupFiles: ["src/node-test-setup.ts"],
           exclude: [
             ...configDefaults.exclude,
             "src/**/*.browser.test.{ts,tsx}",

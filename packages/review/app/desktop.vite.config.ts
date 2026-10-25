@@ -24,7 +24,8 @@ export default defineConfig({
     manifest: true,
     outDir: "dist/desktop",
     rollupOptions: {
-      preserveEntrySignatures: "strict",
+      // Shared modules stay in the entry and its one stylesheet.
+      preserveEntrySignatures: "allow-extension",
       input: {
         canvas: path.resolve(__dirname, "src/desktop-entry.tsx"),
       },

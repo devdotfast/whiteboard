@@ -11,12 +11,15 @@ import { elements } from "@review/review-api/document";
 import type { ReviewProgress } from "@review/review-api/review-progress";
 import {
   type ReactNode,
+  Suspense,
   createContext,
+  lazy,
   memo,
   useContext,
   useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 
 import { AgentSelectionProvider } from "./agent-selection";
@@ -31,10 +34,7 @@ import {
   readOpenAsks,
 } from "./ask-open-state";
 import { BoardCommitsContext } from "./board-commits";
-import {
-  BoardEditor,
-  BoardEditorHostContext,
-} from "./board-editor/BoardEditor";
+import { BoardEditorHostContext } from "./board-editor/host";
 import { CanvasQueryProvider, useCanvasQueryScope } from "./canvas-query";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
@@ -367,12 +367,29 @@ export function useWhiteboardData(): WhiteboardData {
   return data;
 }
 
+let boardEditor: typeof import("./board-editor/BoardEditor") | undefined;
+
+/** Read-only hosts never load ProseMirror; Desktop calls this at startup. */
+export function preloadBoardEditor() {
+  return import("./board-editor/BoardEditor").then(
+    (module) => (boardEditor = module),
+  );
+}
+
+const LazyBoardEditor = lazy(() =>
+  preloadBoardEditor().then(({ BoardEditor }) => ({ default: BoardEditor })),
+);
+
 // A stable component type keeps sections, diagram tours and selections mounted.
 function DocumentBody() {
   const data = useContext(BoardDocument)!;
   const session = useReviewSession();
   const softwareMapEnabled = useContext(BoardSettings).softwareMapEnabled;
   const editing = useContext(BoardEditorHostContext) !== null;
+
+  const [BoardEditor] = useState(
+    () => boardEditor?.BoardEditor ?? LazyBoardEditor,
+  );
 
   // App keys its boundary on the review id; this one recovers on the next version.
   return (
@@ -384,10 +401,12 @@ function DocumentBody() {
       }
     >
       {editing ? (
-        <BoardEditor
-          data={data}
-          softwareMapEnabled={softwareMapEnabled === true}
-        />
+        <Suspense fallback={null}>
+          <BoardEditor
+            data={data}
+            softwareMapEnabled={softwareMapEnabled === true}
+          />
+        </Suspense>
       ) : (
         <ApiDocument
           data={data}

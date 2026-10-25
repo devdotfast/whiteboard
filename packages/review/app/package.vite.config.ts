@@ -32,12 +32,15 @@ export default defineConfig({
   },
   base: "./",
   build: {
+    // Preload hints resolve against the consumer's page, not this package.
+    modulePreload: false,
     assetsInlineLimit: 0,
     copyPublicDir: false,
     emptyOutDir: true,
     outDir: path.resolve(__dirname, "../../canvas/dist"),
     rollupOptions: {
-      preserveEntrySignatures: "strict",
+      // Shared modules stay in index.js instead of a second eager chunk.
+      preserveEntrySignatures: "allow-extension",
       input: {
         canvas: path.resolve(__dirname, "src/canvas-entry.ts"),
       },
