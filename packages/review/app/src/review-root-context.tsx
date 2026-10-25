@@ -3,6 +3,8 @@ import {
   type RefObject,
   createContext,
   useContext,
+  useEffect,
+  useState,
 } from "react";
 
 export interface ReviewRoots {
@@ -50,4 +52,26 @@ export function ReviewContainerProvider({
 
 export function useReviewContainer(): HTMLElement | null {
   return useContext(ReviewContainerContext);
+}
+
+/** A host that names no container gets the `.review-canvas-root` around the
+ * board, found once it mounts; overlays portal there. */
+export function CanvasRootContainer({ children }: { children: ReactNode }) {
+  const outer = useContext(ReviewContainerContext);
+  const roots = useContext(ReviewRootsContext);
+  const [own, setOwn] = useState<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!outer)
+      setOwn(
+        roots?.appRef.current?.closest<HTMLElement>(".review-canvas-root") ??
+          null,
+      );
+  }, [outer, roots]);
+
+  return (
+    <ReviewContainerContext.Provider value={outer ?? own}>
+      {children}
+    </ReviewContainerContext.Provider>
+  );
 }

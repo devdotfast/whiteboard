@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReviewClientConfig } from "./host/review-client";
 import { reviewPreferenceKey, reviewStorageKey } from "./host/review-client";
 import { useReviewSession } from "./host/review-session";
+import { useHydrated } from "./use-hydrated";
 
 /**
  * The one place the Review app reaches for browser storage.
@@ -43,8 +44,12 @@ export function useReviewUiState<T>(
   const session = useReviewSession();
   const key = reviewUiStateKey(session, scope, namespace, name);
 
+  // Hydration renders what the server did; the stored value follows.
+  const hydrated = useHydrated();
+  const hydrating = useRef(!hydrated);
+
   const [value, setValue] = useState<T>(
-    () => readReviewUiState<T>(scope, key) ?? fallback,
+    () => (hydrated ? readReviewUiState<T>(scope, key) : null) ?? fallback,
   );
 
   // Only state somebody actually changed is written back. Persisting on mount
@@ -57,6 +62,14 @@ export function useReviewUiState<T>(
     changed.current = true;
     setValue(next);
   }, []);
+
+  useEffect(() => {
+    if (!hydrated || !hydrating.current) return;
+    hydrating.current = false;
+    const stored = readReviewUiState<T>(scope, key);
+
+    if (stored !== null && !changed.current) setValue(stored);
+  }, [hydrated, key, scope]);
 
   useEffect(() => {
     if (changed.current) writeReviewUiState(scope, key, value);

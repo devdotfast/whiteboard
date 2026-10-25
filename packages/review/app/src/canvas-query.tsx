@@ -96,21 +96,26 @@ export interface CanvasQueryScope {
 /** Desktop's canvas client, kept across the boards it shows. */
 export const SharedCanvasQueryClient = createContext<QueryClient | null>(null);
 
+/** Marks a query that reads the host's bridge rather than its requests, so
+ * it runs on an idle client too. */
+export const bridgeQueryMeta = { bridge: true };
+
 function createIdleQueryClient(): QueryClient {
   const client = createCanvasQueryClient();
   const defaults = client.defaultQueryOptions.bind(client);
 
-  client.defaultQueryOptions = (options) => ({
-    ...defaults(options),
-    enabled: false,
-  });
+  client.defaultQueryOptions = (options) => {
+    const merged = defaults(options);
+
+    return merged.meta?.bridge ? merged : { ...merged, enabled: false };
+  };
 
   return client;
 }
 
 /** The shared client, else one owned by the canvas. Clearing is deferred so
  * a Strict Mode replay keeps its client. A host without `request` gets an
- * idle client. */
+ * idle client: only its bridge queries run. */
 export function useCanvasQueryScope(
   request: ReviewCanvasBridge["request"],
   reviewId: string,

@@ -55,7 +55,10 @@ import type { ReviewTocEntry } from "./review-document-headings";
 import { type ReviewFindHost, ReviewFindProvider } from "./review-find";
 import { ReviewLensesProvider } from "./review-lenses";
 import { ReviewPanelProvider, useReviewPanelStore } from "./review-panel";
-import { ReviewRootsProvider } from "./review-root-context";
+import {
+  CanvasRootContainer,
+  ReviewRootsProvider,
+} from "./review-root-context";
 import { readReviewNavigationRestore } from "./review-view-state";
 
 export interface WhiteboardData extends ApiDocumentData {
@@ -423,15 +426,17 @@ export function Whiteboard() {
   const host = useReviewSession().review?.host;
 
   return (
-    <BoardView
-      snapshot={data.snapshot}
-      maps={data.maps}
-      anchors={data.anchors}
-      tocEntries={data.contents ?? data.headings.entries}
-      commits={data.commits}
-      settings={settings}
-      host={host}
-    />
+    <CanvasRootContainer>
+      <BoardView
+        snapshot={data.snapshot}
+        maps={data.maps}
+        anchors={data.anchors}
+        tocEntries={data.contents ?? data.headings.entries}
+        commits={data.commits}
+        settings={settings}
+        host={host}
+      />
+    </CanvasRootContainer>
   );
 }
 

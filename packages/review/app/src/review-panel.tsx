@@ -16,6 +16,7 @@ import {
   type ReviewPanelStoreState,
   createReviewPanelStore,
 } from "./review-panel-store";
+import { useHydrated } from "./use-hydrated";
 
 const ReviewPanelContext = createContext<ReviewPanelStore | null>(null);
 
@@ -38,7 +39,12 @@ export function ReviewPanelProvider({
    * restoring reads storage. */
   restore?: () => ReviewPanelRestore;
 }) {
-  const [store] = useState(() => createReviewPanelStore(restore?.()));
+  // A hydrating page shows what its server rendered, so it skips restoring.
+  const hydrated = useHydrated();
+
+  const [store] = useState(() =>
+    createReviewPanelStore(hydrated ? restore?.() : undefined),
+  );
 
   return (
     <ReviewPanelContext.Provider value={store}>

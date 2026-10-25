@@ -19,6 +19,7 @@ import { useReviewFindRegistration } from "./review-find";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
 import { useOptionalReviewPanel } from "./review-panel";
 import { tokens } from "./tokens.stylex";
+import { useHydrated } from "./use-hydrated";
 
 const LINE_HEIGHT = 20;
 
@@ -95,6 +96,10 @@ export function DocumentCodeView({
 
   const [shouldMount, setShouldMount] = useState(active);
 
+  // A host that renders static markup sizes the peek by its content, so a
+  // server render and the live editor agree without an estimate.
+  const sizedByHost = session.bridge.inlineEditors.renderStatic !== undefined;
+
   const [height, setHeight] = useState(() =>
     estimatedHeight(ranges, heightMode),
   );
@@ -135,6 +140,19 @@ export function DocumentCodeView({
   const inlineEditorFactory = session.bridge.inlineEditors;
   const inlineEditorSessionId = session.reviewId;
   const reviewFind = useReviewFindRegistration();
+
+  // A server render and its hydration show the host's markup; create() then
+  // takes the container over.
+  const staticHtml = useHydrated()
+    ? undefined
+    : inlineEditorFactory.renderStatic?.({
+        path,
+        title,
+        side,
+        pins,
+        ranges,
+        heightMode,
+      });
 
   const ensureEditor = useCallback(async () => {
     if (handleRef.current) return handleRef.current;
@@ -328,11 +346,18 @@ export function DocumentCodeView({
     <>
       <div
         ref={setContainer}
-        {...stylex.props(styles.editor, edgeToEdge && styles.edgeToEdge)}
+        {...stylex.props(
+          styles.editor,
+          edgeToEdge && styles.edgeToEdge,
+          sizedByHost && styles.sizedByHost,
+        )}
         data-review-inline-editor={path}
         data-tour-target="code-editor"
         data-review-inline-editor-active={active ? "true" : "false"}
-        style={{ height }}
+        style={sizedByHost ? undefined : { height }}
+        {...(staticHtml !== undefined && {
+          dangerouslySetInnerHTML: { __html: staticHtml },
+        })}
       />
       <AskCodePins handle={askTarget} />
       {error ? (
@@ -363,6 +388,8 @@ function estimatedHeight(
 }
 
 const styles = stylex.create({
+  // Skipping offscreen rendering would collapse a peek with no set height.
+  sizedByHost: { contentVisibility: "visible" },
   editor: {
     position: "relative",
     width: "100%",

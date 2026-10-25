@@ -198,8 +198,17 @@ export interface ReviewInlineEditorHandle extends ReviewDisposable {
   setAskMarks?(marks: readonly ReviewAskMark[], mount: ReviewAskPinMount): void;
 }
 
+/** What a peek shows before a host takes its container over. */
+export type ReviewInlineStaticSpec = Pick<
+  ReviewInlineEditorSpec,
+  "path" | "title" | "side" | "pins" | "ranges" | "heightMode"
+>;
+
 export interface ReviewInlineEditorFactory {
   create(spec: ReviewInlineEditorSpec): ReviewInlineEditorHandle;
+  /** Escaped HTML for a peek, for a server render and its hydration; `create`
+   * then replaces the container's content. */
+  renderStatic?(spec: ReviewInlineStaticSpec): string;
   find(
     spec: ReviewInlineFindSpec,
     query: ReviewFindQuery,

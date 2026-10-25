@@ -358,11 +358,12 @@ function ReviewLayoutContent({
 
   useDiffFilePicker(diffFilePicker);
 
+  // A host without requests has only the board's own traces.
   const hasTraceSessions =
     !session.review?.host &&
     ((session.review?.traces.size ?? 0) > 0 ||
-      storedList.status !== "loaded" ||
-      storedList.sessions.length > 0);
+      (session.bridge.request !== undefined &&
+        (storedList.status !== "loaded" || storedList.sessions.length > 0)));
 
   const hasDiff =
     hasChangeRange &&

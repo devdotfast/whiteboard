@@ -36,7 +36,8 @@ it("hides nested stored maps when disabled without dropping surrounding prose", 
       </TestCanvasQuery>,
     );
 
+  // A server render leaves the map to the client, in its placeholder.
   expect(render(false)).toContain("Explanation");
-  expect(render(false)).not.toContain("software-map");
-  expect(render(true)).toContain("software-map");
+  expect(render(false)).not.toContain('data-diagram-placeholder="MAP"');
+  expect(render(true)).toContain('data-diagram-placeholder="MAP"');
 });

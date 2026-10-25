@@ -23,6 +23,7 @@ import { DocumentCallTree } from "./call-tree-view";
 import { RenderedCodeBlock } from "./code-block";
 import { CodePeekCard } from "./CodePeek";
 import { DatabaseLens } from "./database-lens";
+import { ClientDiagram } from "./diagram-placeholder";
 import { SequenceDiagram } from "./diagrams";
 import { documentStyles } from "./document-styles";
 import { useMotionPhase } from "./draw-queue-provider";
@@ -188,29 +189,45 @@ function CodePeekBlock({ node }: BlockProps<"code_peek">) {
 
 function SequenceBlock({ node }: BlockProps<"sequence">) {
   return (
-    <SequenceDiagram
-      id={node.id}
+    <ClientDiagram
+      kind="SEQ"
       title={node.title}
-      actors={node.actors}
-      steps={node.steps}
-      pins={node.pins}
-    />
+      height={112 + node.steps.length * 88}
+    >
+      <SequenceDiagram
+        id={node.id}
+        title={node.title}
+        actors={node.actors}
+        steps={node.steps}
+        pins={node.pins}
+      />
+    </ClientDiagram>
   );
 }
 
 function CallStackDiffBlock({ node }: BlockProps<"call_stack_diff">) {
-  return <DocumentCallTree block={node} />;
+  return (
+    <ClientDiagram
+      kind="Call tree"
+      title={node.title}
+      height={18 + Math.max(node.base.length, node.head.length) * 28}
+    >
+      <DocumentCallTree block={node} />
+    </ClientDiagram>
+  );
 }
 
 function DatabaseLensBlock({ node }: BlockProps<"database_lens">) {
   return (
-    <DatabaseLens
-      id={node.id}
-      title={node.title}
-      actors={node.actors}
-      stores={node.stores}
-      useCases={node.useCases}
-    />
+    <ClientDiagram kind="DB" title={node.title} height={560}>
+      <DatabaseLens
+        id={node.id}
+        title={node.title}
+        actors={node.actors}
+        stores={node.stores}
+        useCases={node.useCases}
+      />
+    </ClientDiagram>
   );
 }
 
@@ -258,12 +275,26 @@ function TraceQuoteBlock({ node, data }: BlockProps<"trace_quote">) {
 
 function SoftwareMapBlock({ node, data }: BlockProps<"software_map">) {
   return (
-    <SoftwareMap
-      diagramId={node.id}
-      model={data.maps.get(node.mapVersionId)}
-      pinnedData={data.maps.get(node.mapVersionId)?.pinnedData}
-      view={node.focusElementId}
-    />
+    <ClientDiagram kind="MAP" height={520}>
+      <SoftwareMap
+        diagramId={node.id}
+        model={data.maps.get(node.mapVersionId)}
+        pinnedData={data.maps.get(node.mapVersionId)?.pinnedData}
+        view={node.focusElementId}
+      />
+    </ClientDiagram>
+  );
+}
+
+function FlowDiagramBlock({ node, data }: BlockProps<"flow_diagram">) {
+  return (
+    <ClientDiagram
+      kind="FLOW"
+      title={node.title}
+      height={node.direction === "right" ? 420 : 560}
+    >
+      <FlowDiagram node={node} snapshot={data.snapshot} />
+    </ClientDiagram>
   );
 }
 
@@ -280,9 +311,7 @@ export const blockComponents = {
   database_lens: DatabaseLensBlock,
   image: ImageBlock,
   trace_quote: TraceQuoteBlock,
-  flow_diagram: ({ node, data }) => (
-    <FlowDiagram node={node} snapshot={data.snapshot} />
-  ),
+  flow_diagram: FlowDiagramBlock,
   software_map: SoftwareMapBlock,
   section: SectionBlock,
   callout: CalloutBlock,

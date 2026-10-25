@@ -6,7 +6,7 @@ import type {
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, createContext, useContext, useMemo } from "react";
 
-import { canvasQueryKeys } from "./canvas-query";
+import { bridgeQueryMeta, canvasQueryKeys } from "./canvas-query";
 import { useReviewSession } from "./host/review-session";
 import { useReviewPanel } from "./review-panel";
 import { useReviewContainer } from "./review-root-context";
@@ -70,6 +70,7 @@ export function ReviewDiffFilesProvider({
       return files;
     },
     enabled: !unavailable,
+    meta: bridgeQueryMeta,
     // A source never changes its answer; a replaced one is never asked again.
     staleTime: Infinity,
     gcTime: 0,
