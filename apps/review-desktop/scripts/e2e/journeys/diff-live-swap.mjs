@@ -111,26 +111,56 @@ export async function run(ctx) {
 
   const [, file, line] = target;
 
-  const swap = async (label, mark, after = async () => {}) => {
+  const swap = async (label, mark, after = async () => {}, above = false) => {
     const [anchor] = await onScreen();
 
-    await page.evaluate(() => {
-      const log = (window.__liveSwap = { loader: 0, empty: 0, rebuilt: 0 });
+    await page.evaluate((anchor) => {
+      const log = (window.__liveSwap = { loader: 0, empty: 0, rebuilt: 0, drift: 0 });
       const first = window.__shownDiff();
 
       const tick = () => {
         const root = window.__shownDiff();
         const status = root?.querySelector(".review-structural-stream-status");
+        const pane = root?.querySelector(".review-files-editor-diffs");
+
+        const line = [...(pane?.querySelectorAll(".editor.modified .view-line") ?? [])].find(
+          (line) => line.textContent.replace(/\s+/g, " ").trim() === anchor.text,
+        );
 
         log.empty += root ? 0 : 1;
         log.rebuilt += root && root !== first ? 1 : 0;
         log.loader += status && !status.hidden ? 1 : 0;
 
+        if (line)
+          log.drift = Math.max(
+            log.drift,
+            Math.abs(line.getBoundingClientRect().top - pane.getBoundingClientRect().top - anchor.y),
+          );
+
         if (!log.stop) requestAnimationFrame(tick);
       };
 
       requestAnimationFrame(tick);
-    });
+    }, anchor);
+
+    if (above) {
+      const [, anchorFile, anchorLine] = /^const v(\d) = (\d+)/.exec(anchor.text);
+
+      assert.ok(
+        anchorFile > 1 || anchorLine > 60,
+        `"${anchor.text}" has no change above it to grow`,
+      );
+      // Lines added above the reader must not push what they read.
+      const first = await readFile(fileName(1), "utf8");
+
+      await writeFile(
+        fileName(1),
+        first.replace(
+          /^const v1 = 50 \+ 1$/m,
+          "const v1 = 50 + 1\nconst v1a = 0\nconst v1b = 0\nconst v1c = 0",
+        ),
+      );
+    }
 
     const text = await readFile(fileName(file), "utf8");
 
@@ -157,6 +187,7 @@ export async function run(ctx) {
     assert.equal(frames.loader, 0, `a loader showed during the ${label}`);
     assert.equal(frames.empty, 0, `the Diff went blank during the ${label}`);
     assert.equal(frames.rebuilt, 0, `the Diff was rebuilt during the ${label}`);
+    assert.ok(frames.drift <= 2, `the ${label} moved "${anchor.text}" ${frames.drift}px mid-update`);
 
     const moved = (await onScreen()).find(({ text }) => text === anchor.text);
 
@@ -170,4 +201,6 @@ export async function run(ctx) {
   ctx.check("a save updates the open Diff in place, without a loader");
   await swap("commit", "4343", () => git("commit", "-qam", "Save"));
   ctx.check("a commit updates the open Diff in place, without a loader");
+  await swap("save above the reader", "4444", undefined, true);
+  ctx.check("lines added above the reader keep their place");
 }

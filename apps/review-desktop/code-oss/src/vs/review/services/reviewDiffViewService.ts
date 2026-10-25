@@ -359,6 +359,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 				),
 			);
 			built = view;
+			store.add(structural.onWillEdit(() => { if (this.view === view) view.holdPlace(); }));
 			const shown = this.view;
 			view.setStaged(!!shown);
 			view.viewedScope = lens && !lens.wholeFiles && !this.spec.document ? 'lens' : undefined;

@@ -21,6 +21,7 @@ import { MultiDiffEditorViewModel } from "../../editor/browser/widget/multiDiffE
 import { MultiDiffEditorWidget, type RevealOptions } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js";
 import type { IMultiDiffEditorViewState } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js";
 import { IDiffEditorOptions } from "../../editor/common/config/editorOptions.js";
+import { TrackedRangeStickiness } from "../../editor/common/model.js";
 import { ITextModelService } from "../../editor/common/services/resolverService.js";
 import { ITextResourceConfigurationService } from "../../editor/common/services/textResourceConfiguration.js";
 import { IHoverService } from "../../platform/hover/browser/hover.js";
@@ -449,6 +450,34 @@ export class ReviewFilesDiffView extends Disposable {
 				});
 			}),
 		);
+	}
+
+	/** Keeps the line at the top of the viewport in place while edits above it change heights. */
+	holdPlace(): void {
+		const top = this.diffContainer.getBoundingClientRect().top;
+		const editorFor = (uri: URI) => this.widget.tryGetCodeEditor(uri)?.editor;
+		for (const { modified } of this.input?.entries ?? []) {
+			const editor = modified && editorFor(modified);
+			const model = editor?.getModel();
+			const node = editor?.getDomNode();
+			if (!modified || !editor || !model || !node) continue;
+			const y = node.getBoundingClientRect().top - editor.getScrollTop();
+			const line = editor.getVisibleRanges().flatMap(range => Array.from({ length: range.endLineNumber - range.startLineNumber + 1 }, (_, i) => range.startLineNumber + i))
+				.find(line => y + editor.getTopForLineNumber(line) >= top);
+			if (!line) continue;
+			const [id] = model.deltaDecorations([], [{ range: new Range(line, 1, line, 1), options: { description: "review-reader-place", stickiness: TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges } }]);
+			const position = () => {
+				const editor = editorFor(modified), at = model.getDecorationRange(id)?.startLineNumber;
+				return editor && at ? editor.getDomNode()!.getBoundingClientRect().top + editor.getTopForLineNumber(at) - editor.getScrollTop() : undefined;
+			};
+			const before = position()!;
+			const hold = this.settle(() => {
+				const now = position();
+				if (now !== undefined && Math.abs(now - before) >= 1) this.widget.setScrollTop(this.widget.getScrollTop() + now - before);
+			});
+			hold.add(toDisposable(() => model.deltaDecorations([id], [])));
+			return;
+		}
 	}
 
 	restoreViewState(viewState: IMultiDiffEditorViewState): void {

@@ -9,7 +9,7 @@ import { IModelService } from "../../editor/common/services/model.js";
 import { ITextModelService } from "../../editor/common/services/resolverService.js";
 import { ILanguageService } from "../../editor/common/languages/language.js";
 import { URI } from "../../base/common/uri.js";
-import { Event } from "../../base/common/event.js";
+import { Emitter, Event } from "../../base/common/event.js";
 import { DisposableMap, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
 import { CancellationError } from "../../base/common/errors.js";
 import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
@@ -45,7 +45,7 @@ export function createStructuralDiffEditors(
 	viewed?: StructuralViewedState,
 	lineNumbers?: ReviewLineNumbersSetting,
 	onscreen?: IObservable<boolean>,
-): { instantiation: IInstantiationService; entries: readonly ReviewFilesEditorEntry[] } {
+): { instantiation: IInstantiationService; entries: readonly ReviewFilesEditorEntry[]; onWillEdit: Event<void> } {
 	// These models belong to this comparison. A live file can change while the
 	// comparison is open, so its editor text must come from diffr's own result.
 	const modelService = instantiation.invokeFunction((a) => a.get(IModelService));
@@ -101,14 +101,17 @@ export function createStructuralDiffEditors(
 	const pairs = new Map(resolvedEntries.map(e => [e.original!.toString() + "\n" + e.modified!.toString(), e.file.path]));
 	// One provider per file, so they share one session listener.
 	const providers = new Set<(files: ReadonlySet<string>) => void>();
+	const willEdit = lifetime.add(new Emitter<void>());
 	lifetime.add(session.onDidChange(change => {
 		// A refreshed diff edits its snapshots before any diff is recomputed against them.
-		for (const uri of snapshots.values()) {
+		const edits = [...snapshots.values()].flatMap(uri => {
 			const source = sources.get(uri.with({ fragment: "" }).toString())!;
 			const diff = change.files.has(source.path) ? session.getFileResult(source.path)?.diff : undefined;
 			const model = diff && modelService.getModel(uri);
-			if (model) replaceText(model, diff.type === "text" ? diff[source.side]?.text ?? "" : "");
-		}
+			return model ? [{ model, text: diff.type === "text" ? diff[source.side]?.text ?? "" : "" }] : [];
+		});
+		if (edits.length) willEdit.fire();
+		for (const { model, text } of edits) replaceText(model, text);
 		for (const notify of [...providers]) notify(change.files);
 	}));
 	const onDidChangeFiles: Event<ReadonlySet<string>> = notify => { providers.add(notify); return toDisposable(() => providers.delete(notify)); };
@@ -120,7 +123,7 @@ export function createStructuralDiffEditors(
 		instantiation.createChild(new ServiceCollection([IDiffProviderFactoryService, factory])),
 	);
 	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime, viewed, lineNumbers, onscreen);
-	return { instantiation: child, entries: resolvedEntries };
+	return { instantiation: child, entries: resolvedEntries, onWillEdit: willEdit.event };
 }
 
 let structuralViewId = 0;
