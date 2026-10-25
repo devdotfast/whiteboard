@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "whiteboard": {
-      "command": "node",
-      "args": [".pi/tools/whiteboard.mjs", "mcp"],
-      "exposure": "codemode"
-    }
-  }
-}
