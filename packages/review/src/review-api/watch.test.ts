@@ -4,13 +4,16 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { ReviewStreamLine } from "@dev.fast/review-protocol";
+import {
+  type ReviewStreamLine,
+  STRUCTURAL_DIFF_WIRE_VERSION,
+} from "@dev.fast/review-protocol";
 import { getRequestListener } from "@hono/node-server";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { createReviewApi } from "./http.js";
 import { LocalReviewData } from "./local-data.js";
-import { ReviewStore, SCRATCHPAD_ID } from "./store.js";
+import { ReviewStore } from "./store.js";
 
 const pins = { repositoryId: "repo", base: "base", head: "head" };
 
@@ -147,6 +150,15 @@ it("sends a list line only for what changed in the list", async () => {
     _pins: typeof pins,
     file?: string,
   ) => (file ? "" : [])) as typeof data.changes);
+  vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
+    yield {
+      type: "start",
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
+      lhs: { type: "revision", rev: "base" },
+      rhs: { type: "revision", rev: "head" },
+      files: [],
+    };
+  });
 
   const stream = await open(
     [{ reviewId: null }, { reviewId: a }, { reviewId: b }],
@@ -161,11 +173,10 @@ it("sends a list line only for what changed in the list", async () => {
     `review:${a}:value`,
   ]);
 
-  await data.coverage(a, pins, "textual");
-  expect((await stream.take(2)).map(label).sort()).toEqual(
-    [`review:${a}:value`, `review:${b}:value`].sort(),
+  await data.coverage(a, pins);
+  expect((await stream.take(3)).map(label).sort()).toEqual(
+    ["list:structural", `review:${a}:value`, `review:${b}:value`].sort(),
   );
-  store.invalidateCatalog();
 
   await command({
     type: "edit",
@@ -191,13 +202,14 @@ it("sends a list line only for what changed in the list", async () => {
 });
 
 it("reports a missing or deleted review as an error line and keeps the stream open", async () => {
+  const MISSING = "missing-review";
   const a = await create("A");
   const b = await create("B");
 
   const stream = await open([
     { reviewId: a },
     { reviewId: b },
-    { reviewId: SCRATCHPAD_ID },
+    { reviewId: MISSING },
   ]);
 
   const first = await stream.take(3);
@@ -205,13 +217,11 @@ it("reports a missing or deleted review as an error line and keeps the stream op
     [
       `review:${a}:value`,
       `review:${b}:value`,
-      `review:${SCRATCHPAD_ID}:error`,
+      `review:${MISSING}:error`,
     ].sort(),
   );
   expect(
-    first.find(
-      (line) => line.kind === "review" && line.reviewId === SCRATCHPAD_ID,
-    ),
+    first.find((line) => line.kind === "review" && line.reviewId === MISSING),
   ).toMatchObject({ error: expect.stringMatching(/not found/i) });
 
   await command({ type: "lifecycle", reviewId: a, state: "trash" });
@@ -226,15 +236,6 @@ it("reports a missing or deleted review as an error line and keeps the stream op
   await rename(b, "B still live");
   expect(await stream.take(1)).toMatchObject([
     { kind: "review", reviewId: b, value: { title: "B still live" } },
-  ]);
-
-  await store.ensureScratchpad();
-  expect(await stream.take(1)).toMatchObject([
-    {
-      kind: "review",
-      reviewId: SCRATCHPAD_ID,
-      value: { reviewId: SCRATCHPAD_ID, kind: "scratchpad" },
-    },
   ]);
 });
 

@@ -22,7 +22,9 @@ import { errorMessage } from "@dev.fast/trace-core";
 import {
   type AskAgentLauncher,
   type AskAgentProcess,
+  askAgentSettings,
   askAgents,
+  defaultAskPermissions,
 } from "@review/ask/agents.js";
 import {
   attachmentsOf,
@@ -44,6 +46,7 @@ import {
   type AskChoices,
   type AskEntry,
   type AskOffer,
+  type AskPermissions,
   type AskPicks,
   type AskQuestion,
   type AskThreadState,
@@ -85,6 +88,15 @@ const steeringSchema = z.object({
 
 const steerOutcomeSchema = z.object({ outcome: z.string() });
 
+/** A review Codex couldn't run; one it ran has a risk level. */
+const failedReviewSchema = z.object({
+  review: z.object({
+    status: z.literal("denied"),
+    riskLevel: z.null(),
+    rationale: z.string(),
+  }),
+});
+
 /** MCP servers the reviewer's own agent may bring whose tools only read,
  * so their calls run without asking, like the agent reading files. */
 const READ_ONLY_MCP_SERVERS = new Set([
@@ -92,11 +104,30 @@ const READ_ONLY_MCP_SERVERS = new Set([
   "fff",
 ]);
 
-/** MCP servers Whiteboard gives every Ask session. Their tool calls are
- * Whiteboard's own, so they run without asking the reviewer. */
-export type AskMcpServers = () => McpServer[];
+/** MCP servers Whiteboard gives every Ask session, for the thread they
+ * serve. Their tool calls are Whiteboard's own, so they run without asking
+ * the reviewer. */
+export type AskMcpServers = (threadId: string) => McpServer[];
 
-interface AskThreadBase {
+export interface AskThreadHooks {
+  /** The agent created a session: the id a later reopen loads. A new one
+   * replaces a session the agent could not reopen. */
+  onSession?: (sessionId: string) => void;
+  /** A turn ended. */
+  onTurn?: () => void;
+  /** What the panel shows, after each turn and on close, so a reopen can
+   * show it without waiting for the agent to replay it. */
+  onSave?: (entries: AskEntry[]) => void;
+  /** The reviewer changed what the agent may do. */
+  onPermissions?: (permissions: AskPermissions) => void;
+  /** The agent said what it offers: choices, commands, or what a question
+   * may carry. */
+  onOffer?: (offer: AskOffer) => void;
+  /** The agent named the conversation. */
+  onTitle?: (title: string) => void;
+}
+
+interface AskThreadBase extends AskThreadHooks {
   /** Stable across reopening; a new conversation gets a fresh one. */
   id?: string;
   reviewId: string;
@@ -107,25 +138,10 @@ interface AskThreadBase {
   /** What the agent reads before a session's first question: the selection
    * and how to find the review. */
   context: string;
-  /** The agent created a session: the id a later reopen loads. A new one
-   * replaces a session the agent could not reopen. */
-  onSession?: (sessionId: string) => void;
-  /** A turn ended. */
-  onTurn?: () => void;
-  /** What the panel shows, after each turn and on close, so a reopen can
-   * show it without waiting for the agent to replay it. */
-  onSave?: (entries: AskEntry[]) => void;
   /** The model and effort to answer with, when the agent offers them. */
   picks?: AskPicks;
-  /** Edit and run commands without asking. */
-  bypass?: boolean;
-  /** The reviewer started or stopped bypassing permissions. */
-  onBypass?: (bypass: boolean) => void;
-  /** The agent said what it offers: choices, commands, or what a question
-   * may carry. */
-  onOffer?: (offer: AskOffer) => void;
-  /** The agent named the conversation. */
-  onTitle?: (title: string) => void;
+  /** What the agent may do without asking; the agent's default without. */
+  permissions?: AskPermissions;
 }
 
 /** A new conversation, or an earlier one to load from the agent. */
@@ -167,6 +183,7 @@ export class AskThread {
   /** The number of changes so far; a snapshot carries the one it includes. */
   private seq = 0;
   private readonly listeners = new Set<(update: AskUpdate) => void>();
+  private readonly statusListeners = new Set<() => void>();
   private readonly closers = new Set<() => void>();
   private readonly decisions = new Map<
     string,
@@ -205,6 +222,8 @@ export class AskThread {
   private needsContext: boolean;
   /** The reviewer changed what the agent may do since it was last told. */
   private permitted = false;
+  /** Why the agent's automatic approval review failed this turn. */
+  private reviewFailure?: string;
   /** The agent could not reopen the session, for a reason signing in would
    * not fix, so trying again starts a new one. */
   private unloadable = false;
@@ -226,7 +245,7 @@ export class AskThread {
     private readonly limits: AskThreadLimits = askThreadLimits,
   ) {
     this.id = start.id ?? randomUUID();
-    this.mcpServers = mcpServers();
+    this.mcpServers = mcpServers(this.id);
     this.picks = { ...start.picks };
     this.state = {
       id: this.id,
@@ -234,7 +253,7 @@ export class AskThread {
       agentName: askAgents[start.agent].name,
       status: "starting",
       readOnly: false,
-      bypass: start.bypass ?? false,
+      permissions: start.permissions ?? defaultAskPermissions(start.agent),
       head: start.head,
       cwd: start.cwd,
       selection: start.selection,
@@ -258,11 +277,22 @@ export class AskThread {
     return { seq: this.seq, snapshot: this.state };
   }
 
+  get status() {
+    return this.state.status;
+  }
+
   /** Every change after the current `seq`, in order. */
   subscribe(listener: (update: AskUpdate) => void) {
     this.listeners.add(listener);
 
     return () => this.listeners.delete(listener);
+  }
+
+  /** Calls back when the status changes, without following the thread. */
+  onStatusChange(listener: () => void) {
+    this.statusListeners.add(listener);
+
+    return () => this.statusListeners.delete(listener);
   }
 
   /** Whether anything follows the thread, as an open panel does. */
@@ -468,7 +498,8 @@ export class AskThread {
     this.closed = true;
 
     try {
-      // Starting and failed conversations must not replace saved history.
+      // A conversation still starting may be half replayed, and one that
+      // failed has nothing new; neither replaces what was saved.
       if (
         save &&
         this.sessionId &&
@@ -597,8 +628,9 @@ export class AskThread {
     const generation = ++this.generation;
 
     const launched = await this.launch(this.start.agent, this.start.cwd, {
-      bypass: this.state.bypass,
+      permissions: this.state.permissions,
       mcpServers: this.mcpServers,
+      threadId: this.id,
     });
 
     // Closed, stopped or given up on while the process started.
@@ -659,9 +691,8 @@ export class AskThread {
       initialized.agentCapabilities?.loadSession === true,
     );
 
-    const { bypass } = this.state;
-    const spec = askAgents[this.start.agent];
-    const mode = bypass ? spec.bypass?.mode : spec.readOnlyMode;
+    const { permissions } = this.state;
+    const { mode } = askAgentSettings(this.start.agent, permissions);
 
     // An agent without a read-only mode still answers, as it is.
     const configurable =
@@ -703,7 +734,8 @@ export class AskThread {
 
     this.emit({
       type: "set",
-      readOnly: !bypass && Boolean(configurable || selectable),
+      readOnly:
+        permissions === "read-only" && Boolean(configurable || selectable),
     });
     this.useConfig(config);
 
@@ -823,20 +855,27 @@ export class AskThread {
     this.start.onOffer?.(offer);
   }
 
-  /** Edits and runs commands without asking from the next answer, or stops:
-   * the agent starts again in that mode and reopens the conversation. */
-  async permit(bypass: boolean) {
+  /** Changes what the agent may do from the next answer: it starts again
+   * in that mode and reopens the conversation. */
+  async permit(permissions: AskPermissions) {
     if (this.state.status !== "idle")
       throw new Error("Settings can change between answers.");
 
-    if (bypass === this.state.bypass) return;
+    if (permissions === this.state.permissions) return;
 
-    if (bypass && !askAgents[this.start.agent].bypass)
-      throw new Error(`${this.state.agentName} cannot bypass permissions.`);
+    if (
+      permissions !== "read-only" &&
+      !askAgents[this.start.agent][permissions]
+    )
+      throw new Error(
+        permissions === "auto"
+          ? `${this.state.agentName} has no auto mode.`
+          : `${this.state.agentName} cannot bypass permissions.`,
+      );
 
-    this.emit({ type: "set", bypass });
+    this.emit({ type: "set", permissions });
     this.permitted = true;
-    this.start.onBypass?.(bypass);
+    this.start.onPermissions?.(permissions);
     this.disconnect();
     // Its mode is Whiteboard's change, not one to announce as the agent's.
     this.settings.clear();
@@ -847,18 +886,18 @@ export class AskThread {
     });
   }
 
-  /** What the session starts with: read-only, or bypassing permissions. */
+  /** What the session starts with, for what the agent may do. */
   private sessionMeta() {
-    const spec = askAgents[this.start.agent];
-
-    return (this.state.bypass && spec.bypass?.sessionMeta) || spec.sessionMeta;
+    return askAgentSettings(this.start.agent, this.state.permissions)
+      .sessionMeta;
   }
 
   /** The agent says which mode it is in now; only its read-only one keeps
    * the checkout as it is. */
   private useMode(mode: string) {
     const readOnly =
-      !this.state.bypass && mode === askAgents[this.start.agent].readOnlyMode;
+      this.state.permissions === "read-only" &&
+      mode === askAgents[this.start.agent].readOnlyMode;
 
     if (readOnly !== this.state.readOnly) this.emit({ type: "set", readOnly });
   }
@@ -885,7 +924,7 @@ export class AskThread {
       if (this.closed) throw new Error("This conversation has ended.");
 
       this.sessionId = response.sessionId;
-      start.onSession?.(response.sessionId);
+      this.start.onSession?.(response.sessionId);
 
       this.greeting = piGreetingSchema.safeParse(
         response._meta,
@@ -954,7 +993,7 @@ export class AskThread {
       ...(withSelection ? [this.start.context] : []),
       ...(withPermission
         ? [
-            this.state.bypass
+            this.state.permissions === "bypass"
               ? "The reviewer lets you change files in the checkout and run commands without asking."
               : "Do not change files in the checkout.",
           ]
@@ -1017,6 +1056,20 @@ export class AskThread {
         title: `${this.state.agentName} finished without replying.`,
       });
 
+    // Every action would fail review again; read-only asks Whiteboard instead.
+    const reviewFailed =
+      this.reviewFailure !== undefined && this.state.permissions === "auto";
+
+    if (reviewFailed)
+      this.push({
+        kind: "notice",
+        id: randomUUID(),
+        severity: "warning",
+        title: `${this.state.agentName}'s automatic approval review failed, so this conversation is now read-only. Ask again to continue.`,
+        description: this.reviewFailure,
+      });
+    this.reviewFailure = undefined;
+
     this.emit({
       type: "set",
       status: "idle",
@@ -1029,6 +1082,8 @@ export class AskThread {
     });
     this.start.onTurn?.();
     this.start.onSave?.(this.state.entries);
+
+    if (reviewFailed) await this.permit("read-only");
     this.askQueued();
   }
 
@@ -1050,7 +1105,7 @@ export class AskThread {
     // may save an "always" rule into the checkout's settings.
     if (
       allowOnce &&
-      (this.state.bypass ||
+      (this.state.permissions === "bypass" ||
         (server &&
           (READ_ONLY_MCP_SERVERS.has(server) ||
             this.mcpServers.some((provided) => provided.name === server))))
@@ -1207,6 +1262,7 @@ export class AskThread {
 
       case "tool_call":
         this.noteMcpServer(update);
+        this.noteReview(update);
         this.push({
           kind: "tool",
           id: update.toolCallId,
@@ -1220,6 +1276,7 @@ export class AskThread {
         return;
       case "tool_call_update":
         this.noteMcpServer(update);
+        this.noteReview(update);
 
         // An agent may report a tool call's first state as an update.
         if (
@@ -1317,6 +1374,14 @@ export class AskThread {
     const server = mcpServerOf(update);
 
     if (server) this.mcpCalls.set(update.toolCallId, server);
+  }
+
+  private noteReview(update: ToolCallUpdate) {
+    const failed = failedReviewSchema.safeParse(
+      update.rawOutput ?? update.rawInput,
+    ).data;
+
+    if (failed && !this.replaying) this.reviewFailure = failed.review.rationale;
   }
 
   /**
@@ -1495,5 +1560,8 @@ export class AskThread {
     const update = { seq: this.seq, change };
 
     for (const listener of this.listeners) listener(update);
+
+    if (change.type === "set" && change.status)
+      for (const listener of this.statusListeners) listener();
   }
 }

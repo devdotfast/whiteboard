@@ -1,3 +1,6 @@
+import { buttonStyles } from "@canvas/ui/button";
+import { CrumbSeparator } from "@canvas/ui/crumbs";
+import { focusStyles } from "@canvas/ui/focus";
 import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { fuzzyMatches } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
@@ -13,6 +16,7 @@ import {
   useState,
 } from "react";
 
+import { countLabel } from "./format";
 import { filterRowMarker } from "./markers.stylex";
 import {
   type HomeFacet,
@@ -25,13 +29,14 @@ import {
   toggleHomeRepository,
   toggleHomeWorktree,
 } from "./review-home-model";
-import { fontSize } from "./scale.stylex";
+import { fontSize, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { CheckboxMark } from "./ui/checkbox";
 import { Shortcut } from "./ui/kbd";
 import { menuStyles, moveMenuFocus } from "./ui/menu";
 import { surfaceStyles } from "./ui/surface";
 import { textStyles } from "./ui/text";
+import { fieldStyles } from "./ui/text-field";
 
 export type HomeFilterSection = "all" | "unread" | HomeFacet;
 
@@ -376,7 +381,7 @@ export function HomeFilterPicker({
       <>
         {selected.map((row) => row.node)}
         {selected.length > 0 && rest.length > 0 && (
-          <div role="separator" {...stylex.props(styles.divider)} />
+          <div role="separator" {...stylex.props(menuStyles.separator)} />
         )}
         {rest.map((row) => row.node)}
         {all.length === 0 && <Empty />}
@@ -408,7 +413,7 @@ export function HomeFilterPicker({
           aria-label={scoped ? facetName : "Filter options"}
           placeholder={scoped ? facetName : "Filter…"}
           value={search}
-          {...stylex.props(styles.filter)}
+          {...stylex.props(fieldStyles.bare, styles.filter)}
           onChange={(event) => {
             setSearch(event.target.value);
             setRepository(null);
@@ -433,8 +438,8 @@ export function HomeFilterPicker({
                 </section>
               )}
               {(repoRows.length > 0 || treeRows.length > 0) && (
-                <section aria-label="Repository filters">
-                  <Label>Repository</Label>
+                <section aria-label="Project filters">
+                  <Label>Project</Label>
                   {repoRows.map(repoRow)}
                   {treeRows}
                 </section>
@@ -444,9 +449,7 @@ export function HomeFilterPicker({
           )}
         </div>
         <div {...stylex.props(styles.footer)}>
-          <span>
-            Showing {count} {count === 1 ? "board" : "boards"}
-          </span>
+          <span>Showing {countLabel(count, "board")}</span>
           <span {...stylex.props(styles.faint)}>
             <Shortcut>esc</Shortcut> done
           </span>
@@ -481,7 +484,7 @@ export function HomeFilterPicker({
             aria-label="Filter worktrees"
             placeholder="Filter worktrees…"
             value={subSearch}
-            {...stylex.props(styles.filter)}
+            {...stylex.props(fieldStyles.bare, styles.filter)}
             onChange={(event) => setSubSearch(event.target.value)}
           />
           <div {...stylex.props(styles.body)}>
@@ -539,6 +542,8 @@ function PickerRow({
       aria-expanded={onRight ? expanded : undefined}
       {...stylex.props(
         filterRowMarker,
+        focusStyles.ringInset,
+        buttonStyles.reset,
         menuStyles.item,
         expanded && styles.expanded,
       )}
@@ -580,7 +585,7 @@ function PickerRow({
       </span>
       <span {...stylex.props(styles.label)}>{label}</span>
       <span {...stylex.props(styles.faint, textStyles.count)}>{count}</span>
-      {onRight && <span aria-hidden="true">›</span>}
+      {onRight && <CrumbSeparator />}
     </button>
   );
 }
@@ -595,25 +600,15 @@ const styles = stylex.create({
     left: "anchor(right)",
   },
   submenuStart: { left: "auto", right: "anchor(left)" },
-  divider: {
-    flexShrink: 0,
-    height: "1px",
-    marginBlock: "4px",
-    backgroundColor: tokens.rule,
-  },
   filter: {
     flexShrink: 0,
     boxSizing: "border-box",
     width: "100%",
     height: "32px",
-    padding: "0 8px",
-    borderWidth: 0,
+    padding: `0 ${space.s8}`,
     borderBottomWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    outlineStyle: "none",
-    backgroundColor: tokens.transparent,
-    color: tokens.ink,
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
   },
@@ -621,9 +616,9 @@ const styles = stylex.create({
     flex: "1 1 auto",
     display: "flex",
     flexDirection: "column",
-    gap: "2px",
+    gap: space.s2,
     minHeight: 0,
-    paddingBlock: "4px",
+    paddingBlock: space.s4,
     overflowY: "auto",
     overscrollBehavior: "contain",
   },
@@ -638,7 +633,7 @@ const styles = stylex.create({
     flexShrink: 0,
     width: "24px",
     height: "24px",
-    margin: "-5px",
+    margin: `-${space.s4}`,
   },
   emptyCheck: {
     opacity: {
@@ -653,20 +648,20 @@ const styles = stylex.create({
     display: "flex",
     flexShrink: 0,
     justifyContent: "space-between",
-    gap: "8px",
-    padding: "8px 8px 4px",
+    gap: space.s8,
+    padding: `${space.s8} ${space.s8} ${space.s4}`,
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
     fontSize: fontSize.small,
   },
   hint: {
-    padding: "5px 8px",
+    padding: `${space.s4} ${space.s8}`,
     color: tokens.inkFaint,
     fontSize: fontSize.small,
   },
   empty: {
-    padding: "12px 8px",
+    padding: `${space.s12} ${space.s8}`,
     color: tokens.inkMuted,
     fontSize: fontSize.small,
   },

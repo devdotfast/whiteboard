@@ -4,8 +4,6 @@ import {
   MAX_REVIEW_TAB_DWELL_MS,
   type ReviewTabDwellPayload,
   createReviewTabDwellTracker,
-  createReviewTabTelemetryTransport,
-  sendReviewTabTelemetryPayload,
 } from "./tab-dwell-telemetry";
 
 describe("createReviewTabDwellTracker", () => {
@@ -79,91 +77,6 @@ describe("createReviewTabDwellTracker", () => {
         reason: "tab_change",
         app_session_id: "session-1234567890",
       },
-    ]);
-  });
-
-  it("uses sendBeacon for pagehide delivery when available", () => {
-    let now = 0;
-    const beacons: Array<{ url: string; body: ReviewTabDwellPayload }> = [];
-    const fetchCalls: unknown[] = [];
-
-    const tracker = createReviewTabDwellTracker({
-      initialTab: "files",
-      appSessionId: "session-1234567890",
-      now: () => now,
-      isVisible: () => true,
-      send: createReviewTabTelemetryTransport({
-        endpoint: "/telemetry/tab",
-        navigator: {
-          sendBeacon(url, data) {
-            beacons.push({
-              url: String(url),
-              body: JSON.parse(String(data)) as ReviewTabDwellPayload,
-            });
-
-            return true;
-          },
-        },
-        fetch: (async (...args) => {
-          fetchCalls.push(args);
-
-          return new Response(null, { status: 200 });
-        }) as typeof fetch,
-      }),
-    });
-
-    now = 750;
-    tracker.handlePageHide();
-
-    expect(beacons).toEqual([
-      {
-        url: "/telemetry/tab",
-        body: {
-          tab: "files",
-          duration_ms: 750,
-          reason: "pagehide",
-          app_session_id: "session-1234567890",
-        },
-      },
-    ]);
-    expect(fetchCalls).toHaveLength(0);
-  });
-
-  it("falls back to keepalive fetch when sendBeacon rejects the document origin", () => {
-    const fetchCalls: Array<Parameters<typeof fetch>> = [];
-
-    const delivery = sendReviewTabTelemetryPayload(
-      {
-        tab: "review",
-        duration_ms: 500,
-        reason: "pagehide",
-        app_session_id: "session-1234567890",
-      },
-      {
-        endpoint: "http://127.0.0.1:1234/telemetry/tab",
-        pageExit: true,
-        navigator: {
-          sendBeacon() {
-            throw new TypeError("Beacons are only supported over HTTP(S).");
-          },
-        },
-        fetch: (async (...args) => {
-          fetchCalls.push(args);
-
-          return new Response(null, { status: 200 });
-        }) as typeof fetch,
-      },
-    );
-
-    expect(delivery).toBe("fetch");
-    expect(fetchCalls).toEqual([
-      [
-        "http://127.0.0.1:1234/telemetry/tab",
-        expect.objectContaining({
-          method: "POST",
-          keepalive: true,
-        }),
-      ],
     ]);
   });
 

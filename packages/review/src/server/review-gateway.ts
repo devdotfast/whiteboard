@@ -126,8 +126,10 @@ export function createReviewGateway(input: {
   home: string;
   relay: ReviewDesktopVerbRelay;
   heartbeatMs?: number;
+  firstByteMs?: number;
   slowRouteMs?: number;
   restarted?(alias: string): void;
+  remoteEvent?(request: Request, reviewId: string): Promise<void>;
   log?(message: string): void;
 }) {
   const log = input.log ?? (() => {});
@@ -237,7 +239,7 @@ export function createReviewGateway(input: {
 
     const limit = route?.slow
       ? (input.slowRouteMs ?? SLOW_ROUTE_TIMEOUT_MS)
-      : FIRST_BYTE_TIMEOUT_MS;
+      : (input.firstByteMs ?? FIRST_BYTE_TIMEOUT_MS);
 
     const abort = new AbortController();
 
@@ -351,7 +353,12 @@ export function createReviewGateway(input: {
     const alias = "remote" in owner ? owner.remote.alias : owner.down.alias;
 
     if (route === "telemetry") {
-      await request.body?.cancel();
+      if (
+        input.remoteEvent &&
+        new URL(request.url).pathname.endsWith("/telemetry/event")
+      )
+        await input.remoteEvent(request, reviewId);
+      else await request.body?.cancel();
 
       return answer(alias, 200, { ok: true });
     }
@@ -419,6 +426,11 @@ export function createReviewGateway(input: {
     fetch: (request: Request) => app.fetch(request),
     setHosts: (list: ReviewGatewayHost[]) => hosts.set(list),
     hosts: () => hosts.states(),
+    isRemote(reviewId: string) {
+      const owner = locate(reviewId);
+
+      return owner !== undefined && owner !== "local";
+    },
     async close() {
       closed = true;
       stopWatchingWindows();

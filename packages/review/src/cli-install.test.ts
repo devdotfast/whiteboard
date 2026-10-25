@@ -753,6 +753,75 @@ describe("installed launcher instance selection", () => {
     // A key is a file name; anything else is left for the CLI to reject.
     expect(await both({ DEV_REVIEW_INSTANCE: "../server" })).toBe("fallback");
   });
+
+  it("finds preview in its own home unless DEV_REVIEW_HOME says otherwise", async () => {
+    const root = await temporaryHome("review-shim-preview-home-");
+    const shim = path.join(root, "review");
+    const fallbackCli = path.join(root, "fallback-cli.js");
+    const fallbackRuntime = path.join(root, "fallback-runtime");
+    await writeFile(fallbackCli, "// CLI fixture\n");
+    await writeFile(fallbackRuntime, "#!/bin/sh\necho fallback\n", {
+      mode: 0o755,
+    });
+
+    const homes = {
+      stable: path.join(root, ".dev"),
+      preview: path.join(root, ".dev-preview"),
+    };
+
+    for (const [key, home] of Object.entries(homes)) {
+      const instances = path.join(home, "review-desktop", "instances");
+      await mkdir(instances, { recursive: true });
+      const cliRuntimePath = path.join(root, `${key}-runtime`);
+      await writeFile(cliRuntimePath, `#!/bin/sh\necho ${key}\n`, {
+        mode: 0o755,
+      });
+      await writeFile(
+        path.join(instances, `${key}.json`),
+        JSON.stringify({
+          cliPath: fallbackCli,
+          cliRuntimePath,
+          serverPid: process.pid,
+        }),
+      );
+    }
+
+    await writePathShim(
+      shim,
+      fallbackCli,
+      fallbackRuntime,
+      homes.stable,
+      homes.preview,
+    );
+
+    const run = async (env: NodeJS.ProcessEnv) =>
+      (
+        await promisify(execFile)(shim, [], {
+          env: { PATH: process.env.PATH, ...env },
+        })
+      ).stdout.trim();
+
+    expect(await run({})).toBe("stable");
+    expect(await run({ DEV_REVIEW_INSTANCE: "preview" })).toBe("preview");
+    expect(
+      await run({
+        DEV_FAST_REVIEW_CHANNEL: "dev",
+        DEV_REVIEW_INSTANCE: "preview",
+      }),
+    ).toBe("fallback");
+    expect(
+      await run({
+        DEV_REVIEW_HOME: homes.preview,
+        DEV_REVIEW_INSTANCE: "preview",
+      }),
+    ).toBe("preview");
+    expect(
+      await run({
+        DEV_REVIEW_HOME: homes.stable,
+        DEV_REVIEW_INSTANCE: "preview",
+      }),
+    ).toBe("fallback");
+  });
 });
 
 describe("Desktop installation alongside npm", () => {
@@ -997,7 +1066,6 @@ describe("MCP self-install", () => {
         fingerprint: "old",
         targets: ["claude"],
         shimPath: shim,
-        commandDisabled: true,
         traceManaged: true,
         updatedAt: now,
       });

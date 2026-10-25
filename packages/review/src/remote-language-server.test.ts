@@ -274,7 +274,7 @@ it("reports a package without a VS Code server", async () => {
   });
 
   expect(result.languageServer).toBeNull();
-  expect(result.languageServerDetail).toMatch(/has no VS Code server/);
+  expect(result.languageServerDetail).toMatch(/has no language server/);
 });
 
 it("reports a server that exits at start with the end of its log", async () => {

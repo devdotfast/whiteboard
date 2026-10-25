@@ -1,4 +1,3 @@
-import { EmptyState } from "@canvas/ui/empty-state";
 import * as stylex from "@stylexjs/stylex";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
@@ -55,21 +54,17 @@ export class ReviewDocumentBoundary extends Component<
   render(): ReactNode {
     if (this.state.hasError) {
       return (
-        <EmptyState
-          variant="document"
-          role="status"
-          message={
-            <>
-              Your coding agent is writing the canvas now…
-              <br />
-              Edit the review through the Whiteboard MCP tools or{" "}
-              <code {...stylex.props(documentStyles.code)}>
-                whiteboard api
-              </code>{" "}
-              to replace the failing block.
-            </>
-          }
-        />
+        <div role="status">
+          <p {...stylex.props(documentStyles.note)}>
+            Your coding agent is writing the canvas now…
+            <br />
+            Edit the review through the Whiteboard MCP tools or{" "}
+            <code {...stylex.props(documentStyles.code)}>
+              whiteboard api
+            </code>{" "}
+            to replace the failing block.
+          </p>
+        </div>
       );
     }
 

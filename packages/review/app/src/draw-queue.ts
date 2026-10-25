@@ -150,7 +150,7 @@ const INVISIBLE_FIELDS = new Set(["defaultCollapsed"]);
 /** Fields on a container that only its heading shows. */
 const HEADING_FIELDS = new Set(["title", "tone"]);
 
-const CONTAINERS = new Set(["section", "callout", "tutorial"]);
+const CONTAINERS = new Set(["section", "callout"]);
 
 /** A block update draws what changed: nothing for a collapse patch, the
  * heading for a retitle, and never a container's children. */

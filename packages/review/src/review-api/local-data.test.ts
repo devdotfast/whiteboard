@@ -25,6 +25,7 @@ import {
   REVIEW_CLIENT_REMOTE,
 } from "@dev.fast/review-protocol";
 import { type SubscribeCallback, subscribe } from "@parcel/watcher";
+import { AskThreads } from "@review/ask/threads.js";
 import { rangeAnchor } from "@review/lens-selection";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { Hono } from "hono";
@@ -37,13 +38,21 @@ import {
   callAuthoringTool,
 } from "./agent-client.js";
 import { ReviewApiClient } from "./client.js";
-import type { Pins } from "./document.js";
+import { type Pins, ReviewInputError, elements } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";
 
 let directory: string, repository: string, database: string, pins: Pins;
 
 let local: ReturnType<typeof openLocalReviewStore>;
+
+/** The commits target as HTTP callers write it: by the checkout's path. */
+const pathTarget = () => ({
+  kind: "commits" as const,
+  repositoryPath: repository,
+  base: pins.base,
+  head: pins.head,
+});
 
 const command = <Operation>(operation: Operation) => ({
   operation,
@@ -67,8 +76,8 @@ const watcherLatency = () => new Promise((resolve) => setTimeout(resolve, 200));
 const recordSpawns = () => {
   spawns.length = 0;
   setLocalVcsCommandObserver({
-    start: ({ file, args }) => {
-      spawns.push([file, ...args]);
+    start: ({ tool, args }) => {
+      spawns.push([tool, ...args]);
 
       return () => {};
     },
@@ -238,9 +247,7 @@ it("reads, resolves and retires a reference at its own pins in another repositor
     ).json(),
   ).toMatchObject({ text: expect.stringContaining("export const more = 2;") });
 
-  const progress = await (
-    await app.request(`/${reviewId}/progress?mode=textual`)
-  ).json();
+  const progress = await (await app.request(`/${reviewId}/progress`)).json();
 
   expect(
     progress.resolvedSelections[
@@ -264,7 +271,7 @@ it("reads, resolves and retires a reference at its own pins in another repositor
   ).not.toContain("lib.ts");
 
   // The reference keeps its repository registered until it is gone.
-  local.store.unregisterRepository(own.repositoryId);
+  await local.store.unregisterRepository(own.repositoryId);
   expect(local.store.repositoryPath(own.repositoryId)).toBe(
     realpathSync(other),
   );
@@ -359,7 +366,7 @@ it("opens a created review in Desktop unless the author opts out", async () => {
     command({
       type: "create",
       title: "Shown",
-      target: { kind: "commits", ...pins },
+      target: pathTarget(),
     }),
   );
 
@@ -374,7 +381,7 @@ it("opens a created review in Desktop unless the author opts out", async () => {
   const background = command({
     type: "create",
     title: "Background",
-    target: { kind: "commits", ...pins },
+    target: pathTarget(),
     open: false,
   });
 
@@ -404,7 +411,7 @@ it("opens the PR's existing review that create returns instead of a new one", as
       command({
         type: "create",
         title: "PR",
-        target: { kind: "commits", ...pins },
+        target: pathTarget(),
         pullRequestUrl,
       }),
     )
@@ -416,7 +423,7 @@ it("opens the PR's existing review that create returns instead of a new one", as
     command({
       type: "create",
       title: "PR again",
-      target: { kind: "commits", ...pins },
+      target: pathTarget(),
       pullRequestUrl,
     }),
   );
@@ -447,7 +454,7 @@ it("does not open a created review when Desktop is not attached", async () => {
     command({
       type: "create",
       title: "Headless",
-      target: { kind: "commits", ...pins },
+      target: pathTarget(),
     }),
   );
 
@@ -476,7 +483,7 @@ it("keeps a created review when Desktop fails to open it", async () => {
     command({
       type: "create",
       title: "Saved anyway",
-      target: { kind: "commits", ...pins },
+      target: pathTarget(),
     }),
   );
 
@@ -619,11 +626,11 @@ it("lists the full repository path and hydrates diff counts from pinned commits"
     }),
   );
   const app = createReviewApi(local.store, local.data);
-  const first = await (await app.request("/?mode=textual")).json();
+  const first = await (await app.request("/")).json();
   expect(first[0].repositoryPath).toBe(realpathSync(repository));
   expect(first[0].diffStats).toBeNull();
-  await local.data.coverage(first[0].reviewId, pins, "textual");
-  const ready = await (await app.request("/?mode=textual")).json();
+  await local.data.coverage(first[0].reviewId, pins);
+  const ready = await (await app.request("/")).json();
   expect(ready[0].diffStats).toEqual({
     fileCount: 3,
     additions: 4,
@@ -633,8 +640,8 @@ it("lists the full repository path and hydrates diff counts from pinned commits"
   await local.store.execute(
     command({ type: "attention", reviewId: ready[0].reviewId, action: "view" }),
   );
-  await local.data.coverage(first[0].reviewId, pins, "textual");
-  expect(local.store.list("textual")[0]?.diffStats).toEqual(ready[0].diffStats);
+  await local.data.coverage(first[0].reviewId, pins);
+  expect(local.store.list()[0]?.diffStats).toEqual(ready[0].diffStats);
 });
 
 it("uses a managed pinned worktree for language services without changing local edits", async () => {
@@ -1245,6 +1252,7 @@ it("keeps a live navigator attached to the live checkout without preparing it", 
   });
 
   expect(live.filePath).toBe(path.join(root, source.file));
+  expect(live.rootPath).toBe(root);
 
   const base = await local.data.navigatorWorkspace(local.store.read(reviewId), {
     side: "base",
@@ -1260,6 +1268,20 @@ it("keeps a live navigator attached to the live checkout without preparing it", 
       file: "outside-link.ts",
     }),
   ).rejects.toThrow("leaves the selected worktree");
+});
+
+it("names a bare clone's worktrees when asked to register the clone", async () => {
+  const clone = path.join(directory, "clone");
+  git("clone", "--quiet", "--bare", repository, path.join(clone, ".bare"));
+  writeFileSync(path.join(clone, ".git"), "gitdir: ./.bare\n");
+
+  await expect(local.data.register(clone)).rejects.toThrow("no worktrees");
+
+  execFileSync("git", ["-C", clone, "worktree", "add", "--quiet", "main"]);
+
+  await expect(local.data.register(clone)).rejects.toThrow(
+    path.join(realpathSync(clone), "main"),
+  );
 });
 
 it("names a linked worktree's source workspace after its repository", async () => {
@@ -2271,7 +2293,7 @@ it("exposes real source and resource operations through the authenticated deskto
         command({
           type: "create",
           title: "HTTP",
-          target: { kind: "commits", ...pins },
+          target: pathTarget(),
         }),
       )
     ).json();
@@ -2395,8 +2417,54 @@ it("copies prose with the displayed version's title and immutable review identit
 
   expect(response.status).toBe(200);
   expect(await response.json()).toEqual({
-    text: `Selected text from Whiteboard: Original title\nSession ID: ${reviewId}\nVersion: 0\nRepository ID: ${pins.repositoryId}\nSession base: ${pins.base}\nSession head: ${pins.head}\nRead this version with session_get({"sessionId":"${reviewId}","version":0,"full":true}).\n\n> First line\n> Second line\n\n`,
+    text: `Whiteboard: Original title\nSession ID: ${reviewId}\nVersion: 0\nSession base: ${pins.base}\nSession head: ${pins.head}\nRead this version with session_get({"sessionId":"${reviewId}","version":0,"full":true}).\n\nSelected text:\n> First line\n> Second line\n\n`,
   });
+});
+
+it("copies the selected rich block from the displayed version and rejects missing block ids", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Block context",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  await insert(reviewId, {
+    type: "code",
+    language: "ts",
+    text: "runJob();",
+    caption: "Job entry",
+  });
+  const saved = local.store.read(reviewId);
+  const version = saved.version;
+  const blockId = saved.document[0].id!;
+  await insert(reviewId, {
+    type: "markdown",
+    markdown: "Unrelated later text",
+  });
+  const app = createReviewApi(local.store, local.data);
+
+  const copy = (blockId: string) =>
+    app.request(`/${reviewId}/copy-context`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        target: { kind: "block", blockId },
+        title: "Job entry",
+        apiSource: { reviewId, version },
+      }),
+    });
+
+  const response = await copy(blockId);
+  expect(response.status).toBe(200);
+  const { text } = await response.json();
+  expect(text).toContain(`Version: ${version}`);
+  expect(text).toContain("Selected block:");
+  expect(text).toContain(`[${blockId}] code`);
+  expect(text).toContain("runJob();");
+  expect(text).not.toContain("Unrelated later text");
+  expect((await copy("missing")).status).toBe(404);
 });
 
 it("copies code from historical pins after a repin, never from working-tree contents", async () => {
@@ -2437,7 +2505,7 @@ it("copies code from historical pins after a repin, never from working-tree cont
 
   expect(historical.status).toBe(200);
   expect(await historical.json()).toEqual({
-    text: `Selected code from Whiteboard: Code\nSession ID: ${reviewId}\nVersion: 0\nRepository ID: ${pins.repositoryId}\nSession base: ${pins.base}\nSession head: ${pins.head}\nRead this version with session_get({"sessionId":"${reviewId}","version":0,"full":true}).\n\n## Value\n\nSelected source\n\n## head: example.ts:1-1 (${pins.head})\n    export const value = 2;\n\n`,
+    text: `Whiteboard: Code\nSession ID: ${reviewId}\nVersion: 0\nSession base: ${pins.base}\nSession head: ${pins.head}\nRead this version with session_get({"sessionId":"${reviewId}","version":0,"full":true}).\n\nSelected code:\n## Value\n\nSelected source\n\n## head: example.ts:1-1 (${pins.head})\n    export const value = 2;\n\n`,
   });
 
   const latest = await app.request(`/${reviewId}/copy-context`, {
@@ -3084,6 +3152,58 @@ it("keeps authored coordinates fixed as live source changes and warns only on un
   });
 });
 
+it("marks only the range of a step that no longer exists", async () => {
+  writeFileSync(
+    path.join(repository, "range.ts"),
+    "const first = 1;\nconst second = 2;\nconst third = 3;\n",
+  );
+  git("add", "-N", "range.ts");
+
+  const result = await local.store.execute(
+    command({
+      type: "create",
+      title: "Ranges",
+      target: {
+        kind: "worktree",
+        repositoryId: pins.repositoryId,
+        base: pins.base,
+      },
+    }),
+  );
+
+  const line = (fromLine: number) =>
+    rangeAnchor({ side: "head", file: "range.ts", fromLine, toLine: fromLine });
+
+  await insert(result.reviewId, {
+    type: "sequence",
+    title: "Read",
+    actors: { app: "App" },
+    steps: [
+      {
+        from: "app",
+        to: "app",
+        label: "Read",
+        source: [line(1), line(2), line(3)],
+      },
+    ],
+  });
+
+  const step = elements(local.store.read(result.reviewId).document).find(
+    (element) => element.type === "step",
+  )!;
+
+  writeFileSync(
+    path.join(repository, "range.ts"),
+    "const first = 99;\nconst second = 2;\n",
+  );
+  await vi.waitFor(async () => {
+    await local.store.refreshWorktrees();
+    expect(local.store.read(result.reviewId).staleSources).toEqual([
+      `${step.id}:source:2`,
+    ]);
+  });
+});
+
 it("reads current checkout even with an older authored version", async () => {
   const api = createReviewApi(local.store, local.data);
   writeFileSync(path.join(repository, "example.ts"), "const generation = 1;\n");
@@ -3686,6 +3806,53 @@ it("answers a source read with 404 while the checkout is gone", async () => {
   );
 });
 
+it("refreshes a commit-pinned review only once it changes or a repository it reads comes or goes", async () => {
+  const pinned = await local.store.execute(
+    command({
+      type: "create",
+      title: "Pinned",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  const live = await local.store.execute(
+    command({
+      type: "create",
+      title: "Live",
+      target: { kind: "worktree", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  await local.store.refreshWorktrees();
+  const checked = vi.spyOn(local.data, "sourcePins");
+  const resolved = vi.spyOn(local.data, "resolveTarget");
+
+  const visits = (reviewId: string) =>
+    checked.mock.calls.filter(([snapshot]) => snapshot.reviewId === reviewId)
+      .length;
+
+  for (let pass = 0; pass < 3; pass++) await local.store.refreshWorktrees();
+  expect(visits(pinned.reviewId)).toBe(0);
+  // Every pass still follows the live checkout.
+  expect(resolved).toHaveBeenCalledTimes(3);
+
+  await insert(pinned.reviewId, { type: "markdown", markdown: "Edited." });
+  await local.store.refreshWorktrees();
+  await local.store.refreshWorktrees();
+  expect(visits(pinned.reviewId)).toBe(1);
+
+  const moved = `${repository}-moved`;
+  renameSync(repository, moved);
+  await local.store.refreshWorktrees();
+  expect(visits(pinned.reviewId)).toBe(2);
+  expect(local.store.read(pinned.reviewId).sourceUnavailable).toBe(true);
+  expect(local.store.read(live.reviewId).sourceUnavailable).toBe(true);
+
+  renameSync(moved, repository);
+  await local.store.refreshWorktrees();
+  expect(local.store.read(pinned.reviewId).sourceUnavailable).toBeUndefined();
+});
+
 it("marks a worktree review unavailable while its checkout is gone", async () => {
   const review = await local.store.execute(
     command({
@@ -3873,4 +4040,167 @@ it("quotes the first and last line of each anchor an edit adds", async () => {
       { anchor: "base/example.ts#L1", first: "export const value = 1;" },
     ],
   });
+});
+
+it("keeps a review's references at their commits when it becomes a plan", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Review",
+      target: { kind: "commits", ...pins },
+    }),
+  );
+
+  await insert(reviewId, {
+    type: "markdown",
+    markdown:
+      "[saved](whiteboard:source/head/example.ts#L2) was [one](whiteboard:source/base/example.ts#L1).",
+  });
+  await insert(reviewId, { type: "code_peek", source: rangeAnchor(source) });
+
+  const converted = await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "project", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  // Nothing moved, so nothing asks to be checked again.
+  expect(converted.warnings).toBeUndefined();
+
+  const plan = local.store.read(reviewId);
+
+  expect(plan.target).toMatchObject({ kind: "project" });
+  expect(plan.pins).toBeUndefined();
+  expect(plan.document).toMatchObject([
+    {
+      markdown: `[saved](whiteboard:source/${pins.head}/example.ts#L2) was [one](whiteboard:source/${pins.base}/example.ts#L1).`,
+    },
+    { pins: { repositoryId: pins.repositoryId, head: pins.head } },
+  ]);
+  // One new version; the review's own stays as it was.
+  expect(plan.version).toBe(3);
+  expect(local.store.read(reviewId, 2).pins).toEqual(pins);
+});
+
+it("warns that a worktree board's references lose its uncommitted lines when it becomes a plan", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Work in progress",
+      target: { kind: "worktree", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  await insert(reviewId, {
+    type: "markdown",
+    markdown: "[value](whiteboard:source/head/example.ts#L1)",
+  });
+
+  const converted = await local.store.execute(
+    command({
+      type: "set_target",
+      reviewId,
+      target: { kind: "project", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  expect(converted.warnings).toHaveLength(1);
+});
+
+it("describes a commit of a board's repository, and 404s one it lacks", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Plan",
+      target: { kind: "project", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  const app = createReviewApi(local.store, local.data);
+
+  const found = await app.request(
+    `/${reviewId}/commit/${pins.base.slice(0, 8)}`,
+  );
+
+  expect(found.status).toBe(200);
+  expect(await found.json()).toMatchObject({ commit: pins.base });
+  expect(
+    (await app.request(`/${reviewId}/commit/${"0".repeat(40)}`)).status,
+  ).toBe(404);
+});
+
+it("saves a commit link's commit in full, and refuses one the repository lacks", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Plan",
+      target: { kind: "project", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  await insert(reviewId, {
+    type: "markdown",
+    markdown: `[one](whiteboard:source/${pins.base.slice(0, 8)}/example.ts#L1)`,
+  });
+  expect(local.store.read(reviewId).document).toMatchObject([
+    { markdown: `[one](whiteboard:source/${pins.base}/example.ts#L1)` },
+  ]);
+
+  await expect(
+    insert(reviewId, {
+      type: "markdown",
+      markdown: "[gone](whiteboard:source/deadbeef0/example.ts#L1)",
+    }),
+  ).rejects.toBeInstanceOf(ReviewInputError);
+});
+
+it("starts Ask on a plan, which has no pins, in its repository's live checkout", async () => {
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Plan",
+      target: { kind: "project", repositoryId: pins.repositoryId },
+    }),
+  );
+
+  expect(local.store.read(reviewId).pins).toBeUndefined();
+
+  // No agent starts here; the thread records where it would have.
+  const threads = new AskThreads(() => {
+    throw new Error("No agent starts here.");
+  });
+
+  const open = vi.spyOn(threads, "open");
+
+  const app = createReviewApi(
+    local.store,
+    local.data,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    { threads, agents: async () => [] },
+  );
+
+  const response = await app.request(`/${reviewId}/ask`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      agent: "claude",
+      question: { text: "Where does this start?" },
+      selection: { title: "Plan", target: { kind: "text", quote: "Plan" } },
+    }),
+  });
+
+  expect(response.status).toBe(200);
+  expect(open.mock.calls[0]?.[0]).toMatchObject({
+    cwd: realpathSync(repository),
+    head: git("rev-parse", "HEAD"),
+  });
+  // Agent traces are optional for Ask; a plan reads them from its checkout.
+  expect((await app.request(`/${reviewId}/agent-traces`)).status).toBe(200);
 });

@@ -14,11 +14,12 @@ export function c4MapReactFlowInteractionProps(
 ) {
   const standalone = interactionMode === "standalone";
 
+  // Inline, a plain wheel scrolls the document; a pinch still zooms.
   return {
     panOnScroll: false,
     preventScrolling: standalone,
-    zoomOnPinch: standalone,
-    zoomOnScroll: standalone,
+    zoomOnPinch: true,
+    zoomOnScroll: true,
   };
 }
 
@@ -225,6 +226,7 @@ export const C4_MAP_HOTKEY_GROUPS = [
     items: [
       { keys: ["h", "j", "k", "l", "Arrows"], label: "select" },
       { keys: ["f"], label: "fit" },
+      { keys: ["+", "-"], label: "zoom" },
     ],
   },
   {

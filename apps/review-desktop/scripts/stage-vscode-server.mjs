@@ -106,8 +106,7 @@ function remoteCuratedExtensions() {
             const key = targetKeyFor(extension, target);
             const pin = extension.targets[key];
 
-            if (!pin?.size)
-              throw new Error(`${id} pins no size for ${target}`);
+            if (!pin) throw new Error(`${id} pins nothing for ${target}`);
 
             return [
               target,
@@ -115,7 +114,6 @@ function remoteCuratedExtensions() {
                 universal: key === "universal",
                 url: vsixUrlFor(extension, key),
                 sha256: pin.sha256,
-                size: pin.size,
               },
             ];
           }),

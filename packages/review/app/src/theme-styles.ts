@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 
+import { fontSize, radius, tracking } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 
 // The palette for everything below the canvas root. The root's own box and
@@ -9,13 +10,6 @@ export const themeStyles = stylex.create({
   // light class can sit on the same element: .review-app and the Desktop
   // entry host that renders home, settings and welcome.
   vars: {
-    "--tutorial-ring": "color-mix(in srgb, var(--accent) 82%, white)",
-    "--tutorial-ring-glow":
-      "color-mix(in srgb, var(--accent) 44%, transparent)",
-    "--tutorial-guide-bg":
-      "color-mix(in srgb, var(--surface-raised) 96%, transparent)",
-    "--tutorial-guide-border":
-      "color-mix(in srgb, var(--tutorial-ring) 48%, var(--rule-soft))",
     // Workbench chrome bridge. The canvas mounts straight into the Code OSS DOM
     // (no iframe), so the workbench's --vscode-* theme variables are in scope and
     // the topbar can dress itself as native chrome. Each token falls back to the
@@ -25,15 +19,15 @@ export const themeStyles = stylex.create({
     // declared, so declaring them further up would freeze the dark values.
     // The workbench has no font custom property to bridge to -- it hardcodes a
     // stack per platform and per language -- so Desktop's review.css publishes
-    // --review-chrome-font; the browser build keeps the canvas's mono face.
-    "--chrome-font": "var(--review-chrome-font, var(--font-mono))",
+    // --review-chrome-font; the browser build uses the canvas's own Inter.
+    "--chrome-font": "var(--review-chrome-font, var(--font-sans))",
     // The workbench publishes a font-weight ramp, so the weights bridge like the
     // color tokens below. The sizes are fixed at the end of this rule.
     "--chrome-font-weight": "var(--vscode-fontWeight-regular, 400)",
     "--chrome-font-weight-strong": "var(--vscode-fontWeight-semiBold, 600)",
     // One tracking value, used only by the uppercase micro-labels. The
     // sentence-case buttons stay untracked, as the workbench's own buttons are.
-    "--chrome-tracking": "0.04em",
+    "--chrome-tracking": tracking.chrome,
     "--chrome-icon-size": "14px",
     "--chrome-fg": "var(--vscode-foreground, var(--ink))",
     // --ink-muted already bridges descriptionForeground, so this is just an alias.
@@ -71,9 +65,9 @@ export const themeStyles = stylex.create({
     // switcher included; two type sizes: the label size for anything you read,
     // the small size for badges and tallies.
     "--chrome-control-height": "24px",
-    "--chrome-control-radius": "6px",
-    "--chrome-font-size": "12px",
-    "--chrome-font-size-small": "11px",
+    "--chrome-control-radius": radius.control,
+    "--chrome-font-size": fontSize.body,
+    "--chrome-font-size-small": fontSize.small,
     "--chrome-hover-bg": "var(--well)",
     "--chrome-border": "var(--rule)",
   },
@@ -87,7 +81,7 @@ export const themeStyles = stylex.create({
     color: tokens.ink,
     backgroundColor: tokens.bg,
     colorScheme: "dark",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   light: {
     "--ghost": "#cdd1d8",
@@ -96,11 +90,11 @@ export const themeStyles = stylex.create({
     "--tray": "#f3f4f6",
     "--tray-raised": "color-mix(in srgb, var(--ink) 6%, var(--tray))",
     "--chevron-down":
-      "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 4.25 6 8l3.5-3.75' fill='none' stroke='%239AA0AB' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
+      "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 8.5 12 16l7-7.5' fill='none' stroke='%239AA0AB' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
     "--check-mark":
-      "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 5.2 4.2 7.4 8 3.2' fill='none' stroke='%23FFFFFF' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
-    "--marker-tint": "rgba(43, 85, 230, 0.08)",
-    "--marker-glow": "rgba(43, 85, 230, 0.22)",
+      "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5 9.5 17 19 7' fill='none' stroke='%23FFFFFF' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
+    "--marker-tint": "color-mix(in srgb, var(--accent) 8%, transparent)",
+    "--marker-glow": "color-mix(in srgb, var(--accent) 22%, transparent)",
     "--agent-1": "#7a4fd6",
     "--agent-1-tint": "rgba(122, 79, 214, 0.08)",
     "--agent-1-glow": "rgba(122, 79, 214, 0.22)",
@@ -131,67 +125,67 @@ export const themeStyles = stylex.create({
       "var(--vscode-scrollbarSlider-activeBackground, #5d6472)",
     "--rule": "var(--vscode-panel-border, #d8dbe1)",
     "--rule-soft": "var(--vscode-editorWidget-border, #b9bec7)",
+    "--toolbar-hover-bg": "var(--vscode-toolbar-hoverBackground, #e9ebef)",
+    "--input-option-active-bg":
+      "var(--vscode-inputOption-activeBackground, #f3f4f6)",
+    "--input-option-active-fg":
+      "var(--vscode-inputOption-activeForeground, #15181e)",
     "--selection": "var(--accent)",
     "--selection-shadow": "color-mix(in srgb, var(--accent) 40%, transparent)",
-    "--tutorial-ring": "color-mix(in srgb, var(--accent) 86%, #14213d)",
-    "--tutorial-ring-glow":
-      "color-mix(in srgb, var(--accent) 34%, transparent)",
-    "--tutorial-guide-bg":
-      "color-mix(in srgb, var(--surface-raised) 98%, white)",
-    "--tutorial-guide-border":
-      "color-mix(in srgb, var(--tutorial-ring) 42%, var(--rule-soft))",
     "--map-storage-border": "#4a7685",
     "--vscode-focusBorder": "transparent",
     "--vscode-list-focusOutline": "transparent",
     "--vscode-list-focusAndSelectionOutline": "transparent",
     "--vscode-list-inactiveFocusOutline": "transparent",
     "--vscode-inputOption-activeBorder": "transparent",
-    "--accent": "#2b55e6",
-    "--accent-soft": "#eef2ff",
-    "--on-accent": "#ffffff",
-    "--on-accent-wash": "rgba(255, 255, 255, 0.34)",
-    "--rpc": "#2b55e6",
-    "--text-selection-bg": "rgba(43, 85, 230, 0.16)",
+    "--accent": "var(--review-accent, #2b55e6)",
+    "--accent-soft": "color-mix(in srgb, var(--accent) 8%, var(--bg))",
+    "--on-accent": "var(--review-on-accent, #ffffff)",
+    "--on-accent-wash": "color-mix(in srgb, var(--on-accent) 34%, transparent)",
+    "--rpc": "var(--accent)",
+    "--text-selection-bg": "color-mix(in srgb, var(--accent) 16%, transparent)",
     "--text-selection-color": "var(--ink)",
     "--canvas-grid": "#e6e8ec",
     "--minimap-mask": "rgba(255, 255, 255, 0.72)",
     "--minimap-node": "#b9bec7",
     "--minimap-node-selected": "transparent",
     "--edge-muted": "#9aa0ab",
-    "--change-added": "#1b9a57",
-    "--change-removed": "#d8402c",
-    "--change-modified": "#c98a0b",
-    "--warning-wash": "rgba(201, 138, 11, 0.1)",
-    "--warning-outline": "rgba(201, 138, 11, 0.24)",
+    "--change-added": "var(--review-success, #1b9a57)",
+    "--change-removed": "var(--review-danger, #d8402c)",
+    "--change-modified": "var(--review-warning, #c98a0b)",
+    "--merged": "#8250df",
+    "--warning-wash":
+      "color-mix(in srgb, var(--change-modified) 10%, transparent)",
+    "--warning-outline":
+      "color-mix(in srgb, var(--change-modified) 24%, transparent)",
     "--on-warning": "#4a3514",
-    "--diff-added": "#1b9a57",
-    "--diff-added-bg": "#eef7f2",
-    "--diff-modified": "#c98a0b",
-    "--diff-modified-bg": "#fbf5e8",
-    "--diff-removed": "#d8402c",
-    "--diff-removed-bg": "#fcefed",
+    "--diff-added": "var(--change-added)",
+    "--diff-added-bg": "color-mix(in srgb, var(--diff-added) 8%, var(--bg))",
+    "--diff-modified": "var(--change-modified)",
+    "--diff-modified-bg":
+      "color-mix(in srgb, var(--diff-modified) 8%, var(--bg))",
+    "--diff-removed": "var(--change-removed)",
+    "--diff-removed-bg":
+      "color-mix(in srgb, var(--diff-removed) 8%, var(--bg))",
     "--shadow-color": "rgba(21, 24, 30, 0.08)",
     "--shadow-color-strong": "rgba(21, 24, 30, 0.1)",
     "--backdrop": "rgba(21, 24, 30, 0.26)",
-    "--accent-shadow": "rgba(43, 85, 230, 0.08)",
-    "--accent-stripe": "rgba(43, 85, 230, 0.12)",
-    "--accent-wash": "rgba(43, 85, 230, 0.08)",
-    "--accent-outline": "rgba(43, 85, 230, 0.32)",
-    "--link-open-wash": "rgba(43, 85, 230, 0.12)",
-    "--rpc-wash": "rgba(43, 85, 230, 0.08)",
-    "--review-home-bg": "var(--bg)",
-    "--review-home-rule": "var(--rule)",
-    "--review-home-rule-soft": "var(--rule-soft)",
-    "--review-home-meta": "#5d6472",
+    "--accent-shadow": "color-mix(in srgb, var(--accent) 8%, transparent)",
+    "--accent-stripe": "color-mix(in srgb, var(--accent) 12%, transparent)",
+    "--accent-wash": "color-mix(in srgb, var(--accent) 8%, transparent)",
+    "--accent-outline": "color-mix(in srgb, var(--accent) 32%, transparent)",
+    "--link-open-wash": "color-mix(in srgb, var(--accent) 12%, transparent)",
+    "--rpc-wash": "color-mix(in srgb, var(--rpc) 8%, transparent)",
     // Code (Whiteboard Light): petrol and navy for types and functions, sepia
     // strings, plum numbers; inserted and deleted sit one step deeper than the
     // change colors so they hold AA as text on white.
-    "--syntax-comment": "#6b7382",
-    "--syntax-type": "#0c6e8e",
-    "--syntax-function": "#1f3f99",
-    "--syntax-string": "#8a5a1c",
-    "--syntax-number": "#8b3f8a",
-    "--syntax-operator": "#5d6472",
+    "--syntax-comment": "var(--review-syntax-comment, #6b7382)",
+    "--syntax-keyword": "var(--review-syntax-keyword, var(--accent))",
+    "--syntax-type": "var(--review-syntax-type, #0c6e8e)",
+    "--syntax-function": "var(--review-syntax-function, #1f3f99)",
+    "--syntax-string": "var(--review-syntax-string, #8a5a1c)",
+    "--syntax-number": "var(--review-syntax-number, #8b3f8a)",
+    "--syntax-operator": "var(--review-syntax-operator, #5d6472)",
     "--syntax-inserted": "#167a47",
     "--syntax-deleted": "#c93a27",
   },

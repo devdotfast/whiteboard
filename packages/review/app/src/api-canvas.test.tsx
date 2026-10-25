@@ -4,6 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import * as clipboard from "@canvas/ui/copy";
 import type {
   JsonObject,
   ReviewApiSummary,
@@ -23,7 +24,7 @@ import { Hono } from "hono";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import * as clipboard from "./copy-text";
+import { askAnchor } from "./ask-anchor";
 import { mountReviewCanvas as mount } from "./desktop-entry";
 import { createSequenceTourEntry, sequenceView } from "./diagrams";
 import { testReviewBridge } from "./review-session-test-utils";
@@ -141,8 +142,10 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
     canvas = mount(container, {
       kind: "api",
       reviewId: review.reviewId,
-      bridge,
-      setSourceView: (_selection, view) => displayedVersion(view.version),
+      bridge: {
+        ...bridge,
+        setSourceView: (_selection, view) => displayedVersion(view.version),
+      },
     });
   });
   await act(async () => {
@@ -277,8 +280,10 @@ it("mounts the existing canvas and preserves a section's DOM and collapsed state
       kind: "api",
       reviewId: review.reviewId,
       version: inserted.version,
-      bridge,
-      setSourceView: (_selection, view) => displayedVersion(view.version),
+      bridge: {
+        ...bridge,
+        setSourceView: (_selection, view) => displayedVersion(view.version),
+      },
     });
   });
   await act(async () => {
@@ -618,8 +623,7 @@ it("renders a code peek block on its pinned side without fetching source text", 
     canvas = mount(container, {
       kind: "api",
       reviewId: review.reviewId,
-      bridge,
-      setSourceView: () => {},
+      bridge: { ...bridge, setSourceView: () => {} },
     });
   });
   await act(async () => {
@@ -758,7 +762,7 @@ it("copies prose and code from the displayed historical JSON review", async () =
 
     const selected: ReviewSurfaceEvent = {
       event: "editorSelectionChanged",
-      reviewId: bridge.config.reviewId,
+      reviewId: review.reviewId,
       path: "example.ts",
       range: { fromLine: 2, toLine: 2 },
       sideContext: "head",
@@ -826,7 +830,77 @@ it("copies prose and code from the displayed historical JSON review", async () =
   }
 });
 
-it("reads a worktree review's range as its base against the working tree, and a commit review's as two commits", async () => {
+it("offers Ask and Copy ref on a selected section title, anchored to its section", async () => {
+  const review = await command({
+    type: "create",
+    title: "Selectable headings",
+    target: { kind: "commits", ...pins },
+  });
+
+  const section = await command({
+    type: "edit",
+    reviewId: review.reviewId,
+    edit: {
+      type: "insert",
+      content: {
+        type: "section",
+        title: "Retry budget",
+        children: [{ type: "markdown", markdown: "Saves retry three times." }],
+      },
+    },
+  });
+
+  const app = new Hono().route("/reviews-api", createReviewApi(store));
+  app.get("/reviews-api/:id/commits", (context) => context.json([]));
+  const write = vi.spyOn(clipboard, "copyText").mockResolvedValue(true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  await act(async () => {
+    canvas = mount(container, {
+      kind: "api",
+      reviewId: review.reviewId,
+      bridge: testReviewBridge(
+        {},
+        { request: async (url, init) => app.request(url, init) },
+      ),
+    });
+  });
+  await act(async () => {
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("Retry budget"),
+    );
+  });
+
+  const heading = container.querySelector<HTMLElement>(
+    `h2[data-review-node-id="${section.targetId}"]`,
+  )!;
+
+  const text = document
+    .createTreeWalker(heading, NodeFilter.SHOW_TEXT)
+    .nextNode()!;
+
+  const range = document.createRange();
+  range.setStart(text, 0);
+  range.setEnd(text, text.textContent!.length);
+  range.getClientRects = () => [new DOMRect(10, 50, 100, 20)] as never;
+  document.getSelection()!.removeAllRanges();
+  document.getSelection()!.addRange(range);
+  await act(async () => document.dispatchEvent(new Event("selectionchange")));
+
+  await act(async () =>
+    container
+      .querySelector<HTMLButtonElement>('[aria-label="Copy ref"]')!
+      .click(),
+  );
+  expect(write.mock.lastCall![0]).toContain("> Retry budget");
+  // Ask pins the passage to the section that holds it.
+  expect(askAnchor(range)).toMatchObject({
+    blockId: section.targetId,
+    text: "Retry budget",
+  });
+});
+
+it("names a worktree review's source as its base against the working copy, and a commit review's as two commits", async () => {
   const head = "c14db2183b0e6c1f4a4a5c3f2d9e8b7a6f5e4d3c";
 
   const store = new ReviewStore(path.join(directory, "worktree.db"), {
@@ -868,10 +942,9 @@ it("reads a worktree review's range as its base against the working tree, and a 
     return container;
   };
 
-  const range = (container: HTMLElement) =>
-    container
-      .querySelector('[role="group"][aria-label^="Session commits"]')
-      ?.getAttribute("aria-label");
+  const source = (container: HTMLElement) =>
+    container.querySelector("[data-review-document-header] > div:last-child")
+      ?.textContent;
 
   try {
     const worktree = await open(
@@ -882,10 +955,7 @@ it("reads a worktree review's range as its base against the working tree, and a 
       "Uncommitted work",
     );
 
-    expect(range(worktree)).toBe(
-      "Session commits: base c14db218, head working tree",
-    );
-    expect(worktree.textContent?.match(/Working tree/g)).toHaveLength(1);
+    await vi.waitFor(() => expect(source(worktree)).toContain("c14db21"));
 
     const committed = await open(
       await create("Committed work", {
@@ -897,12 +967,9 @@ it("reads a worktree review's range as its base against the working tree, and a 
       "Committed work",
     );
 
-    expect(range(committed)).toBeUndefined();
-    expect(
-      committed.querySelector('[data-side="head"]')?.textContent,
-    ).toContain("c14db218");
-    expect(committed.querySelector('[data-side="base"]')).toBeNull();
-    expect(committed.textContent).not.toContain("Working tree");
+    // Base equal to head shows the head alone.
+    await vi.waitFor(() => expect(source(committed)).toContain("c14db21"));
+    expect(committed.querySelector("[aria-label=against]")).toBeNull();
   } finally {
     await store.close();
   }
@@ -1045,7 +1112,11 @@ it("offers the Diff view for a live worktree review and refreshes it on each sav
       {},
       {
         request: async (url, init) => {
-          if (new URL(String(url)).pathname.endsWith("/progress"))
+          if (
+            new URL(String(url), "http://localhost").pathname.endsWith(
+              "/progress",
+            )
+          )
             progressReads++;
 
           return app.request(url, init);
@@ -1111,7 +1182,11 @@ it("leaves window errors to the workbench it shares a window with", async () => 
     {},
     {
       request: async (url, init) => {
-        if (new URL(String(url)).pathname.endsWith("/telemetry/event"))
+        if (
+          new URL(String(url), "http://localhost").pathname.endsWith(
+            "/telemetry/event",
+          )
+        )
           telemetry.push(JSON.parse(String(init?.body)).name);
 
         return app.request(url, init);
@@ -1131,8 +1206,7 @@ it("leaves window errors to the workbench it shares a window with", async () => 
     canvas = mount(container, {
       kind: "api",
       reviewId: review.reviewId,
-      bridge,
-      setSourceView: () => {},
+      bridge: { ...bridge, setSourceView: () => {} },
     });
   });
   await act(async () => {
@@ -1217,10 +1291,13 @@ function rewrittenWatch(
   const encoder = new TextEncoder();
 
   return async (url, init) => {
-    requests.push(new URL(String(url)).pathname);
+    requests.push(new URL(String(url), "http://localhost").pathname);
     const response = await app.request(url, init);
 
-    if (!new URL(String(url)).pathname.endsWith("/watch") || !response.body)
+    if (
+      !new URL(String(url), "http://localhost").pathname.endsWith("/watch") ||
+      !response.body
+    )
       return response;
     const decoder = new TextDecoder();
     let pending = "";
@@ -1247,52 +1324,6 @@ function rewrittenWatch(
   };
 }
 
-it("gives a review on another machine no tutorial controls, even a tutorial review", async () => {
-  const review = await command({
-    type: "create",
-    title: "Remote",
-    target: { kind: "commits", ...pins },
-  });
-
-  const app = new Hono().route("/reviews-api", createReviewApi(store));
-  app.get("/reviews-api/:id/commits", (context) => context.json([]));
-  const tutorial = vi.fn<(enabled: boolean) => void>();
-
-  const bridge = testReviewBridge(
-    {},
-    {
-      request: rewrittenWatch(
-        app,
-        (line) => {
-          if (line.value) line.value.origin = { tutorial: true };
-        },
-        [],
-      ),
-    },
-  );
-
-  const container = document.createElement("div");
-  document.body.append(container);
-  await act(async () => {
-    canvas = mount(container, {
-      kind: "api",
-      reviewId: review.reviewId,
-      host: "wb-a",
-      bridge,
-      setSourceView: () => {},
-      setTutorial: tutorial,
-    });
-  });
-  await act(async () => {
-    await vi.waitFor(() =>
-      expect(container.querySelector("h1")?.textContent).toBe("Remote"),
-    );
-  });
-
-  expect(tutorial).toHaveBeenCalled();
-  expect(tutorial).not.toHaveBeenCalledWith(true);
-});
-
 it("shows a lost remote host as a top-bar chip that retries the host and the stream", async () => {
   const review = await command({
     type: "create",
@@ -1310,7 +1341,9 @@ it("shows a lost remote host as a top-bar chip that retries the host and the str
     {},
     {
       request: async (url, init) => {
-        if (!new URL(String(url)).pathname.endsWith("/watch"))
+        if (
+          !new URL(String(url), "http://localhost").pathname.endsWith("/watch")
+        )
           return app.request(url, init);
         watches++;
 
@@ -1338,7 +1371,10 @@ it("shows a lost remote host as a top-bar chip that retries the host and the str
     },
   );
 
+  let answer: (() => void) | undefined;
+
   const retry = vi.fn<(alias: string) => Promise<void>>(async () => {
+    await new Promise<void>((resolve) => (answer = resolve));
     down = false;
   });
 
@@ -1364,9 +1400,7 @@ it("shows a lost remote host as a top-bar chip that retries the host and the str
       kind: "api",
       reviewId: review.reviewId,
       host: "wb-a",
-      remoteHosts,
-      bridge,
-      setSourceView: () => {},
+      bridge: { ...bridge, remoteHosts, setSourceView: () => {} },
     });
   });
   await act(() =>
@@ -1393,8 +1427,17 @@ it("shows a lost remote host as a top-bar chip that retries the host and the str
   );
 
   const before = watches;
+  chip.focus();
   await act(async () => chip.click());
   expect(retry).toHaveBeenCalledWith("wb-a");
+
+  await act(async () => chip.click());
+  expect(retry).toHaveBeenCalledOnce();
+  expect(chip.disabled).toBe(false);
+  expect(chip.getAttribute("aria-busy")).toBe("true");
+  expect(document.activeElement).toBe(chip);
+
+  await act(async () => answer!());
   await act(() =>
     vi.waitFor(() => {
       expect(container.querySelector(".connection-chip")).toBeNull();
@@ -1414,21 +1457,21 @@ it("shows why a remote review has not loaded, with its host's next step", async 
       kind: "api",
       reviewId: "11111111-1111-4111-8111-111111111111",
       host: "wb-a",
-      remoteHosts: {
-        states: async () => [
-          {
-            alias: "wb-a",
-            state: "incompatible",
-            detail: "wb-a runs Whiteboard 0.1.0; this Desktop runs 0.2.0.",
-          },
-        ],
-        retry: async () => {},
-        install,
-        openSettings: async () => {},
-      },
       bridge: testReviewBridge(
         {},
         {
+          remoteHosts: {
+            states: async () => [
+              {
+                alias: "wb-a",
+                state: "incompatible",
+                detail: "wb-a runs Whiteboard 0.1.0; this Desktop runs 0.2.0.",
+              },
+            ],
+            retry: async () => {},
+            install,
+            openSettings: async () => {},
+          },
           request: async () =>
             Response.json(
               { ok: false, error: "wb-a runs Whiteboard 0.1.0." },
@@ -1509,7 +1552,7 @@ async function mountPeekReview(content: {
     {},
     {
       request: async (url, init) => {
-        requested.push(new URL(String(url)).pathname);
+        requested.push(new URL(String(url), "http://localhost").pathname);
 
         return app.request(url, init);
       },
@@ -1559,8 +1602,8 @@ async function mountPeekReview(content: {
   const mounted = {
     kind: "api" as const,
     reviewId: review.reviewId,
-    bridge,
-    setSourceView: () => {},
+    bridge: { ...bridge, setSourceView: () => {} },
+    settings: { sharingEnabled: true },
     ...content,
   };
 
@@ -1591,17 +1634,11 @@ it.each([
     shown: false,
   },
 ])(
-  "shows Open file and the source tree only where source windows are available ($available)",
+  "shows the source tree only where source windows are available ($available)",
   async ({ available, shown }) => {
-    const { inline, diffs, button } = await mountPeekReview({ available });
+    const { button } = await mountPeekReview({ available });
 
-    expect(Boolean(button("Source tree ↗"))).toBe(shown);
-    expect(inline[0]!.onDidOpen !== undefined).toBe(shown);
-    await act(async () => button("Diff")!.click());
-    await act(async () => {
-      await vi.waitFor(() => expect(diffs).toHaveLength(1));
-    });
-    expect(diffs[0]!.openFile).toBe(shown ? undefined : false);
+    expect(Boolean(button("Source tree"))).toBe(shown);
   },
 );
 
@@ -1614,8 +1651,8 @@ it("keeps Source tree on a remote review whose Source windows are off, disabled 
     },
   });
 
-  expect(button("Source tree ↗")?.disabled).toBe(true);
-  expect(button("Source tree ↗")?.title).toBe("devbox offline.");
+  expect(button("Source tree")?.disabled).toBe(true);
+  expect(button("Source tree")?.title).toBe("devbox offline.");
 });
 
 it("keeps the open peeks and Diff view when the host's source windows go away and return", async () => {

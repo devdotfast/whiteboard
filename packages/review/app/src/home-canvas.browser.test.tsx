@@ -1,0 +1,348 @@
+import type {
+  ReviewApiSummary,
+  ReviewCanvasHandle,
+  ReviewCanvasHomeHost,
+  ReviewCanvasSetupActions,
+  ReviewOnboardingTarget,
+} from "@dev.fast/review-protocol";
+import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { userEvent } from "vitest/browser";
+
+import { testCanvasUi } from "./canvas-ui-test-utils";
+import { mountReviewCanvas } from "./desktop-entry";
+
+const SERVER = "http://127.0.0.1:4000";
+
+const PROJECT = { path: "/repo/main", name: "main" };
+
+// Its targets answer only once the test releases them.
+const SLOW = { path: "/repo/slow", name: "slow" };
+
+function summary(
+  title: string,
+  extra: Partial<ReviewApiSummary> = {},
+): ReviewApiSummary {
+  return {
+    reviewId: title,
+    title,
+    version: 1,
+    repositoryName: "whiteboard",
+    repositoryPath: PROJECT.path,
+    createdAt: "2026-10-10T12:00:00Z",
+    viewedAt: null,
+    trashedAt: null,
+    ...extra,
+  };
+}
+
+/** The desktop server's onboarding routes, counting each one asked. */
+function server() {
+  const requests: string[] = [];
+
+  const targets: ReviewOnboardingTarget[] = [
+    { kind: "branch", path: PROJECT.path, branch: "feature" },
+    { kind: "worktree", path: "/repo/agent", branch: "agent-work" },
+  ];
+
+  let release = () => {};
+
+  const slow = new Promise<void>((resolve) => (release = resolve));
+
+  const respond = vi.fn<typeof fetch>(async (input) => {
+    const url = new URL(String(input));
+    const route = url.pathname;
+
+    requests.push(route);
+
+    if (route === "/reviews-api/onboarding/projects")
+      return Response.json({ projects: [PROJECT, SLOW] });
+
+    if (route === "/reviews-api/onboarding/agents")
+      return Response.json({
+        agents: [{ id: "claude", name: "Claude Code", available: true }],
+      });
+
+    if (
+      route === "/reviews-api/onboarding/targets" &&
+      url.searchParams.get("path") === SLOW.path
+    ) {
+      await slow;
+
+      return Response.json({
+        project: SLOW,
+        base: "main",
+        targets: [{ kind: "branch", path: SLOW.path, branch: "slow-work" }],
+      });
+    }
+
+    if (route === "/reviews-api/onboarding/targets")
+      return Response.json({ project: PROJECT, base: "main", targets });
+
+    return Response.json({ error: "not found" }, { status: 404 });
+  });
+
+  return {
+    respond,
+    targets,
+    release: () => release(),
+    count: (route: string) =>
+      requests.filter((asked) => asked === route).length,
+  };
+}
+
+function setupActions(): ReviewCanvasSetupActions {
+  return {
+    load: vi.fn<ReviewCanvasSetupActions["load"]>(),
+    installCli: vi.fn<ReviewCanvasSetupActions["installCli"]>(async () => {}),
+    connection: vi.fn<ReviewCanvasSetupActions["connection"]>(async () => ({
+      serverUrl: SERVER,
+      token: "token",
+    })),
+    pickFolder: vi.fn<ReviewCanvasSetupActions["pickFolder"]>(
+      async () => undefined,
+    ),
+  };
+}
+
+describe("Home's New whiteboard", () => {
+  let container: HTMLDivElement;
+  let canvas: ReviewCanvasHandle | undefined;
+
+  beforeEach(() => {
+    localStorage.clear();
+    container = document.createElement("div");
+    document.body.append(container);
+  });
+
+  afterEach(async () => {
+    await act(async () => canvas?.dispose());
+    canvas = undefined;
+    container.remove();
+    vi.unstubAllGlobals();
+  });
+
+  const settle = async () => {
+    for (let pass = 0; pass < 10; pass++)
+      await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+  };
+
+  const target = (branch: string) =>
+    [...container.querySelectorAll('[role="radio"]')].find((row) =>
+      row.textContent?.includes(branch),
+    );
+
+  async function openNewWhiteboard(reviews: ReviewApiSummary[]) {
+    const host: ReviewCanvasHomeHost = {
+      openReview: vi.fn<ReviewCanvasHomeHost["openReview"]>(),
+      setupActions: setupActions(),
+    };
+
+    await act(async () => {
+      canvas = mountReviewCanvas(
+        container,
+        { kind: "home", data: { reviews }, host },
+        testCanvasUi().ui,
+      );
+    });
+
+    const create = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent?.trim() === "New",
+    );
+
+    await act(async () => create?.click());
+    await settle();
+
+    return host;
+  }
+
+  it("keeps its list and choice while Home's reviews change", async () => {
+    const { respond, count } = server();
+
+    vi.stubGlobal("fetch", respond);
+
+    const host = await openNewWhiteboard([summary("Plan")]);
+
+    await act(async () => (target("agent-work") as HTMLElement).click());
+    expect(target("agent-work")?.getAttribute("aria-checked")).toBe("true");
+
+    // An agent saving a whiteboard pushes a new list with the same host.
+    for (const version of [2, 3, 4])
+      await act(async () =>
+        canvas?.update({
+          kind: "home",
+          data: { reviews: [summary("Plan", { version })] },
+          host,
+        }),
+      );
+    await settle();
+
+    expect(count("/reviews-api/onboarding/targets")).toBe(1);
+    expect(target("agent-work")?.getAttribute("aria-checked")).toBe("true");
+  });
+
+  it("shows new worktrees on refresh, keeping the choice and prompt", async () => {
+    const { respond, targets, count } = server();
+
+    vi.stubGlobal("fetch", respond);
+
+    await openNewWhiteboard([summary("Plan")]);
+
+    await act(async () => (target("agent-work") as HTMLElement).click());
+
+    const prompt = container.querySelector("textarea") as HTMLTextAreaElement;
+
+    await userEvent.fill(prompt, "Walk me through the agent's change.");
+
+    targets.push({ kind: "worktree", path: "/repo/later", branch: "later" });
+    expect(target("later")).toBeUndefined();
+
+    const refresh = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Refresh branches, worktrees and PRs"]',
+    );
+
+    await act(async () => refresh?.click());
+    await settle();
+
+    expect(count("/reviews-api/onboarding/targets")).toBe(2);
+    expect(target("later")).toBeDefined();
+    expect(target("agent-work")?.getAttribute("aria-checked")).toBe("true");
+    expect(prompt.value).toBe("Walk me through the agent's change.");
+  });
+
+  it("opens once from the workbench, in the project it names", async () => {
+    const { respond, release } = server();
+
+    vi.stubGlobal("fetch", respond);
+
+    const host: ReviewCanvasHomeHost = {
+      openReview: vi.fn<ReviewCanvasHomeHost["openReview"]>(),
+      setupActions: setupActions(),
+    };
+
+    const data = {
+      reviews: [summary("Plan")],
+      newWhiteboard: { via: "sidebar" as const, projectPath: SLOW.path },
+    };
+
+    await act(async () => {
+      canvas = mountReviewCanvas(
+        container,
+        { kind: "home", data, host },
+        testCanvasUi().ui,
+      );
+    });
+    release();
+    await settle();
+
+    expect(container.textContent).toContain("New whiteboard.");
+    expect(target("slow-work")).toBeDefined();
+
+    const back = [...container.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("Whiteboards"),
+    );
+
+    await act(async () => back?.click());
+    await act(async () => canvas?.update({ kind: "home", data, host }));
+    await settle();
+
+    expect(container.textContent).not.toContain("New whiteboard.");
+  });
+
+  it("starts an empty whiteboard in the chosen project", async () => {
+    const { respond } = server();
+
+    vi.stubGlobal("fetch", respond);
+
+    const createWhiteboard = vi.fn<
+      NonNullable<ReviewCanvasHomeHost["createWhiteboard"]>
+    >(async () => {});
+
+    const host: ReviewCanvasHomeHost = {
+      openReview: vi.fn<ReviewCanvasHomeHost["openReview"]>(),
+      setupActions: setupActions(),
+      createWhiteboard,
+    };
+
+    await act(async () => {
+      canvas = mountReviewCanvas(
+        container,
+        {
+          kind: "home",
+          data: {
+            reviews: [summary("Plan")],
+            newWhiteboard: { via: "command" },
+          },
+          host,
+        },
+        testCanvasUi().ui,
+      );
+    });
+    await settle();
+
+    const empty = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Empty whiteboard",
+    );
+
+    await act(async () => empty?.click());
+    await settle();
+
+    expect(createWhiteboard).toHaveBeenCalledExactlyOnceWith(PROJECT.path);
+    expect(container.textContent).not.toContain("New whiteboard.");
+  });
+
+  it("shows a chosen project at once, before its targets load", async () => {
+    const { respond, release } = server();
+
+    vi.stubGlobal("fetch", respond);
+
+    await openNewWhiteboard([summary("Plan")]);
+
+    const menu = container.querySelector<HTMLButtonElement>(
+      '[aria-label="Project"]',
+    );
+
+    await act(async () => menu?.click());
+
+    const slowItem = [
+      ...container.ownerDocument.querySelectorAll('[role="menuitemradio"]'),
+    ].find((item) => item.textContent?.trim() === SLOW.name) as HTMLElement;
+
+    await act(async () => slowItem.click());
+    await settle();
+
+    // The header follows the choice; the old project's targets are gone.
+    expect(menu?.textContent).toContain(SLOW.name);
+    expect(container.textContent).toContain(SLOW.path);
+    expect(target("agent-work")).toBeUndefined();
+    expect(
+      container.querySelector(
+        '[aria-label="Reading branches, worktrees and pull requests"]',
+      ),
+    ).not.toBeNull();
+
+    release();
+    await settle();
+
+    expect(target("slow-work")).toBeDefined();
+  });
+
+  it("stays open when a whiteboard is published elsewhere", async () => {
+    const { respond } = server();
+
+    vi.stubGlobal("fetch", respond);
+
+    const host = await openNewWhiteboard([summary("Plan")]);
+
+    await act(async () =>
+      canvas?.update({
+        kind: "home",
+        data: { reviews: [summary("Plan"), summary("Elsewhere")] },
+        host,
+      }),
+    );
+    await settle();
+
+    expect(container.textContent).toContain("New whiteboard.");
+  });
+});

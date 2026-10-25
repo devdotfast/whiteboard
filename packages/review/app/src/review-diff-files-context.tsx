@@ -1,5 +1,6 @@
 import type {
   ReviewCanvasBridge,
+  ReviewCommitSummary,
   ReviewDiffFileWire,
 } from "@dev.fast/review-protocol";
 import { useQuery } from "@tanstack/react-query";
@@ -7,6 +8,7 @@ import { type ReactNode, createContext, useContext, useMemo } from "react";
 
 import { canvasQueryKeys } from "./canvas-query";
 import { useReviewSession } from "./host/review-session";
+import { useReviewPanel } from "./review-panel";
 import { useReviewContainer } from "./review-root-context";
 
 export type ReviewDiffFilesState =
@@ -55,6 +57,7 @@ export function ReviewDiffFilesProvider({
   // The bridge read cannot be cancelled; a superseded result stays in its own key.
   const query = useQuery({
     queryKey: canvasQueryKeys.diffFiles(
+      session.reviewId,
       documentKey,
       sourceId(diffView),
       revision,
@@ -72,8 +75,8 @@ export function ReviewDiffFilesProvider({
     gcTime: 0,
     // A save refetches the same document and source; show its files meanwhile.
     placeholderData: (previous, previousQuery) =>
-      previousQuery?.queryKey[1] === documentKey &&
-      previousQuery.queryKey[2] === sourceId(diffView)
+      previousQuery?.queryKey[2] === documentKey &&
+      previousQuery.queryKey[3] === sourceId(diffView)
         ? previous
         : undefined,
   });
@@ -119,4 +122,25 @@ function recordDiffSummaryReady(container: HTMLElement | null): void {
   if (!container) return;
   const current = Number(container.dataset.reviewDiffSummaryReadyCount ?? 0);
   container.dataset.reviewDiffSummaryReadyCount = String(current + 1);
+}
+
+export function useDiffScope(commits: readonly ReviewCommitSummary[]) {
+  const picked = useReviewPanel((state) => state.diffScope);
+  const diffFiles = useReviewDiffFiles();
+
+  // Facts come from the board's commits; an unlisted sha scopes nothing.
+  const scopedCommit = picked
+    ? commits.find((each) => each.commit === picked.commit)
+    : undefined;
+
+  return {
+    picked,
+    scopedCommit,
+    diffScope: scopedCommit ? picked : null,
+    fileCount: scopedCommit
+      ? scopedCommit.fileCount
+      : diffFiles.status === "loaded"
+        ? diffFiles.files.length
+        : null,
+  };
 }

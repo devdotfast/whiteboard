@@ -65,10 +65,8 @@ const BLOCKED_SETTING_PREFIXES = [
 
 const BLOCKED_SETTING_KEYS = new Set<string>([
 	...Object.keys(reviewConfigurationDefaults),
-	// An imported setting beats a default, so a VS Code user who runs Pylance
-	// would carry `python.languageServer: "Pylance"` in and re-arm the install
-	// prompt for an extension Review cannot ship. The same holds for every other
-	// prompt these defaults close.
+	// An imported setting beats a default, so importing these would re-arm the
+	// prompts the defaults close.
 	...Object.keys(curatedExtensionConfigurationDefaults),
 ]);
 

@@ -3,9 +3,10 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { DeferredPromise, raceTimeout, TimeoutTimer } from "../../../base/common/async.js";
+import { DeferredPromise, raceTimeout, RunOnceScheduler, TimeoutTimer } from "../../../base/common/async.js";
 import { toErrorMessage } from "../../../base/common/errorMessage.js";
 import { CancellationError } from "../../../base/common/errors.js";
+import { Emitter } from "../../../base/common/event.js";
 import { Disposable, type IDisposable } from "../../../base/common/lifecycle.js";
 import * as platform from "../../../base/common/platform.js";
 import type { Mutable } from "../../../base/common/types.js";
@@ -44,7 +45,7 @@ import { RemoteExtensionEnvironmentChannelClient } from "../../../workbench/serv
 import { REMOTE_FILE_SYSTEM_CHANNEL_NAME } from "../../../workbench/services/remote/common/remoteFileSystemProviderClient.js";
 import { IReviewDesktopConnectionService, type ReviewRemoteLanguageEndpoint } from "../reviewDesktopConnectionService.js";
 import type { ReviewRemoteFileSystemRouter } from "./reviewRemoteFileSystemRouter.js";
-import { ownsRemoteResource } from "./reviewRemoteAuthority.js";
+import { ownsRemoteResource, setReviewRemoteOS } from "./reviewRemoteAuthority.js";
 import { ReviewRemoteWorkspace, reviewRemoteResolver, reviewRemoteScope } from "./reviewRemoteScope.js";
 
 export interface IReviewRemoteHost {
@@ -68,6 +69,10 @@ const STABLE_MS = 60_000;
 
 const PROBE_MS = 5_000;
 
+// Work shorter than this never shows; startup's back-to-back phases read as one.
+const SHOW_MS = 500;
+const IDLE_MS = 250;
+
 export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	readonly languageFeatures: ILanguageFeaturesService = new LanguageFeaturesService();
 	readonly workspace: ReviewRemoteWorkspace;
@@ -80,6 +85,21 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	private probedEndpoint: string | undefined;
 	private readonly retry = this._register(new TimeoutTimer());
 	private readonly activations = new Set<string>();
+	private work = 0;
+	private reported = false;
+	private readonly show = this._register(new RunOnceScheduler(() => {
+		if (this.work > 0) this.report(true);
+	}, SHOW_MS));
+	private readonly idle = this._register(new RunOnceScheduler(() => {
+		this.show.cancel();
+		this.report(false);
+		this.settled.fire();
+	}, IDLE_MS));
+	private readonly busyChanged = this._register(new Emitter<void>());
+	readonly onDidChangeBusy = this.busyChanged.event;
+	private readonly settled = this._register(new Emitter<void>());
+	/** All work has stopped, whether or not it lasted long enough to count as busy. */
+	readonly onDidSettle = this.settled.event;
 
 	constructor(
 		readonly serverId: string,
@@ -119,7 +139,7 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	private async attempt(): Promise<boolean> {
 		let session: IReviewRemoteSession | undefined;
 		try {
-			session = await this.open(this);
+			session = await this.track(this.open(this));
 		} catch (error) {
 			this.logService.warn(`[Remote language] ${this.authority}: could not connect: ${toErrorMessage(error)}`);
 		}
@@ -142,7 +162,7 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 			this.retryLater();
 		});
 		for (const event of this.activations) {
-			session.activateByEvent(event).catch((error) => this.logService.warn(`[Remote language] ${this.authority}: ${event} failed: ${toErrorMessage(error)}`));
+			this.track(session.activateByEvent(event)).catch((error) => this.logService.warn(`[Remote language] ${this.authority}: ${event} failed: ${toErrorMessage(error)}`));
 		}
 		return true;
 	}
@@ -161,8 +181,32 @@ export class ReviewRemoteHost extends Disposable implements IReviewRemoteHost {
 	}
 
 	async activateByEvent(event: string): Promise<void> {
+		const first = !this.activations.has(event);
 		this.activations.add(event);
-		await this.session?.activateByEvent(event);
+		if (!this.session) return;
+		const activation = this.session.activateByEvent(event);
+		await (first ? this.track(activation) : activation);
+	}
+
+	/** Connecting, activating extensions, or work they report. */
+	get busy(): boolean {
+		return this.reported;
+	}
+
+	track<T>(work: Promise<T>): Promise<T> {
+		if (this.work++ === 0) {
+			this.idle.cancel();
+			if (!this.reported && !this.show.isScheduled()) this.show.schedule();
+		}
+		return work.finally(() => {
+			if (--this.work === 0 && !this._store.isDisposed) this.idle.schedule();
+		});
+	}
+
+	private report(busy: boolean): void {
+		if (this.reported === busy) return;
+		this.reported = busy;
+		this.busyChanged.fire();
 	}
 
 	async close(): Promise<void> {
@@ -261,6 +305,7 @@ export class ReviewRemoteSession extends Disposable implements IReviewRemoteSess
 			undefined,
 		);
 		if (environment.reconnectionGraceTime !== undefined) management.updateGraceTime(environment.reconnectionGraceTime);
+		this._register(setReviewRemoteOS(authority, environment.os));
 		const extensions = await management.client
 			.getChannel(RemoteExtensionsScannerChannelName)
 			.call<Mutable<IExtensionDescription>[]>("scanExtensions", [platform.language, undefined, [], undefined, undefined]);
@@ -276,6 +321,7 @@ export class ReviewRemoteSession extends Disposable implements IReviewRemoteSess
 			activate: (event) => this.activateByEvent(event),
 			languageFeatures: this.host.languageFeatures,
 			workspace: this.host.workspace,
+			track: (work) => this.host.track(work),
 			resolver: reviewRemoteResolver(this.resolverService, authority, () => this.address()),
 		}, window))));
 		const extensionHost = scope.createInstance(ReviewRemoteExtensionHost, new RemoteRunningLocation(), {

@@ -1,5 +1,5 @@
-import { ReviewApiClient } from "@review/review-api/client";
 // @vitest-environment jsdom
+import type { ReviewCanvasBridge } from "@dev.fast/review-protocol";
 import {
   type QueryClient,
   onlineManager,
@@ -7,11 +7,11 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { StrictMode, act } from "react";
+import { type ReactNode, StrictMode, act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { CanvasQueryProvider } from "./canvas-query";
+import { CanvasQueryProvider, useCanvasQueryScope } from "./canvas-query";
 
 let root: Root | undefined;
 
@@ -28,8 +28,9 @@ const settle = () =>
     await new Promise((resolve) => setTimeout(resolve, 20));
   });
 
-const apiClient = () =>
-  new ReviewApiClient({ serverUrl: "http://localhost", token: "local" });
+type Host = Pick<ReviewCanvasBridge, "request">;
+
+const apiHost = (): Host => ({ request: (url, init) => fetch(url, init) });
 
 function mount() {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -38,6 +39,20 @@ function mount() {
   root = createRoot(container);
 
   return container;
+}
+
+function Canvas({
+  host,
+  reviewId,
+  children,
+}: {
+  host: Host;
+  reviewId: string;
+  children: ReactNode;
+}) {
+  const scope = useCanvasQueryScope(host.request, reviewId);
+
+  return <CanvasQueryProvider scope={scope}>{children}</CanvasQueryProvider>;
 }
 
 function Probe({
@@ -63,9 +78,9 @@ it("keeps its cache through a Strict Mode replay and drops it on unmount", async
   await act(async () =>
     root!.render(
       <StrictMode>
-        <CanvasQueryProvider client={apiClient()} reviewId="review">
+        <Canvas host={apiHost()} reviewId="review">
           <Probe name="a" read={read} onClient={(next) => (client = next)} />
-        </CanvasQueryProvider>
+        </Canvas>
       </StrictMode>,
     ),
   );
@@ -82,18 +97,18 @@ it("keeps its cache through a Strict Mode replay and drops it on unmount", async
 
 it("gives each canvas and each backend its own cache", async () => {
   const container = mount();
-  const first = apiClient();
+  const first = apiHost();
 
-  const render = (backend: ReviewApiClient, reads: string[]) =>
+  const render = (backend: Host, reads: string[]) =>
     act(async () =>
       root!.render(
         <>
-          <CanvasQueryProvider client={backend} reviewId="review">
+          <Canvas host={backend} reviewId="review">
             <Probe name="a" read={async () => reads[0]!} />
-          </CanvasQueryProvider>
-          <CanvasQueryProvider client={first} reviewId="other">
+          </Canvas>
+          <Canvas host={first} reviewId="other">
             <Probe name="b" read={async () => reads[1]!} />
-          </CanvasQueryProvider>
+          </Canvas>
         </>,
       ),
     );
@@ -102,7 +117,7 @@ it("gives each canvas and each backend its own cache", async () => {
   await settle();
   expect(container.textContent).toBe("a:one;b:two;");
 
-  await render(apiClient(), ["three", "four"]);
+  await render(apiHost(), ["three", "four"]);
   await settle();
   expect(container.textContent).toBe("a:three;b:two;");
 });
@@ -128,13 +143,29 @@ it("reads and writes the local API while the browser reports offline", async () 
 
   await act(async () =>
     root!.render(
-      <CanvasQueryProvider client={apiClient()} reviewId="review">
+      <Canvas host={apiHost()} reviewId="review">
         <Offline />
-      </CanvasQueryProvider>,
+      </Canvas>,
     ),
   );
   await settle();
   await act(async () => container.querySelector("button")!.click());
   await settle();
   expect(container.textContent).toBe("read:written");
+});
+
+it("leaves reads idle for a host that serves no requests", async () => {
+  const container = mount();
+  const read = vi.fn<() => Promise<string>>(async () => "value");
+
+  await act(async () =>
+    root!.render(
+      <Canvas host={{}} reviewId="review">
+        <Probe name="a" read={read} />
+      </Canvas>,
+    ),
+  );
+  await settle();
+  expect(container.textContent).toBe("a:…;");
+  expect(read).not.toHaveBeenCalled();
 });

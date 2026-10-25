@@ -1,12 +1,11 @@
 import { drawStyles } from "@canvas/draw-styles";
 import { documentMarker } from "@canvas/markers.stylex";
+import { space } from "@canvas/scale.stylex";
 import { withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
-
-const narrow = "@media (max-width: 720px)";
 
 const documentWidth = `calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline})`;
 
@@ -25,22 +24,22 @@ export function softwareMapRootProps(className?: string, variant?: "view") {
 
 const styles = stylex.create({
   root: {
-    margin: "24px 0",
-    fontFamily: tokens.fontMono,
+    margin: `${space.s24} 0`,
+    fontFamily: tokens.chromeFont,
     // In a document the map centers on the prose column, never narrower than
     // the prose measure.
     width: {
       default: null,
       [inDocument()]: {
         default: "fit-content",
-        [narrow]: "calc(100cqi - 16px)",
+        [stylex.env.narrow]: "calc(100cqi - 16px)",
       },
     },
     maxWidth: {
       default: null,
       [inDocument()]: {
         default: `min(${tokens.reviewInlineDiagramMaxWidth}, ${documentWidth})`,
-        [narrow]: "none",
+        [stylex.env.narrow]: "none",
       },
     },
     minWidth: {

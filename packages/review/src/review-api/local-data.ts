@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { mkdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 
 import {
   type BlobBatchReader,
@@ -11,20 +9,25 @@ import {
   type LocalVcsDiffFileSummary,
   type LocalVcsKind,
   LocalVcsToolsMissingError,
+  type VcsArg,
   createBlobBatchReader,
   detectLocalVcs,
   diffFileSummariesTrees,
   diffFileSummariesWorkingTree,
   diffTrees,
   diffWorkingTree,
+  gitAt,
   gitCommonDir,
   listCommitRange,
   listTrackedFilesAtCommit,
+  parseGitRemote,
   readFileAtCommit,
   resolveRepoContext,
+  runVcs,
 } from "@dev.fast/local-vcs";
-import { structuralChangeCounts } from "@dev.fast/review-protocol";
+import { boardTitle, structuralChangeCounts } from "@dev.fast/review-protocol";
 import type {
+  PullRequestState,
   ReviewLanguageEnvironment,
   ReviewSourceEntry,
   StructuralDiffEvent,
@@ -37,6 +40,10 @@ import type {
 } from "@parcel/watcher";
 import { textIncludesQuote } from "@review/evidence.js";
 import { isMissingFileError } from "@review/fs-utils.js";
+import {
+  type GitHubPullRequest,
+  readGitHubPullRequests,
+} from "@review/github-pr-graph.js";
 import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
 import { ensureReviewPinnedCheckout } from "@review/review-head-checkout.js";
 import { StructuralComparisons } from "@review/server/structural-comparisons.js";
@@ -57,7 +64,6 @@ import { z } from "zod";
 import { checkoutFs } from "./checkout-fs.js";
 import {
   type ComparisonCoverage,
-  type CoverageMode,
   comparisonCoverage,
 } from "./comparison-coverage.js";
 import { resourceReference } from "./document.js";
@@ -69,20 +75,23 @@ import {
   type ReviewTarget,
   type SourcePins,
   anchorPins,
+  boardRepositoryId,
   elements,
-  explicitPins,
   fileLineRangeSchema,
+  pinnedRepositoryIds,
   pinsSchema,
   sourceReferences,
 } from "./document.js";
 import { decodeImage } from "./image-decode.js";
 import { mapInputSchema } from "./map-input.js";
+import { pullRequestKey, sourceBranchName } from "./origin.js";
 import {
   type PullRequestAddress,
   type PullRequestProvider,
   resolvePullRequest,
 } from "./provider.js";
 import {
+  GitHubRefusedRead,
   type PullRequestDeps,
   defaultPullRequestDeps,
   fetchPullRequest,
@@ -94,6 +103,7 @@ import {
   type Snapshot,
 } from "./store.js";
 import { traceSchema } from "./trace-schema.js";
+import { VersionCache } from "./version-cache.js";
 import { ReviewWorkspaces } from "./workspaces.js";
 import {
   INERT_GIT_PATHS,
@@ -165,7 +175,14 @@ interface RepositoryVcs {
   vcs?: LocalVcs;
 }
 
+/** How long a PR's state is shown before it is read again. */
+const PULL_REQUEST_STATE_TTL_MS = 5 * 60_000;
+
+/** How many PR states are read from GitHub at once. */
+const PULL_REQUEST_STATE_READS = 2;
+
 /** Local source/resource boundary, including Desktop-only local language context. */
+
 export class LocalReviewData {
   private readonly workspaceManager?: ReviewWorkspaces;
 
@@ -301,7 +318,12 @@ export class LocalReviewData {
     if (commit && !anchor)
       await this.comparison(await this.documentPins(snapshot), commit);
 
-    const repositoryId = anchor?.repositoryId ?? snapshot.pins?.repositoryId;
+    const repositoryId =
+      anchor?.repositoryId ??
+      snapshot.pins?.repositoryId ??
+      (snapshot.target?.kind === "project"
+        ? snapshot.target.repositoryId
+        : undefined);
 
     if (!repositoryId)
       throw new ReviewInputError(
@@ -382,7 +404,7 @@ export class LocalReviewData {
       commit?: string;
       anchor?: SourcePins;
     } = {},
-  ): Promise<{ workspacePath: string; filePath?: string }> {
+  ): Promise<{ workspacePath: string; filePath?: string; rootPath: string }> {
     const { pins } = await this.resolveSource(
       snapshot,
       source.commit,
@@ -419,7 +441,7 @@ export class LocalReviewData {
       );
 
     if (!live) {
-      const { stdout } = await promisify(execFile)("git", [
+      const { stdout } = await runVcs("git", [
         "-C",
         rootPath,
         "status",
@@ -472,7 +494,7 @@ export class LocalReviewData {
           ),
         ));
 
-      const title = `${snapshot.title} — ${live ? "Live source" : side === "base" ? "Base source" : "Source"} — Whiteboard`;
+      const title = `${boardTitle(snapshot.title)} — ${live ? "Live source" : side === "base" ? "Base source" : "Source"} — Whiteboard`;
 
       const workspace = previous ?? {
         folders: [],
@@ -515,12 +537,18 @@ export class LocalReviewData {
       }
     }
 
-    return { workspacePath, filePath };
+    // External editors open the checkout as their workspace beside the file.
+    return { workspacePath, filePath, rootPath };
   }
 
-  /** A document read that needs default pins; 409 when the document has none. */
+  /** A document read that needs default pins: its own, or for a plan its
+   * repository's live checkout with base at head; 409 when it has neither. */
   async documentPins(snapshot: Snapshot): Promise<Pins> {
-    const pins = await this.sourcePins(snapshot);
+    const pins =
+      (await this.sourcePins(snapshot)) ??
+      (snapshot.target?.kind === "project"
+        ? await this.livePins(snapshot.target.repositoryId)
+        : undefined);
 
     if (!pins)
       throw new ReviewInputError(
@@ -531,6 +559,21 @@ export class LocalReviewData {
     return pins;
   }
 
+  /** A checkout's current state, base at head: what a plan reads. */
+  private async livePins(repositoryId: string): Promise<Pins> {
+    const vcs = await this.vcs(repositoryId);
+
+    if (!vcs) throw unavailableCheckout();
+    const { revision, commit } = await this.worktreeState(repositoryId, vcs);
+
+    return {
+      repositoryId,
+      base: commit,
+      head: commit,
+      worktreeRevision: revision,
+    };
+  }
+
   /** Pins a reference names itself, checked against the registered checkout. */
   async anchorSourcePins(anchor: SourcePins): Promise<Pins> {
     if (!existsSync(this.store.repositoryPath(anchor.repositoryId)))
@@ -539,28 +582,45 @@ export class LocalReviewData {
     return anchorPins({ pins: anchor }, undefined);
   }
 
-  /** References whose own repository is unregistered or gone from disk. */
+  /** References whose own repository is unregistered or gone from disk.
+   * `snapshot` is a stored version. */
   async unavailableAnchors(snapshot: Snapshot): Promise<string[]> {
     const missing = new Set<string>();
 
-    for (const pins of explicitPins(
-      sourceReferences(snapshot.document, { tolerant: true }),
-    ))
+    // Only Markdown needs parsing, so check the repositories first. Its
+    // commit links read from the board's repository.
+    const repositoryIds = pinnedRepositoryIds(snapshot.document);
+    const boardRepository = boardRepositoryId(snapshot);
+
+    if (boardRepository) repositoryIds.add(boardRepository);
+
+    for (const repositoryId of repositoryIds)
       try {
-        await this.anchorSourcePins(pins);
+        if (!existsSync(this.store.repositoryPath(repositoryId)))
+          missing.add(repositoryId);
       } catch (error) {
         if (!(error instanceof ReviewInputError)) throw error;
-        missing.add(pins.repositoryId);
+        missing.add(repositoryId);
       }
 
     if (!missing.size) return [];
 
-    return sourceReferences(snapshot.document, { tolerant: true })
+    return this.storedReferences
+      .get(snapshot)
       .filter(
         (ref) => ref.source.pins && missing.has(ref.source.pins.repositoryId),
       )
       .map((ref) => ref.id);
   }
+
+  private readonly storedReferences = new VersionCache(
+    (snapshot: Snapshot) =>
+      sourceReferences(snapshot.document, {
+        tolerant: true,
+        repositoryId: boardRepositoryId(snapshot),
+      }),
+    { capacity: 512 },
+  );
 
   // A commit's tree never changes, so one listing serves every folder expansion.
   private readonly trackedFiles = new Map<string, Promise<string[]>>();
@@ -583,6 +643,8 @@ export class LocalReviewData {
       subscribe?: typeof subscribe;
       /** gh, git and GitHub API access for pull request targets. */
       pullRequests?: PullRequestDeps;
+      /** Read PR states from GitHub for the catalog. */
+      pullRequestStates?: boolean;
     } = {},
   ) {
     if (options.manageWorkspaces !== false)
@@ -943,14 +1005,14 @@ export class LocalReviewData {
       throw cause;
     });
 
-    if (!vcs) throw new ReviewInputError("Choose a Git or jj repository.");
+    if (!vcs) throw new ReviewInputError(await notACheckout(resolved));
 
     const repository = this.store.registerRepository(
       await realpath(vcs.rootPath),
     );
 
-    // Registration may follow replacement of a managed repository at the same
-    // path (for example resetting the tutorial). Reopen its Git reader too.
+    // Registration may follow replacement of a repository at the same path.
+    // Reopen its Git reader too.
     await this.closeReader(repository.id);
     this.repositories.delete(repository.id);
 
@@ -964,6 +1026,7 @@ export class LocalReviewData {
     // that no longer exist; the author decides how to update changed source.
     for (const reference of sourceReferences(snapshot.document, {
       tolerant: true,
+      repositoryId: boardRepositoryId(snapshot),
     })) {
       try {
         await this.quote(anchorPins(reference.source, pins), reference.source);
@@ -981,6 +1044,13 @@ export class LocalReviewData {
     if (snapshot.target?.kind === "worktree")
       return (await this.resolveTarget(snapshot.target, snapshot.pins)).pins;
 
+    // A plan has no pins of its own, but its checkout must exist.
+    if (
+      snapshot.target?.kind === "project" &&
+      !existsSync(this.store.repositoryPath(snapshot.target.repositoryId))
+    )
+      throw unavailableCheckout();
+
     if (!snapshot.pins) return undefined;
 
     if (!existsSync(this.store.repositoryPath(snapshot.pins.repositoryId)))
@@ -988,25 +1058,101 @@ export class LocalReviewData {
 
     return snapshot.pins;
   }
+  /** Optional forge context; never changes the comparison's pins. */
+  private readonly readGitHubApi = (host: string, endpoint: string) =>
+    (this.options.pullRequests ?? defaultPullRequestDeps).run(
+      "gh",
+      ["api", "--hostname", { value: host }, { value: endpoint }],
+      { timeoutMs: 10_000 },
+    );
+
+  async findPullRequest(
+    pins: Pins,
+    branch: string,
+  ): Promise<GitHubPullRequest | undefined> {
+    const context = await resolveRepoContext(
+      this.store.repositoryPath(pins.repositoryId),
+    );
+
+    if (!context?.githubSlug || !context.originUrl) return undefined;
+    const remote = parseGitRemote(context.originUrl);
+
+    if (!remote) return undefined;
+    const name = sourceBranchName(branch);
+
+    const matches = (
+      await readGitHubPullRequests(
+        remote.host,
+        context.githubSlug,
+        this.readGitHubApi,
+      )
+    ).filter((pr) => pr.headBranch === name);
+
+    return matches.length === 1 ? matches[0] : undefined;
+  }
+
+  /** Enrich current display metadata without repinning or rewriting history. */
+  async discoverPullRequest(snapshot: Snapshot): Promise<Snapshot> {
+    const { origin, pins } = snapshot;
+
+    if (!pins || !origin?.branch) return snapshot;
+
+    const found = await this.findPullRequest(pins, origin.branch).catch(
+      () => undefined,
+    );
+
+    if (!found) return snapshot;
+
+    // A manually selected PR must not be replaced by a branch-name match.
+    if (
+      origin.pullRequestUrl &&
+      pullRequestKey(origin.pullRequestUrl) !== pullRequestKey(found.url)
+    )
+      return snapshot;
+
+    return {
+      ...snapshot,
+      origin: {
+        ...origin,
+        pullRequestUrl: found.url,
+        pullRequestNumber: found.number,
+        pullRequestTitle: found.title,
+        pullRequestBaseBranch: found.baseBranch,
+      },
+    };
+  }
+
   /** Capture a label only when its ref still resolves to these exact pins. */
   async headBranch(pins: Pins, headRef?: string): Promise<string | undefined> {
+    const context = await resolveRepoContext(
+      this.store.repositoryPath(pins.repositoryId),
+    );
+
+    if (!context) return undefined;
+
     const vcs = await this.vcs(pins.repositoryId);
 
-    if (!vcs || vcs.kind !== "git") return undefined;
+    const symbolicRef =
+      headRef &&
+      headRef !== "HEAD" &&
+      headRef !== "@" &&
+      !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(headRef)
+        ? headRef
+        : undefined;
+
+    let location: VcsArg[];
+
+    if (symbolicRef) location = ["--git-dir", context.commonDir];
+    else if (vcs?.kind === "git") location = ["-C", vcs.rootPath];
+    else return undefined;
 
     try {
-      const run = promisify(execFile);
-
-      const { stdout } = await run("git", [
-        "-C",
-        vcs.rootPath,
+      const { stdout } = await runVcs("git", [
+        ...location,
         "rev-parse",
         "--symbolic-full-name",
         "--verify",
-        "--end-of-options",
-        !headRef || /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(headRef)
-          ? "HEAD"
-          : headRef,
+        symbolicRef ? { rev: symbolicRef } : "HEAD",
       ]);
 
       const ref = stdout.trim();
@@ -1014,13 +1160,18 @@ export class LocalReviewData {
       if (!ref.startsWith("refs/heads/") && !ref.startsWith("refs/remotes/"))
         return undefined;
 
-      const resolved = await vcs.resolveRevision(ref);
+      const { stdout: commit } = await runVcs("git", [
+        ...location,
+        "rev-parse",
+        { rev: ref },
+      ]);
 
-      if (resolved?.commit !== pins.head) return undefined;
+      if (commit.trim() !== pins.head) return undefined;
 
-      return ref.replace(/^refs\/(heads|remotes)\//, "");
+      return ref
+        .replace(/^refs\/remotes\/origin\//, "")
+        .replace(/^refs\/(heads|remotes)\//, "");
     } catch {
-      // Optional provenance must not block authoring in a detached checkout.
       return undefined;
     }
   }
@@ -1031,6 +1182,9 @@ export class LocalReviewData {
     target: ReviewTarget,
     pinned?: Pins,
   ): Promise<{ target: ReviewTarget; pins: Pins }> {
+    if (target.kind === "project")
+      throw new ReviewInputError("A project target has no commits.");
+
     const vcs = await this.vcs(target.repositoryId);
 
     if (!vcs) throw unavailableCheckout();
@@ -1142,10 +1296,147 @@ export class LocalReviewData {
 
     return { ref: branch, commit: fork.commit };
   }
+  /** Each PR's state, by URL, as last read. */
+  private readonly pullRequestStates = new Map<
+    string,
+    {
+      state?: PullRequestState;
+      /** The branch it merges into, and its own. */
+      baseBranch?: string;
+      headBranch?: string;
+      readAt: number;
+      /** When a board last showed it; a deleted board's PR is forgotten. */
+      seenAt: number;
+      reading: boolean;
+    }
+  >();
+
+  private readonly pullRequestStateListeners = new Set<() => void>();
+  private pullRequestStateTimer: ReturnType<typeof setInterval> | undefined;
+  private readonly pullRequestStateQueue: string[] = [];
+  private pullRequestStateReads = 0;
+
+  /** While GitHub rate-limits, no state is read. */
+  private pullRequestStatesPausedUntil = 0;
+
+  /** Calls back when a PR's state changes. While anyone listens, every PR
+   * still shown is read again once its state is a few minutes old. */
+  subscribePullRequestStates(listener: () => void): () => void {
+    this.pullRequestStateListeners.add(listener);
+    this.pullRequestStateTimer ??= setInterval(() => {
+      for (const [url, entry] of this.pullRequestStates)
+        if (Date.now() - entry.seenAt > 2 * PULL_REQUEST_STATE_TTL_MS)
+          this.pullRequestStates.delete(url);
+        else this.pullRequestState(url, { seen: false });
+      this.readPullRequestStates();
+    }, PULL_REQUEST_STATE_TTL_MS / 5);
+    this.pullRequestStateTimer.unref?.();
+
+    return () => {
+      this.pullRequestStateListeners.delete(listener);
+
+      if (!this.pullRequestStateListeners.size) {
+        clearInterval(this.pullRequestStateTimer);
+        this.pullRequestStateTimer = undefined;
+      }
+    };
+  }
+
+  /** A PR's state as last read from GitHub; a read older than a few minutes
+   * queues another in the background. Undefined until the first read lands,
+   * and a failed read keeps the last state. A merged or closed PR is not
+   * read again. */
+  pullRequestState(
+    url: string | undefined,
+    { seen = true }: { seen?: boolean } = {},
+  ): PullRequestState | undefined {
+    if (!url || !this.options.pullRequestStates) return undefined;
+
+    const entry = this.pullRequestStates.get(url) ?? {
+      readAt: 0,
+      seenAt: 0,
+      reading: false,
+    };
+
+    this.pullRequestStates.set(url, entry);
+
+    if (seen) entry.seenAt = Date.now();
+
+    if (
+      !entry.reading &&
+      entry.state !== "merged" &&
+      entry.state !== "closed" &&
+      Date.now() - entry.readAt > PULL_REQUEST_STATE_TTL_MS
+    ) {
+      entry.reading = true;
+      this.pullRequestStateQueue.push(url);
+      this.readPullRequestStates();
+    }
+
+    return entry.state;
+  }
+
+  /** Reads queued PR states a few at a time. */
+  private readPullRequestStates() {
+    while (
+      this.pullRequestStateReads < PULL_REQUEST_STATE_READS &&
+      this.pullRequestStateQueue.length &&
+      Date.now() >= this.pullRequestStatesPausedUntil
+    ) {
+      const url = this.pullRequestStateQueue.shift()!;
+      const entry = this.pullRequestStates.get(url);
+
+      if (!entry) continue;
+      this.pullRequestStateReads++;
+      void Promise.resolve()
+        .then(() => {
+          const { provider, address } = resolvePullRequest(url);
+
+          return provider.readPullRequest(
+            address,
+            this.options.pullRequests ?? defaultPullRequestDeps,
+          );
+        })
+        .then((pullRequest) => {
+          if (
+            (!pullRequest.state || pullRequest.state === entry.state) &&
+            pullRequest.baseRefName === entry.baseBranch &&
+            pullRequest.headBranch === entry.headBranch
+          )
+            return;
+          entry.state = pullRequest.state ?? entry.state;
+          entry.baseBranch = pullRequest.baseRefName;
+          entry.headBranch = pullRequest.headBranch;
+
+          for (const listener of this.pullRequestStateListeners) listener();
+        })
+        .catch((error) => {
+          if (error instanceof GitHubRefusedRead)
+            this.pullRequestStatesPausedUntil = error.retryAt;
+        })
+        .finally(() => {
+          entry.readAt = Date.now();
+          entry.reading = false;
+          this.pullRequestStateReads--;
+          this.readPullRequestStates();
+        });
+    }
+  }
+
+  /** The branch a PR merges into, as last read with its state. */
+  pullRequestBaseBranch(url: string): string | undefined {
+    return this.pullRequestStates.get(url)?.baseBranch;
+  }
+
+  /** A PR's own branch, as last read with its state. */
+  pullRequestHeadBranch(url: string): string | undefined {
+    return this.pullRequestStates.get(url)?.headBranch;
+  }
+
   /** The PR's current comparison, fetched into a registered checkout of its repository. */
   async resolvePullRequest(
     url: string,
-    repository: { id?: string; preferred?: string },
+    repository: { id: string },
   ): Promise<ResolvedPullRequest> {
     const deps = this.options.pullRequests ?? defaultPullRequestDeps;
     const { provider, address } = resolvePullRequest(url);
@@ -1171,6 +1462,8 @@ export class LocalReviewData {
       target: { kind: "commits", repositoryId, head, base },
       pins: { repositoryId, base, head },
       title: pullRequest.title.trim(),
+      branch: pullRequest.headBranch,
+      baseBranch: pullRequest.baseRefName,
     };
   }
   async pullRequestTitle(url: string) {
@@ -1191,19 +1484,14 @@ export class LocalReviewData {
   private async pullRequestCheckout(
     provider: PullRequestProvider,
     address: PullRequestAddress,
-    repository: { id?: string; preferred?: string },
+    repository: { id: string },
     deps: PullRequestDeps,
   ) {
-    const registered = this.store.repositories();
+    const candidates = this.store
+      .repositories()
+      .filter((entry) => entry.id === repository.id);
 
-    const candidates = repository.id
-      ? registered.filter((entry) => entry.id === repository.id)
-      : [
-          ...registered.filter((entry) => entry.id === repository.preferred),
-          ...registered.filter((entry) => entry.id !== repository.preferred),
-        ];
-
-    if (repository.id && candidates.length === 0)
+    if (candidates.length === 0)
       throw new ReviewInputError("Repository is not registered.", 404);
 
     for (const { id } of candidates) {
@@ -1231,9 +1519,7 @@ export class LocalReviewData {
     const name = host === "github.com" ? slug : `${host}/${slug}`;
 
     throw new ReviewInputError(
-      repository.id
-        ? `That checkout has no GitHub remote for ${name}. Add one, or omit repositoryId.`
-        : `No registered checkout has a GitHub remote for ${name}. Register a checkout of ${name} with review_register_repository first, or pass a target.`,
+      `That checkout has no remote for ${name}. Name a checkout of ${name} as the target's repositoryPath.`,
       404,
     );
   }
@@ -1289,6 +1575,74 @@ export class LocalReviewData {
     const [base, head] = await Promise.all([changed("base"), changed("head")]);
 
     return { base, head };
+  }
+  /** What a commit is, for a quote read at it: its subject, author and
+   * date, and how far behind the default branch's tip it is when both are
+   * known. */
+  async commitInfo(
+    repositoryId: string,
+    commit: string,
+  ): Promise<{
+    commit: string;
+    subject: string;
+    author: string;
+    authoredAt: string;
+    behind?: { count: number; branch: string };
+  }> {
+    const vcs = await this.vcs(repositoryId);
+
+    if (!vcs) throw unavailableCheckout();
+
+    const git = async (...args: VcsArg[]) =>
+      (await runVcs("git", ["-C", vcs.rootPath, ...args])).stdout.trim();
+
+    let line: string;
+
+    try {
+      line = await git("log", "-1", "--format=%H%x00%s%x00%an%x00%aI", {
+        rev: commit,
+      });
+    } catch {
+      throw new ReviewInputError("That commit is not in the repository.", 404);
+    }
+
+    const [full = commit, subject = "", author = "", authoredAt = ""] =
+      line.split("\0");
+
+    const branch = await vcs.defaultBranch().catch(() => null);
+
+    const behind = branch
+      ? await git("rev-list", "--count", { rev: `${full}..${branch.commit}` })
+          .then((count) => ({
+            count: Number(count),
+            branch: branch.ref.replace(/^origin\//, ""),
+          }))
+          .catch(() => undefined)
+      : undefined;
+
+    return {
+      commit: full,
+      subject,
+      author,
+      authoredAt,
+      ...(behind && { behind }),
+    };
+  }
+  /** The full commit a commit ID or its prefix names in the repository,
+   * or undefined when it names none. */
+  async resolveCommit(
+    repositoryId: string,
+    commit: string,
+  ): Promise<string | undefined> {
+    const vcs = await this.vcs(repositoryId);
+
+    if (!vcs) throw unavailableCheckout();
+    const resolved = await vcs.resolveRevision(commit);
+
+    // A branch or tag spelled in hex is not the commit it seems.
+    return resolved?.commit.startsWith(commit.toLowerCase())
+      ? resolved.commit
+      : undefined;
   }
   async validatePins(pins: Pins) {
     if (pins.worktreeRevision) {
@@ -1478,8 +1832,8 @@ export class LocalReviewData {
   }
 
   /** Start shared coverage work without occupying an HTTP request until it completes. */
-  coveragePending(reviewId: string, pins: Pins, mode: CoverageMode): boolean {
-    const key = JSON.stringify([pins, mode]);
+  coveragePending(reviewId: string, pins: Pins): boolean {
+    const key = JSON.stringify(pins);
     const existing = this.coverageCache.get(key);
 
     if (existing?.state === "error") {
@@ -1487,14 +1841,14 @@ export class LocalReviewData {
       throw existing.error;
     }
 
-    void this.coverage(reviewId, pins, mode).catch(() => {});
+    void this.coverage(reviewId, pins).catch(() => {});
 
     return this.coverageCache.get(key)!.state === "pending";
   }
 
-  coverageSnapshot(reviewId: string, pins: Pins, mode: CoverageMode) {
-    const pending = this.coveragePending(reviewId, pins, mode);
-    const entry = this.coverageCache.get(JSON.stringify([pins, mode]))!;
+  coverageSnapshot(reviewId: string, pins: Pins) {
+    const pending = this.coveragePending(reviewId, pins);
+    const entry = this.coverageCache.get(JSON.stringify(pins))!;
 
     return {
       pending,
@@ -1518,8 +1872,8 @@ export class LocalReviewData {
     }, 50);
   }
 
-  coverage(reviewId: string, pins: Pins, mode: CoverageMode) {
-    const key = JSON.stringify([pins, mode]);
+  coverage(reviewId: string, pins: Pins) {
+    const key = JSON.stringify(pins);
     let entry = this.coverageCache.get(key);
 
     if (!entry || entry.state === "error") {
@@ -1527,7 +1881,6 @@ export class LocalReviewData {
         this,
         reviewId,
         pins,
-        mode,
         this.coverageAbort.signal,
         (partial) => {
           const current = this.coverageCache.get(key);
@@ -1557,33 +1910,30 @@ export class LocalReviewData {
 
       void promise.then(
         (value) => {
-          current.partial = value;
+          current.partial ??= value;
 
           if (!this.closed)
-            this.store.setDiffStats(
-              pins,
-              {
-                fileCount: value.files.length,
-                additions: value.files.reduce(
-                  (sum, file) =>
-                    sum + structuralChangeCounts(file.changed).added,
-                  0,
-                ),
-                deletions: value.files.reduce(
-                  (sum, file) =>
-                    sum + structuralChangeCounts(file.changed).removed,
-                  0,
-                ),
-              },
-              mode,
-            );
+            this.store.setDiffStats(pins, {
+              fileCount: value.files.length,
+              additions: value.files.reduce(
+                (sum, file) => sum + structuralChangeCounts(file.changed).added,
+                0,
+              ),
+              deletions: value.files.reduce(
+                (sum, file) =>
+                  sum + structuralChangeCounts(file.changed).removed,
+                0,
+              ),
+            });
           settled("ready");
         },
         (error) => settled("error", error),
       );
     }
 
-    return entry.promise;
+    return entry.state === "ready" && entry.partial
+      ? Promise.resolve(entry.partial)
+      : entry.promise;
   }
 
   changes(pins: Pins): Promise<LocalVcsDiffFileSummary[]>;
@@ -1888,6 +2238,27 @@ export class LocalReviewData {
   }
 }
 
+async function notACheckout(folder: string) {
+  const bare = await gitAt(folder, ["rev-parse", "--is-bare-repository"], {
+    allowFailure: true,
+  });
+
+  if (bare.stdout.trim() !== "true") return "Choose a Git or jj repository.";
+
+  const listed = await gitAt(folder, ["worktree", "list", "--porcelain"], {
+    allowFailure: true,
+  });
+
+  const worktrees = listed.stdout
+    .split("\n\n")
+    .filter((entry) => !/^bare$/m.test(entry))
+    .flatMap((entry) => entry.match(/^worktree (.+)$/m)?.[1] ?? []);
+
+  return worktrees.length
+    ? `${folder} is a bare repository. Choose one of its worktrees: ${worktrees.join(", ")}.`
+    : `${folder} is a bare repository with no worktrees. Add one with git worktree add.`;
+}
+
 /** The pure source checks throw their own error; API clients see it as input. */
 function inputError<T>(run: () => T): T {
   try {
@@ -1921,29 +2292,42 @@ export function openLocalReviewStore(
     manageWorkspaces?: boolean;
     subscribe?: typeof subscribe;
     pullRequests?: PullRequestDeps;
+    pullRequestStates?: boolean;
+    /** From `groupCheckoutsAhead`. */
+    checkoutOwners?: ReadonlyMap<string, string>;
   } = {},
 ) {
-  const store: ReviewStore = new ReviewStore(databasePath, {
-    projectSource: (snapshot, pins) => data.projectSource(snapshot, pins),
-    resolveTarget: (target, pinned) => data.resolveTarget(target, pinned),
-    resolvePullRequest: (url, repository) =>
-      data.resolvePullRequest(url, repository),
-    pullRequestTitle: (url) => data.pullRequestTitle(url),
-    headBranch: (pins, headRef) => data.headBranch(pins, headRef),
-    sourcePins: (snapshot) => data.sourcePins(snapshot),
-    unavailableAnchors: (snapshot) => data.unavailableAnchors(snapshot),
-    validatePins: (pins) => data.validatePins(pins),
-    filesChangedBetween: (from, to) => data.filesChangedBetween(from, to),
-    validateSource: (pins, source, options) =>
-      data.validateSource(pins, source, options),
-    validateResource: (pins, block) => data.validateResource(pins, block),
-  });
+  const { checkoutOwners, ...dataOptions } = options;
+
+  const store: ReviewStore = new ReviewStore(
+    databasePath,
+    {
+      projectSource: (snapshot, pins) => data.projectSource(snapshot, pins),
+      resolveTarget: (target, pinned) => data.resolveTarget(target, pinned),
+      resolvePullRequest: (url, repository) =>
+        data.resolvePullRequest(url, repository),
+      pullRequestTitle: (url) => data.pullRequestTitle(url),
+      findPullRequest: (pins, branch) => data.findPullRequest(pins, branch),
+      headBranch: (pins, headRef) => data.headBranch(pins, headRef),
+      sourcePins: (snapshot) => data.sourcePins(snapshot),
+      unavailableAnchors: (snapshot) => data.unavailableAnchors(snapshot),
+      validatePins: (pins) => data.validatePins(pins),
+      resolveCommit: (repositoryId, commit) =>
+        data.resolveCommit(repositoryId, commit),
+      filesChangedBetween: (from, to) => data.filesChangedBetween(from, to),
+      validateSource: (pins, source, options) =>
+        data.validateSource(pins, source, options),
+      validateResource: (pins, block) => data.validateResource(pins, block),
+      pullRequestBaseBranch: (url) => data.pullRequestBaseBranch(url),
+    },
+    checkoutOwners,
+  );
 
   let data: LocalReviewData;
 
   try {
     data = new LocalReviewData(store, {
-      ...options,
+      ...dataOptions,
       workspaceDatabase: `${databasePath}.workspaces`,
     });
   } catch (error) {

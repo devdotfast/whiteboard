@@ -4,7 +4,6 @@ import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { DocumentCodeView } from "./DocumentCodeView";
-import { INLINE_HOVER_EVENT } from "./inline-hover-event";
 import { ReviewFindProvider, createReviewFindHost } from "./review-find";
 import { type ReviewRoots, ReviewRootsProvider } from "./review-root-context";
 import {
@@ -305,12 +304,7 @@ it("searches an offscreen peek without mounting Monaco", async () => {
         side: "head",
         ranges: [{ startLine: 1, endLine: 3 }],
       },
-      {
-        text: "needle",
-        matchCase: false,
-        wholeWord: false,
-        isRegex: true,
-      },
+      expect.objectContaining({ text: "needle", isRegex: true }),
     );
   });
   expect(created).toHaveLength(0);
@@ -384,68 +378,4 @@ it("mounts eagerly when IntersectionObserver is unavailable", () => {
   vi.stubGlobal("IntersectionObserver", undefined);
   renderPeek(false);
   expect(created).toHaveLength(1);
-});
-
-it("emits a neutral hover interaction without remounting", () => {
-  let disposed = 0;
-
-  const session = testReviewSession(
-    {},
-    {
-      inlineEditors: {
-        async find() {
-          return { matchCount: 0 };
-        },
-        create: (spec) => {
-          created.push(spec);
-
-          return {
-            height: 180,
-            setActive() {},
-            setCollapsed() {},
-            async setFindQuery() {
-              return { matchCount: 0 };
-            },
-            revealFindMatch() {},
-            clearActiveFindMatch() {},
-            clearFind() {},
-            onDidChangeHeight: () => ({ dispose() {} }),
-            onDidError: () => ({ dispose() {} }),
-            dispose() {
-              disposed += 1;
-            },
-          };
-        },
-      },
-    },
-  );
-
-  const element = document.createElement("div");
-  document.body.append(element);
-  root = createRoot(element);
-  let hovers = 0;
-  element.addEventListener(INLINE_HOVER_EVENT, () => {
-    hovers += 1;
-  });
-  act(() => {
-    root?.render(
-      reviewSessionElement(
-        session,
-        <DocumentCodeView
-          path="src/example.ts"
-          title="src/example.ts"
-          side="head"
-          ranges={[{ startLine: 10, endLine: 14 }]}
-          heightMode="content"
-          active
-        />,
-      ),
-    );
-  });
-  expect(created).toHaveLength(1);
-  const { onDidShowHover } = created[0]!;
-  act(() => onDidShowHover?.());
-  expect(hovers).toBe(1);
-  expect(created).toHaveLength(1);
-  expect(disposed).toBe(0);
 });

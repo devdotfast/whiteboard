@@ -1,7 +1,7 @@
+import { copyText } from "@canvas/ui/copy";
 import type { AgentSelection } from "@review/agent-selection";
 import { z } from "zod";
 
-import { copyText } from "./copy-text";
 import type { ReviewSession } from "./host/review-session";
 
 /** Copies a selection as the Markdown an agent reads; throws when it can't. */

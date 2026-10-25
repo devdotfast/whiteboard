@@ -1,4 +1,5 @@
 import { Chip } from "@canvas/ui/chip";
+import { textStyles } from "@canvas/ui/text";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
 
@@ -27,7 +28,11 @@ export function DiagramHeader({
         <Chip>{kind}</Chip>
         {title && (
           <span
-            {...stylex.props(diagramStyles.title, titleStyle)}
+            {...stylex.props(
+              textStyles.truncate,
+              diagramStyles.title,
+              titleStyle,
+            )}
             data-review-copy-prose
           >
             {title}

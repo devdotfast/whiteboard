@@ -50,7 +50,15 @@
     ],
     "jsx-a11y/label-has-associated-control": [
       "error",
-      { "controlComponents": ["Checkbox"] }
+      {
+        "controlComponents": [
+          "Checkbox",
+          "Select",
+          "Switch",
+          "TextArea",
+          "TextField"
+        ]
+      }
     ],
     "typescript/no-explicit-any": "off",
     "typescript/no-non-null-assertion": "off",
@@ -108,6 +116,10 @@
     {
       "name": "canvas-styles",
       "specifier": "./tools/oxlint/canvas-styles/index.ts"
+    },
+    {
+      "name": "stylex",
+      "specifier": "@stylexjs/eslint-plugin"
     }
   ],
   "overrides": [
@@ -124,7 +136,7 @@
       }
     },
     {
-      "files": ["packages/review/src/**", "packages/review/app/src/**"],
+      "files": ["packages/review/src/**"],
       "rules": {
         "no-restricted-imports": [
           "error",
@@ -135,7 +147,6 @@
                   "../**",
                   "!**/test/fixtures/**",
                   "!**/test-config*",
-                  "!**/tutorial/*.json",
                   "!**/desktop-css-scope",
                   "!**/agent-plugins/**"
                 ],
@@ -159,12 +170,99 @@
       }
     },
     {
+      "files": ["packages/review/app/src/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["../**", "!**/desktop-css-scope"],
+                "message": "Import through @canvas/*; run scripts/rewrite-relative-imports.mjs."
+              },
+              {
+                "group": [
+                  "vs/**",
+                  "@vscode/**",
+                  "monaco-editor",
+                  "monaco-editor/**"
+                ],
+                "message": "Keep Code OSS imports out of the canvas; go through session.bridge."
+              }
+            ]
+          }
+        ],
+        "react/forbid-elements": [
+          "error",
+          {
+            "forbid": [
+              {
+                "element": "select",
+                "message": "Use Select from ui/text-field."
+              }
+            ]
+          }
+        ],
+        "canvas-styles/scale-literals": "error",
+        "canvas-styles/no-important": "error",
+        "canvas-styles/no-bare-transparent": "error",
+        "canvas-styles/no-raw-colors": "error",
+        "canvas-styles/no-glyph-icons": "error",
+        "stylex/enforce-extension": "error",
+        "stylex/no-legacy-contextual-styles": "error",
+        "stylex/no-unused": "error"
+      }
+    },
+    {
+      "files": ["packages/review/app/src/theme-styles.ts"],
+      "rules": {
+        "canvas-styles/no-bare-transparent": "off",
+        "canvas-styles/no-raw-colors": "off"
+      }
+    },
+    {
+      "files": ["packages/review/app/src/ui/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["../**", "!**/desktop-css-scope"],
+                "message": "Import through @canvas/*; run scripts/rewrite-relative-imports.mjs."
+              },
+              {
+                "group": [
+                  "vs/**",
+                  "@vscode/**",
+                  "monaco-editor",
+                  "monaco-editor/**"
+                ],
+                "message": "Keep Code OSS imports out of the canvas; go through session.bridge."
+              },
+              {
+                "group": [
+                  "@canvas/**",
+                  "!@canvas/ui/**",
+                  "!@canvas/*.stylex",
+                  "!@canvas/stylex-props",
+                  "!@canvas/host/**"
+                ],
+                "message": "Kit modules never import app code; move the piece into src/ui or pass it in."
+              }
+            ]
+          }
+        ],
+        "react/forbid-elements": "off"
+      }
+    },
+    {
       "files": [
-        "packages/review/app/src/**/*.ts",
-        "packages/review/app/src/**/*.tsx"
+        "packages/review/app/src/ui/**/*.test.ts",
+        "packages/review/app/src/ui/**/*.test.tsx"
       ],
       "rules": {
-        "canvas-styles/scale-literals": "error"
+        "no-restricted-imports": "off"
       }
     }
   ]

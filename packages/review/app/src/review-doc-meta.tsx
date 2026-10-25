@@ -1,148 +1,173 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, space } from "@canvas/scale.stylex";
+import { Button } from "@canvas/ui/button";
 import {
+  type ReviewBoardPlace,
   type ReviewDiffStats,
   summarizeReviewDiffFiles,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
+  type QueryClient,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
   Fragment,
   type ReactElement,
   type ReactNode,
+  createContext,
   useContext,
   useEffect,
   useState,
 } from "react";
 
-import { DiffCount } from "./diff-count";
+import { canvasQueryKeys } from "./canvas-query";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
 import { drawStyles } from "./draw-styles";
+import { formatRelativeTime } from "./format";
 import { useReviewSession } from "./host/review-session";
-import { ReviewBranchRange, WORKING_TREE } from "./review-branch-range";
 import { useReviewDiffFiles } from "./review-diff-files-context";
+import { ComparedSides, DiffChanges, PullRequestLink } from "./review-source";
+import { ReviewStackSelector } from "./review-stack-selector";
 import { tokens } from "./tokens.stylex";
 
-interface ReviewDocumentMetaState {
-  pullRequestNumber: number | null;
-  pullRequestUrl: string | null;
-  updatedAtMs: number | null;
+export function useBoardPlace(): ReviewBoardPlace {
+  const session = useReviewSession();
+  const review = session.review;
+  const version = useContext(DisplayedReviewVersionContext);
+
+  const queryClient = useQueryClient();
+  const board = session.reviewId;
+
+  // Optional context: a failed read shows none.
+  const { data } = useQuery({
+    queryKey: canvasQueryKeys.place(board, version),
+    queryFn: ({ signal }) => review!.place(signal),
+    enabled: review !== undefined,
+    staleTime: Infinity,
+    placeholderData: (previous) => previous ?? cachedPlace(queryClient, board),
+  });
+
+  return data ?? NO_PLACE;
 }
 
+/** A board's place before it is read: its own from another version, else
+ * the place of a sibling or of its parent, which lists it. */
+function cachedPlace(
+  queryClient: QueryClient,
+  board: string,
+): ReviewBoardPlace | undefined {
+  const places = queryClient
+    .getQueriesData<ReviewBoardPlace>({
+      queryKey: ["place"],
+      predicate: (query) => query.queryKey[2] === "board",
+    })
+    .flatMap(([key, place]) =>
+      place ? [{ own: key[1] === board, place }] : [],
+    );
+
+  const own = places.findLast((entry) => entry.own);
+
+  if (own) return own.place;
+
+  for (const { place } of places) {
+    const siblings = place.parent ? place.siblings : (place.children ?? []);
+
+    const self = siblings.find((sibling) => sibling.reviewId === board);
+    const parent = place.parent ?? place.board;
+
+    if (self && parent)
+      return {
+        parent,
+        siblings,
+        board: { reviewId: self.reviewId, title: self.title, icon: self.icon },
+      };
+  }
+}
+
+const NO_PLACE: ReviewBoardPlace = { siblings: [] };
+
+/** Where the person's edits are: none yet on a new board, being saved,
+ * saved, or not saved. */
+export type BoardSaveStatus = "new" | "saving" | "saved" | "failed";
+
+export const BoardSaveStatusContext = createContext<
+  BoardSaveStatus | undefined
+>(undefined);
+
+/** Saves again after autosave gave up. */
+export const BoardSaveRetryContext = createContext<(() => void) | undefined>(
+  undefined,
+);
+
 /**
- * Automatic document header: repository and PR identity above the title,
- * with one row of facts below it: saved branch, diff statistics and the
- * commit range, separated by dots.
+ * The board's header: for a child, its parent and its place among the
+ * parent's children; the title; then one faint line with the PR, the
+ * compared branches and the diff.
  */
 export function ReviewDocumentMetaLine({
   children,
+  editable = false,
 }: {
   children?: ReactNode;
+  /** The title is edited in place; the caret skips the rest. */
+  editable?: boolean;
 }): ReactElement {
   const session = useReviewSession();
-  const displayedVersion = useContext(DisplayedReviewVersionContext);
   const diffFiles = useReviewDiffFiles();
+  const place = useBoardPlace();
+  const saveStatus = useContext(BoardSaveStatusContext);
+  const retrySave = useContext(BoardSaveRetryContext);
 
   const review = session.review!;
-  const meta = documentMetaState(review);
-
-  const [relativeTimeNowMs, setRelativeTimeNowMs] = useState<number | null>(
-    null,
-  );
-
-  useEffect(() => {
-    setRelativeTimeNowMs(Date.now());
-  }, [displayedVersion]);
 
   const diff =
-    diffFiles.status === "loaded" ? reviewDiffStats(diffFiles) : null;
-
-  const updatedLabel =
-    meta?.updatedAtMs != null && relativeTimeNowMs != null
-      ? relativeTimeLabel(meta.updatedAtMs, relativeTimeNowMs)
+    review.pins && diffFiles.status === "loaded"
+      ? reviewDiffStats(diffFiles)
       : null;
 
-  const repository = meta.pullRequestUrl?.match(
-    /^https:\/\/[^/]+\/([^/]+)\/([^/]+)\/pull\//,
-  );
-
-  const branch = review.headBranch?.trim() ? review.headBranch : null;
-
+  // The branch stack leads, a pill hidden unless the board is in one.
   const facts: { key: string; node: ReactNode }[] = [];
 
-  if (branch) {
+  // A board on another machine names it first.
+  if (review.host)
     facts.push({
-      key: "branch",
-      node: (
-        <span {...stylex.props(styles.branch)} title={`Head branch: ${branch}`}>
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 20 20"
-            aria-hidden="true"
-            {...stylex.props(styles.icon, styles.branchIcon)}
-          >
-            <circle cx="5" cy="4.5" r="2" />
-            <circle cx="5" cy="15.5" r="2" />
-            <circle cx="15" cy="6.5" r="2" />
-            <path d="M5 6.5v7M15 8.5c0 3-10 2-10 5" />
-          </svg>
-          <span {...stylex.props(styles.branchName)}>{branch}</span>
-        </span>
-      ),
+      key: "host",
+      node: <span {...stylex.props(styles.fixed)}>{review.host}</span>,
     });
-  }
 
-  if (diff && review.pins) {
+  if (review.pullRequestNumber)
     facts.push({
-      key: "files",
-      node: (
-        <span>
-          {diff.fileCount === 1 ? "1 file" : `${diff.fileCount} files`}
-        </span>
-      ),
+      key: "pull-request",
+      node: <PullRequestLink review={review} place={place} />,
     });
-    facts.push({
-      key: "changes",
-      node: (
-        <span {...stylex.props(styles.row, styles.stats)}>
-          <DiffCount
-            additions={diff.additions}
-            deletions={diff.deletions}
-            large
-          />
-          {diff.additions + diff.deletions > 0 ? (
-            <span {...stylex.props(styles.changeBar)} aria-hidden="true">
-              {diff.additions > 0 ? (
-                <span
-                  {...stylex.props(styles.change)}
-                  style={{ flexGrow: diff.additions }}
-                />
-              ) : null}
-              {diff.deletions > 0 ? (
-                <span
-                  {...stylex.props(styles.change, styles.removed)}
-                  style={{ flexGrow: diff.deletions }}
-                />
-              ) : null}
-            </span>
-          ) : null}
-        </span>
-      ),
-    });
-  }
 
-  if (review.pins) {
+  if (review.pins)
     facts.push({
-      key: "range",
+      key: "compare",
+      node: <ComparedSides review={review} place={place} />,
+    });
+
+  if (diff && diff.additions + diff.deletions > 0)
+    facts.push({ key: "diff", node: <DiffChanges diff={diff} /> });
+
+  if (saveStatus === "failed")
+    facts.push({
+      key: "updated",
       node: (
-        <ReviewBranchRange
-          baseRef={review.pins.base}
-          headRef={
-            review.targetKind === "worktree" ? WORKING_TREE : review.pins.head
-          }
-        />
+        <span {...stylex.props(styles.fixed, styles.failed)} role="status">
+          Not saved
+          {retrySave && (
+            <>
+              {" · "}
+              <Button variant="link" xstyle={styles.retry} onClick={retrySave}>
+                Retry
+              </Button>
+            </>
+          )}
+        </span>
       ),
     });
-  }
 
   return (
     // The attribute is a marker for tests.
@@ -150,84 +175,52 @@ export function ReviewDocumentMetaLine({
       {...stylex.props(styles.header, drawStyles.blockChild)}
       data-review-document-header
     >
-      <div {...stylex.props(styles.row, styles.top)} data-review-copy-ignore>
-        <div {...stylex.props(styles.row, styles.identity)}>
-          {review.host || repository ? (
-            <span>
-              {review.host}
-              {review.host && repository ? ": " : null}
-              {repository ? `${repository[1]} / ${repository[2]}` : null}
-            </span>
-          ) : null}
-          {(review.host || repository) && meta.pullRequestNumber != null ? (
-            <span {...stylex.props(styles.separator)} aria-hidden="true">
-              ·
-            </span>
-          ) : null}
-          {meta.pullRequestNumber != null &&
-            (meta.pullRequestUrl ? (
-              <a
-                href={meta.pullRequestUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                {...stylex.props(styles.pullRequest, styles.pullRequestLink)}
-              >
-                PR #{meta.pullRequestNumber}
-                <svg
-                  width="11"
-                  height="11"
-                  viewBox="0 0 20 20"
-                  aria-hidden="true"
-                  {...stylex.props(styles.icon)}
-                >
-                  <path d="M7 4h9v9M16 4 5 15" />
-                </svg>
-              </a>
-            ) : (
-              <span {...stylex.props(styles.pullRequest)}>
-                PR #{meta.pullRequestNumber}
-              </span>
-            ))}
-        </div>
-        {updatedLabel && (
-          <span {...stylex.props(styles.updated)}>Updated {updatedLabel}</span>
-        )}
-      </div>
       {children}
-      <div
-        {...stylex.props(styles.row, styles.details)}
-        data-review-copy-ignore
-      >
-        {withFactDots(facts)}
-      </div>
+      {facts.length ? (
+        <div
+          {...stylex.props(styles.facts)}
+          data-review-copy-ignore
+          contentEditable={editable ? false : undefined}
+        >
+          <ReviewStackSelector />
+          {facts.map(({ key, node }, index) => (
+            <Fragment key={key}>
+              {index > 0 ? (
+                <span aria-hidden="true" {...stylex.props(styles.fixed)}>
+                  ·
+                </span>
+              ) : null}
+              {node}
+            </Fragment>
+          ))}
+        </div>
+      ) : null}
     </header>
   );
 }
 
-/** Lay out header facts with a small dot between each present pair. */
-function withFactDots(
-  facts: readonly { key: string; node: ReactNode }[],
-): ReactNode {
-  return facts.map(({ key, node }, index) => (
-    <Fragment key={key}>
-      {index > 0 ? (
-        <span {...stylex.props(styles.dot)} aria-hidden="true" />
-      ) : null}
-      {node}
-    </Fragment>
-  ));
-}
+/** When the board was last updated, for the page bar. */
+export function BoardUpdatedAt(): ReactElement | null {
+  const updatedAtMs = useReviewSession().review?.updatedAtMs;
+  const displayedVersion = useContext(DisplayedReviewVersionContext);
+  const [nowMs, setNowMs] = useState<number | null>(null);
 
-function documentMetaState(meta: {
-  updatedAtMs?: number;
-  pullRequestNumber?: number;
-  pullRequestUrl?: string;
-}): ReviewDocumentMetaState {
-  return {
-    pullRequestNumber: meta.pullRequestNumber ?? null,
-    pullRequestUrl: meta.pullRequestUrl ?? null,
-    updatedAtMs: meta.updatedAtMs ?? null,
-  };
+  useEffect(() => {
+    setNowMs(Date.now());
+  }, [displayedVersion]);
+
+  if (
+    updatedAtMs === undefined ||
+    !Number.isFinite(updatedAtMs) ||
+    nowMs == null
+  )
+    return null;
+
+  return (
+    <span {...stylex.props(styles.updatedAt)}>
+      Updated {formatRelativeTime(updatedAtMs, nowMs, { short: true })}
+    </span>
+  );
 }
 
 function reviewDiffStats(diff: {
@@ -238,129 +231,35 @@ function reviewDiffStats(diff: {
   return summarizeReviewDiffFiles(diff.files);
 }
 
-function relativeTimeLabel(timeMs: number, nowMs: number): string | null {
-  if (!Number.isFinite(timeMs)) return null;
-  const seconds = Math.max(0, Math.round((nowMs - timeMs) / 1000));
-
-  if (seconds < 60) return "just now";
-  const minutes = Math.round(seconds / 60);
-
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.round(minutes / 60);
-
-  if (hours < 24) return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
-  const days = Math.round(hours / 24);
-
-  if (days < 7) return days === 1 ? "1 day ago" : `${days} days ago`;
-
-  return new Date(timeMs).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-// Paper's review header: identity, title, then source and diff metadata.
 const styles = stylex.create({
   header: {
     width: `min(100%, ${tokens.reviewProseMaxWidth})`,
-    margin: "28px auto 0",
+    margin: "0 auto",
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
-    paddingBottom: "28px",
-    font: `${fontSize.ui}/18px ${tokens.fontMono}`,
+    paddingBottom: space.s28,
+    font: `${fontSize.body}/${leading.px18} ${tokens.chromeFont}`,
     color: tokens.inkFaint,
   },
-  row: {
+  // One line: branch names give way; the rest never does.
+  facts: {
     display: "flex",
     alignItems: "center",
-    flexWrap: "wrap",
-  },
-  top: {
-    justifyContent: "space-between",
-    gap: "10px 24px",
-  },
-  identity: {
-    gap: "10px",
+    gap: space.s8,
     minWidth: 0,
-    overflowWrap: "anywhere",
+    paddingTop: space.s4,
+    whiteSpace: "nowrap",
   },
-  separator: {
-    color: tokens.inkFaint,
-  },
-  updated: {
-    marginLeft: "auto",
-  },
-  icon: {
+  fixed: { flexShrink: 0 },
+  updatedAt: {
     flexShrink: 0,
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: "1.8",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-  },
-  pullRequest: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "5px",
-    color: tokens.accent,
-    fontWeight: fontWeight.medium,
-    textDecoration: "none",
-  },
-  pullRequestLink: {
-    textDecoration: { default: "none", ":hover": "underline" },
-  },
-  // Facts in the details row are divided by small ink-faint dots.
-  details: {
-    gap: "8px 10px",
-    paddingTop: "12px",
-  },
-  dot: {
-    flex: "0 0 3px",
-    width: "3px",
-    height: "3px",
-    borderRadius: radius.round,
-    backgroundColor: tokens.inkFaint,
-  },
-  branch: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "7px",
-    boxSizing: "border-box",
-    minWidth: 0,
-    minHeight: "26px",
-    maxWidth: "100%",
-    padding: "3px 10px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: radius.control,
-    backgroundColor: tokens.well,
-    color: tokens.ink,
-    overflowWrap: "anywhere",
-  },
-  branchIcon: {
+    paddingInlineStart: space.s4,
     color: tokens.inkFaint,
+    fontFamily: tokens.chromeFont,
+    fontSize: fontSize.ui,
+    lineHeight: leading.px18,
+    whiteSpace: "nowrap",
   },
-  branchName: {
-    minWidth: 0,
-    overflowWrap: "anywhere",
-  },
-  stats: {
-    gap: "10px",
-  },
-  changeBar: {
-    display: "flex",
-    flex: "0 0 42px",
-    gap: "2px",
-    height: "8px",
-  },
-  change: {
-    minWidth: "1px",
-    borderRadius: radius.hairline,
-    backgroundColor: tokens.changeAdded,
-  },
-  removed: {
-    backgroundColor: tokens.changeRemoved,
-  },
+  failed: { color: tokens.changeRemoved },
+  retry: { color: "inherit", textDecorationLine: "underline" },
 });

@@ -31,23 +31,15 @@ import { type ToolFailure, toolFailure } from "./tool-failure.js";
 const RELOAD_TOOLS =
   "Whiteboard is running now, but this session listed Whiteboard's tools before it started, so you may see only session_get_instructions. Before authoring, reload the `whiteboard` MCP server's tools (reconnect it in your agent, or start a new agent session). If you can already see tools such as session_create, carry on.";
 
-function mcpAuthoringGuidance(context: {
-  scratchpadAvailable: boolean;
-  traceEnabled: boolean;
-}): string {
+function mcpAuthoringGuidance(context: { traceEnabled: boolean }): string {
   return [
-    "Whiteboard explains code in documents the user reads in Whiteboard Desktop. Call session_get_instructions before creating or editing a Whiteboard and follow it. Read session_capabilities before authoring; session_create opens the new review in Desktop when it is available, so call session_open only for an existing review, and generate software maps only when softwareMapEnabled is true. When the user asks for a Whiteboard or to use Whiteboard (for example to review a branch, a change or a pull request, or to explain a system in Whiteboard), author a Whiteboard with the default topic.",
-    ...(context.scratchpadAvailable
-      ? [
-          'When the user asks in conversation to be shown how code works or wants a diagram, without asking for a Whiteboard, call session_capabilities; if it reports scratchpadEnabled and desktopAvailable, draw on the Whiteboard scratchpad rather than answering only in chat, starting with session_get_instructions({topic:"scratchpad"}).',
-        ]
-      : []),
+    "Whiteboard explains code in documents the user reads in Whiteboard Desktop. Call session_get_instructions before creating or editing a Whiteboard and follow it. Read session_capabilities before authoring; session_create opens the new review in Desktop when it is available, so call session_open only for an existing review, and generate software maps only when softwareMapEnabled is true. When the user asks for a Whiteboard or to use Whiteboard (for example to plan work, review a branch or PR stack, or explain a system in Whiteboard), author a Whiteboard with the default topic.",
     ...(context.traceEnabled
       ? [
           'For why code exists, what an agent was thinking, or whether an agent solved something before, call session_get_instructions({topic:"trace-archaeology"}).',
         ]
       : []),
-    "For programmatic MCP calls, use structuredContent when present; otherwise parse JSON from the text content when the result is JSON. An insert through session_edit uses edit.content for the actual document component, never the MCP transport wrapper containing content or structuredContent. On a server without scratchpad support, session_create requires target or pullRequestUrl; check session_capabilities before creating a session.",
+    "For programmatic MCP calls, use structuredContent when present; otherwise parse JSON from the text content when the result is JSON. An insert through session_edit uses edit.content for the actual document component, never the MCP transport wrapper containing content or structuredContent.",
     "Never read or write Whiteboard files or SQL.",
   ].join(" ");
 }
@@ -69,7 +61,7 @@ export async function serveReviewMcp(
   environmentAgent?: ReviewSessionAgent,
 ) {
   const instructionsTool = {
-    ...authoringTools(false, traceEnabled).find(
+    ...authoringTools(traceEnabled).find(
       (tool) => tool.name === "review_get_instructions",
     )!,
     name: "session_get_instructions",
@@ -132,15 +124,17 @@ export async function serveReviewMcp(
 
     return {
       tools: [...always, ...tools.filter((tool) => !always.includes(tool))].map(
-        ({ name, description, inputSchema }) => ({
+        ({ name, description, inputSchema, method }) => ({
           name,
           // Some clients prepend server instructions to every tool. Keep shared
           // guidance on the discovery tool instead, including before Desktop starts.
           description:
             name === instructionsTool.name
-              ? `${mcpAuthoringGuidance({ scratchpadAvailable: true, traceEnabled })}\n\n${description}`
+              ? `${mcpAuthoringGuidance({ traceEnabled })}\n\n${description}`
               : description,
           inputSchema,
+          // GET routes only read.
+          ...(method === "GET" && { annotations: { readOnlyHint: true } }),
         }),
       ),
     };

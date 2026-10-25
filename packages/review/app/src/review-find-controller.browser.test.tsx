@@ -19,6 +19,7 @@ import {
 import {
   type ReviewFindHost,
   ReviewFindProvider,
+  type ReviewFindSurface,
   createReviewFindHost,
   useReviewFindRegistration,
 } from "./review-find";
@@ -359,6 +360,83 @@ it("restores the review's find inputs after a fresh mount and recomputes matches
   });
 });
 
+it("passes the skip-folded toggle to editors", async () => {
+  const handle = findHandle();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const host = createReviewFindHost();
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<FindHarness host={host} handles={[handle]} />);
+  });
+  await act(async () => {
+    host.showFind("Alpha");
+  });
+  await vi.waitFor(() => {
+    expect(handle.setFindQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ skipFolded: true }),
+    );
+  });
+  await act(async () => button(container, "Skip Folded").click());
+  await vi.waitFor(() => {
+    expect(handle.setFindQuery).toHaveBeenLastCalledWith(
+      expect.objectContaining({ skipFolded: false }),
+    );
+  });
+  expect(button(container, "Skip Folded").getAttribute("aria-pressed")).toBe(
+    "false",
+  );
+});
+
+it("searches only the active surface", async () => {
+  const peek = findHandle();
+  const diff = findHandle(async () => ({ matchCount: 2 }));
+  const container = document.createElement("div");
+  document.body.append(container);
+  const host = createReviewFindHost();
+  let setSurface: ((surface: ReviewFindSurface | null) => void) | undefined;
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(
+      <FindHarness
+        host={host}
+        handles={[peek]}
+        diff={diff}
+        onSurface={(set) => {
+          setSurface = set;
+        }}
+      />,
+    );
+  });
+  await act(async () => {
+    host.showFind("Alpha");
+  });
+  await vi.waitFor(() => {
+    expect(findCount(container)?.textContent).toBe("1 of 3");
+  });
+  expect(diff.setFindQuery).not.toHaveBeenCalled();
+
+  // Leaving the surface closes find; the diff answers alone once reopened.
+  await act(async () => setSurface?.("diff"));
+  expect(container.querySelector(".review-find-widget")).toBeNull();
+  expect(peek.clearFind).toHaveBeenCalled();
+  await act(async () => {
+    host.showFind();
+  });
+  await vi.waitFor(() => {
+    expect(findCount(container)?.textContent).toBe("1 of 2");
+  });
+  expect(diff.setFindQuery).toHaveBeenCalledTimes(1);
+  expect(peek.setFindQuery).toHaveBeenCalledTimes(1);
+  await vi.waitFor(() => {
+    expect(diff.revealFindMatch).toHaveBeenCalledWith(0);
+  });
+
+  await act(async () => setSurface?.(null));
+  expect(container.querySelector(".review-find-widget")).toBeNull();
+  expect(host.showFind()).toBe(false);
+});
+
 it("does not re-render the document while the reader searches", async () => {
   const container = document.createElement("div");
   document.body.append(container);
@@ -489,11 +567,16 @@ function deferred<T>() {
 function FindHarness({
   host,
   handles,
+  diff,
+  onSurface,
   documentKey = "test-document",
   onDocumentRender,
 }: {
   host: ReviewFindHost;
   handles: ReviewInlineEditorHandle[];
+  /** Registers on the diff surface, outside the article. */
+  diff?: ReviewInlineEditorHandle;
+  onSurface?: (set: (surface: ReviewFindSurface | null) => void) => void;
   documentKey?: string;
   onDocumentRender?: () => void;
 }) {
@@ -534,6 +617,8 @@ function FindHarness({
               {handles[1] ? <InlineRegistration handle={handles[1]} /> : null}
             </article>
           </section>
+          {diff ? <InlineRegistration handle={diff} surface="diff" /> : null}
+          {onSurface ? <SurfaceProbe onSurface={onSurface} /> : null}
         </main>
       </ReviewFindProvider>
     </ReviewRootsProvider>
@@ -547,7 +632,26 @@ function DocumentProbe({ onRender }: { onRender?: () => void }) {
   return null;
 }
 
-function InlineRegistration({ handle }: { handle: ReviewInlineEditorHandle }) {
+function SurfaceProbe({
+  onSurface,
+}: {
+  onSurface: (set: (surface: ReviewFindSurface | null) => void) => void;
+}) {
+  const find = useReviewFindRegistration();
+  useLayoutEffect(() => {
+    if (find) onSurface((surface) => find.setSurface(surface));
+  }, [find, onSurface]);
+
+  return null;
+}
+
+function InlineRegistration({
+  handle,
+  surface,
+}: {
+  handle: ReviewInlineEditorHandle;
+  surface?: ReviewFindSurface;
+}) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const find = useReviewFindRegistration();
   useLayoutEffect(() => {
@@ -556,16 +660,17 @@ function InlineRegistration({ handle }: { handle: ReviewInlineEditorHandle }) {
     if (!container || !find) return;
 
     return find.register({
+      surface,
       container,
       setFindQuery: (query) => handle.setFindQuery(query),
       async revealFindMatch(index) {
         handle.revealFindMatch(index);
       },
       clearFind: () => handle.clearFind(),
-      getHandle: () => handle,
+      clearActiveFindMatch: () => handle.clearActiveFindMatch(),
       expand() {},
     });
-  }, [find, handle]);
+  }, [find, handle, surface]);
 
   return <div ref={containerRef} data-review-inline-editor="duplicate.ts" />;
 }

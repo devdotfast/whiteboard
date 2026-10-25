@@ -19,7 +19,6 @@ import {
   remoteMemory,
   runDir,
   showDiff,
-  tab,
   visibleCanvas,
   waitFor,
   windowCall,
@@ -102,7 +101,6 @@ d=$(ls -d ~/.dev/whiteboard-remote/extensions/rust-lang.rust-analyzer-*/)
 
 export const remoteLspOptions = () => ({
   extensions: "none",
-  settings: { "review.experimental.remoteHosts.enabled": true },
   env: { DEV_FAST_REVIEW_SSH_CONFIG: `${runDir}/ssh_config` },
 });
 
@@ -393,17 +391,14 @@ async function journey(ctx, id, language) {
   await openHome(ctx);
 
   const row = page
-    .locator("main.review-home")
-    .getByRole("region", { name: "Sessions", exact: true })
-    .locator("tbody tr")
+    .locator("main.review-home [data-home-row]")
     .filter({ hasText: title });
 
   await row.waitFor({ timeout: 60000 });
-  await row.getByTitle(title, { exact: true }).click();
+  await row.getByRole("button", { name: `Open ${title}`, exact: true }).click();
   await visibleCanvas(page)
     .getByRole("heading", { name: title })
     .waitFor({ timeout: 60000 });
-  await tab(page, title).waitFor();
 
   const content = await readFile(
     path.join(fixtures, language.fixture, language.file),

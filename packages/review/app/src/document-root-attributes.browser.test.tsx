@@ -8,8 +8,11 @@ import type { Snapshot } from "@review/review-api/store";
 import { act } from "react";
 import { afterEach, expect, it } from "vitest";
 
-import { mountReviewCanvas as mount } from "./desktop-entry";
-import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
+import {
+  loadFixture,
+  mountWhiteboard as mount,
+  settled,
+} from "./whiteboard-fixture";
 
 const [lens] = documentSchema.parse(lensFixture);
 
@@ -37,20 +40,6 @@ it.each([
     lens: false,
   },
   {
-    name: "scratchpad",
-    kind: "scratchpad" as const,
-    document: [markdown("a", "Body.\n")],
-    header: false,
-    lens: false,
-  },
-  {
-    name: "titled scratchpad",
-    kind: "scratchpad" as const,
-    document: [markdown("a", "# Notes\n\nBody.\n")],
-    header: true,
-    lens: false,
-  },
-  {
     name: "lens inside a section",
     document: [
       {
@@ -69,7 +58,6 @@ it.each([
     reviewId: "root-attributes",
     version: 0,
     title: "Fixture review",
-    kind: fixture.kind,
     pins: { repositoryId: "repo", base: "base", head: "head" },
     target: {
       kind: "commits",
@@ -84,12 +72,7 @@ it.each([
   const container = document.createElement("div");
   document.body.append(container);
   await act(async () => {
-    canvas = mount(container, {
-      kind: "api",
-      reviewId: snapshot.reviewId,
-      version: 0,
-      bridge: fixtureReviewBridge({ snapshot }),
-    });
+    canvas = mount(container, loadFixture({ snapshot }));
   });
 
   expect(

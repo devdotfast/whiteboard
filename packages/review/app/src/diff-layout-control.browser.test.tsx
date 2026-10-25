@@ -1,3 +1,4 @@
+import { TestCanvasQuery } from "@canvas/canvas-query-test-utils";
 import type {
   ReviewDiffLayout,
   ReviewDiffLayoutScope,
@@ -27,6 +28,9 @@ describe("DiffLayoutControl", () => {
   >;
 
   let posted: unknown[];
+  let showNumbers: boolean;
+  let numbersChanged: Set<(show: boolean) => void>;
+  let setNumbers: ReturnType<typeof vi.fn<(next: boolean) => Promise<void>>>;
 
   beforeEach(async () => {
     container = document.createElement("div");
@@ -35,6 +39,14 @@ describe("DiffLayoutControl", () => {
     layouts = { diff: "split", peek: "unified" };
     listeners = new Set();
     posted = [];
+    showNumbers = false;
+    numbersChanged = new Set();
+    setNumbers = vi.fn<(next: boolean) => Promise<void>>(
+      async (next: boolean) => {
+        showNumbers = next;
+        numbersChanged.forEach((listener) => listener(next));
+      },
+    );
     // The desktop writes the setting and reports back through the change
     // event, so the fake applies the write the same way.
     setDiffLayout = vi.fn<
@@ -46,6 +58,13 @@ describe("DiffLayoutControl", () => {
     const session = testReviewSession(
       {},
       {
+        currentInlineLineNumbers: () => showNumbers,
+        setInlineLineNumbers: (show) => setNumbers(show),
+        onDidChangeInlineLineNumbers: (listener) => {
+          numbersChanged.add(listener);
+
+          return { dispose: () => numbersChanged.delete(listener) };
+        },
         currentDiffLayout: (scope) => layouts[scope],
         setDiffLayout: (scope, next) => setDiffLayout(scope, next),
         onDidChangeDiffLayout: (scope, listener) => {
@@ -65,9 +84,11 @@ describe("DiffLayoutControl", () => {
 
     await act(async () => {
       root.render(
-        <ReviewSessionProvider session={session}>
-          <DiffLayoutControl />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <DiffLayoutControl />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       );
     });
     await act(async () => trigger().click());
@@ -112,6 +133,37 @@ describe("DiffLayoutControl", () => {
       `[aria-label="${group} layout"] [aria-pressed="true"]`,
     )?.textContent;
   }
+
+  it("writes the shared inline setting, rolls back failed writes, and follows external changes", async () => {
+    const buttons = () => [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        '[aria-label="Whiteboard line numbers"] button',
+      ),
+    ];
+
+    const show = () =>
+      buttons().find((button) => button.textContent === "Show")!;
+
+    const hide = () =>
+      buttons().find((button) => button.textContent === "Hide")!;
+
+    expect(hide().getAttribute("aria-pressed")).toBe("true");
+    await act(async () => show().click());
+    expect(setNumbers).toHaveBeenCalledExactlyOnceWith(true);
+    expect(show().getAttribute("aria-pressed")).toBe("true");
+    const write = Promise.withResolvers<void>();
+    setNumbers.mockImplementation(() => write.promise);
+    await act(async () => hide().click());
+    expect(hide().getAttribute("aria-pressed")).toBe("true");
+    await act(async () => write.reject(new Error("Settings unavailable")));
+    expect(show().getAttribute("aria-pressed")).toBe("true");
+    await act(async () => {
+      showNumbers = false;
+      numbersChanged.forEach((listener) => listener(false));
+    });
+    expect(hide().getAttribute("aria-pressed")).toBe("true");
+    expect(layouts).toEqual({ diff: "split", peek: "unified" });
+  });
 
   it("writes the chosen layout and does not rewrite the current one", async () => {
     await act(async () => segment("Diff", "Split").click());

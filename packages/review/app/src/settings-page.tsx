@@ -1,32 +1,44 @@
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { Checkbox } from "@canvas/ui/checkbox";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
+import { focusStyles } from "@canvas/ui/focus";
+import { listRowStyles } from "@canvas/ui/list-row";
 import { textStyles } from "@canvas/ui/text";
+import { Select, TextField } from "@canvas/ui/text-field";
 import type {
+  ReviewAppearance,
   ReviewCanvasSettingsContent,
   ReviewCliInstallStatus,
-  ReviewCtrlTabChoice,
+  ReviewColorTheme,
+  ReviewColorThemeKind,
   ReviewDocumentWidthChoice,
   ReviewKeymapChoice,
+  ReviewOpenFilesIn,
+  ReviewOpenFilesInChoice,
   ReviewReadyNotificationChoice,
-  ReviewThemeChoice,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { type ReactNode, useEffect, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { DiffrConfigSection } from "./diffr-config-section";
 import { homeStyles } from "./home-styles";
-import { RemoteHostsSection } from "./remote-hosts-section";
+import { chevronMarker } from "./markers.stylex";
+import { REMOTE_HOSTS_LABEL, RemoteHostsSection } from "./remote-hosts-section";
+import {
+  scrollToReviewHeading,
+  useHeadingInView,
+} from "./review-heading-scroll";
+import { Row, Section, sectionId } from "./settings-section";
 import { settingsStyles as styles } from "./settings-styles";
 import { withClass } from "./stylex-props";
 import { TraceCaptureSection } from "./trace-capture-section";
 import { SegmentedControl, labeledOptions } from "./ui/segmented";
 
-const THEME_LABELS: Record<ReviewThemeChoice, string> = {
-  light: "Light",
-  dark: "Dark",
-  system: "System",
-};
+const COLOR_THEME_GROUPS: [ReviewColorThemeKind, string][] = [
+  ["dark", "Dark"],
+  ["light", "Light"],
+];
 
 const KEYMAP_LABELS: Record<ReviewKeymapChoice, string> = {
   none: "Default",
@@ -35,10 +47,18 @@ const KEYMAP_LABELS: Record<ReviewKeymapChoice, string> = {
   sublime: "Sublime Text",
 };
 
-const CTRL_TAB_LABELS: Record<ReviewCtrlTabChoice, string> = {
-  recent: "Last used tab",
-  next: "Next tab",
+// The editors open at the selected line; a picked application gets the file.
+const OPEN_FILES_IN_EDITORS: Record<
+  Exclude<ReviewOpenFilesInChoice, "application">,
+  string
+> = {
+  whiteboard: "Whiteboard",
+  vscode: "VS Code",
+  cursor: "Cursor",
+  zed: "Zed",
 };
+
+const CHOOSE_APPLICATION = "choose";
 
 const DOCUMENT_WIDTH_LABELS: Record<ReviewDocumentWidthChoice, string> = {
   standard: "Standard",
@@ -46,16 +66,14 @@ const DOCUMENT_WIDTH_LABELS: Record<ReviewDocumentWidthChoice, string> = {
   full: "Full",
 };
 
-const CODE_FONT_SIZES = [11, 12, 13, 14, 16];
+const READING_FONT_LABELS: Record<ReviewAppearance["readingFont"], string> = {
+  serif: "Serif",
+  sans: "Sans",
+};
 
-// A size set elsewhere, such as one imported from VS Code, gets its own segment.
-function codeFontSizeLabels(current: number) {
-  const sizes = [...new Set([...CODE_FONT_SIZES, current])].sort(
-    (left, right) => left - right,
-  );
+const DOCUMENT_FONT_SIZES = [13, 14, 15, 16, 17, 18, 20];
 
-  return Object.fromEntries(sizes.map((size) => [String(size), String(size)]));
-}
+const CODE_FONT_SIZES = [11, 12, 13, 14, 15, 16, 18];
 
 const READY_NOTIFICATION_LABELS: Record<ReviewReadyNotificationChoice, string> =
   {
@@ -82,10 +100,11 @@ export function SettingsPage({
   );
 
   const [theme, setTheme] = useState(settings.theme);
+  const [colorThemes, setColorThemes] = useState(settings.colorThemes);
   const [keymap, setKeymap] = useState(settings.keymap);
-  const [ctrlTab, setCtrlTab] = useState(settings.ctrlTab);
+  const [openFilesIn, setOpenFilesIn] = useState(settings.openFilesIn);
   const [documentWidth, setDocumentWidth] = useState(settings.documentWidth);
-  const [codeFontSize, setCodeFontSize] = useState(settings.codeFontSize);
+  const [appearance, setAppearance] = useState(settings.appearance);
 
   const [readyNotification, setReadyNotification] = useState(
     settings.readyNotification,
@@ -95,13 +114,7 @@ export function SettingsPage({
     settings.softwareMapEnabled,
   );
 
-  const [structuralDiffEnabled, setStructuralDiffEnabled] = useState(
-    settings.structuralDiffEnabled,
-  );
-
-  const [scratchpadEnabled, setScratchpadEnabled] = useState(
-    settings.scratchpadEnabled,
-  );
+  const [sharingEnabled, setSharingEnabled] = useState(settings.sharingEnabled);
 
   const [animationsEnabled, setAnimationsEnabled] = useState(
     settings.animationsEnabled,
@@ -111,7 +124,7 @@ export function SettingsPage({
     ReviewCliInstallStatus | undefined
   >(settings.install?.status);
 
-  const [busy, setBusy] = useState<string | null>(null);
+  const [installingCli, setInstallingCli] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(
@@ -125,365 +138,619 @@ export function SettingsPage({
       : settings.install;
 
   const run = async <T,>(
-    key: string,
     action: () => Promise<T>,
     adopt: (value: T) => void,
   ) => {
-    setBusy(key);
     setError(null);
 
     try {
       adopt(await action());
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
-    } finally {
-      setBusy(null);
     }
   };
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const columnRef = useRef<HTMLDivElement>(null);
+
+  const agents = Boolean(install);
+  const commandLine = Boolean(install?.status.cli);
+
+  const contents = useMemo(
+    () =>
+      [
+        ...(agents ? ["Agents"] : []),
+        ...(commandLine ? ["Command line"] : []),
+        "Privacy",
+        "Appearance",
+        "Editor",
+        "Notifications",
+        "Tools",
+        REMOTE_HOSTS_LABEL,
+        "Experimental Features",
+        "Uninstall",
+      ].map((label) => ({
+        id: sectionId(label),
+        text: label.replace(" (Experimental)", ""),
+      })),
+    [agents, commandLine],
+  );
+
+  const changeAppearance = <Key extends keyof ReviewAppearance>(
+    key: Key,
+    value: ReviewAppearance[Key],
+  ) => void run(() => settings.setAppearance(key, value), setAppearance);
+
   return (
     <main {...withClass("review-home", homeStyles.page)}>
-      <div {...stylex.props(homeStyles.scroll)}>
-        <div {...stylex.props(homeStyles.content, styles.page)}>
-          <div {...stylex.props(homeStyles.header)}>
-            <h1 {...stylex.props(homeStyles.heading)}>Settings</h1>
-          </div>
-          <p {...stylex.props(styles.lede)}>
-            Settings apply to Whiteboard on this machine.
-          </p>
+      <div ref={scrollRef} {...stylex.props(homeStyles.scroll, styles.scroll)}>
+        <div {...stylex.props(homeStyles.content, styles.layout)}>
+          <SettingsContents
+            entries={contents}
+            columnRef={columnRef}
+            scrollRef={scrollRef}
+          />
+          <div ref={columnRef} {...stylex.props(styles.page)}>
+            <div {...stylex.props(homeStyles.header)}>
+              <h1 {...stylex.props(homeStyles.heading)}>Settings</h1>
+            </div>
+            <p {...stylex.props(styles.lede)}>
+              Settings apply to Whiteboard on this machine.
+            </p>
 
-          {install ? (
-            <Section label="Agents">
-              <LegacySkillsRow
-                install={install}
-                onStatusChange={setInstallStatus}
-              />
-              <div {...stylex.props(styles.connect)}>
-                <ConnectCard install={install} />
-              </div>
-            </Section>
-          ) : null}
+            {install ? (
+              <Section label="Agents">
+                <LegacySkillsRow
+                  install={install}
+                  onStatusChange={setInstallStatus}
+                />
+                <div {...stylex.props(styles.connect)}>
+                  <ConnectCard install={install} />
+                </div>
+              </Section>
+            ) : null}
 
-          {install?.status.cli ? (
-            <Section label="Command line">
+            {install?.status.cli ? (
+              <Section label="Command line">
+                <Row
+                  label="whiteboard command"
+                  description={
+                    install.status.shim.installed
+                      ? `Installed at ${install.status.shim.path}. Your agents and trace capture run it.`
+                      : "Adds whiteboard to your shell PATH. Your agents and trace capture run it."
+                  }
+                >
+                  {install.status.shim.installed ||
+                  install.status.shim.installer ? null : (
+                    <Button
+                      disabled={installingCli}
+                      onClick={async () => {
+                        setInstallingCli(true);
+                        await run(
+                          () => install.apply({ shim: true }),
+                          setInstallStatus,
+                        );
+                        setInstallingCli(false);
+                      }}
+                    >
+                      Install
+                    </Button>
+                  )}
+                </Row>
+              </Section>
+            ) : null}
+
+            <Section label="Privacy">
               <Row
-                label="whiteboard command"
-                description={
-                  install.status.shim.installed
-                    ? `Installed at ${install.status.shim.path}. Your agents and trace capture run it.`
-                    : "Adds whiteboard to your shell PATH. Your agents and trace capture run it."
-                }
+                label="Share anonymous usage data"
+                description="Counts and timings only. Never code, file paths, or repository names."
               >
-                {install.status.shim.installer ? null : (
-                  <Button
-                    disabled={busy !== null}
-                    onClick={() =>
+                <label
+                  {...stylex.props(styles.toggle)}
+                  aria-label="Share anonymous usage data"
+                >
+                  <Checkbox
+                    checked={telemetryEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
                       void run(
-                        "command",
-                        () =>
-                          install.status.shim.installed
-                            ? install.remove({ shim: true })
-                            : install.apply({ shim: true }),
-                        setInstallStatus,
-                      )
-                    }
-                  >
-                    {install.status.shim.installed ? "Remove" : "Install"}
-                  </Button>
-                )}
+                        () => settings.setTelemetryEnabled(enabled),
+                        setTelemetryEnabled,
+                      );
+                    }}
+                  />
+                </label>
               </Row>
             </Section>
-          ) : null}
 
-          <Section label="Privacy">
-            <Row
-              label="Share anonymous usage data"
-              description="Counts and timings only. Never code, file paths, or repository names."
-            >
-              <label
-                {...stylex.props(styles.toggle)}
-                aria-label="Share anonymous usage data"
+            <Section label="Appearance">
+              <Row label="Theme" description="How Whiteboard looks.">
+                <ThemeSelect
+                  themes={colorThemes}
+                  value={theme}
+                  onChange={(id) =>
+                    void run(() => settings.setTheme(id), setTheme)
+                  }
+                />
+              </Row>
+              <Row
+                label="Import a theme"
+                description="A VS Code theme extension (.vsix) or theme file (.json)."
               >
-                <Checkbox
-                  checked={telemetryEnabled}
-                  disabled={busy !== null}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
+                <Button
+                  onClick={() =>
                     void run(
-                      "telemetry",
-                      () => settings.setTelemetryEnabled(enabled),
-                      setTelemetryEnabled,
-                    );
-                  }}
-                />
-              </label>
-            </Row>
-          </Section>
-
-          <Section label="Editor">
-            <Row label="Theme" description="How Whiteboard looks.">
-              <SegmentedControl
-                label="Theme"
-                value={theme}
-                options={labeledOptions(THEME_LABELS)}
-                disabled={busy !== null}
-                onChange={(choice) =>
-                  void run("theme", () => settings.setTheme(choice), setTheme)
-                }
-              />
-            </Row>
-            <Row
-              label="Document width"
-              description="Wide and Full give diagrams and code more room. Text keeps a reading width."
-            >
-              <SegmentedControl
+                      () => settings.importColorTheme(),
+                      (imported) => {
+                        if (!imported) return;
+                        setColorThemes(imported.colorThemes);
+                        setTheme(imported.theme);
+                      },
+                    )
+                  }
+                >
+                  Choose file…
+                </Button>
+              </Row>
+              <Row
                 label="Document width"
-                value={documentWidth}
-                options={labeledOptions(DOCUMENT_WIDTH_LABELS)}
-                disabled={busy !== null}
-                onChange={(choice) =>
-                  void run(
-                    "document-width",
-                    () => settings.setDocumentWidth(choice),
-                    setDocumentWidth,
-                  )
-                }
-              />
-            </Row>
-            <Row
-              label="Code font size"
-              description="Text size in diffs, code peeks, and source tabs."
-            >
-              <SegmentedControl
-                label="Code font size"
-                value={String(codeFontSize)}
-                options={labeledOptions(codeFontSizeLabels(codeFontSize))}
-                disabled={busy !== null}
-                onChange={(choice) =>
-                  void run(
-                    "code-font-size",
-                    () => settings.setCodeFontSize(Number(choice)),
-                    setCodeFontSize,
-                  )
-                }
-              />
-            </Row>
-            <Row
-              label="Keymap"
-              description="Vim, Emacs, and Sublime Text keys come from a bundled extension. A change needs a reload."
-            >
-              <SegmentedControl
+                description="Wide and Full give diagrams and code more room. Text keeps a reading width."
+              >
+                <SegmentedControl
+                  label="Document width"
+                  value={documentWidth}
+                  options={labeledOptions(DOCUMENT_WIDTH_LABELS)}
+                  onChange={(choice) =>
+                    void run(
+                      () => settings.setDocumentWidth(choice),
+                      setDocumentWidth,
+                    )
+                  }
+                />
+              </Row>
+              <div {...stylex.props(styles.nested)}>
+                <details>
+                  <summary
+                    {...stylex.props(
+                      chevronMarker,
+                      disclosureStyles.toggle,
+                      focusStyles.ring,
+                      styles.nestedSummary,
+                    )}
+                  >
+                    <DisclosureChevron />
+                    Specifics
+                  </summary>
+                  <Row
+                    label="Text size"
+                    description="Whiteboard text. Headings scale with it."
+                  >
+                    <SizeSelect
+                      label="Text size"
+                      sizes={DOCUMENT_FONT_SIZES}
+                      value={appearance.documentFontSize}
+                      onChange={(size) =>
+                        changeAppearance("documentFontSize", size)
+                      }
+                    />
+                  </Row>
+                  <Row
+                    label="Reading typeface"
+                    description="Whiteboard text, Ask answers, and trace notes."
+                  >
+                    <SegmentedControl
+                      label="Reading typeface"
+                      value={appearance.readingFont}
+                      options={labeledOptions(READING_FONT_LABELS)}
+                      onChange={(choice) =>
+                        changeAppearance("readingFont", choice)
+                      }
+                    />
+                  </Row>
+                  <Row
+                    label="Code font"
+                    description="Code blocks, diffs, peeks, and source tabs. Clear it for Geist Mono."
+                  >
+                    <FontFamilyField
+                      value={appearance.codeFontFamily}
+                      onChange={(family) =>
+                        changeAppearance("codeFontFamily", family)
+                      }
+                    />
+                  </Row>
+                  <Row
+                    label="Code font size"
+                    description="Code blocks and source tabs."
+                  >
+                    <SizeSelect
+                      label="Code font size"
+                      sizes={CODE_FONT_SIZES}
+                      value={appearance.codeFontSize}
+                      onChange={(size) =>
+                        changeAppearance("codeFontSize", size)
+                      }
+                    />
+                  </Row>
+                  <Row
+                    label="Font ligatures"
+                    description="Code blocks, diffs, peeks, and source tabs."
+                  >
+                    <label {...stylex.props(styles.toggle)}>
+                      <Checkbox
+                        aria-label="Font ligatures"
+                        checked={appearance.fontLigatures}
+                        onChange={(event) =>
+                          changeAppearance(
+                            "fontLigatures",
+                            event.target.checked,
+                          )
+                        }
+                      />
+                    </label>
+                  </Row>
+                  <Row
+                    label="Diff font size"
+                    description="The Diff tab, diff blocks, and code peeks."
+                  >
+                    <SizeSelect
+                      label="Diff font size"
+                      sizes={CODE_FONT_SIZES}
+                      value={appearance.diffFontSize}
+                      onChange={(size) =>
+                        changeAppearance("diffFontSize", size)
+                      }
+                    />
+                  </Row>
+                  <Row
+                    label="Wrap long lines in diffs"
+                    description="The Diff tab and diff blocks."
+                  >
+                    <label {...stylex.props(styles.toggle)}>
+                      <Checkbox
+                        aria-label="Wrap long lines in diffs"
+                        checked={appearance.diffWordWrap}
+                        onChange={(event) =>
+                          changeAppearance("diffWordWrap", event.target.checked)
+                        }
+                      />
+                    </label>
+                  </Row>
+                  <Row
+                    label="Hide whitespace changes"
+                    description="Leading and trailing whitespace, in diffs and peeks."
+                  >
+                    <label {...stylex.props(styles.toggle)}>
+                      <Checkbox
+                        aria-label="Hide whitespace changes"
+                        checked={appearance.diffIgnoreWhitespace}
+                        onChange={(event) =>
+                          changeAppearance(
+                            "diffIgnoreWhitespace",
+                            event.target.checked,
+                          )
+                        }
+                      />
+                    </label>
+                  </Row>
+                </details>
+              </div>
+            </Section>
+
+            <Section label="Editor">
+              <Row
                 label="Keymap"
-                value={keymap}
-                options={labeledOptions(KEYMAP_LABELS)}
-                disabled={busy !== null}
-                onChange={(choice) => {
-                  void run(
-                    "keymap",
-                    () => settings.setKeymap(choice),
-                    setKeymap,
-                  );
-                }}
-              />
-            </Row>
-            <Row
-              label="Ctrl+Tab"
-              description="Jump back to the last used tab, or step through the tab bar."
-            >
-              <SegmentedControl
-                label="Ctrl+Tab"
-                value={ctrlTab}
-                options={labeledOptions(CTRL_TAB_LABELS)}
-                disabled={busy !== null}
-                onChange={(choice) =>
-                  void run(
-                    "ctrl-tab",
-                    () => settings.setCtrlTab(choice),
-                    setCtrlTab,
-                  )
-                }
-              />
-            </Row>
-          </Section>
+                description="Vim, Emacs, and Sublime Text keys come from a bundled extension. A change needs a reload."
+              >
+                <SegmentedControl
+                  label="Keymap"
+                  value={keymap}
+                  options={labeledOptions(KEYMAP_LABELS)}
+                  onChange={(choice) => {
+                    void run(() => settings.setKeymap(choice), setKeymap);
+                  }}
+                />
+              </Row>
+            </Section>
 
-          <Section label="Notifications">
-            <Row
-              label="Review ready"
-              description="When an agent finishes a review you aren't looking at."
-            >
-              <SegmentedControl
+            <Section label="Notifications">
+              <Row
                 label="Review ready"
-                value={readyNotification}
-                options={labeledOptions(READY_NOTIFICATION_LABELS)}
-                disabled={busy !== null}
-                onChange={(choice) =>
-                  void run(
-                    "ready-notification",
-                    () => settings.setReadyNotification(choice),
-                    setReadyNotification,
-                  )
-                }
-              />
-            </Row>
-          </Section>
-
-          <Section label="Tools">
-            <Row
-              label="Extensions"
-              description="Install or turn on language extensions."
-            >
-              <Button onClick={settings.manageExtensions}>Manage…</Button>
-            </Row>
-            <Row
-              label="VS Code settings"
-              description="Copy settings and keybindings from VS Code or Cursor again. Replaces Whiteboard's."
-            >
-              <Button onClick={settings.importVsCodeSettings}>Import…</Button>
-            </Row>
-          </Section>
-
-          {settings.remoteHosts.enabled ? (
-            <RemoteHostsSection hosts={settings.remoteHosts} />
-          ) : null}
-
-          <Section label="Experimental Features">
-            <Row
-              label="Animations"
-              description="Let agents create and edit animations through MCP. Existing animations remain visible when off."
-            >
-              <label {...stylex.props(styles.toggle)}>
-                <Checkbox
-                  aria-label="Animations"
-                  checked={animationsEnabled}
-                  disabled={busy !== null}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
+                description="When an agent finishes a review you aren't looking at."
+              >
+                <SegmentedControl
+                  label="Review ready"
+                  value={readyNotification}
+                  options={labeledOptions(READY_NOTIFICATION_LABELS)}
+                  onChange={(choice) =>
                     void run(
-                      "animations",
-                      () => settings.setAnimationsEnabled(enabled),
-                      setAnimationsEnabled,
-                    );
-                  }}
+                      () => settings.setReadyNotification(choice),
+                      setReadyNotification,
+                    )
+                  }
                 />
-              </label>
-            </Row>
-            <Row
-              label="Structural Diffs"
-              description="Replace the standard diff view with syntax-aware diffs and linked folds."
-            >
-              <label {...stylex.props(styles.toggle)}>
-                <Checkbox
-                  aria-label="Structural Diffs"
-                  checked={structuralDiffEnabled}
-                  disabled={busy !== null}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
-                    void run(
-                      "structural-diff",
-                      () => settings.setStructuralDiffEnabled(enabled),
-                      setStructuralDiffEnabled,
-                    );
-                  }}
-                />
-              </label>
-            </Row>
-            {structuralDiffEnabled ? (
+              </Row>
+            </Section>
+
+            <Section label="Tools">
+              <Row
+                label="Extensions"
+                description="Install or turn on language extensions."
+              >
+                <Button onClick={settings.manageExtensions}>Manage…</Button>
+              </Row>
+              <Row
+                label="VS Code settings"
+                description="Copy settings and keybindings from VS Code or Cursor again. Replaces Whiteboard's."
+              >
+                <Button onClick={settings.importVsCodeSettings}>Import…</Button>
+              </Row>
               <DiffrConfigSection
                 actions={settings.diffrConfig}
                 reloadWindow={settings.reloadWindow}
               />
-            ) : null}
-            <Row
-              label="Software Map"
-              description="Show the experimental Software Map view in sessions."
-            >
-              <label {...stylex.props(styles.toggle)}>
-                <Checkbox
-                  aria-label="Software Map"
-                  checked={softwareMapEnabled}
-                  disabled={busy !== null}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
-                    void run(
-                      "software-map",
-                      () => settings.setSoftwareMapEnabled(enabled),
-                      setSoftwareMapEnabled,
-                    );
-                  }}
-                />
-              </label>
-            </Row>
-            <Row
-              label="Scratchpad"
-              description="Show the experimental scratchpad on Home. Agents draw on it through Whiteboard's MCP tools."
-            >
-              <label {...stylex.props(styles.toggle)}>
-                <Checkbox
-                  aria-label="Scratchpad"
-                  checked={scratchpadEnabled}
-                  disabled={busy !== null}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
-                    void run(
-                      "scratchpad",
-                      () => settings.setScratchpadEnabled(enabled),
-                      setScratchpadEnabled,
-                    );
-                  }}
-                />
-              </label>
-            </Row>
-            {install ? (
-              <TraceCaptureSection
-                install={install}
-                onStatusChange={setInstallStatus}
-              />
-            ) : null}
-          </Section>
+            </Section>
 
-          <Section label="Uninstall">
-            <Row
-              label="Uninstall Whiteboard"
-              description="Removes the whiteboard command, trace setup, and tutorial. Your sessions stay on disk."
-            >
-              <Button onClick={settings.uninstallApp}>Uninstall…</Button>
-            </Row>
-          </Section>
+            <RemoteHostsSection hosts={settings.remoteHosts} />
 
-          {error ? <p {...stylex.props(styles.error)}>{error}</p> : null}
+            <Section label="Experimental Features">
+              <Row
+                label="Animations"
+                description="Let agents create and edit animations through MCP. Existing animations remain visible when off."
+              >
+                <label {...stylex.props(styles.toggle)}>
+                  <Checkbox
+                    aria-label="Animations"
+                    checked={animationsEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      void run(
+                        () => settings.setAnimationsEnabled(enabled),
+                        setAnimationsEnabled,
+                      );
+                    }}
+                  />
+                </label>
+              </Row>
+              <Row
+                label="Software Map"
+                description="Show the experimental Software Map view in sessions."
+              >
+                <label {...stylex.props(styles.toggle)}>
+                  <Checkbox
+                    aria-label="Software Map"
+                    checked={softwareMapEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      void run(
+                        () => settings.setSoftwareMapEnabled(enabled),
+                        setSoftwareMapEnabled,
+                      );
+                    }}
+                  />
+                </label>
+              </Row>
+              <Row label="Sharing" description="Show Share on whiteboards.">
+                <label {...stylex.props(styles.toggle)}>
+                  <Checkbox
+                    aria-label="Sharing"
+                    checked={sharingEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      void run(
+                        () => settings.setSharingEnabled(enabled),
+                        setSharingEnabled,
+                      );
+                    }}
+                  />
+                </label>
+              </Row>
+              <Row
+                label="Open files in"
+                description="Where Open file sends a file. Diffs stay in Whiteboard."
+              >
+                <OpenFilesInSelect
+                  value={openFilesIn}
+                  onChoose={() =>
+                    void run(
+                      () => settings.chooseOpenFilesInApplication(),
+                      setOpenFilesIn,
+                    )
+                  }
+                  onChange={(choice) =>
+                    void run(
+                      () => settings.setOpenFilesIn(choice),
+                      setOpenFilesIn,
+                    )
+                  }
+                />
+              </Row>
+              {install ? (
+                <TraceCaptureSection
+                  install={install}
+                  onStatusChange={setInstallStatus}
+                />
+              ) : null}
+            </Section>
+
+            <Section label="Uninstall">
+              <Row
+                label="Uninstall Whiteboard"
+                description="Removes the whiteboard command and trace setup. Your sessions stay on disk."
+              >
+                <Button onClick={settings.uninstallApp}>Uninstall…</Button>
+              </Row>
+            </Section>
+
+            {error ? (
+              <p {...stylex.props(textStyles.error, styles.error)}>{error}</p>
+            ) : null}
+          </div>
         </div>
       </div>
     </main>
   );
 }
 
-function Section({ label, children }: { label: string; children: ReactNode }) {
+function SettingsContents({
+  entries,
+  columnRef,
+  scrollRef,
+}: {
+  entries: { id: string; text: string }[];
+  columnRef: RefObject<HTMLElement | null>;
+  scrollRef: RefObject<HTMLElement | null>;
+}) {
+  const current = useHeadingInView(entries, columnRef, scrollRef, true);
+
   return (
-    <section {...stylex.props(styles.section)} aria-label={label}>
-      <h2 {...stylex.props(textStyles.eyebrow, styles.sectionLabel)}>
-        {label}
-      </h2>
-      {children}
-    </section>
+    <nav aria-label="Settings contents" {...stylex.props(styles.toc)}>
+      {entries.map(({ id, text }) => (
+        <button
+          key={id}
+          type="button"
+          aria-current={id === current ? "location" : undefined}
+          {...stylex.props(
+            focusStyles.ringInset,
+            buttonStyles.reset,
+            listRowStyles.row,
+            listRowStyles.wash,
+            id === current && listRowStyles.current,
+          )}
+          onClick={() =>
+            scrollToReviewHeading(id, columnRef.current, scrollRef.current)
+          }
+        >
+          {text}
+        </button>
+      ))}
+    </nav>
   );
 }
 
-function Row({
+// A size set elsewhere, such as one imported from VS Code, gets its own option.
+function SizeSelect({
   label,
-  description,
-  children,
+  sizes,
+  value,
+  onChange,
 }: {
   label: string;
-  description: string;
-  children: ReactNode;
+  sizes: number[];
+  value: number;
+  onChange: (size: number) => void;
 }) {
   return (
-    <div {...stylex.props(styles.row)}>
-      <div {...stylex.props(styles.rowText)}>
-        <span {...stylex.props(styles.rowLabel)}>{label}</span>
-        <span {...stylex.props(styles.rowDescription)}>{description}</span>
-      </div>
-      <div {...stylex.props(styles.rowControl)}>{children}</div>
-    </div>
+    <Select
+      aria-label={label}
+      value={String(value)}
+      onChange={(event) => onChange(Number(event.currentTarget.value))}
+    >
+      {[...new Set([...sizes, value])]
+        .sort((left, right) => left - right)
+        .map((size) => (
+          <option key={size} value={size}>
+            {size}px
+          </option>
+        ))}
+    </Select>
+  );
+}
+
+function FontFamilyField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (family: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => setDraft(value), [value]);
+
+  const commit = () => {
+    if (draft.trim() !== value) onChange(draft.trim());
+  };
+
+  return (
+    <TextField
+      aria-label="Code font"
+      spellCheck={false}
+      value={draft}
+      onChange={(event) => setDraft(event.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") commit();
+      }}
+    />
+  );
+}
+
+function ThemeSelect({
+  themes,
+  value,
+  onChange,
+}: {
+  themes: ReviewColorTheme[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  return (
+    <Select
+      aria-label="Theme"
+      value={value}
+      onChange={(event) => onChange(event.currentTarget.value)}
+    >
+      {COLOR_THEME_GROUPS.map(([kind, label]) => (
+        <optgroup key={kind} label={label}>
+          {themes
+            .filter((option) => option.kind === kind)
+            .map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+        </optgroup>
+      ))}
+    </Select>
+  );
+}
+
+function OpenFilesInSelect({
+  value,
+  onChoose,
+  onChange,
+}: {
+  value: ReviewOpenFilesIn;
+  onChoose: () => void;
+  onChange: (choice: ReviewOpenFilesInChoice) => void;
+}) {
+  return (
+    <Select
+      aria-label="Open files in"
+      title={value.application?.path}
+      value={value.choice}
+      onChange={(event) => {
+        const next = event.currentTarget.value;
+
+        if (next === CHOOSE_APPLICATION) return onChoose();
+
+        // SAFETY: every other option's value is a ReviewOpenFilesInChoice.
+        onChange(next as ReviewOpenFilesInChoice);
+      }}
+    >
+      {Object.entries(OPEN_FILES_IN_EDITORS).map(([choice, label]) => (
+        <option key={choice} value={choice}>
+          {label}
+        </option>
+      ))}
+      {value.application ? (
+        <option value="application">{value.application.name}</option>
+      ) : null}
+      <option value={CHOOSE_APPLICATION}>
+        {value.application
+          ? "Choose another application…"
+          : "Choose application…"}
+      </option>
+    </Select>
   );
 }

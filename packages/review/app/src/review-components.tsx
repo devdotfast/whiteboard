@@ -1,7 +1,23 @@
 import { documentType } from "@canvas/document-type.stylex";
-import { fontSize, fontWeight } from "@canvas/scale.stylex";
-import { IconButton } from "@canvas/ui/button";
+import { fontSize, fontWeight, leading, space } from "@canvas/scale.stylex";
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
+import { DisclosureChevron } from "@canvas/ui/disclosure";
+import { useEscape } from "@canvas/ui/escape";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import {
+  ChevronDownIcon,
+  CloseIcon,
+  ExternalLinkIcon,
+  MapPinIcon,
+  MinusIcon,
+  PopOutIcon,
+} from "@canvas/ui/icons";
+import {
+  OverlayScrollbar,
+  overlayScrollbarStyles,
+} from "@canvas/ui/overlay-scrollbar";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import { extractTraceEventText } from "@dev.fast/trace-protocol";
 import * as stylex from "@stylexjs/stylex";
 import type {
@@ -10,9 +26,11 @@ import type {
   ReactElement,
   ReactNode,
   Ref,
+  RefObject,
 } from "react";
 import {
   useCallback,
+  useContext,
   useEffect,
   useEffectEvent,
   useMemo,
@@ -23,19 +41,29 @@ import { createPortal } from "react-dom";
 import { useShallow } from "zustand/react/shallow";
 
 import { AskCloseWarning } from "./ask-close";
-import { AskDeleteThreadButton, AskOpenThreadProvider } from "./ask-delete";
+import { AskDeleteThreadButton } from "./ask-delete";
+import {
+  AskDock,
+  DockHidden,
+  InRightColumn,
+  useAskPanelHost,
+} from "./ask-dock";
 import { AskHistoryButton, AskHistoryList } from "./ask-history-list";
-import { syncOpenAsks } from "./ask-open-state";
+import {
+  AskProjectContext,
+  openHandedOffAsks,
+  syncOpenAsks,
+} from "./ask-open-state";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
 import {
   AskThreadsWatchContext,
   useAskThreadsWatch,
   useLatest,
 } from "./ask-thread-stream";
-import { AskPills, AskSlot, AskWindow } from "./ask-window";
+import { useMarkThreadViewed } from "./ask-viewed";
+import { AskSlot, AskWindow } from "./ask-window";
 import { AuthoredCodeSurface } from "./authored-code-surface";
-import { CodePeekCard } from "./CodePeek";
-import { controlStyles } from "./controls-styles";
+import { SourceCodePeek } from "./CodePeek";
 import { documentStyles } from "./document-styles";
 import { drawStyles } from "./draw-styles";
 import { findWhitespaceNormalizedSpan } from "./highlighted-text";
@@ -43,13 +71,6 @@ import {
   useOptionalReviewSession,
   useReviewSession,
 } from "./host/review-session";
-import {
-  CloseIcon,
-  DisclosureChevron,
-  MapPinIcon,
-  MinusIcon,
-  PopOutIcon,
-} from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { chevronMarker, documentMarker } from "./markers.stylex";
 import { useReviewActions } from "./review-context";
@@ -68,7 +89,7 @@ import type {
   ReviewPeekContent,
   SourcePeekAnchor,
 } from "./review-panel-model";
-import { askPills, askShown } from "./review-panel-store";
+import { askShown, peekShown } from "./review-panel-store";
 import { useReviewRoots } from "./review-root-context";
 import type { ReviewSectionSummary } from "./review-section-summary";
 import { useReviewUiState } from "./review-ui-state";
@@ -83,10 +104,8 @@ import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { TraceDocument } from "./trace-document";
 import { traceStyles } from "./trace-styles";
-import { useTutorialSection } from "./tutorial-section-context";
 import { captureUiEvent } from "./ui-telemetry";
 import { useAgentTrace } from "./use-agent-trace";
-import { useTooltip } from "./use-tooltip";
 
 const TOUR_ACTIVE_TOP_SLACK_PX = 18;
 
@@ -125,7 +144,7 @@ function ReviewPanelFrame({
   /** Buttons beside the close button. */
   headerActions?: ReactNode;
   floatingFooter?: ReactNode;
-  bodyRef?: Ref<HTMLDivElement>;
+  bodyRef?: RefObject<HTMLDivElement | null>;
   onBodyScroll?: () => void;
   tour?: boolean;
   docked?: boolean;
@@ -135,6 +154,25 @@ function ReviewPanelFrame({
 }) {
   const appRef = useReviewRoots()?.appRef;
   const panelMotion = useReviewPanel((state) => state.motion);
+  const [body, setBody] = useState<HTMLDivElement | null>(null);
+
+  const attachBody = useCallback(
+    (node: HTMLDivElement | null) => {
+      setBody(node);
+
+      if (bodyRef) bodyRef.current = node;
+
+      return () => {
+        setBody(null);
+
+        if (bodyRef) bodyRef.current = null;
+      };
+    },
+    [bodyRef],
+  );
+
+  // In Desktop's right column, the header sits level with the window controls.
+  const nativeFrame = useContext(InRightColumn);
 
   const sheet = useBottomSheetResize({
     stateKey: "bottomSheetFraction",
@@ -142,17 +180,8 @@ function ReviewPanelFrame({
     containerRef: appRef,
   });
 
-  useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || !appRef?.current) return;
-      event.preventDefault();
-      onEscape();
-    };
-
-    document.addEventListener("keydown", closeOnEscape);
-
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [appRef, onEscape]);
+  // A hidden dock keeps its peek; Escape must not close it.
+  useEscape(onEscape, { enabled: !useContext(DockHidden) });
 
   // SAFETY: `--side-panel-bottom-fraction` is a CSS custom property, which
   // React forwards to style.setProperty; the CSSProperties typings only omit
@@ -167,19 +196,25 @@ function ReviewPanelFrame({
         "side-panel",
         panelStyles.panel,
         panelMotion === "restored" && panelStyles.restored,
-        tour && panelStyles.tour,
-        docked && panelStyles.docked,
-        tray && panelStyles.tray,
+        (docked || nativeFrame) && panelStyles.docked,
+        (tray || nativeFrame) && panelStyles.tray,
       )}
       role="complementary"
       aria-label={title ?? label}
       style={panelStyle}
     >
       <div
-        {...stylex.props(shellStyles.sheetResizer)}
+        {...stylex.props(buttonStyles.reset, shellStyles.sheetResizer)}
         {...sheet.separatorProps}
       />
-      <header {...stylex.props(panelStyles.header, tray && panelStyles.tray)}>
+      <header
+        {...withClass(
+          nativeFrame ? "review-ask-chrome" : undefined,
+          panelStyles.header,
+          (tray || nativeFrame) && panelStyles.tray,
+          nativeFrame && panelStyles.nativeHeader,
+        )}
+      >
         <div {...stylex.props(panelStyles.title)}>
           <span
             {...stylex.props(
@@ -190,7 +225,11 @@ function ReviewPanelFrame({
           >
             {label}
           </span>
-          {title && <h2 {...stylex.props(panelStyles.heading)}>{title}</h2>}
+          {title && (
+            <h2 {...stylex.props(textStyles.truncate, panelStyles.heading)}>
+              {title}
+            </h2>
+          )}
           {titleAccessory}
         </div>
         <div {...stylex.props(panelStyles.actions)}>
@@ -203,17 +242,22 @@ function ReviewPanelFrame({
             aria-label={closeLabel}
             data-tour-target={tour ? "tour-close" : undefined}
           >
-            <CloseIcon xstyle={controlStyles.inertIcon} />
+            <CloseIcon xstyle={iconStyles.inert} />
           </IconButton>
         </div>
       </header>
       <div
-        ref={bodyRef}
-        {...stylex.props(panelStyles.body, tray && panelStyles.trayBody)}
+        ref={attachBody}
+        {...stylex.props(
+          panelStyles.body,
+          overlayScrollbarStyles.scroller,
+          tray && panelStyles.trayBody,
+        )}
         onScroll={onBodyScroll}
       >
         {children}
       </div>
+      <OverlayScrollbar scroller={body} />
       {floatingFooter}
     </aside>
   );
@@ -244,14 +288,6 @@ export function ReviewSection({
   );
 
   const bodyRef = useRef<HTMLDivElement | null>(null);
-  const tutorialSection = useTutorialSection(title);
-
-  // The active tutorial chapter opens itself. Other chapters keep the
-  // reader's own collapse state.
-  useEffect(() => {
-    if (tutorialSection.state === "active") setCollapsed(false);
-  }, [setCollapsed, tutorialSection.state]);
-
   const toggleCollapsed = () => setCollapsed((current) => !current);
 
   // The table of contents (and anchor navigation) expands a collapsed
@@ -270,7 +306,7 @@ export function ReviewSection({
   }, []);
 
   // The classes are markers: find, the code view and the section ring look
-  // for a (collapsed) section, and the tutorial targets a section's body.
+  // for a (collapsed) section.
   return (
     <section
       {...withClass(
@@ -282,14 +318,8 @@ export function ReviewSection({
         drawStyles.sectionRing,
       )}
       data-review-section={title}
-      data-tutorial-chapter-state={tutorialSection.state ?? undefined}
     >
-      <div
-        {...stylex.props(
-          sectionStyles.header,
-          tutorialSection.state === "complete" && sectionStyles.complete,
-        )}
-      >
+      <div {...stylex.props(sectionStyles.header)}>
         <IconButton
           size="small"
           xstyle={[chevronMarker, sectionStyles.toggle]}
@@ -297,7 +327,7 @@ export function ReviewSection({
           aria-label={collapsed ? `Expand ${title}` : `Collapse ${title}`}
           onClick={toggleCollapsed}
         >
-          <DisclosureChevron expanded={!collapsed} />
+          <DisclosureChevron />
         </IconButton>
         <div {...withClass("review-section-heading", sectionStyles.heading)}>
           <h2
@@ -305,7 +335,6 @@ export function ReviewSection({
             data-review-copy-prose
             {...stylex.props(
               sectionStyles.title,
-              tutorialSection.state === "active" && sectionStyles.titleActive,
               collapsed && sectionStyles.titleCollapsed,
               drawStyles.retitledHeading,
             )}
@@ -331,7 +360,10 @@ export function ReviewSection({
   );
 }
 
-function reviewSectionSummaryLabel(summary: ReviewSectionSummary): string {
+/** What a collapsed section holds, in a few words; empty when nothing. */
+export function reviewSectionSummaryLabel(
+  summary: ReviewSectionSummary,
+): string {
   const parts: string[] = [];
 
   if (summary.diagrams > 0) {
@@ -490,15 +522,20 @@ function keepAnchorLinkVisible(link: HTMLElement) {
 export function ReviewPanelHost() {
   const activePanel = useReviewPanel((state) => state.active);
   const close = useReviewPanel((state) => state.close);
+  const columnHost = useAskPanelHost();
+  // Put away, the peek stays mounted, to come back where it was.
+  const hidden = !useReviewPanel(peekShown);
 
   return (
     <>
       {activePanel ? (
-        <ReviewPeekPanel
-          anchor={activePanel.anchor}
-          content={activePanel.content}
-          onClose={close}
-        />
+        <AskDock host={columnHost} hidden={hidden}>
+          <ReviewPeekPanel
+            anchor={activePanel.anchor}
+            content={activePanel.content}
+            onClose={close}
+          />
+        </AskDock>
       ) : null}
       <AskHost />
     </>
@@ -506,38 +543,32 @@ export function ReviewPanelHost() {
 }
 
 /**
- * The open Asks, each in the side panel, the window or a pill. Each renders
- * once, into an element of its own that moves between them, so popping
- * out, docking or minimizing never restarts it.
+ * The threads on screen, in the column or the window. Each renders once,
+ * into an element of its own that moves between them, so popping out or
+ * docking never restarts it.
  */
 function AskHost() {
   const store = useReviewPanelStore();
   const session = useLatest(useReviewSession());
+  const reviewId = session.current.reviewId;
+  const projectId = useContext(AskProjectContext);
 
-  // Closing an Ask ends its agent; its canvas going, as for another tab,
-  // does not.
   useEffect(
-    () =>
-      syncOpenAsks(
-        store,
-        session.current.config,
-        (threadId) =>
-          void session.current
-            .fetch(`/ask/${threadId}/close`, {
-              method: "POST",
-              keepalive: true,
-            })
-            .catch(() => {}),
-      ),
-    [store, session],
+    () => syncOpenAsks(store, { reviewId }, projectId),
+    [store, reviewId, projectId],
   );
+
+  useEffect(() => {
+    void openHandedOffAsks(store, (endpoint, init) =>
+      session.current.fetch(endpoint, init),
+    ).catch(() => {});
+  }, [store, session]);
 
   const keys = useReviewPanel(
     useShallow((state) => state.asks.map((ask) => ask.key)),
   );
 
-  const pills = useReviewPanel(useShallow(askPills));
-  // Every open Ask follows its thread over this one stream.
+  // Every thread on screen follows its thread over this one stream.
   const watch = useAskThreadsWatch(useReviewSession());
 
   return (
@@ -545,56 +576,70 @@ function AskHost() {
       {keys.map((key) => (
         <OpenAsk key={key} askKey={key} />
       ))}
-      {pills.length ? <AskPills asks={pills} /> : null}
     </AskThreadsWatchContext.Provider>
   );
 }
 
 function OpenAsk({ askKey }: { askKey: number }) {
   const store = useReviewPanelStore();
+  const session = useReviewSession();
 
   const view = useReviewPanel(
     (state) => state.asks.find((ask) => ask.key === askKey)?.view,
   );
 
   const shown = useReviewPanel((state) => askShown(state, askKey));
+  const nativeHost = useAskPanelHost();
   const popOutTooltip = useTooltip("Pop out");
-  const minimizeTooltip = useTooltip("Minimize");
   const [node] = useState(() => document.createElement("div"));
   const [header, setHeader] = useState<HTMLDivElement | null>(null);
   const checkoutGone = useReviewDiffFiles().status === "unavailable";
   const deleted = Boolean(useReviewSession().review?.trashedAt);
   const [warning, setWarning] = useState(false);
   const closeButton = useRef<HTMLButtonElement>(null);
+  const stopping = useRef(false);
 
   const report = useCallback(
     (report: AskReport) => store.getState().reportAsk(askKey, report),
     [store, askKey],
   );
 
-  if (!view || !shown) return null;
+  const ask = useReviewPanel((state) =>
+    state.asks.find((candidate) => candidate.key === askKey),
+  );
 
-  const ask = () =>
-    store.getState().asks.find((candidate) => candidate.key === askKey);
+  useMarkThreadViewed(ask?.threadId ?? null, shown !== null, ask?.busy);
 
-  // Closing stops the agent: while it works, ask first.
-  const close = () => {
-    if (ask()?.busy) setWarning(true);
-    else store.getState().closeAsk(askKey);
+  if (!view) return null;
+
+  const hide = () => {
+    setWarning(false);
+    store.getState().hideAsk(askKey);
   };
 
-  const busy = ask()?.busy ?? false;
+  // Closing stops the agent, even one whose thread is still starting.
+  const stop = () => {
+    const threadId = ask?.threadId;
+
+    stopping.current = true;
+    hide();
+
+    if (threadId)
+      void session
+        .fetch(`/ask/${threadId}/close`, { method: "POST", keepalive: true })
+        .catch(() => {});
+  };
+
+  // While the agent works, closing asks first.
+  const close = () => (ask?.busy ? setWarning(true) : stop());
 
   const closeWarning =
-    warning && busy && shown !== "pill" ? (
+    warning && ask?.busy ? (
       <AskCloseWarning
         anchor={closeButton}
-        agentName={ask()?.presence.agentName ?? "The agent"}
-        onMinimize={() => {
-          setWarning(false);
-          store.getState().minimizeAsk(askKey);
-        }}
-        onClose={() => store.getState().closeAsk(askKey)}
+        agentName={ask.presence.agentName}
+        onKeepRunning={hide}
+        onClose={stop}
         onKeep={() => setWarning(false)}
       />
     ) : null;
@@ -608,28 +653,29 @@ function OpenAsk({ askKey }: { askKey: number }) {
 
   return (
     <AskKeyContext.Provider value={askKey}>
-      <AskOpenThreadProvider>
-        {createPortal(
-          view.type === "history" ? (
-            <AskHistoryList passage={view.passage} />
-          ) : view.type === "saved" && (checkoutGone || deleted) ? (
-            <AskReadOnlyThread
-              selection={view.selection}
-              threadId={view.threadId}
-              onReport={report}
-            />
-          ) : (
-            <AskPanelContent
-              selection={view.selection}
-              agent={view.agent}
-              savedThreadId={view.type === "saved" ? view.threadId : undefined}
-              onReport={report}
-              header={header}
-            />
-          ),
-          node,
-        )}
-        {shown === "panel" ? (
+      {createPortal(
+        view.type === "history" ? (
+          <AskHistoryList passage={view.passage} />
+        ) : view.type === "saved" && (checkoutGone || deleted) ? (
+          <AskReadOnlyThread
+            selection={view.selection}
+            threadId={view.threadId}
+            onReport={report}
+          />
+        ) : (
+          <AskPanelContent
+            selection={view.selection}
+            agent={view.agent}
+            savedThreadId={view.type === "saved" ? view.threadId : undefined}
+            onReport={report}
+            header={header}
+            stopping={stopping}
+          />
+        ),
+        node,
+      )}
+      {shown === "panel" ? (
+        <AskDock host={nativeHost}>
           <ReviewPanelFrame
             tray
             label="Ask"
@@ -649,19 +695,7 @@ function OpenAsk({ askKey }: { askKey: number }) {
                   aria-label="Pop out Ask"
                   onClick={() => store.getState().popOutAsk(askKey)}
                 >
-                  <PopOutIcon
-                    xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-                  />
-                </IconButton>
-                <IconButton
-                  ref={minimizeTooltip}
-                  size="large"
-                  aria-label="Minimize Ask"
-                  onClick={() => store.getState().minimizeAsk(askKey)}
-                >
-                  <MinusIcon
-                    xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-                  />
+                  <PopOutIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
                 </IconButton>
               </>
             }
@@ -669,21 +703,23 @@ function OpenAsk({ askKey }: { askKey: number }) {
             {closeWarning}
             <AskSlot node={node} />
           </ReviewPanelFrame>
-        ) : shown === "window" ? (
-          <AskWindow
-            askKey={askKey}
-            actions={actions}
-            titleAccessory={
-              <div ref={setHeader} {...stylex.props(panelStyles.title)} />
-            }
-            onClose={close}
-            closeRef={closeButton}
-          >
-            {closeWarning}
-            <AskSlot node={node} />
-          </AskWindow>
-        ) : null}
-      </AskOpenThreadProvider>
+        </AskDock>
+      ) : shown === "window" ? (
+        <AskWindow
+          askKey={askKey}
+          actions={actions}
+          titleAccessory={
+            <div ref={setHeader} {...stylex.props(panelStyles.title)} />
+          }
+          onHide={hide}
+          onClose={close}
+          onEscape={warning ? () => setWarning(false) : close}
+          closeRef={closeButton}
+        >
+          {closeWarning}
+          <AskSlot node={node} />
+        </AskWindow>
+      ) : null}
     </AskKeyContext.Provider>
   );
 }
@@ -787,7 +823,7 @@ function TraceQuotePeekPanel({
         closeLabel="Close side peek"
       >
         <div {...stylex.props(panelStyles.peekBody)}>
-          <p {...stylex.props(traceStyles.note, traceStyles.noteError)}>
+          <p {...stylex.props(traceStyles.note, textStyles.error)}>
             {data.error}
           </p>
         </div>
@@ -799,9 +835,8 @@ function TraceQuotePeekPanel({
   const events = loadedTrace.events;
 
   const headerAccessory = (
-    <button
-      type="button"
-      {...stylex.props(traceStyles.peekOpenFull)}
+    <Button
+      xstyle={traceStyles.peekOpenFull}
       onClick={() => {
         openTraceSession?.({
           sessionId,
@@ -811,8 +846,9 @@ function TraceQuotePeekPanel({
         onClose();
       }}
     >
-      Full Trace ↗
-    </button>
+      Full Trace
+      <ExternalLinkIcon xstyle={iconStyles.inline} />
+    </Button>
   );
 
   return (
@@ -895,9 +931,9 @@ function CodeReviewPeekPanel({
       onClose={onClose}
       closeLabel="Close side peek"
     >
-      <div {...stylex.props(panelStyles.peekBody)}>
+      <div {...stylex.props(panelStyles.peekContent)}>
         {softwareMapEnabled && anchor.softwareMapPath ? (
-          <div {...stylex.props(panelStyles.peekActions)}>
+          <div {...stylex.props(panelStyles.peekActions, panelStyles.inset)}>
             <IconButton
               size="large"
               onClick={() => {
@@ -906,7 +942,7 @@ function CodeReviewPeekPanel({
               }}
               aria-label={`Show ${anchor.title} in software map`}
             >
-              <MapPinIcon xstyle={controlStyles.inertIcon} />
+              <MapPinIcon xstyle={iconStyles.inert} />
             </IconButton>
           </div>
         ) : null}
@@ -943,6 +979,7 @@ export function GuidedTourPanel({
   const scrollerRef = useRef<HTMLDivElement | null>(null);
   const sectionRefs = useRef(new Map<string, HTMLElement>());
   const handledRevealRequestRef = useRef(0);
+  const revealingRef = useRef(false);
 
   const activeIndex = tour.stops.findIndex(
     (stop) => stop.anchor.id === activeAnchor,
@@ -1067,20 +1104,66 @@ export function GuidedTourPanel({
 
     if (!section || !scroller) return;
 
-    const frame = requestAnimationFrame(() => {
-      const scrollerTop = scroller.getBoundingClientRect().top;
-      const sectionTop = section.getBoundingClientRect().top;
-      // The tail's active line.
-      scroller.scrollTo({
-        top:
-          scroller.scrollTop +
-          sectionTop -
-          scrollerTop -
-          TOUR_ACTIVE_TOP_SLACK_PX,
-      });
-    });
+    // Source peeks above the requested stop resize as their native editors
+    // load. Keep the heading at the reading line until the reader takes over.
+    revealingRef.current = true;
+    let frame = 0;
+    let disposed = false;
 
-    return () => cancelAnimationFrame(frame);
+    const reveal = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        if (disposed) return;
+
+        const offset =
+          section.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top -
+          TOUR_ACTIVE_TOP_SLACK_PX;
+
+        if (Math.abs(offset) > 1)
+          scroller.scrollTo({ top: scroller.scrollTop + offset });
+      });
+    };
+
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(reveal);
+
+    observer?.observe(scroller);
+    const content = scroller.firstElementChild;
+
+    if (content) observer?.observe(content);
+
+    for (const stop of sectionRefs.current.values()) observer?.observe(stop);
+
+    const inputEvents = [
+      "wheel",
+      "touchstart",
+      "pointerdown",
+      "keydown",
+    ] as const;
+
+    // The overlay scrollbar is beside the body, inside the same panel.
+    const inputRoot = scroller.parentElement ?? scroller;
+
+    const dispose = () => {
+      disposed = true;
+      revealingRef.current = false;
+      cancelAnimationFrame(frame);
+      observer?.disconnect();
+
+      for (const event of inputEvents)
+        inputRoot.removeEventListener(event, dispose, true);
+    };
+
+    for (const event of inputEvents)
+      inputRoot.addEventListener(event, dispose, {
+        capture: true,
+        passive: true,
+      });
+
+    reveal();
+
+    return dispose;
   }, [activeAnchor, revealRequest]);
 
   const displayIndex = Math.max(0, activeIndex);
@@ -1100,6 +1183,9 @@ export function GuidedTourPanel({
   // scroll-active-tracking.ts), the same one the contents rail uses.
   const syncActiveStopToScroll = () => {
     setHasScrolled(true);
+
+    if (revealingRef.current) return;
+
     const scroller = scrollerRef.current;
 
     if (!scroller) return;
@@ -1133,9 +1219,10 @@ export function GuidedTourPanel({
         tour.stops.length > 0 ? (
           <div {...stylex.props(tourStyles.floatingFooter)}>
             {showIntroPill ? (
-              <button
-                type="button"
-                {...stylex.props(tourStyles.pill, tourStyles.pillIntro)}
+              <Button
+                variant="primary"
+                size="large"
+                xstyle={[tourStyles.pill, tourStyles.pillIntro]}
                 data-tour-target="tour-next"
                 onClick={() => {
                   setHasScrolled(true);
@@ -1143,16 +1230,11 @@ export function GuidedTourPanel({
                 }}
               >
                 <span>{tour.stops.length - 1} more steps</span>
-                <span
-                  {...stylex.props(tourStyles.pillChevron)}
-                  aria-hidden="true"
-                >
-                  ↓
-                </span>
-              </button>
+                <ChevronDownIcon />
+              </Button>
             ) : (
               <div
-                {...stylex.props(tourStyles.pill)}
+                {...stylex.props(tourStyles.pill, tourStyles.pillGroup)}
                 role="group"
                 aria-label="Tour steps"
               >
@@ -1162,7 +1244,7 @@ export function GuidedTourPanel({
                   disabled={displayIndex === 0}
                   onClick={() => stepTo(displayIndex - 1)}
                 >
-                  ↑
+                  <ChevronDownIcon xstyle={iconStyles.flip} />
                 </IconButton>
                 <span className="tour-pill-count" aria-live="polite">
                   {displayIndex + 1}/{tour.stops.length}
@@ -1174,7 +1256,7 @@ export function GuidedTourPanel({
                   disabled={displayIndex === lastIndex}
                   onClick={() => stepTo(displayIndex + 1)}
                 >
-                  ↓
+                  <ChevronDownIcon />
                 </IconButton>
               </div>
             )}
@@ -1227,13 +1309,10 @@ export function GuidedTourPanel({
             <>
               <div {...stylex.props(tourStyles.endCap)}>
                 <span>End of tour</span>
-                <button
-                  type="button"
-                  {...stylex.props(tourStyles.endCapButton)}
-                  onClick={() => stepTo(0)}
-                >
-                  ↑ Back to step 1
-                </button>
+                <Button variant="link" tone="accent" onClick={() => stepTo(0)}>
+                  <ChevronDownIcon xstyle={iconStyles.flip} />
+                  Back to step 1
+                </Button>
               </div>
               <div
                 ref={tailRef}
@@ -1297,7 +1376,7 @@ function GuidedTourStopMain({
                 onClose();
               }}
             >
-              <MapPinIcon xstyle={controlStyles.inertIcon} />
+              <MapPinIcon xstyle={iconStyles.inert} />
             </IconButton>
           </div>
         ) : null}
@@ -1329,14 +1408,15 @@ function ReviewPeekContentView({
   reportOutcome?: boolean;
 }) {
   if (content.kind === "explanation")
-    return content.text ? <p>{content.text}</p> : null;
+    return content.text ? (
+      <p {...stylex.props(panelStyles.peekText)}>{content.text}</p>
+    ) : null;
 
   if (content.kind === "source") {
     return (
-      <CodePeekCard
-        source={content.source}
+      <SourceCodePeek
+        sources={[content.source, ...(content.more ?? [])]}
         active={active}
-        heightMode="content"
         onNativeFocus={onNativeFocus}
         reportOutcome={reportOutcome}
       />
@@ -1367,27 +1447,18 @@ const sectionStyles = stylex.create({
     position: "relative",
     display: "flex",
     alignItems: "baseline",
-    gap: "12px",
+    gap: space.s12,
     width: `min(100%, ${tokens.reviewProseMaxWidth})`,
     maxWidth: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
-    marginBlock: "40px 12px",
+    marginBlock: `${space.s40} ${space.s12}`,
     marginInline: "auto",
-  },
-  // A finished tutorial chapter says so at the end of its heading row.
-  complete: {
-    "::after": {
-      content: "'Complete ✓'",
-      marginLeft: "auto",
-      color: tokens.tutorialRing,
-      font: `${fontSize.micro}/16px ${tokens.fontMono}`,
-    },
   },
   // Expanded sections keep a faint chevron so "this collapses" is legible
   // without hovering the header first.
   toggle: {
     position: "absolute",
-    top: "4px",
-    left: "-29px",
+    top: space.s4,
+    left: `-${space.s28}`,
   },
   heading: {
     minWidth: 0,
@@ -1399,10 +1470,7 @@ const sectionStyles = stylex.create({
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h2 },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument()]: "32px" },
-  },
-  titleActive: {
-    color: tokens.ink,
+    lineHeight: { default: null, [inDocument()]: documentType.h2Leading },
   },
   titleCollapsed: {
     color: tokens.ghost,
@@ -1410,7 +1478,7 @@ const sectionStyles = stylex.create({
   meta: {
     flex: "0 0 auto",
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     whiteSpace: "nowrap",
   },

@@ -35,9 +35,9 @@ function canvasUi(ctx) {
     // The state a missing checkout is meant to reach (see desktop-entry.tsx).
     unavailable: ctx.page.getByText("Worktree unavailable"),
     retained: ctx.page.getByRole("status").filter({ hasText: RETAINED_SOURCE }),
-    dismiss: ctx.page
+    trash: ctx.page
       .getByRole("status")
-      .getByRole("button", { name: "Dismiss review", exact: true }),
+      .getByRole("button", { name: "Move to Trash", exact: true }),
     failed: canvas.getByText(/^Whiteboard operation failed \(Error\)\./),
     peek: canvas
       .locator('[data-review-inline-editor="order.ts"]')
@@ -175,11 +175,9 @@ export async function run(ctx) {
   await ctx.restartDesktop();
   await openHome(ctx);
   await ctx.page
-    .locator("main.review-home")
-    .getByRole("region", { name: "Sessions", exact: true })
-    .locator("tbody tr")
+    .locator("main.review-home [data-home-row]")
     .filter({ hasText: TITLE })
-    .getByTitle(TITLE, { exact: true })
+    .getByRole("button", { name: `Open ${TITLE}`, exact: true })
     .click();
 
   const deleted = canvasUi(ctx);
@@ -204,21 +202,8 @@ export async function run(ctx) {
 
   // Nothing is left to read from, so the retained document has to say so rather than pass for a current one.
   await deleted.retained.waitFor();
-  await deleted.dismiss.waitFor();
-
-  const views = ctx.page.locator('[aria-label="Session views"]');
-
-  await views.locator('button[aria-label="Commits"]').click();
-
-  const commits = ctx.page.locator(".review-view-region--commits");
-
-  await deleted.retained.waitFor();
-  assert.equal(
-    await commits.getByText(/\d+ commits/).count(),
-    0,
-    "the Commits tab counted commits although the checkout is gone",
-  );
+  await deleted.trash.waitFor();
   ctx.check(
-    "a deleted worktree renders the retained document under a banner with Dismiss, and Commits lists nothing",
+    "a deleted worktree renders the retained document under a banner with Move to Trash",
   );
 }

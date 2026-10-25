@@ -1,4 +1,11 @@
-import { fontSize, fontWeight, radius, tracking } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+  tracking,
+} from "@canvas/scale.stylex";
 import type { StyleArg } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
@@ -21,10 +28,10 @@ export function Shortcut({ xstyle, ...props }: KbdProps) {
 
 const styles = stylex.create({
   shortcut: {
-    fontFamily: tokens.fontSans,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
     fontWeight: fontWeight.regular,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     letterSpacing: tracking.shortcut,
     whiteSpace: "nowrap",
     flexShrink: 0,
@@ -34,7 +41,7 @@ const styles = stylex.create({
     placeItems: "center",
     minWidth: "16px",
     height: "17px",
-    padding: "0 4px",
+    padding: `0 ${space.s4}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,

@@ -137,15 +137,6 @@ test("final package verification requires the CLI and rechecks archives outside 
       }
     }
 
-    await writeFile(
-      path.join(runtime, "tutorial/runtime-manifest.json"),
-      JSON.stringify({
-        version: 1,
-        reviewFiles: ["review.mdx"],
-        requiredPaths: ["review.mdx"],
-      }),
-    );
-    await writeFile(path.join(runtime, "tutorial/review.mdx"), "# Tutorial\n");
     await assert.rejects(
       assertRuntimeClosure(runtime),
       /missing dist\/cli\.js/,
@@ -160,11 +151,11 @@ test("final package verification requires the CLI and rechecks archives outside 
 
     const diffr = path.join(runtime, RUNTIME_DIFFR_ENTRY);
     await rm(diffr, { force: true });
-    await assert.rejects(assertRuntimeClosure(runtime), /missing node_modules\/@dev\.fast\/diffr-/);
     await assert.rejects(
-      assertPackagedArtifacts(packaged),
-      /missing .*diffr-/,
+      assertRuntimeClosure(runtime),
+      /missing node_modules\/@dev\.fast\/diffr-/,
     );
+    await assert.rejects(assertPackagedArtifacts(packaged), /missing .*diffr-/);
     await writeFile(diffr, "");
 
     const archive = path.join(

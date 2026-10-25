@@ -8,8 +8,11 @@ import type { Snapshot } from "@review/review-api/store";
 import { act } from "react";
 import { afterEach, expect, it } from "vitest";
 
-import { mountReviewCanvas as mount } from "./desktop-entry";
-import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
+import {
+  loadFixture,
+  mountWhiteboard as mount,
+  settled,
+} from "./whiteboard-fixture";
 
 const goldens = import.meta.glob<{ default: JsonValue }>(
   "./fixtures/saved-reviews/*.json",
@@ -62,12 +65,7 @@ it.each(Object.keys(phrases) as (keyof typeof phrases)[])(
     const container = document.createElement("div");
     document.body.append(container);
     await act(async () => {
-      canvas = mount(container, {
-        kind: "api",
-        reviewId: snapshot.reviewId,
-        version: 0,
-        bridge: fixtureReviewBridge({ snapshot }),
-      });
+      canvas = mount(container, loadFixture({ snapshot }));
     });
 
     expect(

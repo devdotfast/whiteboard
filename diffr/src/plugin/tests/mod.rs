@@ -2,6 +2,7 @@
 //! them: a file projected with the bundled queries, then each plugin's
 //! components through a [`Pipeline`].
 mod context;
+mod deferred;
 mod deleted_bodies;
 mod removed_runs;
 mod summarize;
@@ -166,7 +167,17 @@ pub(crate) fn shape(
     file: &FileChange,
     sides: &mut Pairing<Source>,
 ) -> anyhow::Result<()> {
-    *sides = crate::test_runtime().block_on(pipeline.run(file, sides.clone()))?;
+    shape_in(pipeline, file, sides, Pass::All)
+}
+
+/// Run one pass of `pipeline` on `sides` in place.
+pub(crate) fn shape_in(
+    pipeline: &Pipeline,
+    file: &FileChange,
+    sides: &mut Pairing<Source>,
+    pass: Pass,
+) -> anyhow::Result<()> {
+    *sides = crate::test_runtime().block_on(pipeline.run(file, sides.clone(), pass))?;
     Ok(())
 }
 

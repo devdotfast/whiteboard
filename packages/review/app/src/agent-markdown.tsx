@@ -1,4 +1,11 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
+import { Checkbox } from "@canvas/ui/checkbox";
 import { isNumberValue, isStringValue } from "@dev.fast/review-protocol";
 import { type MarkdownNode, parseMarkdown } from "@review/markdown";
 import * as stylex from "@stylexjs/stylex";
@@ -233,6 +240,15 @@ export const markdownHasTitle = (source: string) =>
     (node) => node.type === "heading" && node.depth === 1,
   );
 
+export function renderMath(type: string, tex: string, key?: string): ReactNode {
+  if (type === "math") return <MarkdownMath key={key} tex={tex} display />;
+
+  // Like Pandoc: "$5 and $10" stays prose.
+  if (/^\s|\s$/.test(tex)) return `$${tex}$`;
+
+  return <MarkdownMath key={key} tex={tex} display={false} />;
+}
+
 /** `paragraph` styles the direct paragraph children alone. */
 function renderMarkdownChildren(
   children: MarkdownNode[],
@@ -326,12 +342,8 @@ function renderMarkdownNode(
         />
       );
     case "math":
-      return <MarkdownMath key={key} tex={node.value ?? ""} display />;
     case "inlineMath":
-      // Like Pandoc: "$5 and $10" stays prose.
-      if (/^\s|\s$/.test(node.value ?? "")) return `$${node.value}$`;
-
-      return <MarkdownMath key={key} tex={node.value ?? ""} display={false} />;
+      return renderMath(node.type, node.value ?? "", key);
     case "break":
       return <br key={key} />;
     case "thematicBreak":
@@ -576,12 +588,11 @@ function TaskItem({
 
   return (
     <li {...stylex.props(!inChat && doc.item, styles.task)}>
-      <input
-        type="checkbox"
+      <Checkbox
         checked={node.checked === true}
         disabled={!toggle}
         onChange={() => toggle?.(node)}
-        {...stylex.props(styles.taskBox)}
+        xstyle={styles.taskBox}
       />
       <div {...stylex.props(styles.taskBody)}>{children}</div>
     </li>
@@ -727,11 +738,11 @@ const chat = stylex.create({
     color: tokens.ink,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.bold,
-    lineHeight: 1.35,
+    lineHeight: leading.tight,
   },
   list: {
     display: "grid",
-    gap: "4px",
+    gap: space.s4,
     paddingLeft: "1.35em",
   },
   itemParagraph: {
@@ -744,7 +755,7 @@ const chat = stylex.create({
     textUnderlineOffset: "3px",
   },
   code: {
-    padding: "1px 4px",
+    padding: `1px ${space.s4}`,
     borderRadius: radius.small,
     backgroundColor: tokens.tray,
     color: tokens.ink,
@@ -752,7 +763,7 @@ const chat = stylex.create({
     fontSize: "0.92em",
   },
   quote: {
-    paddingLeft: "10px",
+    paddingLeft: space.s10,
     borderLeftWidth: "3px",
     borderLeftStyle: "solid",
     borderLeftColor: tokens.ruleSoft,
@@ -763,12 +774,12 @@ const chat = stylex.create({
     overflow: "hidden",
     borderCollapse: "collapse",
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.fontSerif,
     fontSize: fontSize.body,
     tableLayout: "fixed",
   },
   cell: {
-    padding: "5px 7px",
+    padding: `${space.s4} ${space.s8}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
@@ -799,13 +810,12 @@ const styles = stylex.create({
   },
   // Centered on the first line of text.
   taskBox: {
-    flex: "none",
     width: "1em",
     height: "1em",
     margin: "calc((1lh - 1em) / 2) 0 0",
+    backgroundSize: "70%",
     font: "inherit",
     lineHeight: "inherit",
-    cursor: { default: null, ":enabled": "pointer" },
   },
   taskBody: {
     minWidth: 0,

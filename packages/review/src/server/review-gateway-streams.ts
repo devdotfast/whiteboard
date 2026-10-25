@@ -7,15 +7,13 @@ import {
   parseJsonText,
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
-import { coverageModeSchema } from "@review/review-api/review-progress.js";
+import { legacyModeSchema } from "@review/review-api/review-progress.js";
 import { z } from "zod";
 
 import type { GatewayHosts, GatewayRemote } from "./review-gateway-hosts.js";
 import { type ListSource, mergeLists } from "./review-gateway-list.js";
 import {
   type GatewayMemory,
-  LIST_MODES,
-  type ListMode,
   listEntriesSchema,
 } from "./review-gateway-memory.js";
 import { keepOpen, readLines, reconnect } from "./review-gateway-transport.js";
@@ -24,14 +22,13 @@ import { serverJson } from "./review-server-core.js";
 const subscriptionsSchema = z.array(
   z.strictObject({
     reviewId: z.string().min(1).nullable(),
-    mode: coverageModeSchema,
+    mode: legacyModeSchema,
   }),
 );
 
 const lineSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("list"),
-    mode: z.enum(LIST_MODES),
     reviews: z.array(z.unknown()),
   }),
   z.object({
@@ -74,8 +71,7 @@ export function createGatewayStreams(input: {
   const clients = new Set<Client>();
   const passThrough = new Set<() => void>();
 
-  const merge = (mode: ListMode, local: ReviewApiSummary[]) =>
-    mergeLists(mode, local, input.lists());
+  const merge = (local: ReviewApiSummary[]) => mergeLists(local, input.lists());
 
   function feedLine(remote: GatewayRemote, text: string) {
     const line = parseLine(text);
@@ -85,7 +81,6 @@ export function createGatewayStreams(input: {
     memory.setList(
       remote.serverId,
       remote.alias,
-      line.mode,
       listEntriesSchema.parse(line.reviews),
     );
 
@@ -111,7 +106,7 @@ export function createGatewayStreams(input: {
       keepOpen({
         hosts,
         remote,
-        path: watchPath(LIST_MODES.map((mode) => ({ reviewId: null, mode }))),
+        path: watchPath([{ reviewId: null }]),
         signal: abort.signal,
         read: (body) => readLines(body, (text) => feedLine(remote, text)),
       });
@@ -127,17 +122,16 @@ export function createGatewayStreams(input: {
     subscriptions: z.infer<typeof subscriptionsSchema>,
     signal: AbortSignal,
   ): Response {
-    const modes = new Set<ListMode>();
-    const reviews = new Map<string, ListMode>();
+    const lists = subscriptions.some(({ reviewId }) => reviewId === null);
 
-    for (const { reviewId, mode } of subscriptions)
-      if (reviewId === null) modes.add(mode);
-      else if (!reviews.has(reviewId)) reviews.set(reviewId, mode);
+    const reviews = new Set(
+      subscriptions.flatMap(({ reviewId }) => reviewId ?? []),
+    );
 
     const encoder = new TextEncoder();
     const pending = new Map<string, string>();
     const sent = new Map<string, string>();
-    const localLists = new Map<ListMode, ReviewApiSummary[]>();
+    let localList: ReviewApiSummary[] | undefined;
     const reportedDown = new Set<string>();
 
     const upstreams = new Map<
@@ -180,13 +174,15 @@ export function createGatewayStreams(input: {
       });
     };
 
-    const emitList = (mode: ListMode) => {
-      const local = localLists.get(mode);
-
-      if (local)
+    const emitList = () => {
+      if (localList)
         emit(
-          `list:${mode}`,
-          JSON.stringify({ kind: "list", mode, reviews: merge(mode, local) }),
+          "list",
+          JSON.stringify({
+            kind: "list",
+            mode: "structural",
+            reviews: merge(localList),
+          }),
         );
     };
 
@@ -204,10 +200,10 @@ export function createGatewayStreams(input: {
       );
     };
 
-    const openLocal = (ids: Map<string, ListMode>, abort: AbortSignal) => {
+    const openLocal = (ids: Set<string>, abort: AbortSignal) => {
       const path = watchPath([
-        ...[...modes].map((mode) => ({ reviewId: null, mode })),
-        ...[...ids].map(([reviewId, mode]) => ({ reviewId, mode })),
+        ...(lists ? [{ reviewId: null }] : []),
+        ...[...ids].map((reviewId) => ({ reviewId })),
       ]);
 
       void reconnect(abort, async () => {
@@ -226,10 +222,10 @@ export function createGatewayStreams(input: {
               (text) => {
                 const line = parseLine(text);
 
-                if (line?.kind === "list" && modes.has(line.mode)) {
+                if (line?.kind === "list" && lists) {
                   // SAFETY: the local server writes ReviewApiSummary entries.
-                  localLists.set(line.mode, line.reviews as ReviewApiSummary[]);
-                  emitList(line.mode);
+                  localList = line.reviews as ReviewApiSummary[];
+                  emitList();
                 } else if (line?.kind === "review" && ids.has(line.reviewId))
                   emitReview(line.reviewId, text);
               },
@@ -240,15 +236,13 @@ export function createGatewayStreams(input: {
 
     const openRemote = (
       remote: GatewayRemote,
-      ids: Map<string, ListMode>,
+      ids: Set<string>,
       abort: AbortSignal,
     ) =>
       keepOpen({
         hosts,
         remote,
-        path: watchPath(
-          [...ids].map(([reviewId, mode]) => ({ reviewId, mode })),
-        ),
+        path: watchPath([...ids].map((reviewId) => ({ reviewId }))),
         signal: abort,
         read: (body) =>
           readLines(body, (text) => {
@@ -263,23 +257,20 @@ export function createGatewayStreams(input: {
       refresh() {
         if (stopped) return;
 
-        for (const mode of modes) emitList(mode);
+        emitList();
 
-        const wanted = new Map<
-          "local" | GatewayRemote,
-          Map<string, ListMode>
-        >();
+        const wanted = new Map<"local" | GatewayRemote, Set<string>>();
 
         const want = (key: "local" | GatewayRemote, reviewId: string) => {
           let ids = wanted.get(key);
 
-          if (!ids) wanted.set(key, (ids = new Map()));
-          ids.set(reviewId, reviews.get(reviewId)!);
+          if (!ids) wanted.set(key, (ids = new Set()));
+          ids.add(reviewId);
         };
 
-        if (modes.size) wanted.set("local", new Map());
+        if (lists) wanted.set("local", new Set());
 
-        for (const reviewId of reviews.keys()) {
+        for (const reviewId of reviews) {
           const located = input.locate(reviewId);
 
           if (located === undefined || located === "local")
@@ -383,15 +374,10 @@ export function createGatewayStreams(input: {
 
       if (!response.ok || !hosts.states().length) return response;
 
-      const mode =
-        coverageModeSchema.safeParse(
-          new URL(request.url).searchParams.get("mode") ?? undefined,
-        ).data ?? "structural";
-
       const local: unknown = await response.json();
 
       // SAFETY: the local server answers ReviewApiSummary[].
-      return serverJson(200, merge(mode, local as ReviewApiSummary[]));
+      return serverJson(200, merge(local as ReviewApiSummary[]));
     },
     changed() {
       syncFeeds();

@@ -83,87 +83,156 @@ function fffSteps(input: ConnectPromptInput, target: InstallTarget): string[] {
   ];
 }
 
-/** The Claude plugin's sh launch cannot start on Windows, so register the server directly. */
-export const CLAUDE_WINDOWS_MCP_ADD = `claude mcp add -s user whiteboard -- ${WINDOWS_MCP_LAUNCH.command} ${WINDOWS_MCP_LAUNCH.args.join(" ")}`;
+export const WHITEBOARD_MARKETPLACE = "devdotfast/whiteboard";
 
-/** Copilot CLI loads the Claude plugin, so on Windows it too registers the server directly. */
-export const COPILOT_WINDOWS_MCP_ADD = `copilot mcp add whiteboard -- ${WINDOWS_MCP_LAUNCH.command} ${WINDOWS_MCP_LAUNCH.args.join(" ")}`;
+export const WHITEBOARD_PLUGIN = "whiteboard@devfast";
 
-export interface ConnectCommand {
-  argv: readonly string[];
-  ifAny?: true;
+/** Its CLI's command is its id. */
+export type CliConnectTarget = Exclude<InstallTarget, "cursor" | "omp">;
+
+export interface ConnectStep {
+  args: string[];
+  /** Output that means the step had already been done. */
+  done?: RegExp;
+  /** Whether a failure leaves the next step to decide the outcome. */
+  optional?: boolean;
+  /** A cleanup, with its comment in the prompt. */
+  note?: string;
 }
 
-export const CONNECT_COMMANDS = {
-  claude: [
+const ALREADY = /already/i;
+
+/** Each CLI agent's connect commands: Connect runs them, prompts print them. */
+export function connectSteps(
+  target: CliConnectTarget,
+  launch: McpLaunch,
+  platform: NodeJS.Platform,
+): ConnectStep[] {
+  // The plugin install says whether it worked: the marketplace can already be
+  // known by another source, such as the repository's earlier name.
+  const marketplace = {
+    args: ["plugin", "marketplace", "add", WHITEBOARD_MARKETPLACE],
+    optional: true,
+  };
+
+  const cleanup = (args: string[], note: string) => ({
+    args,
+    optional: true,
+    note,
+  });
+
+  // The plugins' sh launch cannot start on Windows, so there Claude and
+  // Copilot (which loads the Claude plugin) register the server directly.
+  const windows = (scope: string[]) => [
+    cleanup(
+      ["plugin", "uninstall", WHITEBOARD_PLUGIN],
+      "its launch cannot start on Windows, if installed",
+    ),
+    cleanup(
+      ["mcp", "remove", ...scope, "whiteboard"],
+      "old registration, if any",
+    ),
     {
-      argv: ["claude", "plugin", "marketplace", "add", "devdotfast/whiteboard"],
-    },
-    {
-      argv: [
-        "claude",
-        "plugin",
-        "install",
-        "whiteboard@devfast",
-        "--scope",
-        "user",
-      ],
-    },
-    {
-      argv: ["claude", "mcp", "remove", "-s", "user", "whiteboard"],
-      ifAny: true,
-    },
-  ],
-  codex: [
-    {
-      argv: ["codex", "plugin", "marketplace", "add", "devdotfast/whiteboard"],
-    },
-    { argv: ["codex", "plugin", "add", "whiteboard@devfast"] },
-    { argv: ["codex", "mcp", "remove", "whiteboard"], ifAny: true },
-  ],
-  opencode: [
-    {
-      argv: [
-        "opencode",
+      args: [
         "mcp",
         "add",
-        "--global",
+        ...scope,
         "whiteboard",
         "--",
-        REVIEW_MCP_LAUNCH.command,
-        ...REVIEW_MCP_LAUNCH.args,
+        launch.command,
+        ...launch.args,
       ],
+      done: ALREADY,
     },
-  ],
-  pi: [{ argv: ["pi", "install", PI_WHITEBOARD_PACKAGE] }],
-} as const satisfies Record<string, readonly ConnectCommand[]>;
+  ];
 
-function runBlock(commands: readonly ConnectCommand[]): string {
-  const lines = commands.map(
-    ({ argv, ifAny }) =>
-      `${argv.join(" ")}${ifAny ? " # old manual registration, if any" : ""}`,
-  );
+  const plugin = (install: string[], scope: string[]) => [
+    marketplace,
+    { args: install, done: ALREADY },
+    cleanup(
+      ["mcp", "remove", ...scope, "whiteboard"],
+      "old manual registration, if any",
+    ),
+  ];
 
-  return `Run:\n\n\`\`\`sh\n${lines.join("\n")}\n\`\`\``;
+  switch (target) {
+    case "claude":
+      return platform === "win32"
+        ? windows(["-s", "user"])
+        : plugin(
+            ["plugin", "install", WHITEBOARD_PLUGIN, "--scope", "user"],
+            ["-s", "user"],
+          );
+    case "codex":
+      return plugin(["plugin", "add", WHITEBOARD_PLUGIN], []);
+    case "copilot":
+      return platform === "win32"
+        ? windows([])
+        : plugin(["plugin", "install", WHITEBOARD_PLUGIN], []);
+    case "opencode":
+      return [
+        {
+          args: [
+            "mcp",
+            "add",
+            "--global",
+            "whiteboard",
+            "--",
+            launch.command,
+            ...launch.args,
+          ],
+          done: ALREADY,
+        },
+      ];
+    case "pi":
+      return [
+        {
+          args: [
+            "mcp",
+            "add",
+            "whiteboard",
+            "--",
+            launch.command,
+            ...launch.args,
+          ],
+          done: ALREADY,
+        },
+        cleanup(["remove", PI_WHITEBOARD_PACKAGE], "if installed"),
+      ];
+  }
+}
+
+export function connectLines(
+  target: CliConnectTarget,
+  launch: McpLaunch,
+  platform: NodeJS.Platform,
+  cleanups = true,
+): string {
+  return connectSteps(target, launch, platform)
+    .filter((step) => cleanups || !step.note)
+    .map(
+      ({ args, note }) =>
+        `${shellWords([target, ...args])}${note ? ` # ${note}` : ""}`,
+    )
+    .join("\n");
+}
+
+function runBlock(lines: string): string {
+  return `\`\`\`sh\n${lines}\n\`\`\``;
 }
 
 function pluginSteps(
   target: Exclude<InstallTarget, "cursor">,
   platform: NodeJS.Platform,
 ): string[] {
+  const launch = reviewMcpLaunch(true, platform);
+
   switch (target) {
     case "claude":
-      if (platform === "win32")
-        return [
-          `Run:\n\n\`\`\`sh\nclaude plugin uninstall whiteboard@devfast # its launch cannot start on Windows, if installed\nclaude mcp remove -s user whiteboard # old registration, if any\n${CLAUDE_WINDOWS_MCP_ADD}\n\`\`\``,
-        ];
-
-      return [runBlock(CONNECT_COMMANDS.claude)];
     case "codex":
-      return [runBlock(CONNECT_COMMANDS.codex)];
+    case "copilot":
+      return [`Run:\n\n${runBlock(connectLines(target, launch, platform))}`];
     case "opencode": {
-      const launch = reviewMcpLaunch(true, platform);
-
       const entry = JSON.stringify(
         {
           whiteboard: {
@@ -176,23 +245,14 @@ function pluginSteps(
       );
 
       return [
-        `On OpenCode 2.0 or later, run:\n\n\`\`\`sh\nopencode mcp add --global whiteboard -- ${launchCommand(launch)}\n\`\`\`\n\nOn older OpenCode, add this entry to "mcp" in ~/.config/opencode/opencode.json, keeping the rest of the file:\n\n\`\`\`json\n${entry}\n\`\`\``,
+        `On OpenCode 2.0 or later, run:\n\n${runBlock(connectLines(target, launch, platform))}\n\nOn older OpenCode, add this entry to "mcp" in ~/.config/opencode/opencode.json, keeping the rest of the file:\n\n\`\`\`json\n${entry}\n\`\`\``,
         `Remove "@dev.fast/opencode-whiteboard" from "plugin" in ~/.config/opencode/opencode.json if it is there.`,
       ];
     }
 
-    case "copilot":
-      if (platform === "win32")
-        return [
-          `Run:\n\n\`\`\`sh\ncopilot plugin uninstall whiteboard@devfast # its launch cannot start on Windows, if installed\ncopilot mcp remove whiteboard # old registration, if any\n${COPILOT_WINDOWS_MCP_ADD}\n\`\`\``,
-        ];
-
-      return [
-        "Run:\n\n```sh\ncopilot plugin marketplace add devdotfast/whiteboard\ncopilot plugin install whiteboard@devfast\ncopilot mcp remove whiteboard # old manual registration, if any\n```",
-      ];
     case "pi":
       return [
-        `On Pi 0.99.0 or later, run:\n\n\`\`\`sh\npi mcp add whiteboard -- ${launchCommand(reviewMcpLaunch(true, platform))}\npi remove ${PI_WHITEBOARD_PACKAGE} # if installed\n\`\`\`\n\nOn older Pi, run \`pi install ${PI_WHITEBOARD_PACKAGE}\`.`,
+        `On Pi 0.99.0 or later, run:\n\n${runBlock(connectLines(target, launch, platform))}\n\nOn older Pi, run \`pi install ${PI_WHITEBOARD_PACKAGE}\`.`,
       ];
     case "omp": {
       const entry = JSON.stringify(
@@ -210,8 +270,12 @@ function pluginSteps(
 }
 
 export function launchCommand(launch: McpLaunch): string {
-  return [launch.command, ...launch.args]
-    .map((arg) => (/^[\w./-]+$/.test(arg) ? arg : shellQuote(arg)))
+  return shellWords([launch.command, ...launch.args]);
+}
+
+function shellWords(words: readonly string[]): string {
+  return words
+    .map((word) => (/^[\w./@:-]+$/.test(word) ? word : shellQuote(word)))
     .join(" ");
 }
 

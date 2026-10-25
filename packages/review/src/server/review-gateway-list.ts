@@ -4,13 +4,11 @@ import {
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
 
-import { LIST_MODES, type ListMode } from "./review-gateway-memory.js";
-
 export interface ListSource {
   states: readonly ReviewGatewayHostState[];
   serving(serverId: string): boolean;
   serverIdOf(alias: string): string | undefined;
-  list(serverId: string, mode: ListMode): ReviewApiSummary[] | undefined;
+  list(serverId: string): ReviewApiSummary[] | undefined;
 }
 
 function decorate(
@@ -34,17 +32,16 @@ function decorate(
 
   return {
     ...entry,
-    ...(entry.repositoryGroup && {
-      repositoryGroup: {
-        key: `${alias}:${entry.repositoryGroup.key}`,
-        label: entry.repositoryGroup.label,
-      },
+    // A project on another machine is that machine's.
+    ...(entry.project && {
+      project: { id: `${alias}:${entry.project.id}`, name: entry.project.name },
     }),
     host: alias,
     hostState,
     available: {
       sourceWindows: features,
       ...(reason && { reason }),
+      ...(online && state.languageFeaturesPending && { pending: true }),
     },
   };
 }
@@ -76,11 +73,7 @@ function* servers(source: ListSource) {
 export function listedBy(reviewId: string, source: ListSource) {
   for (const server of servers(source))
     if (
-      LIST_MODES.some((mode) =>
-        source
-          .list(server.serverId, mode)
-          ?.some((entry) => entry.reviewId === reviewId),
-      )
+      source.list(server.serverId)?.some((entry) => entry.reviewId === reviewId)
     )
       return server;
 
@@ -88,7 +81,6 @@ export function listedBy(reviewId: string, source: ListSource) {
 }
 
 export function mergeLists(
-  mode: ListMode,
   local: readonly ReviewApiSummary[],
   source: ListSource,
 ) {
@@ -98,7 +90,7 @@ export function mergeLists(
   for (const { state, serverId } of servers(source)) {
     const hostState = hostStateOf(state, source.serving(serverId));
 
-    for (const entry of source.list(serverId, mode) ?? [])
+    for (const entry of source.list(serverId) ?? [])
       if (!ids.has(entry.reviewId)) {
         ids.add(entry.reviewId);
         merged.push(decorate(entry, state, hostState));

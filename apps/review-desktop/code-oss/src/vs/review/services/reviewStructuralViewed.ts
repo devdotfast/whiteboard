@@ -77,8 +77,8 @@ export class StructuralViewedState extends Disposable {
 				const enclosed = viewed.some(([other, outer]) => other !== id
 					&& ranges.every(r => outer.some(o => r.side === o.side && r.file === o.file && o.fromLine <= r.fromLine && o.toLine >= r.toLine))
 					&& !outer.every(o => ranges.some(r => r.side === o.side && r.file === o.file && r.fromLine <= o.fromLine && r.toLine >= o.toLine)));
-				if (state === 'viewed' && !initialized.has(key) && !enclosed) this.session.setRegionCollapsed(path, id, true);
-				else if (previous === 'viewed' && state !== 'viewed') this.session.setRegionCollapsed(path, id, false);
+				if (state === 'viewed' && !initialized.has(key) && !enclosed) this.session.setRegionCollapsed(path, id, true, false);
+				else if (previous === 'viewed' && state !== 'viewed') this.session.setRegionCollapsed(path, id, false, false);
 				initialized.add(key);
 			}
 		}

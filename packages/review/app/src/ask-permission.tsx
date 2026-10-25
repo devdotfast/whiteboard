@@ -1,13 +1,13 @@
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { AskEntry, AskThreadState } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
 import { permissionSubject } from "./ask-turn";
-import { fontSize, radius } from "./scale.stylex";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { textStyles } from "./ui/text";
-import { useTooltip } from "./use-tooltip";
 
 type PermissionEntry = Extract<AskEntry, { kind: "permission" }>;
 
@@ -81,7 +81,7 @@ export function AskPermission({
         </code>
         <span
           ref={placeTooltip}
-          {...stylex.props(permissionStyles.targetPlace)}
+          {...stylex.props(textStyles.truncate, permissionStyles.targetPlace)}
         >
           in {shortPath(thread.cwd)}@{thread.head.slice(0, 7)}
         </span>
@@ -146,8 +146,8 @@ const permissionStyles = stylex.create({
   card: {
     display: "flex",
     flexDirection: "column",
-    gap: "14px",
-    padding: "16px",
+    gap: space.s14,
+    padding: space.s16,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.warningOutline,
@@ -157,26 +157,26 @@ const permissionStyles = stylex.create({
   copy: {
     display: "flex",
     flexDirection: "column",
-    gap: "6px",
+    gap: space.s6,
   },
   heading: {
     margin: 0,
     color: tokens.changeModified,
-    fontFamily: tokens.fontMono,
-    lineHeight: "14px",
+    fontFamily: tokens.chromeFont,
+    lineHeight: leading.px14,
   },
   text: {
     margin: 0,
     color: tokens.ink,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "24px",
+    lineHeight: leading.px24,
   },
   target: {
     display: "flex",
     flexDirection: "column",
-    gap: "4px",
-    padding: "10px 12px",
+    gap: space.s4,
+    padding: `${space.s10} ${space.s12}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
@@ -187,24 +187,21 @@ const permissionStyles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     whiteSpace: "pre-wrap",
     overflowWrap: "anywhere",
   },
   targetPlace: {
-    overflow: "hidden",
     color: tokens.inkFaint,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.micro,
-    lineHeight: "14px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    lineHeight: leading.px14,
   },
   options: {
     display: "flex",
     flexWrap: "wrap",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
   },
   apart: {
     marginLeft: "auto",

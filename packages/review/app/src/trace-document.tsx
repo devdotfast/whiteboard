@@ -1,9 +1,26 @@
+import { buttonStyles } from "@canvas/ui/button";
 import { Chip, chipStyles } from "@canvas/ui/chip";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import {
+  ChevronDownIcon,
+  FileIcon,
+  PencilIcon,
+  SearchIcon,
+  SparkleIcon,
+  StepsIcon,
+  TerminalIcon,
+  TextIcon,
+  ThinkingIcon,
+} from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { ReviewAgentTraceEvent } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
+  useContext,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -11,14 +28,17 @@ import {
   useState,
 } from "react";
 
-import { AgentChatUserMessage } from "./agent-chat";
+import { AgentChatUserMessage, trayBubbleStyles } from "./agent-chat";
 import { AgentMarkdown } from "./agent-markdown";
+import { InRightColumn } from "./ask-dock";
+import { countLabel, formatClockTime, formatDuration } from "./format";
 import {
   HighlightedText,
   QuoteMark,
   findWhitespaceNormalizedSpan,
 } from "./highlighted-text";
 import {
+  chevronMarker,
   traceGroupMarker,
   traceRowMarker,
   traceToolMarker,
@@ -243,38 +263,16 @@ export function TraceToolGroup({
       open={hasTarget}
       data-trace-event={items[0]?.index}
     >
-      <summary {...stylex.props(styles.summary, styles.toolGroupSummary)}>
+      <summary
+        {...stylex.props(
+          chevronMarker,
+          disclosureStyles.toggle,
+          focusStyles.ring,
+          styles.toolGroupSummary,
+        )}
+      >
         <span {...stylex.props(styles.centered)}>
-          {iconSvg(
-            <>
-              <rect
-                x="2"
-                y="3"
-                width="10"
-                height="2.2"
-                rx="1.1"
-                fill="currentColor"
-              />
-              <rect
-                x="2"
-                y="6.9"
-                width="10"
-                height="2.2"
-                rx="1.1"
-                fill="currentColor"
-                opacity="0.6"
-              />
-              <rect
-                x="2"
-                y="10.8"
-                width="10"
-                height="2.2"
-                rx="1.1"
-                fill="currentColor"
-                opacity="0.35"
-              />
-            </>,
-          )}
+          <StepsIcon xstyle={[iconStyles.chrome, styles.icon]} />
         </span>
         <span {...stylex.props(styles.toolGroupLabel)}>
           {toolGroupLabel(events)}
@@ -283,7 +281,7 @@ export function TraceToolGroup({
           {events.length} steps
         </span>
         <span {...stylex.props(styles.inlineCentered)} aria-hidden="true">
-          <ChevronIcon xstyle={styles.toolGroupChevronIcon} />
+          <DisclosureChevron />
         </span>
       </summary>
       <div {...stylex.props(styles.toolGroupBody)}>
@@ -316,10 +314,14 @@ export function TraceEvent({
   event: TraceTurnEvent;
   highlightQuote?: string;
 }) {
+  // On the right column's tray, the bubble lifts off it as Ask's does.
+  const inColumn = useContext(InRightColumn);
+
   if (event.kind === "user") {
     return (
       <AgentChatUserMessage
-        caption={event.at ? timeLabel(event.at) : undefined}
+        caption={event.at ? formatClockTime(event.at) : undefined}
+        bubbleXstyle={inColumn && trayBubbleStyles.bubble}
       >
         {highlightQuote ? (
           <HighlightedText text={event.text} quote={highlightQuote} />
@@ -386,6 +388,7 @@ export function TraceToolRow({
         <span {...stylex.props(styles.toolVerb)}>{event.verb}</span>
         <span
           {...stylex.props(
+            textStyles.truncate,
             styles.toolTitle,
             Boolean(event.filePath) && styles.toolTitleFile,
           )}
@@ -403,14 +406,20 @@ export function TraceToolRow({
           <span {...stylex.props(styles.removed)}>−{event.deletions}</span>
         )}
         {event.error && (
-          <span {...stylex.props(textStyles.eyebrow, styles.errorFlag)}>
+          <span
+            {...stylex.props(
+              textStyles.eyebrow,
+              textStyles.error,
+              styles.errorFlag,
+            )}
+          >
             failed
           </span>
         )}
       </span>
       {expandable && (
         <span {...stylex.props(styles.centered)} aria-hidden="true">
-          <ChevronIcon xstyle={styles.toolChevronIcon} />
+          <DisclosureChevron />
         </span>
       )}
     </span>
@@ -422,7 +431,15 @@ export function TraceToolRow({
 
   return (
     <details {...stylex.props(styles.tool, traceToolMarker)}>
-      <summary {...stylex.props(styles.summary)}>{row}</summary>
+      <summary
+        {...stylex.props(
+          chevronMarker,
+          disclosureStyles.toggle,
+          focusStyles.ring,
+        )}
+      >
+        {row}
+      </summary>
       <figure {...stylex.props(styles.figure)}>
         <figcaption {...stylex.props(textStyles.eyebrow, styles.figureHead)}>
           <span>{event.command ? "Shell" : event.tool}</span>
@@ -446,107 +463,48 @@ export function TraceToolRow({
 /** The summary row of a thinking block. */
 function ThinkingSummary() {
   return (
-    <summary {...stylex.props(styles.summary)}>
+    <summary
+      {...stylex.props(
+        chevronMarker,
+        disclosureStyles.toggle,
+        focusStyles.ring,
+      )}
+    >
       <span {...stylex.props(styles.toolRow)}>
         <span {...stylex.props(styles.centered)}>{toolIcon("Thinking")}</span>
         <span {...stylex.props(styles.toolLabel)}>
           <span {...stylex.props(styles.toolVerb)}>Thinking</span>
         </span>
         <span {...stylex.props(styles.centered)} aria-hidden="true">
-          <ChevronIcon xstyle={styles.toolChevronIcon} />
+          <DisclosureChevron />
         </span>
       </span>
     </summary>
   );
 }
 
-export function timeLabel(at: string): string {
-  const value = new Date(at);
-
-  if (Number.isNaN(value.getTime())) return "";
-
-  return value.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
-export function formatDuration(durationMs: number): string {
-  if (!Number.isFinite(durationMs) || durationMs < 0) return "";
-  const totalSeconds = Math.round(durationMs / 1000);
-
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  if (minutes < 60) return seconds ? `${minutes}m ${seconds}s` : `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-
-  return rest ? `${hours}h ${rest}m` : `${hours}h`;
-}
-
-function iconSvg(children: ReactNode, xstyle?: stylex.StyleXStyles): ReactNode {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      {...stylex.props(styles.icon, xstyle)}
-      aria-hidden="true"
-    >
-      {children}
-    </svg>
-  );
-}
-
 export function toolIcon(verb: string): ReactNode {
+  const xstyle = [iconStyles.chrome, styles.icon];
+
   switch (verb) {
     case "Thinking":
-      return iconSvg(
-        <path d="M8 2a5 5 0 0 0-3.5 8.5V12a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-1.5A5 5 0 0 0 8 2zM6 15h4" />,
-      );
+      return <ThinkingIcon xstyle={xstyle} />;
     case "Ran":
-      return iconSvg(
-        <>
-          <rect x="1.5" y="2.5" width="13" height="11" rx="2" />
-          <path d="M4.5 6l2 2-2 2M8.5 10.5h3" />
-        </>,
-      );
+      return <TerminalIcon xstyle={xstyle} />;
     case "Edited":
     case "Wrote":
-      return iconSvg(
-        <path d="M11.1 2.2a1.6 1.6 0 0 1 2.3 2.3L5 12.9l-3 .7.7-3z" />,
-      );
+      return <PencilIcon xstyle={xstyle} />;
     case "Read":
-      return iconSvg(
-        <>
-          <path d="M9.5 1.5h-5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V4.5z" />
-          <path d="M9.5 1.5v3h3" />
-        </>,
-      );
+      return <FileIcon xstyle={xstyle} />;
     case "Searched":
     case "Searched web":
     case "Fetched":
-      return iconSvg(
-        <>
-          <circle cx="7" cy="7" r="4.5" />
-          <path d="M10.5 10.5L14 14" />
-        </>,
-      );
+      return <SearchIcon xstyle={xstyle} />;
     case "Ran agent":
-      return iconSvg(
-        <path d="M8 1.5l1.8 4.2 4.2 1.8-4.2 1.8L8 13.5 6.2 9.3 2 7.5l4.2-1.8z" />,
-      );
+      return <SparkleIcon xstyle={xstyle} />;
     default:
-      return iconSvg(
-        <>
-          <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h7" />
-        </>,
-      );
+      return <TextIcon xstyle={xstyle} />;
   }
-}
-
-export function ChevronIcon({ xstyle }: { xstyle?: stylex.StyleXStyles } = {}) {
-  return iconSvg(<path d="M4 6l4 4 4-4" />, xstyle);
 }
 
 export interface LensPickEvent {
@@ -635,8 +593,10 @@ export function ElidedMessage({
   quote?: string;
   onExpand: () => void;
 }) {
+  const inColumn = useContext(InRightColumn);
   const text = event.kind === "user" ? event.text : event.markdown;
   const segments = elideByKeep(text, keep);
+  const expandTooltip = useTooltip("Show the hidden text");
 
   if (!segments) return <TraceEvent event={event} highlightQuote={quote} />;
 
@@ -657,8 +617,9 @@ export function ElidedMessage({
           <button
             key={index}
             type="button"
+            ref={expandTooltip}
             {...stylex.props(chipStyles.pill, styles.lensChip)}
-            title="Show the hidden text"
+            aria-label="Show the hidden text"
             onClick={onExpand}
           >
             ⋯
@@ -671,7 +632,8 @@ export function ElidedMessage({
   if (event.kind === "user") {
     return (
       <AgentChatUserMessage
-        caption={event.at ? timeLabel(event.at) : undefined}
+        caption={event.at ? formatClockTime(event.at) : undefined}
+        bubbleXstyle={inColumn && trayBubbleStyles.bubble}
       >
         {body}
       </AgentChatUserMessage>
@@ -710,7 +672,7 @@ export function TraceGapChip({
     <button
       key={`gap-${from}`}
       type="button"
-      {...stylex.props(styles.lensRow, traceRowMarker)}
+      {...stylex.props(buttonStyles.reset, styles.lensRow, traceRowMarker)}
       data-trace-gap={from}
       onClick={onExpand}
     >
@@ -744,7 +706,7 @@ export function TraceCollapseRow({
   return (
     <button
       type="button"
-      {...stylex.props(styles.lensRow, traceRowMarker)}
+      {...stylex.props(buttonStyles.reset, styles.lensRow, traceRowMarker)}
       onClick={onCollapse}
     >
       <span {...stylex.props(styles.lensLine, styles.lensLineSolid)} />
@@ -757,18 +719,10 @@ export function TraceCollapseRow({
           styles.lensRowChipSolid,
         ]}
       >
-        <svg
-          viewBox="0 0 16 16"
-          {...stylex.props(styles.collapseChevron)}
-          aria-hidden="true"
-        >
-          {edge === "top" ? (
-            <polyline points="4 6 8 10 12 6" />
-          ) : (
-            <polyline points="4 10 8 6 12 10" />
-          )}
-        </svg>
-        collapse {span.count} {span.count === 1 ? "event" : "events"}
+        <ChevronDownIcon
+          xstyle={[styles.collapseChevron, edge !== "top" && iconStyles.flip]}
+        />
+        collapse {countLabel(span.count, "event")}
       </Chip>
       <span {...stylex.props(styles.lensLine, styles.lensLineSolid)} />
     </button>
@@ -815,7 +769,7 @@ export function TraceTurn({
   const workedLabel =
     turn.workedMs !== null && turn.workedMs >= 1000
       ? `Worked for ${formatDuration(turn.workedMs)}`
-      : `Worked · ${steps} ${steps === 1 ? "step" : "steps"}`;
+      : `Worked · ${countLabel(steps, "step")}`;
 
   const renderTurnEvent = (item: IndexedTraceTurnEvent) => {
     const isTarget = item.index === targetEventIndex;
@@ -1080,14 +1034,16 @@ export function TraceTurn({
         <details {...stylex.props(traceWorkedMarker)} open={openWorked}>
           <summary
             {...stylex.props(
-              styles.summary,
+              chevronMarker,
+              disclosureStyles.toggle,
+              focusStyles.ring,
               textStyles.eyebrow,
               styles.workedSummary,
             )}
           >
             <span>{workedLabel}</span>
             <span {...stylex.props(styles.inlineCentered)} aria-hidden="true">
-              <ChevronIcon xstyle={styles.workedChevronIcon} />
+              <DisclosureChevron />
             </span>
             <span {...stylex.props(styles.line)} />
           </summary>

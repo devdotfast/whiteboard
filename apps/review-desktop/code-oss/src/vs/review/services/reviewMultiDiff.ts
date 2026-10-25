@@ -31,6 +31,10 @@ export interface ReviewMultiDiffHeaderEntry {
 	readonly note?: string;
 	/** Tooltip for the note, e.g. why a file stays folded. */
 	readonly noteTooltip?: ReviewTooltipContent;
+	/** The commit an embedded quote is read at, when not the board's own. */
+	readonly commit?: { readonly label: string; readonly tooltip?: ReviewTooltipContent };
+	/** diffr could not diff the file; the note is its error. */
+	readonly failed?: boolean;
 	/** A file with no text to diff: it stays folded and its header never opens it. */
 	readonly collapseLocked?: boolean;
 	/** Tooltip for the counts: what is left of the file, then its whole. */
@@ -50,13 +54,12 @@ export class ReviewMultiDiffUIElementFactory
   implements IWorkbenchUIElementFactory
 {
 
+  readonly hideResourceStatus = true;
   bottomScrollPadding = reviewBottomScrollPadding;
   alwaysShowScrollbars = false;
   scrollbarBelowResourceHeader = false;
 
-  get headerClickToCollapse(): boolean {
-    return !this.hideResourceHeader;
-  }
+  readonly headerClickToCollapse = false;
 
 
 	private readonly headers = new Set<() => void>();
@@ -169,6 +172,21 @@ export class ReviewMultiDiffUIElementFactory
 		element.append(note);
 		const noteTooltip = new ReviewTooltip(this.hoverService, note);
 
+		// A quote read at another commit names it, as a permalink embed does.
+		const commit = ownerDocument.createElement("span");
+		commit.className = "review-multidiff-commit";
+		const commitGlyph = ownerDocument.createElementNS("http://www.w3.org/2000/svg", "svg");
+		commitGlyph.setAttribute("width", "10");
+		commitGlyph.setAttribute("height", "10");
+		commitGlyph.setAttribute("viewBox", "0 0 10 10");
+		commitGlyph.setAttribute("aria-hidden", "true");
+		const commitPath = ownerDocument.createElementNS("http://www.w3.org/2000/svg", "path");
+		commitPath.setAttribute("d", "M0.5 5 H3 M7 5 H9.5 M5 3 A2 2 0 1 1 5 7 A2 2 0 1 1 5 3 Z");
+		commitGlyph.appendChild(commitPath);
+		const commitLabel = ownerDocument.createElement("span");
+		commit.append(commitGlyph, commitLabel);
+		const commitTooltip = new ReviewTooltip(this.hoverService, commit);
+
     const openContainer = ownerDocument.createElement("span");
     openContainer.className = "review-multidiff-open-container";
     element.append(openContainer);
@@ -181,7 +199,7 @@ export class ReviewMultiDiffUIElementFactory
     open.element.classList.add("review-multidiff-open");
 		const countsTooltip = new ReviewTooltip(this.hoverService, counts);
 		const viewed = new ReviewViewedCheckbox(this.hoverService, ownerDocument, () => current?.onToggleViewed?.());
-		element.append(viewed.element);
+		element.append(viewed.element, commit);
     let current: ReviewMultiDiffHeaderEntry | undefined;
 		let lastUris: Parameters<IResourceHeaderMetadata["setUris"]>[0];
     const openListener = open.onDidClick(() => current?.onDidOpen?.());
@@ -228,8 +246,13 @@ export class ReviewMultiDiffUIElementFactory
 				counts.hidden ||= additions.hidden && deletions.hidden;
 			}
 
+			commit.hidden = !current.commit;
+			commitLabel.textContent = current.commit?.label ?? "";
+			commit.setAttribute("aria-label", current.commit ? `At commit ${current.commit.label}` : "");
+			commitTooltip.content = current.commit?.tooltip;
 			note.hidden = !current.note;
 			note.textContent = current.note ?? "";
+			note.classList.toggle("error", !!current.failed);
 			noteTooltip.content = current.noteTooltip;
         openContainer.hidden = !current.onDidOpen;
 		};
@@ -239,6 +262,7 @@ export class ReviewMultiDiffUIElementFactory
 				this.headers.delete(refresh);
 				countsTooltip.dispose();
 				noteTooltip.dispose();
+				commitTooltip.dispose();
 				viewed.dispose();
         openListener.dispose();
         open.dispose();

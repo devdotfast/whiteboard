@@ -4,8 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import type * as spdlog from '@vscode/spdlog';
+import { appendFileSync, mkdirSync } from 'fs';
+import { dirname } from 'path';
 import { ByteSize } from '../../files/common/files.js';
-import { AbstractMessageLogger, ILogger, LogLevel } from '../common/log.js';
+import { AbstractMessageLogger, ILogger, LogLevel, LogLevelToString } from '../common/log.js';
 
 enum SpdLogLevel {
 	Trace,
@@ -30,7 +32,7 @@ async function createSpdLogLogger(name: string, logfilePath: string, filesize: n
 		}
 		return logger;
 	} catch (e) {
-		console.error(e);
+		console.error(`spdlog is unavailable, appending to ${logfilePath} instead: ${e instanceof Error ? e.message.split('\n')[0] : e}`);
 	}
 	return null;
 }
@@ -69,6 +71,8 @@ export class SpdLogLogger extends AbstractMessageLogger implements ILogger {
 	private buffer: ILog[] = [];
 	private readonly _loggerCreationPromise: Promise<void>;
 	private _logger: spdlog.Logger | undefined;
+	private _file: string | undefined;
+	private _donotUseFormatters = false;
 
 	constructor(
 		name: string,
@@ -94,16 +98,26 @@ export class SpdLogLogger extends AbstractMessageLogger implements ILogger {
 		if (logger) {
 			this._logger = logger;
 			setLogLevel(this._logger, this.getLevel());
-			for (const { level, message } of this.buffer) {
-				log(this._logger, level, message);
-			}
-			this.buffer = [];
+		} else {
+			// Whiteboard: without spdlog, append to the file; synchronously, so lines before a process.exit land.
+			try { mkdirSync(dirname(filepath), { recursive: true }); } catch { }
+			this._file = filepath;
+			this._donotUseFormatters = donotUseFormatters;
 		}
+		for (const { level, message } of this.buffer) {
+			this.log(level, message);
+		}
+		this.buffer = [];
 	}
 
 	protected log(level: LogLevel, message: string): void {
 		if (this._logger) {
 			log(this._logger, level, message);
+		} else if (this._file) {
+			if (this.getLevel() <= level) {
+				const line = this._donotUseFormatters ? message : `${new Date().toISOString().replace('T', ' ').slice(0, 23)} [${LogLevelToString(level)}] ${message}`;
+				try { appendFileSync(this._file, `${line}\n`); } catch { }
+			}
 		} else if (this.getLevel() <= level) {
 			this.buffer.push({ level, message });
 		}

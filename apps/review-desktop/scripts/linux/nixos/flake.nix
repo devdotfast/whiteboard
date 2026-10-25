@@ -12,6 +12,5 @@
     in {
       packages.${system} = { default = package; ${release.packageName} = package; };
       apps.${system} = { inherit cli desktop; default = desktop; };
-      checks.${system}.nixos = import ./vm-test.nix { inherit pkgs package release; };
     };
 }

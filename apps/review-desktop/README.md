@@ -101,6 +101,111 @@ The manual end-to-end journeys live in `scripts/e2e/`; each one drives the
 built Desktop through the installed CLI and the JSON review API. See
 `scripts/e2e/TESTING.md` for how to stage a runtime and run them.
 
+### Remote hosts
+
+A development Desktop pins no archive. Set `DEV_FAST_REVIEW_REMOTE_RELEASES` to
+a URL serving the archives and their `.sha256` files, or install this
+checkout's archive with
+`node apps/review-desktop/scripts/remote-dev-install.mjs <alias>`. With
+`DEV_FAST_REVIEW_REMOTE_PUBLISH=1` and Cloudflare credentials, the script
+publishes the archives and prints the URL to export.
+
+How remote hosts work (the user guide is `docs/remote-hosts.md`):
+
+#### Connection
+
+On macOS and Linux, Desktop opens one SSH master connection per host
+(`ControlMaster`) and runs every command and port forward over it. On Windows,
+which has no `ControlMaster`, a master connection serves a loopback SOCKS port
+for forwards, and each command opens its own `BatchMode` connection.
+
+The remote review server listens only on the remote's loopback interface.
+Desktop's local review server reaches it through an SSH port forward and acts
+as a gateway: the canvas talks only to the local server, which proxies remote
+reviews with the remote server's token. Language features use a second
+forward, to a VS Code server also on loopback.
+
+#### Install and updates
+
+Desktop first probes the host and writes nothing. With no install it
+recognises, it asks once, then installs as your user; a host with a
+recognised install gets new versions without asking. The host downloads the
+archive from `install.dev.fast` and verifies Desktop's pinned checksum before
+unpacking. Desktop runs the same `install.sh` you can run by hand.
+
+On update, Desktop installs its new version (also over a hand install),
+restarts the server it started, and keeps the previous version and any
+version still running. A server you started yourself keeps running.
+
+`review.remote.install` controls this:
+
+| Value | Behavior |
+|---|---|
+| `ask` (default) | Ask once per host, unless it has a recognised install. |
+| `always` | Install without asking. |
+| `never` | Never install; use `whiteboard` on the host's `PATH`. |
+
+What Desktop writes on the remote:
+
+| Path | What it is |
+|---|---|
+| `~/.dev/whiteboard-remote/versions/<version>/` | One version, ~250 MB, with its own Node. |
+| `~/.dev/whiteboard-remote/install.lock/` | Present while an install runs. |
+| `~/.local/bin/whiteboard` | Launcher for the newest version, if that path is free or already Desktop's. |
+
+With `DEV_REVIEW_HOME` set on the remote, `whiteboard-remote/` lives under it.
+Reviews are kept in `~/.dev`.
+
+#### Language features
+
+Hover and go to definition in remote reviews are answered on the remote by
+the same extensions a local review uses. Desktop runs one VS Code server and
+extension host per connected remote; the server exits 5 minutes after the
+last window leaves.
+
+- **Languages:** TypeScript, JavaScript, JSON, CSS and HTML always; Python
+  with ty; Go, Rust, Swift and C# when their group is on (Settings → Tools →
+  Extensions).
+- **First connect:** the remote downloads its extensions from Open VSX (a few
+  seconds to a minute), each checked against a checksum Whiteboard pins.
+  Whiteboard redistributes none of them. Without Open VSX access, reviews
+  still open, without hovers.
+- **Memory:** ~1 GB for one TypeScript plus one Python project, ~0.8 GB for
+  TypeScript alone, ~1 GB for a small Rust project.
+- **Version:** both ends must run the same Whiteboard version. Otherwise the
+  host stays `online` without language features.
+
+Optional groups are installed on each remote at its next connection, at your
+laptop's version. Groups you never turned on are never installed; turning one
+off leaves it on the remote, unused.
+
+| Group | Needs on the remote's login `PATH` | Downloads |
+|---|---|---|
+| Go | `go` | Go |
+| Rust | `cargo`, `rustc` | rust-analyzer, ~16 MB |
+| Swift | `swift` | Swift, LLDB DAP, ~16 MB |
+| C# | `dotnet` (.NET SDK) | C#, .NET Runtime, ~80 MB; OmniSharp from Microsoft on first start |
+
+Swift and C# install but do not answer hovers yet, locally or remotely: Swift
+needs the task API, and on remotes `node-pty`. Their debuggers never start;
+reviews are read-only.
+
+#### Source windows
+
+"Open file", the source tree and Ask's file links open a read-only Source
+window on the host, with search and language features. Each window runs its
+own extension host on the host; close ones you are done with. When the host
+stops answering, the status bar offers Retry and the window reconnects when
+the host is back.
+
+Source windows have no terminals or source control. On musl hosts such as
+Alpine, the explorer refreshes on focus instead of live.
+
+#### Ask
+
+Ask threads are kept on the host, so every laptop connected to it sees the
+same history.
+
 ## Packaging and releases
 
 macOS (arm64 and x64) is the only packaged platform with release channels;
@@ -139,30 +244,52 @@ patch/minor/major bump. The workflow:
    `vX.Y.Z`, and creates a draft GitHub release;
 2. compiles the platform-independent Code OSS, Review canvas, Review server,
    workspace packages, and pinned `darwin-arm64` and `darwin-x64` curated
-   extensions on Linux, then uploads one `darwin-payload` artifact;
-3. extracts that payload on two matrix legs, `darwin-arm64` on `macos-15-xlarge`
-   and `darwin-x64` on `macos-15-large`, performs only the native Darwin
+   extensions on Linux, then uploads a `darwin-payload` artifact per arch;
+3. extracts that payload on `macos-15-xlarge` (`darwin-arm64`) or
+   `macos-15-large` (`darwin-x64`), performs only the native Darwin
    package assembly, stages the runtime, tools, and extensions, then signs and
    notarizes via `app:package:macos`;
 4. gates the upload with `scripts/validate-release-artifacts.mjs` (curated
    extension closure, staple and Gatekeeper checks, and packaged `product.json`
    commit/quality/updateUrl assertions), which also emits the `latest.json`
    feed manifest for that arch;
-5. once both legs pass, `publish-macos` uploads to R2 in two passes — both
-   arches' zip and dmg payloads first, both `latest.json` files last — so a
-   client can never see a manifest whose payload is missing;
-6. curls both live feeds to confirm the new release is served, attaches both
-   dmgs to the GitHub release, and publishes it.
+5. once both legs pass, a `publish` job per arch uploads its zip and dmg
+   payloads first, then its `latest.json` feed and dmg alias, so a client can
+   never see a manifest whose payload is missing;
+6. curls that arch's live feed to confirm the new release is served, attaches
+   the dmg to the GitHub release, and publishes it.
 
-The `platforms` input picks `all` (the default), `macos`, `linux` or `windows`.
+Each platform publishes as soon as its own build passes; one failing platform
+does not hold back the others. Latest aliases and feeds only move forward
+(`scripts/promote-release-aliases.mjs`; Linux's pointer has the same rule), so
+publishing an older version uploads its files and leaves latest alone. The
+first platform to publish takes the GitHub release out of draft. Platform
+builds start with the remote tarball job and wait for its pin artifact only
+before packaging (`scripts/wait-for-run-artifact.mjs`).
+
+To retry a platform that failed, use **Re-run failed jobs** on the run. To
+build it again later for the same version, start a new run with that version's
+tag and only that platform:
+
+```sh
+gh workflow run review-desktop-release.yml -f version=v0.2.4 -f platforms=windows
+gh workflow run review-desktop-preview.yml -f version=v0.2.5-preview.20261015.117 -f platforms=windows
+```
+
+A backfill builds the tagged commit, reuses the published remote tarballs, and
+makes no version bump, tag, or new GitHub release. Linux packages are not
+byte-for-byte reproducible, so a Linux publish that failed partway is recovered
+by re-running its failed jobs, not by a backfill.
+
+The `platforms` input picks `all` (the default), `macos-arm64`, `macos-x64`,
+`linux` or `windows`. The two Mac arches build, publish and backfill on their own.
 Windows builds in parallel with the Darwin payload and the Linux packages
 (`review-windows-build.yml` on the 16-core `review_big_boy_windows` runner) and
 signs every binary and installer with Azure Artifact Signing through the
-`windows-signing` environment. Nothing is uploaded until every selected platform
-has built and validated; `publish-windows` then uploads the installers to
-`releases/<version>/win32-x64/`, points `install.dev.fast/windows` at the new
-per-user installer, and attaches the installers to the GitHub release. Windows
-has no update feed yet, so installed Windows apps do not update themselves.
+`windows-signing` environment. Its `publish` job then uploads the installers
+to `releases/<version>/win32-x64/`, points `install.dev.fast/windows` at the new
+per-user installer, updates the Windows update feeds, and attaches the
+installers to the GitHub release.
 
 ### Promoting a preview to stable
 
@@ -213,9 +340,10 @@ gh workflow run review-desktop-preview.yml -f ref=<branch>
 The workflow makes no commit and no GitHub release. It stamps the working
 tree with the next patch version plus
 `-preview.<yyyymmdd>.<run-number>`, then publishes only to preview R2 keys.
-Once the upload, the update feed, and the installer landing all check out, it
-pushes a lightweight `v<version>` tag at the commit it built — but only when
-that commit is on `main`, since a branch that never landed cannot be promoted.
+Once the version is computed, it pushes a lightweight `v<version>` tag at the
+commit it builds — but only when that commit is on `main`, since a branch that
+never landed cannot be promoted. The tag names the build, not a set of
+published platforms.
 That tag is what "Promoting a preview to stable" above takes as its
 `preview_tag`, and it stays promotable as `main` moves on.
 The ref must include the preview tooling, so branch it from a `main` that
@@ -255,7 +383,7 @@ of the host it runs on.
 | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
 | Code OSS `out-build`, `out-vscode-min`, and `out`                                                        | Electron application bundle                            |
 | Compiled built-in extensions in `.build/extensions`                                                      | Darwin-native npm closure installed by `pnpm`          |
-| Manifest-selected `darwin-arm64` and `darwin-x64` VSIX payloads, including `ty`, Ruff, and rust-analyzer | Manifest-selected extensions copied into the final app |
+| Manifest-selected `darwin-arm64` and `darwin-x64` VSIX payloads, including `ty` and rust-analyzer       | Manifest-selected extensions copied into the final app |
 | Review canvas/server and required workspace `dist` directories                                           | App icon, signatures, notarization, ZIP, and DMG       |
 
 The curated-extension handoff is manifest-driven. Linux materializes the
@@ -368,7 +496,7 @@ unpacks the extension into `code-oss/extensions/`.
 
 | Extension  | Notes                                                                                        |
 | ---------- | -------------------------------------------------------------------------------------------- |
-| ty, ruff   | Same; `ms-python.python` rides along as their extension dependency                           |
+| ty         | Bundles its own server                                                                       |
 | Go         | Bundles nothing and prompts to `go install gopls` against your own Go toolchain              |
 | Vim, Emacs | Adopted from the host VS Code install on first launch; otherwise off, and mutually exclusive |
 
@@ -408,11 +536,9 @@ Software Map defaults to off. Enable it to add the Map tab to reviews.
 Disable it to remove Map entry points. This preference persists in the
 application profile. The change does not require a reload.
 
-Trace capture defaults to off. The tutorial includes an interactive sample
-quote and points to Settings for capture setup. Enabling capture
-takes S3/R2 credentials, installs the agent session hooks and the
-`trace-archaeology` skill for every installed agent, and lets reviews quote
-agent sessions. Disabling removes the hooks and skill again. The state lives
+Trace capture defaults to off. Enabling capture takes S3/R2 credentials,
+installs the agent session hooks and the `trace-archaeology` skill for every
+installed agent, and lets reviews quote agent sessions. Disabling removes the hooks and skill again. The state lives
 in the review server's machine trace settings, not the application profile.
 
 The application menu is macOS only. On Windows and Linux the same surfaces are

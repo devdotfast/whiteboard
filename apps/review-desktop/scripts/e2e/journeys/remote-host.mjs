@@ -25,10 +25,6 @@ export const name = "remote-host";
 export const phase = 2;
 
 export const options = {
-  settings: {
-    "review.experimental.remoteHosts.enabled": true,
-    "review.experimental.structuralDiff.enabled": true,
-  },
   env: { DEV_FAST_REVIEW_SSH_CONFIG: `${runDir}/ssh_config` },
 };
 
@@ -170,7 +166,7 @@ export function sourcePages(ctx) {
 }
 
 const DESKTOP_ROUTE =
-  /^\/(app|control|crash-reports|diffr-config|install|preferences|remote-hosts|telemetry|tutorial)(\/|$)|^\/reviews-api\/[^/]+\/telemetry\//;
+  /^\/(app|control|crash-reports|diffr-config|install|preferences|remote-hosts|telemetry)(\/|$)|^\/reviews-api\/[^/]+\/telemetry\//;
 
 export async function run(ctx) {
   const { page, until } = ctx;
@@ -297,7 +293,7 @@ async function journey(ctx, page, until) {
   const peek = canvas.locator('[data-review-inline-editor="f.ts"]');
   const opened = Date.now();
 
-  await row(title).getByTitle(title, { exact: true }).click();
+  await row(title).getByRole("button", { name: `Open ${title}`, exact: true }).click();
   await canvas
     .getByRole("heading", { name: title })
     .waitFor({ timeout: 60000 });
@@ -685,6 +681,7 @@ const desktopSsh = async () =>
 
 export async function masterPid() {
   return (await desktopSshProcesses()).find(
-    ([, args]) => args.includes(" -M -N ") && args.endsWith(`-- ${alias}`),
+    ([, args]) =>
+      / -M -N | -N -T -D /.test(args) && args.endsWith(`-- ${alias}`),
   )?.[0];
 }

@@ -516,6 +516,7 @@ const terminalConfiguration: IStringDictionary<IConfigurationPropertySchema> = {
 		default: 'on'
 	},
 	[TerminalSettingId.AllowedLinkSchemes]: {
+		restricted: true,
 		description: localize('terminal.integrated.allowedLinkSchemes', "An array of strings containing the URI schemes that the terminal is allowed to open links for. By default, only a small subset of possible schemes are allowed for security reasons."),
 		type: 'array',
 		items: {

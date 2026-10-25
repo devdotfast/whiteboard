@@ -149,6 +149,7 @@ it("restores find inputs per review, leaving matches and handles transient", () 
     matchCase: true,
     wholeWord: false,
     isRegex: false,
+    skipFolded: true,
   });
 
   const restored = createReviewFindStore(TEST_REVIEW_CONFIG);

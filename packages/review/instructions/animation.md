@@ -29,7 +29,7 @@ An `animation` component plays HTML you write, frame by frame, to show how a cha
 
 - `frames`: every possible step. `key` names the frame for your markup and scripts; `title` and `caption` show under the stage. `label` is a short step name (e.g. `SEND`); give every frame one, or none, and the reader gets a named step strip instead of dots. `duration` (ms, default 3000) is how long the frame holds while playing. For a flow with alternate branches, declare every stable frame here and select the active ordered path with `whiteboard.setSequence(...)`.
 - `code`: the source ranges the stage shows, by name. The server checks each anchor like any other reference, so verify paths and lines. Use `head/` for the new code and `base/` for the old.
-- `pins`: as on any block that quotes code. A review with a target lends its own; a scratchpad needs them on the block.
+- `pins`: as on any block that quotes code. A review with a target lends its own; a board without one needs them on the block.
 - `html`: the stage's body. It runs in a sandboxed frame with no network: inline `<style>` and `<script>` only, no external URLs. Images must be `data:` URLs.
 - `height`: defaults to `"auto"`, which fits the stage to its content, including host code peeks and blocks. Omit it for most animations. Set a number (120 to 1200 CSS pixels) only when the animation intentionally needs a fixed viewport; fixed-height stages clip overflow, so verify every frame at narrow widths. The width is the document column.
 

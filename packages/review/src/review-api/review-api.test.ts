@@ -1,4 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -8,7 +9,7 @@ import {
   STRUCTURAL_DIFF_WIRE_VERSION,
   type StructuralSource,
 } from "@dev.fast/review-protocol";
-import { anchorSelection, rangeAnchor } from "@review/lens-selection.js";
+import { rangeAnchor } from "@review/lens-selection.js";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { GlobalReviewDesktopVerbRelay } from "@review/server/global-verb-relay.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,12 +22,12 @@ import { documentText } from "./document-text.js";
 import { ReviewInputError } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { LocalReviewData } from "./local-data";
-import {
-  type ReviewProviders,
-  ReviewStore,
-  SCRATCHPAD_ID,
-  inspectSnapshot,
-} from "./store.js";
+import { callPublicTool, publicTool } from "./public-tools.js";
+import { STORE_UPGRADES } from "./store-migrations.js";
+import { type ReviewProviders, ReviewStore, inspectSnapshot } from "./store.js";
+
+const upgradeVersion = (name: string) =>
+  STORE_UPGRADES.find((step) => step.name === name)!.version;
 
 const pins = { repositoryId: "repo", base: "base-commit", head: "head-commit" };
 
@@ -113,6 +114,74 @@ it("guides missing-review reads and opens to an agent while keeping missing vers
 });
 
 describe("snapshot authoring", () => {
+  it("keeps the name of a base branch its pins resolve", async () => {
+    // Any name resolves to 1…; a full hash to itself; no base to 3….
+    providers.resolveTarget = async (target) => ({
+      target,
+      pins: {
+        repositoryId: "repo",
+        base:
+          !("base" in target) || !target.base
+            ? "3".repeat(40)
+            : target.base.length === 40
+              ? target.base
+              : "1".repeat(40),
+        head: "2".repeat(40),
+      },
+    });
+
+    const created = (base: string) =>
+      store.execute(
+        request({
+          type: "create",
+          title: "Branch",
+          target: {
+            kind: "commits",
+            repositoryId: "repo",
+            base,
+            head: "kt/links",
+          },
+        }),
+      );
+
+    const named = await created("main");
+    const hashed = await created("1".repeat(7));
+    const hexNamed = await created("cafe123");
+
+    expect(store.read(named.reviewId).origin?.baseBranch).toBe("main");
+    expect(store.read(hashed.reviewId).origin?.baseBranch).toBeUndefined();
+    expect(store.read(hexNamed.reviewId).origin?.baseBranch).toBe("cafe123");
+
+    // A retarget onto another base forgets the old name.
+    for (const base of ["4".repeat(40), undefined]) {
+      await store.execute(
+        request({
+          type: "set_target",
+          reviewId: named.reviewId,
+          target: {
+            kind: "commits",
+            repositoryId: "repo",
+            head: "kt/links",
+            ...(base && { base }),
+          },
+        }),
+      );
+      expect(store.read(named.reviewId).origin?.baseBranch).toBeUndefined();
+      await store.execute(
+        request({
+          type: "set_target",
+          reviewId: named.reviewId,
+          target: {
+            kind: "commits",
+            repositoryId: "repo",
+            base: "main",
+            head: "kt/links",
+          },
+        }),
+      );
+    }
+  });
+
   it("binds PR identity without erasing content, versions changes, and clears stale identity across repositories", async () => {
     const url = "https://github.com/devdotfast/review/pull/310";
 
@@ -245,7 +314,7 @@ describe("snapshot authoring", () => {
           pullRequestUrl: url,
         }),
       ),
-    ).toThrow(/canonical GitHub PR URL|PR number is too large/);
+    ).toThrow(/canonical PR URL|PR number is too large/);
     expect(store.list()).toEqual([]);
   });
 
@@ -430,6 +499,8 @@ describe("snapshot authoring", () => {
     db.prepare(
       "UPDATE review_attention SET dismissed_at=? WHERE review_id=?",
     ).run("2020-01-01T00:00:00Z", reviewId);
+    // A store from before Trash has not run the step.
+    db.exec(`PRAGMA user_version=${upgradeVersion("archive-to-trash") - 1}`);
     db.close();
     const before = Date.now();
     store = new ReviewStore(database, providers);
@@ -1431,103 +1502,1190 @@ describe("snapshot authoring", () => {
     ).rejects.toThrow(/base-side anchor needs base pins/);
   });
 
-  it("keeps one scratchpad: made on demand, drawn on at explicit pins only, outside the review lifecycle", async () => {
-    await store.ensureScratchpad();
-    await store.ensureScratchpad();
-    const pad = store.read(SCRATCHPAD_ID);
-    expect(pad).toMatchObject({ kind: "scratchpad", title: "Scratchpad" });
-    expect(pad.pins).toBeUndefined();
-    expect(pad.target).toBeUndefined();
-    expect(store.list()).toMatchObject([
-      { reviewId: SCRATCHPAD_ID, kind: "scratchpad" },
-    ]);
-    await expect(
-      store.execute(
-        request({ type: "create", title: "Another", kind: "scratchpad" }),
-      ),
-    ).rejects.toMatchObject({ status: 409 });
+  it("makes the old scratchpad a plan in the project of the repository it quotes most, or of the one opened last", async () => {
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+    const { id: repositoryId } = store.registerRepository(checkout);
 
-    // Nothing to inherit: a reference must name its own pins.
-    await expect(
-      edit(SCRATCHPAD_ID, {
-        type: "insert",
-        content: { type: "code_peek", source: rangeAnchor(source) },
+    // Writes a store from before the scratchpad became a plan.
+    const projectId = store.projectOfRepository(repositoryId);
+
+    const oldPad = async (quoted?: string) => {
+      await store.close();
+      const db = new DatabaseSync(database);
+      db.exec(`PRAGMA user_version=${upgradeVersion("scratchpad-plan") - 1}`);
+      db.prepare(
+        "INSERT INTO reviews(id,version,next_id,project_id) VALUES('scratchpad',0,1,?)",
+      ).run(projectId);
+      db.prepare(
+        "INSERT INTO versions(review_id,version,snapshot,author_kind) VALUES('scratchpad',0,?,'agent')",
+      ).run(
+        JSON.stringify({
+          reviewId: "scratchpad",
+          version: 0,
+          title: "Scratchpad",
+          kind: "scratchpad",
+          document: quoted
+            ? [
+                {
+                  type: "code_peek",
+                  id: "code_peek-1",
+                  source: rangeAnchor(source),
+                  pins: { repositoryId: quoted, head: "h".repeat(40) },
+                },
+              ]
+            : [{ type: "markdown", id: "markdown-1", markdown: "A note" }],
+          createdAt: "2026-09-01T00:00:00.000Z",
+        }),
+      );
+      db.close();
+      store = new ReviewStore(database, providers);
+
+      return store.list().find((board) => board.title === "Scratchpad")!;
+    };
+
+    const quoting = await oldPad(repositoryId);
+    expect(store.has("scratchpad")).toBe(false);
+    expect(quoting).toMatchObject({
+      target: { kind: "project", repositoryId },
+      project: { id: projectId },
+    });
+    expect(quoting).not.toHaveProperty("kind");
+    expect(store.read(quoting.reviewId).document).toHaveLength(1);
+
+    await store.execute(
+      request({
+        type: "lifecycle",
+        state: "trash",
+        reviewId: quoting.reviewId,
       }),
-    ).rejects.toThrow(/document has no pins/);
-    const own = { repositoryId: "repo-b", head: "b".repeat(40) };
-    await edit(SCRATCHPAD_ID, {
-      type: "insert",
-      content: {
-        type: "code_peek",
-        source: rangeAnchor(source),
-        pins: own,
+    );
+    await store.execute(
+      request({ type: "delete", reviewId: quoting.reviewId }),
+    );
+    const plain = await oldPad();
+    expect(plain.target).toEqual({ kind: "project", repositoryId });
+  });
+
+  it("migrates every version of the old scratchpad onto a checkout that exists", async () => {
+    const live = path.join(directory, "live");
+    const gone = path.join(directory, "gone");
+    execFileSync("git", ["init", "-q", live]);
+    execFileSync("git", ["init", "-q", gone]);
+    const { id: liveId } = store.registerRepository(live);
+    const { id: goneId } = store.registerRepository(gone);
+    rmSync(gone, { recursive: true, force: true });
+
+    await store.close();
+    const db = new DatabaseSync(database);
+    db.exec(`PRAGMA user_version=${upgradeVersion("scratchpad-plan") - 1}`);
+    db.prepare(
+      "INSERT INTO reviews(id,version,next_id,project_id) VALUES('scratchpad',1,9,?)",
+    ).run(String(db.prepare("SELECT id FROM projects LIMIT 1").get()!.id));
+
+    for (const version of [0, 1])
+      db.prepare(
+        "INSERT INTO versions(review_id,version,snapshot,author_kind) VALUES('scratchpad',?,?,'agent')",
+      ).run(
+        version,
+        JSON.stringify({
+          reviewId: "scratchpad",
+          version,
+          title: "Scratchpad",
+          kind: "scratchpad",
+          document: [
+            {
+              type: "code_peek",
+              id: "code_peek-1",
+              source: rangeAnchor(source),
+              pins: { repositoryId: goneId, head: "h".repeat(40) },
+            },
+          ],
+          createdAt: "2026-09-01T00:00:00.000Z",
+        }),
+      );
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    const [pad] = store.list();
+
+    expect(pad!.target).toEqual({ kind: "project", repositoryId: liveId });
+    expect(store.read(pad!.reviewId, 0).document).toMatchObject([
+      { type: "code" },
+    ]);
+    expect(store.read(pad!.reviewId, 1).document).toMatchObject([
+      { type: "code" },
+    ]);
+  });
+
+  it("snapshots the old scratchpad's quotes of other repositories", async () => {
+    const git = (cwd: string, ...args: string[]) =>
+      execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
+
+    const repository = (name: string, file: string, text: string) => {
+      const root = path.join(directory, name);
+      execFileSync("git", ["init", "-q", root]);
+      mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+      writeFileSync(path.join(root, file), text);
+      git(root, "add", file);
+      git(
+        root,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "commit",
+        "-qm",
+        "first",
+      );
+
+      return { root, head: git(root, "rev-parse", "HEAD") };
+    };
+
+    const review = repository("review", "a.ts", "one\ntwo\nthree\n");
+
+    const diffr = repository(
+      "diffr",
+      "src/main.rs",
+      "fn a() {}\nfn main() {\n  run();\n}\n",
+    );
+
+    const own = {
+      repositoryId: store.registerRepository(review.root).id,
+      head: review.head,
+    };
+
+    const other = {
+      repositoryId: store.registerRepository(diffr.root).id,
+      head: diffr.head,
+    };
+
+    await store.close();
+    const db = new DatabaseSync(database);
+    db.exec(`PRAGMA user_version=${upgradeVersion("scratchpad-plan") - 1}`);
+    db.prepare(
+      "INSERT INTO reviews(id,version,next_id,project_id) SELECT 'scratchpad',0,9,id FROM projects LIMIT 1",
+    ).run();
+    db.prepare(
+      "INSERT INTO versions(review_id,version,snapshot,author_kind) VALUES('scratchpad',0,?,'agent')",
+    ).run(
+      JSON.stringify({
+        reviewId: "scratchpad",
+        version: 0,
+        title: "Scratchpad",
+        kind: "scratchpad",
+        document: [
+          {
+            type: "code_peek",
+            id: "code_peek-1",
+            source: "head/a.ts#L1-L2",
+            pins: own,
+          },
+          {
+            type: "code_peek",
+            id: "code_peek-2",
+            source: "head/a.ts#L2-L3",
+            pins: own,
+          },
+          {
+            type: "markdown",
+            id: "markdown-3",
+            markdown: "diffr's [main](review-source:head/src/main.rs#L2-L4).",
+            pins: other,
+          },
+          {
+            type: "code_peek",
+            id: "code_peek-4",
+            source: "head/src/main.rs#L2-L4",
+            pins: other,
+          },
+        ],
+        createdAt: "2026-09-01T00:00:00.000Z",
+      }),
+    );
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    const [pad] = store.list();
+    const [first, , markdown, snapshot] = store.read(pad!.reviewId).document;
+
+    expect(pad!.target).toEqual({
+      kind: "project",
+      repositoryId: own.repositoryId,
+    });
+    expect(first).toMatchObject({ type: "code_peek", pins: own });
+    // The link's text stays, then where it pointed.
+    expect(markdown).toMatchObject({
+      type: "markdown",
+      markdown: expect.stringMatching(
+        /^diffr's main \(`diffr · src\/main\.rs:2-4 @ [0-9a-f]{7}`\)\.$/,
+      ),
+    });
+    expect(snapshot).toMatchObject({
+      type: "code",
+      id: "code_peek-4",
+      language: "rust",
+      text: "fn main() {\n  run();\n}",
+    });
+    expect(JSON.stringify(store.read(pad!.reviewId, 0))).not.toContain(
+      other.repositoryId,
+    );
+  });
+
+  it("puts a plan in its repository's project, which the repository's worktrees share", async () => {
+    const checkout = path.join(directory, "checkout");
+
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", checkout, ...args]);
+
+    execFileSync("git", ["init", "-q", checkout]);
+    git(
+      "-c",
+      "user.name=t",
+      "-c",
+      "user.email=t@t",
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "first",
+    );
+    git("worktree", "add", "-q", path.join(directory, "worktree"));
+    const { id: repositoryId } = store.registerRepository(checkout);
+
+    const { reviewId } = await store.execute(
+      request({
+        type: "create",
+        title: "Plan",
+        target: { kind: "project", repositoryId },
+      }),
+    );
+
+    expect(store.read(reviewId).pins).toBeUndefined();
+    expect(store.summary(reviewId)).toMatchObject({
+      target: { kind: "project", repositoryId },
+      project: { name: "checkout" },
+    });
+
+    const worktree = store.registerRepository(path.join(directory, "worktree"));
+
+    expect(store.projectOfRepository(worktree.id)).toBe(
+      store.projectOf(reviewId),
+    );
+  });
+
+  describe("upgrading a store saved before projects", () => {
+    const repository = (name: string) => {
+      const checkout = path.join(directory, name);
+      execFileSync("git", ["init", "-q", checkout]);
+      execFileSync("git", [
+        "-C",
+        checkout,
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@t",
+        "commit",
+        "-q",
+        "--allow-empty",
+        "-m",
+        "first",
+      ]);
+
+      return checkout;
+    };
+
+    const plan = async (repositoryId: string) =>
+      (
+        await store.execute(
+          request({
+            type: "create",
+            title: "Plan",
+            target: { kind: "project", repositoryId },
+          }),
+        )
+      ).reviewId;
+
+    /** Reopens the store as main left it, after `sql` runs on it. */
+    const reopenBeforeProjects = async (sql = "") => {
+      await store.close();
+      const db = new DatabaseSync(database);
+      db.exec(`PRAGMA foreign_keys=OFF;
+        CREATE TABLE old_reviews(id TEXT PRIMARY KEY, version INTEGER NOT NULL, next_id INTEGER NOT NULL);
+        INSERT INTO old_reviews SELECT id,version,next_id FROM reviews ORDER BY rowid;
+        DROP TABLE reviews; ALTER TABLE old_reviews RENAME TO reviews;
+        ALTER TABLE repositories DROP COLUMN project_id; DELETE FROM projects; PRAGMA user_version=0;
+        ${sql}`);
+      db.close();
+      store = new ReviewStore(database, providers);
+    };
+
+    it("gives every board its repository's project", async () => {
+      const { id: repositoryId } = store.registerRepository(
+        repository("checkout"),
+      );
+
+      const reviewId = await plan(repositoryId);
+
+      await reopenBeforeProjects();
+
+      expect(store.summary(reviewId)?.project).toEqual({
+        id: store.projectOfRepository(repositoryId),
+        name: "checkout",
+      });
+    });
+
+    it("keeps boards in the order they were made", async () => {
+      const { id: repositoryId } = store.registerRepository(
+        repository("checkout"),
+      );
+
+      const first = await plan(repositoryId);
+      const second = await plan(repositoryId);
+
+      await reopenBeforeProjects(`
+        INSERT OR REPLACE INTO review_attention(review_id,viewed_at) VALUES('${first}','2020-01-01'),('${second}','2021-01-01');`);
+
+      expect(store.list().map(({ reviewId }) => reviewId)).toEqual([
+        first,
+        second,
+      ]);
+    });
+
+    it("files a deleted worktree's boards under its repository", async () => {
+      const checkout = repository("checkout");
+      const worktree = path.join(directory, "worktree");
+      execFileSync("git", ["-C", checkout, "worktree", "add", "-q", worktree]);
+      const main = store.registerRepository(checkout);
+      const reviewId = await plan(store.registerRepository(worktree).id);
+
+      rmSync(worktree, { recursive: true, force: true });
+      await reopenBeforeProjects();
+
+      expect(store.projectOf(reviewId)).toBe(
+        store.projectOfRepository(main.id),
+      );
+    });
+
+    it("keeps a board whose current version is missing", async () => {
+      const { id: repositoryId } = store.registerRepository(
+        repository("checkout"),
+      );
+
+      const kept = await plan(repositoryId);
+      const broken = await plan(repositoryId);
+
+      await reopenBeforeProjects(
+        `DELETE FROM versions WHERE review_id='${broken}';`,
+      );
+
+      expect(store.projectOf(broken)).toBe(store.projectOf(kept));
+    });
+
+    it("upgrades past a reference it didn't break", async () => {
+      const { id: repositoryId } = store.registerRepository(
+        repository("checkout"),
+      );
+
+      const reviewId = await plan(repositoryId);
+
+      await reopenBeforeProjects(
+        "INSERT INTO review_attention(review_id,viewed_at) VALUES('gone','2020-01-01');",
+      );
+
+      expect(store.projectOf(reviewId)).toBe(
+        store.projectOfRepository(repositoryId),
+      );
+    });
+
+    it("leaves the store as it was when the upgrade fails", async () => {
+      const { id: repositoryId } = store.registerRepository(
+        repository("checkout"),
+      );
+
+      await plan(repositoryId);
+
+      await expect(
+        // The rebuild's scratch table, as a crash could leave it.
+        reopenBeforeProjects("CREATE TABLE reviews_with_projects(id TEXT);"),
+      ).rejects.toThrow(Error);
+
+      const db = new DatabaseSync(database);
+
+      expect(
+        db
+          .prepare("SELECT name FROM pragma_table_info('reviews')")
+          .all()
+          .map(({ name }) => name),
+      ).toEqual(["id", "version", "next_id"]);
+      db.close();
+      store = new ReviewStore(path.join(directory, "other.db"), providers);
+    });
+  });
+
+  it("takes repositories by path and pins without them, and never shows their ids", async () => {
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+    const api = createReviewApi(store, new LocalReviewData(store));
+
+    const client = new ReviewApiClient(
+      { serverUrl: "http://review.test", token: "t" },
+      async (url, init) =>
+        api.request(
+          new URL(url).pathname.replace(/^\/reviews-api/, "") +
+            new URL(url).search,
+          init,
+        ),
+    );
+
+    // SAFETY: the published tools as the server lists them over /authoring.
+    const tools = (authoringTools() as AuthoringTool[]).map(publicTool);
+    const named = (name: string) => tools.find((tool) => tool.name === name)!;
+
+    const created = await callPublicTool(client, named("session_create"), {
+      title: "Plan",
+      target: { kind: "project", repositoryPath: checkout },
+      open: false,
+    });
+
+    expect(JSON.stringify(created)).not.toContain("repositoryId");
+    const { sessionId } = created as { sessionId: string };
+
+    await callPublicTool(client, named("session_edit"), {
+      sessionId,
+      edit: {
+        type: "insert",
+        content: {
+          type: "code_peek",
+          source: rangeAnchor(source),
+          pins: { head: "h".repeat(40) },
+        },
       },
     });
-    await edit(SCRATCHPAD_ID, {
+
+    // The host fills in the board's repository.
+    expect(store.read(sessionId).document[0]).toMatchObject({
+      pins: {
+        repositoryId: store.read(sessionId).target!.repositoryId,
+        head: "h".repeat(40),
+      },
+    });
+  });
+
+  it("names head or base, never the repository, when an agent's pins are malformed", async () => {
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+    const api = createReviewApi(store, new LocalReviewData(store));
+
+    const post = <Operation>(operation: Operation) =>
+      api.request("/commands", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ operation }),
+      });
+
+    const { reviewId } = (await (
+      await post({
+        type: "create",
+        title: "Pins",
+        target: { kind: "project", repositoryPath: checkout },
+      })
+    ).json()) as { reviewId: string };
+
+    for (const pins of [
+      { head: 7 },
+      { base: "b".repeat(40) },
+      { head: "", extra: 1 },
+    ]) {
+      const response = await post({
+        type: "edit",
+        reviewId,
+        edit: {
+          type: "insert",
+          content: { type: "code_peek", source: rangeAnchor(source), pins },
+        },
+      });
+
+      const { error } = (await response.json()) as { error: string };
+
+      expect(response.status).toBe(400);
+      expect(error).toMatch(/pins\.(head|base|extra)/);
+      expect(error).not.toMatch(/repositoryId/);
+    }
+  });
+
+  it("pins every edit to the board's own repository, whichever one it names", async () => {
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+    const api = createReviewApi(store, new LocalReviewData(store));
+
+    const post = <Operation>(operation: Operation) =>
+      api.request("/commands", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ operation }),
+      });
+
+    const created = await post({
+      type: "create",
+      title: "Schema",
+      target: { kind: "project", repositoryPath: checkout },
+    });
+
+    const { reviewId } = (await created.json()) as { reviewId: string };
+
+    // A lens of this very schema keys its fields repositoryId and pins.
+    const field = (label: string) => ({ label, dataType: "text" });
+
+    const inserted = await post({
+      type: "edit",
+      reviewId,
+      edit: {
+        type: "insert",
+        content: {
+          type: "database_lens",
+          title: "Boards",
+          actors: { app: "App" },
+          pins: { head: "h".repeat(40) },
+          stores: {
+            db: {
+              label: "Database",
+              storage: "relational",
+              collections: {
+                boards: {
+                  label: "boards",
+                  fields: {
+                    repositoryId: field("repositoryId"),
+                    pins: field("pins"),
+                  },
+                },
+              },
+            },
+          },
+          useCases: [
+            {
+              label: "Save",
+              operations: [
+                {
+                  kind: "write",
+                  store: "db",
+                  collection: "boards",
+                  field: "pins",
+                  actor: "app",
+                  label: "Write pins",
+                  source: rangeAnchor(source),
+                },
+              ],
+            },
+          ],
+        },
+      },
+    });
+
+    expect(inserted.status).toBe(200);
+    expect(store.read(reviewId).document[0]).toMatchObject({
+      pins: { repositoryId: store.read(reviewId).target!.repositoryId },
+      stores: {
+        db: { collections: { boards: { fields: { pins: field("pins") } } } },
+      },
+    });
+
+    const elsewhere = await post({
+      type: "edit",
+      reviewId,
+      edit: {
+        type: "insert",
+        content: {
+          type: "code_peek",
+          source: rangeAnchor(source),
+          pins: { repositoryId: "an-id", head: "h".repeat(40) },
+        },
+      },
+    });
+
+    expect(elsewhere.status).toBe(200);
+    expect(store.read(reviewId).document.at(-1)).toMatchObject({
+      pins: {
+        repositoryId: store.read(reviewId).target!.repositoryId,
+        head: "h".repeat(40),
+      },
+    });
+  });
+
+  it("respells a whole board's retired links on any save, not only the edit's", async () => {
+    const { reviewId } = await create();
+    await store.close();
+
+    const db = new DatabaseSync(database);
+    db.prepare(
+      "UPDATE versions SET snapshot=json_set(snapshot,'$.document',json(?)) WHERE review_id=?",
+    ).run(
+      JSON.stringify([
+        {
+          type: "markdown",
+          id: "markdown-1",
+          markdown: "[old](review-source:head/src/store.ts#L1)",
+        },
+      ]),
+      reviewId,
+    );
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    await edit(reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "New." },
+    });
+
+    // Stored as saved: the new version respelled, history as it was written.
+    const stored = (version: number) =>
+      new DatabaseSync(database, { readOnly: true })
+        .prepare(
+          "SELECT json_extract(snapshot,'$.document[0].markdown') AS markdown FROM versions WHERE review_id=? AND version=?",
+        )
+        .get(reviewId, version)!.markdown;
+
+    expect(stored(1)).toBe("[old](whiteboard:source/head/src/store.ts#L1)");
+    expect(stored(0)).toBe("[old](review-source:head/src/store.ts#L1)");
+  });
+
+  it("reads a board's retired links in their current spelling", async () => {
+    const { reviewId } = await create();
+    await store.close();
+
+    const db = new DatabaseSync(database);
+    db.prepare(
+      "UPDATE versions SET snapshot=json_set(snapshot,'$.document',json(?)) WHERE review_id=?",
+    ).run(
+      JSON.stringify([
+        {
+          type: "markdown",
+          id: "markdown-1",
+          markdown: "[old](review-source:head/src/store.ts#L1)",
+        },
+      ]),
+      reviewId,
+    );
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    // So the editor, which saves what it read, never saves a respelling
+    // the person didn't make.
+    expect(store.read(reviewId).document[0]).toMatchObject({
+      markdown: "[old](whiteboard:source/head/src/store.ts#L1)",
+    });
+  });
+
+  it("sends a board again when a board it links to is deleted", async () => {
+    const plan = await create();
+    const pr = await create();
+
+    await edit(pr.reviewId, {
       type: "insert",
       content: {
         type: "markdown",
-        markdown: "[store](review-source:head/src/store.ts#L1)",
-        pins: own,
+        markdown: `See [the plan](whiteboard:board/${plan.reviewId}).`,
       },
     });
 
-    const refused = [
-      { type: "lifecycle", state: "trash", reviewId: SCRATCHPAD_ID },
-      { type: "attention", reviewId: SCRATCHPAD_ID, action: "view" },
-      { type: "rename", reviewId: SCRATCHPAD_ID, title: "Notes" },
-      {
-        type: "set_target",
-        reviewId: SCRATCHPAD_ID,
-        target: { kind: "commits", ...pins },
-      },
-      {
-        type: "set_target",
-        reviewId: SCRATCHPAD_ID,
-        target: { kind: "commits", repositoryId: "repo", head: "h" },
-      },
-    ];
-
-    for (const operation of refused)
-      await expect(store.execute(request(operation))).rejects.toMatchObject({
-        status: 409,
-      });
-    expect(store.read(SCRATCHPAD_ID).version).toBe(2);
-    await store.execute(
-      request({ type: "restore", reviewId: SCRATCHPAD_ID, version: 1 }),
+    const watch = await createReviewApi(store).request(
+      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId: pr.reviewId, mode: "textual" }]))}`,
     );
-    expect(store.read(SCRATCHPAD_ID).document).toHaveLength(1);
+
+    const reader = watch.body!.pipeThrough(new TextDecoderStream()).getReader();
+
+    let buffered = "";
+
+    const next = async () => {
+      while (!buffered.includes("\n")) buffered += (await reader.read()).value;
+      const line = buffered.slice(0, buffered.indexOf("\n"));
+      buffered = buffered.slice(line.length + 1);
+
+      // A review's line; the list's lines are not asked for here.
+      return JSON.parse(line).value;
+    };
+
+    try {
+      expect(await next()).toMatchObject({ linksRevision: 0 });
+      await store.execute(
+        request({ type: "lifecycle", state: "trash", reviewId: plan.reviewId }),
+      );
+      await store.execute(request({ type: "delete", reviewId: plan.reviewId }));
+      expect(await next()).toMatchObject({
+        reviewId: pr.reviewId,
+        linksRevision: 1,
+      });
+    } finally {
+      await reader.cancel();
+    }
   });
 
-  it("logs the scratchpad newest first while a review keeps appending", async () => {
-    await store.ensureScratchpad();
-    const note = (markdown: string) => ({ type: "markdown", markdown });
+  it("redraws a link's icon when the board it links to is retargeted", async () => {
+    const plan = await create();
+    const pr = await create();
 
-    const order = (reviewId: string) =>
-      store
-        .read(reviewId)
-        .document.map((block) => "markdown" in block && block.markdown);
-
-    const first = await edit(SCRATCHPAD_ID, {
+    await edit(pr.reviewId, {
       type: "insert",
-      content: note("first"),
+      content: {
+        type: "markdown",
+        markdown: `See [the plan](whiteboard:board/${plan.reviewId}).`,
+      },
     });
 
-    await edit(SCRATCHPAD_ID, { type: "insert", content: note("second") });
-    expect(order(SCRATCHPAD_ID)).toEqual(["second", "first"]);
+    const api = createReviewApi(store);
 
-    // An explicit anchor still wins: the block lands after it, not on top.
-    await edit(SCRATCHPAD_ID, {
+    const icon = async () =>
+      (
+        (await (await api.request(`/${pr.reviewId}/links`)).json()) as {
+          outgoing: { icon?: string }[];
+        }
+      ).outgoing[0]!.icon;
+
+    expect(await icon()).toBe("code");
+
+    const checkout = path.join(directory, "checkout");
+    mkdirSync(checkout);
+    const { id: repositoryId } = store.registerRepository(checkout);
+
+    const watch = await api.request(
+      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId: pr.reviewId, mode: "textual" }]))}`,
+    );
+
+    const reader = watch.body!.pipeThrough(new TextDecoderStream()).getReader();
+
+    try {
+      await reader.read();
+      await store.execute(
+        request({
+          type: "set_target",
+          reviewId: plan.reviewId,
+          target: { kind: "project", repositoryId },
+        }),
+      );
+      // The linking board is sent again, so it reads its links again.
+      expect((await reader.read()).value).toContain('"linksRevision":1');
+      expect(await icon()).toBe("board");
+    } finally {
+      await reader.cancel();
+    }
+  });
+
+  it("sends a board again for a PR state its links show, and not for any other", async () => {
+    const pr = (number: number) =>
+      `https://github.com/acme/widget/pull/${number}`;
+
+    const prBoard = async (number: number) => {
+      const { reviewId } = await create();
+
+      await store.execute(
+        request({
+          type: "set_target",
+          reviewId,
+          target: { kind: "commits", ...pins },
+          pullRequestUrl: pr(number),
+        }),
+      );
+
+      return reviewId;
+    };
+
+    const linked = await prBoard(7);
+    // A PR board nothing here links to.
+    await prBoard(8);
+    const { reviewId } = await create();
+
+    await edit(reviewId, {
       type: "insert",
-      content: note("after first"),
-      afterId: first.targetId,
+      content: {
+        type: "markdown",
+        markdown: `See [the PR](whiteboard:board/${linked}).`,
+      },
     });
-    expect(order(SCRATCHPAD_ID)).toEqual(["second", "first", "after first"]);
+
+    const data = new LocalReviewData(store, {
+      manageWorkspaces: false,
+      pullRequestStates: true,
+      pullRequests: {
+        run: async (_file, args) => {
+          const number = Number(
+            JSON.stringify(args).match(/"value":"(\d+)"/)![1],
+          );
+
+          return JSON.stringify({
+            number,
+            title: "Widgets",
+            baseRefName: "main",
+            headRefName: "widgets",
+            isCrossRepository: false,
+            state: "MERGED",
+          });
+        },
+        fetch: async () => new Response("{}", { status: 500 }),
+      },
+    });
+
+    const watch = await createReviewApi(store, data).request(
+      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId, mode: "textual" }]))}`,
+    );
+
+    const reader = watch.body!.pipeThrough(new TextDecoderStream()).getReader();
+
+    let buffered = "";
+
+    const next = async () => {
+      while (!buffered.includes("\n")) buffered += (await reader.read()).value;
+      const line = buffered.slice(0, buffered.indexOf("\n"));
+      buffered = buffered.slice(line.length + 1);
+
+      return JSON.parse(line).value;
+    };
+
+    try {
+      expect(await next()).toMatchObject({ linksRevision: 0 });
+
+      // GitHub answers for a PR none of its links show, then for the one it
+      // links to; only the second sends the board again.
+      for (const number of [8, 7]) {
+        data.pullRequestState(pr(number));
+        await vi.waitFor(() =>
+          expect(data.pullRequestState(pr(number))).toBe("merged"),
+        );
+      }
+
+      const { version } = await edit(reviewId, {
+        type: "insert",
+        content: { type: "markdown", markdown: "Done." },
+      });
+
+      const sent: number[] = [];
+
+      for (let line = await next(); ; line = await next()) {
+        sent.push(line.linksRevision);
+
+        if (line.version === version) break;
+      }
+
+      expect(sent).toEqual([1, 1]);
+    } finally {
+      await reader.cancel();
+      await data.close();
+    }
+  });
+  it("sends a PR board's header again when its PR's state is read", async () => {
+    const url = "https://github.com/acme/widget/pull/7";
+    const { reviewId } = await create();
+
+    await store.execute(
+      request({
+        type: "set_target",
+        reviewId,
+        target: { kind: "commits", ...pins },
+        pullRequestUrl: url,
+      }),
+    );
+
+    const data = new LocalReviewData(store, {
+      manageWorkspaces: false,
+      pullRequestStates: true,
+      pullRequests: {
+        run: async () =>
+          JSON.stringify({
+            number: 7,
+            title: "Widgets",
+            baseRefName: "main",
+            headRefName: "widgets",
+            isCrossRepository: false,
+            state: "MERGED",
+          }),
+        fetch: async () => new Response("{}", { status: 500 }),
+      },
+    });
+
+    const watch = await createReviewApi(store, data).request(
+      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId, mode: "textual" }]))}`,
+    );
+
+    const reader = watch.body!.pipeThrough(new TextDecoderStream()).getReader();
+
+    let buffered = "";
+
+    const next = async () => {
+      while (!buffered.includes("\n")) buffered += (await reader.read()).value;
+      const line = buffered.slice(0, buffered.indexOf("\n"));
+      buffered = buffered.slice(line.length + 1);
+
+      // A review's line; the list's lines are not asked for here.
+      return JSON.parse(line).value;
+    };
+
+    try {
+      const { placeRevision } = await next();
+
+      // The first line asked GitHub; its answer moves the header.
+      expect((await next()).placeRevision).not.toBe(placeRevision);
+    } finally {
+      await reader.cancel();
+      await data.close();
+    }
+  });
+
+  it("sends a link's hover card only when it is asked for, and only for a link the board has", async () => {
+    const target = await create();
+
+    await edit(target.reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "Opening words." },
+    });
 
     const { reviewId } = await create();
-    await edit(reviewId, { type: "insert", content: note("first") });
-    await edit(reviewId, { type: "insert", content: note("second") });
-    expect(order(reviewId)).toEqual(["first", "second"]);
+
+    await edit(reviewId, {
+      type: "insert",
+      content: {
+        type: "markdown",
+        markdown: `See [the plan](whiteboard:board/${target.reviewId}).`,
+      },
+    });
+
+    const api = createReviewApi(store);
+    const links = await (await api.request(`/${reviewId}/links`)).json();
+
+    expect(links.outgoing).toEqual([
+      expect.not.objectContaining({ preview: expect.anything() }),
+    ]);
+
+    const peek = (board: string) =>
+      api.request(`/${reviewId}/links/peek?board=${board}`);
+
+    expect(await (await peek(target.reviewId)).json()).toEqual({
+      prose: ["Opening words."],
+    });
+    expect((await peek(reviewId)).status).toBe(404);
+  });
+
+  it("links boards to existing boards and blocks, and indexes the links both ways", async () => {
+    const plan = await create();
+
+    const { targetId: section } = await edit(plan.reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "## API" },
+    });
+
+    const pr = await create();
+
+    const link = (markdown: string) =>
+      edit(pr.reviewId, {
+        type: "insert",
+        content: { type: "markdown", markdown },
+      });
+
+    await expect(
+      link("[gone](whiteboard:board/11111111-1111-4111-8111-111111111111)"),
+    ).rejects.toBeInstanceOf(ReviewInputError);
+    await expect(
+      link(`[gone](whiteboard:board/${plan.reviewId}#block-99)`),
+    ).rejects.toBeInstanceOf(ReviewInputError);
+
+    const { targetId: from } = await link(
+      `See [the plan](whiteboard:board/${plan.reviewId}) and [its API](whiteboard:board/${plan.reviewId}#${section}).`,
+    );
+
+    const linkFrom = { board: pr.reviewId, block: from! };
+
+    expect(store.links(plan.reviewId).backlinks).toMatchObject([
+      { from: linkFrom, to: { board: plan.reviewId } },
+      { from: linkFrom, to: { board: plan.reviewId, block: section } },
+    ]);
+
+    await store.execute(
+      request({ type: "lifecycle", state: "trash", reviewId: plan.reviewId }),
+    );
+    await store.execute(request({ type: "delete", reviewId: plan.reviewId }));
+
+    // Deleting the target keeps the link and marks it missing.
+    expect(store.links(pr.reviewId).outgoing).toMatchObject([
+      {
+        from: linkFrom,
+        to: { board: plan.reviewId },
+        missing: true,
+        title: "Example",
+        deletedAt: expect.any(String),
+      },
+      {
+        from: linkFrom,
+        to: { board: plan.reviewId, block: section },
+        missing: true,
+      },
+    ]);
+    await edit(pr.reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "Still saves." },
+    });
+  });
+
+  it("names the Ask thread that asked for an edit on its version", async () => {
+    const api = createReviewApi(store);
+    const { reviewId } = await create();
+
+    const write = (headers: Record<string, string>) =>
+      api.request("/commands", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify({
+          operation: {
+            type: "edit",
+            reviewId,
+            edit: {
+              type: "insert",
+              content: { type: "markdown", markdown: "Noted." },
+            },
+          },
+        }),
+      });
+
+    // A thread this host knows.
+    store.askHistory.save({
+      id: "thread-1",
+      anchor: { board: reviewId },
+      projectId: store.projectOf(reviewId),
+      agent: "claude",
+      sessionId: "session-1",
+      version: 0,
+      head: "7fd03b8e2",
+      cwd: "/checkout",
+      title: "Question",
+      selection: { title: "Paragraph", target: { kind: "text", quote: "Q." } },
+      createdAt: "2026-09-01T10:00:00.000Z",
+      updatedAt: "2026-09-01T10:00:00.000Z",
+      permissions: "read-only",
+    });
+
+    expect((await write({ "x-review-thread": "thread-1" })).status).toBe(200);
+    expect(store.read(reviewId).lastEdit?.threadId).toBe("thread-1");
+
+    await write({});
+    expect(store.read(reviewId).lastEdit?.threadId).toBeUndefined();
+
+    // A remote caller cannot speak for a thread.
+    await write({ "x-review-thread": "thread-2", "x-review-client": "remote" });
+    expect(store.read(reviewId).lastEdit?.threadId).toBeUndefined();
+  });
+
+  it("says a board changed until it is viewed again, whoever changed it", async () => {
+    const { reviewId } = await create();
+    const changed = () => store.summary(reviewId)?.changed;
+
+    const view = () =>
+      store.execute(request({ type: "attention", reviewId, action: "view" }));
+
+    // Never viewed.
+    expect(changed()).toBe(true);
+    await view();
+    expect(changed()).toBe(false);
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await edit(reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "More." },
+    });
+    expect(changed()).toBe(true);
+    await view();
+    expect(changed()).toBe(false);
+  });
+
+  it("lists the open board's project and its whiteboards for its sidebar", async () => {
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+    const other = path.join(directory, "other");
+    execFileSync("git", ["init", "-q", other]);
+
+    const board = async (title: string, at: string) =>
+      (
+        await store.execute(
+          request({
+            type: "create",
+            title,
+            target: {
+              kind: "project",
+              repositoryId: store.registerRepository(at).id,
+            },
+          }),
+        )
+      ).reviewId;
+
+    const plan = await board("Plan", checkout);
+    const notes = await board("Notes", checkout);
+    const old = await board("Old", checkout);
+    await board("Elsewhere", other);
+    await store.execute(
+      request({ type: "set_parent", reviewId: notes, parentId: plan }),
+    );
+    await store.execute(
+      request({ type: "lifecycle", state: "trash", reviewId: old }),
+    );
+
+    const api = createReviewApi(store);
+    const listed = await (await api.request(`/${plan}/project`)).json();
+
+    expect(listed.project).toMatchObject({ name: "checkout" });
+    expect(
+      listed.boards
+        .map((entry: { title: string; children?: string[] }) => [
+          entry.title,
+          entry.children ?? [],
+        ])
+        .sort(),
+    ).toEqual([
+      ["Notes", []],
+      ["Plan", [notes]],
+    ]);
+  });
+
+  it("counts every board as viewed on upgrade, so only later changes badge it", async () => {
+    const { reviewId } = await create();
+    await store.close();
+
+    const db = new DatabaseSync(database);
+    db.exec(
+      `DELETE FROM review_attention; PRAGMA user_version=${upgradeVersion("viewed-on-upgrade") - 1}`,
+    );
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    expect(store.summary(reviewId)?.changed).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await edit(reviewId, {
+      type: "insert",
+      content: { type: "markdown", markdown: "Later." },
+    });
+    expect(store.summary(reviewId)?.changed).toBe(true);
+
+    // A board made after the upgrade badges until it is opened.
+    const { reviewId: fresh } = await create();
+    expect(store.summary(fresh)?.changed).toBe(true);
+  });
+
+  it("keeps when a board was viewed if its latest version can't say when it was saved", async () => {
+    const { reviewId } = await create();
+    await store.close();
+
+    const db = new DatabaseSync(database);
+    db.prepare(
+      "INSERT OR REPLACE INTO review_attention(review_id,viewed_at) VALUES(?,'2026-09-01T00:00:00.000Z')",
+    ).run(reviewId);
+    db.exec(`UPDATE versions SET snapshot=json_remove(snapshot,'$.createdAt');
+      PRAGMA user_version=${upgradeVersion("viewed-on-upgrade") - 1};`);
+    db.close();
+    store = new ReviewStore(database, providers);
+
+    const read = new DatabaseSync(database);
+
+    expect(
+      read
+        .prepare("SELECT viewed_at FROM review_attention WHERE review_id=?")
+        .get(reviewId),
+    ).toEqual({ viewed_at: "2026-09-01T00:00:00.000Z" });
+    read.close();
   });
 
   it("serializes edits through async validation and preserves different-field patches", async () => {
@@ -1739,7 +2897,7 @@ describe("create for a pull request", () => {
     expect(found.note).toContain("Writing the summary");
   });
 
-  it("leaves creates without a PR, other PRs and the scratchpad alone", async () => {
+  it("leaves creates without a PR and other PRs alone", async () => {
     const first = await createFor(undefined);
     const second = await createFor(undefined);
     const otherPr = await createFor(url);
@@ -1747,9 +2905,7 @@ describe("create for a pull request", () => {
 
     for (const result of [first, second, otherPr, samePrElsewhere])
       expect(result).toMatchObject({ created: true });
-    await store.ensureScratchpad();
-    expect(store.read(SCRATCHPAD_ID).kind).toBe("scratchpad");
-    expect(store.list()).toHaveLength(5);
+    expect(store.list()).toHaveLength(4);
   });
 
   it("takes the source and title from the PR when only its URL is given", async () => {
@@ -1759,12 +2915,13 @@ describe("create for a pull request", () => {
       target: { kind: "commits", ...pins },
       pins,
       title: "From GitHub",
+      baseBranch: "main",
     }));
 
     providers.resolvePullRequest = resolvePullRequest;
 
     const untitled = await store.execute(
-      request({ type: "create", pullRequestUrl: url }),
+      request({ type: "create", pullRequestUrl: url, repositoryId: "repo" }),
     );
 
     const titled = await store.execute(
@@ -1783,17 +2940,11 @@ describe("create for a pull request", () => {
       origin: { pullRequestUrl: url, pullRequestTitle: "From GitHub" },
     });
     expect(store.read(titled.reviewId).title).toBe("Mine");
-    expect(resolvePullRequest.mock.calls).toEqual([
-      [url, { id: undefined, preferred: undefined }],
-      [url, { id: "repo", preferred: undefined }],
-    ]);
 
-    // A repeat prefers the checkout of the review it will find.
-    await store.execute(request({ type: "create", pullRequestUrl: url }));
-    expect(resolvePullRequest).toHaveBeenLastCalledWith(url, {
-      id: undefined,
-      preferred: "repo",
-    });
+    // The checkout to fetch into is never guessed.
+    await expect(
+      store.execute(request({ type: "create", pullRequestUrl: url })),
+    ).rejects.toBeInstanceOf(ReviewInputError);
   });
 
   it("needs a source, and a title unless a PR supplies it", async () => {
@@ -1828,12 +2979,6 @@ it("serves the experiment through the real desktop HTTP server and existing auth
 
   const relay = new GlobalReviewDesktopVerbRelay();
 
-  // The scratchpad preference is off by default; this host has it on.
-  writeFileSync(
-    path.join(directory, "preferences.json"),
-    JSON.stringify({ scratchpadEnabled: true }),
-  );
-
   const server = createGlobalReviewServer({
     appPid: process.pid,
     packageRoot,
@@ -1863,10 +3008,19 @@ it("serves the experiment through the real desktop HTTP server and existing auth
         body: JSON.stringify(request(operation)),
       });
 
+    // HTTP callers name the checkout by its path.
+    const checkout = path.join(directory, "checkout");
+    execFileSync("git", ["init", "-q", checkout]);
+
     const response = await post({
       type: "create",
       title: "HTTP review",
-      target: { kind: "commits", ...pins },
+      target: {
+        kind: "commits",
+        repositoryPath: checkout,
+        base: pins.base,
+        head: pins.head,
+      },
     });
 
     expect(response.status).toBe(200);
@@ -1940,29 +3094,21 @@ it("serves the experiment through the real desktop HTTP server and existing auth
       ),
     ).toEqual({
       issues: [
-        { side: "head" as const, message: "Repository is not registered." },
-        { side: "base", message: "Repository is not registered." },
+        { side: "head" as const, message: expect.any(String) },
+        { side: "base", message: expect.any(String) },
       ],
     });
 
     relay.close();
 
-    // Listing through the interactive host, with the preference on, also
-    // makes the one scratchpad.
     // SAFETY: review_list returns the catalog summaries the store lists.
     const listed = (await callAuthoringTool(
       client,
       tools.find((t) => t.name === "review_list")!,
       {},
-    )) as { reviewId: string; kind?: string }[];
+    )) as { reviewId: string }[];
 
-    const reviewsOnly = (entries: { kind?: string }[]) =>
-      entries.filter((entry) => entry.kind !== "scratchpad");
-
-    expect(reviewsOnly(listed)).toMatchObject([{ reviewId }]);
-    expect(listed).toContainEqual(
-      expect.objectContaining({ reviewId: SCRATCHPAD_ID, kind: "scratchpad" }),
-    );
+    expect(listed).toMatchObject([{ reviewId }]);
     await expect(
       callAuthoringTool(client, tools.find((t) => t.name === "review_edit")!, {
         reviewId,
@@ -1986,7 +3132,7 @@ it("serves the experiment through the real desktop HTTP server and existing auth
     const nextList = async () => {
       const line = (await catalog.next()).value;
 
-      return reviewsOnly(line?.kind === "list" ? line.reviews : []);
+      return line?.kind === "list" ? line.reviews : [];
     };
 
     expect(await nextList()).toMatchObject([{ reviewId, trashedAt: null }]);
@@ -2375,14 +3521,13 @@ it("preserves unchanged partial file coverage across pins and rejects stale writ
   const api = createReviewApi(store, data);
   const initial = await reviewProgress(store, data, store.read(reviewId));
 
-  await data.coverage(reviewId, pins, "structural");
+  await data.coverage(reviewId, pins);
   expect(store.list()[0].diffStats).toEqual({
     fileCount: 1,
     additions: 1,
     deletions: 1,
   });
   expect(data.structuralChanges).toHaveBeenCalledTimes(1);
-  expect(store.list("textual")[0].diffStats).toBeNull();
 
   const mark = (fingerprint: string, version: number) =>
     api.request(`/${reviewId}/progress`, {
@@ -2549,7 +3694,7 @@ it("still reports structural read failures", async () => {
   ).rejects.toThrow("Cannot count a.ts: unreadable");
 });
 
-it("textual coverage uses Git ranges without launching diffr", async () => {
+it("counts structural coverage without waiting for summary events", async () => {
   const { createReviewApi } = await import("./http.js");
   const { coverageProgress } = await import("@review/viewed-coverage.js");
   const { reviewId } = await create();
@@ -2574,26 +3719,7 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
     text: side === "head" ? "const x = 1;" : "const x=1;",
   }));
   const structural = vi.spyOn(data, "structuralChanges");
-
-  const response = await createReviewApi(store, data).request(
-    `/${reviewId}/progress?mode=textual`,
-  );
-
-  expect(response.status).toBe(200);
-  const progress = await response.json();
-  expect(coverageProgress(progress.files).total).toEqual({
-    additions: 1,
-    deletions: 1,
-  });
-  await data.coverage(reviewId, pins, "textual");
   const api = createReviewApi(store, data);
-  const textualCatalog = await (await api.request("/?mode=textual")).json();
-  expect(textualCatalog[0].diffStats).toEqual({
-    fileCount: 1,
-    additions: 1,
-    deletions: 1,
-  });
-  expect(structural).not.toHaveBeenCalled();
   structural.mockImplementation(async function* () {
     const file = {
       lhs: { path: "a.ts", oid: "base", mode: "100644" },
@@ -2623,11 +3749,9 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
     };
     throw new Error("Counts must not wait for summary events");
   });
-  await data.coverage(reviewId, pins, "structural");
+  await data.coverage(reviewId, pins);
 
-  const structuralCatalog = await (
-    await api.request("/?mode=structural")
-  ).json();
+  const structuralCatalog = await (await api.request("/")).json();
 
   expect(structuralCatalog[0].diffStats).toEqual({
     fileCount: 1,
@@ -2636,7 +3760,7 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
   });
 
   const structuralProgress = await (
-    await api.request(`/${reviewId}/progress?mode=structural`)
+    await api.request(`/${reviewId}/progress`)
   ).json();
 
   expect(coverageProgress(structuralProgress.files).total).toEqual({
@@ -2648,9 +3772,6 @@ it("textual coverage uses Git ranges without launching diffr", async () => {
     deletions: 0,
   });
   expect(structural).toHaveBeenCalledTimes(1);
-  expect(store.list("textual")[0].diffStats).toEqual(
-    textualCatalog[0].diffStats,
-  );
 });
 
 it("resolves file lenses to whole changed files, preserves empty groups, and shares viewed coverage", async () => {
@@ -3012,8 +4133,17 @@ it("returns pending progress without waiting for coverage and signals completion
 
     return file ? "" : [];
   }) as typeof data.changes);
+  vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
+    yield {
+      type: "start",
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
+      lhs: { type: "revision", rev: "base" },
+      rhs: { type: "revision", rev: "head" },
+      files: [],
+    };
+  });
   const api = createReviewApi(store, data);
-  const route = `/${reviewId}/progress?version=0&mode=textual&wait=false`;
+  const route = `/${reviewId}/progress?version=0&wait=false`;
 
   try {
     const pending = await api.request(route);
@@ -3021,11 +4151,11 @@ it("returns pending progress without waiting for coverage and signals completion
     expect(await pending.json()).toMatchObject({ complete: false, files: [] });
     expect(data.coverageRevision).toBe(0);
     release();
-    await data.coverage(reviewId, pins, "textual");
+    await data.coverage(reviewId, pins);
     await vi.waitFor(() => expect(data.coverageRevision).toBeGreaterThan(0));
 
     const watch = await api.request(
-      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId, mode: "textual" }]))}`,
+      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId }]))}`,
     );
 
     const reader = watch.body!.getReader();
@@ -3063,7 +4193,7 @@ it("logs a provider failure and names its kind without returning its local detai
   vi.spyOn(data, "changes").mockRejectedValue(failure);
   const logged = vi.spyOn(console, "error").mockImplementation(() => {});
   const api = createReviewApi(store, data);
-  const route = `/${reviewId}/progress?version=0&mode=textual&wait=false`;
+  const route = `/${reviewId}/progress?version=0&wait=false`;
 
   try {
     await api.request(route);
@@ -3084,131 +4214,6 @@ it("logs a provider failure and names its kind without returning its local detai
   }
 });
 
-it("makes a streamed file selectable and markable before an unrelated file finishes counting", async () => {
-  const { createReviewApi } = await import("./http.js");
-  const { selectionKey } = await import("@review/lens-selection.js");
-  const { reviewId } = await create();
-
-  const refs = ["a.ts", "b.ts"].map((file) =>
-    rangeAnchor({ side: "head", file, fromLine: 1, toLine: 1 }),
-  );
-
-  await edit(reviewId, {
-    type: "insert",
-    content: {
-      ...diagram,
-      steps: refs.map((source, i) => ({
-        from: "app",
-        to: "db",
-        label: `step ${i}`,
-        source,
-      })),
-    },
-  });
-  const data = new LocalReviewData(store);
-  let release!: () => void;
-
-  const gate = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-
-  vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
-    snapshot,
-    pins: snapshot.pins!,
-  }));
-  vi.spyOn(data, "changes").mockImplementation((async (
-    _pins: typeof pins,
-    file?: string,
-  ) => {
-    if (!file)
-      return ["a.ts", "b.ts"].map((path) => ({
-        path,
-        status: "modified",
-        additions: 1,
-        deletions: 1,
-      }));
-
-    if (file === "b.ts") await gate;
-
-    return "@@ -1 +1 @@\n-old\n+new\n";
-  }) as typeof data.changes);
-  vi.spyOn(data, "file").mockImplementation(async (_pins, side, file) => ({
-    file,
-    side,
-    commit: _pins[side],
-    text: side === "head" ? "new" : "old",
-  }));
-  const api = createReviewApi(store, data);
-  const route = `/${reviewId}/progress?version=${store.read(reviewId).version}&mode=textual&wait=false`;
-
-  try {
-    await api.request(route);
-    await vi.waitFor(() =>
-      expect(
-        data.coverageSnapshot(reviewId, pins, "textual").comparison.files,
-      ).toHaveLength(1),
-    );
-    const partial = await (await api.request(route)).json();
-    expect(partial.complete).toBe(false);
-    // A diagram is not a Diff-view lens: only the automatic lens is listed.
-    expect(partial.lenses).toHaveLength(1);
-    expect(
-      partial.resolvedSelections[selectionKey(anchorSelection(refs[0]!))],
-    ).toBeDefined();
-    expect(
-      partial.resolvedSelections[selectionKey(anchorSelection(refs[1]!))],
-    ).toBeUndefined();
-    expect(partial.unavailableSelections).toEqual({});
-    expect(partial.lenses.at(-1)).toMatchObject({
-      id: "automatic-uncategorized",
-      pending: true,
-      sources: [],
-    });
-    let marked: Response | undefined;
-
-    const marking = Promise.resolve(
-      api.request(`/${reviewId}/progress`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          version: store.read(reviewId).version,
-          mode: "textual",
-          files: [
-            {
-              path: "a.ts",
-              fingerprint: partial.files[0].fingerprint,
-              sources: [{ side: "head", file: "a.ts", fromLine: 1, toLine: 1 }],
-            },
-          ],
-          viewed: true,
-        }),
-      }),
-    ).then((response) => {
-      marked = response;
-
-      return response;
-    });
-
-    await vi.waitFor(() => expect(marked).toBeDefined());
-    expect(marked!.status).toBe(200);
-    const markedProgress = await (await marking).json();
-    expect(markedProgress.complete).toBe(false);
-    expect(markedProgress.files[0].viewed.head).toEqual([[0, 1]]);
-    release();
-    await data.coverage(reviewId, pins, "textual");
-    const complete = await (await api.request(route)).json();
-    expect(complete.complete).toBe(true);
-    expect(complete.files[0].viewed.head).toEqual([[0, 1]]);
-    expect(complete.lenses[0].pending).toBe(false);
-    expect(
-      complete.resolvedSelections[selectionKey(anchorSelection(refs[1]!))],
-    ).toBeDefined();
-  } finally {
-    release();
-    await data.close();
-  }
-});
-
 it("Home reads persisted counts without scheduling comparisons, and changed pins start unknown", async () => {
   const { createReviewApi } = await import("./http.js");
   const { reviewId } = await create();
@@ -3218,11 +4223,10 @@ it("Home reads persisted counts without scheduling comparisons, and changed pins
   expect((await (await api.request("/")).json())[0].diffStats).toBeNull();
   expect(comparison).not.toHaveBeenCalled();
   const counts = { fileCount: 2, additions: 9, deletions: 3 };
-  store.setDiffStats(pins, counts, "structural");
+  store.setDiffStats(pins, counts);
   await store.close();
   store = new ReviewStore(database, providers);
   expect(store.list()[0].diffStats).toEqual(counts);
-  expect(store.list("textual")[0].diffStats).toBeNull();
   await store.execute(
     request({
       type: "set_target",
@@ -3262,13 +4266,13 @@ it("shares pending comparison work even when more than 32 reviews are opened", a
     };
     yield { type: "complete", succeeded: 0, failed: 0 };
   });
-  const first = data.coverage(reviewId, pins, "structural");
+  const first = data.coverage(reviewId, pins);
 
   const others = Array.from({ length: 33 }, (_, i) =>
-    data.coverage(reviewId, { ...pins, head: `head-${i}` }, "structural"),
+    data.coverage(reviewId, { ...pins, head: `head-${i}` }),
   );
 
-  expect(data.coverage(reviewId, pins, "structural")).toBe(first);
+  expect(data.coverage(reviewId, pins)).toBe(first);
   release();
   await Promise.all([first, ...others]);
 });
@@ -3277,10 +4281,12 @@ it("reports a created review with the origin its headers claim", async () => {
   const { createReviewApi } = await import("./http.js");
   const created: unknown[] = [];
 
+  const checkout = path.join(directory, "checkout");
+  execFileSync("git", ["init", "-q", checkout]);
+
   const api = createReviewApi(
     store,
-    undefined,
-    undefined,
+    new LocalReviewData(store),
     undefined,
     undefined,
     undefined,
@@ -3297,7 +4303,7 @@ it("reports a created review with the origin its headers claim", async () => {
         request({
           type: "create",
           title,
-          target: { kind: "commits", ...pins },
+          target: { kind: "project", repositoryPath: checkout },
         }),
       ),
     });
@@ -3321,12 +4327,11 @@ it("reports a created review with the origin its headers claim", async () => {
   expect(created).toEqual([
     {
       reviewId: expect.any(String),
-      kind: "review",
       blocks: 0,
       via: "mcp",
       agentKind: "codex",
     },
-    { reviewId: expect.any(String), kind: "review", blocks: 0, via: "other" },
+    { reviewId: expect.any(String), blocks: 0, via: "other" },
   ]);
 });
 

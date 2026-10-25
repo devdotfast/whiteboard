@@ -72,6 +72,9 @@ node "$APP_DIR/scripts/curated-extensions.mjs" \
   --target="$DARWIN_TARGET" \
   --source-root "$CURATED_EXTENSIONS_SOURCE" \
   --copy-to "$PACKAGED_APP/Contents/Resources/app/extensions"
+node "$APP_DIR/scripts/typescript-native.mjs" \
+  --target="$DARWIN_TARGET" \
+  --extension-dir "$PACKAGED_APP/Contents/Resources/app/extensions/typescript-native"
 
 # The installed app embeds its own Review server runtime so it never reaches
 # back into this checkout. Stage it before signing so it is covered by the

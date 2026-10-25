@@ -20,6 +20,8 @@ function fakeWindow() {
 		win: {
 			show: () => calls.push("show"),
 			showInactive: () => calls.push("showInactive"),
+			setOpacity: (opacity: number) => calls.push(`opacity ${opacity}`),
+			setIgnoreMouseEvents: (ignore: boolean) => calls.push(`ignoreMouse ${ignore}`),
 			once: (_event: "focus", listener: () => void) => { onFocus = listener; },
 		},
 	};
@@ -69,6 +71,30 @@ test("a forced focus releases the gate", () => {
 	const launch = new ReviewBackgroundLaunch(background);
 	assert.equal(launch.allowsFocus(FocusMode.Force), true);
 	assert.equal(launch.suppressesFocus, false);
+});
+
+test("an always launch keeps every window in the background", () => {
+	const launch = new ReviewBackgroundLaunch({ DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "always" });
+	const { win, calls, focusFromUser } = fakeWindow();
+	launch.attach(win);
+	focusFromUser();
+	assert.equal(launch.allowsFocus(FocusMode.Force), false);
+	assert.equal(launch.allowsFocus(FocusMode.Notify), false);
+	const later = { show: true };
+	launch.prepare(later);
+	assert.equal(later.show, false);
+	launch.show(win);
+	assert.deepEqual(calls, ["showInactive"]);
+});
+
+test("a hidden launch never takes focus and shows every window invisible and click-through", () => {
+	const launch = new ReviewBackgroundLaunch({ DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "hidden" });
+	for (const { win, calls } of [fakeWindow(), fakeWindow()]) {
+		launch.prepare({ show: true });
+		launch.attach(win);
+		assert.ok(calls.includes("opacity 0") && calls.includes("ignoreMouse true"));
+	}
+	assert.equal(launch.allowsFocus(FocusMode.Force), false);
 });
 
 test("only the value 1 marks a background launch", () => {

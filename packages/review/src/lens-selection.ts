@@ -24,8 +24,23 @@ const sameSideAnchor = /^(head|base)\/(.+)#L(\d+)(?:-L(\d+))?$/;
 
 const crossSideAnchor = /^diff\/(.+)#([LR])(\d+)-([LR])(\d+)$/;
 
+const commitLinkAnchor = /^([0-9a-f]{7,40})\/(.+#L\d+(?:-L\d+)?)$/i;
+
+/** A source link's commit form, "<sha>/path#L10-L24" (without its
+ * `whiteboard:source/` prefix): lines of that commit of the board's own
+ * repository, read as their head side. Undefined for any other form. */
+export function commitLinkTarget(
+  target: string,
+): { commit: string; anchor: Anchor } | undefined {
+  const match = commitLinkAnchor.exec(target);
+
+  return match
+    ? { commit: match[1]!.toLowerCase(), anchor: `head/${match[2]!}` }
+    : undefined;
+}
+
 /** An anchor's selection, as markdown source links write it too (without
- * their `review-source:` scheme). Undefined when it isn't one. */
+ * their `whiteboard:source/` prefix). Undefined when it isn't one. */
 export function parseAnchor(text: string): DiffSelection | undefined {
   const same = sameSideAnchor.exec(text);
 
@@ -195,6 +210,26 @@ export function sourceAnchor(source: LensSource): FileLineRange {
   return sourceAnchors(source)[0]!;
 }
 
+/** Why a selection cannot be resolved at its pins, as telemetry reports it. */
+export const SELECTION_UNAVAILABLE_REASONS = [
+  "missing_file",
+  "no_alignment",
+  "outside_lines",
+  "other",
+] as const;
+
+export type SelectionUnavailableReason =
+  (typeof SELECTION_UNAVAILABLE_REASONS)[number];
+
+export class SelectionUnavailableError extends Error {
+  constructor(
+    readonly reason: SelectionUnavailableReason,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
 /** Resolve once against the renderer's rows. No matching or context expansion. */
 export function resolveDiffSelection(
   source: LensSource,
@@ -210,7 +245,8 @@ export function resolveDiffSelection(
   const end = locate(source.end);
 
   if (start < 0 || end < start)
-    throw new Error(
+    throw new SelectionUnavailableError(
+      "outside_lines",
       "Lens endpoints do not identify an ordered interval in this diff.",
     );
   const selected = rows.slice(start, end + 1);

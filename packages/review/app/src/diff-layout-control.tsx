@@ -1,12 +1,17 @@
-import { layer } from "@canvas/scale.stylex";
+import { fontSize, layer, space } from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { SlidersIcon } from "@canvas/ui/icons";
+import { menuStyles } from "@canvas/ui/menu";
+import { Popover } from "@canvas/ui/popover";
 import { SegmentedControl, labeledOptions } from "@canvas/ui/segmented";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewDiffLayout,
   ReviewDiffLayoutScope,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
+import { useMutation } from "@tanstack/react-query";
 import {
   type ReactElement,
   useCallback,
@@ -16,15 +21,10 @@ import {
   useSyncExternalStore,
 } from "react";
 
-import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
-import { SlidersIcon } from "./icons";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureClientError, captureUiEvent } from "./ui-telemetry";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
-import { useTooltip } from "./use-tooltip";
 
 const LAYOUT_OPTIONS = labeledOptions<ReviewDiffLayout>({
   unified: "Unified",
@@ -36,11 +36,9 @@ export function DiffLayoutControl(): ReactElement {
 
   const control = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
-  const popoverRef = useAnchoredPopover(open, control);
   const diff = useDiffLayout("diff");
   const peek = useDiffLayout("peek");
-
-  useDismissOnOutside(control, open, setOpen, true, true);
+  const lineNumbers = useInlineLineNumbers();
 
   return (
     <div
@@ -54,19 +52,15 @@ export function DiffLayoutControl(): ReactElement {
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        <SlidersIcon xstyle={controlStyles.chromeIcon} />
+        <SlidersIcon xstyle={iconStyles.chrome} />
       </IconButton>
       {open && (
-        <div
-          ref={popoverRef}
-          popover="manual"
+        <Popover
+          anchor={control}
+          onDismiss={() => setOpen(false)}
           role="dialog"
           aria-label="Diff settings"
-          {...stylex.props(
-            shellStyles.topbarPopover,
-            surfaceStyles.popover,
-            styles.popover,
-          )}
+          xstyle={[shellStyles.topbarPopover, styles.popover]}
         >
           {(
             [
@@ -84,7 +78,20 @@ export function DiffLayoutControl(): ReactElement {
               />
             </div>
           ))}
-        </div>
+          <div {...stylex.props(menuStyles.separator)} />
+          <div {...stylex.props(styles.row)}>
+            <span>Line numbers</span>
+            <SegmentedControl
+              label="Whiteboard line numbers"
+              value={lineNumbers.show ? "show" : "hide"}
+              options={labeledOptions({ hide: "Hide", show: "Show" })}
+              onChange={(value) => lineNumbers.choose(value === "show")}
+            />
+          </div>
+          <span {...stylex.props(styles.scope)}>
+            Whiteboard document and peeks
+          </span>
+        </Popover>
       )}
     </div>
   );
@@ -98,17 +105,18 @@ const styles = stylex.create({
     zIndex: layer.popover,
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
-    padding: "10px 12px",
+    gap: space.s8,
+    padding: `${space.s10} ${space.s12}`,
     color: tokens.chromeFg,
     fontFamily: tokens.chromeFont,
     fontSize: tokens.chromeFontSize,
   },
+  scope: { color: tokens.inkMuted, fontSize: fontSize.small },
   row: {
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: "16px",
+    gap: space.s16,
   },
 });
 
@@ -151,4 +159,46 @@ function useDiffLayout(scope: ReviewDiffLayoutScope) {
   };
 
   return { layout: shownLayout, choose };
+}
+
+function useInlineLineNumbers() {
+  const session = useReviewSession();
+  const bridge = session.bridge;
+
+  const show = useSyncExternalStore(
+    useCallback(
+      (changed: () => void) => {
+        const subscription = bridge.onDidChangeInlineLineNumbers(changed);
+
+        return () => subscription.dispose();
+      },
+      [bridge],
+    ),
+    () => bridge.currentInlineLineNumbers(),
+  );
+
+  const [pending, setPending] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (pending === show) setPending(null);
+  }, [pending, show]);
+  const shown = pending ?? show;
+
+  const { mutate } = useMutation({
+    mutationFn: (next: boolean) => bridge.setInlineLineNumbers(next),
+    onError: (error) => {
+      setPending(null);
+      captureClientError(session, "settings", error, {
+        component: "inline_line_numbers",
+      });
+    },
+  });
+
+  return {
+    show: shown,
+    choose: (next: boolean) => {
+      if (next === shown) return;
+      setPending(next);
+      mutate(next);
+    },
+  };
 }

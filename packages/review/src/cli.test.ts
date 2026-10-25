@@ -1,4 +1,5 @@
 import {
+  chmod,
   mkdir,
   mkdtemp,
   readFile,
@@ -136,12 +137,14 @@ describe("Whiteboard CLI", () => {
     expect(prompt).not.toContain("install the whiteboard command");
   });
 
-  it("lists the agents whose configuration exists, as one JSON line", async () => {
+  it("lists the agents found here, as one JSON line", async () => {
     const { code, stdout } = await runConnect(
       ["connect", "--detect", "--json"],
       async (home) => {
-        await mkdir(path.join(home, ".codex"));
+        await fakeAgentCli(home, "codex");
+        await mkdir(path.join(home, ".omp"));
       },
+      { env: agentPath },
     );
 
     expect(code).toBe(0);
@@ -149,12 +152,8 @@ describe("Whiteboard CLI", () => {
     expect(JSON.parse(stdout)).toEqual({
       event: "connect.detect",
       agents: [
-        {
-          id: "codex",
-          name: "Codex",
-          connected: false,
-          manual: true,
-        },
+        { id: "codex", name: "Codex", connected: false },
+        { id: "omp", name: "oh-my-pi", connected: false },
       ],
     });
   });
@@ -172,10 +171,14 @@ describe("Whiteboard CLI", () => {
           path.join(home, ".claude", "plugins", "installed_plugins.json"),
           "{}",
         );
-        await mkdir(path.join(home, ".pi"));
+        await fakeAgentCli(home, "claude");
+        await fakeAgentCli(home, "pi");
         before = await fileTree(home);
       },
-      { after: async (home) => void (after = await fileTree(home)) },
+      {
+        env: agentPath,
+        after: async (home) => void (after = await fileTree(home)),
+      },
     );
 
     expect(code).toBe(0);
@@ -195,7 +198,7 @@ describe("Whiteboard CLI", () => {
 
     expect(code).toBe(1);
     expect(JSON.parse(stdout).error.message).toContain(
-      "claude, codex, opencode or pi",
+      "claude, codex, opencode, pi, omp, copilot",
     );
   });
 
@@ -898,6 +901,16 @@ async function installTestShim(home: string): Promise<void> {
   const bin = path.join(home, ".local", "bin");
   await mkdir(bin, { recursive: true });
   await writeFile(path.join(bin, "whiteboard"), "# Managed by Whiteboard\n");
+}
+
+const agentPath = (home: string) => ({ PATH: path.join(home, "agent-bin") });
+
+async function fakeAgentCli(home: string, name: string) {
+  const file = path.join(home, "agent-bin", name);
+
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, "#!/bin/sh\n");
+  await chmod(file, 0o755);
 }
 
 async function runConnect(

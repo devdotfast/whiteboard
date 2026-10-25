@@ -31,8 +31,10 @@ export function reviewServerDiscoveryPath(stateDir: string) {
   return path.join(stateDir, "review-server", "server.json");
 }
 
-/** Sent by a Desktop taking over the server's state directory. */
-export const DESKTOP_TAKEOVER_SIGNAL = "SIGUSR2";
+/** Sent by a Desktop taking over the server's state directory. Windows has no
+ * SIGUSR2. */
+export const DESKTOP_TAKEOVER_SIGNAL: NodeJS.Signals =
+  process.platform === "win32" ? "SIGTERM" : "SIGUSR2";
 
 export function headlessServerLockPath(stateDir: string) {
   return path.join(stateDir, "headless-server.lock");

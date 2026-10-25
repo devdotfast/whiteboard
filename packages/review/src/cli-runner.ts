@@ -5,10 +5,13 @@ import { createInterface } from "node:readline/promises";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
+import { boardTitle } from "@dev.fast/review-protocol";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
+  REVIEW_REMOTE_AGENT_IDS,
   REVIEW_REMOTE_ATTACH_BEGIN,
   REVIEW_REMOTE_ATTACH_END,
+  type ReviewRemoteAgentId,
 } from "@dev.fast/review-protocol";
 import {
   StoreApiError,
@@ -39,18 +42,13 @@ import {
 } from "@dev.fast/trace-core";
 import { Argument, Command, CommanderError, Option } from "commander";
 
+import { connectAgent, detectConnectAgents } from "./agent-connect";
 import {
   isOwnedShim,
   pathShimPath,
   windowsInstallerCommand,
 } from "./cli-install";
 import { cliRuntimeInfo, describeCliRuntime } from "./cli-runtime-info";
-import {
-  AGENT_CONNECT_TARGETS,
-  type AgentConnectTarget,
-  connectAgents,
-  detectAgents,
-} from "./connect-agents";
 import { connectPrompts } from "./connect-prompts";
 import {
   ReviewInstanceUnavailableError,
@@ -623,17 +621,17 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     input.stdout.write(
       options.json
         ? `${REVIEW_REMOTE_ATTACH_BEGIN}\n${JSON.stringify(attach)}\n${REVIEW_REMOTE_ATTACH_END}\n`
-        : `Whiteboard server ${attach.startedServer ? "started" : "already running"} at ${attach.url}\nLanguage features: ${attach.languageServer ? `VS Code server on port ${attach.languageServer.port}` : `unavailable (${attach.languageServerDetail})`}\n`,
+        : `Whiteboard server ${attach.startedServer ? "started" : "already running"} at ${attach.url}\nLanguage features: ${attach.languageServer ? `language server on port ${attach.languageServer.port}` : `unavailable (${attach.languageServerDetail})`}\n`,
     );
   });
 
   configureJsonOutput(
     remote
       .command("extensions")
-      .description("Language extensions for the VS Code server on a remote")
+      .description("Language extensions for the language server on a remote")
       .command("ensure")
       .description(
-        "Download the curated extensions for this machine and list them for the VS Code server",
+        "Download the curated extensions for this machine and list them for the language server",
       )
       .option(
         "--groups <groups>",
@@ -839,7 +837,9 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
             : "Whiteboard Desktop is ready in the background. Pass --focus to bring it forward.\n",
       );
     } else {
-      input.stdout.write(`Whiteboard Desktop is showing "${event.title}".\n`);
+      input.stdout.write(
+        `Whiteboard Desktop is showing "${boardTitle(event.title)}".\n`,
+      );
     }
   };
 
@@ -995,12 +995,12 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       .addOption(
         new Option(
           "--detect",
-          "list the agents on this machine and whether each is connected; changes nothing",
+          "list the agents here that --yes can connect, and whether each is; changes nothing",
         ).conflicts("yes"),
       )
       .option(
         "--yes",
-        "run the commands the prompt gives, without an agent: claude, codex, opencode or pi",
+        "connect the named agents here, as Desktop does, without an agent",
       ),
     "plain",
   );
@@ -1017,7 +1017,13 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
       };
 
       if (options.detect) {
-        const agents = await detectAgents({ homeDir: scope.homeDir, env });
+        const agents = (
+          await detectConnectAgents({ homeDir: scope.homeDir, env })
+        ).flatMap(({ target, name, found, connected }) =>
+          found && REVIEW_REMOTE_AGENT_IDS.some((id) => id === target)
+            ? [{ id: target, name, connected }]
+            : [],
+        );
 
         if (options.json) {
           emitJsonEvent(output, { event: "connect.detect", agents });
@@ -1027,7 +1033,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
 
         humanStream(output).write(
           agents.length
-            ? `${agents.map((agent) => `${agent.name}: ${agent.connected ? "connected" : "not connected"}${agent.manual ? " (its command is not on PATH)" : ""}`).join("\n")}\n`
+            ? `${agents.map((agent) => `${agent.name}: ${agent.connected ? "connected" : "not connected"}`).join("\n")}\n`
             : "No agents found.\n",
         );
 
@@ -1039,19 +1045,33 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
 
         if (
           targets.length === 0 ||
-          !agents.every((target): target is AgentConnectTarget =>
-            AGENT_CONNECT_TARGETS.some((known) => known === target),
+          !agents.every((target): target is ReviewRemoteAgentId =>
+            REVIEW_REMOTE_AGENT_IDS.some((known) => known === target),
           )
         )
           throw new Error(
-            "connect --yes takes one or more of claude, codex, opencode or pi.",
+            `connect --yes takes one or more of ${REVIEW_REMOTE_AGENT_IDS.join(", ")}.`,
           );
 
-        const results = await connectAgents({
-          agents,
-          homeDir: scope.homeDir,
-          env,
-        });
+        const hasShim = await shimLaunchable(scope.homeDir, env);
+        const results = [];
+
+        for (const target of agents) {
+          const result = await connectAgent(target, {
+            homeDir: scope.homeDir,
+            env,
+            hasShim,
+          });
+
+          results.push({
+            id: target,
+            name: REVIEW_CLI_INSTALL_TARGET_LABELS[target],
+            connected: result.state === "connected",
+            output: result.output
+              ? `${result.output.slice(-CONNECT_OUTPUT_LIMIT)}\n`
+              : "",
+          });
+        }
 
         state.exitCode = results.every((result) => result.connected) ? 0 : 1;
 
@@ -1079,12 +1099,7 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
 
       const prompts = connectPrompts({
         legacyPaths: await scanLegacySkills(homeDir),
-        hasShim:
-          (await isOwnedShim(pathShimPath(homeDir))) ||
-          (await windowsInstallerCommand(
-            findReviewPackageRoot(import.meta.url),
-            env,
-          )) !== undefined,
+        hasShim: await shimLaunchable(homeDir, env),
         traceEnabled: await traceMachineEnabled({ homeDir, env }),
         fffBinaryPath: path.join(homeDir, ".local", "bin", "fff-mcp"),
         fffCorpusRoot: path.join(devHome, "trace-search"),
@@ -1536,6 +1551,21 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
   } finally {
     await attemptTelemetry(() => telemetry.shutdown(1_000));
   }
+}
+
+const CONNECT_OUTPUT_LIMIT = 4000;
+
+async function shimLaunchable(
+  homeDir: string,
+  env: NodeJS.ProcessEnv,
+): Promise<boolean> {
+  return (
+    (await isOwnedShim(pathShimPath(homeDir))) ||
+    (await windowsInstallerCommand(
+      findReviewPackageRoot(import.meta.url),
+      env,
+    )) !== undefined
+  );
 }
 
 function parseTargets(targets: readonly string[]): InstallTarget[] {

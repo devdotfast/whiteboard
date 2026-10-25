@@ -1,11 +1,11 @@
-import type { ReviewApiSummary } from "../../common/reviewProtocol.js";
+import { boardTitle, type ReviewApiSummary } from "../../common/reviewProtocol.js";
 
 export class ReviewCompletionTracker {
 	private working = new Set<string>();
 
 	update(reviews: readonly ReviewApiSummary[]): ReviewApiSummary[] {
 		const finished = reviews.filter(review =>
-			this.working.has(review.reviewId) && review.working === false && !review.trashedAt && review.kind !== "scratchpad",
+			this.working.has(review.reviewId) && review.working === false && !review.trashedAt,
 		);
 		this.working = new Set(reviews.filter(review => review.working).map(review => review.reviewId));
 		return finished;
@@ -48,7 +48,7 @@ export async function notifyReviewDone(review: FinishedReview, effects: {
 }): Promise<void> {
 	if (effects.isViewing()) return;
 	await effects.requestAttention();
-	const result = await effects.showToast({ title: `Whiteboard ready: ${review.title}`, body: completionBody(review.document) });
+	const result = await effects.showToast({ title: `Whiteboard ready: ${boardTitle(review.title)}`, body: completionBody(review.document) });
 	if (!result.clicked) return;
 	await effects.openReview();
 	await effects.focus();

@@ -4,7 +4,7 @@ import path from "node:path";
 
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { askAgentTakesMcp } from "./agents.js";
+import { askAgentTakesMcp, findExecutable } from "./agents.js";
 
 let root: string;
 
@@ -41,3 +41,14 @@ it.skipIf(process.platform === "win32")(
     expect(await askAgentTakesMcp("pi")).toBe(false);
   },
 );
+
+it("finds a Windows npm shim by its .cmd, not the sh script beside it", async () => {
+  const bin = path.join(root, "bin");
+  await mkdir(bin);
+  await writeFile(path.join(bin, "opencode"), "", { mode: 0o755 });
+  await writeFile(path.join(bin, "opencode.cmd"), "", { mode: 0o755 });
+
+  expect(await findExecutable("opencode", { PATH: bin }, "win32")).toBe(
+    path.join(bin, "opencode.cmd"),
+  );
+});

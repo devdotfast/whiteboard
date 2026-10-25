@@ -1,5 +1,4 @@
 import { orderReviewDiffFiles } from "../common/reviewChangedFilesModel.js";
-import { lensFiles } from "../common/reviewLensFiles.js";
 import { StructuralDiffClient } from "./reviewStructuralDiffClient.js";
 /*---------------------------------------------------------------------------------------------
  *  Copyright (c) dev.fast. All rights reserved.
@@ -25,7 +24,7 @@ import type {
 	ReviewSourceEntry,
 	ReviewApiSourceLocation,
 } from "../common/reviewProtocol.js";
-import { resolveReviewSourceView, reviewSourceAnchor, reviewSourceComparison, reviewSourceQuery, type ReviewSourceView } from "../common/reviewProtocol.js";
+import { lensDiffFiles, resolveReviewSourceView, reviewSourceAnchor, reviewSourceComparison, reviewSourceQuery, type ReviewSourceView } from "../common/reviewProtocol.js";
 import { REVIEW_LANGUAGE_SOURCE_SCHEME } from "../common/reviewReadonlySource.js";
 import { apiSourceUri, sourceLocation, sourceTreeUri, sourceTreeSelection, REVIEW_API_TREE_SCHEME, REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
 import { IReviewCanvasEditorTabsService } from "./reviewCanvasEditorTabsService.js";
@@ -265,11 +264,12 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 				// Capture the comparison once; live checkout bytes may change during the load.
 				const current = reviewSourceComparison(getView(), scope?.commit);
 				const comparisonFiles = await files(current);
-				const entries = lens ? lensFiles(comparisonFiles, lens).filter(file => lens.ranges.some(range =>
-					range.file === (range.side === "base" ? file.previousPath ?? file.path : file.path))) : orderReviewDiffFiles(comparisonFiles);
+				const entries = lens ? lensDiffFiles(comparisonFiles, lens) : orderReviewDiffFiles(comparisonFiles);
+				const session = openComparison(current);
+				if (!session) throw new Error("This comparison was closed.");
 
 				return {
-					session: openComparison(current),
+					session,
 					stateKey: JSON.stringify([current.reviewId, reviewSourceQuery(current)]),
 					sourceUri: URI.from({ scheme: "review-api-diff", authority: current.reviewId, path: `/${current.version}/${current.generation ?? ""}`, query: comparisonQuery(current) }),
 					entries: await Promise.all(entries.map(async file => {
@@ -293,7 +293,7 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 			return { lens, source: makeSource(() => current) };
 		};
 		return {
-			openStructuralComparison: () => diff.structuralRenderingEnabled ? openComparison(reviewSourceComparison(view())) : undefined,
+			openStructuralComparison: () => openComparison(reviewSourceComparison(view())),
 			inlineEditors: {
 				create: (spec) => { const { lens, source } = documentScope(spec); return diff.createDocument(spec, lens, source); },
 				find: async (spec, query) => { const { lens, source } = documentScope(spec); return { matchCount: (await diff.findDocument(lens, source, query)).length }; },

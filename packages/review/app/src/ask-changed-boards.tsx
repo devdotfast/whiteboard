@@ -1,0 +1,98 @@
+import { BoardIcon } from "@canvas/ui/board-icons";
+import { Button } from "@canvas/ui/button";
+import { boardTitle } from "@dev.fast/review-protocol";
+import * as stylex from "@stylexjs/stylex";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import type { ReactElement } from "react";
+import { z } from "zod";
+
+import { canvasQueryKeys } from "./canvas-query";
+import { countLabel } from "./format";
+import { useReviewSession } from "./host/review-session";
+import { fontSize, leading, space } from "./scale.stylex";
+import { tokens } from "./tokens.stylex";
+
+const boardsSchema = z.object({
+  boards: z.array(
+    z.object({
+      reviewId: z.string(),
+      title: z.string(),
+      icon: z.enum(["board", "code"]).optional().catch(undefined),
+      blockId: z.string().optional(),
+    }),
+  ),
+});
+
+/** Boards this thread's agent has edited, newest first. Refetched after each turn. */
+export function AskChangedBoards({
+  threadId,
+  turns,
+}: {
+  threadId: string | null;
+  turns: number;
+}): ReactElement | null {
+  const session = useReviewSession();
+
+  const { data } = useQuery({
+    queryKey: canvasQueryKeys.askBoards(threadId, turns),
+    enabled: threadId !== null,
+    queryFn: async () => {
+      const response = await session.fetch(`/ask/${threadId}/boards`);
+
+      return response.ok
+        ? boardsSchema.parse(await response.json()).boards
+        : [];
+    },
+    placeholderData: keepPreviousData,
+  });
+
+  const boards = (threadId !== null && data) || [];
+
+  if (!boards.length) return null;
+
+  return (
+    <nav
+      aria-label="Boards this conversation changed"
+      {...stylex.props(styles.list)}
+    >
+      <span>Edited {countLabel(boards.length, "board")}</span>
+      {boards.map((board) => (
+        <Button
+          key={board.reviewId}
+          variant="link"
+          tone="accent"
+          xstyle={styles.board}
+          onClick={(event) =>
+            void session.surface.post({
+              name: "openReview",
+              args: {
+                reviewUuid: board.reviewId,
+                active: !(event.metaKey || event.ctrlKey || event.shiftKey),
+                ...(board.blockId && { blockId: board.blockId }),
+              },
+            })
+          }
+        >
+          <BoardIcon icon={board.icon} xstyle={styles.icon} />
+          {boardTitle(board.title)}
+        </Button>
+      ))}
+    </nav>
+  );
+}
+
+const styles = stylex.create({
+  list: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "baseline",
+    gap: `${space.s4} ${space.s8}`,
+    margin: 0,
+    color: tokens.inkMuted,
+    fontFamily: tokens.chromeFont,
+    fontSize: fontSize.small,
+    lineHeight: leading.px16,
+  },
+  board: { gap: space.s4, whiteSpace: "normal" },
+  icon: { width: "12px", height: "12px" },
+});

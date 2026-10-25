@@ -19,6 +19,7 @@ import { IInstantiationService, type ServicesAccessor } from "../../../platform/
 import { ServiceCollection } from "../../../platform/instantiation/common/serviceCollection.js";
 import { ILogService } from "../../../platform/log/common/log.js";
 import { IMarkerService } from "../../../platform/markers/common/markers.js";
+import { IProgressService } from "../../../platform/progress/common/progress.js";
 import { IRemoteAuthorityResolverService, type IRemoteConnectionData, type ResolverResult } from "../../../platform/remote/common/remoteAuthorityResolver.js";
 import {
 	IWorkspaceContextService,
@@ -64,6 +65,13 @@ export function reviewRemoteMarkerService(base: IMarkerService, authority: strin
 			Event.map(base.onMarkerChanged, (resources) => resources.filter(mine)),
 			(resources) => resources.length > 0,
 		),
+	});
+}
+
+/** Work a host's extensions report, such as indexing, keeps the host busy. */
+export function reviewRemoteProgress(base: IProgressService, track: <T>(work: Promise<T>) => Promise<T>): IProgressService {
+	return override(base, {
+		withProgress: (options, task, onDidCancel) => track(base.withProgress(options, task, onDidCancel)),
 	});
 }
 
@@ -201,6 +209,7 @@ export function reviewRemoteScope(input: {
 	languageFeatures: ILanguageFeaturesService;
 	workspace: ReviewRemoteWorkspace;
 	resolver: IRemoteAuthorityResolverService;
+	track<T>(work: Promise<T>): Promise<T>;
 }, window: ServicesAccessor): ServiceCollection {
 	const { authority } = input;
 	return new ServiceCollection(
@@ -216,5 +225,6 @@ export function reviewRemoteScope(input: {
 		[ICommandService, new SyncDescriptor(ReviewRemoteCommandService, [authority])],
 		[IOutlineModelService, new SyncDescriptor(OutlineModelService)],
 		[IFileService, reviewRemoteFileEvents(window.get(IFileService), authority)],
+		[IProgressService, reviewRemoteProgress(window.get(IProgressService), input.track)],
 	);
 }

@@ -12,6 +12,7 @@ import { testCanvasUi } from "./canvas-ui-test-utils";
 import { CanvasUiContext } from "./host/canvas-ui";
 import { createReviewFindHost } from "./review-find";
 import { ReviewHome } from "./review-home-view";
+import { ReviewSidebarSection, WhiteboardsList } from "./sidebar-sections";
 
 const now = Date.parse("2026-10-11T12:00:00Z");
 
@@ -24,9 +25,9 @@ function summary(
     title,
     version: 1,
     repositoryName: "whiteboard",
-    repositoryGroup: {
-      key: extra.repositoryName ?? "whiteboard",
-      label: extra.repositoryName ?? "whiteboard",
+    project: {
+      id: extra.repositoryName ?? "whiteboard",
+      name: extra.repositoryName ?? "whiteboard",
     },
     repositoryPath: "/repo/main",
     createdAt: "2026-10-10T12:00:00Z",
@@ -144,9 +145,206 @@ describe("Home interactions", () => {
       : container;
 
     return [
-      ...parent.querySelectorAll("[data-home-row] button span[title]"),
-    ].map((el) => el.getAttribute("title"));
+      ...parent.querySelectorAll(
+        '[data-home-row] button[aria-label^="Open "], [data-home-row] button[aria-label^="Select "]',
+      ),
+    ].map((el) =>
+      el.getAttribute("aria-label")!.replace(/^(Open|Select) /, ""),
+    );
   }
+
+  it("keeps children in sidebar order under one date group and rolls changed state up only while collapsed", async () => {
+    const reviews = [
+      summary("Plan", {
+        ...read,
+        createdAt: "2026-09-01T00:00:00Z",
+        children: ["First", "Second"],
+      }),
+      summary("Second", { parentId: "Plan", changed: true }),
+      summary("First", { parentId: "Plan", ...read }),
+    ];
+
+    const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
+    await render(reviews, { onOpen });
+    expect(titles("Unread")).toEqual(["Plan"]);
+    expect(
+      container.querySelectorAll(
+        '[aria-label="Changed since you last viewed it"]',
+      ),
+    ).toHaveLength(1);
+    await click("Expand Plan");
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(titles("Unread")).toEqual(["Plan", "First", "Second"]);
+    expect(
+      container.querySelector(
+        '[data-home-row="Plan"] [aria-label="Changed since you last viewed it"]',
+      ),
+    ).toBeNull();
+    await click("Open First");
+    expect(onOpen).toHaveBeenCalledWith(reviews[2]);
+    await click("Collapse Plan");
+    expect(titles()).toEqual(["Plan"]);
+  });
+
+  it("shares expansion live with the sidebar and remembers it after remount", async () => {
+    const reviews = [
+      summary("Plan", { children: ["Child"] }),
+      summary("Child", { parentId: "Plan" }),
+    ];
+
+    await act(async () =>
+      root.render(
+        <CanvasUiContext.Provider value={host.ui}>
+          <ReviewHome reviews={reviews} onOpen={() => {}} />
+          <aside>
+            <WhiteboardsList
+              project={{ project: reviews[0].project!, boards: reviews }}
+              current=""
+              onOpen={() => {}}
+            />
+          </aside>
+        </CanvasUiContext.Provider>,
+      ),
+    );
+    const sidebar = container.querySelector("aside")!;
+    await act(async () =>
+      sidebar
+        .querySelector<HTMLButtonElement>('[aria-label="Expand Plan"]')!
+        .click(),
+    );
+    expect(titles()).toEqual(["Plan", "Child"]);
+    await click("Collapse Plan");
+    expect(sidebar.querySelector('[aria-label="Expand Plan"]')).not.toBeNull();
+    await click("Expand Plan");
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await render(reviews);
+    expect(titles()).toEqual(["Plan", "Child"]);
+  });
+
+  it("shares explicit expansion with both This board and Recent", async () => {
+    const reviews = [
+      summary("Plan", { ...read, children: ["Child"] }),
+      summary("Child", { ...read, parentId: "Plan" }),
+    ];
+
+    const project = { project: reviews[0].project!, boards: reviews };
+    const connection = { serverUrl: "http://review.test", token: "test" };
+    await act(async () =>
+      root.render(
+        <CanvasUiContext.Provider value={host.ui}>
+          <ReviewHome reviews={reviews} onOpen={() => {}} />
+          <aside data-testid="family">
+            <ReviewSidebarSection
+              section="family"
+              connection={connection}
+              project={project}
+              reviewId="Plan"
+              onOpenBoard={() => {}}
+            />
+          </aside>
+          <aside data-testid="recent">
+            <ReviewSidebarSection
+              section="recent"
+              connection={connection}
+              project={project}
+              recent={reviews}
+              reviewId="elsewhere"
+              onOpenBoard={() => {}}
+            />
+          </aside>
+        </CanvasUiContext.Provider>,
+      ),
+    );
+    const family = container.querySelector('[data-testid="family"]')!;
+    const recent = container.querySelector('[data-testid="recent"]')!;
+    await click("Expand Plan");
+    expect(family.querySelector('[aria-label="Collapse Plan"]')).not.toBeNull();
+    expect(recent.querySelector('[aria-label="Collapse Plan"]')).not.toBeNull();
+    await act(async () =>
+      recent
+        .querySelector<HTMLButtonElement>('[aria-label="Collapse Plan"]')!
+        .click(),
+    );
+    expect(titles()).toEqual(["Plan"]);
+    expect(family.querySelector('[aria-label="Expand Plan"]')).not.toBeNull();
+  });
+
+  it("explains empty families and keeps Trash flat", async () => {
+    const onNewChildWhiteboard = vi.fn<(parentId: string) => Promise<void>>();
+    await render([summary("Empty plan")], { onNewChildWhiteboard });
+    await click("Expand Empty plan");
+    expect(container.textContent).toContain("No child whiteboards");
+    await render(
+      [summary("Trashed plan", { trashedAt: "2026-10-10T00:00:00Z" })],
+      { view: "trash", onNewChildWhiteboard },
+    );
+    expect(
+      container.querySelector('[aria-label="Expand Trashed plan"]'),
+    ).toBeNull();
+    expect(
+      container.querySelector(
+        '[aria-label="Add child whiteboard to Trashed plan"]',
+      ),
+    ).toBeNull();
+  });
+
+  it("searches a child with its parent context and does not select hidden siblings", async () => {
+    await render([
+      summary("Plan", { children: ["Needle", "Other"] }),
+      summary("Needle", { parentId: "Plan" }),
+      summary("Other", { parentId: "Plan" }),
+    ]);
+    await search("Needle");
+    expect(titles()).toEqual(["Plan", "Needle"]);
+    await key("Escape", {}, searchField());
+    // Escape discards the draft search; a committed query keeps the result family.
+    await search("Needle");
+    await key("Enter", {}, searchField());
+    await key("a", { metaKey: true });
+    expect(container.textContent).toContain("2 selected");
+    expect(container.textContent).not.toContain("Other");
+  });
+
+  it("keeps child creation focused while pending, prevents duplicates and retries an inline failure", async () => {
+    let fail!: (reason: Error) => void;
+
+    const onCreate = vi
+      .fn<(parentId: string) => Promise<void>>()
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((_, reject) => {
+            fail = reject;
+          }),
+      )
+      .mockResolvedValue(undefined);
+
+    await render([summary("Plan"), summary("Child", { parentId: "Plan" })], {
+      onNewChildWhiteboard: onCreate,
+    });
+    const add = button("Add child whiteboard to Plan");
+    await act(async () => {
+      add.focus();
+      add.click();
+    });
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    await act(async () => add.click());
+    expect(onCreate).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toBe(add);
+    expect(add.disabled).toBe(false);
+    await act(async () => fail(new Error("Could not create this child")));
+    await vi.waitFor(() =>
+      expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+        "Could not create this child",
+      ),
+    );
+    await act(async () => add.click());
+    await vi.waitFor(() => expect(onCreate).toHaveBeenCalledTimes(2));
+    expect(onCreate).toHaveBeenLastCalledWith("Plan");
+    expect(
+      container.querySelector('[aria-label="Add child whiteboard to Child"]'),
+    ).toBeNull();
+  });
 
   it("focuses title search through the native host Find command and releases the controller", async () => {
     const findHost = createReviewFindHost();
@@ -165,13 +363,36 @@ describe("Home interactions", () => {
     expect(findHost.showFind()).toBe(false);
   });
   const read = { viewedAt: "2026-10-11T12:00:00Z" };
+  it("badges a row that changed since it was last viewed", async () => {
+    await render([
+      summary("Changed", { changed: true }),
+      summary("Seen", { changed: false }),
+    ]);
+    expect(
+      container.querySelectorAll(
+        '[aria-label="Changed since you last viewed it"]',
+      ),
+    ).toHaveLength(1);
+  });
+  it("marks a PR's row by its state", async () => {
+    await render([
+      summary("Stack", {
+        origin: { pullRequestNumber: 320 },
+        pullRequestState: "merged",
+      }),
+      summary("Plan"),
+    ]);
+    expect(
+      container.querySelector('[aria-label="PR #320, merged"]'),
+    ).not.toBeNull();
+    expect(container.querySelectorAll('[role="img"]')).toHaveLength(1);
+  });
   it("uses unread precedence, persists collapse, and sorts within fixed groups", async () => {
     const reviews = [
       summary("Zulu"),
       summary("Alpha", { createdAt: "2026-09-01T00:00:00Z" }),
       summary("Read", read),
       summary("Old", { ...read, createdAt: "2026-09-01T00:00:00Z" }),
-      summary("Scratchpad", { kind: "scratchpad" }),
     ];
 
     await render(reviews);
@@ -211,7 +432,7 @@ describe("Home interactions", () => {
     ]);
     expect(titles("Unread")).toEqual(["Board"]);
   });
-  it("adds exact filters from pills without opening the board, and edits the branch facet", async () => {
+  it("adds exact filters from the row menu without opening the board, and edits the branch facet", async () => {
     const onOpen = vi.fn<(review: ReviewApiSummary) => void>();
     await render(
       [
@@ -224,13 +445,8 @@ describe("Home interactions", () => {
       ],
       { onOpen },
     );
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>(
-          '[aria-label="Filter branch: feature/exact"]',
-        )!
-        .click(),
-    );
+    await click("More actions for One");
+    await act(async () => host.select("branches"));
     expect(onOpen).not.toHaveBeenCalled();
     expect(titles()).toEqual(["One", "Three"]);
     expect(
@@ -242,13 +458,8 @@ describe("Home interactions", () => {
     );
     await click("feature/exact");
     expect(titles()).toEqual(["One", "Two", "Three"]);
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>(
-          '[aria-label="Filter worktree: main"]',
-        )!
-        .click(),
-    );
+    await click("More actions for One");
+    await act(async () => host.select("worktrees"));
     expect(titles()).toEqual(["One", "Two"]);
     expect(
       container.querySelector('[aria-label="Filter worktree: main"]'),
@@ -358,7 +569,7 @@ describe("Home interactions", () => {
     await key(" ", {}, button("beta"));
     expect(titles()).toEqual(["Two"]);
     expect(button("beta").getAttribute("aria-checked")).toBe("true");
-    await click("Remove Repo beta");
+    await click("Remove Project beta");
     expect(button("beta").getAttribute("aria-checked")).toBe("false");
     expect(titles()).toHaveLength(2);
     await key("Escape");
@@ -395,7 +606,7 @@ describe("Home interactions", () => {
     expect(titles()).toEqual(["One"]);
     expect(button("alpha").getAttribute("aria-checked")).toBe("mixed");
     await click("feature");
-    expect(button("Repo alpha")).toBeTruthy();
+    expect(button("Project alpha")).toBeTruthy();
     expect(button("alpha").getAttribute("aria-checked")).toBe("true");
     expect(button("main").getAttribute("aria-checked")).toBe("true");
     await render([
@@ -415,7 +626,7 @@ describe("Home interactions", () => {
     await key("Escape");
     await click("Worktree feature +1");
     await key("Escape");
-    await click("Repo beta");
+    await click("Project beta");
     await click("alpha");
     expect(container.querySelector("[data-home-submenu]")).not.toBeNull();
     await key("ArrowLeft", {}, document.activeElement!);
@@ -425,10 +636,12 @@ describe("Home interactions", () => {
         button("alpha").querySelector("[data-picker-check]") as HTMLElement
       ).click(),
     );
-    expect(button("Repo beta +1")).toBeTruthy();
+    expect(button("Project beta +1")).toBeTruthy();
     await key(" ", {}, button("gamma"));
     expect(titles()).toHaveLength(5);
-    expect(container.querySelector('[aria-label^="Remove Repo"]')).toBeNull();
+    expect(
+      container.querySelector('[aria-label^="Remove Project"]'),
+    ).toBeNull();
     expect(container.querySelector("[data-home-picker]")).toBeNull();
     await openFilters();
     expect(button("alpha").getAttribute("aria-checked")).toBe("false");
@@ -441,7 +654,7 @@ describe("Home interactions", () => {
       }),
       summary("Other", { repositoryName: "beta" }),
       summary("Fold local", {
-        repositoryGroup: undefined,
+        project: undefined,
         repositoryPath: "/local/main",
       }),
     ]);
@@ -453,7 +666,7 @@ describe("Home interactions", () => {
     await click("alpha › feature");
     expect(titles()).toEqual(["Fold one"]);
     await key("Escape");
-    await click("Remove Repo alpha");
+    await click("Remove Project alpha");
     expect(titles()).toHaveLength(2);
   });
   it("keeps the caret in the menu under the pointer when hover opens or switches submenus", async () => {
@@ -710,6 +923,39 @@ describe("Home interactions", () => {
       container.querySelector('[aria-label="Selected whiteboards"]'),
     ).toBeNull();
   });
+  it("asks once before moving boards others need to Trash, and keeps them all if refused", async () => {
+    const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      async () => {},
+    );
+
+    vi.mocked(host.ui.confirmDelete!).mockResolvedValue(false);
+    await render([summary("One"), summary("Two")], { onTrash });
+    await key("a", { metaKey: true });
+    await key("Backspace", { metaKey: true });
+    expect(host.ui.confirmDelete).toHaveBeenCalledExactlyOnceWith(
+      ["One", "Two"],
+      { reviewIds: ["One", "Two"], trash: true },
+    );
+    expect(onTrash).not.toHaveBeenCalled();
+    expect(titles()).toEqual(["One", "Two"]);
+  });
+  it("deletes from Trash once the host's dialog, naming the linking boards, says so", async () => {
+    const onDelete = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      async () => {},
+    );
+
+    await render([summary("Gone", { trashedAt: "2026-10-10" })], {
+      onDelete,
+    });
+    await click("1 in Trash ›");
+    await select("Gone");
+    await key("Backspace", { metaKey: true });
+    expect(host.ui.confirmDelete).toHaveBeenCalledExactlyOnceWith(["Gone"], {
+      reviewIds: ["Gone"],
+    });
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(titles()).toEqual([]);
+  });
   it("deletes in a batch with Undo, and restores a deleted selection", async () => {
     const onTrash = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
       async () => {},
@@ -742,6 +988,24 @@ describe("Home interactions", () => {
       view: "active",
     });
     expect(titles()).toEqual(["Old"]);
+  });
+  it("marks unread selections read and keeps failures unread", async () => {
+    const onMarkRead = vi.fn<(review: ReviewApiSummary) => Promise<void>>(
+      async (r: ReviewApiSummary) => {
+        if (r.title === "Two") throw new Error("Offline");
+      },
+    );
+
+    await render([summary("One"), summary("Two"), summary("Seen", read)], {
+      onMarkRead,
+    });
+    await select("Seen");
+    expect(container.textContent).not.toContain("Mark Read");
+    await key("a", { metaKey: true });
+    await click("Mark Read");
+    expect(onMarkRead.mock.calls.map(([r]) => r.title)).toEqual(["One", "Two"]);
+    expect(titles("Unread")).toEqual(["Two"]);
+    expect(container.textContent).toContain("1 selected");
   });
   it("removes the whole selected batch while requests are pending", async () => {
     const pending: Array<() => void> = [];
@@ -835,7 +1099,9 @@ describe("Home interactions", () => {
     await click("1 in Trash ›");
     await select("Gone");
     await key("Backspace", { metaKey: true });
-    expect(confirmDelete).toHaveBeenLastCalledWith(["Gone"]);
+    expect(confirmDelete).toHaveBeenLastCalledWith(["Gone"], {
+      reviewIds: ["Gone"],
+    });
     expect(onDelete).not.toHaveBeenCalled();
     await key("Backspace", { metaKey: true });
     expect(onDelete).toHaveBeenCalledOnce();
@@ -930,11 +1196,7 @@ describe("Home interactions", () => {
       expect(row.hasAttribute("data-unavailable")).toBe(true);
       expect(row.textContent).toContain(words);
       expect(button("Open Remote").getAttribute("aria-disabled")).toBe("true");
-      expect(
-        button("Open Remote")
-          .querySelector("span[title]")!
-          .getAttribute("title"),
-      ).toBe(label);
+      expect(button("Open Remote").getAttribute("title")).toContain(label);
       await click("Open Remote");
       expect(onOpen).not.toHaveBeenCalled();
       await vi.waitFor(() =>

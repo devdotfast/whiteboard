@@ -38,10 +38,10 @@ import {
   ReviewFileContentRequestSchema,
   type ReviewFileContentResponse,
   ReviewFileContentResponseSchema,
+  type ReviewBoardPlace,
+  ReviewBoardPlaceSchema,
   type ReviewStackResponse,
   ReviewStackResponseSchema,
-  type ReviewTutorialOpenResponse,
-  ReviewTutorialOpenResponseSchema,
   type ReviewVerbRequest,
   ReviewVerbRequestSchema,
   type ReviewVerbResponse,
@@ -57,6 +57,8 @@ export * from "./contracts.js";
 export * from "./review-api-client.js";
 
 export * from "./review-host-status.js";
+
+export * from "./board-icons.js";
 
 export {
   type ByCommitEntry,
@@ -75,6 +77,10 @@ export function parseReviewDesktopDiscovery(
   value: JsonValue,
 ): ReviewDesktopDiscovery {
   return parseZod(ReviewDesktopDiscoverySchema, value);
+}
+
+export function parseReviewBoardPlace(value: JsonValue): ReviewBoardPlace {
+  return parseZod(ReviewBoardPlaceSchema, value);
 }
 
 export function parseReviewStackResponse(
@@ -99,12 +105,6 @@ export function parseReviewCliInstallApplyResponse(
   value: JsonValue,
 ): ReviewCliInstallApplyResponse {
   return parseZod(ReviewCliInstallApplyResponseSchema, value);
-}
-
-export function parseReviewTutorialOpenResponse(
-  value: JsonValue,
-): ReviewTutorialOpenResponse {
-  return parseZod(ReviewTutorialOpenResponseSchema, value);
 }
 
 export function parseReviewDesktopVerbFrame(

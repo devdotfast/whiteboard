@@ -1,6 +1,16 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
-import { Button } from "@canvas/ui/button";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
+import { Button, buttonStyles } from "@canvas/ui/button";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
 import { EmptyState } from "@canvas/ui/empty-state";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CheckIcon, DrawnCheckIcon } from "@canvas/ui/icons";
 import { textStyles } from "@canvas/ui/text";
 import { welcomeType } from "@canvas/welcome-page.stylex";
 import {
@@ -16,7 +26,6 @@ import { type ReactNode, useEffect, useState } from "react";
 import { cliInstallReady } from "./cli-install-status";
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { homeStyles } from "./home-styles";
-import { DisclosureChevron, DrawnCheckIcon } from "./icons";
 import { newTabLinkProps } from "./link-props";
 import { chevronMarker } from "./markers.stylex";
 import { PromptCard } from "./prompt-card";
@@ -37,14 +46,12 @@ export function WelcomePage({
   onClose,
   onDismissUpdate,
   onboarding,
-  onOpenTutorial,
 }: {
   install?: ReviewCanvasInstallContent;
   setupActions?: ReviewCanvasSetupActions;
   onClose?: () => void;
   onDismissUpdate?: () => void;
   onboarding?: ReviewCanvasOnboarding;
-  onOpenTutorial?: () => void;
 }) {
   const [loadedInstall, setLoadedInstall] =
     useState<ReviewCanvasInstallContent>();
@@ -135,7 +142,9 @@ export function WelcomePage({
     setConnectCopied(true);
     setFinishing({
       from: "Connect your agents",
-      to: updating ? "Continue shipping thoughtful code" : "Take the tour",
+      to: updating
+        ? "Continue shipping thoughtful code"
+        : "Create your first session",
     });
 
     try {
@@ -144,9 +153,6 @@ export function WelcomePage({
       // The desktop can disable DOM storage; the in-memory flag still works.
     }
   };
-
-  const tourChecked = onboarding?.tutorialChecked ?? 0;
-  const tourTotal = onboarding?.tutorialTotal ?? 0;
 
   const installDone = finishing?.from === "Install the whiteboard command";
 
@@ -213,7 +219,10 @@ export function WelcomePage({
           ) : null}
         </div>
         {setupError ? (
-          <p role="alert" {...stylex.props(promptStyles.error)}>
+          <p
+            role="alert"
+            {...stylex.props(textStyles.error, promptStyles.error)}
+          >
             {setupError}
           </p>
         ) : null}
@@ -300,39 +309,13 @@ export function WelcomePage({
     });
 
   if (!updating && !showLegacyStep)
-    steps.push(
-      {
-        title: "Take the tour",
-        disabled: !setupReady,
-        done: tourTotal > 0 && tourChecked >= tourTotal,
-        note: onboarding
-          ? `${tourChecked} of ${tourTotal} checks`
-          : "a three-minute sample session",
-        body: (
-          <>
-            <p {...stylex.props(styles.hint)}>
-              Explore a sample session in three minutes.
-            </p>
-            {onOpenTutorial ? (
-              <Button
-                size="large"
-                xstyle={styles.stepButton}
-                onClick={onOpenTutorial}
-              >
-                {tourChecked > 0 ? "Reopen the tutorial" : "Open the tutorial"}
-              </Button>
-            ) : null}
-          </>
-        ),
-      },
-      {
-        title: "Create your first session",
-        disabled: !setupReady,
-        done: onboarding?.published ?? false,
-        note: onboarding?.published ? "published" : "your agent writes it",
-        body: <PromptCard />,
-      },
-    );
+    steps.push({
+      title: "Create your first session",
+      disabled: !setupReady,
+      done: onboarding?.published ?? false,
+      note: onboarding?.published ? "published" : "your agent writes it",
+      body: <PromptCard />,
+    });
 
   // Keep step identity stable as status and completion labels change.
   const [openStep, setOpenStep] = useState(() =>
@@ -420,7 +403,13 @@ export function WelcomePage({
                   >
                     <button
                       type="button"
-                      {...stylex.props(chevronMarker, styles.stepHeader)}
+                      {...stylex.props(
+                        chevronMarker,
+                        focusStyles.ringInset,
+                        buttonStyles.reset,
+                        disclosureStyles.toggle,
+                        styles.stepHeader,
+                      )}
                       disabled={step.disabled}
                       aria-expanded={open}
                       aria-label={`${open ? "Collapse" : "Expand"} ${step.label ?? step.title}`}
@@ -444,10 +433,7 @@ export function WelcomePage({
                           {step.note}
                         </span>
                       ) : null}
-                      <DisclosureChevron
-                        expanded={open}
-                        xstyle={styles.stepChevron}
-                      />
+                      <DisclosureChevron xstyle={styles.stepChevron} />
                     </button>
                     {open ? (
                       <div {...stylex.props(styles.stepBody)}>{step.body}</div>
@@ -544,13 +530,7 @@ function StepBadge({
       data-done={done}
     >
       {done ? (
-        <svg
-          {...stylex.props(styles.badgeCheck)}
-          viewBox="0 0 10 10"
-          aria-hidden="true"
-        >
-          <path d="M1.5 5.5 4 8l4.5-6" fill="none" strokeWidth="1.6" />
-        </svg>
+        <CheckIcon xstyle={[iconStyles.inline, styles.badgeCheck]} />
       ) : (
         label
       )}
@@ -579,41 +559,41 @@ const styles = stylex.create({
   columns: {
     display: "flex",
     flexDirection: { default: null, [stacked]: "column" },
-    gap: { default: "72px", [stacked]: "32px" },
+    gap: { default: space.s72, [stacked]: space.s32 },
     alignItems: "flex-start",
-    paddingTop: "48px",
+    paddingTop: space.s48,
   },
   intro: {
     display: "flex",
     flexDirection: "column",
-    gap: "20px",
+    gap: space.s20,
     width: { default: "380px", [stacked]: "auto" },
     flexShrink: 0,
   },
   kicker: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
   },
   headline: {
     margin: 0,
     color: tokens.ink,
-    font: `${fontWeight.medium} ${welcomeType.headline}/46px ${tokens.fontSerif}`,
+    font: `${fontWeight.medium} ${welcomeType.headline}/${welcomeType.headlineLeading} ${tokens.chromeFont}`,
   },
   sub: {
     margin: 0,
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.ui,
-    lineHeight: "21px",
+    lineHeight: leading.px20,
   },
   dismiss: {
     alignSelf: "flex-start",
-    marginTop: "4px",
+    marginTop: space.s4,
   },
   steps: {
     display: "flex",
     flex: 1,
     flexDirection: "column",
     alignSelf: { default: null, [stacked]: "stretch" },
-    gap: "12px",
+    gap: space.s12,
     minWidth: 0,
     margin: 0,
     padding: 0,
@@ -626,36 +606,28 @@ const styles = stylex.create({
     flexDirection: "column",
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: tokens.reviewHomeRule,
+    borderColor: tokens.rule,
     borderRadius: radius.surface,
   },
   stepOpen: {
-    borderColor: tokens.reviewHomeRuleSoft,
+    borderColor: tokens.ruleSoft,
     backgroundColor: tokens.tray,
   },
   stepHeader: {
     display: "flex",
     alignItems: "center",
-    gap: "12px",
+    gap: space.s12,
     width: "100%",
-    padding: "16px 20px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
+    padding: `${space.s16} ${space.s20}`,
     borderRadius: { default: null, ":focus-visible": radius.surface },
     color: "inherit",
-    backgroundColor: tokens.transparent,
     cursor: { default: "pointer", ":disabled": "not-allowed" },
     opacity: { default: null, ":disabled": 0.5 },
-    textAlign: "left",
     font: "inherit",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-2px" },
   },
   // The chevron closes the row: it sits in the trailing lane, after the note.
   stepChevron: {
-    margin: "2px 2px 2px auto",
-    stroke: tokens.reviewHomeMeta,
+    margin: `${space.s2} ${space.s2} ${space.s2} auto`,
   },
   badge: {
     display: "flex",
@@ -667,8 +639,8 @@ const styles = stylex.create({
     borderRadius: radius.round,
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: tokens.reviewHomeRuleSoft,
-    color: tokens.reviewHomeMeta,
+    borderColor: tokens.ruleSoft,
+    color: tokens.inkMuted,
     fontSize: fontSize.small,
     fontWeight: fontWeight.medium,
   },
@@ -682,30 +654,23 @@ const styles = stylex.create({
     backgroundColor: tokens.accent,
   },
   badgeCheck: {
-    width: "10px",
-    height: "10px",
-    flexShrink: 0,
-    fill: "none",
-    stroke: tokens.changeAdded,
-    strokeWidth: "1.5px",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
+    color: tokens.changeAdded,
   },
   stepTitle: {
     color: tokens.ink,
     fontSize: fontSize.ui,
   },
   stepTitleDone: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
   },
   stepNote: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   stepBody: {
     display: "flex",
     flexDirection: "column",
-    padding: "0 20px 18px",
+    padding: `0 ${space.s20} ${space.s18}`,
   },
   stepButton: {
     alignSelf: "flex-start",
@@ -714,23 +679,23 @@ const styles = stylex.create({
     display: "flex",
     flexWrap: "wrap",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
   },
   // A finished step's button stays at full strength.
   stepDone: {
     opacity: 1,
   },
   hint: {
-    margin: "0 0 14px",
+    margin: `0 0 ${space.s14}`,
     maxWidth: "560px",
     color: tokens.inkMuted,
-    font: `${fontSize.ui}/20px ${tokens.fontMono}`,
+    font: `${fontSize.ui}/${leading.px20} ${tokens.chromeFont}`,
   },
   hintCode: {
-    padding: "1px 5px",
+    padding: `1px ${space.s4}`,
     borderWidth: "1px",
     borderStyle: "solid",
-    borderColor: tokens.reviewHomeRuleSoft,
+    borderColor: tokens.ruleSoft,
     borderRadius: radius.small,
     color: tokens.ink,
     backgroundColor: tokens.controlBg,
@@ -738,10 +703,10 @@ const styles = stylex.create({
   },
   feedback: {
     margin: "auto 0 0",
-    paddingTop: "48px",
-    color: tokens.reviewHomeMeta,
+    paddingTop: space.s48,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
-    lineHeight: "20px",
+    lineHeight: leading.px20,
   },
   feedbackLink: {
     color: tokens.accent,

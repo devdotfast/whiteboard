@@ -2,12 +2,34 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyCorsHeaders,
+  corsPreflightResponse,
   isAuthorizedRequest,
   jsonResponse,
   readBoundedRequestJson,
 } from "./hono-http";
 
 describe("Hono HTTP adapter", () => {
+  it("lets the client reuse a preflight across requests", () => {
+    const response = corsPreflightResponse(
+      new Request("http://localhost/watch", {
+        method: "OPTIONS",
+        headers: {
+          origin: "vscode-file://review",
+          "access-control-request-headers": "x-review-token",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.headers.get("access-control-allow-headers")).toContain(
+      "x-review-token",
+    );
+    // Longer than Chromium's 5 s default.
+    expect(
+      Number(response.headers.get("access-control-max-age")),
+    ).toBeGreaterThanOrEqual(60);
+  });
+
   it("preserves newline JSON, CORS, and timing-safe token inputs", async () => {
     const request = new Request("http://localhost/path?token=query-token", {
       headers: { origin: "vscode-file://review" },

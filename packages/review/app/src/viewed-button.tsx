@@ -1,6 +1,5 @@
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { CoverageProgress } from "@review/viewed-coverage";
-
-import { useTooltip } from "./use-tooltip";
 
 /**
  * The viewed box. Its look lives in the workbench's review.css so the diff
@@ -11,11 +10,14 @@ export function ViewedButton({
   progress,
   onClick,
   disabled,
+  busy,
   label,
 }: {
   progress: CoverageProgress;
   onClick(): void;
   disabled?: boolean;
+  /** Saving; stays enabled. */
+  busy?: boolean;
   /** What the box marks, e.g. the lens title. */
   label: string;
 }) {
@@ -39,6 +41,7 @@ export function ViewedButton({
       role="checkbox"
       aria-checked={progress.state === "partial" ? "mixed" : done}
       aria-label={`${done ? "Mark unviewed" : "Mark viewed"}: ${label}`}
+      aria-busy={busy || undefined}
       disabled={disabled || empty}
       onClick={onClick}
     />

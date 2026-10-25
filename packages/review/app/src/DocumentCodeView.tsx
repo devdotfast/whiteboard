@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import type {
   ReviewDiffProgress,
   ReviewDiffSide,
@@ -12,8 +12,9 @@ import { coverageProgress, coverageSources } from "@review/viewed-coverage";
 import * as stylex from "@stylexjs/stylex";
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
 
+import { AskCodePins } from "./ask-code-pins";
+import { useCodeCommit } from "./code-commit";
 import { useReviewSession } from "./host/review-session";
-import { INLINE_HOVER_EVENT } from "./inline-hover-event";
 import { useReviewFindRegistration } from "./review-find";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
 import { useOptionalReviewPanel } from "./review-panel";
@@ -24,9 +25,6 @@ const LINE_HEIGHT = 20;
 const MAX_VISIBLE_LINES = 18;
 
 const INLINE_HEADER_HEIGHT = 40;
-
-/** Sent up the page from an editor's host once the editor is made in it. */
-export const INLINE_EDITOR_MADE = "review-inline-editor-made";
 
 export function DocumentCodeView({
   path,
@@ -42,6 +40,7 @@ export function DocumentCodeView({
   onOpen,
   collapsed = false,
   lenses: lensesOverride,
+  edgeToEdge = false,
 }: {
   path: string;
   title: string;
@@ -58,6 +57,8 @@ export function DocumentCodeView({
   onOpen?: () => void;
   collapsed?: boolean;
   lenses?: ReviewLensView;
+  /** Run across its column like the Diff panel, not as an inset card. */
+  edgeToEdge?: boolean;
 }) {
   const session = useReviewSession();
 
@@ -92,10 +93,6 @@ export function DocumentCodeView({
   progressRef.current = progress;
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
 
-  const handleHover = useCallback(() => {
-    container?.dispatchEvent(new Event(INLINE_HOVER_EVENT, { bubbles: true }));
-  }, [container]);
-
   const [shouldMount, setShouldMount] = useState(active);
 
   const [height, setHeight] = useState(() =>
@@ -108,9 +105,18 @@ export function DocumentCodeView({
 
   const countRangesKey = JSON.stringify(countRanges);
   const pinsKey = JSON.stringify(pins);
+  const commit = useCodeCommit(pins, side);
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
+  const commitKey = JSON.stringify(commit ?? null);
 
   const [error, setError] = useState<string | null>(null);
   const handleRef = useRef<ReviewInlineEditorHandle | null>(null);
+
+  const [askTarget, setAskTarget] = useState<ReviewInlineEditorHandle | null>(
+    null,
+  );
+
   const creationFailedRef = useRef(false);
   const latestFindQueryRef = useRef<ReviewFindQuery | null>(null);
 
@@ -127,7 +133,7 @@ export function DocumentCodeView({
   const collapsedRef = useRef(collapsed);
   collapsedRef.current = collapsed;
   const inlineEditorFactory = session.bridge.inlineEditors;
-  const inlineEditorSessionId = session.config.reviewId;
+  const inlineEditorSessionId = session.reviewId;
   const reviewFind = useReviewFindRegistration();
 
   const ensureEditor = useCallback(async () => {
@@ -180,7 +186,7 @@ export function DocumentCodeView({
       setFindQuery,
       revealFindMatch,
       clearFind,
-      getHandle: () => handleRef.current,
+      clearActiveFindMatch: () => handleRef.current?.clearActiveFindMatch(),
       expand: () => {
         container
           .closest(".review-section--collapsed")
@@ -236,6 +242,7 @@ export function DocumentCodeView({
         description,
         side,
         pins,
+        commit: commitRef.current,
         ranges,
         heightMode,
         active,
@@ -243,7 +250,6 @@ export function DocumentCodeView({
         countRanges,
         onDidFocus: handleFocus,
         onDidOpen: handleOpen,
-        onDidShowHover: handleHover,
       });
     } catch (caught) {
       creationFailedRef.current = true;
@@ -256,7 +262,7 @@ export function DocumentCodeView({
 
     handle.setCollapsed(collapsedRef.current);
     handleRef.current = handle;
-    container.dispatchEvent(new Event(INLINE_EDITOR_MADE, { bubbles: true }));
+    setAskTarget(handle);
 
     for (const resolve of handleWaitersRef.current.splice(0)) resolve(handle);
     setHeight(handle.height);
@@ -268,6 +274,7 @@ export function DocumentCodeView({
 
     return () => {
       if (handleRef.current === handle) handleRef.current = null;
+      setAskTarget(null);
       handle.clearFind();
       errorSubscription.dispose();
       heightSubscription.dispose();
@@ -278,7 +285,6 @@ export function DocumentCodeView({
     description,
     countRangesKey,
     handleFocus,
-    handleHover,
     handleOpen,
     heightMode,
     inlineEditorFactory,
@@ -294,6 +300,10 @@ export function DocumentCodeView({
   useLayoutEffect(() => {
     handleRef.current?.setActive(active);
   }, [active]);
+
+  useLayoutEffect(() => {
+    handleRef.current?.setCommit?.(commitRef.current);
+  }, [commitKey]);
 
   useLayoutEffect(() => {
     handleRef.current?.setProgress?.(progressRef.current);
@@ -318,12 +328,13 @@ export function DocumentCodeView({
     <>
       <div
         ref={setContainer}
-        {...stylex.props(styles.editor)}
+        {...stylex.props(styles.editor, edgeToEdge && styles.edgeToEdge)}
         data-review-inline-editor={path}
         data-tour-target="code-editor"
         data-review-inline-editor-active={active ? "true" : "false"}
         style={{ height }}
       />
+      <AskCodePins handle={askTarget} />
       {error ? (
         <div {...stylex.props(styles.error)} title={error}>
           Inline preview unavailable
@@ -364,13 +375,20 @@ const styles = stylex.create({
     borderRadius: radius.control,
     backgroundColor: tokens.bg,
   },
+  // Square, with rules above and below. The editor's header and code read
+  // --review-code-inset to sit 16px in from the column edge.
+  edgeToEdge: {
+    borderWidth: "1px 0",
+    borderRadius: 0,
+    "--review-code-inset": "6px",
+  },
   error: {
     display: "flex",
     alignItems: "center",
-    padding: "0 10px",
+    padding: `0 ${space.s10}`,
     borderColor: tokens.ruleSoft,
     backgroundColor: tokens.surface,
     color: tokens.inkFaint,
-    font: `${fontSize.small}/1 ${tokens.fontMono}`,
+    font: `${fontSize.small}/${leading.none} ${tokens.chromeFont}`,
   },
 });

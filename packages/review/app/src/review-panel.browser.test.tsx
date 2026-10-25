@@ -195,6 +195,7 @@ describe("Guided tour panel", () => {
     );
 
     await act(async () => {
+      body.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
       body.dispatchEvent(new Event("scroll", { bubbles: true }));
     });
 
@@ -265,6 +266,150 @@ describe("Guided tour panel", () => {
       )?.disabled,
     ).toBe(true);
     expect(HTMLElement.prototype.scrollTo).toHaveBeenCalled();
+  });
+
+  it.each(["wheel", "touchstart", "pointerdown", "keydown"])(
+    "keeps a requested heading aligned while earlier peeks resize, until %s hands control to the reader",
+    async (input) => {
+      const resized: (() => void)[] = [];
+      vi.stubGlobal(
+        "ResizeObserver",
+        class {
+          observing = true;
+          constructor(callback: () => void) {
+            resized.push(() => {
+              if (this.observing) callback();
+            });
+          }
+          observe() {}
+          disconnect() {
+            this.observing = false;
+          }
+        },
+      );
+      const container = document.createElement("div");
+      document.body.append(container);
+      root = createRoot(container);
+
+      await act(async () => {
+        renderWithSession(
+          <ReviewDebugSettingsProvider>
+            <ReviewProvider>
+              <ReviewPanelProvider>
+                <TourPanel />
+              </ReviewPanelProvider>
+            </ReviewProvider>
+          </ReviewDebugSettingsProvider>,
+        );
+      });
+
+      const body = container.querySelector<HTMLElement>(panelBodySelector)!;
+
+      const [first, second] = container.querySelectorAll<HTMLElement>(
+        "section[data-review-anchor-id]",
+      );
+
+      let scrollTop = 0;
+      let secondTop = 1600;
+      Object.defineProperty(body, "scrollTop", {
+        configurable: true,
+        get: () => scrollTop,
+      });
+      vi.spyOn(body, "getBoundingClientRect").mockImplementation(() =>
+        domRect({ top: 100, bottom: 600, height: 500 }),
+      );
+      vi.spyOn(first!, "getBoundingClientRect").mockImplementation(() =>
+        domRect({ top: 100 - scrollTop, height: secondTop }),
+      );
+      vi.spyOn(second!, "getBoundingClientRect").mockImplementation(() =>
+        domRect({ top: 100 + secondTop - scrollTop, height: 400 }),
+      );
+
+      const scrollTo = vi.fn<(options: ScrollToOptions) => void>((options) => {
+        scrollTop = options.top ?? scrollTop;
+      });
+
+      Object.defineProperty(body, "scrollTo", { value: scrollTo });
+
+      await act(async () => {
+        container
+          .querySelector<HTMLButtonElement>('[data-tour-target="tour-next"]')!
+          .click();
+      });
+
+      expect(second!.getBoundingClientRect().top).toBe(118);
+
+      // A native editor first reports a placeholder height, then its loaded diff.
+      for (const height of [360, 1176]) {
+        secondTop = height;
+        await act(async () => {
+          for (const resize of resized) resize();
+          body.dispatchEvent(new Event("scroll"));
+        });
+        expect(second!.getBoundingClientRect().top).toBe(118);
+        expect(
+          container.querySelector("[data-active-tour-anchor]")?.textContent,
+        ).toBe("second");
+      }
+
+      scrollTo.mockClear();
+      await act(async () => {
+        // Scrollbar input arrives beside the scroll body, on its parent panel.
+        const inputTarget =
+          input === "pointerdown" ? body.parentElement! : body;
+
+        inputTarget.dispatchEvent(new Event(input, { bubbles: true }));
+        scrollTop = 0;
+        body.dispatchEvent(new Event("scroll"));
+      });
+      secondTop = 900;
+      await act(async () => {
+        for (const resize of resized) resize();
+      });
+
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(
+        container.querySelector("[data-active-tour-anchor]")?.textContent,
+      ).toBe("first");
+    },
+  );
+});
+
+describe("Side panel scrollbar", () => {
+  it("overlays the scrollbar so tour content runs to the column's right edge", async () => {
+    const container = document.createElement("div");
+    container.style.cssText = "display: flex; width: 360px; height: 160px";
+    document.body.append(container);
+    root = createRoot(container);
+
+    await act(async () => {
+      renderWithSession(
+        <ReviewDebugSettingsProvider>
+          <ReviewProvider>
+            <ReviewPanelProvider>
+              <TourPanel />
+            </ReviewPanelProvider>
+          </ReviewProvider>
+        </ReviewDebugSettingsProvider>,
+      );
+      await Promise.resolve();
+    });
+
+    const panel = container.querySelector<HTMLElement>(".side-panel")!;
+    const body = container.querySelector<HTMLElement>(panelBodySelector)!;
+
+    const stopContent = container.querySelector<HTMLElement>(
+      "section[data-review-anchor-id] > :last-child > :last-child",
+    )!;
+
+    // Headless Chromium hides native scrollbars, so a gutter would not show
+    // in the widths here; check the scroller opts out of the native bar.
+    expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+    expect(getComputedStyle(body).scrollbarWidth).toBe("none");
+    expect(body.offsetWidth - body.clientWidth).toBe(0);
+    expect(stopContent.getBoundingClientRect().right).toBe(
+      panel.getBoundingClientRect().right,
+    );
   });
 });
 

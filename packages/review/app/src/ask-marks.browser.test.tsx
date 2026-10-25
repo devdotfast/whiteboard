@@ -1,6 +1,7 @@
+import { EditorView } from "@tiptap/pm/view";
 import { type ReactNode, act, useLayoutEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 
 import { MarkdownContent } from "./agent-markdown";
@@ -8,12 +9,20 @@ import { type AskAnchor, askAnchor } from "./ask-anchor";
 import { AskHistoryProvider, useAskHistory } from "./ask-history";
 import { AskHistoryList } from "./ask-history-list";
 import { AskThreadMarks } from "./ask-marks";
+import type { Board } from "./board-editor/board-doc";
+import { createBoardState } from "./board-editor/editor-state";
+import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { documentStyles } from "./document-styles";
-import { INLINE_EDITOR_MADE } from "./DocumentCodeView";
 import { drawStyles } from "./draw-styles";
 import { ReviewSessionProvider } from "./host/review-session";
 import { documentMarker } from "./markers.stylex";
-import { ReviewPanelProvider, useReviewPanel } from "./review-panel";
+import {
+  ReviewPanelProvider,
+  useReviewPanel,
+  useReviewPanelStore,
+} from "./review-panel";
+import type { PeekAnchor } from "./review-panel-model";
+import type { ReviewPanelStore } from "./review-panel-store";
 import { ReviewRootsProvider } from "./review-root-context";
 import { testReviewSession } from "./review-session-test-utils";
 import { withClass } from "./stylex-props";
@@ -44,8 +53,8 @@ let asked = 0;
 
 function Probe() {
   view = useReviewPanel(
-    ({ asks, askDocked }) =>
-      asks.find((ask) => ask.key === askDocked)?.view ?? null,
+    ({ asks, askColumn }) =>
+      asks.find((ask) => ask.key === askColumn)?.view ?? null,
   );
   const history = useAskHistory();
   outdated = history?.outdated;
@@ -206,12 +215,14 @@ it("marks each asked-about passage beside it and reopens its conversation", asyn
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">
-              <Blocks blocks={blocks} />
-            </Document>
-            <Probe />
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">
+                <Blocks blocks={blocks} />
+              </Document>
+              <Probe />
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -270,187 +281,6 @@ it("marks each asked-about passage beside it and reopens its conversation", asyn
   expect(CSS.highlights.has("ask-thread")).toBe(false);
 });
 
-/** A file in an editor, as the Desktop draws one in a code block: the
- * editor numbers each line it has drawn. */
-function CodeBlock({
-  path,
-  from,
-  lines,
-}: {
-  path: string;
-  from: number;
-  lines: number;
-}) {
-  const host = useRef<HTMLDivElement>(null);
-
-  // As the canvas's code view does once it makes the editor.
-  useLayoutEffect(() => {
-    host.current!.dispatchEvent(
-      new Event(INLINE_EDITOR_MADE, { bubbles: true }),
-    );
-  }, []);
-
-  return (
-    <div ref={host} data-review-node-id="code" data-review-inline-editor={path}>
-      <div className="editor modified">
-        {Array.from({ length: lines }, (_, index) => (
-          <div key={index} style={{ display: "flex", height: 20 }}>
-            <span className="line-numbers">{from + index}</span>
-            <span>line {from + index}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-it("marks asked-about code beside its line in the editor showing its file, without washing it", async () => {
-  const session = testReviewSession();
-
-  const about = (id: string, path: string, line: number) => ({
-    ...saved(id, `${path}:${line}`, undefined),
-    selection: {
-      title: `${path}:${line}–${line}`,
-      target: {
-        kind: "code",
-        path,
-        side: "head",
-        startLine: line,
-        endLine: line,
-      },
-    },
-  });
-
-  vi.spyOn(session, "fetch").mockImplementation(async () =>
-    Response.json({
-      threads: [
-        about("tab-size", "app/src/code-block.tsx", 299),
-        // A file this version shows nowhere.
-        about("elsewhere", "app/src/other.tsx", 3),
-      ],
-    }),
-  );
-
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
-  await act(async () =>
-    root.render(
-      <ReviewSessionProvider session={session}>
-        <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">
-              <Blocks
-                blocks={[{ id: "block-1", text: "The tab size changes." }]}
-              />
-              <CodeBlock path="app/src/code-block.tsx" from={296} lines={6} />
-            </Document>
-            <Probe />
-          </AskHistoryProvider>
-        </ReviewPanelProvider>
-      </ReviewSessionProvider>,
-    ),
-  );
-
-  const pins = () => [
-    ...container.querySelectorAll<HTMLButtonElement>(".ask-mark-pin"),
-  ];
-
-  await vi.waitFor(async () => {
-    await frame();
-    expect(pins()).toHaveLength(1);
-  });
-
-  const [pin] = pins();
-
-  const line = [...container.querySelectorAll(".line-numbers")]
-    .find((number) => number.textContent === "299")!
-    .getBoundingClientRect();
-
-  const editor = container
-    .querySelector("[data-review-inline-editor]")!
-    .getBoundingClientRect();
-
-  // Level with the line asked about, outside the editor.
-  const at = pin!.getBoundingClientRect();
-
-  expect(
-    Math.abs(at.top + at.height / 2 - (line.top + line.height / 2)),
-  ).toBeLessThan(2);
-  expect(at.left).toBeGreaterThanOrEqual(editor.right);
-  expect(CSS.highlights.has("ask-thread")).toBe(false);
-  expect(outdated).toEqual(new Set());
-
-  await act(async () => pin!.click());
-  expect(view).toMatchObject({ type: "saved", threadId: "tab-size" });
-
-  await act(async () => root.unmount());
-});
-
-it("marks asked-about code once a diff's editor appears, after its lines are found", async () => {
-  const session = testReviewSession();
-
-  vi.spyOn(session, "fetch").mockImplementation(async () =>
-    Response.json({
-      threads: [
-        {
-          ...saved("tab-size", "app/src/code-block.tsx:299", undefined),
-          selection: {
-            title: "app/src/code-block.tsx:299–299",
-            target: {
-              kind: "code",
-              path: "app/src/code-block.tsx",
-              side: "head",
-              startLine: 299,
-              endLine: 299,
-            },
-          },
-        },
-      ],
-    }),
-  );
-
-  const container = document.createElement("div");
-  document.body.append(container);
-  const root = createRoot(container);
-
-  const render = (found: boolean) =>
-    root.render(
-      <ReviewSessionProvider session={session}>
-        <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">
-              {found ? (
-                <CodeBlock path="app/src/code-block.tsx" from={296} lines={6} />
-              ) : (
-                <section role="status">Loading diff selection…</section>
-              )}
-            </Document>
-            <Probe />
-          </AskHistoryProvider>
-        </ReviewPanelProvider>
-      </ReviewSessionProvider>,
-    );
-
-  const pins = () => container.querySelectorAll(".ask-mark-pin");
-
-  await act(async () => render(false));
-  await vi.waitFor(() => expect(asked).toBe(1));
-  await frame();
-  expect(pins()).toHaveLength(0);
-
-  // The same version of the review, its diff's lines now found.
-  await act(async () => render(true));
-
-  await vi.waitFor(async () => {
-    await frame();
-    expect(pins()).toHaveLength(1);
-  });
-
-  await act(async () => root.unmount());
-});
-
 it("follows the words asked about through later versions, and calls them outdated once an edit touches them", async () => {
   const session = testReviewSession();
 
@@ -486,12 +316,14 @@ it("follows the words asked about through later versions, and calls them outdate
       root.render(
         <ReviewSessionProvider session={session}>
           <ReviewPanelProvider>
-            <AskHistoryProvider>
-              <Document revision={revision}>
-                <Blocks blocks={blocks} />
-              </Document>
-              <Probe />
-            </AskHistoryProvider>
+            <TestCanvasQuery>
+              <AskHistoryProvider>
+                <Document revision={revision}>
+                  <Blocks blocks={blocks} />
+                </Document>
+                <Probe />
+              </AskHistoryProvider>
+            </TestCanvasQuery>
           </ReviewPanelProvider>
         </ReviewSessionProvider>,
       ),
@@ -602,9 +434,11 @@ it("pins every passage in one lane, side by side on a shared line, and pairs a p
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">{document_}</Document>
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">{document_}</Document>
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -716,9 +550,11 @@ it("pins a passage beside its own line of a paragraph, and follows it as the doc
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">{document_}</Document>
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">{document_}</Document>
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -798,10 +634,12 @@ it("rests a pin as a tick in the margin when the column leaves no gutter, and op
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">{document_}</Document>
-            <Probe />
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">{document_}</Document>
+              <Probe />
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -891,9 +729,11 @@ it("rests every pin as a tick once one row has no room, never mixing the two", a
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">{document_}</Document>
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">{document_}</Document>
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -953,10 +793,12 @@ it("folds a line of more than two passages into its first pin and a +N chip", as
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <Document revision="1">{document_}</Document>
-            <Probe />
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">{document_}</Document>
+              <Probe />
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -1083,9 +925,11 @@ it("scrolls to a history passage on hover, keyboard focus, and activation", asyn
     root.render(
       <ReviewSessionProvider session={session}>
         <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <HistoryDocument />
-          </AskHistoryProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <HistoryDocument />
+            </AskHistoryProvider>
+          </TestCanvasQuery>
         </ReviewPanelProvider>
       </ReviewSessionProvider>,
     ),
@@ -1134,4 +978,302 @@ it("scrolls to a history passage on hover, keyboard focus, and activation", asyn
   } finally {
     await act(async () => root.unmount());
   }
+});
+
+let editor: EditorView | undefined;
+
+/** A board in its editor, which owns the blocks it draws. */
+function BoardInEditor({ board }: { board: Board }) {
+  const host = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    editor = new EditorView(host.current!, { state: createBoardState(board) });
+
+    return () => editor?.destroy();
+  }, [board]);
+
+  return <div ref={host} />;
+}
+
+it("pins and washes a passage in a board's editor, and keeps both as the board is edited", async () => {
+  const session = testReviewSession();
+
+  const board: Board = {
+    title: "Plan",
+    document: [
+      {
+        id: "block-1",
+        type: "markdown",
+        markdown:
+          "Retries are cheap.\n\nStripe redelivers a webhook whenever our handler times out.",
+      },
+      { id: "block-2", type: "markdown", markdown: "The index is safe." },
+    ],
+  };
+
+  const quote = "redelivers a webhook";
+
+  const [stripe] = await anchorsIn(<BoardInEditor board={board} />, [
+    { words: quote },
+  ]);
+
+  vi.spyOn(session, "fetch").mockImplementation(async () =>
+    Response.json({ threads: [saved("stripe", quote, stripe)] }),
+  );
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+
+  await act(async () =>
+    root.render(
+      <ReviewSessionProvider session={session}>
+        <ReviewPanelProvider>
+          <TestCanvasQuery>
+            <AskHistoryProvider>
+              <Document revision="1">
+                <BoardInEditor board={board} />
+              </Document>
+            </AskHistoryProvider>
+          </TestCanvasQuery>
+        </ReviewPanelProvider>
+      </ReviewSessionProvider>,
+    ),
+  );
+
+  const pin = () => container.querySelector<HTMLElement>(".ask-mark-pin");
+
+  const paragraph = () =>
+    [...container.querySelectorAll("p")].find((element) =>
+      element.textContent?.includes(quote),
+    )!;
+
+  // Beside its passage's line, washed; still so once the editor has seen
+  // whatever was done to its blocks.
+  const marked = async () => {
+    await vi.waitFor(async () => {
+      await frame();
+      expect(pin()).toBeTruthy();
+    });
+
+    for (let settle = 0; settle < 3; settle++) await frame();
+    const line = paragraph().getBoundingClientRect();
+    const at = pin()!.getBoundingClientRect();
+
+    expect(at.left).toBeGreaterThan(line.right);
+    expect(at.top).toBeGreaterThanOrEqual(line.top - 4);
+    expect(at.bottom).toBeLessThanOrEqual(line.bottom + 4);
+    expect([...CSS.highlights.get("ask-thread")!][0]?.toString()).toBe(quote);
+  };
+
+  try {
+    await marked();
+
+    // A line typed in another block.
+    await act(async () => {
+      const end = editor!.state.doc.content.size - 1;
+      editor!.dispatch(editor!.state.tr.insertText(" It always was.", end));
+    });
+    await marked();
+
+    // And a paragraph above it in its own block.
+    await act(async () => {
+      let at = 0;
+      editor!.state.doc.descendants((node, pos) => {
+        if (node.isText && node.text === "Retries are cheap.") at = pos;
+      });
+      editor!.dispatch(
+        editor!.state.tr.insertText(
+          "They also keep the handler honest when the network drops a reply. ",
+          at,
+        ),
+      );
+    });
+    await marked();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+describe("a click on a passage's words in a board's editor", () => {
+  let store: ReviewPanelStore | undefined;
+
+  function StoreProbe() {
+    store = useReviewPanelStore();
+
+    return null;
+  }
+
+  const board: Board = {
+    title: "Plan",
+    document: [
+      {
+        id: "block-1",
+        type: "markdown",
+        markdown:
+          "Stripe redelivers a webhook whenever our handler times out, so the handler must be idempotent.",
+      },
+    ],
+  };
+
+  /** The board in its editor with these conversations, washed and pinned. */
+  async function mount(
+    threads: (anchor: (words: string) => AskAnchor) => unknown[],
+    words: string[],
+  ) {
+    const session = testReviewSession();
+
+    const anchors = await anchorsIn(
+      <BoardInEditor board={board} />,
+      words.map((each) => ({ words: each })),
+    );
+
+    vi.spyOn(session, "fetch").mockImplementation(async () =>
+      Response.json({
+        threads: threads((each) => anchors[words.indexOf(each)]!),
+      }),
+    );
+
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+
+    await act(async () =>
+      root.render(
+        <ReviewSessionProvider session={session}>
+          <ReviewPanelProvider>
+            <TestCanvasQuery>
+              <AskHistoryProvider>
+                <Document revision="1">
+                  <BoardInEditor board={board} />
+                </Document>
+                <Probe />
+                <StoreProbe />
+              </AskHistoryProvider>
+            </TestCanvasQuery>
+          </ReviewPanelProvider>
+        </ReviewSessionProvider>,
+      ),
+    );
+
+    await vi.waitFor(async () => {
+      await frame();
+      expect(container.querySelector(".ask-mark-pin")).toBeTruthy();
+    });
+
+    const paragraph = container.querySelector("p")!;
+
+    /** A point on these words, from the paragraph's top left. */
+    const on = (words: string, at = 0.5) => {
+      const rect = rangeOf(paragraph, words).getClientRects()[0]!;
+      const box = paragraph.getBoundingClientRect();
+
+      return {
+        x: rect.left - box.left + rect.width * at,
+        y: rect.top - box.top + rect.height / 2,
+      };
+    };
+
+    return { root, paragraph, on };
+  }
+
+  it("opens the conversation and puts the caret where it was clicked", async () => {
+    const quote = "redelivers a webhook";
+
+    const { root, paragraph, on } = await mount(
+      (anchor) => [saved("stripe", quote, anchor(quote))],
+      [quote],
+    );
+
+    try {
+      await userEvent.click(paragraph, { position: on("webhook") });
+      expect(view).toMatchObject({ type: "saved", threadId: "stripe" });
+
+      // Inside the word clicked.
+      const word = rangeOf(paragraph, "webhook");
+      const start = editor!.posAtDOM(word.startContainer, word.startOffset);
+
+      expect(editor!.state.selection.empty).toBe(true);
+      expect(editor!.state.selection.from).toBeGreaterThan(start);
+      expect(editor!.state.selection.from).toBeLessThan(
+        start + "webhook".length,
+      );
+      expect(
+        document.querySelector(".ask-mark-pin")?.hasAttribute("data-active"),
+      ).toBe(true);
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
+  it("opens nothing for a selection dragged across the passage", async () => {
+    const quote = "redelivers a webhook";
+
+    const { root, paragraph, on } = await mount(
+      (anchor) => [saved("stripe", quote, anchor(quote))],
+      [quote],
+    );
+
+    try {
+      await userEvent.dragAndDrop(paragraph, paragraph, {
+        sourcePosition: on("Stripe", 0.1),
+        targetPosition: on(quote, 0.9),
+      });
+
+      expect(editor!.state.selection.empty).toBe(false);
+      expect(view).toBeNull();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
+  it("puts the conversation in place of an open peek", async () => {
+    const quote = "redelivers a webhook";
+
+    const { root, paragraph, on } = await mount(
+      (anchor) => [saved("stripe", quote, anchor(quote))],
+      [quote],
+    );
+
+    try {
+      await act(async () =>
+        store!.getState().openPeek({
+          kind: "peek",
+          anchor: { id: "peek", title: "Handler" } as PeekAnchor,
+          content: { kind: "inline-code", text: "handle();" },
+        }),
+      );
+      expect(store!.getState().active).not.toBeNull();
+
+      await userEvent.click(paragraph, { position: on(quote) });
+      expect(store!.getState().active).toBeNull();
+      expect(view).toMatchObject({ type: "saved", threadId: "stripe" });
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
+  it("lists the conversations of passages that overlap where it was clicked", async () => {
+    const { root, paragraph, on } = await mount(
+      (anchor) => [
+        saved(
+          "webhook",
+          "redelivers a webhook",
+          anchor("redelivers a webhook"),
+        ),
+        saved("handler", "a webhook whenever", anchor("a webhook whenever")),
+      ],
+      ["redelivers a webhook", "a webhook whenever"],
+    );
+
+    try {
+      await userEvent.click(paragraph, { position: on("webhook") });
+      expect(view).toMatchObject({
+        type: "history",
+        passage: { threadIds: ["webhook", "handler"], several: true },
+      });
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
 });

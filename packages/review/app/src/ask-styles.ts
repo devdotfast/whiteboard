@@ -1,9 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 
-import { fontSize, motion, radius } from "./scale.stylex";
+import { fontSize, leading, motion, radius, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
-
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 
 const sweep = stylex.keyframes({
   from: { backgroundPosition: "100% 0" },
@@ -24,31 +22,24 @@ export const askPanelStyles = stylex.create({
     display: "flex",
     flex: "1 1 auto",
     flexDirection: "column",
-    gap: "14px",
+    gap: space.s14,
     minHeight: 0,
-    padding: "20px 16px 16px",
+    padding: `${space.s20} ${space.s16} ${space.s16}`,
     overflowY: "auto",
   },
   caps: {
-    fontFamily: tokens.fontMono,
-    lineHeight: "14px",
+    fontFamily: tokens.chromeFont,
+    lineHeight: leading.px14,
   },
   selection: {
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: space.s8,
     margin: 0,
-  },
-  selectionCaption: {
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   selectionQuote: {
-    display: "-webkit-box",
     margin: 0,
-    paddingLeft: "12px",
-    overflow: "hidden",
+    paddingLeft: space.s12,
     borderLeftWidth: "2px",
     borderLeftStyle: "solid",
     borderLeftColor: tokens.accent,
@@ -56,36 +47,18 @@ export const askPanelStyles = stylex.create({
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
     fontStyle: "italic",
-    lineHeight: "22px",
-    WebkitBoxOrient: "vertical",
-    WebkitLineClamp: 2,
+    lineHeight: leading.px22,
   },
   error: {
     margin: 0,
-    color: tokens.changeRemoved,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
     whiteSpace: "pre-wrap",
-  },
-  errorAction: {
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
-    color: tokens.ink,
-    font: "inherit",
-    textDecorationLine: "underline",
-    textUnderlineOffset: "3px",
-    cursor: "pointer",
-    borderRadius: radius.small,
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   // A loading shimmer; sites set the gradient and its size.
   sweep: {
-    animationName: { default: sweep, [reducedMotion]: "none" },
+    animationName: { default: sweep, [stylex.env.reducedMotion]: "none" },
     animationDuration: motion.pulse,
     animationTimingFunction: "linear",
     animationIterationCount: "infinite",

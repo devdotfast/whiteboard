@@ -72,7 +72,12 @@ export function useAgentTrace(
   // Full payloads can be large, so an unobserved trace leaves the cache soon
   // after the view moves away from it.
   const query = useQuery({
-    queryKey: canvasQueryKeys.agentTrace(sessionId, trace, storage),
+    queryKey: canvasQueryKeys.agentTrace(
+      session.reviewId,
+      sessionId,
+      trace,
+      storage,
+    ),
     queryFn:
       sessionId && !retained
         ? ({ signal }) =>

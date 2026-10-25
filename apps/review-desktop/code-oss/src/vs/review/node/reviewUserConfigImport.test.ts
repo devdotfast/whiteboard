@@ -44,8 +44,8 @@ describe('ReviewUserConfigImport', () => {
 			"telemetry.telemetryLevel": "all",
 			"extensions.autoUpdate": true,
 			"workbench.statusBar.visible": true,
-			// Would re-arm the install prompt for an extension Review cannot ship.
-			"python.languageServer": "Pylance",
+			// Would re-arm a prompt that Review closes.
+			"go.survey.prompt": true,
 		}`);
 
 		const extensionsDir = path.join(fixture.sourceRoot, 'extensions');

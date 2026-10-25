@@ -23,6 +23,7 @@ import {
   requestJsonErrorStatus,
 } from "./review-api-parsers";
 import {
+  type ReviewTelemetryCapture,
   captureSanitizedUiTelemetry,
   clientErrorsForSession,
   recordClientError,
@@ -69,6 +70,27 @@ export function jsonReviewBugReportSource(
   };
 }
 
+/** The path id wins over any review id in the payload. */
+export async function captureReviewUiEvent(
+  telemetry: ReviewTelemetryCapture,
+  request: Request,
+  reviewId: string,
+) {
+  const body = await readBoundedRequestJson(request, undefined, {});
+  const payload = isJsonObject(body) ? body : {};
+  const rawContext = isJsonObject(payload.context) ? payload.context : {};
+  await captureSanitizedUiTelemetry(
+    telemetry,
+    request,
+    payload.name,
+    payload.properties,
+    recordClientError,
+    payload.error,
+    { ...rawContext, reviewUuid: reviewId },
+    payload.occurredAt,
+  );
+}
+
 /** Telemetry and report uploads for a pinned native review. */
 export function createJsonReviewReporting(
   store: ReviewStore,
@@ -105,21 +127,8 @@ export function createJsonReviewReporting(
     await next();
   });
   app.post("/:id/telemetry/event", async (c) => {
-    const body = await readBoundedRequestJson(c.req.raw, undefined, {});
-    const payload = isJsonObject(body) ? body : {};
-    const rawContext = isJsonObject(payload.context) ? payload.context : {};
-    await captureSanitizedUiTelemetry(
-      telemetry,
-      c.req.raw,
-      payload.name,
-      payload.properties,
-      recordClientError,
-      payload.error,
-      // The path id wins: the middleware above already asserted it exists,
-      // so a payload trying to assert a different review id is overridden.
-      { ...rawContext, reviewUuid: c.req.param("id") },
-      payload.occurredAt,
-    );
+    // The middleware above already asserted the review exists.
+    await captureReviewUiEvent(telemetry, c.req.raw, c.req.param("id"));
 
     return c.json({ ok: true });
   });

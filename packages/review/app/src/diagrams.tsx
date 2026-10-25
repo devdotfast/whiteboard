@@ -1,7 +1,20 @@
 import { flowLayer } from "@canvas/flow-layers.stylex";
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  elevation,
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
+import { Button } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import { type DiffSelection, anchorSelection } from "@review/lens-selection";
-import type { SourcePins, Step } from "@review/review-api/document";
+import {
+  type SourcePins,
+  type Step,
+  stepSources,
+} from "@review/review-api/document";
 import * as stylex from "@stylexjs/stylex";
 import {
   BaseEdge,
@@ -34,10 +47,17 @@ import { hasTextSelectionWithin } from "./diagram-text-selection";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { useMotionPhase } from "./draw-queue-provider";
 import { drawStyles } from "./draw-styles";
+import { countLabel } from "./format";
 import { useReviewSession } from "./host/review-session";
 import { appMarker, documentMarker } from "./markers.stylex";
 import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { GuidedTour, PeekAnchor } from "./review-panel-model";
+import {
+  SEQUENCE_LABEL_LIFT,
+  SEQUENCE_SELF_LOOP,
+  type SequenceRow,
+  sequenceRows,
+} from "./sequence-layout";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
@@ -46,8 +66,7 @@ type SequenceParticipantNodeData = {
   participant: SequenceParticipant;
   height: number;
   messages: SequenceMessage[];
-  messageGap: number;
-  messageTop: number;
+  rows: SequenceRow[];
 };
 
 type SequenceParticipantFlowNode = ReactFlowNode<
@@ -59,6 +78,7 @@ type SequenceMessageEdgeData = {
   message: SequenceMessage;
   index: number;
   width: number;
+  labelWidth: number;
   active: boolean;
   openTour: (anchor?: string) => void;
   stepNumber: number | null;
@@ -74,7 +94,7 @@ const sequenceNodeTypes = { sequenceParticipant: SequenceParticipantNode };
 const sequenceEdgeTypes = { sequenceMessage: SequenceMessageEdge };
 
 export function sequenceMessageColor(isActive: boolean): string {
-  return isActive ? "var(--accent)" : "var(--edge-muted)";
+  return isActive ? tokens.accent : tokens.edgeMuted;
 }
 
 /** The canonical `sequence` block as the document stores it. */
@@ -97,7 +117,8 @@ export interface SequenceMessage {
   to: SequenceParticipant;
   label: string;
   style: Step["style"];
-  source?: DiffSelection;
+  /** Every range of the step, in order; the first is its call site. */
+  sources: DiffSelection[];
   code?: Step["code"];
   explanation?: string;
 }
@@ -125,10 +146,10 @@ export function sequenceView(block: SequenceDiagramProps): SequenceView {
       to: participant(step.to),
       label: step.label,
       style: step.style,
+      sources: stepSources(step).map((anchor) =>
+        anchorSelection(anchor, step.pins ?? block.pins),
+      ),
     };
-
-    if (step.source)
-      message.source = anchorSelection(step.source, step.pins ?? block.pins);
 
     if (step.code) message.code = step.code;
 
@@ -153,7 +174,7 @@ function panelAnchor(message: SequenceMessage): PeekAnchor {
     title: message.label,
   };
 
-  if (message.source) anchor.peek = message.source;
+  if (message.sources[0]) anchor.peek = message.sources[0];
 
   return anchor;
 }
@@ -169,8 +190,14 @@ export function createSequenceTourEntry(sequence: SequenceView): GuidedTour {
       detail: `${message.from.label} -> ${message.to.label}`,
       content: message.code
         ? { kind: "inline-code" as const, ...message.code }
-        : message.source
-          ? { kind: "source" as const, source: message.source }
+        : message.sources[0]
+          ? {
+              kind: "source" as const,
+              source: message.sources[0],
+              ...(message.sources.length > 1 && {
+                more: message.sources.slice(1),
+              }),
+            }
           : { kind: "explanation" as const, text: message.explanation },
     })),
   };
@@ -386,10 +413,21 @@ function SequenceDiagramFigure({
     Math.floor(availableWidth / Math.max(1, sequence.participants.length)),
   );
 
-  const messageTop = 112;
-  const messageGap = 76;
   const width = Math.max(320, sequence.participants.length * laneWidth);
-  const height = messageTop + sequence.messages.length * messageGap + 42;
+
+  const { rows, height } = useMemo(() => {
+    const lane = (id: string) =>
+      sequence.participants.findIndex((participant) => participant.id === id);
+
+    return sequenceRows(
+      sequence.messages.map((message) => ({
+        label: message.label,
+        from: lane(message.from.id),
+        to: lane(message.to.id),
+      })),
+      laneWidth,
+    );
+  }, [laneWidth, sequence]);
 
   const reactFlowNodes: SequenceParticipantFlowNode[] = useMemo(
     () =>
@@ -414,13 +452,12 @@ function SequenceDiagramFigure({
           participant,
           height,
           messages: sequence.messages,
-          messageGap,
-          messageTop,
+          rows,
         },
         draggable: false,
         selectable: false,
       })),
-    [height, laneWidth, sequence],
+    [height, laneWidth, rows, sequence],
   );
 
   const reactFlowEdges: SequenceMessageFlowEdge[] = useMemo(
@@ -451,6 +488,7 @@ function SequenceDiagramFigure({
             message,
             index,
             width,
+            labelWidth: rows[index]!.labelWidth,
             active: isActive,
             openTour,
             stepNumber: onCloseTour ? index + 1 : null,
@@ -462,7 +500,7 @@ function SequenceDiagramFigure({
           zIndex: isActive ? 2 : 1,
         };
       }),
-    [activeTourAnchor, onCloseTour, openTour, sequence, width],
+    [activeTourAnchor, onCloseTour, openTour, rows, sequence, width],
   );
 
   const onEdgeClick: EdgeMouseHandler<SequenceMessageFlowEdge> = (
@@ -519,8 +557,7 @@ function SequenceDiagramFigure({
     const nextScrollTop = sequenceActiveMessageScrollTopTarget({
       sequence,
       activeAnchor: activeTourAnchor,
-      messageTop,
-      messageGap,
+      rows,
       viewportHeight: scroll.clientHeight,
       scrollHeight: scroll.scrollHeight,
       currentScrollTop: scroll.scrollTop,
@@ -543,7 +580,7 @@ function SequenceDiagramFigure({
       top,
       behavior: panelMotion === "restored" ? "auto" : "smooth",
     });
-  }, [activeTourAnchor, laneWidth, panelMotion, sequence]);
+  }, [activeTourAnchor, laneWidth, panelMotion, rows, sequence]);
 
   // SAFETY: the `--sequence-*` keys are CSS custom properties, which React
   // forwards to style.setProperty; the CSSProperties typings only omit custom
@@ -572,14 +609,14 @@ function SequenceDiagramFigure({
         <DiagramHeader
           kind="SEQ"
           title={sequence.title}
-          meta={`${stopCount} ${stopCount === 1 ? "stop" : "stops"}`}
+          meta={countLabel(stopCount, "stop")}
           xstyle={styles.header}
           action={
             // The tour panel's header owns the close control fullscreen.
             onCloseTour ? null : (
-              <button
-                type="button"
-                {...withClass("diagram-tour-button", diagramStyles.control)}
+              <Button
+                className="diagram-tour-button"
+                xstyle={diagramStyles.button}
                 data-tour-target="diagram-tour"
                 onClick={(event) => {
                   event.preventDefault();
@@ -588,7 +625,7 @@ function SequenceDiagramFigure({
                 }}
               >
                 Tour
-              </button>
+              </Button>
             )
           }
         />
@@ -626,7 +663,7 @@ function SequenceDiagramFigure({
 function SequenceParticipantNode({
   data,
 }: ReactFlowNodeProps<SequenceParticipantFlowNode>) {
-  const { participant, height, messages, messageGap, messageTop } = data;
+  const { participant, height, messages, rows } = data;
 
   const activeMessages = messages.filter(
     (message) =>
@@ -637,7 +674,7 @@ function SequenceParticipantNode({
     <div {...stylex.props(styles.participant)} style={{ height }}>
       <div {...stylex.props(styles.participantLabelAnchor)}>
         <span
-          {...stylex.props(styles.participantLabel)}
+          {...stylex.props(textStyles.truncate, styles.participantLabel)}
           title={participant.label}
         >
           {participant.label}
@@ -649,7 +686,7 @@ function SequenceParticipantNode({
           (item) => item.id === message.id,
         );
 
-        const top = messageTop + messageIndex * messageGap;
+        const top = rows[messageIndex]!.arrow;
         const isSelfLoop = message.from.id === message.to.id;
 
         const handles: Array<{
@@ -680,7 +717,7 @@ function SequenceParticipantNode({
             id={handle.id}
             type={handle.type}
             position={handle.side}
-            {...stylex.props(styles.handle)}
+            {...stylex.props(diagramStyles.handle, styles.handle)}
             style={{
               left: "50%",
               top: sequenceMessageHandleTop(message, handle.type, top),
@@ -698,7 +735,7 @@ export function sequenceMessageHandleTop(
   messageTop: number,
 ): number {
   return message.from.id === message.to.id && handleType === "target"
-    ? messageTop + 24
+    ? messageTop + SEQUENCE_SELF_LOOP
     : messageTop;
 }
 
@@ -744,7 +781,7 @@ function SequenceMessageEdge(
     ? (props.sourceX + loopX) / 2
     : (props.sourceX + props.targetX) / 2;
 
-  const labelY = props.sourceY - 12;
+  const labelY = props.sourceY - SEQUENCE_LABEL_LIFT;
 
   const stepMotion = useMotionPhase(data.message.id);
   const stage = data.stepNumber !== null;
@@ -828,6 +865,8 @@ function SequenceMessageEdge(
             role="button"
             tabIndex={0}
             {...stylex.props(styles.label, data.active && styles.labelActive)}
+            // The width its row was laid out for.
+            style={{ maxWidth: data.labelWidth }}
             data-review-anchor-id={data.message.id}
             onClick={(event) => {
               event.stopPropagation();
@@ -948,8 +987,7 @@ export function sequenceActiveMessageScrollTarget({
 interface SequenceActiveMessageScrollTopInput {
   sequence: SequenceView;
   activeAnchor: string | null;
-  messageTop: number;
-  messageGap: number;
+  rows: readonly Pick<SequenceRow, "labelTop" | "bottom">[];
   viewportHeight: number;
   scrollHeight: number;
   currentScrollTop: number;
@@ -958,13 +996,12 @@ interface SequenceActiveMessageScrollTopInput {
 
 // Vertical counterpart of sequenceActiveMessageScrollTarget: long diagrams
 // scroll inside a viewport-capped body, so stepping the tour must also bring
-// the active message's row into view. Row y derives from the same layout
-// constants that position the message edges.
+// the active message's row, label to lowest mark, into view: the same rows
+// that position the message edges.
 export function sequenceActiveMessageScrollTopTarget({
   sequence,
   activeAnchor,
-  messageTop,
-  messageGap,
+  rows,
   viewportHeight,
   scrollHeight,
   currentScrollTop,
@@ -980,9 +1017,11 @@ export function sequenceActiveMessageScrollTopTarget({
 
   if (messageIndex < 0) return null;
 
-  const rowTop = messageTop + messageIndex * messageGap;
-  const targetTop = Math.max(0, rowTop - padding);
-  const targetBottom = Math.min(scrollHeight, rowTop + messageGap + padding);
+  const row = rows[messageIndex];
+
+  if (!row) return null;
+  const targetTop = Math.max(0, row.labelTop - padding);
+  const targetBottom = Math.min(scrollHeight, row.bottom + padding);
   const visibleTop = currentScrollTop;
   const visibleBottom = currentScrollTop + viewportHeight;
 
@@ -1027,7 +1066,7 @@ const styles = stylex.create({
     gridTemplateRows: "auto minmax(0, 1fr)",
     width: {
       default: "100%",
-      "@media (max-width: 720px)": {
+      [stylex.env.narrow]: {
         default: "100%",
         [inDocument()]: "calc(100cqi - 16px)",
       },
@@ -1042,7 +1081,7 @@ const styles = stylex.create({
     height: "auto",
     minHeight: `min(${tokens.sequenceHeight}, 260px)`,
     maxHeight: "3200px",
-    marginBlock: "24px",
+    marginBlock: space.s24,
     marginInline: { default: 0, [inDocument()]: "auto" },
     paddingTop: 0,
     overflow: "hidden",
@@ -1113,15 +1152,14 @@ const styles = stylex.create({
     width: "fit-content",
     minWidth: "min(148px, 100%)",
     maxWidth: "calc(100% - 16px)",
-    margin: "24px auto 0",
+    margin: `${space.s24} auto 0`,
     pointerEvents: "all",
   },
   participantLabel: {
     display: "block",
     boxSizing: "border-box",
     width: "100%",
-    padding: "6px 10px",
-    overflow: "hidden",
+    padding: `${space.s6} ${space.s10}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
@@ -1133,14 +1171,12 @@ const styles = stylex.create({
     fontSize: fontSize.small,
     fontWeight: fontWeight.bold,
     textAlign: "center",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
     pointerEvents: "all",
   },
   lifeline: {
     position: "absolute",
-    top: "62px",
-    bottom: "18px",
+    top: space.s56,
+    bottom: space.s18,
     left: "50%",
     marginLeft: "-0.5px",
     borderLeftWidth: "1px",
@@ -1150,15 +1186,6 @@ const styles = stylex.create({
   // Edge endpoints sit exactly on the lane: left: 50% places the handle's
   // left edge, so the handle centers itself on it.
   handle: {
-    width: "1px",
-    height: "1px",
-    minWidth: 0,
-    minHeight: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    opacity: 0,
-    pointerEvents: "none",
     transform: "translate(-50%, -50%)",
   },
   message: {
@@ -1192,7 +1219,7 @@ const styles = stylex.create({
   },
   dotAttention: {
     borderColor: tokens.accent,
-    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+    boxShadow: elevation.markerRing,
   },
   dotActive: {
     borderColor: tokens.accent,
@@ -1207,7 +1234,7 @@ const styles = stylex.create({
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.micro,
-    lineHeight: 1,
+    lineHeight: leading.none,
   },
   stopBadgeActive: {
     color: tokens.onAccent,
@@ -1223,7 +1250,7 @@ const styles = stylex.create({
     position: "relative",
     zIndex: 4,
     maxWidth: "calc(var(--sequence-lane-width, 176px) - 12px)",
-    padding: "0 3px",
+    padding: `0 ${space.s4}`,
     borderWidth: 0,
     borderStyle: "none",
     borderRadius: 0,
@@ -1233,7 +1260,7 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
     fontWeight: fontWeight.medium,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
     overflowWrap: "anywhere",
     textAlign: "center",
     whiteSpace: "normal",

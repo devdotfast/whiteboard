@@ -1,9 +1,8 @@
-import { spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
-import { execFileAsync, execFileSyncObserved } from "./exec";
+import { runVcs, runVcsSync, spawnPiped } from "./exec";
 import { withFileLock, withFileLockSync } from "./file-lock";
 import {
   git,
@@ -71,7 +70,7 @@ export function readNoteSync(input: {
   commit: string;
 }): string | null {
   try {
-    return execFileSyncObserved(
+    return runVcsSync(
       "git",
       gitArgsSync(input.rootPath, [
         "notes",
@@ -185,7 +184,7 @@ async function catFileBatch(
   const args = await gitArgs(rootPath, ["cat-file", "--batch"]);
 
   return new Promise((resolve, reject) => {
-    const child = spawn("git", args, { stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawnPiped("git", args);
     const chunks: Buffer[] = [];
     child.stdout.on("data", (chunk: Buffer) => chunks.push(chunk));
     let stderr = "";
@@ -198,9 +197,13 @@ async function catFileBatch(
     child.stdin.on("error", (error) =>
       reject(new Error(`git cat-file --batch stdin failed: ${String(error)}`)),
     );
-    child.once("close", (code) => {
+    child.once("close", (code, signal) => {
       if (code !== 0) {
-        reject(new Error(`git cat-file --batch failed: ${stderr}`));
+        reject(
+          new Error(
+            `git cat-file --batch failed: ${stderr || String(signal ?? code)}`,
+          ),
+        );
 
         return;
       }
@@ -310,7 +313,7 @@ export function writeNoteSync(input: {
     fs.writeFileSync(tmp, input.content, "utf8");
 
     try {
-      const blob = execFileSyncObserved(
+      const blob = runVcsSync(
         "git",
         gitArgsSync(input.rootPath, ["hash-object", "-w", "--no-filters", tmp]),
         { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
@@ -320,7 +323,7 @@ export function writeNoteSync(input: {
 
       for (let attempt = 0; attempt < NOTES_WRITE_RETRIES; attempt += 1) {
         try {
-          execFileSyncObserved(
+          runVcsSync(
             "git",
             gitArgsSync(input.rootPath, [
               "notes",
@@ -493,7 +496,7 @@ async function unreachableCommits(
 
   const listed = await new Promise<{ ok: boolean; stdout: string }>(
     (resolve) => {
-      const child = spawn("git", args, { stdio: ["pipe", "pipe", "pipe"] });
+      const child = spawnPiped("git", args);
       let stdout = "";
       let stderr = "";
       child.stdout.on("data", (chunk: Buffer) => {
@@ -505,9 +508,11 @@ async function unreachableCommits(
       child.once("error", (error) =>
         resolve({ ok: false, stdout: String(error) }),
       );
-      child.once("close", (code) =>
+      child.once("close", (code, signal) =>
         resolve(
-          code === 0 ? { ok: true, stdout } : { ok: false, stdout: stderr },
+          code === 0
+            ? { ok: true, stdout }
+            : { ok: false, stdout: stderr || String(signal ?? code) },
         ),
       );
       child.stdin.on("error", () => {});
@@ -544,7 +549,7 @@ async function jjWorkingCopyCommitIds(rootPath: string): Promise<string[]> {
     // jj resolves the workspace by walking up from cwd; `-R <path>` does NOT
     // walk up, so a subdirectory invocation with -R would silently yield
     // nothing and disable prune's working-copy sparing.
-    const { stdout } = await execFileAsync(
+    const { stdout } = await runVcs(
       "jj",
       [
         "--ignore-working-copy",
@@ -609,7 +614,7 @@ export function notesRemoteSync(
 
   try {
     return (
-      execFileSyncObserved(
+      runVcsSync(
         "git",
         gitArgsSync(rootPath, [
           "config",
@@ -844,7 +849,7 @@ export async function notesFetchDisabled(rootPath: string): Promise<boolean> {
 export function notesFetchDisabledSync(rootPath: string): boolean {
   try {
     return (
-      execFileSyncObserved(
+      runVcsSync(
         "git",
         gitArgsSync(rootPath, [
           "config",
@@ -943,7 +948,7 @@ export function ensureNotesConfigSync(input: { rootPath: string }): void {
 
   const config = (args: string[]) => {
     try {
-      return execFileSyncObserved(
+      return runVcsSync(
         "git",
         gitArgsSync(input.rootPath, ["config", ...args]),
         {
@@ -1008,7 +1013,7 @@ export async function evologCommitIds(input: {
     try {
       // cwd-based invocation (no -R): jj walks up from cwd, so subdirectory
       // roots still resolve to the enclosing workspace.
-      const { stdout } = await execFileAsync(
+      const { stdout } = await runVcs(
         "jj",
         [
           "--ignore-working-copy",

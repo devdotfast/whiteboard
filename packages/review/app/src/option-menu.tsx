@@ -1,3 +1,7 @@
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CheckIcon, ChevronDownIcon } from "@canvas/ui/icons";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
@@ -8,11 +12,8 @@ import {
   useState,
 } from "react";
 
-import { CheckIcon } from "./icons";
 import { menuStyles, moveMenuFocus } from "./ui/menu";
-import { surfaceStyles } from "./ui/surface";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
+import { Popover } from "./ui/popover";
 
 /** A single-choice menu; the caller renders the trigger's content. */
 export function OptionMenu<T extends string>({
@@ -23,6 +24,7 @@ export function OptionMenu<T extends string>({
   triggerStyle,
   triggerProps,
   triggerRef,
+  align = "end",
   children,
 }: {
   ariaLabel: string;
@@ -32,10 +34,12 @@ export function OptionMenu<T extends string>({
   triggerStyle?: stylex.StyleXStyles;
   triggerProps?: { "aria-pressed"?: boolean };
   triggerRef?: RefCallback<HTMLButtonElement>;
+  /** Which edge of the trigger the menu lines up with. */
+  align?: "start" | "end";
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
-  const container = useRef<HTMLDivElement>(null);
+  const popup = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
 
   const setTrigger = useCallback(
@@ -47,9 +51,7 @@ export function OptionMenu<T extends string>({
     [triggerRef],
   );
 
-  const popup = useAnchoredPopover(open, trigger);
   const selectedIndex = options.findIndex((option) => option.value === value);
-  useDismissOnOutside(container, open, () => setOpen(false));
 
   const close = () => {
     setOpen(false);
@@ -67,7 +69,7 @@ export function OptionMenu<T extends string>({
   }, [open, popup, selectedIndex]);
 
   return (
-    <div ref={container} {...stylex.props(styles.menu)}>
+    <div {...stylex.props(styles.menu)}>
       <button
         {...stylex.props(triggerStyle)}
         type="button"
@@ -85,36 +87,25 @@ export function OptionMenu<T extends string>({
         {...triggerProps}
       >
         {children}
-        <svg
-          {...stylex.props(styles.chevron)}
-          viewBox="0 0 20 20"
-          aria-hidden="true"
-        >
-          <path d={open ? "m5 12 5-5 5 5" : "m5 8 5 5 5-5"} />
-        </svg>
+        <ChevronDownIcon xstyle={open && iconStyles.flip} />
       </button>
       {open && (
-        <div
+        <Popover
           ref={popup}
-          popover="manual"
+          anchor={trigger}
+          onDismiss={close}
           role="menu"
           tabIndex={-1}
           aria-label={ariaLabel}
-          {...stylex.props(
-            surfaceStyles.popover,
+          xstyle={[
             menuStyles.popover,
-            menuStyles.end,
+            align === "end" && menuStyles.end,
             styles.options,
-          )}
+          ]}
           onKeyDown={(event) => {
-            if (event.key === "Escape") {
-              event.preventDefault();
-              event.stopPropagation();
-              close();
-            } else if (event.key === "Tab") {
-              // Restore the trigger before the browser advances to the next control.
-              close();
-            } else moveMenuFocus(event);
+            // Restore the trigger before the browser advances to the next control.
+            if (event.key === "Tab") close();
+            else moveMenuFocus(event);
           }}
         >
           {options.map((option) => (
@@ -125,6 +116,8 @@ export function OptionMenu<T extends string>({
               aria-checked={option.value === value}
               tabIndex={option.value === value ? 0 : -1}
               {...stylex.props(
+                focusStyles.ringInset,
+                buttonStyles.reset,
                 menuStyles.item,
                 option.value === value && menuStyles.itemCurrent,
               )}
@@ -140,7 +133,7 @@ export function OptionMenu<T extends string>({
               )}
             </button>
           ))}
-        </div>
+        </Popover>
       )}
     </div>
   );
@@ -151,14 +144,4 @@ const styles = stylex.create({
     position: "relative",
   },
   options: { minWidth: "160px" },
-  chevron: {
-    width: "12px",
-    height: "12px",
-    flexShrink: 0,
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: "1.8",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-  },
 });

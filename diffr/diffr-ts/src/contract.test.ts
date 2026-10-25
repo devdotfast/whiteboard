@@ -100,6 +100,46 @@ test("a record missing required fields is rejected", () => {
   );
 });
 
+describe("update records", () => {
+  const file = { rhs: { path: "a.rs", oid: "", mode: "" } };
+  const problem = { code: "mutation_failed", message: "no" };
+  const regions = [{ id: 4, collapsed: true, label: "sums" }, { id: 5 }];
+  const visible = { added: 1, removed: 0 };
+
+  test("an update with regions validates", () => {
+    const record = { type: "update", file, regions, visible };
+    expect(decodeStructuralDiffEvent(JSON.stringify(record))).toEqual(record);
+  });
+
+  test("an update with an error validates", () => {
+    const record = { type: "update", file, error: problem };
+    expect(decodeStructuralDiffEvent(JSON.stringify(record))).toEqual(record);
+  });
+
+  test("an update without a file is rejected", () => {
+    expect(() => decodeStructuralDiffEvent(JSON.stringify({ type: "update", error: problem }))).toThrow(
+      "Malformed diffr protocol record.",
+    );
+  });
+
+  test("an update with neither regions nor error is rejected", () => {
+    expect(() => decodeStructuralDiffEvent(JSON.stringify({ type: "update", file }))).toThrow(
+      "Malformed diffr protocol record.",
+    );
+  });
+
+  test("an update with regions but no visible counts is rejected", () => {
+    expect(() => decodeStructuralDiffEvent(JSON.stringify({ type: "update", file, regions }))).toThrow(
+      "Malformed diffr protocol record.",
+    );
+  });
+
+  test("--defer output validates", () => {
+    const events = run(["--no-index", "--defer", "--format", "ndjson", "--", ...pairs[0]]);
+    expect(events.at(-1)).toMatchObject({ type: "complete", failed: 0 });
+  });
+});
+
 test("removed annotation records are rejected", () => {
   const record = {
     type: "annotations",

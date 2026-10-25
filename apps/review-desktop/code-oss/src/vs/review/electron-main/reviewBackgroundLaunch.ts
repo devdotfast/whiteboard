@@ -5,25 +5,34 @@
 
 import { FocusMode } from "../../platform/native/common/native.js";
 
-/** "1" on `whiteboard app` launches without --focus. */
+/** "1" on `whiteboard app` launches without --focus; "always" never takes focus; "hidden" also hides windows (e2e runs). */
 export const REVIEW_DESKTOP_BACKGROUND_ENV = "DEV_FAST_REVIEW_DESKTOP_BACKGROUND";
+
+export const isBackgroundLaunch = (env: NodeJS.ProcessEnv) =>
+	["1", "always", "hidden"].includes(env[REVIEW_DESKTOP_BACKGROUND_ENV] ?? "");
 
 interface BackgroundWindow {
 	show(): void;
 	showInactive(): void;
+	setOpacity(opacity: number): void;
+	setIgnoreMouseEvents(ignore: boolean): void;
 	once(event: "focus", listener: () => void): unknown;
 }
 
 /**
  * Shows the first window inactive and swallows focus until the user focuses a
- * window or a forced focus arrives. Releases once per process.
+ * window or a forced focus arrives. Releases once per process, unless "always".
  */
 export class ReviewBackgroundLaunch {
 	private pending: boolean;
+	private readonly always: boolean;
+	private readonly hidden: boolean;
 	private showInactiveOnCreate = false;
 
 	constructor(env: NodeJS.ProcessEnv = process.env) {
-		this.pending = env[REVIEW_DESKTOP_BACKGROUND_ENV] === "1";
+		this.hidden = env[REVIEW_DESKTOP_BACKGROUND_ENV] === "hidden";
+		this.always = this.hidden || env[REVIEW_DESKTOP_BACKGROUND_ENV] === "always";
+		this.pending = isBackgroundLaunch(env);
 	}
 
 	get suppressesFocus(): boolean {
@@ -39,6 +48,10 @@ export class ReviewBackgroundLaunch {
 
 	attach(win: BackgroundWindow): void {
 		if (!this.pending) return;
+		if (this.hidden) {
+			win.setOpacity(0);
+			win.setIgnoreMouseEvents(true);
+		}
 		if (this.showInactiveOnCreate) win.showInactive();
 		win.once("focus", () => this.release());
 	}
@@ -51,6 +64,7 @@ export class ReviewBackgroundLaunch {
 
 	allowsFocus(mode: FocusMode): boolean {
 		if (!this.pending) return true;
+		if (this.always) return false;
 		if (mode === FocusMode.Force) {
 			this.release();
 			return true;
@@ -59,6 +73,7 @@ export class ReviewBackgroundLaunch {
 	}
 
 	private release(): void {
+		if (this.always) return;
 		this.pending = false;
 		this.showInactiveOnCreate = false;
 	}

@@ -3,9 +3,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import {
-  readReviewPreferences,
+  readAnimationsEnabled,
   writeAnimationsEnabled,
-  writeScratchpadEnabled,
 } from "@review/review-preferences.js";
 import { expect, it } from "vitest";
 
@@ -13,7 +12,7 @@ import { type AuthoringTool } from "./agent-client.js";
 import { ReviewApiClient } from "./client.js";
 import { createReviewApi } from "./http.js";
 import { callPublicTool, publicTool } from "./public-tools.js";
-import { ReviewStore, SCRATCHPAD_ID } from "./store.js";
+import { ReviewStore } from "./store.js";
 
 it("gates animation authoring live, including stale MCP tools, while keeping saved animations readable", async () => {
   let enabled = false;
@@ -30,7 +29,6 @@ it("gates animation authoring live, including stale MCP tools, while keeping sav
     undefined,
     undefined,
     undefined,
-    () => true,
     undefined,
     undefined,
     undefined,
@@ -54,7 +52,19 @@ it("gates animation authoring live, including stale MCP tools, while keeping sav
     (await client.read<AuthoringTool[]>("/authoring")).map(publicTool);
 
   try {
-    await store.ensureScratchpad();
+    const { reviewId } = await store.execute({
+      operation: {
+        type: "create",
+        title: "Animations",
+        target: {
+          kind: "commits",
+          repositoryId: "repo",
+          base: "base",
+          head: "head",
+        },
+      },
+    });
+
     const disabledTools = await catalog();
     expect(JSON.stringify(disabledTools)).not.toContain('"animation"');
     expect(await client.read<string>("/instructions")).not.toContain(
@@ -74,10 +84,10 @@ it("gates animation authoring live, including stale MCP tools, while keeping sav
       200,
     );
     await callPublicTool(client, editTool, {
-      sessionId: SCRATCHPAD_ID,
+      sessionId: reviewId,
       edit: { type: "insert", content: animation },
     });
-    const saved = store.read(SCRATCHPAD_ID);
+    const saved = store.read(reviewId);
     const targetId = saved.document[0]!.id;
 
     enabled = false;
@@ -96,16 +106,16 @@ it("gates animation authoring live, including stale MCP tools, while keeping sav
       { type: "remove", targetId },
     ]) {
       await expect(
-        callPublicTool(client, editTool, { sessionId: SCRATCHPAD_ID, edit }),
+        callPublicTool(client, editTool, { sessionId: reviewId, edit }),
       ).rejects.toThrow("Animation authoring is disabled");
-      expect(store.read(SCRATCHPAD_ID)).toEqual(saved);
+      expect(store.read(reviewId)).toEqual(saved);
     }
 
-    const read = await app.request(`/${SCRATCHPAD_ID}?full=true`);
+    const read = await app.request(`/${reviewId}?full=true`);
     expect(read.status).toBe(200);
     expect(await read.text()).toContain("Pipeline");
     await callPublicTool(client, editTool, {
-      sessionId: SCRATCHPAD_ID,
+      sessionId: reviewId,
       edit: {
         type: "insert",
         content: { type: "markdown", markdown: "Still editable" },
@@ -113,10 +123,10 @@ it("gates animation authoring live, including stale MCP tools, while keeping sav
     });
     enabled = true;
     await callPublicTool(client, editTool, {
-      sessionId: SCRATCHPAD_ID,
+      sessionId: reviewId,
       edit: { type: "update", targetId, changes: { html: "<p>Updated</p>" } },
     });
-    expect(store.read(SCRATCHPAD_ID).document).toEqual(
+    expect(store.read(reviewId).document).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "animation", html: "<p>Updated</p>" }),
       ]),
@@ -126,21 +136,15 @@ it("gates animation authoring live, including stale MCP tools, while keeping sav
   }
 });
 
-it("defaults animation authoring off and persists it without changing scratchpad preferences", async () => {
+it("defaults animation authoring off and persists it", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "animation-preferences-"));
 
   try {
-    expect((await readReviewPreferences(home)).animationsEnabled).toBe(false);
-    await writeScratchpadEnabled(true, home);
+    expect(await readAnimationsEnabled(home)).toBe(false);
     await writeAnimationsEnabled(true, home);
-    expect(await readReviewPreferences(home)).toMatchObject({
-      animationsEnabled: true,
-      scratchpadEnabled: true,
-    });
-    await writeScratchpadEnabled(false, home);
-    expect((await readReviewPreferences(home)).animationsEnabled).toBe(true);
+    expect(await readAnimationsEnabled(home)).toBe(true);
     await writeAnimationsEnabled(false, home);
-    expect((await readReviewPreferences(home)).animationsEnabled).toBe(false);
+    expect(await readAnimationsEnabled(home)).toBe(false);
   } finally {
     await rm(home, { recursive: true, force: true });
   }

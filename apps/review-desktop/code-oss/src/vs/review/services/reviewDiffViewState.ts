@@ -52,10 +52,11 @@ function stableResource(uri: URI): URI {
 	if (uri.scheme !== "review-api-source") return uri;
 	const query = new URLSearchParams(uri.query);
 	query.delete("generation");
+	query.delete("structuralView");
 	return uri.with({ query: query.toString() });
 }
 
-/** Model generations change on refresh; the comparison and file identities do not. */
+/** Model generations and structural view ids change on refresh; the comparison and file identities do not. */
 function stableDiffItemKey(key: string): string | undefined {
 	try {
 		const resources = jsonArray(parseJsonText(key));

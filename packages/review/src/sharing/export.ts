@@ -14,10 +14,11 @@ import { lensSelections } from "@review/review-api/diff-lenses.js";
 import { ReviewInputError } from "@review/review-api/document.js";
 import {
   anchorPins,
+  boardRepositoryId,
   checkReferences,
   documentSchema,
   elements,
-  hasCodeReferences,
+  readsAtBoardPins,
   resourceReference,
   resourceReferences,
   sourceReferences,
@@ -46,11 +47,31 @@ export function digestBytes(bytes: Uint8Array): string {
 export function validateShareSources(
   snapshot: Pick<Snapshot, "pins" | "document" | "lenses">,
 ) {
-  if (!snapshot.pins && hasCodeReferences(snapshot))
+  if (!snapshot.pins && readsAtBoardPins(snapshot))
     throw new ReviewInputError(
       "Reviews with code references need source pins before sharing.",
       409,
     );
+}
+
+/** The commits a board's references read at besides its base and head. A
+ * recipient fetches them too. A shared board names no repository of its
+ * own, so one stands in for its commit links. */
+export function referenceCommits(
+  snapshot: Pick<Snapshot, "pins" | "document" | "target">,
+  repositoryId = boardRepositoryId(snapshot) ?? "shared",
+): string[] {
+  const own = new Set([snapshot.pins?.base, snapshot.pins?.head]);
+  const commits = new Set<string>();
+
+  for (const { source } of sourceReferences(snapshot.document, {
+    tolerant: true,
+    repositoryId,
+  }))
+    for (const commit of [source.pins?.base, source.pins?.head])
+      if (commit && !own.has(commit)) commits.add(commit);
+
+  return [...commits].sort();
 }
 
 /** Freeze one stored version before any asynchronous source reads. */
@@ -61,16 +82,24 @@ export async function exportShare(input: {
   version?: number;
   repository?: ShareManifest["repository"];
 }): Promise<ShareBundle> {
-  // A share is the finished document: what edit last touched it stays home.
+  const stored = structuredClone(
+    input.store.read(input.reviewId, input.version),
+  );
+
+  // Commit links read from the board's repository, which a plan names only
+  // in its target.
+  const repositoryId = boardRepositoryId(stored);
+
+  // Local-only fields stay home; the target names a local checkout.
   const {
     target,
-    kind: _kind,
     staleSources: _staleSources,
     sourceUnavailable: _sourceUnavailable,
     lastEdit: _lastEdit,
     trashedAt: _trashedAt,
+    personEdit: _personEdit,
     ...snapshot
-  } = structuredClone(input.store.read(input.reviewId, input.version));
+  } = stored;
 
   if (target?.kind === "worktree")
     throw new ReviewInputError("Pin this review to commits before sharing it.");
@@ -102,7 +131,7 @@ export async function exportShare(input: {
 
   // Lens ranges travel with the snapshot and must resolve at its pins too.
   const sources = [
-    ...sourceReferences(snapshot.document),
+    ...sourceReferences(snapshot.document, { repositoryId }),
     ...lensSelections(snapshot.lenses ?? []).flatMap((selection) =>
       sourceAnchors(selection.source).map((source) => ({
         ...selection,
@@ -116,7 +145,7 @@ export async function exportShare(input: {
 
   validateShareSources(snapshot);
 
-  if (Boolean(pins) !== Boolean(input.repository))
+  if ((pins || referenceCommits(stored).length) && !input.repository)
     throw new ReviewInputError("Shared source pins require a repository.", 409);
 
   for (const block of elements(snapshot.document)) {

@@ -1,5 +1,7 @@
 import {
   type LensSource,
+  SelectionUnavailableError,
+  type SelectionUnavailableReason,
   comparisonKey,
   resolveDiffSelection,
   selectionKey,
@@ -15,17 +17,23 @@ import {
   UNCATEGORIZED_LENS_ID,
   lensSelections,
 } from "./diff-lenses.js";
-import { type Pins, anchorPins, selectionReferences } from "./document.js";
+import {
+  type Pins,
+  anchorPins,
+  boardRepositoryId,
+  selectionReferences,
+} from "./document.js";
 import { resolveFileLens, uncategorizedSources } from "./file-lenses.js";
+import { ReviewInputError } from "./input-error.js";
+import { textualRows } from "./lens-alignment.js";
 import type { LocalReviewData } from "./local-data.js";
 import type { ReviewStore, Snapshot } from "./store.js";
 
-export const coverageModeSchema = z
-  .enum(["structural", "textual"])
-  .default("structural");
+/** Older clients still send `mode`. */
+export const legacyModeSchema = z.unknown().optional();
 
 export const progressUpdateSchema = z.strictObject({
-  mode: coverageModeSchema,
+  mode: legacyModeSchema,
   version: z.number().int().nonnegative(),
   files: z
     .array(
@@ -41,7 +49,7 @@ export const progressUpdateSchema = z.strictObject({
 
 export interface ReviewProgress {
   complete?: boolean;
-  unavailableSelections?: Record<string, string>;
+  unavailableSelections?: Record<string, SelectionUnavailableReason>;
   files: CoverageFile[];
   /** Changed files of the comparisons that references with their own pins
    * named, by `comparisonKey` and then path. They are not the document's
@@ -62,7 +70,6 @@ export async function reviewProgress(
   data: LocalReviewData,
   snapshot: Snapshot,
   signal: AbortSignal = new AbortController().signal,
-  mode: "structural" | "textual" = "structural",
   partial?: ComparisonCoverage,
 ): Promise<ReviewProgress> {
   // A shared review is read-only and never enters the store, so it has no
@@ -78,7 +85,7 @@ export async function reviewProgress(
   // A document without pins of its own has no changed files; its references
   // each resolve against the comparison their own pins name.
   const comparison: ComparisonCoverage = pins
-    ? (partial ?? (await data.coverage(snapshot.reviewId, pins, mode)))
+    ? (partial ?? (await data.coverage(snapshot.reviewId, pins)))
     : {
         counted: true,
         files: [],
@@ -103,7 +110,7 @@ export async function reviewProgress(
     if (loading) return loading;
 
     if (partial) {
-      const state = data.coverageSnapshot(snapshot.reviewId, own, mode);
+      const state = data.coverageSnapshot(snapshot.reviewId, own);
 
       if (state.pending)
         return state.comparison.counted
@@ -111,7 +118,7 @@ export async function reviewProgress(
           : undefined;
     }
 
-    loading = data.coverage(snapshot.reviewId, own, mode);
+    loading = data.coverage(snapshot.reviewId, own);
     comparisons.set(key, loading);
 
     return loading;
@@ -132,7 +139,7 @@ export async function reviewProgress(
   const alignments = new Map(comparison.alignments);
   const resolvedSelections: Record<string, FileLineRange[]> = {};
 
-  const unavailableSelections: Record<string, string> = {};
+  const unavailableSelections: Record<string, SelectionUnavailableReason> = {};
   const pendingSources = new Set<string>();
 
   const resolve = async (source: LensSource): Promise<FileLineRange[]> => {
@@ -171,7 +178,8 @@ export async function reviewProgress(
     let rows = file && ownAlignments.get(file.path);
 
     // Context-only files are absent from the changed-file stream. Read both pins
-    // and require equality rather than inventing correspondence for missing diffs.
+    // and require equality rather than inventing correspondence for missing
+    // diffs; a file on one side only, such as an untracked one, is that side.
     if (!file && counting && !own) {
       pendingSources.add(key);
 
@@ -179,20 +187,43 @@ export async function reviewProgress(
     }
 
     if (!file) {
-      const [base, head] = await Promise.all([
-        data.file(sourcePins, "base", source.file),
-        data.file(sourcePins, "head", source.file),
-      ]);
+      const [base, head] = await Promise.all(
+        (["base", "head"] as const).map((side) =>
+          data.file(sourcePins, side, source.file).then(
+            (value) => value.text,
+            (error) => {
+              if (error instanceof ReviewInputError && error.status === 404)
+                return null;
+              throw error;
+            },
+          ),
+        ),
+      );
 
-      if (base.text !== head.text)
-        throw new Error("Changed context file has no alignment.");
-      rows = Array.from(
-        { length: base.text.split("\n").length },
-        (_, line) => [line, line] as const,
+      if (base === null && head === null)
+        throw new SelectionUnavailableError(
+          "missing_file",
+          "File is unavailable at these pins.",
+        );
+
+      if (base !== null && head !== null && base !== head)
+        throw new SelectionUnavailableError(
+          "no_alignment",
+          "Changed context file has no alignment.",
+        );
+      rows = textualRows(
+        source.file,
+        "",
+        base?.split("\n").length ?? 0,
+        head?.split("\n").length ?? 0,
       );
     }
 
-    if (!rows) throw new Error("File has no text alignment.");
+    if (!rows)
+      throw new SelectionUnavailableError(
+        "no_alignment",
+        "File has no text alignment.",
+      );
 
     const result = resolveDiffSelection(
       source,
@@ -208,9 +239,9 @@ export async function reviewProgress(
   const resolveAvailable = async (source: LensSource) => {
     try {
       return await resolve(source);
-    } catch {
+    } catch (error) {
       unavailableSelections[selectionKey(source)] =
-        "Source links need updating at these pins";
+        error instanceof SelectionUnavailableError ? error.reason : "other";
 
       return [];
     }
@@ -256,15 +287,16 @@ export async function reviewProgress(
 
   // Peeks share alignment resolution without claiming lens coverage.
   await Promise.all(
-    selectionReferences(snapshot.document, { tolerant: true }).map(
-      async ({ source }) => {
-        try {
-          await resolveAvailable(source);
-        } catch {
-          /* An unavailable peek does not hide other content. */
-        }
-      },
-    ),
+    selectionReferences(snapshot.document, {
+      tolerant: true,
+      repositoryId: boardRepositoryId(snapshot),
+    }).map(async ({ source }) => {
+      try {
+        await resolveAvailable(source);
+      } catch {
+        /* An unavailable peek does not hide other content. */
+      }
+    }),
   );
 
   const uncategorized = counting
@@ -301,7 +333,7 @@ export async function reviewProgress(
   });
 
   const progress: ReviewProgress = {
-    complete: !counting,
+    complete: !counting && !pendingSources.size,
     files,
     referenceFiles,
     lenses,

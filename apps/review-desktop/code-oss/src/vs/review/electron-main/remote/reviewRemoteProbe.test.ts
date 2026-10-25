@@ -12,8 +12,8 @@ import test from "node:test";
 
 import type { SpawnSsh } from "./reviewRemoteHost.js";
 import { REVIEW_REMOTE_INSTALL_MARKER, REVIEW_REMOTE_WRAPPER_MARK } from "./reviewRemoteInstallScript.js";
-import { judgeRemote, parseRemoteProbe, probeRemote, type ReviewRemoteProbe } from "./reviewRemoteProbe.js";
-import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_PATH_CLI } from "./reviewRemoteProbeScript.js";
+import { judgeRemote, parseRemoteProbe, probeRemote, REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_PATH_CLI, type ReviewRemoteProbe } from "./reviewRemoteProbe.js";
+import { INSTALL_SCRIPT } from "./test/installScript.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
 
 const SHA256 = "a".repeat(64);
@@ -111,7 +111,7 @@ test("the script finds the complete installed versions and the host's tools, and
 	const { home, env } = await fakeRemote(t);
 	const before = await tree(home);
 
-	const result = await probeRemote({ session, spawn: localShell(env), env: {} });
+	const result = await probeRemote({ session, spawn: localShell(env), env: {}, script: INSTALL_SCRIPT });
 
 	assert.ok("probe" in result, "error" in result ? result.error : "");
 	const { probe } = result;
@@ -134,7 +134,7 @@ test("Desktop's wrapper and a link into the install root are not a CLI on PATH: 
 	await rm(join(bin, "whiteboard"));
 	await executable(join(local, "whiteboard"), `${REVIEW_REMOTE_WRAPPER_MARK}\necho 0.1.6`);
 	const probe = async () => {
-		const result = await probeRemote({ session, spawn: localShell(env), env: {} });
+		const result = await probeRemote({ session, spawn: localShell(env), env: {}, script: INSTALL_SCRIPT });
 		assert.ok("probe" in result, "error" in result ? result.error : "");
 		return result.probe.pathCli;
 	};
@@ -153,7 +153,7 @@ test("a tree unpacked by hand under the install root is a CLI on PATH; one under
 	await rm(join(home, "bin/whiteboard"));
 	const probe = async (dir: string) => {
 		await executable(join(dir, "whiteboard"), 'if [ "$1" = --version ]; then echo 1.2.3; fi');
-		const result = await probeRemote({ session, spawn: localShell({ ...env, PATH: `${dir}:${env.PATH}` }), env: {} });
+		const result = await probeRemote({ session, spawn: localShell({ ...env, PATH: `${dir}:${env.PATH}` }), env: {}, script: INSTALL_SCRIPT });
 		assert.ok("probe" in result, "error" in result ? result.error : "");
 		return result.probe.pathCli;
 	};
@@ -170,7 +170,7 @@ test("a home with quotes and backslashes reaches the parser intact", async (t) =
 	const home = join(parent, 'a "quoted" \\ home');
 	await mkdir(home);
 
-	const result = await probeRemote({ session, spawn: localShell({ HOME: home, PATH: "/usr/bin:/bin" }), env: {} });
+	const result = await probeRemote({ session, spawn: localShell({ HOME: home, PATH: "/usr/bin:/bin" }), env: {}, script: INSTALL_SCRIPT });
 
 	assert.ok("probe" in result, "error" in result ? result.error : "");
 	assert.equal(result.probe.home, home);
@@ -181,7 +181,7 @@ test("a home that does not exist is refused as unwritable, not as a malformed an
 	t.after(() => rm(parent, { recursive: true, force: true }));
 	const home = join(parent, "missing");
 
-	const result = await probeRemote({ session, spawn: localShell({ HOME: home, PATH: "/usr/bin:/bin" }), env: {} });
+	const result = await probeRemote({ session, spawn: localShell({ HOME: home, PATH: "/usr/bin:/bin" }), env: {}, script: INSTALL_SCRIPT });
 
 	assert.ok("probe" in result, "error" in result ? result.error : "");
 	assert.equal(result.probe.freeBytes, 0);
@@ -193,7 +193,7 @@ test("a home that does not exist is refused as unwritable, not as a malformed an
 
 test("a probe that does not answer in time is ended and reported", async () => {
 	const started = Date.now();
-	const result = await probeRemote({ session, spawn: localShell({}, "/bin/sleep", ["30"]), env: {}, timeout: 300 });
+	const result = await probeRemote({ session, spawn: localShell({}, "/bin/sleep", ["30"]), env: {}, script: INSTALL_SCRIPT, timeout: 300 });
 
 	assert.deepEqual(result, { error: "The probe of devbox did not answer within 0.3 seconds." });
 	assert.ok(Date.now() - started < 5000);
@@ -201,7 +201,7 @@ test("a probe that does not answer in time is ended and reported", async () => {
 
 test("a probe that runs out of time after its answer has no PATH CLI, and is not an error", async () => {
 	const printed = answer({ ...supported, pathCli: undefined });
-	const result = await probeRemote({ session, spawn: localShell({}, "/bin/sh", ["-c", `cat >/dev/null; printf '%s' '${printed}'; exec sleep 30`]), env: {}, timeout: 500 });
+	const result = await probeRemote({ session, spawn: localShell({}, "/bin/sh", ["-c", `cat >/dev/null; printf '%s' '${printed}'; exec sleep 30`]), env: {}, script: INSTALL_SCRIPT, timeout: 500 });
 
 	assert.deepEqual(result, { probe: { ...supported, pathCli: null } });
 });
@@ -216,7 +216,7 @@ test("a login shell that ignores SIGTERM is killed in time, and finds no CLI", {
 	await executable(join(home, "bin/curl"), "exit 7");
 	const started = Date.now();
 
-	const result = await probeRemote({ session, spawn: localShell({ HOME: home, SHELL: shell, PATH: `${join(home, "bin")}:${timeoutDir}:/usr/bin:/bin` }), env: {} });
+	const result = await probeRemote({ session, spawn: localShell({ HOME: home, SHELL: shell, PATH: `${join(home, "bin")}:${timeoutDir}:/usr/bin:/bin` }), env: {}, script: INSTALL_SCRIPT });
 
 	assert.ok("probe" in result, "error" in result ? result.error : "");
 	assert.equal(result.probe.pathCli, null);

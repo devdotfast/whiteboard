@@ -51,10 +51,7 @@ const client = new ReviewApiClient(
 );
 
 afterEach(async () => {
-  // The scratchpad cannot be deleted; every review can.
-  for (const { reviewId, kind, trashedAt } of store.list()) {
-    if (kind === "scratchpad") continue;
-
+  for (const { reviewId, trashedAt } of store.list()) {
     if (!trashedAt)
       await store.execute({
         operation: { type: "lifecycle", state: "trash", reviewId },
@@ -64,10 +61,6 @@ afterEach(async () => {
     });
   }
 });
-
-/** Catalog entries that are reviews: listing also makes the scratchpad. */
-const reviewsOnly = (entries: { kind?: string }[]) =>
-  entries.filter((entry) => entry.kind !== "scratchpad");
 
 it("uses host-advertised tools to edit, retry, reject invalid content and inspect saved IDs", async () => {
   const tools = await client.read<AuthoringTool[]>("/authoring");
@@ -83,7 +76,7 @@ it("uses host-advertised tools to edit, retry, reject invalid content and inspec
     title: "Authoring",
     target: {
       kind: "commits",
-      repositoryId: "repo",
+      repositoryPath: "repo",
       base: "base",
       head: "head",
     },
@@ -251,6 +244,13 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
       properties: expect.objectContaining({ activityId: expect.anything() }),
     });
 
+    const annotations = (name: string) =>
+      list.result.tools.find((tool: AuthoringTool) => tool.name === name)
+        .annotations;
+
+    expect(annotations("session_get")).toEqual({ readOnlyHint: true });
+    expect(annotations("session_delete")).toBeUndefined();
+
     const error = await request(3, "tools/call", {
       name: "session_get",
       arguments: { sessionId: "missing" },
@@ -266,7 +266,7 @@ it("serves MCP framing without stdout diagnostics and returns host errors as too
       arguments: {},
     });
 
-    expect(reviewsOnly(JSON.parse(next.result.content[0].text))).toEqual([]);
+    expect(JSON.parse(next.result.content[0].text)).toEqual([]);
 
     const created = await store.execute({
       operation: {
@@ -498,7 +498,7 @@ it("binds existing content through the host-advertised PR tool", async () => {
       reviewId: created.reviewId,
       target: {
         kind: "commits",
-        repositoryId: "repo",
+        repositoryPath: "repo",
         base: "base",
         head: "head",
       },

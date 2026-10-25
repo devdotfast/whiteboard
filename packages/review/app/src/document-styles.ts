@@ -1,5 +1,11 @@
-import { documentType } from "@canvas/document-type.stylex";
-import { fontSize, fontWeight, radius, tracking } from "@canvas/scale.stylex";
+import { codeType, documentType } from "@canvas/document-type.stylex";
+import {
+  fontWeight,
+  leading,
+  radius,
+  space,
+  tracking,
+} from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { appMarker, documentMarker, proseMarker } from "./markers.stylex";
@@ -12,8 +18,10 @@ import { tokens } from "./tokens.stylex";
 
 const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
-// A block's own element: it sits in the prose column.
-const inDocumentBlock = () => `${inDocument()}:is([data-review-node-id] > *)`;
+// A block's own element: it sits in the prose column. A board's Markdown
+// block is one before its first save gives it an id.
+const inDocumentBlock = () =>
+  `${inDocument()}:is([data-review-node-id] > *, [data-board-markdown] > *)`;
 
 // Inside a Markdown or trace quote block.
 const inProse = () =>
@@ -25,12 +33,6 @@ const inOpenDocumentLink = () =>
   `${inDocument()}:is(a[data-review-anchor-open] *)`;
 
 const afterProseItem = () => `${inProse()}:is(li + *)`;
-
-// The scratchpad has no title, so its opening heading sits at the top.
-const scratchpadOpening = () =>
-  `${inDocument()}:is([data-kind="scratchpad"] > [data-review-node-id]:first-child *):first-child`;
-
-const narrow = "@media (max-width: 720px)";
 
 const compact = "@container review-content (max-width: 1080px)";
 
@@ -71,12 +73,15 @@ export const documentStyles = stylex.create({
     },
     "--review-document-padding-inline": {
       default: "clamp(20px, calc((100cqi - 720px) * 0.122 + 20px), 64px)",
-      [narrow]: "clamp(12px, 4vw, 20px)",
+      [stylex.env.narrow]: "clamp(12px, 4vw, 20px)",
     },
-    "--review-document-padding-block-start": "28px",
+    // With the view's own top padding, the header's first line sits 36px
+    // under the top bar.
+    "--review-document-padding-block-start": "16px",
+    "--document-scale": "var(--review-document-scale, 1)",
     "--review-document-padding-block-end": {
       default: "72px",
-      [narrow]: "48px",
+      [stylex.env.narrow]: "48px",
     },
     "--review-prose-max-width": {
       default: "720px",
@@ -92,30 +97,30 @@ export const documentStyles = stylex.create({
       default: "100%",
       [withLens()]: "min(1360px, calc(100% - 32px))",
       [full()]: { default: null, [roomy]: "100%" },
-      [narrow]: "100%",
+      [stylex.env.narrow]: "100%",
     },
     maxWidth: {
       default: "860px",
       [withHeader()]: "900px",
       [wide()]: { default: null, [roomy]: "1360px" },
       [full()]: { default: null, [roomy]: "1800px" },
-      [narrow]: { default: "none", [withHeader()]: "900px" },
+      [stylex.env.narrow]: { default: "none", [withHeader()]: "900px" },
     },
     minWidth: 0,
     margin: {
-      default: "0 auto 96px",
-      [compact]: { default: "0 auto", [narrow]: 0 },
-      [narrow]: 0,
+      default: `0 auto ${space.s96}`,
+      [compact]: { default: "0 auto", [stylex.env.narrow]: 0 },
+      [stylex.env.narrow]: 0,
     },
     padding: {
       default: `${tokens.reviewDocumentPaddingBlockStart} ${tokens.reviewDocumentPaddingInline} ${tokens.reviewDocumentPaddingBlockEnd}`,
-      [compact]: `28px ${tokens.reviewDocumentPaddingInline}`,
+      [compact]: `${space.s28} ${tokens.reviewDocumentPaddingInline}`,
     },
     backgroundColor: tokens.transparent,
     color: tokens.ink,
     fontFamily: tokens.fontSerif,
     fontSize: documentType.body,
-    lineHeight: 1.6,
+    lineHeight: leading.relaxed,
   },
   // Beside an open side peek the column narrows its inline diagrams, and a
   // database lens keeps a smaller gutter.
@@ -127,14 +132,14 @@ export const documentStyles = stylex.create({
     width: {
       default: "100%",
       [withLens()]: "calc(100% - 24px)",
-      [narrow]: "100%",
+      [stylex.env.narrow]: "100%",
     },
     maxWidth: {
       default: "860px",
       [withHeader()]: "900px",
       [wide()]: { default: null, [roomy]: "1360px" },
       [full()]: { default: null, [roomy]: "1800px" },
-      [narrow]: {
+      [stylex.env.narrow]: {
         default: "none",
         [withHeader()]: { default: "900px", [withLens()]: "none" },
       },
@@ -142,13 +147,12 @@ export const documentStyles = stylex.create({
   },
   h1: {
     width: { default: null, [inDocument()]: proseColumn },
-    margin: { default: null, [inDocument()]: "28px auto 18px" },
-    marginTop: { default: null, [scratchpadOpening()]: 0 },
+    margin: { default: null, [inDocument()]: `${space.s28} auto ${space.s18}` },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h1 },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument()]: "40px" },
+    lineHeight: { default: null, [inDocument()]: documentType.h1Leading },
     letterSpacing: { default: null, [inDocument()]: tracking.tight },
     textAlign: { default: null, [inDocument()]: "left" },
   },
@@ -159,27 +163,25 @@ export const documentStyles = stylex.create({
     scrollMarginTop: { default: null, [inDocument()]: "24px" },
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
-    margin: { default: null, [inDocument()]: "40px auto 12px" },
-    marginTop: { default: null, [scratchpadOpening()]: 0 },
+    margin: { default: null, [inDocument()]: `${space.s40} auto ${space.s12}` },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h2 },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument()]: "32px" },
+    lineHeight: { default: null, [inDocument()]: documentType.h2Leading },
   },
   h3: {
     scrollMarginTop: { default: null, [inDocument()]: "24px" },
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
-    margin: { default: null, [inDocument()]: "30px auto 10px" },
-    marginTop: { default: null, [scratchpadOpening()]: 0 },
+    margin: { default: null, [inDocument()]: `${space.s32} auto ${space.s10}` },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: documentType.h3 },
     fontWeight: { default: null, [inDocument()]: fontWeight.medium },
-    lineHeight: { default: null, [inDocument()]: "23px" },
+    lineHeight: { default: null, [inDocument()]: documentType.h3Leading },
   },
-  // A block in the prose column: lists, quotes, images, tutorial controls.
+  // A block in the prose column: lists, quotes, images.
   column: {
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
@@ -191,12 +193,12 @@ export const documentStyles = stylex.create({
   paragraph: {
     width: { default: null, [inDocumentBlock()]: proseColumn },
     maxWidth: { default: null, [inDocumentBlock()]: proseMaxWidth },
-    margin: { default: null, [inProse()]: "14px 0" },
+    margin: { default: null, [inProse()]: `${space.s14} 0` },
     marginInline: { default: null, [inDocumentBlock()]: "auto" },
     color: { default: null, [inProse()]: tokens.ink },
     fontFamily: { default: null, [inProse()]: tokens.fontSerif },
-    fontSize: { default: null, [inProse()]: fontSize.reading },
-    lineHeight: { default: null, [inProse()]: 1.72 },
+    fontSize: { default: null, [inProse()]: documentType.reading },
+    lineHeight: { default: null, [inProse()]: leading.prose },
     textAlign: { default: null, [inProse()]: "left" },
   },
   // A list item's paragraphs sit flush with the item.
@@ -211,21 +213,21 @@ export const documentStyles = stylex.create({
     },
   },
   item: {
-    marginTop: { default: null, [afterProseItem()]: "8px" },
+    marginTop: { default: null, [afterProseItem()]: space.s8 },
     color: { default: null, [inProse()]: tokens.ink },
     fontFamily: { default: null, [inProse()]: tokens.fontSerif },
-    fontSize: { default: null, [inProse()]: fontSize.reading },
-    lineHeight: { default: null, [inProse()]: 1.72 },
+    fontSize: { default: null, [inProse()]: documentType.reading },
+    lineHeight: { default: null, [inProse()]: leading.prose },
     textAlign: { default: null, [inProse()]: "left" },
   },
   // Document copy outside a Markdown block, read as its paragraphs: the
   // stale block's notice, the fallback message.
   note: {
-    margin: { default: null, [inDocument()]: "14px 0" },
+    margin: { default: null, [inDocument()]: `${space.s14} 0` },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
-    fontSize: { default: null, [inDocument()]: fontSize.reading },
-    lineHeight: { default: null, [inDocument()]: 1.72 },
+    fontSize: { default: null, [inDocument()]: documentType.reading },
+    lineHeight: { default: null, [inDocument()]: leading.prose },
     textAlign: { default: null, [inDocument()]: "left" },
   },
   // Links are just text in the link color, prose and code chips alike, with
@@ -246,7 +248,7 @@ export const documentStyles = stylex.create({
     },
   },
   code: {
-    padding: { default: null, [inDocument()]: "2px 5px" },
+    padding: { default: null, [inDocument()]: `${space.s2} ${space.s4}` },
     borderRadius: { default: null, [inDocument()]: radius.small },
     backgroundColor: {
       default: null,
@@ -258,21 +260,23 @@ export const documentStyles = stylex.create({
       [inDocument()]: tokens.ink,
       [inDocumentLink()]: tokens.accent,
     },
-    fontFamily: { default: null, [inDocument()]: tokens.fontMono },
+    fontFamily: { default: null, [inDocument()]: tokens.fontCode },
     fontSize: { default: null, [inDocument()]: "0.85em" },
+    fontVariantLigatures: { default: null, [inDocument()]: codeType.ligatures },
   },
   table: {
     width: { default: null, [inDocument()]: "min(100%, 600px)" },
-    margin: { default: null, [inDocument()]: "24px auto" },
+    margin: { default: null, [inDocument()]: `${space.s24} auto` },
     borderCollapse: { default: null, [inDocument()]: "collapse" },
     color: { default: null, [inDocument()]: tokens.ink },
-    fontFamily: { default: null, [inDocument()]: tokens.fontMono },
-    fontSize: { default: null, [inDocument()]: fontSize.ui },
-    lineHeight: { default: null, [inDocument()]: 1.55 },
+    // The board's prose face; code chips in cells keep their own.
+    fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
+    fontSize: { default: null, [inDocument()]: documentType.small },
+    lineHeight: { default: null, [inDocument()]: leading.normal },
     tableLayout: { default: null, [inDocument()]: "fixed" },
   },
   cell: {
-    padding: { default: null, [inDocument()]: "8px 10px" },
+    padding: { default: null, [inDocument()]: `${space.s8} ${space.s10}` },
     borderWidth: { default: null, [inDocument()]: "1px" },
     borderStyle: { default: null, [inDocument()]: "solid" },
     borderColor: { default: null, [inDocument()]: tokens.rule },

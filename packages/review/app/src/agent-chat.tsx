@@ -1,4 +1,4 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement, ReactNode } from "react";
 
@@ -31,24 +31,32 @@ export function AgentChatUserMessage({
   );
 }
 
+/** The bubble on a tray (Ask's panel, the right column), lifted off it. */
+export const trayBubbleStyles = stylex.create({
+  bubble: {
+    padding: `${space.s10} ${space.s14}`,
+    backgroundColor: tokens.trayRaised,
+  },
+});
+
 const styles = stylex.create({
   message: {
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-end",
-    gap: "5px",
-    marginTop: "14px",
+    gap: space.s4,
+    marginTop: space.s14,
     marginLeft: "auto",
     maxWidth: "min(480px, 90%)",
     minWidth: 0,
   },
   bubble: {
-    padding: "12px 14px",
+    padding: `${space.s12} ${space.s14}`,
     backgroundColor: tokens.tray,
     borderRadius: `${radius.surface} ${radius.surface} ${radius.small} ${radius.surface}`,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "24px",
+    lineHeight: leading.px24,
     color: tokens.ink,
     whiteSpace: "pre-wrap",
     overflowWrap: "anywhere",
@@ -56,7 +64,7 @@ const styles = stylex.create({
     maxWidth: "100%",
   },
   caption: {
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
     color: tokens.inkFaint,
   },

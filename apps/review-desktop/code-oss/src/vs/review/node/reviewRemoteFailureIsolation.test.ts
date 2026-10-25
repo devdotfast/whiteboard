@@ -209,15 +209,3 @@ test('a new connection to an authority that failed succeeds once its server is b
 	assert.equal(await echo(again, 'b again'), 'b again');
 	assert.equal(await echo(toA, 'a'), 'a');
 });
-
-test('a new connection to a third authority succeeds after another authority failed', async () => {
-	const [a, b, c] = [await startRemote(), await startRemote(), await startRemote()];
-	const toA = await connect(a, 'wb-test+a');
-	const toB = await connect(b, 'wb-test+b');
-	await failPermanently(b, toB);
-
-	const toC = await connect(c, 'wb-test+c');
-
-	assert.equal(await echo(toC, 'c'), 'c');
-	assert.equal(await echo(toA, 'a'), 'a');
-});

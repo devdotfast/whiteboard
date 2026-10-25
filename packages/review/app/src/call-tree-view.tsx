@@ -1,4 +1,9 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, leading, space } from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CheckIcon } from "@canvas/ui/icons";
+import { Spinner } from "@canvas/ui/spinner";
+import { surfaceStyles } from "@canvas/ui/surface";
 import type { DiffSelection } from "@review/lens-selection";
 import type { CallStackDiffBlock } from "@review/review-api/blocks/call_stack_diff";
 import * as stylex from "@stylexjs/stylex";
@@ -78,6 +83,7 @@ export function CallTree({
                   opacity: unavailable ? 0.45 : undefined,
                 }}
                 {...stylex.props(
+                  buttonStyles.reset,
                   styles.row,
                   stop.id === active && styles.rowCurrent,
                 )}
@@ -110,7 +116,7 @@ export function CallTree({
                 </span>
                 {unavailable && (
                   <span {...stylex.props(styles.stats)}>
-                    {availability === "pending" ? "…" : "Unavailable"}
+                    {availability === "pending" ? <Spinner /> : "Unavailable"}
                   </span>
                 )}
                 {!unavailable && stats && change !== "unchanged" && (
@@ -119,7 +125,11 @@ export function CallTree({
                     title={`Remaining +${stats.remaining.additions} −${stats.remaining.deletions} · Total +${stats.total.additions} −${stats.total.deletions}`}
                   >
                     {stats.state === "viewed" ? (
-                      "✓"
+                      <span role="img" aria-label="Viewed">
+                        <CheckIcon
+                          xstyle={[iconStyles.inline, iconStyles.glyph]}
+                        />
+                      </span>
                     ) : stats.state === "folded" ? (
                       "Folded"
                     ) : (
@@ -225,7 +235,11 @@ export function DocumentCallTree({ block }: { block: CallStackDiffBlock }) {
 
   return (
     <figure
-      {...stylex.props(styles.figure, drawStyles.blockChild)}
+      {...stylex.props(
+        surfaceStyles.card,
+        styles.figure,
+        drawStyles.blockChild,
+      )}
       data-review-call-stack="ready"
     >
       <DiagramHeader kind="Call tree" title={block.title ?? "Call tree"} />
@@ -255,18 +269,12 @@ export function DocumentCallTree({ block }: { block: CallStackDiffBlock }) {
 
 const styles = stylex.create({
   figure: {
-    margin: "14px 0",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.rule,
-    borderRadius: radius.surface,
-    overflow: "hidden",
-    backgroundColor: tokens.surface,
+    margin: `${space.s14} 0`,
   },
   tree: {
     minWidth: "100%",
     width: "100%",
-    padding: "6px 0 12px",
+    padding: `${space.s6} 0 ${space.s12}`,
   },
   // A hovered or focused call-site edge paints over the rows below it.
   entry: {
@@ -283,15 +291,12 @@ const styles = stylex.create({
     alignItems: "center",
     width: "100%",
     height: "26px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    padding: "0 12px 0 14px",
+    padding: `0 ${space.s12} 0 ${space.s14}`,
     backgroundColor: {
-      default: "transparent",
+      default: tokens.transparent,
       ":hover:not(:disabled)": `color-mix(in srgb, ${tokens.ink} 3%, transparent)`,
     },
-    font: `${fontSize.body}/26px ${tokens.fontMono}`,
+    font: `${fontSize.body}/${leading.px26} ${tokens.fontMono}`,
     textAlign: "left",
     whiteSpace: "nowrap",
   },
@@ -318,18 +323,18 @@ const styles = stylex.create({
   },
   stats: {
     display: "inline-flex",
-    gap: "5px",
+    gap: space.s4,
     fontVariantNumeric: "tabular-nums",
     flexShrink: 0,
     marginLeft: "auto",
-    paddingLeft: "12px",
+    paddingLeft: space.s12,
     fontSize: fontSize.micro,
   },
   connectors: {
     flexShrink: 0,
     alignSelf: "stretch",
     position: "absolute",
-    left: "14px",
+    left: space.s14,
     top: 0,
     zIndex: 1,
     pointerEvents: "none",
@@ -345,7 +350,7 @@ const styles = stylex.create({
     cursor: "pointer",
   },
   edgeHit: {
-    stroke: "transparent",
+    stroke: tokens.transparent,
     strokeWidth: "10px",
   },
   edgeHighlight: {

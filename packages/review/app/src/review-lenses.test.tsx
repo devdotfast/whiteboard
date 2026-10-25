@@ -8,7 +8,7 @@ import { expect, it, vi } from "vitest";
 import { createCanvasQueryClient } from "./canvas-query";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewDiffView } from "./DiffView";
-import { ReviewSessionProvider } from "./host/review-session";
+import { ReviewSessionProvider, hostApiClient } from "./host/review-session";
 import { ReviewLensesProvider, useReviewLenses } from "./review-lenses";
 import { ReviewPanelProvider } from "./review-panel";
 import { testReviewSession } from "./review-session-test-utils";
@@ -48,7 +48,7 @@ it("clears a lens without destroying the full comparison's native state", async 
     },
   );
 
-  const client = new ReviewApiClient(session.config, session.bridge.request);
+  const client = hostApiClient(session.bridge);
 
   const snapshot: Snapshot = {
     reviewId: "test-session",

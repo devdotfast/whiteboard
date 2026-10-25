@@ -24,7 +24,8 @@ The bundled plugins, in their default order:
 The bundled classifier, `plugins.classify.bundled`, runs before all of them. It
 tags each file as `generated`, `vendored`, `docs`, `test`, `integration` or
 `e2e`, from GitHub Linguist's rules, test-path rules and git attributes, and
-hides some of them.
+hides some of them. Attributes win: `vendor/** linguist-vendored=false` in
+`.gitattributes` or `.git/info/attributes` shows those files.
 
 Many requests need only a setting on a bundled plugin. Set one with
 `diffr config set <key> <value>`, for example

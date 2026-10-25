@@ -11,7 +11,7 @@ import { Orientation, SplitView } from "../../base/browser/ui/splitview/splitvie
 import { disposableTimeout } from "../../base/common/async.js";
 import { Emitter, Event } from "../../base/common/event.js";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
-import { autorun, observableFromEvent, observableValue } from "../../base/common/observable.js";
+import { autorun, observableFromEvent, observableValue, type ISettableObservable } from "../../base/common/observable.js";
 import { isEqual } from "../../base/common/resources.js";
 import { URI } from "../../base/common/uri.js";
 import { ElementSizeObserver } from "../../editor/browser/config/elementSizeObserver.js";
@@ -37,6 +37,7 @@ import { ReviewChangedFilesTree } from "../browser/reviewChangedFilesTree.js";
 import { REVIEW_COUNTS_PENDING_TOOLTIP, reviewChangesTooltip, reviewCountsTooltip, ReviewTooltip, type ReviewTooltipContent } from "../browser/reviewTooltip.js";
 import { type ReviewDiffFileWire } from "../common/reviewProtocol.js";
 import { binarySizeLabel, isBinaryCounts, type ReviewFileCounts } from "../common/reviewStructuralDiff.js";
+import type { DiffFindFolds } from "./reviewDiffFind.js";
 import type { ReviewDiffLayoutSetting } from "./reviewDiffLayout.js";
 import { reviewMultiDiffLabelUris, ReviewMultiDiffUIElementFactory } from "./reviewMultiDiff.js";
 import type { StructuralDiffSession } from "./reviewStructuralDiffSession.js";
@@ -48,7 +49,8 @@ const REVIEW_FILES_DIFF_EDITOR_OPTIONS = {
 	hideUnchangedRegions: { enabled: true },
 	originalEditable: false,
 	readOnly: true,
-	glyphMargin: false,
+	// Ask pins.
+	glyphMargin: true,
 	lineNumbersMinChars: 3,
 	// A peek or diff on the page is read until it is clicked into; the current
 	// line highlight belongs to the cursor, not to the first revealed line.
@@ -77,8 +79,8 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 	constructor(
 		source: URI,
 		readonly entries: readonly ReviewFilesEditorEntry[],
-		structural: StructuralDiffSession | undefined,
-		lens: boolean = false,
+		structural: StructuralDiffSession,
+		compactPinLane: boolean,
 		@ITextModelService textModelService: ITextModelService,
 		@ITextResourceConfigurationService
 		textResourceConfigurationService: ITextResourceConfigurationService,
@@ -96,33 +98,29 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 					entry.original,
 					entry.modified,
 					entry.goToFileResource,
-					structural && entry.file.status !== "unchanged" && structural.getFileResult(entry.file.path)?.diff?.type !== "binary"
+					entry.file.status !== "unchanged" && structural.getTextDiff(entry.file.path)
 						? structural.fileCollapse(entry.file.path)
 						: observableValue("collapsed", false),
 					undefined,
 					undefined,
 					reviewMultiDiffLabelUris(entry.file),
 					// Use diffr's child folds; the file header controls the root.
-					(structural || lens)
-						? {
-							...REVIEW_FILES_DIFF_EDITOR_OPTIONS,
-							hideOriginalLineNumbers: entry.file.status === "added" || entry.file.status === "unchanged",
-							hideUnchangedRegions: {
-								enabled: true,
-								minimumLineCount: 1,
-								contextLineCount: 0,
-							},
-							folding: false,
-							// Structural rails use one geometry through code, folds and deleted rows.
-							...(structural ? {
-								guides: { indentation: false, bracketPairs: false },
-								// Fold controls follow the line numbers, with breathing room before code.
-								lineDecorationsWidth: 24,
-							} : {}),
-							glyphMargin: true,
-							experimental: { useTrueInlineView: false },
-						}
-						: { ...REVIEW_FILES_DIFF_EDITOR_OPTIONS, hideOriginalLineNumbers: entry.file.status === "added" || entry.file.status === "unchanged" },
+					{
+						...REVIEW_FILES_DIFF_EDITOR_OPTIONS,
+						glyphMarginWidth: compactPinLane ? 0 : -1,
+						hideOriginalLineNumbers: entry.file.status === "added" || entry.file.status === "unchanged",
+						hideUnchangedRegions: {
+							enabled: true,
+							minimumLineCount: 1,
+							contextLineCount: 0,
+						},
+						folding: false,
+						// Structural rails use one geometry through code, folds and deleted rows.
+						guides: { indentation: false, bracketPairs: false },
+						// Fold controls follow the line numbers, with breathing room before code.
+						lineDecorationsWidth: 24,
+						experimental: { useTrueInlineView: false },
+					},
 				);
 				items.set(entry, item);
 			}
@@ -143,19 +141,17 @@ export class ReviewFilesEditorInput extends MultiDiffEditorInput {
 		super(
 			source,
 			"Files",
-			structural ? undefined : entries.map(itemFor),
+			undefined,
 			true,
 			textModelService,
 			textResourceConfigurationService,
 			instantiationService,
-			structural
-				? {
-					_serviceBrand: undefined,
-					registerResolver: (resolver) =>
-						multiDiffSourceResolverService.registerResolver(resolver),
-					resolve: async () => streamSource,
-				}
-				: multiDiffSourceResolverService,
+			{
+				_serviceBrand: undefined,
+				registerResolver: (resolver) =>
+					multiDiffSourceResolverService.registerResolver(resolver),
+				resolve: async () => streamSource,
+			},
 			textFileService,
 		);
 		this._register(changes);
@@ -197,7 +193,8 @@ export class ReviewFilesDiffView extends Disposable {
 	private viewModel: MultiDiffEditorViewModel | undefined;
 	private input: ReviewFilesEditorInput | undefined;
 	private readonly readyFiles = new Set<string>();
-	private readonly fileStates = new Map<string, string>();
+	private readonly loadingFiles = new Set<string>();
+	private readonly failedFiles = new Map<string, string>();
 	private readonly settleHold = this._register(new MutableDisposable<DisposableStore>());
 	private readonly documentLayout = this._register(new MutableDisposable());
 	/** Full structural counts for views without persisted coverage. */
@@ -213,6 +210,7 @@ export class ReviewFilesDiffView extends Disposable {
 	private pendingPath: string | undefined;
 	private pendingSectionId: string | undefined;
 	private pendingSource: ReviewDiffLens["ranges"][number] | undefined;
+	private pendingReveal: RevealSourceOptions | undefined;
 	private progress: ReviewDiffProgress | undefined;
 	private progressFiles = new Map<string, ReviewDiffProgressFile>();
 	private documentCollapsed = false;
@@ -232,6 +230,7 @@ export class ReviewFilesDiffView extends Disposable {
 		private readonly onToggleSection: ((id: string) => void) | undefined,
 		private readonly document: ReviewDiffViewSpec["document"],
 		openFile: boolean,
+		private readonly onscreen: ISettableObservable<boolean> | undefined,
 		@IInstantiationService
 		private readonly reviewInstantiationService: IInstantiationService,
 		@IEditorService private readonly editorService: IEditorService,
@@ -255,7 +254,7 @@ export class ReviewFilesDiffView extends Disposable {
 							modified: entry.modified,
 							additions: entry.file.status === "unchanged" || this.isBinary(entry) ? undefined : this.entryProgress(entry)?.remaining.additions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.added),
 							deletions: entry.file.status === "unchanged" || this.isBinary(entry) ? undefined : this.entryProgress(entry)?.remaining.deletions ?? (this.fileTreeContainer || this.document ? undefined : this.lineCounts(entry.file.path)?.removed),
-							collapseLocked: this.isBinary(entry),
+							collapseLocked: this.isBinary(entry) || this.failedFiles.has(entry.file.path),
 						countsTooltip: this.progressTooltip(entry) ?? this.streamStats.get(entry.file.path)?.tooltip,
 						viewedState: this.entryProgress(entry)?.state,
 						viewedScope: this.viewedScope,
@@ -266,8 +265,10 @@ export class ReviewFilesDiffView extends Disposable {
 						section: entry.sectionStart ? this.progress?.sections?.find(section => section.id === entry.sectionId) : undefined,
 						onToggleSection: () => entry.sectionId && this.onToggleSection?.(entry.sectionId),
 						// A binary is folded like a hidden file, with its size as the reason.
-						note: entry.file.status === "unchanged" ? (this.document ? undefined : "Unchanged") : this.isBinary(entry) ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path),
-						noteTooltip: this.isBinary(entry) ? { label: "No text to show · binary files stay folded" } : undefined,
+						note: this.failedFiles.get(entry.file.path) ?? (entry.file.status === "unchanged" ? (this.document ? undefined : "Unchanged") : this.isBinary(entry) ? this.binaryNote(entry.file.path) : this.hiddenFiles.get(entry.file.path)),
+						noteTooltip: this.failedFiles.has(entry.file.path) ? { label: this.failedFiles.get(entry.file.path)! } : this.isBinary(entry) ? { label: "No text to show · binary files stay folded" } : undefined,
+						failed: this.failedFiles.has(entry.file.path),
+						commit: document?.commit,
 							// A binary has no text to open.
 							onDidOpen: this.isBinary(entry) || !(document ? document.onDidOpen : openFile) ? undefined : () => {
 								if (document?.onDidOpen) { document.onDidOpen(); return; }
@@ -372,6 +373,7 @@ export class ReviewFilesDiffView extends Disposable {
 		if (document) {
 			const visibility = new IntersectionObserver(([entry]) => {
 				this.offscreen = !entry.isIntersecting;
+				this.onscreen?.set(entry.isIntersecting, undefined);
 				if (!this.offscreen && this.layoutDeferred) this.layout();
 			}, { rootMargin: "200px 0px" });
 			visibility.observe(container);
@@ -450,7 +452,7 @@ export class ReviewFilesDiffView extends Disposable {
 				this.pendingPath = undefined;
 				this.showStreamStatus();
 				queueMicrotask(() => {
-					if (!this._store.isDisposed) { if (this.pendingSource) this.revealSource(this.pendingSource, this.pendingSectionId); else this.reveal(entry); }
+					if (!this._store.isDisposed) { if (this.pendingSource) this.revealSource(this.pendingSource, this.pendingSectionId, this.pendingReveal); else this.reveal(entry); }
 				});
 			}),
 		);
@@ -459,7 +461,7 @@ export class ReviewFilesDiffView extends Disposable {
 	startLoading(entries: readonly ReviewFilesEditorEntry[]): void {
 		this.changedFilesTree?.setFiles(Array.from(new Map(entries.map(entry => [entry.file.path, entry.file])).values()));
 		for (const entry of entries) {
-			this.fileStates.set(entry.file.path, "Loading diff…");
+			this.loadingFiles.add(entry.file.path);
 			this.changedFilesTree?.setFileState(entry.file.path, "loading");
 		}
 		this.showStreamStatus();
@@ -469,17 +471,16 @@ export class ReviewFilesDiffView extends Disposable {
 		path: string,
 		error?: string,
 	): void {
-		if (error) {
-			this.fileStates.set(path, error);
-			this.changedFilesTree?.setFileState(path, "error", error);
-		} else {
-			this.fileStates.delete(path);
-			this.readyFiles.add(path);
-			this.changedFilesTree?.setFileState(path, undefined);
-		}
-		this.input?.setReadyFiles(this.readyFiles, [...this.fileStates.values()].some(state => state === "Loading diff…"));
+		// A failed file still gets a section, so the tree can reveal its error.
+		this.loadingFiles.delete(path);
+		this.readyFiles.add(path);
+		if (error) this.failedFiles.set(path, error);
+		this.changedFilesTree?.setFileState(path, error ? "error" : undefined, error);
+		this.input?.setReadyFiles(this.readyFiles, this.loadingFiles.size > 0);
 		this.showStreamStatus();
 	}
+
+	refreshHeaders(): void { this.headerFactory.refreshHeaders(); }
 
 	/** Coverage counts are independent of fold state. */
 	fileCounts(path: string, counts: ReviewFileCounts): void {
@@ -579,16 +580,33 @@ export class ReviewFilesDiffView extends Disposable {
 			this.viewedApplied.set(key, file.state);
 		}
 	}
-	revealSource(source: ReviewDiffLens['ranges'][number], sectionId?: string): void {
+	revealSource(source: ReviewDiffLens['ranges'][number], sectionId?: string, options?: RevealSourceOptions): void {
 		this.settleHold.clear();
 		const entry = this.input?.entries.find(entry => (!sectionId || entry.sectionId === sectionId) && (!entry.sectionId || this.progress?.sections?.find(section => section.id === entry.sectionId)?.sources.some(range => range.file === source.file && range.side === source.side && range.fromLine <= source.fromLine && range.toLine >= source.fromLine)) && source.file === (source.side === 'base' ? entry.file.previousPath ?? entry.file.path : entry.file.path));
 		if (!entry) return;
 		if (entry.sectionId && this.collapsedSections.delete(entry.sectionId)) this.headerFactory.refreshHeaders();
-		this.pendingSource = source; this.pendingSectionId = sectionId;
-		if (this.fileStates.has(entry.file.path)) { this.pendingPath = entry.file.path; return; }
+		this.pendingSource = source; this.pendingSectionId = sectionId; this.pendingReveal = options;
+		if (this.loadingFiles.has(entry.file.path)) { this.pendingPath = entry.file.path; return; }
 		this.itemFor(entry)?.collapsed.set(false, undefined);
-		this.reveal(entry, { highlight: true, side: source.side === 'base' && entry.file.status !== 'unchanged' ? 'original' : 'modified', range: new Range(source.fromLine, 1, source.toLine, 1) });
-		this.pendingSource = undefined;
+		this.reveal(entry, { highlight: true, side: source.side === 'base' && entry.file.status !== 'unchanged' ? 'original' : 'modified', range: options?.range ?? new Range(source.fromLine, 1, source.toLine, 1), select: options?.select });
+		this.pendingSource = undefined; this.pendingReveal = undefined;
+	}
+
+	/** Collapsed files and hidden lines, for skip-folded find. */
+	folds(): DiffFindFolds {
+		return {
+			itemCollapsed: entry => this.documentCollapsed || (!!entry.sectionId && this.collapsedSections.has(entry.sectionId)) || (this.itemFor(entry)?.collapsed.get() ?? false),
+			// The view model outlives its editor.
+			hiddenLines: async (entry, side) => {
+				const comparison = this.itemFor(entry)?.diffEditorViewModel;
+				if (!(comparison instanceof DiffEditorViewModel)) return [];
+				await comparison.waitForDiff();
+				return comparison.unchangedRegions.get().map(region => {
+					const range = side === 'base' ? region.getHiddenOriginalRange(undefined) : region.getHiddenModifiedRange(undefined);
+					return { from: range.startLineNumber, to: range.endLineNumberExclusive - 1 };
+				}).filter(span => span.to >= span.from);
+			},
+		};
 	}
 
 	/** Scroll to a file, or to it once its diff has loaded. */
@@ -596,32 +614,24 @@ export class ReviewFilesDiffView extends Disposable {
 		this.settleHold.clear();
 		const entry = this.input?.entries.find((entry) => entry.file.path === path);
 		if (!entry) return;
-		this.pendingPath = this.fileStates.has(path) ? path : undefined;
+		this.pendingPath = this.loadingFiles.has(path) ? path : undefined;
 		this.showStreamStatus();
 		if (!this.pendingPath) this.reveal(entry);
 	}
 
 	loadingFailed(message: string): void {
-		for (const [path, state] of this.fileStates)
-			if (state === "Loading diff…") this.fileLoaded(path, message);
+		for (const path of this.loadingFiles) this.fileLoaded(path, message);
 		this.showStreamStatus();
 	}
 
 	private showStreamStatus(): void {
-		const message = this.pendingPath
-			? this.fileStates.get(this.pendingPath)
-			: undefined;
-		this.streamStatus.hidden =
-			(!message && this.readyFiles.size > 0) || this.fileStates.size === 0;
-		this.streamStatus.textContent = message
-			? `${this.pendingPath}: ${message}`
-			: this.readyFiles.size === 0
-				? ([...this.fileStates.values()][0] ?? "")
-				: "";
-		this.streamStatus.classList.toggle(
-			"loading",
-			[...this.fileStates.values()].some((s) => s === "Loading diff…"),
-		);
+		const loading = this.loadingFiles.size > 0;
+		const pending = this.pendingPath && this.loadingFiles.has(this.pendingPath) ? this.pendingPath : undefined;
+		this.streamStatus.hidden = !loading || (!pending && this.readyFiles.size > 0);
+		this.streamStatus.textContent = pending
+			? `${pending}: Loading diff…`
+			: this.readyFiles.size === 0 ? "Loading diff…" : "";
+		this.streamStatus.classList.toggle("loading", loading);
 	}
 
 	getViewState(): IMultiDiffEditorViewState | undefined {
@@ -657,11 +667,25 @@ export class ReviewFilesDiffView extends Disposable {
 		this.splitView.layout(width, height);
 		if (this.fileTreeContainer) this.changedFilesTree?.layout(this.fileTreeContainer.clientHeight, this.fileTreeContainer.clientWidth);
 	}
-	private reveal(resource: { original: URI | undefined; modified: URI | undefined }, options: RevealOptions = { highlight: true }): void {
-		this.widget.reveal(resource, options);
+	private reveal(resource: { original: URI | undefined; modified: URI | undefined }, options: RevealOptions & { select?: boolean } = { highlight: true }): void {
+		const show = (highlight: boolean) => {
+			this.widget.reveal(resource, { ...options, highlight });
+			if (options.select && options.range) this.select(resource, options.side ?? 'modified', options.range);
+		};
+		show(options.highlight);
 		this.settle(() => {
-			if (this.itemFor(resource)) this.widget.reveal(resource, { ...options, highlight: false });
+			if (this.itemFor(resource)) show(false);
 		});
+	}
+
+	/** A selection makes the diff editor unfold the line, as the single-file find does. */
+	private select(resource: { original: URI | undefined; modified: URI | undefined }, side: 'original' | 'modified', range: Range): void {
+		const uri = side === 'original' ? resource.original : resource.modified;
+		const target = uri && this.widget.tryGetCodeEditor(uri);
+		if (!target) return;
+		const editor = side === 'original' ? target.diffEditor.getOriginalEditor() : target.diffEditor.getModifiedEditor();
+		if (!editor.getSelection()?.equalsRange(range)) editor.setSelection(range);
+		editor.revealRangeInCenter(range);
 	}
 
 	/**
@@ -699,10 +723,14 @@ export class ReviewFilesDiffView extends Disposable {
 			(entry) => sameResource(entry.original, resource.original) && sameResource(entry.modified, resource.modified),
 		);
 		if (index === -1) return;
-		// Passive editor updates must not move a sidebar the reader scrolled independently.
-		this.changedFilesTree?.setActiveFile(input.entries[index].file.path, false);
+		this.changedFilesTree?.setActiveFile(input.entries[index].file.path);
 	}
 }
+export interface RevealSourceOptions {
+	range?: Range;
+	select?: boolean;
+}
+
 function sameResource(left: URI | undefined, right: URI | undefined): boolean {
 	return left === undefined ? right === undefined : !!right && isEqual(left, right);
 }

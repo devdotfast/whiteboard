@@ -13,7 +13,8 @@ import { installedAttachScript, parseRemoteAttach, reviewRemoteAttachScript, typ
 import type { ReviewRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
 import type { ReviewRemoteInstallInput, ReviewRemoteInstallResult } from "./reviewRemoteInstaller.js";
 import { reviewRemoteVersionDir } from "./reviewRemoteInstallScript.js";
-import { judgeRemote, missingInstallTools, probeRemote, type ReviewRemoteProbe, type ReviewRemoteTarget } from "./reviewRemoteProbe.js";
+import { judgeRemote, missingInstallTools, probeRemote, REVIEW_REMOTE_PROBE_TIMEOUT, type ReviewRemoteProbe, type ReviewRemoteTarget } from "./reviewRemoteProbe.js";
+import { socksAnswers, socksForward, type ReviewSocksForward } from "./reviewSocksForward.js";
 import {
 	sshCancelForwardArgs,
 	sshCheckArgs,
@@ -68,7 +69,6 @@ export const REVIEW_REMOTE_TIMEOUTS = {
 
 const FIRST_DELAY_MS = 1_000;
 const PENDING_REATTACH_MS = 60_000;
-const PENDING_ATTACHES = 10;
 const MAX_DELAY_MS = 60_000;
 const OUTPUT_LIMIT = 64 * 1024;
 
@@ -92,8 +92,12 @@ const SSH_SENTENCES: [RegExp, (alias: string) => string][] = [
 	[/(Operation|Connection) timed out/, (alias) => `The SSH connection to ${alias} timed out. Check that it is on and reachable from this network.`],
 ];
 
-function sshFailureSentence(stderr: string, alias: string): string | undefined {
-	return SSH_SENTENCES.find(([pattern]) => pattern.test(stderr))?.[1](alias);
+/** A direct session cannot prompt, so a key with a passphrase only works through ssh-agent. */
+const DIRECT_PERMISSION_HINT = 'Whiteboard cannot ask for a password or passphrase here: if your key has one, add it to ssh-agent with "ssh-add", then retry.';
+
+function sshFailureSentence(stderr: string, alias: string, direct = false): string | undefined {
+	const sentence = SSH_SENTENCES.find(([pattern]) => pattern.test(stderr))?.[1](alias);
+	return direct && sentence && /Permission denied/.test(stderr) ? `${sentence} ${DIRECT_PERMISSION_HINT}` : sentence;
 }
 
 const SSH_DROPS: [RegExp, (alias: string) => string][] = [
@@ -163,13 +167,12 @@ function probeHealth(port: number, timeout: number): Promise<void> {
 	});
 }
 
-function probeVersion(port: number, timeout: number): Promise<string> {
+function probeVersion(port: number, timeout: number): Promise<void> {
 	return new Promise((resolve, reject) => {
 		const request = get({ host: "127.0.0.1", port, path: "/version", timeout }, (response) => {
-			let body = "";
-			response.setEncoding("utf8");
-			response.on("data", (chunk: string) => (body += chunk));
-			response.on("end", () => (response.statusCode === 200 ? resolve(body.trim()) : reject(new Error(`/version answered ${response.statusCode}`))));
+			response.resume();
+			if (response.statusCode === 200) resolve();
+			else reject(new Error(`/version answered ${response.statusCode}`));
 		});
 		request.on("timeout", () => request.destroy(new Error(`/version did not answer within ${timeout / 1000} seconds`)));
 		request.on("error", reject);
@@ -178,10 +181,10 @@ function probeVersion(port: number, timeout: number): Promise<string> {
 
 export function languageCommitMismatch(alias: string, serverCommit: string, desktopCommit: string | undefined): string | undefined {
 	if (!desktopCommit || desktopCommit === serverCommit) return undefined;
-	return `language features need the same Whiteboard version on ${alias}: it runs ${serverCommit.slice(0, 7)}, this Desktop ${desktopCommit.slice(0, 7)}`;
+	return `language features need the same Whiteboard version on ${alias}: its Whiteboard server runs ${serverCommit.slice(0, 7)}, this Desktop ${desktopCommit.slice(0, 7)}`;
 }
 
-type LanguageFeatures = Pick<ReviewGatewayHost, "languageFeatures" | "languageFeaturesDetail">;
+type LanguageFeatures = Pick<ReviewGatewayHost, "languageFeatures" | "languageFeaturesDetail" | "languageFeaturesPending">;
 
 const groupsOf = ({ languageGroups }: ReviewRemoteAttach): Pick<ReviewGatewayHost, "languageGroups"> =>
 	languageGroups.length > 0 ? { languageGroups: [...languageGroups] } : {};
@@ -194,7 +197,7 @@ export interface RunResult {
 	readonly timedOut: boolean;
 }
 
-export function runSsh(spawn: SpawnSsh, env: NodeJS.ProcessEnv, args: string[], timeout: number, input?: string): Promise<RunResult> {
+export function runSsh(spawn: SpawnSsh, env: NodeJS.ProcessEnv, args: string[], timeout: number, input?: string, onStdout?: (chunk: string) => void): Promise<RunResult> {
 	return new Promise((resolve) => {
 		let child: SshChildProcess;
 		try {
@@ -215,7 +218,10 @@ export function runSsh(spawn: SpawnSsh, env: NodeJS.ProcessEnv, args: string[], 
 			done({ code: null });
 		}, timeout);
 		child.stdout?.setEncoding("utf8");
-		child.stdout?.on("data", (chunk: string) => (stdout = (stdout + chunk).slice(-OUTPUT_LIMIT)));
+		child.stdout?.on("data", (chunk: string) => {
+			stdout = (stdout + chunk).slice(-OUTPUT_LIMIT);
+			onStdout?.(chunk);
+		});
 		child.stderr?.setEncoding("utf8");
 		child.stderr?.on("data", (chunk: string) => (stderr = (stderr + chunk).slice(0, OUTPUT_LIMIT)));
 		child.once("error", (error: NodeJS.ErrnoException) => done({ code: null, error }));
@@ -229,7 +235,7 @@ export function runSsh(spawn: SpawnSsh, env: NodeJS.ProcessEnv, args: string[], 
 
 export type ReviewRemoteInstallMode = "ask" | "always" | "never";
 
-export type ReviewRemoteInstallRunInput = Pick<ReviewRemoteInstallInput, "session" | "probe" | "target" | "version" | "onProgress" | "signal" | "spawn" | "env" | "artifact">;
+export type ReviewRemoteInstallRunInput = Pick<ReviewRemoteInstallInput, "session" | "probe" | "target" | "version" | "onProgress" | "signal" | "spawn" | "env" | "artifact" | "script">;
 
 export interface ReviewRemoteInstallFlow {
 	mode(): ReviewRemoteInstallMode;
@@ -239,6 +245,8 @@ export interface ReviewRemoteInstallFlow {
 	run(input: ReviewRemoteInstallRunInput): Promise<ReviewRemoteInstallResult>;
 	origin(): string | undefined;
 	artifact(target: ReviewRemoteTarget, version: string): Promise<ReviewRemoteArtifact>;
+	/** packages/review/remote/install.sh. */
+	script(): Promise<string>;
 }
 
 type InstallStep = NonNullable<ReviewGatewayHost["installing"]>["step"];
@@ -260,11 +268,6 @@ const STEP_WORDS: Record<InstallStep, string> = {
 const noTarballText = (alias: string) =>
 	`This dev build has no remote tarball; run \`node apps/review-desktop/scripts/remote-dev-install.mjs ${alias}\` from the checkout or set DEV_FAST_REVIEW_REMOTE_RELEASES.`;
 
-export function installPromptText(alias: string, version: string, probe: ReviewRemoteProbe): string {
-	const where = probe.root === `${probe.home}/.dev/whiteboard-remote` ? "~/.dev/whiteboard-remote" : "whiteboard-remote under DEV_REVIEW_HOME";
-	return `Whiteboard ${version} is not installed on ${alias}. Install it in ${where}? It takes about 250 MB. Whiteboard also adds ~/.local/bin/whiteboard if that path is free.`;
-}
-
 export function installFailureText(alias: string, version: string, step: InstallStep, message: string): string {
 	const said = /^Installing on .+? failed( while .+?)?: ([\s\S]*)$/.exec(message);
 	const what = said ? (said[1] ?? "") : ` while ${STEP_WORDS[step]}`;
@@ -280,6 +283,7 @@ export interface ReviewRemoteHostOptions {
 	groups?(): Promise<readonly string[]>;
 	freePort(): Promise<number>;
 	report(host: ReviewGatewayHost): void;
+	capture?(name: string, properties: Record<string, string | number | boolean>): void;
 	log(message: string): void;
 	readonly clock?: ReviewRemoteClock;
 	readonly timeouts?: Partial<typeof REVIEW_REMOTE_TIMEOUTS>;
@@ -292,12 +296,14 @@ export class ReviewRemoteHost {
 	private readonly clock: ReviewRemoteClock;
 	private readonly timeouts: typeof REVIEW_REMOTE_TIMEOUTS;
 	private reported: ReviewGatewayHost;
+	private capturedOutcome: string | undefined;
 	private generation = 0;
 	private master: SshChildProcess | undefined;
 	private readonly closing = new Map<SshChildProcess, Promise<void>>();
 	private forwarded: { local: number; remote: number } | undefined;
-	private language: { local: number; remote: number; connectionToken: string; commit: string } | undefined;
-	private pendingAttaches = 0;
+	private socksPort: number | undefined;
+	private readonly socks = new Map<number, ReviewSocksForward>();
+	private language: { local: number; remote: number; connectionToken: string } | undefined;
 	private cancelPending: (() => void) | undefined;
 	private reattaching = false;
 	private queuedReattach = false;
@@ -315,7 +321,6 @@ export class ReviewRemoteHost {
 	private detecting: Promise<ReviewRemoteAgent[] | undefined> | undefined;
 	private declined = false;
 	private installFailure: string | undefined;
-	private target: ReviewRemoteTarget | undefined;
 	private installing: AbortController | undefined;
 	private removing = false;
 	serverId: string | undefined;
@@ -325,6 +330,10 @@ export class ReviewRemoteHost {
 		this.clock = options.clock ?? systemClock;
 		this.timeouts = { ...REVIEW_REMOTE_TIMEOUTS, ...options.timeouts };
 		this.reported = { alias: this.alias };
+	}
+
+	private get direct(): boolean {
+		return !this.options.session.controlPath;
 	}
 
 	get state(): ReviewGatewayHost {
@@ -338,7 +347,6 @@ export class ReviewRemoteHost {
 	retry(): void {
 		if (this.disposed || this.removing) return;
 		this.failures = 0;
-		this.pendingAttaches = 0;
 		this.declined = false;
 		this.installFailure = undefined;
 		this.set({ alias: this.alias });
@@ -368,14 +376,18 @@ export class ReviewRemoteHost {
 			return Promise.resolve();
 		}
 		const attempt = this.nextAttempt();
-		if (attempt === 0) return this.attachAgain("its server restarted", false);
+		if (attempt === 0) return this.attachAgain("its Whiteboard server restarted", false);
 		const delay = reconnectDelay(attempt - 1);
-		this.options.log(`${this.alias}: its server restarted again; attaching again in ${Math.round(delay / 1000)} s.`);
+		this.options.log(`${this.alias}: its Whiteboard server restarted again; attaching again in ${Math.round(delay / 1000)} s.`);
 		this.cancelTimer = this.clock.schedule(delay, () => {
 			this.cancelTimer = undefined;
-			void this.attachAgain("its server restarted", false);
+			void this.attachAgain("its Whiteboard server restarted", false);
 		});
 		return Promise.resolve();
+	}
+
+	recheck(): Promise<void> {
+		return this.attachAgain("asked to check it again", true);
 	}
 
 	private async attachAgain(reason: string, reuse: boolean): Promise<void> {
@@ -386,9 +398,9 @@ export class ReviewRemoteHost {
 		this.reattaching = true;
 		this.options.log(`${this.alias}: ${reason}; attaching again.`);
 		try {
-			const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
+			const check = await this.masterAnswers(env);
 			if (stale()) return;
-			if (check.code !== 0) throw unreachable(`The SSH connection to ${this.alias} did not answer. ${firstLines(check.stderr)}`.trim());
+			if (!check.ok) throw unreachable(`The SSH connection to ${this.alias} did not answer. ${firstLines(check.stderr)}`.trim());
 			await this.establish(env, stale, { script: this.attachScript, cli: this.cli }, reuse);
 		} catch (error) {
 			if (stale()) return;
@@ -443,16 +455,17 @@ export class ReviewRemoteHost {
 		this.installing?.abort();
 		const master = this.master;
 		this.master = undefined;
+		this.closeForwards();
 		await this.close(master);
 	}
 
 	async languageEndpoint(serverId: string): Promise<{ host: "127.0.0.1"; port: number; connectionToken: string } | undefined> {
 		const language = this.language;
 		if (!language || this.connectedAt === undefined || this.serverId !== serverId || this.reported.languageFeatures !== true) return undefined;
-		const commit = await probeVersion(language.local, this.timeouts.operation).catch(() => undefined);
-		if (commit === language.commit) return { host: "127.0.0.1", port: language.local, connectionToken: language.connectionToken };
+		const live = await probeVersion(language.local, this.timeouts.operation).then(() => true, () => false);
+		if (live) return { host: "127.0.0.1", port: language.local, connectionToken: language.connectionToken };
 		if (language === this.language) {
-			void this.attachAgain("its VS Code server did not answer", true);
+			void this.attachAgain("its language server did not answer", true);
 		}
 		return undefined;
 	}
@@ -460,11 +473,7 @@ export class ReviewRemoteHost {
 	private whilePending(attach: ReviewRemoteAttach): void {
 		this.cancelPending?.();
 		this.cancelPending = undefined;
-		if (!attach.languageServerPending) {
-			this.pendingAttaches = 0;
-			return;
-		}
-		if (++this.pendingAttaches >= PENDING_ATTACHES) return;
+		if (!attach.languageServerPending) return;
 		this.cancelPending = this.clock.schedule(PENDING_REATTACH_MS, () => {
 			this.cancelPending = undefined;
 			void this.attachAgain("its language extensions were installing", true);
@@ -478,10 +487,23 @@ export class ReviewRemoteHost {
 	private set(state: ReviewGatewayHost): void {
 		if (JSON.stringify(state) === JSON.stringify(this.reported)) return;
 		this.reported = state;
+		this.captureOutcome(state);
 		this.options.log(
 			`${this.alias}: ${state.endpoint ? `online through ${state.endpoint.url}` : state.problem ? `${state.problem.state}: ${state.problem.detail}` : "connecting"}`,
 		);
 		this.options.report(state);
+	}
+
+	// Once per change of outcome, so a host retrying while down reports once.
+	private captureOutcome(state: ReviewGatewayHost): void {
+		const outcome = state.endpoint ? "online" : state.problem?.state;
+		if (!outcome || outcome === this.capturedOutcome) return;
+		this.capturedOutcome = outcome;
+		this.options.capture?.("remote_host_connected", {
+			ok: outcome === "online",
+			...(state.problem && { problem: state.problem.state.replaceAll("-", "_") }),
+			direct: this.direct,
+		});
 	}
 
 	private async connect(): Promise<void> {
@@ -505,9 +527,10 @@ export class ReviewRemoteHost {
 			this.env = env;
 			await Promise.all(this.closing.values());
 			// None of this host's masters runs now, but one killed by a signal left its socket, and ssh does not multiplex on a path that exists.
-			await rm(this.options.session.controlPath, { force: true });
+			if (this.options.session.controlPath) await rm(this.options.session.controlPath, { force: true });
+			const socksPort = this.direct ? await this.options.freePort() : undefined;
 			if (stale()) return;
-			const master = this.startMaster(env);
+			const master = this.startMaster(env, socksPort);
 			await this.waitForMaster(master, env, stale);
 			const prepared = await this.prepareAttach(env, stale);
 			if (prepared === undefined) return;
@@ -533,7 +556,7 @@ export class ReviewRemoteHost {
 		const language = await this.forwardLanguage(env, attach, stale);
 		if (stale()) return;
 		for (const forward of [kept ? undefined : old, oldLanguage]) {
-			if (forward) await this.run(sshCancelForwardArgs(this.options.session, forward.local, forward.remote, env), this.timeouts.operation);
+			if (forward) await this.cancelForward(env, forward);
 			if (stale()) return;
 		}
 		this.attachScript = prepared.script;
@@ -550,10 +573,10 @@ export class ReviewRemoteHost {
 		return this.failures++;
 	}
 
-	private startMaster(env: NodeJS.ProcessEnv): SshChildProcess {
+	private startMaster(env: NodeJS.ProcessEnv, socksPort: number | undefined): SshChildProcess {
 		let master: SshChildProcess;
 		try {
-			master = this.options.spawn(sshMasterArgs(this.options.session, env), {
+			master = this.options.spawn(sshMasterArgs(this.options.session, env, socksPort), {
 				env,
 				detached: true,
 				stdio: ["ignore", "ignore", "pipe"],
@@ -562,6 +585,7 @@ export class ReviewRemoteHost {
 			throw (error as NodeJS.ErrnoException).code === "ENOENT" ? unreachable(OPENSSH_NEEDED) : error;
 		}
 		this.master = master;
+		this.socksPort = socksPort;
 		this.masterStderr = "";
 		master.stderr?.setEncoding("utf8");
 		master.stderr?.on("data", (chunk: string) => (this.masterStderr = (this.masterStderr + chunk).slice(-OUTPUT_LIMIT)));
@@ -585,7 +609,7 @@ export class ReviewRemoteHost {
 				detail: sshDropSentence(last, this.alias) ?? `The SSH connection to ${this.alias} ended: ${last || exited}`,
 			});
 		}
-		const sentence = sshFailureSentence(this.masterStderr, this.alias);
+		const sentence = sshFailureSentence(this.masterStderr, this.alias, this.direct);
 		if (sentence) this.options.log(`${this.alias}: ${exited} ${firstLines(this.masterStderr)}`);
 		this.fail({
 			state: classifySshFailure(this.masterStderr, this.promptCancelled),
@@ -597,9 +621,9 @@ export class ReviewRemoteHost {
 		let since = Date.now();
 		for (;;) {
 			if (stale() || gone(master)) throw unreachable("The SSH connection ended.");
-			const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
+			const check = await this.masterAnswers(env);
 			if (stale()) throw unreachable("The SSH connection ended.");
-			if (check.code === 0) return;
+			if (check.ok) return;
 			if (this.prompts > 0) since = Date.now();
 			if (Date.now() - since > this.timeouts.connect) {
 				throw unreachable(`${this.alias} did not connect within ${this.timeouts.connect / 1000} seconds. ${firstLines(this.masterStderr)}`.trim());
@@ -608,19 +632,27 @@ export class ReviewRemoteHost {
 		}
 	}
 
+	private async masterAnswers(env: NodeJS.ProcessEnv): Promise<{ ok: boolean; stderr: string }> {
+		if (this.direct) return { ok: this.socksPort !== undefined && (await socksAnswers(this.socksPort)), stderr: firstLines(this.masterStderr) };
+		const check = await this.run(sshCheckArgs(this.options.session, env), this.timeouts.operation);
+		return { ok: check.code === 0, stderr: check.stderr };
+	}
+
 	private async prepareAttach(env: NodeJS.ProcessEnv, stale: () => boolean): Promise<PreparedAttach | undefined> {
 		const onPath = { script: reviewRemoteAttachScript };
 		const flow = this.options.install;
 		const mode = flow?.mode() ?? "never";
 		if (!flow || mode === "never") return onPath;
 		const origin = flow.origin();
-		const probed = await probeRemote({ session: this.options.session, spawn: this.options.spawn, env, releases: origin && `${origin}/` });
+		const script = await flow.script();
+		// A direct probe logs in afresh, so it gets the connect allowance too.
+		const timeout = this.direct ? REVIEW_REMOTE_PROBE_TIMEOUT + this.timeouts.connect : undefined;
+		const probed = await probeRemote({ session: this.options.session, spawn: this.options.spawn, env, script, releases: origin && `${origin}/`, timeout });
 		if (stale()) return;
 		if ("error" in probed) throw unreachable(probed.error);
 		const { probe } = probed;
 		const support = judgeRemote(probe);
 		if (!support.supported) throw new HostFailure({ state: "unsupported", detail: support.reason });
-		this.target = support.target;
 		const version = await this.options.desktopVersion();
 		const artifact = await flow.artifact(support.target, version).catch((error: Error) => error);
 		if (stale()) return;
@@ -638,7 +670,9 @@ export class ReviewRemoteHost {
 		if (artifact instanceof ReviewRemoteNoTarball) return this.cannotInstall(probe, version, noTarballText(this.alias));
 		if (artifact instanceof Error) return this.cannotInstall(probe, version, installFailureText(this.alias, version, "preparing", artifact.message));
 		if (!present && !probe.releasesReachable) return this.cannotInstall(probe, version, `${this.alias} cannot reach ${origin}.`);
-		if (!present && mode === "ask" && !(await this.agreed(flow, probe, version, stale))) {
+		// Like VS Code's server, an install Desktop recognises is updated without asking; a CLI the user put on PATH is theirs.
+		const upgrade = probe.installed.length > 0;
+		if (!present && !upgrade && mode === "ask" && !(await this.agreed(flow, version, stale))) {
 			this.declined = true;
 			return stale() ? undefined : onPath;
 		}
@@ -658,13 +692,13 @@ export class ReviewRemoteHost {
 		return { script: reviewRemoteAttachScript };
 	}
 
-	private async agreed(flow: ReviewRemoteInstallFlow, probe: ReviewRemoteProbe, version: string, stale: () => boolean): Promise<boolean> {
+	private async agreed(flow: ReviewRemoteInstallFlow, version: string, stale: () => boolean): Promise<boolean> {
 		const log = (error: Error) => this.options.log(`${this.alias}: install consent: ${error.message}`);
 		const stored = await flow.consent.get(this.alias).catch(log);
 		if (stored) return stored === "allow";
 		if (stale()) return false;
 		this.set({ alias: this.alias, asking: version });
-		const answer = await flow.confirm({ alias: this.alias, text: installPromptText(this.alias, version, probe) });
+		const answer = await flow.confirm({ alias: this.alias, text: `Install remote server on ${this.alias}? (~250 MB)` });
 		if (!stale()) this.set({ alias: this.alias });
 		if (answer !== undefined && !stale()) await flow.consent.set(this.alias, answer ? "allow" : "deny").catch(log);
 		return answer === true;
@@ -683,6 +717,10 @@ export class ReviewRemoteHost {
 		const abort = new AbortController();
 		this.installing = abort;
 		let step: InstallStep = "preparing";
+		const started = this.clock.now();
+		// A version already present is only checked, not installed.
+		const captureInstalled = (ok: boolean) =>
+			!present && this.options.capture?.("remote_host_installed", { ok, target, duration_ms: this.clock.now() - started });
 		if (!present) this.set({ alias: this.alias, installing: { step } });
 		try {
 			const path = await flow.run({
@@ -691,6 +729,7 @@ export class ReviewRemoteHost {
 				target,
 				version,
 				artifact,
+				script: await flow.script(),
 				spawn: this.options.spawn,
 				env,
 				signal: abort.signal,
@@ -701,9 +740,11 @@ export class ReviewRemoteHost {
 					this.set({ alias: this.alias, installing: { step } });
 				},
 			});
+			captureInstalled(true);
 			return { path };
 		} catch (error) {
 			if (stale()) return undefined;
+			captureInstalled(false);
 			const message = (error as Error).message;
 			// ssh exits 255 when the connection drops.
 			if (/\bexit 255\b/.test(message) || !this.master || gone(this.master)) {
@@ -715,8 +756,8 @@ export class ReviewRemoteHost {
 		}
 	}
 
-	detectAgents(): Promise<ReviewRemoteAgent[] | undefined> {
-		if (this.agents) return Promise.resolve(this.agents);
+	detectAgents(refresh = false): Promise<ReviewRemoteAgent[] | undefined> {
+		if (this.agents && !refresh) return Promise.resolve(this.agents);
 		return (this.detecting ??= this.readAgents().finally(() => (this.detecting = undefined)));
 	}
 
@@ -739,7 +780,7 @@ export class ReviewRemoteHost {
 		if (!known) throw new Error(`${this.alias} is not connected, or its agents could not be read.`);
 		const wanted = [...new Set(ids)];
 		for (const id of wanted) {
-			if (!isRemoteAgentId(id) || !known.some((agent) => agent.id === id && !agent.manual)) {
+			if (!isRemoteAgentId(id) || !known.some((agent) => agent.id === id)) {
 				throw new Error(`Whiteboard cannot connect ${isRemoteAgentId(id) ? id : "that agent"} on ${this.alias}.`);
 			}
 		}
@@ -792,10 +833,8 @@ export class ReviewRemoteHost {
 
 	private async forward(env: NodeJS.ProcessEnv, attach: ReviewRemoteAttach, stale: () => boolean): Promise<string> {
 		this.forwarded = undefined;
-		const port = await this.options.freePort();
-		if (stale()) throw unreachable("The SSH connection ended.");
-		const forward = await this.run(sshForwardArgs(this.options.session, port, attach.port, env), this.timeouts.operation);
-		if (forward.code !== 0) throw unreachable(`Could not forward a local port to ${this.alias}: ${firstLines(forward.stderr) || `ssh exited with code ${forward.code}`}`);
+		const port = await this.openForward(env, attach.port, stale);
+		if (typeof port !== "number") throw unreachable(`Could not forward a local port to ${this.alias}: ${port.error}`);
 		try {
 			await probeHealth(port, this.timeouts.operation);
 		} catch (error) {
@@ -810,26 +849,55 @@ export class ReviewRemoteHost {
 		this.language = undefined;
 		const server = attach.languageServer;
 		const unavailable = (detail: string): LanguageFeatures => ({ languageFeatures: false, languageFeaturesDetail: detail });
-		if (!server) return unavailable(attach.languageServerDetail ?? "This host has no VS Code server.");
+		if (!server) return { ...unavailable(attach.languageServerDetail ?? "This host has no language server."), ...(attach.languageServerPending && { languageFeaturesPending: true }) };
 		const mismatch = languageCommitMismatch(this.alias, server.commit, this.options.desktopCommit);
 		if (mismatch) return unavailable(mismatch);
-		const port = await this.options.freePort();
-		if (stale()) throw unreachable("The SSH connection ended.");
-		const forward = await this.run(sshForwardArgs(this.options.session, port, server.port, env), this.timeouts.operation);
-		if (forward.code !== 0) return unavailable(`Could not forward a local port to the VS Code server on ${this.alias}: ${firstLines(forward.stderr) || `ssh exited with code ${forward.code}`}`);
+		const port = await this.openForward(env, server.port, stale);
+		if (typeof port !== "number") return unavailable(`Could not forward a local port to the language server on ${this.alias}: ${port.error}`);
 		try {
-			const commit = await probeVersion(port, this.timeouts.operation);
-			if (commit !== server.commit) throw new Error(`it reports ${commit}, not ${server.commit}`);
+			await probeVersion(port, this.timeouts.operation);
 		} catch (error) {
-			await this.run(sshCancelForwardArgs(this.options.session, port, server.port, env), this.timeouts.operation);
-			return unavailable(`The VS Code server on ${this.alias} did not answer through the forward: ${(error as Error).message}.`);
+			await this.cancelForward(env, { local: port, remote: server.port });
+			return unavailable(`The language server on ${this.alias} did not answer through the forward: ${(error as Error).message}.`);
 		}
-		this.language = { local: port, remote: server.port, connectionToken: server.connectionToken, commit: server.commit };
+		this.language = { local: port, remote: server.port, connectionToken: server.connectionToken };
 		return { languageFeatures: true };
 	}
 
-	private facts(): Pick<ReviewGatewayHost, "declined" | "installFailure" | "target"> {
-		return { ...(this.declined && { declined: true as const }), ...(this.installFailure && { installFailure: this.installFailure }), ...(this.target && { target: this.target }) };
+	/** A loopback port that reaches `remote` on the host. */
+	private async openForward(env: NodeJS.ProcessEnv, remote: number, stale: () => boolean): Promise<number | { error: string }> {
+		if (this.direct) {
+			const socksPort = this.socksPort;
+			if (socksPort === undefined) throw unreachable("The SSH connection ended.");
+			const forward = await socksForward(socksPort, remote);
+			if (stale()) {
+				await forward.close();
+				throw unreachable("The SSH connection ended.");
+			}
+			this.socks.set(forward.port, forward);
+			return forward.port;
+		}
+		const port = await this.options.freePort();
+		if (stale()) throw unreachable("The SSH connection ended.");
+		const forward = await this.run(sshForwardArgs(this.options.session, port, remote, env), this.timeouts.operation);
+		return forward.code === 0 ? port : { error: firstLines(forward.stderr) || `ssh exited with code ${forward.code}` };
+	}
+
+	private async cancelForward(env: NodeJS.ProcessEnv, { local, remote }: { local: number; remote: number }): Promise<void> {
+		const socks = this.socks.get(local);
+		this.socks.delete(local);
+		if (socks) await socks.close();
+		else if (!this.direct) await this.run(sshCancelForwardArgs(this.options.session, local, remote, env), this.timeouts.operation);
+	}
+
+	private closeForwards(): void {
+		for (const forward of this.socks.values()) void forward.close();
+		this.socks.clear();
+		this.socksPort = undefined;
+	}
+
+	private facts(): Pick<ReviewGatewayHost, "declined" | "installFailure"> {
+		return { ...(this.declined && { declined: true as const }), ...(this.installFailure && { installFailure: this.installFailure }) };
 	}
 
 	private fail(problem: Problem): void {
@@ -842,7 +910,7 @@ export class ReviewRemoteHost {
 		this.cancelPending = undefined;
 		this.connectedAt = undefined;
 		this.dropMaster();
-		this.set({ alias: this.alias, problem, ...(this.declined && { declined: true as const }), ...(this.target && { target: this.target }) });
+		this.set({ alias: this.alias, problem, ...(this.declined && { declined: true as const }) });
 		if (problem.state !== "unreachable" || this.disposed) return;
 		const delay = reconnectDelay(attempt);
 		this.cancelTimer = this.clock.schedule(delay, () => {
@@ -856,6 +924,7 @@ export class ReviewRemoteHost {
 		this.master = undefined;
 		this.forwarded = undefined;
 		this.language = undefined;
+		this.closeForwards();
 		this.installing?.abort();
 		void this.close(master);
 	}
@@ -866,7 +935,7 @@ export class ReviewRemoteHost {
 		if (pending) return pending;
 		const closed = (async () => {
 			// A master still connecting has no socket to take -O exit.
-			const asked = this.env && (await this.run(sshCloseArgs(this.options.session, this.env), this.timeouts.close)).code === 0;
+			const asked = !this.direct && this.env && (await this.run(sshCloseArgs(this.options.session, this.env), this.timeouts.close)).code === 0;
 			if (!asked || !(await exitedWithin(master, this.timeouts.close))) master.kill("SIGTERM");
 			await exitedWithin(master, this.timeouts.close);
 		})().finally(() => this.closing.delete(master));

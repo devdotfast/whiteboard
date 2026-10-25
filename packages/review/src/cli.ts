@@ -84,9 +84,12 @@ async function maybeDelegateToDesktopCli(
   // This bootstrap runs before the Node floor check, so it cannot import
   // devReviewHome() from @dev.fast/trace-core: that module graph needs a modern
   // Node. Keep this copy in step with devReviewHome().
+  const channel =
+    env.DEV_FAST_REVIEW_CHANNEL?.trim() || env.DEV_REVIEW_INSTANCE?.trim();
+
   const devHome = env.DEV_REVIEW_HOME?.trim()
     ? path.resolve(env.DEV_REVIEW_HOME.trim())
-    : path.join(os.homedir(), ".dev");
+    : path.join(os.homedir(), channel === "preview" ? ".dev-preview" : ".dev");
 
   let cliPath: string;
   let runtimePath: string | undefined;

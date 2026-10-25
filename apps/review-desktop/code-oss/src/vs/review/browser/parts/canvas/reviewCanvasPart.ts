@@ -3,20 +3,22 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { openChildWhiteboard } from "../../reviewChildWhiteboard.js";
+
 import { reviewBottomScrollPadding } from "../../reviewScrollPadding.js";
 import { $, addDisposableListener, getWindow, type Dimension } from "../../../../base/browser/dom.js";
+import { mainWindow } from "../../../../base/browser/window.js";
 import type { IHoverOptions, IHoverWidget } from "../../../../base/browser/ui/hover/hover.js";
 import { HoverPosition } from "../../../../base/browser/ui/hover/hoverWidget.js";
-import { createTrustedTypesPolicy } from "../../../../base/browser/trustedTypes.js";
 import type { CancellationToken } from "../../../../base/common/cancellation.js";
 import { Emitter } from "../../../../base/common/event.js";
 import { Disposable, DisposableStore, MutableDisposable, toDisposable, type IDisposable } from "../../../../base/common/lifecycle.js";
-import { FileAccess } from "../../../../base/common/network.js";
+import { basename } from "../../../../base/common/path.js";
 import type { ICursorPositionChangedEvent } from "../../../../editor/common/cursorEvents.js";
 import { ICommandService } from "../../../../platform/commands/common/commands.js";
 import { ConfigurationTarget, IConfigurationService } from "../../../../platform/configuration/common/configuration.js";
 import { TextEditorSelectionSource, type IEditorOptions } from "../../../../platform/editor/common/editor.js";
-import { IDialogService } from "../../../../platform/dialogs/common/dialogs.js";
+import { IDialogService, IFileDialogService } from "../../../../platform/dialogs/common/dialogs.js";
 import { IContextMenuService, IContextViewService } from "../../../../platform/contextview/browser/contextView.js";
 import { IHoverService } from "../../../../platform/hover/browser/hover.js";
 import { createDecorator, IInstantiationService } from "../../../../platform/instantiation/common/instantiation.js";
@@ -24,8 +26,10 @@ import { ILogService } from "../../../../platform/log/common/log.js";
 import { FocusMode } from "../../../../platform/native/common/native.js";
 import { INotificationService } from "../../../../platform/notification/common/notification.js";
 import { IProductService } from "../../../../platform/product/common/productService.js";
+import { IOpenerService } from "../../../../platform/opener/common/opener.js";
+import { IWorkbenchEnvironmentService } from "../../../../workbench/services/environment/common/environmentService.js";
 import { IEditorProgressService, LongRunningOperation } from "../../../../platform/progress/common/progress.js";
-import { IStorageService, StorageScope, StorageTarget } from "../../../../platform/storage/common/storage.js";
+import { IStorageService, StorageScope } from "../../../../platform/storage/common/storage.js";
 import { ITelemetryService } from "../../../../platform/telemetry/common/telemetry.js";
 import { ColorScheme } from "../../../../platform/theme/common/theme.js";
 import { IThemeService } from "../../../../platform/theme/common/themeService.js";
@@ -40,56 +44,69 @@ import type {
 import { EditorPaneSelectionChangeReason } from "../../../../workbench/common/editor.js";
 import type { IEditorGroup } from "../../../../workbench/services/editor/common/editorGroupsService.js";
 import { IHostService } from "../../../../workbench/services/host/browser/host.js";
+import { IWorkbenchThemeService, type IWorkbenchColorTheme } from "../../../../workbench/services/themes/common/workbenchThemeService.js";
+import { importColorThemes } from "../../reviewThemeImport.js";
 import { isMacintosh } from "../../../../base/common/platform.js";
 import { ILifecycleService, ShutdownReason } from "../../../../workbench/services/lifecycle/common/lifecycle.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import {
+	DIFF_EDITOR_FONT_SIZE_SETTING,
+	DIFF_EDITOR_IGNORE_TRIM_WHITESPACE_SETTING,
+	DIFF_EDITOR_WORD_WRAP_SETTING,
+	EDITOR_FONT_FAMILY_SETTING,
+	EDITOR_FONT_LIGATURES_SETTING,
 	EDITOR_FONT_SIZE_SETTING,
-	REVIEW_CTRL_TAB_SETTING,
+	REVIEW_DOCUMENT_FONT_SIZE_SETTING,
+	REVIEW_READING_FONT_SETTING,
+	REVIEW_OPEN_FILES_IN_APPLICATION_SETTING,
+	REVIEW_OPEN_FILES_IN_CHOICES,
+	REVIEW_OPEN_FILES_IN_SETTING,
 	REVIEW_DOCUMENT_WIDTH_SETTING,
 	REVIEW_KEYMAP_SETTING,
-	REVIEW_KEYMAPS,
 	REVIEW_READY_NOTIFICATION_SETTING,
+	REVIEW_SHARING_SETTING,
 	REVIEW_SOFTWARE_MAP_SETTING,
-	REVIEW_STRUCTURAL_DIFF_SETTING,
 	REVIEW_TELEMETRY_SETTING,
 } from "../../../common/reviewConfigurationDefaults.js";
-import { homeSessions, resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
+import { ReviewApiClient, type ReviewApiSummary, resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
 import type {
 	ReviewCanvasBridge,
 	ReviewCanvasContent,
 	ReviewCanvasDiagnostic,
 	ReviewCanvasHandle,
+	ReviewCanvasHomeHost,
+	ReviewCanvasInstallActions,
 	ReviewCanvasInstallContent,
-	ReviewCanvasModule,
+	ReviewCanvasNewWhiteboardRequest,
 	ReviewCanvasOnboarding,
+	ReviewAppearance,
 	ReviewCanvasSettingsContent,
+	ReviewColorTheme,
 	ReviewCanvasSetupActions,
-	ReviewCanvasTutorialBridge,
+	ReviewCanvasWelcomeHost,
 	ReviewCliInstallStatus,
-	ReviewCtrlTabChoice,
+	ReviewDiffFileWire,
+	ReviewDiffViewFactory,
+	ReviewDiffViewHandle,
+	ReviewOpenFilesIn,
+	ReviewOpenFilesInChoice,
 	ReviewDocumentWidthChoice,
 	ReviewKeymapChoice,
 	ReviewReadyNotificationChoice,
 	ReviewRemoteHostActions,
-	ReviewRuntimeConfig,
+	ReviewCanvasSettings,
 	ReviewSurfaceEvent,
 	ReviewTheme,
 	ReviewVerbResponse,
-	TutorialProgressV1,
-	TutorialStepId,
 } from "../../../common/reviewProtocol.js";
 import {
 	parseReviewVerbRequest,
-	SCRATCHPAD_REVIEW_ID,
 	REVIEW_CANVAS_RESUME_EVENT,
-	REVIEW_TUTORIAL_PROGRESS_STORAGE_KEY,
-	REVIEW_TUTORIAL_STEP_IDS
 } from "../../../common/reviewProtocol.js";
 import { IReviewVerbsService } from "../../../contrib/verbs/reviewVerbs.js";
 import { vetoStoppingAskAgents } from "../../reviewAskShutdown.js";
 import { notifyOpenFailure } from "./reviewHostFailure.js";
-import { confirmReviewDeletion } from "../../reviewDeleteConfirmation.js";
+import { confirmReviewDeletion, type ReviewDeleteListedBoard, type ReviewDeleteNamed } from "../../reviewDeleteConfirmation.js";
 import { showReviewNotification } from "../../reviewNotification.js";
 import { showReviewCanvasMenu } from "../../reviewCanvasMenu.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
@@ -97,6 +114,7 @@ import { IReviewApiCatalogService, REVIEW_HAS_PUBLISHED_BOARD } from "../../../s
 import { IReviewApiSourceService } from "../../../services/reviewApiSourceService.js";
 import { IReviewCanvasEditorTabsService } from "../../../services/reviewCanvasEditorTabsService.js";
 import { IReviewDesktopConnectionService } from "../../../services/reviewDesktopConnectionService.js";
+import { IReviewRemoteHostsService } from "../../../services/remote/reviewRemoteHosts.js";
 import { ReviewDiffViewService } from "../../../services/reviewDiffViewService.js";
 import {
 	ReviewEmbeddedEditorSelection,
@@ -108,22 +126,12 @@ import { IReviewTelemetryService } from "../../../services/reviewTelemetryServic
 
 import "../../media/review.css";
 import { ReviewSessionTelemetry } from "../../reviewSessionTelemetry.js";
-import { applyReviewThemeChoice, currentReviewThemeChoice } from "../../reviewThemeChoice.js";
+import { type ReviewCanvasAssetsModule, loadReviewCanvasAssets } from "./reviewCanvasAssets.js";
 import { ReviewCanvasEditorInput } from "./reviewCanvasEditorInput.js";
 import { remoteEntry, withRemoteEntry } from "./reviewRemoteEntry.js";
 import { reviewRemoteHostsSettings } from "../../reviewRemoteHostsSettings.js";
-
-interface ReviewCanvasAssetsModule extends ReviewCanvasModule {
-	readonly clearReviewViewState: (config: ReviewRuntimeConfig) => void;
-	readonly reviewWasmUrl: string;
-	readonly reviewStylesheetUrls: readonly string[];
-}
-
-interface ReviewCanvasGlobalThis {
-	__zod_globalConfig?: {
-		jitless?: boolean;
-	};
-}
+import { IReviewSidebarPartsService } from "../sidebar/reviewSidebarPart.js";
+import { IReviewAskPartsService } from "../ask/reviewAskPart.js";
 
 interface ReviewCanvasLoadLifecycle {
 	ready(): void;
@@ -131,16 +139,21 @@ interface ReviewCanvasLoadLifecycle {
 }
 
 type ReviewCanvasState = "home" | "connecting" | "active" | "completed" | "error";
+type PendingBoardEvent = Extract<ReviewSurfaceEvent, { event: "revealBlock" | "showReviewView" }> & { reviewId: string };
 
-const reviewCanvasPolicy = createTrustedTypesPolicy("reviewCanvas", {
-	createScriptURL: (value: string) => value,
-});
+const APPEARANCE_SETTINGS = {
+	documentFontSize: { key: REVIEW_DOCUMENT_FONT_SIZE_SETTING, setting: "document_font_size" },
+	readingFont: { key: REVIEW_READING_FONT_SETTING, setting: "reading_font" },
+	codeFontSize: { key: EDITOR_FONT_SIZE_SETTING, setting: "code_font_size" },
+	codeFontFamily: { key: EDITOR_FONT_FAMILY_SETTING, setting: "code_font_family" },
+	fontLigatures: { key: EDITOR_FONT_LIGATURES_SETTING, setting: "font_ligatures" },
+	diffFontSize: { key: DIFF_EDITOR_FONT_SIZE_SETTING, setting: "diff_font_size" },
+	diffWordWrap: { key: DIFF_EDITOR_WORD_WRAP_SETTING, setting: "diff_word_wrap" },
+	diffIgnoreWhitespace: { key: DIFF_EDITOR_IGNORE_TRIM_WHITESPACE_SETTING, setting: "diff_ignore_whitespace" },
+} as const satisfies Record<keyof ReviewAppearance, { key: string; setting: string }>;
 
 const requestReviewApi: typeof fetch = (url, init) => fetch(url, init);
 
-function isTutorialStepId(step: unknown): step is TutorialStepId {
-	return typeof step === "string" && REVIEW_TUTORIAL_STEP_IDS.includes(step as TutorialStepId);
-}
 function embeddedSelectionChangeReason(event: ICursorPositionChangedEvent): EditorPaneSelectionChangeReason {
 	switch (event.source) {
 		case TextEditorSelectionSource.PROGRAMMATIC:
@@ -157,6 +170,8 @@ function embeddedSelectionChangeReason(event: ICursorPositionChangedEvent): Edit
 export class ReviewCanvasEditorPane extends EditorPane {
 	private homeView: "active" | "trash" = "active";
 	private renderHome: (() => Promise<void>) | undefined;
+	/** Sent with Home's next render only. */
+	private newWhiteboardRequest: ReviewCanvasNewWhiteboardRequest | undefined;
 	static readonly ID = ReviewCanvasEditorInput.EDITOR_ID;
 
 	private readonly canvas = this._register(new MutableDisposable<ReviewCanvasHandle>());
@@ -170,12 +185,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	private canvasMount: HTMLElement | null = null;
 	private targetDocument: Document | null = null;
 	private apiContent: Extract<ReviewCanvasContent, { kind: "api" }> | undefined;
+	private pendingReveal: { event: PendingBoardEvent; at: number } | undefined;
 	private loadGeneration = 0;
 	private openingGeneration: number | undefined;
 	private readonly refreshProgress: LongRunningOperation;
 	private renderedInput: ReviewCanvasEditorInput | undefined;
 	private readyInput: ReviewCanvasEditorInput | undefined;
-	private assetsPromise: Promise<ReviewCanvasAssetsModule> | null = null;
 	private readonly modelSubscription = this._register(new MutableDisposable());
 	private readonly inlineEditors: ReviewEmbeddedEditors;
 	private readonly diffViews: ReviewDiffViewService;
@@ -184,18 +199,23 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	constructor(
 		group: IEditorGroup,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@IThemeService private readonly reviewThemeService: IThemeService,
+		@IWorkbenchThemeService private readonly reviewThemeService: IWorkbenchThemeService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IProductService private readonly productService: IProductService,
+		@IOpenerService private readonly openerService: IOpenerService,
+		@IWorkbenchEnvironmentService private readonly workbenchEnvironment: IWorkbenchEnvironmentService,
 		@IReviewDesktopConnectionService
 		private readonly desktopConnection: IReviewDesktopConnectionService,
 		@IReviewApiSourceService private readonly apiSource: IReviewApiSourceService,
 		@IReviewApiCatalogService private readonly apiCatalog: IReviewApiCatalogService,
+		@IReviewRemoteHostsService private readonly remoteHosts: IReviewRemoteHostsService,
 		@IReviewVerbsService private readonly verbs: IReviewVerbsService,
+		@IReviewSidebarPartsService private readonly sidebar: IReviewSidebarPartsService,
+		@IReviewAskPartsService private readonly askParts: IReviewAskPartsService,
 		@IReviewCanvasEditorTabsService
 		private readonly tabsService: IReviewCanvasEditorTabsService,
 		@IInstantiationService
-		reviewInstantiationService: IInstantiationService,
+		private readonly reviewInstantiationService: IInstantiationService,
 		@IHostService private readonly hostService: IHostService,
 		@IWorkbenchLayoutService
 		private readonly layoutService: IWorkbenchLayoutService,
@@ -209,6 +229,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		@IContextMenuService private readonly contextMenuService: IContextMenuService,
 		@IContextViewService private readonly contextViewService: IContextViewService,
 		@IDialogService private readonly dialogService: IDialogService,
+		@IFileDialogService private readonly fileDialogService: IFileDialogService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IEditorProgressService editorProgressService: IEditorProgressService,
 		@ILifecycleService lifecycleService: ILifecycleService,
@@ -241,25 +262,40 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			}),
 		);
 		this._register(toDisposable(() => this.sessionTelemetry.end("closed")));
+		this._register(toDisposable(() => this.askParts.release(this)));
+		// ⌥⌘B: the canvas on screen in the main window puts its column away
+		// or brings it back.
+		this._register(
+			this.askParts.onDidRequestToggle((owner) => {
+				const reviewId = this.apiContent?.reviewId;
+				if (owner === this && reviewId && this.targetDocument === mainWindow.document)
+					this.surfaceEvents.fire({ event: "toggleAskColumn", reviewId });
+			}),
+		);
 		let catalog = this.apiCatalog.reviews;
 		this._register(this.apiCatalog.onDidChange(() => {
 			const previous = catalog;
 			catalog = this.apiCatalog.reviews;
 			this.sessionTelemetry.catalogChanged(previous, catalog);
-			const content = this.apiContent;
-			const updated = content && withRemoteEntry(content, catalog.find((review) => review.reviewId === content.reviewId));
-			if (updated) {
-				this.apiContent = updated;
-				this.canvas.value?.update(updated);
-			}
+			this.updateRemoteEntry();
 		}));
+		this._register(this.remoteHosts.onDidChangeBusy(() => this.updateRemoteEntry()));
 		this.inlineEditors = this._register(reviewInstantiationService.createInstance(ReviewEmbeddedEditors));
 		this.refreshProgress = this._register(new LongRunningOperation(editorProgressService));
 		this.diffViews = this._register(
 			reviewInstantiationService.createInstance(ReviewDiffViewService, this.inlineEditors),
 		);
+		// Pass sidebar events on to the board this pane shows.
+		this._register(
+			this.sidebar.onDidEmitSurfaceEvent((event) => {
+				// Every sidebar event names its board; the tabs' showReviewView too.
+				if ("reviewId" in event && event.reviewId === this.apiContent?.reviewId) this.surfaceEvents.fire(event);
+			}),
+		);
 		this._register(
 			verbs.onDidEmitSurfaceEvent((event) => {
+				if (event.event === "revealBlock") return this.pend(event);
+				if (event.event === "showReviewView" && event.reviewId) return this.pend({ ...event, reviewId: event.reviewId });
 				if (
 					event.event === "editorSelectionChanged" &&
 					event.reviewId !== this.apiContent?.reviewId
@@ -292,17 +328,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			configurationService.onDidChangeConfiguration((event) => {
 				if (
 					!event.affectsConfiguration(REVIEW_SOFTWARE_MAP_SETTING) &&
-					!event.affectsConfiguration(REVIEW_STRUCTURAL_DIFF_SETTING) &&
+					!event.affectsConfiguration(REVIEW_SHARING_SETTING) &&
 					!event.affectsConfiguration(REVIEW_DOCUMENT_WIDTH_SETTING)
 				)
 					return;
 				if (this.apiContent) {
-					this.apiContent = {
-						...this.apiContent,
-						structuralDiffEnabled: this.currentStructuralDiffEnabled(),
-						softwareMapEnabled: this.currentSoftwareMapEnabled(),
-						documentWidth: this.currentDocumentWidth(),
-					};
+					this.apiContent = { ...this.apiContent, settings: this.canvasSettings() };
 					this.canvas.value?.update(this.apiContent);
 					return;
 				}
@@ -383,14 +414,17 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		this.restoreEmbeddedSelection(options);
 		try {
 			await this.desktopConnection.initialize();
-			if (input.target.kind === "api" && input.target.reviewId !== SCRATCHPAD_REVIEW_ID) {
+			if (input.target.kind === "api") {
 				const { reviewId } = input.target;
 				await this.apiCatalog.initialize();
 				if (generation !== this.loadGeneration || token.isCancellationRequested) return;
 				if (this.apiCatalog.reviews.find(review => review.reviewId === reviewId)?.trashedAt) {
 					throw new Error("This whiteboard is in Trash. Restore it from Home before opening it.");
 				}
-				await this.apiCatalog.attention(reviewId, "view");
+				// Marking the board viewed never holds up drawing it.
+				void this.apiCatalog.attention(reviewId, "view").catch(error =>
+					this.logService.warn("[Whiteboard] Could not mark the whiteboard viewed:", error),
+				);
 			}
 		} catch (error) {
 			if (generation === this.loadGeneration && !token.isCancellationRequested) {
@@ -424,7 +458,13 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		if (input.target.kind === "api") {
 			try {
 				const { reviewId } = input.target;
-				const [connection, assets] = await Promise.all([this.desktopConnection.getConnection(), this.loadAssets()]);
+				// The catalog names the board's project, whose boards share the
+				// threads on screen; a failed list only costs that.
+				const [connection, assets] = await Promise.all([
+					this.desktopConnection.getConnection(),
+					this.loadAssets(),
+					this.apiCatalog.initialize().catch(() => undefined),
+				]);
 				if (generation !== this.loadGeneration || token.isCancellationRequested) return;
 				this.renderedInput = input;
 				this.setCanvasState("active", reviewId);
@@ -432,63 +472,40 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				let sourceSelection: ReviewSourceSelection = { reviewId, kind: "current" };
 				let sourceView: ReviewSourceView = resolveReviewSourceView({ reviewId, version: 0, pins: {} });
 				const source = this.apiSource.canvas(() => sourceView, this.inlineEditors, this.diffViews);
-				const closeTutorial = () => void this.group.closeEditor(input);
-				const updateTutorial = (progress: TutorialProgressV1) => {
-					this.writeTutorialProgress(progress);
-					if (!this.apiContent) return;
-					this.apiContent = {
-						...this.apiContent,
-						tutorial: this.createTutorialBridge(reviewId, progress, updateTutorial, closeTutorial),
-					};
-					this.canvas.value?.update(this.apiContent);
-				};
 				await this.render(
 					{
-						setTutorial: (enabled) => {
-							if (
-								!this.apiContent ||
-								generation !== this.loadGeneration ||
-								enabled === Boolean(this.apiContent.tutorial)
-							)
-								return;
-							this.apiContent = {
-								...this.apiContent,
-								tutorial: enabled
-									? this.createTutorialBridge(reviewId, this.readTutorialProgress(), updateTutorial, closeTutorial)
-									: undefined,
-							};
-							this.canvas.value?.update(this.apiContent);
-						},
 						kind: "api",
 						reviewId,
-						...remoteEntry(this.apiCatalog.reviews.find((review) => review.reviewId === reviewId)),
-						remoteHosts: this.remoteHostActions(),
-						structuralDiffEnabled: this.currentStructuralDiffEnabled(),
-						softwareMapEnabled: this.currentSoftwareMapEnabled(),
-						documentWidth: this.currentDocumentWidth(),
-						setTitle: (title) => input.setApiTitle(title),
-						setSourceView: (selection, next) => {
-							sourceSelection = selection;
-							sourceView = next;
-							source.openStructuralComparison();
-						},
-						openSource: (source, range) => this.apiSource.open(source, range),
+						...remoteEntry(...this.catalogEntry(reviewId)),
+						projectId: this.apiCatalog.reviews.find((review) => review.reviewId === reviewId)?.project?.id,
+						settings: this.canvasSettings(),
 						bridge: {
 							...source,
+							diffView: this.withSidebarFileTree(reviewId, source.diffView),
 							...this.sharedBridge(generation, () => {
 								this.readyInput = input;
 								this.sessionTelemetry.presented();
 							}),
 							appSessionId: connection.appSessionId,
-							config: this.reviewRuntimeConfig(
-								{
-									serverUrl: connection.serverUrl,
-									token: connection.token,
-									reviewId: reviewId,
-								},
-								assets,
-							),
-							request: requestReviewApi,
+							wasmUrl: assets.reviewWasmUrl,
+							appVersion: this.productService.reviewVersion ?? this.productService.version,
+							remoteHosts: this.remoteHostActions(),
+							setTitle: (title) => input.setApiTitle(title),
+							setSourceView: (selection, next) => {
+								sourceSelection = selection;
+								sourceView = next;
+								source.openStructuralComparison();
+							},
+							openSource: (source, range) => this.apiSource.open(source, range),
+							request: (path, init) => {
+								const headers = new Headers(init?.headers);
+								if (connection.token) headers.set("x-review-token", connection.token);
+								return requestReviewApi(`${connection.serverUrl}${path}`, { ...init, headers });
+							},
+							beacon: (path, body) => void requestReviewApi(
+								`${connection.serverUrl}/reviews-api/${encodeURIComponent(reviewId)}${path}`,
+								{ method: "POST", keepalive: true, headers: { "content-type": "application/json", "x-review-token": connection.token }, body },
+							).catch(() => undefined),
 							post: async (request) => {
 								if (request.name === "openSourceTree") {
 									return this.openSource(() => this.tabsService.openApiSource(sourceSelection, input.getName()));
@@ -523,72 +540,92 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			this.homeView = homeViewFromOptions(options) ?? this.homeView;
 			this.renderedInput = input;
 			this.setCanvasState("home");
-			await this.apiCatalog.initialize();
+			try {
+				await this.apiCatalog.initialize();
+			} catch (error) {
+				// A server that couldn't start, in its own words: a failed
+				// upgrade names the copy to go back to.
+				if (generation === this.loadGeneration) await this.renderError(error, generation);
+				return;
+			}
 			let emptyStateVisible = false;
 			/* The empty-list render suspends on the install fetch below, while
 			   the list render has no await at all. The sequence number keeps a
 			   suspended empty render from resuming after a later list render
 			   and overwriting it with a stale snapshot. */
 			let renderSeq = 0;
-			const renderHome = async () => {
-				const seq = ++renderSeq;
-				const reviews = this.apiCatalog.reviews;
-				// Home shows Welcome when no session is listed; the scratchpad
-				// is not one, so the rail still gets install status beside it.
-				const isEmpty = homeSessions(reviews).length === 0;
-				// Small catalogs can show setup progress on Home.
-				const install = homeSessions(reviews).length < 5 ? await this.resolveInstallContent() : undefined;
-				if (seq !== renderSeq) return;
-				if (isEmpty && !emptyStateVisible) {
-					this.reviewTelemetryService.capture("home_empty_state_viewed");
-				}
-				emptyStateVisible = isEmpty;
-				const openReview = (uuid: string) => {
+			/* Made once for this input: every render passes the same host, so
+			   the canvas can depend on its members across list changes. */
+			const host: ReviewCanvasHomeHost = {
+				navigate: view => {
+					if (this.homeView === view) return;
+					this.homeView = view;
+					void renderHome();
+					this._onDidChangeSelection.fire({ reason: EditorPaneSelectionChangeReason.NAVIGATION });
+				},
+				openSettings: () => { void this.tabsService.openSettings(true); },
+				openSetup: () => { void this.tabsService.openWelcome(true); },
+				openReview: (uuid) => {
 					this.reviewTelemetryService.capture("review_opened", {
 						via: "home",
 					});
 					const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);
-					return api ? this.tabsService.openApiReview(uuid, api.title) : Promise.resolve();
-				};
+					if (api) void this.tabsService.openApiReview(uuid, api.title);
+				},
+				trashReview: (uuid) => {
+					this.reviewTelemetryService.capture("review_deleted", { via: "home" });
+					return this.apiCatalog.trashReview(uuid);
+				},
+				markReviewRead: (uuid) => this.apiCatalog.attention(uuid, "view"),
+				deleteReview: (uuid) => {
+					this.reviewTelemetryService.capture("review_deleted", { via: "home" });
+					return this.apiCatalog.deleteReview(uuid);
+				},
+				restoreReview: (uuid) => {
+					this.reviewTelemetryService.capture("review_restored", { via: "home" });
+					return this.apiCatalog.lifecycle(uuid, "active");
+				},
+				remoteHosts: this.remoteHostActions(),
+				openSourceTree: (uuid) => {
+					const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);
+					if (api) {
+						void this.tabsService.openApiSource({ reviewId: api.reviewId, kind: "current" }, api.title).catch(error => this.notifyOpenFailure(error));
+					}
+				},
+				install: this.installActions(),
+				setupActions: this.setupActions(),
+				createChildWhiteboard: (parentId) => openChildWhiteboard(this.apiCatalog, this.tabsService, parentId),
+				createWhiteboard: async (repositoryPath) => {
+					const reviewId = await this.apiCatalog.createReview(repositoryPath);
+					// Unnamed: the tab reads "Untitled" until a title is typed.
+					await this.tabsService.openApiReview(reviewId, "");
+				},
+			};
+			const renderHome = async () => {
+				const seq = ++renderSeq;
+				const reviews = this.apiCatalog.reviews;
+				// Home shows Welcome when no session is listed.
+				const isEmpty = reviews.length === 0;
+				// Small catalogs can show setup progress on Home.
+				const installStatus = reviews.length < 5 ? await this.resolveInstallStatus() : undefined;
+				if (seq !== renderSeq) return;
+				const newWhiteboard = this.newWhiteboardRequest;
+				this.newWhiteboardRequest = undefined;
+				if (isEmpty && !emptyStateVisible) {
+					this.reviewTelemetryService.capture("home_empty_state_viewed");
+				}
+				emptyStateVisible = isEmpty;
 				return this.render(
 					{
 						kind: "home",
-						view: this.homeView,
-						navigate: view => {
-							if (this.homeView === view) return;
-							this.homeView = view;
-							void renderHome();
-							this._onDidChangeSelection.fire({ reason: EditorPaneSelectionChangeReason.NAVIGATION });
+						data: {
+							view: this.homeView,
+							reviews,
+							installStatus,
+							onboarding: installStatus ? this.resolveOnboarding(installStatus) : undefined,
+							newWhiteboard,
 						},
-						openSettings: () => { void this.tabsService.openSettings(true); },
-						openSetup: () => { void this.tabsService.openWelcome(true); },
-						reviews,
-						openReview: (uuid) => void openReview(uuid),
-						trashReview: (uuid) => {
-							this.reviewTelemetryService.capture("review_deleted", { via: "home" });
-							return this.apiCatalog.trashReview(uuid);
-						},
-						deleteReview: (uuid) => {
-							this.reviewTelemetryService.capture("review_deleted", { via: "home" });
-							return this.apiCatalog.deleteReview(uuid);
-						},
-						restoreReview: (uuid) => {
-							this.reviewTelemetryService.capture("review_restored", { via: "home" });
-							return this.apiCatalog.lifecycle(uuid, "active");
-						},
-						remoteHosts: this.remoteHostActions(),
-						openSourceTree: (uuid) => {
-							const api = this.apiCatalog.reviews.find((review) => review.reviewId === uuid);
-							if (api) {
-								void this.tabsService.openApiSource({ reviewId: api.reviewId, kind: "current" }, api.title).catch(error => this.notifyOpenFailure(error));
-								return;
-							}
-						},
-						// Home shows setup progress for small catalogs.
-						install,
-						setupActions: this.setupActions(),
-						onboarding: install ? this.resolveOnboarding(install.status) : undefined,
-						openTutorial: () => this.openTutorial(),
+						host,
 					},
 					generation,
 				);
@@ -605,26 +642,28 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			return;
 		}
 		if (input.target.kind === "welcome") {
-			void this.desktopConnection
-				.prepareTutorial()
-				.catch((error) => this.logService.warn("[Whiteboard] Tutorial preparation did not complete:", error));
 			this.renderedInput = input;
 			this.setCanvasState("home");
 			/* Same stale-resume guard as Home: the install fetch suspends, and
 			   a later list event must win over an earlier suspended render. */
 			let renderSeq = 0;
+			const host: ReviewCanvasWelcomeHost = {
+				install: this.installActions(),
+				setupActions: this.setupActions(),
+				close: () => void this.group.closeEditor(input),
+			};
 			const renderWelcome = async () => {
 				const seq = ++renderSeq;
-				const install = await this.resolveInstallContent();
+				const installStatus = await this.resolveInstallStatus();
 				if (seq !== renderSeq) return;
 				return this.render(
 					{
 						kind: "welcome",
-						install,
-						setupActions: this.setupActions(),
-						close: () => void this.group.closeEditor(input),
-						onboarding: install ? this.resolveOnboarding(install.status) : undefined,
-						openTutorial: () => this.openTutorial(),
+						data: {
+							installStatus,
+							onboarding: installStatus ? this.resolveOnboarding(installStatus) : undefined,
+						},
+						host,
 					},
 					generation,
 				);
@@ -659,8 +698,26 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		}
 	}
 
+	private cachedRemoteHostActions: ReviewRemoteHostActions | undefined;
+
+	/* One object for the pane's life, like `setupActions`: the canvas keys
+	   effects on it. */
+	private catalogEntry(reviewId: string) {
+		const review = this.apiCatalog.reviews.find((entry) => entry.reviewId === reviewId);
+		return [review, !!review?.host && this.remoteHosts.isBusy(review.host)] as const;
+	}
+
+	private updateRemoteEntry(): void {
+		const content = this.apiContent;
+		const updated = content && withRemoteEntry(content, ...this.catalogEntry(content.reviewId));
+		if (updated) {
+			this.apiContent = updated;
+			this.canvas.value?.update(updated);
+		}
+	}
+
 	private remoteHostActions(): ReviewRemoteHostActions {
-		return {
+		return this.cachedRemoteHostActions ??= {
 			states: () => this.desktopConnection.readRemoteHosts(),
 			retry: (alias) => this.desktopConnection.retryRemoteHost(alias),
 			install: (alias) => this.desktopConnection.installRemoteHost(alias),
@@ -688,6 +745,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	protected override setEditorVisible(visible: boolean): void {
 		super.setEditorVisible(visible);
+		this.askParts.setShown(this, visible);
 		if (!visible) {
 			this.canvasMenu.clear();
 			this.refreshProgress.stop();
@@ -709,6 +767,30 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			}
 		}
 		return this.canvas.value?.showFind(seed) ?? false;
+	}
+
+	diffFiles(): Promise<readonly ReviewDiffFileWire[]> | undefined {
+		return this.canvas.value?.diffFiles();
+	}
+
+	/** False when this pane is not Home. */
+	newWhiteboard(request: ReviewCanvasNewWhiteboardRequest): boolean {
+		if (!this.renderHome || !(this.input instanceof ReviewCanvasEditorInput) || this.input.target.kind !== "home") return false;
+		if (this.homeView !== "active") {
+			this.homeView = "active";
+			this._onDidChangeSelection.fire({ reason: EditorPaneSelectionChangeReason.NAVIGATION });
+		}
+		this.newWhiteboardRequest = request;
+		void this.renderHome();
+		return true;
+	}
+
+	showFeedback(): void {
+		this.canvas.value?.showFeedback();
+	}
+
+	revealDiffFile(path: string): void {
+		this.canvas.value?.revealDiffFile(path);
 	}
 
 	override getControl(): IEditorControl | undefined {
@@ -787,16 +869,39 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		// The canvas uses normal CSS flow and fills the editor pane.
 	}
 
+	private cachedSetupActions: ReviewCanvasSetupActions | undefined;
+
+	/* One object for the pane's life: Home re-renders on each list change, and
+	   New whiteboard reconnects, refetching its targets, when this changes. */
 	private setupActions(): ReviewCanvasSetupActions {
-		return {
+		return this.cachedSetupActions ??= {
 			load: () => this.loadInstallContent(),
 			installCli: async () => { await this.commandService.executeCommand("review.installCliInPath"); },
+			connection: async () => {
+				const { serverUrl, token } = await this.desktopConnection.getConnection();
+				return { serverUrl, token };
+			},
+			pickFolder: async () => {
+				const picked = await this.fileDialogService.showOpenDialog({
+					title: "Choose a project",
+					openLabel: "Choose",
+					canSelectFiles: false,
+					canSelectFolders: true,
+					canSelectMany: false,
+				});
+				return picked?.[0]?.fsPath;
+			},
 		};
 	}
 
 	private async resolveInstallContent(): Promise<ReviewCanvasInstallContent | undefined> {
+		const status = await this.resolveInstallStatus();
+		return status ? { status, ...this.installActions() } : undefined;
+	}
+
+	private async resolveInstallStatus(): Promise<ReviewCliInstallStatus | undefined> {
 		try {
-			return await this.loadInstallContent();
+			return await this.desktopConnection.getCliInstallStatus();
 		} catch (error) {
 			this.logService.warn("Whiteboard install status failed", error);
 			return undefined;
@@ -804,9 +909,14 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	private async loadInstallContent(): Promise<ReviewCanvasInstallContent> {
-		const status = await this.desktopConnection.getCliInstallStatus();
-		return {
-			status,
+		return { status: await this.desktopConnection.getCliInstallStatus(), ...this.installActions() };
+	}
+
+	private cachedInstallActions: ReviewCanvasInstallActions | undefined;
+
+	/* Stable like `setupActions`; each action resolves with the new status. */
+	private installActions(): ReviewCanvasInstallActions {
+		return this.cachedInstallActions ??= {
 			apply: async (request) => {
 				await this.desktopConnection.applyCliInstall(request);
 				return this.desktopConnection.getCliInstallStatus();
@@ -838,22 +948,11 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		};
 	}
 
-	private openTutorial(): void {
-		// The command opens and focuses the tutorial tab itself, and reports
-		// its own failures. Welcome stays open behind it: it is a hub the
-		// reader comes back to, not a one-shot wizard.
-		void this.commandService.executeCommand("review.openTutorial");
-	}
-
 	/**
 	 * Settings state and actions for the Settings page. Every value lives in
-	 * workbench configuration, apart from the scratchpad, which the review server
-	 * owns. Extensions reuse the existing quick pick.
+	 * workbench configuration. Extensions reuse the existing quick pick.
 	 */
 	private async resolveSettingsContent(): Promise<ReviewCanvasSettingsContent> {
-		// Settings must render even when the server preference cannot be read;
-		// the row then shows the default, off.
-		const scratchpadEnabled = await this.desktopConnection.readScratchpadEnabled().catch(() => false);
 		return {
 			telemetryEnabled: this.currentTelemetryEnabled(),
 			setTelemetryEnabled: async (enabled) => {
@@ -867,14 +966,24 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_TELEMETRY_SETTING, enabled, ConfigurationTarget.USER);
 				return this.currentTelemetryEnabled();
 			},
-			theme: currentReviewThemeChoice(this.configurationService, this.reviewThemeService),
-			setTheme: async (choice) => {
+			// Auto-detect can come back with imported VS Code settings; then show the theme on screen.
+			theme: this.configurationService.getValue<boolean>("window.autoDetectColorScheme")
+				? this.reviewThemeService.getColorTheme().settingsId
+				: this.configurationService.getValue<string>("workbench.colorTheme"),
+			setTheme: async (id) => {
+				const picked = (await this.reviewThemeService.getColorThemes()).find((theme) => theme.settingsId === id);
+				if (!picked) return this.configurationService.getValue<string>("workbench.colorTheme");
 				this.reviewTelemetryService.capture("setting_changed", {
 					setting: "theme",
-					value: choice,
+					value: themeKind(picked.type),
 				});
-				await applyReviewThemeChoice(this.configurationService, choice);
-				return currentReviewThemeChoice(this.configurationService, this.reviewThemeService);
+				return this.applyColorTheme(picked);
+			},
+			colorThemes: await this.colorThemeOptions(),
+			importColorTheme: async () => {
+				const [imported] = (await this.reviewInstantiationService.invokeFunction(importColorThemes)) ?? [];
+				if (!imported) return undefined;
+				return { theme: await this.applyColorTheme(imported), colorThemes: await this.colorThemeOptions() };
 			},
 			keymap: this.currentKeymap(),
 			setKeymap: async (choice) => {
@@ -885,15 +994,18 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.commandService.executeCommand("review.setKeymap", choice);
 				return this.currentKeymap();
 			},
-			ctrlTab: this.currentCtrlTab(),
-			setCtrlTab: async (choice) => {
+			openFilesIn: this.currentOpenFilesIn(),
+			setOpenFilesIn: async (choice) => {
+				// An application choice needs one picked first.
+				if (choice === "application" && !this.currentOpenFilesIn().application) return this.chooseOpenFilesInApplication();
 				this.reviewTelemetryService.capture("setting_changed", {
-					setting: "ctrl_tab",
+					setting: "open_files_in",
 					enabled: true,
 				});
-				await this.configurationService.updateValue(REVIEW_CTRL_TAB_SETTING, choice, ConfigurationTarget.USER);
-				return this.currentCtrlTab();
+				await this.configurationService.updateValue(REVIEW_OPEN_FILES_IN_SETTING, choice, ConfigurationTarget.USER);
+				return this.currentOpenFilesIn();
 			},
+			chooseOpenFilesInApplication: () => this.chooseOpenFilesInApplication(),
 			documentWidth: this.currentDocumentWidth(),
 			setDocumentWidth: async (choice) => {
 				this.reviewTelemetryService.capture("setting_changed", {
@@ -903,14 +1015,16 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_DOCUMENT_WIDTH_SETTING, choice, ConfigurationTarget.USER);
 				return this.currentDocumentWidth();
 			},
-			codeFontSize: this.currentCodeFontSize(),
-			setCodeFontSize: async (size) => {
+			appearance: this.currentAppearance(),
+			setAppearance: async (name, value) => {
+				const { key, setting } = APPEARANCE_SETTINGS[name];
+				const written = name === "diffWordWrap" ? (value ? "on" : "off") : value === "" ? undefined : value;
 				this.reviewTelemetryService.capture("setting_changed", {
-					setting: "code_font_size",
-					enabled: size !== 12,
+					setting,
+					enabled: written !== undefined && written !== this.configurationService.inspect(key).defaultValue,
 				});
-				await this.configurationService.updateValue(EDITOR_FONT_SIZE_SETTING, size, ConfigurationTarget.USER);
-				return this.currentCodeFontSize();
+				await this.configurationService.updateValue(key, written, ConfigurationTarget.USER);
+				return this.currentAppearance();
 			},
 			readyNotification: this.currentReadyNotification(),
 			setReadyNotification: async (choice) => {
@@ -932,26 +1046,14 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			},
 			animationsEnabled: await this.desktopConnection.readAnimationsEnabled().catch(() => false),
 			setAnimationsEnabled: (enabled) => this.desktopConnection.setAnimationsEnabled(enabled),
-			scratchpadEnabled,
-			setScratchpadEnabled: async (enabled) => {
+			sharingEnabled: this.currentSharingEnabled(),
+			setSharingEnabled: async (enabled) => {
 				this.reviewTelemetryService.capture("setting_changed", {
-					setting: "scratchpad_enabled",
+					setting: "sharing_enabled",
 					enabled,
 				});
-				return this.desktopConnection.setScratchpadEnabled(enabled);
-			},
-			structuralDiffEnabled: this.currentStructuralDiffEnabled(),
-			setStructuralDiffEnabled: async (enabled) => {
-				this.reviewTelemetryService.capture("setting_changed", {
-					setting: "structural_diff",
-					enabled,
-				});
-				await this.configurationService.updateValue(
-					REVIEW_STRUCTURAL_DIFF_SETTING,
-					enabled,
-					ConfigurationTarget.USER,
-				);
-				return this.currentStructuralDiffEnabled();
+				await this.configurationService.updateValue(REVIEW_SHARING_SETTING, enabled, ConfigurationTarget.USER);
+				return this.currentSharingEnabled();
 			},
 			remoteHosts: reviewRemoteHostsSettings({
 				get: (key) => this.configurationService.getValue(key),
@@ -977,12 +1079,41 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		};
 	}
 
+	/** With auto-detect on, this sets the current mode's preferred theme. */
+	private async applyColorTheme(theme: IWorkbenchColorTheme): Promise<string> {
+		await this.reviewThemeService.setColorTheme(theme, ConfigurationTarget.USER);
+		return this.reviewThemeService.getColorTheme().settingsId;
+	}
+
+	/** Whiteboard's own themes first, then the rest by name. */
+	private async colorThemeOptions(): Promise<ReviewColorTheme[]> {
+		return (await this.reviewThemeService.getColorThemes())
+			.map((theme) => ({ id: theme.settingsId, label: theme.label, kind: themeKind(theme.type) }))
+			.sort((a, b) => Number(!a.label.startsWith("Whiteboard")) - Number(!b.label.startsWith("Whiteboard")) || a.label.localeCompare(b.label));
+	}
+
 	private currentKeymap(): ReviewKeymapChoice {
 		return this.configurationService.getValue<ReviewKeymapChoice>(REVIEW_KEYMAP_SETTING) ?? "none";
 	}
 
-	private currentCtrlTab(): ReviewCtrlTabChoice {
-		return this.configurationService.getValue<ReviewCtrlTabChoice>(REVIEW_CTRL_TAB_SETTING) === "next" ? "next" : "recent";
+	private currentOpenFilesIn(): ReviewOpenFilesIn {
+		const path = this.configurationService.getValue<string>(REVIEW_OPEN_FILES_IN_APPLICATION_SETTING);
+		const application = path ? { path, name: basename(path).replace(/\.(app|exe)$/i, "") } : null;
+		const value = this.configurationService.getValue<ReviewOpenFilesInChoice>(REVIEW_OPEN_FILES_IN_SETTING);
+		const choice = REVIEW_OPEN_FILES_IN_CHOICES.includes(value) && (value !== "application" || application) ? value : "whiteboard";
+		return { choice, application };
+	}
+
+	private async chooseOpenFilesInApplication(): Promise<ReviewOpenFilesIn> {
+		const path = await this.desktopConnection.chooseApplication();
+		if (!path) return this.currentOpenFilesIn();
+		this.reviewTelemetryService.capture("setting_changed", {
+			setting: "open_files_in",
+			enabled: true,
+		});
+		await this.configurationService.updateValue(REVIEW_OPEN_FILES_IN_APPLICATION_SETTING, path, ConfigurationTarget.USER);
+		await this.configurationService.updateValue(REVIEW_OPEN_FILES_IN_SETTING, "application", ConfigurationTarget.USER);
+		return this.currentOpenFilesIn();
 	}
 
 	private currentDocumentWidth(): ReviewDocumentWidthChoice {
@@ -990,24 +1121,31 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return choice === "wide" || choice === "full" ? choice : "standard";
 	}
 
-	private currentCodeFontSize(): number {
-		return this.configurationService.getValue<number>(EDITOR_FONT_SIZE_SETTING);
+	private currentAppearance(): ReviewAppearance {
+		const value = <T,>(name: keyof ReviewAppearance) => this.configurationService.getValue<T>(APPEARANCE_SETTINGS[name].key);
+		return {
+			documentFontSize: value<number>("documentFontSize"),
+			readingFont: value("readingFont") === "sans" ? "sans" : "serif",
+			codeFontSize: value<number>("codeFontSize"),
+			codeFontFamily: value<string>("codeFontFamily"),
+			// `editor.fontLigatures` also takes font-feature-settings.
+			fontLigatures: value<boolean | string>("fontLigatures") !== false,
+			diffFontSize: value<number>("diffFontSize"),
+			diffWordWrap: value("diffWordWrap") === "on",
+			diffIgnoreWhitespace: value<boolean>("diffIgnoreWhitespace") !== false,
+		};
 	}
 
 	private currentReadyNotification(): ReviewReadyNotificationChoice {
 		return this.configurationService.getValue<ReviewReadyNotificationChoice>(REVIEW_READY_NOTIFICATION_SETTING) ?? "off";
 	}
 
-	private currentStructuralDiffEnabled(): boolean {
-		return (
-			this.configurationService.getValue<boolean>(
-				REVIEW_STRUCTURAL_DIFF_SETTING,
-			) === true
-		);
-	}
-
 	private currentSoftwareMapEnabled(): boolean {
 		return this.configurationService.getValue<boolean>(REVIEW_SOFTWARE_MAP_SETTING) === true;
+	}
+
+	private currentSharingEnabled(): boolean {
+		return this.configurationService.getValue<boolean>(REVIEW_SHARING_SETTING) === true;
 	}
 
 	// The setting ships as true, so only an explicit false means opted out.
@@ -1018,114 +1156,15 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	/**
 	 * Step state for the Welcome rail, derived from the install status the
 	 * caller already fetched, so one render costs one status round-trip. The
-	 * rest is local: stored tutorial progress and the review list.
+	 * rest is the review list.
 	 */
 	private resolveOnboarding(status: ReviewCliInstallStatus): ReviewCanvasOnboarding {
-		const checked = new Set(this.readTutorialProgress().checked);
 		return {
 			installed: !status.cli || status.shim.installed,
-			tutorialChecked: REVIEW_TUTORIAL_STEP_IDS.filter((step) => checked.has(step)).length,
-			tutorialTotal: REVIEW_TUTORIAL_STEP_IDS.length,
-			// Drafts are filtered out of this list, the tutorial never joins
-			// it and the scratchpad is set aside, so this counts only a real
+			// Drafts are filtered out of this list, so this counts only a real
 			// published review.
-			published: this.storageService.getBoolean(REVIEW_HAS_PUBLISHED_BOARD, StorageScope.APPLICATION, false) || homeSessions(this.apiCatalog.reviews).length > 0,
+			published: this.storageService.getBoolean(REVIEW_HAS_PUBLISHED_BOARD, StorageScope.APPLICATION, false) || this.apiCatalog.reviews.length > 0,
 		};
-	}
-
-	private createTutorialBridge(
-		reviewUuid: string,
-		progress: TutorialProgressV1,
-		onChange: (progress: TutorialProgressV1) => void,
-		close: () => void,
-	): ReviewCanvasTutorialBridge {
-		/* Mutations re-read stored progress instead of using the captured
-		   snapshot: two events arriving before the re-rendered bridge lands
-		   (hover then goto-definition) must not clobber each other. */
-		const setStep = (step: TutorialStepId, checked: boolean) => {
-			if (!REVIEW_TUTORIAL_STEP_IDS.includes(step)) return;
-			const current = this.readTutorialProgress();
-			if (current.checked.includes(step) === checked) return;
-			const values = new Set(current.checked);
-			if (checked) values.add(step);
-			else values.delete(step);
-			onChange({ ...current, checked: [...values] });
-		};
-		return {
-			content: { reviewUuid, progress, keymap: this.currentKeymap() },
-			setStep,
-			dismiss: () => onChange({ ...this.readTutorialProgress(), dismissed: true }),
-			reopen: () => onChange({ ...this.readTutorialProgress(), dismissed: false }),
-			selectKeymap: async (keymap) => {
-				if (!REVIEW_KEYMAPS.includes(keymap)) {
-					throw new Error("Unsupported tutorial keymap choice.");
-				}
-				setStep("chooseKeymap", true);
-				try {
-					/* The keymap command may reload the window before its promise can
-					   settle. Persist the completed step first so the restored tutorial
-					   advances from the choice the user already made. */
-					await this.commandService.executeCommand("review.setKeymap", keymap);
-				} catch (error) {
-					setStep("chooseKeymap", false);
-					throw error;
-				}
-			},
-			close,
-		};
-	}
-
-	private readTutorialProgress(): TutorialProgressV1 {
-		const empty: TutorialProgressV1 = {
-			version: 1,
-			checked: [],
-			dismissed: false,
-		};
-		const raw = this.storageService.get(REVIEW_TUTORIAL_PROGRESS_STORAGE_KEY, StorageScope.APPLICATION);
-		if (!raw) return empty;
-		try {
-			const value = JSON.parse(raw) as {
-				version?: unknown;
-				checked?: unknown;
-				dismissed?: unknown;
-				steps?: unknown;
-			};
-			if (
-				value.version !== 1 ||
-				!Array.isArray(value.steps) ||
-				!Array.isArray(value.checked) ||
-				!value.checked.every(isTutorialStepId) ||
-				typeof value.dismissed !== "boolean"
-			) {
-				throw new Error("Invalid tutorial progress.");
-			}
-			const checked = new Set(value.checked);
-			const known = value.steps.filter(isTutorialStepId);
-			if (known.length > 0 && known.every((step) => checked.has(step))) {
-				for (const step of REVIEW_TUTORIAL_STEP_IDS) {
-					checked.add(step);
-				}
-			}
-			return {
-				version: 1,
-				checked: [...checked],
-				dismissed: value.dismissed,
-			};
-		} catch {
-			this.writeTutorialProgress(empty);
-			return empty;
-		}
-	}
-
-	private writeTutorialProgress(progress: TutorialProgressV1): void {
-		this.storageService.store(
-			REVIEW_TUTORIAL_PROGRESS_STORAGE_KEY,
-			// `steps` marks which step ids existed at write time, so a later
-			// release can tell a finished tour from one its new steps reopened.
-			JSON.stringify({ ...progress, steps: REVIEW_TUTORIAL_STEP_IDS }),
-			StorageScope.APPLICATION,
-			StorageTarget.MACHINE,
-		);
 	}
 
 	private async renderFailure(error: Error): Promise<void> {
@@ -1158,15 +1197,24 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		if (generation !== this.loadGeneration) return;
 		this.apiContent = content.kind === "api" ? content : undefined;
 		if (this.canvas.value) {
+			// A pending reveal waits for the new board's onReady, after its canvas subscribes.
 			this.canvas.value.update(content);
 		} else {
 			this.canvas.value = assets.mountReviewCanvas(this.canvasMount, content, {
+				feedback: {
+					environment: !this.workbenchEnvironment.isBuilt ? "development" : this.productService.quality === "preview" ? "preview" : "production",
+					submit: response => this.desktopConnection.submitFeedback(response),
+					submitContact: contact => this.desktopConnection.submitFeedbackContact(contact),
+					openReleaseNotes: () => { void this.openerService.open("https://github.com/devdotfast/whiteboard/releases", { openExternal: true }); },
+				},
 				setupTooltip: this.setupTooltip,
 				notify: (notification) => showReviewNotification(this.notificationService, notification),
-				confirmDelete: titles => {
+				confirmDelete: async (titles, options) => {
 					const openedGeneration = this.loadGeneration;
+					const ids = options?.reviewIds ?? [];
 					return confirmReviewDeletion(this.dialogService, titles,
-						() => openedGeneration === this.loadGeneration && this.isVisible());
+						() => openedGeneration === this.loadGeneration && this.isVisible(),
+						ids.length ? await this.namedOnDelete(ids) : undefined, options?.trash);
 				},
 				showMenu: request => {
 					const openedGeneration = this.loadGeneration;
@@ -1180,32 +1228,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	private loadAssets(): Promise<ReviewCanvasAssetsModule> {
-		this.assetsPromise ??= this.importAssets().catch((error) => {
-			this.assetsPromise = null;
-			throw error;
-		});
-		return this.assetsPromise;
-	}
-
-	private async importAssets(): Promise<ReviewCanvasAssetsModule> {
-		// Zod 4 probes the Function constructor unless its CSP-safe mode is set
-		// before the canvas module graph is evaluated. Chromium reports the caught
-		// probe as a Trusted Types violation, so configure the bundled authoring
-		// runtime before importing it instead of weakening the workbench policy.
-		const canvasGlobal = globalThis as ReviewCanvasGlobalThis;
-		canvasGlobal.__zod_globalConfig ??= {};
-		canvasGlobal.__zod_globalConfig.jitless = true;
-
-		const url = FileAccess.asBrowserUri("vs/review/canvas/canvas-loader.js").toString(true);
-		const trustedUrl = reviewCanvasPolicy?.createScriptURL(url) ?? (url as string);
-		const assets = (await import(
-			/* webpackIgnore: true */ trustedUrl as unknown as string
-		)) as ReviewCanvasAssetsModule;
-		if (typeof assets.mountReviewCanvas !== "function") {
-			throw new Error("Whiteboard canvas bundle has no mount function.");
-		}
-		await Promise.all(assets.reviewStylesheetUrls.map((stylesheet) => loadStylesheet(document, stylesheet)));
-		return assets;
+		return loadReviewCanvasAssets();
 	}
 
 	private readonly setupTooltip: NonNullable<ReviewCanvasBridge["setupTooltip"]> = (target, content, tooltip) => {
@@ -1241,6 +1264,90 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return store;
 	};
 
+	/** The boards linking to these, and their children, for the delete
+	 * confirmation, leaving out the boards asked about. Either is empty when
+	 * it can't be read. */
+	private async namedOnDelete(reviewIds: readonly string[]): Promise<ReviewDeleteNamed> {
+		const listed = ({ title, pullRequestNumber }: ReviewDeleteListedBoard): ReviewDeleteListedBoard => ({
+			title,
+			...(pullRequestNumber && { pullRequestNumber }),
+		});
+		const asked = new Set(reviewIds);
+		const client = new ReviewApiClient(await this.desktopConnection.getConnection());
+		const [linkedFrom, movesUp] = await Promise.all([
+			Promise.all(reviewIds.map((reviewId) => client.read<{ backlinks: ({ from: { board: string } } & ReviewDeleteListedBoard)[] }>(`/${encodeURIComponent(reviewId)}/links`)))
+				.then((reads) => [...new Map(reads.flatMap(({ backlinks }) => backlinks)
+					.filter((link) => !asked.has(link.from.board))
+					.map((link) => [link.from.board, listed(link)])).values()])
+				.catch((error) => {
+					this.logService.warn("[Whiteboard] Could not read the boards linking here:", error);
+					return [];
+				}),
+			client.read<ReviewApiSummary[]>("")
+				.then((boards) => {
+					const byId = new Map(boards.map((board) => [board.reviewId, board]));
+					return reviewIds.flatMap((reviewId) => byId.get(reviewId)?.children ?? []).flatMap((id) => {
+						const child = byId.get(id);
+						return child && !asked.has(id) ? [listed({ ...child, pullRequestNumber: child.origin?.pullRequestNumber })] : [];
+					});
+				})
+				.catch((error) => {
+					this.logService.warn("[Whiteboard] Could not read the boards nested here:", error);
+					return [];
+				}),
+		]);
+		return { linkedFrom, movesUp };
+	}
+
+	/**
+	 * Wraps the diff view factory so a view can put its file tree in the
+	 * sidebar's Files section. The view still owns the tree.
+	 */
+	private withSidebarFileTree(reviewId: string, factory: ReviewDiffViewFactory): ReviewDiffViewFactory {
+		return {
+			files: factory.files,
+			create: (spec) => {
+				if (!spec.sidebarFileTree) return factory.create(spec);
+				const host = this.sidebar.fileTreeHost(reviewId);
+				const view = factory.create({ ...spec, fileTreeContainer: host.element });
+				return {
+					focus: () => view.focus(),
+					setProgress: (progress) => view.setProgress?.(progress),
+					revealSource: (source, sectionId) => view.revealSource?.(source, sectionId),
+					revealFile: (path, options) => view.revealFile?.(path, options),
+					setFindQuery: async (query) => await view.setFindQuery?.(query) ?? { matchCount: 0 },
+					revealFindMatch: (index) => view.revealFindMatch?.(index),
+					clearActiveFindMatch: () => view.clearActiveFindMatch?.(),
+					clearFind: () => view.clearFind?.(),
+					setAskMarks: (marks, mount) => view.setAskMarks?.(marks, mount),
+					onDidError: (listener) => view.onDidError(listener),
+					setFileTreeHidden: (hidden) => host.setHidden(hidden),
+					dispose: () => {
+						view.dispose();
+						host.dispose();
+					},
+				} satisfies Required<ReviewDiffViewHandle>;
+			},
+		};
+	}
+
+	private pend(event: PendingBoardEvent): void {
+		this.pendingReveal = { event, at: Date.now() };
+		this.revealPending();
+	}
+
+	/** Hands a pending block reveal to the canvas once it shows that board. */
+	private revealPending(): void {
+		const pending = this.pendingReveal;
+		// Every pane gets the request. Drop it after 10s so a board opened later doesn't jump.
+		if (pending && Date.now() - pending.at > 10_000) this.pendingReveal = undefined;
+		// Its canvas subscribes before it reports ready.
+		const ready = this.readyInput !== undefined && this.readyInput === this.renderedInput;
+		if (!pending || !this.pendingReveal || !this.canvas.value || !ready || pending.event.reviewId !== this.apiContent?.reviewId) return;
+		this.pendingReveal = undefined;
+		this.surfaceEvents.fire(pending.event);
+	}
+
 	/** The bridge members every canvas shares; `onReady` runs once the mount reports ready. */
 	private sharedBridge(
 		generation: number,
@@ -1251,6 +1358,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		| "subscribe"
 		| "currentTheme"
 		| "onDidChangeTheme"
+		| "currentInlineLineNumbers"
+		| "setInlineLineNumbers"
+		| "onDidChangeInlineLineNumbers"
 		| "currentDiffLayout"
 		| "setDiffLayout"
 		| "onDidChangeDiffLayout"
@@ -1258,11 +1368,22 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		| "notify"
 		| "ready"
 		| "reportDiagnostic"
+		| "reportSidebar"
+		| "reportSidebarLenses"
+		| "sidebarShowsBoard"
+		| "onDidChangeSidebarShowsBoard"
+		| "sidebarLensList"
+		| "askPanelHost"
+		| "reportAsk"
+		| "showThreads"
 	> {
 		return {
 			subscribe: (listener) => this.surfaceEvents.event(listener),
 			currentTheme: () => this.colorScheme(),
 			onDidChangeTheme: (listener) => this.themeEvents.event(listener),
+			currentInlineLineNumbers: () => this.diffViews.lineNumbers.get(),
+			setInlineLineNumbers: show => this.diffViews.lineNumbers.set(show),
+			onDidChangeInlineLineNumbers: listener => this.diffViews.lineNumbers.onDidChange(listener),
 			currentDiffLayout: (scope) => this.diffViews.layout(scope).get(),
 			setDiffLayout: (scope, layout) => this.diffViews.layout(scope).set(layout),
 			onDidChangeDiffLayout: (scope, listener) => this.diffViews.layout(scope).onDidChange(listener),
@@ -1272,6 +1393,24 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				if (generation !== this.loadGeneration || !this.targetDocument) return;
 				this.targetDocument.body.dataset["reviewCanvasReady"] = "true";
 				onReady();
+				this.revealPending();
+			},
+			sidebarShowsBoard: () => this.sidebar.showsBoard(this.apiContent?.reviewId),
+			onDidChangeSidebarShowsBoard: (listener) => this.sidebar.onDidChangeBoard(listener),
+			sidebarLensList: () => this.sidebar.lensList(this.apiContent?.reviewId),
+			// Only the main window has the Ask column.
+			askPanelHost: () => this.targetDocument === mainWindow.document ? this.askParts.host(this) : undefined,
+			reportAsk: (state) => {
+				if (generation !== this.loadGeneration) return;
+				this.askParts.setDocked(this, state.docked);
+				this.sidebar.reportAsk(this.apiContent?.reviewId, state);
+			},
+			showThreads: () => this.sidebar.showThreads(),
+			reportSidebarLenses: (lenses) => {
+				if (generation === this.loadGeneration) this.sidebar.reportLenses(this.apiContent?.reviewId, lenses);
+			},
+			reportSidebar: (state) => {
+				if (generation === this.loadGeneration) this.sidebar.report(this.apiContent?.reviewId, state);
 			},
 			reportDiagnostic: (diagnostic) => {
 				if (generation === this.loadGeneration && diagnostic.level === "error") {
@@ -1284,16 +1423,11 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		};
 	}
 
-	private reviewRuntimeConfig(
-		connection: Pick<ReviewRuntimeConfig, "serverUrl" | "reviewId" | "token">,
-		assets: ReviewCanvasAssetsModule,
-	): ReviewRuntimeConfig {
+	private canvasSettings(): ReviewCanvasSettings {
 		return {
-			...connection,
-			wasmUrl: assets.reviewWasmUrl,
-			appVersion: this.productService.reviewVersion ?? this.productService.version,
-			theme: this.colorScheme(),
-			host: "desktop",
+			softwareMapEnabled: this.currentSoftwareMapEnabled(),
+			sharingEnabled: this.currentSharingEnabled(),
+			documentWidth: this.currentDocumentWidth(),
 		};
 	}
 
@@ -1320,9 +1454,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	private colorScheme(): ReviewTheme {
-		const type = this.reviewThemeService.getColorTheme().type;
-		return type === ColorScheme.LIGHT || type === ColorScheme.HIGH_CONTRAST_LIGHT ? "light" : "dark";
+		return themeKind(this.reviewThemeService.getColorTheme().type);
 	}
+}
+
+function themeKind(type: ColorScheme): ReviewTheme {
+	return type === ColorScheme.LIGHT || type === ColorScheme.HIGH_CONTRAST_LIGHT ? "light" : "dark";
 }
 
 class ReviewCanvasPlaceholderPart extends Part {
@@ -1374,18 +1511,3 @@ export class ReviewCanvasParts extends Disposable implements IReviewCanvasPartsS
 	}
 }
 
-function loadStylesheet(document: Document, url: string): Promise<void> {
-	const existing = [...document.querySelectorAll<HTMLLinkElement>('link[data-review-canvas-stylesheet="true"]')].find(
-		(link) => link.href === url,
-	);
-	if (existing) return Promise.resolve();
-	return new Promise((resolve, reject) => {
-		const link = document.createElement("link");
-		link.rel = "stylesheet";
-		link.href = url;
-		link.dataset["reviewCanvasStylesheet"] = "true";
-		link.addEventListener("load", () => resolve(), { once: true });
-		link.addEventListener("error", () => reject(new Error(`Whiteboard canvas stylesheet failed: ${url}`)), { once: true });
-		document.head.appendChild(link);
-	});
-}

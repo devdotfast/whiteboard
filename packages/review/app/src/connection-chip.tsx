@@ -1,5 +1,15 @@
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { RefreshIcon } from "@canvas/ui/icons";
+import { Spinner } from "@canvas/ui/spinner";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewHostStatus,
   type ReviewRemoteHostActions,
@@ -8,7 +18,6 @@ import {
 import * as stylex from "@stylexjs/stylex";
 import { createContext, useContext } from "react";
 
-import { RefreshIcon } from "./icons";
 import {
   ACTION_WORDS,
   useHostAction,
@@ -16,7 +25,6 @@ import {
 } from "./remote-host-state";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 export interface LostConnection {
   host?: string;
@@ -67,9 +75,7 @@ export function ConnectionChip() {
         ref={tooltip}
       >
         <span {...stylex.props(styles.text)}>{label}</span>
-        {spinning ? (
-          <RefreshIcon xstyle={[styles.icon, styles.spinning]} />
-        ) : null}
+        {spinning ? <Spinner /> : null}
       </span>
     );
 
@@ -79,7 +85,6 @@ export function ConnectionChip() {
       {...withClass("connection-chip", styles.chip, styles.button)}
       aria-label={`${label}. ${ACTION_WORDS[action]}.`}
       aria-busy={pending || undefined}
-      disabled={pending}
       ref={tooltip}
       onClick={() => run(action)}
     >
@@ -87,11 +92,28 @@ export function ConnectionChip() {
         {label}
       </span>
       {action === "retry" ? (
-        <RefreshIcon xstyle={[styles.icon, spinning && styles.spinning]} />
+        <RefreshIcon xstyle={iconStyles.inline} spinning={!!spinning} />
       ) : (
         <span {...stylex.props(styles.action)}>{ACTION_WORDS[action]}</span>
       )}
     </button>
+  );
+}
+
+/** Shown while a remote review's language server starts. */
+export function LanguageServerChip({ host }: { host: string }) {
+  if (useContext(ConnectionContext)) return null;
+
+  return (
+    <span
+      {...withClass("language-server-chip", styles.chip, styles.neutral)}
+      role="status"
+    >
+      <span {...stylex.props(styles.text)}>
+        Loading language features on {host}
+      </span>
+      <Spinner />
+    </span>
   );
 }
 
@@ -106,7 +128,7 @@ export function useHostActionButton(
 
   const button =
     action && hosts ? (
-      <Button disabled={pending} onClick={() => run(action)}>
+      <Button aria-busy={pending || undefined} onClick={() => run(action)}>
         {ACTION_WORDS[action]}
       </Button>
     ) : null;
@@ -160,12 +182,6 @@ export function HostWaiting({
   );
 }
 
-const REDUCED = "@media (prefers-reduced-motion: reduce)";
-
-const spin = stylex.keyframes({
-  to: { transform: "rotate(360deg)" },
-});
-
 const styles = stylex.create({
   chip: {
     display: "inline-flex",
@@ -173,10 +189,10 @@ const styles = stylex.create({
     minWidth: 0,
     maxWidth: "320px",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     height: tokens.chromeControlHeight,
-    marginInline: "4px",
-    padding: "0 10px",
+    marginInline: space.s4,
+    padding: `0 ${space.s10}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.warningOutline,
@@ -186,6 +202,11 @@ const styles = stylex.create({
     font: `${fontWeight.semibold} ${fontSize.small} ${tokens.fontMono}`,
     whiteSpace: "nowrap",
   },
+  neutral: {
+    borderColor: tokens.chromeBorder,
+    backgroundColor: tokens.transparent,
+    color: tokens.chromeFgMuted,
+  },
   // A long alias ends in an ellipsis; the tooltip has it all.
   text: {
     minWidth: 0,
@@ -193,7 +214,7 @@ const styles = stylex.create({
     textOverflow: "ellipsis",
   },
   button: {
-    paddingInlineEnd: "7px",
+    paddingInlineEnd: space.s8,
     cursor: { default: "pointer", ":disabled": "progress" },
     filter: { default: null, ":hover:not(:disabled)": "brightness(1.15)" },
     outline: {
@@ -206,11 +227,11 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-start",
-    gap: "12px",
+    gap: space.s12,
     maxWidth: "72ch",
-    margin: "32px auto",
-    padding: "0 24px",
-    font: `${fontSize.reading}/1.6 ${tokens.fontDisplay}`,
+    margin: `${space.s32} auto`,
+    padding: `0 ${space.s24}`,
+    font: `${fontSize.reading}/${leading.relaxed} ${tokens.chromeFont}`,
   },
   waitingLabel: {
     margin: 0,
@@ -224,16 +245,5 @@ const styles = stylex.create({
   action: {
     textDecorationLine: "underline",
     textUnderlineOffset: "2px",
-  },
-  icon: {
-    flexShrink: 0,
-    width: "13px",
-    height: "13px",
-  },
-  spinning: {
-    animationName: { default: spin, [REDUCED]: "none" },
-    animationDuration: { default: motion.pulse, [REDUCED]: motion.instant },
-    animationTimingFunction: "linear",
-    animationIterationCount: "infinite",
   },
 });

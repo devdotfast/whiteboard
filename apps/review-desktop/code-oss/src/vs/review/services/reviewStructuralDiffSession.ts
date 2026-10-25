@@ -4,7 +4,7 @@ import { Disposable } from "../../base/common/lifecycle.js";
 import { CancellationError } from "../../base/common/errors.js";
 import { derivedWithSetter, observableValue, type ISettableObservable } from "../../base/common/observable.js";
 import { structuralFilePath, STRUCTURAL_WIRE_VERSION, type StructuralEvent, type StructuralRegion, type StructuralTextDiff } from "../common/reviewStructuralDiff.js";
-import type { StructuralDiff } from "../common/reviewProtocol.js";
+import { applyStructuralUpdate, type StructuralDiff } from "../common/reviewProtocol.js";
 import type { StructuralDiffStream } from "./reviewStructuralDiffClient.js";
 
 export interface StructuralFileResult {
@@ -12,6 +12,8 @@ export interface StructuralFileResult {
 	error?: string;
 	hidden?: string;
 }
+
+export type StructuralFailureReason = "missing_binary" | "process_exit" | "stream_ended" | "aborted" | "file_error" | "other";
 
 export interface StructuralSessionChange {
 	/** Files whose diff or fold state changed. */
@@ -29,6 +31,8 @@ export class StructuralDiffSession extends Disposable {
 	private readonly abort = new AbortController();
 	private readonly results = new Map<string, StructuralFileResult>();
 	private readonly folds = new Map<string, boolean | ISettableObservable<boolean>>();
+	/** Files the reader has seen or folded; diffr updates only relabel their folds. */
+	private readonly seen = new Set<string>();
 	private manifest: Set<string> | undefined;
 	private task: Promise<void> | undefined;
 	private finished = false;
@@ -45,15 +49,15 @@ export class StructuralDiffSession extends Disposable {
 		const current = this.results.get(path);
 		if (current) return Promise.resolve(current);
 		if (this.disposed) return Promise.reject(new CancellationError());
-		if (this.finished) return Promise.reject(new Error(this.error ?? `diffr did not supply a result for ${path}.`));
+		if (this.finished) return Promise.resolve(this.missingResult());
 		return new Promise((resolve, reject) => {
 			const finish = () => {
 				const result = this.results.get(path);
 				if (!result && !this.finished && !this.disposed) return;
 				listener.dispose();
 				this.abort.signal.removeEventListener("abort", cancel);
-				if (result) resolve(result);
-				else reject(this.disposed ? new CancellationError() : new Error(this.error ?? `diffr did not supply a result for ${path}.`));
+				if (this.disposed) reject(new CancellationError());
+				else resolve(result ?? this.missingResult());
 			};
 			const cancel = () => finish();
 			const listener = this.onDidChange(change => {
@@ -63,6 +67,19 @@ export class StructuralDiffSession extends Disposable {
 			finish();
 		});
 	}
+	/** Why this comparison failed, or `undefined` when every file has a diff. */
+	failure(): { reason: StructuralFailureReason; files: number } | undefined {
+		if (!this.finished || this.disposed) return undefined;
+		const files = [...this.manifest ?? []].filter(path => !this.results.get(path)?.diff).length;
+		const error = this.error;
+		if (!error) return files ? { reason: "file_error", files } : undefined;
+		const reason = error.includes("executable is missing") ? "missing_binary"
+			: error.startsWith("diffr exited with") ? "process_exit"
+				: error.includes("ended before completion") ? "stream_ended"
+					: error.startsWith("diffr stopped early") ? "aborted" : "other";
+		return { reason, files };
+	}
+	private missingResult(): StructuralFileResult { return { error: this.error ?? "diffr did not supply a result for this file." }; }
 	getTextDiff(path: string): StructuralTextDiff | undefined {
 		const diff = this.results.get(path)?.diff;
 		return diff?.type === "text" ? diff : undefined;
@@ -79,9 +96,12 @@ export class StructuralDiffSession extends Disposable {
 		if (!state || typeof state === "boolean") throw new Error(`Missing root collapse state for ${path}.`);
 		return state;
 	}
-	setRegionCollapsed(path: string, id: number, collapsed: boolean): void {
+	/** The reader has had this file's code on screen. */
+	markSeen(path: string): void { if (!this.disposed) this.seen.add(path); }
+	setRegionCollapsed(path: string, id: number, collapsed: boolean, byReader = true): void {
 		const key = `${path}:${id}`;
 		if (this.disposed) return;
+		if (byReader) this.seen.add(path);
 		const state = this.folds.get(key);
 		if (typeof state === "object") state.set(collapsed, undefined);
 		else if (state !== collapsed) { this.folds.set(key, collapsed); this.notify(path); }
@@ -121,9 +141,10 @@ export class StructuralDiffSession extends Disposable {
 			if (event.type !== "start" || event.version !== STRUCTURAL_WIRE_VERSION) throw new Error("Unsupported diffr stream protocol.");
 			this.acceptManifest(event);
 		} else if (event.type === "file") this.storeFileResult(event);
+		else if (event.type === "update") this.applyUpdate(event);
 		else if (event.type === "complete") this.finishLoading(event);
-		else throw new Error(`Unexpected diffr event: ${event.type}`);
-		if (event.type === "file") this.notify(structuralFilePath(event.file));
+		else throw new Error(`Unexpected diffr event: ${(event as StructuralEvent).type}`);
+		if (event.type === "file" || event.type === "update") this.notify(structuralFilePath(event.file));
 		else this.notify(undefined, true);
 	}
 
@@ -151,7 +172,24 @@ export class StructuralDiffSession extends Disposable {
 		const path = structuralFilePath(event.file);
 		if (!this.manifest!.has(path) || this.results.has(path)) throw new Error(`Unexpected or repeated diffr result: ${path}`);
 		if (event.error) { this.results.set(path, { error: event.error.message }); return; }
-		const diff = event.diff;
+		this.storeDiff(path, event.diff);
+	}
+
+	/** Labels always apply; collapse only in files the reader has not seen, so nothing moves under them. */
+	private applyUpdate(event: Extract<StructuralEvent, { type: "update" }>): void {
+		const path = structuralFilePath(event.file);
+		const diff = this.getTextDiff(path);
+		if (!diff) throw new Error(`Unexpected diffr update: ${path}`);
+		if (event.error) return;
+		const seen = this.seen.has(path);
+		this.storeDiff(path, applyStructuralUpdate(diff, event, (region, next) => {
+			if (seen) return { ...next, collapsed: region.visibility?.collapsed };
+			this.setRegionCollapsed(path, region.fold_state_id, next.collapsed === true, false);
+			return next;
+		}));
+	}
+
+	private storeDiff(path: string, diff: StructuralDiff): void {
 		if (diff.type === "text") {
 			const seed = (region: StructuralRegion) => {
 				const key = `${path}:${region.fold_state_id}`;
@@ -174,7 +212,7 @@ export class StructuralDiffSession extends Disposable {
 	}
 
 	private finishLoading(event: Extract<StructuralEvent, { type: "complete" }>): void {
-		for (const path of this.manifest!) if (!this.results.has(path)) { this.results.set(path, { error: "diffr did not supply a result for this file." }); this.pendingFiles.add(path); }
+		for (const path of this.manifest!) if (!this.results.has(path)) { this.results.set(path, this.missingResult()); this.pendingFiles.add(path); }
 		this.finished = true;
 		if (event.aborted) this.error = `diffr stopped early: ${event.aborted.message}`;
 	}
@@ -184,6 +222,7 @@ export class StructuralDiffSession extends Disposable {
 		this.abort.abort();
 		this.results.clear();
 		this.folds.clear();
+		this.seen.clear();
 		this.pendingFiles.clear();
 		super.dispose();
 	}

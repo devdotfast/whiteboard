@@ -2,24 +2,26 @@ import {
   type AskHistoryEntry,
   askHistoryEntrySchema,
 } from "@review/ask/thread-state";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   type ReactElement,
   type ReactNode,
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import { z } from "zod";
 
+import { canvasQueryKeys } from "./canvas-query";
 import { useReviewSession } from "./host/review-session";
 
 export interface AskHistory {
-  /** Newest first; null until the first read. */
+  /** The project's conversations, newest first; null until the first read. */
   entries: AskHistoryEntry[] | null;
+  /** The board on screen. Only threads anchored on it get marks. */
+  board: string | null;
   error: string | null;
   /** Reads the list again, after a conversation is saved or continued. */
   refresh: () => void;
@@ -38,7 +40,10 @@ export interface AskHistory {
 
 const AskHistoryContext = createContext<AskHistory | null>(null);
 
-const listSchema = z.object({ threads: z.array(askHistoryEntrySchema) });
+const listSchema = z.object({
+  threads: z.array(askHistoryEntrySchema),
+  board: z.string().optional(),
+});
 
 /** This review's saved conversations, shared by the document's marks, the
  * history list, and the Ask panel that adds to them. */
@@ -48,7 +53,6 @@ export function AskHistoryProvider({
   children: ReactNode;
 }): ReactElement {
   const session = useReviewSession();
-  const [entries, setEntries] = useState<AskHistoryEntry[] | null>(null);
   const [previewId, preview] = useState<string | null>(null);
 
   const [revealRequest, setRevealRequest] = useState<AskHistoryEntry | null>(
@@ -59,8 +63,6 @@ export function AskHistoryProvider({
     (entry: AskHistoryEntry) => setRevealRequest({ ...entry }),
     [],
   );
-
-  const [error, setError] = useState<string | null>(null);
 
   const [outdated, setOutdated] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -75,54 +77,67 @@ export function AskHistoryProvider({
     );
   }, []);
 
-  // A slower, older read must not replace a newer one.
-  const reads = useRef(0);
+  const queryClient = useQueryClient();
 
-  const refresh = useCallback(() => {
-    const read = ++reads.current;
+  const list = useQuery({
+    queryKey: canvasQueryKeys.askThreads(session.reviewId),
+    queryFn: async () => {
+      const response = await session.fetch("/ask/threads");
 
-    void session
-      .fetch("/ask/threads")
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Unavailable");
+      if (!response.ok) throw new Error("Unavailable");
 
-        const { threads } = listSchema.parse(await response.json());
+      return listSchema.parse(await response.json());
+    },
+  });
 
-        if (read !== reads.current) return;
-        setEntries(threads);
-        setError(null);
-      })
-      .catch(() => {
-        if (read === reads.current)
-          setError("Whiteboard could not read saved conversations.");
-      });
-  }, [session]);
+  const refresh = useCallback(
+    () =>
+      void queryClient.invalidateQueries({
+        queryKey: canvasQueryKeys.askThreads(session.reviewId),
+      }),
+    [queryClient, session.reviewId],
+  );
 
-  useEffect(refresh, [refresh]);
+  const remove = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await session.fetch(`/ask/${id}`, { method: "DELETE" });
+
+      if (!response.ok) throw new Error("Unavailable");
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({
+        queryKey: canvasQueryKeys.askThreads(session.reviewId),
+      }),
+  });
+
+  const { mutateAsync: removeThread } = remove;
 
   const forget = useCallback(
     async (id: string) => {
-      const response = await session
-        .fetch(`/ask/${id}`, { method: "DELETE" })
-        .catch(() => null);
+      try {
+        await removeThread(id);
 
-      if (!response?.ok) {
-        setError("Whiteboard could not delete that conversation.");
-
+        return true;
+      } catch {
         return false;
       }
-
-      reads.current += 1;
-      setEntries((list) => list?.filter((entry) => entry.id !== id) ?? null);
-
-      return true;
     },
-    [session],
+    [removeThread],
   );
+
+  const entries = list.data?.threads ?? null;
+  const board = list.data?.board ?? null;
+
+  const error = remove.error
+    ? "Whiteboard could not delete that conversation."
+    : list.error
+      ? "Whiteboard could not read saved conversations."
+      : null;
 
   const value = useMemo(
     () => ({
       entries,
+      board,
       error,
       refresh,
       forget,
@@ -135,6 +150,7 @@ export function AskHistoryProvider({
     }),
     [
       entries,
+      board,
       error,
       refresh,
       forget,

@@ -5,35 +5,28 @@ import path from "node:path";
 import gitUrlParse from "git-url-parse";
 
 import { BlobBatchReader } from "./blob-batch-reader";
-import { execFileAsync, execFileSyncObserved } from "./exec";
+import {
+  type VcsArg,
+  type VcsTool,
+  localGitEnvironment,
+  runVcs,
+  runVcsSync,
+} from "./exec";
 import { refreshWindowsPath } from "./windows-path";
 
 export { type BlobBatchReader } from "./blob-batch-reader";
 
 export {
   type LocalVcsCommandObserver,
+  type Operand,
+  type VcsArg,
+  VcsOperandError,
+  renderVcsArgs,
+  runVcs,
+  runVcsSync,
+  localGitEnvironment,
   setLocalVcsCommandObserver,
 } from "./exec";
-
-const LOCAL_GIT_ENV_KEYS = [
-  "GIT_ALTERNATE_OBJECT_DIRECTORIES",
-  "GIT_COMMON_DIR",
-  "GIT_CONFIG",
-  "GIT_CONFIG_COUNT",
-  "GIT_CONFIG_PARAMETERS",
-  "GIT_DIR",
-  "GIT_GRAFT_FILE",
-  "GIT_IMPLICIT_WORK_TREE",
-  "GIT_INDEX_FILE",
-  "GIT_INTERNAL_SUPER_PREFIX",
-  "GIT_NO_REPLACE_OBJECTS",
-  "GIT_OBJECT_DIRECTORY",
-  "GIT_PREFIX",
-  "GIT_QUARANTINE_PATH",
-  "GIT_REPLACE_REF_BASE",
-  "GIT_SHALLOW_FILE",
-  "GIT_WORK_TREE",
-] as const;
 
 type CommandOutputOptions = {
   cwd?: string;
@@ -308,42 +301,6 @@ export async function resolveRepoContext(
   return context;
 }
 
-export function resolveRepoContextSync(rootPath: string): RepoContext | null {
-  const key = path.resolve(rootPath);
-
-  const commonDir = gitCommonDirSync(key);
-
-  if (!commonDir) return null;
-
-  const originUrl =
-    commandOutputSync("git", [
-      "--git-dir",
-      commonDir,
-      "config",
-      "--get",
-      "remote.origin.url",
-    ]) || null;
-
-  const resolvedOriginUrl =
-    commandOutputSync("git", [
-      "--git-dir",
-      commonDir,
-      "remote",
-      "get-url",
-      "origin",
-    ]) || null;
-
-  const context = {
-    commonDir,
-    originUrl,
-    githubSlug:
-      (resolvedOriginUrl ? parseGitRemoteSlug(resolvedOriginUrl) : null) ??
-      (originUrl ? parseGitRemoteSlug(originUrl) : null),
-  };
-
-  return context;
-}
-
 /** git argv for the object store: a jj workspace reads through its backing store. */
 export async function objectStoreArgs(input: {
   rootPath: string;
@@ -371,8 +328,8 @@ export function createBlobBatchReader(input: {
 /** Git argv prefix that pins a command to the repo's shared git dir. */
 export async function gitArgs(
   rootPath: string,
-  args: string[],
-): Promise<string[]> {
+  args: readonly VcsArg[],
+): Promise<VcsArg[]> {
   const gitDir = await gitCommonDir(rootPath);
 
   if (!gitDir) throw new Error(`No git repository found at ${rootPath}`);
@@ -380,7 +337,10 @@ export async function gitArgs(
   return ["--git-dir", gitDir, ...args];
 }
 
-export function gitArgsSync(rootPath: string, args: string[]): string[] {
+export function gitArgsSync(
+  rootPath: string,
+  args: readonly VcsArg[],
+): VcsArg[] {
   const gitDir = gitCommonDirSync(rootPath);
 
   if (!gitDir) throw new Error(`No git repository found at ${rootPath}`);
@@ -388,14 +348,38 @@ export function gitArgsSync(rootPath: string, args: string[]): string[] {
   return ["--git-dir", gitDir, ...args];
 }
 
+/** execFile's rejection: utf8 output, `killed` on timeout. */
+type ExecFailure = Error & {
+  stdout?: string;
+  stderr?: string;
+  killed?: boolean;
+  signal?: string;
+};
+
+/** A timed-out child said nothing, so report the kill. */
+function failure(cause: unknown) {
+  // SAFETY: execFile rejects with ExecFailure's optional fields.
+  const error = cause as ExecFailure;
+
+  return {
+    ok: false,
+    stdout: error.stdout ?? "",
+    stderr:
+      error.stderr ||
+      (error.killed
+        ? `git timed out and was killed (${error.signal ?? "SIGTERM"})`
+        : String(error)),
+  };
+}
+
 /** Run git against the repo's shared git dir, optionally tolerating failure. */
 export async function git(
   rootPath: string,
-  args: string[],
+  args: readonly VcsArg[],
   options: { allowFailure?: boolean; signal?: AbortSignal } = {},
 ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   try {
-    const { stdout, stderr } = await execFileAsync(
+    const { stdout, stderr } = await runVcs(
       "git",
       await gitArgs(rootPath, args),
       { maxBuffer: 64 * 1024 * 1024, signal: options.signal },
@@ -403,17 +387,7 @@ export async function git(
 
     return { ok: true, stdout, stderr };
   } catch (error) {
-    if (options.allowFailure) {
-      // SAFETY: execFile rejects with an ExecFileException that carries the
-      // child's captured stdout and stderr as utf8 strings.
-      const err = error as { stdout?: string; stderr?: string };
-
-      return {
-        ok: false,
-        stdout: err.stdout ?? "",
-        stderr: err.stderr ?? String(error),
-      };
-    }
+    if (options.allowFailure) return failure(error);
 
     throw error;
   }
@@ -426,7 +400,7 @@ export async function git(
  */
 export async function gitAt(
   cwd: string,
-  args: string[],
+  args: readonly VcsArg[],
   options: {
     allowFailure?: boolean;
     signal?: AbortSignal;
@@ -435,30 +409,16 @@ export async function gitAt(
   } = {},
 ): Promise<{ ok: boolean; stdout: string; stderr: string }> {
   try {
-    const { stdout, stderr } = await execFileAsync(
-      "git",
-      ["-C", cwd, ...args],
-      {
-        maxBuffer: 64 * 1024 * 1024,
-        signal: options.signal,
-        env: options.env,
-        timeout: options.timeout,
-      },
-    );
+    const { stdout, stderr } = await runVcs("git", ["-C", cwd, ...args], {
+      maxBuffer: 64 * 1024 * 1024,
+      signal: options.signal,
+      env: options.env,
+      timeout: options.timeout,
+    });
 
     return { ok: true, stdout, stderr };
   } catch (error) {
-    if (options.allowFailure) {
-      // SAFETY: execFile rejects with an ExecFileException that carries the
-      // child's captured stdout and stderr as utf8 strings.
-      const err = error as { stdout?: string; stderr?: string };
-
-      return {
-        ok: false,
-        stdout: err.stdout ?? "",
-        stderr: err.stderr ?? String(error),
-      };
-    }
+    if (options.allowFailure) return failure(error);
 
     throw error;
   }
@@ -480,18 +440,18 @@ function createLocalVcs(kind: LocalVcsKind, rootPath: string): LocalVcs {
         kind,
       }),
     listTrackedFiles: (revision) =>
-      Promise.resolve(
-        listTrackedFilesForKind({ rootPath, ref: revision, kind }),
-      ),
-    readFileAtRef: (ref, relativePath) =>
-      Promise.resolve(
-        readFileAtRevisionForKind({
-          rootPath,
-          ref,
-          relativePath,
-          kind,
-        })?.source ?? null,
-      ),
+      listTrackedFilesOf({ rootPath, kind }, revision),
+    readFileAtRef: async (ref, relativePath) => {
+      const commit = await resolveRevisionCommitByPreference(
+        rootPath,
+        ref,
+        kind,
+      );
+
+      return commit
+        ? readFileAtCommit({ rootPath, kind, commit, relativePath })
+        : null;
+    },
     diff: (input) =>
       diffForKind({
         rootPath,
@@ -549,12 +509,12 @@ export async function jjRevisionIsConflicted(
   if (vcs?.kind !== "jj") return null;
 
   try {
-    const { stdout } = await execFileAsync(
+    const { stdout } = await runVcs(
       "jj",
       [
         "log",
         "-r",
-        revision,
+        { rev: revision },
         "--no-graph",
         "-T",
         'if(conflict, "true", "false")',
@@ -690,15 +650,26 @@ export async function listTrackedFiles(input: {
 }): Promise<string[]> {
   const vcs = await detectLocalVcs(input.rootPath);
 
-  if (!vcs) return [];
+  return vcs ? listTrackedFilesOf(vcs, input.ref) : [];
+}
 
-  const run = (command: string, args: string[]) =>
+async function listTrackedFilesOf(
+  vcs: { rootPath: string; kind: LocalVcsKind },
+  ref?: string,
+): Promise<string[]> {
+  const run = (command: VcsTool, args: readonly VcsArg[]) =>
     commandOutput(command, args, { cwd: vcs.rootPath }).catch(() => null);
 
   if (vcs.kind === "jj") {
-    const args = ["-R", vcs.rootPath, "file", "list", "--ignore-working-copy"];
+    const args: VcsArg[] = [
+      "-R",
+      vcs.rootPath,
+      "file",
+      "list",
+      "--ignore-working-copy",
+    ];
 
-    if (input.ref) args.push("-r", input.ref);
+    if (ref) args.push("-r", { rev: ref });
     const output = await run("jj", args);
 
     if (output !== null) return splitLines(output);
@@ -719,8 +690,8 @@ export async function listTrackedFiles(input: {
 
   const output = await run(
     "git",
-    input.ref
-      ? ["-C", vcs.rootPath, "ls-tree", "-r", "-z", "--name-only", input.ref]
+    ref
+      ? ["-C", vcs.rootPath, "ls-tree", "-r", "-z", "--name-only", { rev: ref }]
       : ["-C", vcs.rootPath, "ls-files", "-z"],
   );
 
@@ -742,7 +713,7 @@ export async function listTrackedFilesAtCommit(input: {
         "list",
         "--ignore-working-copy",
         "-r",
-        input.commit,
+        { rev: input.commit },
       ],
       { cwd: input.rootPath },
     ).catch(() => null);
@@ -754,7 +725,15 @@ export async function listTrackedFilesAtCommit(input: {
 
   const output = await commandOutput(
     "git",
-    ["-C", input.rootPath, "ls-tree", "-r", "-z", "--name-only", input.commit],
+    [
+      "-C",
+      input.rootPath,
+      "ls-tree",
+      "-r",
+      "-z",
+      "--name-only",
+      { rev: input.commit },
+    ],
     { cwd: input.rootPath },
   ).catch(() => null);
 
@@ -786,7 +765,15 @@ function listTrackedFilesForKind(input: {
   const output = input.ref
     ? commandOutputSync(
         "git",
-        ["-C", input.rootPath, "ls-tree", "-r", "-z", "--name-only", input.ref],
+        [
+          "-C",
+          input.rootPath,
+          "ls-tree",
+          "-r",
+          "-z",
+          "--name-only",
+          { rev: input.ref },
+        ],
         { cwd: input.rootPath },
       )
     : commandOutputSync("git", ["-C", input.rootPath, "ls-files", "-z"], {
@@ -864,7 +851,7 @@ async function readJjFileAtCommit(input: {
       "file",
       "show",
       "-r",
-      input.commit,
+      { rev: input.commit },
       "--ignore-working-copy",
       "--",
       toJjRootFilePattern(input.relativePath),
@@ -904,20 +891,6 @@ async function jjCommitIsConflicted(
   known.set(commit, probe);
 
   return probe;
-}
-
-function readFileAtRevisionForKind(input: {
-  rootPath: string;
-  ref: string;
-  relativePath: string;
-  kind: LocalVcsKind;
-}): { commit: string; source: string } | null {
-  return input.kind === "jj"
-    ? (readJjFileAtRevisionSync(input) ??
-        (canUseGitFallbackSync(input.rootPath, input.kind)
-          ? readGitFileAtRevisionSync(input)
-          : null))
-    : (readGitFileAtRevisionSync(input) ?? readJjFileAtRevisionSync(input));
 }
 
 export async function diff(input: {
@@ -1021,8 +994,8 @@ async function withWorkingTreeIndex<T>(
     await fs.promises.mkdir(path.join(scratch, "objects"));
 
     // A split index would otherwise create sharedindex files in the real git dir.
-    const git = (args: string[]) =>
-      execFileAsync(
+    const git = (args: readonly VcsArg[]) =>
+      runVcs(
         "git",
         ["-c", "core.splitIndex=false", "-C", input.rootPath, ...args],
         {
@@ -1034,7 +1007,7 @@ async function withWorkingTreeIndex<T>(
 
     if (input.kind === "git") {
       const index = (
-        await execFileAsync(
+        await runVcs(
           "git",
           [
             "-C",
@@ -1158,7 +1131,7 @@ export async function listCommitRange(input: {
   }
 
   try {
-    const { stdout } = await execFileAsync(
+    const { stdout } = await runVcs(
       "git",
       [
         "-C",
@@ -1168,7 +1141,7 @@ export async function listCommitRange(input: {
         "--format=%H%x00%P%x00%an%x00%aI%x00%s%x00",
         "--numstat",
         "-z",
-        `${input.baseRef}..${input.headRef}`,
+        { rev: `${input.baseRef}..${input.headRef}` },
       ],
       { cwd: vcs.rootPath, maxBuffer: 25 * 1024 * 1024 },
     );
@@ -1247,7 +1220,7 @@ async function readJjCommitRange(
       "log",
       "--no-graph",
       "-r",
-      `::${headRef} ~ ::${baseRef}`,
+      { rev: `::${headRef} ~ ::${baseRef}` },
       "-T",
       'commit_id ++ "\\0" ++ parents.map(|p| p.commit_id()).join(" ") ++ "\\0" ++ author.name() ++ "\\0" ++ author.timestamp().format("%+") ++ "\\0" ++ description.first_line() ++ "\\0"',
       "--ignore-working-copy",
@@ -1329,8 +1302,8 @@ async function diffForKind(input: {
   literalPaths?: boolean;
 }): Promise<string> {
   if (input.kind === "jj") {
-    return readJjDiff(input).catch((cause: unknown) => {
-      if (!canUseGitFallbackSync(input.rootPath, input.kind)) throw cause;
+    return readJjDiff(input).catch(async (cause: unknown) => {
+      if (!(await canUseGitFallback(input.rootPath, input.kind))) throw cause;
 
       return readGitDiff(input);
     });
@@ -1352,7 +1325,7 @@ async function diffFileSummariesForKind(input: {
   let summaries: LocalVcsDiffFileSummary[];
 
   if (input.kind === "jj") {
-    if (canUseGitFallbackSync(input.rootPath, input.kind)) {
+    if (await canUseGitFallback(input.rootPath, input.kind)) {
       try {
         summaries = await readGitDiffFileSummaries(unfilteredInput);
 
@@ -1401,8 +1374,8 @@ async function diffNameStatusForKind(input: {
   kind: LocalVcsKind;
 }): Promise<DiffNameStatus> {
   if (input.kind === "jj") {
-    return readJjDiffNameStatus(input).catch((cause: unknown) => {
-      if (!canUseGitFallbackSync(input.rootPath, input.kind)) throw cause;
+    return readJjDiffNameStatus(input).catch(async (cause: unknown) => {
+      if (!(await canUseGitFallback(input.rootPath, input.kind))) throw cause;
 
       return readGitDiffNameStatus(input);
     });
@@ -1567,8 +1540,8 @@ async function readGitDiffNameStatus(input: {
 }): Promise<DiffNameStatus> {
   const refRange =
     input.mergeBase === false
-      ? [input.baseRef, input.headRef]
-      : [`${input.baseRef}...${input.headRef}`];
+      ? [{ rev: input.baseRef }, { rev: input.headRef }]
+      : [{ rev: `${input.baseRef}...${input.headRef}` }];
 
   return parseGitDiffNameStatus(
     await commandOutput(
@@ -1601,9 +1574,9 @@ async function readJjDiffNameStatus(input: {
         "diff",
         "--summary",
         "--from",
-        input.baseRef,
+        { rev: input.baseRef },
         "--to",
-        input.headRef,
+        { rev: input.headRef },
         "--ignore-working-copy",
       ],
       { cwd: input.rootPath, maxBuffer: 25 * 1024 * 1024 },
@@ -1656,7 +1629,7 @@ async function resolveRevisionCommitByPreference(
 
   return (
     (await primary(rootPath, revision).catch(() => null)) ??
-    (canUseGitFallbackSync(rootPath, preferred)
+    ((await canUseGitFallback(rootPath, preferred))
       ? await secondary(rootPath, revision).catch(() => null)
       : null)
   );
@@ -1675,7 +1648,7 @@ async function mergeBaseByPreference(
 
   return (
     (await primary(rootPath, baseRef, headRef).catch(() => null)) ??
-    (canUseGitFallbackSync(rootPath, preferred)
+    ((await canUseGitFallback(rootPath, preferred))
       ? await secondary(rootPath, baseRef, headRef).catch(() => null)
       : null)
   );
@@ -1690,20 +1663,7 @@ async function resolveGitRevisionCommit(
     rootPath,
     "rev-parse",
     "--verify",
-    `${revision}^{commit}`,
-  ]);
-}
-
-function resolveGitRevisionCommitSync(
-  rootPath: string,
-  revision: string,
-): string | null {
-  return commandOutputSync("git", [
-    "-C",
-    rootPath,
-    "rev-parse",
-    "--verify",
-    `${revision}^{commit}`,
+    { rev: `${revision}^{commit}` },
   ]);
 }
 
@@ -1719,7 +1679,7 @@ async function resolveJjRevisionCommit(
       "log",
       "--no-graph",
       "-r",
-      revision,
+      { rev: revision },
       "-T",
       'commit_id ++ "\\n"',
       "--ignore-working-copy",
@@ -1728,29 +1688,6 @@ async function resolveJjRevisionCommit(
   );
 
   return oneResolvedCommit(output, revision);
-}
-
-function resolveJjRevisionCommitSync(
-  rootPath: string,
-  revision: string,
-): string | null {
-  const output = commandOutputSync(
-    "jj",
-    [
-      "-R",
-      rootPath,
-      "log",
-      "--no-graph",
-      "-r",
-      revision,
-      "-T",
-      'commit_id ++ "\\n"',
-      "--ignore-working-copy",
-    ],
-    { cwd: rootPath },
-  );
-
-  return output ? oneResolvedCommit(output, revision) : null;
 }
 
 function oneResolvedCommit(output: string, revision: string): string {
@@ -1768,7 +1705,13 @@ async function resolveGitMergeBase(
   baseRef: string,
   headRef: string,
 ): Promise<string> {
-  return commandOutput("git", ["-C", rootPath, "merge-base", baseRef, headRef]);
+  return commandOutput("git", [
+    "-C",
+    rootPath,
+    "merge-base",
+    { rev: baseRef },
+    { rev: headRef },
+  ]);
 }
 
 async function resolveJjMergeBase(
@@ -1784,7 +1727,7 @@ async function resolveJjMergeBase(
       "log",
       "--no-graph",
       "-r",
-      `heads(::${baseRef} & ::${headRef})`,
+      { rev: `heads(::${baseRef} & ::${headRef})` },
       "-T",
       'commit_id ++ "\n"',
       "--ignore-working-copy",
@@ -1793,52 +1736,6 @@ async function resolveJjMergeBase(
   );
 
   return splitLines(output)[0] ?? null;
-}
-
-function readGitFileAtRevisionSync(input: {
-  rootPath: string;
-  ref: string;
-  relativePath: string;
-}): { commit: string; source: string } | null {
-  const commit = resolveGitRevisionCommitSync(input.rootPath, input.ref);
-
-  if (!commit) return null;
-
-  const source = commandOutputSync(
-    "git",
-    ["-C", input.rootPath, "show", `${commit}:${input.relativePath}`],
-    { maxBuffer: 10 * 1024 * 1024, trim: false },
-  );
-
-  return source === null ? null : { commit, source };
-}
-
-function readJjFileAtRevisionSync(input: {
-  rootPath: string;
-  ref: string;
-  relativePath: string;
-}): { commit: string; source: string } | null {
-  const commit = resolveJjRevisionCommitSync(input.rootPath, input.ref);
-
-  if (!commit) return null;
-
-  const source = commandOutputSync(
-    "jj",
-    [
-      "-R",
-      input.rootPath,
-      "file",
-      "show",
-      "-r",
-      input.ref,
-      "--ignore-working-copy",
-      "--",
-      toJjRootFilePattern(input.relativePath),
-    ],
-    { cwd: input.rootPath, maxBuffer: 10 * 1024 * 1024, trim: false },
-  );
-
-  return source === null ? null : { commit, source };
 }
 
 async function readGitDiff(input: {
@@ -1859,9 +1756,9 @@ async function readGitDiff(input: {
 
   const diffRefs = input.headRef
     ? input.mergeBase === false
-      ? [input.baseRef, input.headRef]
-      : [`${input.baseRef}...${input.headRef}`]
-    : [input.baseRef];
+      ? [{ rev: input.baseRef }, { rev: input.headRef }]
+      : [{ rev: `${input.baseRef}...${input.headRef}` }]
+    : [{ rev: input.baseRef }];
 
   const args = [
     ...(input.literalPaths ? ["--literal-pathspecs"] : []),
@@ -1881,7 +1778,7 @@ async function readGitDiff(input: {
     ...paths,
   ];
 
-  const { stdout } = await execFileAsync("git", args, {
+  const { stdout } = await runVcs("git", args, {
     env: input.env,
     cwd: input.rootPath,
     maxBuffer: 25 * 1024 * 1024,
@@ -1902,11 +1799,11 @@ async function readGitDiffFileSummaries(input: {
 
   const diffRefs = input.headRef
     ? input.mergeBase === false
-      ? [input.baseRef, input.headRef]
-      : [`${input.baseRef}...${input.headRef}`]
-    : [input.baseRef];
+      ? [{ rev: input.baseRef }, { rev: input.headRef }]
+      : [{ rev: `${input.baseRef}...${input.headRef}` }]
+    : [{ rev: input.baseRef }];
 
-  const { stdout } = await execFileAsync(
+  const { stdout } = await runVcs(
     "git",
     [
       "-C",
@@ -1960,7 +1857,7 @@ async function readJjDiff(input: {
     ...(input.literalPaths ? paths.map(toJjRootFilePattern) : paths),
   ];
 
-  const { stdout } = await execFileAsync("jj", args, {
+  const { stdout } = await runVcs("jj", args, {
     cwd: input.rootPath,
     maxBuffer: 25 * 1024 * 1024,
   });
@@ -2296,43 +2193,41 @@ function canonicalPath(filePath: string): string {
 }
 
 async function commandOutput(
-  command: string,
-  args: string[],
+  command: VcsTool,
+  args: readonly VcsArg[],
   options: CommandOutputOptions = {},
 ): Promise<string> {
   return runCommandOutput(command, args, options);
 }
 
 function commandOutputSync(
-  command: string,
-  args: string[],
+  command: VcsTool,
+  args: readonly VcsArg[],
   options: CommandOutputOptions = {},
 ): string | null {
   return runCommandOutputSync(command, args, options);
 }
 
 function runCommandOutput(
-  command: string,
-  args: string[],
+  command: VcsTool,
+  args: readonly VcsArg[],
   options: CommandOutputOptions,
 ): Promise<string> {
-  return execFileAsync(command, args, {
+  return runVcs(command, args, {
     cwd: options.cwd,
-    env: commandEnvironment(command, args),
     maxBuffer: options.maxBuffer,
   }).then(({ stdout }) => (options.trim === false ? stdout : stdout.trim()));
 }
 
 function runCommandOutputSync(
-  command: string,
-  args: string[],
+  command: VcsTool,
+  args: readonly VcsArg[],
   options: CommandOutputOptions,
 ): string | null {
   try {
-    const output = execFileSyncObserved(command, args, {
+    const output = runVcsSync(command, args, {
       cwd: options.cwd,
       encoding: "utf8",
-      env: commandEnvironment(command, args),
       maxBuffer: options.maxBuffer,
       stdio: ["ignore", "pipe", "ignore"],
     });
@@ -2341,26 +2236,4 @@ function runCommandOutputSync(
   } catch {
     return null;
   }
-}
-
-function commandEnvironment(
-  command: string,
-  args: string[],
-): NodeJS.ProcessEnv | undefined {
-  if (command !== "git" || (args[0] !== "-C" && args[0] !== "--git-dir")) {
-    return undefined;
-  }
-
-  return localGitEnvironment();
-}
-
-/** Drop per-repository git env vars that would redirect an explicit object store. */
-function localGitEnvironment(): NodeJS.ProcessEnv {
-  const env = { ...process.env };
-
-  for (const key of LOCAL_GIT_ENV_KEYS) {
-    delete env[key];
-  }
-
-  return env;
 }

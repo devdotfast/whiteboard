@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { Emitter, type Event } from "../../../base/common/event.js";
 import { hash } from "../../../base/common/hash.js";
 import { Disposable, DisposableMap } from "../../../base/common/lifecycle.js";
 import { Schemas } from "../../../base/common/network.js";
@@ -23,6 +24,9 @@ export const IReviewRemoteHostsService = createDecorator<IReviewRemoteHostsServi
 export interface IReviewRemoteHostsService {
 	readonly _serviceBrand: undefined;
 	host(serverId: string): Promise<IReviewRemoteHost | undefined>;
+	readonly onDidChangeBusy: Event<void>;
+	readonly onDidSettle: Event<void>;
+	isBusy(alias: string): boolean;
 }
 
 export function reviewRemoteLabel(serverId: string, alias: string | undefined): string {
@@ -34,6 +38,11 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 	private readonly hosts = new Map<string, ReviewRemoteHost>();
 	private readonly router = this._register(new ReviewRemoteFileSystemRouter());
 	private readonly labels = this._register(new DisposableMap<string>());
+	private readonly aliases = new Map<string, string>();
+	private readonly busyChanged = this._register(new Emitter<void>());
+	readonly onDidChangeBusy = this.busyChanged.event;
+	private readonly settled = this._register(new Emitter<void>());
+	readonly onDidSettle = this.settled.event;
 	private closing = false;
 
 	constructor(
@@ -56,9 +65,15 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 		let host = this.hosts.get(authority);
 		if (!host) {
 			host = new ReviewRemoteHost(serverId, authority, (target) => this.open(target), () => this.endpoint(serverId), this.logService);
+			this._register(host.onDidChangeBusy(() => this.busyChanged.fire()));
+			this._register(host.onDidSettle(() => this.settled.fire()));
 			this.hosts.set(authority, host);
 		}
 		return (await host.connect()) ? host : undefined;
+	}
+
+	isBusy(alias: string): boolean {
+		return [...this.hosts.values()].some((host) => host.busy && this.aliases.get(host.serverId) === alias);
 	}
 
 	private async open(host: ReviewRemoteHost): Promise<ReviewRemoteSession | undefined> {
@@ -84,6 +99,10 @@ export class ReviewRemoteHostsService extends Disposable implements IReviewRemot
 		const states = await this.connection.readRemoteHosts().catch(() => []);
 		const alias = states.find((state) => state.serverId === host.serverId)?.alias;
 		if (this.closing) return;
+		if (alias) {
+			this.aliases.set(host.serverId, alias);
+			this.busyChanged.fire();
+		}
 		this.labels.set(host.authority, this.labelService.registerFormatter({
 			scheme: Schemas.vscodeRemote,
 			authority: host.authority,

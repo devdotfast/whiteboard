@@ -1,10 +1,20 @@
-/** A reader's place in a review survives a renderer reload: a commit diff, a picked trace, a fullscreen tour step, and a map focus that must not replay. */
+/** A reader's place in a review survives a renderer reload: a commit diff, a picked trace, and a fullscreen tour step. */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { createDiagramReview, createReview, sleep } from "../harness.mjs";
+import {
+  DIAGRAM_REVIEW_TITLE,
+  clearToasts,
+  commitPill,
+  createDiagramReview,
+  createReview,
+  inView,
+  openFullTrace,
+  scopeToCommit,
+  showView,
+} from "../harness.mjs";
 
 export const name = "canvas-resume";
 
@@ -13,8 +23,6 @@ export const phase = 1;
 export const options = {};
 
 const TITLE = "Canvas resume review";
-
-const DIAGRAMS = "Canvas resume diagrams";
 
 const trace = (label) => ({
   label,
@@ -46,40 +54,12 @@ async function reloadWindow(ctx, page) {
     .waitFor({ timeout: 90000 });
 }
 
-const viewTab = (page, label) =>
-  page.locator(`[aria-label="Session views"] button[aria-label="${label}"]`);
-
-async function activate(ctx, page, label) {
-  await viewTab(page, label).click();
-  await waitPressed(ctx, page, label);
-}
-
-const waitPressed = (ctx, page, label) =>
-  ctx.until(
-    async () =>
-      (await viewTab(page, label).getAttribute("aria-pressed")) === "true",
-    `the ${label} view to be active`,
-  );
-
-const scopeSubject = (page) =>
-  page
-    .locator(".review-diff-view--scoped > div:first-child span[title]")
-    .innerText({ timeout: 1000 })
-    .catch(() => null);
-
-/** The ids of the Map view's selected nodes. */
-const selectedNodes = (page) =>
-  page
-    .locator(".review-map-view .react-flow__node")
-    .evaluateAll((nodes) =>
-      nodes
-        .filter(
-          (node) =>
-            node.matches("[data-selected]") ||
-            node.querySelector("[data-selected]"),
-        )
-        .map((node) => node.dataset.id),
-    );
+const scopeSubject = async (page) =>
+  /^Commit \w+: (.*)\. Choose commits$/.exec(
+    await commitPill(page)
+      .getAttribute("aria-label", { timeout: 1000 })
+      .catch(() => ""),
+  )?.[1] ?? null;
 
 export async function run(ctx) {
   const { until, git, repo } = ctx;
@@ -105,14 +85,6 @@ export async function run(ctx) {
       trace: trace(`Trace ${index + 1}`),
     });
 
-  // The picker lists retained traces in load order, so the second one is held back to keep the first the default.
-  await ctx.page
-    .context()
-    .route(`**/resources/${traceIds[1]}`, async (route) => {
-      await sleep(1500);
-      await route.continue();
-    });
-
   const review = await createReview(ctx, {
     title: TITLE,
     head: ship,
@@ -133,19 +105,13 @@ export async function run(ctx) {
 
   await ctx.watchPage(page);
 
-  await activate(ctx, page, "Commits");
-  await page
-    .locator("article")
-    .filter({ has: page.getByText("Queue", { exact: true }) })
-    .getByRole("button", { name: "Open commit diff" })
-    .click();
-  await waitPressed(ctx, page, "Diff");
+  await scopeToCommit(ctx, "Queue", page);
   await until(
     async () => (await scopeSubject(page)) === "Queue",
     "the Queue commit diff",
   );
   await reloadWindow(ctx, page);
-  await waitPressed(ctx, page, "Diff");
+  await inView(ctx, "diff", page);
   await until(
     async () => (await scopeSubject(page)) === "Queue",
     "the Queue commit diff to resume after the reload",
@@ -162,7 +128,7 @@ export async function run(ctx) {
     },
   });
   await reloadWindow(ctx, page);
-  await waitPressed(ctx, page, "Diff");
+  await inView(ctx, "diff", page);
   await until(
     async () => (await scopeSubject(page)) === "Queue",
     "the Queue scope to survive a version that still lists it",
@@ -175,12 +141,12 @@ export async function run(ctx) {
     target: { kind: "commits", repositoryId, head: ship, base: ctx.head },
   });
   await reloadWindow(ctx, page);
-  await waitPressed(ctx, page, "Diff");
+  await inView(ctx, "diff", page);
   await page.locator(".review-diff-view-host").waitFor();
-  assert.equal(
-    await page.locator(".review-diff-view--scoped").count(),
-    0,
-    "the dropped commit's scope bar is still shown",
+  await until(
+    async () =>
+      (await commitPill(page).getAttribute("aria-label")).startsWith("All "),
+    "the dropped commit's scope to clear",
   );
   assert.equal(
     await page.locator('[data-review-api] > p[role="status"]').count(),
@@ -191,125 +157,54 @@ export async function run(ctx) {
     "a new version keeps a listed commit's scope and drops an unlisted one",
   );
 
-  const trigger = page.locator('button[aria-haspopup="listbox"]');
+  const trigger = page.locator(
+    '.review-view-region--trace button[aria-haspopup="menu"]',
+  );
 
   const option = (label) =>
-    page.getByRole("listbox").getByRole("option").filter({ hasText: label });
+    page
+      .getByRole("menu", { name: "Agent sessions" })
+      .getByRole("menuitemradio")
+      .filter({ hasText: label });
 
-  await activate(ctx, page, "Trace");
+  await showView(ctx, "Whiteboard", page);
+  await openFullTrace(
+    ctx,
+    page
+      .locator('.review-canvas-root [data-review-api] a[href^="#trace-"]')
+      .filter({ hasText: "Trace 1" }),
+    page,
+  );
   await trigger.click();
   assert.equal(
-    await option("Trace 1").getAttribute("aria-selected"),
+    await option("Trace 1").getAttribute("aria-checked"),
     "true",
-    "the first trace is not the default",
+    "the quoted trace is not the one shown",
   );
   await option("Trace 2").click();
   await until(
     async () =>
-      (
-        await trigger.locator("span").nth(1).innerText()
-      ).trim() === "Trace 2",
+      (await trigger.locator("span").nth(1).innerText()).trim() === "Trace 2",
     "the picked trace to show",
   );
   await reloadWindow(ctx, page);
-  await waitPressed(ctx, page, "Trace");
+  await inView(ctx, "trace", page);
   await trigger.click();
   await until(
     async () =>
-      (await option("Trace 2").getAttribute("aria-selected")) === "true",
+      (await option("Trace 2").getAttribute("aria-checked")) === "true",
     "the picked trace to resume after the reload",
   );
   ctx.check("a picked trace resumes after a reload");
 
-  await createDiagramReview(ctx, DIAGRAMS);
-  page = await ctx.apiCanvasFor(DIAGRAMS);
+  await createDiagramReview(ctx);
+  page = await ctx.apiCanvasFor(DIAGRAM_REVIEW_TITLE);
   await ctx.watchPage(page);
 
   const canvas = page.locator(".review-canvas-root [data-review-api]");
 
-  const lens = canvas
-    .locator(".database-lens")
-    .first();
-
-  // The lens's actors name software-map paths, yet no tour stop offers the map.
-  await lens.locator(".diagram-tour-button").click();
-
-  const tour = page.locator('[role="dialog"][aria-label$=" tour"]');
-
-  await tour
-    .getByText(/^Step \d+ of \d+$/)
-    .first()
-    .waitFor();
-  assert.equal(
-    await tour.locator('button[aria-label$=" in software map"]').count(),
-    0,
-  );
-  await ctx.knownBug(
-    "Peeks and tour stops never offer to show their element in the software map",
-  );
-  await page.keyboard.press("Escape");
-  await tour.waitFor({ state: "hidden" });
-
-  // So the focus request goes through the same review action the button calls.
-  const focusOrders = () =>
-    lens.evaluate((element) => {
-      const key = Object.keys(element).find((k) =>
-        k.startsWith("__reactFiber$"),
-      );
-
-      for (let fiber = element[key]; fiber; fiber = fiber.return) {
-        const open = fiber.memoizedProps?.value?.openSoftwareMapElement;
-
-        if (open) return open("orderService.application.orders");
-      }
-
-      throw new Error("no review actions above the database lens");
-    });
-
-  const selected = (id, label) =>
-    until(async () => (await selectedNodes(page)).join() === id, label);
-
-  await focusOrders();
-  await waitPressed(ctx, page, "Map (Experimental)");
-  await selected(
-    "orderService.application.orders",
-    "the focus request that mounts the Map view to select its element",
-  );
-  await page.waitForTimeout(1000);
-  assert.deepEqual(
-    await selectedNodes(page),
-    ["orderService.application.orders"],
-    "the Map view's default selection replaced the focused element",
-  );
-  ctx.check("a focus request that mounts the Map view selects its element");
-
-  await activate(ctx, page, "Whiteboard");
-  await focusOrders();
-  await waitPressed(ctx, page, "Map (Experimental)");
-  await selected(
-    "orderService.application.orders",
-    "the focused map element to be selected",
-  );
-  await page
-    .locator(
-      '.review-map-view .react-flow__node[data-id="orderService.application"]',
-    )
-    .click({ position: { x: 12, y: 12 } });
-  await selected(
-    "orderService.application",
-    "the reader's node to be selected",
-  );
-  await activate(ctx, page, "Whiteboard");
-  await activate(ctx, page, "Map (Experimental)");
-  await page.waitForTimeout(1000);
-  assert.deepEqual(
-    await selectedNodes(page),
-    ["orderService.application"],
-    "coming back to Map replayed the focus request",
-  );
-  ctx.check("a map focus request does not replay over the reader's selection");
-
-  await activate(ctx, page, "Whiteboard");
+  // The telemetry notice's toast covers the tour's controls.
+  await clearToasts(page);
   await canvas
     .locator(".sequence-diagram .diagram-tour-button")
     .first()

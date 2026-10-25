@@ -1,8 +1,9 @@
-import { radius } from "@canvas/scale.stylex";
+import { radius, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactNode } from "react";
 
 import { withClass } from "./stylex-props";
+import { tokens } from "./tokens.stylex";
 
 export function findWhitespaceNormalizedSpan(
   text: string,
@@ -83,9 +84,9 @@ export function QuoteMark({ children }: { children: ReactNode }) {
 
 const styles = stylex.create({
   mark: {
-    backgroundColor: "rgba(255, 230, 0, 0.35)",
+    backgroundColor: tokens.quoteMark,
     color: "inherit",
     borderRadius: radius.hairline,
-    padding: "1px 2px",
+    padding: `1px ${space.s2}`,
   },
 });

@@ -1,10 +1,12 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
+import { useCopy } from "@canvas/ui/copy";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { ArrowLeftIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
-import { type ReactElement, useEffect, useRef, useState } from "react";
+import type { ReactElement } from "react";
 
-import { copyText } from "./copy-text";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 const fullHash = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i;
 
@@ -28,30 +30,18 @@ export function ReviewBranchRange({
   baseRef: string;
   headRef: string | typeof WORKING_TREE;
 }): ReactElement {
-  const [copied, setCopied] = useState<"base" | "head" | null>(null);
+  const [copied, copy] = useCopy();
 
-  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
+  const chip = (label: "base" | "head", name: string) => (
+    <BranchRef
+      label={label}
+      name={name}
+      copied={copied === name}
+      onCopy={() => copy(name)}
+    />
   );
 
-  useEffect(() => () => clearTimeout(resetTimer.current), []);
-
-  const copy = async (side: "base" | "head", ref: string) => {
-    if (!(await copyText(ref))) return;
-    clearTimeout(resetTimer.current);
-    setCopied(side);
-    resetTimer.current = setTimeout(() => setCopied(null), 1500);
-  };
-
-  if (baseRef === headRef)
-    return (
-      <BranchRef
-        label="head"
-        name={headRef}
-        copied={copied === "head"}
-        onCopy={() => void copy("head", headRef)}
-      />
-    );
+  if (baseRef === headRef) return chip("head", headRef);
 
   return (
     <div
@@ -61,25 +51,9 @@ export function ReviewBranchRange({
         headRef === WORKING_TREE ? "working tree" : shortRef(headRef)
       }`}
     >
-      <BranchRef
-        label="base"
-        name={baseRef}
-        copied={copied === "base"}
-        onCopy={() => void copy("base", baseRef)}
-      />
-      <span {...stylex.props(styles.arrow)} aria-hidden="true">
-        ←
-      </span>
-      {headRef === WORKING_TREE ? (
-        <WorkingTreeRef />
-      ) : (
-        <BranchRef
-          label="head"
-          name={headRef}
-          copied={copied === "head"}
-          onCopy={() => void copy("head", headRef)}
-        />
-      )}
+      {chip("base", baseRef)}
+      <ArrowLeftIcon xstyle={[iconStyles.inline, styles.arrow]} />
+      {headRef === WORKING_TREE ? <WorkingTreeRef /> : chip("head", headRef)}
     </div>
   );
 }
@@ -142,7 +116,7 @@ const styles = stylex.create({
     display: "flex",
     minWidth: 0,
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     color: "inherit",
     whiteSpace: "nowrap",
   },
@@ -154,14 +128,14 @@ const styles = stylex.create({
     minWidth: 0,
     alignItems: "center",
     margin: 0,
-    padding: "0 6px",
+    padding: `0 ${space.s6}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
     borderRadius: radius.small,
     backgroundColor: tokens.tray,
     color: tokens.ink,
-    font: `${fontSize.body}/18px ${tokens.fontMono}`,
+    font: `${fontSize.body}/${leading.px18} ${tokens.fontMono}`,
     cursor: "pointer",
   },
   copy: {

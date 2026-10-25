@@ -32,6 +32,8 @@ const REVIEW_VIEW_STATE_NAMESPACE = "view-state";
 
 const SCROLL_RESTORE_DEADLINE_MS = 30_000;
 
+const SCROLL_RESTORE_SETTLE_MS = 1_000;
+
 export interface PersistedReviewViewState {
   scrollTop?: number;
   activeView?: ReviewView;
@@ -69,7 +71,7 @@ export function useReviewViewStateSync({
   panelStore: ReviewPanelStore;
 }): void {
   const session = useReviewSession();
-  const key = reviewViewStateKey(session.config);
+  const key = reviewViewStateKey(session);
 
   const saved = useMemo(() => createReviewViewStateStore(key), [key]);
   const initialState = useMemo(() => saved.getState(), [saved]);
@@ -100,10 +102,7 @@ export function useReviewViewStateSync({
           // Written on every change: a scope a restore dropped must not
           // come back on another version.
           diffScope: state.diffScope
-            ? {
-                commit: state.diffScope.commit.commit,
-                file: state.diffScope.file,
-              }
+            ? { commit: state.diffScope.commit, file: state.diffScope.file }
             : undefined,
           ...(state.traceSelection !== previous.traceSelection && {
             trace: state.traceSelection
@@ -160,8 +159,8 @@ export function readReviewNavigationRestore(
     softwareMapEnabled: boolean;
     hasChangeRange: boolean;
     version: number;
-    lensMode: ReviewLensSelection["mode"];
-    commits: readonly ReviewCommitSummary[];
+    /** Undefined until read: a stored scope waits for them. */
+    commits?: readonly ReviewCommitSummary[];
   },
 ): ReviewNavigationRestore {
   const stored = readPersistedReviewViewState(config);
@@ -173,33 +172,27 @@ export function readReviewNavigationRestore(
       activeAnchor: stored.panel.activeAnchor,
     });
 
-  const scopedCommit =
-    stored.activeView === "diff" && stored.diffScope
-      ? canvas.commits.find(
-          (summary) => summary.commit === stored.diffScope!.commit,
-        )
+  const scoped =
+    stored.activeView === "diff" &&
+    stored.diffScope &&
+    (canvas.commits?.some(
+      (summary) => summary.commit === stored.diffScope!.commit,
+    ) ??
+      true)
+      ? stored.diffScope
       : undefined;
 
   return {
     view: stored.activeView ?? "review",
     // Traces are listed after mount; the canvas narrows this once they are.
     availableViews: offeredReviewViews({
-      hasCommits: canvas.commits.length > 0,
       hasDiff: canvas.hasChangeRange,
       softwareMapEnabled: canvas.softwareMapEnabled,
       hasTraceSessions: true,
     }),
-    lens:
-      stored.lens?.version === canvas.version &&
-      stored.lens.mode === canvas.lensMode
-        ? stored.lens
-        : null,
-    diffScope: scopedCommit
-      ? {
-          commit: scopedCommit,
-          file: stored.diffScope!.file,
-          restoreFile: true,
-        }
+    lens: stored.lens?.version === canvas.version ? stored.lens : null,
+    diffScope: scoped
+      ? { commit: scoped.commit, file: scoped.file, restoreFile: true }
       : null,
     traceSelection: stored.trace,
     traceStorage: stored.traceStorage ?? null,
@@ -257,6 +250,7 @@ function useScrollRestoration(
 
     if (!scrollRegion || scrollTop === undefined) return;
     let deadline: ReturnType<typeof setTimeout> | null = null;
+    let settle: ReturnType<typeof setTimeout> | undefined;
     let resizeObserver: ResizeObserver | null = null;
     let aborted = false;
 
@@ -275,6 +269,7 @@ function useScrollRestoration(
 
       if (deadline !== null) clearTimeout(deadline);
       deadline = null;
+      clearTimeout(settle);
       resizeObserver?.disconnect();
       resizeObserver = null;
       removeUserListeners();
@@ -290,8 +285,11 @@ function useScrollRestoration(
 
       scrollRegion.scrollTop = Math.min(scrollTop, maxScrollTop);
 
+      // Content above can still resize after the target fits.
+      clearTimeout(settle);
+
       if (scrollTop <= maxScrollTop) {
-        finish();
+        settle = setTimeout(finish, SCROLL_RESTORE_SETTLE_MS);
       }
     };
 
@@ -309,6 +307,7 @@ function useScrollRestoration(
           "Home",
           "PageDown",
           "PageUp",
+          " ",
         ].includes(event.key)
       ) {
         finish();
@@ -349,6 +348,7 @@ function useScrollRestoration(
 
     return () => {
       if (deadline !== null) clearTimeout(deadline);
+      clearTimeout(settle);
       resizeObserver?.disconnect();
       removeUserListeners();
       pendingRef.current = false;
@@ -489,12 +489,9 @@ function parsePersistedLens(
   if (!lens) return undefined;
   const id = jsonString(jsonProperty(lens, "id"));
   const version = jsonNumber(jsonProperty(lens, "version"));
-  const mode = jsonString(jsonProperty(lens, "mode"));
 
-  return id !== undefined &&
-    version !== undefined &&
-    (mode === "structural" || mode === "textual")
-    ? { id, version, mode }
+  return id !== undefined && version !== undefined
+    ? { id, version }
     : undefined;
 }
 

@@ -1,7 +1,9 @@
 //! What a diff looks like once the plugins have shaped it: the changed
 //! lines that stay visible.
 use crate::pairing::Pairing;
-use crate::protocol::{Diff, LineRange, Node, Region, Source, StructuralChanges, Visibility};
+use crate::protocol::{
+    Diff, LineCounts, LineRange, Node, Region, Source, StructuralChanges, Visibility,
+};
 
 /// Run the plugins on a diff and recount what stays visible. `shape` runs
 /// the plugins on a text diff's sides. A hidden file runs no plugin: its
@@ -36,6 +38,11 @@ pub async fn present(
         }
         Diff::Binary { sides } => Ok(Diff::Binary { sides }),
     }
+}
+
+/// The changed lines still on screen under the sides' visibility.
+pub fn visible(sides: &Pairing<Source>) -> LineCounts {
+    change_coverage(sides).initially_visible.counts()
 }
 
 /// Collect complete and default-visible coverage together. A paired leaf counts

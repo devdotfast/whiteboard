@@ -4,8 +4,11 @@ import { DatabaseSync } from "node:sqlite";
 
 import { withFileLock } from "@dev.fast/trace-core";
 
+import { CheckoutGroups } from "./checkout-groups.js";
 import { openLocalReviewStore } from "./local-data.js";
+import { groupCheckoutsAhead } from "./store-migrations.js";
 import { initializeReviewStoreSchema } from "./store-schema.js";
+import { projectOfCheckout } from "./store.js";
 
 const lockOptions = {
   retryMs: 50,
@@ -16,7 +19,7 @@ const lockOptions = {
 
 export async function openReviewProfile(
   home: string,
-  options: { manageWorkspaces: boolean },
+  options: { manageWorkspaces: boolean; pullRequestStates?: boolean },
 ) {
   await mkdir(home, { recursive: true, mode: 0o700 });
 
@@ -30,7 +33,12 @@ export async function openReviewProfile(
       ])
         await importHeadlessStore(home, source);
 
-      return openLocalReviewStore(path.join(home, "review-api.db"), options);
+      const database = path.join(home, "review-api.db");
+
+      return openLocalReviewStore(database, {
+        ...options,
+        checkoutOwners: await groupCheckoutsAhead(database),
+      });
     },
   );
 
@@ -89,7 +97,7 @@ async function importHeadlessStore(home: string, source: string) {
               `Cannot merge ${source}: the shared store already contains one of its review IDs. Both databases are unchanged.`,
             );
           database.exec(`
-          INSERT INTO repositories SELECT s.* FROM headless.repositories s WHERE NOT EXISTS (SELECT 1 FROM repositories t WHERE t.path=s.path);
+          INSERT INTO repositories(id,path,name) SELECT s.id,s.path,s.name FROM headless.repositories s WHERE NOT EXISTS (SELECT 1 FROM repositories t WHERE t.path=s.path);
           CREATE TEMP TABLE repository_ids AS SELECT s.id old_id,t.id new_id FROM headless.repositories s JOIN repositories t ON s.path=t.path;
         `);
 
@@ -114,13 +122,36 @@ async function importHeadlessStore(home: string, source: string) {
               `Cannot merge ${source}: a resource ID has different content. Both databases are unchanged.`,
             );
 
+          if (
+            database
+              .prepare(
+                "SELECT 1 FROM pragma_table_info('reviews') WHERE name='project_id'",
+              )
+              .get()
+          ) {
+            // A store with projects: file each board under its repository's,
+            // grouping the checkouts once for all of them.
+            const groups = new CheckoutGroups(database);
+
+            for (const { new_id: repositoryId } of database
+              .prepare("SELECT new_id FROM repository_ids")
+              .all())
+              projectOfCheckout(database, String(repositoryId), groups);
+            database.exec(`INSERT INTO reviews(id,version,next_id,project_id) SELECT s.id,s.version,s.next_id,p.project_id
+              FROM headless.reviews s JOIN headless.versions v ON v.review_id=s.id AND v.version=s.version
+              JOIN repository_ids r ON json_extract(v.snapshot,'$.pins.repositoryId')=r.old_id
+              JOIN repositories p ON p.id=r.new_id;`);
+          } else
+            database.exec(
+              "INSERT INTO reviews(id,version,next_id) SELECT id,version,next_id FROM headless.reviews;",
+            );
           database.exec(`
           INSERT OR IGNORE INTO resources SELECT s.id,r.new_id,s.kind,s.mime_type,s.data FROM headless.resources s JOIN repository_ids r ON s.repository_id=r.old_id;
-          INSERT INTO reviews SELECT * FROM headless.reviews;
-          INSERT INTO versions SELECT s.review_id,s.version,
+          INSERT INTO versions(review_id,version,snapshot,thread_id,author_kind) SELECT s.review_id,s.version,
             CASE WHEN json_type(s.snapshot,'$.target')='object'
               THEN json_set(s.snapshot,'$.pins.repositoryId',r.new_id,'$.target.repositoryId',r.new_id)
-              ELSE json_set(s.snapshot,'$.pins.repositoryId',r.new_id) END
+              ELSE json_set(s.snapshot,'$.pins.repositoryId',r.new_id) END,
+            NULL, NULL
             FROM headless.versions s JOIN repository_ids r ON json_extract(s.snapshot,'$.pins.repositoryId')=r.old_id;
           INSERT INTO review_attention SELECT * FROM headless.review_attention;
         `);

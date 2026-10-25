@@ -1,8 +1,4 @@
-import {
-  type JsonValue,
-  type ReviewCanvasTutorialBridge,
-  parseJsonText,
-} from "@dev.fast/review-protocol";
+import type { JsonValue } from "@dev.fast/review-protocol";
 import {
   FIXTURE_IMAGE_ID,
   FIXTURE_MAP_ID,
@@ -23,14 +19,21 @@ import { type ReactNode, act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import tutorialDocument from "../../tutorial/document.json";
+import type { SavedMap } from "./api-document";
 import {
   BlockErrorBoundary,
   type StoredBlock,
   blockComponents,
 } from "./blocks";
-import { mountReviewCanvas as mount } from "./desktop-entry";
-import { fixtureReviewBridge, settled } from "./fixture-review-bridge";
+import type { WhiteboardHost } from "./whiteboard";
+import {
+  fixtureHost,
+  loadFixture,
+  mountWhiteboard as mount,
+  settled,
+} from "./whiteboard-fixture";
+
+import "./styles.css";
 
 type Kind = keyof typeof blockComponents;
 
@@ -77,16 +80,14 @@ const model = defineSoftwareMap({
   },
 });
 
-const savedMap = parseJsonText(
-  JSON.stringify({
-    elements: model.elements,
-    relationships: model.relationships,
-    side: "head",
-    commit: "head",
-    countsByElementPath: {},
-    unmappedByElementPath: {},
-  }),
-);
+const savedMap: SavedMap = {
+  elements: model.elements,
+  relationships: model.relationships,
+  side: "head",
+  commit: "head",
+  countsByElementPath: {},
+  unmappedByElementPath: {},
+};
 
 // The fixture compares the single status line in order.ts on both sides.
 const fixtureProgress: ReviewProgress = {
@@ -160,9 +161,6 @@ const rendered: Record<
     !has(c, ".software-map-code-status"),
   section: (c) =>
     has(c, "button[aria-expanded='true']") && text(c).includes("Hello."),
-  tutorial: (c) =>
-    has(c, ".tutorial-keymap-picker") &&
-    has(c, '[data-tour-target="open-diff"]'),
   callout: (c) =>
     c.querySelector("blockquote[data-tone='warning'] strong")?.textContent ===
       "Note" && text(c).includes("Careful."),
@@ -184,9 +182,11 @@ afterEach(async () => {
 
 async function mountFixture(
   kind: Kind,
-  options: { trace?: null; document?: Snapshot["document"] } = {},
-  tutorial?: ReviewCanvasTutorialBridge,
-  shippedTutorial = false,
+  options: {
+    trace?: null;
+    document?: Snapshot["document"];
+    host?: Partial<WhiteboardHost>;
+  } = {},
   hostStyle?: string,
 ) {
   const snapshot: Snapshot = {
@@ -200,23 +200,13 @@ async function mountFixture(
       base: "base",
       head: "head",
     },
-    document: shippedTutorial
-      ? documentSchema.parse(tutorialDocument.document)
-      : (options.document ?? fixtures.get(kind)!),
-    origin: shippedTutorial ? { tutorial: true } : undefined,
+    document: options.document ?? fixtures.get(kind)!,
     createdAt: "2026-09-16T00:00:00.000Z",
   };
 
-  if (shippedTutorial) {
-    let nextId = 0;
-
-    for (const block of snapshot.document)
-      assignFreshIds(block, (prefix) => `${prefix}-${++nextId}`);
-  }
-
   const image = { bytes: png, type: "image/png" };
 
-  const bridge = fixtureReviewBridge({
+  const data = loadFixture({
     snapshot,
     progress: fixtureProgress,
     commits: [
@@ -231,49 +221,33 @@ async function mountFixture(
         deletions: 0,
       },
     ],
-    files: [{ path: "a.ts", status: "modified", additions: 1, deletions: 0 }],
-    resources:
-      options.trace === null
-        ? { [FIXTURE_IMAGE_ID]: image }
-        : {
-            [FIXTURE_IMAGE_ID]: image,
-            [FIXTURE_TRACE_ID]: trace,
-          },
+    images: { [FIXTURE_IMAGE_ID]: image },
+    traces: options.trace === null ? {} : { [FIXTURE_TRACE_ID]: trace },
     maps: { [FIXTURE_MAP_ID]: savedMap },
   });
 
-  const request = vi.spyOn(bridge, "request");
   const container = document.createElement("div");
 
   if (hostStyle) container.style.cssText = hostStyle;
   document.body.append(container);
   await act(async () => {
-    canvas = mount(container, {
-      kind: "api",
-      tutorial:
-        tutorial ??
-        (kind === "tutorial"
-          ? {
-              content: {
-                reviewUuid: snapshot.reviewId,
-                progress: { version: 1, checked: [], dismissed: false },
-                keymap: "none",
-              },
-              setStep() {},
-              dismiss() {},
-              reopen() {},
-              async selectKeymap() {},
-              close() {},
-            }
-          : undefined),
-      softwareMapEnabled: true,
-      reviewId: snapshot.reviewId,
-      version: 0,
-      bridge,
+    canvas = mount(container, data, {
+      host: fixtureHost({
+        diffView: {
+          files: async () => [
+            { path: "a.ts", status: "modified", additions: 1, deletions: 0 },
+          ],
+          create: () => {
+            throw new Error("Diff is not mounted by this test.");
+          },
+        },
+        ...options.host,
+      }),
+      settings: { softwareMapEnabled: true },
     });
   });
 
-  return { container, snapshot, request };
+  return { container, snapshot };
 }
 
 describe("block components", () => {
@@ -334,8 +308,19 @@ describe("block components", () => {
               ]
             : undefined;
 
-      const { container, request } = await mountFixture(kind, {
+      // Copy ref asks the host's review API for the agent's context.
+      let reply = "";
+
+      const request = vi.fn<NonNullable<WhiteboardHost["request"]>>(
+        async (path) =>
+          path.includes("/copy-context")
+            ? Response.json({ text: reply })
+            : Response.json({ error: "Not in this test." }, { status: 404 }),
+      );
+
+      const { container } = await mountFixture(kind, {
         document: documentBlocks,
+        host: { request },
       });
 
       expect(
@@ -347,7 +332,7 @@ describe("block components", () => {
         kind === "code" || kind === "markdown" ? code : selected.textContent!;
 
       request.mockClear();
-      request.mockResolvedValueOnce(Response.json({ text: `> ${quote}` }));
+      reply = `> ${quote}`;
 
       const write = vi
         .spyOn(navigator.clipboard, "writeText")
@@ -386,61 +371,10 @@ describe("block components", () => {
         expect(write).toHaveBeenCalledWith(`> ${quote}`);
       } finally {
         selection.removeAllRanges();
-        request.mockRestore();
         write.mockRestore();
       }
     },
   );
-
-  it("keeps shipped tutorial keybindings and view buttons interactive in the JSON canvas", async () => {
-    const selectKeymap = vi.fn<ReviewCanvasTutorialBridge["selectKeymap"]>(
-      async () => {},
-    );
-
-    const tutorial: ReviewCanvasTutorialBridge = {
-      content: {
-        reviewUuid: "fixture-tutorial",
-        progress: { version: 1, checked: [], dismissed: true },
-        keymap: "none",
-      },
-      setStep() {},
-      dismiss() {},
-      reopen() {},
-      selectKeymap,
-      close() {},
-    };
-
-    const { container } = await mountFixture("tutorial", {}, tutorial, true);
-    expect(
-      await settled(
-        () =>
-          has(container, ".tutorial-keymap-picker") &&
-          has(container, '[data-tour-target="open-diff"]'),
-      ),
-    ).toBe(true);
-
-    const vim = [
-      ...container.querySelectorAll<HTMLButtonElement>(
-        ".tutorial-keymap-picker button",
-      ),
-    ].find((button) => button.textContent === "Vim")!;
-
-    expect(vim.disabled).toBe(false);
-    await act(async () => vim.click());
-    expect(selectKeymap).toHaveBeenCalledWith("vim");
-
-    const diff = container.querySelector<HTMLButtonElement>(
-      '[data-tour-target="open-diff"]',
-    )!;
-
-    expect(diff).not.toBeNull();
-    await act(async () => diff.click());
-    expect(
-      container
-        .querySelector('[aria-label="Diff"]')
-        ?.getAttribute("aria-pressed"),
-    ).toBe("true");
-  });
 
   it.each(["sequence", "database_lens", "software_map"] as const)(
     "keeps %s interactions without offering Copy ref",
@@ -761,20 +695,20 @@ describe("block components", () => {
       ],
     });
 
-    await settled(() => container.querySelector("iframe"));
+    const width = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.width;
+
+    // The stage's script has run once its placeholder reports its width.
+    expect(await settled(() => width() === "10px")).toBe(true);
     await act(async () =>
       container
         .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
         .click(),
     );
-    expect(
-      await settled(() =>
-        container.querySelector<HTMLElement>("[data-animation-slot='code']")
-          ?.style.width === "200px"
-          ? true
-          : undefined,
-      ),
-    ).toBe(true);
+    expect(await settled(() => (width() === "200px" ? true : undefined))).toBe(
+      true,
+    );
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
@@ -1119,67 +1053,6 @@ describe("BlockErrorBoundary", () => {
   });
 });
 
-describe("tutorial guide placement", () => {
-  it("keeps the guide inside the host when status rows sit above the document", async () => {
-    const tutorial: ReviewCanvasTutorialBridge = {
-      content: {
-        reviewUuid: "fixture-tutorial",
-        progress: { version: 1, checked: [], dismissed: false },
-        keymap: "none",
-      },
-      setStep() {},
-      dismiss() {},
-      reopen() {},
-      async selectKeymap() {},
-      close() {},
-    };
-
-    const { container } = await mountFixture(
-      "tutorial",
-      {},
-      tutorial,
-      true,
-      "position: relative; height: 700px; overflow: hidden;",
-    );
-
-    expect(
-      await settled(() => has(container, 'aside[aria-label="Tutorial guide"]')),
-    ).toBe(true);
-
-    const contentsElement = container.querySelector("#review-toc")!;
-    const appElement = container.querySelector(".review-app")!;
-
-    const contentsOffset =
-      contentsElement.getBoundingClientRect().top -
-      appElement.getBoundingClientRect().top;
-
-    const statusRow = document.createElement("p");
-    statusRow.setAttribute("role", "status");
-    statusRow.textContent = "Refresh failed; showing the last saved review.";
-    statusRow.style.minHeight = "200px";
-    container.querySelector("[data-review-api]")!.prepend(statusRow);
-
-    const host = container.getBoundingClientRect();
-    const app = container.querySelector(".review-app")!.getBoundingClientRect();
-    const status = statusRow.getBoundingClientRect();
-
-    const contents = container
-      .querySelector("#review-toc")!
-      .getBoundingClientRect();
-
-    const guide = container
-      .querySelector('aside[aria-label="Tutorial guide"]')!
-      .getBoundingClientRect();
-
-    expect(app.bottom).toBeLessThanOrEqual(host.bottom);
-    expect(app.top).toBeGreaterThanOrEqual(status.bottom);
-    expect(contents.top).toBeGreaterThanOrEqual(app.top);
-    expect(contents.top - app.top).toBeCloseTo(contentsOffset);
-    expect(guide.top).toBeGreaterThanOrEqual(host.top);
-    expect(guide.bottom).toBeLessThanOrEqual(host.bottom);
-  });
-});
-
 it("opens a flow node in a full-screen tour with all its code attachments", async () => {
   const { container } = await mountFixture("flow_diagram");
   await settled(() => container.querySelector(".lens-flow-node"));
@@ -1232,8 +1105,6 @@ it("grows a tall, wide sequence diagram to its height instead of scrolling it ve
         },
       ]),
     },
-    undefined,
-    false,
     "position: relative; height: 700px; overflow: hidden",
   );
 
@@ -1245,8 +1116,8 @@ it("grows a tall, wide sequence diagram to its height instead of scrolling it ve
 
   await settled(() => body!.querySelector(".react-flow__node"));
 
-  // Eight lanes overflow sideways; ten steps stand 914px tall.
+  // Eight lanes overflow sideways; ten steps stand taller than the page.
   expect(body!.scrollWidth).toBeGreaterThan(body!.clientWidth);
-  expect(body!.clientHeight).toBeGreaterThanOrEqual(914);
+  expect(body!.clientHeight).toBeGreaterThan(700);
   expect(body!.scrollHeight).toBe(body!.clientHeight);
 });

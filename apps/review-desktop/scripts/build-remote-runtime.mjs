@@ -45,6 +45,7 @@ const OPTIONAL_NATIVE_PACKAGES = [
 
 export const REMOTE_BUILTIN_EXTENSIONS = [
   "typescript-language-features",
+  "typescript-native",
   "json-language-features",
   "css-language-features",
   "html-language-features",
@@ -83,11 +84,38 @@ async function buildBuiltinExtensions(out) {
     fs.writeFileSync(manifestPath, JSON.stringify(manifest));
   }
 
-  fs.cpSync(
-    path.join(extensions, "node_modules/typescript"),
-    path.join(out, "extensions/node_modules/typescript"),
-    { recursive: true },
+  const keep = moduleFilter(buildRequire("minimatch"));
+  const modules = path.join(extensions, "node_modules");
+
+  for (const entry of fs.readdirSync(path.join(modules, "typescript"), {
+    recursive: true,
+    withFileTypes: true,
+  })) {
+    const file = path.join(entry.parentPath, entry.name);
+    const relative = path.relative(modules, file);
+
+    if (entry.isFile() && keep(relative.split(path.sep).join("/")))
+      fs.cpSync(file, path.join(out, "extensions/node_modules", relative));
+  }
+}
+
+// Desktop's cleanNodeModules semantics: drop a rule's match unless a ! rule keeps it.
+function moduleFilter(minimatch) {
+  const rules = fs
+    .readFileSync(path.join(codeOss, "build/.moduleignore"), "utf8")
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith("#"));
+
+  const excludes = rules.filter((rule) => !rule.startsWith("!"));
+
+  const includes = rules.flatMap((rule) =>
+    rule.startsWith("!") ? [rule.slice(1)] : [],
   );
+
+  return (file) =>
+    includes.some((rule) => minimatch(file, rule)) ||
+    !excludes.some((rule) => minimatch(file, rule));
 }
 
 function desktopCommit() {
@@ -175,6 +203,9 @@ export async function buildRemoteRuntime({
   );
 
   await buildBuiltinExtensions(out);
+
+  // localize calls stay unbuilt, so this table is never read; a missing one is an error at start.
+  fs.writeFileSync(path.join(out, "out/nls.messages.json"), "[]\n");
 
   return { out, commit };
 }

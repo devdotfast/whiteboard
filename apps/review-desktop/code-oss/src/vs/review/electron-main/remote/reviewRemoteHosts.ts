@@ -23,15 +23,18 @@ import { uninstallRemote } from "./reviewRemoteUninstall.js";
 import {
 	prepareSshControlDirectory,
 	reviewSshInstancePrefix,
+	reviewSshDirectSession,
 	reviewSshSession,
 	sshCloseArgs,
+	type ReviewSshSession,
 } from "./reviewSshCommand.js";
 import { validateSshAlias } from "../../common/reviewSshAlias.js";
 
 
 export interface ReviewRemoteHostsOptions {
 	readonly spawn: SpawnSsh;
-	readonly controlDirectory: string;
+	/** Absent: the connections are direct, and nothing prompts. */
+	readonly controlDirectory?: string;
 	readonly instance: string;
 	environment(): Promise<NodeJS.ProcessEnv>;
 	createAskpass(input: {
@@ -45,6 +48,7 @@ export interface ReviewRemoteHostsOptions {
 	groups?(): Promise<readonly string[]>;
 	freePort?(): Promise<number>;
 	send(hosts: ReviewGatewayHost[]): void;
+	capture?: ReviewRemoteHostOptions["capture"];
 	log(message: string): void;
 	readonly clock?: ReviewRemoteClock;
 	readonly timeouts?: ReviewRemoteHostOptions["timeouts"];
@@ -123,9 +127,9 @@ export class ReviewRemoteHosts {
 		};
 	}
 
-	update(enabled: boolean, aliases: readonly string[]): void {
+	update(aliases: readonly string[]): void {
 		if (this.disposed) return;
-		const wanted = enabled ? [...new Set(aliases)] : [];
+		const wanted = [...new Set(aliases)];
 		for (const [alias, host] of this.hosts) {
 			if (wanted.includes(alias)) continue;
 			this.hosts.delete(alias);
@@ -160,9 +164,10 @@ export class ReviewRemoteHosts {
 		this.publish();
 	}
 
-	retry(alias: string): void {
+	async retry(alias: string): Promise<void> {
 		const host = this.hosts.get(alias);
 		if (host?.quiesced && !this.uninstalling.has(alias)) host.unquiesce();
+		else if (host?.state.endpoint) await host.recheck();
 		else host?.retry();
 	}
 
@@ -171,8 +176,8 @@ export class ReviewRemoteHosts {
 		this.hosts.get(alias)?.retry();
 	}
 
-	detectAgents(alias: string): Promise<ReviewRemoteAgent[] | undefined> {
-		return this.hosts.get(alias)?.detectAgents() ?? Promise.resolve(undefined);
+	detectAgents(alias: string, refresh?: boolean): Promise<ReviewRemoteAgent[] | undefined> {
+		return this.hosts.get(alias)?.detectAgents(refresh) ?? Promise.resolve(undefined);
 	}
 
 	connectAgents(alias: string, ids: readonly unknown[]): Promise<ReviewRemoteAgentResult[]> {
@@ -195,8 +200,10 @@ export class ReviewRemoteHosts {
 		const host = this.hosts.get(alias);
 		host?.quiesce();
 		try {
+			if (!this.options.install) throw new Error("This Desktop cannot install or remove Whiteboard on hosts.");
 			const env = { ...(await this.options.environment()), ...(await this.askpass()).env(alias) };
-			await uninstallRemote({ session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance), spawn: this.options.spawn, env });
+			const script = await this.options.install.script();
+			await uninstallRemote({ session: this.session(alias), spawn: this.options.spawn, env, script });
 		} catch (error) {
 			this.options.log(`${alias}: Whiteboard was not removed; the host waits for the setting.`);
 			throw error;
@@ -253,7 +260,7 @@ export class ReviewRemoteHosts {
 
 	private createHost(alias: string): ReviewRemoteHost {
 		return new ReviewRemoteHost({
-			session: reviewSshSession(alias, this.options.controlDirectory, this.options.instance),
+			session: this.session(alias),
 			spawn: this.options.spawn,
 			environment: async () => ({ ...(await this.options.environment()), ...(await this.askpass()).env(alias) }),
 			desktopVersion: () => this.options.desktopVersion(),
@@ -261,6 +268,7 @@ export class ReviewRemoteHosts {
 			groups: this.options.groups,
 			freePort: this.options.freePort ?? freeLoopbackPort,
 			report: () => this.publish(),
+			capture: this.options.capture,
 			log: this.options.log,
 			clock: this.clock,
 			timeouts: this.options.timeouts,
@@ -274,25 +282,32 @@ export class ReviewRemoteHosts {
 		if (serverId && ![...this.hosts.values()].some((other) => other.serverId === serverId)) this.options.removed?.(serverId);
 	}
 
+	private session(alias: string): ReviewSshSession {
+		const directory = this.options.controlDirectory;
+		return directory === undefined ? reviewSshDirectSession(alias) : reviewSshSession(alias, directory, this.options.instance);
+	}
+
 	private askpass(): Promise<ReviewSshAskpass> {
 		return (this.prepared ??= (async () => {
-			await prepareSshControlDirectory(this.options.controlDirectory);
-			await this.sweepOrphans();
+			const directory = this.options.controlDirectory;
+			if (directory === undefined) return { env: () => ({}), dispose() {} };
+			await prepareSshControlDirectory(directory);
+			await this.sweepOrphans(directory);
 			return this.options.createAskpass({
-				directory: this.options.controlDirectory,
+				directory,
 				prompt: (request) => this.prompt(request),
 				log: this.options.log,
 			});
 		})());
 	}
 
-	private async sweepOrphans(): Promise<void> {
+	private async sweepOrphans(directory: string): Promise<void> {
 		const prefix = reviewSshInstancePrefix(this.options.instance);
 		try {
 			const env = await this.options.environment();
-			for (const name of await readdir(this.options.controlDirectory)) {
+			for (const name of await readdir(directory)) {
 				if (!name.startsWith(prefix)) continue;
-				const controlPath = join(this.options.controlDirectory, name);
+				const controlPath = join(directory, name);
 				try {
 					// -O exit works on any socket; the alias after -- is only a placeholder.
 					const closed = await runSsh(this.options.spawn, env, sshCloseArgs({ alias: "orphan", controlPath }, env), REVIEW_REMOTE_TIMEOUTS.close);

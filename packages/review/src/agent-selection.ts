@@ -35,6 +35,12 @@ export const AgentSelectionSchema = z.strictObject({
       startLine: z.number().int().positive(),
       endLine: z.number().int().positive(),
     }),
+    z.strictObject({
+      kind: z.literal("block"),
+      blockId: z.string().min(1).max(200),
+    }),
+    /** Nothing in particular: a question about the whole review. */
+    z.strictObject({ kind: z.literal("review") }),
   ]),
   title: z.string().max(500),
   detail: z.string().max(24000).optional(),
@@ -52,18 +58,28 @@ export function selectionMarkdown(
 ): string {
   const target = selection.target;
 
+  // Labelled where it starts: agents otherwise take the nearest labelled
+  // line, the board's name, for the selection.
   if (selection.selectedDiff)
-    return selectedDiffMarkdown(selection.selectedDiff, diffPaths);
+    return `Selected diff:\n${selectedDiffMarkdown(selection.selectedDiff, diffPaths)}`;
+
+  if (target.kind === "review") return "";
+
+  if (target.kind === "block") return `Selected block:\n${sourceExcerpt}`;
 
   if (target.kind === "text")
-    return target.quote
+    return `Selected text:\n${target.quote
       .split(/\r?\n/)
       .map((line) => `> ${line}`)
-      .join("\n");
+      .join("\n")}`;
 
-  return [`## ${selection.title}`, selection.detail ?? "", sourceExcerpt]
+  return `Selected code:\n${[
+    `## ${selection.title}`,
+    selection.detail ?? "",
+    sourceExcerpt,
+  ]
     .filter(Boolean)
-    .join("\n\n");
+    .join("\n\n")}`;
 }
 
 export function selectedDiffMarkdown(

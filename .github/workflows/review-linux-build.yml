@@ -9,10 +9,6 @@ on:
       version:
         type: string
         default: ""
-      whiteboard_remote:
-        description: The remote job's pin (stamp-remote-artifacts.mjs); required with a version.
-        type: string
-        default: ""
       package_revision:
         type: string
         default: "1"
@@ -25,9 +21,21 @@ on:
       release_signing:
         type: boolean
         default: false
+      channel:
+        description: preview or stable repository to publish to.
+        type: string
+        default: preview
+      publish:
+        type: boolean
+        default: false
+      release_tag:
+        description: Stable GitHub Release to attach the packages to and publish.
+        type: string
+        default: ""
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   linux:
@@ -52,11 +60,6 @@ jobs:
           QUALITY=stable
           if [[ "$VERSION" == *-preview.* ]]; then QUALITY=preview; fi
           node apps/review-desktop/scripts/stamp-release-channel.mjs --version "$VERSION" --quality "$QUALITY"
-      - name: Pin the remote tarballs
-        if: inputs.version != ''
-        env:
-          WHITEBOARD_REMOTE: ${{ inputs.whiteboard_remote }}
-        run: node apps/review-desktop/scripts/stamp-remote-artifacts.mjs --pinned "$WHITEBOARD_REMOTE"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -72,15 +75,34 @@ jobs:
             libx11-dev libxkbfile-dev libkrb5-dev libsecret-1-dev \
             libgtk-3-0t64 libnss3 libasound2t64 libgbm1 libnotify4 \
             zstd xvfb dbus-x11 unzip
-      - name: Build and assemble Linux app
+      - name: Build Linux app
         env:
           GITHUB_TOKEN: ${{ github.token }}
           REVIEW_DESKTOP_CI_FAST: "1"
           # Only stamped releases ship the telemetry key.
           REVIEW_POSTHOG_KEY: ${{ inputs.version != '' && vars.REVIEW_POSTHOG_KEY || '' }}
-        run: |
-          pnpm desktop:build
-          pnpm desktop:package:linux
+        run: pnpm desktop:build
+      - name: Wait for the remote pin
+        if: inputs.version != ''
+        id: pin
+        timeout-minutes: 45
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node apps/review-desktop/scripts/wait-for-run-artifact.mjs --job "Publish remote tarballs" --artifact "whiteboard-remote-pin-${{ inputs.version }}"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        if: inputs.version != ''
+        with:
+          artifact-ids: ${{ steps.pin.outputs.artifact-id }}
+          path: remote-pin
+      - name: Pin the remote tarballs
+        if: inputs.version != ''
+        run: node apps/review-desktop/scripts/stamp-remote-artifacts.mjs --pinned "$(cat remote-pin/pin.json)"
+      - name: Assemble Linux app
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          REVIEW_DESKTOP_CI_FAST: "1"
+          REVIEW_POSTHOG_KEY: ${{ inputs.version != '' && vars.REVIEW_POSTHOG_KEY || '' }}
+        run: pnpm desktop:package:linux
       - name: Configure packaged Electron sandbox
         run: |
           sudo chown root:root apps/review-desktop/VSCode-linux-x64/chrome-sandbox
@@ -208,8 +230,18 @@ jobs:
             --commit "$BUILD_SOURCEVERSION" --fingerprint "$FINGERPRINT" --channel "$CHANNEL"
           find apps/review-desktop/dist/linux-repository -name '*.rpm' -exec cp {} apps/review-desktop/dist/linux/ \;
           find apps/review-desktop/dist/linux-repository -path '*/repos*/arch/x86_64/*.pkg.tar.zst.sig' -exec cp {} apps/review-desktop/dist/linux/ \;
-          tar --zstd -cf apps/review-desktop/dist/linux/linux-publication.tar.zst -C apps/review-desktop/dist/linux-repository .
-      - name: Upload Linux artifacts
+          mkdir -p apps/review-desktop/dist/linux-publication
+          tar --zstd -cf apps/review-desktop/dist/linux-publication/linux-publication.tar.zst -C apps/review-desktop/dist/linux-repository .
+      # Validation and R2 publishing read only the sealed publication; the loose
+      # packages are for GitHub Release attachments.
+      - name: Upload Linux publication
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ${{ inputs.artifact_name }}-publication
+          path: apps/review-desktop/dist/linux-publication/linux-publication.tar.zst
+          retention-days: 7
+          compression-level: 0
+      - name: Upload Linux packages
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.artifact_name }}
@@ -243,7 +275,7 @@ jobs:
           ref: ${{ github.workflow_sha }}
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: ${{ inputs.artifact_name }}
+          name: ${{ inputs.artifact_name }}-publication
           path: linux-packages
       - name: Validate clean installs and rejected signatures
         env:
@@ -253,41 +285,15 @@ jobs:
           tar --zstd -xf linux-packages/linux-publication.tar.zst -C linux-repository
           bash apps/review-desktop/scripts/linux/verify-repository.sh linux-repository "$TARGET"
 
-  validate-nixos:
-    name: Validate Linux (NixOS)
-    needs: repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
-        with:
-          ref: ${{ github.workflow_sha }}
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: ${{ inputs.artifact_name }}
-          path: linux-packages
-      - uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31
-        with:
-          extra_nix_config: |
-            experimental-features = nix-command flakes
-            accept-flake-config = false
-      - name: Verify signed package and run NixOS VM
-        env:
-          NIX_CONFIG: |
-            experimental-features = nix-command flakes
-            accept-flake-config = false
-            system-features = nixos-test benchmark big-parallel kvm
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends zstd gnupg
-          mkdir linux-repository
-          tar --zstd -xf linux-packages/linux-publication.tar.zst -C linux-repository
-          bash apps/review-desktop/scripts/linux/verify-nixos.sh linux-repository
-      - name: Upload NixOS VM evidence
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: ${{ inputs.artifact_name }}-nixos-validation
-          path: nixos-validation
-          if-no-files-found: ignore
-          retention-days: 7
+  publish:
+    name: Publish Linux
+    needs: validate
+    if: ${{ inputs.publish }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/review-linux-publish.yml
+    with:
+      channel: ${{ inputs.channel }}
+      release_tag: ${{ inputs.release_tag }}
+      artifact_name: ${{ inputs.artifact_name }}
+    secrets: inherit

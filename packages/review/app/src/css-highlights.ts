@@ -1,21 +1,23 @@
 import { create, props } from "@stylexjs/stylex";
 
+import { tokens } from "./tokens.stylex";
+
 const styles = create({
   "review-find-match": {
     "::highlight(review-find-match)": {
-      backgroundColor: "var(--review-find-match-background)",
+      backgroundColor: tokens.reviewFindMatchBackground,
     },
   },
   "review-find-match-active": {
     "::highlight(review-find-match-active)": {
-      backgroundColor: "var(--review-find-match-active-background)",
+      backgroundColor: tokens.reviewFindMatchActiveBackground,
     },
   },
   "ask-thread": {
-    "::highlight(ask-thread)": { backgroundColor: "var(--accent-wash)" },
+    "::highlight(ask-thread)": { backgroundColor: tokens.accentWash },
   },
   "ask-thread-active": {
-    "::highlight(ask-thread-active)": { backgroundColor: "var(--marker-glow)" },
+    "::highlight(ask-thread-active)": { backgroundColor: tokens.markerGlow },
   },
 });
 

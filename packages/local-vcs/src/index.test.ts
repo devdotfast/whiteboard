@@ -27,7 +27,6 @@ import {
   parseJjDiffSummary,
   readFileAtCommit,
   resolveRepoContext,
-  resolveRepoContextSync,
   setLocalVcsCommandObserver,
   splitGitPatchFiles,
 } from ".";
@@ -35,6 +34,20 @@ import {
 describe("local vcs", () => {
   afterEach(() => {
     setLocalVcsCommandObserver(null);
+  });
+
+  it("says a call timed out instead of reporting nothing", async () => {
+    const repository = await mkdtemp(path.join(tmpdir(), "vcs-timeout-"));
+
+    execFileSync("git", ["init", "-q", repository]);
+
+    const result = await gitAt(repository, ["cat-file", "--batch"], {
+      allowFailure: true,
+      timeout: 50,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.stderr).toMatch(/timed out.*SIGTERM/);
   });
 
   it("runs git in the linked worktree that owns the working directory", async () => {
@@ -179,6 +192,18 @@ describe("local vcs", () => {
 
     expect(detectLocalVcsSync(rootPath)).toMatchObject({ kind: "git" });
     expect(listTrackedFilesSync({ rootPath })).toEqual(["src/app.ts"]);
+
+    const vcs = (await detectLocalVcs(rootPath))!;
+    await expect(vcs.listTrackedFiles()).resolves.toEqual(["src/app.ts"]);
+    await expect(vcs.readFileAtRef("HEAD", "src/app.ts")).resolves.toBe(
+      "export const app = 1;\n",
+    );
+    await expect(
+      vcs.readFileAtRef("HEAD", "src/missing.ts"),
+    ).resolves.toBeNull();
+    await expect(
+      vcs.readFileAtRef("no-such-ref", "src/app.ts"),
+    ).resolves.toBeNull();
   });
 
   it("limits git diffs to requested paths", async () => {
@@ -403,8 +428,8 @@ describe("local vcs", () => {
     const spawns: string[][] = [];
 
     setLocalVcsCommandObserver({
-      start: ({ file, args }) => {
-        spawns.push([file, ...args]);
+      start: ({ tool, args }) => {
+        spawns.push([tool, ...args]);
 
         return () => {};
       },
@@ -759,12 +784,6 @@ describe("local vcs", () => {
     );
 
     await expect(resolveRepoContext(rootPath)).resolves.toEqual({
-      commonDir: innerGitDir,
-      originUrl: "https://github.com/Fix-Fast/dev.git",
-      githubSlug: "Fix-Fast/dev",
-    });
-
-    expect(resolveRepoContextSync(rootPath)).toEqual({
       commonDir: innerGitDir,
       originUrl: "https://github.com/Fix-Fast/dev.git",
       githubSlug: "Fix-Fast/dev",

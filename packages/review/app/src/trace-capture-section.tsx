@@ -1,4 +1,6 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, space } from "@canvas/scale.stylex";
+import { Button } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
 import type {
   ReviewCanvasInstallContent,
@@ -45,8 +47,7 @@ function traceDestinationCopy(trace: ReviewCliInstallStatus["trace"]): string {
 
 /**
  * Experimental trace capture controls. Lives under Settings ▸ Experimental
- * Features. The tutorial demonstrates a bundled trace without requiring
- * capture to be enabled.
+ * Features.
  *
  * The on/off state is the machine-level trace setting the review server owns,
  * read back through the install status.
@@ -173,19 +174,17 @@ export function TraceCaptureSection({
         </div>
       )}
       {status.trace.enabled ? (
-        <button
-          type="button"
+        <Button
           disabled={busy !== null}
           onClick={() =>
             void run("trace-remove", () => install.remove({ trace: true }))
           }
         >
           {busy === "trace-remove" ? "Disabling…" : "Disable"}
-        </button>
+        </Button>
       ) : null}
       {hosted ? null : (
-        <button
-          type="button"
+        <Button
           disabled={busy !== null}
           onClick={() =>
             void run(
@@ -217,9 +216,11 @@ export function TraceCaptureSection({
             : status.trace.enabled
               ? "Repair"
               : "Enable"}
-        </button>
+        </Button>
       )}
-      {error ? <p {...stylex.props(promptStyles.error)}>{error}</p> : null}
+      {error ? (
+        <p {...stylex.props(textStyles.error, promptStyles.error)}>{error}</p>
+      ) : null}
     </div>
   );
 }
@@ -229,12 +230,9 @@ const styles = stylex.create({
     display: "flex",
     flexWrap: "wrap",
     alignItems: "flex-start",
-    gap: "10px",
-    marginTop: "12px",
-    paddingTop: "10px",
-    borderTopWidth: "1px",
-    borderTopStyle: "solid",
-    borderTopColor: tokens.reviewHomeRuleSoft,
+    gap: space.s10,
+    // The settings row above draws the rule; match its padding below it.
+    paddingTop: space.s14,
   },
   info: {
     display: "flex",
@@ -243,7 +241,7 @@ const styles = stylex.create({
     flexBasis: "100%",
     flexWrap: "wrap",
     alignItems: "baseline",
-    gap: "10px",
+    gap: space.s10,
     minWidth: 0,
   },
   name: {
@@ -252,7 +250,7 @@ const styles = stylex.create({
   state: {
     flex: 1,
     minWidth: 0,
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   // Enabled is the one state worth colouring.
@@ -260,13 +258,13 @@ const styles = stylex.create({
     color: tokens.changeAdded,
   },
   detail: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   fields: {
     display: "grid",
     flex: 1,
     gridTemplateColumns: "repeat(2, minmax(160px, 1fr))",
-    gap: "6px",
+    gap: space.s6,
   },
 });

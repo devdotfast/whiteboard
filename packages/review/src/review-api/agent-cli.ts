@@ -17,9 +17,15 @@ import {
   toolResultText,
 } from "./agent-client.js";
 import { type ReviewApiClient, ReviewApiError } from "./client.js";
+import { exitOnInstallUpdate } from "./install-update.js";
 import { callPublicTool, publicTool } from "./public-tools.js";
 import { RECOVERY } from "./recovery.js";
-import { REVIEW_AGENT_HEADER, REVIEW_VIA_HEADER } from "./request-origin.js";
+import {
+  ASK_THREAD_ENV,
+  REVIEW_AGENT_HEADER,
+  REVIEW_THREAD_HEADER,
+  REVIEW_VIA_HEADER,
+} from "./request-origin.js";
 import { toolFailure } from "./tool-failure.js";
 
 interface AgentCliInput {
@@ -63,13 +69,17 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
     if (extra.length || (mode === "mcp" && name))
       throw new Error("Unexpected arguments. Use whiteboard api --help.");
 
-    const headers = {
-      [REVIEW_VIA_HEADER]: mode === "mcp" ? "mcp" : "api",
-      [REVIEW_AGENT_HEADER]: reviewSessionAgent(env),
-    };
+    const thread = env[ASK_THREAD_ENV]?.trim();
+
+    const headers = Object.fromEntries([
+      [REVIEW_VIA_HEADER, mode === "mcp" ? "mcp" : "api"],
+      [REVIEW_AGENT_HEADER, reviewSessionAgent(env)],
+      [REVIEW_THREAD_HEADER, thread ?? ""],
+    ]);
 
     if (mode === "mcp") {
       const { serveReviewMcp } = await import("./mcp.js");
+      exitOnInstallUpdate(input.stderr);
       await serveReviewMcp(
         async (key, agentKind) => {
           const connected = await connectReviewInstance(

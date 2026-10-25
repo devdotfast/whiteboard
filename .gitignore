@@ -1,8 +1,6 @@
 # Node
 node_modules/
 dist/
-packages/review/tutorial/.bundle/
-packages/review/tutorial/git-stub/
 *.tsbuildinfo
 
 # pnpm
@@ -49,6 +47,9 @@ packages/code-graph/canvas/public/snapshot*.json
 # Local agent/context files
 /tasks/
 .claude/
+!/.claude/
+/.claude/*
+!/.claude/skills/
 .pi-subagents/
 .claude-context
 .codex-context
@@ -89,8 +90,6 @@ backend.hcl
 .dev/evidence/
 artifacts/devbox/
 scripts/acceptance/evidence/
-
-packages/review/tutorial/pins.json
 
 # Prebuilt, platform-specific diffr binary fetched at build time
 packages/review/bin/

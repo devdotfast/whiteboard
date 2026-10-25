@@ -9,19 +9,22 @@ import { diagramStyles } from "@canvas/diagram-styles";
 import { hasTextSelectionWithin } from "@canvas/diagram-text-selection";
 import { flowLayer } from "@canvas/flow-layers.stylex";
 import { useReviewSession } from "@canvas/host/review-session";
-import { CloseIcon, RefreshIcon } from "@canvas/icons";
 import {
   appMarker,
   codeInspectorMarker,
   documentMarker,
   mapFrameMarker,
 } from "@canvas/markers.stylex";
+import { MetaWheelZoom } from "@canvas/meta-wheel-zoom";
 import { useReviewContainer } from "@canvas/review-root-context";
 import {
+  elevation,
   fontSize,
   fontWeight,
+  leading,
   motion,
   radius,
+  space,
   tracking,
 } from "@canvas/scale.stylex";
 import { shellStyles } from "@canvas/shell-styles";
@@ -30,18 +33,19 @@ import { withClass } from "@canvas/stylex-props";
 import { themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
 import { captureUiEvent } from "@canvas/ui-telemetry";
-import { IconButton } from "@canvas/ui/button";
+import { IconButton, buttonStyles } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
+import { CloseIcon, FoldIcon, RefreshIcon, UnfoldIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import { useCanvasScrollLock } from "@canvas/use-canvas-scroll-lock";
 import { codePeekSource } from "@review/source";
 import * as stylex from "@stylexjs/stylex";
 import {
   Background,
   BaseEdge,
-  Controls,
   EdgeLabelRenderer,
   Handle,
   MiniMap,
@@ -855,6 +859,7 @@ export function SoftwareMapFrame({
   onViewportFocusComplete,
 }: SoftwareMapFrameProps) {
   const session = useReviewSession();
+  const refreshTooltip = useTooltip("Refresh software map");
   const frameRef = useRef<HTMLElement | null>(null);
 
   const codeInspectorResize = useRightPanelResize({
@@ -928,11 +933,15 @@ export function SoftwareMapFrame({
       style={style}
     >
       {showChrome && (
-        <header {...stylex.props(styles.header)}>
+        <header {...stylex.props(buttonStyles.reset, styles.header)}>
           <div {...stylex.props(diagramStyles.headerMain, styles.titleBlock)}>
             <Chip xstyle={styles.kindBadge}>{VIEW_TYPE_LABELS[viewType]}</Chip>
             <figcaption
-              {...stylex.props(diagramStyles.title, styles.title)}
+              {...stylex.props(
+                textStyles.truncate,
+                diagramStyles.title,
+                styles.title,
+              )}
               data-review-copy-prose
             >
               {title}
@@ -943,8 +952,8 @@ export function SoftwareMapFrame({
               <IconButton
                 xstyle={refreshing && styles.refreshing}
                 onClick={onRefresh}
+                ref={refreshTooltip}
                 aria-label="Refresh software map"
-                title="Refresh software map"
               >
                 <RefreshIcon />
               </IconButton>
@@ -973,8 +982,8 @@ export function SoftwareMapFrame({
           <IconButton
             xstyle={refreshing && styles.refreshing}
             onClick={onRefresh}
+            ref={refreshTooltip}
             aria-label="Refresh software map"
-            title="Refresh software map"
           >
             <RefreshIcon />
           </IconButton>
@@ -994,6 +1003,7 @@ export function SoftwareMapFrame({
           {(status || error || !hasResolvedSnapshot) && (
             <div
               {...stylex.props(
+                buttonStyles.reset,
                 styles.status,
                 Boolean(error) && styles.statusError,
               )}
@@ -1029,7 +1039,11 @@ export function SoftwareMapFrame({
               onClick={onCloseCodeInspector}
             />
             <div
-              {...stylex.props(shellStyles.resizer, styles.inspectorResizer)}
+              {...stylex.props(
+                buttonStyles.reset,
+                shellStyles.resizer,
+                styles.inspectorResizer,
+              )}
               {...codeInspectorResize.separatorProps}
             />
             <SoftwareMapCodeInspector
@@ -1064,6 +1078,8 @@ function SoftwareMapCodeInspector({
     ? "Expand all diffs"
     : "Collapse all diffs";
 
+  const collapseTooltip = useTooltip(collapseActionLabel);
+
   return (
     // The marker is the hook code peeks restyle themselves by in the inspector.
     <aside
@@ -1084,16 +1100,10 @@ function SoftwareMapCodeInspector({
             <IconButton
               onClick={() => setDiffsCollapsed((current) => !current)}
               aria-expanded={!diffsCollapsed}
+              ref={collapseTooltip}
               aria-label={collapseActionLabel}
-              title={collapseActionLabel}
             >
-              <span
-                {...withClass(
-                  `codicon ${diffsCollapsed ? "codicon-unfold" : "codicon-fold"}`,
-                  styles.codicon,
-                )}
-                aria-hidden="true"
-              />
+              {diffsCollapsed ? <UnfoldIcon /> : <FoldIcon />}
             </IconButton>
           ) : null}
           <SoftwareMapChangeBadge
@@ -1529,6 +1539,15 @@ function C4MapCanvas({
         return;
       }
 
+      if (event.key === "+" || event.key === "=" || event.key === "-") {
+        event.preventDefault();
+        event.stopPropagation();
+        const instance = flowRef.current;
+        void (event.key === "-" ? instance?.zoomOut() : instance?.zoomIn());
+
+        return;
+      }
+
       const direction = c4SpatialDirectionForKey(event.key);
 
       if (direction) {
@@ -1636,6 +1655,7 @@ function C4MapCanvas({
   // The class is the block tests' hook for a map still laying out.
   const codeStatusProps = withClass(
     "software-map-code-status",
+    buttonStyles.reset,
     styles.codeStatus,
   );
 
@@ -1704,35 +1724,37 @@ function C4MapCanvas({
                   <Background
                     {...stylex.props(styles.background)}
                     gap={24}
-                    color="var(--canvas-grid)"
+                    color={tokens.canvasGrid}
                   />
                   {expanded && (
                     <MiniMap
                       pannable
                       zoomable
                       position="top-right"
-                      maskColor="var(--minimap-mask)"
-                      maskStrokeColor="var(--rule-soft)"
+                      maskColor={tokens.minimapMask}
+                      maskStrokeColor={tokens.ruleSoft}
                       maskStrokeWidth={1}
                       nodeColor={(node) =>
                         node.id === displayedSnapshot.selectedNodeId
-                          ? "var(--minimap-node-selected)"
-                          : "var(--minimap-node)"
+                          ? tokens.minimapNodeSelected
+                          : tokens.minimapNode
                       }
                       nodeStrokeColor={(node) =>
                         node.id === displayedSnapshot.selectedNodeId
-                          ? "var(--selection)"
-                          : "var(--rule-soft)"
+                          ? tokens.selection
+                          : tokens.ruleSoft
                       }
                       nodeBorderRadius={4}
                       style={{
-                        backgroundColor: "var(--surface)",
-                        border: "1px solid var(--rule)",
+                        backgroundColor: tokens.surface,
+                        border: `1px solid ${tokens.rule}`,
                         borderRadius: 8,
                       }}
                     />
                   )}
-                  <Controls showInteractive={false} />
+                  {interactionMode !== "standalone" && (
+                    <MetaWheelZoom frame={keyboardTargetRef} />
+                  )}
                 </ReactFlow>
               </C4HoveredNodeContext.Provider>
             </>
@@ -2032,25 +2054,25 @@ function SoftwareMapC4GroupNode({
         id="target-left"
         type="target"
         position={Position.Left}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-left"
         type="source"
         position={Position.Left}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-top"
         type="target"
         position={Position.Top}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-top"
         type="source"
         position={Position.Top}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <div
         {...stylex.props(
@@ -2063,6 +2085,7 @@ function SoftwareMapC4GroupNode({
         </span>
         <strong
           {...stylex.props(
+            textStyles.truncate,
             styles.groupLabel,
             data.node.type === "softwareSystem" && styles.groupLabelSystem,
             data.node.changeStatus === "removed" && styles.struck,
@@ -2081,25 +2104,25 @@ function SoftwareMapC4GroupNode({
         id="source-right"
         type="source"
         position={Position.Right}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-right"
         type="target"
         position={Position.Right}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-bottom"
         type="source"
         position={Position.Bottom}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-bottom"
         type="target"
         position={Position.Bottom}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
     </div>
   );
@@ -2130,25 +2153,25 @@ function SoftwareMapC4Node({ data }: ReactFlowNodeProps<C4MapFlowNode>) {
         id="target-left"
         type="target"
         position={Position.Left}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-left"
         type="source"
         position={Position.Left}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-top"
         type="target"
         position={Position.Top}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-top"
         type="source"
         position={Position.Top}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <SoftwareMapNodeCard
         node={data.node}
@@ -2160,25 +2183,25 @@ function SoftwareMapC4Node({ data }: ReactFlowNodeProps<C4MapFlowNode>) {
         id="source-right"
         type="source"
         position={Position.Right}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-right"
         type="target"
         position={Position.Right}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="source-bottom"
         type="source"
         position={Position.Bottom}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         id="target-bottom"
         type="target"
         position={Position.Bottom}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
     </div>
   );
@@ -2414,6 +2437,7 @@ function SoftwareMapNodeFrame({
         <div {...stylex.props(styles.codeHead)}>
           <code
             {...stylex.props(
+              textStyles.truncate,
               styles.codeLabel,
               status === "removed" && styles.struck,
             )}
@@ -2435,7 +2459,13 @@ function SoftwareMapNodeFrame({
               isCollection && styles.hidden,
             )}
           >
-            <div {...stylex.props(textStyles.eyebrow, styles.nodeType)}>
+            <div
+              {...stylex.props(
+                textStyles.eyebrow,
+                textStyles.truncate,
+                styles.nodeType,
+              )}
+            >
               {softwareMapNodeTypeLabel(node)}
             </div>
             <SoftwareMapChangeBadge
@@ -2477,18 +2507,38 @@ function SoftwareMapNodeFrame({
           )}
         >
           {node.file && (
-            <span {...stylex.props(styles.metaItem)}>
+            <span
+              {...stylex.props(
+                textStyles.truncate,
+                buttonStyles.reset,
+                styles.metaItem,
+              )}
+            >
               {node.file}
               {node.line === undefined ? "" : `:L${node.line}`}
             </span>
           )}
           {node.childCount !== undefined && node.childCount > 0 && (
-            <span {...stylex.props(styles.metaItem)}>
+            <span
+              {...stylex.props(
+                textStyles.truncate,
+                buttonStyles.reset,
+                styles.metaItem,
+              )}
+            >
               {node.childCount} children
             </span>
           )}
           {node.boundary && (
-            <span {...stylex.props(styles.metaItem)}>boundary</span>
+            <span
+              {...stylex.props(
+                textStyles.truncate,
+                buttonStyles.reset,
+                styles.metaItem,
+              )}
+            >
+              boundary
+            </span>
           )}
         </div>
       )}
@@ -2525,12 +2575,14 @@ function SoftwareMapDataStoreSchema({
         >
           <header {...stylex.props(styles.schemaHeader)}>
             <span {...stylex.props(styles.schemaKind)}>{section.kind}</span>
-            <strong {...stylex.props(styles.schemaLabel)}>
+            <strong {...stylex.props(textStyles.truncate, styles.schemaLabel)}>
               {section.label}
             </strong>
           </header>
           {section.key && (
-            <div {...stylex.props(styles.schemaKey)}>{section.key}</div>
+            <div {...stylex.props(textStyles.truncate, styles.schemaKey)}>
+              {section.key}
+            </div>
           )}
           <div>
             {section.rows.map((row) => (
@@ -2550,7 +2602,9 @@ function SoftwareMapDataStoreSchema({
                   } as CSSProperties
                 }
               >
-                <span {...stylex.props(styles.schemaRowName)}>
+                <span
+                  {...stylex.props(textStyles.truncate, styles.schemaRowName)}
+                >
                   {row.primaryKey && (
                     <Chip xstyle={styles.schemaKeyFlag}>PK</Chip>
                   )}
@@ -2566,7 +2620,9 @@ function SoftwareMapDataStoreSchema({
                   )}
                   {row.label}
                 </span>
-                <span {...stylex.props(styles.schemaRowType)}>
+                <span
+                  {...stylex.props(textStyles.truncate, styles.schemaRowType)}
+                >
                   {row.type ?? row.example ?? "object"}
                 </span>
               </div>
@@ -2625,6 +2681,8 @@ function SoftwareMapChangeBadge({
     return (
       <span
         {...stylex.props(
+          textStyles.truncate,
+          buttonStyles.reset,
           styles.badge,
           inGroupTitle && styles.badgeInGroup,
           styles.badgeEmpty,
@@ -2635,7 +2693,14 @@ function SoftwareMapChangeBadge({
   }
 
   return (
-    <span {...stylex.props(styles.badge, inGroupTitle && styles.badgeInGroup)}>
+    <span
+      {...stylex.props(
+        textStyles.truncate,
+        buttonStyles.reset,
+        styles.badge,
+        inGroupTitle && styles.badgeInGroup,
+      )}
+    >
       {visibleAdditions ? (
         <span
           {...stylex.props(
@@ -2726,12 +2791,6 @@ const peekOpen = () => stylex.when.ancestor("[data-peek-open]", appMarker);
 
 const stacked = "@media (max-width: 900px)";
 
-const narrow = "@media (max-width: 720px)";
-
-const geistMono = '"Geist Mono", ui-monospace, monospace';
-
-const settle = "cubic-bezier(0.2, 0.8, 0.2, 1)";
-
 const groupBloom = stylex.keyframes({
   from: { opacity: 0.72, transform: "scale(0.88)" },
   to: { opacity: 1, transform: "scale(1)" },
@@ -2742,20 +2801,20 @@ const cardBloom = stylex.keyframes({
   to: { opacity: 1, transform: "scale(1)" },
 });
 
-const noBorder = {
-  borderWidth: 0,
-  borderStyle: "none",
-  borderColor: "currentcolor",
-} as const;
+// c4-edge-label-geometry.ts sizes edge labels with this line height.
+const EDGE_LABEL_LINE_HEIGHT = "15px";
+
+// The folder tab path's baseline, where the folder body starts.
+const FOLDER_TAB_HEIGHT = "46px";
+
+// Off screen, so the layout can size each card before placing it.
+const OFFSCREEN = "-10000px";
 
 const styles = stylex.create({
-  // The expanded map: a fixed layer over the canvas. The layer variable lives
-  // on .review-app, outside this portal, so the fallback keeps it above the
-  // sticky topbar.
   overlay: {
     position: "fixed",
     inset: 0,
-    zIndex: "var(--review-debug-layer, 2147483000)",
+    zIndex: tokens.reviewDebugLayer,
     display: "grid",
     boxSizing: "border-box",
     minWidth: 0,
@@ -2763,6 +2822,8 @@ const styles = stylex.create({
     overflow: "hidden",
     padding: 0,
     backgroundColor: tokens.bg,
+    // Its header clears the window controls, as the page bar does.
+    "--review-fullscreen-inset": "var(--review-page-bar-inset, 0px)",
   },
   frame: {
     position: "relative",
@@ -2778,10 +2839,12 @@ const styles = stylex.create({
     borderRadius: radius.control,
     backgroundColor: tokens.surface,
     boxShadow: "none",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   frameExpanded: {
-    ...noBorder,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
     boxSizing: "border-box",
     width: "100%",
     height: "100%",
@@ -2789,7 +2852,9 @@ const styles = stylex.create({
     minHeight: 0,
   },
   frameChromeHidden: {
-    ...noBorder,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
     gridTemplateRows: "minmax(0, 1fr)",
     borderRadius: 0,
   },
@@ -2803,17 +2868,17 @@ const styles = stylex.create({
     backgroundColor: tokens.transparent,
   },
   header: {
-    ...noBorder,
     display: "flex",
     justifyContent: "space-between",
-    gap: "16px",
+    gap: space.s16,
     minWidth: 0,
     alignItems: "center",
     minHeight: "36px",
-    padding: "0 12px",
-    backgroundColor: tokens.transparent,
+    paddingBlock: 0,
+    paddingRight: space.s12,
+    paddingLeft: "calc(12px + var(--review-fullscreen-inset, 0px))",
     boxShadow: "none",
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
   },
   titleBlock: {
     position: "relative",
@@ -2831,16 +2896,16 @@ const styles = stylex.create({
     flex: "0 0 auto",
     alignItems: "center",
     minWidth: 0,
-    gap: "4px",
+    gap: space.s4,
   },
   floatingActions: {
     position: "absolute",
-    top: "10px",
-    right: "10px",
+    top: space.s10,
+    right: space.s10,
     zIndex: flowLayer.actions,
     display: { default: "flex", [peekOpen()]: "none" },
-    gap: "8px",
-    padding: "2px",
+    gap: space.s8,
+    padding: space.s2,
     // A toolbar: its corners follow the buttons inside.
     borderRadius: radius.control,
   },
@@ -2899,16 +2964,16 @@ const styles = stylex.create({
   },
   // Narrow layouts stack the inspector under the map, then float it over.
   bodyWithInspector: {
-    position: { default: null, [narrow]: "relative" },
+    position: { default: null, [stylex.env.narrow]: "relative" },
     gridTemplateRows: {
       default: null,
       [stacked]: "minmax(0, 1fr) minmax(220px, 42%)",
-      [narrow]: "minmax(0, 1fr)",
+      [stylex.env.narrow]: "minmax(0, 1fr)",
     },
     gridTemplateColumns: {
       default: "minmax(0, 1fr) 10px var(--software-map-inspector-width, 420px)",
       [stacked]: "minmax(0, 1fr)",
-      [narrow]: "minmax(0, 1fr)",
+      [stylex.env.narrow]: "minmax(0, 1fr)",
     },
   },
   bodyResizing: {
@@ -2926,21 +2991,19 @@ const styles = stylex.create({
     fontFamily: tokens.fontMono,
   },
   status: {
-    ...noBorder,
     position: "absolute",
-    top: "14px",
-    left: "14px",
+    top: space.s14,
+    left: space.s14,
     zIndex: 8,
     width: "max-content",
     maxWidth: "min(420px, calc(100% - 28px))",
     margin: 0,
-    padding: "8px 10px",
+    padding: `${space.s8} ${space.s10}`,
     borderRadius: radius.control,
-    backgroundColor: tokens.transparent,
     boxShadow: "none",
     color: tokens.inkMuted,
     fontSize: fontSize.body,
-    lineHeight: "17px",
+    lineHeight: leading.px16,
   },
   statusError: {
     borderColor: tokens.diffRemoved,
@@ -2958,64 +3021,69 @@ const styles = stylex.create({
       [peekOpen()]: {
         default: null,
         "@container review-canvas (max-width: 929px)": "none",
-        [narrow]: "none",
+        [stylex.env.narrow]: "none",
       },
     },
   },
   inspectorBackdrop: {
-    display: { default: "none", [narrow]: "block" },
-    position: { default: null, [narrow]: "absolute" },
-    inset: { default: null, [narrow]: 0 },
-    zIndex: { default: null, [narrow]: flowLayer.inspectorBackdrop },
-    padding: { default: null, [narrow]: 0 },
-    borderWidth: { default: null, [narrow]: 0 },
-    borderStyle: { default: null, [narrow]: "none" },
-    borderColor: { default: null, [narrow]: "currentcolor" },
-    backgroundColor: { default: null, [narrow]: tokens.backdrop },
+    display: { default: "none", [stylex.env.narrow]: "block" },
+    position: { default: null, [stylex.env.narrow]: "absolute" },
+    inset: { default: null, [stylex.env.narrow]: 0 },
+    zIndex: { default: null, [stylex.env.narrow]: flowLayer.inspectorBackdrop },
+    padding: { default: null, [stylex.env.narrow]: 0 },
+    borderWidth: { default: null, [stylex.env.narrow]: 0 },
+    borderStyle: { default: null, [stylex.env.narrow]: "none" },
+    borderColor: { default: null, [stylex.env.narrow]: "currentcolor" },
+    backgroundColor: { default: null, [stylex.env.narrow]: tokens.backdrop },
   },
   inspector: {
-    ...noBorder,
-    position: { default: null, [narrow]: "absolute" },
-    right: { default: null, [narrow]: "8px" },
-    bottom: { default: null, [narrow]: "8px" },
-    left: { default: null, [narrow]: "8px" },
-    zIndex: { default: null, [narrow]: flowLayer.inspector },
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
+    position: { default: null, [stylex.env.narrow]: "absolute" },
+    right: { default: null, [stylex.env.narrow]: space.s8 },
+    bottom: { default: null, [stylex.env.narrow]: space.s8 },
+    left: { default: null, [stylex.env.narrow]: space.s8 },
+    zIndex: { default: null, [stylex.env.narrow]: flowLayer.inspector },
     display: "grid",
     gridTemplateRows: "auto minmax(0, 1fr)",
     minWidth: 0,
-    height: { default: null, [narrow]: "min(72%, 560px)" },
-    minHeight: { default: 0, [narrow]: "240px" },
+    height: { default: null, [stylex.env.narrow]: "min(72%, 560px)" },
+    minHeight: { default: 0, [stylex.env.narrow]: "240px" },
     overflow: "hidden",
-    borderRadius: { default: null, [narrow]: radius.surface },
+    borderRadius: { default: null, [stylex.env.narrow]: radius.surface },
     backgroundColor: tokens.bg,
     boxShadow: "none",
   },
   inspectorHeader: {
-    position: { default: null, [narrow]: "sticky" },
-    top: { default: null, [narrow]: 0 },
-    zIndex: { default: null, [narrow]: 2 },
+    position: { default: null, [stylex.env.narrow]: "sticky" },
+    top: { default: null, [stylex.env.narrow]: 0 },
+    zIndex: { default: null, [stylex.env.narrow]: 2 },
     display: "flex",
-    gap: "10px",
+    gap: space.s10,
     alignItems: "center",
     justifyContent: "space-between",
     minWidth: 0,
-    padding: { default: "7px 8px 3px", [narrow]: "8px" },
-    borderBottomWidth: { default: null, [narrow]: "1px" },
-    borderBottomStyle: { default: null, [narrow]: "solid" },
-    borderBottomColor: { default: null, [narrow]: tokens.rule },
+    padding: {
+      default: `${space.s8} ${space.s8} ${space.s4}`,
+      [stylex.env.narrow]: space.s8,
+    },
+    borderBottomWidth: { default: null, [stylex.env.narrow]: "1px" },
+    borderBottomStyle: { default: null, [stylex.env.narrow]: "solid" },
+    borderBottomColor: { default: null, [stylex.env.narrow]: tokens.rule },
     backgroundColor: tokens.bg,
   },
   inspectorTitle: {
     display: "flex",
-    gap: "8px",
+    gap: space.s8,
     alignItems: "baseline",
     minWidth: 0,
-    paddingLeft: "4px",
+    paddingLeft: space.s4,
     whiteSpace: "nowrap",
   },
   inspectorKind: {
     flex: "none",
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   inspectorLabel: {
     minWidth: 0,
@@ -3023,17 +3091,14 @@ const styles = stylex.create({
     color: tokens.ink,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.semibold,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
     textOverflow: "ellipsis",
   },
   inspectorActions: {
     display: "flex",
     flex: "none",
-    gap: "4px",
+    gap: space.s4,
     alignItems: "center",
-  },
-  codicon: {
-    fontSize: fontSize.reading,
   },
   inspectorDiffs: {
     minHeight: 0,
@@ -3042,10 +3107,12 @@ const styles = stylex.create({
     scrollbarColor: `${tokens.ruleSoft} ${tokens.surface}`,
   },
   inspectorEmpty: {
-    paddingInline: "16px",
+    paddingInline: space.s16,
   },
   c4Canvas: {
-    ...noBorder,
+    borderWidth: 0,
+    borderStyle: "none",
+    borderColor: "currentcolor",
     position: "relative",
     width: "100%",
     height: "100%",
@@ -3067,29 +3134,25 @@ const styles = stylex.create({
   },
   // React Flow's node wrapper. Its text reads like the prose around it.
   flowNode: {
-    ...noBorder,
-    backgroundColor: tokens.transparent,
     boxShadow: "none",
-    transition: `transform ${motion.medium} ${settle}, width ${motion.medium} ${settle}, height ${motion.medium} ${settle}, opacity ${motion.medium} ${motion.ease}`,
+    transition: `transform ${motion.medium} ${motion.settle}, width ${motion.medium} ${motion.settle}, height ${motion.medium} ${motion.settle}, opacity ${motion.medium} ${motion.ease}`,
     userSelect: "text",
   },
   flowEdge: {
     zIndex: 1,
   },
   codeStatus: {
-    ...noBorder,
     position: "absolute",
-    right: "14px",
-    bottom: "14px",
+    right: space.s14,
+    bottom: space.s14,
     zIndex: 8,
     maxWidth: "min(380px, calc(100% - 28px))",
-    padding: "8px 10px",
+    padding: `${space.s8} ${space.s10}`,
     borderRadius: radius.control,
-    backgroundColor: tokens.transparent,
     boxShadow: "none",
     color: tokens.inkMuted,
     fontSize: fontSize.body,
-    lineHeight: "17px",
+    lineHeight: leading.px16,
   },
   edgeHighlight: {
     fill: "none",
@@ -3139,7 +3202,7 @@ const styles = stylex.create({
   edgeLabel: {
     boxSizing: "border-box",
     maxWidth: "132px",
-    padding: "4px 10px",
+    padding: `${space.s4} ${space.s10}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
@@ -3150,7 +3213,7 @@ const styles = stylex.create({
     fontSize: fontSize.small,
     fontWeight: fontWeight.medium,
     letterSpacing: 0,
-    lineHeight: "15px",
+    lineHeight: EDGE_LABEL_LINE_HEIGHT,
     textAlign: "center",
     whiteSpace: "normal",
     overflowWrap: "anywhere",
@@ -3161,11 +3224,10 @@ const styles = stylex.create({
   edgeLabelSelectedNode: {
     borderColor: tokens.accent,
   },
-  // Off screen, so the layout can size each card before placing it.
   measureLayer: {
     position: "absolute",
     top: 0,
-    left: "-10000px",
+    left: OFFSCREEN,
     zIndex: -1,
     width: "280px",
     visibility: "hidden",
@@ -3175,7 +3237,7 @@ const styles = stylex.create({
     width: "max-content",
     minWidth: "188px",
     maxWidth: "340px",
-    marginBottom: "16px",
+    marginBottom: space.s16,
   },
   measureNodeStore: {
     width: "280px",
@@ -3190,16 +3252,16 @@ const styles = stylex.create({
     position: "relative",
     width: "100%",
     height: "100%",
-    animationName: cardBloom,
+    animationName: { default: cardBloom, [stylex.env.reducedMotion]: "none" },
     animationDuration: motion.medium,
-    animationTimingFunction: settle,
+    animationTimingFunction: motion.settle,
   },
   groupShell: {
     position: "relative",
     boxSizing: "border-box",
     width: "100%",
     height: "100%",
-    padding: "14px 16px",
+    padding: `${space.s14} ${space.s16}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: {
@@ -3216,10 +3278,10 @@ const styles = stylex.create({
     boxShadow: "none",
     outline: { default: null, ":hover": "none", ":focus-visible": "none" },
     cursor: "pointer",
-    fontFamily: tokens.fontMono,
-    animationName: groupBloom,
+    fontFamily: tokens.chromeFont,
+    animationName: { default: groupBloom, [stylex.env.reducedMotion]: "none" },
     animationDuration: motion.medium,
-    animationTimingFunction: settle,
+    animationTimingFunction: motion.settle,
   },
   // Hover outranks a change's border; selection outranks hover.
   groupAdded: {
@@ -3253,15 +3315,15 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: tokens.accent,
     backgroundColor: tokens.markerTint,
-    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+    boxShadow: elevation.markerRing,
   },
   groupTitle: {
     position: "absolute",
-    top: "14px",
-    right: "16px",
-    left: "16px",
+    top: space.s14,
+    right: space.s16,
+    left: space.s16,
     display: "flex",
-    gap: "8px",
+    gap: space.s8,
     alignItems: "baseline",
     minWidth: 0,
     color: tokens.inkMuted,
@@ -3270,21 +3332,18 @@ const styles = stylex.create({
     userSelect: "text",
   },
   groupTitleSystem: {
-    top: "18px",
-    right: "22px",
-    left: "22px",
+    top: space.s18,
+    right: space.s24,
+    left: space.s24,
   },
   groupKind: {
     flex: "0 0 auto",
   },
   groupLabel: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.ink,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.semibold,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   groupLabelSystem: {
     fontSize: fontSize.reading,
@@ -3295,23 +3354,15 @@ const styles = stylex.create({
   hidden: {
     display: "none",
   },
-  handle: {
-    ...noBorder,
-    width: "1px",
-    height: "1px",
-    backgroundColor: tokens.transparent,
-    opacity: 0,
-    pointerEvents: "none",
-  },
   node: {
     position: "relative",
     boxSizing: "border-box",
     display: "grid",
-    gap: "7px",
+    gap: space.s8,
     width: "100%",
     maxWidth: "none",
     minHeight: "104px",
-    padding: "12px 14px",
+    padding: `${space.s12} ${space.s14}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
@@ -3386,7 +3437,7 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: tokens.accent,
     backgroundColor: tokens.markerTint,
-    boxShadow: `0 0 0 3px ${tokens.markerGlow}`,
+    boxShadow: elevation.markerRing,
   },
   nodeStoreMarked: {
     borderWidth: 0,
@@ -3404,62 +3455,54 @@ const styles = stylex.create({
   },
   kicker: {
     display: "flex",
-    gap: "8px",
+    gap: space.s8,
     alignItems: "center",
     justifyContent: "space-between",
     minWidth: 0,
   },
   nodeType: {
     minWidth: 0,
-    overflow: "hidden",
-    lineHeight: "14px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    lineHeight: leading.px14,
   },
   label: {
     margin: 0,
     color: tokens.ink,
     fontSize: fontSize.reading,
     fontWeight: fontWeight.semibold,
-    lineHeight: "19px",
+    lineHeight: leading.px20,
   },
   labelWithSchema: {
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   // In a document the description reads as a document paragraph.
   description: {
-    margin: { default: 0, [inDocument()]: "14px 0" },
+    margin: { default: 0, [inDocument()]: `${space.s14} 0` },
     color: tokens.inkMuted,
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: fontSize.body,
     fontWeight: fontWeight.regular,
-    lineHeight: "17px",
+    lineHeight: leading.px16,
   },
   meta: {
     display: "flex",
     flexWrap: "wrap",
-    gap: "5px",
+    gap: space.s4,
     alignItems: "center",
     minWidth: 0,
   },
   metaItem: {
-    ...noBorder,
     maxWidth: "100%",
-    overflow: "hidden",
     padding: 0,
     borderRadius: 0,
-    backgroundColor: tokens.transparent,
     color: tokens.inkFaint,
-    fontFamily: geistMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     fontWeight: fontWeight.regular,
-    lineHeight: "15px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    lineHeight: leading.px16,
   },
   codeHead: {
     display: "flex",
-    gap: "8px",
+    gap: space.s8,
     alignItems: "center",
     width: "max-content",
     maxWidth: "100%",
@@ -3470,38 +3513,30 @@ const styles = stylex.create({
     display: "block",
     flex: "0 1 auto",
     minWidth: 0,
-    overflow: "hidden",
-    padding: { default: null, [inDocument()]: "2px 5px" },
+    padding: { default: null, [inDocument()]: `${space.s2} ${space.s4}` },
     borderRadius: { default: null, [inDocument()]: radius.small },
     backgroundColor: { default: null, [inDocument()]: tokens.well },
     color: tokens.ink,
-    fontFamily: { default: geistMono, [inDocument()]: tokens.fontMono },
+    fontFamily: tokens.fontMono,
     fontSize: fontSize.reading,
     fontWeight: fontWeight.semibold,
-    lineHeight: "18px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    lineHeight: leading.px18,
   },
   // Counts sit in the title row as plain text: the one +n −n pair, no pill.
   badge: {
-    ...noBorder,
     display: "inline-flex",
     flex: "0 0 auto",
     alignItems: "center",
     justifyContent: "flex-end",
-    gap: "6px",
+    gap: space.s6,
     width: "auto",
     maxWidth: "140px",
     minHeight: 0,
-    overflow: "hidden",
     padding: 0,
-    backgroundColor: tokens.transparent,
-    fontFamily: geistMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
     fontWeight: fontWeight.medium,
-    lineHeight: "15px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    lineHeight: leading.px16,
   },
   badgeEmpty: {
     visibility: "hidden",
@@ -3585,8 +3620,8 @@ const styles = stylex.create({
     pointerEvents: "none",
     "::after": {
       position: "absolute",
-      top: "46px",
-      right: "10px",
+      top: FOLDER_TAB_HEIGHT,
+      right: space.s10,
       left: "min(190px, 68%)",
       borderTopWidth: "2px",
       borderTopStyle: "solid",
@@ -3596,7 +3631,7 @@ const styles = stylex.create({
   },
   storageFolderBody: {
     position: "absolute",
-    top: "46px",
+    top: FOLDER_TAB_HEIGHT,
     right: 0,
     bottom: 0,
     left: 0,
@@ -3618,8 +3653,8 @@ const styles = stylex.create({
     position: "relative",
     zIndex: 1,
     display: "grid",
-    gap: "8px",
-    margin: "12px -2px 0",
+    gap: space.s8,
+    margin: `${space.s12} -${space.s2} 0`,
   },
   schemaFlush: {
     margin: 0,
@@ -3640,8 +3675,8 @@ const styles = stylex.create({
     display: "grid",
     gridTemplateColumns: "auto minmax(0, 1fr)",
     alignItems: "center",
-    gap: "8px",
-    padding: "7px 10px",
+    gap: space.s8,
+    padding: `${space.s8} ${space.s10}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -3650,26 +3685,22 @@ const styles = stylex.create({
   },
   schemaKind: {
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
     fontWeight: fontWeight.bold,
-    lineHeight: "12px",
+    lineHeight: leading.px14,
     letterSpacing: tracking.caps,
     textTransform: "uppercase",
   },
   schemaLabel: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.ink,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "15px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    lineHeight: leading.px16,
   },
   schemaKey: {
-    overflow: "hidden",
-    padding: "7px 10px",
+    padding: `${space.s8} ${space.s10}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -3677,17 +3708,14 @@ const styles = stylex.create({
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   schemaRow: {
     display: "grid",
     gridTemplateColumns: "minmax(0, 1fr) minmax(68px, auto)",
     alignItems: "center",
-    gap: "10px",
+    gap: space.s10,
     height: "30px",
-    padding:
-      "0 10px 0 calc(12px + var(--software-map-schema-row-depth, 0) * 18px)",
+    padding: `0 ${space.s10} 0 calc(12px + var(--software-map-schema-row-depth, 0) * 18px)`,
     borderBottomWidth: { default: "1px", ":last-child": 0 },
     borderBottomStyle: { default: "solid", ":last-child": "none" },
     borderBottomColor: { default: tokens.rule, ":last-child": "currentcolor" },
@@ -3704,15 +3732,12 @@ const styles = stylex.create({
   },
   schemaRowName: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.ink,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   schemaKeyFlag: {
-    marginRight: "6px",
+    marginRight: space.s6,
     backgroundColor: tokens.diffModifiedBg,
     color: tokens.diffModified,
   },
@@ -3722,13 +3747,10 @@ const styles = stylex.create({
   },
   schemaRowType: {
     minWidth: 0,
-    overflow: "hidden",
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
     textAlign: "right",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
 });
 
@@ -3767,6 +3789,9 @@ const codeRingStyles = stylex.create({
 });
 
 // React Flow takes node and edge classes as strings.
-const FLOW_NODE_CLASS_NAME = stylex.props(styles.flowNode).className;
+const FLOW_NODE_CLASS_NAME = stylex.props(
+  buttonStyles.reset,
+  styles.flowNode,
+).className;
 
 const FLOW_EDGE_CLASS_NAME = stylex.props(styles.flowEdge).className;

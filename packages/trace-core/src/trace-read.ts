@@ -212,7 +212,7 @@ export async function describeTraceSession(
   };
 }
 
-/** Loads the offline tutorial or a store-compatible normalized trace, preserving freshness and offline fallback status; store refusals propagate. */
+/** Loads a store-compatible normalized trace, preserving freshness and offline fallback status; store refusals propagate. */
 export async function loadReviewAgentTrace(input: {
   sessionId: string;
   trace?: string;

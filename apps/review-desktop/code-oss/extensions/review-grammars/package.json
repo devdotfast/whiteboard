@@ -1,0 +1,606 @@
+{
+	"name": "review-grammars",
+	"displayName": "%displayName%",
+	"description": "%description%",
+	"version": "10.0.0",
+	"publisher": "vscode",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"categories": [
+		"Programming Languages"
+	],
+	"contributes": {
+		"languages": [
+			{
+				"id": "apex",
+				"aliases": [
+					"Apex"
+				],
+				"extensions": [
+					".apexc",
+					".trigger"
+				],
+				"configuration": "./language-configuration/apex.json"
+			},
+			{
+				"id": "asm",
+				"aliases": [
+					"Assembly"
+				],
+				"extensions": [
+					".asm",
+					".s",
+					".S"
+				],
+				"configuration": "./language-configuration/asm.json"
+			},
+			{
+				"id": "cmake",
+				"aliases": [
+					"CMake"
+				],
+				"extensions": [
+					".cmake",
+					".cmake.in"
+				],
+				"filenames": [
+					"CMakeLists.txt"
+				],
+				"configuration": "./language-configuration/cmake.json"
+			},
+			{
+				"id": "commonlisp",
+				"aliases": [
+					"Common Lisp"
+				],
+				"extensions": [
+					".lisp",
+					".lsp",
+					".asd"
+				],
+				"configuration": "./language-configuration/commonlisp.json"
+			},
+			{
+				"id": "elixir",
+				"aliases": [
+					"Elixir"
+				],
+				"extensions": [
+					".ex",
+					".exs"
+				],
+				"configuration": "./language-configuration/elixir.json"
+			},
+			{
+				"id": "elm",
+				"aliases": [
+					"Elm"
+				],
+				"extensions": [
+					".elm"
+				],
+				"configuration": "./language-configuration/elm.json"
+			},
+			{
+				"id": "erlang",
+				"aliases": [
+					"Erlang"
+				],
+				"extensions": [
+					".erl",
+					".hrl",
+					".app.src",
+					".escript",
+					".xrl",
+					".yrl"
+				],
+				"filenames": [
+					"Emakefile",
+					"rebar.config",
+					"rebar.config.lock",
+					"rebar.lock"
+				],
+				"configuration": "./language-configuration/erlang.json"
+			},
+			{
+				"id": "fortran",
+				"aliases": [
+					"Fortran"
+				],
+				"extensions": [
+					".f90",
+					".F90",
+					".f95",
+					".f03",
+					".f08"
+				],
+				"configuration": "./language-configuration/fortran.json"
+			},
+			{
+				"id": "fortran-fixed",
+				"aliases": [
+					"Fortran (fixed form)"
+				],
+				"extensions": [
+					".f",
+					".for",
+					".F",
+					".FOR"
+				],
+				"configuration": "./language-configuration/fortran-fixed.json"
+			},
+			{
+				"id": "gleam",
+				"aliases": [
+					"Gleam"
+				],
+				"extensions": [
+					".gleam"
+				],
+				"configuration": "./language-configuration/gleam.json"
+			},
+			{
+				"id": "haskell",
+				"aliases": [
+					"Haskell"
+				],
+				"extensions": [
+					".hs"
+				],
+				"configuration": "./language-configuration/haskell.json"
+			},
+			{
+				"id": "hcl",
+				"aliases": [
+					"HCL"
+				],
+				"extensions": [
+					".hcl",
+					".nomad"
+				],
+				"configuration": "./language-configuration/hcl.json"
+			},
+			{
+				"id": "kotlin",
+				"aliases": [
+					"Kotlin"
+				],
+				"extensions": [
+					".kt",
+					".ktm",
+					".kts"
+				],
+				"configuration": "./language-configuration/kotlin.json"
+			},
+			{
+				"id": "nix",
+				"aliases": [
+					"Nix"
+				],
+				"extensions": [
+					".nix"
+				],
+				"configuration": "./language-configuration/nix.json"
+			},
+			{
+				"id": "ocaml",
+				"aliases": [
+					"OCaml"
+				],
+				"extensions": [
+					".ml",
+					".mli"
+				],
+				"configuration": "./language-configuration/ocaml.json"
+			},
+			{
+				"id": "pascal",
+				"aliases": [
+					"Pascal"
+				],
+				"extensions": [
+					".pas",
+					".dfm",
+					".dpr",
+					".lpr",
+					".pascal"
+				],
+				"configuration": "./language-configuration/pascal.json"
+			},
+			{
+				"id": "proto",
+				"aliases": [
+					"Protocol Buffers"
+				],
+				"extensions": [
+					".proto"
+				],
+				"configuration": "./language-configuration/proto.json"
+			},
+			{
+				"id": "qml",
+				"aliases": [
+					"QML"
+				],
+				"extensions": [
+					".qml"
+				],
+				"configuration": "./language-configuration/qml.json"
+			},
+			{
+				"id": "scala",
+				"aliases": [
+					"Scala"
+				],
+				"extensions": [
+					".scala",
+					".sbt",
+					".sc"
+				],
+				"configuration": "./language-configuration/scala.json"
+			},
+			{
+				"id": "scheme",
+				"aliases": [
+					"Scheme"
+				],
+				"extensions": [
+					".scm",
+					".sch",
+					".ss"
+				],
+				"configuration": "./language-configuration/scheme.json"
+			},
+			{
+				"id": "solidity",
+				"aliases": [
+					"Solidity"
+				],
+				"extensions": [
+					".sol"
+				],
+				"configuration": "./language-configuration/solidity.json"
+			},
+			{
+				"id": "systemverilog",
+				"aliases": [
+					"SystemVerilog"
+				],
+				"extensions": [
+					".sv",
+					".svh"
+				],
+				"configuration": "./language-configuration/systemverilog.json"
+			},
+			{
+				"id": "terraform",
+				"aliases": [
+					"Terraform"
+				],
+				"extensions": [
+					".tf",
+					".tfvars"
+				],
+				"configuration": "./language-configuration/terraform.json"
+			},
+			{
+				"id": "toml",
+				"aliases": [
+					"TOML"
+				],
+				"extensions": [
+					".toml"
+				],
+				"filenames": [
+					"Cargo.lock",
+					"Gopkg.lock",
+					"Pipfile",
+					"pdm.lock",
+					"poetry.lock",
+					"uv.lock"
+				],
+				"configuration": "./language-configuration/toml.json"
+			},
+			{
+				"id": "verilog",
+				"aliases": [
+					"Verilog"
+				],
+				"extensions": [
+					".v",
+					".vh"
+				],
+				"configuration": "./language-configuration/verilog.json"
+			},
+			{
+				"id": "vhdl",
+				"aliases": [
+					"VHDL"
+				],
+				"extensions": [
+					".vhd",
+					".vhdl"
+				],
+				"configuration": "./language-configuration/vhdl.json"
+			},
+			{
+				"id": "zig",
+				"aliases": [
+					"Zig"
+				],
+				"extensions": [
+					".zig",
+					".zon"
+				],
+				"configuration": "./language-configuration/zig.json"
+			},
+			{
+				"id": "clojure",
+				"extensions": [
+					".bb",
+					".boot",
+					".clje"
+				]
+			},
+			{
+				"id": "cpp",
+				"extensions": [
+					".tcc"
+				]
+			},
+			{
+				"id": "javascript",
+				"extensions": [
+					".snap"
+				]
+			},
+			{
+				"id": "json",
+				"extensions": [
+					".avsc",
+					".gltf",
+					".mcmeta",
+					".tfstate",
+					".tfstate.backup",
+					".topojson"
+				],
+				"filenames": [
+					".arcconfig",
+					".c8rc",
+					".nycrc",
+					".tern-config",
+					".tern-project",
+					"flake.lock",
+					"Pipfile.lock"
+				]
+			},
+			{
+				"id": "makefile",
+				"extensions": [
+					".make",
+					".makefile",
+					".mkfile"
+				],
+				"filenames": [
+					"BSDmakefile",
+					"Kbuild",
+					"Makefile.am",
+					"Makefile.inc",
+					"mkfile"
+				]
+			},
+			{
+				"id": "php",
+				"extensions": [
+					".php3",
+					".php7",
+					".phps"
+				]
+			},
+			{
+				"id": "python",
+				"extensions": [
+					".bzl",
+					".py3"
+				],
+				"filenames": [
+					"BUCK",
+					"TARGETS"
+				]
+			},
+			{
+				"id": "r",
+				"extensions": [
+					".rsx"
+				]
+			},
+			{
+				"id": "ruby",
+				"extensions": [
+					".builder"
+				]
+			},
+			{
+				"id": "shellscript",
+				"extensions": [
+					".bats",
+					".command",
+					".tmux"
+				],
+				"filenames": [
+					".kshrc",
+					"gradlew"
+				]
+			},
+			{
+				"id": "sql",
+				"extensions": [
+					".pgsql"
+				]
+			},
+			{
+				"id": "xml",
+				"extensions": [
+					".ant",
+					".mjml",
+					".plist",
+					".resx",
+					".zcml"
+				],
+				"filenames": [
+					".classpath",
+					".cproject",
+					".project",
+					"App.config",
+					"nuget.config",
+					"packages.config"
+				]
+			},
+			{
+				"id": "yaml",
+				"filenames": [
+					"yarn.lock"
+				]
+			}
+		],
+		"grammars": [
+			{
+				"language": "apex",
+				"scopeName": "source.apex",
+				"path": "./syntaxes/apex.tmLanguage.json"
+			},
+			{
+				"language": "asm",
+				"scopeName": "source.asm.x86_64",
+				"path": "./syntaxes/asm.tmLanguage.json"
+			},
+			{
+				"language": "cmake",
+				"scopeName": "source.cmake",
+				"path": "./syntaxes/cmake.tmLanguage.json"
+			},
+			{
+				"language": "commonlisp",
+				"scopeName": "source.commonlisp",
+				"path": "./syntaxes/common-lisp.tmLanguage.json"
+			},
+			{
+				"language": "elixir",
+				"scopeName": "source.elixir",
+				"path": "./syntaxes/elixir.tmLanguage.json"
+			},
+			{
+				"language": "elm",
+				"scopeName": "source.elm",
+				"path": "./syntaxes/elm.tmLanguage.json"
+			},
+			{
+				"language": "erlang",
+				"scopeName": "source.erlang",
+				"path": "./syntaxes/erlang.tmLanguage.json"
+			},
+			{
+				"language": "fortran",
+				"scopeName": "source.fortran.free",
+				"path": "./syntaxes/fortran-free-form.tmLanguage.json"
+			},
+			{
+				"language": "fortran-fixed",
+				"scopeName": "source.fortran.fixed",
+				"path": "./syntaxes/fortran-fixed-form.tmLanguage.json"
+			},
+			{
+				"language": "gleam",
+				"scopeName": "source.gleam",
+				"path": "./syntaxes/gleam.tmLanguage.json"
+			},
+			{
+				"language": "haskell",
+				"scopeName": "source.haskell",
+				"path": "./syntaxes/haskell.tmLanguage.json"
+			},
+			{
+				"language": "hcl",
+				"scopeName": "source.hcl",
+				"path": "./syntaxes/hcl.tmLanguage.json"
+			},
+			{
+				"language": "kotlin",
+				"scopeName": "source.kotlin",
+				"path": "./syntaxes/kotlin.tmLanguage.json"
+			},
+			{
+				"language": "nix",
+				"scopeName": "source.nix",
+				"path": "./syntaxes/nix.tmLanguage.json"
+			},
+			{
+				"language": "ocaml",
+				"scopeName": "source.ocaml",
+				"path": "./syntaxes/ocaml.tmLanguage.json"
+			},
+			{
+				"language": "pascal",
+				"scopeName": "source.pascal",
+				"path": "./syntaxes/pascal.tmLanguage.json"
+			},
+			{
+				"language": "proto",
+				"scopeName": "source.proto",
+				"path": "./syntaxes/proto.tmLanguage.json"
+			},
+			{
+				"language": "qml",
+				"scopeName": "source.qml",
+				"path": "./syntaxes/qml.tmLanguage.json"
+			},
+			{
+				"language": "scala",
+				"scopeName": "source.scala",
+				"path": "./syntaxes/scala.tmLanguage.json"
+			},
+			{
+				"language": "scheme",
+				"scopeName": "source.scheme",
+				"path": "./syntaxes/scheme.tmLanguage.json"
+			},
+			{
+				"language": "solidity",
+				"scopeName": "source.solidity",
+				"path": "./syntaxes/solidity.tmLanguage.json"
+			},
+			{
+				"language": "systemverilog",
+				"scopeName": "source.systemverilog",
+				"path": "./syntaxes/system-verilog.tmLanguage.json"
+			},
+			{
+				"language": "terraform",
+				"scopeName": "source.hcl.terraform",
+				"path": "./syntaxes/terraform.tmLanguage.json"
+			},
+			{
+				"language": "toml",
+				"scopeName": "source.toml",
+				"path": "./syntaxes/toml.tmLanguage.json"
+			},
+			{
+				"language": "verilog",
+				"scopeName": "source.verilog",
+				"path": "./syntaxes/verilog.tmLanguage.json"
+			},
+			{
+				"language": "vhdl",
+				"scopeName": "source.vhdl",
+				"path": "./syntaxes/vhdl.tmLanguage.json"
+			},
+			{
+				"language": "zig",
+				"scopeName": "source.zig",
+				"path": "./syntaxes/zig.tmLanguage.json"
+			}
+		]
+	}
+}

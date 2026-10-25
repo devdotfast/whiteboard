@@ -127,7 +127,9 @@ def publish(directory, bucket, base_url, channel=None, upload_format=None, promo
         if not package_name or any(name not in files for name in required):
             raise ValueError("Incomplete NixOS publication")
     # Compare-and-swap prevents concurrent or stale workflow reruns from moving
-    # the repository backwards after a newer release has already won.
+    # the repository backwards after a newer release has already won. An older
+    # release (a backfill) still uploads its snapshot but leaves the pointer.
+    stale = False
     with tempfile.TemporaryDirectory(prefix="review-current-") as temporary:
         previous_path = Path(temporary) / "current.json"
         try:
@@ -141,8 +143,9 @@ def publish(directory, bucket, base_url, channel=None, upload_format=None, promo
             _, old_version = parse_generation(previous)
             if not old_version:
                 raise ValueError("Existing repository pointer is invalid")
-            if new_version < old_version or (new_version == old_version and current != previous):
-                raise ValueError("Refusing to replace an equal or newer package release")
+            if new_version == old_version and current != previous:
+                raise ValueError("Refusing to replace an equal package release with different content")
+            stale = new_version < old_version
             condition = ["--if-match", previous_object["ETag"]]
 
     # A rerun can resume immutable uploads. Never replace an object with other
@@ -168,6 +171,9 @@ def publish(directory, bucket, base_url, channel=None, upload_format=None, promo
             if existing.get("Metadata", {}).get("sha256") != sha:
                 raise RuntimeError(f"Immutable object differs: {name}; increment the package revision") from error
     if upload_format:
+        return
+    if stale:
+        print(f"{pointer_key} names a newer release; leaving it in place.")
         return
     aws("put-object", "--bucket", bucket, "--key", pointer_key, "--body", str(pointer),
         "--content-type", "application/json", "--cache-control", "no-store", *condition)

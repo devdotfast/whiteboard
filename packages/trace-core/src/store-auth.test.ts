@@ -118,6 +118,7 @@ describe("store-auth", () => {
       );
 
       const opened: string[] = [];
+      const codes: string[] = [];
 
       const code = await runStoreLogin({
         traces: true,
@@ -127,11 +128,13 @@ describe("store-auth", () => {
         openUrl: async (u) => {
           opened.push(u);
         },
+        onDeviceCode: ({ userCode }) => codes.push(userCode),
         sleep: async () => {},
       });
 
       expect(code).toBe(0);
       expect(opened[0]).toContain("user_code=ABCD-1234");
+      expect(codes).toEqual(["ABCD-1234"]);
       expect((await readStoreAuth())?.token).toBe("tok");
     },
   );

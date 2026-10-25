@@ -9,10 +9,6 @@ export const name = "find-peek-performance";
 
 export const phase = 1;
 
-export const options = {
-  env: { DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "1" },
-};
-
 const TITLE = "Find across peeks";
 
 const FILES = 30;
@@ -50,11 +46,7 @@ export async function run(ctx) {
     head,
     blocks: files.map((file) => ({
       type: "code_peek",
-      source: {
-        file,
-        start: { side: "head", line: 1 },
-        end: { side: "head", line: 40 },
-      },
+      source: `head/${file}#L1-L40`,
     })),
   });
 
@@ -71,6 +63,16 @@ export async function run(ctx) {
     async () =>
       (await page.locator("[data-review-inline-editor]").count()) === FILES,
     "every code peek to register",
+  );
+
+  // Until the peeks' diffs load, their decoding counts against Find.
+  const status = "[data-review-inline-editor] .review-structural-stream-status";
+
+  await until(
+    async () =>
+      (await page.locator(status).count()) > 0 &&
+      (await page.locator(`${status}.loading`).count()) === 0,
+    "the mounted code peeks to finish loading",
   );
 
   await page.evaluate(() => {

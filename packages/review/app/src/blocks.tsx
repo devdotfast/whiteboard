@@ -1,8 +1,9 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import { anchorSelection } from "@review/lens-selection";
 import {
   type Block,
   type BlockType,
+  boardLink,
   traceQuoteLink,
 } from "@review/review-api/document";
 import * as stylex from "@stylexjs/stylex";
@@ -18,6 +19,7 @@ import { MarkdownContent } from "./agent-markdown";
 import { AnimationBlock } from "./animation/animation-block";
 import type { ApiDocumentData } from "./api-document";
 import { blockSectionSummary } from "./block-document-derivations";
+import { BoardLink } from "./board-link";
 import { DocumentCallTree } from "./call-tree-view";
 import { RenderedCodeBlock } from "./code-block";
 import { CodePeekCard } from "./CodePeek";
@@ -33,8 +35,6 @@ import { ReviewDocumentTitle } from "./review-document-surface";
 import { SoftwareMap } from "./software-map/SoftwareMap";
 import { tokens } from "./tokens.stylex";
 import { TraceQuote } from "./trace-quote";
-import { TutorialViewButton } from "./tutorial-dynamic-content";
-import { TutorialKeymapPicker } from "./tutorial-keymap-picker";
 
 /** A block the store has written: ids are assigned before any write. */
 export type StoredBlock = Block & { id: string };
@@ -84,6 +84,19 @@ function MarkdownBlock({ node, data }: BlockProps<"markdown">) {
       headingId={(index) => data.headings.get(node.id, index)}
       h1={ReviewDocumentTitle}
       renderLink={(href, children) => {
+        const board = boardLink(href);
+
+        if (board)
+          return (
+            <BoardLink
+              reviewId={board.board}
+              blockId={board.block}
+              target={data.boards.get(`${board.board}#${board.block ?? ""}`)}
+            >
+              {children}
+            </BoardLink>
+          );
+
         const quote = traceQuoteLink(href);
 
         if (quote) {
@@ -258,25 +271,7 @@ function SoftwareMapBlock({ node, data }: BlockProps<"software_map">) {
 type Components = { [K in BlockType]: BlockComponent<K> };
 
 /** Every block kind's component, keyed by type. A kind without a component is a compile error. */
-function TutorialBlock({ node }: BlockProps<"tutorial">) {
-  switch (node.kind) {
-    case "keymap":
-      return (
-        <div {...stylex.props(documentStyles.column, drawStyles.blockChild)}>
-          <TutorialKeymapPicker />
-        </div>
-      );
-    case "view":
-      return (
-        <div {...stylex.props(documentStyles.column, drawStyles.blockChild)}>
-          <TutorialViewButton view={node.view}>{node.label}</TutorialViewButton>
-        </div>
-      );
-  }
-}
-
 export const blockComponents = {
-  tutorial: TutorialBlock,
   markdown: MarkdownBlock,
   code: CodeBlock,
   divider: DividerBlock,
@@ -378,8 +373,8 @@ const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 const styles = stylex.create({
   callout: {
-    margin: { default: null, [inDocument()]: "18px 0" },
-    padding: { default: null, [inDocument()]: "12px 16px" },
+    margin: { default: null, [inDocument()]: `${space.s18} 0` },
+    padding: { default: null, [inDocument()]: `${space.s12} ${space.s16}` },
     borderLeftWidth: { default: null, [inDocument()]: "2px" },
     borderLeftStyle: { default: null, [inDocument()]: "solid" },
     borderLeftColor: { default: null, [inDocument()]: tokens.inkFaint },
@@ -389,7 +384,7 @@ const styles = stylex.create({
     },
     backgroundColor: { default: null, [inDocument()]: tokens.tray },
     fontSize: { default: null, [inDocument()]: fontSize.reading },
-    lineHeight: { default: null, [inDocument()]: "22px" },
+    lineHeight: { default: null, [inDocument()]: leading.px22 },
   },
   info: {
     borderLeftColor: { default: null, [inDocument()]: tokens.accent },

@@ -1,3 +1,4 @@
+import { space } from "@canvas/scale.stylex";
 import type {
   ReviewDiffSide,
   ReviewInlineEditorHeightMode,
@@ -10,7 +11,7 @@ import {
 } from "@review/lens-selection";
 import { type FileLineRange, codePeekSource } from "@review/source";
 import * as stylex from "@stylexjs/stylex";
-import { useEffect, useMemo, useRef } from "react";
+import { Fragment, useEffect, useMemo, useRef } from "react";
 
 import { DocumentCodeView } from "./DocumentCodeView";
 import { drawStyles } from "./draw-styles";
@@ -19,6 +20,7 @@ import { codeInspectorMarker, documentMarker } from "./markers.stylex";
 import { peekResolutionOutcome } from "./peek-telemetry";
 import { type ReviewLensView, useReviewLenses } from "./review-lenses";
 import type { SourcePeekAnchor } from "./review-panel-model";
+import { radius } from "./scale.stylex";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
@@ -129,6 +131,7 @@ export function CodePeekCard({
   onNativeFocus,
   lenses: lensesOverride,
   reportOutcome = false,
+  edgeToEdge = false,
   xstyle,
 }: {
   source: DiffSelection;
@@ -139,6 +142,8 @@ export function CodePeekCard({
   /** Report resolution telemetry. Only the panel the user opened sets this,
    * so an authored document with many inline peeks sends one event, not N. */
   reportOutcome?: boolean;
+  /** Run across its column like the Diff panel, not as an inset card. */
+  edgeToEdge?: boolean;
   /** Call-site styles, applied last. */
   xstyle?: stylex.StyleXStyles;
 }) {
@@ -156,12 +161,16 @@ export function CodePeekCard({
 
   const key = selectionKey(source);
 
+  const unavailable = lenses?.progress?.unavailableSelections?.[key];
+
   const outcome = peekResolutionOutcome({
     resolvedCount: ranges.length,
     complete: Boolean(lenses?.progress?.complete),
-    unavailable: Boolean(lenses?.progress?.unavailableSelections?.[key]),
+    unavailable: Boolean(unavailable),
     error: Boolean(lenses?.error),
   });
+
+  const reason = unavailable ?? (lenses?.error ? "error" : "unresolved");
 
   const reportedKey = useRef<string | null>(null);
 
@@ -169,17 +178,26 @@ export function CodePeekCard({
     if (!reportOutcome || outcome === "pending" || reportedKey.current === key)
       return;
     reportedKey.current = key;
-    captureUiEvent(
-      session,
-      outcome === "resolved" ? "peek_resolved" : "peek_resolve_failed",
-      { root_kind: "range" },
-    );
-  }, [key, outcome, reportOutcome, session]);
+
+    if (outcome === "resolved")
+      captureUiEvent(session, "peek_resolved", { root_kind: "range" });
+    else
+      captureUiEvent(session, "peek_resolve_failed", {
+        root_kind: "range",
+        reason,
+      });
+  }, [key, outcome, reason, reportOutcome, session]);
 
   if (!ranges.length)
     return (
       <section
-        {...withClass("code-peek", styles.peek, drawStyles.blockChild, xstyle)}
+        {...withClass(
+          "code-peek",
+          styles.peek,
+          edgeToEdge && styles.edgeToEdge,
+          drawStyles.blockChild,
+          xstyle,
+        )}
         role="status"
       >
         {outcome === "failed" ? "Code unavailable" : "Loading code…"}
@@ -188,7 +206,13 @@ export function CodePeekCard({
 
   return (
     <section
-      {...withClass("code-peek", styles.peek, drawStyles.blockChild, xstyle)}
+      {...withClass(
+        "code-peek",
+        styles.peek,
+        edgeToEdge && styles.edgeToEdge,
+        drawStyles.blockChild,
+        xstyle,
+      )}
       data-code-rendering="inline-editor"
     >
       <DocumentCodeView
@@ -208,6 +232,7 @@ export function CodePeekCard({
         countRanges={ranges}
         heightMode={heightMode}
         active={active}
+        edgeToEdge={edgeToEdge}
         onFocus={onNativeFocus}
         onOpen={() =>
           session.surface.revealAnchor(
@@ -220,6 +245,42 @@ export function CodePeekCard({
       />
     </section>
   );
+}
+
+/** A peek's or tour stop's code: one ordinary card per range, in order. A
+ * step with several ranges, even in one file, gets a card for each. */
+export function SourceCodePeek({
+  sources,
+  active,
+  onNativeFocus,
+  lenses,
+  reportOutcome,
+}: {
+  sources: readonly DiffSelection[];
+  active?: boolean;
+  onNativeFocus?: () => void;
+  lenses?: ReviewLensView;
+  reportOutcome?: boolean;
+}) {
+  return sources.map((source, index) => (
+    <Fragment key={selectionKey(source)}>
+      {index > 0 && (
+        <div
+          {...withClass("code-peek-gap", styles.cardGap)}
+          aria-hidden="true"
+        />
+      )}
+      <CodePeekCard
+        source={source}
+        active={active}
+        heightMode="content"
+        edgeToEdge
+        onNativeFocus={onNativeFocus}
+        lenses={lenses}
+        reportOutcome={reportOutcome && index === 0}
+      />
+    </Fragment>
+  ));
 }
 
 function FileSnippetCard({
@@ -369,8 +430,6 @@ function mergedCodePeekRanges(
   return merged;
 }
 
-const narrow = "@media (max-width: 720px)";
-
 const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 
 // A block in a Review document shares the prose column.
@@ -382,6 +441,8 @@ const inMapInspector = () =>
 // Peeks keep the `code-peek` class: document-embed-scroll.ts finds embeds by it.
 const styles = stylex.create({
   peek: {
+    // Its card's corners, so the editor's selection ring follows them.
+    borderRadius: radius.control,
     width: {
       default: null,
       [inDocumentBlock()]: `min(100%, ${tokens.reviewBlockMaxWidth})`,
@@ -392,17 +453,38 @@ const styles = stylex.create({
       [inDocumentBlock()]: `calc(100cqi - 2 * ${tokens.reviewDocumentPaddingInline})`,
     },
     marginInline: { default: null, [inDocumentBlock()]: "auto" },
-    marginBlock: { default: "24px", [inMapInspector()]: 0 },
+    marginBlock: { default: space.s24, [inMapInspector()]: 0 },
     overflow: { default: null, [inMapInspector()]: "visible" },
     padding: {
       default: null,
-      [inMapInspector()]: { default: 0, [narrow]: "0 8px 8px" },
+      [inMapInspector()]: {
+        default: 0,
+        [stylex.env.narrow]: `0 ${space.s8} ${space.s8}`,
+      },
     },
     overscrollBehavior: {
       default: null,
-      [inMapInspector()]: { default: null, [narrow]: "contain" },
+      [inMapInspector()]: { default: null, [stylex.env.narrow]: "contain" },
     },
     color: tokens.ink,
     fontFamily: tokens.fontMono,
+  },
+  edgeToEdge: {
+    marginBlock: 0,
+  },
+  // Between a step's cards, sized by --review-code-card-gap (unset outside a
+  // tour step) with the tour rail running faintly through it.
+  cardGap: {
+    position: "relative",
+    height: "var(--review-code-card-gap, 0px)",
+    "::before": {
+      position: "absolute",
+      top: 0,
+      bottom: 0,
+      left: "var(--review-tour-rail-x)",
+      width: "2px",
+      backgroundColor: `color-mix(in srgb, ${tokens.ruleSoft} 70%, transparent)`,
+      content: "''",
+    },
   },
 });

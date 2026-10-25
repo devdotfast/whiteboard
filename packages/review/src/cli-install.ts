@@ -33,10 +33,9 @@ import {
 } from "@dev.fast/trace-core";
 
 import {
-  CLAUDE_WINDOWS_MCP_ADD,
-  COPILOT_WINDOWS_MCP_ADD,
+  type CliConnectTarget,
+  connectLines,
   connectSetupPrompts,
-  launchCommand,
   reviewMcpLaunch,
 } from "./connect-prompts";
 import { cursorInstallDeeplink } from "./cursor-deeplink";
@@ -284,7 +283,7 @@ async function resyncCliInstallUnlocked(
   let shimPath: string | undefined;
   let userPath = stamp.userPath;
 
-  if (stamp.shimPath && !stamp.commandDisabled) {
+  if (stamp.shimPath) {
     const installed = await installShim(input, chunks);
 
     if (installed.code !== 0) return installed;
@@ -373,9 +372,6 @@ async function applyCliInstallUnlocked(
 
   if (stampShimPath) stamp.shimPath = stampShimPath;
 
-  if (granted && previous.commandDisabled && input.shim !== true)
-    stamp.commandDisabled = true;
-
   if (input.trace !== undefined || (granted && previous.traceManaged))
     stamp.traceManaged = true;
 
@@ -432,12 +428,17 @@ function withShimPath(
 function connectPlugins(
   hasShim: boolean,
 ): ReviewCliInstallStatus["connect"]["plugins"] {
+  const launch = reviewMcpLaunch(hasShim);
+
+  const command = (target: CliConnectTarget) =>
+    connectLines(target, launch, process.platform, false);
+
   return {
     claude:
       process.platform === "win32"
         ? {
             label: "Add the Claude Code MCP server",
-            command: CLAUDE_WINDOWS_MCP_ADD,
+            command: command("claude"),
           }
         : {
             label: "Install the Claude Code plugin",
@@ -446,8 +447,7 @@ function connectPlugins(
           },
     codex: {
       label: "Install the Codex plugin",
-      command:
-        "codex plugin marketplace add devdotfast/whiteboard\ncodex plugin add whiteboard@devfast",
+      command: command("codex"),
     },
     cursor: hasShim
       ? {
@@ -457,11 +457,11 @@ function connectPlugins(
       : { label: "Install in Cursor" },
     opencode: {
       label: "Add the OpenCode MCP server (OpenCode 2+)",
-      command: `opencode mcp add --global whiteboard -- ${launchCommand(reviewMcpLaunch(hasShim))}`,
+      command: command("opencode"),
     },
     pi: {
       label: "Add the Pi MCP server (Pi 0.99+)",
-      command: `pi mcp add whiteboard -- ${launchCommand(reviewMcpLaunch(hasShim))}`,
+      command: command("pi"),
     },
     omp: {
       label: "Add the oh-my-pi MCP server",
@@ -471,12 +471,11 @@ function connectPlugins(
       process.platform === "win32"
         ? {
             label: "Add the Copilot CLI MCP server",
-            command: COPILOT_WINDOWS_MCP_ADD,
+            command: command("copilot"),
           }
         : {
             label: "Install the Copilot CLI plugin",
-            command:
-              "copilot plugin marketplace add devdotfast/whiteboard\ncopilot plugin install whiteboard@devfast",
+            command: command("copilot"),
           },
   };
 }
@@ -639,8 +638,6 @@ async function removeCliInstallUnlocked(
 
     if (!input.shim && previous.shimPath) stamp.shimPath = previous.shimPath;
 
-    if (input.shim || previous.commandDisabled) stamp.commandDisabled = true;
-
     if (!input.trace && previous.traceManaged) stamp.traceManaged = true;
 
     if (!input.shim && previous.userPath) stamp.userPath = previous.userPath;
@@ -697,11 +694,16 @@ export async function writePathShim(
   cliPath: string,
   runtimePath: string | undefined,
   devHome: string,
+  previewHome = devHome,
 ): Promise<void> {
   if (process.platform === "win32") {
     await writeFileAtomicAsync(
       shimPath,
-      windowsCliShim(cliPath, runtimePath ?? process.execPath, devHome),
+      windowsCliShim(
+        cliPath,
+        runtimePath ?? process.execPath,
+        devHome === previewHome ? devHome : undefined,
+      ),
       { replaceSymlink: true },
     );
 
@@ -714,6 +716,8 @@ export async function writePathShim(
 FALLBACK_CLI=${shSingleQuote(cliPath)}
 FALLBACK_RUNTIME=${shSingleQuote(runtimePath ?? "")}
 DEFAULT_HOME=${shSingleQuote(devHome)}
+channel="\${DEV_FAST_REVIEW_CHANNEL:-\${DEV_REVIEW_INSTANCE:-}}"
+[ "$channel" = preview ] && DEFAULT_HOME=${shSingleQuote(previewHome)}
 export DEV_REVIEW_HOME="\${DEV_REVIEW_HOME:-$DEFAULT_HOME}"
 DESKTOP="$DEV_REVIEW_HOME/review-desktop"
 
@@ -834,7 +838,11 @@ export async function installReviewCommand(input: {
     shimPath,
     input.cliPath,
     input.cliRuntimePath,
-    devReviewHome(env, homeDir),
+    devReviewHome({ DEV_REVIEW_HOME: env.DEV_REVIEW_HOME }, homeDir),
+    devReviewHome(
+      { DEV_REVIEW_HOME: env.DEV_REVIEW_HOME, DEV_REVIEW_INSTANCE: "preview" },
+      homeDir,
+    ),
   );
 
   if (await traceMachineEnabled({ homeDir, env })) {

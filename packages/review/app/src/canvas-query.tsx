@@ -1,6 +1,12 @@
-import type { ReviewApiClient } from "@review/review-api/client";
+import type { ReviewCanvasBridge } from "@dev.fast/review-protocol";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { type ReactNode, useEffect, useMemo } from "react";
+import {
+  type ReactNode,
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+} from "react";
 
 import type { AgentTraceStorage } from "./use-agent-trace";
 
@@ -25,44 +31,54 @@ export function createCanvasQueryClient(): QueryClient {
   });
 }
 
-/**
- * Each ApiCanvas owns one client, so its backend and review are the cache
- * boundary and keys name only what varies within one canvas.
- */
+/** Desktop shares one client across boards, so board keys name the board. */
 export const canvasQueryKeys = {
   sharingAccount: () => ["sharing", "account"] as const,
-  shareLink: (version: number | undefined) =>
-    ["sharing", "link", version] as const,
+  shareLink: (board: string, version: number | undefined) =>
+    ["sharing", "link", board, version] as const,
   traceList: (
+    board: string,
     version: number | undefined,
     pins: { base: string; head: string } | undefined,
     storage: AgentTraceStorage | null,
-  ) => ["agent-traces", version, pins?.base, pins?.head, storage] as const,
+  ) =>
+    ["agent-traces", board, version, pins?.base, pins?.head, storage] as const,
   agentTrace: (
+    board: string,
     sessionId: string | null | undefined,
     trace: string | null | undefined,
     storage: AgentTraceStorage | null | undefined,
-  ) => ["agent-trace", sessionId, trace ?? null, storage ?? null] as const,
-  commitFiles: (commit: string) => ["commit-files", commit] as const,
-  askThread: (threadId: string) => ["ask-thread", threadId] as const,
-  diffFiles: (documentKey: string, source: number, revision?: string) =>
-    ["diff-files", documentKey, source, revision] as const,
-  reviewStack: (
-    version: number | undefined,
-    pullRequestNumber: number | null,
-    pullRequestUrl: string | null,
-    branch: string | null,
   ) =>
-    [
-      "review-stack",
-      version,
-      pullRequestNumber,
-      pullRequestUrl,
-      branch,
-    ] as const,
-  lensProgress: (version: number, mode: "structural" | "textual") =>
-    ["lens-progress", version, mode] as const,
-  allLensProgress: () => ["lens-progress"] as const,
+    ["agent-trace", board, sessionId, trace ?? null, storage ?? null] as const,
+  askThread: (threadId: string) => ["ask-thread", threadId] as const,
+  diffFiles: (
+    board: string,
+    documentKey: string,
+    source: number,
+    revision?: string,
+  ) => ["diff-files", board, documentKey, source, revision] as const,
+  lensProgress: (board: string, version: number) =>
+    ["lens-progress", board, version] as const,
+  allLensProgress: (board: string) => ["lens-progress", board] as const,
+  board: (board: string, version: number | undefined) =>
+    ["board", board, version ?? "latest"] as const,
+  place: (board: string, version: number | undefined) =>
+    ["place", board, "board", version] as const,
+  placeRevision: (board: string) => ["place-revision", board] as const,
+  stack: (board: string, version: number | undefined) =>
+    ["place", board, "stack", version] as const,
+  allPlace: (board: string) => ["place", board] as const,
+  projectBoards: (board: string) => ["project-boards", board] as const,
+  askThreads: (board: string) => ["ask-threads", board] as const,
+  askAgents: (host: string) => ["ask-agents", host] as const,
+  askBoards: (threadId: string | null, turns: number) =>
+    ["ask-boards", threadId, turns] as const,
+  linkStates: (board: string) => ["link-states", board] as const,
+  linkPeek: (
+    board: string,
+    block: string | undefined,
+    updatedAt: string | undefined,
+  ) => ["link-peek", board, block ?? null, updatedAt ?? null] as const,
 };
 
 const pendingDisposals = new WeakMap<
@@ -72,25 +88,49 @@ const pendingDisposals = new WeakMap<
 
 let nextScope = 0;
 
-export function CanvasQueryProvider({
-  client,
-  reviewId,
-  children,
-}: {
-  client: ReviewApiClient;
-  reviewId: string;
-  children: ReactNode;
-}) {
+export interface CanvasQueryScope {
+  id: number;
+  queryClient: QueryClient;
+}
+
+/** Desktop's canvas client, kept across the boards it shows. */
+export const SharedCanvasQueryClient = createContext<QueryClient | null>(null);
+
+function createIdleQueryClient(): QueryClient {
+  const client = createCanvasQueryClient();
+  const defaults = client.defaultQueryOptions.bind(client);
+
+  client.defaultQueryOptions = (options) => ({
+    ...defaults(options),
+    enabled: false,
+  });
+
+  return client;
+}
+
+/** The shared client, else one owned by the canvas. Clearing is deferred so
+ * a Strict Mode replay keeps its client. A host without `request` gets an
+ * idle client. */
+export function useCanvasQueryScope(
+  request: ReviewCanvasBridge["request"],
+  reviewId: string,
+): CanvasQueryScope {
+  const shared = useContext(SharedCanvasQueryClient);
+
   const scope = useMemo(
-    () => ({ id: nextScope++, queryClient: createCanvasQueryClient() }),
-    [client, reviewId],
+    () => ({
+      id: nextScope++,
+      queryClient: request
+        ? (shared ?? createCanvasQueryClient())
+        : createIdleQueryClient(),
+    }),
+    [shared, request, reviewId],
   );
 
   const { queryClient } = scope;
 
-  // Clearing cancels in-flight reads and drops the cache. Deferring it lets a
-  // Strict Mode effect replay keep the client it immediately remounts.
   useEffect(() => {
+    if (queryClient === shared) return;
     clearTimeout(pendingDisposals.get(queryClient));
 
     return () => {
@@ -99,11 +139,21 @@ export function CanvasQueryProvider({
         setTimeout(() => queryClient.clear()),
       );
     };
-  }, [queryClient]);
+  }, [queryClient, shared]);
 
-  // Queries bind to the client they mount with, so a new scope remounts them.
+  return scope;
+}
+
+/** A new scope remounts its queries. */
+export function CanvasQueryProvider({
+  scope,
+  children,
+}: {
+  scope: CanvasQueryScope;
+  children: ReactNode;
+}) {
   return (
-    <QueryClientProvider key={scope.id} client={queryClient}>
+    <QueryClientProvider key={scope.id} client={scope.queryClient}>
       {children}
     </QueryClientProvider>
   );

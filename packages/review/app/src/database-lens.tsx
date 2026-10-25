@@ -1,6 +1,15 @@
-import { radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
+import { Button } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
+import { textStyles } from "@canvas/ui/text";
+import { Select } from "@canvas/ui/text-field";
 import { type JsonValue, isStringValue } from "@dev.fast/review-protocol";
 import { type DiffSelection, anchorSelection } from "@review/lens-selection";
 import type {
@@ -471,7 +480,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
 
   const { portalTarget } = useDiagramTourShell(tourOpen, closeTour);
 
-  // database-lens is a marker: the tutorial and document-embed-scroll.ts find it.
+  // database-lens is a marker: document-embed-scroll.ts finds it.
   const renderLensFigure = (stage: boolean) => (
     <figure
       {...withClass(
@@ -485,15 +494,18 @@ export function DatabaseLens(block: DatabaseLensProps) {
       <header {...stylex.props(diagramStyles.header, styles.header)}>
         <div {...stylex.props(diagramStyles.headerMain)}>
           <Chip>DB</Chip>
-          <span {...stylex.props(diagramStyles.title)} data-review-copy-prose>
+          <span
+            {...stylex.props(textStyles.truncate, diagramStyles.title)}
+            data-review-copy-prose
+          >
             {title ?? "Database lens"}
           </span>
         </div>
         <div {...stylex.props(styles.actions)}>
           {activeUseCase && (
             <div {...stylex.props(styles.selectTarget)}>
-              <select
-                {...stylex.props(diagramStyles.control, diagramStyles.select)}
+              <Select
+                xstyle={styles.useCase}
                 aria-label="Database use case"
                 value={activeUseCase.id}
                 onChange={handleUseCaseChange}
@@ -503,13 +515,13 @@ export function DatabaseLens(block: DatabaseLensProps) {
                     {databaseUseCaseOptionLabel(useCase)}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           )}
           {!stage && activeTourId && (
-            <button
-              type="button"
-              {...withClass("diagram-tour-button", diagramStyles.control)}
+            <Button
+              className="diagram-tour-button"
+              xstyle={diagramStyles.button}
               data-tour-target="diagram-tour"
               onClick={(event) => {
                 event.preventDefault();
@@ -518,7 +530,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
               }}
             >
               Tour
-            </button>
+            </Button>
           )}
         </div>
       </header>
@@ -1267,7 +1279,7 @@ const styles = stylex.create({
     width: {
       default: "100%",
       [inDocument()]: "fit-content",
-      "@media (max-width: 720px)": {
+      [stylex.env.narrow]: {
         default: "100%",
         [inDocument()]: "calc(100cqi - 16px)",
       },
@@ -1279,12 +1291,12 @@ const styles = stylex.create({
     maxWidth: {
       default: "100%",
       [inDocument()]: `min(${tokens.reviewInlineDiagramMaxWidth}, calc(100cqi - ${tokens.reviewDocumentPaddingInline} - ${tokens.reviewDocumentPaddingInline}))`,
-      "@media (max-width: 720px)": {
+      [stylex.env.narrow]: {
         default: "100%",
         [inDocument()]: "none",
       },
     },
-    marginBlock: "24px",
+    marginBlock: space.s24,
     marginInline: { default: 0, [inDocument()]: "auto" },
     overflow: "hidden",
     // Without --diagram-border the border drops out whole, as the shorthand
@@ -1322,9 +1334,21 @@ const styles = stylex.create({
     gridTemplateColumns: { default: null, [narrow]: "minmax(0, 1fr) auto" },
     alignItems: "center",
     justifyContent: "flex-end",
-    gap: "8px",
+    gap: space.s8,
     width: { default: null, [narrow]: "100%" },
     minWidth: 0,
+  },
+  useCase: {
+    width: "100%",
+    height: "24px",
+    paddingLeft: space.s10,
+    borderColor: { default: tokens.ruleSoft, ":focus": tokens.accent },
+    borderRadius: radius.control,
+    backgroundColor: { default: tokens.surface, ":hover": tokens.well },
+    fontFamily: tokens.fontMono,
+    fontSize: fontSize.small,
+    fontWeight: fontWeight.medium,
+    lineHeight: leading.px22,
   },
   selectTarget: {
     position: "relative",

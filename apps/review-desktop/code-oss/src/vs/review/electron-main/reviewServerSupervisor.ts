@@ -22,6 +22,7 @@ import {
   resolveReviewServerEntry,
 } from "../common/reviewDesktopBootstrap.js";
 import type { ReviewGatewayHost } from "../common/reviewProtocol.js";
+import { createReviewLoopbackCert, type ReviewLoopbackCert } from "../node/reviewLoopbackCert.js";
 import {
   REVIEW_SERVER_RESTART_DELAYS,
   REVIEW_SERVER_STARTUP_TIMEOUT_MS,
@@ -89,6 +90,7 @@ export interface ReviewServerSupervisorOptions {
   /** Called every time a server, first or restarted, announces its endpoint. */
   readonly onServerReady?: () => void;
   readonly onRemoteHostRestarted?: (alias: string) => void;
+  readonly createLoopbackCert?: () => ReviewLoopbackCert;
 }
 
 export function createReviewServerEnvironment(options: {
@@ -107,6 +109,7 @@ export function createReviewServerEnvironment(options: {
   readonly appSessionId: string;
   readonly channel: ReviewReleaseChannel;
   readonly crashDumpsDir?: string;
+  readonly tls?: { key: string; cert: string };
 }): Record<string, string | undefined> {
   return {
     ...options.applicationEnvironment,
@@ -132,6 +135,10 @@ export function createReviewServerEnvironment(options: {
     DEV_FAST_REVIEW_APP_SESSION_ID: options.appSessionId,
     DEV_FAST_REVIEW_CHANNEL: options.channel,
     DEV_FAST_REVIEW_CRASH_DUMPS_DIR: options.crashDumpsDir,
+    ...(options.tls && {
+      DEV_FAST_REVIEW_SERVER_TLS_KEY: options.tls.key,
+      DEV_FAST_REVIEW_SERVER_TLS_CERT: options.tls.cert,
+    }),
   };
 }
 
@@ -214,6 +221,8 @@ export class ReviewServerSupervisor extends Disposable {
   private processListeners = new DisposableStore();
   private restartTimer: ReturnType<typeof setTimeout> | undefined;
   private restartCount = 0;
+  /** Why the server could not start, in its own words, when it said. */
+  private startupError: string | undefined;
   private stopping = false;
   private telemetryEnabled: boolean;
   private readyProcess: IReviewServerProcess | undefined;
@@ -226,6 +235,7 @@ export class ReviewServerSupervisor extends Disposable {
    */
   private readonly token = randomBytes(32).toString("base64url");
   private readonly instanceId = randomUUID();
+  private readonly tls: ReviewLoopbackCert | undefined;
   private port = 0;
 
   /**
@@ -244,6 +254,21 @@ export class ReviewServerSupervisor extends Disposable {
     super();
     this.readyTimeout = options.readyTimeout ?? REVIEW_SERVER_STARTUP_TIMEOUT_MS;
     this.telemetryEnabled = options.telemetryEnabled !== false;
+    this.tls = this.createLoopbackCert();
+  }
+
+  get tlsFingerprint(): string | undefined {
+    return this.tls?.fingerprint;
+  }
+
+  private createLoopbackCert(): ReviewLoopbackCert | undefined {
+    if (process.env["DEV_FAST_REVIEW_NO_H2"] === "1") return undefined;
+    try {
+      return (this.options.createLoopbackCert ?? createReviewLoopbackCert)();
+    } catch (error) {
+      this.options.logError(`[Review Desktop] no loopback TLS cert, renderers use plain HTTP: ${String(error)}`);
+      return undefined;
+    }
   }
 
   setTelemetryEnabled(enabled: boolean): void {
@@ -335,8 +360,10 @@ export class ReviewServerSupervisor extends Disposable {
           return;
         }
         if (!announced) return;
+        const { tls, ...rest } = announced;
         const connection: ReviewDesktopConnection = {
-          ...announced,
+          ...rest,
+          ...(tls && this.tls && { secureUrl: announced.url.replace(/^http:/, "https:") }),
           appSessionId: this.appSessionId,
         };
         ready = true;
@@ -346,6 +373,7 @@ export class ReviewServerSupervisor extends Disposable {
         this.readyTimer.cancel();
         this.port = Number(new URL(connection.url).port);
         this.restartCount = 0;
+        this.startupError = undefined;
         if (!this.connected.isSettled) {
           this.options.logInfo(
             `[Review Desktop] server ready at ${connection.url}`,
@@ -363,9 +391,13 @@ export class ReviewServerSupervisor extends Disposable {
       }),
     );
     this.processListeners.add(
-      serverProcess.onStderr((value) =>
-        this.options.logError(`[Review server] ${value.trimEnd()}`),
-      ),
+      serverProcess.onStderr((value) => {
+        this.options.logError(`[Review server] ${value.trimEnd()}`);
+        // A store the server can't upgrade fails every restart the same way;
+        // its own words are what the user needs to see.
+        const upgrade = /Could not upgrade the whiteboard store[^\n]*/.exec(value);
+        if (upgrade) this.startupError = upgrade[0];
+      }),
     );
 
     let terminated = false;
@@ -389,7 +421,8 @@ export class ReviewServerSupervisor extends Disposable {
       if (delay === undefined) {
         this.failStartup(
           new Error(
-            "The Review server exhausted its restart budget without becoming ready.",
+            this.startupError ??
+              "The Review server exhausted its restart budget without becoming ready.",
           ),
         );
         return;
@@ -432,6 +465,7 @@ export class ReviewServerSupervisor extends Disposable {
       appSessionId: this.appSessionId,
       channel: this.options.channel,
       crashDumpsDir: this.options.crashDumpsDir,
+      tls: this.tls,
     });
     const started = serverProcess.start({
       type: REVIEW_SERVER_PROCESS_TYPE,
@@ -452,7 +486,8 @@ export class ReviewServerSupervisor extends Disposable {
     this.readyTimer.cancelAndSet(() => {
       this.failStartup(
         new Error(
-          `The Review server did not become ready within ${this.readyTimeout}ms.`,
+          this.startupError ??
+            `The Review server did not become ready within ${this.readyTimeout}ms.`,
         ),
       );
     }, this.readyTimeout);

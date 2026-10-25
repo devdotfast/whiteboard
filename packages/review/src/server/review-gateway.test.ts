@@ -177,23 +177,40 @@ it("replaces this machine's token with the remote's, drops its credentials and m
   expect(seen?.headers.authorization).toBeUndefined();
 });
 
-it("answers per-review telemetry for a remote review itself and refuses local-only routes", async () => {
+it("captures a remote review's canvas events locally and refuses local-only routes", async () => {
   const reviewId = randomUUID();
   const fake = await startFake({ version, reviewIds: [reviewId] });
+  const captured: [string, unknown][] = [];
 
-  const { request, gateway } = await startGateway([
-    { alias: "wb-a", endpoint: fake.endpoint },
-  ]);
+  const { request, gateway } = await startLocalGateway(
+    root,
+    [{ alias: "wb-a", endpoint: fake.endpoint }],
+    {
+      remoteEvent: async (event, id) => {
+        captured.push([id, await event.json()]);
+      },
+    },
+  );
 
   await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
+  expect(gateway.isRemote(reviewId)).toBe(true);
 
   const telemetry = await request(`/${reviewId}/telemetry/event`, {
     method: "POST",
-    body: "{}",
+    body: '{"name":"ask_sent"}',
   });
 
   expect(telemetry.status).toBe(200);
   expect(telemetry.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
+  expect(captured).toEqual([[reviewId, { name: "ask_sent" }]]);
+
+  const tab = await request(`/${reviewId}/telemetry/tab`, {
+    method: "POST",
+    body: "{}",
+  });
+
+  expect(tab.status).toBe(200);
+  expect(captured).toHaveLength(1);
 
   for (const [method, route] of [
     ["POST", "open"],
@@ -254,7 +271,7 @@ it("gives a remote review's language context with its path on that machine and i
   ).toBe("export const a = 2;\n");
 });
 
-it("waits past the 10 s limit for a slow language context and keeps the host online when it never answers", async () => {
+it("waits past the first-byte limit for a slow language context and keeps the host online when it never answers", async () => {
   const slow = randomUUID();
   const hung = randomUUID();
   const serverId = randomUUID();
@@ -279,7 +296,7 @@ it("waits past the 10 s limit for a slow language context and keeps the host onl
             serverId,
           }),
         );
-      }, 11_000);
+      }, 300);
 
       return true;
     },
@@ -288,7 +305,7 @@ it("waits past the 10 s limit for a slow language context and keeps the host onl
   const { request, gateway } = await startLocalGateway(
     root,
     [{ alias: "wb-a", endpoint: fake.endpoint }],
-    { slowRouteMs: 14_000 },
+    { firstByteMs: 100, slowRouteMs: 1_000 },
   );
 
   await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
@@ -306,7 +323,7 @@ it("waits past the 10 s limit for a slow language context and keeps the host onl
   expect(unanswered.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
   expect(gateway.hosts()[0]?.state).toBe("online");
   expect((await request(`/${slow}/progress`)).status).toBe(200);
-}, 30_000);
+});
 
 it("streams a remote answer line by line and closes the remote connection when the client leaves", async () => {
   const reviewId = randomUUID();
@@ -598,7 +615,7 @@ it("routes a review a host just created once its list line arrives, and an unkno
     for await (const line of new ReviewApiClient({
       serverUrl: desktop.url,
       token: LOCAL_TOKEN,
-    }).watch([{ reviewId, mode: "structural" }], AbortSignal.timeout(5_000)))
+    }).watch([{ reviewId }], AbortSignal.timeout(5_000)))
       if (line.kind === "review" && "value" in line) return line.value;
 
     return undefined;

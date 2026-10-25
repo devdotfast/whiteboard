@@ -1,6 +1,11 @@
 import { Button, IconButton } from "@canvas/ui/button";
-import { surfaceStyles } from "@canvas/ui/surface";
-import { fieldStyles } from "@canvas/ui/text-field";
+import { Checkbox } from "@canvas/ui/checkbox";
+import { Dialog } from "@canvas/ui/dialog";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { BugIcon, CloseIcon } from "@canvas/ui/icons";
+import { textStyles } from "@canvas/ui/text";
+import { TextArea } from "@canvas/ui/text-field";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewBugReportRequest,
   parseReviewBugReportResponse,
@@ -10,6 +15,8 @@ import {
   type ClipboardEvent,
   type DragEvent,
   type FormEvent,
+  type Ref,
+  useImperativeHandle,
   useRef,
   useState,
 } from "react";
@@ -20,41 +27,41 @@ import {
   imageFileFromDataTransfer,
   normalizeScreenshot,
 } from "./bug-report-screenshot";
-import { controlStyles } from "./controls-styles";
 import { useReviewSession } from "./host/review-session";
-import { BugIcon } from "./icons";
 import { appMarker } from "./markers.stylex";
 import { useNotify } from "./notify";
-import { fontSize, fontWeight, layer, radius } from "./scale.stylex";
+import { fontSize, fontWeight, leading, radius, space } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
-import { useTutorial } from "./tutorial-context";
 import { captureUiEvent, clientErrorName } from "./ui-telemetry";
-import { useTooltip } from "./use-tooltip";
 
 const MAX_DESCRIPTION_BYTES = 64 * 1024;
 
 export function BugReportControl({
   captureScreenshot = captureWindowScreenshot,
+  folded = false,
+  handle,
 }: {
   /** Captures the window when the dialog opens; tests inject a fake. */
   captureScreenshot?: typeof captureWindowScreenshot;
+  /** In "⋯": no button; `handle` opens the dialog. */
+  folded?: boolean;
+  handle?: Ref<{ open(): void }>;
 } = {}) {
   const session = useReviewSession();
-  const tutorial = useTutorial();
   const [open, setOpen] = useState(false);
   const [description, setDescription] = useState("");
   const [includeContext, setIncludeContext] = useState(true);
   const [includeDiff, setIncludeDiff] = useState(true);
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [dropActive, setDropActive] = useState(false);
-  const [capturing, setCapturing] = useState(false);
   const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const notify = useNotify();
   const tooltip = useTooltip("Report a bug");
   const capturePending = useRef(false);
   const descriptionBytes = new TextEncoder().encode(description).byteLength;
-  const canSend = descriptionBytes <= MAX_DESCRIPTION_BYTES && !sending;
+  const canSend = descriptionBytes <= MAX_DESCRIPTION_BYTES;
 
   const reset = () => {
     setDescription("");
@@ -63,6 +70,7 @@ export function BugReportControl({
     setScreenshot(null);
     setDropActive(false);
     setSending(false);
+    setError(null);
   };
 
   const cancel = () => {
@@ -74,8 +82,9 @@ export function BugReportControl({
   const submit = async (event: FormEvent) => {
     event.preventDefault();
 
-    if (!canSend) return;
+    if (!canSend || sending) return;
     setSending(true);
+    setError(null);
 
     try {
       const report: ReviewBugReportRequest = {
@@ -84,7 +93,7 @@ export function BugReportControl({
         include_map: includeContext,
         include_diff: includeDiff,
         app_session_id: session.appSessionId,
-        app_version: session.config.appVersion,
+        app_version: session.bridge.appVersion,
       };
 
       if (screenshot) {
@@ -106,15 +115,13 @@ export function BugReportControl({
         captureUiEvent(session, "bug_report_send_failed", {
           error_name: clientErrorName(new Error()),
         });
-        notify({
-          kind: "error",
-          text:
-            response.status === 429
-              ? "Too many reports. Try again later."
-              : response.status === 413
-                ? "The report is too large. Remove an attachment and try again."
-                : "The report could not be sent. Try again.",
-        });
+        setError(
+          response.status === 429
+            ? "Too many reports. Try again later."
+            : response.status === 413
+              ? "The report is too large. Remove an attachment and try again."
+              : "The report could not be sent. Try again.",
+        );
 
         return;
       }
@@ -132,10 +139,7 @@ export function BugReportControl({
       captureUiEvent(session, "bug_report_send_failed", {
         error_name: clientErrorName(error),
       });
-      notify({
-        kind: "error",
-        text: "The report could not be sent. Try again.",
-      });
+      setError("The report could not be sent. Try again.");
     } finally {
       setSending(false);
     }
@@ -147,14 +151,13 @@ export function BugReportControl({
 
       if (!normalized) throw new Error("Screenshot could not be decoded.");
       setScreenshot(normalized);
+      setError(null);
     } catch (error) {
-      notify({
-        kind: "error",
-        text:
-          error instanceof ScreenshotTooLargeError
-            ? "The screenshot is too large. Use an image under 3 MiB."
-            : "That image could not be attached. Use a PNG, JPEG, or WebP image.",
-      });
+      setError(
+        error instanceof ScreenshotTooLargeError
+          ? "The screenshot is too large. Use an image under 3 MiB."
+          : "That image could not be attached. Use a PNG, JPEG, or WebP image.",
+      );
     }
   };
 
@@ -172,10 +175,9 @@ export function BugReportControl({
     const image = imageFileFromDataTransfer(event.dataTransfer);
 
     if (!image) {
-      notify({
-        kind: "error",
-        text: "That image could not be attached. Use a PNG, JPEG, or WebP image.",
-      });
+      setError(
+        "That image could not be attached. Use a PNG, JPEG, or WebP image.",
+      );
 
       return;
     }
@@ -184,9 +186,8 @@ export function BugReportControl({
   };
 
   const openDialog = async () => {
-    if (tutorial || capturePending.current) return;
+    if (capturePending.current) return;
     capturePending.current = true;
-    setCapturing(true);
     captureUiEvent(session, "bug_report_dialog_opened");
     let captured: string | null = null;
 
@@ -195,155 +196,146 @@ export function BugReportControl({
     } finally {
       setScreenshot(captured);
       setOpen(true);
-      setCapturing(false);
       capturePending.current = false;
     }
   };
 
+  useImperativeHandle(handle, () => ({ open: () => void openDialog() }));
+
   return (
     <>
-      <IconButton
-        xstyle={shellStyles.topbarItem}
-        aria-label="Report a bug"
-        ref={tooltip}
-        disabled={Boolean(tutorial) || capturing}
-        onClick={() => void openDialog()}
-      >
-        <BugIcon xstyle={controlStyles.chromeIcon} />
-      </IconButton>
-      {open && (
-        <div
-          {...stylex.props(shellStyles.topbarItem, styles.backdrop)}
-          onMouseDown={cancel}
+      {folded ? null : (
+        <IconButton
+          xstyle={shellStyles.topbarItem}
+          aria-label="Report a bug"
+          data-page-bar-fold="chat"
+          ref={tooltip}
+          onClick={() => void openDialog()}
         >
-          <section
-            {...stylex.props(
-              surfaceStyles.dialog,
-              styles.dialog,
-              dropActive && styles.dropTarget,
-            )}
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="bug-report-title"
-            onMouseDown={(event) => event.stopPropagation()}
-            onPaste={pasteScreenshot}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setDropActive(true);
-            }}
-            onDragLeave={(event) => {
-              const next = event.relatedTarget;
+          <BugIcon xstyle={iconStyles.chrome} />
+        </IconButton>
+      )}
+      {open && (
+        <Dialog
+          aria-labelledby="bug-report-title"
+          closedby="any"
+          xstyle={[styles.dialog, dropActive && styles.dropTarget]}
+          onClose={cancel}
+          onPaste={pasteScreenshot}
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDropActive(true);
+          }}
+          onDragLeave={(event) => {
+            const next = event.relatedTarget;
 
-              if (next instanceof Node && event.currentTarget.contains(next)) {
-                return;
-              }
+            if (next instanceof Node && event.currentTarget.contains(next)) {
+              return;
+            }
 
-              setDropActive(false);
-            }}
-            onDrop={dropScreenshot}
-          >
-            <form {...stylex.props(styles.form)} onSubmit={submit}>
-              <h2 {...stylex.props(styles.title)} id="bug-report-title">
-                Report a bug
-              </h2>
-              <label {...stylex.props(styles.description)}>
-                <span>What happened? (optional)</span>
-                <textarea
-                  {...stylex.props(
-                    fieldStyles.box,
-                    fieldStyles.multiline,
-                    styles.textarea,
-                  )}
-                  autoFocus
-                  rows={7}
-                  value={description}
-                  onChange={(event) => setDescription(event.target.value)}
-                  placeholder="Describe what you expected and what happened."
+            setDropActive(false);
+          }}
+          onDrop={dropScreenshot}
+        >
+          <form {...stylex.props(styles.form)} onSubmit={submit}>
+            <h2 {...stylex.props(styles.title)} id="bug-report-title">
+              Report a bug
+            </h2>
+            <label {...stylex.props(styles.description)}>
+              <span>What happened? (optional)</span>
+              <TextArea
+                xstyle={styles.textarea}
+                rows={7}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="Describe what you expected and what happened."
+              />
+            </label>
+            <div
+              {...stylex.props(
+                styles.byteCount,
+                descriptionBytes > MAX_DESCRIPTION_BYTES &&
+                  styles.byteCountError,
+              )}
+            >
+              {descriptionBytes.toLocaleString()} / 65,536 bytes
+            </div>
+            <fieldset {...stylex.props(styles.fieldset)}>
+              <legend {...stylex.props(styles.small)}>
+                Include diagnostic attachments
+              </legend>
+              <label {...stylex.props(styles.small, styles.option)}>
+                <Checkbox
+                  checked={includeContext}
+                  onChange={(event) => setIncludeContext(event.target.checked)}
                 />
+                Session
               </label>
-              <div
-                {...stylex.props(
-                  styles.byteCount,
-                  descriptionBytes > MAX_DESCRIPTION_BYTES &&
-                    styles.byteCountError,
+              <label {...stylex.props(styles.small, styles.option)}>
+                <Checkbox
+                  checked={includeDiff}
+                  onChange={(event) => setIncludeDiff(event.target.checked)}
+                />
+                Changed-file diffs used by CodePeeks
+              </label>
+              <div {...stylex.props(styles.screenshot)}>
+                {screenshot ? (
+                  <>
+                    <img
+                      {...stylex.props(styles.screenshotImage)}
+                      src={screenshot}
+                      alt="Screenshot preview"
+                    />
+                    <IconButton
+                      xstyle={styles.screenshotRemove}
+                      aria-label="Remove screenshot"
+                      title="Remove screenshot"
+                      onClick={() => setScreenshot(null)}
+                    >
+                      <CloseIcon />
+                    </IconButton>
+                  </>
+                ) : (
+                  <span {...stylex.props(styles.small, styles.faint)}>
+                    Paste or drop an image to attach a screenshot.
+                  </span>
                 )}
+              </div>
+            </fieldset>
+            <p {...stylex.props(styles.small, styles.privacy)}>
+              Reports are sent securely to /dev/fast. Only authorized /dev/fast
+              team members can access them. Reports are deleted after 90 days.
+              The screenshot above is included unless you remove it.
+            </p>
+            {error && (
+              <p
+                {...stylex.props(styles.small, styles.error, textStyles.error)}
+                role="alert"
               >
-                {descriptionBytes.toLocaleString()} / 65,536 bytes
-              </div>
-              <fieldset {...stylex.props(styles.fieldset)}>
-                <legend {...stylex.props(styles.small)}>
-                  Include diagnostic attachments
-                </legend>
-                <label {...stylex.props(styles.small, styles.option)}>
-                  <input
-                    type="checkbox"
-                    checked={includeContext}
-                    onChange={(event) =>
-                      setIncludeContext(event.target.checked)
-                    }
-                  />
-                  Session
-                </label>
-                <label {...stylex.props(styles.small, styles.option)}>
-                  <input
-                    type="checkbox"
-                    checked={includeDiff}
-                    onChange={(event) => setIncludeDiff(event.target.checked)}
-                  />
-                  Changed-file diffs used by CodePeeks
-                </label>
-                <div {...stylex.props(styles.screenshot)}>
-                  {screenshot ? (
-                    <>
-                      <img
-                        {...stylex.props(styles.screenshotImage)}
-                        src={screenshot}
-                        alt="Screenshot preview"
-                      />
-                      <IconButton
-                        xstyle={styles.screenshotRemove}
-                        aria-label="Remove screenshot"
-                        title="Remove screenshot"
-                        onClick={() => setScreenshot(null)}
-                      >
-                        ×
-                      </IconButton>
-                    </>
-                  ) : (
-                    <span {...stylex.props(styles.small, styles.faint)}>
-                      Paste or drop an image to attach a screenshot.
-                    </span>
-                  )}
-                </div>
-              </fieldset>
-              <p {...stylex.props(styles.small, styles.privacy)}>
-                Reports are sent securely to /dev/fast. Only authorized
-                /dev/fast team members can access them. Reports are deleted
-                after 90 days. The screenshot above is included unless you
-                remove it.
+                {error}
               </p>
-              <div {...stylex.props(styles.actions)}>
-                <Button
-                  size="large"
-                  xstyle={styles.action}
-                  onClick={cancel}
-                  disabled={sending}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="large"
-                  xstyle={styles.action}
-                  disabled={!canSend}
-                >
-                  {sending ? "Sending..." : "Send"}
-                </Button>
-              </div>
-            </form>
-          </section>
-        </div>
+            )}
+            <div {...stylex.props(styles.actions)}>
+              <Button
+                size="large"
+                xstyle={styles.action}
+                onClick={cancel}
+                disabled={sending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                variant="primary"
+                size="large"
+                xstyle={styles.action}
+                disabled={!canSend}
+              >
+                {sending ? "Sending..." : "Send"}
+              </Button>
+            </div>
+          </form>
+        </Dialog>
       )}
     </>
   );
@@ -361,15 +353,6 @@ const chromeBorder = () =>
   }) as const;
 
 const styles = stylex.create({
-  backdrop: {
-    position: "fixed",
-    zIndex: layer.dialog,
-    inset: 0,
-    display: "grid",
-    placeItems: "center",
-    padding: "24px",
-    backgroundColor: tokens.backdrop,
-  },
   dialog: {
     width: "min(540px, 100%)",
   },
@@ -379,8 +362,8 @@ const styles = stylex.create({
   },
   form: {
     display: "grid",
-    gap: "14px",
-    padding: "20px",
+    gap: space.s14,
+    padding: space.s20,
   },
   title: {
     margin: 0,
@@ -388,7 +371,7 @@ const styles = stylex.create({
   },
   description: {
     display: "grid",
-    gap: "7px",
+    gap: space.s8,
     fontSize: fontSize.body,
     fontWeight: fontWeight.semibold,
   },
@@ -396,9 +379,9 @@ const styles = stylex.create({
     width: "100%",
   },
   byteCount: {
-    marginTop: "-10px",
+    marginTop: `-${space.s10}`,
     color: tokens.inkFaint,
-    font: `${fontSize.micro}/1.3 ${tokens.fontMono}`,
+    font: `${fontSize.micro}/${leading.tight} ${tokens.fontMono}`,
     textAlign: "right",
   },
   byteCountError: {
@@ -406,32 +389,32 @@ const styles = stylex.create({
   },
   fieldset: {
     display: "grid",
-    gap: "8px",
+    gap: space.s8,
     margin: 0,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.ruleSoft,
     borderRadius: radius.small,
-    padding: "10px 12px 12px",
+    padding: `${space.s10} ${space.s12} ${space.s12}`,
   },
   small: {
-    font: `${fontSize.small}/1.45 ${tokens.fontMono}`,
+    font: `${fontSize.small}/${leading.normal} ${tokens.chromeFont}`,
   },
   option: {
     display: "flex",
-    gap: "8px",
+    gap: space.s8,
     alignItems: "center",
   },
   screenshot: {
     display: "flex",
     minHeight: "54px",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     borderWidth: "1px",
     borderStyle: "dashed",
     borderColor: tokens.ruleSoft,
     borderRadius: radius.small,
-    padding: "8px",
+    padding: space.s8,
   },
   screenshotImage: {
     display: "block",
@@ -445,8 +428,6 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: tokens.chromeBorder,
     backgroundColor: tokens.tray,
-    fontSize: fontSize.heading,
-    fontWeight: fontWeight.regular,
   },
   faint: {
     color: tokens.inkFaint,
@@ -455,10 +436,13 @@ const styles = stylex.create({
     margin: 0,
     color: tokens.inkFaint,
   },
+  error: {
+    margin: 0,
+  },
   actions: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: "8px",
+    gap: space.s8,
   },
   action: {
     minWidth: "76px",

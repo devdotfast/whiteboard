@@ -1,14 +1,24 @@
 import {
+  type JsonValue,
+  isJsonArray,
+  isJsonObject,
+  isStringValue,
+} from "@dev.fast/json";
+import {
   type Anchor,
   type LensSource,
+  commitLinkTarget,
   parseAnchor,
   selectionProblem,
   sourceAnchors,
 } from "@review/lens-selection.js";
 import {
+  type MarkdownNode,
+  linkDestinations,
   markdownNodes,
   markdownText,
   parseMarkdown,
+  rewriteLinkDestinations,
 } from "@review/markdown.js";
 import {
   type FileLineRange,
@@ -31,7 +41,7 @@ import {
   blockSchema,
   blocks,
 } from "./blocks/index.js";
-import { type Step, stepSchema } from "./blocks/sequence.js";
+import { type Step, stepSchema, stepSources } from "./blocks/sequence.js";
 import type { Lens } from "./diff-lenses.js";
 import { ReviewInputError } from "./input-error.js";
 
@@ -45,6 +55,7 @@ export {
   blockSchema,
   blocks,
   checkReferences,
+  documentAdvice,
 } from "./blocks/index.js";
 
 export { type Frame, frameSchema } from "./blocks/call_stack_diff.js";
@@ -67,6 +78,7 @@ export {
   type Step,
   sequenceSchema,
   stepSchema,
+  stepSources,
 } from "./blocks/sequence.js";
 
 const text = z.string();
@@ -120,10 +132,33 @@ export function explicitPins(references: { source: { pins?: SourcePins } }[]) {
   return [...seen.values()];
 }
 
+/** Every repository a document's references can read by their own pins,
+ * found without parsing Markdown: a Markdown link reads at its block's pins. */
+export function pinnedRepositoryIds(document: Block[]): Set<string> {
+  const ids = new Set<string>();
+
+  for (const element of elements(document))
+    if (element.type === "markdown" && element.pins)
+      ids.add(element.pins.repositoryId);
+
+  for (const { source } of documentReferences(document, {
+    tolerant: true,
+    markdown: false,
+  }))
+    if (source.pins) ids.add(source.pins.repositoryId);
+
+  return ids;
+}
+
 const targets = <Repository extends Record<string, z.ZodType>>(
   repository: Repository,
 ) =>
   z.discriminatedUnion("kind", [
+    /** The project of the repository, no change: a plan. */
+    z.strictObject({
+      kind: z.literal("project"),
+      ...repository,
+    }),
     z.strictObject({
       kind: z.literal("worktree"),
       ...repository,
@@ -139,8 +174,16 @@ const targets = <Repository extends Record<string, z.ZodType>>(
 
 export const reviewTargetSchema = targets({ repositoryId: label });
 
-/** How agents name a target: by the checkout's path, registered on acceptance. */
-export const pathTargetSchema = targets({ repositoryPath: label });
+/** Targets as agents write them: a checkout path instead of a repository id,
+ * plus a PR by URL or number. */
+export const pathTargetSchema = z.discriminatedUnion("kind", [
+  ...targets({ repositoryPath: label }).options,
+  z.strictObject({
+    kind: z.literal("pullRequest"),
+    repositoryPath: label,
+    pullRequest: z.union([label, z.number().int().positive()]),
+  }),
+]);
 
 export type ReviewTarget = z.infer<typeof reviewTargetSchema>;
 
@@ -160,11 +203,131 @@ export const isUnit = (element: Element): element is Unit =>
 export const animationCodeId = (blockId: string, name: string) =>
   `${blockId}:code:${name}`;
 
+/** Rewrites old review-source: and review-trace: links to their whiteboard: form. */
+export function canonicalLink(href: string): string {
+  return href.replace(
+    /^review-(source|trace):/i,
+    (_, kind: string) => `whiteboard:${kind.toLowerCase()}/`,
+  );
+}
+
+/** Markdown link destinations and definitions that begin with `target`, a
+ * regex source; the match's first group is what comes before it. */
+const linkDestination = (target: string) =>
+  new RegExp(String.raw`(\]\(\s*<?|^\s*\[[^\]\n]+\]:\s*<?)` + target, "gim");
+
+function rewriteMarkdown<T>(
+  value: T,
+  rewrite: (markdown: string) => string,
+): T {
+  const visit = (node: JsonValue) => {
+    if (isJsonArray(node)) node.forEach(visit);
+    else if (isJsonObject(node))
+      for (const [key, field] of Object.entries(node))
+        if (key === "markdown" && isStringValue(field)) {
+          const rewritten = rewrite(field);
+
+          if (rewritten !== field) node[key] = rewritten;
+        } else visit(field);
+  };
+
+  // SAFETY: documents and edits are JSON; only Markdown text changes.
+  visit(value as JsonValue);
+
+  return value;
+}
+
+const retiredLinks = linkDestination("review-(source|trace):");
+
+/** Rewrites old link prefixes in link destinations only, not code. */
+export function respellLinks(markdown: string): string {
+  if (!/review-(source|trace):/i.test(markdown)) return markdown;
+
+  return rewriteLinkDestinations(markdown, (span) =>
+    span.replace(
+      retiredLinks,
+      (_, before: string, kind: string) =>
+        `${before}whiteboard:${kind.toLowerCase()}/`,
+    ),
+  );
+}
+
+/** Every Markdown text in `document` with its links spelled the current
+ * way. */
+export function respellDocumentLinks<T>(document: T): T {
+  return rewriteMarkdown(document, respellLinks);
+}
+
+export function respellEditLinks(edit: Edit): Edit {
+  return rewriteMarkdown(edit, respellLinks);
+}
+
+/** Names a block from outside its board. Block ids are unique only within a board. */
+export type BlockRef = { board: string; block: string };
+
+export type BoardRef = BlockRef | { board: string; block?: undefined };
+
+/** Parses whiteboard:board/<id> or whiteboard:board/<id>#<blockId>. */
+export function boardLink(href: string): BoardRef | undefined {
+  const match = /^whiteboard:board\/([^#/]+)(?:#(.+))?$/.exec(href);
+
+  if (!match) return undefined;
+
+  try {
+    const board = decodeURIComponent(match[1]!);
+
+    return match[2] === undefined
+      ? { board }
+      : { board, block: decodeURIComponent(match[2]) };
+  } catch {
+    return undefined;
+  }
+}
+
+/** A link from a block to a board or one of its blocks. */
+export interface BoardLinkRef {
+  from: BlockRef;
+  to: BoardRef;
+}
+
+const parsedBlocks = new WeakMap<
+  object,
+  { markdown: string; nodes: MarkdownNode[] }
+>();
+
+/** Parsed once per text; a save reads links, sources and resources from
+ * it. */
+function blockNodes(block: { markdown: string }): MarkdownNode[] {
+  const cached = parsedBlocks.get(block);
+
+  if (cached?.markdown === block.markdown) return cached.nodes;
+
+  const nodes = [...markdownNodes(parseMarkdown(block.markdown))];
+
+  parsedBlocks.set(block, { markdown: block.markdown, nodes });
+
+  return nodes;
+}
+
+/** Every board link in a document. Malformed links are skipped; writes reject them. */
+export function boardLinks(board: string, document: Block[]): BoardLinkRef[] {
+  return elements(document).flatMap((element) =>
+    element.type === "markdown"
+      ? blockNodes(element).flatMap((node) => {
+          const to =
+            node.type === "link" ? boardLink(node.url ?? "") : undefined;
+
+          return to ? [{ from: { board, block: element.id! }, to }] : [];
+        })
+      : [],
+  );
+}
+
 /** Inline trace quotes keep paragraph/list layout while using retained resources. */
 export function traceQuoteLink(
   href: string,
 ): { traceId: string; eventId: string } | undefined {
-  const match = /^review-trace:([^#]+)#(.+)$/.exec(href);
+  const match = /^whiteboard:trace\/([^#]+)#(.+)$/.exec(canonicalLink(href));
 
   return match
     ? {
@@ -198,17 +361,18 @@ export function resourceReferences(document: Block[]): Block[] {
         ? [block]
         : [];
 
-    return [...markdownNodes(parseMarkdown(block.markdown))].flatMap(
-      (node): Block[] => {
-        if (node.type !== "link" || !node.url?.startsWith("review-trace:"))
-          return [];
-        const quote = traceQuoteLink(node.url);
+    return blockNodes(block).flatMap((node): Block[] => {
+      if (
+        node.type !== "link" ||
+        !canonicalLink(node.url ?? "").startsWith("whiteboard:trace/")
+      )
+        return [];
+      const quote = traceQuoteLink(node.url ?? "");
 
-        if (!quote) throw new ReviewInputError("Invalid trace quote link.");
+      if (!quote) throw new ReviewInputError("Invalid trace quote link.");
 
-        return [{ type: "trace_quote", ...quote, text: markdownText(node) }];
-      },
-    );
+      return [{ type: "trace_quote", ...quote, text: markdownText(node) }];
+    });
   });
 }
 
@@ -219,7 +383,16 @@ export function resourceReferences(document: Block[]): Block[] {
  */
 function documentReferences(
   document: Block[],
-  { tolerant = false }: { tolerant?: boolean } = {},
+  {
+    tolerant = false,
+    markdown = true,
+    repositoryId,
+  }: {
+    tolerant?: boolean;
+    markdown?: boolean;
+    /** The board's repository, which commit links read from. */
+    repositoryId?: string;
+  } = {},
 ): {
   id: string;
   source: LensSource;
@@ -250,47 +423,71 @@ function documentReferences(
   };
 
   return elements(document).flatMap<Reference>((element) => {
+    if (element.type === "markdown" && !markdown) return [];
+
     if (element.type === "markdown")
-      return [...markdownNodes(parseMarkdown(element.markdown))].flatMap(
-        (node) => {
-          if (node.type !== "link") return [];
-          const href = node.url ?? "";
+      return blockNodes(element).flatMap((node) => {
+        if (node.type !== "link") return [];
+        const href = canonicalLink(node.url ?? "");
 
-          if (!/^review-source:/i.test(href)) {
-            // Trace links are checked by resourceReferences.
-            if (href.startsWith("review-trace:")) return [];
+        if (!href.startsWith("whiteboard:source/")) {
+          // Trace links are checked by resourceReferences.
+          if (href.startsWith("whiteboard:trace/")) return [];
 
-            if (/^(?:https?:\/\/|mailto:|#)/i.test(href)) return [];
+          // Board links are checked against the store on write.
+          if (href.startsWith("whiteboard:board/"))
+            return boardLink(href)
+              ? []
+              : reject(
+                  `Use whiteboard:board/<sessionId> or whiteboard:board/<sessionId>#<blockId> to link a board, in block ${element.id}.`,
+                );
 
-            return reject(
-              `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](review-source:head/path#L10-L24) or review-source:base/path#L10-L24 for repository files, or review-source:diff/path#L84-R90 across sides, with a repository-relative path and verified line numbers. External links must use https://, http://, or mailto:; document anchors use #heading.`,
-            );
-          }
+          if (/^(?:https?:\/\/|mailto:|#)/i.test(href)) return [];
 
-          let target: string;
+          return reject(
+            `Unsupported Markdown link ${JSON.stringify(href)} in block ${element.id}. Use [label](whiteboard:source/head/path#L10-L24) or whiteboard:source/base/path#L10-L24 for repository files, whiteboard:source/diff/path#L84-R90 across sides, or whiteboard:source/<commit>/path#L10-L24 at a commit of the board's repository, with a repository-relative path and verified line numbers. Link another board as whiteboard:board/<sessionId>, or one of its blocks as whiteboard:board/<sessionId>#<blockId>. External links must use https://, http://, or mailto:; document anchors use #heading.`,
+          );
+        }
 
-          try {
-            target = decodeURIComponent(href.slice("review-source:".length));
-          } catch {
-            return reject("Invalid URL encoding in source link.");
-          }
+        let target: string;
 
-          // Links share the anchor grammar blocks use.
-          const anchor = target.replace(/^(head|base|diff)\//i, (side) =>
-            side.toLowerCase(),
+        try {
+          target = decodeURIComponent(href.slice("whiteboard:source/".length));
+        } catch {
+          return reject("Invalid URL encoding in source link.");
+        }
+
+        // A commit of the board's repository: the commit is the link's pins.
+        const commit = commitLinkTarget(target);
+
+        if (commit)
+          return repositoryId
+            ? select(commit.anchor, {
+                repositoryId,
+                head: commit.commit,
+              }).map((source) => ({
+                id: `${element.id}:${node.url}`,
+                source,
+              }))
+            : reject(
+                `A commit link names a commit of the board's repository, and this board has none, in block ${element.id}.`,
+              );
+
+        // Links share the anchor grammar blocks use.
+        const anchor = target.replace(/^(head|base|diff)\//i, (side) =>
+          side.toLowerCase(),
+        );
+
+        if (!parseAnchor(anchor))
+          return reject(
+            "Use whiteboard:source/head/path#L10-L24 (or base, diff/path#L84-R90 across sides, or <commit>/path#L10-L24 at a commit of the board's repository) for a source link.",
           );
 
-          if (!parseAnchor(anchor))
-            return reject(
-              "Use review-source:head/path#L10-L24 (or base, or diff/path#L84-R90 across sides) for a source link.",
-            );
-
-          return select(anchor, element.pins).map((source) => ({
-            id: `${element.id}:${node.url}`,
-            source,
-          }));
-        },
-      );
+        return select(anchor, element.pins).map((source) => ({
+          id: `${element.id}:${node.url}`,
+          source,
+        }));
+      });
 
     if (element.type === "code_peek")
       return select(element.source, element.pins).map((source) => ({
@@ -303,16 +500,18 @@ function documentReferences(
     // A step, frame and operation render the range as a peek, so a
     // whitespace-only range is an authoring mistake for each of them; prose
     // links and context sources only need the range to exist.
+    // Each of a step's ranges is its own reference, so a stale one marks only
+    // itself. The first keeps the step's id, as a single source always had.
     if (element.type === "sequence")
       return element.steps.flatMap((step) =>
-        step.source
-          ? select(step.source, step.pins ?? element.pins).map((source) => ({
-              id: step.id!,
-              source,
-              label: step.label,
-              peek: true,
-            }))
-          : [],
+        stepSources(step).flatMap((anchor, index) =>
+          select(anchor, step.pins ?? element.pins).map((source) => ({
+            id: index ? `${step.id}:source:${index}` : step.id!,
+            source,
+            label: step.label,
+            peek: true,
+          })),
+        ),
       );
 
     if (element.type === "flow_diagram")
@@ -402,10 +601,122 @@ function documentReferences(
 /** All authored attachments, including code peeks, select the aligned diff. */
 export const selectionReferences = documentReferences;
 
+const commitLinkDestination = linkDestination(
+  String.raw`whiteboard:source\/([0-9a-f]{7,40})\/`,
+);
+
+const hasCommitLink = /whiteboard:source\//i;
+
+/** Commits named by commit links, not by code samples. */
+export function commitLinkCommits(document: Block[]): string[] {
+  const commits = new Set<string>();
+
+  for (const element of elements(document))
+    if (element.type === "markdown" && hasCommitLink.test(element.markdown))
+      for (const { from, to } of linkDestinations(blockNodes(element)))
+        for (const match of element.markdown
+          .slice(from, to)
+          .matchAll(commitLinkDestination))
+          commits.add(match[2]!);
+
+  return [...commits];
+}
+
+/** Rewrites the commits Markdown commit links name, as a short commit
+ * becomes the full one on save. */
+export function respellCommitLinks(
+  document: Block[],
+  commits: ReadonlyMap<string, string>,
+): Block[] {
+  return rewriteMarkdown(document, (markdown) =>
+    hasCommitLink.test(markdown)
+      ? rewriteLinkDestinations(markdown, (span) =>
+          span.replace(
+            commitLinkDestination,
+            (_, before: string, commit: string) =>
+              `${before}whiteboard:source/${commits.get(commit) ?? commit}/`,
+          ),
+        )
+      : markdown,
+  );
+}
+
+/** Blocks that carry pins of their own for the references in them. */
+const pinnedBlockTypes = new Set([
+  "markdown",
+  "code_peek",
+  "sequence",
+  "flow_diagram",
+  "call_stack_diff",
+  "database_lens",
+]);
+
+const hasSideLink = /whiteboard:source\/(head|base)\//i;
+
+const sideLinkDestination = linkDestination(
+  String.raw`whiteboard:source\/(head|base)\/`,
+);
+
+/**
+ * Makes every reference that reads at the document's pins carry them
+ * itself, for a board about to lose its pins: Markdown head/ and base/
+ * links become commit links, and a block whose references still lean on
+ * the document's pins (any anchor, or a diff/ link) takes them as its own.
+ * Nothing changes what it points at.
+ */
+export function pinDocumentReferences(document: Block[], pins: Pins): Block[] {
+  const own: SourcePins = {
+    repositoryId: pins.repositoryId,
+    base: pins.base,
+    head: pins.head,
+  };
+
+  const pinned = structuredClone(document);
+
+  for (const element of elements(pinned)) {
+    if (!pinnedBlockTypes.has(element.type)) continue;
+
+    // SAFETY: every pinned block type has optional source pins of its own.
+    const block = element as Block & { pins?: SourcePins };
+
+    if (block.pins) continue;
+
+    if (block.type === "markdown") {
+      block.markdown = respellLinks(block.markdown);
+
+      if (hasSideLink.test(block.markdown))
+        block.markdown = rewriteLinkDestinations(block.markdown, (span) =>
+          span.replace(
+            sideLinkDestination,
+            (_, before: string, side: string) =>
+              `${before}whiteboard:source/${side.toLowerCase() === "base" ? pins.base : pins.head}/`,
+          ),
+        );
+    }
+
+    if (
+      documentReferences([block], { tolerant: true }).some(
+        (reference) => !reference.source.pins,
+      )
+    )
+      block.pins = own;
+  }
+
+  return pinned;
+}
+
+/** The repository a board's commit links read from: its target's. */
+export function boardRepositoryId(board: {
+  target?: { repositoryId: string };
+  pins?: { repositoryId: string };
+}): string | undefined {
+  return board.target?.repositoryId ?? board.pins?.repositoryId;
+}
+
 /** Per-side read coordinates for endpoint validation and retained source quotes. */
 export function sourceReferences(
   document: Block[],
-  options: { tolerant?: boolean } = {},
+  options: { tolerant?: boolean; repositoryId?: string } = {},
 ) {
   return selectionReferences(document, options).flatMap((ref) =>
     sourceAnchors(ref.source).map((source) => ({ ...ref, source })),
@@ -413,12 +724,16 @@ export function sourceReferences(
 }
 
 /** Includes lenses and maps without inline ranges. */
-export function hasCodeReferences(review: {
+/** Whether a board reads code at its own pins: a commit link or a block
+ * with pins of its own names its commits itself. */
+export function readsAtBoardPins(review: {
   document: Block[];
   lenses?: readonly Lens[];
 }): boolean {
   return Boolean(
-    sourceReferences(review.document).length ||
+    sourceReferences(review.document, { tolerant: true }).some(
+      (reference) => !reference.source.pins,
+    ) ||
     review.lenses?.length ||
     resourceReferences(review.document).some(
       (block) => block.type === "software_map",
@@ -465,10 +780,7 @@ export const editSchema = edits(contentSchema, blockSchema, z.json());
 
 export type Edit = z.infer<typeof editSchema>;
 
-// Tutorial blocks are the built-in tutorial's, not for agents to write.
-const writableBlockTypes = Object.keys(blocks).filter(
-  (type) => type !== "tutorial",
-);
+const writableBlockTypes = Object.keys(blocks);
 
 const namedByType = (types: string[]) =>
   z
@@ -511,6 +823,8 @@ export interface EditSummary {
   units?: string[];
   /** The agent whose courier draws this edit, when the host could tell. */
   activityId?: string;
+  /** The Ask thread that made this edit, if any. */
+  threadId?: string;
 }
 
 /** A component an edit wrote, named so the author can address it. */
@@ -708,17 +1022,32 @@ export function assignFreshIds(
   element: Element,
   allocate: (prefix: string) => string,
 ): void {
-  if (element.id !== undefined)
-    throw new ReviewInputError("IDs are assigned by the server.");
-  element.id = allocate(idPrefix(element));
+  assignIds(element, allocate, true);
+}
 
-  for (const child of children(element)) assignFreshIds(child, allocate);
+/** Give ids to the parts of an element tree that have none, keeping the
+ * rest: a person's save names the blocks it kept and leaves new ones bare. */
+export function assignMissingIds(
+  element: Element,
+  allocate: (prefix: string) => string,
+): void {
+  assignIds(element, allocate, false);
+}
 
+function assignIds(
+  element: Element,
+  allocate: (prefix: string) => string,
+  fresh: boolean,
+): void {
   const assign = (item: { id?: string }, prefix: string) => {
-    if (item.id !== undefined)
+    if (item.id === undefined) item.id = allocate(prefix);
+    else if (fresh)
       throw new ReviewInputError("IDs are assigned by the server.");
-    item.id = allocate(prefix);
   };
+
+  assign(element, idPrefix(element));
+
+  for (const child of children(element)) assignIds(child, allocate, fresh);
 
   if (element.type === "call_stack_diff")
     for (const frame of [...element.base, ...element.head])
@@ -732,16 +1061,10 @@ export function assignFreshIds(
     }
 }
 
-export interface ApplyEditOptions {
-  /** Where a root-level insert with no placement lands: the end by default. */
-  placement?: "first" | "last";
-}
-
 export function applyEdit(
   document: Block[],
   edit: Edit,
   allocate: (prefix: string) => string,
-  options: ApplyEditOptions = {},
 ): Applied {
   adoptFlowUnits(document, allocate);
 
@@ -805,14 +1128,10 @@ export function applyEdit(
     // Resolve the destination before detaching, then compute its final position.
     if (from) from.splice(from.indexOf(element), 1);
 
-    // A running log reads newest first, so a root insert with no placement
-    // may lead the document; a move or a unit inside a diagram never does.
     const index =
-      afterId !== undefined
-        ? siblings.findIndex((s) => s.id === afterId) + 1
-        : !parent && !from && options.placement === "first"
-          ? 0
-          : siblings.length;
+      afterId === undefined
+        ? siblings.length
+        : siblings.findIndex((s) => s.id === afterId) + 1;
 
     siblings.splice(index, 0, element);
   };

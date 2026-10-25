@@ -1,4 +1,5 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -50,6 +51,13 @@ const BINARY = {
   type: "file",
   file: FILE,
   diff: { type: "binary", rhs: { size: 2 } },
+};
+
+const UPDATE = {
+  type: "update",
+  file: FILE,
+  regions: [{ id: 1, collapsed: true, label: "Sums" }],
+  visible: { added: 0, removed: 0 },
 };
 
 const COMPLETE = { type: "complete", succeeded: 1, failed: 0 };
@@ -164,6 +172,60 @@ test.each([
 ])("rejects invalid or incomplete streams", async (script, message) => {
   const root = await executable(script);
   await expect(collect(request(root))).rejects.toThrow(message);
+});
+
+test("passes an update after its file", async () => {
+  const root = await executable(
+    `${emit(START)} ${emit(BINARY)} ${emit(UPDATE)} ${emit(COMPLETE)}`,
+  );
+
+  expect(await collect(request(root))).toEqual([
+    START,
+    BINARY,
+    UPDATE,
+    COMPLETE,
+  ]);
+});
+
+test("rejects an update before its file", async () => {
+  const root = await executable(
+    `${emit(START)} ${emit(UPDATE)} ${emit(BINARY)} ${emit(COMPLETE)}`,
+  );
+
+  await expect(collect(request(root))).rejects.toThrow(
+    "Unexpected diffr event: update",
+  );
+});
+
+test("rejects an update after completion", async () => {
+  const root = await executable(
+    `${emit(START)} ${emit(BINARY)} ${emit(COMPLETE)} ${emit(UPDATE)}`,
+  );
+
+  await expect(collect(request(root))).rejects.toThrow("after completion");
+});
+
+test("replays updates to a reader that joins after the run", async () => {
+  const { StructuralComparisons } = await import("./structural-comparisons.js");
+
+  const root = await executable(
+    `${emit(START)} ${emit(BINARY)} ${emit(UPDATE)} ${emit(COMPLETE)}`,
+  );
+
+  const cache = new StructuralComparisons();
+
+  try {
+    for await (const _event of cache.stream(request(root))) {
+      /* drain */
+    }
+
+    const replay = [];
+
+    for await (const event of cache.stream(request(root))) replay.push(event);
+    expect(replay).toEqual([START, BINARY, UPDATE, COMPLETE]);
+  } finally {
+    cache.close();
+  }
 });
 
 test("reports launch failures", async () => {
@@ -377,6 +439,41 @@ test("keeps the ten most recently read idle comparisons", async () => {
     expect(await runs()).toBe(11);
     await read("head-0");
     expect(await runs()).toBe(12);
+  } finally {
+    cache.close();
+  }
+});
+
+test.each([
+  ".git/info/attributes",
+  ".gitattributes",
+  "config/diffr/config.toml",
+])("editing %s reclassifies a cached comparison", async (file) => {
+  const { StructuralComparisons } = await import("./structural-comparisons.js");
+
+  const root = await executable(`
+      require('node:fs').appendFileSync('runs', 'x');
+      ${emit(START)} ${emit(BINARY)} ${emit(COMPLETE)}
+    `);
+
+  execFileSync("git", ["init", "-q", root]);
+  const cache = new StructuralComparisons();
+
+  const read = async () => {
+    for await (const _event of cache.stream(request(root))) {
+      /* drain */
+    }
+
+    return (await readFile(path.join(root, "runs"), "utf8")).length;
+  };
+
+  try {
+    expect(await read()).toBe(1);
+    expect(await read()).toBe(1);
+    await mkdir(path.dirname(path.join(root, file)), { recursive: true });
+    await writeFile(path.join(root, file), "edited\n");
+    expect(await read()).toBe(2);
+    expect(await read()).toBe(2);
   } finally {
     cache.close();
   }

@@ -18,9 +18,9 @@
 
 import {
   type JsonObject,
+  REVIEW_COLOR_THEME_KINDS,
   REVIEW_DIFF_LAYOUTS,
   REVIEW_DIFF_LAYOUT_SCOPES,
-  REVIEW_THEME_CHOICES,
   isJsonObject,
   jsonBoolean,
   jsonNumber,
@@ -28,6 +28,8 @@ import {
 } from "@dev.fast/review-protocol";
 import { z } from "zod";
 
+import { askAgentIds } from "./ask/thread-state";
+import { SELECTION_UNAVAILABLE_REASONS } from "./lens-selection";
 import { containsFilePath, hasPossibleUserInfo } from "./telemetry-clean-text";
 
 /** Property value validators: an enum of allowed strings, or a scalar type. */
@@ -64,9 +66,17 @@ const PEEK_VIA = [
   "map",
   "db_lens",
   "call_stack_frame",
+  "diff_definition",
 ] as const;
 
 export const PEEK_ROOT_KIND = ["range"] as const;
+
+/** `unresolved`: progress finished without this selection; `error`: progress failed. */
+export const PEEK_FAILURE_REASON = [
+  ...SELECTION_UNAVAILABLE_REASONS,
+  "error",
+  "unresolved",
+] as const;
 
 export const LSP_FEATURE = [
   "hover",
@@ -135,24 +145,27 @@ export const SETTING_NAME = [
   "telemetry_enabled",
   "keymap",
   "software_map_enabled",
-  "scratchpad_enabled",
+  "sharing_enabled",
   "diffr_config",
-  "structural_diff",
   "theme",
   "ctrl_tab",
+  "open_files_in",
   "ready_notification",
   "document_width",
   "code_font_size",
+  "document_font_size",
+  "reading_font",
+  "code_font_family",
+  "font_ligatures",
+  "diff_font_size",
+  "diff_word_wrap",
+  "diff_ignore_whitespace",
 ] as const;
 
 export const REVIEW_OPENED_VIA = ["home", "cli", "other"] as const;
 
-/** Where a review's source comes from: its target's kind, or the one scratchpad. */
-export const SESSION_SOURCE_KIND = [
-  "worktree",
-  "commits",
-  "scratchpad",
-] as const;
+/** Where a review's source comes from: its target's kind. */
+export const SESSION_SOURCE_KIND = ["worktree", "commits", "project"] as const;
 
 /**
  * The authoring agent a review session is attributed to. This is the one
@@ -242,10 +255,54 @@ export const INSTALL_LOCATION = [
   "other",
 ] as const;
 
-export const DIFF_OPENED_VIA = ["topbar", "lens", "locate"] as const;
+export const DIFF_OPENED_VIA = [
+  "topbar",
+  "sidebar",
+  "lens",
+  "locate",
+  "file_picker",
+] as const;
 
 /** Which diff opened: a commit's, or a file diff drawn plain or structural. */
-export const DIFF_OPENED_KIND = ["commit", "file", "structural"] as const;
+export const DIFF_OPENED_KIND = ["commit", "structural"] as const;
+
+export const DIFF_FAILED_REASON = [
+  "missing_binary",
+  "process_exit",
+  "stream_ended",
+  "aborted",
+  "file_error",
+  "other",
+] as const;
+
+/** GitHub Enterprise is any GitHub host but github.com. */
+export const PR_PROVIDER = [
+  "github",
+  "github_enterprise",
+  "azure_devops",
+] as const;
+
+export const REMOTE_HOST_PROBLEM = [
+  "unreachable",
+  "not_installed",
+  "auth_failed",
+  "unsupported",
+  "incompatible",
+] as const;
+
+export const REMOTE_HOST_TARGET = ["linux-x64", "linux-arm64"] as const;
+
+export const ASK_SELECTION = ["text", "code", "diff", "review"] as const;
+
+export const ONBOARDING_STEP = ["welcome", "install", "run"] as const;
+
+export const RUN_MODE = ["draw", "copy"] as const;
+
+export const NEW_WHITEBOARD_VIA = ["button", "command", "sidebar"] as const;
+
+export const NEW_WHITEBOARD_MODE = [...RUN_MODE, "empty"] as const;
+
+export const FIND_SURFACE = ["review", "diff"] as const;
 
 export const DISCORD_VIA = ["topbar", "dialog", "docs"] as const;
 
@@ -355,10 +412,6 @@ export const UI_TELEMETRY_EVENTS = {
   map_expanded: {
     event: "review_map_expanded",
     properties: { level: MAP_LEVEL },
-  },
-  commit_expanded: {
-    event: "review_commit_expanded",
-    properties: { expanded: "boolean" },
   },
   commit_diff_opened: {
     event: "review_commit_diff_opened",
@@ -499,11 +552,11 @@ export const UI_TELEMETRY_EVENTS = {
   },
   setting_changed: {
     event: "review_setting_changed",
-    // value carries the chosen option for the one multi-valued setting, theme.
+    // value carries whether the chosen theme is dark or light.
     properties: {
       setting: SETTING_NAME,
       enabled: "boolean",
-      value: REVIEW_THEME_CHOICES,
+      value: REVIEW_COLOR_THEME_KINDS,
     },
   },
   review_opened: {
@@ -515,6 +568,8 @@ export const UI_TELEMETRY_EVENTS = {
     properties: {
       source_kind: SESSION_SOURCE_KIND,
       agent_kind: SESSION_AGENT_KIND,
+      remote: "boolean",
+      pr_provider: PR_PROVIDER,
     },
   },
   session_ended: {
@@ -550,6 +605,10 @@ export const UI_TELEMETRY_EVENTS = {
     event: "review_app_ready",
     properties: { duration_ms: "number", install_location: INSTALL_LOCATION },
   },
+  loopback_tls_fallback: {
+    event: "review_loopback_tls_fallback",
+    properties: { error_name: "enum_free_short" },
+  },
   error_burst: {
     event: "review_error_burst",
     properties: { message_hash: "hash_hex", suppressed: "number" },
@@ -558,7 +617,10 @@ export const UI_TELEMETRY_EVENTS = {
     event: "review_diff_opened",
     properties: { kind: DIFF_OPENED_KIND, via: DIFF_OPENED_VIA },
   },
-  scratchpad_opened: { event: "review_scratchpad_opened", properties: {} },
+  diff_failed: {
+    event: "review_diff_failed",
+    properties: { reason: DIFF_FAILED_REASON, files: "number" },
+  },
   discord_clicked: {
     event: "review_discord_clicked",
     properties: { via: DISCORD_VIA },
@@ -577,7 +639,7 @@ export const UI_TELEMETRY_EVENTS = {
   },
   peek_resolve_failed: {
     event: "review_peek_resolve_failed",
-    properties: { root_kind: PEEK_ROOT_KIND },
+    properties: { root_kind: PEEK_ROOT_KIND, reason: PEEK_FAILURE_REASON },
   },
   review_deleted: {
     event: "review_review_deleted",
@@ -585,6 +647,59 @@ export const UI_TELEMETRY_EVENTS = {
   },
   // The reader copied the review's share link.
   review_shared: { event: "review_review_shared", properties: {} },
+  find_opened: {
+    event: "review_find_opened",
+    properties: { surface: FIND_SURFACE },
+  },
+  ask_sent: {
+    event: "review_ask_sent",
+    properties: {
+      agent: askAgentIds,
+      follow_up: "boolean",
+      selection: ASK_SELECTION,
+      remote: "boolean",
+    },
+  },
+  onboarding_step_viewed: {
+    event: "review_onboarding_step_viewed",
+    properties: { step: ONBOARDING_STEP },
+  },
+  onboarding_skipped: {
+    event: "review_onboarding_skipped",
+    properties: { step: ONBOARDING_STEP },
+  },
+  onboarding_run_started: {
+    event: "review_onboarding_run_started",
+    properties: { mode: RUN_MODE, agent: askAgentIds },
+  },
+  new_whiteboard_opened: {
+    event: "review_new_whiteboard_opened",
+    properties: { via: NEW_WHITEBOARD_VIA },
+  },
+  new_whiteboard_started: {
+    event: "review_new_whiteboard_started",
+    properties: {
+      mode: NEW_WHITEBOARD_MODE,
+      embedded: "boolean",
+      agent: askAgentIds,
+    },
+  },
+  remote_host_installed: {
+    event: "review_remote_host_installed",
+    properties: {
+      ok: "boolean",
+      target: REMOTE_HOST_TARGET,
+      duration_ms: "number",
+    },
+  },
+  remote_host_connected: {
+    event: "review_remote_host_connected",
+    properties: {
+      ok: "boolean",
+      problem: REMOTE_HOST_PROBLEM,
+      direct: "boolean",
+    },
+  },
 } as const satisfies Record<
   string,
   { event: string; properties: Record<string, UiTelemetryPropertySpec> }

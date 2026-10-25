@@ -1,5 +1,8 @@
 import { testReviewSession } from "@canvas/review-session-test-utils";
-import type { ReviewVerbRequest } from "@dev.fast/review-protocol";
+import type {
+  ReviewCanvasBridge,
+  ReviewVerbRequest,
+} from "@dev.fast/review-protocol";
 import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -21,9 +24,18 @@ describe("ReviewSessionProvider", () => {
     const postedA: ReviewVerbRequest[] = [];
     const postedB: ReviewVerbRequest[] = [];
 
+    const requestA = vi.fn<NonNullable<ReviewCanvasBridge["request"]>>(
+      async () => new Response(null, { status: 204 }),
+    );
+
+    const requestB = vi.fn<NonNullable<ReviewCanvasBridge["request"]>>(
+      async () => new Response(null, { status: 204 }),
+    );
+
     const sessionA = testReviewSession(
-      { reviewId: "a", token: "token-a" },
+      { reviewId: "a" },
       {
+        request: requestA,
         post: async (request) => {
           postedA.push(request);
 
@@ -33,8 +45,9 @@ describe("ReviewSessionProvider", () => {
     );
 
     const sessionB = testReviewSession(
-      { reviewId: "b", token: "token-b" },
+      { reviewId: "b" },
       {
+        request: requestB,
         post: async (request) => {
           postedB.push(request);
 
@@ -50,12 +63,6 @@ describe("ReviewSessionProvider", () => {
     const rootB = createRoot(containerB);
     roots.push(rootA, rootB);
 
-    const fetchMock = vi.fn<typeof fetch>(
-      async () => new Response(null, { status: 204 }),
-    );
-
-    vi.stubGlobal("fetch", fetchMock);
-
     await act(async () => {
       rootA.render(
         <ReviewSessionProvider session={sessionA}>
@@ -70,13 +77,7 @@ describe("ReviewSessionProvider", () => {
     });
 
     expect(containerA.querySelector("output")?.textContent).toContain(
-      "/reviews-api/a/file",
-    );
-    expect(containerA.querySelector("output")?.textContent).toContain(
       "progressive-review:probe:a",
-    );
-    expect(containerB.querySelector("output")?.textContent).toContain(
-      "/reviews-api/b/file",
     );
     expect(containerB.querySelector("output")?.textContent).toContain(
       "progressive-review:probe:b",
@@ -93,14 +94,8 @@ describe("ReviewSessionProvider", () => {
     expect(postedB).toEqual([
       { name: "showReviewView", args: { view: "diff" } },
     ]);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "http://127.0.0.1:5570/reviews-api/b/file",
-      expect.objectContaining({
-        headers: expect.objectContaining({}),
-      }),
-    );
-    const requestHeaders = new Headers(fetchMock.mock.calls[0]?.[1]?.headers);
-    expect(requestHeaders.get("x-review-token")).toBe("token-b");
+    expect(requestA).not.toHaveBeenCalled();
+    expect(requestB).toHaveBeenCalledWith("/reviews-api/b/file", undefined);
   });
 });
 
@@ -111,7 +106,7 @@ function SessionProbe() {
   return (
     <>
       <output>
-        {session.apiUrl("/file")} {session.storageKey("probe")} {clicks}
+        {session.storageKey("probe")} {clicks}
       </output>
       <button
         type="button"

@@ -8,18 +8,24 @@ on:
         required: true
         type: string
         default: main
+      version:
+        description: "Existing preview tag to build again for the selected platforms, e.g. v0.2.5-preview.20261015.117. Overrides ref."
+        required: false
+        type: string
+        default: ""
       dry_run:
         description: "Build and validate only. Do not upload."
         required: false
         type: boolean
         default: false
       platforms:
-        description: "Platforms to release; only all creates a promotable preview tag"
+        description: "Platforms to release"
         required: true
         type: choice
         options:
           - all
-          - macos
+          - macos-arm64
+          - macos-x64
           - linux
           - windows
         default: all
@@ -27,8 +33,10 @@ on:
 permissions:
   contents: read
 
+# Per selection, so backfilling one platform does not wait behind a release of
+# another. Latest aliases only move forward, so overlapping runs are safe.
 concurrency:
-  group: review-desktop-preview
+  group: review-desktop-preview-${{ inputs.platforms }}
   cancel-in-progress: false
 
 jobs:
@@ -55,12 +63,28 @@ jobs:
       - name: Checkout preview ref
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ inputs.version && format('refs/tags/{0}', inputs.version) || inputs.ref }}
 
       - name: Compute preview version
         id: version
         shell: bash
+        env:
+          EXISTING: ${{ inputs.version }}
         run: |
+          # A backfill rebuilds an existing preview, so it keeps that version.
+          if [ -n "$EXISTING" ]; then
+            if [[ ! "$EXISTING" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]{8}\.[0-9]+$ ]]; then
+              echo "::error::version '${EXISTING}' is not a preview tag (vX.Y.Z-preview.YYYYMMDD.N)."
+              exit 1
+            fi
+            VERSION="${EXISTING#v}"
+            COMMIT=$(git rev-parse HEAD)
+            echo "Backfilling Whiteboard ${VERSION} from ${COMMIT}"
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           CURRENT=$(node -p "require('./apps/review-desktop/package.json').version")
           if [[ "$CURRENT" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)([-+].*)?$ ]]; then
             PATCH="${BASH_REMATCH[3]}"
@@ -77,10 +101,9 @@ jobs:
           echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
 
       # A re-run reuses GITHUB_RUN_NUMBER, so it recomputes the same version
-      # string while re-resolving the mutable ref, which may have moved on. Left
-      # to the tag push at the end, that collision would surface only after
-      # signing, notarization, and an R2 upload that already overwrote the keys
-      # for this version.
+      # string while re-resolving the mutable ref, which may have moved on.
+      # Platforms do not wait for the tag job, so left to it, that collision
+      # would surface while they publish over this version's keys.
       - name: Check the preview tag is free
         shell: bash
         env:
@@ -102,15 +125,13 @@ jobs:
           fi
 
   remote:
-    name: Publish remote tarballs and npm package
+    name: Publish remote tarballs
     needs: version
-    runs-on: ubuntu-latest
+    # xz compresses on every core.
+    runs-on: review_big_boy
     timeout-minutes: 60
     permissions:
       contents: read
-      id-token: write
-    outputs:
-      whiteboard_remote: ${{ steps.remote.outputs.whiteboard_remote }}
     env:
       VERSION: ${{ needs.version.outputs.version }}
       COMMIT: ${{ needs.version.outputs.commit }}
@@ -122,26 +143,9 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .nvmrc
-          registry-url: https://registry.npmjs.org
           cache: pnpm
       - name: Install build dependencies
         run: pnpm install --frozen-lockfile
-      - name: Resolve dist-tag and publication state
-        id: npm
-        env:
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          DIST_TAG=$(node scripts/review-cli-release.mjs dist-tag "$VERSION")
-          if PUBLISHED=$(node scripts/review-cli-release.mjs published "$VERSION" "$COMMIT"); then
-            :
-          elif [ "$DRY_RUN" = true ]; then
-            echo "::warning::@dev.fast/whiteboard@${VERSION} exists on npm from another commit, or the registry check failed (see above); this dry run skips publish validation."
-            PUBLISHED=true
-          else
-            exit 1
-          fi
-          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
-          echo "published=$PUBLISHED" >> "$GITHUB_OUTPUT"
       - name: Install Code OSS native build prerequisites
         run: |
           # The hosted runner image lists an HTTP Azure mirror first. That
@@ -202,9 +206,9 @@ jobs:
         run: |
           source apps/review-desktop/scripts/code-oss-dependencies.sh
           ensure_code_oss_dependencies "$PWD/apps/review-desktop" "$PWD/apps/review-desktop/code-oss"
-          for t in linux-x64 linux-arm64; do
-            node apps/review-desktop/scripts/build-remote-tarball.mjs --target "$t" --out remote-artifacts --version "$VERSION" --commit "$COMMIT"
-          done
+          node apps/review-desktop/scripts/build-remote-tarball.mjs --target linux-x64 --target linux-arm64 \
+            --out remote-artifacts --version "$VERSION" --commit "$COMMIT"
+          cp packages/review/remote/install.sh remote-artifacts/install.sh
       # Payloads before the pin: no Desktop build may pin a tarball R2 lacks.
       - name: Upload the remote tarballs to R2
         if: ${{ !inputs.dry_run && steps.existing.outputs.published != 'true' }}
@@ -218,11 +222,58 @@ jobs:
           PREFIX="s3://${R2_BUCKET}/releases/${VERSION}/remote/"
           aws s3 cp remote-artifacts/ "$PREFIX" --recursive --exclude "*" --include "*.tar.xz" --content-type application/x-xz
           aws s3 cp remote-artifacts/ "$PREFIX" --recursive --exclude "*" --include "*.sha256" --content-type text/plain
+          aws s3 cp remote-artifacts/install.sh "${PREFIX}install.sh" --content-type text/plain
+      # Platform builds start before this job ends and wait for this pin only
+      # when they package (wait-for-run-artifact.mjs).
       - name: Pin the remote tarballs
-        id: remote
         run: |
-          PIN=$(node apps/review-desktop/scripts/stamp-remote-artifacts.mjs remote-artifacts "$VERSION" "https://install.dev.fast/releases/${VERSION}/remote")
-          echo "whiteboard_remote=$PIN" >> "$GITHUB_OUTPUT"
+          mkdir -p remote-pin
+          node apps/review-desktop/scripts/stamp-remote-artifacts.mjs remote-artifacts "$VERSION" "https://install.dev.fast/releases/${VERSION}/remote" > remote-pin/pin.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: whiteboard-remote-pin-${{ env.VERSION }}
+          path: remote-pin/pin.json
+          overwrite: true
+
+  npm:
+    name: Publish npm package
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      COMMIT: ${{ needs.version.outputs.commit }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.version.outputs.commit }}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+      - name: Install build dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Resolve dist-tag and publication state
+        id: npm
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          DIST_TAG=$(node scripts/review-cli-release.mjs dist-tag "$VERSION")
+          if PUBLISHED=$(node scripts/review-cli-release.mjs published "$VERSION" "$COMMIT"); then
+            :
+          elif [ "$DRY_RUN" = true ]; then
+            echo "::warning::@dev.fast/whiteboard@${VERSION} exists on npm from another commit, or the registry check failed (see above); this dry run skips publish validation."
+            PUBLISHED=true
+          else
+            exit 1
+          fi
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "published=$PUBLISHED" >> "$GITHUB_OUTPUT"
       - name: Build release tarball
         run: |
           jq -n --arg version "$VERSION" --arg commit "$COMMIT" '{$version, $commit}' > release-plan.json
@@ -253,221 +304,72 @@ jobs:
   # build signs with the production repository key rather than a CI key.
   linux:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'linux' }}
-    needs: [version, remote]
+    needs: version
+    permissions:
+      contents: write
+      actions: read
     uses: ./.github/workflows/review-linux-build.yml
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
-      whiteboard_remote: ${{ needs.remote.outputs.whiteboard_remote }}
       release_signing: ${{ !inputs.dry_run }}
+      channel: preview
+      publish: ${{ !inputs.dry_run }}
     secrets: inherit
 
   windows:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'windows' }}
-    needs: [version, remote]
+    needs: version
     permissions:
-      contents: read
+      contents: write
+      actions: read
       id-token: write
     uses: ./.github/workflows/review-windows-build.yml
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
-      whiteboard_remote: ${{ needs.remote.outputs.whiteboard_remote }}
       sign: true
+      channel: preview
+      publish: ${{ !inputs.dry_run }}
+    secrets: inherit
 
-  macos:
-    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'macos' }}
-    needs: [version, remote]
+  macos-arm64:
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'macos-arm64' }}
+    needs: version
     permissions:
-      contents: read
+      contents: write
       actions: read
     uses: ./.github/workflows/review-macos-build.yml
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
-      whiteboard_remote: ${{ needs.remote.outputs.whiteboard_remote }}
+      target: darwin-arm64
       channel: preview
+      publish: ${{ !inputs.dry_run }}
     secrets: inherit
 
-  validate:
-    name: Validate selected platforms
-    needs: [version, macos, linux, windows]
-    if: ${{ !cancelled() && needs.version.result == 'success' }}
-    runs-on: ubuntu-latest
-    permissions: {}
-    env:
-      PLATFORMS: ${{ inputs.platforms }}
-      macos: ${{ needs.macos.result }}
-      linux: ${{ needs.linux.result }}
-      windows: ${{ needs.windows.result }}
-    steps:
-      - name: Require every selected build and validation
-        run: |
-          for platform in macos linux windows; do
-            if [ "$PLATFORMS" = all ] || [ "$PLATFORMS" = "$platform" ]; then
-              result="${!platform}"
-              if [ "$result" != success ]; then
-                echo "::error::${platform} build and validation: ${result}"
-                exit 1
-              fi
-            fi
-          done
-
-  publish-macos:
-    name: Publish macOS preview
-    needs: [version, validate]
-    if: ${{ !cancelled() && needs.validate.result == 'success' && !inputs.dry_run && (inputs.platforms == 'all' || inputs.platforms == 'macos') }}
-    runs-on: ubuntu-latest
-    env:
-      RELEASE_VERSION: ${{ needs.version.outputs.version }}
-      RELEASE_COMMIT: ${{ needs.version.outputs.commit }}
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          digest-mismatch: warn
-          pattern: macos-*
-          path: dist
-
-      # Payloads first, manifests last: a client must never see a latest.json
-      # whose zip is not yet downloadable, on either arch.
-      - name: Upload preview to R2
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
-          AWS_REGION: auto
-          R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
-        run: |
-          for dir in dist/macos-*; do
-            target="${dir#dist/macos-}"
-            DMG_DISPOSITION="attachment; filename=\"df-whiteboard-preview-${RELEASE_VERSION}-${target#darwin-}.dmg\""
-            RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/${target}"
-            for zip in "$dir"/*-"${target}"-"${RELEASE_VERSION}".zip; do
-              aws s3 cp "$zip" "${RELEASE_PREFIX}/$(basename "$zip")" \
-                --content-type application/zip
-            done
-            aws s3 cp "$dir/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
-              "${RELEASE_PREFIX}/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
-              --content-type application/x-apple-diskimage \
-              --content-disposition "$DMG_DISPOSITION"
-            aws s3 cp "$dir/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
-              "s3://${R2_BUCKET}/releases/preview-latest/${target}/Whiteboard.dmg" \
-              --content-type application/x-apple-diskimage \
-              --content-disposition "$DMG_DISPOSITION"
-          done
-
-          for dir in dist/macos-*; do
-            target="${dir#dist/macos-}"
-            aws s3 cp "$dir/latest.json" \
-              "s3://${R2_BUCKET}/update/preview/${target}/latest.json" \
-              --content-type application/json
-          done
-
-      - name: Verify preview update feed
-        run: |
-          echo "Feed for an outdated preview client (expect 200 with ${RELEASE_VERSION}):"
-          RESPONSE=$(curl -sf "https://update.dev.fast/api/update/darwin-arm64/preview/0000000000000000000000000000000000000000")
-          echo "$RESPONSE"
-          echo "$RESPONSE" | grep -F "\"productVersion\":\"${RELEASE_VERSION}\""
-          echo "$RESPONSE" | grep -F "\"version\":\"${RELEASE_COMMIT}\""
-          echo "$RESPONSE" | grep -F "/Review-darwin-arm64-${RELEASE_VERSION}.zip"
-
-          echo "Feed for a Whiteboard Preview.app install (expect the Whiteboard zip):"
-          curl -sf "https://update.dev.fast/api/update/darwin-arm64/preview/0000000000000000000000000000000000000000?bundle=Whiteboard%20Preview" \
-            | grep -F "/Whiteboard-darwin-arm64-${RELEASE_VERSION}.zip"
-
-          echo "Feed for the just-released commit (expect 204):"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://update.dev.fast/api/update/darwin-arm64/preview/${RELEASE_COMMIT}")
-          echo "$STATUS"
-          test "$STATUS" = "204"
-
-          echo "Intel preview feed (clients send plain darwin):"
-          curl -sf "https://update.dev.fast/api/update/darwin/preview/0000000000000000000000000000000000000000?bundle=Whiteboard%20Preview" \
-            | grep -F "/Whiteboard-darwin-x64-${RELEASE_VERSION}.zip"
-          test "$(curl -s -o /dev/null -w '%{http_code}' "https://update.dev.fast/api/update/darwin/preview/${RELEASE_COMMIT}")" = 204
-
-      - name: Verify preview install landing
-        run: |
-          echo "install.dev.fast/preview (expect 302 to the preview disk image):"
-          LOCATION=$(curl -s -o /dev/null -w "%{redirect_url}" https://install.dev.fast/preview)
-          echo "$LOCATION"
-          test "$LOCATION" = "https://install.dev.fast/releases/preview-latest/darwin-arm64/Whiteboard.dmg"
-
-          echo "Following it (expect 200 and a disk image):"
-          curl -sfL -o /dev/null -w "%{http_code} %{content_type}\n" https://install.dev.fast/preview \
-            | grep -F "200 application/x-apple-diskimage"
-
-          echo "Intel preview disk image (expect a disk image):"
-          curl -sfI https://install.dev.fast/releases/preview-latest/darwin-x64/Whiteboard.dmg | grep -i "content-type: application/x-apple-diskimage"
-
-  publish-linux:
-    name: Publish Linux preview repository
+  macos-x64:
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'macos-x64' }}
+    needs: version
     permissions:
       contents: write
-    needs: [version, validate]
-    if: ${{ !cancelled() && needs.validate.result == 'success' && !inputs.dry_run && (inputs.platforms == 'all' || inputs.platforms == 'linux') }}
-    uses: ./.github/workflows/review-linux-publish.yml
+      actions: read
+    uses: ./.github/workflows/review-macos-build.yml
     with:
+      commit: ${{ needs.version.outputs.commit }}
+      version: ${{ needs.version.outputs.version }}
+      target: darwin-x64
       channel: preview
+      publish: ${{ !inputs.dry_run }}
     secrets: inherit
 
-  publish-windows:
-    name: Publish Windows preview installers
-    environment: review-release
-    needs: [version, validate]
-    if: ${{ !cancelled() && needs.validate.result == 'success' && !inputs.dry_run && (inputs.platforms == 'all' || inputs.platforms == 'windows') }}
-    runs-on: ubuntu-latest
-    env:
-      RELEASE_VERSION: ${{ needs.version.outputs.version }}
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          digest-mismatch: warn
-          name: windows-packages
-          path: windows-packages
-      # Versioned payloads first, then the alias install.dev.fast/windows/preview serves.
-      - name: Upload preview to R2
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
-          AWS_REGION: auto
-          R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
-        run: |
-          RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/win32-x64"
-          SETUP="Whiteboard-Preview-${RELEASE_VERSION}-Setup.exe"
-          aws s3 cp windows-packages/Whiteboard-win32-x64-user.exe "${RELEASE_PREFIX}/${SETUP}" \
-            --content-type application/vnd.microsoft.portable-executable \
-            --content-disposition "attachment; filename=\"${SETUP}\""
-          aws s3 cp windows-packages/Whiteboard-win32-x64-system.exe "${RELEASE_PREFIX}/Whiteboard-Preview-${RELEASE_VERSION}-System-Setup.exe" \
-            --content-type application/vnd.microsoft.portable-executable \
-            --content-disposition "attachment; filename=\"Whiteboard-Preview-${RELEASE_VERSION}-System-Setup.exe\""
-          aws s3 cp windows-packages/Whiteboard-win32-x64.zip "${RELEASE_PREFIX}/Whiteboard-Preview-win32-x64-${RELEASE_VERSION}.zip" \
-            --content-type application/zip
-          aws s3 cp windows-packages/Whiteboard-win32-x64-user.exe \
-            "s3://${R2_BUCKET}/releases/preview-latest/win32-x64/Whiteboard-Setup.exe" \
-            --content-type application/vnd.microsoft.portable-executable \
-            --content-disposition "attachment; filename=\"${SETUP}\""
-      - name: Verify preview install landing
-        run: |
-          echo "install.dev.fast/windows/preview (expect 302 to the preview installer):"
-          LOCATION=$(curl -s -o /dev/null -w "%{redirect_url}" https://install.dev.fast/windows/preview)
-          echo "$LOCATION"
-          test "$LOCATION" = "https://install.dev.fast/releases/preview-latest/win32-x64/Whiteboard-Setup.exe"
-
-          echo "Following it (expect 200 and a Windows executable):"
-          curl -sfL -o /dev/null -w "%{http_code} %{content_type}\n" https://install.dev.fast/windows/preview \
-            | grep -F "200 application/vnd.microsoft.portable-executable"
-
-  # This tagging job holds no signing or R2 credentials.
-  # `needs: version` carries the initial approval
-  # gate transitively, and `needs: publish-macos`, `needs: publish-linux` and
-  # `needs: publish-windows` mean a tag only ever names a preview that published
-  # on every platform, answered its update feeds, and served its installers.
+  # This tagging job holds no signing or R2 credentials. The tag names the
+  # build, not a set of published platforms: each platform publishes on its
+  # own, and a missing one is backfilled for the same version.
   tag-preview:
-    name: Tag published preview
-    needs: [version, publish-macos, publish-linux, publish-windows]
-    if: ${{ !inputs.dry_run && inputs.platforms == 'all' }}
+    name: Tag preview
+    needs: version
+    if: ${{ !inputs.dry_run && !inputs.version }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

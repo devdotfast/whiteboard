@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  CLAUDE_WINDOWS_MCP_ADD,
-  COPILOT_WINDOWS_MCP_ADD,
   REVIEW_MCP_LAUNCH,
   WINDOWS_MCP_LAUNCH,
   connectPrompt,
@@ -57,8 +55,11 @@ describe("connectPrompt", () => {
 
   it("registers the Claude plugin's MCP server directly on Windows instead of the plugin", () => {
     for (const [target, add] of [
-      ["claude", CLAUDE_WINDOWS_MCP_ADD],
-      ["copilot", COPILOT_WINDOWS_MCP_ADD],
+      [
+        "claude",
+        "claude mcp add -s user whiteboard -- cmd /d /c whiteboard mcp",
+      ],
+      ["copilot", "copilot mcp add whiteboard -- cmd /d /c whiteboard mcp"],
     ] as const) {
       const prompt = connectPrompt(target, { ...input, platform: "win32" });
 

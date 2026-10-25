@@ -1,61 +1,24 @@
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { TrashIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
-import {
-  type ReactElement,
-  type ReactNode,
-  createContext,
-  useContext,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { type ReactElement, useEffect, useState } from "react";
 
+import { useShowThreads } from "./ask-dock";
 import { useAskHistory } from "./ask-history";
-import { controlStyles } from "./controls-styles";
-import { TrashIcon } from "./icons";
 import { useNotify } from "./notify";
-import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
-import { fontSize, radius } from "./scale.stylex";
+import {
+  useAskKey,
+  useOptionalReviewPanel,
+  useOptionalReviewPanelStore,
+} from "./review-panel";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { IconButton } from "./ui/button";
-import { useTooltip } from "./use-tooltip";
 
 /** How long a first click keeps a delete armed. */
 const ARMED_MS = 4_000;
-
-interface OpenThread {
-  threadId: string | null;
-  show: (threadId: string | null) => void;
-}
-
-/** The conversation the Ask panel shows, for its header to act on. */
-const OpenThreadContext = createContext<OpenThread | null>(null);
-
-export function AskOpenThreadProvider({
-  children,
-}: {
-  children: ReactNode;
-}): ReactElement {
-  const [threadId, show] = useState<string | null>(null);
-  const value = useMemo(() => ({ threadId, show }), [threadId]);
-
-  return (
-    <OpenThreadContext.Provider value={value}>
-      {children}
-    </OpenThreadContext.Provider>
-  );
-}
-
-/** Tells the panel's header which conversation is open. */
-export function useShowOpenThread(threadId: string | null) {
-  const show = useContext(OpenThreadContext)?.show;
-
-  useEffect(() => {
-    show?.(threadId);
-
-    return () => show?.(null);
-  }, [show, threadId]);
-}
 
 /** A delete that asks once more: the first click arms it, the second
  * deletes. It disarms after a few seconds, or when focus leaves it. */
@@ -96,21 +59,24 @@ export function AskDeleteButton({
       }}
       onBlur={() => setArmed(false)}
     >
-      <TrashIcon xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]} />
+      <TrashIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
       {armed ? <span>Delete</span> : null}
     </IconButton>
   );
 }
 
-/** The header's delete for the open conversation, once it is saved: it
- * leaves Whiteboard, and the panel returns to the saved conversations. The
- * agent keeps its own transcript. */
+/** Deletes the saved conversation; the agent keeps its own transcript. */
 export function AskDeleteThreadButton(): ReactElement | null {
-  const threadId = useContext(OpenThreadContext)?.threadId;
+  const askKey = useAskKey();
+
+  const threadId = useOptionalReviewPanel(
+    (state) => state.asks.find((ask) => ask.key === askKey)?.threadId,
+  );
+
   const history = useAskHistory();
   const panels = useOptionalReviewPanelStore();
-  const askKey = useAskKey();
   const notify = useNotify();
+  const showThreads = useShowThreads();
 
   if (!threadId || !history?.entries?.some((entry) => entry.id === threadId))
     return null;
@@ -120,7 +86,10 @@ export function AskDeleteThreadButton(): ReactElement | null {
       label="Delete this conversation"
       onDelete={() =>
         void history.forget(threadId).then((deleted) => {
-          if (deleted)
+          if (deleted && showThreads) {
+            if (askKey !== undefined) panels?.getState().hideAsk(askKey);
+            showThreads();
+          } else if (deleted)
             panels
               ?.getState()
               .openAskView(
@@ -143,15 +112,15 @@ const styles = stylex.create({
   armed: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "5px",
+    gap: space.s4,
     width: "auto",
-    padding: "0 8px",
+    padding: `0 ${space.s8}`,
     borderRadius: radius.control,
     backgroundColor: tokens.diffRemovedBg,
     color: tokens.changeRemoved,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
     opacity: 1,
   },
 });

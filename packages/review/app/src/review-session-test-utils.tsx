@@ -1,13 +1,10 @@
-import type {
-  ReviewCanvasBridge,
-  ReviewRuntimeConfig,
-} from "@dev.fast/review-protocol";
+import type { ReviewCanvasBridge } from "@dev.fast/review-protocol";
 import type { Block } from "@review/review-api/document";
 import type { ReactNode } from "react";
 
 import type { ApiDocumentData } from "./api-document";
 import { apiHeadingIds } from "./api-document-headings";
-import { reviewFetchUrl } from "./host/review-client";
+import { type ReviewClientConfig, reviewFetchUrl } from "./host/review-client";
 import {
   type ReviewSession,
   ReviewSessionProvider,
@@ -15,21 +12,19 @@ import {
 } from "./host/review-session";
 
 export const TEST_REVIEW_CONFIG = {
-  serverUrl: "http://127.0.0.1:5570",
-  reviewId: "test-session",
-  token: "secret-token",
-  wasmUrl: "vscode-file://review/libavoid.wasm",
-  appVersion: "0.0.13",
-  theme: "dark",
-  host: "desktop",
-} satisfies ReviewRuntimeConfig;
+  reviewId: "test-review",
+} satisfies ReviewClientConfig;
+
+type TestReviewConfig = ReviewClientConfig &
+  Partial<Pick<ReviewCanvasBridge, "wasmUrl" | "appVersion">>;
 
 export function testReviewBridge(
-  config: Partial<ReviewRuntimeConfig> = {},
-  overrides: Partial<Omit<ReviewCanvasBridge, "config">> = {},
+  config: TestReviewConfig = {},
+  overrides: Partial<ReviewCanvasBridge> = {},
 ): ReviewCanvasBridge {
   return {
-    config: { ...TEST_REVIEW_CONFIG, ...config },
+    wasmUrl: config.wasmUrl ?? "vscode-file://review/libavoid.wasm",
+    appVersion: config.appVersion ?? "0.0.13",
     diffView: {
       files: async () => [],
       create: () => {
@@ -44,11 +39,15 @@ export function testReviewBridge(
         throw new Error("unused test inline editor");
       },
     },
-    request: (url, init) => reviewFetchUrl({}, url, init),
+    request: (path, init) =>
+      reviewFetchUrl({}, new URL(path, location.origin), init),
     post: async () => ({ ok: true }),
     subscribe: () => ({ dispose() {} }),
     currentTheme: () => "dark",
     onDidChangeTheme: () => ({ dispose() {} }),
+    currentInlineLineNumbers: () => false,
+    setInlineLineNumbers: async () => {},
+    onDidChangeInlineLineNumbers: () => ({ dispose() {} }),
     currentDiffLayout: () => "split",
     async setDiffLayout() {},
     onDidChangeDiffLayout: () => ({ dispose() {} }),
@@ -58,24 +57,26 @@ export function testReviewBridge(
 }
 
 export function testReviewSession(
-  config: Partial<ReviewRuntimeConfig> = {},
-  bridge: Partial<Omit<ReviewCanvasBridge, "config">> = {},
+  config: TestReviewConfig = {},
+  bridge: Partial<ReviewCanvasBridge> = {},
 ): ReviewSession {
   return {
     ...createReviewSession(testReviewBridge(config, bridge), {
       jsonReview: {
-        id: config.reviewId ?? "test-review",
+        id: config.reviewId ?? TEST_REVIEW_CONFIG.reviewId,
         version: () => undefined,
       },
     }),
     review: {
+      reviewId: config.reviewId ?? "test-review",
       pins: { base: "a".repeat(40), head: "b".repeat(40) },
       historicalRevision: null,
       updatedAtMs: Date.now(),
       traces: new Map(),
-      stack: async () => [],
+      place: async () => ({ siblings: [] }),
+      stack: async () => ({ layers: [] }),
       createBranchReview: async () => "",
-      dismiss: async () => {},
+      dismiss: async () => true,
     },
   };
 }
@@ -102,6 +103,7 @@ export function testApiDocumentData(blocks: Block[]): ApiDocumentData {
     anchors: new Map(),
     images: new Map(),
     traces: new Map(),
+    boards: new Map(),
     maps: new Map(),
   };
 }

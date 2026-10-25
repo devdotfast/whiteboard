@@ -2,7 +2,7 @@ import { radius } from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import * as stylex from "@stylexjs/stylex";
-import type { ComponentProps } from "react";
+import { type ComponentProps, type RefCallback, useCallback } from "react";
 
 const mixedBar = `linear-gradient(${tokens.onAccent}, ${tokens.onAccent})`;
 
@@ -11,24 +11,48 @@ type CheckboxProps = Omit<
   "type" | "ref" | "className" | "style"
 > & {
   indeterminate?: boolean;
+  ref?: RefCallback<HTMLInputElement>;
   className?: string;
   xstyle?: StyleArg;
 };
 
 export function Checkbox({
   indeterminate = false,
+  ref,
   className,
   xstyle,
   ...props
 }: CheckboxProps) {
+  const box = useCallback(
+    (element: HTMLInputElement | null) => {
+      if (element) element.indeterminate = indeterminate;
+
+      return ref?.(element);
+    },
+    [indeterminate, ref],
+  );
+
   return (
     <input
       type="checkbox"
-      ref={(element) => {
-        if (element) element.indeterminate = indeterminate;
-      }}
+      ref={box}
       {...props}
       {...withClass(className, styles.box, xstyle)}
+    />
+  );
+}
+
+/** Native radio behavior, with the same dimensions and palette as Checkbox. */
+export function Radio({
+  className,
+  xstyle,
+  ...props
+}: Omit<CheckboxProps, "indeterminate">) {
+  return (
+    <input
+      type="radio"
+      {...props}
+      {...withClass(className, styles.box, styles.radio, xstyle)}
     />
   );
 }
@@ -83,12 +107,33 @@ const styles = stylex.create({
     backgroundSize: { default: "10px 10px", ":indeterminate": "8px 1.5px" },
     backgroundRepeat: "no-repeat",
     appearance: "none",
-    cursor: "pointer",
+    cursor: { default: "pointer", ":disabled": "default" },
+    opacity: { default: null, ":disabled": 0.5 },
   },
   checked: {
     borderColor: tokens.accent,
     backgroundColor: tokens.accent,
     backgroundImage: tokens.checkMark,
+  },
+  radio: {
+    borderRadius: radius.round,
+    // An unanswered radio group is also :indeterminate, but has no mixed mark.
+    borderColor: {
+      default: tokens.ruleSoft,
+      ":checked": tokens.accent,
+      ":indeterminate": tokens.ruleSoft,
+    },
+    backgroundColor: {
+      default: tokens.surface,
+      ":checked": tokens.accent,
+      ":indeterminate": tokens.surface,
+    },
+    backgroundImage: {
+      default: "none",
+      ":checked": `radial-gradient(circle, ${tokens.onAccent} 3px, ${tokens.transparent} 3px)`,
+      ":indeterminate": "none",
+    },
+    backgroundSize: { default: "100% 100%", ":indeterminate": "100% 100%" },
   },
   mixed: {
     borderColor: tokens.accent,

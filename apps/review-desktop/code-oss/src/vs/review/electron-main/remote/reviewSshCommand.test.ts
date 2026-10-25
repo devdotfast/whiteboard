@@ -13,8 +13,10 @@ import {
 	prepareSshControlDirectory,
 	reviewSshConfigPath,
 	reviewSshControlDirectory,
+	reviewSshDirectSession,
 	reviewSshInstancePrefix,
 	reviewSshSession,
+	reviewSshSharesConnections,
 	sshCancelForwardArgs,
 	sshCheckArgs,
 	sshCloseArgs,
@@ -47,6 +49,26 @@ test("accepts ordinary aliases", () => {
 
 test("a session refuses an invalid alias", () => {
 	assert.throws(() => reviewSshSession("-oProxyCommand=x", "/tmp/d", "test"), /starts with -/);
+});
+
+test("a direct session never prompts, keeps host-key checking, and has no control socket", () => {
+	const direct = reviewSshDirectSession("wb-test-a");
+	const env = { DEV_FAST_REVIEW_SSH_CONFIG: "/tmp/c", VSCODE_DEV: "1" };
+	for (const args of [sshMasterArgs(direct, env, 41000), sshExecArgs(direct, env)]) {
+		assert.deepEqual(args.slice(0, 3), ["-F", "/tmp/c", "-oBatchMode=yes"]);
+		for (const arg of args) assert.doesNotMatch(arg, /^-[SOM]$|StrictHostKeyChecking|UserKnownHostsFile|ControlMaster/);
+	}
+	assert.throws(() => sshMasterArgs(direct, env), /Invalid port/);
+	for (const build of [() => sshForwardArgs(direct, 1, 2, env), () => sshCheckArgs(direct, env), () => sshCloseArgs(direct, env)])
+		assert.throws(build);
+});
+
+test("only Windows and the development switch make sessions direct", () => {
+	assert.equal(reviewSshSharesConnections({}, "darwin"), true);
+	assert.equal(reviewSshSharesConnections({}, "win32"), false);
+	assert.equal(reviewSshSharesConnections({ DEV_FAST_REVIEW_SSH_DIRECT: "1", VSCODE_DEV: "1" }, "linux"), false);
+	assert.equal(reviewSshSharesConnections({ DEV_FAST_REVIEW_SSH_DIRECT: "1" }, "linux"), true);
+	assert.equal(reviewSshSharesConnections({ DEV_FAST_REVIEW_SSH_DIRECT: "0", VSCODE_DEV: "1" }, "linux"), true);
 });
 
 test("a development config file is passed to every call, and ignored in a packaged build", () => {

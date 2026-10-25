@@ -165,6 +165,122 @@ describe("resolveReviewStackLayers", () => {
     ).toEqual([]);
   });
 
+  describe("an inferred PR chain", () => {
+    const repo = { full_name: "o/r" };
+
+    const graph = [
+      {
+        number: 10,
+        title: "Lower",
+        head: { ref: "a", repo },
+        base: { ref: "main", repo },
+      },
+      {
+        number: 20,
+        title: "Middle",
+        head: { ref: "b", repo },
+        base: { ref: "a", repo },
+      },
+      {
+        number: 30,
+        title: "Upper",
+        head: { ref: "c", repo },
+        base: { ref: "b", repo },
+      },
+      {
+        number: 40,
+        title: "Fork collision",
+        head: { ref: "a", repo: { full_name: "fork/r" } },
+        base: { ref: "main", repo },
+      },
+    ];
+
+    const run: RunGitHubApi = async (_, endpoint) =>
+      endpoint.includes("/stacks?") ? "[]" : JSON.stringify(graph);
+
+    const pins = { repositoryId: "repo", base: "base", head: "head" };
+
+    const subject = {
+      reviewId: "middle",
+      pins,
+      origin: {
+        branch: "b",
+        baseBranch: "main",
+        pullRequestUrl: "https://github.com/o/r/pull/20",
+        pullRequestNumber: 20,
+        pullRequestBaseBranch: "a",
+      },
+    };
+
+    const middle = { ...subject, title: "Middle board", trashedAt: null };
+
+    const branchBoard = (
+      reviewId: string,
+      origin: NonNullable<ReviewApiSummary["origin"]>,
+    ) => ({ reviewId, title: reviewId, trashedAt: null, pins, origin });
+
+    const rows = async (
+      reviews: Parameters<typeof resolveReviewStackLayers>[1],
+    ) =>
+      (
+        await resolveReviewStackLayers(subject, reviews, { runGitHubApi: run })
+      ).map((layer) => [layer.branch, layer.relation, layer.reviewUuid]);
+
+    it("discovers it even when other PRs have no whiteboards", async () => {
+      expect(await rows([middle])).toEqual([
+        ["a", "earlier", null],
+        ["b", "current", "middle"],
+        ["c", "later", null],
+      ]);
+    });
+
+    it("attaches a board by a stored origin/ branch label", async () => {
+      expect(
+        await rows([middle, branchBoard("legacy", { branch: "origin/c" })]),
+      ).toEqual([
+        ["a", "earlier", null],
+        ["b", "current", "middle"],
+        ["c", "later", "legacy"],
+      ]);
+    });
+  });
+
+  it("does not pick an arbitrary continuation when multiple PRs depend on one branch", async () => {
+    const repo = { full_name: "o/r" };
+
+    const graph = [
+      {
+        number: 10,
+        title: "Base",
+        head: { ref: "a", repo },
+        base: { ref: "main", repo },
+      },
+      {
+        number: 20,
+        title: "Left",
+        head: { ref: "b", repo },
+        base: { ref: "a", repo },
+      },
+      {
+        number: 30,
+        title: "Right",
+        head: { ref: "c", repo },
+        base: { ref: "a", repo },
+      },
+    ];
+
+    const result = await resolveReviewStackLayers(
+      { origin: { pullRequestUrl: "https://github.com/o/r/pull/10" } },
+      [],
+      {
+        runGitHubApi: async (_, endpoint) =>
+          endpoint.includes("/stacks?") ? "[]" : JSON.stringify(graph),
+      },
+    );
+
+    expect(result).toEqual([]);
+  });
+
   it("does not attach reviews of the same PR number in another repository", async () => {
     const result = await resolveReviewStackLayers(
       { origin: { pullRequestUrl: "https://github.com/o/r/pull/20" } },
@@ -280,6 +396,38 @@ describe("resolveReviewStackLayers", () => {
   });
 });
 
+it("asks GitHub once for a stack its pull requests share within a minute", async () => {
+  const run = vi.fn<RunGitHubApi>(async () =>
+    JSON.stringify([
+      {
+        pull_requests: [
+          { number: 1, head: { ref: "a" } },
+          { number: 2, head: { ref: "b" } },
+        ],
+      },
+    ]),
+  );
+
+  const subject = (pullRequestNumber: number) => ({
+    origin: {
+      pullRequestNumber,
+      pullRequestUrl: `https://github.com/o/cached/pull/${pullRequestNumber}`,
+    },
+  });
+
+  const layers = (number: number) =>
+    resolveReviewStackLayers(subject(number), [], { runGitHubApi: run });
+
+  await layers(1);
+  await layers(1);
+  // The other pull request in the stack reads the same answer.
+  await expect(layers(2)).resolves.toMatchObject([
+    { pullRequestNumber: 1, relation: "earlier" },
+    { pullRequestNumber: 2, relation: "current" },
+  ]);
+  expect(run).toHaveBeenCalledTimes(1);
+});
+
 describe("local stacks", () => {
   const roots: string[] = [];
 
@@ -325,7 +473,7 @@ describe("local stacks", () => {
     title: `Review ${branch}`,
     origin: { branch, baseBranch },
     trashedAt,
-    repositoryGroup: { key: "repo", label: "repo" },
+    project: { id: "repo", name: "repo" },
   });
 
   const rows = (layers: ReviewStackLayer[]) =>
@@ -351,7 +499,7 @@ describe("local stacks", () => {
         review("c-trashed", "c", "b", "2026-10-13T00:00:00.000Z"),
         {
           ...review("other", "d", "b"),
-          repositoryGroup: { key: "other", label: "other" },
+          project: { id: "other", name: "other" },
         },
       ],
       { repositoryPath: root },

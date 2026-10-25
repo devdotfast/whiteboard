@@ -755,7 +755,7 @@ checksum = "6184e33543162437515c2e2b48714794e37845ec9851711914eec9d308f6ebe8"
 
 [[package]]
 name = "diffr-cli"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -789,7 +789,7 @@ dependencies = [
 
 [[package]]
 name = "diffr-core"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "anyhow",
  "bumpalo",
@@ -882,7 +882,7 @@ dependencies = [
 
 [[package]]
 name = "diffr-grammars"
-version = "0.1.20"
+version = "0.1.21"
 dependencies = [
  "cc",
  "object",
@@ -3406,9 +3406,9 @@ dependencies = [
 
 [[package]]
 name = "rustls"
-version = "0.23.44"
+version = "0.23.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6725596c3f2c3a0aef021139e145d4eafe314a6623e4680ca83852b2c67ab2ba"
+checksum = "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
 dependencies = [
  "log",
  "once_cell",

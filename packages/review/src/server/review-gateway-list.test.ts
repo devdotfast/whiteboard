@@ -45,7 +45,6 @@ const summary = (list: ReviewApiSummary[]) =>
 
 it("lists this machine first, then each machine in the setting's order", () => {
   const merged = mergeLists(
-    "structural",
     [entry("local")],
     source(
       [
@@ -69,7 +68,6 @@ it("lists this machine first, then each machine in the setting's order", () => {
 
 it("offers language features and Source windows only for an online host whose Desktop reported language features", () => {
   const merged = mergeLists(
-    "structural",
     [],
     source(
       [
@@ -91,7 +89,6 @@ it("offers language features and Source windows only for an online host whose De
 
 it("lists a server two aliases share once, under the first, offline", () => {
   const merged = mergeLists(
-    "structural",
     [],
     source(
       [
@@ -105,16 +102,15 @@ it("lists a server two aliases share once, under the first, offline", () => {
   expect(summary(merged)).toEqual([["on a", "first", "offline"]]);
 });
 
-it("puts the alias in front of the group key and keeps the label", () => {
+it("puts the alias in front of the project id and keeps its name", () => {
   const [merged] = mergeLists(
-    "structural",
     [],
     source(
       [{ alias: "a", serverId: "A", state: "online" }],
       {
         A: [
           entry("grouped", {
-            repositoryGroup: { key: "git:/srv/r/.git", label: "r" },
+            project: { id: "project-1", name: "r" },
           }),
         ],
       },
@@ -122,15 +118,11 @@ it("puts the alias in front of the group key and keeps the label", () => {
     ),
   );
 
-  expect(merged?.repositoryGroup).toEqual({
-    key: "a:git:/srv/r/.git",
-    label: "r",
-  });
+  expect(merged?.project).toEqual({ id: "a:project-1", name: "r" });
 });
 
 it("keeps the last list of a host that is connecting, offline, incompatible or unreachable, with its state", () => {
   const merged = mergeLists(
-    "structural",
     [],
     source(
       [
@@ -178,7 +170,7 @@ it("gives an id to this machine, then to the first host in the setting's order t
     ["A"],
   );
 
-  expect(summary(mergeLists("structural", [shared], lists))).toEqual([
+  expect(summary(mergeLists([shared], lists))).toEqual([
     ["mine", undefined, undefined],
     ["b's", "b", "offline"],
   ]);
@@ -187,7 +179,6 @@ it("gives an id to this machine, then to the first host in the setting's order t
 
 it("says why Source windows are off: the host's sentence while it is down, else the language features detail", () => {
   const merged = mergeLists(
-    "structural",
     [],
     source(
       [
@@ -207,6 +198,14 @@ it("says why Source windows are off: the host's sentence while it is down, else 
           detail: "Permission denied.",
         },
         { alias: "e", serverId: "E", state: "online", detail: "stale" },
+        {
+          alias: "f",
+          serverId: "F",
+          state: "online",
+          languageFeatures: false,
+          languageFeaturesDetail: "Installing the language extensions.",
+          languageFeaturesPending: true,
+        },
       ],
       {
         A: [entry("on a")],
@@ -214,18 +213,24 @@ it("says why Source windows are off: the host's sentence while it is down, else 
         C: [entry("on c")],
         D: [entry("on d")],
         E: [entry("on e")],
+        F: [entry("on f")],
       },
-      ["A", "B"],
+      ["A", "B", "F"],
     ),
   );
 
   expect(
-    merged.map((review) => [review.host, review.available?.reason]),
+    merged.map((review) => [
+      review.host,
+      review.available?.reason,
+      review.available?.pending,
+    ]),
   ).toEqual([
-    ["a", undefined],
-    ["b", "The Whiteboard on b has no VS Code server."],
-    ["c", "c offline."],
-    ["d", "Permission denied."],
-    ["e", "e offline."],
+    ["a", undefined, undefined],
+    ["b", "The Whiteboard on b has no VS Code server.", undefined],
+    ["c", "c offline.", undefined],
+    ["d", "Permission denied.", undefined],
+    ["e", "e offline.", undefined],
+    ["f", "Installing the language extensions.", true],
   ]);
 });

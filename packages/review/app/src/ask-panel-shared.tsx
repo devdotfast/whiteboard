@@ -9,8 +9,11 @@ export function AskSelectionQuote({
   selection,
 }: {
   selection: AgentSelection;
-}): ReactElement {
+}): ReactElement | null {
   const target = selection.target;
+
+  // A question about the whole review quotes nothing.
+  if (target.kind === "review") return null;
 
   return (
     <figure {...stylex.props(askPanelStyles.selection)}>
@@ -18,12 +21,18 @@ export function AskSelectionQuote({
         {...stylex.props(
           textStyles.eyebrow,
           askPanelStyles.caps,
-          askPanelStyles.selectionCaption,
+          textStyles.truncate,
         )}
       >
-        {target.kind === "text" ? "Selection" : "Code"}
+        {target.kind === "text"
+          ? "Selection"
+          : target.kind === "code"
+            ? "Code"
+            : "Whiteboard"}
       </figcaption>
-      <blockquote {...stylex.props(askPanelStyles.selectionQuote)}>
+      <blockquote
+        {...stylex.props(textStyles.clamp2, askPanelStyles.selectionQuote)}
+      >
         {target.kind === "text" ? target.quote : selection.title}
       </blockquote>
     </figure>

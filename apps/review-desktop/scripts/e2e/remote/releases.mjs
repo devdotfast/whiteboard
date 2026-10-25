@@ -1,9 +1,10 @@
-/** This checkout's remote tarballs, served over plain HTTP as install.dev.fast serves a release's, for DEV_FAST_REVIEW_REMOTE_RELEASES. */
+/** This checkout's remote tarballs and install.sh over plain HTTP, as install.dev.fast serves a release's; any path resolves by file name. */
 import { createReadStream } from "node:fs";
 import { copyFile, mkdtemp, rm, stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import { networkInterfaces, tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { buildDevRemoteTarball } from "../../build-remote-tarball.mjs";
 
@@ -24,8 +25,13 @@ function laptopAddress() {
   return address;
 }
 
+const INSTALL_SCRIPT = fileURLToPath(
+  new URL("../../../../../packages/review/remote/install.sh", import.meta.url),
+);
+
 export async function serveReleases() {
   const dir = await mkdtemp(path.join(tmpdir(), "wb-releases-"));
+  await copyFile(INSTALL_SCRIPT, path.join(dir, "install.sh"));
 
   const server = createServer(async (request, response) => {
     let name;
@@ -40,8 +46,7 @@ export async function serveReleases() {
 
     const found =
       name === "" ||
-      (name === path.basename(name) &&
-        (await stat(file).then((s) => s.isFile(), () => false)));
+      (await stat(file).then((s) => s.isFile(), () => false));
 
     response.writeHead(found ? 200 : 404);
 

@@ -1,7 +1,12 @@
-import { layer } from "@canvas/scale.stylex";
+import { layer, space } from "@canvas/scale.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { useCopy } from "@canvas/ui/copy";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { ShareIcon } from "@canvas/ui/icons";
+import { Popover } from "@canvas/ui/popover";
+import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type ReviewApiClient,
   ReviewApiError,
@@ -13,20 +18,22 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useRef, useState } from "react";
+import {
+  type Ref,
+  createContext,
+  useContext,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 
 import { canvasQueryKeys } from "./canvas-query";
-import { controlStyles } from "./controls-styles";
-import { copyText } from "./copy-text";
 import { useOptionalReviewSession } from "./host/review-session";
-import { ShareIcon } from "./icons";
 import { topbarActionsMarker } from "./markers.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
-import { useTooltip } from "./use-tooltip";
 
 export const SharingContext = createContext<{
   client: ReviewApiClient;
@@ -39,6 +46,7 @@ export const SharingContext = createContext<{
 interface SharingAccount {
   account: { login: string; origin: string } | null;
   pending: boolean;
+  userCode?: string;
   error?: string;
 }
 
@@ -57,7 +65,19 @@ const actionError = (error: Error | null) =>
     ? error.message
     : "Could not complete this action. Please retry.");
 
-export function ShareControl() {
+/** Whether this review can be shared, so a menu may offer Share. */
+export function useCanShare(): boolean {
+  return useContext(SharingContext) !== null;
+}
+
+export function ShareControl({
+  folded = false,
+  handle,
+}: {
+  /** In "⋯": no button, and the popover hangs from the bar's right end. */
+  folded?: boolean;
+  handle?: Ref<{ open(): void }>;
+} = {}) {
   const context = useContext(SharingContext);
   const session = useOptionalReviewSession();
   const queryClient = useQueryClient();
@@ -65,9 +85,7 @@ export function ShareControl() {
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<ShareTarget>();
   const [copyError, setCopyError] = useState<string>();
-  const [copied, setCopied] = useState(false);
-  const popover = useRef<HTMLDivElement>(null);
-  const popoverRef = useAnchoredPopover(open, popover);
+  const control = useRef<HTMLDivElement>(null);
   const shared = context?.reviewId.startsWith("shared-");
   const accountKey = canvasQueryKeys.sharingAccount();
 
@@ -106,11 +124,21 @@ export function ShareControl() {
 
   // Links created this canvas, so reopening a shared version skips the upload.
   const link = useQuery<string>({
-    queryKey: canvasQueryKeys.shareLink(target?.version),
+    queryKey: canvasQueryKeys.shareLink(
+      context?.reviewId ?? "",
+      target?.version,
+    ),
     queryFn: skipToken,
     staleTime: Infinity,
     gcTime: Infinity,
   }).data;
+
+  const [copied, copy] = useCopy({
+    onCopied: () => {
+      if (session) captureUiEvent(session, "review_shared");
+    },
+    onFailed: () => setCopyError("Copy the link below."),
+  });
 
   const login = useMutation({
     mutationFn: () => client!.post("/sharing/login", {}),
@@ -132,7 +160,10 @@ export function ShareControl() {
         requestId,
       }),
     onSuccess: ({ url }, { version }) =>
-      queryClient.setQueryData(canvasQueryKeys.shareLink(version), url),
+      queryClient.setQueryData(
+        canvasQueryKeys.shareLink(context!.reviewId, version),
+        url,
+      ),
     onError: (error) => {
       // The host forgot a stale login; show sign-in and upload again after it.
       if (error instanceof ReviewApiError && error.status === 401)
@@ -157,19 +188,33 @@ export function ShareControl() {
     });
   };
 
-  useDismissOnOutside(popover, open, setOpen);
+  const toggle = () => {
+    if (!context) return;
+
+    // An upload of this version in flight keeps its request.
+    if (!open && !(publish.isPending && target?.version === context.version)) {
+      setTarget({
+        version: context.version,
+        requestId: crypto.randomUUID(),
+      });
+      publish.reset();
+      login.reset();
+      setCopyError(undefined);
+    }
+
+    setOpen(!open);
+  };
+
+  useImperativeHandle(handle, () => ({
+    open: () => {
+      if (!open) toggle();
+    },
+  }));
 
   // Upload once per opening; a failure waits for Retry or a new sign-in.
   useEffect(() => {
     if (open && signedIn && target && publish.isIdle && !link) upload(target);
   }, [open, signedIn, target, publish.isIdle, link]);
-
-  useEffect(() => {
-    if (!copied) return;
-    const timer = setTimeout(() => setCopied(false), 2000);
-
-    return () => clearTimeout(timer);
-  }, [copied]);
 
   if (!context) return null;
 
@@ -179,64 +224,37 @@ export function ShareControl() {
     ? "Could not read sign-in status."
     : undefined;
 
-  const copy = async (url: string) => {
-    if (!(await copyText(url))) {
-      setCopyError("Copy the link below.");
-
-      return;
-    }
-
-    setCopied(true);
-
-    if (session) captureUiEvent(session, "review_shared");
-  };
-
   return (
     <div
-      ref={popover}
-      {...stylex.props(shellStyles.topbarItem)}
-      style={{ position: "relative" }}
+      ref={control}
+      data-page-bar-fold={folded ? undefined : "share"}
+      {...stylex.props(shellStyles.topbarItem, folded && styles.folded)}
+      style={folded ? undefined : { position: "relative" }}
     >
-      <IconButton
-        ref={tooltip}
-        aria-label={label}
-        aria-haspopup="dialog"
-        aria-expanded={open}
-        onClick={() => {
-          // An upload of this version in flight keeps its request.
-          if (
-            !open &&
-            !(publish.isPending && target?.version === context.version)
-          ) {
-            setTarget({
-              version: context.version,
-              requestId: crypto.randomUUID(),
-            });
-            publish.reset();
-            login.reset();
-            setCopyError(undefined);
-            setCopied(false);
-          }
-
-          setOpen(!open);
-        }}
-      >
-        <ShareIcon xstyle={controlStyles.chromeIcon} />
-      </IconButton>
+      {folded ? null : (
+        <IconButton
+          ref={tooltip}
+          aria-label={label}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          onClick={toggle}
+        >
+          <ShareIcon xstyle={iconStyles.chrome} />
+        </IconButton>
+      )}
       {open && (
-        <div
-          ref={popoverRef}
-          popover="manual"
+        <Popover
+          anchor={control}
+          onDismiss={() => setOpen(false)}
           role="dialog"
           aria-label={shared ? "Shared review" : "Share review"}
-          {...stylex.props(
-            shellStyles.topbarPopover,
-            surfaceStyles.popover,
-            styles.popover,
-          )}
+          xstyle={[shellStyles.topbarPopover, styles.popover]}
         >
           {(error || accountError || account?.error) && (
-            <p {...stylex.props(styles.paragraph, styles.error)} role="alert">
+            <p
+              {...stylex.props(styles.paragraph, textStyles.error)}
+              role="alert"
+            >
               {error ?? accountError ?? account?.error}
             </p>
           )}
@@ -257,8 +275,8 @@ export function ShareControl() {
                   value={link}
                   onFocus={(event) => event.target.select()}
                 />
-                <Button variant="primary" onClick={() => void copy(link)}>
-                  {copied ? "Copied" : "Copy link"}
+                <Button variant="primary" onClick={() => copy(link)}>
+                  {copied === link ? "Copied" : "Copy link"}
                 </Button>
               </>
             ) : error ? (
@@ -276,6 +294,15 @@ export function ShareControl() {
           ) : (
             account && (
               <>
+                {account.userCode && (
+                  <p {...stylex.props(styles.paragraph, styles.status)}>
+                    Confirm code{" "}
+                    <code {...stylex.props(styles.code)}>
+                      {account.userCode}
+                    </code>{" "}
+                    in your browser.
+                  </p>
+                )}
                 <Button
                   variant="primary"
                   disabled={
@@ -293,7 +320,7 @@ export function ShareControl() {
               </>
             )
           )}
-        </div>
+        </Popover>
       )}
     </div>
   );
@@ -303,6 +330,14 @@ const inTopbarActions = () =>
   stylex.when.ancestor(":is(*)", topbarActionsMarker);
 
 const styles = stylex.create({
+  // Out of the row, at its right end, so the popover still has an anchor.
+  folded: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: 0,
+    height: "100%",
+  },
   // Hovered, the open button keeps the topbar button hover colors.
   // In the topbar action row the shared anchoring (shellStyles.topbarPopover)
   // places it; these are its own values anywhere else.
@@ -316,10 +351,10 @@ const styles = stylex.create({
     right: { default: 0, [inTopbarActions()]: "anchor(right)" },
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
+    gap: space.s8,
     width: "280px",
     margin: 0,
-    padding: "10px 12px",
+    padding: `${space.s10} ${space.s12}`,
     color: tokens.chromeFg,
     fontFamily: tokens.chromeFont,
     fontSize: tokens.chromeFontSize,
@@ -330,10 +365,12 @@ const styles = stylex.create({
   status: {
     color: tokens.chromeFgMuted,
   },
-  error: {
-    color: "var(--vscode-errorForeground, #f48771)",
-  },
   link: {
     width: "100%",
+  },
+  code: {
+    color: tokens.chromeFg,
+    fontFamily: tokens.fontMono,
+    fontWeight: tokens.chromeFontWeightStrong,
   },
 });

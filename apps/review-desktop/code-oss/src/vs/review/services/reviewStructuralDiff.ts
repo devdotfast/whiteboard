@@ -10,7 +10,7 @@ import { ITextModelService } from "../../editor/common/services/resolverService.
 import { ILanguageService } from "../../editor/common/languages/language.js";
 import { URI } from "../../base/common/uri.js";
 import { Event } from "../../base/common/event.js";
-import { DisposableMap, DisposableStore } from "../../base/common/lifecycle.js";
+import { DisposableMap, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
 import { CancellationError } from "../../base/common/errors.js";
 import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
 import { ServiceCollection } from "../../platform/instantiation/common/serviceCollection.js";
@@ -30,6 +30,7 @@ import {
 } from "../common/reviewStructuralDiff.js";
 import type { ITextModel } from "../../editor/common/model.js";
 import type { ReviewFilesEditorEntry } from "./reviewFilesDiffView.js";
+import { InlineLineNumbers, type ReviewLineNumbersSetting } from "./reviewLineNumbers.js";
 import { StructuralFoldControls, StructuralFoldHover } from "./reviewStructuralFolds.js";
 import { REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
 import type { StructuralViewedState } from "./reviewStructuralViewed.js";
@@ -41,6 +42,8 @@ export function createStructuralDiffEditors(
 	lifetime: DisposableStore,
 	session: StructuralDiffSession,
 	viewed?: StructuralViewedState,
+	lineNumbers?: ReviewLineNumbersSetting,
+	onscreen?: IObservable<boolean>,
 ): { instantiation: IInstantiationService; entries: readonly ReviewFilesEditorEntry[] } {
 	// These models belong to this comparison. A live file can change while the
 	// comparison is open, so its editor text must come from diffr's own result.
@@ -76,7 +79,6 @@ export function createStructuralDiffEditors(
 				text = await read;
 			} else {
 				const result = await session.fileResult(source.path);
-				if (result.error) throw new Error(result.error);
 				// diffr's binary check is stricter than git's.
 				text = result.diff?.type === "text" ? result.diff[source.side]?.text ?? "" : "";
 			}
@@ -93,14 +95,18 @@ export function createStructuralDiffEditors(
 	}));
 	const unchanged = new Set(entries.filter(e => e.file.status === "unchanged").map(e => e.file.path));
 	const pairs = new Map(resolvedEntries.map(e => [e.original!.toString() + "\n" + e.modified!.toString(), e.file.path]));
+	// One provider per file, so they share one session listener.
+	const providers = new Set<(files: ReadonlySet<string>) => void>();
+	lifetime.add(session.onDidChange(change => { for (const notify of [...providers]) notify(change.files); }));
+	const onDidChangeFiles: Event<ReadonlySet<string>> = notify => { providers.add(notify); return toDisposable(() => providers.delete(notify)); };
 	const factory: IDiffProviderFactoryService = {
 		_serviceBrand: undefined,
-		createDiffProvider: () => new StructuralDiffProvider(session, pairs, unchanged),
+		createDiffProvider: () => new StructuralDiffProvider(session, pairs, unchanged, onDidChangeFiles),
 	};
 	const child = lifetime.add(
 		instantiation.createChild(new ServiceCollection([IDiffProviderFactoryService, factory])),
 	);
-	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime, viewed);
+	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime, viewed, lineNumbers, onscreen);
 	return { instantiation: child, entries: resolvedEntries };
 }
 
@@ -110,8 +116,8 @@ let structuralViewId = 0;
 export class StructuralDiffProvider implements IDocumentDiffProvider {
 	private path: string | undefined;
 	readonly onDidChange: Event<void>;
-	constructor(private readonly session: StructuralDiffSession, private readonly pairs: ReadonlyMap<string, string>, private readonly unchanged: ReadonlySet<string>) {
-		this.onDidChange = Event.map(Event.filter(session.onDidChange, change => this.path !== undefined && change.files.has(this.path)), () => undefined);
+	constructor(private readonly session: StructuralDiffSession, private readonly pairs: ReadonlyMap<string, string>, private readonly unchanged: ReadonlySet<string>, onDidChangeFiles: Event<ReadonlySet<string>>) {
+		this.onDidChange = Event.map(Event.filter(onDidChangeFiles, files => this.path !== undefined && files.has(this.path)), () => undefined);
 	}
 	/** A lens can expose a child of a collapsed outer scope, so include both until it clips the outer gap. */
 	contextGapsForLens(): IDocumentDiff['contextGaps'] {
@@ -131,7 +137,7 @@ export class StructuralDiffProvider implements IDocumentDiffProvider {
 			if (original.getValue() !== modified.getValue()) throw new Error("Referenced context file changed; reload the session.");
 			return { changes: [], moves: [], identical: true, quitEarly: false };
 		}
-		if (path !== undefined && this.session.getFileResult(path)?.diff?.type === "binary") {
+		if (path !== undefined && this.session.getFileResult(path)?.diff?.type !== "text") {
 			return { changes: [], moves: [], identical: false, quitEarly: false, changeHighlights: { original: [], modified: [] } };
 		}
 		const diff = path === undefined ? undefined : this.session.getTextDiff(path);
@@ -203,31 +209,49 @@ function attachStructuralEditors(
 	session: StructuralDiffSession,
 	lifetime: DisposableStore,
 	viewed?: StructuralViewedState,
+	lineNumbers?: ReviewLineNumbersSetting,
+	onscreen?: IObservable<boolean>,
 ): void {
 	const editors = instantiation.invokeFunction((a) => a.get(ICodeEditorService));
 	const sides = new Map(entries.flatMap((e) => [[e.original!.toString(), e.file.path], [e.modified!.toString(), e.file.path]] as const));
 	const watched = lifetime.add(new DisposableMap<IDiffEditor, DisposableStore>());
+	const pathIn = (model: ITextModel | null | undefined) => model ? sides.get(model.uri.with({ fragment: "" }).toString()) : undefined;
 	function watch(editor: IDiffEditor) {
 		const widget = editor as unknown as { unchangedRegions?: IObservable<readonly UnchangedRegion[]> };
 		if (!widget.unchangedRegions) return;
 		const store = new DisposableStore();
 		watched.set(editor, store);
+		// Every diff editor in the window arrives here; only the comparison's get controls.
+		const attached = store.add(new MutableDisposable<DisposableStore>());
+		const sync = () => {
+			const model = editor.getModel();
+			if (!pathIn(model?.original) && !pathIn(model?.modified)) attached.clear();
+			else attached.value ??= attach(editor, widget.unchangedRegions!);
+		};
+		store.add(editor.onDidChangeModel(sync));
+		sync();
+	}
+	function attach(editor: IDiffEditor, unchangedRegions: IObservable<readonly UnchangedRegion[]>): DisposableStore {
+		const store = new DisposableStore();
 		// A reused editor swaps one side's model at a time.
-		const pathIn = (model: ITextModel | null) => model ? sides.get(model.uri.with({ fragment: "" }).toString()) : undefined;
 		const pathOf = () => {
 			const model = editor.getModel();
-			const path = pathIn(model?.original ?? null);
-			return path === pathIn(model?.modified ?? null) ? path : undefined;
+			const path = pathIn(model?.original);
+			return path === pathIn(model?.modified) ? path : undefined;
 		};
 		const sideOf = (side: ICodeEditor) => () => pathIn(side.getModel());
+		if (lineNumbers) {
+            store.add(new InlineLineNumbers(editor.getOriginalEditor(), lineNumbers));
+            store.add(new InlineLineNumbers(editor.getModifiedEditor(), lineNumbers));
+        }
 		const hover = new StructuralFoldHover();
-		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", sideOf(editor.getOriginalEditor()), session, widget.unchangedRegions, hover, viewed));
-		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", sideOf(editor.getModifiedEditor()), session, widget.unchangedRegions, hover, viewed));
+		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", sideOf(editor.getOriginalEditor()), session, unchangedRegions, hover, viewed, onscreen));
+		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", sideOf(editor.getModifiedEditor()), session, unchangedRegions, hover, viewed, onscreen));
 		let revealed = new Set<UnchangedRegion>();
 		store.add(
 			autorun((reader) => {
 				const path = pathOf();
-				const regions = widget.unchangedRegions!.read(reader);
+				const regions = unchangedRegions.read(reader);
 				if (!path || !session.getTextDiff(path)) return;
 				let gaps: StructuralGap[] | undefined;
 				const next = new Set<UnchangedRegion>();
@@ -258,6 +282,7 @@ function attachStructuralEditors(
 				revealed = next;
 			}),
 		);
+		return store;
 	}
 
 	lifetime.add(editors.onDiffEditorRemove(editor => watched.deleteAndDispose(editor)));

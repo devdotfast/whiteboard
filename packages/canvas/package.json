@@ -1,0 +1,37 @@
+{
+  "name": "@dev.fast/canvas",
+  "version": "0.0.1",
+  "private": true,
+  "license": "MIT",
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./canvas.css": "./dist/assets/canvas.css"
+  },
+  "scripts": {
+    "build": "vite build --config ../review/app/package.vite.config.ts && tsdown",
+    "test": "pnpm run build && node scripts/check-pack.mjs",
+    "typecheck": "pnpm -w exec tsc --noEmit -p packages/canvas"
+  },
+  "devDependencies": {
+    "@dev.fast/review-canvas": "workspace:*",
+    "@types/node": "24.12.2",
+    "@types/react": "19.2.14",
+    "tsdown": "0.22.14",
+    "typescript": "6.0.3",
+    "vite": "8.1.6"
+  },
+  "peerDependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}

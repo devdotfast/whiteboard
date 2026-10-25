@@ -1,4 +1,6 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import { codeType } from "@canvas/document-type.stylex";
+import { fontWeight, radius, space } from "@canvas/scale.stylex";
+import { CopyButton } from "@canvas/ui/copy";
 import {
   type ShjLanguage,
   type ShjToken,
@@ -12,9 +14,9 @@ import {
   useState,
 } from "react";
 
-import { CopyButton } from "./copy-text";
 import { DiagramHeader } from "./diagram-header";
 import { drawStyles } from "./draw-styles";
+import { countLabel } from "./format";
 import { documentMarker } from "./markers.stylex";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -96,7 +98,7 @@ export function RenderedCodeBlock({
       <DiagramHeader
         kind={displayLanguage || "code"}
         title={caption}
-        meta={`${lineCount} ${lineCount === 1 ? "line" : "lines"}`}
+        meta={countLabel(lineCount, "line")}
         xstyle={styles.header}
         metaStyle={styles.meta}
         action={
@@ -244,7 +246,7 @@ const styles = stylex.create({
       default: null,
       [inDocumentBlock()]: "auto",
     },
-    marginBlock: "24px",
+    marginBlock: space.s24,
     overflow: "hidden",
     borderWidth: "1px",
     borderStyle: "solid",
@@ -253,10 +255,10 @@ const styles = stylex.create({
     backgroundColor: tokens.surface,
   },
   compact: {
-    marginBlock: "8px",
+    marginBlock: space.s8,
   },
   header: {
-    paddingRight: "8px",
+    paddingRight: space.s8,
   },
   meta: {
     marginLeft: 0,
@@ -282,13 +284,14 @@ const styles = stylex.create({
     margin: 0,
     overflowX: "auto",
     color: tokens.ink,
-    font: `${fontSize.ui}/20px ${tokens.fontMono}`,
+    font: `${codeType.size}/${codeType.leading} ${tokens.fontCode}`,
+    fontVariantLigatures: codeType.ligatures,
     textAlign: "left",
   },
   code: {
     display: "block",
     flex: "1 0 auto",
-    padding: "12px 14px",
+    padding: `${space.s12} ${space.s14}`,
     borderRadius: 0,
     backgroundColor: tokens.transparent,
     color: "inherit",
@@ -303,7 +306,7 @@ const styles = stylex.create({
     left: 0,
     flex: "0 0 auto",
     minWidth: "50px",
-    padding: "12px 14px",
+    padding: `${space.s12} ${space.s14}`,
     backgroundColor: tokens.surface,
     color: tokens.ghost,
     textAlign: "right",
@@ -312,13 +315,12 @@ const styles = stylex.create({
   },
 });
 
-// Syntax tokens (@speed-highlight/core). The Whiteboard palette: ink at three
-// strengths, the marker for keywords, two more blues for types and functions,
-// one warm pencil for strings and one plum for numbers. Comments are quiet and
-// italic. Diff green and red are reserved for the diff language. The editor
-// themes carry the same values.
+// Syntax tokens (@speed-highlight/core), colored by the active theme's token
+// colors. Comments are quiet and italic. Diff green and red are reserved for
+// the diff language.
+/* oxlint-disable stylex/no-unused -- read by token name through syntaxByToken */
 const syntaxStyles = stylex.create({
-  kwd: { color: tokens.accent },
+  kwd: { color: tokens.syntaxKeyword },
   type: { color: tokens.syntaxType },
   class: { color: tokens.syntaxType, fontWeight: fontWeight.medium },
   func: { color: tokens.syntaxFunction },
@@ -337,6 +339,7 @@ const syntaxStyles = stylex.create({
     textDecorationStyle: "wavy",
   },
 });
+/* oxlint-enable stylex/no-unused */
 
 const syntaxByToken = new Map<string, stylex.StyleXStyles>(
   Object.entries(syntaxStyles),

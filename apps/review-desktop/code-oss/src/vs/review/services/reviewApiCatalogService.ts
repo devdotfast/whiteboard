@@ -3,8 +3,6 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { IConfigurationService } from "../../platform/configuration/common/configuration.js";
-import { REVIEW_STRUCTURAL_DIFF_SETTING } from "../common/reviewConfigurationDefaults.js";
 import { Emitter, type Event } from "../../base/common/event.js";
 import { Disposable, toDisposable } from "../../base/common/lifecycle.js";
 import { createDecorator } from "../../platform/instantiation/common/instantiation.js";
@@ -28,6 +26,11 @@ export interface IReviewApiCatalogService {
 	lifecycle(reviewId: string, state: "active" | "trash"): Promise<void>;
 	trashReview(reviewId: string): Promise<void>;
 	deleteReview(reviewId: string): Promise<void>;
+	/** Creates an empty top-level board, a plan in the checkout's project; returns its id. */
+	/** A new board in the repository's project, unnamed until the person types a title. */
+	createReview(repositoryPath: string, parentId?: string): Promise<string>;
+	/** Deletes the board if it is still untouched: no title, no blocks; the server decides. */
+	discardReview(reviewId: string): Promise<boolean>;
 }
 
 /** A live API list for Home and tab restoration; no legacy review sessions. */
@@ -41,23 +44,13 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 	loaded = false;
 	private client?: ReviewApiClient;
 	private started?: Promise<void>;
-	private connectionAbort?: AbortController;
 
 	constructor(
 		@IReviewDesktopConnectionService private readonly session: IReviewDesktopConnectionService,
 		@ILogService private readonly log: ILogService,
-		@IConfigurationService private readonly configuration: IConfigurationService,
 		@IStorageService private readonly storage: IStorageService,
 	) {
 		super();
-		this._register(configuration.onDidChangeConfiguration(event => {
-			if (!event.affectsConfiguration(REVIEW_STRUCTURAL_DIFF_SETTING) || !this.started) return;
-			this.connectionAbort?.abort();
-			this.started = undefined;
-			this.reviews = this.reviews.map(review => ({ ...review, diffStats: null }));
-			this.changed.fire();
-			void this.initialize().catch(error => this.log.warn("[Whiteboard] Catalog mode change failed:", error));
-		}));
 	}
 
 	initialize(): Promise<void> {
@@ -74,15 +67,13 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 
 	private async connect(): Promise<void> {
 		const abort = new AbortController();
-		this.connectionAbort = abort;
-		const mode = this.configuration.getValue<boolean>(REVIEW_STRUCTURAL_DIFF_SETTING) === false ? "textual" : "structural";
 		const client = new ReviewApiClient(await this.session.getConnection());
 		this._register(toDisposable(() => abort.abort()));
 		const accept = (reviews: ReviewApiSummary[]) => {
 			if (abort.signal.aborted) return;
 			const previous = this.reviews;
 			this.reviews = reviews;
-			if (reviews.some(review => review.kind !== "scratchpad")) {
+			if (reviews.length > 0) {
 				this.storage.store(REVIEW_HAS_PUBLISHED_BOARD, true, StorageScope.APPLICATION, StorageTarget.USER);
 			}
 			this.loaded = true;
@@ -94,11 +85,10 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 		};
 		// Surface a failed first list instead of reporting an empty catalog:
 		// tab restoration would otherwise drop every persisted API tab.
-		accept(await client.read<ReviewApiSummary[]>(`?mode=${mode}`, abort.signal));
+		accept(await client.read<ReviewApiSummary[]>("", abort.signal));
 		this.client = client;
 		void client.follow<ReviewApiSummary[]>(null, abort.signal, accept, (error) =>
 			this.log.warn("[Whiteboard] API review list disconnected:", error),
-			mode,
 		);
 	}
 
@@ -109,20 +99,31 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 		});
 	}
 
-  async lifecycle(reviewId: string, state: "active" | "trash"): Promise<void> {
-    await this.initialize();
-    await this.client!.post("/commands", { operation: { type: "lifecycle", reviewId, state } });
-  }
+	async lifecycle(reviewId: string, state: "active" | "trash"): Promise<void> {
+		await this.initialize();
+		await this.client!.personCommand({ type: "lifecycle", reviewId, state });
+	}
 
 	async trashReview(reviewId: string): Promise<void> {
 		await this.initialize();
-		await this.client!.post("/commands", {
-			operation: { type: "lifecycle", state: "trash", reviewId },
-		});
+		await this.client!.personCommand({ type: "lifecycle", state: "trash", reviewId });
 	}
 	async deleteReview(reviewId: string): Promise<void> {
 		await this.initialize();
-		await this.client!.post("/commands", { operation: { type: "delete", reviewId } });
+		await this.client!.personCommand({ type: "delete", reviewId });
 	}
 
+	async createReview(repositoryPath: string, parentId?: string): Promise<string> {
+		await this.initialize();
+		// open:false: the caller opens the tab itself.
+		// The person's own board: History credits its first version to them.
+		const result = await this.client!.personCommand<{ reviewId: string }>({ type: "create", title: "", target: { kind: "project", repositoryPath }, ...(parentId && { parentId }), open: false });
+		return result.reviewId;
+	}
+
+	async discardReview(reviewId: string): Promise<boolean> {
+		await this.initialize();
+		const result = await this.client!.post<{ deleted: boolean }>(`/${encodeURIComponent(reviewId)}/discard`, {});
+		return result.deleted;
+	}
 }

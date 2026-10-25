@@ -4,7 +4,9 @@
 //! immediately.
 use crate::hash::DftHashMap;
 use crate::pairing::Pairing;
-use crate::protocol::{FileChange, Node, Region, Source, SourcePos, SourceRange, Span, Visibility};
+use crate::protocol::{
+    FileChange, Node, Region, RegionVisibility, Source, SourcePos, SourceRange, Span, Visibility,
+};
 use std::collections::BTreeSet;
 
 /// The before (`lhs`) or after (`rhs`) side of a comparison.
@@ -76,13 +78,22 @@ pub enum Grouping {
 pub enum MoveError {
     NoRegion(u32),
     CutFold(u32),
-    CutOutside { id: u32, offset: u32, len: u32 },
+    CutOutside {
+        id: u32,
+        offset: u32,
+        len: u32,
+    },
     UnevenSides(u32),
     TooFewRegions(Grouping),
-    Repeated { grouping: Grouping, ids: Vec<u32> },
+    Repeated {
+        grouping: Grouping,
+        ids: Vec<u32>,
+    },
     OneSided(Vec<u32>),
     NotSiblings(Vec<u32>),
     NoNextSibling(u32),
+    /// A structural edit on a visibility-only cursor.
+    VisibilityOnly(u32),
 }
 
 /// A file's trees, the next unused IDs, and where the current walk stands.
@@ -98,6 +109,12 @@ pub struct Cursor {
     places: DftHashMap<u32, Place>,
     /// The regions in each fold state.
     states: DftHashMap<u32, Vec<u32>>,
+    visibility_only: bool,
+    /// The first structural edit refused by a visibility-only cursor.
+    refused: Option<MoveError>,
+    /// Each region's visibility before `set_collapsed` or `set_label` first
+    /// touched it.
+    before: DftHashMap<u32, Visibility>,
 }
 
 impl Cursor {
@@ -138,7 +155,31 @@ impl Cursor {
             next_alignment_id,
             places,
             states,
+            visibility_only: false,
+            refused: None,
+            before: DftHashMap::default(),
         })
+    }
+
+    /// The same cursor, refusing `cut`, `join` and `link`.
+    pub fn visibility_only(self) -> Self {
+        Self {
+            visibility_only: true,
+            ..self
+        }
+    }
+
+    pub fn refused(&self) -> Option<&MoveError> {
+        self.refused.as_ref()
+    }
+
+    fn refuse_structure(&mut self, id: u32) -> Result<(), MoveError> {
+        if !self.visibility_only {
+            return Ok(());
+        }
+        let error = MoveError::VisibilityOnly(id);
+        self.refused.get_or_insert(error.clone());
+        Err(error)
     }
 
     /// The edited sides, once the plugins are done.
@@ -422,6 +463,7 @@ impl Cursor {
 
     /// Split a leaf and its paired leaf at a relative line offset. Returns the new tails.
     pub fn cut(&mut self, id: u32, offset: u32) -> Result<RegionIds, MoveError> {
+        self.refuse_structure(id)?;
         let leaf = self.region(id)?;
         let Node::Leaf { pair, .. } = leaf.node else {
             return Err(MoveError::CutFold(id));
@@ -465,6 +507,7 @@ impl Cursor {
 
     /// Wrap consecutive siblings on each side in new open, unlabelled folds.
     pub fn join(&mut self, ids: &[u32]) -> Result<RegionIds, MoveError> {
+        self.refuse_structure(ids.first().copied().unwrap_or_default())?;
         check_regions(ids, Grouping::Join)?;
         let located = ids
             .iter()
@@ -545,6 +588,7 @@ impl Cursor {
 
     /// Merge the fold states of `ids` into the first's; all collapse if any was.
     pub fn link(&mut self, ids: &[u32]) -> Result<(), MoveError> {
+        self.refuse_structure(ids.first().copied().unwrap_or_default())?;
         check_regions(ids, Grouping::Link)?;
         let state = self.region(ids[0])?.fold_state_id;
         let mut collapsed = false;
@@ -577,25 +621,41 @@ impl Cursor {
     /// Set the shared collapsed state.
     pub fn set_collapsed(&mut self, region: u32, collapsed: bool) -> Result<(), MoveError> {
         let state = self.region(region)?.fold_state_id;
-        let Cursor {
-            sides,
-            places,
-            states,
-            ..
-        } = self;
-        for id in &states[&state] {
-            let place = &places[id];
-            at_mut(tree_mut(sides, place.side), &place.path)
-                .visibility
-                .collapsed = collapsed;
+        for id in self.states[&state].clone() {
+            self.visibility_mut(id)?.collapsed = collapsed;
         }
         Ok(())
     }
 
     /// Set or clear a region's label.
     pub fn set_label(&mut self, region: u32, label: Option<String>) -> Result<(), MoveError> {
-        self.region_mut(region)?.visibility.label = label.unwrap_or_default();
+        self.visibility_mut(region)?.label = label.unwrap_or_default();
         Ok(())
+    }
+
+    /// The regions whose visibility `set_collapsed` or `set_label` changed,
+    /// by id.
+    pub fn visibility_changes(&self) -> Vec<RegionVisibility> {
+        let mut changes: Vec<RegionVisibility> = self
+            .before
+            .iter()
+            .filter_map(|(&id, before)| {
+                let visibility = &self.region(id).ok()?.visibility;
+                (visibility != before).then(|| RegionVisibility {
+                    id,
+                    visibility: visibility.clone(),
+                })
+            })
+            .collect();
+        changes.sort_by_key(|change| change.id);
+        changes
+    }
+
+    fn visibility_mut(&mut self, id: u32) -> Result<&mut Visibility, MoveError> {
+        let place = self.places.get(&id).ok_or(MoveError::NoRegion(id))?;
+        let visibility = &mut at_mut(tree_mut(&mut self.sides, place.side), &place.path).visibility;
+        self.before.entry(id).or_insert_with(|| visibility.clone());
+        Ok(visibility)
     }
 
     fn place(&self, id: u32) -> Result<&Place, MoveError> {
@@ -606,11 +666,6 @@ impl Cursor {
     fn region(&self, id: u32) -> Result<&Region, MoveError> {
         let place = self.place(id)?;
         Ok(at(top(self.source_on(place.side)), &place.path))
-    }
-
-    fn region_mut(&mut self, id: u32) -> Result<&mut Region, MoveError> {
-        let place = self.places.get(&id).ok_or(MoveError::NoRegion(id))?;
-        Ok(at_mut(tree_mut(&mut self.sides, place.side), &place.path))
     }
 
     fn source_on(&self, side: Side) -> &Source {
@@ -697,6 +752,7 @@ impl std::fmt::Display for MoveError {
                 write!(f, "the joined regions {ids:?} are not consecutive siblings")
             }
             Self::NoNextSibling(id) => write!(f, "region {id} has no next sibling"),
+            Self::VisibilityOnly(_) => write!(f, "deferred plugins may only change visibility"),
         }
     }
 }

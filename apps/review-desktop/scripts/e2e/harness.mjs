@@ -44,6 +44,7 @@ const watchedPages = new WeakSet();
 
 const defaultSettings = {
   "review.experimental.softwareMap.enabled": true,
+  "review.experimental.sharing.enabled": true,
   "security.workspace.trust.enabled": false,
   "telemetry.telemetryLevel": "off",
   "workbench.startupEditor": "none",
@@ -89,6 +90,8 @@ export async function createHarness({
     DEV_FAST_REVIEW_TELEMETRY_DISABLED: "1",
     DEV_FAST_REVIEW_TELEMETRY_ENV: "e2e",
     DEV_REVIEW_EXTENSIONS: extensions,
+    // Never takes focus; windows still paint, at opacity 0.
+    DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "hidden",
   };
 
   for (const key of [
@@ -672,81 +675,107 @@ export async function createReview(ctx, spec) {
   };
 }
 
-/** A review with a sequence, a database lens, a trace quote and a software map. */
-export async function createDiagramReview(ctx, title) {
-  const repoPath = path.join(ctx.root, "diagram-service");
-  const fixtures = path.join(import.meta.dirname, "fixtures/diagram-review");
+export const DIAGRAM_REVIEW_TITLE = "Diagram review";
+
+/**
+ * A review with every interactive diagram: a sequence and a database lens with
+ * guided tours, a trace, and a software map on both sides. Its prose links into
+ * the order service's source, so it gets a repository of its own holding that
+ * source; the trace and map upload against its commits.
+ */
+export async function createDiagramReview(ctx) {
+  const fixture = async (name) =>
+    JSON.parse(
+      await readFile(
+        path.join(import.meta.dirname, "fixtures/diagram-review", name),
+        "utf8",
+      ),
+    );
+
+  const [authored, trace, model, source] = await Promise.all([
+    fixture("document.json"),
+    fixture("trace.json"),
+    fixture("software-map.json"),
+    fixture("source.json"),
+  ]);
+
+  const repo = path.join(ctx.root, "diagram-repo");
 
   const git = async (...args) =>
     (
       await exec(
         "git",
-        ["-c", "user.name=Review E2E", "-c", "user.email=e2e@example.invalid"]
-          .concat(args),
-        { cwd: repoPath },
+        [
+          "-c",
+          "user.name=Review E2E",
+          "-c",
+          "user.email=review-e2e@example.invalid",
+          "-c",
+          "commit.gpgsign=false",
+          ...args,
+        ],
+        { cwd: repo },
       )
     ).stdout.trim();
 
-  await cp(path.join(sourcePackage, "tutorial/sample-service"), repoPath, {
-    recursive: true,
-  });
+  for (const [file, text] of Object.entries(source)) {
+    await mkdir(path.dirname(path.join(repo, file)), { recursive: true });
+    await writeFile(path.join(repo, file), text);
+  }
+
   await git("init", "-q", "-b", "main");
   await git("add", ".");
-  await git("commit", "-qm", "Sample service");
+  await git("commit", "-qm", "Create the order service");
+
   const base = await git("rev-parse", "HEAD");
-  await writeFile(path.join(repoPath, "CHANGELOG.md"), "Ship orders.\n");
+
+  await writeFile(path.join(repo, "README.md"), "# Order service\n");
   await git("add", ".");
-  await git("commit", "-qm", "Ship orders");
+  await git("commit", "-qm", "Describe the order service");
+
   const head = await git("rev-parse", "HEAD");
 
   const repositoryId = (
-    await ctx.apiOk("/reviews-api/repositories", "POST", { path: repoPath })
+    await ctx.apiOk("/reviews-api/repositories", "POST", { path: repo })
   ).id;
 
-  const ids = new Map([
-    ["trace", randomUUID()],
-    ["map-base", randomUUID()],
-    ["map-head", randomUUID()],
-  ]);
+  const ids = new Map([["fixture-trace", randomUUID()]]);
 
   await ctx.apiOk("/reviews-api/resources", "POST", {
-    id: ids.get("trace"),
+    id: ids.get("fixture-trace"),
     repositoryId,
     kind: "trace",
-    trace: {
-      label: "Sample session",
-      events: [
-        { id: "0", role: "user", text: "Order one, then ship it." },
-        { id: "1", role: "assistant", text: "The order ships." },
-      ],
-    },
+    trace,
   });
 
-  const model = JSON.parse(
-    await readFile(path.join(fixtures, "software-map.json"), "utf8"),
-  );
+  for (const side of ["base", "head"]) {
+    const id = randomUUID();
 
-  for (const side of ["base", "head"])
+    ids.set(`fixture-map-${side}`, id);
     await ctx.apiOk("/reviews-api/resources", "POST", {
-      id: ids.get(`map-${side}`),
+      id,
       repositoryId,
       kind: "map",
       pins: { repositoryId, base, head },
       side,
       model,
     });
+  }
 
   const blocks = JSON.parse(
-    await readFile(path.join(fixtures, "blocks.json"), "utf8"),
-  ).map((block) =>
-    block.type === "trace_quote"
-      ? { ...block, traceId: ids.get(block.traceId) }
-      : block.type === "software_map"
-        ? { ...block, mapVersionId: ids.get(block.mapVersionId) }
-        : block,
+    JSON.stringify(authored.document).replace(
+      /"(fixture-(?:trace|map-base|map-head))"/g,
+      (_, alias) => JSON.stringify(ids.get(alias)),
+    ),
   );
 
-  return createReview(ctx, { title, repoPath, base, head, blocks });
+  return createReview(ctx, {
+    title: DIAGRAM_REVIEW_TITLE,
+    blocks,
+    repoPath: repo,
+    base,
+    head,
+  });
 }
 
 /** The standard two-block order review used by several journeys. */
@@ -763,11 +792,7 @@ export const orderReviewBlocks = [
   },
   {
     type: "code_peek",
-    source: {
-      file: "order.ts",
-      start: { side: "head", line: 1 },
-      end: { side: "head", line: 1 },
-    },
+    source: "head/order.ts#L1",
   },
 ];
 
@@ -891,16 +916,66 @@ export async function installExtensionGroup(
   );
 }
 
-/** Brings the Home canvas to the front by activating its editor tab; falls back to a restart. */
+/** Brings the Home canvas to the front with the titlebar's Home button; falls back to a restart. */
 export async function openHome(ctx) {
-  const tab = ctx.page
-    .locator(".tabs-container .tab")
-    .filter({ hasText: /^Home$/ })
-    .first();
+  const home = ctx.page.locator(".review-titlebar-home").first();
 
-  if (await tab.count()) await tab.click();
+  if (await home.isVisible()) await home.click();
   else await ctx.restartDesktop();
   await ctx.page.locator("main.review-home").waitFor({ timeout: 60000 });
+}
+
+/** Switches the session to a view with its sidebar tab: Whiteboard, Diff or Threads. */
+export async function showView(ctx, label, page = ctx.page) {
+  await sidebarTab(page, label).click();
+  await tabSelected(ctx, label, page);
+}
+
+const sidebarTab = (page, label) =>
+  page.locator(`.review-sidebar-tabs [role="tab"][aria-label^="${label}"]`);
+
+/** Waits for the sidebar's `label` tab to be the active one. */
+export const tabSelected = (ctx, label, page = ctx.page) =>
+  ctx.until(
+    async () =>
+      (await sidebarTab(page, label).getAttribute("aria-selected")) === "true",
+    `the ${label} tab to be active`,
+  );
+
+/** Waits for the session to show `view`: review, diff or trace. */
+export const inView = (ctx, view, page = ctx.page) =>
+  ctx.until(
+    async () => (await page.locator(`.review-view-region--${view}`).count()) > 0,
+    `the ${view} view to be shown`,
+  );
+
+export const commitPill = (page) =>
+  page.locator('.review-sidebar-commit-picker button[aria-haspopup="menu"]');
+
+/** Scopes the Diff to the commit with `subject`. */
+export async function scopeToCommit(ctx, subject, page = ctx.page) {
+  await showView(ctx, "Diff", page);
+  await commitPill(page).click();
+  await page
+    .getByRole("menu", { name: "Commits" })
+    .getByRole("menuitemradio")
+    .filter({ hasText: subject })
+    .click();
+}
+
+/** Opens the Trace view from the peek of the trace quote `link`. */
+export async function openFullTrace(ctx, link, page = ctx.page) {
+  await link.click();
+  await page.getByRole("button", { name: "Full Trace" }).click();
+  await inView(ctx, "trace", page);
+}
+
+/** Dismisses the workbench's toasts, such as the usage-data notice. */
+export async function clearToasts(page) {
+  for (const clear of await page
+    .locator(".notifications-toasts .codicon-notifications-clear")
+    .all())
+    await clear.click().catch(() => {});
 }
 
 /** `--app` names a macOS bundle, or the installed executable on Linux and Windows. */

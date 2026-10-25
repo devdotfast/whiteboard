@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { REVIEW_REMOTE_HOSTS_ENABLED_SETTING, REVIEW_REMOTE_HOSTS_SETTING } from "../common/reviewConfigurationDefaults.js";
+import { REVIEW_REMOTE_HOSTS_SETTING } from "../common/reviewConfigurationDefaults.js";
 import { reviewRemoteHostsSettings } from "./reviewRemoteHostsSettings.js";
 
 function fixture(values: Record<string, unknown>) {
@@ -33,13 +33,9 @@ function fixture(values: Record<string, unknown>) {
 	return { hosts, writes, retried, uninstalled };
 }
 
-test("reads the two settings as main does", () => {
-	const on = fixture({ [REVIEW_REMOTE_HOSTS_ENABLED_SETTING]: true, [REVIEW_REMOTE_HOSTS_SETTING]: ["devbox", 7] }).hosts;
-	assert.equal(on.enabled, true);
-	assert.deepEqual(on.configured, ["devbox"]);
-	const off = fixture({ [REVIEW_REMOTE_HOSTS_ENABLED_SETTING]: "true", [REVIEW_REMOTE_HOSTS_SETTING]: "devbox" }).hosts;
-	assert.equal(off.enabled, false);
-	assert.deepEqual(off.configured, []);
+test("reads the hosts setting as main does", () => {
+	assert.deepEqual(fixture({ [REVIEW_REMOTE_HOSTS_SETTING]: ["devbox", 7] }).hosts.configured, ["devbox"]);
+	assert.deepEqual(fixture({ [REVIEW_REMOTE_HOSTS_SETTING]: "devbox" }).hosts.configured, []);
 });
 
 test("refuses an alias the SSH command would refuse, with the reason, and writes nothing", async () => {

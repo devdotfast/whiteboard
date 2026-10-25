@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { REVIEW_REMOTE_HOSTS_ENABLED_SETTING, REVIEW_REMOTE_HOSTS_SETTING } from "../common/reviewConfigurationDefaults.js";
+import { REVIEW_REMOTE_HOSTS_SETTING } from "../common/reviewConfigurationDefaults.js";
 import type { ReviewRemoteHostsSettings } from "../common/reviewProtocol.js";
 import { remoteHostAliases, validateSshAlias } from "../common/reviewSshAlias.js";
 import type { IReviewDesktopConnectionService } from "../services/reviewDesktopConnectionService.js";
@@ -15,13 +15,12 @@ export function reviewRemoteHostsSettings(input: {
 }): ReviewRemoteHostsSettings {
 	const configured = () => remoteHostAliases(input.get(REVIEW_REMOTE_HOSTS_SETTING));
 	return {
-		enabled: input.get(REVIEW_REMOTE_HOSTS_ENABLED_SETTING) === true,
 		configured: configured(),
 		suggestions: () => input.connection.listSshAliases(),
 		states: () => input.connection.readRemoteHosts(),
 		retry: (alias) => input.connection.retryRemoteHost(alias),
 		install: (alias) => input.connection.installRemoteHost(alias),
-		agents: (alias) => input.connection.detectRemoteAgents(alias),
+		agents: (alias, refresh) => input.connection.detectRemoteAgents(alias, refresh),
 		connectAgents: (alias, agents) => input.connection.connectRemoteAgents(alias, agents),
 		uninstall: (alias) => input.connection.uninstallRemoteHost(alias),
 		set: async (aliases) => {

@@ -389,3 +389,28 @@ fn moves_that_cannot_be_carried_out_are_errors() {
         })
     );
 }
+
+#[test]
+fn a_visibility_only_cursor_refuses_structural_edits() {
+    let mut file = both(
+        vec![leaf(1, 0, 0, 4, &[]), leaf(2, 1, 4, 8, &[])],
+        vec![leaf(3, 0, 0, 4, &[]), leaf(4, 1, 4, 8, &[])],
+    )
+    .visibility_only();
+    let original = file.sides.clone();
+    for refused in [
+        file.cut(1, 1).err(),
+        file.join(&[1, 2]).err(),
+        file.link(&[1, 2]).err(),
+    ] {
+        let refused = refused.expect("refused");
+        assert_eq!(
+            refused.to_string(),
+            "deferred plugins may only change visibility"
+        );
+    }
+    assert_eq!(file.sides, original);
+    assert!(file.refused().is_some());
+    file.set_collapsed(1, true).unwrap();
+    file.set_label(1, Some("label".into())).unwrap();
+}

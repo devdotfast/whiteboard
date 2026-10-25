@@ -5,7 +5,7 @@ import { parseShareLink, shareIdSchema } from "@dev.fast/review-share-protocol";
 import {
   DEFAULT_STORE_ORIGIN,
   clearStoreAuth,
-  openUrlInBrowser,
+  type openUrlInBrowser,
   readStoreAuth,
   runStoreLogin,
 } from "@dev.fast/trace-core";
@@ -18,13 +18,18 @@ import { z } from "zod";
 
 import { readSharingAuth } from "./auth.js";
 import { ShareAuthError, ShareClient, SharePreflightError } from "./client.js";
-import { exportShare, validateShareSources } from "./export.js";
+import {
+  exportShare,
+  referenceCommits,
+  validateShareSources,
+} from "./export.js";
 import { SharedReviewStore, sharedReviewId } from "./import.js";
 import { readShareRepository, verifyShareRepository } from "./repository.js";
 
 interface LoginState {
   pending: boolean;
   url?: string;
+  userCode?: string;
   error?: string;
 }
 
@@ -61,7 +66,6 @@ export function mountSharingHost(
   options: SharingHostOptions = {},
 ) {
   const startLogin = options.login ?? runStoreLogin;
-  const openUrl = options.openUrl ?? openUrlInBrowser;
 
   let login: LoginState = {
     pending: false,
@@ -92,9 +96,9 @@ export function mountSharingHost(
         traces: false,
         stdout: discard,
         stderr: discard,
-        openUrl: async (url) => {
-          login.url = url;
-          await openUrl(url);
+        openUrl: options.openUrl,
+        onDeviceCode: (device) => {
+          Object.assign(login, device);
         },
       })
         .then((code) => {
@@ -223,13 +227,26 @@ export function mountSharingPublisher(
         409,
       );
 
-    const root = snapshot.pins
-      ? store.repositoryPath(snapshot.pins.repositoryId)
-      : undefined;
+    const repositoryId =
+      snapshot.pins?.repositoryId ?? snapshot.target?.repositoryId;
 
-    const repository = root
-      ? await (options.readRepository ?? readShareRepository)(root)
-      : undefined;
+    const root = repositoryId ? store.repositoryPath(repositoryId) : undefined;
+
+    const readRepository = options.readRepository ?? readShareRepository;
+
+    // Unpinned boards name their repository when they can, so receivers can
+    // group them.
+    const repository = !root
+      ? undefined
+      : snapshot.pins
+        ? await readRepository(root)
+        : await (async () => {
+            try {
+              return await readRepository(root);
+            } catch {
+              return undefined;
+            }
+          })();
 
     const bundle = await exportShare({
       store,
@@ -239,9 +256,12 @@ export function mountSharingPublisher(
       repository,
     });
 
+    const commits = referenceCommits(snapshot);
+
+    // The commits must be on GitHub for a recipient to fetch them.
     const verification =
-      root && snapshot.pins && repository
-        ? verifyRepository(root, snapshot.pins, repository).then(
+      root && (snapshot.pins || commits.length) && repository
+        ? verifyRepository(root, snapshot.pins, commits).then(
             () => ({ ok: true as const }),
             (error: Error) => ({ ok: false as const, error }),
           )

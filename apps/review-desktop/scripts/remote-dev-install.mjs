@@ -12,7 +12,9 @@ import {
   buildDevRemoteTarball,
 } from "./build-remote-tarball.mjs";
 
-const ROOT = "~/.dev/whiteboard-remote";
+const INSTALL_SCRIPT = fileURLToPath(
+  new URL("../../../packages/review/remote/install.sh", import.meta.url),
+);
 
 const BUCKET = "dev-fast-desktop-artifacts";
 
@@ -44,7 +46,15 @@ function hostTarget(alias, { sshConfig } = {}) {
   return target;
 }
 
-/** Unpacks this checkout's tarball in ~/.dev/whiteboard-remote, links ~/.local/bin/whiteboard, and returns its `whiteboard version --json`; `commit` rewrites its VS Code server's commit. */
+/** The version directory the script's DONE line names. */
+export function installedFrom(said) {
+  const done = /^WHITEBOARD-INSTALL DONE (.*)$/m.exec(said);
+  const cli = done && JSON.parse(done[1]).cli;
+
+  return cli ? path.posix.dirname(path.posix.dirname(cli)) : undefined;
+}
+
+/** Installs this checkout's tarball with install.sh, as Desktop does; `commit` rewrites its VS Code server's commit. */
 export async function remoteDevInstall(
   alias,
   { target, sshConfig, version, commit, stdio = "inherit" } = {},
@@ -54,12 +64,6 @@ export async function remoteDevInstall(
   const built = await buildDevRemoteTarball({ target, version, stdio });
   const copy = `/tmp/whiteboard-remote-${randomBytes(4).toString("hex")}.tar.xz`;
 
-  const removeCopy = () => {
-    try {
-      ssh(alias, sshConfig, `rm -f ${copy}`);
-    } catch {}
-  };
-
   try {
     execFileSync(
       "scp",
@@ -67,28 +71,42 @@ export async function remoteDevInstall(
       { stdio: ["ignore", "inherit", "inherit"] },
     );
 
+    const args = ["install", "--version", built.version, "--sha256", built.sha256, "--file", copy];
+
+    let said;
+
+    try {
+      said = execFileSync("ssh", [...sshArgs(sshConfig), alias, "sh", "-s"], {
+        encoding: "utf8",
+        input: `set -- ${args.map((arg) => `'${arg}'`).join(" ")}\n${await readFile(INSTALL_SCRIPT, "utf8")}`,
+        stdio: ["pipe", "pipe", "inherit"],
+      });
+    } catch (error) {
+      said = error.stdout ?? "";
+    }
+
+    const installed = installedFrom(said);
+
+    if (!installed)
+      throw new Error(`install.sh did not install on ${alias}:\n${said.trim()}`);
+
     return ssh(
       alias,
       sshConfig,
       [
         "set -e",
-        `trap 'rm -f ${copy}' EXIT`,
-        `mkdir -p ${ROOT}`,
-        `rm -rf ${ROOT}/whiteboard-remote`,
-        `tar -xJ -C ${ROOT} < ${copy}`,
         ...(commit
           ? [
-              `sed -i 's/"commit": "[0-9a-f]*"/"commit": "${commit}"/' ${ROOT}/whiteboard-remote/vscode-server/product.json`,
+              `sed -i 's/"commit": "[0-9a-f]*"/"commit": "${commit}"/' ${installed}/vscode-server/product.json`,
             ]
           : []),
-        "mkdir -p ~/.local/bin",
-        `ln -sf ${ROOT}/whiteboard-remote/whiteboard ~/.local/bin/whiteboard`,
-        "~/.local/bin/whiteboard version --json",
+        `${installed}/whiteboard version --json`,
       ].join("\n"),
     );
-  } catch (error) {
-    removeCopy();
-    throw error;
+  } finally {
+    try {
+      ssh(alias, sshConfig, `rm -f ${copy}`);
+    } catch {}
   }
 }
 

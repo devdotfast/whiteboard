@@ -47,7 +47,6 @@ export const name = "remote-install";
 export const phase = 2;
 
 export const options = {
-  settings: { "review.experimental.remoteHosts.enabled": true },
   env: { DEV_FAST_REVIEW_SSH_CONFIG: `${runDir}/ssh_config` },
 };
 
@@ -59,7 +58,14 @@ const hasDocker = () =>
   });
 
 export async function prepare({ app }) {
-  if (prepared || app || !(await hasDocker().then(() => true, () => false)))
+  if (
+    prepared ||
+    app ||
+    !(await hasDocker().then(
+      () => true,
+      () => false,
+    ))
+  )
     return undefined;
 
   releases = await serveReleases();
@@ -190,7 +196,8 @@ async function desktopSsh() {
 
 const masterPid = async (host) =>
   (await desktopSsh()).find(
-    ([, args]) => args.includes(" -M -N ") && args.endsWith(`-- ${host}`),
+    ([, args]) =>
+      / -M -N | -N -T -D /.test(args) && args.endsWith(`-- ${host}`),
   )?.[0];
 
 function watcher(ctx) {
@@ -239,7 +246,7 @@ async function watchPage(page) {
       ].find(
         (e) =>
           e.offsetParent !== null &&
-          e.textContent.startsWith("Install Whiteboard on "),
+          e.textContent.startsWith("Install remote server on "),
       );
 
       if (title && !open)
@@ -248,7 +255,9 @@ async function watchPage(page) {
       open = Boolean(title);
 
       for (const row of document.querySelectorAll("[data-remote-host]")) {
-        const [label, detail] = row.firstElementChild?.children ?? [];
+        const [label, detail] =
+          row.querySelector("button[aria-expanded] > span")?.children ?? [];
+
         const rows = (ui.rows[label?.textContent] ??= []);
         const text = detail?.textContent;
 
@@ -347,7 +356,7 @@ export async function removeHost(ctx, host, { uninstall = false } = {}) {
 
 async function answerPrompt(ctx, host, label) {
   const widget = ctx.page.locator(".quick-input-widget");
-  const heading = `Install Whiteboard on ${host}?`;
+  const heading = `Install remote server on ${host}? (~250 MB)`;
 
   await ctx.until(
     async () =>
@@ -358,17 +367,12 @@ async function answerPrompt(ctx, host, label) {
     2 * MINUTE,
   );
 
-  const text = await widget
-    .locator(".quick-input-description")
-    .first()
-    .textContent();
-
   await widget
     .locator(".monaco-list-row", { hasText: new RegExp(`^${label}$`) })
     .first()
     .click({ timeout: 10_000 });
 
-  return { text, at: Date.now() };
+  return Date.now();
 }
 
 async function reached(ctx, watch, host, states, label, timeout) {
@@ -407,7 +411,7 @@ function assertStepOrder(details, label) {
 
 const promptsFor = async (ctx, host) =>
   (await pageRecord(ctx)).prompts.filter(
-    (prompt) => prompt.title === `Install Whiteboard on ${host}?`,
+    (prompt) => prompt.title === `Install remote server on ${host}? (~250 MB)`,
   );
 
 const marker = async (host, version) =>
@@ -421,7 +425,7 @@ const marker = async (host, version) =>
 async function install(ctx, watch, host, { timeout = 10 * MINUTE } = {}) {
   await addHost(ctx, host);
 
-  const { text, at } = await answerPrompt(ctx, host, "Install");
+  const at = await answerPrompt(ctx, host, "Install");
 
   const online = await reached(
     ctx,
@@ -442,7 +446,7 @@ async function install(ctx, watch, host, { timeout = 10 * MINUTE } = {}) {
 
   assertStepOrder(steps, host);
 
-  return { text, steps, ms: online.at - at };
+  return { steps, ms: online.at - at };
 }
 
 async function createRemoteReview(host, reviewTitle) {
@@ -507,8 +511,6 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   const first = await install(ctx, watch, fresh);
 
   timings.fresh = first.ms;
-  assert.match(first.text, /about 250 MB/);
-  assert.doesNotMatch(first.text, /\/home\//, "the question names a path");
 
   const settingsSteps = (await pageRecord(ctx)).rows[fresh].filter((text) =>
     STEP_ORDER.some((step) => text.startsWith(step)),
@@ -662,16 +664,9 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   assert.equal(declined.state, "not-installed", declined.detail);
   assert.equal(declined.declined, true);
 
-  const denyTarget = { x86_64: "linux-x64", aarch64: "linux-arm64" }[
-    await onRemote(deny, "uname -m")
-  ];
-
   assert.equal(
     declined.installCommand,
-    [
-      `mkdir -p ${ROOT} && rm -rf ${ROOT}/whiteboard-remote && curl -fsSL https://install.dev.fast/releases/${version}/remote/whiteboard-remote-${version}-${denyTarget}.tar.xz | tar -xJ -C ${ROOT}`,
-      "mkdir -p ~/.local/bin && ln -sf ~/.dev/whiteboard-remote/whiteboard-remote/whiteboard ~/.local/bin/whiteboard",
-    ].join("\n"),
+    `curl -fsSL https://install.dev.fast/releases/${version}/remote/install.sh | sh -s -- --version ${version}`,
   );
   await denySection
     .getByRole("button", { name: `Install ${deny}` })
@@ -796,7 +791,10 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   assert.equal(newFreshServer.version, next);
   assert.notEqual(newFreshServer.serverPid, oldFreshServer.serverPid);
   assert.match(
-    await onRemote(fresh, `cat /proc/${newFreshServer.serverPid}/cmdline | tr '\\0' ' '`),
+    await onRemote(
+      fresh,
+      `cat /proc/${newFreshServer.serverPid}/cmdline | tr '\\0' ' '`,
+    ),
     new RegExp(`/versions/${next.replaceAll(".", "\\.")}/`),
   );
   await homeRow(ctx, title);
@@ -841,15 +839,16 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   const section = await hostsSection(ctx);
   const freshRow = hostRow(section, fresh);
 
+  const connect = freshRow.getByRole("button", {
+    name: `Connect Claude Code on ${fresh}`,
+  });
+
   await until(
-    async () =>
-      /Agents on wb-test-fresh: Claude Code/.test(await freshRow.innerText()),
+    async () => (await connect.count()) === 1,
     "the agent offer for fresh",
     2 * MINUTE,
   );
-  await freshRow
-    .getByRole("button", { name: `Connect agents on ${fresh}` })
-    .click();
+  await connect.click();
   await until(
     async () =>
       /Claude Code (is connected|was not connected)/.test(
@@ -894,18 +893,14 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   );
 
   const hand = alias("hand");
-  const [unpack, link] = declined.installCommand.split("\n");
-  const served = `${releases.url}whiteboard-remote-${next}-linux-x64.tar.xz`;
+  const base = releases.url.replace(/\/$/, "");
 
-  await onRemote(
-    hand,
-    [
-      "set -e",
-      unpack.replace(/curl -fsSL \S+/, `curl -fsSL ${served}`),
-      link,
-    ].join("\n"),
-    { timeout: 5 * MINUTE },
-  );
+  const handCommand = declined.installCommand
+    .replaceAll(version, next)
+    .replace("https://install.dev.fast/releases", base)
+    .replace("| sh ", `| WHITEBOARD_RELEASES=${base} sh `);
+
+  await onRemote(hand, handCommand, { timeout: 5 * MINUTE });
   assert.equal(await onRemote(hand, "bash -lc 'whiteboard --version'"), next);
 
   const handAdded = Date.now();
@@ -934,13 +929,10 @@ async function steps(ctx, until, watch, timings, manifestPath) {
   );
 
   assert.equal(handSettled.state, "online", handSettled.detail);
-  assert.equal(
-    await onRemote(hand, `ls -d ${ROOT}/versions 2>/dev/null || true`),
-    "",
-  );
+  assert.equal(await onRemote(hand, `ls ${ROOT}/versions`), next);
   assert.match(
-    await onRemote(hand, `readlink ${WHITEBOARD}`),
-    /\/\.dev\/whiteboard-remote\/whiteboard-remote\/whiteboard$/,
+    await onRemote(hand, `cat ${WHITEBOARD}`),
+    new RegExp(`/versions/${next.replaceAll(".", "\\.")}/whiteboard`),
   );
 
   const handServer = JSON.parse(
@@ -953,11 +945,11 @@ async function steps(ctx, until, watch, timings, manifestPath) {
       hand,
       `cat /proc/${handServer.serverPid}/cmdline | tr '\\0' ' '`,
     ),
-    /\/\.dev\/whiteboard-remote\/whiteboard-remote\//,
+    new RegExp(`/versions/${next.replaceAll(".", "\\.")}/`),
   );
   assert.deepEqual(await promptsFor(ctx, hand), []);
   ctx.check(
-    `11. ${hand}: ${served} unpacked and linked by Settings' two lines; online without a question, its server runs from the unpacked tree, no versions/ was written and ${WHITEBOARD} is still the hand symlink`,
+    `11. ${hand}: Settings' install.sh line installed ${next}; online without a question, as Desktop's own install, and its server runs from versions/${next}`,
   );
 
   ctx.check(

@@ -97,6 +97,9 @@ struct Cli {
     /// Include every token's tree-sitter capture name in --format ndjson output
     #[arg(long, requires = "format", conflicts_with = "quiet", conflicts_with_all = METADATA)]
     syntax: bool,
+    /// Send each file before deferred plugins finish, then an update record with their result
+    #[arg(long, requires = "format", conflicts_with = "quiet", conflicts_with_all = METADATA)]
+    defer: bool,
     /// Columns for --stat; defaults to the terminal's width
     #[arg(long)]
     width: Option<usize>,
@@ -686,6 +689,7 @@ impl Cli {
         run::Options {
             syntax: self.syntax,
             ignore_comments: self.ignore_comments,
+            defer: self.defer,
         }
     }
 }

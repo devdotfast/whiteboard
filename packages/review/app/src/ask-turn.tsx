@@ -1,3 +1,12 @@
+import { AgentLogo } from "@canvas/ui/brand-icons";
+import { buttonStyles } from "@canvas/ui/button";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CheckIcon, CloseIcon } from "@canvas/ui/icons";
+import { Spinner } from "@canvas/ui/spinner";
+import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { AskEntry, AskThreadState } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -8,19 +17,15 @@ import {
   useState,
 } from "react";
 
-import { AGENT_LOGOS } from "./agent-logos";
 import { AgentMarkdown } from "./agent-markdown";
 import { askFileCode, askFileLink } from "./ask-files";
-import { askMotion } from "./ask-motion.stylex";
 import { askPanelStyles } from "./ask-styles";
-import { controlStyles } from "./controls-styles";
 import { CourierFigure } from "./courier-figure";
-import { CheckIcon, CloseIcon, DisclosureChevron } from "./icons";
+import { formatDuration } from "./format";
 import { chevronMarker } from "./markers.stylex";
-import { fontSize, radius } from "./scale.stylex";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import { settleStreamingMarkdown } from "./streaming-markdown";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 type ToolEntry = Extract<AskEntry, { kind: "tool" }>;
 
@@ -271,15 +276,15 @@ export function summarize(activities: readonly Activity[]) {
 function ActivityStatusIcon({ status }: { status: ActivityStatus }) {
   return (
     <span
-      {...stylex.props(styles.status, status === "failed" && styles.failed)}
+      {...stylex.props(styles.status, status === "failed" && textStyles.error)}
       aria-label={status}
     >
       {status === "completed" ? (
-        <CheckIcon xstyle={controlStyles.inlineIcon} />
+        <CheckIcon xstyle={iconStyles.inline} />
       ) : status === "failed" ? (
-        <CloseIcon xstyle={controlStyles.inlineIcon} />
+        <CloseIcon xstyle={iconStyles.inline} />
       ) : status === "in_progress" ? (
-        <span {...stylex.props(styles.spinner)} />
+        <Spinner tone="accent" />
       ) : (
         <span
           {...stylex.props(styles.dot, status === "waiting" && styles.waiting)}
@@ -298,7 +303,10 @@ function AskToolItem({ activity }: { activity: Activity }): ReactElement {
   const head = (
     <>
       <ActivityStatusIcon status={activity.status} />
-      <span ref={labelTooltip} {...stylex.props(styles.toolLabel)}>
+      <span
+        ref={labelTooltip}
+        {...stylex.props(textStyles.truncate, styles.toolLabel)}
+      >
         {activity.label}
       </span>
     </>
@@ -311,17 +319,20 @@ function AskToolItem({ activity }: { activity: Activity }): ReactElement {
           type="button"
           {...stylex.props(
             chevronMarker,
+            buttonStyles.reset,
+            disclosureStyles.toggle,
             styles.toolHead,
+            focusStyles.ringInset,
             styles.toolHeadButton,
           )}
           aria-expanded={open}
           onClick={() => setOpen((value) => !value)}
         >
           {head}
-          <DisclosureChevron expanded={open} />
+          <DisclosureChevron />
         </button>
       ) : (
-        <div {...stylex.props(styles.toolHead)}>{head}</div>
+        <div {...stylex.props(buttonStyles.reset, styles.toolHead)}>{head}</div>
       )}
       {open ? (
         <div {...stylex.props(styles.toolBody)}>
@@ -359,6 +370,9 @@ function AskToolGroup({
         type="button"
         {...stylex.props(
           chevronMarker,
+          focusStyles.ring,
+          buttonStyles.reset,
+          disclosureStyles.toggle,
           styles.summary,
           failed && styles.summaryFailed,
         )}
@@ -366,7 +380,7 @@ function AskToolGroup({
         onClick={() => setOpen((value) => !value)}
       >
         <span>{summarize(activities)}</span>
-        <DisclosureChevron expanded={open} xstyle={styles.summaryChevron} />
+        <DisclosureChevron xstyle={styles.summaryChevron} />
       </button>
       {open ? (
         <ul {...stylex.props(styles.toolList)}>
@@ -480,7 +494,7 @@ export function AskAgentTurn({
             role="note"
             {...stylex.props(
               styles.notice,
-              entry.severity === "error" && styles.failed,
+              entry.severity === "error" && textStyles.error,
             )}
           >
             {entry.description
@@ -544,9 +558,7 @@ export function AskAgentTurn({
   return (
     <div {...stylex.props(styles.turn)}>
       <div {...stylex.props(styles.byline)}>
-        <span {...stylex.props(styles.bylineLogo)}>
-          {AGENT_LOGOS[thread.agent]({ xstyle: styles.bylineLogoMark })}
-        </span>
+        <AgentLogo agent={thread.agent} size="inline" />
         <span>{thread.agentName}</span>
       </div>
       {blocks.map((block) =>
@@ -558,14 +570,6 @@ export function AskAgentTurn({
       )}
     </div>
   );
-}
-
-function elapsed(since: number, now: number) {
-  const seconds = Math.max(0, Math.floor((now - since) / 1000));
-
-  return seconds < 60
-    ? `${seconds}s`
-    : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
 }
 
 /** How long after the answer text last grew the agent still reads as
@@ -634,51 +638,46 @@ export function AskWorking({
         marching={writing}
         thinking={!writing}
       />
-      <span {...stylex.props(styles.workingLabel, askPanelStyles.sweep)}>
+      <span
+        {...stylex.props(
+          textStyles.truncate,
+          styles.workingLabel,
+          askPanelStyles.sweep,
+        )}
+      >
         {doing}…
       </span>
-      <span {...stylex.props(styles.workingTime)}>{elapsed(since, now)}</span>
+      <span {...stylex.props(styles.workingTime)}>
+        {formatDuration(Math.max(0, now - since))}
+      </span>
     </div>
   );
 }
-
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
-
-const spin = stylex.keyframes({ to: { transform: "rotate(360deg)" } });
 
 const styles = stylex.create({
   turn: {
     display: "flex",
     flexDirection: "column",
-    gap: "16px",
+    gap: space.s16,
   },
   byline: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    marginBottom: "-8px",
+    gap: space.s8,
+    marginBottom: `-${space.s8}`,
     color: tokens.ink,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "14px",
-  },
-  bylineLogo: {
-    display: "flex",
-    flex: "0 0 14px",
-    justifyContent: "center",
-  },
-  bylineLogoMark: {
-    width: "12px",
-    height: "12px",
+    lineHeight: leading.px14,
   },
   answer: {
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
+    gap: space.s12,
     color: tokens.ink,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "26px",
+    lineHeight: leading.px26,
   },
   // Lifted off the panel's tray, where the chat's own code sits. A long path
   // wraps; each line's piece keeps its padding and corners.
@@ -691,20 +690,16 @@ const styles = stylex.create({
   tools: {
     display: "flex",
     flexDirection: "column",
-    gap: "6px",
+    gap: space.s6,
   },
   summary: {
     display: "inline-flex",
     // A wrapped summary keeps its chevron on the first line.
     alignItems: "flex-start",
     alignSelf: "flex-start",
-    gap: "6px",
+    gap: space.s6,
     padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
     borderRadius: radius.small,
-    backgroundColor: tokens.transparent,
     color: {
       default: tokens.inkMuted,
       ":hover": tokens.ink,
@@ -712,16 +707,11 @@ const styles = stylex.create({
     },
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "20px",
-    // Buttons center their text, which shows once a long summary wraps.
-    textAlign: "left",
-    cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
+    lineHeight: leading.px20,
   },
   // Centered on the summary's first 20px line.
   summaryChevron: {
-    margin: "4px 2px",
+    margin: `${space.s4} ${space.s2}`,
   },
   summaryFailed: {
     color: tokens.inkFaint,
@@ -730,7 +720,7 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     margin: 0,
-    padding: "4px 0",
+    padding: `${space.s4} 0`,
     overflow: "hidden",
     borderWidth: "1px",
     borderStyle: "solid",
@@ -746,18 +736,14 @@ const styles = stylex.create({
   toolHead: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     width: "100%",
     minWidth: 0,
-    padding: "7px 12px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
+    padding: `${space.s8} ${space.s12}`,
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.ui,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
     textAlign: "left",
   },
   toolHeadButton: {
@@ -766,16 +752,10 @@ const styles = stylex.create({
       ":hover": tokens.ink,
       ":focus-visible": tokens.ink,
     },
-    cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-1px" },
   },
   toolLabel: {
     flex: "1 1 auto",
     minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   status: {
     display: "flex",
@@ -783,28 +763,12 @@ const styles = stylex.create({
     justifyContent: "center",
     color: tokens.inkFaint,
   },
-  failed: {
-    color: tokens.changeRemoved,
-  },
   notice: {
     margin: 0,
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: 1.5,
-  },
-  spinner: {
-    width: "8px",
-    height: "8px",
-    borderWidth: "1.4px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderTopColor: tokens.accent,
-    borderRadius: radius.round,
-    animationName: { default: spin, [reducedMotion]: "none" },
-    animationDuration: askMotion.spin,
-    animationTimingFunction: "linear",
-    animationIterationCount: "infinite",
+    lineHeight: leading.normal,
   },
   dot: {
     width: "6px",
@@ -818,18 +782,18 @@ const styles = stylex.create({
   toolBody: {
     display: "flex",
     flexDirection: "column",
-    gap: "8px",
-    padding: "0 12px 10px 34px",
+    gap: space.s8,
+    padding: `0 ${space.s12} ${space.s10} ${space.s32}`,
   },
   pre: {
     maxHeight: "240px",
     margin: 0,
-    padding: "8px 10px",
+    padding: `${space.s8} ${space.s10}`,
     overflow: "auto",
     borderRadius: radius.control,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.small,
-    lineHeight: "17px",
+    lineHeight: leading.px16,
     whiteSpace: "pre-wrap",
     overflowWrap: "anywhere",
   },
@@ -847,12 +811,12 @@ const styles = stylex.create({
   working: {
     display: "flex",
     alignItems: "baseline",
-    gap: "8px",
+    gap: space.s8,
     minWidth: 0,
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "20px",
+    lineHeight: leading.px20,
   },
 
   // The board's courier, working on the answer, standing on the text's
@@ -870,25 +834,30 @@ const styles = stylex.create({
   },
   workingLabel: {
     minWidth: 0,
-    overflow: "hidden",
     backgroundImage: {
       default: `linear-gradient(90deg, ${tokens.inkMuted} 0%, ${tokens.inkMuted} 40%, ${tokens.ink} 50%, ${tokens.inkMuted} 60%, ${tokens.inkMuted} 100%)`,
-      [reducedMotion]: "none",
+      [stylex.env.reducedMotion]: "none",
     },
     backgroundPosition: "0 0",
     // Twice the label: the sweep moves it by one repeat, so each loop ends
     // where the next begins.
     backgroundSize: "200% 100%",
-    backgroundClip: { default: "text", [reducedMotion]: "border-box" },
-    color: { default: tokens.transparent, [reducedMotion]: tokens.inkMuted },
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    backgroundClip: {
+      default: "text",
+      [stylex.env.reducedMotion]: "border-box",
+    },
+    color: {
+      default: tokens.transparent,
+      [stylex.env.reducedMotion]: tokens.inkMuted,
+    },
   },
+  // A time, in Inter, its digits steady as it ticks.
   workingTime: {
     flex: "0 0 auto",
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
+    fontVariantNumeric: "tabular-nums",
     fontSize: fontSize.small,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
 });

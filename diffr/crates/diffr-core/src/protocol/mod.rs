@@ -1,8 +1,9 @@
 //! The NDJSON wire protocol between diffr and its frontends.
 //!
 //! One `Event` per line: a `start` header, one `file` record per changed
-//! file in completion order, and a `complete` footer. Every enum on the
-//! wire is internally tagged with a `type` (or `kind`) key in snake_case.
+//! file in completion order, at most one `update` per file after its `file`
+//! record, and a `complete` footer. Every enum on the wire is internally
+//! tagged with a `type` (or `kind`) key in snake_case.
 //! Optional, empty, and default fields are omitted, never `null`. Consumers
 //! ignore unknown fields and tolerate unknown enum strings.
 //!
@@ -85,6 +86,14 @@ pub enum Event {
         #[serde(flatten)]
         outcome: Outcome,
     },
+    /// What deferred plugins changed on a file already sent, with `--defer`.
+    /// Sent only when they changed visibility or failed; their failure
+    /// leaves the file's record and `complete` untouched.
+    Update {
+        file: Pairing<FileRef>,
+        #[serde(flatten)]
+        change: Update,
+    },
     /// The footer. `aborted` is present when a run-level failure stopped
     /// the comparison early; every file already emitted stays valid.
     Complete {
@@ -101,6 +110,29 @@ pub enum Event {
 pub enum Outcome {
     Diff { diff: Diff },
     Error { error: Problem },
+}
+
+/// Exactly one of `regions` or `error` appears on an `update` record.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum Update {
+    /// The regions whose visibility changed, and the file's new
+    /// `stats.visible`. Nothing else in the diff changes.
+    Visibility {
+        regions: Vec<RegionVisibility>,
+        visible: LineCounts,
+    },
+    Error {
+        error: Problem,
+    },
+}
+
+/// A region's new visibility, by its `id`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RegionVisibility {
+    pub id: u32,
+    #[serde(flatten)]
+    pub visibility: Visibility,
 }
 
 /// What one end of the comparison is.
@@ -609,6 +641,49 @@ mod tests {
                     error: Problem {
                         code: "not_utf8".to_owned(),
                         message: "a.txt is not valid UTF-8".to_owned(),
+                    },
+                },
+            },
+            Event::Update {
+                file: Pairing::RightOnly {
+                    rhs: FileRef {
+                        path: "a.py".to_owned(),
+                        oid: "dddddd".to_owned(),
+                        mode: "100644".to_owned(),
+                    },
+                },
+                change: Update::Error {
+                    error: Problem {
+                        code: "mutation_failed".to_owned(),
+                        message: "mutation summarize: summarizer: HTTP 400".to_owned(),
+                    },
+                },
+            },
+            Event::Update {
+                file: Pairing::RightOnly {
+                    rhs: FileRef {
+                        path: "a.py".to_owned(),
+                        oid: "dddddd".to_owned(),
+                        mode: "100644".to_owned(),
+                    },
+                },
+                change: Update::Visibility {
+                    regions: vec![
+                        RegionVisibility {
+                            id: 4,
+                            visibility: Visibility {
+                                collapsed: true,
+                                label: "sums".to_owned(),
+                            },
+                        },
+                        RegionVisibility {
+                            id: 5,
+                            visibility: Visibility::default(),
+                        },
+                    ],
+                    visible: LineCounts {
+                        added: 1,
+                        removed: 0,
                     },
                 },
             },

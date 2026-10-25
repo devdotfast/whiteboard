@@ -183,7 +183,17 @@ export class ShareClient {
     requestId: string = randomUUID(),
     beforeUpload?: () => Promise<void>,
   ) {
-    validateShareBundle(bundle);
+    try {
+      validateShareBundle(bundle);
+    } catch (cause) {
+      throw new SharePreflightError(
+        new Error(
+          "Whiteboard could not prepare this review for sharing. Please report this issue.",
+          { cause },
+        ),
+      );
+    }
+
     const manifestBytes = Buffer.from(JSON.stringify(bundle.manifest));
 
     const created = createdSchema.parse(

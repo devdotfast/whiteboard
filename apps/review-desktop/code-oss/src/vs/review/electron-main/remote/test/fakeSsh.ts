@@ -9,8 +9,7 @@ import type { AddressInfo } from "node:net";
 import { PassThrough } from "node:stream";
 import type { TestContext } from "node:test";
 import type { ReviewRemoteClock, SpawnSsh, SshChildProcess } from "../reviewRemoteHost.js";
-import { REVIEW_REMOTE_INSTALL_SAY } from "../reviewRemoteInstallScript.js";
-import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_PATH_CLI } from "../reviewRemoteProbeScript.js";
+import { REVIEW_REMOTE_PROBE_BEGIN, REVIEW_REMOTE_PROBE_END, REVIEW_REMOTE_PROBE_PATH_CLI } from "../reviewRemoteProbe.js";
 
 class FakeChild extends EventEmitter {
 	static nextPid = 1000;
@@ -167,7 +166,8 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 			} else if (kind === "exec") {
 				const answer = () => {
 					entry.input = child.input;
-					if (child.input.includes(REVIEW_REMOTE_PROBE_BEGIN)) {
+					const command = /^set -- '([a-z]+)'/.exec(child.input)?.[1];
+					if (command === "probe") {
 						entry.kind = "probe";
 						return child.finish(0, { stdout: probeOutput(remote.probe) });
 					}
@@ -181,11 +181,7 @@ export function fakeSsh(remotes: Record<string, FakeRemote>, clock?: { now(): nu
 						const answer = remote.connect ?? { code: 0, stdout: connectedOutput(child.input) };
 						return child.finish(answer.code, answer);
 					}
-					if (child.input.includes(" LISTED\\n")) {
-						entry.kind = "uninstall";
-						return child.finish(0, { stdout: `${REVIEW_REMOTE_INSTALL_SAY} ROOT /home/dev/.dev/whiteboard-remote\n${REVIEW_REMOTE_INSTALL_SAY} HAVE 0.1.6\n${REVIEW_REMOTE_INSTALL_SAY} LISTED\n` });
-					}
-					if (child.input.includes("remote uninstall")) {
+					if (command === "uninstall") {
 						entry.kind = "uninstall";
 						const done = () => child.finish(0, { stdout: `${JSON.stringify({ event: "remote.uninstall", ok: remote.uninstall?.ok ?? true, reason: "refused" })}\n` });
 						return void (remote.uninstall?.after ?? Promise.resolve()).then(done);

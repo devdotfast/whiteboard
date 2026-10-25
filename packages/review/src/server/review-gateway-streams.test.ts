@@ -44,7 +44,7 @@ afterEach(async () => {
 
 type Api = <T>(route: string, init?: RequestInit) => Promise<T>;
 
-type Subscription = { reviewId: string | null; mode?: "structural" };
+type Subscription = { reviewId: string | null };
 
 function follow(url: string, subscriptions: Subscription[]) {
   const client = new ReviewApiClient({ serverUrl: url, token: "local-token" });
@@ -137,9 +137,6 @@ const command = (api: Api, operation: JsonObject) =>
     body: JSON.stringify({ operation }),
   });
 
-const withoutPad = (reviews: ReviewApiSummary[]) =>
-  reviews.filter((review) => review.kind !== "scratchpad");
-
 it("lists this machine's reviews, then each host's in the setting's order, with host, state and availability", async () => {
   const a = await startRemote(path.join(root, "a"));
   const b = await startRemote(path.join(root, "b"));
@@ -156,7 +153,7 @@ it("lists this machine's reviews, then each host's in the setting's order, with 
   await expect
     .poll(
       async () =>
-        withoutPad(await desktop.api<ReviewApiSummary[]>("")).map((review) => [
+        (await desktop.api<ReviewApiSummary[]>("")).map((review) => [
           review.title,
           review.host ?? null,
           review.hostState ?? null,
@@ -176,14 +173,11 @@ it("lists this machine's reviews, then each host's in the setting's order, with 
   )!;
 
   const fromA = merged.find((review) => review.reviewId === onA)!;
-  const { repositoryGroup, ...rest } = asSent;
+  const { project, ...rest } = asSent;
 
   expect(fromA).toEqual({
     ...rest,
-    repositoryGroup: {
-      key: `wb-a:${repositoryGroup!.key}`,
-      label: repositoryGroup!.label,
-    },
+    project: { id: `wb-a:${project!.id}`, name: project!.name },
     host: "wb-a",
     hostState: "online",
     available: { sourceWindows: false },
@@ -502,7 +496,7 @@ it("lists a host's last reviews as connecting, then offline, after a restart whi
   await expect
     .poll(
       async () =>
-        withoutPad(await second.api<ReviewApiSummary[]>("")).map((review) => [
+        (await second.api<ReviewApiSummary[]>("")).map((review) => [
           review.title,
           review.host,
           review.hostState,

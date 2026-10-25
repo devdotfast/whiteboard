@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { InlineLineNumbers } from "./reviewLineNumbers.js";
 import { Codicon } from "../../base/common/codicons.js";
 import { Disposable } from "../../base/common/lifecycle.js";
 import { autorun, observableValue, type IObservable } from "../../base/common/observable.js";
@@ -67,6 +68,8 @@ export class StructuralFoldControls extends Disposable {
 		private readonly regions: IObservable<readonly UnchangedRegion[]>,
 		private readonly sharedHover: StructuralFoldHover,
 		private readonly viewed?: StructuralViewedState,
+		/** Whether a document embed is near the viewport; undefined for views that are not embeds. */
+		private readonly onscreen?: IObservable<boolean>,
 	) {
 		super();
 		if (viewed) this._register(viewed.onDidChange(() => this.render()));
@@ -100,6 +103,7 @@ export class StructuralFoldControls extends Disposable {
 		}));
 		this._register(editor.onDidChangeModel(() => { this.hovered = undefined; this.render(); }));
 		this._register(editor.onDidChangeModelTokens(() => this.render()));
+		this._register(editor.onDidChangeCursorSelection(() => this.render()));
 		// These move lines without changing scope state.
 		this._register(editor.onDidContentSizeChange(() => this.layoutViewport()));
 		this._register(editor.onDidScrollChange(() => this.layoutViewport()));
@@ -109,6 +113,7 @@ export class StructuralFoldControls extends Disposable {
 		// The pills follow what the editor hides, not the fold state.
 		this._register(autorun(reader => {
 			this.sharedHover.state.read(reader);
+			this.onscreen?.read(reader);
 			for (const region of regions.read(reader)) {
 				region.visibleLineCountTop.read(reader);
 				region.visibleLineCountBottom.read(reader);
@@ -182,6 +187,9 @@ export class StructuralFoldControls extends Disposable {
 			this.rails.hide();
 			return;
 		}
+		// The multi-diff editor attaches an editor only while its file is in view,
+		// but a document embed attaches all of them, on screen or not.
+		if (this.onscreen?.get() !== false && !this.session.fileCollapse(path).get()) this.session.markSeen(path);
 		const decorations: IModelDeltaDecoration[] = [];
 		const folded = this.foldedHeaders();
 		for (const range of this.viewed?.getViewedRanges(path) ?? []) {
@@ -261,7 +269,7 @@ export class StructuralFoldControls extends Disposable {
 				options: { description: "review-scope-brace", inlineClassName: `review-scope-brace${state}` },
 			});
 		}
-		if (targeted && foldable.rail) {
+		if (targeted && foldable.rail && !(InlineLineNumbers.hasSelectionHint(this.editor) && this.editor.getSelection()?.startLineNumber === line)) {
 			const lines = foldable.rail.end - foldable.rail.start;
 			const end = model.getLineMaxColumn(line);
 			result.push({

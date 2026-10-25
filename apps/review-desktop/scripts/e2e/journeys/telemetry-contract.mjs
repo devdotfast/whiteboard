@@ -42,6 +42,7 @@ const EXPECTED_EVENTS = new Set([
   "review_app_opened",
   "review_extension_disabled",
   "review_home_empty_state_viewed",
+  "review_onboarding_step_viewed",
   "review_installation_created",
   "review_session_started",
   "review_review_presented",

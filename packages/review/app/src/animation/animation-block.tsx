@@ -4,11 +4,17 @@ import { useReviewDebugSettings } from "@canvas/debug-settings";
 import { DiagramHeader } from "@canvas/diagram-header";
 import { drawStyles } from "@canvas/draw-styles";
 import { useOptionalReviewPanel } from "@canvas/review-panel";
-import { fontSize, radius, tracking } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  leading,
+  radius,
+  space,
+  tracking,
+} from "@canvas/scale.stylex";
 import { withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import { IconButton } from "@canvas/ui/button";
-import { useTooltip } from "@canvas/use-tooltip";
+import { useTooltip } from "@canvas/ui/tooltip";
 import { anchorSelection } from "@review/lens-selection";
 import { type Block, animationCodeId } from "@review/review-api/document";
 import * as stylex from "@stylexjs/stylex";
@@ -638,14 +644,14 @@ const narrow = "@media (max-width: 720px)";
 const styles = stylex.create({
   figure: {
     overflow: "hidden",
-    margin: "18px 0 4px",
+    margin: `${space.s18} 0 ${space.s4}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
     borderRadius: radius.surface,
     backgroundColor: tokens.surface,
     color: tokens.ink,
-    font: `${fontSize.body}/1.5 ${tokens.fontMono}`,
+    font: `${fontSize.body}/${leading.normal} ${tokens.fontMono}`,
   },
   headerTitle: {
     overflow: { default: null, [narrow]: "visible" },
@@ -689,9 +695,9 @@ const styles = stylex.create({
   controls: {
     display: "flex",
     alignItems: "center",
-    gap: "4px",
+    gap: space.s4,
     minHeight: "36px",
-    padding: "0 12px 0 8px",
+    padding: `0 ${space.s12} 0 ${space.s8}`,
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
@@ -708,15 +714,15 @@ const styles = stylex.create({
   caption: {
     flex: "1 1 auto",
     minWidth: 0,
-    marginLeft: "6px",
-    paddingBlock: "8px",
+    marginLeft: space.s6,
+    paddingBlock: space.s8,
     color: tokens.inkMuted,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
   },
   dots: {
     display: "flex",
     flex: "0 0 auto",
-    gap: "6px",
+    gap: space.s6,
   },
   dot: {
     width: "8px",
@@ -752,9 +758,12 @@ const styles = stylex.create({
     flex: "1 1 0",
     alignItems: "center",
     justifyContent: "center",
-    gap: "5px",
+    gap: space.s4,
     minWidth: { default: "fit-content", [narrow]: 0 },
-    padding: { default: "6px 10px", [narrow]: "6px 4px" },
+    padding: {
+      default: `${space.s6} ${space.s10}`,
+      [narrow]: `${space.s6} ${space.s4}`,
+    },
     borderStyle: "none",
     borderBottomWidth: "2px",
     borderBottomStyle: "solid",
@@ -779,7 +788,7 @@ const styles = stylex.create({
   },
   error: {
     margin: 0,
-    padding: "8px 12px",
+    padding: `${space.s8} ${space.s12}`,
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,

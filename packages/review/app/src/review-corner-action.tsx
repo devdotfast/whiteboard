@@ -1,47 +1,27 @@
-import { fontSize, fontWeight } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, space } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { TrashIcon } from "@canvas/ui/icons";
+import { Popover } from "@canvas/ui/popover";
+import { textStyles } from "@canvas/ui/text";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useRef, useState } from "react";
 
 import { useReviewSession } from "./host/review-session";
-import { type IconProps, TrashIcon } from "./icons";
 import { useReviewActions, useReviewState } from "./review-context";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
-import { useTutorial } from "./tutorial-context";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useTooltip } from "./use-tooltip";
 
 export function ReviewCornerAction(): ReactElement | null {
   const { dismissReview } = useReviewActions();
   const { submissionOutcome } = useReviewState();
-  const tutorial = useTutorial();
   const session = useReviewSession();
-
-  const closeTooltip = useTooltip("Close tutorial");
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const control = useRef<HTMLDivElement>(null);
-  const errorPopover = useAnchoredPopover<HTMLSpanElement>(failed, control);
 
   // A finished review has nothing left to submit or dismiss.
   if (submissionOutcome === "dismissed" || session.review?.trashedAt)
     return null;
-
-  /* The tutorial is not in the review store, so there is no list to leave.
-     Closing the tab is the whole action, and it needs no
-     confirmation. */
-  if (tutorial) {
-    return (
-      <div {...stylex.props(shellStyles.topbarItem, styles.action)}>
-        <Button ref={closeTooltip} onClick={tutorial.close}>
-          <ArchiveIcon xstyle={styles.icon} />
-          <span>Close</span>
-        </Button>
-      </div>
-    );
-  }
 
   const dismiss = async () => {
     if (busy) return;
@@ -60,41 +40,20 @@ export function ReviewCornerAction(): ReactElement | null {
 
   return (
     <div ref={control} {...stylex.props(shellStyles.topbarItem, styles.action)}>
-      <Button disabled={busy} onClick={() => void dismiss()}>
-        <TrashIcon xstyle={styles.icon} />
+      <Button aria-busy={busy || undefined} onClick={() => void dismiss()}>
+        <TrashIcon />
         <span>Move to Trash</span>
       </Button>
       {failed && (
-        <span
-          ref={errorPopover}
-          popover="manual"
-          {...stylex.props(
-            shellStyles.topbarPopover,
-            surfaceStyles.popover,
-            styles.error,
-          )}
+        <Popover
+          anchor={control}
+          xstyle={[shellStyles.topbarPopover, textStyles.error, styles.error]}
           role="alert"
         >
           Could not move the whiteboard to Trash. Try again.
-        </span>
+        </Popover>
       )}
     </div>
-  );
-}
-
-export function ArchiveIcon({ xstyle }: IconProps = {}): ReactElement {
-  return (
-    <svg
-      {...stylex.props(xstyle)}
-      viewBox="0 0 16 16"
-      width="13"
-      height="13"
-      aria-hidden="true"
-    >
-      <rect x="1.6" y="2.6" width="12.8" height="3.4" rx="1" />
-      <path d="M3 6v6.2a1.2 1.2 0 0 0 1.2 1.2h7.6A1.2 1.2 0 0 0 13 12.2V6" />
-      <path d="M6.4 9h3.2" />
-    </svg>
   );
 }
 
@@ -107,17 +66,10 @@ const styles = stylex.create({
     display: "inline-flex",
     alignItems: "center",
   },
-  icon: {
-    fill: "none",
-    stroke: "currentcolor",
-    strokeWidth: "1.3",
-    strokeLinejoin: "round",
-  },
   // Only rendered in the topbar, where the popover placement positions it.
   error: {
-    padding: "8px 12px",
-    color: tokens.changeRemoved,
-    font: `${fontWeight.regular} ${fontSize.small} ${tokens.fontMono}`,
+    padding: `${space.s8} ${space.s12}`,
+    font: `${fontWeight.regular} ${fontSize.small} ${tokens.chromeFont}`,
     whiteSpace: "nowrap",
   },
 });

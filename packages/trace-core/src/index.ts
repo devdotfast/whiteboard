@@ -197,6 +197,7 @@ export {
 
 export {
   liveLockOwner,
+  pidReused,
   processIsAlive,
   processStartIdentity,
   withFileLock,

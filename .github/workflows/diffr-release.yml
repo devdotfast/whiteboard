@@ -20,7 +20,7 @@ jobs:
       matrix:
         include:
           - target: aarch64-apple-darwin
-            os: macos-14
+            os: macos-15
           - target: x86_64-apple-darwin
             os: macos-15-large
           - target: x86_64-unknown-linux-gnu
@@ -114,7 +114,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm]
+        os: [macos-15, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     env:
@@ -330,7 +330,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm, windows-latest]
+        os: [macos-15, macos-15-intel, ubuntu-22.04, ubuntu-22.04-arm, windows-latest]
     runs-on: ${{ matrix.os }}
     defaults:
       run:

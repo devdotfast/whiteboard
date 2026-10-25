@@ -8,7 +8,7 @@ import * as stylex from "@stylexjs/stylex";
 /** A top bar surface tab; its marker underline draws while it is hovered. */
 export const segmentMarker = stylex.defineMarker();
 
-/** The button a disclosure chevron sits in; the chevron inks on its hover. */
+/** A disclosure toggle, a button or summary; its chevron inks and turns. */
 export const chevronMarker = stylex.defineMarker();
 
 /** A call tree's call-site edge; its highlight draws while it is hovered. */
@@ -35,8 +35,8 @@ export const mapFrameMarker = stylex.defineMarker();
 /** A flow diagram node; its outline takes the marker while it has focus. */
 export const flowNodeMarker = stylex.defineMarker();
 
-/** A contents entry; its number inks while it is the current section. */
-export const tocEntryMarker = stylex.defineMarker();
+/** A contents rail tick's hit area; its tick lengthens while hovered. */
+export const tocTickMarker = stylex.defineMarker();
 
 /** A review document block; its heading recomposes while it is retitled. */
 export const documentNodeMarker = stylex.defineMarker();
@@ -78,3 +78,12 @@ export const homeRowMarker = stylex.defineMarker();
 
 /** A filter option reveals its empty checkbox only while hovered or keyboard focused. */
 export const filterRowMarker = stylex.defineMarker();
+
+/** A first-run install row; its copy chip shows while it is hovered. */
+export const installRowMarker = stylex.defineMarker();
+
+/** An onboarding rail step; its label inks while it is hovered. */
+export const railStepMarker = stylex.defineMarker();
+
+/** A board row reveals its disclosure on hover or keyboard focus. */
+export const boardRowMarker = stylex.defineMarker();

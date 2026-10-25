@@ -1,7 +1,16 @@
-import { MinusIcon, PlusIcon } from "@canvas/icons";
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
-import { dockShadow } from "@canvas/software-map/hotkeys-tab.stylex";
+import {
+  elevation,
+  fontSize,
+  fontWeight,
+  leading,
+  motion,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
+import { Button, IconButton } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { MinusIcon, PlusIcon } from "@canvas/ui/icons";
 import { Kbd } from "@canvas/ui/kbd";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -146,34 +155,29 @@ export function SoftwareMapHotkeysTab({
             </div>
           ))}
         </div>
-        <button
+        <IconButton
           ref={toggleRef}
-          type="button"
-          {...stylex.props(styles.button, styles.toggle)}
+          xstyle={styles.toggle}
           aria-label="Minimize software map hotkeys"
           aria-expanded="true"
           tabIndex={open ? 0 : -1}
           onClick={() => onOpenChange(false)}
         >
-          <MinusIcon xstyle={styles.icon} />
-        </button>
+          <MinusIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
+        </IconButton>
       </div>
-      <button
+      <Button
         ref={collapsedButtonRef}
-        type="button"
-        {...stylex.props(
-          styles.button,
-          styles.collapsedButton,
-          !open && styles.collapsedButtonShown,
-        )}
+        variant="ghost"
+        xstyle={[styles.collapsedButton, !open && styles.collapsedButtonShown]}
         aria-label="Show software map hotkeys"
         aria-expanded="false"
         tabIndex={open ? -1 : 0}
         onClick={() => onOpenChange(true)}
       >
         <span>Hotkeys</span>
-        <PlusIcon xstyle={styles.icon} />
-      </button>
+        <PlusIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
+      </Button>
     </aside>
   );
 }
@@ -184,10 +188,6 @@ function stopSoftwareMapHotkeysKeyDown(event: KeyboardEvent<HTMLElement>) {
   if (event.ctrlKey || event.metaKey || event.altKey) return;
   event.stopPropagation();
 }
-
-const settle = "cubic-bezier(0.2, 0.8, 0.2, 1)";
-
-const reducedMotion = "@media (prefers-reduced-motion: reduce)";
 
 const styles = stylex.create({
   // A tab docked to the bottom edge, sized to its content.
@@ -215,18 +215,18 @@ const styles = stylex.create({
     borderRadius: `${radius.surface} ${radius.surface} 0 0`,
     backgroundColor: tokens.surface,
     color: tokens.ink,
-    boxShadow: dockShadow.open,
+    boxShadow: elevation.dock,
     fontSize: fontSize.small,
-    lineHeight: 1,
+    lineHeight: leading.none,
     transform: "translateX(-50%)",
     transition: {
-      default: `width ${motion.medium} ${settle}, box-shadow ${motion.medium} ${motion.ease}`,
-      [reducedMotion]: "none",
+      default: `width ${motion.medium} ${motion.settle}, box-shadow ${motion.medium} ${motion.ease}`,
+      [stylex.env.reducedMotion]: "none",
     },
     willChange: "width",
   },
   tabCollapsed: {
-    boxShadow: dockShadow.collapsed,
+    boxShadow: elevation.dockCollapsed,
   },
   panel: {
     display: "flex",
@@ -237,8 +237,8 @@ const styles = stylex.create({
     opacity: 1,
     transform: "translateY(0)",
     transition: {
-      default: `opacity ${motion.fast} ${motion.ease}, transform ${motion.medium} ${settle}`,
-      [reducedMotion]: "none",
+      default: `opacity ${motion.fast} ${motion.ease}, transform ${motion.medium} ${motion.settle}`,
+      [stylex.env.reducedMotion]: "none",
     },
   },
   panelCollapsed: {
@@ -249,11 +249,11 @@ const styles = stylex.create({
   strip: {
     display: "flex",
     flex: "1 1 auto",
-    gap: "12px",
+    gap: space.s12,
     alignItems: "center",
     minWidth: 0,
     height: "100%",
-    padding: "0 8px 0 10px",
+    padding: `0 ${space.s8} 0 ${space.s10}`,
     overflowX: "auto",
     scrollbarWidth: "none",
     "::-webkit-scrollbar": {
@@ -263,7 +263,7 @@ const styles = stylex.create({
   group: {
     display: "flex",
     flex: "0 0 auto",
-    gap: "6px",
+    gap: space.s6,
     alignItems: "center",
     minWidth: 0,
     whiteSpace: "nowrap",
@@ -280,42 +280,22 @@ const styles = stylex.create({
   item: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "3px",
+    gap: space.s4,
     color: tokens.inkMuted,
   },
   keys: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "2px",
+    gap: space.s2,
   },
   itemLabel: {
     color: tokens.inkFaint,
   },
-  button: {
-    display: "inline-flex",
-    alignItems: "center",
-    height: "100%",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
-    color: {
-      default: tokens.inkFaint,
-      ":hover": tokens.ink,
-      ":focus-visible": tokens.ink,
-    },
-    cursor: "pointer",
-    outline: {
-      default: null,
-      ":focus-visible": `1px solid ${tokens.ruleSoft}`,
-    },
-    outlineOffset: { default: null, ":focus-visible": "-3px" },
-  },
   toggle: {
     flex: "0 0 28px",
-    justifyContent: "center",
     width: "28px",
-    padding: 0,
+    height: "100%",
+    borderRadius: 0,
     borderLeftWidth: "1px",
     borderLeftStyle: "solid",
     borderLeftColor: tokens.ruleSoft,
@@ -323,30 +303,20 @@ const styles = stylex.create({
   collapsedButton: {
     position: "absolute",
     inset: "0 auto 0 0",
-    gap: "6px",
-    padding: "0 10px",
-    color: {
-      default: tokens.inkMuted,
-      ":hover": tokens.ink,
-      ":focus-visible": tokens.ink,
-    },
-    font: "inherit",
+    height: "100%",
+    borderRadius: 0,
+    fontSize: fontSize.small,
     opacity: 0,
     pointerEvents: "none",
     transform: "translateY(-3px)",
     transition: {
-      default: `opacity ${motion.fast} ${motion.ease}, transform ${motion.medium} ${settle}`,
-      [reducedMotion]: "none",
+      default: `opacity ${motion.fast} ${motion.ease}, transform ${motion.medium} ${motion.settle}`,
+      [stylex.env.reducedMotion]: "none",
     },
   },
   collapsedButtonShown: {
     opacity: 1,
     pointerEvents: "auto",
     transform: "translateY(0)",
-  },
-  icon: {
-    width: "14px",
-    height: "14px",
-    pointerEvents: "none",
   },
 });

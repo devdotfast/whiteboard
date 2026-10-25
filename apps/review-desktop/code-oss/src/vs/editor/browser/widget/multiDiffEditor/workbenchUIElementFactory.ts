@@ -48,6 +48,7 @@ export interface IWorkbenchUIElementFactory {
 	 */
 	readonly scrollRange?: IObservable<{ readonly start: number; readonly endExclusive: number } | undefined>;
 	readonly hideResourceHeader?: boolean;
+	readonly hideResourceStatus?: boolean;
 	readonly codeEditorWidgetOptions?: IDiffCodeEditorWidgetOptions;
 
 	/**

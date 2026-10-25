@@ -1,13 +1,39 @@
+import { BoardIcon, PullRequestStateIcon } from "@canvas/ui/board-icons";
+import { CopyableText, copyText } from "@canvas/ui/copy";
+import { CrumbSeparator } from "@canvas/ui/crumbs";
+import { DisclosureChevron, disclosureStyles } from "@canvas/ui/disclosure";
+import { dividerStyles } from "@canvas/ui/divider";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import {
+  ChevronDownIcon,
+  ClearFiltersIcon,
+  CloseIcon,
+  CodeIcon,
+  FilterIcon,
+  GearIcon,
+  HelpIcon,
+  MoreIcon,
+  PlusIcon,
+  SearchIcon,
+  SortIcon,
+  StackIcon,
+} from "@canvas/ui/icons";
+import { textStyles } from "@canvas/ui/text";
+import { fieldStyles } from "@canvas/ui/text-field";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   REVIEW_DISCORD_URL,
   type ReviewApiSummary,
   type ReviewCanvasOnboarding,
   type ReviewRemoteHostActions,
-  homeSessions,
+  boardIconKind,
+  boardTitle,
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
 import { fuzzySegments } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
+import { QueryClientProvider } from "@tanstack/react-query";
 import {
   type ReactNode,
   useCallback,
@@ -20,28 +46,19 @@ import {
   useState,
 } from "react";
 
+import { AddChildWhiteboard } from "./add-child-whiteboard";
+import { createCanvasQueryClient } from "./canvas-query";
+import { ChangedBadge } from "./changed-badge";
 import { useHostActionButton } from "./connection-chip";
-import { CopyableText, copyText } from "./copy-text";
 import { countLabel, formatRelativeTime } from "./format";
 import { homeStyles } from "./home-styles";
 import { CanvasUiContext, useCanvasMenu } from "./host/canvas-ui";
 import {
-  BoardIcon,
-  BranchIcon,
-  ChevronDownIcon,
-  ClearFiltersIcon,
-  CloseIcon,
-  CodeIcon,
-  DisclosureChevron,
-  FilterIcon,
-  FolderIcon,
-  GearIcon,
-  HelpIcon,
-  PullRequestIcon,
-  SearchIcon,
-  SortIcon,
-} from "./icons";
-import { homeGroupMarker, homeRowMarker } from "./markers.stylex";
+  boardRowMarker,
+  chevronMarker,
+  homeGroupMarker,
+  homeRowMarker,
+} from "./markers.stylex";
 import { useNotify } from "./notify";
 import { useReviewHostDown } from "./remote-host-state";
 import type { ReviewFindHost } from "./review-find";
@@ -57,30 +74,39 @@ import {
   type HomeSort,
   activeHomeChips,
   defaultHomeFilters,
-  groupFor,
+  homeBoardTree,
+  homeBranchGroup,
   homeFacetLabels,
   homeFacetValues,
   homeGroups,
   isHomeFacet,
+  isUnread,
   matchesHomeFilters,
   mergeChipOrder,
   removeHomeChip,
   reviewMetadataPills,
-  reviewTitle,
   sortHomeReviews,
   trashDaysLeft,
   trashRetentionDays,
 } from "./review-home-model";
 import { styles } from "./review-home-styles";
 import { withClass } from "./stylex-props";
-import { Button, IconButton } from "./ui/button";
+import { BoardDisclosure, boardControlStyles } from "./ui/board-disclosure";
+import { Button, IconButton, buttonStyles } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
+import { Dialog } from "./ui/dialog";
 import { EmptyState } from "./ui/empty-state";
 import { Shortcut } from "./ui/kbd";
+import { useDismissOnOutside } from "./ui/popover";
 import { StatusBanner } from "./ui/status-banner";
 import { surfaceStyles } from "./ui/surface";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
-import { useTooltip } from "./use-tooltip";
+import { useWhiteboardExpansion } from "./whiteboard-expansion";
+import {
+  type WhiteboardBranch,
+  canAddChildWhiteboard,
+  canExpandWhiteboard,
+  showsChanged,
+} from "./whiteboard-tree";
 
 interface ReviewHomeProps {
   findHost?: ReviewFindHost;
@@ -90,12 +116,17 @@ interface ReviewHomeProps {
   onOpen(review: ReviewApiSummary): void;
   onDelete?(review: ReviewApiSummary): Promise<void>;
   onTrash?(review: ReviewApiSummary): Promise<void>;
+  onMarkRead?(review: ReviewApiSummary): Promise<void>;
   onRestore?(review: ReviewApiSummary): Promise<void>;
   remoteHosts?: ReviewRemoteHostActions;
   onboarding?: ReviewCanvasOnboarding;
-  onOpenTutorial?(): void;
   onOpenSettings?(): void;
   onOpenSetup?(): void;
+  /** Opens New whiteboard; absent where Home cannot draw one. */
+  onNewWhiteboard?(): void;
+  onNewChildWhiteboard?(parentId: string): Promise<void>;
+  /** Shown in place of "No whiteboards yet" while there is nothing to list. */
+  emptyState?: ReactNode;
 }
 
 type PickerTrigger = "filter" | "unread" | HomeFacet;
@@ -132,7 +163,17 @@ function withEntries<V>(
   return next;
 }
 
-export function ReviewHome({
+export function ReviewHome(props: ReviewHomeProps) {
+  const [client] = useState(createCanvasQueryClient);
+
+  return (
+    <QueryClientProvider client={client}>
+      <ReviewHomeBody {...props} />
+    </QueryClientProvider>
+  );
+}
+
+function ReviewHomeBody({
   findHost,
   view,
   onViewChange,
@@ -140,18 +181,23 @@ export function ReviewHome({
   onOpen,
   onDelete,
   onTrash,
+  onMarkRead,
   onRestore,
   remoteHosts,
   onboarding,
-  onOpenTutorial,
   onOpenSettings,
   onOpenSetup,
+  onNewWhiteboard,
+  onNewChildWhiteboard,
+  emptyState,
 }: ReviewHomeProps) {
   const helpTooltip = useTooltip("Help", { instant: true });
   const settingsTooltip = useTooltip("Settings", { instant: true });
   const clearTooltip = useTooltip("Clear filters", { instant: true });
   const filterTooltip = useTooltip("Filter", { instant: true });
   const sortTooltip = useTooltip("Sort", { instant: true });
+  const selectGroupTooltip = useTooltip<HTMLInputElement>("Select group");
+  const selectTooltip = useTooltip<HTMLInputElement>("Select");
   const ui = useContext(CanvasUiContext);
   const notify = useNotify();
 
@@ -177,14 +223,18 @@ export function ReviewHome({
     section: HomeFilterSection;
   } | null>(null);
 
+  const { expanded: expandedParents, setExpanded } = useWhiteboardExpansion();
+  const [filteredCollapsed, setFilteredCollapsed] = useState(new Set<string>());
   const [sort, setSort] = useState<HomeSort>("updated");
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const [selected, setSelected] = useState(new Set<string>());
   const [deleted, setDeleted] = useState(new Set<string>());
+  const [read, setRead] = useState(new Map<string, string>());
   const [lifecycle, setLifecycle] = useState(new Map<string, string | null>());
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState("");
+  const [childErrors, setChildErrors] = useState<Record<string, string>>({});
   // The unavailable review last opened; it opens once its host is back.
   const [waiting, setWaiting] = useState<ReviewApiSummary>();
 
@@ -213,7 +263,7 @@ export function ReviewHome({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [localView, setLocalView] = useState<"active" | "trash">("active");
   const inTrash = (view ?? localView) === "trash";
-  const published = onboarding?.published || homeSessions(reviews).length > 0;
+  const published = onboarding?.published || reviews.length > 0;
   const [hasPublished, setHasPublished] = useState(published);
 
   if (published && !hasPublished) setHasPublished(true);
@@ -285,6 +335,17 @@ export function ReviewHome({
 
       return next.size === current.size ? current : next;
     });
+    setRead((current) => {
+      const next = new Map(
+        [...current].filter(([id]) => {
+          const review = reviews.find((r) => r.reviewId === id);
+
+          return review && isUnread(review);
+        }),
+      );
+
+      return next.size === current.size ? current : next;
+    });
     setLifecycle((current) => {
       const next = new Map(
         [...current].filter(([id, value]) => {
@@ -300,14 +361,17 @@ export function ReviewHome({
 
   const catalog = useMemo(
     () =>
-      homeSessions(reviews)
+      reviews
         .filter((r) => !deleted.has(r.reviewId))
+        .map((r) =>
+          read.has(r.reviewId) ? { ...r, viewedAt: read.get(r.reviewId)! } : r,
+        )
         .map((r) =>
           lifecycle.has(r.reviewId)
             ? { ...r, trashedAt: lifecycle.get(r.reviewId)! }
             : r,
         ),
-    [reviews, deleted, lifecycle],
+    [reviews, deleted, read, lifecycle],
   );
 
   const trashed = catalog.filter((review) => review.trashedAt);
@@ -355,27 +419,51 @@ export function ReviewHome({
     searchTerms,
   );
 
+  const searching = searchTerms.length > 0;
+
+  const filtering =
+    activeHomeChips(appliedFilters).length > 0 || Boolean(query.trim());
+
+  const branches = inTrash
+    ? visible.map((board) => ({ board, children: [] }))
+    : homeBoardTree(listed, appliedFilters, query.trim(), sort);
+
+  const branchById = new Map(
+    branches.map((branch) => [branch.board.reviewId, branch]),
+  );
+
+  const expanded = (branch: WhiteboardBranch) =>
+    filtering
+      ? !filteredCollapsed.has(branch.board.reviewId)
+      : expandedParents(branch.board.project?.id).has(branch.board.reviewId);
+
   const groups = (
     inTrash ? [{ id: "earlier" as const, label: "Trash" }] : homeGroups
   )
-    .map((group) => ({
-      ...group,
-      reviews: inTrash
-        ? visible
-        : visible.filter((r) => groupFor(r, now) === group.id),
-    }))
+    .map((group) => {
+      const families = branches.filter(
+        (branch) => inTrash || homeBranchGroup(branch, now) === group.id,
+      );
+
+      return {
+        ...group,
+        reviews: families.flatMap((branch) => [
+          branch.board,
+          ...(expanded(branch) ? branch.children : []),
+        ]),
+      };
+    })
     .filter((group) => group.reviews.length > 0);
 
   const ordered = groups.flatMap((group) => group.reviews);
   const selectedReviews = ordered.filter((r) => selected.has(r.reviewId));
   const selectionMode = selectedReviews.length > 0;
-  const searching = searchTerms.length > 0;
 
   const isCollapsed = (id: HomeGroup) =>
     !inTrash && !searching && collapsed[id];
 
   // A filter change must never leave invisible destructive targets selected.
-  const visibleIds = visible
+  const visibleIds = ordered
     .map((r) => r.reviewId)
     .sort()
     .join(",");
@@ -563,13 +651,31 @@ export function ReviewHome({
   }
 
   async function changeLifecycle(
-    targets = selectedReviews,
+    chosen = selectedReviews,
     restore = false,
     undoing = false,
   ) {
     const action = restore ? onRestore : onTrash;
 
-    if (!action || busyRef.current || !targets.length) return;
+    if (!action || busyRef.current || !chosen.length) return;
+
+    // Boards other boards need ask first, together, naming their children
+    // and the boards that link to them; the host lets the rest through.
+    if (
+      !restore &&
+      !undoing &&
+      ui?.confirmDelete &&
+      !(await ui.confirmDelete(
+        chosen.map((review) => boardTitle(review.title)),
+        {
+          reviewIds: chosen.map((review) => review.reviewId),
+          trash: true,
+        },
+      ))
+    )
+      return;
+
+    const targets = chosen;
     const timestamp = restore ? null : new Date().toISOString();
 
     setLifecycle((current) =>
@@ -614,7 +720,12 @@ export function ReviewHome({
     if (
       !onDelete ||
       busyRef.current ||
-      !(await ui?.confirmDelete?.(targets.map(reviewTitle)))
+      !(await ui?.confirmDelete?.(
+        targets.map((review) => boardTitle(review.title)),
+        {
+          reviewIds: targets.map((review) => review.reviewId),
+        },
+      ))
     )
       return;
 
@@ -633,6 +744,28 @@ export function ReviewHome({
     );
 
     if (succeeded.length) setNotice({ kind: "permanent", targets: succeeded });
+  }
+
+  async function markRead(targets: ReviewApiSummary[]) {
+    if (!onMarkRead || busyRef.current || !targets.length) return;
+    const timestamp = new Date().toISOString();
+
+    setRead((current) =>
+      withEntries(
+        current,
+        targets.map((review) => [review.reviewId, timestamp]),
+      ),
+    );
+
+    await runBatch(
+      targets,
+      onMarkRead,
+      (count) => `mark ${countLabel(count, "whiteboard")} read`,
+      (failed) =>
+        setRead(
+          (current) => new Map([...current].filter(([id]) => !failed.has(id))),
+        ),
+    );
   }
 
   function undo(shown: Notice) {
@@ -716,14 +849,14 @@ export function ReviewHome({
     } else if (!editing && command && key === "a") {
       event.preventDefault();
       event.stopPropagation();
-      setSelected(new Set(visible.map((r) => r.reviewId)));
+      setSelected(new Set(ordered.map((review) => review.reviewId)));
     } else if (!editing && command && key === "backspace" && !event.repeat) {
       const rowId =
         target instanceof HTMLElement
           ? target.closest<HTMLElement>("[data-home-row]")?.dataset.homeRow
           : undefined;
 
-      const focused = visible.find((review) => review.reviewId === rowId);
+      const focused = ordered.find((review) => review.reviewId === rowId);
 
       if (selectionMode || focused) {
         event.preventDefault();
@@ -764,15 +897,20 @@ export function ReviewHome({
     .join(" and ");
 
   const completed = onboarding
-    ? Number(onboarding.installed) +
-      Number(
-        onboarding.tutorialTotal > 0 &&
-          onboarding.tutorialChecked >= onboarding.tutorialTotal,
-      ) +
-      Number(onboarding.published)
-    : 3;
+    ? Number(onboarding.installed) + Number(onboarding.published)
+    : 2;
 
-  const setupIncomplete = !inTrash && !hasPublished && completed < 3;
+  // Nothing to list, nor filtered away: Home offers to draw one in place.
+  const drawInPlace =
+    emptyState !== undefined && !inTrash && listed.length === 0;
+
+  // Drawing in place is the next step itself, so the banner would repeat it.
+  const setupIncomplete =
+    !inTrash &&
+    !hasPublished &&
+    completed < 2 &&
+    !(drawInPlace && onboarding?.installed);
+
   const weeksAway = lastVisit > 0 ? Math.floor((now - lastVisit) / week) : 0;
 
   const sortOptions = [
@@ -800,17 +938,11 @@ export function ReviewHome({
 
   const helpMenu = useCanvasMenu({
     items: [
-      {
-        id: "tour",
-        label: "Need a refresher? Take the tour",
-        enabled: !!onOpenTutorial,
-      },
       { id: "discord", label: "Ask on Discord ↗" },
       { id: "email", label: "Need help? Copy our email" },
     ],
     onSelect: async (id) => {
-      if (id === "tour") onOpenTutorial?.();
-      else if (id === "discord")
+      if (id === "discord")
         window.open(REVIEW_DISCORD_URL, "_blank", "noopener,noreferrer");
       else if (id === "email") {
         const copied = await copyText("founders@dev.fast");
@@ -831,7 +963,7 @@ export function ReviewHome({
     if (id === "draft" || id === editingSearch) {
       return (
         <span key={id} {...stylex.props(styles.chip, styles.editingChip)}>
-          <SearchIcon xstyle={[styles.smallIcon, styles.editingIcon]} />
+          <SearchIcon xstyle={[iconStyles.inline, styles.editingIcon]} />
           <input
             ref={input}
             aria-label="Search whiteboards"
@@ -839,6 +971,7 @@ export function ReviewHome({
             spellCheck={false}
             value={query}
             {...stylex.props(
+              fieldStyles.bare,
               styles.textChipInput,
               styles.textChipWidth(Math.max(5, query.length + 1)),
             )}
@@ -884,7 +1017,7 @@ export function ReviewHome({
           onOpen={() => startTextFilter(term, id)}
           onRemove={() => setFilters((current) => removeHomeChip(current, id))}
         >
-          <SearchIcon xstyle={[styles.smallIcon, styles.muted]} />
+          <SearchIcon xstyle={[iconStyles.inline, styles.muted]} />
           <span {...stylex.props(styles.chipValue)}>{term}</span>
         </FilterChip>
       );
@@ -932,25 +1065,26 @@ export function ReviewHome({
           homeStyles.scroll,
           styles.scroll,
           selectionMode && styles.selectionSpace,
+          drawInPlace && styles.fillScroll,
         )}
       >
-        <div {...stylex.props(homeStyles.content, styles.content)}>
+        <div
+          {...stylex.props(
+            homeStyles.content,
+            styles.content,
+            drawInPlace && styles.fillContent,
+          )}
+        >
           <header
             ref={filterRegion}
             {...stylex.props(homeStyles.header, styles.header)}
           >
             {inTrash ? (
               <h1 {...stylex.props(homeStyles.heading, styles.trail)}>
-                <button
-                  type="button"
-                  {...stylex.props(styles.crumb)}
-                  onClick={() => showView("active")}
-                >
+                <Button variant="link" onClick={() => showView("active")}>
                   Whiteboards
-                </button>
-                <span aria-hidden="true" {...stylex.props(styles.faint)}>
-                  ›
-                </span>
+                </Button>
+                <CrumbSeparator xstyle={styles.trailChevron} />
                 Trash
                 <span {...stylex.props(styles.faint)}>{trashed.length}</span>
               </h1>
@@ -1001,6 +1135,16 @@ export function ReviewHome({
                 {sortOptions.find((option) => option.value === sort)?.label}
                 <ChevronDownIcon />
               </Button>
+              {onNewWhiteboard && !inTrash && !drawInPlace ? (
+                <Button
+                  variant="primary"
+                  xstyle={styles.newWhiteboard}
+                  onClick={onNewWhiteboard}
+                >
+                  <PlusIcon />
+                  New
+                </Button>
+              ) : null}
             </div>
             {picker !== null && (
               <HomeFilterPicker
@@ -1029,17 +1173,15 @@ export function ReviewHome({
             <StatusBanner
               xstyle={styles.notice}
               action={
-                <Button size="large" onClick={onOpenSetup ?? onOpenTutorial}>
+                <Button size="large" onClick={onOpenSetup}>
                   Continue setup
                 </Button>
               }
             >
-              Finish setting up Whiteboard · {completed} of 3 done · next:{" "}
+              Finish setting up Whiteboard · {completed} of 2 done · next:{" "}
               {!onboarding?.installed
                 ? "connect your agent"
-                : onboarding.tutorialChecked < onboarding.tutorialTotal
-                  ? "take the tour"
-                  : "create your first whiteboard"}
+                : "create your first whiteboard"}
             </StatusBanner>
           ) : !inTrash && weeksAway >= 2 && !nudgeClosed ? (
             <StatusBanner
@@ -1064,17 +1206,19 @@ export function ReviewHome({
           ) : null}
           {error && <p role="alert">{error}</p>}
           {waiting ? <HostNotice review={waiting} hosts={remoteHosts} /> : null}
-          {!visible.length && (
-            <EmptyState
-              message={
-                hidden
-                  ? "No matching whiteboards."
-                  : inTrash
-                    ? "Trash is empty."
-                    : "No whiteboards yet."
-              }
-            />
-          )}
+          {drawInPlace
+            ? emptyState
+            : !visible.length && (
+                <EmptyState
+                  message={
+                    hidden
+                      ? "No matching whiteboards."
+                      : inTrash
+                        ? "Trash is empty."
+                        : "No whiteboards yet."
+                  }
+                />
+              )}
           <div {...stylex.props(styles.list)}>
             {groups.map((group) => {
               const count = group.reviews.filter((r) =>
@@ -1092,22 +1236,32 @@ export function ReviewHome({
                 >
                   {!inTrash && (
                     <div {...stylex.props(styles.groupHeader)}>
+                      <Checkbox
+                        ref={selectGroupTooltip}
+                        aria-label={`Select ${group.label}`}
+                        checked={count === group.reviews.length}
+                        indeterminate={
+                          count > 0 && count < group.reviews.length
+                        }
+                        xstyle={[
+                          styles.rowCheck,
+                          count === 0 && styles.hiddenGroupCheck,
+                        ]}
+                        onChange={() => selectGroup(group.reviews)}
+                      />
                       <button
                         type="button"
                         aria-expanded={!isCollapsed(group.id)}
-                        {...stylex.props(styles.groupToggle)}
+                        {...stylex.props(
+                          chevronMarker,
+                          disclosureStyles.toggle,
+                          focusStyles.ring,
+                          styles.groupToggle,
+                        )}
                         onClick={() => toggleGroup(group.id)}
                       >
-                        <DisclosureChevron expanded={!isCollapsed(group.id)} />
-                        <span {...stylex.props(styles.slot)}>
-                          {group.id === "unread" && (
-                            <span {...stylex.props(styles.dot)} />
-                          )}
-                        </span>
+                        <DisclosureChevron />
                         <span>{group.label}</span>
-                        <span {...stylex.props(styles.faint, styles.regular)}>
-                          {group.reviews.length}
-                        </span>
                       </button>
                       <div {...stylex.props(styles.groupSelection)}>
                         {count > 0 && (
@@ -1117,158 +1271,218 @@ export function ReviewHome({
                               : `${count} of ${group.reviews.length} selected`}
                           </span>
                         )}
-                        <Checkbox
-                          aria-label={`Select ${group.label}`}
-                          title="Select group"
-                          checked={count === group.reviews.length}
-                          indeterminate={
-                            count > 0 && count < group.reviews.length
-                          }
-                          xstyle={count === 0 && styles.hiddenGroupCheck}
-                          onChange={() => selectGroup(group.reviews)}
-                        />
                       </div>
                     </div>
                   )}
                   {!isCollapsed(group.id) &&
-                    group.reviews.map((review, index) => (
-                      <div
-                        key={review.reviewId}
-                        data-home-row={review.reviewId}
-                        {...stylex.props(
-                          homeRowMarker,
-                          styles.row,
-                          styles.waterfall(index),
-                          unavailable(review) && styles.unavailableRow,
-                          isSelected(index) && styles.selected,
-                          isSelected(index) &&
-                            isSelected(index - 1) &&
-                            styles.selectedAfter,
-                          isSelected(index) &&
-                            isSelected(index + 1) &&
-                            styles.selectedBefore,
-                        )}
-                        data-unavailable={unavailable(review) ? "" : undefined}
-                        onClick={() =>
-                          inTrash ? toggleRow(review.reviewId) : open(review)
-                        }
-                        onKeyDown={(event) => {
-                          if (
-                            event.key.toLowerCase() === "x" &&
-                            !event.metaKey &&
-                            !event.ctrlKey &&
-                            !event.altKey
-                          ) {
-                            event.preventDefault();
-                            toggleRow(review.reviewId);
-                          }
-                        }}
-                      >
-                        <Checkbox
-                          aria-label={`Select ${reviewTitle(review)}`}
-                          title="Select  x"
-                          checked={isSelected(index)}
-                          xstyle={!isSelected(index) && styles.hiddenCheck}
-                          onChange={() => {}}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            toggleRow(review.reviewId, event.shiftKey);
-                          }}
-                        />
-                        {review.origin?.pullRequestNumber ? (
-                          <CodeIcon xstyle={styles.kindIcon} />
-                        ) : (
-                          <BoardIcon xstyle={styles.kindIcon} />
-                        )}
-                        <button
-                          type="button"
-                          aria-label={`${inTrash ? "Select" : "Open"} ${reviewTitle(review)}`}
-                          aria-disabled={unavailable(review) || undefined}
-                          {...stylex.props(styles.rowOpen)}
-                          onClick={(event) => {
-                            event.stopPropagation();
+                    group.reviews.map((review, index) => {
+                      const branch = branchById.get(review.reviewId);
 
-                            if (inTrash) toggleRow(review.reviewId);
-                            else open(review);
+                      const parent =
+                        !inTrash &&
+                        branch &&
+                        canExpandWhiteboard(
+                          branch,
+                          Boolean(onNewChildWhiteboard),
+                        );
+
+                      const isExpanded = Boolean(branch && expanded(branch));
+
+                      const nested =
+                        !inTrash && Boolean(review.parentId) && !branch;
+
+                      const firstChild =
+                        nested &&
+                        group.reviews[index - 1]?.parentId !== review.parentId;
+
+                      const lastChild =
+                        nested &&
+                        group.reviews[index + 1]?.parentId !== review.parentId;
+
+                      return (
+                        <div
+                          key={review.reviewId}
+                          data-home-row={review.reviewId}
+                          {...stylex.props(
+                            homeRowMarker,
+                            boardRowMarker,
+                            styles.row,
+                            nested && styles.nestedRow,
+                            styles.waterfall(index),
+                            unavailable(review) && styles.unavailableRow,
+                            isSelected(index) && styles.selected,
+                            isSelected(index) &&
+                              isSelected(index - 1) &&
+                              styles.selectedAfter,
+                            isSelected(index) &&
+                              isSelected(index + 1) &&
+                              styles.selectedBefore,
+                          )}
+                          data-unavailable={
+                            unavailable(review) ? "" : undefined
+                          }
+                          onClick={() =>
+                            inTrash ? toggleRow(review.reviewId) : open(review)
+                          }
+                          onKeyDown={(event) => {
+                            if (
+                              event.key.toLowerCase() === "x" &&
+                              !event.metaKey &&
+                              !event.ctrlKey &&
+                              !event.altKey
+                            ) {
+                              event.preventDefault();
+                              toggleRow(review.reviewId);
+                            }
                           }}
                         >
+                          <Checkbox
+                            ref={selectTooltip}
+                            aria-label={`Select ${boardTitle(review.title)}`}
+                            checked={isSelected(index)}
+                            xstyle={[
+                              styles.rowCheck,
+                              !isSelected(index) && styles.hiddenCheck,
+                            ]}
+                            onChange={() => {}}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              toggleRow(review.reviewId, event.shiftKey);
+                            }}
+                          />
+                          <BoardDisclosure
+                            title={boardTitle(review.title)}
+                            expanded={parent ? isExpanded : undefined}
+                            onToggle={() => {
+                              if (filtering)
+                                setFilteredCollapsed((previous) => {
+                                  const next = new Set(previous);
+
+                                  if (isExpanded) next.add(review.reviewId);
+                                  else next.delete(review.reviewId);
+
+                                  return next;
+                                });
+                              else
+                                setExpanded(
+                                  review.project?.id,
+                                  review.reviewId,
+                                  !isExpanded,
+                                );
+                            }}
+                          />
+                          {nested ? (
+                            <span
+                              aria-hidden="true"
+                              {...stylex.props(
+                                styles.nestedConnector,
+                                firstChild && styles.firstConnector,
+                                lastChild && styles.lastConnector,
+                              )}
+                            />
+                          ) : null}
+                          {/* A PR's state, else the board's target. */}
                           <span
-                            title={
-                              unavailable(review)
-                                ? hostStatus(review).label
-                                : reviewTitle(review)
-                            }
                             {...stylex.props(
-                              styles.title,
-                              inTrash && styles.muted,
+                              styles.kindIcon,
+                              nested && styles.nestedIcon,
                             )}
                           >
-                            <MatchedText
-                              text={reviewTitle(review)}
-                              queries={searchTerms}
+                            {branch?.children.length ? (
+                              <StackIcon xstyle={styles.boardGlyph} />
+                            ) : review.origin?.pullRequestNumber ? (
+                              <PullRequestStateIcon
+                                number={review.origin.pullRequestNumber}
+                                state={review.pullRequestState}
+                                xstyle={styles.boardGlyph}
+                              />
+                            ) : (
+                              <BoardIcon
+                                icon={boardIconKind(review.target)}
+                                xstyle={styles.boardGlyph}
+                              />
+                            )}
+                            {(
+                              branch
+                                ? showsChanged(branch, "", !isExpanded)
+                                : review.changed
+                            ) ? (
+                              <ChangedBadge />
+                            ) : null}
+                          </span>
+                          <HomeBoardTitle
+                            review={review}
+                            parent={Boolean(branch)}
+                            inTrash={inTrash}
+                            onOpen={() =>
+                              inTrash
+                                ? toggleRow(review.reviewId)
+                                : open(review)
+                            }
+                            queries={searchTerms}
+                          />
+                          <span {...stylex.props(styles.rowActions)}>
+                            {!inTrash &&
+                            onNewChildWhiteboard &&
+                            canAddChildWhiteboard(review) &&
+                            !unavailable(review) ? (
+                              <AddChildWhiteboard
+                                board={review}
+                                onCreate={onNewChildWhiteboard}
+                                onError={(message) =>
+                                  setChildErrors((previous) => ({
+                                    ...previous,
+                                    [review.reviewId]: message,
+                                  }))
+                                }
+                              />
+                            ) : null}
+                            <HomeRowMenu
+                              review={review}
+                              inTrash={inTrash}
+                              filters={appliedFilters}
+                              onFilter={(facet, key) =>
+                                setFilters((current) => ({
+                                  ...current,
+                                  [facet]: [
+                                    ...new Set([...current[facet], key]),
+                                  ],
+                                }))
+                              }
+                              onMarkRead={
+                                !inTrash && onMarkRead
+                                  ? () => markRead([review])
+                                  : undefined
+                              }
                             />
                           </span>
-                        </button>
-                        <span {...stylex.props(styles.metadata)}>
-                          {reviewMetadataPills(review, appliedFilters)
-                            .filter(
-                              (pill) => !inTrash || pill.facet !== "branches",
-                            )
-                            .map((pill) =>
-                              pill.facet === "pullRequest" ? (
-                                <PullRequestPill
-                                  key={pill.facet}
-                                  url={pill.key}
-                                  label={pill.label}
-                                  title={pill.title}
-                                  queries={searchTerms}
-                                />
-                              ) : (
-                                <button
-                                  key={pill.facet}
-                                  type="button"
-                                  aria-label={`Filter ${pill.facet === "branches" ? "branch" : "worktree"}: ${pill.label}`}
-                                  title={pill.label}
-                                  {...stylex.props(styles.metadataPill)}
-                                  onClick={(event) => {
-                                    event.stopPropagation();
-                                    setFilters((current) => ({
-                                      ...current,
-                                      [pill.facet]: [
-                                        ...new Set([
-                                          ...current[pill.facet],
-                                          pill.key,
-                                        ]),
-                                      ],
-                                    }));
-                                  }}
-                                >
-                                  {pill.facet === "branches" ? (
-                                    <>
-                                      <BranchIcon xstyle={styles.smallIcon} />
-                                      <MiddleTruncatedText
-                                        text={pill.label}
-                                        queries={searchTerms}
-                                      />
-                                    </>
-                                  ) : (
-                                    <>
-                                      <FolderIcon xstyle={styles.smallIcon} />
-                                      <span {...stylex.props(styles.ellipsis)}>
-                                        <MatchedText
-                                          text={pill.label}
-                                          queries={searchTerms}
-                                        />
-                                      </span>
-                                    </>
-                                  )}
-                                </button>
-                              ),
-                            )}
-                        </span>
-                        <RowTime review={review} now={now} inTrash={inTrash} />
-                      </div>
-                    ))}
+                          <RowTime
+                            review={review}
+                            now={now}
+                            inTrash={inTrash}
+                          />
+                          {parent &&
+                          isExpanded &&
+                          branch.children.length === 0 ? (
+                            <EmptyState
+                              message="No child whiteboards"
+                              xstyle={styles.emptyChildren}
+                            />
+                          ) : null}
+                          {childErrors[review.reviewId] ? (
+                            <p
+                              role="alert"
+                              {...stylex.props(
+                                textStyles.error,
+                                styles.rowError,
+                              )}
+                            >
+                              {childErrors[review.reviewId]}
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
                 </section>
               );
             })}
@@ -1278,7 +1492,8 @@ export function ReviewHome({
               <div>
                 {countLabel(hidden, "whiteboard")} hidden by {cause} ·{" "}
                 <Button variant="ghost" onClick={clearFilters}>
-                  Clear filters ×
+                  Clear filters
+                  <CloseIcon xstyle={iconStyles.inline} />
                 </Button>
               </div>
             </footer>
@@ -1333,15 +1548,27 @@ export function ReviewHome({
               Restore <Shortcut>R</Shortcut>
             </Button>
           )}
+          {!inTrash && selectedReviews.some(isUnread) && (
+            <Button
+              variant="ghost"
+              disabled={busy || !onMarkRead}
+              onClick={() => void markRead(selectedReviews.filter(isUnread))}
+            >
+              Mark Read
+            </Button>
+          )}
           <Button
             variant="ghost"
             disabled={busy || !(inTrash ? onDelete : onTrash)}
-            xstyle={inTrash && styles.danger}
+            xstyle={styles.danger}
             onClick={() => deleteSelection()}
           >
-            {inTrash ? "Delete…" : "Move to Trash"} <Shortcut>⌘⌫</Shortcut>
+            {inTrash ? "Delete…" : "Trash"} <Shortcut>⌘⌫</Shortcut>
           </Button>
-          <span aria-hidden="true" {...stylex.props(styles.barDivider)} />
+          <span
+            aria-hidden="true"
+            {...stylex.props(dividerStyles.vertical, styles.barDivider)}
+          />
           <IconButton aria-label="Clear selection" onClick={clearSelection}>
             <CloseIcon />
           </IconButton>
@@ -1349,7 +1576,8 @@ export function ReviewHome({
       )}
       {refresherOpen && (
         <Dialog
-          labelledBy="home-help-title"
+          aria-labelledby="home-help-title"
+          xstyle={styles.dialog}
           onClose={() => setRefresherOpen(false)}
         >
           <div {...stylex.props(styles.header)}>
@@ -1389,52 +1617,9 @@ export function ReviewHome({
             filters with the filter icon; Sort orders each group. Delete keeps
             completed work out of the way until you need it again.
           </p>
-          <Button
-            size="large"
-            disabled={!onOpenTutorial}
-            onClick={() => {
-              setRefresherOpen(false);
-              onOpenTutorial?.();
-            }}
-          >
-            Take the tour
-          </Button>
         </Dialog>
       )}
     </main>
-  );
-}
-
-/** A modal shown as soon as it mounts; Enter never submits it. */
-function Dialog({
-  labelledBy,
-  onClose,
-  children,
-}: {
-  labelledBy: string;
-  onClose(): void;
-  children: ReactNode;
-}) {
-  const dialog = useRef<HTMLDialogElement>(null);
-
-  useLayoutEffect(() => dialog.current?.showModal(), []);
-
-  return (
-    <dialog
-      ref={dialog}
-      aria-labelledby={labelledBy}
-      {...stylex.props(surfaceStyles.dialog, styles.dialog)}
-      onClose={onClose}
-      onCancel={(event) => {
-        event.preventDefault();
-        onClose();
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") event.preventDefault();
-      }}
-    >
-      {children}
-    </dialog>
   );
 }
 
@@ -1473,15 +1658,14 @@ function FilterChip({
       >
         {children}
       </button>
-      <button
-        type="button"
+      <IconButton
         aria-label={`Remove ${label}`}
-        {...stylex.props(styles.chipClose)}
+        xstyle={styles.chipClose}
         onMouseDown={(event) => event.preventDefault()}
         onClick={onRemove}
       >
-        <CloseIcon xstyle={styles.smallIcon} />
-      </button>
+        <CloseIcon xstyle={iconStyles.inline} />
+      </IconButton>
     </span>
   );
 }
@@ -1569,65 +1753,123 @@ function HostNotice({
   );
 }
 
-function PullRequestPill({
-  url,
-  label,
-  title,
+function HomeBoardTitle({
+  review,
+  parent,
+  inTrash,
+  onOpen,
   queries,
 }: {
-  url: string;
-  label: string;
-  title?: string;
+  review: ReviewApiSummary;
+  inTrash: boolean;
+  parent: boolean;
+  onOpen(): void;
   queries: string[];
 }) {
-  const tooltip = useTooltip<HTMLAnchorElement>(
-    title ? `${label} ${title}` : label,
-    { quick: true },
-  );
+  const tooltip = useTooltip(boardTitle(review.title), {
+    detail: unavailable(review)
+      ? hostStatus(review).label
+      : [review.project?.name, review.origin?.branch, review.repositoryPath]
+          .filter(Boolean)
+          .join(" · "),
+  });
 
   return (
-    <a
+    <button
       ref={tooltip}
-      href={url}
-      target="_blank"
-      rel="noopener noreferrer"
-      {...stylex.props(styles.metadataPill)}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <PullRequestIcon xstyle={styles.smallIcon} />
-      {label}
-      {title && (
-        <span {...stylex.props(styles.ellipsis, styles.pullRequestTitle)}>
-          <MatchedText text={title} queries={queries} />
-        </span>
+      type="button"
+      aria-label={`${inTrash ? "Select" : "Open"} ${boardTitle(review.title)}`}
+      aria-disabled={unavailable(review) || undefined}
+      {...stylex.props(
+        focusStyles.ringInset,
+        buttonStyles.reset,
+        styles.rowOpen,
       )}
-    </a>
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen();
+      }}
+    >
+      <span
+        {...stylex.props(
+          textStyles.clamp2,
+          styles.title,
+          parent && styles.parentTitle,
+          inTrash && styles.muted,
+        )}
+      >
+        <MatchedText text={boardTitle(review.title)} queries={queries} />
+      </span>
+    </button>
   );
 }
 
-function MiddleTruncatedText({
-  text,
-  queries,
+function HomeRowMenu({
+  review,
+  inTrash,
+  filters,
+  onFilter,
+  onMarkRead,
 }: {
-  text: string;
-  queries: string[];
+  review: ReviewApiSummary;
+  inTrash: boolean;
+  filters: HomeFilters;
+  onFilter(facet: HomeFacet, key: string): void;
+  onMarkRead?(): void;
 }) {
-  // The prefix elides first so the branch keeps its last path component.
-  const split = text.includes("/")
-    ? text.lastIndexOf("/") + 1
-    : Math.ceil(text.length * 0.75);
+  const tooltip = useTooltip(`More actions for ${boardTitle(review.title)}`, {
+    detail: [review.project?.name, review.origin?.branch, review.repositoryPath]
+      .filter(Boolean)
+      .join(" · "),
+  });
+
+  const pills = reviewMetadataPills(review, filters).filter(
+    (pill) => !inTrash || pill.facet !== "branches",
+  );
+
+  const items = [
+    ...pills.map((pill) => ({
+      id: pill.facet,
+      label:
+        pill.facet === "pullRequest"
+          ? `Open pull request ${pill.label}`
+          : `Filter ${pill.facet === "branches" ? "branch" : "worktree"}: ${pill.label}`,
+    })),
+    ...(onMarkRead && isUnread(review)
+      ? [{ id: "read", label: "Mark as read" }]
+      : []),
+  ];
+
+  const menu = useCanvasMenu({
+    items,
+    onSelect: (id) => {
+      if (id === "read") return onMarkRead?.();
+      const pill = pills.find((item) => item.facet === id);
+
+      if (!pill) return;
+
+      if (pill.facet === "pullRequest")
+        window.open(pill.key, "_blank", "noopener,noreferrer");
+      else onFilter(pill.facet, pill.key);
+    },
+  });
+
+  if (!items.length) return null;
 
   return (
-    <span {...stylex.props(styles.middle)}>
-      <span {...stylex.props(styles.ellipsis)}>
-        <MatchedText text={text} queries={queries} to={split} />
-      </span>
-      <span {...stylex.props(styles.middleSuffix)}>
-        <bdi>
-          <MatchedText text={text} queries={queries} from={split} />
-        </bdi>
-      </span>
-    </span>
+    <IconButton
+      ref={tooltip}
+      size="small"
+      aria-label={`More actions for ${boardTitle(review.title)}`}
+      xstyle={boardControlStyles.reveal}
+      {...menu.triggerProps}
+      onClick={(event) => {
+        event.stopPropagation();
+        menu.triggerProps.onClick(event);
+      }}
+    >
+      <MoreIcon xstyle={iconStyles.inline} />
+    </IconButton>
   );
 }
 

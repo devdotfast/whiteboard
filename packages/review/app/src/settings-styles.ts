@@ -1,49 +1,74 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 
 import { tokens } from "./tokens.stylex";
+
+const narrow = "@container review-canvas (max-width: 980px)";
 
 // Settings page: flat rows, no cards. One narrow column, a small-caps label per
 // section, and a fixed right lane so every control lines up. Shared with the
 // diffr section, which lays its rows out the same way.
 export const settingsStyles = stylex.create({
+  layout: {
+    display: "grid",
+    gridTemplateColumns: {
+      default: "160px minmax(0, 820px)",
+      [narrow]: "minmax(0, 820px)",
+    },
+    justifyContent: "center",
+    alignItems: "start",
+    gap: space.s40,
+  },
+  // Lets Contents scroll the last section to the top.
+  scroll: {
+    paddingBottom:
+      "calc(max(56px, var(--review-bottom-scroll-padding, 0px)) + var(--review-toc-tail, 0px))",
+  },
   page: {
     width: "min(820px, 100%)",
   },
+  toc: {
+    display: { default: "flex", [narrow]: "none" },
+    flexDirection: "column",
+    gap: space.s2,
+    position: "sticky",
+    top: 0,
+    paddingTop: space.s8,
+  },
   lede: {
-    margin: "0 0 28px",
-    color: tokens.reviewHomeMeta,
+    margin: `0 0 ${space.s28}`,
+    color: tokens.inkMuted,
     fontSize: fontSize.ui,
   },
   section: {
-    marginBottom: "28px",
+    marginBottom: space.s28,
   },
   sectionLabel: {
-    margin: "0 0 2px",
-    paddingBottom: "6px",
+    margin: `0 0 ${space.s2}`,
+    paddingBottom: space.s6,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
-    borderBottomColor: tokens.reviewHomeRule,
-    color: tokens.reviewHomeMeta,
+    borderBottomColor: tokens.rule,
+    color: tokens.inkMuted,
   },
   connect: {
-    paddingBlock: "14px",
+    paddingBlock: space.s14,
   },
   row: {
     display: "grid",
     // Wide segmented controls grow the lane instead of overlapping the text.
     gridTemplateColumns: "minmax(0, 1fr) minmax(200px, max-content)",
     alignItems: "center",
-    gap: "24px",
-    padding: "14px 0",
+    gap: space.s24,
+    padding: `${space.s14} 0`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
-    borderBottomColor: tokens.reviewHomeRuleSoft,
+    borderBottomColor: tokens.ruleSoft,
   },
   rowText: {
     display: "flex",
     flexDirection: "column",
-    gap: "3px",
+    gap: space.s4,
     minWidth: 0,
   },
   rowLabel: {
@@ -51,7 +76,7 @@ export const settingsStyles = stylex.create({
     fontSize: fontSize.ui,
   },
   rowDescription: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   rowControl: {
@@ -62,32 +87,33 @@ export const settingsStyles = stylex.create({
   toggle: {
     display: "flex",
     alignItems: "center",
-    gap: "8px",
-    color: tokens.reviewHomeMeta,
+    gap: space.s8,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
     cursor: "pointer",
   },
   input: {
     minWidth: "200px",
   },
-  diffr: {
-    marginTop: "8px",
-    paddingLeft: "12px",
+  nested: {
+    marginTop: space.s8,
+    paddingLeft: space.s12,
     borderLeftWidth: "2px",
     borderLeftStyle: "solid",
-    borderLeftColor: tokens.reviewHomeRuleSoft,
+    borderLeftColor: tokens.ruleSoft,
   },
-  diffrSummary: {
-    cursor: "pointer",
-    paddingBlock: "8px",
+  nestedSummary: {
+    display: "flex",
+    alignItems: "center",
+    gap: space.s6,
+    paddingBlock: space.s8,
   },
   unavailable: {
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   error: {
-    margin: "4px 0 0",
-    color: tokens.changeRemoved,
+    margin: `${space.s4} 0 0`,
     fontSize: fontSize.body,
     whiteSpace: "pre-wrap",
   },
@@ -101,13 +127,13 @@ export const settingsStyles = stylex.create({
   },
   summaryActions: {
     display: "flex",
-    gap: "8px",
+    gap: space.s8,
   },
   prompt: {
     display: "flex",
     flexDirection: "column",
-    gap: "4px",
-    marginTop: "8px",
+    gap: space.s4,
+    marginTop: space.s8,
   },
   summaryResult: {
     whiteSpace: "pre-wrap",

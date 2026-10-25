@@ -1,11 +1,17 @@
-import { fontSize, layer } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  layer,
+  leading,
+  space,
+} from "@canvas/scale.stylex";
 import { IconButton } from "@canvas/ui/button";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { ArrowDownIcon, ArrowUpIcon, CloseIcon } from "@canvas/ui/icons";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { fieldStyles } from "@canvas/ui/text-field";
-import type {
-  ReviewFindQuery,
-  ReviewInlineEditorHandle,
-} from "@dev.fast/review-protocol";
+import { useTooltip } from "@canvas/ui/tooltip";
+import type { ReviewFindQuery } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ReactNode,
@@ -33,6 +39,7 @@ import { reviewFindRanges } from "./review-find-text";
 import { useReviewRoots } from "./review-root-context";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
+import { captureUiEvent } from "./ui-telemetry";
 
 const ALL_HIGHLIGHT = "review-find-match";
 
@@ -65,18 +72,24 @@ export function createReviewFindHost(): ReviewFindHost {
   };
 }
 
+/** The tab a search runs over: the Review document, or a diff. */
+export type ReviewFindSurface = "review" | "diff";
+
 export interface ReviewInlineFindRegistration {
+  /** Defaults to the Review document. */
+  surface?: ReviewFindSurface;
   container: HTMLElement;
   setFindQuery(query: ReviewFindQuery): Promise<{ matchCount: number }>;
   revealFindMatch(index: number): Promise<void>;
   clearFind(): void;
-  getHandle(): ReviewInlineEditorHandle | null;
+  clearActiveFindMatch(): void;
   expand(): void;
 }
 
 interface FindContextValue {
   register(registration: ReviewInlineFindRegistration): () => void;
-  setReviewActive(active: boolean): void;
+  /** null closes find and refuses to open it. */
+  setSurface(surface: ReviewFindSurface | null): void;
 }
 
 const ReviewFindContext = createContext<FindContextValue | null>(null);
@@ -100,7 +113,9 @@ export function ReviewFindProvider({
   const session = useOptionalReviewSession();
 
   const [controller] = useState(() =>
-    createFindController(articleRef, session?.config),
+    createFindController(articleRef, session ?? undefined, (surface) => {
+      if (session) captureUiEvent(session, "find_opened", { surface });
+    }),
   );
 
   const previousDocument = useRef(documentKey);
@@ -136,11 +151,12 @@ type ReviewFindController = ReturnType<typeof createFindController>;
 function createFindController(
   articleRef: RefObject<HTMLElement | null>,
   config?: ReviewClientConfig,
+  onOpen?: (surface: ReviewFindSurface) => void,
 ) {
   const store = createReviewFindStore(config);
   const registrations = new Set<ReviewInlineFindRegistration>();
   const inputRef = createRef<HTMLInputElement>();
-  let reviewActive = true;
+  let surface: ReviewFindSurface | null = "review";
   let priorFocus: HTMLElement | null = null;
   let searchScheduled = false;
 
@@ -159,7 +175,9 @@ function createFindController(
     const target = priorFocus;
     priorFocus = null;
 
-    if (restoreFocus && target?.isConnected) target.focus();
+    // Back where it was, without scrolling the board to it.
+    if (restoreFocus && target?.isConnected)
+      target.focus({ preventScroll: true });
   };
 
   const reveal = (index: number) => {
@@ -172,7 +190,7 @@ function createFindController(
     setCssHighlight(articleRef.current, ACTIVE_HIGHLIGHT, []);
 
     for (const registration of registrations) {
-      registration.getHandle()?.clearActiveFindMatch();
+      registration.clearActiveFindMatch();
     }
 
     // A frame later the search may have closed or moved on.
@@ -190,7 +208,10 @@ function createFindController(
       match.registration.expand();
       requestAnimationFrame(async () => {
         if (!current()) return;
-        match.registration.container.scrollIntoView?.({ block: "center" });
+
+        // A diff view fills its column and scrolls itself.
+        if ((match.registration.surface ?? "review") === "review")
+          match.registration.container.scrollIntoView?.({ block: "center" });
         await match.registration.revealFindMatch(match.localIndex);
         inputRef.current?.focus();
       });
@@ -232,13 +253,15 @@ function createFindController(
     query: ReviewFindQuery,
     expression: RegExp,
   ) => {
-    const article = articleRef.current;
+    const article = surface === "review" ? articleRef.current : null;
 
     const ranges = article ? reviewFindRanges(article, expression) : [];
 
-    const orderedRegistrations = [...registrations].sort((left, right) =>
-      compareDocumentOrder(left.container, right.container),
-    );
+    const orderedRegistrations = [...registrations]
+      .filter((registration) => (registration.surface ?? "review") === surface)
+      .sort((left, right) =>
+        compareDocumentOrder(left.container, right.container),
+      );
 
     void Promise.all(
       orderedRegistrations.map(async (registration) => {
@@ -306,12 +329,20 @@ function createFindController(
       };
     },
     showFind(seed?: string) {
-      if (!reviewActive) return false;
+      if (surface === null) return false;
 
       if (!store.getState().open) {
         const active = articleRef.current?.ownerDocument.activeElement;
         priorFocus = active instanceof HTMLElement ? active : null;
-        store.getState().show(seed ?? selectedMdxText(articleRef.current));
+        onOpen?.(surface);
+        store
+          .getState()
+          .show(
+            seed ??
+              (surface === "review"
+                ? selectedMdxText(articleRef.current)
+                : undefined),
+          );
       }
 
       requestAnimationFrame(() => {
@@ -343,10 +374,11 @@ function createFindController(
         scheduleSearch();
       };
     },
-    setReviewActive(active: boolean) {
-      reviewActive = active;
+    setSurface(next: ReviewFindSurface | null) {
+      if (next === surface) return;
+      surface = next;
 
-      if (!active && store.getState().open) close(false);
+      if (store.getState().open) close(false);
     },
   };
 }
@@ -393,7 +425,7 @@ function ReviewFindWidget({
       >
         <input
           ref={inputRef}
-          {...stylex.props(styles.input)}
+          {...stylex.props(fieldStyles.bare, styles.input)}
           aria-label="Find"
           aria-invalid={invalid ? "true" : undefined}
           title={invalid ?? undefined}
@@ -435,6 +467,14 @@ function ReviewFindWidget({
             onClick={() => toggleOption("isRegex")}
           >
             .*
+          </FindToggle>
+          <FindToggle
+            label="Skip Folded"
+            description="Skip Folded: leave out matches in folded files and regions."
+            active={query.skipFolded ?? false}
+            onClick={() => toggleOption("skipFolded")}
+          >
+            ⊟
           </FindToggle>
         </div>
       </div>
@@ -487,18 +527,20 @@ function FindToggle({
   onClick(): void;
   children: ReactNode;
 }) {
+  const tooltip = useTooltip(description, { instant: true });
+
   return (
-    <button
-      type="button"
-      {...stylex.props(styles.toggle, active && styles.togglePressed, xstyle)}
+    <IconButton
+      ref={tooltip}
+      size="small"
+      xstyle={[styles.toggle, xstyle]}
       aria-label={label}
       aria-pressed={active}
-      title={description}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
     >
       {children}
-    </button>
+    </IconButton>
   );
 }
 
@@ -523,27 +565,14 @@ function FindActionButton({
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
     >
-      <FindActionIcon icon={icon} />
+      {icon === "previous" ? (
+        <ArrowUpIcon xstyle={iconStyles.chrome} />
+      ) : icon === "next" ? (
+        <ArrowDownIcon xstyle={iconStyles.chrome} />
+      ) : (
+        <CloseIcon xstyle={iconStyles.chrome} />
+      )}
     </IconButton>
-  );
-}
-
-function FindActionIcon({ icon }: { icon: "previous" | "next" | "close" }) {
-  const path =
-    icon === "previous"
-      ? "M3 7.5 8 2.5l5 5M8 3v10.5"
-      : icon === "next"
-        ? "m3 8.5 5 5 5-5M8 13V2.5"
-        : "m3 3 10 10M13 3 3 13";
-
-  return (
-    <svg
-      {...stylex.props(styles.actionIcon)}
-      viewBox="0 0 16 16"
-      aria-hidden="true"
-    >
-      <path d={path} />
-    </svg>
   );
 }
 
@@ -580,37 +609,20 @@ function compareDocumentOrder(left: Node, right: Node): number {
 
 const compact = "@media (max-width: 620px)";
 
-const hoverBackground = "var(--vscode-toolbar-hoverBackground, var(--tray))";
-
-const button = {
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-  borderWidth: "1px",
-  borderStyle: "solid",
-  borderRadius: "3px",
-  cursor: "pointer",
-  outline: {
-    default: null,
-    ":focus-visible": `1px solid ${tokens.accent}`,
-  },
-  outlineOffset: { default: null, ":focus-visible": "1px" },
-} as const;
-
 const styles = stylex.create({
   widget: {
     position: "absolute",
     zIndex: layer.popover,
-    top: "48px",
-    right: { default: "16px", [compact]: "8px" },
-    left: { default: null, [compact]: "8px" },
+    top: space.s48,
+    right: { default: space.s16, [compact]: space.s8 },
+    left: { default: null, [compact]: space.s8 },
     display: "flex",
     alignItems: "center",
     minWidth: { default: "490px", [compact]: 0 },
     maxWidth: { default: "calc(100vw - 32px)", [compact]: "none" },
     height: "34px",
-    gap: "3px",
-    padding: "3px 4px 3px 6px",
+    gap: space.s4,
+    padding: `${space.s4} ${space.s4} ${space.s4} ${space.s6}`,
   },
   inputShell: {
     display: "flex",
@@ -618,24 +630,14 @@ const styles = stylex.create({
     flex: 1,
     minWidth: "160px",
     gap: "1px",
-    padding: "0 2px 0 6px",
+    padding: `0 ${space.s2} 0 ${space.s6}`,
   },
   inputShellInvalid: {
     borderColor: tokens.changeRemoved,
   },
   input: {
     flex: 1,
-    minWidth: 0,
     height: "100%",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: "transparent",
-    color: tokens.ink,
-    fontFamily: tokens.chromeFont,
-    fontSize: fontSize.body,
-    outline: "none",
   },
   options: {
     display: "flex",
@@ -648,41 +650,18 @@ const styles = stylex.create({
     flexShrink: 0,
     flexBasis: { default: "auto", [compact]: "56px" },
     minWidth: "64px",
-    marginLeft: "4px",
-    padding: "0 3px",
+    marginLeft: space.s4,
+    padding: `0 ${space.s4}`,
     color: tokens.inkMuted,
     fontFamily: tokens.chromeFont,
+    fontVariantNumeric: "tabular-nums",
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     textAlign: "center",
     whiteSpace: "nowrap",
   },
   toggle: {
-    ...button,
-    flex: "0 0 22px",
-    width: "22px",
-    height: "20px",
-    padding: 0,
-    borderColor: "transparent",
-    backgroundColor: {
-      default: "transparent",
-      ":hover:not(:disabled)": hoverBackground,
-    },
-    color: { default: tokens.inkMuted, ":hover:not(:disabled)": tokens.ink },
-    fontFamily: tokens.chromeFont,
-    fontSize: fontSize.body,
-    lineHeight: "16px",
-  },
-  togglePressed: {
-    borderColor: tokens.accent,
-    backgroundColor: {
-      default: "var(--vscode-inputOption-activeBackground, var(--tray))",
-      ":hover:not(:disabled)": hoverBackground,
-    },
-    color: {
-      default: "var(--vscode-inputOption-activeForeground, var(--ink))",
-      ":hover:not(:disabled)": tokens.ink,
-    },
+    fontWeight: fontWeight.regular,
   },
   wholeWord: {
     textDecorationLine: "underline",
@@ -690,14 +669,5 @@ const styles = stylex.create({
   },
   regex: {
     fontFamily: tokens.fontMono,
-  },
-  actionIcon: {
-    width: "14px",
-    height: "14px",
-    fill: "none",
-    stroke: "currentcolor",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    strokeWidth: "1.35",
   },
 });

@@ -1,26 +1,30 @@
+import { AgentLogo } from "@canvas/ui/brand-icons";
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { ChatIcon, HistoryIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, useEffect } from "react";
 
-import { logos, useAskAgents } from "./ask-agent-picker";
+import { useAskAgents } from "./ask-agent-picker";
 import { resolveAskAnchor } from "./ask-anchor";
 import { AskDeleteButton } from "./ask-delete";
+import { useShowThreads } from "./ask-dock";
 import { useAskHistory } from "./ask-history";
 import { askPanelStyles } from "./ask-styles";
-import { controlStyles } from "./controls-styles";
 import { formatRelativeTime } from "./format";
 import { useReviewSession } from "./host/review-session";
-import { ChatIcon, HistoryIcon } from "./icons";
 import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
 import type { AskPassage, AskView } from "./review-panel-model";
 import { useReviewRoots } from "./review-root-context";
-import { fontSize } from "./scale.stylex";
+import { fontSize, leading, space } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
-import { IconButton } from "./ui/button";
+import { Button, IconButton } from "./ui/button";
 import { Chip } from "./ui/chip";
 import { EmptyState } from "./ui/empty-state";
 import { textStyles } from "./ui/text";
-import { useTooltip } from "./use-tooltip";
 
 /** Opens the list of this review's saved conversations. */
 function useOpenAskHistory() {
@@ -64,47 +68,25 @@ export function AskOutdatedNote({
   );
 }
 
-/** The Ask panel's header button for its history. */
+/** The Ask panel's header button for its history: in Desktop, the
+ * sidebar's Threads tab. */
 export function AskHistoryButton({ view }: { view: AskView }): ReactElement {
   const openHistory = useOpenAskHistory();
+  const showThreads = useShowThreads();
   // One passage's conversations are a step away from all of them.
-  const allShown = view.type === "history" && !view.passage;
+  const allShown = !showThreads && view.type === "history" && !view.passage;
   const tooltip = useTooltip("Saved conversations");
 
   return (
     <IconButton
       ref={tooltip}
       size="large"
-      xstyle={allShown && styles.historyButtonOn}
       aria-label="Saved conversations"
       aria-pressed={allShown}
-      disabled={!openHistory || allShown}
-      onClick={openHistory}
+      disabled={!(showThreads ?? openHistory)}
+      onClick={allShown ? undefined : (showThreads ?? openHistory)}
     >
-      <HistoryIcon
-        xstyle={[controlStyles.inertIcon, controlStyles.chromeIcon]}
-      />
-    </IconButton>
-  );
-}
-
-/** The review toolbar's way back to saved conversations, where Ask runs. */
-export function AskHistoryControl(): ReactElement | null {
-  const session = useReviewSession();
-  const openHistory = useOpenAskHistory();
-  const agents = useAskAgents(openHistory ? session : null);
-  const tooltip = useTooltip("Saved conversations");
-
-  if (!openHistory || !agents) return null;
-
-  return (
-    <IconButton
-      ref={tooltip}
-      xstyle={shellStyles.topbarItem}
-      aria-label="Saved conversations"
-      onClick={openHistory}
-    >
-      <ChatIcon xstyle={controlStyles.chromeIcon} />
+      <HistoryIcon xstyle={[iconStyles.inert, iconStyles.chrome]} />
     </IconButton>
   );
 }
@@ -145,28 +127,54 @@ export function AskHistoryList({
   return (
     <div {...stylex.props(askPanelStyles.body)}>
       <div {...stylex.props(askPanelStyles.page)}>
-        <h3
-          {...stylex.props(
-            textStyles.eyebrow,
-            askPanelStyles.caps,
-            styles.historyHeading,
+        <div {...stylex.props(styles.historyHeader)}>
+          <h3
+            {...stylex.props(
+              textStyles.eyebrow,
+              askPanelStyles.caps,
+              styles.historyHeading,
+            )}
+          >
+            {passage?.several
+              ? "About these passages"
+              : passage
+                ? "About this passage"
+                : "Saved conversations"}
+          </h3>
+          {/* A question needs no selection: one about the whole review. */}
+          {passage || !panels ? null : (
+            <Button
+              onClick={() =>
+                panels
+                  .getState()
+                  .openAsk(
+                    { target: { kind: "review" }, title: "Whole review" },
+                    undefined,
+                    { from },
+                  )
+              }
+            >
+              New conversation
+            </Button>
           )}
-        >
-          {passage?.several
-            ? "About these passages"
-            : passage
-              ? "About this passage"
-              : "Saved conversations"}
-        </h3>
+        </div>
         {passage ? (
           <figure {...stylex.props(askPanelStyles.selection)}>
-            <blockquote {...stylex.props(askPanelStyles.selectionQuote)}>
+            <blockquote
+              {...stylex.props(
+                textStyles.clamp2,
+                askPanelStyles.selectionQuote,
+              )}
+            >
               {passage.quote}
             </blockquote>
           </figure>
         ) : null}
         {error ? (
-          <p {...stylex.props(askPanelStyles.error)} role="alert">
+          <p
+            {...stylex.props(textStyles.error, askPanelStyles.error)}
+            role="alert"
+          >
             {error}
           </p>
         ) : null}
@@ -178,7 +186,7 @@ export function AskHistoryList({
             message={
               passage
                 ? "No saved conversations about this passage."
-                : "Nothing yet. Select text or code in the review and choose Ask; the conversation is saved here."
+                : "Nothing yet. Start a new conversation, or select text or code in the review and choose Ask; conversations are saved here."
             }
           />
         ) : entries?.length ? (
@@ -228,7 +236,11 @@ export function AskHistoryList({
                 >
                   <button
                     type="button"
-                    {...stylex.props(styles.historyOpen)}
+                    {...stylex.props(
+                      focusStyles.ringInset,
+                      buttonStyles.reset,
+                      styles.historyOpen,
+                    )}
                     onPointerEnter={() => {
                       history?.preview(entry.id);
                       history?.reveal(entry);
@@ -254,11 +266,17 @@ export function AskHistoryList({
                       );
                     }}
                   >
-                    <span {...stylex.props(styles.historyLogo)}>
-                      {logos[entry.agent]({})}
-                    </span>
+                    <AgentLogo
+                      agent={entry.agent}
+                      xstyle={styles.historyLogo}
+                    />
                     <span {...stylex.props(styles.historyText)}>
-                      <span {...stylex.props(styles.historyTitle)}>
+                      <span
+                        {...stylex.props(
+                          textStyles.clamp2,
+                          styles.historyTitle,
+                        )}
+                      >
                         {title}
                       </span>
                       {source ? (
@@ -268,7 +286,12 @@ export function AskHistoryList({
                       ) : null}
                       {/* One passage's list quotes it once, above. */}
                       {!passage && target.kind === "text" ? (
-                        <span {...stylex.props(styles.historyQuote)}>
+                        <span
+                          {...stylex.props(
+                            textStyles.truncate,
+                            styles.historyQuote,
+                          )}
+                        >
                           {target.quote}
                         </span>
                       ) : null}
@@ -294,16 +317,13 @@ export function AskHistoryList({
           </ul>
         ) : null}
         {passage && openHistory ? (
-          <button
-            type="button"
-            {...stylex.props(
-              askPanelStyles.errorAction,
-              styles.allConversations,
-            )}
+          <Button
+            variant="link"
+            xstyle={styles.allConversations}
             onClick={openHistory}
           >
             All saved conversations
-          </button>
+          </Button>
         ) : null}
       </div>
     </div>
@@ -313,14 +333,14 @@ export function AskHistoryList({
 const styles = stylex.create({
   allConversations: {
     alignSelf: "flex-start",
-    color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
   },
-  // Showing the list it opens: pressed, not dimmed as disabled.
-  historyButtonOn: {
-    color: tokens.ink,
-    opacity: 1,
+  historyHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: space.s8,
   },
   historyHeading: {
     margin: 0,
@@ -336,12 +356,9 @@ const styles = stylex.create({
   historyOpen: {
     display: "flex",
     flex: "1 1 auto",
-    gap: "12px",
+    gap: space.s12,
     minWidth: 0,
-    padding: "12px 40px 12px 14px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
+    padding: `${space.s12} ${space.s40} ${space.s12} ${space.s14}`,
     backgroundColor: {
       default: tokens.transparent,
       ":hover": tokens.chromeHoverBg,
@@ -350,51 +367,39 @@ const styles = stylex.create({
     color: tokens.ink,
     textAlign: "left",
     cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "-1px" },
   },
   historyLogo: {
-    display: "flex",
-    flex: "0 0 16px",
-    justifyContent: "center",
-    paddingTop: "3px",
+    marginTop: space.s4,
   },
   historyText: {
     display: "flex",
     flexDirection: "column",
-    gap: "4px",
+    gap: space.s4,
     minWidth: 0,
   },
   historyTitle: {
-    display: "-webkit-box",
-    overflow: "hidden",
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "22px",
-    WebkitBoxOrient: "vertical",
-    WebkitLineClamp: 2,
+    lineHeight: leading.px22,
   },
   historyQuote: {
-    overflow: "hidden",
     color: tokens.inkMuted,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.ui,
     fontStyle: "italic",
-    lineHeight: "20px",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
+    lineHeight: leading.px20,
   },
   historyMeta: {
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   // Shown with its row, or once it has focus or is armed.
   historyForget: {
     position: "absolute",
-    top: "10px",
-    right: "8px",
+    top: space.s10,
+    right: space.s8,
     opacity: {
       default: 0,
       ":focus-visible": 1,
@@ -407,20 +412,19 @@ const styles = stylex.create({
     borderStyle: "solid",
     borderColor: tokens.warningOutline,
     backgroundColor: tokens.warningWash,
-    fontFamily: tokens.fontMono,
   },
   outdatedInline: {
-    marginLeft: "6px",
+    marginLeft: space.s6,
   },
   outdated: {
     display: "flex",
     flexWrap: "wrap",
     alignItems: "baseline",
-    gap: "4px 8px",
+    gap: `${space.s4} ${space.s8}`,
     margin: 0,
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
 });

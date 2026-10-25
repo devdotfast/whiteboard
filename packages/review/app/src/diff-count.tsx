@@ -1,4 +1,4 @@
-import { fontSize } from "@canvas/scale.stylex";
+import { fontSize, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
@@ -42,16 +42,15 @@ export function DiffCount({
   additions,
   deletions,
   binary = false,
-  large = false,
 }: {
   additions: number;
   deletions: number;
   binary?: boolean;
-  /** The review header's size. */
-  large?: boolean;
 }): ReactElement {
   return (
-    <span {...stylex.props(diffCountStyles.counts, large && styles.large)}>
+    <span
+      {...stylex.props(diffCountStyles.counts, binary && diffCountStyles.words)}
+    >
       {binary ? (
         "Binary"
       ) : (
@@ -64,23 +63,18 @@ export function DiffCount({
 export const diffCountStyles = stylex.create({
   counts: {
     display: "inline-flex",
-    gap: "6px",
+    gap: space.s6,
     font: `${fontSize.small} ${tokens.fontMono}`,
     fontVariantNumeric: "tabular-nums",
     whiteSpace: "nowrap",
     fontSize: fontSize.small,
   },
+  // A word in a count's place, "Viewed" or "0 files": Inter, not mono.
+  words: { fontFamily: tokens.chromeFont },
   added: {
     color: tokens.changeAdded,
   },
   removed: {
     color: tokens.changeRemoved,
-  },
-});
-
-const styles = stylex.create({
-  large: {
-    fontSize: fontSize.ui,
-    gap: "10px",
   },
 });

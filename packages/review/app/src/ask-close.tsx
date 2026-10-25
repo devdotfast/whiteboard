@@ -1,90 +1,62 @@
-import { fontSize, fontWeight } from "@canvas/scale.stylex";
+import { fontSize, fontWeight, leading, space } from "@canvas/scale.stylex";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactElement, type RefObject, useEffect, useRef } from "react";
 
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { menuStyles } from "./ui/menu";
-import { surfaceStyles } from "./ui/surface";
-import { useAnchoredPopover } from "./use-anchored-popover";
+import { Popover } from "./ui/popover";
 
 /** Asked from the close button of an Ask whose agent is working: closing
- * stops it, and minimizing keeps it going out of the way. */
+ * stops it, and keeping it running hides it, still in the Threads tab. */
 export function AskCloseWarning({
   anchor,
   agentName,
-  onMinimize,
+  onKeepRunning,
   onClose,
   onKeep,
 }: {
   /** The close button it hangs from. */
   anchor: RefObject<HTMLElement | null>;
   agentName: string;
-  onMinimize: () => void;
+  onKeepRunning: () => void;
   onClose: () => void;
   onKeep: () => void;
 }): ReactElement {
-  const popover = useAnchoredPopover(true, anchor);
-  const minimize = useRef<HTMLButtonElement>(null);
+  const keepRunning = useRef<HTMLButtonElement>(null);
 
-  useEffect(() => minimize.current?.focus(), []);
+  useEffect(() => keepRunning.current?.focus(), []);
 
   // A press anywhere else keeps the Ask; the close button asks again.
-  useEffect(() => {
-    const outside = (event: PointerEvent) => {
-      if (
-        event.target instanceof Node &&
-        (popover.current?.contains(event.target) ||
-          anchor.current?.contains(event.target))
-      )
-        return;
-      onKeep();
-    };
-
-    document.addEventListener("pointerdown", outside);
-
-    return () => document.removeEventListener("pointerdown", outside);
-  }, [popover, anchor, onKeep]);
-
   return (
-    <div
-      ref={popover}
-      popover="manual"
-      {...stylex.props(
-        menuStyles.popover,
-        menuStyles.end,
-        surfaceStyles.popover,
-        styles.warning,
-      )}
+    <Popover
+      anchor={anchor}
+      onDismiss={onKeep}
+      xstyle={[menuStyles.popover, menuStyles.end, styles.warning]}
       role="alertdialog"
       aria-label={`Stop ${agentName}?`}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        event.stopPropagation();
-        onKeep();
-      }}
     >
       <p {...stylex.props(styles.title)}>Stop {agentName}?</p>
       <p {...stylex.props(styles.text)}>
-        {agentName} is still running. Minimize to keep running.
+        {agentName} is still running. Keep it running to find it in Threads.
       </p>
       <span {...stylex.props(styles.actions)}>
         <Button variant="ghost" onClick={onClose}>
           Stop and close
         </Button>
-        <Button ref={minimize} variant="primary" onClick={onMinimize}>
-          Minimize
+        <Button ref={keepRunning} variant="primary" onClick={onKeepRunning}>
+          Keep running
         </Button>
       </span>
-    </div>
+    </Popover>
   );
 }
 
 const styles = stylex.create({
   warning: {
-    gap: "6px",
+    gap: space.s6,
     width: "276px",
-    padding: "12px 12px 10px 14px",
+    padding: `${space.s12} ${space.s12} ${space.s10} ${space.s14}`,
     overflowY: "visible",
     fontFamily: tokens.chromeFont,
   },
@@ -93,18 +65,18 @@ const styles = stylex.create({
     color: tokens.ink,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.semibold,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
   },
   text: {
     margin: 0,
     color: tokens.inkMuted,
     fontSize: fontSize.body,
-    lineHeight: "18px",
+    lineHeight: leading.px18,
   },
   actions: {
     display: "flex",
     justifyContent: "flex-end",
-    gap: "6px",
-    marginTop: "6px",
+    gap: space.s6,
+    marginTop: space.s6,
   },
 });

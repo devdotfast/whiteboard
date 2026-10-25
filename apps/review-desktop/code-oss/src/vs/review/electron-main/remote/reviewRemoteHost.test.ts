@@ -14,20 +14,24 @@ import test from "node:test";
 
 import type { ReviewGatewayHost } from "../../common/reviewProtocol.js";
 import { attachOutput, COMMIT, detectOutput, FAKE_SERVER_ID, fakeClock, fakeSsh, flush, healthServer, until, type FakeRemote } from "./test/fakeSsh.js";
+import { INSTALL_SCRIPT } from "./test/installScript.js";
 import { classifySshFailure, languageCommitMismatch, ReviewRemoteHost, type ReviewRemoteHostOptions, type ReviewRemoteInstallFlow, type ReviewRemoteInstallMode, type ReviewRemoteInstallRunInput } from "./reviewRemoteHost.js";
 import { ReviewRemoteNoTarball } from "./reviewRemoteArtifacts.js";
 import { openRemoteInstallConsent } from "./reviewRemoteInstallConsent.js";
 import type { ReviewRemoteInstallProgress, ReviewRemoteInstallResult } from "./reviewRemoteInstaller.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
 
-async function versionServer(t: test.TestContext, commit: string): Promise<number> {
-	const server: Server = createServer((request, response) => response.end(request.url === "/version" ? commit : ""));
+async function versionServer(t: test.TestContext, status = 200): Promise<number> {
+	const server: Server = createServer((_request, response) => {
+		response.statusCode = status;
+		response.end();
+	});
 	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
 	t.after(() => new Promise((resolve) => server.close(() => resolve(undefined))));
 	return (server.address() as AddressInfo).port;
 }
 
-const NO_SERVER = { languageFeatures: false, languageFeaturesDetail: "The Whiteboard on this host has no VS Code server." };
+const NO_SERVER = { languageFeatures: false, languageFeaturesDetail: "The Whiteboard server on this host has no language server." };
 
 function hostFor(
 	t: test.TestContext,
@@ -102,6 +106,7 @@ async function installFlow(
 			if (error) throw error;
 			return INSTALLED;
 		},
+		script: async () => INSTALL_SCRIPT,
 		origin: () => (options.origin === null ? undefined : (options.origin ?? "https://install.dev.fast")),
 		artifact:
 			options.artifact ??
@@ -130,7 +135,7 @@ test("a successful attach reports an endpoint at the forwarded port", async (t) 
 });
 
 test("the VS Code server gets a second forward on the same master, and only its endpoint reaches a window", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), await versionServer(t)];
 	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
 	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, ports);
 
@@ -157,7 +162,7 @@ test("the Desktop's enabled groups go to remote attach", async (t) => {
 });
 
 test("a VS Code server of another commit leaves the review online without language features", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), await versionServer(t)];
 	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
 	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, ports, "wb-test-a", "/tmp/wb-ssh-test", undefined, undefined, { desktopCommit: "b".repeat(40) });
 
@@ -168,7 +173,7 @@ test("a VS Code server of another commit leaves the review online without langua
 		alias: "wb-test-a",
 		endpoint: { url: `http://127.0.0.1:${ports[0]}`, token: "remote-token" },
 		languageFeatures: false,
-		languageFeaturesDetail: "language features need the same Whiteboard version on wb-test-a: it runs aaaaaaa, this Desktop bbbbbbb",
+		languageFeaturesDetail: "language features need the same Whiteboard version on wb-test-a: its Whiteboard server runs aaaaaaa, this Desktop bbbbbbb",
 	});
 	assert.equal(ssh.of("wb-test-a", "forward").length, 1);
 	assert.equal(await host.languageEndpoint(FAKE_SERVER_ID), undefined);
@@ -177,11 +182,11 @@ test("a VS Code server of another commit leaves the review online without langua
 test("a dev Desktop, with no commit, accepts any VS Code server; a release Desktop only its own", () => {
 	assert.equal(languageCommitMismatch("a", COMMIT, undefined), undefined);
 	assert.equal(languageCommitMismatch("a", COMMIT, COMMIT), undefined);
-	assert.match(languageCommitMismatch("a", COMMIT, "b".repeat(40))!, /on a: it runs aaaaaaa, this Desktop bbbbbbb$/);
+	assert.match(languageCommitMismatch("a", COMMIT, "b".repeat(40))!, /on a: its Whiteboard server runs aaaaaaa, this Desktop bbbbbbb$/);
 });
 
 test("a VS Code server that does not answer through its forward is unavailable, and its forward is cancelled", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, "c".repeat(40))];
+	const ports = [await healthServer(t), await versionServer(t, 503)];
 	const languageServer = { port: 45678, connectionToken: "vscode-token", commit: COMMIT };
 	const { host, ssh, last } = hostFor(t, { attach: { code: 0, stdout: attachOutput(41234, "remote-token", { languageServer }) } }, ports);
 
@@ -189,7 +194,7 @@ test("a VS Code server that does not answer through its forward is unavailable, 
 	await until(() => last()?.endpoint !== undefined);
 
 	assert.equal(last()?.languageFeatures, false);
-	assert.match(last()!.languageFeaturesDetail!, /did not answer through the forward: it reports c{40}, not a{40}\.$/);
+	assert.match(last()!.languageFeaturesDetail!, /did not answer through the forward: \/version answered 503\.$/);
 	const cancels = ssh.of("wb-test-a", "cancel");
 	assert.equal(cancels.length, 1);
 	assert.ok(cancels[0].args.includes(`127.0.0.1:${ports[1]}:127.0.0.1:45678`));
@@ -197,7 +202,7 @@ test("a VS Code server that does not answer through its forward is unavailable, 
 });
 
 test("a reattach drops both old forwards", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, COMMIT), await healthServer(t), await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), await versionServer(t), await healthServer(t), await versionServer(t)];
 	const { host, ssh, last } = hostFor(
 		t,
 		{ attach: (call) => ({ code: 0, stdout: attachOutput(41234 + call, `token-${call}`, { languageServer: { port: 45678 + call, connectionToken: `vscode-${call}`, commit: COMMIT } }) }) },
@@ -226,7 +231,7 @@ test("a VS Code server that stopped answering is not handed out, and the host at
 	const stopped: Server = createServer((request, response) => response.end(request.url === "/version" ? COMMIT : ""));
 	await new Promise<void>((resolve) => stopped.listen(0, "127.0.0.1", resolve));
 	t.after(() => new Promise((resolve) => stopped.close(() => resolve(undefined))));
-	const ports = [await healthServer(t), (stopped.address() as AddressInfo).port, await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), (stopped.address() as AddressInfo).port, await versionServer(t)];
 	const { host, ssh, last } = hostFor(
 		t,
 		{ attach: (call) => ({ code: 0, stdout: attachOutput(41234, "remote-token", { languageServer: { port: 45677 + call, connectionToken: `vscode-${call}`, commit: COMMIT } }) }) },
@@ -262,7 +267,7 @@ test("a reattach the gateway asks for opens a new review forward, even to the sa
 });
 
 test("a reattach the gateway asks for during a pending attach runs after it, with new forwards", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, COMMIT), await healthServer(t), await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), await versionServer(t), await healthServer(t), await versionServer(t)];
 	const { host, ssh, clock, last } = hostFor(
 		t,
 		{ attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { languageServer: { port: 45678, connectionToken: `vscode-${call}`, commit: COMMIT } }) }) },
@@ -279,28 +284,8 @@ test("a reattach the gateway asks for during a pending attach runs after it, wit
 	assert.deepEqual(await host.languageEndpoint(FAKE_SERVER_ID), { host: "127.0.0.1", port: ports[3], connectionToken: "vscode-3" });
 });
 
-test("a Retry after ten pending attaches attaches again on the same schedule", async (t) => {
-	const port = await healthServer(t);
-	const { host, ssh, clock, last } = hostFor(t, { attach: { code: 0, stdout: pendingOutput(41234) } }, port);
-
-	host.start();
-	await until(() => last()?.endpoint !== undefined);
-	for (let attaches = 1; attaches < 10; attaches++) {
-		await until(() => clock.pending === 1);
-		clock.next();
-		await until(() => ssh.of("wb-test-a", "exec").length === attaches + 1);
-	}
-	await new Promise((resolve) => setTimeout(resolve, 100));
-	assert.equal(clock.pending, 0);
-
-	host.retry();
-	await until(() => ssh.of("wb-test-a", "exec").length === 11 && last()?.endpoint !== undefined);
-	await until(() => clock.pending === 1);
-	assert.equal(clock.delays.at(-1), 60_000);
-});
-
 test("a remote still installing its extensions is attached again after a minute, until its VS Code server is reported", async (t) => {
-	const ports = [await healthServer(t), await versionServer(t, COMMIT)];
+	const ports = [await healthServer(t), await versionServer(t)];
 	const { host, ssh, clock, last } = hostFor(
 		t,
 		{ attach: (call) => ({ code: 0, stdout: call === 1 ? pendingOutput(41234) : attachOutput(41234, "remote-token", { languageServer: { port: 45678, connectionToken: "vscode-token", commit: COMMIT } }) }) },
@@ -315,6 +300,7 @@ test("a remote still installing its extensions is attached again after a minute,
 		endpoint: { url: `http://127.0.0.1:${ports[0]}`, token: "remote-token" },
 		languageFeatures: false,
 		languageFeaturesDetail: PENDING_DETAIL,
+		languageFeaturesPending: true,
 	});
 	assert.equal(clock.pending, 1);
 	assert.equal(clock.delays.at(-1), 60_000);
@@ -324,25 +310,6 @@ test("a remote still installing its extensions is attached again after a minute,
 	assert.equal(last()?.endpoint?.url, `http://127.0.0.1:${ports[0]}`);
 	assert.equal(ssh.of("wb-test-a", "exec").length, 2);
 	assert.equal(clock.pending, 0);
-});
-
-test("attaching again for a pending install stops after ten attaches in a row", async (t) => {
-	const port = await healthServer(t);
-	const { host, ssh, clock, last } = hostFor(t, { attach: { code: 0, stdout: pendingOutput(41234) } }, port);
-
-	host.start();
-	await until(() => last()?.endpoint !== undefined);
-	for (let attaches = 1; attaches < 10; attaches++) {
-		await until(() => clock.pending === 1);
-		clock.next();
-		await until(() => ssh.of("wb-test-a", "exec").length === attaches + 1);
-	}
-	await new Promise((resolve) => setTimeout(resolve, 100));
-	assert.equal(clock.pending, 0);
-
-	assert.equal(ssh.of("wb-test-a", "exec").length, 10);
-	assert.equal(last()?.languageFeaturesDetail, PENDING_DETAIL);
-	assert.equal(last()?.endpoint?.url, `http://127.0.0.1:${port}`);
 });
 
 test("output with a banner before the first sentinel still parses", async (t) => {
@@ -724,18 +691,17 @@ test("the version present: no prompt and no install shown; the installed CLI att
 	);
 });
 
-test("the version present with another sha256 is not installed: the user is asked and the install is shown", async (t) => {
+test("the version present with another sha256 is reinstalled without asking, and the install is shown", async (t) => {
 	const port = await healthServer(t);
-	const { flow, prompts, runs } = await installFlow(t, "ask", { answers: [true], steps: STEPS });
+	const { flow, prompts, runs } = await installFlow(t, "ask", { steps: STEPS });
 	const { host, reports, last } = hostFor(t, { probe: { installed: [at("0.1.5"), at("0.1.6", "b".repeat(64))] } }, port, "wb-test-a", "/tmp/wb-ssh-test", flow);
 
 	host.start();
 	await until(() => last()?.endpoint !== undefined);
 
-	assert.equal(prompts.length, 1);
+	assert.equal(prompts.length, 0);
 	assert.equal(runs.length, 1);
 	assert.deepEqual(reports.find((report) => report.installing)?.installing, { step: "preparing" });
-	assert.equal(await flow.consent.get("wb-test-a"), "allow");
 });
 
 test("the version absent with installs always: each step is reported, then the host attaches", async (t) => {
@@ -774,7 +740,6 @@ test("the version absent, asked and declined: not-installed and declined, and no
 		alias: "wb-test-a",
 		problem: { state: "not-installed", detail: "Whiteboard is not installed on wb-test-a. Install Whiteboard 0.1.6 there." },
 		declined: true,
-		target: "linux-arm64",
 	});
 	assert.equal(clock.pending, 0);
 	assert.deepEqual(JSON.parse(await readFile(consentFile, "utf8")).aliases, { "wb-test-a": "deny" });
@@ -983,7 +948,6 @@ test("a server of another version a user started is left, and the host is incomp
 			state: "incompatible",
 			detail: "A Whiteboard server 0.1.5 started by a user is running on wb-test-a; stop it to use this Desktop's version.",
 		},
-		target: "linux-arm64",
 	});
 	assert.equal(clock.pending, 0);
 	assert.equal(ssh.of("wb-test-a", "exec").length, 1);
@@ -1069,7 +1033,6 @@ test("a failed upgrade attaches the older version, which reports why, and Retry 
 		endpoint: { url: `http://127.0.0.1:${port}`, token: "remote-token" },
 		...NO_SERVER,
 		installFailure: "Installing Whiteboard 0.1.6 on wb-test-a failed while installing the package: The package installed on wb-test-a reports version 0.1.5, not 0.1.6.",
-		target: "linux-arm64",
 	});
 	assert.match(ssh.of("wb-test-a", "exec")[0].input!, /command -v whiteboard/);
 	assert.equal(clock.pending, 0);
@@ -1079,7 +1042,7 @@ test("a failed upgrade attaches the older version, which reports why, and Retry 
 	assert.match(ssh.of("wb-test-a", "exec")[1].input!, /--replace/);
 });
 
-test("agents are detected once after the first attach, with the installed CLI, and kept", async (t) => {
+test("agents are detected once after the first attach, with the installed CLI, and kept until asked again", async (t) => {
 	const port = await healthServer(t);
 	const { flow } = await installFlow(t, "always");
 	const attached = new Set<string>();
@@ -1095,6 +1058,8 @@ test("agents are detected once after the first attach, with the installed CLI, a
 	assert.match(detect.input!, new RegExp(`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' 'connect' '--detect' '--json'\n$`));
 	assert.deepEqual(await host.detectAgents(), [{ id: "pi", connected: false }]);
 	assert.equal(ssh.of("wb-test-a", "detect").length, 1, "the kept answer");
+	assert.deepEqual(await host.detectAgents(true), [{ id: "pi", connected: false }]);
+	assert.equal(ssh.of("wb-test-a", "detect").length, 2, "read again when asked");
 	assert.equal(ssh.of("wb-test-a", "connect").length, 0, "nothing changed on the host");
 	assert.deepEqual([...attached], [FAKE_SERVER_ID]);
 
@@ -1102,7 +1067,7 @@ test("agents are detected once after the first attach, with the installed CLI, a
 	await until(() => ssh.of("wb-test-a", "exec").length === 2);
 	await until(() => last()?.endpoint !== undefined);
 	await new Promise((resolve) => setTimeout(resolve, 20));
-	assert.equal(ssh.of("wb-test-a", "detect").length, 1);
+	assert.equal(ssh.of("wb-test-a", "detect").length, 2);
 });
 
 test("a hand-installed host detects with the CLI on its PATH", async (t) => {
@@ -1116,7 +1081,7 @@ test("a hand-installed host detects with the CLI on its PATH", async (t) => {
 	assert.deepEqual(await host.detectAgents(), []);
 });
 
-test("connecting runs the agents' commands with the installed CLI, and refuses agents it did not find or cannot connect alone", async (t) => {
+test("connecting runs the agents' commands with the installed CLI, and refuses agents it did not find", async (t) => {
 	const port = await healthServer(t);
 	const { flow } = await installFlow(t, "always");
 	const remote: FakeRemote = {
@@ -1124,7 +1089,6 @@ test("connecting runs the agents' commands with the installed CLI, and refuses a
 			code: 0,
 			stdout: detectOutput([
 				{ id: "pi", connected: false },
-				{ id: "codex", connected: false, manual: true },
 			]),
 		},
 	};
@@ -1141,8 +1105,26 @@ test("connecting runs the agents' commands with the installed CLI, and refuses a
 	assert.deepEqual(await host.connectAgents(["pi", "pi"]), [{ id: "pi", connected: true, output: "" }]);
 	const [connect] = ssh.of("wb-test-a", "connect");
 	assert.match(connect.input!, new RegExp(`exec '${INSTALLED.nodePath}' '${INSTALLED.cliPath}' 'connect' '--yes' '--json' 'pi'\n$`));
-	assert.deepEqual(await host.detectAgents(), [
-		{ id: "codex", connected: false, manual: true },
-		{ id: "pi", connected: true },
+	assert.deepEqual(await host.detectAgents(), [{ id: "pi", connected: true }]);
+});
+
+test("telemetry gets each change of connect outcome once", async (t) => {
+	const port = await healthServer(t);
+	const events: [string, Record<string, unknown>][] = [];
+	const { host, ssh, clock, last } = hostFor(t, {}, port, "wb-test-a", "/tmp/wb-ssh-test", undefined, "0.1.6", {
+		capture: (name, properties) => events.push([name, properties]),
+	});
+
+	host.start();
+	await until(() => last()?.endpoint !== undefined);
+	ssh.master("wb-test-a")!.finish(255, { stderr: "Connection to 127.0.0.1 closed by remote host.\n" });
+	await until(() => last()?.problem !== undefined);
+	assert.ok(clock.next());
+	await until(() => last()?.endpoint !== undefined);
+
+	assert.deepEqual(events, [
+		["remote_host_connected", { ok: true, direct: false }],
+		["remote_host_connected", { ok: false, problem: "unreachable", direct: false }],
+		["remote_host_connected", { ok: true, direct: false }],
 	]);
 });

@@ -143,7 +143,9 @@ describe("sequence diagram guided tour", () => {
     expect(
       createSequenceTourEntry(sequence).stops.map((stop) => stop.anchor.id),
     ).toEqual(["request", "reply"]);
-    expect(sequence.messages[0]?.source).toEqual(sequence.messages[1]?.source);
+    expect(sequence.messages[0]?.sources).toEqual(
+      sequence.messages[1]?.sources,
+    );
   });
 
   it("calculates scroll targets that reveal the active message participants", () => {
@@ -224,12 +226,14 @@ describe("sequence diagram guided tour", () => {
       }),
     ).toBeNull();
 
-    // Vertical counterpart: rows at messageTop + index * messageGap must be
-    // brought into the capped, scrollable diagram body as the tour advances.
+    // Vertical counterpart: each message's row must be brought into the
+    // capped, scrollable diagram body as the tour advances.
     const baseScrollTopInput = {
       sequence,
-      messageTop: 112,
-      messageGap: 76,
+      rows: sequence.messages.map((_, index) => ({
+        labelTop: 112 + index * 76,
+        bottom: 112 + (index + 1) * 76,
+      })),
       viewportHeight: 200,
       scrollHeight: 990,
     };

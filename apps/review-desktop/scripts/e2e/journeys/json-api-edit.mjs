@@ -51,11 +51,7 @@ export async function run(ctx) {
     [
       {
         type: "code_peek",
-        source: {
-          file: "../outside.ts",
-          start: { side: "head", line: 1 },
-          end: { side: "head", line: 1 },
-        },
+        source: "head/../outside.ts#L1",
       },
       "repository-relative",
     ],
@@ -98,9 +94,7 @@ export async function run(ctx) {
     blocks: orderReviewBlocks,
   });
 
-  await created.canvas
-    .getByRole("heading", { name: "Overview", exact: true })
-    .waitFor();
+  await created.canvas.getByRole("heading", { name: "Overview" }).waitFor();
   await created.canvas
     .getByText("moves from draft to queued")
     .first()

@@ -16,30 +16,50 @@ export function lensContextGaps(diff: IDocumentDiff, originalCount: number, modi
 	const context = visible.map((_, index) => visible.slice(Math.max(0, index - 3), index + 4).some(Boolean));
 	if (diff.contextScopes) {
 		// A lens must not clip context that diffr kept around its selected code.
-		// Seed enclosing scope boundaries, then retain each visible context run
-		// touching a seed. Never expand through a collapsed provider band.
+		// Retain the unchanged lines of each open run (no collapsed provider
+		// band) holding pinned lines. Show each enclosing scope's first and
+		// last line, plus the unchanged lines diffr kept between it and the
+		// pin, such as the rest of a multi-line header. Never fill away from
+		// the pin, and never into changed lines: diffr never folds those, so
+		// a run that holds them is not context diffr chose to keep.
 		const scopes = [diff.contextScopes.original, diff.contextScopes.modified];
-		const enclosing = scopes.map((sideScopes, side) => sideScopes.filter(([start, end]) =>
-			rows.some((row, index) => visible[index] && row[side] !== null && row[side]! >= start && row[side]! < end)));
-		const open = rows.map(row => row.every((line, side) => line === null || !(diff.contextGaps ?? []).some(gap => {
+		const shown = [new Uint32Array(originalCount + 1), new Uint32Array(modifiedCount + 1)];
+		rows.forEach((row, index) => row.forEach((line, side) => { if (visible[index] && line !== null) shown[side][line + 1] = 1; }));
+		for (const counts of shown) for (let line = 1; line < counts.length; line++) counts[line] += counts[line - 1];
+		const before = (side: number, line: number) => shown[side][Math.min(Math.max(line, 0), shown[side].length - 1)];
+		const enclosing = scopes.map((sideScopes, side) => sideScopes.filter(([start, end]) => before(side, end) > before(side, start)));
+		const folded = [new Uint8Array(originalCount), new Uint8Array(modifiedCount)];
+		for (const gap of diff.contextGaps ?? []) {
 			// An inline scope folds into its header. Its fold state must not
 			// move the lens boundary and swallow that header's reopen control.
-			if (gap.collapsed === false || gap.band === false) return false;
-			const start = side === 0 ? gap.originalStart : gap.modifiedStart;
-			const count = side === 0 ? gap.originalCount : gap.modifiedCount;
-			return line + 1 >= start && line + 1 < start + count;
-		})));
-		const seeds = rows.map((row, index) => visible[index] || row.some((line, side) =>
-			line !== null && enclosing[side].some(([start, end]) => line === start || line === end - 1)));
+			if (gap.collapsed === false || gap.band === false) continue;
+			folded[0].fill(1, gap.originalStart - 1, gap.originalStart - 1 + gap.originalCount);
+			folded[1].fill(1, gap.modifiedStart - 1, gap.modifiedStart - 1 + gap.modifiedCount);
+		}
+		const open = rows.map(row => row.every((line, side) => line === null || !folded[side][line]));
+		const edited = [new Uint8Array(originalCount), new Uint8Array(modifiedCount)];
+		for (const change of diff.changes) {
+			edited[0].fill(1, change.original.startLineNumber - 1, change.original.endLineNumberExclusive - 1);
+			edited[1].fill(1, change.modified.startLineNumber - 1, change.modified.endLineNumberExclusive - 1);
+		}
+		const unchanged = rows.map(row => row.every((line, side) => line !== null && !edited[side][line]));
 		for (let start = 0; start < rows.length;) {
 			if (!open[start]) { start++; continue; }
 			let end = start + 1;
 			while (end < rows.length && open[end]) end++;
-			// diffr never collapses inside added code, so no band bounds a run of
-			// only added lines (as in an added file). Keep only its seeds.
-			if (rows.slice(start, end).every(row => row[0] === null)) for (let index = start; index < end; index++) context[index] ||= seeds[index];
-			else if (seeds.slice(start, end).some(Boolean)) context.fill(true, start, end);
+			if (visible.slice(start, end).some(Boolean)) for (let index = start; index < end; index++) context[index] ||= unchanged[index];
 			start = end;
+		}
+		// A boundary inside a collapsed band stays folded with it.
+		const edges = enclosing.map(sideScopes => ({ start: new Set(sideScopes.map(([start]) => start)), end: new Set(sideScopes.map(([, end]) => end - 1)) }));
+		const boundary = (index: number, edge: 'start' | 'end') => open[index] && rows[index].some((line, side) =>
+			line !== null && edges[side][edge].has(line));
+		for (let index = 0; index < rows.length; index++) {
+			for (const [edge, step] of [['start', 1], ['end', -1]] as const) {
+				if (!boundary(index, edge)) continue;
+				context[index] = true;
+				for (let next = index + step; next >= 0 && next < rows.length && !context[next] && open[next] && unchanged[next]; next += step) context[next] = true;
+			}
 		}
 	}
 	const gaps: IDocumentContextGap[] = [];

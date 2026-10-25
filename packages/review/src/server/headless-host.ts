@@ -8,7 +8,11 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { isObjectValue } from "@dev.fast/json";
-import { withFileLock, writePrivateJsonAtomic } from "@dev.fast/trace-core";
+import {
+  processStartIdentity,
+  withFileLock,
+  writePrivateJsonAtomic,
+} from "@dev.fast/trace-core";
 import type { AskAgentLauncher } from "@review/ask/agents.js";
 import { cliAskTools } from "@review/ask/threads.js";
 import { desktopUsesHome } from "@review/desktop-discovery.js";
@@ -19,12 +23,12 @@ import {
   type ReviewServerDiscovery,
   desktopOwnsHome,
   headlessServerLockPath,
-  readReviewServerDiscovery,
   reviewServerDiscoveryPath,
 } from "@review/server-discovery.js";
 
 import {
   headlessServerOwner,
+  recordedBackgroundServer,
   stopBackgroundServer,
 } from "./background-server.js";
 import { migrateDiffrConfig } from "./diffr-config.js";
@@ -96,9 +100,10 @@ export function withHeadlessServerLock<T>(
 export async function takeOverServerHome<T>(
   home: string,
   start: () => Promise<T>,
+  { timeoutMs = 30_000 }: { timeoutMs?: number } = {},
 ): Promise<T> {
   const stateDir = await realpath(home);
-  const deadline = Date.now() + 30_000;
+  const deadline = Date.now() + timeoutMs;
 
   while (true) {
     const outcome = await withHeadlessServerLock(stateDir, start);
@@ -106,18 +111,22 @@ export async function takeOverServerHome<T>(
     if (outcome.acquired) return outcome.result;
 
     const owner = await headlessServerOwner(stateDir);
+    // A server that answers as its recorded pid; a reused pid would not.
+    const server = await recordedBackgroundServer(stateDir);
 
-    const discovery = await readReviewServerDiscovery(stateDir).catch(
-      () => null,
-    );
-
-    if (owner !== undefined && discovery?.serverPid === owner)
-      await stopBackgroundServer(discovery, DESKTOP_TAKEOVER_SIGNAL);
-    else if (Date.now() > deadline)
+    if (owner !== undefined && server?.discovery.serverPid === owner)
+      await stopBackgroundServer(server.discovery, DESKTOP_TAKEOVER_SIGNAL);
+    else if (Date.now() <= deadline) await delay(100);
+    // Without a start time (Windows), nothing proves the owner is the server.
+    else if (owner !== undefined && processStartIdentity(owner) === null)
+      await rm(headlessServerLockPath(stateDir), {
+        recursive: true,
+        force: true,
+      });
+    else
       throw new Error(
         `Process ${owner} holds the Whiteboard server's lock in ${stateDir} without serving it.`,
       );
-    else await delay(100);
   }
 }
 
@@ -212,8 +221,6 @@ async function serve(input: HeadlessServerInput) {
     token: discovery.token,
     instanceId: discovery.instanceId,
     softwareMapEnabled: input.softwareMapEnabled,
-    // The scratchpad is the laptop's alone, even with a Desktop attached.
-    scratchpad: () => false,
     status: () => ({ key: "headless", home: input.stateDir }),
     ask: {
       tools: cliAskTools(() => (existsSync(cliPath) ? cliPath : undefined), {

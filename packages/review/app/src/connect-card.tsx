@@ -1,5 +1,11 @@
-import { fontSize, radius } from "@canvas/scale.stylex";
-import { Button } from "@canvas/ui/button";
+import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
+import { AgentLogo } from "@canvas/ui/brand-icons";
+import { Button, buttonLook, buttonStyles } from "@canvas/ui/button";
+import { useCopy } from "@canvas/ui/copy";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CopyIcon, DrawnCheckIcon } from "@canvas/ui/icons";
+import { textStyles } from "@canvas/ui/text";
 import {
   REVIEW_CLI_INSTALL_TARGET_LABELS,
   type ReviewCanvasInstallContent,
@@ -8,12 +14,10 @@ import {
   ReviewCliInstallTargetSchema,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
-import { AGENT_LOGOS } from "./agent-logos";
 import { cliInstallReady } from "./cli-install-status";
-import { CopyIcon, copyText } from "./copy-text";
-import { DrawnCheckIcon } from "./icons";
+import { countLabel } from "./format";
 import { newTabLinkProps } from "./link-props";
 import { OptionMenu } from "./option-menu";
 import { promptStyles } from "./prompt-styles";
@@ -29,8 +33,6 @@ const OTHER_TARGETS = ReviewCliInstallTargetSchema.options.filter(
 
 export const REVIEW_CONNECT_TARGET_STORAGE_KEY =
   "dev.fast.review.connectTarget";
-
-const COPIED_RESET_MS = 2000;
 
 /** Lines of a prompt shown before the reader expands it. */
 const COLLAPSED_LINES = 4;
@@ -59,23 +61,10 @@ export function ConnectCard({
     useState<ReviewCliInstallTarget>(readStoredTarget);
 
   const [mode, setMode] = useState<Mode>("prompt");
-  const [copied, setCopied] = useState(false);
   const [expanded, setExpanded] = useState(false);
-
-  const resetTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
-
-  useEffect(() => () => clearTimeout(resetTimer.current), []);
-
-  const clearCopied = () => {
-    setCopied(false);
-    clearTimeout(resetTimer.current);
-  };
 
   const selectTarget = (next: ReviewCliInstallTarget) => {
     setTarget(next);
-    clearCopied();
     setExpanded(false);
 
     try {
@@ -87,7 +76,6 @@ export function ConnectCard({
 
   const selectMode = (next: Mode) => {
     setMode(next);
-    clearCopied();
     setExpanded(false);
   };
 
@@ -98,18 +86,8 @@ export function ConnectCard({
   const text =
     mode === "prompt" ? status.connect.prompts[target] : plugin.command;
 
-  const copy = (value: string) => {
-    void copyText(value).then((ok) => {
-      if (!ok) {
-        return;
-      }
-
-      setCopied(true);
-      clearTimeout(resetTimer.current);
-      resetTimer.current = setTimeout(() => setCopied(false), COPIED_RESET_MS);
-      onCopied?.();
-    });
-  };
+  const [copiedText, copy] = useCopy({ onCopied });
+  const copied = copiedText === text;
 
   const noun = mode === "prompt" ? "prompt" : "install command";
 
@@ -135,19 +113,15 @@ export function ConnectCard({
       <SegmentedControl
         label="Agent"
         value={target}
-        options={TAB_TARGETS.map((tab) => {
-          const Logo = AGENT_LOGOS[tab];
-
-          return {
-            value: tab,
-            label: (
-              <>
-                <Logo xstyle={styles.logo} />
-                {REVIEW_CLI_INSTALL_TARGET_LABELS[tab]}
-              </>
-            ),
-          };
-        })}
+        options={TAB_TARGETS.map((tab) => ({
+          value: tab,
+          label: (
+            <>
+              <AgentLogo agent={tab} size="chrome" />
+              {REVIEW_CLI_INSTALL_TARGET_LABELS[tab]}
+            </>
+          ),
+        }))}
         onChange={selectTarget}
         size="large"
         xstyle={[promptStyles.tabs, styles.agentTabs]}
@@ -185,39 +159,43 @@ export function ConnectCard({
               )}
             </pre>
             {collapsed ? (
-              <button
-                type="button"
-                {...stylex.props(styles.expand)}
+              <Button
+                xstyle={styles.expand}
                 aria-expanded={false}
                 onClick={() => setExpanded(true)}
               >
                 Show full {noun}
-              </button>
+              </Button>
             ) : null}
           </div>
           <div {...stylex.props(promptStyles.actions)}>
             {collapsible && expanded ? (
-              <button
-                type="button"
-                {...stylex.props(styles.collapse)}
+              <Button
+                variant="link"
+                xstyle={styles.collapse}
                 aria-expanded={true}
                 onClick={() => setExpanded(false)}
               >
                 Show less
-              </button>
+              </Button>
             ) : null}
-            <button
-              type="button"
-              {...stylex.props(promptStyles.copy)}
+            <Button
+              variant="primary"
+              size="large"
+              xstyle={promptStyles.copy}
               aria-live="polite"
               aria-label={`${copied ? "Copied" : "Copy"} ${noun} for ${agent}`}
               onClick={() => copy(text)}
             >
-              {copied ? <DrawnCheckIcon /> : <CopyIcon />}
+              {copied ? (
+                <DrawnCheckIcon />
+              ) : (
+                <CopyIcon xstyle={iconStyles.inline} />
+              )}
               {copied
                 ? "Copied"
                 : `Copy ${mode === "prompt" ? "prompt" : "command"}`}
-            </button>
+            </Button>
           </div>
         </>
       ) : plugin.url ? (
@@ -227,7 +205,10 @@ export function ConnectCard({
           </p>
           <div {...stylex.props(promptStyles.actions)}>
             <a
-              {...stylex.props(promptStyles.copy)}
+              {...stylex.props(
+                buttonLook({ variant: "primary", size: "large" }),
+                promptStyles.copy,
+              )}
               href={plugin.url}
               {...newTabLinkProps(plugin.url)}
             >
@@ -241,7 +222,9 @@ export function ConnectCard({
         </p>
       )}
       {status.error ? (
-        <p {...stylex.props(promptStyles.error)}>{status.error}</p>
+        <p {...stylex.props(textStyles.error, promptStyles.error)}>
+          {status.error}
+        </p>
       ) : null}
     </section>
   );
@@ -254,23 +237,19 @@ function OtherAgentMenu({
   selected: ReviewCliInstallTarget | undefined;
   onSelect(target: ReviewCliInstallTarget): void;
 }) {
-  const Logo = selected ? AGENT_LOGOS[selected] : undefined;
-
   return (
     <OptionMenu
       ariaLabel="Other agent"
       value={selected}
-      options={OTHER_TARGETS.map((other) => {
-        const OptionLogo = AGENT_LOGOS[other];
-
-        return {
-          value: other,
-          label: REVIEW_CLI_INSTALL_TARGET_LABELS[other],
-          icon: <OptionLogo />,
-        };
-      })}
+      options={OTHER_TARGETS.map((other) => ({
+        value: other,
+        label: REVIEW_CLI_INSTALL_TARGET_LABELS[other],
+        icon: <AgentLogo agent={other} />,
+      }))}
       onChange={onSelect}
       triggerStyle={[
+        focusStyles.ringInset,
+        buttonStyles.reset,
         segmentStyles.segment,
         segmentStyles.segmentLarge,
         styles.otherTrigger,
@@ -278,7 +257,7 @@ function OtherAgentMenu({
       ]}
       triggerProps={{ "aria-pressed": selected !== undefined }}
     >
-      {Logo ? <Logo xstyle={styles.logo} /> : null}
+      {selected ? <AgentLogo agent={selected} size="chrome" /> : null}
       {selected ? REVIEW_CLI_INSTALL_TARGET_LABELS[selected] : "Other…"}
     </OptionMenu>
   );
@@ -378,7 +357,7 @@ export function LegacySkillsRow({
       {removed.length > 0 ? (
         <>
           <p {...stylex.props(styles.legacyText)}>
-            Removed {removed.length} skill{removed.length === 1 ? "" : "s"}
+            Removed {countLabel(removed.length, "skill")}
           </p>
           <ul {...stylex.props(styles.legacyList)}>
             {removed.map((path) => (
@@ -390,7 +369,15 @@ export function LegacySkillsRow({
         </>
       ) : null}
       {error ? (
-        <p {...stylex.props(promptStyles.error, styles.legacyText)}>{error}</p>
+        <p
+          {...stylex.props(
+            textStyles.error,
+            promptStyles.error,
+            styles.legacyText,
+          )}
+        >
+          {error}
+        </p>
       ) : null}
     </section>
   );
@@ -398,21 +385,17 @@ export function LegacySkillsRow({
 
 const styles = stylex.create({
   note: {
-    margin: "0 0 8px",
-    color: tokens.reviewHomeMeta,
+    margin: `0 0 ${space.s8}`,
+    color: tokens.inkMuted,
     fontSize: fontSize.body,
   },
   // The prompt card's tabs, one agent at a time.
   agentTabs: {
     flexWrap: "wrap",
-    marginBottom: "6px",
-  },
-  logo: {
-    width: "14px",
-    height: "14px",
+    marginBottom: space.s6,
   },
   otherTrigger: {
-    paddingRight: "6px",
+    paddingRight: space.s6,
   },
   bodyWrap: {
     position: "relative",
@@ -431,35 +414,21 @@ const styles = stylex.create({
     bottom: 0,
     left: "50%",
     transform: "translateX(-50%)",
-    padding: "3px 12px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: {
-      default: tokens.reviewHomeRuleSoft,
-      ":hover": tokens.inkMuted,
-    },
     borderRadius: radius.pill,
     backgroundColor: tokens.raised,
     color: tokens.ink,
-    font: `${fontSize.body}/18px ${tokens.fontMono}`,
+    font: `${fontSize.body}/${leading.px18} ${tokens.chromeFont}`,
     cursor: "pointer",
   },
   collapse: {
     marginRight: "auto",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: "transparent",
-    color: { default: tokens.inkMuted, ":hover": tokens.ink },
-    font: `${fontSize.body}/22px ${tokens.fontMono}`,
-    cursor: "pointer",
+    font: `${fontSize.body}/${leading.px22} ${tokens.chromeFont}`,
   },
   legacy: {
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-start",
-    gap: "8px",
+    gap: space.s8,
     fontSize: fontSize.body,
   },
   legacyText: {
@@ -469,12 +438,12 @@ const styles = stylex.create({
     margin: 0,
     padding: 0,
     listStyle: "none",
-    color: tokens.reviewHomeMeta,
+    color: tokens.inkMuted,
   },
   legacyCode: {
     fontFamily: tokens.fontMono,
   },
   legacyButton: {
-    marginTop: "8px",
+    marginTop: space.s8,
   },
 });

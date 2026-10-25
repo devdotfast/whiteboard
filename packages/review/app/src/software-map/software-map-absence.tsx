@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { EmptyState } from "@canvas/ui/empty-state";
 import * as stylex from "@stylexjs/stylex";
@@ -93,7 +99,7 @@ const styles = stylex.create({
     minHeight: "var(--software-map-empty-height, 520px)",
   },
   code: {
-    padding: "2px 5px",
+    padding: `${space.s2} ${space.s4}`,
     borderRadius: radius.small,
     backgroundColor: tokens.well,
     color: tokens.ink,
@@ -104,14 +110,14 @@ const styles = stylex.create({
   topologyUnavailable: {
     flex: "none",
     margin: 0,
-    padding: "7px 12px",
+    padding: `${space.s8} ${space.s12}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
     backgroundColor: tokens.tray,
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
 });

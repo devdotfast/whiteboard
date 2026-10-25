@@ -1,0 +1,222 @@
+{
+	"name": "theme-collection",
+	"displayName": "Whiteboard Theme Collection",
+	"description": "Popular third-party color themes for /dev/fast Whiteboard.",
+	"categories": [
+		"Themes"
+	],
+	"version": "0.0.1",
+	"publisher": "dev-fast",
+	"license": "MIT",
+	"engines": {
+		"vscode": "*"
+	},
+	"contributes": {
+		"themes": [
+			{
+				"id": "Tokyo Night",
+				"label": "Tokyo Night",
+				"uiTheme": "vs-dark",
+				"path": "./themes/tokyo-night/tokyo-night-color-theme.json"
+			},
+			{
+				"id": "Tokyo Night Storm",
+				"label": "Tokyo Night Storm",
+				"uiTheme": "vs-dark",
+				"path": "./themes/tokyo-night/tokyo-night-storm-color-theme.json"
+			},
+			{
+				"id": "Tokyo Night Light",
+				"label": "Tokyo Night Light",
+				"uiTheme": "vs",
+				"path": "./themes/tokyo-night/tokyo-night-light-color-theme.json"
+			},
+			{
+				"id": "Catppuccin Mocha",
+				"label": "Catppuccin Mocha",
+				"uiTheme": "vs-dark",
+				"path": "./themes/catppuccin/mocha.json"
+			},
+			{
+				"id": "Catppuccin Macchiato",
+				"label": "Catppuccin Macchiato",
+				"uiTheme": "vs-dark",
+				"path": "./themes/catppuccin/macchiato.json"
+			},
+			{
+				"id": "Catppuccin Frappé",
+				"label": "Catppuccin Frappé",
+				"uiTheme": "vs-dark",
+				"path": "./themes/catppuccin/frappe.json"
+			},
+			{
+				"id": "Catppuccin Latte",
+				"label": "Catppuccin Latte",
+				"uiTheme": "vs",
+				"path": "./themes/catppuccin/latte.json"
+			},
+			{
+				"id": "Rosé Pine",
+				"label": "Rosé Pine",
+				"uiTheme": "vs-dark",
+				"path": "./themes/rose-pine/rose-pine-color-theme.json"
+			},
+			{
+				"id": "Rosé Pine Moon",
+				"label": "Rosé Pine Moon",
+				"uiTheme": "vs-dark",
+				"path": "./themes/rose-pine/rose-pine-moon-color-theme.json"
+			},
+			{
+				"id": "Rosé Pine Dawn",
+				"label": "Rosé Pine Dawn",
+				"uiTheme": "vs",
+				"path": "./themes/rose-pine/rose-pine-dawn-color-theme.json"
+			},
+			{
+				"id": "Gruvbox Dark Medium",
+				"label": "Gruvbox Dark Medium",
+				"uiTheme": "vs-dark",
+				"path": "./themes/gruvbox/gruvbox-dark-medium.json"
+			},
+			{
+				"id": "Gruvbox Light Medium",
+				"label": "Gruvbox Light Medium",
+				"uiTheme": "vs",
+				"path": "./themes/gruvbox/gruvbox-light-medium.json"
+			},
+			{
+				"id": "Nord",
+				"label": "Nord",
+				"uiTheme": "vs-dark",
+				"path": "./themes/nord/nord-color-theme.json"
+			},
+			{
+				"id": "Dracula Theme",
+				"label": "Dracula Theme",
+				"uiTheme": "vs-dark",
+				"path": "./themes/dracula/dracula.json"
+			},
+			{
+				"id": "Kanagawa",
+				"label": "Kanagawa",
+				"uiTheme": "vs-dark",
+				"path": "./themes/kanagawa/kanagawa-color-theme.json"
+			},
+			{
+				"id": "Everforest Dark",
+				"label": "Everforest Dark",
+				"uiTheme": "vs-dark",
+				"path": "./themes/everforest/everforest-dark.json"
+			},
+			{
+				"id": "Everforest Light",
+				"label": "Everforest Light",
+				"uiTheme": "vs",
+				"path": "./themes/everforest/everforest-light.json"
+			},
+			{
+				"id": "GitHub Dark Default",
+				"label": "GitHub Dark Default",
+				"uiTheme": "vs-dark",
+				"path": "./themes/github/dark-default.json"
+			},
+			{
+				"id": "GitHub Light Default",
+				"label": "GitHub Light Default",
+				"uiTheme": "vs",
+				"path": "./themes/github/light-default.json"
+			},
+			{
+				"id": "GitHub Dark Dimmed",
+				"label": "GitHub Dark Dimmed",
+				"uiTheme": "vs-dark",
+				"path": "./themes/github/dark-dimmed.json"
+			},
+			{
+				"id": "Ayu Dark Bordered",
+				"label": "Ayu Dark",
+				"uiTheme": "vs-dark",
+				"path": "./themes/ayu/ayu-dark.json"
+			},
+			{
+				"id": "Ayu Mirage Bordered",
+				"label": "Ayu Mirage",
+				"uiTheme": "vs-dark",
+				"path": "./themes/ayu/ayu-mirage.json"
+			},
+			{
+				"id": "Ayu Light Bordered",
+				"label": "Ayu Light",
+				"uiTheme": "vs",
+				"path": "./themes/ayu/ayu-light.json"
+			},
+			{
+				"id": "One Dark Pro",
+				"label": "One Dark Pro",
+				"uiTheme": "vs-dark",
+				"path": "./themes/one-dark-pro/OneDark-Pro.json"
+			},
+			{
+				"id": "Solarized Dark",
+				"label": "Solarized Dark",
+				"uiTheme": "vs-dark",
+				"path": "./themes/solarized/solarized-dark-color-theme.json"
+			},
+			{
+				"id": "Solarized Light",
+				"label": "Solarized Light",
+				"uiTheme": "vs",
+				"path": "./themes/solarized/solarized-light-color-theme.json"
+			},
+			{
+				"id": "Night Owl",
+				"label": "Night Owl",
+				"uiTheme": "vs-dark",
+				"path": "./themes/night-owl/Night Owl-color-theme.json"
+			},
+			{
+				"id": "Night Owl Light",
+				"label": "Night Owl Light",
+				"uiTheme": "vs",
+				"path": "./themes/night-owl/Night Owl-Light-color-theme.json"
+			},
+			{
+				"id": "Winter is Coming (Dark Blue)",
+				"label": "Winter is Coming (Dark Blue)",
+				"uiTheme": "vs-dark",
+				"path": "./themes/winter-is-coming/WinterIsComing-dark-blue-color-theme.json"
+			},
+			{
+				"id": "Winter is Coming (Dark Black)",
+				"label": "Winter is Coming (Dark Black)",
+				"uiTheme": "vs-dark",
+				"path": "./themes/winter-is-coming/WinterIsComing-dark-color-theme.json"
+			},
+			{
+				"id": "Winter is Coming (Light)",
+				"label": "Winter is Coming (Light)",
+				"uiTheme": "vs",
+				"path": "./themes/winter-is-coming/WinterIsComing-light-color-theme.json"
+			},
+			{
+				"id": "One Monokai",
+				"label": "One Monokai",
+				"uiTheme": "vs-dark",
+				"path": "./themes/one-monokai/OneMonokai-color-theme.json"
+			},
+			{
+				"id": "Cobalt2",
+				"label": "Cobalt2",
+				"uiTheme": "vs-dark",
+				"path": "./themes/cobalt2/cobalt2.json"
+			},
+			{
+				"id": "Atom One Light",
+				"label": "Atom One Light",
+				"uiTheme": "vs",
+				"path": "./themes/atom-one-light/OneLight.json"
+			}
+		]
+	}
+}

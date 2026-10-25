@@ -9,7 +9,8 @@ on:
         type: choice
         options:
           - all
-          - macos
+          - macos-arm64
+          - macos-x64
           - linux
           - windows
         default: all
@@ -23,15 +24,26 @@ on:
           - major
         default: patch
       release_source:
-        description: "Release main's tip, or promote a published preview tag."
+        description: "Release main's tip, promote a published preview tag, or release any tag on origin."
         required: true
         type: choice
         options:
           - main
           - preview
+          - tag
         default: main
       preview_tag:
         description: "Preview tag to promote, e.g. v0.0.32-preview.20260907.7. Required when release_source is preview."
+        required: false
+        type: string
+        default: ""
+      source_tag:
+        description: "Tag to release as is, e.g. a hotfix cherry-picked onto an earlier release. Required when release_source is tag."
+        required: false
+        type: string
+        default: ""
+      version:
+        description: "Existing release tag to build again for the selected platforms, e.g. v0.2.4. Skips the bump; bump, release_source, preview_tag and source_tag are ignored."
         required: false
         type: string
         default: ""
@@ -44,8 +56,10 @@ on:
 permissions:
   contents: write
 
+# Per selection, so backfilling one platform does not wait behind a release of
+# another. Latest aliases only move forward, so overlapping runs are safe.
 concurrency:
-  group: review-desktop-release
+  group: review-desktop-release-${{ inputs.platforms }}
   cancel-in-progress: false
 
 jobs:
@@ -64,9 +78,9 @@ jobs:
     environment: review-release
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.bump.outputs.version || steps.dryrun.outputs.version }}
-      tag: ${{ steps.bump.outputs.tag }}
-      commit: ${{ steps.bump.outputs.commit || steps.dryrun.outputs.commit }}
+      version: ${{ steps.existing.outputs.version || steps.bump.outputs.version || steps.dryrun.outputs.version }}
+      tag: ${{ steps.existing.outputs.tag || steps.bump.outputs.tag }}
+      commit: ${{ steps.existing.outputs.commit || steps.bump.outputs.commit || steps.dryrun.outputs.commit }}
     steps:
       # The `main` ruleset requires a pull request and the "Review Desktop"
       # check, and lists DeployKey as its only non-admin bypass actor. Checking
@@ -91,24 +105,58 @@ jobs:
           curl -fsS https://install.dev.fast/repos/apt/health | python3 -c 'import json,sys; assert json.load(sys.stdin) == {"schemaVersion": 1, "format": "deb"}'
           curl -fsS https://install.dev.fast/repos/arch/health | python3 -c 'import json,sys; assert json.load(sys.stdin) == {"schemaVersion": 1, "format": "pacman"}'
 
+      # A backfill builds missing platforms for a release that already exists:
+      # no bump, no tag, no new GitHub release.
+      - name: Use the existing release
+        if: ${{ inputs.version }}
+        id: existing
+        shell: bash
+        env:
+          VERSION_INPUT: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="$(printf '%s' "$VERSION_INPUT" | tr -d '[:space:]')"
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version '${TAG}' is not a release tag (vX.Y.Z)."
+            exit 1
+          fi
+          if ! git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::${TAG} does not exist on origin."
+            exit 1
+          fi
+          git fetch --no-tags origin "+refs/tags/${TAG}:refs/tags/${TAG}"
+          COMMIT=$(git rev-parse "refs/tags/${TAG}^{commit}")
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
+          echo "Backfilling Whiteboard ${TAG} from ${COMMIT}."
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+
       # Every read-only gate lives here so a dry run rehearses the same checks a
       # real run must pass, and so the write step below re-derives nothing.
       - name: Resolve release version
+        if: ${{ !inputs.version }}
         id: resolve
         shell: bash
         env:
           BUMP: ${{ inputs.bump }}
           RELEASE_SOURCE: ${{ inputs.release_source }}
           PREVIEW_TAG_INPUT: ${{ inputs.preview_tag }}
+          SOURCE_TAG_INPUT: ${{ inputs.source_tag }}
           DRY_RUN: ${{ inputs.dry_run }}
           GH_TOKEN: ${{ github.token }}
         run: |
           # A dispatch form field left with stale text arrives as a non-empty
           # string, so trim before testing for emptiness.
           PREVIEW_TAG="$(printf '%s' "$PREVIEW_TAG_INPUT" | tr -d '[:space:]')"
+          SOURCE_TAG="$(printf '%s' "$SOURCE_TAG_INPUT" | tr -d '[:space:]')"
 
           if [ "$RELEASE_SOURCE" != "preview" ] && [ -n "$PREVIEW_TAG" ]; then
             echo "::error::preview_tag only applies when release_source is 'preview'. Clear the field, or set release_source to 'preview'."
+            exit 1
+          fi
+          if [ "$RELEASE_SOURCE" != "tag" ] && [ -n "$SOURCE_TAG" ]; then
+            echo "::error::source_tag only applies when release_source is 'tag'. Clear the field, or set release_source to 'tag'."
             exit 1
           fi
 
@@ -158,18 +206,18 @@ jobs:
             # `+` so a tag already in this checkout cannot block the fetch, and
             # `^{commit}` peels a lightweight and an annotated tag alike.
             git fetch --no-tags origin "+refs/tags/${PREVIEW_TAG}:refs/tags/${PREVIEW_TAG}"
-            PREVIEW_COMMIT=$(git rev-parse "refs/tags/${PREVIEW_TAG}^{commit}")
+            SOURCE_COMMIT=$(git rev-parse "refs/tags/${PREVIEW_TAG}^{commit}")
 
             # Whatever merged since the preview published stays out of this
             # release: promotion ships the commit that was actually tested. It
             # must still be on ${GITHUB_REF_NAME}, so a branch that never landed
             # cannot be released. Asked over the API because this checkout is
             # shallow and has no history to walk.
-            STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${GITHUB_REF_NAME}...${PREVIEW_COMMIT}" --jq .status)
+            STATUS=$(gh api "repos/${GITHUB_REPOSITORY}/compare/${GITHUB_REF_NAME}...${SOURCE_COMMIT}" --jq .status)
             case "$STATUS" in
               identical | behind) ;;
               *)
-                echo "::error::${PREVIEW_TAG} was built from ${PREVIEW_COMMIT}, which is not on ${GITHUB_REF_NAME} (${STATUS}). Only a preview built from a commit that landed can be promoted."
+                echo "::error::${PREVIEW_TAG} was built from ${SOURCE_COMMIT}, which is not on ${GITHUB_REF_NAME} (${STATUS}). Only a preview built from a commit that landed can be promoted."
                 exit 1
                 ;;
             esac
@@ -181,7 +229,19 @@ jobs:
               exit 1
             fi
 
-            echo "Promoting ${PREVIEW_TAG} (${PREVIEW_COMMIT}) to Whiteboard ${TAG}."
+            echo "Promoting ${PREVIEW_TAG} (${SOURCE_COMMIT}) to Whiteboard ${TAG}."
+          elif [ "$RELEASE_SOURCE" = "tag" ]; then
+            if [ -z "$SOURCE_TAG" ]; then
+              echo "::error::release_source 'tag' requires source_tag."
+              exit 1
+            fi
+            if ! git ls-remote --exit-code --tags origin "refs/tags/${SOURCE_TAG}" >/dev/null 2>&1; then
+              echo "::error::${SOURCE_TAG} does not exist on origin."
+              exit 1
+            fi
+            git fetch --no-tags origin "+refs/tags/${SOURCE_TAG}:refs/tags/${SOURCE_TAG}"
+            SOURCE_COMMIT=$(git rev-parse "refs/tags/${SOURCE_TAG}^{commit}")
+            echo "Releasing ${SOURCE_TAG} (${SOURCE_COMMIT}) as Whiteboard ${TAG}."
           else
             echo "Releasing Whiteboard ${TAG} from ${GITHUB_REF_NAME}."
           fi
@@ -204,16 +264,16 @@ jobs:
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "preview_commit=$PREVIEW_COMMIT" >> "$GITHUB_OUTPUT"
+          echo "source_commit=$SOURCE_COMMIT" >> "$GITHUB_OUTPUT"
 
       - name: Bump version and create tag
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && !inputs.version }}
         id: bump
         shell: bash
         env:
           VERSION: ${{ steps.resolve.outputs.version }}
           TAG: ${{ steps.resolve.outputs.tag }}
-          PREVIEW_COMMIT: ${{ steps.resolve.outputs.preview_commit }}
+          SOURCE_COMMIT: ${{ steps.resolve.outputs.source_commit }}
         run: |
           # product.json carries the same number to the running app, which shows
           # it in the About panel, alongside the stable channel identity.
@@ -232,7 +292,7 @@ jobs:
           # the version onto that tree, the way the preview run stamped its own.
           # The bump still lands on ${GITHUB_REF_NAME} because the next release
           # derives its version from there.
-          TARGET="${PREVIEW_COMMIT:-$(git rev-parse HEAD)}"
+          TARGET="${SOURCE_COMMIT:-$(git rev-parse HEAD)}"
           git tag "$TAG" "$TARGET"
           # Atomic: the previous release left an orphan tag on origin because
           # the branch push was rejected after the tag push had already landed.
@@ -243,15 +303,15 @@ jobs:
           echo "commit=$TARGET" >> "$GITHUB_OUTPUT"
 
       - name: Dry-run version
-        if: ${{ inputs.dry_run }}
+        if: ${{ inputs.dry_run && !inputs.version }}
         id: dryrun
         shell: bash
         env:
           RELEASE_SOURCE: ${{ inputs.release_source }}
           RESOLVED_VERSION: ${{ steps.resolve.outputs.version }}
-          PREVIEW_COMMIT: ${{ steps.resolve.outputs.preview_commit }}
+          SOURCE_COMMIT: ${{ steps.resolve.outputs.source_commit }}
         run: |
-          if [ "$RELEASE_SOURCE" = "preview" ]; then
+          if [ "$RELEASE_SOURCE" != "main" ]; then
             # The build jobs stamp the promoted version into this same commit,
             # so the artifacts a promotion dry run validates carry it too.
             VERSION="$RESOLVED_VERSION"
@@ -261,10 +321,10 @@ jobs:
             VERSION=$(node -p "require('./apps/review-desktop/package.json').version")
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "commit=${PREVIEW_COMMIT:-$(git rev-parse HEAD)}" >> "$GITHUB_OUTPUT"
+          echo "commit=${SOURCE_COMMIT:-$(git rev-parse HEAD)}" >> "$GITHUB_OUTPUT"
 
       - name: Create draft GitHub Release
-        if: ${{ !inputs.dry_run }}
+        if: ${{ !inputs.dry_run && !inputs.version }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -275,15 +335,13 @@ jobs:
             --generate-notes
 
   remote:
-    name: Publish remote tarballs and npm package
+    name: Publish remote tarballs
     needs: version
-    runs-on: ubuntu-latest
+    # xz compresses on every core.
+    runs-on: review_big_boy
     timeout-minutes: 60
     permissions:
       contents: write
-      id-token: write
-    outputs:
-      whiteboard_remote: ${{ steps.remote.outputs.whiteboard_remote }}
     env:
       VERSION: ${{ needs.version.outputs.version }}
       COMMIT: ${{ needs.version.outputs.commit }}
@@ -295,26 +353,9 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version-file: .nvmrc
-          registry-url: https://registry.npmjs.org
           cache: pnpm
       - name: Install build dependencies
         run: pnpm install --frozen-lockfile
-      - name: Resolve dist-tag and publication state
-        id: npm
-        env:
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          DIST_TAG=$(node scripts/review-cli-release.mjs dist-tag "$VERSION")
-          if PUBLISHED=$(node scripts/review-cli-release.mjs published "$VERSION" "$COMMIT"); then
-            :
-          elif [ "$DRY_RUN" = true ]; then
-            echo "::warning::@dev.fast/whiteboard@${VERSION} exists on npm from another commit, or the registry check failed (see above); this dry run skips publish validation."
-            PUBLISHED=true
-          else
-            exit 1
-          fi
-          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
-          echo "published=$PUBLISHED" >> "$GITHUB_OUTPUT"
       - name: Install Code OSS native build prerequisites
         run: |
           # The hosted runner image lists an HTTP Azure mirror first. That
@@ -375,9 +416,9 @@ jobs:
         run: |
           source apps/review-desktop/scripts/code-oss-dependencies.sh
           ensure_code_oss_dependencies "$PWD/apps/review-desktop" "$PWD/apps/review-desktop/code-oss"
-          for t in linux-x64 linux-arm64; do
-            node apps/review-desktop/scripts/build-remote-tarball.mjs --target "$t" --out remote-artifacts --version "$VERSION" --commit "$COMMIT"
-          done
+          node apps/review-desktop/scripts/build-remote-tarball.mjs --target linux-x64 --target linux-arm64 \
+            --out remote-artifacts --version "$VERSION" --commit "$COMMIT"
+          cp packages/review/remote/install.sh remote-artifacts/install.sh
       # Release assets, then R2, then the pin: a rerun that finds the tarballs on
       # R2 skips both uploads, and no Desktop build may pin a tarball R2 lacks.
       - name: Attach the remote tarballs to the GitHub Release
@@ -385,7 +426,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.version.outputs.tag }}
-        run: gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber remote-artifacts/*.tar.xz remote-artifacts/*.sha256
+        run: gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber remote-artifacts/*.tar.xz remote-artifacts/*.sha256 remote-artifacts/install.sh
       - name: Upload the remote tarballs to R2
         if: ${{ !inputs.dry_run && steps.existing.outputs.published != 'true' }}
         env:
@@ -398,11 +439,58 @@ jobs:
           PREFIX="s3://${R2_BUCKET}/releases/${VERSION}/remote/"
           aws s3 cp remote-artifacts/ "$PREFIX" --recursive --exclude "*" --include "*.tar.xz" --content-type application/x-xz
           aws s3 cp remote-artifacts/ "$PREFIX" --recursive --exclude "*" --include "*.sha256" --content-type text/plain
+          aws s3 cp remote-artifacts/install.sh "${PREFIX}install.sh" --content-type text/plain
+      # Platform builds start before this job ends and wait for this pin only
+      # when they package (wait-for-run-artifact.mjs).
       - name: Pin the remote tarballs
-        id: remote
         run: |
-          PIN=$(node apps/review-desktop/scripts/stamp-remote-artifacts.mjs remote-artifacts "$VERSION" "https://install.dev.fast/releases/${VERSION}/remote")
-          echo "whiteboard_remote=$PIN" >> "$GITHUB_OUTPUT"
+          mkdir -p remote-pin
+          node apps/review-desktop/scripts/stamp-remote-artifacts.mjs remote-artifacts "$VERSION" "https://install.dev.fast/releases/${VERSION}/remote" > remote-pin/pin.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: whiteboard-remote-pin-${{ env.VERSION }}
+          path: remote-pin/pin.json
+          overwrite: true
+
+  npm:
+    name: Publish npm package
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      COMMIT: ${{ needs.version.outputs.commit }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.version.outputs.commit }}
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+      - name: Install build dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Resolve dist-tag and publication state
+        id: npm
+        env:
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          DIST_TAG=$(node scripts/review-cli-release.mjs dist-tag "$VERSION")
+          if PUBLISHED=$(node scripts/review-cli-release.mjs published "$VERSION" "$COMMIT"); then
+            :
+          elif [ "$DRY_RUN" = true ]; then
+            echo "::warning::@dev.fast/whiteboard@${VERSION} exists on npm from another commit, or the registry check failed (see above); this dry run skips publish validation."
+            PUBLISHED=true
+          else
+            exit 1
+          fi
+          echo "dist_tag=$DIST_TAG" >> "$GITHUB_OUTPUT"
+          echo "published=$PUBLISHED" >> "$GITHUB_OUTPUT"
       - name: Build release tarball
         run: |
           jq -n --arg version "$VERSION" --arg commit "$COMMIT" '{$version, $commit}' > release-plan.json
@@ -431,245 +519,66 @@ jobs:
 
   linux:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'linux' }}
-    needs: [version, remote]
+    needs: version
+    permissions:
+      contents: write
+      actions: read
     uses: ./.github/workflows/review-linux-build.yml
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
-      whiteboard_remote: ${{ needs.remote.outputs.whiteboard_remote }}
       release_signing: ${{ !inputs.dry_run }}
+      channel: stable
+      publish: ${{ !inputs.dry_run }}
+      release_tag: ${{ needs.version.outputs.tag }}
     secrets: inherit
 
   # Signs even on a dry run, so the run validates exactly what would ship.
   windows:
     if: ${{ inputs.platforms == 'all' || inputs.platforms == 'windows' }}
-    needs: [version, remote]
+    needs: version
     permissions:
-      contents: read
+      contents: write
+      actions: read
       id-token: write
     uses: ./.github/workflows/review-windows-build.yml
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
-      whiteboard_remote: ${{ needs.remote.outputs.whiteboard_remote }}
       sign: true
+      channel: stable
+      publish: ${{ !inputs.dry_run }}
+      release_tag: ${{ needs.version.outputs.tag }}
+    secrets: inherit
 
-  macos:
-    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'macos' }}
-    needs: [version, remote]
+  macos-arm64:
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'macos-arm64' }}
+    needs: version
     permissions:
-      contents: read
+      contents: write
       actions: read
     uses: ./.github/workflows/review-macos-build.yml
     with:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
-      whiteboard_remote: ${{ needs.remote.outputs.whiteboard_remote }}
+      target: darwin-arm64
       channel: stable
-    secrets: inherit
-
-  validate:
-    name: Validate selected platforms
-    needs: [version, macos, linux, windows]
-    if: ${{ !cancelled() && needs.version.result == 'success' }}
-    runs-on: ubuntu-latest
-    permissions: {}
-    env:
-      PLATFORMS: ${{ inputs.platforms }}
-      macos: ${{ needs.macos.result }}
-      linux: ${{ needs.linux.result }}
-      windows: ${{ needs.windows.result }}
-    steps:
-      - name: Require every selected build and validation
-        run: |
-          for platform in macos linux windows; do
-            if [ "$PLATFORMS" = all ] || [ "$PLATFORMS" = "$platform" ]; then
-              result="${!platform}"
-              if [ "$result" != success ]; then
-                echo "::error::${platform} build and validation: ${result}"
-                exit 1
-              fi
-            fi
-          done
-
-  publish-macos:
-    name: Publish macOS
-    # Nothing publishes until every selected platform has built and validated.
-    needs: [version, validate]
-    if: ${{ !cancelled() && needs.validate.result == 'success' && !inputs.dry_run && (inputs.platforms == 'all' || inputs.platforms == 'macos') }}
-    runs-on: ubuntu-latest
-    env:
-      RELEASE_VERSION: ${{ needs.version.outputs.version }}
-      RELEASE_COMMIT: ${{ needs.version.outputs.commit }}
-      RELEASE_TAG: ${{ needs.version.outputs.tag }}
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          digest-mismatch: warn
-          pattern: macos-*
-          path: dist
-
-      # Payloads first, manifests last: a client must never see a latest.json
-      # whose zip is not yet downloadable, on either arch.
-      - name: Upload release to R2
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
-          AWS_REGION: auto
-          R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
-        run: |
-          # The releases/latest/ key is version-free by design, so the version
-          # rides along in the filename a client saves the download as, with the
-          # arch so Apple silicon and Intel downloads are told apart.
-          for dir in dist/macos-*; do
-            target="${dir#dist/macos-}"
-            DMG_DISPOSITION="attachment; filename=\"df-whiteboard-${RELEASE_VERSION}-${target#darwin-}.dmg\""
-            RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/${target}"
-            for zip in "$dir"/*-"${target}"-"${RELEASE_VERSION}".zip; do
-              aws s3 cp "$zip" "${RELEASE_PREFIX}/$(basename "$zip")" \
-                --content-type application/zip
-            done
-            aws s3 cp "$dir/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
-              "${RELEASE_PREFIX}/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
-              --content-type application/x-apple-diskimage \
-              --content-disposition "$DMG_DISPOSITION"
-            aws s3 cp "$dir/Whiteboard-${target}-${RELEASE_VERSION}.dmg" \
-              "s3://${R2_BUCKET}/releases/latest/${target}/Whiteboard.dmg" \
-              --content-type application/x-apple-diskimage \
-              --content-disposition "$DMG_DISPOSITION"
-          done
-
-          for dir in dist/macos-*; do
-            target="${dir#dist/macos-}"
-            aws s3 cp "$dir/latest.json" \
-              "s3://${R2_BUCKET}/update/stable/${target}/latest.json" \
-              --content-type application/json
-          done
-
-      - name: Verify update feed
-        run: |
-          echo "Feed for an outdated client (expect 200 with ${RELEASE_VERSION}):"
-          RESPONSE=$(curl -sf "https://update.dev.fast/api/update/darwin-arm64/stable/0000000000000000000000000000000000000000")
-          echo "$RESPONSE"
-          echo "$RESPONSE" | grep -F "\"productVersion\":\"${RELEASE_VERSION}\""
-          echo "$RESPONSE" | grep -F "\"version\":\"${RELEASE_COMMIT}\""
-          echo "$RESPONSE" | grep -F "/Review-darwin-arm64-${RELEASE_VERSION}.zip"
-
-          echo "Feed for a Whiteboard.app install (expect the Whiteboard zip):"
-          curl -sf "https://update.dev.fast/api/update/darwin-arm64/stable/0000000000000000000000000000000000000000?bundle=Whiteboard" \
-            | grep -F "/Whiteboard-darwin-arm64-${RELEASE_VERSION}.zip"
-
-          echo "Feed for the just-released commit (expect 204):"
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://update.dev.fast/api/update/darwin-arm64/stable/${RELEASE_COMMIT}")
-          echo "$STATUS"
-          test "$STATUS" = "204"
-
-          echo "Intel feed (clients send plain darwin):"
-          curl -sf "https://update.dev.fast/api/update/darwin/stable/0000000000000000000000000000000000000000?bundle=Whiteboard" \
-            | grep -F "/Whiteboard-darwin-x64-${RELEASE_VERSION}.zip"
-          test "$(curl -s -o /dev/null -w '%{http_code}' "https://update.dev.fast/api/update/darwin/stable/${RELEASE_COMMIT}")" = 204
-
-      - name: Verify install landing
-        run: |
-          echo "install.dev.fast (expect 302 to the disk image):"
-          LOCATION=$(curl -s -o /dev/null -w "%{redirect_url}" https://install.dev.fast/)
-          echo "$LOCATION"
-          test "$LOCATION" = "https://install.dev.fast/releases/latest/darwin-arm64/Whiteboard.dmg"
-
-          echo "Following it (expect 200 and a disk image):"
-          curl -sfL -o /dev/null -w "%{http_code} %{content_type}\n" https://install.dev.fast/ \
-            | grep -F "200 application/x-apple-diskimage"
-
-          echo "Intel disk image (expect a disk image):"
-          curl -sfI https://install.dev.fast/releases/latest/darwin-x64/Whiteboard.dmg | grep -i "content-type: application/x-apple-diskimage"
-
-      - name: Attach DMGs to GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release upload "$RELEASE_TAG" \
-            --repo "${{ github.repository }}" \
-            dist/macos-*/Whiteboard-*-"${RELEASE_VERSION}".dmg
-
-  publish-linux:
-    name: Publish Linux repositories
-    needs: [version, validate]
-    if: ${{ !cancelled() && needs.validate.result == 'success' && !inputs.dry_run && (inputs.platforms == 'all' || inputs.platforms == 'linux') }}
-    uses: ./.github/workflows/review-linux-publish.yml
-    with:
-      channel: stable
+      publish: ${{ !inputs.dry_run }}
       release_tag: ${{ needs.version.outputs.tag }}
     secrets: inherit
 
-  publish-windows:
-    name: Publish Windows installers
-    environment: review-release
-    needs: [version, validate]
-    if: ${{ !cancelled() && needs.validate.result == 'success' && !inputs.dry_run && (inputs.platforms == 'all' || inputs.platforms == 'windows') }}
-    runs-on: ubuntu-latest
-    env:
-      RELEASE_VERSION: ${{ needs.version.outputs.version }}
-      RELEASE_TAG: ${{ needs.version.outputs.tag }}
-    steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: windows-packages
-          path: windows-packages
-          digest-mismatch: warn
-      - name: Name the installers for this release
-        run: |
-          mkdir windows-release
-          cp windows-packages/Whiteboard-win32-x64-user.exe "windows-release/Whiteboard-${RELEASE_VERSION}-Setup.exe"
-          cp windows-packages/Whiteboard-win32-x64-system.exe "windows-release/Whiteboard-${RELEASE_VERSION}-System-Setup.exe"
-          cp windows-packages/Whiteboard-win32-x64.zip "windows-release/Whiteboard-win32-x64-${RELEASE_VERSION}.zip"
-      # Versioned payloads first, then the alias install.dev.fast/windows serves.
-      - name: Upload release to R2
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
-          AWS_REGION: auto
-          R2_BUCKET: ${{ vars.R2_RELEASE_BUCKET }}
-        run: |
-          RELEASE_PREFIX="s3://${R2_BUCKET}/releases/${RELEASE_VERSION}/win32-x64"
-          for file in windows-release/*.exe; do
-            aws s3 cp "$file" "${RELEASE_PREFIX}/$(basename "$file")" \
-              --content-type application/vnd.microsoft.portable-executable \
-              --content-disposition "attachment; filename=\"$(basename "$file")\""
-          done
-          aws s3 cp "windows-release/Whiteboard-win32-x64-${RELEASE_VERSION}.zip" \
-            "${RELEASE_PREFIX}/Whiteboard-win32-x64-${RELEASE_VERSION}.zip" \
-            --content-type application/zip
-          aws s3 cp "windows-release/Whiteboard-${RELEASE_VERSION}-Setup.exe" \
-            "s3://${R2_BUCKET}/releases/latest/win32-x64/Whiteboard-Setup.exe" \
-            --content-type application/vnd.microsoft.portable-executable \
-            --content-disposition "attachment; filename=\"Whiteboard-${RELEASE_VERSION}-Setup.exe\""
-      - name: Verify install landing
-        run: |
-          echo "install.dev.fast/windows (expect 302 to the installer):"
-          LOCATION=$(curl -s -o /dev/null -w "%{redirect_url}" https://install.dev.fast/windows)
-          echo "$LOCATION"
-          test "$LOCATION" = "https://install.dev.fast/releases/latest/win32-x64/Whiteboard-Setup.exe"
-
-          echo "Following it (expect 200 and a Windows executable):"
-          curl -sfL -o /dev/null -w "%{http_code} %{content_type}\n" https://install.dev.fast/windows \
-            | grep -F "200 application/vnd.microsoft.portable-executable"
-      - name: Attach installers to GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" windows-release/*
-
-  finalize-release:
-    name: Publish release
-    needs: [version, publish-macos, publish-linux, publish-windows]
-    if: ${{ !cancelled() && !inputs.dry_run && needs.version.result == 'success' && (inputs.platforms != 'all' && inputs.platforms != 'macos' || needs.publish-macos.result == 'success') && (inputs.platforms != 'all' && inputs.platforms != 'linux' || needs.publish-linux.result == 'success') && (inputs.platforms != 'all' && inputs.platforms != 'windows' || needs.publish-windows.result == 'success') }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Publish GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release edit "${{ needs.version.outputs.tag }}" \
-            --repo "${{ github.repository }}" \
-            --draft=false
+  macos-x64:
+    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'macos-x64' }}
+    needs: version
+    permissions:
+      contents: write
+      actions: read
+    uses: ./.github/workflows/review-macos-build.yml
+    with:
+      commit: ${{ needs.version.outputs.commit }}
+      version: ${{ needs.version.outputs.version }}
+      target: darwin-x64
+      channel: stable
+      publish: ${{ !inputs.dry_run }}
+      release_tag: ${{ needs.version.outputs.tag }}
+    secrets: inherit

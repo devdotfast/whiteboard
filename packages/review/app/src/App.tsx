@@ -1,11 +1,19 @@
-import { Button, IconButton } from "@canvas/ui/button";
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
+import { ArrowLeftIcon, SlidersIcon } from "@canvas/ui/icons";
+import { menuStyles } from "@canvas/ui/menu";
+import {
+  OverlayScrollbar,
+  overlayScrollbarStyles,
+} from "@canvas/ui/overlay-scrollbar";
+import { Popover } from "@canvas/ui/popover";
 import { StatusBanner } from "@canvas/ui/status-banner";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { Switch } from "@canvas/ui/switch";
 import { textStyles } from "@canvas/ui/text";
 import {
   type ReviewCanvasRange,
   type ReviewCommitSummary,
   type ReviewDocumentWidthChoice,
+  lensDiffFiles,
 } from "@dev.fast/review-protocol";
 import {
   type SoftwareMapTopologyDiff,
@@ -16,7 +24,7 @@ import {
   type CSSProperties,
   type ComponentType,
   type ReactElement,
-  type RefObject,
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -24,76 +32,54 @@ import {
   useState,
 } from "react";
 
-import { AgentSelectionProvider, useAgentSelection } from "./agent-selection";
+import { useAgentSelection } from "./agent-selection";
 import { observeAgentTextSelection } from "./agent-text-selection";
-import { AskHistoryProvider } from "./ask-history";
-import { AskHistoryControl } from "./ask-history-list";
+import { useAskPanelHost } from "./ask-dock";
 import { AskThreadMarks } from "./ask-marks";
-import {
-  AuthoringActivityBadge,
-  ReviewSurfaceLabel,
-} from "./authoring-activity";
-import { BugReportControl } from "./bug-report-dialog";
-import { controlStyles } from "./controls-styles";
-import {
-  ReviewDebugSettingsProvider,
-  type ReviewNodeTint,
-  useReviewDebugSettings,
-} from "./debug-settings";
-import { DiffLayoutControl } from "./diff-layout-control";
+import { CommitPicker } from "./commit-picker";
+import { ContentsRail } from "./contents-rail";
+import { type ReviewNodeTint, useReviewDebugSettings } from "./debug-settings";
+import { type DiffFilePicker, useDiffFilePicker } from "./diff-file-picker";
+import { DocumentContentsContext } from "./diff-sidebar-folds";
 import { ReviewDiffView } from "./DiffView";
 import { useDocumentEmbedScroll } from "./document-embed-scroll";
 import { documentStyles } from "./document-styles";
 import { useReviewSession } from "./host/review-session";
-import { DiscordIcon, MarkerUnderline, SettingsSlidersIcon } from "./icons";
-import {
-  appMarker,
-  detailHostMarker,
-  documentMarker,
-  scopedDiffMarker,
-  segmentMarker,
-  topbarActionsMarker,
-  topbarTabsMarker,
-} from "./markers.stylex";
+import { useKeepPlace } from "./keep-place";
+import { appMarker, detailHostMarker, documentMarker } from "./markers.stylex";
 import { MissingCheckoutBanner } from "./missing-checkout-banner";
+import { shortRef } from "./review-branch-range";
 import { ReviewPanelHost } from "./review-components";
-import {
-  ReviewProvider,
-  type ReviewSubmissionOutcome,
-  useReview,
-} from "./review-context";
-import { ReviewCornerAction } from "./review-corner-action";
-import { useReviewDiffFiles } from "./review-diff-files-context";
-import { ReviewDiffFilesProvider } from "./review-diff-files-context";
+import { useReview } from "./review-context";
+import { useDiffScope, useReviewDiffFiles } from "./review-diff-files-context";
 import { ReviewDocumentBoundary } from "./review-document-boundary";
 import { reportReviewDocumentRenderError } from "./review-document-error-report";
+import { useReviewFindRegistration } from "./review-find";
 import {
-  type ReviewFindHost,
-  ReviewFindProvider,
-  useReviewFindRegistration,
-} from "./review-find";
+  scrollToReviewBlock,
+  scrollToReviewHeading,
+} from "./review-heading-scroll";
 import { useReviewLenses } from "./review-lenses";
 import {
   useReviewPanel,
   useReviewPanelStore,
   useSuppressPanelMotionOnCanvasResume,
 } from "./review-panel";
-import { type ReviewDiffScope, askDockedShown } from "./review-panel-store";
-import { ReviewRootsProvider, useReviewContainer } from "./review-root-context";
-import { ReviewStackSelector } from "./review-stack-selector";
-import { ReviewToc } from "./review-toc";
-import { offeredReviewViews, reviewViewLabel } from "./review-view-route";
-import { useReviewViewStateSync } from "./review-view-state";
-import { ReviewCommitsView } from "./ReviewCommitsView";
-import { ReviewTraceView } from "./ReviewTraceView";
 import {
-  elevation,
-  fontSize,
-  fontWeight,
-  motion,
-  radius,
-} from "./scale.stylex";
-import { ShareControl } from "./share-control";
+  type ReviewDiffScope,
+  askColumnShown,
+  peekShown,
+} from "./review-panel-store";
+import { useReviewContainer, useReviewRoots } from "./review-root-context";
+import {
+  StackPill,
+  useOpenStackLayer,
+  useReviewStack,
+} from "./review-stack-selector";
+import { offeredReviewViews } from "./review-view-route";
+import { useReviewViewStateSync } from "./review-view-state";
+import { ReviewTraceView } from "./ReviewTraceView";
+import { elevation, fontSize, fontWeight, radius, space } from "./scale.stylex";
 import { shellStyles } from "./shell-styles";
 import { useRightPanelResize } from "./side-panel-resizer";
 import { selectActiveSoftwareMapModel } from "./software-map-selection";
@@ -107,11 +93,9 @@ import { withClass } from "./stylex-props";
 import { themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
 import { traceStyles } from "./trace-styles";
-import { TutorialExperienceProvider } from "./tutorial-experience";
 import { captureUiEvent } from "./ui-telemetry";
-import { segmentStyles } from "./ui/segmented";
+import { SegmentedControl, labeledOptions } from "./ui/segmented";
 import { useReviewTabTelemetry } from "./use-review-tab-telemetry";
-import { useTooltip } from "./use-tooltip";
 import { useTraceList } from "./use-trace-list";
 
 const DEFAULT_SIDE_PEEK_WIDTH = 560;
@@ -122,36 +106,39 @@ const MAX_SIDE_PEEK_WIDTH = 920;
 
 const MIN_DOCUMENT_WIDTH = 560;
 
+const noCommits: readonly ReviewCommitSummary[] = [];
+
 export function App({
   document,
   softwareMap,
   softwareMapEnabled,
   range,
   commits,
-  findHost,
 }: {
   document: RenderedReviewDocument;
   softwareMap: PublishedSoftwareMap;
   softwareMapEnabled: boolean;
   range: ReviewCanvasRange;
-  commits: readonly ReviewCommitSummary[];
-  findHost?: ReviewFindHost;
+  commits?: readonly ReviewCommitSummary[];
 }): ReactElement {
   return (
-    <ReviewDiffFilesProvider
-      documentKey={[document.routePath, document.filePath].join("\0")}
-      revision={range.worktreeRevision}
-      unavailable={!!range.sourceUnavailable}
-    >
-      <ReviewLayout
-        document={document}
-        softwareMap={softwareMap}
-        softwareMapEnabled={softwareMapEnabled}
-        range={range}
-        commits={commits}
-        findHost={findHost}
-      />
-    </ReviewDiffFilesProvider>
+    <ReviewLayoutContent
+      document={document}
+      documentRevision={document.key}
+      softwareModels={[
+        ...(softwareMap.head ? [softwareMap.head] : []),
+        ...document.documentSoftwareModels,
+      ]}
+      repoSoftwareMap={softwareMap.head ?? null}
+      baseSoftwareMap={softwareMap.base ?? null}
+      softwareMapTopologyDiff={diffSoftwareMaps(
+        softwareMap.base,
+        softwareMap.head,
+      )}
+      softwareMapEnabled={softwareMapEnabled}
+      range={range}
+      commits={commits}
+    />
   );
 }
 
@@ -175,97 +162,7 @@ export interface RenderedReviewDocument {
   width?: ReviewDocumentWidthChoice;
 }
 
-/** A commit-scoped diff stays "commit"; otherwise it follows the reader's
- * structural-diff setting. */
-function diffOpenedKind(
-  diffScope: ReviewDiffScope | null,
-  structuralDiffEnabled: boolean,
-): "commit" | "file" | "structural" {
-  if (diffScope) return "commit";
-
-  return structuralDiffEnabled ? "structural" : "file";
-}
-
-function ReviewLayout({
-  document,
-  softwareMap,
-  softwareMapEnabled,
-  range,
-  commits,
-  findHost,
-}: {
-  document: RenderedReviewDocument;
-  softwareMap: PublishedSoftwareMap;
-  softwareMapEnabled: boolean;
-  range: ReviewCanvasRange;
-  commits: readonly ReviewCommitSummary[];
-  findHost?: ReviewFindHost;
-}): ReactElement {
-  const documentRoute = document.routePath;
-  const documentRevision = document.key;
-  const panelStore = useReviewPanelStore();
-
-  const articleRef = useRef<HTMLElement | null>(null);
-  const appRef = useRef<HTMLDivElement | null>(null);
-  const shellRef = useRef<HTMLElement | null>(null);
-  const scrollRegionRef = useRef<HTMLElement | null>(null);
-
-  const roots = useMemo(
-    () => ({ appRef, shellRef, scrollRegionRef, articleRef }),
-    [],
-  );
-
-  return (
-    <ReviewRootsProvider roots={roots}>
-      <ReviewFindProvider
-        articleRef={articleRef}
-        documentKey={documentRevision}
-        host={findHost}
-      >
-        <ReviewDebugSettingsProvider>
-          <ReviewProvider
-            key={documentRoute}
-            documentRoute={documentRoute}
-            softwareMapEnabled={softwareMapEnabled}
-            openTraceSession={panelStore.getState().openTrace}
-          >
-            <AskHistoryProvider>
-              <AgentSelectionProvider revision={documentRevision}>
-                <ReviewLayoutContent
-                  appRef={appRef}
-                  shellRef={shellRef}
-                  scrollRegionRef={scrollRegionRef}
-                  articleRef={articleRef}
-                  document={document}
-                  documentRevision={documentRevision}
-                  softwareModels={[
-                    ...(softwareMap.head ? [softwareMap.head] : []),
-                    ...document.documentSoftwareModels,
-                  ]}
-                  repoSoftwareMap={softwareMap.head ?? null}
-                  baseSoftwareMap={softwareMap.base ?? null}
-                  softwareMapTopologyDiff={diffSoftwareMaps(
-                    softwareMap.base,
-                    softwareMap.head,
-                  )}
-                  softwareMapEnabled={softwareMapEnabled}
-                  range={range}
-                  commits={commits}
-                />
-              </AgentSelectionProvider>
-            </AskHistoryProvider>
-          </ReviewProvider>
-        </ReviewDebugSettingsProvider>
-      </ReviewFindProvider>
-    </ReviewRootsProvider>
-  );
-}
-
 function ReviewLayoutContent({
-  appRef,
-  shellRef,
-  scrollRegionRef,
-  articleRef,
   document,
   documentRevision,
   softwareModels,
@@ -274,12 +171,8 @@ function ReviewLayoutContent({
   softwareMapTopologyDiff,
   softwareMapEnabled,
   range,
-  commits,
+  commits: readCommits,
 }: {
-  appRef: RefObject<HTMLDivElement | null>;
-  shellRef: RefObject<HTMLElement | null>;
-  scrollRegionRef: RefObject<HTMLElement | null>;
-  articleRef: RefObject<HTMLElement | null>;
   document: RenderedReviewDocument;
   documentRevision: string;
   softwareModels: NormalizedSoftwareModel[];
@@ -288,42 +181,52 @@ function ReviewLayoutContent({
   softwareMapTopologyDiff: SoftwareMapTopologyDiff | null;
   softwareMapEnabled: boolean;
   range: ReviewCanvasRange;
-  commits: readonly ReviewCommitSummary[];
+  commits?: readonly ReviewCommitSummary[];
 }): ReactElement {
+  const commits = readCommits ?? noCommits;
+  const { appRef, shellRef, scrollRegionRef, articleRef } = useReviewRoots()!;
   const session = useReviewSession();
   const review = useReview();
-  // The scratchpad is a document and nothing else: no source tree to browse,
-  // nothing to share, nothing to dismiss.
-  const scratchpad = session.review?.kind === "scratchpad";
-  const available = session.review?.available;
-  // A remote review keeps Source tree, disabled with the reason.
-  const sourceWindows = available?.sourceWindows !== false;
-  const sourceTreeShown = sourceWindows || !!session.review?.host;
-  useEffect(() => {
-    if (scratchpad) captureUiEvent(session, "scratchpad_opened");
-  }, [scratchpad, session]);
-  const discordTooltip = useTooltip("Join our Discord community");
+  const sidebarLeads = session.bridge.reportSidebar !== undefined;
 
-  const sourceTreeTooltip = useTooltip(
-    sourceWindows
-      ? "Open full read-only source"
-      : (available?.reason ?? "Source windows are unavailable."),
+  // The board's scroller, for the overlay scrollbar that replaces its own.
+  const [scrollRegion, setScrollRegion] = useState<HTMLElement | null>(null);
+
+  const attachScrollRegion = useCallback(
+    (node: HTMLElement | null) => {
+      scrollRegionRef.current = node;
+      setScrollRegion(node);
+    },
+    [scrollRegionRef],
   );
 
   const panelStore = useReviewPanelStore();
   useSuppressPanelMotionOnCanvasResume(appRef);
-  const activePanel = useReviewPanel((state) => state.active);
-  const askDocked = useReviewPanel(askDockedShown);
+  const peekOpen = useReviewPanel(peekShown);
+
+  // In Desktop, a docked Ask has a panel of its own beside the board.
+  const askBeside = !useAskPanelHost();
+
+  const askDocked = useReviewPanel(
+    (state) => askBeside && askColumnShown(state),
+  );
+
   const panelMotion = useReviewPanel((state) => state.motion);
   const activeView = useReviewPanel((state) => state.view);
-  const diffScope = useReviewPanel((state) => state.diffScope);
+
+  const {
+    picked: pickedScope,
+    scopedCommit,
+    diffScope,
+    fileCount: filesTabFileCount,
+  } = useDiffScope(commits);
 
   // The full diff stays mounted while another view shows, at the width it
   // had when it was hidden: following the column through a side peek's
   // resize would lay out every editor in it on each step. Shown, it fills the
   // column again and lays out once.
   const diffHostRef = useRef<HTMLDivElement | null>(null);
-  const diffPreloaded = activeView !== "diff" || diffScope !== null;
+  const diffPreloaded = activeView !== "diff";
   // Built the first time it is shown, then kept for instant returns.
   const [diffOpened, setDiffOpened] = useState(!diffPreloaded);
 
@@ -345,11 +248,11 @@ function ReviewLayoutContent({
   const traceSelection = useReviewPanel((state) => state.traceSelection);
   const traceStorage = useReviewPanel((state) => state.traceStorage);
   const mapFocus = useReviewPanel((state) => state.mapFocus);
-  const showView = useReviewPanel((state) => state.showView);
 
   const debugSettings = useReviewDebugSettings();
 
-  const rightPanelOpen = activePanel !== null || askDocked;
+  // In Desktop the column right of the board holds peeks and Ask alike.
+  const rightPanelOpen = askBeside && (peekOpen || askDocked);
 
   const sidePeekResize = useRightPanelResize({
     stateKey: "side-peek-width",
@@ -365,18 +268,25 @@ function ReviewLayoutContent({
   });
 
   useDocumentEmbedScroll(scrollRegionRef);
+  // The board keeps its place as the column beside it opens and closes.
+  useKeepPlace(scrollRegionRef);
   useReviewViewStateSync({ scrollRegionRef, panelStore });
 
   // Diagrams only read the open tour, so a restored tour whose diagram is
-  // no longer in the document would sit in the store unrendered. The
-  // document and its tour overlay commit before this effect runs.
+  // no longer in the document would sit in the store unrendered. The board
+  // editor draws its diagrams a task after the document commits, so look
+  // then.
   const canvasRoot = useReviewContainer();
   useEffect(() => {
-    const { overlayTour, closeOverlayTour } = panelStore.getState();
+    const timer = setTimeout(() => {
+      const { overlayTour, closeOverlayTour } = panelStore.getState();
 
-    if (overlayTour && !canvasRoot?.querySelector(".diagram-tour-overlay")) {
-      closeOverlayTour();
-    }
+      if (overlayTour && !canvasRoot?.querySelector(".diagram-tour-overlay")) {
+        closeOverlayTour();
+      }
+    });
+
+    return () => clearTimeout(timer);
   }, [canvasRoot, documentRevision, panelStore]);
 
   const hasChangeRange =
@@ -416,40 +326,62 @@ function ReviewLayoutContent({
 
   const reviewFind = useReviewFindRegistration();
   useEffect(() => {
-    reviewFind?.setReviewActive(activeView === "review");
+    reviewFind?.setSurface(
+      activeView === "review"
+        ? "review"
+        : activeView === "diff"
+          ? "diff"
+          : null,
+    );
   }, [activeView, reviewFind]);
 
   const storedList = useTraceList();
   const diffFiles = useReviewDiffFiles();
 
+  const activeLens = useReviewLenses()?.active;
+
+  const diffFilePicker = useMemo<DiffFilePicker>(
+    () => ({
+      files: async () => {
+        const commit = panelStore.getState().diffScope?.commit;
+
+        const files = await session.bridge.diffView.files(
+          commit ? { commit } : undefined,
+        );
+
+        return commit || !activeLens ? files : lensDiffFiles(files, activeLens);
+      },
+      reveal: (path) => panelStore.getState().revealDiffFile(path),
+    }),
+    [panelStore, session.bridge.diffView, activeLens],
+  );
+
+  useDiffFilePicker(diffFilePicker);
+
   const hasTraceSessions =
-    !scratchpad &&
     !session.review?.host &&
     ((session.review?.traces.size ?? 0) > 0 ||
       storedList.status !== "loaded" ||
       storedList.sessions.length > 0);
-
-  const filesTabFileCount = diffScope
-    ? diffScope.commit.fileCount
-    : diffFiles.status === "loaded"
-      ? diffFiles.files.length
-      : null;
 
   const hasDiff =
     hasChangeRange &&
     !(diffFiles.status === "loaded" && diffFiles.files.length === 0);
 
   const hasCommits = commits.length > 0;
+  const stack = useReviewStack();
+  const openStackLayer = useOpenStackLayer();
+  const stackRef = useRef({ stack, openStackLayer });
+  stackRef.current = { stack, openStackLayer };
 
   const reviewViews = useMemo(
     () =>
       offeredReviewViews({
-        hasCommits,
         hasDiff,
         softwareMapEnabled,
         hasTraceSessions,
       }),
-    [hasCommits, hasDiff, hasTraceSessions, softwareMapEnabled],
+    [hasDiff, hasTraceSessions, softwareMapEnabled],
   );
 
   useLayoutEffect(() => {
@@ -462,16 +394,163 @@ function ReviewLayoutContent({
 
   const tocEntries = document.tocEntries ?? [];
 
+  // The Diff view's folded Contents opens the document at a heading.
+  const documentContents = useMemo(
+    () => ({
+      entries: tocEntries,
+      open: (headingId: string) => {
+        panelStore.getState().showView("review");
+        revealWhenDrawn(() =>
+          scrollToReviewHeading(
+            headingId,
+            articleRef.current,
+            scrollRegionRef.current,
+          ),
+        );
+      },
+    }),
+    [tocEntries, panelStore, articleRef, scrollRegionRef],
+  );
+
+  // Report the view and change counts to Desktop's sidebar.
+  const lensStats = lenses?.progress ? lenses.stats() : undefined;
+
+  // The change's counts come from the diff, which can take seconds; the
+  // board's view is reported at once, and the sidebar keeps
+  // its Lenses and Files counts until these arrive.
+  const countsPending =
+    hasChangeRange &&
+    !!lenses &&
+    !lenses.error &&
+    (lensStats === undefined || filesTabFileCount === null);
+
+  useEffect(() => {
+    session.bridge.reportSidebar?.({
+      view: activeView,
+      ...(countsPending && { countsPending }),
+      ...(hasCommits && {
+        commits: commits.map(
+          ({ commit, subject, author, authoredAt, additions, deletions }) => ({
+            commit,
+            subject,
+            author,
+            authoredAt,
+            additions,
+            deletions,
+          }),
+        ),
+        compare: `${shortRef(range.baseRef || range.baseCommit)} ← ${shortRef(range.headRef || range.headCommit)}`,
+      }),
+      ...(diffScope && { commit: diffScope.commit }),
+      ...(stack.layers.length > 1 && { stack }),
+      ...(hasChangeRange && lenses && { lenses: lenses.authored.length }),
+      ...(hasChangeRange &&
+        filesTabFileCount !== null &&
+        lensStats && {
+          files: {
+            count: filesTabFileCount,
+            // A picked commit's own changes; else the board's.
+            additions: scopedCommit
+              ? scopedCommit.additions
+              : lensStats.total.additions,
+            deletions: scopedCommit
+              ? scopedCommit.deletions
+              : lensStats.total.deletions,
+            ...(lenses?.progress?.untrackedFiles && {
+              untracked: lenses.progress.untrackedFiles,
+            }),
+          },
+        }),
+    });
+  }, [
+    session.bridge,
+    countsPending,
+    activeView,
+    hasChangeRange,
+    lenses,
+    filesTabFileCount,
+    lensStats?.total.additions,
+    lensStats?.total.deletions,
+    lenses?.progress?.untrackedFiles,
+    hasCommits,
+    commits,
+    range.baseRef,
+    range.baseCommit,
+    range.headRef,
+    range.headCommit,
+    diffScope,
+    stack,
+  ]);
+
+  // Only once the commits are read.
+  useEffect(() => {
+    if (readCommits && pickedScope && !scopedCommit)
+      panelStore.getState().pickCommit(null);
+  }, [readCommits, pickedScope, scopedCommit, panelStore]);
+
   // Subscribe before the canvas signals ready so a reveal immediately after
   // mounting cannot outrun the listener.
   useLayoutEffect(() => {
-    return session.surface.subscribe((event) => {
-      if (event.event !== "showReviewView") return;
-      const { availableViews, showView } = panelStore.getState();
+    let stopReveal: (() => void) | undefined;
 
-      if (availableViews.includes(event.view)) showView(event.view);
+    const unsubscribe = session.surface.subscribe((event) => {
+      if (event.event === "revealBlock") {
+        stopReveal?.();
+        panelStore.getState().showView("review");
+        stopReveal = revealWhenDrawn(() =>
+          scrollToReviewBlock(
+            event.blockId,
+            articleRef.current,
+            scrollRegionRef.current,
+          ),
+        );
+
+        return;
+      }
+
+      if (event.event === "openStackLayer") {
+        const { stack, openStackLayer } = stackRef.current;
+        const layer = stack.layers.find((each) => each.branch === event.branch);
+
+        if (layer) void openStackLayer(layer, event.active);
+
+        return;
+      }
+
+      if (event.event === "pickCommit") {
+        panelStore
+          .getState()
+          .pickCommit(event.commit ? { commit: event.commit } : null);
+
+        return;
+      }
+
+      if (event.event !== "showReviewView") return;
+
+      const {
+        availableViews,
+        showView,
+        diffScope: scope,
+      } = panelStore.getState();
+
+      const view = event.view;
+
+      if (!availableViews.includes(view)) return;
+
+      // Desktop's sidebar tabs open the diff in place of the strip.
+      if (view === "diff" && event.reviewId)
+        captureUiEvent(session, "diff_opened", {
+          kind: scope ? "commit" : "structural",
+          via: "sidebar",
+        });
+      showView(view);
     });
-  }, [panelStore, session.surface]);
+
+    return () => {
+      stopReveal?.();
+      unsubscribe();
+    };
+  }, [panelStore, session, articleRef, scrollRegionRef]);
 
   const activeSoftwareMapSource = useMemo(
     () =>
@@ -513,6 +592,7 @@ function ReviewLayoutContent({
         appMarker,
         themeStyles.vars,
         themeStyles.app,
+        shellStyles.board,
         debugSettings.theme === "light" && themeStyles.light,
         rightPanelOpen && shellStyles.appPeekOpen,
         sidePeekResize.isResizing && shellStyles.appResizing,
@@ -532,320 +612,164 @@ function ReviewLayoutContent({
           !!banner && shellStyles.documentShellBanner,
         )}
       >
-        <TutorialExperienceProvider
-          shellRef={shellRef}
-          scrollRegionRef={scrollRegionRef}
-        >
-          <header {...stylex.props(shellStyles.topbar)}>
-            <div {...stylex.props(shellStyles.topbarLeft, topbarTabsMarker)}>
-              <div
-                {...stylex.props(
-                  segmentStyles.segmented,
-                  segmentStyles.segmentedTopbar,
-                )}
-                role="group"
-                aria-label="Session views"
-              >
-                {reviewViews.map((view) => (
-                  <button
-                    key={view}
-                    type="button"
-                    aria-label={
-                      view === "map"
-                        ? "Map (Experimental)"
-                        : reviewViewLabel(view)
-                    }
-                    aria-pressed={activeView === view}
-                    data-tour-target={`${view}-tab`}
-                    title={view === "map" ? "Map (Experimental)" : undefined}
-                    {...withClass(
-                      "review-segment",
-                      segmentMarker,
-                      segmentStyles.segment,
-                      segmentStyles.segmentTopbar,
-                      activeView === view && segmentStyles.segmentActive,
-                      activeView === view && segmentStyles.segmentTopbarActive,
-                    )}
-                    onClick={() => {
-                      if (view === "diff")
-                        captureUiEvent(session, "diff_opened", {
-                          kind: diffOpenedKind(
-                            diffScope,
-                            Boolean(lenses?.structuralDiffEnabled),
-                          ),
-                          via: "topbar",
-                        });
-                      showView(view);
-                    }}
-                  >
-                    {view === "review" ? (
-                      <ReviewSurfaceLabel
-                        label={scratchpad ? "Scratchpad" : "Whiteboard"}
-                        hasContent={document.empty === false}
-                        active={activeView === "review"}
-                      />
-                    ) : (
-                      <span>{reviewViewLabel(view)}</span>
-                    )}
-                    {view === "diff" && filesTabFileCount !== null && (
-                      <span
-                        {...stylex.props(
-                          segmentStyles.segmentCount,
-                          activeView === view &&
-                            segmentStyles.segmentCountActive,
-                        )}
-                      >
-                        {filesTabFileCount}
-                      </span>
-                    )}
-                    {view === "commits" && (
-                      <span
-                        {...stylex.props(
-                          segmentStyles.segmentCount,
-                          activeView === view &&
-                            segmentStyles.segmentCountActive,
-                        )}
-                      >
-                        {commits.length}
-                      </span>
-                    )}
-                    <MarkerUnderline active={activeView === view} />
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div
-              {...stylex.props(shellStyles.topbarActions, topbarActionsMarker)}
-            >
-              <div
-                {...stylex.props(
-                  shellStyles.topbarItem,
-                  shellStyles.topbarContext,
-                )}
-              >
-                {!scratchpad && sourceTreeShown && (
-                  <Button
-                    variant="ghost"
-                    xstyle={shellStyles.openSourceTree}
-                    aria-label="Source tree ↗"
-                    disabled={!sourceWindows}
-                    ref={sourceTreeTooltip}
-                    onClick={() => {
-                      captureUiEvent(session, "source_tree_opened", {
-                        via: "topbar",
-                      });
-                      // The desktop already showed why it failed.
-                      session.surface
-                        .post({ name: "openSourceTree", args: {} })
-                        .catch(() => undefined);
-                    }}
-                  >
-                    <span {...stylex.props(shellStyles.openSourceTreeLabel)}>
-                      Source tree
-                    </span>
-                    <span aria-hidden="true">↗</span>
-                  </Button>
-                )}
-                <AuthoringActivityBadge
-                  onLocate={(view) => {
-                    if (view === "diff")
-                      captureUiEvent(session, "diff_opened", {
-                        kind: diffOpenedKind(
-                          diffScope,
-                          Boolean(lenses?.structuralDiffEnabled),
-                        ),
-                        via: "locate",
-                      });
-                    showView(view);
-                  }}
-                />
-              </div>
-              <ReviewStackSelector />
-              <AskHistoryControl />
-              <ShareControl />
-              <IconButton
-                xstyle={shellStyles.topbarItem}
-                ref={discordTooltip}
-                aria-label="Join our Discord community"
-                onClick={() => {
-                  captureUiEvent(session, "discord_clicked", {
-                    via: "topbar",
-                  });
-                  session.surface.post({ name: "joinDiscord", args: {} });
-                }}
-              >
-                <DiscordIcon xstyle={controlStyles.chromeIcon} />
-              </IconButton>
-              <BugReportControl />
-              <ReviewBatonChip outcome={review.submissionOutcome} />
-              <DiffLayoutControl />
-              {!scratchpad &&
-                !review.historicalRevision &&
-                !review.submissionOutcome && (
-                  <div
-                    {...stylex.props(
-                      shellStyles.topbarItem,
-                      shellStyles.actionsDivider,
-                    )}
-                  />
-                )}
-              {!scratchpad &&
-              !review.historicalRevision &&
-              !review.submissionOutcome ? (
-                <ReviewCornerAction />
-              ) : null}
-            </div>
-          </header>
-          {banner}
-          {activeView === "review" && (
-            <ReviewToc
-              entries={tocEntries}
-              besideHeader={document.header}
-              documentWidth={document.width}
-            />
+        {banner}
+        <section
+          ref={attachScrollRegion}
+          // The contents rail returns focus here when its card closes.
+          tabIndex={-1}
+          {...withClass(
+            `review-view-region review-view-region--${activeView}`,
+            shellStyles.viewRegion,
+            activeView === "review" && shellStyles.reviewRegion,
+            activeView === "review" && overlayScrollbarStyles.scroller,
+            activeView === "review" &&
+              tocEntries.length > 0 &&
+              shellStyles.reviewRegionRail,
+            activeView === "trace" && traceStyles.region,
           )}
-          <section
-            ref={scrollRegionRef}
+        >
+          <div
             {...withClass(
-              `review-view-region review-view-region--${activeView}`,
-              shellStyles.viewRegion,
-              activeView === "commits" && shellStyles.commitsRegion,
-              activeView === "review" && shellStyles.reviewRegion,
-              activeView === "trace" && traceStyles.region,
+              "review-document-view",
+              shellStyles.documentView,
+              activeView !== "review" && shellStyles.hidden,
             )}
+            hidden={activeView !== "review"}
           >
+            <>
+              <article
+                ref={articleRef}
+                {...withClass(
+                  "review-document",
+                  documentStyles.article,
+                  documentMarker,
+                  rightPanelOpen && documentStyles.articlePeekOpen,
+                )}
+              >
+                <ReviewDocumentBoundary
+                  key={documentRevision}
+                  session={session}
+                  revision={documentRevision}
+                  onError={(_revision, error) =>
+                    reportReviewDocumentRenderError(session, error)
+                  }
+                >
+                  <document.render />
+                </ReviewDocumentBoundary>
+              </article>
+              <AskThreadMarks
+                articleRef={articleRef}
+                revision={documentRevision}
+              />
+            </>
+          </div>
+          {softwareMapEnabled && activeView === "map" && (
             <div
               {...withClass(
-                "review-document-view",
-                shellStyles.documentView,
-                activeView !== "review" && shellStyles.hidden,
+                "review-map-view",
+                shellStyles.mapView,
+                mapViewStyles.view,
               )}
-              hidden={activeView !== "review"}
             >
-              <>
-                <article
-                  ref={articleRef}
-                  {...withClass(
-                    "review-document",
-                    documentStyles.article,
-                    documentMarker,
-                    rightPanelOpen && documentStyles.articlePeekOpen,
-                  )}
-                  data-kind={scratchpad ? "scratchpad" : undefined}
-                >
-                  <ReviewDocumentBoundary
-                    key={documentRevision}
-                    session={session}
-                    revision={documentRevision}
-                    onError={(_revision, error) =>
-                      reportReviewDocumentRenderError(session, error)
-                    }
-                  >
-                    <document.render />
-                  </ReviewDocumentBoundary>
-                </article>
-                <AskThreadMarks
-                  articleRef={articleRef}
-                  revision={documentRevision}
-                />
-              </>
-            </div>
-            {softwareMapEnabled && activeView === "map" && (
               <div
-                {...withClass(
-                  "review-map-view",
-                  shellStyles.mapView,
-                  mapViewStyles.view,
+                {...stylex.props(
+                  shellStyles.mapCanvasShell,
+                  mapViewStyles.canvasShell,
                 )}
               >
-                <div
-                  {...stylex.props(
-                    shellStyles.mapCanvasShell,
-                    mapViewStyles.canvasShell,
-                  )}
-                >
-                  <SoftwareMapTopologyUnavailable
-                    repoSoftwareMap={repoSoftwareMap}
-                    baseSoftwareMap={baseSoftwareMap}
-                    baseRef={review.resolvedBaseRef ?? undefined}
-                    headRef={review.resolvedHeadRef ?? undefined}
-                  />
-                  <SoftwareMap
-                    model={activeSoftwareMap ?? undefined}
-                    pinnedData={
-                      activeSoftwareMapSource
-                        ? session.softwareMapData?.(activeSoftwareMapSource)
-                        : undefined
-                    }
-                    focusRequest={mapFocus?.pending ? mapFocus : null}
-                    onFocusRequestHandled={
-                      panelStore.getState().consumeMapFocus
-                    }
-                    height="100%"
-                    showChrome={false}
-                    showFloatingActions={!rightPanelOpen}
-                    variant="view"
-                  />
-                  <MapSettingsControl />
-                </div>
+                <SoftwareMapTopologyUnavailable
+                  repoSoftwareMap={repoSoftwareMap}
+                  baseSoftwareMap={baseSoftwareMap}
+                  baseRef={review.resolvedBaseRef ?? undefined}
+                  headRef={review.resolvedHeadRef ?? undefined}
+                />
+                <SoftwareMap
+                  model={activeSoftwareMap ?? undefined}
+                  pinnedData={
+                    activeSoftwareMapSource
+                      ? session.softwareMapData?.(activeSoftwareMapSource)
+                      : undefined
+                  }
+                  focusRequest={mapFocus?.pending ? mapFocus : null}
+                  onFocusRequestHandled={panelStore.getState().consumeMapFocus}
+                  height="100%"
+                  showChrome={false}
+                  showFloatingActions={!rightPanelOpen}
+                  variant="view"
+                />
+                <MapSettingsControl />
               </div>
-            )}
-            {activeView === "commits" && (
-              <ReviewCommitsView
-                commits={commits}
-                range={range}
-                onOpenDiff={(commit, via, file) => {
-                  captureUiEvent(session, "commit_diff_opened", { via });
-                  panelStore.getState().openCommitDiff({ commit, file });
-                }}
-              />
-            )}
-            <div
-              ref={diffHostRef}
-              aria-hidden={diffPreloaded}
-              {...stylex.props(
-                shellStyles.diffView,
-                diffPreloaded && shellStyles.diffViewPreloaded,
-              )}
-              style={frozenDiffStyle}
-            >
-              {diffOpened && <ReviewDiffView />}
             </div>
-            {activeView === "diff" && diffScope !== null && (
-              <div
-                {...withClass(
-                  "review-diff-view--scoped",
-                  shellStyles.diffView,
-                  shellStyles.diffViewScoped,
-                  scopedDiffMarker,
-                )}
-              >
-                <CommitDiffScopeBar
-                  commit={diffScope.commit}
-                  onBack={() => showView("commits")}
-                />
+          )}
+          <div
+            ref={diffHostRef}
+            aria-hidden={diffPreloaded}
+            {...stylex.props(
+              shellStyles.diffView,
+              diffPreloaded && shellStyles.diffViewPreloaded,
+            )}
+            style={frozenDiffStyle}
+          >
+            {diffOpened && (
+              <DocumentContentsContext.Provider value={documentContents}>
                 <ReviewDiffView
-                  scope={{ commit: diffScope.commit.commit }}
-                  revealFile={diffScope.file}
-                  restoreFile={diffScope.restoreFile}
+                  scope={diffScope ? { commit: diffScope.commit } : undefined}
+                  revealFile={diffScope?.file}
+                  restoreFile={diffScope?.restoreFile}
+                  picker={
+                    // Desktop's sidebar has its own, over its Lenses.
+                    sidebarLeads ? undefined : (
+                      <CommitPicker
+                        commits={commits}
+                        leading={
+                          <StackPill
+                            stack={stack}
+                            size="bar"
+                            onOpen={(layer, active) =>
+                              void openStackLayer(layer, active)
+                            }
+                          />
+                        }
+                        selected={diffScope?.commit}
+                        onPick={(sha) =>
+                          panelStore
+                            .getState()
+                            .pickCommit(sha ? { commit: sha } : null)
+                        }
+                      />
+                    )
+                  }
                 />
-              </div>
+              </DocumentContentsContext.Provider>
             )}
-            {activeView === "trace" && (
-              <ReviewTraceView
-                selection={traceSelection}
-                onSelect={panelStore.getState().selectTrace}
-                storage={traceStorage}
-                onSelectStorage={panelStore.getState().selectTraceStorage}
-                storedList={storedList}
-              />
-            )}
-          </section>
-        </TutorialExperienceProvider>
+          </div>
+          {activeView === "trace" && (
+            <ReviewTraceView
+              selection={traceSelection}
+              onSelect={panelStore.getState().selectTrace}
+              storage={traceStorage}
+              onSelectStorage={panelStore.getState().selectTraceStorage}
+              storedList={storedList}
+            />
+          )}
+        </section>
+        {activeView === "review" && (
+          <OverlayScrollbar scroller={scrollRegion} />
+        )}
+        {activeView === "review" && (
+          <ContentsRail
+            entries={tocEntries}
+            articleRef={articleRef}
+            scrollRegionRef={scrollRegionRef}
+            boardTop={shellRef}
+            onHiddenChange={panelStore.getState().setContentsRailHidden}
+          />
+        )}
       </main>
       {rightPanelOpen && (
         <div
           {...stylex.props(
+            buttonStyles.reset,
             shellStyles.resizer,
             shellStyles.peekResizer,
             shellStyles.resizerGrabPanel,
@@ -859,104 +783,6 @@ function ReviewLayoutContent({
         <ReviewPanelHost />
       </div>
     </div>
-  );
-}
-
-function CommitDiffScopeBar({
-  commit,
-  onBack,
-}: {
-  commit: ReviewCommitSummary;
-  onBack: () => void;
-}) {
-  return (
-    <div {...stylex.props(scopeBarStyles.bar)}>
-      <button
-        type="button"
-        {...stylex.props(scopeBarStyles.back)}
-        onClick={onBack}
-      >
-        <span aria-hidden="true">←</span> Commits
-      </button>
-      <code {...stylex.props(scopeBarStyles.sha)} title={commit.commit}>
-        {commit.commit.slice(0, 8)}
-      </code>
-      <span {...stylex.props(scopeBarStyles.subject)} title={commit.subject}>
-        {commit.subject}
-      </span>
-    </div>
-  );
-}
-
-const scopeBarStyles = stylex.create({
-  bar: {
-    display: "flex",
-    height: "30px",
-    flex: "0 0 30px",
-    alignItems: "center",
-    gap: "12px",
-    padding: "0 12px",
-    borderBottomWidth: "1px",
-    borderBottomStyle: "solid",
-    borderBottomColor: tokens.ruleSoft,
-    backgroundColor: tokens.surface,
-  },
-  back: {
-    height: "20px",
-    flex: "0 0 auto",
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: "transparent",
-    color: tokens.accent,
-    fontSize: fontSize.micro,
-  },
-  sha: {
-    color: tokens.inkMuted,
-    font: `${fontSize.micro} ${tokens.fontMono}`,
-  },
-  subject: {
-    minWidth: 0,
-    overflow: "hidden",
-    color: tokens.ink,
-    fontSize: fontSize.small,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-  },
-});
-
-/**
- * Reports where the baton sits after the reader acts. It renders nothing while
- * the review is simply waiting: the corner action already says what to do, and
- * a standing "awaiting your review" chip was noise on every review.
- */
-function ReviewBatonChip({
-  outcome,
-}: {
-  outcome: ReviewSubmissionOutcome | null;
-}): ReactElement | null {
-  const tooltip = useTooltip<HTMLSpanElement>("Deleted");
-
-  if (!outcome) return null;
-
-  return (
-    <span
-      ref={tooltip}
-      {...stylex.props(shellStyles.topbarItem, batonStyles.chip)}
-    >
-      <svg
-        {...stylex.props(batonStyles.glyph)}
-        viewBox="0 0 16 16"
-        width="12"
-        height="12"
-        aria-hidden="true"
-      >
-        <rect x="1.6" y="2.6" width="12.8" height="3.4" rx="1" />
-        <path d="M3 6v6.2a1.2 1.2 0 0 0 1.2 1.2h7.6A1.2 1.2 0 0 0 13 12.2V6" />
-      </svg>
-      <span>deleted</span>
-    </span>
   );
 }
 
@@ -975,43 +801,37 @@ function MapSettingsControl(): ReactElement {
     setNodeTint,
   } = useReviewDebugSettings();
 
-  const controlRef = useRef<HTMLDivElement | null>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
   const [isOpen, setIsOpen] = useState(false);
 
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const closeOnOutsidePointerDown = (event: PointerEvent) => {
-      const target = event.target;
-
-      if (target instanceof Node && controlRef.current?.contains(target))
-        return;
-      setIsOpen(false);
-    };
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setIsOpen(false);
-    };
-
-    document.addEventListener("pointerdown", closeOnOutsidePointerDown, true);
-    document.addEventListener("keydown", closeOnEscape);
-
-    return () => {
-      document.removeEventListener(
-        "pointerdown",
-        closeOnOutsidePointerDown,
-        true,
-      );
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [isOpen]);
-
   return (
-    <div ref={controlRef} {...stylex.props(mapSettingsStyles.control)}>
+    <div {...stylex.props(mapSettingsStyles.control)}>
+      <IconButton
+        ref={trigger}
+        size="large"
+        xstyle={[
+          mapSettingsStyles.trigger,
+          isOpen && mapSettingsStyles.triggerActive,
+        ]}
+        aria-label="Map settings"
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        <SlidersIcon />
+      </IconButton>
       {isOpen && (
-        <section
-          {...stylex.props(surfaceStyles.popover, mapSettingsStyles.popover)}
+        <Popover
+          anchor={trigger}
+          onDismiss={() => setIsOpen(false)}
+          role="dialog"
           aria-label="Map settings"
+          xstyle={[
+            menuStyles.popover,
+            menuStyles.above,
+            menuStyles.end,
+            mapSettingsStyles.popover,
+          ]}
         >
           <DebugSwitch
             label="Show modified nodes only"
@@ -1023,11 +843,7 @@ function MapSettingsControl(): ReactElement {
             checked={showRemovedNodes}
             onChange={setShowRemovedNodes}
           />
-          <div
-            {...stylex.props(mapSettingsStyles.tints)}
-            role="group"
-            aria-label="Node tint"
-          >
+          <div {...stylex.props(mapSettingsStyles.tints)}>
             <span
               {...stylex.props(
                 textStyles.eyebrow,
@@ -1036,35 +852,15 @@ function MapSettingsControl(): ReactElement {
             >
               Map node tint
             </span>
-            {(["none", "slate", "mineral"] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                {...stylex.props(
-                  mapSettingsStyles.tint,
-                  nodeTint === option && mapSettingsStyles.tintActive,
-                )}
-                aria-pressed={nodeTint === option}
-                onClick={() => setNodeTint(option)}
-              >
-                {nodeTintLabel(option)}
-              </button>
-            ))}
+            <SegmentedControl
+              label="Node tint"
+              value={nodeTint}
+              options={labeledOptions(NODE_TINT_LABELS)}
+              onChange={setNodeTint}
+            />
           </div>
-        </section>
+        </Popover>
       )}
-      <IconButton
-        size="large"
-        xstyle={[
-          mapSettingsStyles.trigger,
-          isOpen && mapSettingsStyles.triggerActive,
-        ]}
-        aria-label="Map settings"
-        aria-expanded={isOpen}
-        onClick={() => setIsOpen((open) => !open)}
-      >
-        <SettingsSlidersIcon />
-      </IconButton>
     </div>
   );
 }
@@ -1081,28 +877,19 @@ function DebugSwitch({
   return (
     <label {...stylex.props(mapSettingsStyles.switch)}>
       <span>{label}</span>
-      <input
-        type="checkbox"
-        {...stylex.props(mapSettingsStyles.switchInput)}
+      <Switch
         checked={checked}
         onChange={(event) => onChange(event.currentTarget.checked)}
-      />
-      <i
-        {...stylex.props(
-          mapSettingsStyles.switchTrack,
-          checked && mapSettingsStyles.switchTrackOn,
-        )}
-        aria-hidden="true"
       />
     </label>
   );
 }
 
-function nodeTintLabel(tint: ReviewNodeTint) {
-  if (tint === "none") return "None";
-
-  return tint === "slate" ? "Slate" : "Mineral";
-}
+const NODE_TINT_LABELS: Record<ReviewNodeTint, string> = {
+  none: "None",
+  slate: "Slate",
+  mineral: "Mineral",
+};
 
 export function applySoftwareMapTopologyStatuses(
   model: NormalizedSoftwareModel | undefined,
@@ -1125,41 +912,14 @@ export function applySoftwareMapTopologyStatuses(
   };
 }
 
-const batonStyles = stylex.create({
-  chip: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: "7px",
-    color: tokens.diffRemoved,
-    fontFamily: tokens.chromeFont,
-    fontSize: tokens.chromeFontSizeSmall,
-    fontWeight: tokens.chromeFontWeightStrong,
-    lineHeight: 1,
-    letterSpacing: tokens.chromeTracking,
-    textTransform: "uppercase",
-    whiteSpace: "nowrap",
-  },
-  glyph: {
-    fill: "none",
-    stroke: "currentColor",
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-    strokeWidth: "1.4",
-  },
-});
-
 // Map settings float over the map canvas instead of sitting behind a topbar
 // gear, so map-only controls stay with the map.
 const mapSettingsStyles = stylex.create({
   control: {
     position: "absolute",
-    right: "16px",
-    bottom: "16px",
+    right: space.s16,
+    bottom: space.s16,
     zIndex: 3,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-end",
-    gap: "8px",
   },
   // A floating corner control, so it keeps a border and lifts off the map.
   trigger: {
@@ -1175,98 +935,32 @@ const mapSettingsStyles = stylex.create({
     color: tokens.ink,
   },
   popover: {
-    display: "flex",
+    gap: 0,
     width: "268px",
-    flexDirection: "column",
+    padding: 0,
   },
   switch: {
-    position: "relative",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: "14px",
+    gap: space.s14,
     minHeight: "50px",
-    padding: "10px 13px",
+    padding: `${space.s10} ${space.s12}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
     color: tokens.ink,
     fontSize: fontSize.ui,
   },
-  switchInput: {
-    position: "absolute",
-    opacity: 0,
-    pointerEvents: "none",
-  },
-  switchTrack: {
-    position: "relative",
-    flex: "0 0 auto",
-    width: "38px",
-    height: "22px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.ruleSoft,
-    borderRadius: radius.pill,
-    backgroundColor: tokens.controlBg,
-    "::before": {
-      position: "absolute",
-      top: "3px",
-      left: "3px",
-      width: "14px",
-      height: "14px",
-      borderRadius: radius.pill,
-      backgroundColor: tokens.inkFaint,
-      transition: `transform ${motion.fast} ${motion.ease}, background ${motion.fast} ${motion.ease}`,
-      content: "''",
-    },
-  },
-  switchTrackOn: {
-    borderColor: tokens.accent,
-    backgroundColor: tokens.accentSoft,
-    "::before": {
-      backgroundColor: tokens.accent,
-      transform: "translateX(16px)",
-    },
-  },
   tints: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr 1fr",
-    gap: "6px",
-    padding: "10px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: space.s6,
+    padding: space.s10,
   },
   groupLabel: {
-    gridColumn: "1 / -1",
-    fontFamily: tokens.fontMono,
-  },
-  tint: {
-    minHeight: "32px",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: {
-      default: tokens.rule,
-      ":hover": tokens.accent,
-      ":focus-visible": tokens.accent,
-    },
-    borderRadius: radius.control,
-    backgroundColor: {
-      default: tokens.tray,
-      ":hover": tokens.accentSoft,
-      ":focus-visible": tokens.accentSoft,
-    },
-    color: {
-      default: tokens.inkMuted,
-      ":hover": tokens.accent,
-      ":focus-visible": tokens.accent,
-    },
-    fontSize: fontSize.body,
-    fontWeight: fontWeight.bold,
-    outline: { default: null, ":hover": "none", ":focus-visible": "none" },
-  },
-  tintActive: {
-    borderColor: tokens.accent,
-    backgroundColor: tokens.accentSoft,
-    color: tokens.accent,
-    outline: "none",
+    fontFamily: tokens.chromeFont,
   },
 });
 
@@ -1283,3 +977,20 @@ const mapViewStyles = stylex.create({
     boxShadow: "none",
   },
 });
+
+/** Tries each frame until `scroll` succeeds, as once the document shows the
+ * block. Gives up after 5s, since the block may not exist in this version. */
+function revealWhenDrawn(scroll: () => boolean): () => void {
+  const deadline = Date.now() + 5000;
+  let frame = 0;
+
+  const attempt = () => {
+    if (scroll()) return;
+
+    if (Date.now() < deadline) frame = requestAnimationFrame(attempt);
+  };
+
+  attempt();
+
+  return () => cancelAnimationFrame(frame);
+}

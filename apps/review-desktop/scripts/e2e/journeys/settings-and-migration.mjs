@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { openHome, openSettings } from "../harness.mjs";
+import { openSettings } from "../harness.mjs";
 import { readUserSettings } from "../storage.mjs";
 
 export const name = "settings-and-migration";
@@ -16,30 +16,18 @@ const LEGACY_UUID = "11111111-1111-4111-8111-111111111111";
 
 const LEGACY_RECORD = { schemaVersion: 1, uuid: LEGACY_UUID };
 
-/** How a theme choice lands in workbench settings; "system" is left out because it stores an auto-detect flag instead. */
-const THEME_SETTINGS = {
-  dark: {
-    "window.autoDetectColorScheme": false,
-    "workbench.colorTheme": "Review Dark",
-  },
-  light: {
-    "window.autoDetectColorScheme": false,
-    "workbench.colorTheme": "Review Light",
-  },
-};
+/** How a theme pick lands in workbench settings. */
+const themeSettings = (theme) => ({
+  "window.autoDetectColorScheme": false,
+  "workbench.colorTheme": theme,
+});
 
 /** The telemetry checkbox, the only one in the Privacy section. */
 const telemetryToggle = (settings) =>
   settings.getByRole("region", { name: "Privacy" }).getByRole("checkbox");
 
-/** The theme radio group's checked choice, lower-cased to match THEME_SETTINGS. */
-const themeChoice = async (settings) =>
-  (
-    await settings
-      .getByRole("radiogroup", { name: "Theme" })
-      .locator('[aria-checked="true"]')
-      .innerText()
-  ).toLowerCase();
+/** The theme select: its value is the `workbench.colorTheme` id. */
+const themeSelect = (settings) => settings.getByRole("combobox", { name: "Theme" });
 
 /** Writes the unreadable record into `<home>/reviews/<uuid>/review.json`. */
 async function seedLegacyReview(home) {
@@ -79,20 +67,20 @@ export async function run(ctx) {
     `review.telemetry.enabled to be ${!before} in the workbench settings`,
   );
 
-  const theme = (await themeChoice(settings)) === "light" ? "dark" : "light";
+  const theme =
+    (await themeSelect(settings).inputValue()) === "Review Light"
+      ? "Review Dark"
+      : "Review Light";
 
-  await settings
-    .getByRole("radiogroup", { name: "Theme" })
-    .getByRole("radio", { name: theme === "light" ? "Light" : "Dark" })
-    .click();
+  await themeSelect(settings).selectOption(theme);
   await until(
-    async () => (await themeChoice(settings)) === theme,
+    async () => (await themeSelect(settings).inputValue()) === theme,
     `the theme control to read ${theme}`,
   );
   await until(() => {
     const stored = readUserSettings(userData);
 
-    return Object.entries(THEME_SETTINGS[theme]).every(
+    return Object.entries(themeSettings(theme)).every(
       ([key, value]) => stored[key] === value,
     );
   }, `the ${theme} theme in the workbench settings`);
@@ -106,7 +94,7 @@ export async function run(ctx) {
     "the telemetry toggle did not keep its value across the restart",
   );
   assert.equal(
-    await themeChoice(settings),
+    await themeSelect(settings).inputValue(),
     theme,
     "the theme control did not keep its value across the restart",
   );
@@ -123,9 +111,9 @@ export async function run(ctx) {
   );
   assert.deepEqual(
     Object.fromEntries(
-      Object.keys(THEME_SETTINGS[theme]).map((key) => [key, restored[key]]),
+      Object.keys(themeSettings(theme)).map((key) => [key, restored[key]]),
     ),
-    THEME_SETTINGS[theme],
+    themeSettings(theme),
     `the ${theme} theme settings did not survive the restart`,
   );
   ctx.check(
@@ -133,9 +121,8 @@ export async function run(ctx) {
   );
 
   const legacyDir = path.join(ctx.home, "reviews", LEGACY_UUID);
-  await openHome(ctx);
-  const home = ctx.page.locator("main.review-home");
-  await home.getByText("Create your first session").waitFor({ timeout: 60000 });
+  await ctx.page.locator(".review-titlebar-home").first().click();
+  await ctx.page.locator("main.review-onboarding").waitFor({ timeout: 60000 });
   const summaries = await ctx.apiOk("/reviews-api");
   assert.ok(!summaries.some((summary) => summary.reviewId === LEGACY_UUID));
   assert.deepEqual(await storedRecord(legacyDir), LEGACY_RECORD);

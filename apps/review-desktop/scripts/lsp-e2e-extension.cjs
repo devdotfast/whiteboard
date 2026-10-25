@@ -141,7 +141,7 @@ exports.activate = function (context) {
           ),
           extensions: vscode.extensions.all
             .filter((extension) =>
-              /typescript-language|astral-sh.ty|ms-python.python/.test(
+              /typescript-language|astral-sh.ty/.test(
                 extension.id,
               ),
             )

@@ -1,5 +1,14 @@
 import { courierMotion } from "@canvas/courier-motion.stylex";
-import { fontSize, fontWeight, motion, radius } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  motion,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type { ActivityPresence } from "@review/review-api/activity";
 import * as stylex from "@stylexjs/stylex";
 import { useContext, useState } from "react";
@@ -20,7 +29,6 @@ import { topbarTabsMarker } from "./markers.stylex";
 import { useReviewRoots } from "./review-root-context";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
-import { useTooltip } from "./use-tooltip";
 
 /**
  * The top-bar badges: one pill per working agent, in its color, with its
@@ -50,7 +58,11 @@ export function AuthoringActivityBadge({
   if (activity === "unknown")
     return (
       <span
-        {...withClass("host-authoring-activity", styles.badge)}
+        {...withClass(
+          "host-authoring-activity",
+          buttonStyles.reset,
+          styles.badge,
+        )}
         role="status"
         aria-live="polite"
         ref={tooltip}
@@ -124,7 +136,9 @@ function AgentPill({
       type="button"
       {...withClass(
         "host-authoring-activity",
+        buttonStyles.reset,
         styles.badge,
+        focusStyles.ring,
         styles.badgeActive,
         agentColor(presence.slot),
       )}
@@ -155,12 +169,9 @@ function AgentPill({
 export function ReviewSurfaceLabel({
   hasContent,
   active,
-  label = "Whiteboard",
 }: {
   hasContent: boolean;
   active: boolean;
-  /** The tab's word; the scratchpad names itself. */
-  label?: string;
 }) {
   const activity = useContext(AuthoringActivityContext);
   const version = useContext(DisplayedReviewVersionContext) ?? null;
@@ -189,13 +200,11 @@ export function ReviewSurfaceLabel({
       )}
       data-working={live || undefined}
     >
-      {label}
+      Whiteboard
       {unread && <span {...stylex.props(styles.unread)} aria-hidden="true" />}
     </span>
   );
 }
-
-const REDUCED = "@media (prefers-reduced-motion: reduce)";
 
 // The surface tab's word is styled only in the top bar's tabs.
 const inTopbarTabs = () => stylex.when.ancestor(":is(*)", topbarTabsMarker);
@@ -222,17 +231,13 @@ const styles = stylex.create({
     minWidth: 0,
     maxWidth: "420px",
     alignItems: "center",
-    gap: "7px",
+    gap: space.s8,
     height: tokens.chromeControlHeight,
-    marginInline: "4px",
-    padding: "0 10px 0 6px",
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
+    marginInline: space.s4,
+    padding: `0 ${space.s10} 0 ${space.s6}`,
     borderRadius: radius.pill,
-    backgroundColor: tokens.transparent,
     color: tokens.inkMuted,
-    font: `${fontWeight.medium} ${fontSize.small} ${tokens.fontMono}`,
+    font: `${fontWeight.medium} ${fontSize.small} ${tokens.chromeFont}`,
     whiteSpace: "nowrap",
   },
   // While an agent works the badge is a button that locates the courier.
@@ -244,8 +249,6 @@ const styles = stylex.create({
     },
     color: tokens.accent,
     fontWeight: fontWeight.semibold,
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: { default: null, ":focus-visible": "1px" },
   },
   // A long update ends in an ellipsis inside the pill; the tooltip has it all.
   text: {
@@ -265,16 +268,19 @@ const styles = stylex.create({
   courierActive: {
     color: tokens.accent,
     transform: "none",
-    animationName: { default: courierArrive, [REDUCED]: "none" },
+    animationName: {
+      default: courierArrive,
+      [stylex.env.reducedMotion]: "none",
+    },
     animationDuration: {
       default: courierMotion.arrive,
-      [REDUCED]: motion.instant,
+      [stylex.env.reducedMotion]: motion.instant,
     },
     animationTimingFunction: {
-      default: "cubic-bezier(0.2, 0.7, 0.2, 1)",
-      [REDUCED]: "ease",
+      default: motion.enter,
+      [stylex.env.reducedMotion]: "ease",
     },
-    animationFillMode: { default: "both", [REDUCED]: "none" },
+    animationFillMode: { default: "both", [stylex.env.reducedMotion]: "none" },
   },
   // Neither the ink nor the unread dot touches the tab's layout: the dot is
   // out of flow and only color moves.
@@ -285,38 +291,56 @@ const styles = stylex.create({
   wordWorking: {
     backgroundImage: {
       default: null,
-      [inTopbarTabs()]: { default: mutedInk, [REDUCED]: "none" },
+      [inTopbarTabs()]: {
+        default: mutedInk,
+        [stylex.env.reducedMotion]: "none",
+      },
     },
     backgroundSize: {
       default: null,
-      [inTopbarTabs()]: { default: "240% 100%", [REDUCED]: "auto" },
+      [inTopbarTabs()]: {
+        default: "240% 100%",
+        [stylex.env.reducedMotion]: "auto",
+      },
     },
     backgroundClip: {
       default: null,
-      [inTopbarTabs()]: { default: "text", [REDUCED]: "border-box" },
+      [inTopbarTabs()]: {
+        default: "text",
+        [stylex.env.reducedMotion]: "border-box",
+      },
     },
     color: {
       default: null,
       [inTopbarTabs()]: {
         default: tokens.transparent,
-        [REDUCED]: tokens.inkMuted,
+        [stylex.env.reducedMotion]: tokens.inkMuted,
       },
     },
     animationName: {
       default: null,
-      [inTopbarTabs()]: { default: shimmer, [REDUCED]: "none" },
+      [inTopbarTabs()]: {
+        default: shimmer,
+        [stylex.env.reducedMotion]: "none",
+      },
     },
     animationDuration: {
       default: null,
-      [inTopbarTabs()]: { default: motion.pulse, [REDUCED]: motion.instant },
+      [inTopbarTabs()]: {
+        default: motion.pulse,
+        [stylex.env.reducedMotion]: motion.instant,
+      },
     },
     animationTimingFunction: {
       default: null,
-      [inTopbarTabs()]: { default: "linear", [REDUCED]: "ease" },
+      [inTopbarTabs()]: {
+        default: "linear",
+        [stylex.env.reducedMotion]: "ease",
+      },
     },
     animationIterationCount: {
       default: null,
-      [inTopbarTabs()]: { default: "infinite", [REDUCED]: 1 },
+      [inTopbarTabs()]: { default: "infinite", [stylex.env.reducedMotion]: 1 },
     },
   },
   // The chosen tab inks darker, reduced motion included.
@@ -326,7 +350,7 @@ const styles = stylex.create({
   unread: {
     position: { default: null, [inTopbarTabs()]: "absolute" },
     top: { default: null, [inTopbarTabs()]: "1px" },
-    right: { default: null, [inTopbarTabs()]: "-7px" },
+    right: { default: null, [inTopbarTabs()]: `-${space.s8}` },
     width: { default: null, [inTopbarTabs()]: "4px" },
     height: { default: null, [inTopbarTabs()]: "4px" },
     borderRadius: { default: null, [inTopbarTabs()]: radius.round },

@@ -9,10 +9,10 @@ import { userEvent } from "vitest/browser";
 
 import { BlockErrorBoundary } from "./blocks";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
-import { settled } from "./fixture-review-bridge";
 import { FlowGraph } from "./flow-graph";
 import { ReviewSessionProvider } from "./host/review-session";
 import { testReviewSession } from "./review-session-test-utils";
+import { settled } from "./whiteboard-fixture";
 
 import "./styles.css";
 
@@ -343,3 +343,115 @@ describe("zooming a flow by hand", () => {
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });
+
+it.each(["down", "right"] as const)(
+  "keeps wrapped labels readable and selectable in a %s flow",
+  async (direction) => {
+    const container = document.createElement("div");
+    container.style.width = "700px";
+    document.body.append(container);
+    const root = createRoot(container);
+    const onSelect = vi.fn<(node: FlowDiagramBlock["nodes"][number]) => void>();
+
+    const labels = [
+      "Request",
+      "Resolve the requested branch and pull request identity",
+      "Preserve the source revision while discovering all dependent pull requests in the stack",
+    ];
+
+    const block = flowDiagramSchema.parse({
+      type: "flow_diagram",
+      title: "Identity flow",
+      direction,
+      nodes: labels.map((label, index) => ({ key: String(index), label })),
+      edges: [
+        { from: "0", to: "1" },
+        { from: "1", to: "2" },
+      ],
+    });
+
+    try {
+      await act(async () =>
+        root.render(
+          <ReviewSessionProvider session={testReviewSession()}>
+            <ReviewDebugSettingsProvider>
+              <FlowGraph block={block} onSelect={onSelect} />
+            </ReviewDebugSettingsProvider>
+          </ReviewSessionProvider>,
+        ),
+      );
+      expect(
+        await settled(
+          () => container.querySelectorAll(".lens-flow-node").length === 3,
+        ),
+      ).toBe(true);
+
+      const nodes = [
+        ...container.querySelectorAll<HTMLElement>(".lens-flow-node"),
+      ];
+
+      expect(nodes[1]!.textContent).toContain(labels[1]);
+      expect(nodes[2]!.textContent).toContain(labels[2]);
+      const boxes = nodes.map((node) => node.getBoundingClientRect());
+      expect(boxes[1]!.height).toBeGreaterThan(boxes[0]!.height);
+      expect(boxes[2]!.height).toBeGreaterThan(boxes[0]!.height);
+
+      for (let index = 1; index < boxes.length; index++) {
+        const previous = boxes[index - 1]!;
+        const current = boxes[index]!;
+        expect(
+          direction === "down"
+            ? current.top > previous.bottom
+            : current.left > previous.right,
+        ).toBe(true);
+      }
+
+      nodes[1]!.focus();
+      await userEvent.keyboard("{Enter}");
+      expect(onSelect).toHaveBeenCalledWith(
+        expect.objectContaining({ label: labels[1] }),
+      );
+
+      container.style.width = "330px";
+      await act(async () =>
+        root.render(
+          <ReviewSessionProvider session={testReviewSession()}>
+            <ReviewDebugSettingsProvider>
+              <FlowGraph
+                block={block}
+                interactive
+                selectedKey="1"
+                onSelect={onSelect}
+              />
+            </ReviewDebugSettingsProvider>
+          </ReviewSessionProvider>,
+        ),
+      );
+      expect(
+        await settled(() => {
+          const viewport = container.querySelector(".react-flow__viewport");
+
+          return (
+            viewport !== null &&
+            new DOMMatrixReadOnly(getComputedStyle(viewport).transform).a >=
+              0.75
+          );
+        }),
+      ).toBe(true);
+      expect(
+        await settled(() => {
+          const selectedBox = nodes[1]!.getBoundingClientRect();
+          const frameBox = container.getBoundingClientRect();
+
+          return (
+            selectedBox.left >= frameBox.left &&
+            selectedBox.right <= frameBox.right
+          );
+        }),
+      ).toBe(true);
+    } finally {
+      await act(async () => root.unmount());
+      container.remove();
+    }
+  },
+);

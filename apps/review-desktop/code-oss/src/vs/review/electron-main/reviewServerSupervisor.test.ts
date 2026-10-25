@@ -89,7 +89,8 @@ class FakeServerProcess implements IReviewServerProcess {
 	private readonly stdout = new Emitter<string>();
 	private readonly exit = new Emitter<{ readonly code: number; readonly signal: string }>();
 	readonly onStdout = this.stdout.event;
-	readonly onStderr = new Emitter<string>().event;
+	private readonly stderr = new Emitter<string>();
+	readonly onStderr = this.stderr.event;
 	readonly onExit = this.exit.event;
 	private readonly crashed = new Emitter<{ readonly code: number; readonly reason: string }>();
 	readonly onCrash = this.crashed.event;
@@ -101,14 +102,18 @@ class FakeServerProcess implements IReviewServerProcess {
 		this.env = configuration.env ?? {};
 		return true;
 	}
-	announceReady(): void {
+	announceReady(extra: Record<string, unknown> = {}): void {
 		this.stdout.fire(`${JSON.stringify({
 			event: 'ready',
 			version: REVIEW_DESKTOP_CONNECTION_VERSION,
 			url: 'http://127.0.0.1:4321',
 			token: this.env.DEV_FAST_REVIEW_SERVER_TOKEN,
 			instanceId: this.env.DEV_FAST_REVIEW_INSTANCE_ID,
+			...extra,
 		})}\n`);
+	}
+	fail(message: string): void {
+		this.stderr.fire(`${message}\n`);
 	}
 	crash(): void {
 		this.exit.fire({ code: 1, signal: 'SIGKILL' });
@@ -157,6 +162,70 @@ test('a restarted server keeps the launch\'s app session id, which the connectio
 	assert.equal(second.env.DEV_FAST_REVIEW_APP_SESSION_ID, first.env.DEV_FAST_REVIEW_APP_SESSION_ID);
 	assert.equal(second.env.DEV_FAST_REVIEW_CHANNEL, 'preview');
 });
+
+test('a restarted server keeps the launch\'s TLS cert, and the connection offers its https URL', async (t) => {
+	const processes: FakeServerProcess[] = [];
+	let restarted!: () => void;
+	const whenRestarted = new Promise<void>((resolve) => restarted = resolve);
+	const supervisor = new ReviewServerSupervisor({
+		appRoot: '/app',
+		appVersion: '0.0.34',
+		isBuilt: true,
+		channel: 'preview',
+		logInfo: () => { },
+		logError: () => { },
+		createProcess: () => {
+			const serverProcess = new FakeServerProcess();
+			processes.push(serverProcess);
+			if (processes.length === 2) queueMicrotask(restarted);
+			return serverProcess;
+		},
+	});
+	t.after(() => supervisor.dispose());
+
+	supervisor.start();
+	const [first] = processes;
+	first.announceReady({ tls: true });
+	const connection = await supervisor.whenConnected();
+	first.crash();
+	await whenRestarted;
+	const second = processes[1];
+
+	assert.equal(connection.url, 'http://127.0.0.1:4321');
+	assert.equal(connection.secureUrl, 'https://127.0.0.1:4321');
+	assert.equal(second.env.DEV_FAST_REVIEW_SERVER_TLS_CERT, first.env.DEV_FAST_REVIEW_SERVER_TLS_CERT);
+});
+
+for (const [failure, createLoopbackCert, tls] of [
+	['the cert cannot be created', () => { throw new Error('no EC'); }, true],
+	['the server did not announce TLS', undefined, false],
+] as const) {
+	test(`the connection offers no https URL when ${failure}`, async (t) => {
+		const processes: FakeServerProcess[] = [];
+		const supervisor = new ReviewServerSupervisor({
+			appRoot: '/app',
+			appVersion: '0.0.34',
+			isBuilt: true,
+			channel: 'preview',
+			logInfo: () => { },
+			logError: () => { },
+			createProcess: () => {
+				const serverProcess = new FakeServerProcess();
+				processes.push(serverProcess);
+				return serverProcess;
+			},
+			...(createLoopbackCert && { createLoopbackCert }),
+		});
+		t.after(() => supervisor.dispose());
+
+		supervisor.start();
+		processes[0].announceReady(tls ? { tls: true } : {});
+		const connection = await supervisor.whenConnected();
+
+		assert.equal(connection.url, 'http://127.0.0.1:4321');
+		assert.equal(connection.secureUrl, undefined);
+	});
+}
 
 test('reports a server process death to onServerTerminated, but not a deliberate stop', async (t) => {
 	const processes: FakeServerProcess[] = [];
@@ -286,6 +355,69 @@ test('a server that never announces readiness still times out', async (t) => {
 	t.mock.timers.tick(119_999);
 	assert.deepEqual(errors, []);
 	t.mock.timers.tick(1);
+	await rejected;
+});
+
+function crashLoop(processes: FakeServerProcess[], t: { mock: { timers: { tick(ms: number): void } } }): void {
+	for (const delay of [250, 1_000, 2_000]) {
+		processes.at(-1)!.crash();
+		t.mock.timers.tick(delay);
+	}
+	processes.at(-1)!.crash();
+}
+
+test('an upgrade failure seen before a server was ready is forgotten once one is', (t) => {
+	t.mock.timers.enable({ apis: ['setTimeout'] });
+	const processes: FakeServerProcess[] = [];
+	const errors: string[] = [];
+	const supervisor = new ReviewServerSupervisor({
+		appRoot: '/app',
+		appVersion: '0.0.34',
+		isBuilt: true,
+		channel: 'stable',
+		logInfo: () => { },
+		logError: (message) => errors.push(message),
+		createProcess: () => {
+			const serverProcess = new FakeServerProcess();
+			processes.push(serverProcess);
+			return serverProcess;
+		},
+	});
+	t.after(() => supervisor.dispose());
+
+	supervisor.start();
+	processes[0].fail('Could not upgrade the whiteboard store: the file is locked');
+	processes[0].crash();
+	t.mock.timers.tick(250);
+	processes[1].announceReady();
+	crashLoop(processes, t);
+
+	assert.match(errors.at(-1)!, /exhausted its restart budget/);
+});
+
+test('an upgrade failure is what a crash loop reports when no server becomes ready', async (t) => {
+	t.mock.timers.enable({ apis: ['setTimeout'] });
+	const processes: FakeServerProcess[] = [];
+	const supervisor = new ReviewServerSupervisor({
+		appRoot: '/app',
+		appVersion: '0.0.34',
+		isBuilt: true,
+		channel: 'stable',
+		logInfo: () => { },
+		logError: () => { },
+		createProcess: () => {
+			const serverProcess = new FakeServerProcess();
+			processes.push(serverProcess);
+			return serverProcess;
+		},
+	});
+	t.after(() => supervisor.dispose());
+	const rejected = assert.rejects(supervisor.whenConnected(), /the file is locked/);
+
+	supervisor.start();
+	processes[0].fail('Could not upgrade the whiteboard store: the file is locked');
+	crashLoop(processes, t);
+
 	await rejected;
 });
 

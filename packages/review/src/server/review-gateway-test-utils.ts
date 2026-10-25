@@ -158,10 +158,9 @@ export async function startFake(
     if (request.url?.startsWith("/reviews-api/watch")) {
       response.setHeader("content-type", "application/x-ndjson");
 
-      for (const mode of ["structural", "textual"])
-        response.write(
-          `${JSON.stringify({ kind: "list", mode, reviews: (options.reviewIds ?? []).map((reviewId) => summary(reviewId, reviewId)) })}\n`,
-        );
+      response.write(
+        `${JSON.stringify({ kind: "list", mode: "structural", reviews: (options.reviewIds ?? []).map((reviewId) => summary(reviewId, reviewId)) })}\n`,
+      );
 
       return;
     }
@@ -210,23 +209,17 @@ export async function startGateway(
     home?: string;
     relay?: ReviewDesktopVerbRelay;
     heartbeatMs?: number;
+    firstByteMs?: number;
     slowRouteMs?: number;
+    remoteEvent?(request: Request, reviewId: string): Promise<void>;
   } = {},
 ) {
   const home = options.home ?? path.join(root, "local");
   const local = await openReviewProfile(home, { manageWorkspaces: true });
-  await local.store.ensureScratchpad();
 
   const desktop = new Hono().route(
     "/reviews-api",
-    createReviewApi(
-      local.store,
-      local.data,
-      undefined,
-      undefined,
-      undefined,
-      () => true,
-    ),
+    createReviewApi(local.store, local.data, undefined, undefined, undefined),
   );
 
   const logged: string[] = [];
@@ -241,9 +234,13 @@ export async function startGateway(
     ...(options.heartbeatMs !== undefined && {
       heartbeatMs: options.heartbeatMs,
     }),
+    ...(options.firstByteMs !== undefined && {
+      firstByteMs: options.firstByteMs,
+    }),
     ...(options.slowRouteMs !== undefined && {
       slowRouteMs: options.slowRouteMs,
     }),
+    ...(options.remoteEvent && { remoteEvent: options.remoteEvent }),
     log: (message) => logged.push(message),
   });
 

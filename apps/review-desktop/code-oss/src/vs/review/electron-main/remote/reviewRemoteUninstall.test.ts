@@ -14,6 +14,7 @@ import type { SpawnSsh } from "./reviewRemoteHost.js";
 import { REVIEW_REMOTE_INSTALL_MARKER } from "./reviewRemoteInstallScript.js";
 import { uninstallRemote } from "./reviewRemoteUninstall.js";
 import { reviewSshSession } from "./reviewSshCommand.js";
+import { INSTALL_SCRIPT } from "./test/installScript.js";
 
 const localRemote =
 	(home: string): SpawnSsh =>
@@ -28,9 +29,9 @@ async function fixture(t: test.TestContext) {
 		const dir = join(home, ".dev/whiteboard-remote/versions", name);
 		await mkdir(dir, { recursive: true });
 		await writeFile(join(dir, "cli.js"), cli);
-		await writeFile(join(dir, REVIEW_REMOTE_INSTALL_MARKER), JSON.stringify({ version: name, node: process.execPath, cli: join(dir, "cli.js") }));
+		await writeFile(join(dir, REVIEW_REMOTE_INSTALL_MARKER), JSON.stringify({ version: name, sha256: "0".repeat(64), node: process.execPath, cli: join(dir, "cli.js") }));
 	};
-	const uninstall = () => uninstallRemote({ session: reviewSshSession("devbox", tmpdir(), "test"), spawn: localRemote(home), env: {} });
+	const uninstall = () => uninstallRemote({ session: reviewSshSession("devbox", tmpdir(), "test"), spawn: localRemote(home), env: {}, script: INSTALL_SCRIPT });
 	return { home, ran, version, uninstall };
 }
 

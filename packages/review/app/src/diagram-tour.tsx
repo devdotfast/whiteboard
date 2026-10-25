@@ -1,3 +1,4 @@
+import { buttonStyles } from "@canvas/ui/button";
 import * as stylex from "@stylexjs/stylex";
 import type { CSSProperties, ReactElement, ReactNode } from "react";
 import { useEffect, useRef } from "react";
@@ -50,11 +51,11 @@ export function DiagramTourOverlay({
   const paneResize = useRightPanelResize({
     stateKey: "diagram-tour-pane-width",
     defaultWidth: 594,
-    minWidth: 360,
+    minWidth: PANE_MIN,
     maxWidth: 760,
     maxContainerFraction: 0.5,
-    minMainWidth: 480,
-    separatorWidth: 10,
+    minMainWidth: STAGE_MIN,
+    separatorWidth: SEPARATOR,
     label: "Resize tour pane",
     containerRef: overlayRef,
   });
@@ -71,6 +72,7 @@ export function DiagramTourOverlay({
       ref={overlayRef}
       {...withClass(
         `diagram-tour-overlay review-app--theme-${theme}`,
+        themeStyles.vars,
         theme === "light" && themeStyles.light,
         styles.overlay,
         flow && styles.flowOverlay,
@@ -80,18 +82,25 @@ export function DiagramTourOverlay({
       aria-label={`${tour.title ?? "Guided"} tour`}
       style={overlayStyle}
     >
-      <div {...stylex.props(styles.stage, flow && styles.flowStage)}>
+      <div
+        {...stylex.props(
+          styles.stage,
+          flow && styles.flowStage,
+          shellStyles.clearsWindowControls,
+        )}
+      >
         {children}
       </div>
       <div
         {...stylex.props(
+          buttonStyles.reset,
           shellStyles.resizer,
           shellStyles.resizerGrabPanel,
           styles.resizer,
         )}
         {...paneResize.separatorProps}
       />
-      <div {...stylex.props(styles.panel)}>
+      <div {...stylex.props(styles.panel, !flow && styles.panelAlone)}>
         <GuidedTourPanel
           tour={tour}
           activeAnchor={activeAnchor}
@@ -131,21 +140,27 @@ export function useDiagramTourShell(open: boolean, onClose: () => void) {
   return { portalTarget };
 }
 
-// A terminal split can leave the canvas too narrow for both tour columns: the
-// diagram collapses before the tour panel becomes unreadable.
-const narrow = "@container review-canvas (max-width: 1080px)";
+// The tour panel gives way first, down to a readable width, while the stage
+// keeps at least its minimum (a wide diagram scrolls inside it). Below the
+// two minimums side by side, the stage collapses and the panel fills the
+// canvas.
+const STAGE_MIN = 280;
 
-// Portals inside .review-canvas-root but outside .review-app, where
-// --review-debug-layer lives, hence the literal fallback.
+const PANE_MIN = 420;
+
+const SEPARATOR = 10;
+
+const narrow = `@container review-canvas (max-width: ${STAGE_MIN + SEPARATOR + PANE_MIN - 1}px)`;
+
 const styles = stylex.create({
   overlay: {
     position: "fixed",
     inset: 0,
-    zIndex: "var(--review-debug-layer, 2147483000)",
+    zIndex: tokens.reviewDebugLayer,
     boxSizing: "border-box",
     display: "grid",
     gridTemplateColumns: {
-      default: "minmax(0, 1fr) 10px var(--diagram-tour-pane-width, 424px)",
+      default: `minmax(max(${STAGE_MIN}px, 38%), 1fr) ${SEPARATOR}px minmax(${PANE_MIN}px, var(--diagram-tour-pane-width, ${PANE_MIN}px))`,
       [narrow]: "minmax(0, 1fr)",
     },
     minWidth: 0,
@@ -178,5 +193,13 @@ const styles = stylex.create({
     flexDirection: "column",
     minWidth: 0,
     minHeight: 0,
+  },
+  // Without its stage, the panel is the left column, under the window
+  // controls.
+  panelAlone: {
+    "--review-fullscreen-inset": {
+      default: null,
+      [narrow]: "var(--review-page-bar-inset, 0px)",
+    },
   },
 });

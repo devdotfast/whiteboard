@@ -12,7 +12,6 @@ import { z } from "zod";
 const DOWNLOAD_TIMEOUT_MS = 120_000;
 
 interface DownloadOptions {
-  size?: number;
   timeoutMs?: number;
   signal?: AbortSignal;
 }
@@ -21,7 +20,7 @@ interface DownloadOptions {
 export async function downloadFile(
   url: string,
   file: string,
-  { size, timeoutMs = DOWNLOAD_TIMEOUT_MS, signal }: DownloadOptions = {},
+  { timeoutMs = DOWNLOAD_TIMEOUT_MS, signal }: DownloadOptions = {},
 ) {
   const { host } = new URL(url);
   const partial = `${file}.${process.pid}.part`;
@@ -46,9 +45,6 @@ export async function downloadFile(
     throw new Error(`${host} answered ${response.status} for ${url}`);
 
   const hash = createHash("sha256");
-  let received = 0;
-
-  const tooLarge = new Error(`${url} is larger than its pinned ${size} bytes`);
 
   try {
     await pipeline(
@@ -57,10 +53,6 @@ export async function downloadFile(
       Readable.fromWeb(response.body as WebReadableStream),
       async function* (chunks: AsyncIterable<Buffer>) {
         for await (const chunk of chunks) {
-          received += chunk.length;
-
-          if (size !== undefined && received > size) throw tooLarge;
-
           hash.update(chunk);
           yield chunk;
         }
@@ -70,8 +62,6 @@ export async function downloadFile(
     await rename(partial, file);
   } catch (error) {
     await rm(partial, { force: true });
-
-    if (error === tooLarge) throw error;
 
     throw new Error(
       `Network error downloading from ${host}: ${error instanceof Error ? networkCause(error) : String(error)}`,
@@ -83,16 +73,13 @@ export async function downloadFile(
 
 /** Leaves a matching `file` in place; otherwise downloads it and checks the pin. */
 export async function downloadPinned(
-  pin: { url: string; sha256: string; size?: number },
+  pin: { url: string; sha256: string },
   file: string,
-  options: Omit<DownloadOptions, "size"> = {},
+  options: DownloadOptions = {},
 ) {
   if ((await sha256File(file).catch(() => undefined)) === pin.sha256) return;
 
-  const actual = await downloadFile(pin.url, file, {
-    ...options,
-    size: pin.size,
-  });
+  const actual = await downloadFile(pin.url, file, options);
 
   if (actual !== pin.sha256) {
     await rm(file, { force: true });

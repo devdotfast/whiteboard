@@ -28,7 +28,6 @@ const curatedDownloadSchema = z.object({
   universal: z.boolean(),
   url: z.string(),
   sha256: z.string(),
-  size: z.number(),
 });
 
 type CuratedDownload = z.infer<typeof curatedDownloadSchema>;
@@ -256,7 +255,9 @@ async function readPackagedCurated(): Promise<CuratedRemoteExtension[]> {
   );
 
   const text = await readFile(file, "utf8").catch(() => {
-    throw new Error(`This package has no VS Code server (${file} is missing).`);
+    throw new Error(
+      `This Whiteboard server has no language server (${file} is missing).`,
+    );
   });
 
   return z
@@ -296,7 +297,7 @@ async function install(
   try {
     await downloadPinned(download, part, { timeoutMs, signal });
     await rm(staging, { recursive: true, force: true });
-    await extractVsix(part, staging, download.size * 8);
+    await extractVsix(part, staging);
     await sanitizeVsixManifest(staging, extension);
 
     await checkExecutables(staging, extension);

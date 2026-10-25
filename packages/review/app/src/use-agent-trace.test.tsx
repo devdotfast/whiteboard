@@ -50,7 +50,7 @@ function harness() {
     {
       request: (url) =>
         new Promise<Response>((resolve) =>
-          requests.push({ url: new URL(url), resolve }),
+          requests.push({ url: new URL(url, "http://localhost"), resolve }),
         ),
     },
   );

@@ -4,7 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { spawn } from "node:child_process";
-import { app, BrowserWindow, powerMonitor } from "electron";
+import { app, BrowserWindow, powerMonitor, session } from "electron";
 import { Disposable, toDisposable } from "../../base/common/lifecycle.js";
 import { join } from "../../base/common/path.js";
 import { IConfigurationService } from "../../platform/configuration/common/configuration.js";
@@ -22,14 +22,13 @@ import { NullTelemetryService } from "../../platform/telemetry/common/telemetryU
 import { IUpdateService } from "../../platform/update/common/update.js";
 import { UtilityProcess } from "../../platform/utilityProcess/electron-main/utilityProcess.js";
 import { IWindowsMainService } from "../../platform/windows/electron-main/windows.js";
-import type { ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
+import { resolveReviewServerEntry, type ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
 import type {
   ReviewGatewayHostState,
   ReviewRemoteAgent,
   ReviewRemoteAgentResult,
 } from "../common/reviewProtocol.js";
 import {
-  REVIEW_REMOTE_HOSTS_ENABLED_SETTING,
   REVIEW_REMOTE_HOSTS_SETTING,
   REVIEW_REMOTE_INSTALL_MODES,
   REVIEW_REMOTE_INSTALL_SETTING,
@@ -41,6 +40,7 @@ import {
   REVIEW_REMOTE_INSTALL_YES,
 } from "../common/reviewSshPrompt.js";
 import { REVIEW_CRASH_DUMPS_DIRNAME } from "../node/reviewCrashReporter.js";
+import { reviewLoopbackCertVerdict } from "../node/reviewLoopbackCert.js";
 import { ReviewCrashDumps } from "./reviewCrashDumps.js";
 import { ReviewCrashTelemetry } from "./reviewCrashTelemetry.js";
 import { ReviewMainErrorTelemetry } from "./reviewMainErrorTelemetry.js";
@@ -54,16 +54,19 @@ import type {
   ReviewRemoteInstallFlow,
   ReviewRemoteInstallMode,
 } from "./remote/reviewRemoteHost.js";
-import { closeRemoteHostWindows, ReviewRemoteHosts } from "./remote/reviewRemoteHosts.js";
+import { closeRemoteHostWindows, ReviewRemoteHosts, type ReviewRemoteHostsOptions } from "./remote/reviewRemoteHosts.js";
 import {
   openRemoteInstallConsent,
   reviewRemoteInstallConsentPath,
 } from "./remote/reviewRemoteInstallConsent.js";
 import { installRemote } from "./remote/reviewRemoteInstaller.js";
+import { readRemoteInstallScript } from "./remote/reviewRemoteInstallScript.js";
 import { createSshAskpass } from "./remote/reviewSshAskpass.js";
 import {
+  reviewSshBinary,
   reviewSshConfigPath,
   reviewSshControlDirectory,
+  reviewSshSharesConnections,
 } from "./remote/reviewSshCommand.js";
 import { listSshAliases } from "./remote/reviewSshConfigAliases.js";
 import { reviewSshPromptRelay } from "./remote/reviewSshPromptRelay.js";
@@ -156,6 +159,12 @@ export class ReviewDesktopHost extends Disposable {
         onRemoteHostRestarted: (alias) => this.remoteHosts?.reattach(alias),
       }),
     );
+    // DEV_FAST_REVIEW_TLS_PIN_MISMATCH=1 pins the wrong cert, so renderers fall back to plain HTTP.
+    const fingerprint = process.env["DEV_FAST_REVIEW_TLS_PIN_MISMATCH"] === "1" ? "sha256/mismatch" : this.supervisor.tlsFingerprint;
+    if (fingerprint)
+      session.defaultSession.setCertificateVerifyProc((request, callback) =>
+        callback(reviewLoopbackCertVerdict(request, fingerprint)),
+      );
     this._register(
       this.configurationService.onDidChangeConfiguration((event) => {
         if (!event.affectsConfiguration(REVIEW_TELEMETRY_SETTING)) return;
@@ -175,7 +184,11 @@ export class ReviewDesktopHost extends Disposable {
     );
     void this.lifecycleMainService
       .when(LifecycleMainPhase.AfterWindowOpen)
-      .then(() => this.startRemoteHosts(shellEnvironment));
+      .then(() =>
+        this.startRemoteHosts(shellEnvironment, (name, properties) =>
+          errorTelemetry?.capture(name, properties),
+        ),
+      );
     // Main-process errors report through the embedded server, so they pass the
     // same opt-out checks and the same redaction step as every other event.
     errorTelemetry = new ReviewMainErrorTelemetry({
@@ -253,8 +266,8 @@ export class ReviewDesktopHost extends Disposable {
     return listSshAliases(reviewSshConfigPath());
   }
 
-  retryRemoteHost(alias: string): void {
-    this.remoteHosts?.retry(alias);
+  async retryRemoteHost(alias: string): Promise<void> {
+    await this.remoteHosts?.retry(alias);
   }
 
   async getRemoteLanguageEndpoint(serverId: string) {
@@ -285,8 +298,8 @@ export class ReviewDesktopHost extends Disposable {
     return this.remoteHosts?.install(alias) ?? Promise.resolve();
   }
 
-  detectRemoteAgents(alias: string): Promise<ReviewRemoteAgent[] | undefined> {
-    return this.remoteHosts?.detectAgents(alias) ?? Promise.resolve(undefined);
+  detectRemoteAgents(alias: string, refresh?: boolean): Promise<ReviewRemoteAgent[] | undefined> {
+    return this.remoteHosts?.detectAgents(alias, refresh) ?? Promise.resolve(undefined);
   }
 
   connectRemoteAgents(alias: string, ids: readonly unknown[]): Promise<ReviewRemoteAgentResult[]> {
@@ -305,7 +318,8 @@ export class ReviewDesktopHost extends Disposable {
   }
 
   private remoteInstallFlow(): ReviewRemoteInstallFlow {
-    const { userDataPath } = this.environmentMainService;
+    const { userDataPath, appRoot, isBuilt } = this.environmentMainService;
+    let script: Promise<string> | undefined;
     const artifactsOptions = {
       pin: this.productService.whiteboardRemote,
       releases: process.env[REVIEW_REMOTE_RELEASES_ENV],
@@ -339,17 +353,38 @@ export class ReviewDesktopHost extends Disposable {
       origin: () => remoteReleasesOrigin(artifactsOptions),
       artifact: (target, version) =>
         remoteArtifact(target, version, artifactsOptions),
+      script: () =>
+        (script ??= readRemoteInstallScript(
+          resolveReviewServerEntry({
+            isBuilt,
+            appRoot,
+            serverEntryOverride: process.env["DEV_FAST_REVIEW_SERVER_ENTRY"],
+            join,
+          }),
+        )),
     };
   }
 
   private startRemoteHosts(
     shellEnvironment: () => Promise<NodeJS.ProcessEnv>,
+    capture: ReviewRemoteHostsOptions["capture"],
   ): void {
     if (this.disposed) return;
     let version: Promise<string> | undefined;
+    const ssh = reviewSshBinary();
     const manager = new ReviewRemoteHosts({
-      spawn: (args, options) => spawn("ssh", args, options),
-      controlDirectory: reviewSshControlDirectory(),
+      // A detached ssh gets a console window on Windows; direct sessions never prompt there.
+      spawn: (args, options) =>
+        spawn(
+          ssh,
+          args,
+          process.platform === "win32"
+            ? { ...options, detached: false, windowsHide: true }
+            : options,
+        ),
+      controlDirectory: reviewSshSharesConnections()
+        ? reviewSshControlDirectory()
+        : undefined,
       instance: this.environmentMainService.userDataPath,
       environment: async () => ({
         ...process.env,
@@ -362,6 +397,7 @@ export class ReviewDesktopHost extends Disposable {
       groups: () =>
         reviewEnabledExtensionGroups(this.environmentMainService.extensionsPath),
       send: (hosts) => this.supervisor.setRemoteHosts(hosts),
+      capture,
       log: (message) => this.logService.info(`[Remote hosts] ${message}`),
       install: this.remoteInstallFlow(),
       removed: (serverId) =>
@@ -372,9 +408,6 @@ export class ReviewDesktopHost extends Disposable {
     this.remoteHosts = manager;
     const update = () => {
       manager.update(
-        this.configurationService.getValue(
-          REVIEW_REMOTE_HOSTS_ENABLED_SETTING,
-        ) === true,
         remoteHostAliases(
           this.configurationService.getValue(REVIEW_REMOTE_HOSTS_SETTING),
         ),
@@ -395,7 +428,6 @@ export class ReviewDesktopHost extends Disposable {
       this.configurationService.onDidChangeConfiguration((event) => {
         if (
           event.affectsConfiguration(REVIEW_REMOTE_HOSTS_SETTING) ||
-          event.affectsConfiguration(REVIEW_REMOTE_HOSTS_ENABLED_SETTING) ||
           event.affectsConfiguration(REVIEW_REMOTE_INSTALL_SETTING)
         )
           update();

@@ -2,14 +2,13 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { createReview } from "../harness.mjs";
+import { createReview, showView } from "../harness.mjs";
 
 export const name = "fold-colors";
 
 export const phase = 1;
 
 export const options = {
-  env: { DEV_FAST_REVIEW_DESKTOP_BACKGROUND: "1" },
   settings: {
     "window.autoDetectColorScheme": false,
     "workbench.colorTheme": "Review Dark",
@@ -56,9 +55,7 @@ export async function run(ctx) {
   await createReview(ctx, { title, base, head, blocks: [] });
   const page = await ctx.apiCanvasFor(title);
   await ctx.watchPage(page);
-  await page
-    .locator('[aria-label="Session views"] button[aria-label="Diff"]')
-    .click();
+  await showView(ctx, "Diff", page);
 
   const header = page
     .locator(".view-line")
@@ -98,11 +95,16 @@ export async function run(ctx) {
 
     const closer = page
       .locator(".view-line")
-      .filter({ hasText: '} from "./module.js";' })
+      .filter({ hasText: '} from "./module.js";', hasNotText: "import" })
       .first();
 
-    await closer.waitFor();
-    const expanded = await coloredText(closer);
+    // Monaco re-renders the line after it expands.
+    let expanded;
+    await ctx.until(async () => {
+      expanded = await coloredText(closer);
+
+      return expanded.length > 0 && expanded.every(([, color]) => color);
+    }, "colored expanded closer");
     // Bracket-pair decorations apply separately to the expanded closing brace.
     assert.deepEqual(
       folded.slice(1),
@@ -124,7 +126,7 @@ export async function run(ctx) {
   await pill.click();
   await page
     .locator(".view-line")
-    .filter({ hasText: '} from "./module.js";' })
+    .filter({ hasText: '} from "./module.js";', hasNotText: "import" })
     .first()
     .waitFor();
   ctx.check("the fold expands at a narrow width with reduced motion");

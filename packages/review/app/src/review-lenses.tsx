@@ -65,7 +65,6 @@ interface Lenses {
   busy: boolean;
   readOnly: boolean;
   error: string | null;
-  structuralDiffEnabled: boolean;
 }
 
 export type ReviewLensView = Pick<Lenses, "progress" | "resolve" | "error">;
@@ -77,14 +76,14 @@ export const useReviewLenses = () => useContext(Context);
 export function ReviewLensesProvider({
   client,
   snapshot,
-  structuralDiffEnabled = true,
   coverageRevision = 0,
+  loaded,
   children,
 }: {
   client: ReviewApiClient;
   snapshot: Snapshot;
-  structuralDiffEnabled?: boolean;
   coverageRevision?: number;
+  loaded?: ReviewProgress;
   children: ReactNode;
 }) {
   const queryClient = useQueryClient();
@@ -99,52 +98,69 @@ export function ReviewLensesProvider({
   const generation = useRef(0);
   const pending = useRef(false);
   const refreshAfterMark = useRef(false);
-  const mode = structuralDiffEnabled ? "structural" : "textual";
   const route = `/${snapshot.reviewId}/progress`;
-  const progressKey = canvasQueryKeys.lensProgress(snapshot.version, mode);
+
+  const progressKey = canvasQueryKeys.lensProgress(
+    snapshot.reviewId,
+    snapshot.version,
+  );
+
   const selectedLens = useReviewPanel((state) => state.lens);
 
-  // A lens chosen on another version or diff mode no longer applies.
+  // A lens chosen on another version no longer applies.
   const activeId =
-    selectedLens?.version === snapshot.version && selectedLens.mode === mode
-      ? selectedLens.id
-      : undefined;
+    selectedLens?.version === snapshot.version ? selectedLens.id : undefined;
 
-  // Coverage events drive freshness, and a version or mode left behind is not
-  // kept: returning to it reads again, as a first visit does.
+  // Coverage events drive freshness, and a version left behind is not kept:
+  // returning to it reads again, as a first visit does.
   const read = useQuery({
     queryKey: progressKey,
     queryFn: ({ signal }) =>
       client.read<ReviewProgress>(
-        `${route}?version=${snapshot.version}&mode=${mode}&wait=false`,
+        `${route}?version=${snapshot.version}&wait=false`,
         signal,
       ),
     enabled: !snapshot.sourceUnavailable,
+    initialData: loaded,
     staleTime: Infinity,
     gcTime: 0,
   });
 
   const progress = read.data ?? null;
 
+  // Where each selection resolved, by the commits it was read at: a new
+  // version's progress is read afresh, and a peek it leaves as it was keeps
+  // showing its code meanwhile rather than "Loading code…".
+  const resolvedBefore = useRef(new Map<string, ResolvedRange[]>());
+  const pinsKey = JSON.stringify(snapshot.pins ?? null);
+
+  const resolvedSelection = (source: LensSource) => {
+    const key = `${pinsKey}|${selectionKey(source)}`;
+    const ranges = progress?.resolvedSelections[selectionKey(source)];
+
+    if (ranges) resolvedBefore.current.set(key, ranges);
+
+    return ranges ?? resolvedBefore.current.get(key);
+  };
+
   const markViewed = useMutation({
     mutationFn: (input: {
       version: number;
-      mode: typeof mode;
       files: { path: string; fingerprint: string; sources: FileLineRange[] }[];
       viewed: boolean;
     }) => client.post<ReviewProgress>(route, input),
     // A read that started before the mark must not land after it; it is
     // repeated once the mark has landed.
-    onMutate: async ({ version, mode }) => {
-      const queryKey = canvasQueryKeys.lensProgress(version, mode);
+    onMutate: async ({ version }) => {
+      const queryKey = canvasQueryKeys.lensProgress(snapshot.reviewId, version);
 
       if (queryClient.isFetching({ queryKey })) refreshAfterMark.current = true;
       await queryClient.cancelQueries({ queryKey });
     },
     // Only the version marked is updated, and only while it is still held.
-    onSuccess: (next, { version, mode }) =>
+    onSuccess: (next, { version }) =>
       queryClient.setQueryData<ReviewProgress>(
-        canvasQueryKeys.lensProgress(version, mode),
+        canvasQueryKeys.lensProgress(snapshot.reviewId, version),
         (current) =>
           current && { ...next, lenses: current.lenses ?? next.lenses },
       ),
@@ -152,7 +168,7 @@ export function ReviewLensesProvider({
 
   const refreshProgress = () =>
     void queryClient.invalidateQueries({
-      queryKey: canvasQueryKeys.allLensProgress(),
+      queryKey: canvasQueryKeys.allLensProgress(snapshot.reviewId),
     });
 
   const resetMark = markViewed.reset;
@@ -167,7 +183,7 @@ export function ReviewLensesProvider({
     return () => {
       generation.current++;
     };
-  }, [client, route, snapshot.version, mode, resetMark]);
+  }, [client, route, snapshot.version, resetMark]);
 
   // Live coverage and worktree saves mark every held progress stale; a mark
   // in flight defers the reread until it lands.
@@ -257,7 +273,6 @@ export function ReviewLensesProvider({
     try {
       await markViewed.mutateAsync({
         version: snapshot.version,
-        mode,
         files,
         viewed,
       });
@@ -294,12 +309,7 @@ export function ReviewLensesProvider({
         )
           return "unavailable";
 
-        if (
-          sources.every(
-            (source) =>
-              progress?.resolvedSelections[selectionKey(source)] !== undefined,
-          )
-        )
+        if (sources.every((source) => resolvedSelection(source) !== undefined))
           return "ready";
 
         return progress?.complete === true ? "unavailable" : "pending";
@@ -310,21 +320,18 @@ export function ReviewLensesProvider({
       busy,
       readOnly: Boolean(snapshot.trashedAt),
       error,
-      structuralDiffEnabled,
       select: (id) => {
         if (!lenses.some((item) => item.id === id && !item.unavailable)) return;
         captureUiEvent(session, "diff_opened", {
-          kind: structuralDiffEnabled ? "structural" : "file",
+          kind: "structural",
           via: "lens",
         });
-        panelStore
-          .getState()
-          .selectLens({ id, version: snapshot.version, mode });
+        panelStore.getState().selectLens({ id, version: snapshot.version });
       },
       clear: () => panelStore.getState().clearLens(),
       resolve: (sources) =>
         sources.flatMap((source) =>
-          (progress?.resolvedSelections[selectionKey(source)] ?? []).map(
+          (resolvedSelection(source) ?? []).map(
             (range): ResolvedRange =>
               source.pins
                 ? { ...range, comparison: comparisonKey(source.pins) }
@@ -370,7 +377,6 @@ export function ReviewLensesProvider({
       busy,
       snapshot.trashedAt,
       error,
-      structuralDiffEnabled,
       client,
       route,
       snapshot,

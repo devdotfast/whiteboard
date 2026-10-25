@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { closeSourceWindow, openHome, openSettings } from "../harness.mjs";
+import { clearToasts, closeSourceWindow, openHome, openSettings } from "../harness.mjs";
 import {
   alias,
   closeDesktop,
@@ -31,7 +31,6 @@ export const name = "remote-ask";
 export const phase = 2;
 
 export const options = {
-  settings: { "review.experimental.remoteHosts.enabled": true },
   env: { DEV_FAST_REVIEW_SSH_CONFIG: `${runDir}/ssh_config` },
 };
 
@@ -96,7 +95,7 @@ export const sessionRow = (ctx, title) =>
 export async function openRemoteReview(ctx, title) {
   await openHome(ctx);
   await sessionRow(ctx, title).waitFor({ timeout: 60000 });
-  await sessionRow(ctx, title).getByTitle(title, { exact: true }).click();
+  await sessionRow(ctx, title).getByRole("button", { name: `Open ${title}`, exact: true }).click();
   await reviewCanvas(ctx).getByRole("heading", { name: title }).waitFor({
     timeout: 60000,
   });
@@ -105,10 +104,7 @@ export async function openRemoteReview(ctx, title) {
 /** Selects the document's sentence and opens Ask on it with ⌘L. */
 export async function askAboutReviewSentence(ctx) {
   // The workbench's usage-data notice sits over the composer's Ask button.
-  for (const clear of await ctx.page
-    .locator(".notifications-toasts .codicon-notifications-clear")
-    .all())
-    await clear.click().catch(() => {});
+  await clearToasts(ctx.page);
 
   const sentence = reviewCanvas(ctx).getByText("One now returns");
 

@@ -89,7 +89,7 @@ test('per-file failures and run abortion remain observable after the stream fini
 			yield { ...complete, aborted: { code: 'cancel', message: 'stopped' } } as StructuralEvent;
 		}
 	});
-	try { await session.start(); assert.equal(session.getFileResult('a.ts')?.error, 'bad file'); assert.match(session.error!, /stopped/); }
+	try { await session.start(); assert.equal(session.getFileResult('a.ts')?.error, 'bad file'); assert.match(session.error!, /stopped/); assert.deepEqual(session.failure(), { reason: 'aborted', files: 1 }); }
 	finally { session.dispose(); }
 });
 
@@ -109,6 +109,7 @@ test('structural editor models retain diffr bytes across a live file save', asyn
 	const { URI } = await import('../../base/common/uri.js');
 	const { DisposableStore } = await import('../../base/common/lifecycle.js');
 	const { CancellationToken } = await import('../../base/common/cancellation.js');
+	const { Event } = await import('../../base/common/event.js');
 	const { IModelService } = await import('../../editor/common/services/model.js');
 	const { ITextModelService } = await import('../../editor/common/services/resolverService.js');
 	const { ILanguageService } = await import('../../editor/common/languages/language.js');
@@ -163,9 +164,84 @@ test('structural editor models retain diffr bytes across a live file save', asyn
 		live.value = 'saved B\n';
 		assert.equal(right.getValue(), 'saved A\n');
 		const pairs = new Map([[`${left.uri}\n${right.uri}`, 'a.ts']]);
-		const provider = new StructuralDiffProvider(session, pairs, new Set());
+		const provider = new StructuralDiffProvider(session, pairs, new Set(), Event.None);
 		await assert.doesNotReject(provider.computeDiff(left as never, right as never,
 			{ ignoreTrimWhitespace: false, maxComputationTimeMs: 0, computeMoves: false }, CancellationToken.None));
 		await task;
 	} finally { release(); lifetime.dispose(); session.dispose(); await task; }
+});
+
+test('a file diffr could not diff resolves to the run\'s error', async () => {
+	const session = new StructuralDiffSession({ async *streamComparison() { yield start; throw new Error('diffr exited with 1: boom'); } });
+	try {
+		const pending = session.fileResult('a.ts');
+		await session.start();
+		assert.deepEqual(await pending, { error: 'diffr exited with 1: boom' });
+	} finally { session.dispose(); }
+});
+
+function foldedFile(): StructuralEvent {
+	const pos = (line: number) => ({ line, column: 0 });
+	const leaf = { kind: 'leaf' as const, id: 3, fold_state_id: 3, alignment_id: 1, start: pos(1), end: pos(2) };
+	const body = { kind: 'fold' as const, id: 2, fold_state_id: 2, indent: pos(1), start: pos(1), end: pos(2), children: [leaf] };
+	const root = { kind: 'fold' as const, id: 1, fold_state_id: 1, indent: pos(0), start: pos(0), end: pos(3), children: [body] };
+	return { type: 'file', file, diff: { type: 'text', structural_changes: { base: [], head: [[0, 3]] }, rhs: { text: 'a\nb\nc\n', root }, stats: { textual: { added: 3, removed: 0 }, visible: { added: 3, removed: 0 } } } };
+}
+const summary: StructuralEvent = { type: 'update', file, regions: [{ id: 2, collapsed: true, label: 'Sets up a' }], visible: { added: 0, removed: 0 } };
+const bodyOf = (session: StructuralDiffSession) => {
+	const root = session.getTextDiff('a.ts')!.rhs!.root;
+	return root.kind === 'fold' ? root.children[0] : undefined;
+};
+
+async function updated(before: (session: StructuralDiffSession) => void, event = summary) {
+	let release!: () => void;
+	const gate = new Promise<void>(resolve => release = resolve);
+	const session = new StructuralDiffSession({ async *streamComparison() { yield start; yield foldedFile(); await gate; yield event; yield complete; } });
+	const task = session.start();
+	await session.fileResult('a.ts');
+	before(session);
+	release(); await task;
+	assert.equal(session.error, undefined);
+	return session;
+}
+
+test('an update labels and collapses folds in a file the reader has not seen', async () => {
+	const session = await updated(session => session.setRegionCollapsed('a.ts', 3, true, false));
+	try {
+		assert.deepEqual(bodyOf(session)?.visibility, { collapsed: true, label: 'Sets up a' });
+		assert.equal(session.isRegionCollapsed('a.ts', 2), true);
+		assert.equal(session.getTextDiff('a.ts')!.stats.visible.added, 0);
+	} finally { session.dispose(); }
+});
+
+test('an update only labels folds in a file the reader has seen', async () => {
+	const session = await updated(session => session.markSeen('a.ts'));
+	try {
+		assert.deepEqual(bodyOf(session)?.visibility, { label: 'Sets up a' });
+		assert.equal(session.isRegionCollapsed('a.ts', 2), false);
+	} finally { session.dispose(); }
+});
+
+test('a fold the reader toggled keeps its state when an update arrives', async () => {
+	const session = await updated(session => session.setRegionCollapsed('a.ts', 2, false));
+	try {
+		assert.equal(session.isRegionCollapsed('a.ts', 2), false);
+		assert.equal(bodyOf(session)?.visibility?.label, 'Sets up a');
+	} finally { session.dispose(); }
+});
+
+test('a failed update keeps the file\'s diff', async () => {
+	const session = await updated(() => {}, { type: 'update', file, error: { code: 'plugin', message: 'summary failed' } });
+	try {
+		assert.equal(bodyOf(session)?.visibility, undefined);
+		assert.equal(session.isRegionCollapsed('a.ts', 2), false);
+	} finally { session.dispose(); }
+});
+
+test('an update for a file without a result fails the comparison', async () => {
+	const session = new StructuralDiffSession({ async *streamComparison() { yield start; yield summary; yield complete; } });
+	try {
+		await session.start();
+		assert.match(session.error!, /Unexpected diffr update: a\.ts/);
+	} finally { session.dispose(); }
 });

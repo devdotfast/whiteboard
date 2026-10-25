@@ -112,6 +112,24 @@ export class MultiDiffEditorWidgetImpl extends Disposable {
 				? MULTI_DIFF_RESOURCE_HEADER_HEIGHT
 				: 0,
 		}, this._scrollable));
+		// The browser can natively scroll the `overflow: hidden` content (e.g. when focusing an element or
+		// calling `scrollIntoView`), which the virtualized layout does not account for. Undo that native
+		// scroll and apply it to the virtual scroll position instead, so the focused element stays visible.
+		this._register(addDisposableListener(this._scrollableElements.root, 'scroll', () => {
+			const element = this._scrollableElements.root;
+			const nativeScrollTop = element.scrollTop;
+			const nativeScrollLeft = element.scrollLeft;
+			if (nativeScrollTop === 0 && nativeScrollLeft === 0) {
+				return;
+			}
+			element.scrollTop = 0;
+			element.scrollLeft = 0;
+			const position = this._scrollableElement.getScrollPosition();
+			this._scrollableElement.setScrollPosition({
+				scrollTop: position.scrollTop + nativeScrollTop,
+				scrollLeft: position.scrollLeft + nativeScrollLeft,
+			});
+		}));
 		this._elements = h('div.monaco-component.multiDiffEditor', {}, [
 			h('div', {}, [this._scrollableElement.getDomNode()]),
 			h('div.placeholder@placeholder', {}, [h('div')]),

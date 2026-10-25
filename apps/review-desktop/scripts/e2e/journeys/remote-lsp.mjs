@@ -9,12 +9,10 @@ import { promisify } from "node:util";
 import { DEFAULT_REMOTE_RUNTIME } from "../../build-remote-runtime.mjs";
 import {
   appRoot,
-  closeSourceWindow,
   createReview,
   openHome,
   openSettings,
   sleep,
-  sourceWindowFor,
 } from "../harness.mjs";
 
 const exec = promisify(execFile);
@@ -44,7 +42,6 @@ export const name = "remote-lsp";
 export const phase = 2;
 
 export const options = {
-  settings: { "review.experimental.remoteHosts.enabled": true },
   env: { DEV_FAST_REVIEW_SSH_CONFIG: `${runDir}/ssh_config` },
   beforeLaunch: stampDesktopCommit,
 };
@@ -346,6 +343,18 @@ async function journey(ctx) {
   const hostRow = (alias) =>
     section.locator("[data-remote-host]").filter({ hasText: alias });
 
+  const languageFeatures = async (alias) => {
+    const toggle = hostRow(alias).locator("button[aria-expanded]").first();
+
+    if ((await toggle.getAttribute("aria-expanded")) === "false") {
+      await toggle.click();
+    }
+
+    return hostRow(alias)
+      .getByRole("group", { name: "Language features" })
+      .innerText();
+  };
+
   for (const alias of [aliasA, aliasB]) {
     await section.getByLabel("SSH alias").fill(alias);
     added[alias] = Date.now();
@@ -367,8 +376,8 @@ async function journey(ctx) {
       timings[`available ${alias}`] = Date.now() - added[alias];
       await until(
         async () =>
-          (await hostRow(alias).innerText()).includes(
-            "Language features: available",
+          /^Language features\s+available\b/.test(
+            await languageFeatures(alias),
           ),
         `the Settings row of ${alias} to say language features are available`,
       );
@@ -397,17 +406,16 @@ async function journey(ctx) {
     const row = rows.filter({ hasText: text });
 
     await row.waitFor({ timeout: 60000 });
-    await row.getByTitle(text, { exact: true }).click();
+    await row.getByRole("button", { name: `Open ${text}`, exact: true }).click();
     await visibleCanvas(page)
       .getByRole("heading", { name: text })
       .waitFor({ timeout: 60000 });
     await openHome(ctx);
   }
 
-  for (const text of Object.values(title)) await tab(page, text).waitFor();
   check(
     ctx,
-    "2. the laptop's review, two on A and one on B are open in tabs at once",
+    "2. the laptop's review, two on A and one on B are open at once",
   );
 
   const timeOrigin = await page.evaluate(() => performance.timeOrigin);
@@ -483,30 +491,16 @@ async function journey(ctx) {
       warm[m.key].push(result.ms);
     }
 
-    const opened = await windowCall(ctx, "goto", m.review, "b.ts", 3, "answer");
+    const { peek } = await windowCall(ctx, "goto", m.review, "b.ts", 3, "answer");
 
-    if (m.key === "laptop") {
-      const source = await sourceWindowFor(ctx, "a.ts");
-
-      assert.match(await lines(source), /export const answer = 1;/);
-      await closeSourceWindow(source);
-    } else {
-      assert.match(
-        opened.active?.resource ?? "",
-        new RegExp(
-          `^vscode-remote://whiteboard%2B${m.serverId.toLowerCase()}/.*/a\\.ts$`,
-        ),
-        JSON.stringify(opened),
-      );
-      assert.match(opened.active.text, new RegExp(`answer = ${m.answer};`));
-      assert.ok(opened.active.readonly, "the host's a.ts is not read-only");
-      assert.ok(opened.active.label.startsWith(`${m.alias}: `));
-      await windowCall(ctx, "closeModal");
-    }
+    assert.match(peek?.resource ?? "", /\/a\.ts(\?|$)/, JSON.stringify(peek));
+    assert.match(peek.text, new RegExp(`answer = ${m.answer};`));
+    assert.ok(peek.readonly, "the peeked a.ts is not read-only");
+    await windowCall(ctx, "closePeek");
 
     check(
       ctx,
-      `3${m.key}. ${m.alias}: the hover read "${shown.text.match(answer(m.answer))[0]}" ${shown.ms} ms after the pointer arrived; go to definition opened ${m.key === "laptop" ? "a Source window on" : "read-only"} its a.ts`,
+      `3${m.key}. ${m.alias}: the hover read "${shown.text.match(answer(m.answer))[0]}" ${shown.ms} ms after the pointer arrived; go to definition peeked its a.ts`,
     );
   }
 
@@ -662,17 +656,17 @@ async function journey(ctx) {
     );
     settings = await openSettings(ctx);
     section = settings.getByRole("region", { name: "Remote hosts" });
-    await until(
-      async () =>
-        (await hostRow(aliasB).innerText()).includes(
-          `Language features: unavailable · ${why}`,
-        ),
-      "the Settings row to say why",
-    );
+    await until(async () => {
+      const text = await languageFeatures(aliasB);
 
-    const detail = (await hostRow(aliasB).innerText()).match(
-      /Language features: unavailable · .*/,
-    )[0];
+      return (
+        /^Language features\s+unavailable\b/.test(text) && text.includes(why)
+      );
+    }, "the Settings row to say why");
+
+    const detail = (await languageFeatures(aliasB))
+      .split("\n")
+      .find((line) => line.startsWith(why));
 
     await showDiff(ctx, title.b, "b.ts", reviewB);
     assert.match(await lines(visibleCanvas(page)), /answer \+ 1/);
@@ -694,10 +688,17 @@ async function journey(ctx) {
       `8. ${aliasB} with another commit: its review and Diff read normally, the hover is empty (${absent.ms} ms) and no widget shows; Settings says "${detail}"`,
     );
 
-    await remote("install", nameB);
+    // The same package is already installed, so only the commit changes back.
+    await remote("install", nameB, "--commit", commit);
     await onRemote(aliasB, "whiteboard server stop");
     await until(
-      async () => (await hostState(aliasB))?.languageFeatures === true,
+      async () => {
+        const state = await hostState(aliasB);
+
+        if (state?.languageFeatures !== true) throw new Error(JSON.stringify(state));
+
+        return true;
+      },
       `${aliasB} available again`,
       120000,
     );
@@ -819,32 +820,26 @@ export const visibleCanvas = (page) =>
     .locator(".review-canvas-root [data-review-api]")
     .filter({ visible: true });
 
-export const tab = (page, text) =>
-  page.locator(".tabs-container .tab").filter({ hasText: text });
-
 export async function showDiff(ctx, title, file, review) {
-  await tab(ctx.page, title).click();
-  await ctx.until(
-    async () =>
-      /\bactive\b/.test(
-        (await tab(ctx.page, title).getAttribute("class")) ?? "",
-      ),
-    `the ${title} tab to be active`,
-  );
+  await openHome(ctx);
+  await ctx.page
+    .locator("main.review-home [data-home-row]")
+    .filter({ hasText: title })
+    .getByRole("button", { name: `Open ${title}`, exact: true })
+    .click();
 
   const diff = ctx.page
-    .locator('[aria-label="Session views"] button[aria-label="Diff"]')
+    .locator('.review-sidebar-tabs [role="tab"][aria-label^="Diff"]')
     .filter({ visible: true });
 
-  // The shared canvas shows the previous review briefly after the tab turns active.
+  // The sidebar lights Diff from the last board until this one reports its view.
   await ctx.until(async () => {
-    if ((await diff.getAttribute("aria-pressed")) !== "true") {
+    try {
+      return await windowCall(ctx, "shown", review, file);
+    } catch (error) {
       await diff.click();
-
-      return false;
+      throw error;
     }
-
-    return windowCall(ctx, "shown", review, file);
   }, `the Diff view of ${title} to show ${file}`);
 }
 
@@ -1020,13 +1015,23 @@ async function inWindow(command, args) {
     return {};
   }
 
-  if (command === "closeModal") {
-    const groups = await get(
-      "vs/workbench/services/editor/common/editorGroupsService.js",
-      "IEditorGroupsService",
-    );
+  const peekEditor = async () =>
+    (
+      await get(
+        "vs/editor/browser/services/codeEditorService.js",
+        "ICodeEditorService",
+      )
+    )
+      .listCodeEditors()
+      .find((e) => e.getModel() && e.getDomNode()?.closest(".peekview-widget"));
 
-    return { closed: (await groups.activeModalEditorPart?.close()) ?? null };
+  if (command === "closePeek") {
+    (await peekEditor())?.focus();
+    await (
+      await get("vs/platform/commands/common/commands.js", "ICommandService")
+    ).executeCommand("review.closeDefinitionPeek");
+
+    return { open: Boolean(await peekEditor()) };
   }
 
   const languages = await get(
@@ -1147,13 +1152,8 @@ async function inWindow(command, args) {
   }
 
   if (command === "goto") {
-    const [editors, labels, commands, { SymbolNavigationAnchor }] =
+    const [commands, { SymbolNavigationAnchor }] =
       await Promise.all([
-        get(
-          "vs/workbench/services/editor/common/editorService.js",
-          "IEditorService",
-        ),
-        get("vs/platform/label/common/label.js", "ILabelService"),
         get("vs/platform/commands/common/commands.js", "ICommandService"),
         import(
           `${globalThis._VSCODE_FILE_ROOT}vs/editor/contrib/gotoSymbol/browser/goToCommands.js`
@@ -1168,15 +1168,14 @@ async function inWindow(command, args) {
     );
     await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    const active = editors.activeEditor;
+    const peek = await peekEditor();
 
     return {
       ms: ms(),
-      active: active && {
-        resource: active.resource?.toString() ?? null,
-        label: active.resource ? labels.getUriLabel(active.resource) : null,
-        readonly: Boolean(active.isReadonly()),
-        text: editors.activeTextEditorControl?.getModel?.()?.getValue?.() ?? "",
+      peek: peek && {
+        resource: peek.getModel().uri.toString(),
+        readonly: Boolean(peek.getRawOptions().readOnly),
+        text: peek.getModel().getValue(),
       },
     };
   }

@@ -4,15 +4,33 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { Event } from "../../base/common/event.js";
+import { isAbsolute } from "../../base/common/path.js";
 import { IServerChannel } from "../../base/parts/ipc/common/ipc.js";
+import type { IDialogMainService } from "../../platform/dialogs/electron-main/dialogMainService.js";
 import type { IWindowsMainService } from "../../platform/windows/electron-main/windows.js";
 import type { ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
+import { editorPosition, externalEditorUrl, type ReviewExternalEditorTarget } from "../common/reviewExternalEditor.js";
 import { REVIEW_SSH_ANSWER_CALL, REVIEW_SSH_PROMPT_EVENT } from "../common/reviewSshPrompt.js";
 import {
   reviewSshPromptRelay,
   type ReviewSshPromptRelay,
 } from "./remote/reviewSshPromptRelay.js";
 import type { ReviewDesktopHost } from "./reviewDesktopHost.js";
+import { applicationPickerOptions, launchApplication, launchEditorWorkspace, launchExternalEditorUrl } from "./reviewExternalEditorLauncher.js";
+
+/** How the channel reaches outside Whiteboard; tests replace it. */
+export interface ReviewExternalLauncher {
+  openUrl(url: string): Promise<void>;
+  openInApplication(application: string, filePath: string): Promise<void>;
+  /** False where the editor's command line is not found. */
+  openEditorWorkspace(editor: string, folder: string, file: string): Promise<boolean>;
+}
+
+const externalLauncher: ReviewExternalLauncher = {
+  openUrl: (url) => launchExternalEditorUrl(url),
+  openInApplication: (application, filePath) => launchApplication(application, filePath),
+  openEditorWorkspace: (editor, folder, file) => launchEditorWorkspace(editor, folder, file),
+};
 
 export { REVIEW_DESKTOP_CHANNEL } from "../common/reviewDesktopBootstrap.js";
 
@@ -26,7 +44,9 @@ export class ReviewDesktopChannel implements IServerChannel {
     private readonly host: ReviewDesktopHost,
     private readonly windows: IWindowsMainService,
     private readonly moveToApplications: () => boolean,
+    private readonly dialogs: Pick<IDialogMainService, "showOpenDialog">,
     private readonly sshPrompts: ReviewSshPromptRelay = reviewSshPromptRelay,
+    private readonly launcher: ReviewExternalLauncher = externalLauncher,
   ) {}
 
   listen<T>(_context: string, event: string): Event<T> {
@@ -50,6 +70,35 @@ export class ReviewDesktopChannel implements IServerChannel {
       this.closeSourceWindows(Array.isArray(arg) ? arg.map(String) : []);
       return undefined as T;
     }
+    if (command === "openInExternalEditor") {
+      // Only a known editor's file URL leaves here: the renderer names the
+      // file, never the URL or the program that opens it.
+      const target = (arg ?? {}) as ReviewExternalEditorTarget;
+      const url = externalEditorUrl(target);
+      if (!url) throw new Error("Not a file Whiteboard can open in an external editor.");
+      const folder = typeof target.folder === "string" && isAbsolute(target.folder) ? target.folder : undefined;
+      // The command line takes the folder and file together, into one window.
+      if (folder && await this.launcher.openEditorWorkspace(target.editor, folder, target.filePath + editorPosition(target.line, target.column))) return undefined as T;
+      // Without it, the folder's URL first, so the editor puts the file in
+      // the window that has its checkout open. Zed would open the folder in
+      // a window of its own, so it gets only the file.
+      const folderUrl = folder && target.editor !== "zed" && externalEditorUrl({ editor: target.editor, filePath: folder });
+      if (folderUrl) await this.launcher.openUrl(folderUrl);
+      await this.launcher.openUrl(url);
+      return undefined as T;
+    }
+    if (command === "openInApplication") {
+      const { application, filePath } = (arg ?? {}) as { application?: unknown; filePath?: unknown };
+      if (typeof application !== "string" || typeof filePath !== "string" || !isAbsolute(application) || !isAbsolute(filePath))
+        throw new Error("Not a file and application Whiteboard can open.");
+      await this.launcher.openInApplication(application, filePath);
+      return undefined as T;
+    }
+    if (command === "chooseApplication") {
+      const parent = this.windows.getFocusedWindow()?.win ?? undefined;
+      const result = await this.dialogs.showOpenDialog(applicationPickerOptions(process.platform), parent);
+      return (result.canceled ? null : result.filePaths[0] ?? null) as T;
+    }
     if (command === "listSshAliases") {
       return (await this.host.listSshAliases()) as T;
     }
@@ -63,12 +112,13 @@ export class ReviewDesktopChannel implements IServerChannel {
       return (await this.host.getRemoteHostState(serverId, typeof last === "string" ? last : undefined)) as T;
     }
     if (command === "retryRemoteHost") {
-      if (typeof arg === "string") this.host.retryRemoteHost(arg);
+      if (typeof arg === "string") await this.host.retryRemoteHost(arg);
       return undefined as T;
     }
     if (command === "detectRemoteAgents") {
-      if (typeof arg !== "string") throw new Error("Unknown agents request.");
-      return ((await this.host.detectRemoteAgents(arg)) ?? null) as T;
+      const [alias, refresh] = Array.isArray(arg) ? arg : [arg];
+      if (typeof alias !== "string") throw new Error("Unknown agents request.");
+      return ((await this.host.detectRemoteAgents(alias, refresh === true)) ?? null) as T;
     }
     if (command === "connectRemoteAgents") {
       const { alias, agents } = (arg ?? {}) as { alias?: unknown; agents?: unknown };

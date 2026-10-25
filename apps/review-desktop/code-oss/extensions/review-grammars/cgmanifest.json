@@ -1,0 +1,302 @@
+{
+	"registrations": [
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "forcedotcom/apex-tmLanguage",
+					"repositoryUrl": "https://github.com/forcedotcom/apex-tmLanguage",
+					"commitHash": "611becc66c4553876ac6fd0287f57135581e2e59"
+				}
+			},
+			"license": "BSD-3-Clause"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "13xforever/x86_64-assembly-vscode",
+					"repositoryUrl": "https://github.com/13xforever/x86_64-assembly-vscode",
+					"commitHash": "5c1958f4283d260f5dc88fa4f5f31c620e061a5a"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "twxs/vs.language.cmake",
+					"repositoryUrl": "https://github.com/twxs/vs.language.cmake",
+					"commitHash": "19b1b8fe2d68d72cf294d0c3c22f0a3fc54f8f6f"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "qingpeng9802/vscode-common-lisp",
+					"repositoryUrl": "https://github.com/qingpeng9802/vscode-common-lisp",
+					"commitHash": "79d04dc9ca80d98e65c4f28b3d67a24a7829b18f"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "elixir-editors/elixir-tmbundle",
+					"repositoryUrl": "https://github.com/elixir-editors/elixir-tmbundle",
+					"commitHash": "43c8cd957d5ac6e1abbd8730fc7a08c81a6e76c9"
+				}
+			},
+			"license": "Apache-2.0"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "elm-tooling/elm-language-client-vscode",
+					"repositoryUrl": "https://github.com/elm-tooling/elm-language-client-vscode",
+					"commitHash": "c70351314682c2e0fae8a402ebb301da79821c37"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "erlang-ls/grammar",
+					"repositoryUrl": "https://github.com/erlang-ls/grammar",
+					"commitHash": "fe898becd3004bcb4947ab50d6b6b830fbfb9228"
+				}
+			},
+			"license": "Apache-2.0"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "fortran-lang/vscode-fortran-support",
+					"repositoryUrl": "https://github.com/fortran-lang/vscode-fortran-support",
+					"commitHash": "f5fbf935d709e165922b307885a6106e32624018"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "fortran-lang/vscode-fortran-support",
+					"repositoryUrl": "https://github.com/fortran-lang/vscode-fortran-support",
+					"commitHash": "002eaa90668fd7d63cd073e8ca21b1388357ed62"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "gleam-lang/vscode-gleam",
+					"repositoryUrl": "https://github.com/gleam-lang/vscode-gleam",
+					"commitHash": "aa487ed82aeaec8dbac62e796689daf55abf1aa9"
+				}
+			},
+			"license": "Apache-2.0"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "octref/language-haskell",
+					"repositoryUrl": "https://github.com/octref/language-haskell",
+					"commitHash": "ae87982aac2bf5cf6334c067e49c5ec8fc08b871"
+				}
+			},
+			"license": "BSD-3-Clause"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "hashicorp/syntax",
+					"repositoryUrl": "https://github.com/hashicorp/syntax",
+					"commitHash": "2ec7cd10c9d6134e836bf85eb0f5aa010512bff4"
+				}
+			},
+			"license": "MPL-2.0"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "fwcd/vscode-kotlin",
+					"repositoryUrl": "https://github.com/fwcd/vscode-kotlin",
+					"commitHash": "626e20d5c51a4379c4c0ee293aa89e58b5232aec"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "nix-community/vscode-nix-ide",
+					"repositoryUrl": "https://github.com/nix-community/vscode-nix-ide",
+					"commitHash": "effbf3494a43250a537834805b305793994b9ca8"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "reasonml-editor/vscode-reasonml",
+					"repositoryUrl": "https://github.com/reasonml-editor/vscode-reasonml",
+					"commitHash": "14af625ec50ed9968b957b4d6336c5338d81af45"
+				}
+			},
+			"license": "Apache-2.0"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "alefragnani/vscode-language-pascal",
+					"repositoryUrl": "https://github.com/alefragnani/vscode-language-pascal",
+					"commitHash": "f2d6345bd9fe83932f4d04fcacf98ce7d74b8034"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "zxh0/vscode-proto3",
+					"repositoryUrl": "https://github.com/zxh0/vscode-proto3",
+					"commitHash": "274be763ecae7055505354b44f4892a2669e1da8"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "seanwu1105/vscode-qt-for-python",
+					"repositoryUrl": "https://github.com/seanwu1105/vscode-qt-for-python",
+					"commitHash": "51408001e908800c00ce9f68f66e511545ea29fe"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "scala/vscode-scala-syntax",
+					"repositoryUrl": "https://github.com/scala/vscode-scala-syntax",
+					"commitHash": "672fa16c64e12b2cc8b98da011411463968de727"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "sjhuangx/vscode-scheme",
+					"repositoryUrl": "https://github.com/sjhuangx/vscode-scheme",
+					"commitHash": "4e21683666e1e2edfa21d040ecd427f628e7b5ff"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "juanfranblanco/vscode-solidity",
+					"repositoryUrl": "https://github.com/juanfranblanco/vscode-solidity",
+					"commitHash": "54ae302551a095e3f34371bb15f654f574e10fac"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "mshr-h/vscode-verilog-hdl-support",
+					"repositoryUrl": "https://github.com/mshr-h/vscode-verilog-hdl-support",
+					"commitHash": "e6a5a2b76055dd7acbdc7420060e0314cb86e8dd"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "hashicorp/syntax",
+					"repositoryUrl": "https://github.com/hashicorp/syntax",
+					"commitHash": "cc2b4d4fe389f14b8a13937f4e0d7b2811b57588"
+				}
+			},
+			"license": "MPL-2.0"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "textmate/toml.tmbundle",
+					"repositoryUrl": "https://github.com/textmate/toml.tmbundle",
+					"commitHash": "e82b64c1e86396220786846201e9aa3f0a2d9ca2"
+				}
+			},
+			"license": "TextMate bundle license"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "mshr-h/vscode-verilog-hdl-support",
+					"repositoryUrl": "https://github.com/mshr-h/vscode-verilog-hdl-support",
+					"commitHash": "67065883604b1b68a97ca33db22b1eb0c05553de"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "jonasjj/awesome-vhdl",
+					"repositoryUrl": "https://github.com/jonasjj/awesome-vhdl",
+					"commitHash": "b787559a47d64c7baf2a9ac0f4cac8e2e721cddc"
+				}
+			},
+			"license": "MIT"
+		},
+		{
+			"component": {
+				"type": "git",
+				"git": {
+					"name": "ziglang/vscode-zig",
+					"repositoryUrl": "https://github.com/ziglang/vscode-zig",
+					"commitHash": "9c7bb7631f3af99331475b633aaf5b70345c6713"
+				}
+			},
+			"license": "MIT"
+		}
+	],
+	"version": 1
+}

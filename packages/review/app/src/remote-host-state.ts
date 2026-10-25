@@ -93,7 +93,7 @@ export function useHostAction(
   const [failure, setFailure] = useState<string>();
 
   const run = (action: NonNullable<ReviewHostStatus["action"]>) => {
-    if (!hosts || !alias) return;
+    if (!hosts || !alias || pending) return;
     setPending(true);
     setFailure(undefined);
 

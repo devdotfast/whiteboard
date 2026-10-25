@@ -1,8 +1,7 @@
 import crypto from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
-import { type Server, createServer } from "node:http";
-import type { AddressInfo } from "node:net";
+import type { AddressInfo, Server } from "node:net";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -12,20 +11,22 @@ import {
   type JsonValue,
   REVIEW_DESKTOP_DISCOVERY_VERSION,
   type ReviewCliInstallApplyResponse,
+  ReviewConnectRequestSchema,
   type ReviewDesktopDiscovery,
   type ReviewGatewayHost,
-  type ReviewTutorialOpenResponse,
   isJsonObject,
   isObjectValue,
   parseReviewCliInstallApplyRequest,
   reviewDiffrSummarizerInputSchema,
 } from "@dev.fast/review-protocol";
-import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
-import { cliAskTools } from "@review/ask/threads.js";
+import { shellQuote, writePrivateJsonAtomic } from "@dev.fast/trace-core";
+import { connectAgent, detectConnectAgents } from "@review/agent-connect";
+import { type AskTools, cliAskTools } from "@review/ask/threads.js";
 import {
   applyCliInstall,
   declineCliInstall,
   finishCliInstallUpdate,
+  pathShimPath,
   removeCliInstall,
   removeLegacyReviewSkills,
   resetCliInstall,
@@ -38,6 +39,7 @@ import {
 } from "@review/desktop-discovery";
 import { readReviewPackageVersion } from "@review/package-paths";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
+import { pullRequestProvider } from "@review/review-api/provider.js";
 import type { ReviewStore } from "@review/review-api/store.js";
 import {
   devReviewHome,
@@ -45,9 +47,8 @@ import {
   reviewLegacyDiscoveryPath,
 } from "@review/review-home-paths";
 import {
-  readReviewPreferences,
+  readAnimationsEnabled,
   writeAnimationsEnabled,
-  writeScratchpadEnabled,
 } from "@review/review-preferences";
 import {
   ReviewTelemetry,
@@ -76,7 +77,11 @@ import {
   readBoundedRequestJson,
 } from "./hono-http";
 import { ReviewServerError } from "./http-json";
-import { createJsonReviewReporting } from "./json-review-reporting";
+import {
+  captureReviewUiEvent,
+  createJsonReviewReporting,
+} from "./json-review-reporting";
+import { type LoopbackTls, createLoopbackServer } from "./loopback-server";
 import { createReviewGateway } from "./review-gateway";
 import { reviewLifecycleTelemetry } from "./review-lifecycle-telemetry";
 import { ReviewOpenWatchdog } from "./review-open-watchdog";
@@ -86,10 +91,7 @@ import {
   serverJson,
 } from "./review-server-core";
 import { invalidateStructuralComparisons } from "./structural-comparisons.js";
-import { createTutorialService } from "./tutorial-service";
 import { captureSanitizedUiTelemetry } from "./ui-telemetry";
-
-const TUTORIAL_LIFECYCLE_LOCK_KEY = "tutorial-lifecycle";
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -112,6 +114,7 @@ export interface GlobalReviewServerInput {
   relay?: ReviewDesktopVerbRelay;
   /** Electron's Review crash dump directory; `/crash-reports` reads only inside it. */
   crashDumpsDir?: string;
+  tls?: LoopbackTls;
   onRemoteHostRestarted?(alias: string): void;
   log?(message: string): void;
 }
@@ -119,6 +122,7 @@ export interface GlobalReviewServerInput {
 export interface GlobalReviewServer {
   readonly discovery: ReviewDesktopDiscovery;
   readonly url: string;
+  readonly secure: boolean;
   listen(): Promise<void>;
   close(reason?: "app-exit"): Promise<void>;
   setRemoteHosts(hosts: ReviewGatewayHost[]): void;
@@ -157,8 +161,6 @@ export function createGlobalReviewServer(
 
   const reviewStore = input.reviewStore;
 
-  const reviewLocks = new Map<string, Promise<void>>();
-
   // A reload or a second window starts the workbench again, but the launch
   // this server belongs to became ready once.
   let appReadyReported = false;
@@ -172,18 +174,11 @@ export function createGlobalReviewServer(
       ),
   });
 
-  const tutorial = createTutorialService({
-    packageRoot: input.packageRoot,
-    store: reviewStore,
-    data: input.reviewData,
-  });
-
   let closing = false;
   const cliPath = path.join(input.packageRoot, "dist", "cli.js");
 
-  // The scratchpad preference, read once at listen and kept current by the
+  // The animations preference, read once at listen and kept current by the
   // settings endpoint below: this server is the only writer while it runs.
-  let scratchpadEnabled = false;
   let animationsEnabled = false;
 
   const discovery: ReviewDesktopDiscovery = {
@@ -218,7 +213,6 @@ export function createGlobalReviewServer(
     relay,
     token,
     instanceId,
-    scratchpad: () => scratchpadEnabled,
     animations: () => animationsEnabled,
     status: () => {
       const { key, channel, checkout, appVersion, cliVersion, instanceId } =
@@ -264,31 +258,14 @@ export function createGlobalReviewServer(
     home: devReviewHome(),
     relay,
     restarted: (alias) => input.onRemoteHostRestarted?.(alias),
+    remoteEvent: (request, reviewId) =>
+      captureReviewUiEvent(telemetry, request, reviewId),
     log: input.log,
   });
 
   app.all("/reviews-api", (context) => gateway.fetch(context.req.raw));
   app.all("/reviews-api/*", (context) => gateway.fetch(context.req.raw));
   app.get("/remote-hosts", () => serverJson(200, gateway.hosts()));
-  app.get("/preferences/scratchpad", () =>
-    serverJson(200, { enabled: scratchpadEnabled }),
-  );
-  app.put("/preferences/scratchpad", async (context) => {
-    const request = z
-      .object({ enabled: z.boolean() })
-      .safeParse(await readBoundedRequestJson(context.req.raw));
-
-    if (!request.success)
-      throw new ReviewServerError("enabled must be a boolean.", 400);
-
-    scratchpadEnabled = await writeScratchpadEnabled(request.data.enabled);
-
-    // Home watches the catalog; the pad appears or goes without a store write.
-    if (scratchpadEnabled) await reviewStore.ensureScratchpad();
-    reviewStore.invalidateCatalog();
-
-    return serverJson(200, { enabled: scratchpadEnabled });
-  });
   app.get("/preferences/animations", () =>
     serverJson(200, { enabled: animationsEnabled }),
   );
@@ -339,12 +316,14 @@ export function createGlobalReviewServer(
 
         const rawContext = isJsonObject(payload.context) ? payload.context : {};
 
-        const sourceKind = sessionStartedSourceKind(
-          reviewStore,
-          jsonString(rawContext.reviewUuid),
+        const reviewUuid = jsonString(rawContext.reviewUuid);
+
+        Object.assign(
+          eventProperties,
+          sessionStartedSource(reviewStore, reviewUuid),
         );
 
-        if (sourceKind) eventProperties.source_kind = sourceKind;
+        if (reviewUuid) eventProperties.remote = gateway.isRemote(reviewUuid);
       }
 
       await captureSanitizedUiTelemetry(
@@ -390,32 +369,6 @@ export function createGlobalReviewServer(
 
     return serverJson(result.status, result.body);
   });
-  app.get("/tutorial/status", async () =>
-    serverJson(200, await tutorial.status()),
-  );
-  app.post("/tutorial/prepare", async () => {
-    const prepared = await withReviewLock(
-      TUTORIAL_LIFECYCLE_LOCK_KEY,
-      prepareTutorialLocked,
-    );
-
-    return serverJson(200, {
-      ok: true,
-      reviewUuid: prepared.reviewId,
-    });
-  });
-  app.post("/tutorial/open", async () => {
-    return serverJson(
-      200,
-      await withReviewLock(TUTORIAL_LIFECYCLE_LOCK_KEY, openTutorialLocked),
-    );
-  });
-  app.delete("/tutorial", async () => {
-    await withReviewLock(TUTORIAL_LIFECYCLE_LOCK_KEY, deleteTutorialLocked);
-
-    return serverJson(200, { ok: true });
-  });
-
   app.get("/diffr-config", async () =>
     serverJson(200, await readDiffrConfig()),
   );
@@ -535,61 +488,42 @@ export function createGlobalReviewServer(
 
     return serverJson(200, { ok: true });
   });
+  // The harnesses first run connects for the user, instead of asking them
+  // to paste a prompt into each one.
+  app.get("/install/agents", async () =>
+    serverJson(200, { agents: await detectConnectAgents() }),
+  );
+  app.post("/install/connect", async (context) => {
+    const request = ReviewConnectRequestSchema.safeParse(
+      await readBoundedRequestJson(context.req.raw),
+    );
 
-  const httpServer = createServer(createNodeRequestListener(app));
+    if (!request.success) throw new ReviewServerError("Invalid agent.", 400);
 
-  async function prepareTutorialLocked() {
-    return tutorial.prepare();
-  }
+    return serverJson(
+      200,
+      await connectAgent(request.data.target, {
+        hasShim: existsSync(pathShimPath()),
+      }),
+    );
+  });
 
-  async function openTutorialLocked(): Promise<ReviewTutorialOpenResponse> {
-    const snapshot = await prepareTutorialLocked();
-
-    return {
-      kind: "api",
-      reviewUuid: snapshot.reviewId,
-      title: snapshot.title,
-    };
-  }
-
-  async function deleteTutorialLocked(): Promise<void> {
-    await tutorial.cleanup();
-  }
-
-  async function withReviewLock<T>(
-    reviewUuid: string,
-    operation: () => Promise<T>,
-  ): Promise<T> {
-    const previous = reviewLocks.get(reviewUuid) ?? Promise.resolve();
-    let release: () => void = () => {};
-
-    const current = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-
-    const chain = previous.then(() => current);
-    reviewLocks.set(reviewUuid, chain);
-    await previous;
-
-    try {
-      return await operation();
-    } finally {
-      release();
-
-      if (reviewLocks.get(reviewUuid) === chain) reviewLocks.delete(reviewUuid);
-    }
-  }
+  const loopback = createLoopbackServer(
+    createNodeRequestListener(app),
+    input.tls,
+    input.log,
+  );
 
   return {
     discovery,
+    secure: loopback.secure,
     get url() {
       return urlForBoundPort();
     },
     listen: async () => {
       await migrateDiffrConfig();
-      ({ scratchpadEnabled, animationsEnabled } =
-        await readReviewPreferences());
-      boundPort = await listen(httpServer, input.port);
+      animationsEnabled = await readAnimationsEnabled();
+      boundPort = await listen(loopback.server, input.port);
       discovery.url = urlForBoundPort();
 
       for (const discoveryPath of discoveryPaths)
@@ -605,7 +539,7 @@ export function createGlobalReviewServer(
       relay.close();
       openWatchdog.dispose();
 
-      await closeHttpServer(httpServer);
+      await loopback.close();
       await gateway.close();
       await telemetry.shutdown(1_500);
     },
@@ -633,26 +567,44 @@ function watchSessionOpen(
 }
 
 /**
- * `session_started`'s `source_kind`: the opened review's target kind, or
- * `scratchpad` for the one scratchpad. Undefined when the review is gone (a
- * shared review this store never had, or one deleted between open and the
- * event arriving) or was left without a target.
+ * `session_started`'s `source_kind` and `pr_provider`. Empty when the review
+ * is not in this store: a shared or remote review, or one deleted between open
+ * and the event arriving.
  */
-export function sessionStartedSourceKind(
+export function sessionStartedSource(
   reviewStore: ReviewStore,
   reviewUuid: string | undefined,
-): string | undefined {
-  if (!reviewUuid) return undefined;
+) {
+  if (!reviewUuid) return {};
 
   try {
     const snapshot = reviewStore.read(reviewUuid);
 
-    return snapshot.kind === "scratchpad"
-      ? snapshot.kind
-      : snapshot.target?.kind;
+    const sourceKind = snapshot.target?.kind;
+
+    const pullRequestUrl = snapshot.origin?.pullRequestUrl;
+
+    const prProvider = pullRequestUrl && prProviderOf(pullRequestUrl);
+
+    return {
+      ...(sourceKind && { source_kind: sourceKind }),
+      ...(prProvider && { pr_provider: prProvider }),
+    };
   } catch {
-    return undefined;
+    return {};
   }
+}
+
+function prProviderOf(url: string) {
+  const resolved = pullRequestProvider(url);
+
+  if (!resolved) return undefined;
+
+  if (resolved.provider.id === "azure-devops") return "azure_devops";
+
+  return resolved.address.host === "github.com"
+    ? "github"
+    : "github_enterprise";
 }
 
 function listen(server: Server, port: number): Promise<number> {
@@ -670,18 +622,6 @@ function listen(server: Server, port: number): Promise<number> {
 
       resolve(address.port);
     });
-  });
-}
-
-function closeHttpServer(server: Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (!server.listening) {
-      resolve();
-
-      return;
-    }
-
-    server.close((error) => (error ? reject(error) : resolve()));
   });
 }
 

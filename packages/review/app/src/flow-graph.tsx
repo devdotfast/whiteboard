@@ -1,4 +1,12 @@
-import { fontSize, fontWeight, motion } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  motion,
+  space,
+} from "@canvas/scale.stylex";
+import { Button } from "@canvas/ui/button";
+import { Spinner } from "@canvas/ui/spinner";
 import type { DiffSelection } from "@review/lens-selection";
 import {
   type FlowDiagramBlock,
@@ -24,7 +32,6 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
-  useStoreApi,
 } from "@xyflow/react";
 import type { ElkNode } from "elkjs/lib/elk.bundled.js";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
@@ -36,6 +43,7 @@ import { drawStyles } from "./draw-styles";
 import { loadElk } from "./elk";
 import { ElementCountsText } from "./lens-counts";
 import { documentMarker, flowNodeMarker } from "./markers.stylex";
+import { MetaWheelZoom } from "./meta-wheel-zoom";
 import { useReviewLenses } from "./review-lenses";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
@@ -63,7 +71,7 @@ export function FlowGraph({
   requireReady?: boolean;
   /** Pan and zoom by hand, for the fullscreen tour. */
   interactive?: boolean;
-  height?: number | string;
+  height?: number | "100%";
   onSelect(node: FlowDiagramNode): void;
 }) {
   const { theme } = useReviewDebugSettings();
@@ -81,6 +89,20 @@ export function FlowGraph({
       : cachedLayouts.get(block)?.get(direction);
 
   const frame = useRef<HTMLDivElement>(null);
+  const [frameWidth, setFrameWidth] = useState(0);
+
+  useEffect(() => {
+    const element = frame.current;
+
+    if (!element) return;
+
+    const measure = () => setFrameWidth(element.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [layout]);
 
   // The layout the reader has zoomed or panned by hand. A new layout is a
   // new drawing, so it starts from its fit again.
@@ -122,7 +144,8 @@ export function FlowGraph({
                 id: node.key,
                 type: "flowNode",
                 position,
-                ...SIZE,
+                width: SIZE.width,
+                height: position.height,
                 draggable: false,
                 selectable: false,
                 className: stylex.props(styles.nodeWrapper).className,
@@ -192,7 +215,20 @@ export function FlowGraph({
     <div
       ref={frame}
       {...withClass("lens-flow", styles.flow)}
-      style={{ height }}
+      style={{
+        height:
+          !interactive && height !== "100%" && frameWidth
+            ? Math.max(
+                height,
+                layout.height *
+                  Math.min(
+                    1,
+                    Math.max(1, frameWidth - PADDING * 2) / layout.width,
+                  ) +
+                  PADDING * 2,
+              )
+            : height,
+      }}
       aria-label={block.title}
     >
       <ReactFlowProvider>
@@ -231,15 +267,21 @@ export function FlowGraph({
         >
           {moved ? (
             <Panel position="top-right">
-              <button
-                {...withClass("diagram-tour-button", diagramStyles.control)}
+              <Button
+                className="diagram-tour-button"
+                xstyle={diagramStyles.button}
                 onClick={() => setMovedLayout(undefined)}
               >
                 Reset view
-              </button>
+              </Button>
             </Panel>
           ) : (
-            <FitToLayout layout={layout} frame={frame} />
+            <FitToLayout
+              layout={layout}
+              frame={frame}
+              interactive={interactive}
+              selectedKey={selectedKey}
+            />
           )}
           {!interactive && (
             <MetaWheelZoom
@@ -264,7 +306,7 @@ const ARROW = {
   type: MarkerType.ArrowClosed,
   width: 14,
   height: 14,
-  color: "var(--ink-muted)",
+  color: tokens.inkMuted,
 };
 
 /**
@@ -278,12 +320,16 @@ const ARROW = {
 function FitToLayout({
   layout,
   frame,
+  interactive,
+  selectedKey,
 }: {
   layout: Layout;
   frame: RefObject<HTMLDivElement | null>;
+  interactive: boolean;
+  selectedKey?: string | null;
 }) {
   const flow = useReactFlow();
-  const fitted = useRef(false);
+  const selected = selectedKey ? layout.nodes.get(selectedKey) : undefined;
 
   useEffect(() => {
     const element = frame.current;
@@ -295,21 +341,27 @@ function FitToLayout({
 
       if (!width || !height) return;
 
-      const zoom = Math.min(
+      const fitZoom = Math.min(
         1,
         (width - PADDING * 2) / Math.max(1, layout.width),
         (height - PADDING * 2) / Math.max(1, layout.height),
       );
 
+      // The tour can pan. Start near its selected node at a readable scale
+      // instead of shrinking three lines of text into a tiny overview.
+      const zoom = interactive ? Math.max(0.75, fitZoom) : fitZoom;
+      const focus = zoom > fitZoom && selected;
+      const centerX = focus ? focus.x + SIZE.width / 2 : layout.width / 2;
+      const centerY = focus ? focus.y + focus.height / 2 : layout.height / 2;
+
       void flow.setViewport(
         {
-          x: (width - layout.width * zoom) / 2,
-          y: (height - layout.height * zoom) / 2,
+          x: width / 2 - centerX * zoom,
+          y: height / 2 - centerY * zoom,
           zoom,
         },
-        { duration: fitted.current ? 300 : 0 },
+        { duration: 0 },
       );
-      fitted.current = true;
     };
 
     fit();
@@ -317,76 +369,7 @@ function FitToLayout({
     observer.observe(element);
 
     return () => observer.disconnect();
-  }, [flow, frame, layout]);
-
-  return null;
-}
-
-/**
- * Cmd+wheel zooms about the pointer, as Ctrl+wheel does. React Flow reads a
- * wheel as a zoom only when it carries Ctrl, which is also how a pinch
- * arrives, so Cmd is handled here.
- */
-function MetaWheelZoom({
-  frame,
-  onZoom,
-}: {
-  frame: RefObject<HTMLDivElement | null>;
-  onZoom(): void;
-}) {
-  const store = useStoreApi();
-  const zoomed = useRef(onZoom);
-  zoomed.current = onZoom;
-
-  useEffect(() => {
-    const element = frame.current;
-
-    if (!element) return;
-
-    const zoom = (event: WheelEvent) => {
-      if (!event.metaKey || event.ctrlKey) return;
-
-      event.preventDefault();
-
-      const {
-        panZoom,
-        transform: [x, y, from],
-        width,
-        height,
-        translateExtent,
-      } = store.getState();
-
-      const box = element.getBoundingClientRect();
-
-      const pointer = {
-        x: event.clientX - box.left,
-        y: event.clientY - box.top,
-      };
-
-      const to = Math.min(
-        MAX_ZOOM,
-        Math.max(MIN_ZOOM, from * 2 ** (-event.deltaY * 0.002)),
-      );
-
-      void panZoom?.setViewportConstrained(
-        {
-          x: pointer.x - ((pointer.x - x) * to) / from,
-          y: pointer.y - ((pointer.y - y) * to) / from,
-          zoom: to,
-        },
-        [
-          [0, 0],
-          [width, height],
-        ],
-        translateExtent,
-      );
-      zoomed.current();
-    };
-
-    element.addEventListener("wheel", zoom, { passive: false });
-
-    return () => element.removeEventListener("wheel", zoom);
-  }, [store, frame]);
+  }, [flow, frame, layout, interactive, selected]);
 
   return null;
 }
@@ -394,7 +377,7 @@ function MetaWheelZoom({
 interface Layout {
   width: number;
   height: number;
-  nodes: Map<string, { x: number; y: number }>;
+  nodes: Map<string, { x: number; y: number; height: number }>;
   edges: {
     index: number;
     section: number;
@@ -424,6 +407,32 @@ async function layoutFlow(
   direction: "down" | "right" | undefined,
 ): Promise<Layout> {
   const elk = await loadElk();
+  // Measure with the same font, wrapping and clamp as the rendered node.
+  // ELK needs these sizes before it can route edges around the labels.
+  const measure = document.createElement("div");
+  Object.assign(measure, stylex.props(styles.node, styles.measure));
+  const label = document.createElement("span");
+  Object.assign(label, stylex.props(styles.label));
+  measure.style.width = `${SIZE.width}px`;
+  measure.append(label);
+  (document.querySelector(".review-app") ?? document.body).append(measure);
+  const heights = new Map<string, number>();
+
+  try {
+    await document.fonts.load(getComputedStyle(label).font);
+    label.textContent = "M";
+    const singleLineHeight = label.offsetHeight;
+
+    for (const node of block.nodes) {
+      label.textContent = node.label;
+      heights.set(
+        node.key,
+        SIZE.height + Math.max(0, label.offsetHeight - singleLineHeight),
+      );
+    }
+  } finally {
+    measure.remove();
+  }
 
   const result = await elk.layout<ElkNode>({
     id: "flow",
@@ -433,7 +442,11 @@ async function layoutFlow(
       "elk.spacing.nodeNode": "28",
       "elk.layered.spacing.nodeNodeBetweenLayers": "44",
     },
-    children: block.nodes.map((node) => ({ id: node.key, ...SIZE })),
+    children: block.nodes.map((node) => ({
+      id: node.key,
+      width: SIZE.width,
+      height: heights.get(node.key)!,
+    })),
     edges: block.edges.map((edge, index) => {
       const text = edge.label && labelText(edge.label);
 
@@ -463,7 +476,7 @@ async function layoutFlow(
     nodes: new Map(
       result.children?.map((node) => [
         node.id,
-        { x: node.x ?? 0, y: node.y ?? 0 },
+        { x: node.x ?? 0, y: node.y ?? 0, height: node.height ?? SIZE.height },
       ]),
     ),
     edges: (result.edges ?? []).flatMap((edge) =>
@@ -517,7 +530,7 @@ const change = (progress: CoverageProgress) =>
         ? "removed"
         : "unchanged";
 
-function FlowNode({ data }: NodeProps<FlowNodeType>) {
+function FlowNode({ data, height = SIZE.height }: NodeProps<FlowNodeType>) {
   const { node, sources, requireReady, selected } = data;
   const lenses = useReviewLenses();
   const motion = useMotionPhase(node.id);
@@ -543,7 +556,7 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
         progress.state === "viewed" && styles.viewed,
         motion === "queued" && drawStyles.hidden,
       )}
-      style={{ width: SIZE.width, height: SIZE.height }}
+      style={{ width: SIZE.width, height }}
       role="button"
       tabIndex={unavailable ? -1 : 0}
       aria-disabled={unavailable}
@@ -570,16 +583,16 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
       <Handle
         type="target"
         position={Position.Top}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <Handle
         type="source"
         position={Position.Bottom}
-        {...stylex.props(styles.handle)}
+        {...stylex.props(diagramStyles.handle)}
       />
       <svg
         {...stylex.props(styles.drawing)}
-        viewBox={`0 0 ${SIZE.width} ${SIZE.height}`}
+        viewBox={`0 0 ${SIZE.width} ${height}`}
         preserveAspectRatio="none"
         aria-hidden="true"
       >
@@ -602,8 +615,8 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
           x={0.5}
           y={0.5}
           width={SIZE.width - 1}
-          height={SIZE.height - 1}
-          rx={node.kind === "terminal" ? SIZE.height / 2 : 6}
+          height={height - 1}
+          rx={node.kind === "terminal" ? height / 2 : 6}
         />
       </svg>
       <div
@@ -614,13 +627,11 @@ function FlowNode({ data }: NodeProps<FlowNodeType>) {
           (motion === "fill" || motion === "relabel") && drawStyles.labelFill,
         )}
       >
-        <span {...stylex.props(styles.label)}>
-          {node.label.length > 26 ? `${node.label.slice(0, 25)}…` : node.label}
-        </span>
+        <span {...stylex.props(styles.label)}>{node.label}</span>
         <span {...stylex.props(styles.caption)}>
           {unavailable ? (
             availability === "pending" ? (
-              "…"
+              <Spinner />
             ) : (
               "Unavailable"
             )
@@ -694,15 +705,15 @@ const inDocument = () => stylex.when.ancestor(":is(*)", documentMarker);
 const styles = stylex.create({
   // Read as document paragraphs inside a document.
   paragraph: {
-    margin: { default: null, [inDocument()]: "14px 0" },
+    margin: { default: null, [inDocument()]: `${space.s14} 0` },
     color: { default: null, [inDocument()]: tokens.ink },
     fontFamily: { default: null, [inDocument()]: tokens.fontSerif },
     fontSize: { default: null, [inDocument()]: fontSize.reading },
-    lineHeight: { default: null, [inDocument()]: 1.72 },
+    lineHeight: { default: null, [inDocument()]: leading.prose },
     textAlign: { default: null, [inDocument()]: "left" },
   },
   note: {
-    padding: "8px 12px",
+    padding: `${space.s8} ${space.s12}`,
     color: { default: tokens.inkFaint, [inDocument()]: tokens.ink },
   },
   flow: {
@@ -721,25 +732,12 @@ const styles = stylex.create({
     position: "relative",
     boxSizing: "border-box",
     color: tokens.ink,
-    font: `${fontSize.body}/1.4 ${tokens.fontMono}`,
+    font: `${fontSize.body}/${leading.normal} ${tokens.fontMono}`,
     cursor: "pointer",
     outline: { default: null, ":focus-visible": "none" },
   },
   viewed: {
     opacity: 0.42,
-  },
-  // Handles exist only so edges can attach.
-  handle: {
-    width: "1px",
-    height: "1px",
-    minWidth: 0,
-    minHeight: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
-    opacity: 0,
-    pointerEvents: "none",
   },
   drawing: {
     position: "absolute",
@@ -794,15 +792,23 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     justifyContent: "center",
-    gap: "2px",
+    gap: space.s2,
     minWidth: 0,
-    padding: "0 12px",
+    padding: `0 ${space.s12}`,
+  },
+  measure: {
+    padding: `0 ${space.s12}`,
+    position: "absolute",
+    visibility: "hidden",
+    pointerEvents: "none",
   },
   label: {
+    display: "-webkit-box",
     overflow: "hidden",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: 3,
+    overflowWrap: "anywhere",
     fontWeight: fontWeight.medium,
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
   caption: {
     color: tokens.inkFaint,

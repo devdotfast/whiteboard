@@ -19,10 +19,10 @@ import {
   ReviewOpenEditorSchema,
   ReviewRangeSchema,
   ReviewRepositoryIdentitySchema,
-  ReviewRuntimeConfigSchema,
   ReviewSurfaceEventSchema,
   ReviewVerbRequestSchema,
   ReviewVerbResponseSchema,
+  lensDiffFiles,
   summarizeReviewDiffFiles,
 } from "./contracts.js";
 
@@ -40,19 +40,6 @@ const contracts: Array<[string, ZodType, JsonObject]> = [
     {
       consent: "skipped",
       updatedAt: "2026-08-09T00:00:00.000Z",
-    },
-  ],
-  [
-    "runtime config",
-    ReviewRuntimeConfigSchema,
-    {
-      serverUrl: "http://127.0.0.1:5570",
-      reviewId: "review-1",
-      token: "",
-      wasmUrl: "http://127.0.0.1:5570/libavoid.wasm",
-      appVersion: "0.0.13",
-      theme: "dark",
-      host: "desktop",
     },
   ],
   [
@@ -195,6 +182,49 @@ describe("summarizeReviewDiffFiles", () => {
     expect(
       summarizeReviewDiffFiles([{ additions: 4 }, { deletions: 3 }]),
     ).toEqual({ fileCount: 2, additions: 4, deletions: 3 });
+  });
+});
+
+describe("lensDiffFiles", () => {
+  const files = [
+    {
+      path: "renamed.ts",
+      previousPath: "old.ts",
+      status: "renamed" as const,
+      additions: 2,
+      deletions: 1,
+    },
+    {
+      path: "other.ts",
+      status: "modified" as const,
+      additions: 1,
+      deletions: 0,
+    },
+  ];
+
+  const lens = {
+    id: "lens",
+    title: "Context",
+    reviewId: "review",
+    version: 1,
+    ranges: [
+      { file: "old.ts", side: "base" as const, fromLine: 2, toLine: 5 },
+      { file: "context.ts", side: "base" as const, fromLine: 10, toLine: 12 },
+      { file: "context.ts", side: "head" as const, fromLine: 10, toLine: 12 },
+    ],
+  };
+
+  it("keeps the lens's files and adds each referenced unchanged file once", () => {
+    expect(lensDiffFiles(files, lens)).toEqual([
+      files[0],
+      { path: "context.ts", status: "unchanged", additions: 0, deletions: 0 },
+    ]);
+  });
+
+  it("adds no context files to a whole-file lens", () => {
+    expect(lensDiffFiles(files, { ...lens, wholeFiles: true })).toEqual([
+      files[0],
+    ]);
   });
 });
 

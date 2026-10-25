@@ -16,9 +16,6 @@ const VERSION_TIMEOUT_MS = 3_000;
 
 const INSTALL_TIMEOUT_MS = 35_000;
 
-const SHUTDOWN_WITHOUT_DELAY_ENV =
-  "DEV_FAST_REVIEW_REMOTE_SHUTDOWN_WITHOUT_DELAY";
-
 const GRACE_ENV = "DEV_FAST_REVIEW_REMOTE_RECONNECTION_GRACE_SECONDS";
 
 const PENDING = {
@@ -184,7 +181,7 @@ export async function ensureRemoteLanguageServer(
     );
 
     if (!outcome.acquired)
-      throw new Error("Another start of the VS Code server did not finish.");
+      throw new Error("Another start of the language server did not finish.");
 
     return { languageServer: outcome.result, languageGroups };
   } catch (error) {
@@ -292,7 +289,7 @@ async function readCommit(root: string) {
 
   const text = await readFile(file, "utf8").catch(() => {
     throw new Error(
-      `This Whiteboard install has no VS Code server (${file} is missing).`,
+      `This Whiteboard server has no language server (${file} is missing).`,
     );
   });
 
@@ -376,9 +373,6 @@ async function startServer(
       extensionsDir,
       "--accept-server-license-terms",
       ...idleArgs(env),
-      ...(env[SHUTDOWN_WITHOUT_DELAY_ENV] === "1"
-        ? ["--remote-auto-shutdown-without-delay"]
-        : []),
     ],
     cwd: serverDataDir,
     env,
@@ -423,6 +417,6 @@ async function startServer(
     .join("\n");
 
   throw new Error(
-    `The VS Code server did not start${child.error ? `: ${child.error.message}` : child.exited ? "" : ` within ${timeoutMs / 1_000} s`}. The end of ${files.logFile}:\n${tail}`,
+    `The language server did not start${child.error ? `: ${child.error.message}` : child.exited ? "" : ` within ${timeoutMs / 1_000} s`}. The end of ${files.logFile}:\n${tail}`,
   );
 }

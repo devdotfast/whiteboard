@@ -1,29 +1,50 @@
-import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
+import {
+  type ReviewCommitSummary,
+  boardTitle,
+} from "@dev.fast/review-protocol";
 import { type DiffSelection } from "@review/lens-selection";
 import type { ReviewApiClient } from "@review/review-api/client";
 import {
   type Block,
+  type BoardRef,
+  boardLinks,
+  boardRepositoryId,
   elements,
   resourceReferences,
   selectionReferences,
 } from "@review/review-api/document";
 import type { LocalReviewData } from "@review/review-api/local-data";
 import type { Snapshot } from "@review/review-api/store";
+import { VersionCache } from "@review/review-api/version-cache";
 import type { NormalizedSoftwareModel } from "@review/software-map-model";
 import * as stylex from "@stylexjs/stylex";
-import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
+import type { QueryClient } from "@tanstack/react-query";
+import {
+  memo,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { agentColor } from "./agent-colors";
 import { markdownHasTitle } from "./agent-markdown";
 import { type ApiHeadingIds, apiHeadingIds } from "./api-document-headings";
 import { AuthoringActivityContext } from "./authoring-activity-context";
-import { scopeLive, scopePresence } from "./authoring-cursor";
+import {
+  type AuthoringCursor,
+  scopeLive,
+  scopePresence,
+} from "./authoring-cursor";
 import {
   BlockErrorBoundary,
   type StoredBlock,
   renderBlock,
   stored,
 } from "./blocks";
+import type { BoardLinkTarget } from "./board-link";
 import { AuthoringCursorContext, Courier } from "./courier";
 import { documentStyles } from "./document-styles";
 import { withErasedBlocks } from "./draw-queue";
@@ -38,7 +59,7 @@ import type { SourcePeekAnchor } from "./review-panel-model";
 import { useReviewRoots } from "./review-root-context";
 import type { SoftwareMapResolvedDataPayload } from "./software-map/software-map-snapshot";
 
-interface Trace {
+export interface BoardTrace {
   label: string;
   events: { id: string; role: string; text: string }[];
 }
@@ -46,10 +67,13 @@ interface Trace {
 export interface ApiDocumentData {
   snapshot: Snapshot;
   headings: ApiHeadingIds;
-  commits: ReviewCommitSummary[];
+  /** Undefined until read. */
+  commits?: ReviewCommitSummary[];
   anchors: Map<string, SourcePeekAnchor>;
   images: Map<string, string>;
-  traces: Map<string, Trace>;
+  traces: Map<string, BoardTrace>;
+  /** Board link targets, keyed "<boardId>#<blockId>". */
+  boards: Map<string, BoardLinkTarget>;
   maps: Map<
     string,
     NormalizedSoftwareModel & {
@@ -61,133 +85,260 @@ export interface ApiDocumentData {
   >;
 }
 
-/** Cache only immutable resources and commit-addressed quotes, for this canvas. */
-export function createDocumentLoader(client: ReviewApiClient) {
-  const cache = new Map<string, Promise<unknown>>();
-  const urls = new Set<string>();
-  let disposed = false;
+// Reopening a board parses its Markdown again only if the document changed.
+// The key includes a hash of the document: serializing and hashing it takes
+// 1–2 ms on a 300 KB board.
+const derivations = new VersionCache(
+  (snapshot: Snapshot) => ({
+    headings: apiHeadingIds(snapshot.document),
+    references: selectionReferences(snapshot.document, {
+      tolerant: true,
+      repositoryId: boardRepositoryId(snapshot),
+    }),
+    resources: resourceReferences(snapshot.document),
+  }),
+  { capacity: 32, key: documentKey },
+);
 
-  const once = <T,>(key: string, read: () => Promise<T>): Promise<T> => {
-    if (!cache.has(key))
-      cache.set(
-        key,
-        read().catch((error) => {
-          cache.delete(key);
-          throw error;
-        }),
+// A draft runs as each read lands; hash each snapshot once.
+const documentKeys = new WeakMap<Snapshot, string>();
+
+function documentKey(snapshot: Snapshot): string {
+  const known = documentKeys.get(snapshot);
+
+  if (known) return known;
+  const text = JSON.stringify(snapshot.document);
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < text.length; index++)
+    hash = Math.imul(hash ^ text.charCodeAt(index), 0x01000193);
+
+  const key = `${snapshot.reviewId}\0${snapshot.version}\0${text.length}\0${hash >>> 0}`;
+
+  documentKeys.set(snapshot, key);
+
+  return key;
+}
+
+export type SavedMap = Awaited<ReturnType<LocalReviewData["map"]>>;
+
+type MapModel =
+  ApiDocumentData["maps"] extends Map<string, infer Model> ? Model : never;
+
+export function savedMapModel(saved: SavedMap): MapModel {
+  return {
+    ...saved,
+    pinnedData: {
+      side: saved.side,
+      counts: new Map(Object.entries(saved.countsByElementPath)),
+      unmappedByElementPath: new Map(
+        Object.entries(saved.unmappedByElementPath),
+      ),
+    },
+    elementsByPath: new Map(
+      saved.elements.map((element) => [element.path, element]),
+    ),
+  };
+}
+
+type LinkTarget = BoardLinkTarget & { to: BoardRef };
+
+/** Drafts a board from cached reads and reads the rest into the client. */
+export function createDocumentLoader(
+  client: ReviewApiClient,
+  queryClient: QueryClient,
+) {
+  const urls = new Map<Blob, string>();
+
+  const cached = <T,>(key: string) =>
+    queryClient.getQueryData<T>(["document", key]);
+
+  const read = <T,>(
+    key: string,
+    queryFn: () => Promise<T>,
+    staleTime = Infinity,
+  ) =>
+    queryClient.fetchQuery({ queryKey: ["document", key], queryFn, staleTime });
+
+  const url = (blob: Blob) => {
+    let url = urls.get(blob);
+
+    if (!url) {
+      url = URL.createObjectURL(blob);
+      urls.set(blob, url);
+    }
+
+    return url;
+  };
+
+  // Per board: the server checks each read against its board.
+  const keys = ({ reviewId, version, pins }: Snapshot) => ({
+    commits: `${reviewId}:commits:${JSON.stringify(pins)}`,
+    links: `${reviewId}:links:${version}`,
+    image: (assetId: string) => `${reviewId}:image:${assetId}`,
+    trace: (traceId: string) => `${reviewId}:trace:${traceId}`,
+    map: (mapVersionId: string) =>
+      `${reviewId}:map:${mapVersionId}:${JSON.stringify(pins ?? null)}`,
+  });
+
+  const readsCommits = (snapshot: Snapshot) =>
+    !snapshot.sourceUnavailable && snapshot.pins !== undefined;
+
+  /** The board with whatever has been read so far. */
+  const draft = (snapshot: Snapshot): ApiDocumentData => {
+    const { headings, references, resources } = derivations.get(snapshot);
+    const key = keys(snapshot);
+    const boards: ApiDocumentData["boards"] = new Map();
+
+    for (const link of cached<LinkTarget[]>(key.links) ?? [])
+      boards.set(`${link.to.board}#${link.to.block ?? ""}`, link);
+
+    const data: ApiDocumentData = {
+      snapshot,
+      headings,
+      commits: readsCommits(snapshot)
+        ? cached<ReviewCommitSummary[]>(key.commits)
+        : [],
+      anchors: new Map(),
+      images: new Map(),
+      traces: new Map(),
+      boards,
+      maps: new Map(),
+    };
+
+    for (const { id, source, label } of references) {
+      if (snapshot.staleSources?.includes(id)) continue;
+      data.anchors.set(
+        id,
+        sourceAnchor(
+          id,
+          source,
+          label ?? `${source.file}:${source.start.line}`,
+        ),
+      );
+    }
+
+    for (const node of resources) {
+      if (node.type === "image") {
+        const blob = cached<Blob>(key.image(node.assetId));
+
+        if (blob) data.images.set(node.assetId, url(blob));
+      }
+
+      if (node.type === "trace_quote") {
+        const trace = cached<BoardTrace | null>(key.trace(node.traceId));
+
+        if (trace) data.traces.set(node.traceId, trace);
+      }
+
+      if (node.type === "software_map" && !data.maps.has(node.mapVersionId)) {
+        const model = cached<MapModel>(key.map(node.mapVersionId));
+
+        if (model)
+          data.maps.set(node.mapVersionId, {
+            ...model,
+            pinnedData: { ...model.pinnedData, diagramId: node.id },
+          });
+      }
+    }
+
+    return data;
+  };
+
+  // Read again each time; on failure, links render without targets.
+  const readLinks = (snapshot: Snapshot) =>
+    boardLinks(snapshot.reviewId, snapshot.document).length
+      ? read(
+          keys(snapshot).links,
+          async () =>
+            (
+              await client
+                .read<{ outgoing: LinkTarget[] }>(
+                  `/${encodeURIComponent(snapshot.reviewId)}/links?version=${snapshot.version}`,
+                )
+                .catch(() => ({ outgoing: [] }))
+            ).outgoing,
+          0,
+        )
+      : undefined;
+
+  const reads = (snapshot: Snapshot) => {
+    const { resources } = derivations.get(snapshot);
+    const key = keys(snapshot);
+    const pending: (Promise<unknown> | undefined)[] = [readLinks(snapshot)];
+
+    if (readsCommits(snapshot))
+      pending.push(
+        read(key.commits, () =>
+          client.read<ReviewCommitSummary[]>(
+            `/${snapshot.reviewId}/commits?version=${snapshot.version}`,
+          ),
+        ),
       );
 
-    // SAFETY: each key identifies one immutable resource and its loader's result type.
-    return cache.get(key) as Promise<T>;
+    for (const node of resources) {
+      if (node.type === "image")
+        pending.push(
+          read(key.image(node.assetId), async () =>
+            (
+              await client.response(
+                `/${encodeURIComponent(snapshot.reviewId)}/resources/${encodeURIComponent(node.assetId)}`,
+              )
+            ).blob(),
+          ),
+        );
+
+      // A trace that cannot be loaded leaves its quote to render as text.
+      if (node.type === "trace_quote")
+        pending.push(
+          read(key.trace(node.traceId), () =>
+            client
+              .read<BoardTrace>(
+                `/${encodeURIComponent(snapshot.reviewId)}/resources/${encodeURIComponent(node.traceId)}`,
+              )
+              .catch(() => null),
+          ),
+        );
+
+      if (node.type === "software_map")
+        pending.push(
+          read(key.map(node.mapVersionId), async () =>
+            savedMapModel(
+              await client.read<SavedMap>(
+                `/${snapshot.reviewId}/maps/${encodeURIComponent(node.mapVersionId)}?version=${snapshot.version}`,
+              ),
+            ),
+          ),
+        );
+    }
+
+    return pending;
   };
 
   return {
+    draft,
     dispose() {
-      disposed = true;
-
-      for (const url of urls) URL.revokeObjectURL(url);
-      cache.clear();
+      for (const url of urls.values()) URL.revokeObjectURL(url);
+      urls.clear();
     },
-    async load(snapshot: Snapshot): Promise<ApiDocumentData> {
-      const data: ApiDocumentData = {
-        snapshot,
-        headings: apiHeadingIds(snapshot.document),
-        commits:
-          snapshot.sourceUnavailable || !snapshot.pins
-            ? []
-            : await once(`commits:${JSON.stringify(snapshot.pins)}`, () =>
-                client.read<ReviewCommitSummary[]>(
-                  `/${snapshot.reviewId}/commits?version=${snapshot.version}`,
-                ),
-              ),
-        anchors: new Map(),
-        images: new Map(),
-        traces: new Map(),
-        maps: new Map(),
-      };
-
-      for (const { id, source, label } of selectionReferences(
-        snapshot.document,
-        { tolerant: true },
-      )) {
-        if (snapshot.staleSources?.includes(id)) continue;
-        data.anchors.set(
-          id,
-          sourceAnchor(
-            id,
-            source,
-            label ?? `${source.file}:${source.start.line}`,
-          ),
-        );
-      }
-
+    /** Reads the rest; `update` takes each partial board. */
+    async load(
+      snapshot: Snapshot,
+      update?: (data: ApiDocumentData) => void,
+    ): Promise<ApiDocumentData> {
       await Promise.all(
-        resourceReferences(snapshot.document).map(async (node) => {
-          if (node.type === "image") {
-            const url = await once(`image:${node.assetId}`, async () => {
-              const blob = await (
-                await client.response(
-                  `/${encodeURIComponent(snapshot.reviewId)}/resources/${encodeURIComponent(node.assetId)}`,
-                )
-              ).blob();
-
-              if (disposed) throw new Error("Canvas closed.");
-              const url = URL.createObjectURL(blob);
-              urls.add(url);
-
-              return url;
-            });
-
-            data.images.set(node.assetId, url);
-          }
-
-          // A trace that cannot be loaded leaves its quote to render as text.
-          if (node.type === "trace_quote") {
-            const loaded = await once(`trace:${node.traceId}`, () =>
-              client.read<Trace>(
-                `/${encodeURIComponent(snapshot.reviewId)}/resources/${encodeURIComponent(node.traceId)}`,
-              ),
-            ).catch(() => undefined);
-
-            if (loaded) data.traces.set(node.traceId, loaded);
-          }
-
-          if (node.type === "software_map") {
-            const model = await once(
-              `map:${node.mapVersionId}:${JSON.stringify(snapshot.pins ?? null)}`,
-              async () => {
-                const saved = await client.read<
-                  Awaited<ReturnType<LocalReviewData["map"]>>
-                >(
-                  `/${snapshot.reviewId}/maps/${encodeURIComponent(node.mapVersionId)}?version=${snapshot.version}`,
-                );
-
-                return {
-                  ...saved,
-                  pinnedData: {
-                    side: saved.side,
-                    counts: new Map(Object.entries(saved.countsByElementPath)),
-                    unmappedByElementPath: new Map(
-                      Object.entries(saved.unmappedByElementPath),
-                    ),
-                  },
-                  elementsByPath: new Map(
-                    saved.elements.map((element) => [element.path, element]),
-                  ),
-                };
-              },
-            );
-
-            if (!data.maps.has(node.mapVersionId))
-              data.maps.set(node.mapVersionId, {
-                ...model,
-                pinnedData: { ...model.pinnedData, diagramId: node.id },
-              });
-          }
-        }),
+        reads(snapshot).map((each) =>
+          each?.then(() => update?.(draft(snapshot))),
+        ),
       );
 
-      return data;
+      return draft(snapshot);
+    },
+    /** The same document, after a board it links to changed. */
+    async relink(data: ApiDocumentData): Promise<ApiDocumentData> {
+      await readLinks(data.snapshot);
+
+      return draft(data.snapshot);
     },
   };
 }
@@ -219,15 +370,14 @@ export function ApiDocument({
     [data.snapshot.document],
   );
 
-  // The scratchpad is a napkin, not a titled document: no heading, no
-  // updated-ago line, just the blocks.
-  const scratchpad = data.snapshot.kind === "scratchpad";
   const region = useEditingRegion(data.snapshot.document);
 
   return (
     <>
-      {!hasTitle && !scratchpad && (
-        <ReviewDocumentTitle>{data.snapshot.title}</ReviewDocumentTitle>
+      {!hasTitle && (
+        <ReviewDocumentTitle>
+          {boardTitle(data.snapshot.title)}
+        </ReviewDocumentTitle>
       )}
       <DocumentBlocks
         nodes={data.snapshot.document}
@@ -244,11 +394,12 @@ export function ApiDocument({
  * writing; the courier sits down at the same moment. */
 const WRITING_MS = 3000;
 
-/** The top-level block the agent is editing, the one holding the courier,
- * while the document lease is live: writing while the courier keeps moving,
- * idle once he sits. */
-function useEditingRegion(
-  document: Block[],
+const ownBlock = (cursor: AuthoringCursor) => cursor.blockId;
+
+/** The agent's block while the document lease is live; `blockOf` maps the
+ * courier to a block. */
+export function useEditingBlock(
+  blockOf: (cursor: AuthoringCursor) => string | undefined = ownBlock,
 ): { id: string; writing: boolean; slot?: number } | null {
   const cursor = useContext(AuthoringCursorContext);
   const activity = useContext(AuthoringActivityContext);
@@ -263,15 +414,10 @@ function useEditingRegion(
     return () => clearTimeout(timer);
   }, [seq]);
 
-  const id = useMemo(() => {
-    if (!cursor) return undefined;
-
-    return document.find((top) =>
-      elements([top]).some(
-        (node) => node.id === cursor.blockId || node.id === cursor.targetId,
-      ),
-    )?.id;
-  }, [document, cursor]);
+  const id = useMemo(
+    () => (cursor ? blockOf(cursor) : undefined),
+    [cursor, blockOf],
+  );
 
   if (!live || !cursor || id === undefined) return null;
 
@@ -280,6 +426,20 @@ function useEditingRegion(
     writing: quietSeq !== cursor.seq,
     slot: scopePresence(activity, "document")?.slot,
   };
+}
+
+function useEditingRegion(document: Block[]) {
+  const topOf = useCallback(
+    (cursor: AuthoringCursor) =>
+      document.find((top) =>
+        elements([top]).some(
+          (node) => node.id === cursor.blockId || node.id === cursor.targetId,
+        ),
+      )?.id,
+    [document],
+  );
+
+  return useEditingBlock(topOf);
 }
 
 /** Follows a `#fragment` link to one of the document's headings, which can sit
@@ -393,9 +553,10 @@ export const DocumentNode = memo(function DocumentNode({
 
   const stale =
     block.type !== "section" &&
-    selectionReferences([block], { tolerant: true }).some((reference) =>
-      data.snapshot.staleSources?.includes(reference.id),
-    );
+    selectionReferences([block], {
+      tolerant: true,
+      repositoryId: boardRepositoryId(data.snapshot),
+    }).some((reference) => data.snapshot.staleSources?.includes(reference.id));
 
   const prose = node.type === "markdown" || node.type === "trace_quote";
 

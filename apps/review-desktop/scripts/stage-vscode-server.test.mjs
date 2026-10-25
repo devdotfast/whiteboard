@@ -126,11 +126,10 @@ test("stages the VS Code server with ripgrep, the watcher and the curated extens
 
   for (const extension of curated.extensions)
     for (const target of ["linux-x64", "linux-arm64"]) {
-      const { url, sha256, size } = extension.targets[target];
+      const { url, sha256 } = extension.targets[target];
 
       assert.match(url, /^https:\/\/open-vsx\.org\//);
       assert.match(sha256, /^[0-9a-f]{64}$/);
-      assert.ok(size > 0);
     }
 });
 

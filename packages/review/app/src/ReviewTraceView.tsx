@@ -1,16 +1,21 @@
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
 import { Chip } from "@canvas/ui/chip";
 import { EmptyState } from "@canvas/ui/empty-state";
-import { surfaceStyles } from "@canvas/ui/surface";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CheckIcon, ChevronDownIcon } from "@canvas/ui/icons";
+import { menuStyles, moveMenuFocus } from "@canvas/ui/menu";
+import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
-import { fieldStyles } from "@canvas/ui/text-field";
+import { Select } from "@canvas/ui/text-field";
 import { type ReviewAgentTraceSession } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { countLabel, formatDuration } from "./format";
 import { useReviewSession } from "./host/review-session";
 import type { TraceSelection } from "./review-panel-store";
-import { ChevronIcon, TraceDocument, formatDuration } from "./trace-document";
+import { TraceDocument } from "./trace-document";
 import { TraceRuler } from "./trace-ruler";
 import { traceStyles as styles } from "./trace-styles";
 import {
@@ -42,26 +47,24 @@ export function ReviewTraceView({
     : null;
 
   const [pickerOpen, setPickerOpen] = useState(false);
-  const pickerRef = useRef<HTMLDivElement | null>(null);
+  const pickerTrigger = useRef<HTMLButtonElement>(null);
+  const pickerMenu = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  const closePicker = () => {
+    setPickerOpen(false);
+    pickerTrigger.current?.focus();
+  };
+
+  useLayoutEffect(() => {
     if (!pickerOpen) return;
-
-    const handleOutsideClick = (e: MouseEvent) => {
-      const target = e.target;
-
-      if (
-        pickerRef.current &&
-        target instanceof Node &&
-        !pickerRef.current.contains(target)
-      ) {
-        setPickerOpen(false);
-      }
-    };
-
-    document.addEventListener("mousedown", handleOutsideClick);
-
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
+    (
+      pickerMenu.current?.querySelector<HTMLElement>(
+        '[aria-checked="true"]:not(:disabled)',
+      ) ??
+      pickerMenu.current?.querySelector<HTMLElement>(
+        '[role="menuitemradio"]:not(:disabled)',
+      )
+    )?.focus();
   }, [pickerOpen]);
 
   const storedList = useTraceList(storage, providedList);
@@ -201,15 +204,14 @@ export function ReviewTraceView({
           <p {...stylex.props(styles.note)}>Resolving agent sessions…</p>
         )}
         {list.status === "error" && (
-          <p {...stylex.props(styles.note, styles.noteError)}>{list.error}</p>
+          <p {...stylex.props(styles.note, textStyles.error)}>{list.error}</p>
         )}
         {sourceChoices.length > 1 && (
           <label {...stylex.props(styles.source)}>
             <span {...stylex.props(textStyles.eyebrow, styles.kicker)}>
               Trace source
             </span>
-            <select
-              {...stylex.props(fieldStyles.box)}
+            <Select
               aria-label="Trace source"
               value={activeSource ?? ""}
               onChange={(event) => {
@@ -224,7 +226,7 @@ export function ReviewTraceView({
                   {source === "s3" ? "S3/R2 bucket" : "Hosted store"}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         )}
         {list.status === "loaded" &&
@@ -259,51 +261,70 @@ export function ReviewTraceView({
             />
           )}
         {targets.length > 1 && activeTarget && (
-          <div {...stylex.props(styles.picker)} ref={pickerRef}>
+          <div {...stylex.props(styles.picker)}>
             <Button
+              ref={pickerTrigger}
               size="large"
               xstyle={[
                 styles.pickerTrigger,
                 pickerOpen && styles.pickerTriggerOpen,
               ]}
-              aria-haspopup="listbox"
+              aria-haspopup="menu"
               aria-expanded={pickerOpen}
               onClick={() => setPickerOpen((open) => !open)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  setPickerOpen(true);
+                }
+              }}
             >
               <span {...stylex.props(textStyles.eyebrow, styles.pickerHarness)}>
                 {harnessTag(activeHarness, activeTarget.isSubagent)}
               </span>
-              <span {...stylex.props(styles.pickerTitle)}>{activeTitle}</span>
+              <span {...stylex.props(textStyles.truncate, styles.pickerTitle)}>
+                {activeTitle}
+              </span>
               <span
                 {...stylex.props(
                   styles.pickerChevron,
                   pickerOpen && styles.pickerChevronOpen,
                 )}
               >
-                <ChevronIcon />
+                <ChevronDownIcon />
               </span>
             </Button>
             {pickerOpen && (
-              <div
-                {...stylex.props(surfaceStyles.popover, styles.pickerMenu)}
-                role="listbox"
+              <Popover
+                ref={pickerMenu}
+                anchor={pickerTrigger}
+                onDismiss={closePicker}
+                role="menu"
+                tabIndex={-1}
+                aria-label="Agent sessions"
+                xstyle={[menuStyles.popover, styles.pickerMenu]}
+                onKeyDown={(event) => {
+                  // Restore the trigger before the browser advances.
+                  if (event.key === "Tab") closePicker();
+                  else moveMenuFocus(event);
+                }}
               >
                 {targets.map((target) => {
                   const isActive = target.key === activeKey;
-                  const targetHarness = target.harness;
-                  const itemTitle = target.title;
 
                   return (
                     <button
                       key={target.key}
                       type="button"
-                      role="option"
-                      aria-selected={isActive}
+                      role="menuitemradio"
+                      aria-checked={isActive}
+                      tabIndex={isActive ? 0 : -1}
                       {...stylex.props(
-                        styles.pickerItem,
-                        isActive
-                          ? styles.pickerItemActive
-                          : target.isSubagent && styles.pickerItemSubagent,
+                        focusStyles.ringInset,
+                        buttonStyles.reset,
+                        menuStyles.item,
+                        isActive && menuStyles.itemCurrent,
+                        target.isSubagent && styles.pickerItemSubagent,
                       )}
                       disabled={!target.available}
                       onClick={() => {
@@ -311,37 +332,32 @@ export function ReviewTraceView({
                           sessionId: target.sessionId,
                           trace: target.trace,
                         });
-                        setPickerOpen(false);
+                        closePicker();
                       }}
                     >
-                      <div {...stylex.props(styles.pickerItemLeft)}>
-                        <span
-                          {...stylex.props(
-                            textStyles.eyebrow,
-                            styles.pickerItemHarness,
-                            isActive && styles.pickerItemHarnessActive,
-                          )}
-                        >
-                          {harnessTag(targetHarness, target.isSubagent)}
-                        </span>
-                        <span
-                          {...stylex.props(
-                            styles.pickerItemTitle,
-                            isActive && styles.pickerItemTitleActive,
-                          )}
-                        >
-                          {itemTitle}
-                        </span>
-                      </div>
+                      <span
+                        {...stylex.props(
+                          textStyles.eyebrow,
+                          styles.pickerItemHarness,
+                          isActive && styles.pickerItemHarnessActive,
+                        )}
+                      >
+                        {harnessTag(target.harness, target.isSubagent)}
+                      </span>
+                      <span {...stylex.props(textStyles.truncate)}>
+                        {target.title}
+                      </span>
                       {target.notSynced ? (
                         <Chip xstyle={styles.pickerItemBadge}>not synced</Chip>
                       ) : isActive ? (
-                        <span {...stylex.props(styles.pickerItemCheck)}>✓</span>
+                        <CheckIcon
+                          xstyle={[iconStyles.inline, menuStyles.check]}
+                        />
                       ) : null}
                     </button>
                   );
                 })}
-              </div>
+              </Popover>
             )}
           </div>
         )}
@@ -349,7 +365,7 @@ export function ReviewTraceView({
           <p {...stylex.props(styles.note)}>Loading trace…</p>
         )}
         {detail.status === "error" && (
-          <p {...stylex.props(styles.note, styles.noteError)}>{detail.error}</p>
+          <p {...stylex.props(styles.note, textStyles.error)}>{detail.error}</p>
         )}
         {detail.status === "loaded" &&
           detail.trace.cacheStatus &&
@@ -459,9 +475,7 @@ export function ReviewTraceDocument({
             </>
           )}
           <span {...stylex.props(styles.metaSeparator)}>·</span>
-          <span>
-            {trace.userTurns} {trace.userTurns === 1 ? "turn" : "turns"}
-          </span>
+          <span>{countLabel(trace.userTurns, "turn")}</span>
           <span {...stylex.props(styles.metaSeparator)}>·</span>
           <span>{trace.toolCalls} tool calls</span>
           {duration && (

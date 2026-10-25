@@ -1,3 +1,7 @@
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { ArrowDownIcon, ImageIcon, LockIcon } from "@canvas/ui/icons";
+import { textStyles } from "@canvas/ui/text";
+import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewHostStatus,
   ReviewRemoteHostActions,
@@ -7,10 +11,12 @@ import {
   type AskAgentId,
   type AskChoiceKind,
   type AskEntry,
+  type AskPermissions,
   type AskPicks,
   type AskQuestion,
   type AskThreadState,
   askChoiceKinds,
+  askPermissionsSchema,
   askThreadStateSchema,
 } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
@@ -18,6 +24,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   type ReactElement,
   type ReactNode,
+  type RefObject,
   memo,
   useCallback,
   useEffect,
@@ -27,24 +34,25 @@ import {
 import { createPortal } from "react-dom";
 import { z } from "zod";
 
-import { AgentChatUserMessage } from "./agent-chat";
+import { AgentChatUserMessage, trayBubbleStyles } from "./agent-chat";
 import {
   AskAgentPicker,
   AskChoicePicker,
   choiceLabels,
+  permissionsOffered,
   permissionsSelect,
   preferredAskAgent,
   rememberAskAgent,
-  rememberBypass,
   rememberChoice,
-  storedBypass,
+  rememberPermissions,
   storedChoice,
+  storedPermissions,
   storedPicks,
   useAskAgents,
   useOffer,
 } from "./ask-agent-picker";
+import { AskChangedBoards } from "./ask-changed-boards";
 import { AskComposer } from "./ask-composer";
-import { useShowOpenThread } from "./ask-delete";
 import { AskFilesProvider } from "./ask-files";
 import { useAskHistory } from "./ask-history";
 import { AskOutdatedNote } from "./ask-history-list";
@@ -56,22 +64,24 @@ import { useLatest, useThread } from "./ask-thread-stream";
 import { AskAgentTurn, AskWorking, turns } from "./ask-turn";
 import { canvasQueryKeys } from "./canvas-query";
 import { useHostActionButton } from "./connection-chip";
-import { controlStyles } from "./controls-styles";
-import { formatRelativeTime } from "./format";
+import { countLabel, formatRelativeTime } from "./format";
 import { useReviewSession } from "./host/review-session";
-import { ArrowUpIcon, ImageIcon, LockIcon } from "./icons";
 import { useReviewHostDown } from "./remote-host-state";
-import { useAskKey, useOptionalReviewPanelStore } from "./review-panel";
-import type { AskPresence, AskReport } from "./review-panel-model";
-import { fontSize, radius } from "./scale.stylex";
+import {
+  useAskKey,
+  useOptionalReviewPanel,
+  useOptionalReviewPanelStore,
+} from "./review-panel";
+import type { AskReport } from "./review-panel-model";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import type { StyleArg } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
-import { IconButton } from "./ui/button";
+import { captureUiEvent } from "./ui-telemetry";
+import { Button, IconButton } from "./ui/button";
 import { Chip } from "./ui/chip";
 import { StatusBanner } from "./ui/status-banner";
 import { surfaceStyles } from "./ui/surface";
 import { useFollowLatest } from "./use-follow-latest";
-import { useTooltip } from "./use-tooltip";
 
 /** What the panel sends: a first question, a follow-up, or a decision. */
 type AskRequest =
@@ -80,10 +90,10 @@ type AskRequest =
       question: AskQuestion;
       selection: AgentSelection;
       picks: AskPicks;
-      bypass: boolean;
+      permissions: AskPermissions;
     }
   | { question: AskQuestion }
-  | { bypass: boolean }
+  | { permissions: AskPermissions }
   | { kind: AskChoiceKind; value: string }
   | { permissionId: string; optionId: string }
   | Record<string, never>;
@@ -100,14 +110,18 @@ export function AskPanelContent({
   savedThreadId,
   onReport,
   header,
+  stopping,
 }: {
   selection: AgentSelection;
   agent?: AskAgentId;
   header?: HTMLElement | null;
   /** A saved conversation to reopen instead of asking a new question. */
   savedThreadId?: string;
-  /** What the conversation is doing, for the pill to say while it is out
-   * of sight and for closing to warn while its agent works. */
+  /** Set when the reader stops this Ask. A thread that starts after the
+   * panel left the screen keeps running unless this is set. */
+  stopping?: RefObject<boolean>;
+  /** Who answers and whether they are working: what replaces a working
+   * thread floats it, and closing it warns. */
   onReport?: (report: AskReport) => void;
 }): ReactElement {
   const session = useReviewSession();
@@ -120,7 +134,7 @@ export function AskPanelContent({
   const down = useReviewHostDown(session.review);
   // Choices for a question not yet asked; a thread says its own.
   const [picks, setPicks] = useState<AskPicks>({});
-  const [bypassPick, setBypassPick] = useState<boolean>();
+  const [permissionsPick, setPermissionsPick] = useState<AskPermissions>();
   const { thread, lost } = useThread(session, threadId);
 
   const loadingConversation =
@@ -128,8 +142,6 @@ export function AskPanelContent({
     !requestError &&
     !lost &&
     (!thread || (thread.status === "starting" && !thread.entries.length));
-
-  useShowOpenThread(threadId ?? savedThreadId ?? null);
 
   const offered = useOffer(
     session,
@@ -147,6 +159,15 @@ export function AskPanelContent({
     if (agents && !agent) setAgent(preferredAskAgent(session, agents)?.id);
   }, [agents, agent, session]);
 
+  // A new thread's mode is remembered as if picked, including Codex's
+  // fallback to read-only; a saved one's is its own.
+  const threadPermissions = thread?.permissions;
+
+  useEffect(() => {
+    if (agent && threadPermissions && savedThreadId === undefined)
+      rememberPermissions(session, agent, threadPermissions);
+  }, [agent, threadPermissions, savedThreadId, session]);
+
   const latestSession = useLatest(session);
   const mounted = useRef(true);
 
@@ -158,13 +179,16 @@ export function AskPanelContent({
     };
   }, []);
 
-  // A thread opened after the panel closed has nobody to close it.
+  // A thread that starts after the reader stopped its Ask has nobody else
+  // to stop it. One that only left the screen keeps running, in Threads.
   const closeLate = useCallback(
-    (id: string) =>
-      void latestSession.current
-        .fetch(`/ask/${id}/close`, { method: "POST", keepalive: true })
-        .catch(() => {}),
-    [latestSession],
+    (id: string) => {
+      if (stopping?.current)
+        void latestSession.current
+          .fetch(`/ask/${id}/close`, { method: "POST", keepalive: true })
+          .catch(() => {});
+    },
+    [latestSession, stopping],
   );
 
   // A saved conversation: the server starts its agent and loads it, once
@@ -207,7 +231,14 @@ export function AskPanelContent({
     };
   }, [latestSession, savedThreadId, requestedAgent, closeLate]);
 
-  useEffect(() => composer.current?.focus(), [agent, loadingConversation]);
+  // Unless it opened where the reader is editing.
+  const unfocused = useOptionalReviewPanel(
+    (state) => state.asks.find((ask) => ask.key === askKey)?.unfocused,
+  );
+
+  useEffect(() => {
+    if (!unfocused) composer.current?.focus();
+  }, [agent, loadingConversation, unfocused]);
 
   // The server saves a conversation once the agent starts it and dates it
   // by its last turn, so the document's marks and the history follow.
@@ -283,7 +314,7 @@ export function AskPanelContent({
           question,
           selection,
           picks: currentPicks(),
-          bypass,
+          permissions: access,
         });
 
         const { threadId: id } = z
@@ -299,6 +330,13 @@ export function AskPanelContent({
         rememberAskAgent(session, agent);
         setThreadId(id);
       }
+
+      captureUiEvent(session, "ask_sent", {
+        agent,
+        follow_up: threadId !== null,
+        selection: selection.selectedDiff ? "diff" : selection.target.kind,
+        remote: session.review?.host !== undefined,
+      });
 
       // Asking returns to the newest, where the answer will be.
       latest.jump("instant");
@@ -398,25 +436,34 @@ export function AskPanelContent({
     );
   };
 
-  // A thread says its own; before a new one, what was chosen last for the
-  // agent. A saved one says once it is open.
-  const bypass =
-    thread?.bypass ??
-    (savedThreadId === undefined &&
-      chosen?.bypass === true &&
-      (bypassPick ?? (agent ? storedBypass(session, agent) : false)));
+  const offeredPermissions = permissionsOffered(chosen);
 
-  const permit = (value: boolean) => {
+  // A thread says its own; before a new one, what was chosen last for the
+  // agent, else auto where it has it. A saved one says once it is open.
+  const picked =
+    permissionsPick ?? (agent ? storedPermissions(session, agent) : undefined);
+
+  const access: AskPermissions =
+    thread?.permissions ??
+    (savedThreadId !== undefined
+      ? "read-only"
+      : picked && offeredPermissions.includes(picked)
+        ? picked
+        : chosen?.auto
+          ? "auto"
+          : "read-only");
+
+  const permit = (value: AskPermissions) => {
     if (!agent) return;
-    rememberBypass(session, agent, value);
+    rememberPermissions(session, agent, value);
 
     if (!threadId) {
-      setBypassPick(value);
+      setPermissionsPick(value);
 
       return;
     }
 
-    void post(`/ask/${threadId}/permissions`, { bypass: value }).catch(
+    void post(`/ask/${threadId}/permissions`, { permissions: value }).catch(
       (error: Error) => fail(error.message, () => permit(value)),
     );
   };
@@ -499,25 +546,8 @@ export function AskPanelContent({
 
   const agentName = thread?.agentName ?? chosenName;
 
-  // Before the agents load, the pill names Ask.
-  const pillName = thread?.agentName ?? chosen?.name ?? "Ask";
-
-  const presence: AskPresence =
-    thread?.status === "waiting"
-      ? { agentName: pillName, status: "Needs your approval", tone: "waiting" }
-      : thread?.status === "failed" || error
-        ? { agentName: pillName, status: "Stopped", tone: "failed" }
-        : {
-            agentName: pillName,
-            status: connecting
-              ? "Connecting…"
-              : busy
-                ? answeringStatus(thread)
-                : thread
-                  ? "Answered"
-                  : "New question",
-            tone: "quiet",
-          };
+  // Before the agents load, the Ask is Ask's.
+  const presenceName = thread?.agentName ?? chosen?.name ?? "Ask";
 
   const presenceAgent = thread?.agent ?? agent;
   const reportedThreadId = threadId ?? savedThreadId ?? null;
@@ -534,22 +564,9 @@ export function AskPanelContent({
     onReport?.({
       threadId: reportedThreadId,
       busy: working,
-      presence: {
-        agent: presenceAgent,
-        agentName: presence.agentName,
-        status: presence.status,
-        tone: presence.tone,
-      },
+      presence: { agent: presenceAgent, agentName: presenceName },
     });
-  }, [
-    onReport,
-    reportedThreadId,
-    working,
-    presenceAgent,
-    presence.agentName,
-    presence.status,
-    presence.tone,
-  ]);
+  }, [onReport, reportedThreadId, working, presenceAgent, presenceName]);
 
   if (agents && !agents.some((candidate) => candidate.available))
     return <AskSetup agents={agents} selection={selection} />;
@@ -562,39 +579,46 @@ export function AskPanelContent({
   const readOnly =
     thread && thread.status !== "starting"
       ? thread.readOnly
-      : !bypass && (chosen?.readOnly ?? true);
+      : access === "read-only" && (chosen?.readOnly ?? true);
 
   const modeTitle = readOnly
     ? "The agent cannot change files in the checkout, and asks before running commands. It can edit this review."
-    : bypass
+    : access === "bypass"
       ? `${agentName} bypasses permissions: it may change files in the checkout and run commands without asking.`
-      : `${agentName} is not in a read-only mode, so it may change files in the checkout.`;
+      : access === "auto"
+        ? `${agentName} runs what it judges safe and asks you about the rest.`
+        : `${agentName} is not in a read-only mode, so it may change files in the checkout.`;
 
   const settingsDisabled =
     (busy && threadId !== null) || thread?.status === "failed";
 
   // Below the composer, as in the agents' own apps: what the agent may do,
   // then its model and effort.
-  const canBypass = chosen?.bypass && (thread || savedThreadId === undefined);
+  const canChoosePermissions =
+    offeredPermissions.length > 1 && (thread || savedThreadId === undefined);
 
-  const permissions = canBypass ? (
+  const permissions = canChoosePermissions ? (
     <AskChoicePicker
       label="Permissions"
-      select={permissionsSelect(bypass)}
-      current={bypass ? "bypass" : "ask"}
+      select={permissionsSelect(offeredPermissions, access)}
+      current={access}
       disabled={settingsDisabled}
       quiet
-      icon={readOnly ? <LockIcon xstyle={controlStyles.inlineIcon} /> : null}
-      onPick={(value) => permit(value === "bypass")}
+      icon={readOnly ? <LockIcon xstyle={iconStyles.inline} /> : null}
+      onPick={(value) => {
+        const parsed = askPermissionsSchema.safeParse(value);
+
+        if (parsed.success) permit(parsed.data);
+      }}
     />
   ) : (
     <TooltipLabel
       tooltip={modeTitle}
-      xstyle={[styles.mode, styles.settingsLabel]}
+      xstyle={[textStyles.truncate, styles.mode, styles.settingsLabel]}
     >
       {readOnly ? (
         <>
-          <LockIcon xstyle={controlStyles.inlineIcon} />
+          <LockIcon xstyle={iconStyles.inline} />
           Read-only
         </>
       ) : (
@@ -634,7 +658,7 @@ export function AskPanelContent({
       onPick={(picked) => {
         setAgent(picked);
         setPicks({});
-        setBypassPick(undefined);
+        setPermissionsPick(undefined);
       }}
     />
   );
@@ -661,6 +685,10 @@ export function AskPanelContent({
           >
             <AskSelectionQuote selection={selection} />
             <AskOutdatedNote threadId={threadId ?? savedThreadId ?? null} />
+            <AskChangedBoards
+              threadId={threadId ?? savedThreadId ?? null}
+              turns={thread?.entries.length ?? 0}
+            />
 
             {thread ? <AskTurns thread={thread} onDecide={decide} /> : null}
 
@@ -679,7 +707,7 @@ export function AskPanelContent({
               <AgentChatUserMessage
                 key={queued.id}
                 xstyle={styles.userMessage}
-                bubbleXstyle={[styles.userBubble, styles.queuedBubble]}
+                bubbleXstyle={[trayBubbleStyles.bubble, styles.queuedBubble]}
                 caption={`Sends when ${agentName} finishes`}
               >
                 {queued.text}
@@ -693,18 +721,21 @@ export function AskPanelContent({
                 onRetry={retry}
               />
             ) : error ? (
-              <p {...stylex.props(askPanelStyles.error)} role="alert">
+              <p
+                {...stylex.props(textStyles.error, askPanelStyles.error)}
+                role="alert"
+              >
                 {error}
                 {errorAction ? (
                   <>
                     {" "}
-                    <button
-                      type="button"
-                      {...stylex.props(askPanelStyles.errorAction)}
+                    <Button
+                      variant="link"
+                      tone="accent"
                       onClick={errorAction.run}
                     >
                       {errorAction.label}
-                    </button>
+                    </Button>
                   </>
                 ) : null}
               </p>
@@ -720,6 +751,9 @@ export function AskPanelContent({
         inputRef={composer}
         placeholders={askPlaceholders(
           Boolean(threadId || savedThreadId),
+          selection.target.kind === "review"
+            ? "this whiteboard"
+            : "this selection",
           chosen?.name ?? "an agent",
           (thread?.commands ?? offered?.commands)?.length
             ? "/ for commands, @ for files"
@@ -745,7 +779,15 @@ export function AskPanelContent({
         findFiles={findFiles}
         permissions={permissions}
         onCyclePermissions={
-          canBypass && !settingsDisabled ? () => permit(!bypass) : undefined
+          canChoosePermissions && !settingsDisabled
+            ? () =>
+                permit(
+                  offeredPermissions[
+                    (offeredPermissions.indexOf(access) + 1) %
+                      offeredPermissions.length
+                  ] ?? "read-only",
+                )
+            : undefined
         }
         settings={settings}
         onAsk={ask}
@@ -782,24 +824,15 @@ export function AskReadOnlyThread({
     },
   });
 
-  useShowOpenThread(threadId);
-
   const agentName = thread?.agentName ?? "Ask";
 
-  // Nothing runs on a read-only conversation, and it opens no thread to
-  // close.
   useEffect(() => {
     onReport?.({
-      threadId: null,
+      threadId,
       busy: false,
-      presence: {
-        agent: thread?.agent,
-        agentName,
-        status: "Read-only",
-        tone: "quiet",
-      },
+      presence: { agent: thread?.agent, agentName },
     });
-  }, [onReport, thread?.agent, agentName]);
+  }, [onReport, threadId, thread?.agent, agentName]);
 
   return (
     <div {...stylex.props(askPanelStyles.body)}>
@@ -807,7 +840,10 @@ export function AskReadOnlyThread({
         <AskSelectionQuote selection={selection} />
         {thread ? <AskTurns thread={thread} onDecide={() => {}} /> : null}
         {error ? (
-          <p {...stylex.props(askPanelStyles.error)} role="alert">
+          <p
+            {...stylex.props(textStyles.error, askPanelStyles.error)}
+            role="alert"
+          >
             {error.message}
           </p>
         ) : null}
@@ -849,7 +885,7 @@ function ToLatestButton({ onClick }: { onClick: () => void }): ReactElement {
       aria-label={label}
       onClick={onClick}
     >
-      <ArrowUpIcon xstyle={[controlStyles.chromeIcon, styles.toLatestIcon]} />
+      <ArrowDownIcon xstyle={iconStyles.chrome} />
     </IconButton>
   );
 }
@@ -874,33 +910,15 @@ function TooltipLabel({
  * panel or window drops the hint, then shortens the question. */
 function askPlaceholders(
   followUp: boolean,
+  subject: string,
   agentName: string,
   hint: string,
 ): string[] {
   if (followUp) return [`Ask a follow-up · ${hint}`, "Ask a follow-up…"];
 
-  const lead = `Ask ${agentName} about this selection`;
+  const lead = `Ask ${agentName} about ${subject}`;
 
-  return [`${lead} · ${hint}`, `${lead}…`, "Ask about this selection…"];
-}
-
-/** What a busy agent is doing, for where the thread is out of sight. */
-function answeringStatus(thread: AskThreadState | null) {
-  const sinceQuestion = thread?.entries.slice(
-    thread.entries.findLastIndex((entry) => entry.kind === "user") + 1,
-  );
-
-  const read =
-    sinceQuestion?.filter(
-      (entry) =>
-        entry.kind === "tool" &&
-        entry.toolKind === "read" &&
-        entry.status === "completed",
-    ).length ?? 0;
-
-  return read
-    ? `Answering · ${read} ${read === 1 ? "file" : "files"} read`
-    : "Answering…";
+  return [`${lead} · ${hint}`, `${lead}…`, `Ask about ${subject}…`];
 }
 
 /** The images sent with a question. Its files show as its @ mentions. */
@@ -932,7 +950,7 @@ function AskImageChip({ name }: { name: string }): ReactElement {
       variant="pill"
       xstyle={styles.attachment}
     >
-      <ImageIcon xstyle={controlStyles.inlineIcon} />
+      <ImageIcon xstyle={iconStyles.inline} />
       {name}
     </Chip>
   );
@@ -954,7 +972,7 @@ const AskTurns = memo(function AskTurns({
           <AgentChatUserMessage
             key={turn.entry.id}
             xstyle={styles.userMessage}
-            bubbleXstyle={styles.userBubble}
+            bubbleXstyle={trayBubbleStyles.bubble}
             caption={
               turn.entry.at === undefined
                 ? "You"
@@ -988,23 +1006,20 @@ const AskTurns = memo(function AskTurns({
 const styles = stylex.create({
   // Level with the pickers beside it.
   settingsLabel: {
-    padding: "4px 6px",
+    padding: `${space.s4} ${space.s6}`,
     fontSize: fontSize.ui,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   mode: {
     display: "inline-flex",
     flex: "0 1 auto",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.small,
-    lineHeight: "14px",
-    whiteSpace: "nowrap",
+    lineHeight: leading.px14,
   },
   // Holds the thread and, over its foot, the way back to the newest.
   threadFrame: {
@@ -1016,7 +1031,7 @@ const styles = stylex.create({
   },
   toLatest: {
     position: "absolute",
-    bottom: "12px",
+    bottom: space.s12,
     left: "50%",
     borderRadius: radius.round,
     color: {
@@ -1026,16 +1041,13 @@ const styles = stylex.create({
     },
     transform: "translateX(-50%)",
   },
-  toLatestIcon: {
-    transform: "rotate(180deg)",
-  },
   thread: {
     display: "flex",
     flex: "1 1 auto",
     flexDirection: "column",
-    gap: "18px",
+    gap: space.s18,
     minHeight: 0,
-    padding: "20px 16px 16px",
+    padding: `${space.s20} ${space.s16} ${space.s16}`,
     overflowY: "auto",
     overscrollBehavior: "contain",
   },
@@ -1049,22 +1061,18 @@ const styles = stylex.create({
     maxWidth: "88%",
     marginTop: 0,
   },
-  userBubble: {
-    padding: "10px 14px",
-    backgroundColor: tokens.trayRaised,
-  },
   queuedBubble: {
     opacity: 0.6,
   },
   attachments: {
     display: "flex",
     flexWrap: "wrap",
-    gap: "6px",
-    marginTop: "8px",
+    gap: space.s6,
+    marginTop: space.s8,
   },
   // Outlined: the pill's well would vanish on the bubble.
   attachment: {
-    gap: "4px",
+    gap: space.s4,
     maxWidth: "100%",
     overflow: "hidden",
     borderWidth: "1px",

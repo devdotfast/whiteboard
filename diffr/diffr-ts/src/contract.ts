@@ -38,6 +38,10 @@ export type StructuralDiffEvent =
       type: "file";
       file: StructuralPairing<StructuralFileRef>;
     } & StructuralOutcome)
+  | ({
+      type: "update";
+      file: StructuralPairing<StructuralFileRef>;
+    } & StructuralUpdate)
   | {
       type: "complete";
       succeeded: number;
@@ -61,6 +65,12 @@ export const StructuralDiffEventSchema: z.ZodType<StructuralDiffEvent> = z.lazy(
           file: structuralPairingSchema(StructuralFileRefSchema),
         })
         .and(StructuralOutcomeSchema),
+      z
+        .object({
+          type: z.literal("update"),
+          file: structuralPairingSchema(StructuralFileRefSchema),
+        })
+        .and(StructuralUpdateSchema),
       z.object({
         type: z.literal("complete"),
         succeeded: structuralU32,
@@ -82,6 +92,45 @@ export const StructuralOutcomeSchema: z.ZodType<StructuralOutcome> = z.lazy(
       z.object({ error: StructuralProblemSchema, diff: z.never().optional() }),
     ]),
 );
+
+/**
+ * An update record carries the regions whose visibility deferred plugins
+ * changed, by region `id`, and the file's new `stats.visible`; or their error.
+ */
+export type StructuralUpdate =
+  | {
+      regions: StructuralRegionVisibility[];
+      visible: StructuralLineCounts;
+      error?: never;
+    }
+  | { error: StructuralProblem; regions?: never; visible?: never };
+
+export const StructuralUpdateSchema: z.ZodType<StructuralUpdate> = z.lazy(() =>
+  z.union([
+    z.object({
+      regions: z.array(StructuralRegionVisibilitySchema),
+      visible: StructuralLineCountsSchema,
+      error: z.never().optional(),
+    }),
+    z.object({
+      error: StructuralProblemSchema,
+      regions: z.never().optional(),
+      visible: z.never().optional(),
+    }),
+  ]),
+);
+
+/** A region's new visibility; absent fields are open and unlabelled. */
+export type StructuralRegionVisibility = { id: number } & StructuralVisibility;
+
+export const StructuralRegionVisibilitySchema: z.ZodType<StructuralRegionVisibility> =
+  z.lazy(() =>
+    z.object({
+      id: structuralU32,
+      collapsed: z.boolean().optional(),
+      label: z.string().optional(),
+    }),
+  );
 
 export type StructuralSnapshot =
   | { type: "revision"; rev: string }

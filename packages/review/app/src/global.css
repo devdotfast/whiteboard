@@ -12,10 +12,10 @@
   --raised: #1a1f29;
   --tray: #12161e;
   --tray-raised: color-mix(in srgb, var(--ink) 6%, var(--tray));
-  --chevron-down: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'><path d='M2.5 4.25 6 8l3.5-3.75' fill='none' stroke='%239AA0AB' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  --check-mark: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M2 5.2 4.2 7.4 8 3.2' fill='none' stroke='%230C0F15' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  --marker-tint: rgba(91, 124, 255, 0.14);
-  --marker-glow: rgba(91, 124, 255, 0.3);
+  --chevron-down: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 8.5 12 16l7-7.5' fill='none' stroke='%239AA0AB' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  --check-mark: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5 9.5 17 19 7' fill='none' stroke='%230C0F15' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  --marker-tint: color-mix(in srgb, var(--accent) 14%, transparent);
+  --marker-glow: color-mix(in srgb, var(--accent) 30%, transparent);
   /* Agents after the first, in the order they begin: violet, then teal. */
   --agent-1: #9b7bff;
   --agent-1-tint: rgba(155, 123, 255, 0.14);
@@ -25,10 +25,17 @@
   --agent-2-glow: rgba(43, 179, 173, 0.3);
   --board-grid: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='1' cy='1' r='0.8' fill='%231A1F2A'/></svg>");
   --review-header-height: 35px;
+  /* The page bar, as tall as Desktop's window controls. */
+  --review-page-bar-height: 40px;
+  /* Three faces, each with one role: Inter for the app's own interface
+     (sidebar, tabs, page bar, Home, menus, buttons, tooltips and lists),
+     Newsreader for a board's prose, its tables and thread quotes, and Geist
+     Mono for code, commit ids, paths, line numbers and counts. */
   --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-serif: "Newsreader", Georgia, serif;
+  --font-serif: var(--review-reading-font, "Newsreader", Georgia, serif);
   --font-mono: "Geist Mono", ui-monospace, monospace;
-  --font-display: var(--font-mono);
+  --font-code: var(--review-code-font, var(--font-mono));
+  --font-display: var(--font-sans);
   --transparent: transparent;
   /* Ground bridge. Same principle as the --chrome-* tokens on .review-app: the
      canvas mounts straight into the Code OSS DOM, so --vscode-* is in scope and
@@ -36,8 +43,8 @@
      palette as the standalone fallback. Unlike --chrome-*, these can live on
      .review-canvas-root because every fallback is a literal rather than another
      canvas token, so nothing is frozen by declaring them this far up.
-     Only neutrals bridge; the accent, diff and syntax colors stay the canvas's
-     own. The rules bridge editorWidget.border rather than widget.border: the
+     Accent, status and syntax colors come from Desktop's --review-*. The
+     rules bridge editorWidget.border rather than widget.border: the
      latter is null on both stock themes, so its variable is never emitted and
      the dark fallback would leak into light. */
   --bg: var(--vscode-editor-background, #0c0f15);
@@ -49,6 +56,10 @@
   --ink-faint: var(--vscode-disabledForeground, #5f6776);
   --rule: var(--vscode-panel-border, #262c37);
   --rule-soft: var(--vscode-editorWidget-border, #39404d);
+  /* Workbench controls the canvas mirrors: find toggles and error text. */
+  --toolbar-hover-bg: var(--vscode-toolbar-hoverBackground, #1a1f29);
+  --input-option-active-bg: var(--vscode-inputOption-activeBackground, #12161e);
+  --input-option-active-fg: var(--vscode-inputOption-activeForeground, #eef0f4);
   /* The canvas shares the workbench DOM, but selection already reads through
      its background and row highlights, so suppress the inherited
      focus/list/input chrome. The map is the exception: its selection ring is
@@ -61,52 +72,56 @@
   --vscode-list-focusAndSelectionOutline: transparent;
   --vscode-list-inactiveFocusOutline: transparent;
   --vscode-inputOption-activeBorder: transparent;
-  --accent: #5b7cff;
-  --accent-soft: #1a2240;
-  --on-accent: #ffffff;
-  --on-accent-wash: rgba(255, 255, 255, 0.22);
-  --rpc: #8fa6ff;
-  --text-selection-bg: rgba(91, 124, 255, 0.35);
+  --accent: var(--review-accent, #5b7cff);
+  --accent-soft: color-mix(in srgb, var(--accent) 18%, var(--bg));
+  --on-accent: var(--review-on-accent, #ffffff);
+  --on-accent-wash: color-mix(in srgb, var(--on-accent) 22%, transparent);
+  --rpc: color-mix(in srgb, var(--accent) 68%, #ffffff);
+  --text-selection-bg: color-mix(in srgb, var(--accent) 35%, transparent);
   --text-selection-color: #ffffff;
   --canvas-grid: #1a1f2a;
   --minimap-mask: rgba(12, 15, 21, 0.78);
   --minimap-node: #8796ad;
   --minimap-node-selected: transparent;
   --edge-muted: #6f7786;
-  --change-added: #4ed990;
-  --change-removed: #f26a55;
-  --change-modified: #f2c14e;
-  --warning-wash: rgba(242, 193, 78, 0.12);
-  --warning-outline: rgba(242, 193, 78, 0.52);
+  --change-added: var(--review-success, #4ed990);
+  --change-removed: var(--review-danger, #f26a55);
+  --change-modified: var(--review-warning, #f2c14e);
+  --merged: #a371f7;
+  --warning-wash: color-mix(in srgb, var(--change-modified) 12%, transparent);
+  --warning-outline: color-mix(
+    in srgb,
+    var(--change-modified) 52%,
+    transparent
+  );
   --on-warning: #1a1405;
-  --diff-added: #4ed990;
-  --diff-added-bg: #132019;
-  --diff-modified: #f2c14e;
-  --diff-modified-bg: #1d1b12;
-  --diff-removed: #f26a55;
-  --diff-removed-bg: #211517;
+  --diff-added: var(--change-added);
+  --diff-added-bg: color-mix(in srgb, var(--diff-added) 8%, var(--bg));
+  --diff-modified: var(--change-modified);
+  --diff-modified-bg: color-mix(in srgb, var(--diff-modified) 8%, var(--bg));
+  --diff-removed: var(--change-removed);
+  --diff-removed-bg: color-mix(in srgb, var(--diff-removed) 8%, var(--bg));
   --shadow-color: rgb(0 0 0 / 45%);
   --shadow-color-strong: rgba(0, 0, 0, 0.55);
+  --shadow-color-soft: rgb(0 0 0 / 0.16);
+  --quote-mark: rgba(255, 230, 0, 0.35);
   --backdrop: rgba(0, 0, 0, 0.56);
-  --accent-shadow: rgba(91, 124, 255, 0.2);
-  --accent-stripe: rgba(91, 124, 255, 0.18);
-  --accent-wash: rgba(91, 124, 255, 0.14);
-  --accent-outline: rgb(91 124 255 / 32%);
-  --link-open-wash: rgba(91, 124, 255, 0.15);
-  --rpc-wash: rgba(143, 166, 255, 0.12);
-  --review-home-bg: var(--bg);
-  --review-home-rule: #262c37;
-  --review-home-rule-soft: #39404d;
-  --review-home-meta: #9199a8;
+  --accent-shadow: color-mix(in srgb, var(--accent) 20%, transparent);
+  --accent-stripe: color-mix(in srgb, var(--accent) 18%, transparent);
+  --accent-wash: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-outline: color-mix(in srgb, var(--accent) 32%, transparent);
+  --link-open-wash: color-mix(in srgb, var(--accent) 15%, transparent);
+  --rpc-wash: color-mix(in srgb, var(--rpc) 12%, transparent);
   /* Code (Whiteboard Dark): ink at three strengths, the marker for keywords,
      sky and periwinkle for types and functions, straw strings, orchid
      numbers. Every value clears WCAG AA on the editor background. */
-  --syntax-comment: #778090;
-  --syntax-type: #6fc3e6;
-  --syntax-function: #b7c4ff;
-  --syntax-string: #d9a85c;
-  --syntax-number: #d48fd6;
-  --syntax-operator: #9199a8;
+  --syntax-comment: var(--review-syntax-comment, #778090);
+  --syntax-keyword: var(--review-syntax-keyword, var(--accent));
+  --syntax-type: var(--review-syntax-type, #6fc3e6);
+  --syntax-function: var(--review-syntax-function, #b7c4ff);
+  --syntax-string: var(--review-syntax-string, #d9a85c);
+  --syntax-number: var(--review-syntax-number, #d48fd6);
+  --syntax-operator: var(--review-syntax-operator, #9199a8);
   --syntax-inserted: #4ed990;
   --syntax-deleted: #f26a55;
   --review-debug-layer: 2147483000;
@@ -164,6 +179,11 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+/* Keep controls clickable inside window drag regions. */
+:is(button, a, input, select, textarea, label, [role], [tabindex]) {
+  -webkit-app-region: no-drag;
 }
 
 /* One scrollbar for every native scroller in the canvas: a 6px pill centered
@@ -325,4 +345,195 @@ button {
   syntax: "<length>";
   inherits: false;
   initial-value: 560px;
+}
+
+/* The board editor's ProseMirror document (board-editor/). A heading's
+   chevron sits in the gutter, as a section's does; a collapsed heading hides
+   the lines after it; an empty line can show a faint hint. */
+
+.review-board-editor {
+  position: relative;
+  outline: none;
+  white-space: pre-wrap;
+  white-space: break-spaces;
+  overflow-wrap: break-word;
+  font-variant-ligatures: none;
+  caret-color: var(--ink);
+}
+
+/* A selected rich block shows its ring, not a text selection or a caret. */
+.review-board-editor.ProseMirror-hideselection {
+  caret-color: var(--transparent);
+}
+
+.review-board-editor.ProseMirror-hideselection *::selection {
+  background: var(--transparent);
+  color: inherit;
+}
+
+.review-board-editor .review-board-hidden {
+  display: none;
+}
+
+/* What a collapsed heading hides, after its text. */
+.review-board-summary {
+  margin-left: 12px;
+  color: var(--ink-faint);
+  font: 11px/1 var(--font-mono);
+  white-space: nowrap;
+}
+
+/* Over the heading's own ink, as a collapsed section's title is. */
+.review-board-editor .review-board-heading-collapsed {
+  color: var(--ghost) !important;
+}
+
+.review-board-editor .review-board-placeholder::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  color: var(--ink-faint);
+  pointer-events: none;
+}
+
+.review-board-chevron {
+  position: absolute;
+  top: calc((1lh - 20px) / 2);
+  left: -29px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: var(--transparent);
+  color: var(--ink-faint);
+  user-select: none;
+}
+
+.review-board-chevron:hover {
+  background: var(--chrome-hover-bg);
+  color: var(--chrome-fg);
+}
+
+.review-board-chevron:focus-visible {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.review-board-chevron svg {
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentcolor;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 120ms ease;
+}
+
+.review-board-chevron[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-board-chevron svg {
+    transition: none;
+  }
+}
+
+/* An empty heading's chevron is ghost until the heading has text. */
+.review-board-placeholder > .review-board-chevron {
+  color: var(--ghost);
+}
+
+/* A list item's paragraphs sit flush with the item, as on the read-only
+   page; the prose margin a paragraph carries is stronger than a plain rule. */
+.review-board-editor li > p:first-child {
+  margin-top: 0 !important;
+}
+
+.review-board-editor li > p:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* A task item, as the read-only page draws it: its checkbox in place of
+   the bullet, beside the item's first line. The node view draws
+   li > label > input, and the item's blocks in a div. */
+.review-board-editor li.review-board-task {
+  display: flex;
+  gap: 0.5em;
+  list-style: none;
+}
+
+.review-board-editor li.review-board-task > label {
+  flex: none;
+  display: flex;
+}
+
+.review-board-editor li.review-board-task input {
+  width: 1em;
+  height: 1em;
+  margin: calc((1lh - 1em) / 2) 0 0;
+  font: inherit;
+  line-height: inherit;
+  cursor: pointer;
+}
+
+.review-board-editor li.review-board-task > div {
+  flex: 1;
+  min-width: 0;
+}
+
+.review-board-editor li.review-board-task > div > p:first-child {
+  margin-top: 0 !important;
+}
+
+.review-board-editor li.review-board-task > div > p:last-child {
+  margin-bottom: 0 !important;
+}
+
+/* A table cell holds one line, set in the table's own type, as the
+   read-only page's cells hold inline text. */
+.review-board-editor .review-board-table p {
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  font: inherit !important;
+  color: inherit !important;
+  text-align: inherit !important;
+}
+
+.review-board-editor .review-board-table .selectedCell {
+  background: var(--link-open-wash);
+}
+
+/* A table selected whole, to delete it. */
+.review-board-editor .review-board-table.ProseMirror-selectednode {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The link whose target the side column shows. Its code chips wash whole. */
+.review-board-editor .review-board-link-open,
+.review-board-editor code:has(> .review-board-link-open) {
+  background-color: var(--link-open-wash);
+}
+
+.review-board-editor .review-board-code {
+  margin: 14px auto;
+  padding: 12px 14px;
+  border-radius: 6px;
+  background: var(--well);
+  font: var(--review-code-font-size, 13px) /
+    calc(var(--review-code-font-size, 13px) * 20 / 13) var(--font-code);
+  font-variant-ligatures: var(--review-code-ligatures, normal);
+  white-space: pre-wrap;
+}
+
+/* A selected rich block: a ring outside its card, not a wash over it. */
+.review-board-editor [data-board-selected] > [data-review-node-id] > * {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }

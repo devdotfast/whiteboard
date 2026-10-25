@@ -7,7 +7,7 @@ import { onUnexpectedError } from '../../base/common/errors.js';
 import { IDialogService } from '../../platform/dialogs/common/dialogs.js';
 import { IOpenerService } from '../../platform/opener/common/opener.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../platform/storage/common/storage.js';
-import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../workbench/common/contributions.js';
+import { IWorkbenchContribution } from '../../workbench/common/contributions.js';
 import { isFirstRunReloadPending } from '../common/reviewFirstRunReload.js';
 import { REVIEW_DISCORD_URL } from '../common/reviewProtocol.js';
 import { IReviewApiCatalogService } from '../services/reviewApiCatalogService.js';
@@ -38,7 +38,7 @@ export class ReviewCommunityContribution implements IWorkbenchContribution {
 			return; // the seeding reload would discard both the question and the answer
 		}
 		await catalogService.initialize();
-		if (catalogService.reviews.filter(review => review.kind !== 'scratchpad').length < 2) {
+		if (catalogService.reviews.length < 2) {
 			return;
 		}
 		telemetryService.capture('discord_dialog_shown');
@@ -58,5 +58,3 @@ export class ReviewCommunityContribution implements IWorkbenchContribution {
 		}
 	}
 }
-
-registerWorkbenchContribution2(ReviewCommunityContribution.ID, ReviewCommunityContribution, WorkbenchPhase.AfterRestored);

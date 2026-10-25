@@ -1,17 +1,18 @@
+import { AgentLogo } from "@canvas/ui/brand-icons";
+import { CopyButton } from "@canvas/ui/copy";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CopyIcon } from "@canvas/ui/icons";
 import type { AgentSelection } from "@review/agent-selection";
 import * as stylex from "@stylexjs/stylex";
 import type { ReactElement } from "react";
 
-import { type AskAgent, logos } from "./ask-agent-picker";
+import type { AskAgent } from "./ask-agent-picker";
 import { AskSelectionQuote } from "./ask-panel-shared";
 import { askPanelStyles } from "./ask-styles";
-import { controlStyles } from "./controls-styles";
 import { copyAgentContext } from "./copy-agent-context";
-import { CopyButton } from "./copy-text";
 import { useReviewSession } from "./host/review-session";
-import { CopyIcon } from "./icons";
 import { useNotify } from "./notify";
-import { fontSize, radius } from "./scale.stylex";
+import { fontSize, leading, radius, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { EmptyState } from "./ui/empty-state";
@@ -61,9 +62,7 @@ export function AskSetup({
               key={candidate.id}
               {...stylex.props(askPanelStyles.listItem, setupStyles.agent)}
             >
-              <span {...stylex.props(setupStyles.logo)}>
-                {logos[candidate.id]({ xstyle: setupStyles.logoMark })}
-              </span>
+              <AgentLogo agent={candidate.id} xstyle={setupStyles.logo} />
               <span {...stylex.props(setupStyles.name)}>
                 <span>{candidate.name}</span>
                 <span {...stylex.props(setupStyles.status)}>
@@ -81,7 +80,7 @@ export function AskSetup({
           xstyle={setupStyles.copy}
           onClick={() => void copy()}
         >
-          <CopyIcon xstyle={[controlStyles.inlineIcon, setupStyles.copyIcon]} />
+          <CopyIcon xstyle={[iconStyles.inline, setupStyles.copyIcon]} />
           Copy selection for your agent
         </Button>
       </div>
@@ -117,7 +116,7 @@ export function AskSignIn({
         <CopyButton
           text={command}
           label="Copy the sign-in command"
-          iconStyle={controlStyles.chromeIcon}
+          iconStyle={iconStyles.chrome}
         />
       </div>
       <Button variant="primary" size="large" onClick={onRetry}>
@@ -129,57 +128,50 @@ export function AskSignIn({
 
 const setupStyles = stylex.create({
   page: {
-    gap: "36px",
+    gap: space.s36,
   },
   // The page pads it already.
   message: {
     paddingBlock: 0,
-    paddingInline: "4px",
+    paddingInline: space.s4,
   },
   agent: {
     display: "flex",
     alignItems: "center",
-    gap: "12px",
-    padding: "12px 14px",
+    gap: space.s12,
+    padding: `${space.s12} ${space.s14}`,
   },
   logo: {
-    display: "flex",
-    flex: "0 0 18px",
-    justifyContent: "center",
     opacity: 0.45,
-  },
-  logoMark: {
-    width: "18px",
-    height: "18px",
   },
   name: {
     display: "flex",
     flexDirection: "column",
-    gap: "2px",
+    gap: space.s2,
     color: tokens.inkMuted,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
   },
   status: {
     color: tokens.inkFaint,
     fontSize: fontSize.micro,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   fallback: {
     display: "flex",
     flex: "0 0 auto",
     flexDirection: "column",
     alignItems: "center",
-    gap: "10px",
-    padding: "16px 16px 20px",
+    gap: space.s10,
+    padding: `${space.s16} ${space.s16} ${space.s20}`,
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
     color: tokens.inkFaint,
-    fontFamily: tokens.fontMono,
+    fontFamily: tokens.chromeFont,
     fontSize: fontSize.micro,
-    lineHeight: "14px",
+    lineHeight: leading.px14,
   },
   copy: {
     width: "100%",
@@ -194,8 +186,8 @@ const signInStyles = stylex.create({
     display: "flex",
     flexDirection: "column",
     alignItems: "flex-start",
-    gap: "12px",
-    padding: "16px",
+    gap: space.s12,
+    padding: space.s16,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
@@ -207,14 +199,14 @@ const signInStyles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.fontSerif,
     fontSize: fontSize.reading,
-    lineHeight: "24px",
+    lineHeight: leading.px24,
   },
   command: {
     display: "flex",
     alignItems: "center",
     alignSelf: "stretch",
-    gap: "8px",
-    padding: "4px 4px 4px 12px",
+    gap: space.s8,
+    padding: `${space.s4} ${space.s4} ${space.s4} ${space.s12}`,
     borderWidth: "1px",
     borderStyle: "solid",
     borderColor: tokens.rule,
@@ -227,7 +219,7 @@ const signInStyles = stylex.create({
     color: tokens.ink,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     overflowWrap: "anywhere",
   },
 });

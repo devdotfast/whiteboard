@@ -1,20 +1,28 @@
+import { AgentLogo } from "@canvas/ui/brand-icons";
+import { buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
+import { iconStyles } from "@canvas/ui/icon-styles";
+import { CheckIcon, ChevronDownIcon, SearchIcon } from "@canvas/ui/icons";
+import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type AskAgentId,
   type AskChoiceKind,
   type AskOffer,
+  type AskPermissions,
   type AskPicks,
   type AskSelect,
   askAgentIds,
   askChoiceKinds,
   askOfferSchema,
+  askPermissionsSchema,
 } from "@review/ask/thread-state";
 import { fuzzyRank } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
+import { useQuery } from "@tanstack/react-query";
 import {
   type ReactElement,
   type ReactNode,
   type RefObject,
-  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -23,21 +31,16 @@ import {
 } from "react";
 import { z } from "zod";
 
-import { AGENT_LOGOS } from "./agent-logos";
-import { controlStyles } from "./controls-styles";
+import { canvasQueryKeys } from "./canvas-query";
 import type { ReviewSession } from "./host/review-session";
-import { CheckIcon, ChevronDownIcon, SearchIcon } from "./icons";
-import { fontSize } from "./scale.stylex";
+import { fontSize, leading, space } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
 import { Button } from "./ui/button";
 import { EmptyState } from "./ui/empty-state";
 import { menuStyles } from "./ui/menu";
-import { surfaceStyles } from "./ui/surface";
+import { Popover } from "./ui/popover";
 import { textStyles } from "./ui/text";
 import { fieldStyles } from "./ui/text-field";
-import { useAnchoredPopover } from "./use-anchored-popover";
-import { useDismissOnOutside } from "./use-dismiss-on-outside";
-import { useTooltip } from "./use-tooltip";
 
 const agentsSchema = z.object({
   agents: z.array(
@@ -47,6 +50,8 @@ const agentsSchema = z.object({
       available: z.boolean(),
       /** Whether it has a mode that keeps the checkout as it is. */
       readOnly: z.boolean().default(true),
+      /** Whether it can decide for itself what is safe to run. */
+      auto: z.boolean().default(false),
       /** Whether it can edit and run commands without asking. */
       bypass: z.boolean().default(false),
     }),
@@ -55,87 +60,61 @@ const agentsSchema = z.object({
 
 export type AskAgent = z.infer<typeof agentsSchema>["agents"][number];
 
-export const logos: Record<
-  AskAgentId,
-  (props: { xstyle?: stylex.StyleXStyles }) => ReactElement
-> = AGENT_LOGOS;
+const hostOf = (session: ReviewSession) => session.review?.host ?? "";
 
-// The last answer per canvas session, shown while the next is asked; and the
-// request under way, which the toolbar and the panel share.
-const knownAgents = new WeakMap<ReviewSession, AskAgent[] | null>();
-
-// Undefined: the host could not say now.
-const askingAgents = new WeakMap<
-  ReviewSession,
-  Promise<AskAgent[] | null | undefined>
->();
-
-function askAgentsOf(
-  session: ReviewSession,
-): Promise<AskAgent[] | null | undefined> {
-  let request = askingAgents.get(session);
-
-  if (!request) {
-    request = session
-      .fetch("/ask/agents")
-      .then(async (response) => {
-        // A host without Ask refuses the request; one that is down fails it.
-        if (response.status >= 500) throw new Error(response.statusText);
-
-        return response.ok
-          ? agentsSchema.parse(await response.json()).agents
-          : null;
-      })
-      .then(
-        (agents) => {
-          knownAgents.set(session, agents);
-
-          return agents;
-        },
-        () => knownAgents.get(session),
-      )
-      .finally(() => askingAgents.delete(session));
-    askingAgents.set(session, request);
-  }
-
-  return request;
-}
-
-/** Which local agents can answer, or null where this host has no Ask. Asked
- * again each time Ask opens, each time the review comes back into focus and
- * each time its host changes state, so an agent installed during the review
- * shows up. A host that cannot answer now keeps the last answer. */
+/** The host's agents that can answer, or null where it has no Ask. Read
+ * again on focus and when the host changes state. */
 export function useAskAgents(session: ReviewSession | null): AskAgent[] | null {
-  const [agents, setAgents] = useState<AskAgent[] | null>(() =>
-    session ? (knownAgents.get(session) ?? null) : null,
-  );
+  const sessionRef = useRef(session);
+
+  sessionRef.current = session;
+
+  const { data, refetch } = useQuery({
+    queryKey: canvasQueryKeys.askAgents(session ? hostOf(session) : ""),
+    queryFn: async () => {
+      const response = await sessionRef.current!.fetch("/ask/agents");
+
+      // A host without Ask refuses the request; one that is down fails it.
+      if (response.status >= 500) throw new Error(response.statusText);
+
+      return response.ok
+        ? agentsSchema.parse(await response.json()).agents
+        : null;
+    },
+    enabled: session !== null,
+    staleTime: 30_000,
+  });
+
+  const active = session !== null;
+  const hostState = session?.review?.hostState;
+  const asked = useRef(hostState);
+
+  // A failed read keeps the last answer.
+  useEffect(() => {
+    if (asked.current === hostState) return;
+    asked.current = hostState;
+
+    if (active) void refetch();
+  }, [active, hostState, refetch]);
 
   useEffect(() => {
-    if (!session) return;
-    let current = true;
-
-    const refresh = () => {
-      void askAgentsOf(session).then((value) => {
-        if (current && value !== undefined) setAgents(value);
-      });
-    };
+    if (!active) return;
+    const refresh = () => void refetch();
 
     const refreshIfShown = () => {
       if (document.visibilityState === "visible") refresh();
     };
 
-    refresh();
     window.addEventListener("focus", refresh);
     document.addEventListener("visibilitychange", refreshIfShown);
 
     return () => {
-      current = false;
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refreshIfShown);
     };
-  }, [session]);
+  }, [active, refetch]);
 
-  return agents;
+  return data ?? null;
 }
 
 const offeredSchema = z.object({ offer: askOfferSchema });
@@ -213,47 +192,57 @@ export function rememberAskAgent(session: ReviewSession, agent: AskAgentId) {
 const choiceKey = (
   session: ReviewSession,
   agent: AskAgentId,
-  kind: AskChoiceKind | "bypass",
+  kind: AskChoiceKind | "permissions",
 ) => session.storageKey(`ask-${kind}-${agent}`);
 
-/** Whether the reviewer last had this agent bypass permissions. */
-export function storedBypass(session: ReviewSession, agent: AskAgentId) {
+/** What the reviewer last let this agent do, when they chose. */
+export function storedPermissions(
+  session: ReviewSession,
+  agent: AskAgentId,
+): AskPermissions | undefined {
   try {
-    return localStorage.getItem(choiceKey(session, agent, "bypass")) === "on";
+    const stored = askPermissionsSchema.safeParse(
+      localStorage.getItem(choiceKey(session, agent, "permissions")),
+    );
+
+    return stored.success ? stored.data : undefined;
   } catch {
-    /* Storage can be unavailable; the agent asks first. */
-    return false;
+    /* Storage can be unavailable; the agent's default applies. */
+    return undefined;
   }
 }
 
-export function rememberBypass(
+export function rememberPermissions(
   session: ReviewSession,
   agent: AskAgentId,
-  bypass: boolean,
+  permissions: AskPermissions,
 ) {
   try {
-    localStorage.setItem(
-      choiceKey(session, agent, "bypass"),
-      bypass ? "on" : "off",
-    );
+    localStorage.setItem(choiceKey(session, agent, "permissions"), permissions);
   } catch {
     /* The choice is a convenience; forgetting it is harmless. */
   }
 }
 
+const permissionNames: Record<AskPermissions, string> = {
+  "read-only": "Read-only",
+  auto: "Auto",
+  bypass: "Bypass permissions",
+};
+
+/** What an agent can be let do, in the order the reviewer cycles them. */
+export const permissionsOffered = (agent: AskAgent | undefined) =>
+  askPermissionsSchema.options.filter(
+    (permissions) => permissions === "read-only" || agent?.[permissions],
+  );
+
 /** The permissions a conversation can have. */
-export const permissionsSelect = (bypass: boolean): AskSelect => ({
-  current: bypass ? "bypass" : "ask",
-  options: [
-    {
-      value: "ask",
-      name: "Read-only",
-    },
-    {
-      value: "bypass",
-      name: "Bypass permissions",
-    },
-  ],
+export const permissionsSelect = (
+  offered: AskPermissions[],
+  current: AskPermissions,
+): AskSelect => ({
+  current,
+  options: offered.map((value) => ({ value, name: permissionNames[value] })),
 });
 
 /** The model or effort the reviewer chose last for this agent. */
@@ -322,9 +311,7 @@ export function AskAgentMenu({
   onPick: (agent: AskAgentId) => void;
   onDismiss: () => void;
 }): ReactElement {
-  const menu = useAnchoredPopover(true, within);
-
-  useDismissOnOutside(within, true, onDismiss, true);
+  const menu = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!autoFocus) return;
@@ -334,23 +321,14 @@ export function AskAgentMenu({
   }, [autoFocus, menu]);
 
   return (
-    <div
+    <Popover
       ref={menu}
-      popover="manual"
+      anchor={within}
+      onDismiss={onDismiss}
       role="menu"
       tabIndex={-1}
       aria-label="Answer with"
-      {...stylex.props(
-        surfaceStyles.popover,
-        menuStyles.popover,
-        styles.agentMenu,
-      )}
-      onKeyDown={(event) => {
-        if (event.key !== "Escape") return;
-        // Escape closes the menu, not the panel behind it.
-        event.stopPropagation();
-        onDismiss();
-      }}
+      xstyle={[menuStyles.popover, styles.agentMenu]}
     >
       <div
         {...stylex.props(textStyles.eyebrow, menuStyles.label)}
@@ -367,39 +345,22 @@ export function AskAgentMenu({
             role="menuitemradio"
             aria-checked={candidate.id === current}
             {...stylex.props(
+              focusStyles.ringInset,
+              buttonStyles.reset,
               menuStyles.item,
               candidate.id === current && menuStyles.itemCurrent,
             )}
             onClick={() => onPick(candidate.id)}
           >
-            <span {...stylex.props(styles.logo)}>
-              {logos[candidate.id]({})}
-            </span>
+            <AgentLogo agent={candidate.id} />
             <span {...stylex.props(styles.name)}>{candidate.name}</span>
             {candidate.id === current ? (
-              <CheckIcon
-                xstyle={[controlStyles.inlineIcon, menuStyles.check]}
-              />
+              <CheckIcon xstyle={[iconStyles.inline, menuStyles.check]} />
             ) : null}
           </button>
         ))}
-    </div>
+    </Popover>
   );
-}
-
-/** Closes a menu; focus that went with it returns to its button. */
-function useMenuClose(
-  setOpen: (open: boolean) => void,
-  trigger: RefObject<HTMLButtonElement | null>,
-) {
-  return useCallback(() => {
-    setOpen(false);
-    requestAnimationFrame(() => {
-      const focused = document.activeElement;
-
-      if (!focused || focused === document.body) trigger.current?.focus();
-    });
-  }, [setOpen, trigger]);
 }
 
 export function AskAgentPicker({
@@ -417,8 +378,7 @@ export function AskAgentPicker({
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const dismiss = useMenuClose(setOpen, trigger);
+  const dismiss = () => setOpen(false);
   const hint = useTooltip<HTMLSpanElement>(unavailable ?? "");
   const chosen = agents?.find((candidate) => candidate.id === agent);
 
@@ -432,7 +392,7 @@ export function AskAgentPicker({
         ref={unavailable === undefined ? undefined : hint}
         {...stylex.props(styles.inline)}
       >
-        {agent ? logos[agent]({}) : null}
+        {agent ? <AgentLogo agent={agent} /> : null}
         <span>{chosen?.name ?? agent ?? "Agent"}</span>
       </span>
     );
@@ -441,7 +401,6 @@ export function AskAgentPicker({
   return (
     <div ref={anchor} {...stylex.props(styles.anchor, styles.whole)}>
       <Button
-        ref={trigger}
         variant="secondary"
         size="large"
         xstyle={styles.trigger}
@@ -450,7 +409,7 @@ export function AskAgentPicker({
         disabled={!agents}
         onClick={() => setOpen((value) => !value)}
       >
-        {agent ? logos[agent]({}) : null}
+        {agent ? <AgentLogo agent={agent} /> : null}
         <span>{chosen?.name ?? "Choose an agent"}</span>
         <ChevronDownIcon />
       </Button>
@@ -496,12 +455,9 @@ export function AskChoicePicker({
 }): ReactElement {
   const [open, setOpen] = useState(false);
   const anchor = useRef<HTMLDivElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
-  const dismiss = useMenuClose(setOpen, trigger);
-  const menu = useAnchoredPopover(open, anchor);
+  const menu = useRef<HTMLDivElement>(null);
+  const dismiss = () => setOpen(false);
   const chosen = select.options.find((option) => option.value === current);
-
-  useDismissOnOutside(anchor, open, dismiss, true);
 
   useEffect(() => {
     if (!open) return;
@@ -523,7 +479,6 @@ export function AskChoicePicker({
   return (
     <div ref={anchor} {...stylex.props(styles.anchor)}>
       <Button
-        ref={trigger}
         variant={quiet ? "ghost" : "secondary"}
         size={quiet ? "default" : "large"}
         xstyle={[styles.trigger, styles.choice, quiet && styles.quiet]}
@@ -537,7 +492,7 @@ export function AskChoicePicker({
         onClick={() => setOpen((value) => !value)}
       >
         {icon}
-        <span {...stylex.props(styles.choiceName)}>
+        <span {...stylex.props(textStyles.truncate, styles.choiceName)}>
           {chosen?.name ?? current}
         </span>
         {/* Under the composer it reads as text; pointing at it shows it
@@ -545,25 +500,19 @@ export function AskChoicePicker({
         {quiet ? null : <ChevronDownIcon />}
       </Button>
       {open ? (
-        <div
+        <Popover
           ref={menu}
-          popover="manual"
+          anchor={anchor}
+          onDismiss={dismiss}
           role="menu"
           tabIndex={-1}
           aria-label={label}
-          {...stylex.props(
-            surfaceStyles.popover,
+          xstyle={[
             menuStyles.popover,
             quiet && menuStyles.above,
             end && menuStyles.end,
             searchable ? styles.searchMenu : styles.choiceMenu,
-          )}
-          onKeyDown={(event) => {
-            if (event.key !== "Escape") return;
-            // Escape closes the menu, not the panel behind it.
-            event.stopPropagation();
-            dismiss();
-          }}
+          ]}
         >
           {searchable ? (
             <AskChoiceSearch
@@ -590,7 +539,7 @@ export function AskChoicePicker({
               ))}
             </>
           )}
-        </div>
+        </Popover>
       ) : null}
     </div>
   );
@@ -625,6 +574,8 @@ function AskChoiceItem({
       aria-checked={checked}
       data-highlighted={highlighted || undefined}
       {...stylex.props(
+        focusStyles.ringInset,
+        buttonStyles.reset,
         menuStyles.item,
         checked && menuStyles.itemCurrent,
         highlighted && menuStyles.itemHighlighted,
@@ -634,7 +585,7 @@ function AskChoiceItem({
     >
       <span {...stylex.props(styles.name)}>{option.name}</span>
       {checked ? (
-        <CheckIcon xstyle={[controlStyles.inlineIcon, menuStyles.check]} />
+        <CheckIcon xstyle={[iconStyles.inline, menuStyles.check]} />
       ) : null}
     </button>
   );
@@ -687,9 +638,9 @@ function AskChoiceSearch({
       <label
         {...stylex.props(fieldStyles.box, fieldStyles.shell, styles.search)}
       >
-        <SearchIcon xstyle={[controlStyles.inlineIcon, styles.searchIcon]} />
+        <SearchIcon xstyle={[iconStyles.inline, styles.searchIcon]} />
         <input
-          {...stylex.props(styles.searchInput)}
+          {...stylex.props(fieldStyles.bare, styles.searchInput)}
           value={query}
           placeholder={`Search ${noun}s`}
           aria-label={`Search ${noun}s`}
@@ -774,7 +725,7 @@ const styles = stylex.create({
     display: "flex",
     flex: "0 0 auto",
     alignItems: "center",
-    gap: "6px",
+    gap: space.s6,
     cursor: "text",
   },
   searchIcon: {
@@ -784,19 +735,6 @@ const styles = stylex.create({
   searchInput: {
     flex: "1 1 auto",
     alignSelf: "stretch",
-    minWidth: 0,
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    backgroundColor: tokens.transparent,
-    color: "inherit",
-    font: "inherit",
-    // The field around it shows the focus.
-    outline: "none",
-    "::placeholder": {
-      color: tokens.inkFaint,
-    },
   },
   count: {
     flex: "0 0 auto",
@@ -809,21 +747,16 @@ const styles = stylex.create({
     display: "flex",
     flex: "1 1 auto",
     flexDirection: "column",
-    gap: "2px",
+    gap: space.s2,
     minHeight: 0,
     maxHeight: "118px",
     overflowY: "auto",
     overscrollBehavior: "contain",
   },
   empty: {
-    paddingBlock: "8px",
-    paddingInline: "8px",
+    paddingBlock: space.s8,
+    paddingInline: space.s8,
     fontSize: fontSize.small,
-  },
-  logo: {
-    display: "flex",
-    flex: "0 0 16px",
-    justifyContent: "center",
   },
   name: {
     flex: "1 1 0",
@@ -838,16 +771,16 @@ const styles = stylex.create({
   },
   trigger: {
     maxWidth: "100%",
-    padding: "0 8px",
+    padding: `0 ${space.s8}`,
   },
   inline: {
     display: "inline-flex",
     alignItems: "center",
-    gap: "8px",
+    gap: space.s8,
     color: tokens.inkMuted,
     fontFamily: tokens.fontMono,
     fontSize: fontSize.body,
-    lineHeight: "16px",
+    lineHeight: leading.px16,
     whiteSpace: "nowrap",
   },
   choice: {
@@ -857,12 +790,9 @@ const styles = stylex.create({
   // it truncates only once the row is full.
   quiet: {
     maxWidth: "100%",
-    padding: "0 6px",
+    padding: `0 ${space.s6}`,
   },
   choiceName: {
     minWidth: 0,
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
   },
 });

@@ -357,7 +357,6 @@ it("progress counts folded changes as done, overall, per lens and uncategorized"
 
   // Viewing every unfolded line reads 100%, with the folded code unopened.
   const viewed = await client.post<ReviewProgress>(`/${reviewId}/progress`, {
-    mode: "structural",
     version: store.read(reviewId).version,
     viewed: true,
     files: ["src/api.rs", "src/main.rs", "docs/readme.md"].map((path) => ({
@@ -417,7 +416,6 @@ it("counts all changes before plugins finish and preserves viewed marks as folds
     const file = initial.files.find((file) => file.path === "docs/readme.md")!;
 
     const marked = await client.post<ReviewProgress>(`/${reviewId}/progress`, {
-      mode: "structural",
       version: store.read(reviewId).version,
       viewed: true,
       files: [
@@ -433,7 +431,7 @@ it("counts all changes before plugins finish and preserves viewed marks as folds
       "viewed",
     );
     release();
-    await data.coverage(reviewId, pins, "structural");
+    await data.coverage(reviewId, pins);
     const final = await client.read<ReviewProgress>(`/${reviewId}/progress`);
     expect(coverageProgress(final.files).total).toEqual({
       additions: 7,
@@ -529,7 +527,6 @@ it("keeps Git's rename identity and counts when diffr emits separate deletion an
     data,
     "review",
     pins,
-    "structural",
     new AbortController().signal,
     (snapshot) => snapshots.push(snapshot),
   );
@@ -552,6 +549,139 @@ it("keeps Git's rename identity and counts when diffr emits separate deletion an
     deletions: 1,
   });
   data.close();
+});
+
+async function updateApi(
+  events: (file: ReturnType<typeof ref>) => AsyncGenerator<StructuralDiffEvent>,
+) {
+  const data = new LocalReviewData(store);
+  const file = ref("a.ts");
+
+  const { reviewId } = await store.execute({
+    operation: {
+      type: "create",
+      title: "Updates",
+      target: { kind: "commits", ...pins },
+    },
+  });
+
+  vi.spyOn(data, "changes").mockImplementation((async (
+    _pins: typeof pins,
+    path?: string,
+  ) =>
+    path
+      ? "@@ -1 +1 @@\n-old\n+new\n"
+      : [
+          { path: "a.ts", status: "modified", additions: 1, deletions: 1 },
+        ]) as typeof data.changes);
+  vi.spyOn(data, "file").mockImplementation(async (at, side, path) => ({
+    file: path,
+    side,
+    commit: at[side],
+    text: text(2),
+  }));
+  vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {
+    yield {
+      type: "start",
+      version: STRUCTURAL_DIFF_WIRE_VERSION,
+      lhs: { type: "revision", rev: pins.base },
+      rhs: { type: "revision", rev: pins.head },
+      files: [{ file, status: "modified" }],
+    };
+    yield* events(file);
+  });
+
+  return { data, reviewId };
+}
+
+const folded = (comparison: ComparisonCoverage) =>
+  coverageProgress(comparison.files).folded;
+
+const collapseLeaves = {
+  regions: [
+    { id: 1, collapsed: true },
+    { id: 2, collapsed: true },
+  ],
+  visible: { added: 0, removed: 0 },
+};
+
+function gate() {
+  let open!: () => void;
+
+  const opened = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+
+  return { open, opened };
+}
+
+it("counts at the last file, then folds what diffr's update collapses", async () => {
+  const update = gate();
+
+  const { data, reviewId } = await updateApi(async function* (file) {
+    yield { type: "file", file, diff: plainDiff(2) };
+    await update.opened;
+    yield { type: "update", file, ...collapseLeaves };
+    yield { type: "complete", succeeded: 1, failed: 0 };
+  });
+
+  try {
+    const counted = await data.coverage(reviewId, pins);
+    expect(folded(counted)).toEqual({ additions: 0, deletions: 0 });
+    update.open();
+
+    await vi.waitFor(async () => {
+      const later = await data.coverage(reviewId, pins);
+      expect(folded(later)).toEqual({ additions: 1, deletions: 1 });
+      expect(coverageProgress(later.files).total).toEqual({
+        additions: 1,
+        deletions: 1,
+      });
+    });
+  } finally {
+    data.close();
+  }
+});
+
+it("keeps a file's coverage when its update fails", async () => {
+  const error = { code: "provider_failed", message: "boom" };
+  const done = gate();
+  const warn = vi.spyOn(console, "warn");
+
+  const { data, reviewId } = await updateApi(async function* (file) {
+    yield { type: "file", file, diff: hideFile(plainDiff(2)) };
+    yield { type: "update", file, error };
+    done.open();
+    yield { type: "complete", succeeded: 1, failed: 0 };
+  });
+
+  try {
+    await data.coverage(reviewId, pins);
+    await done.opened;
+
+    expect(folded(await data.coverage(reviewId, pins))).toEqual({
+      additions: 1,
+      deletions: 1,
+    });
+    expect(warn).not.toHaveBeenCalled();
+  } finally {
+    warn.mockRestore();
+    data.close();
+  }
+});
+
+it("rejects an update for a file it has not seen", async () => {
+  const { data, reviewId } = await updateApi(async function* (file) {
+    yield { type: "update", file, ...collapseLeaves };
+  });
+
+  try {
+    await expect(data.coverage(reviewId, pins)).rejects.toThrow(
+      "Unexpected structural result: a.ts",
+    );
+  } finally {
+    data.close();
+  }
 });
 
 function root(children: StructuralRegion[]): StructuralRegion {

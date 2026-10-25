@@ -4,13 +4,8 @@ import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { beforeEach, expect, it, vi } from "vitest";
 
-import {
-  AskDeleteThreadButton,
-  AskOpenThreadProvider,
-  useShowOpenThread,
-} from "./ask-delete";
 import { AskHistoryProvider, useAskHistory } from "./ask-history";
-import { AskHistoryControl, AskHistoryList } from "./ask-history-list";
+import { AskHistoryList } from "./ask-history-list";
 import { AskPanelContent, AskReadOnlyThread } from "./ask-panel";
 import { TestCanvasQuery } from "./canvas-query-test-utils";
 import { ReviewSessionProvider } from "./host/review-session";
@@ -45,7 +40,7 @@ const state = (change: Partial<AskThreadState>): AskThreadState => ({
   agentName: "Claude Code",
   status: "running",
   readOnly: true,
-  bypass: false,
+  permissions: "read-only",
   head: "7fd03b8e2",
   cwd: "/checkouts/payments-service",
   selection: { title: "Paragraph 3" },
@@ -131,11 +126,15 @@ it("asks the chosen agent, streams its answer, relays a decision, and leaves the
   try {
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <AskPanelContent selection={selection} header={header} />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskPanelContent selection={selection} header={header} />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
+    // The agents land a task later.
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
 
     const textarea = container.querySelector("textarea")!;
 
@@ -170,7 +169,7 @@ it("asks the chosen agent, streams its answer, relays a decision, and leaves the
         question: { text: "Is this safe on replicas?" },
         selection,
         picks: {},
-        bypass: false,
+        permissions: "read-only",
       },
     ]);
 
@@ -320,16 +319,18 @@ it("lists saved conversations, reopens one, and deletes another once confirmed",
     updatedAt: "2026-09-01T10:05:00.000Z",
   });
 
+  let threads = [
+    saved("first", "Is this safe on replicas?"),
+    saved("second", "Why a new index?"),
+  ];
+
   const fetch = vi
     .spyOn(session, "fetch")
     .mockImplementation(async (endpoint, init) => {
-      if (endpoint === "/ask/threads")
-        return Response.json({
-          threads: [
-            saved("first", "Is this safe on replicas?"),
-            saved("second", "Why a new index?"),
-          ],
-        });
+      if (endpoint === "/ask/threads") return Response.json({ threads });
+
+      if (init?.method === "DELETE")
+        threads = threads.filter(({ id }) => endpoint !== `/ask/${id}`);
 
       return Response.json({ ok: true }, { status: init?.method ? 200 : 404 });
     });
@@ -338,8 +339,8 @@ it("lists saved conversations, reopens one, and deletes another once confirmed",
 
   function Probe() {
     view = useReviewPanel(
-      ({ asks, askDocked }) =>
-        asks.find((ask) => ask.key === askDocked)?.view ?? null,
+      ({ asks, askColumn }) =>
+        asks.find((ask) => ask.key === askColumn)?.view ?? null,
     );
 
     return null;
@@ -352,17 +353,20 @@ it("lists saved conversations, reopens one, and deletes another once confirmed",
   try {
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <ReviewPanelProvider>
-            <AskHistoryProvider>
-              <AskHistoryList />
-              <Probe />
-              <ReportOutdated ids={["first"]} />
-            </AskHistoryProvider>
-          </ReviewPanelProvider>
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <ReviewPanelProvider>
+              <AskHistoryProvider>
+                <AskHistoryList />
+                <Probe />
+                <ReportOutdated ids={["first"]} />
+              </AskHistoryProvider>
+            </ReviewPanelProvider>
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
 
     const titles = () =>
       [...container.querySelectorAll("li")].map((row) =>
@@ -397,6 +401,7 @@ it("lists saved conversations, reopens one, and deletes another once confirmed",
     expect(deleteButton().textContent).toBe("Delete");
 
     await act(async () => deleteButton().click());
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
 
     expect(
       fetch.mock.calls
@@ -471,13 +476,15 @@ it("shows a refused plan as the answer, and names options the agent offers twice
   try {
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <AskPanelContent
-            selection={selection}
-            agent="claude"
-            savedThreadId="saved"
-          />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskPanelContent
+              selection={selection}
+              agent="claude"
+              savedThreadId="saved"
+            />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
 
@@ -589,8 +596,8 @@ it("keeps the agent through new versions of the review, and says so when the con
 
   function Probe() {
     view = useReviewPanel(
-      ({ asks, askDocked }) =>
-        asks.find((ask) => ask.key === askDocked)?.view ?? null,
+      ({ asks, askColumn }) =>
+        asks.find((ask) => ask.key === askColumn)?.view ?? null,
     );
 
     return null;
@@ -603,16 +610,18 @@ it("keeps the agent through new versions of the review, and says so when the con
   // Each new version of the review hands the canvas a new session object.
   const render = (version: typeof session) =>
     root.render(
-      <ReviewSessionProvider session={version}>
-        <ReviewPanelProvider>
-          <AskPanelContent
-            selection={selection}
-            agent="claude"
-            savedThreadId="saved"
-          />
-          <Probe />
-        </ReviewPanelProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={version}>
+          <ReviewPanelProvider>
+            <AskPanelContent
+              selection={selection}
+              agent="claude"
+              savedThreadId="saved"
+            />
+            <Probe />
+          </ReviewPanelProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     );
 
   try {
@@ -756,9 +765,11 @@ it("asks with the model and effort the reviewer picks, and switches them between
   try {
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <AskPanelContent selection={selection} agent="codex" />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskPanelContent selection={selection} agent="codex" />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
 
@@ -887,9 +898,11 @@ it("completes the agent's commands after / and the checkout's files after @, and
   try {
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <AskPanelContent selection={selection} agent="codex" />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskPanelContent selection={selection} agent="codex" />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
 
@@ -971,13 +984,15 @@ it("says how to sign a signed-out agent back in, and tries again once it is", as
   try {
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <AskPanelContent
-            selection={selection}
-            agent="claude"
-            savedThreadId="saved"
-          />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskPanelContent
+              selection={selection}
+              agent="claude"
+              savedThreadId="saved"
+            />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
     await act(async () =>
@@ -1066,8 +1081,8 @@ it("offers a new conversation when one cannot be reopened: one lost before it wa
 
   function Probe() {
     view = useReviewPanel(
-      ({ asks, askDocked }) =>
-        asks.find((ask) => ask.key === askDocked)?.view ?? null,
+      ({ asks, askColumn }) =>
+        asks.find((ask) => ask.key === askColumn)?.view ?? null,
     );
 
     return null;
@@ -1079,19 +1094,21 @@ it("offers a new conversation when one cannot be reopened: one lost before it wa
 
   const render = (savedThreadId?: string) =>
     root.render(
-      <ReviewSessionProvider session={session}>
-        <ReviewPanelProvider>
-          <AskHistoryProvider>
-            <AskPanelContent
-              key={savedThreadId}
-              selection={selection}
-              agent="claude"
-              savedThreadId={savedThreadId}
-            />
-            <Probe />
-          </AskHistoryProvider>
-        </ReviewPanelProvider>
-      </ReviewSessionProvider>,
+      <TestCanvasQuery>
+        <ReviewSessionProvider session={session}>
+          <ReviewPanelProvider>
+            <AskHistoryProvider>
+              <AskPanelContent
+                key={savedThreadId}
+                selection={selection}
+                agent="claude"
+                savedThreadId={savedThreadId}
+              />
+              <Probe />
+            </AskHistoryProvider>
+          </ReviewPanelProvider>
+        </ReviewSessionProvider>
+      </TestCanvasQuery>,
     );
 
   try {
@@ -1202,13 +1219,15 @@ it("stops a conversation while it reopens, and takes no answer to a permission o
   try {
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <AskPanelContent
-            selection={selection}
-            agent="claude"
-            savedThreadId="saved"
-          />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskPanelContent
+              selection={selection}
+              agent="claude"
+              savedThreadId="saved"
+            />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
     expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
@@ -1319,15 +1338,19 @@ it("moves from setup to asking once an agent is installed", async () => {
   try {
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <AskPanelContent selection={selection} />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskPanelContent selection={selection} />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
     expect(container.querySelector("textarea")).toBeNull();
 
     available = true;
     await act(async () => window.dispatchEvent(new Event("focus")));
+    await act(() => new Promise((resolve) => setTimeout(resolve)));
     expect(container.querySelector("textarea")).not.toBeNull();
   } finally {
     await act(async () => root.unmount());
@@ -1337,7 +1360,7 @@ it("moves from setup to asking once an agent is installed", async () => {
   }
 });
 
-it("closes an agent that starts after its panel closed", async () => {
+it("keeps an agent that starts after its panel left the screen, unless the reader stopped it", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const session = testReviewSession();
   const answers: Record<string, (response: Response) => void> = {};
@@ -1359,27 +1382,35 @@ it("closes an agent that starts after its panel closed", async () => {
   const closes = (id: string) =>
     fetch.mock.calls.filter(([called]) => called === `/ask/${id}/close`).length;
 
-  const panel = async (savedThreadId?: string) => {
+  const panel = async (
+    savedThreadId?: string,
+    stopping = { current: false },
+  ) => {
     const container = document.createElement("div");
     document.body.append(container);
     const root = createRoot(container);
 
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <AskPanelContent
-            selection={selection}
-            agent="claude"
-            savedThreadId={savedThreadId}
-          />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskPanelContent
+              selection={selection}
+              agent="claude"
+              savedThreadId={savedThreadId}
+              stopping={stopping}
+            />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
 
-    return { container, root };
+    return { container, root, stopping };
   };
 
   try {
+    // Keep running, or something else taking the column: it runs on, in
+    // Threads.
     const asking = await panel();
     const textarea = asking.container.querySelector("textarea")!;
 
@@ -1387,11 +1418,13 @@ it("closes an agent that starts after its panel closed", async () => {
     await enter(textarea);
     await act(async () => asking.root.unmount());
     await act(async () => answers["/ask"]!(Response.json({ threadId: "new" })));
-    expect(closes("new")).toBe(1);
+    expect(closes("new")).toBe(0);
     asking.container.remove();
 
+    // Stop and close, before the thread had started.
     const opening = await panel("saved");
 
+    opening.stopping.current = true;
     await act(async () => opening.root.unmount());
     await act(async () =>
       answers["/ask/saved/open"]!(Response.json({ ok: true })),
@@ -1428,9 +1461,11 @@ it("keeps what is written while a question goes, and puts back one that did not"
   try {
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <AskPanelContent selection={selection} agent="claude" />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskPanelContent selection={selection} agent="claude" />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
 
@@ -1545,9 +1580,11 @@ it("asks nothing while a remote review's host is down, and says why with its nex
   try {
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <AskPanelContent selection={selection} agent="claude" />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskPanelContent selection={selection} agent="claude" />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
 
@@ -1606,9 +1643,11 @@ it("offers to try again a question that did not go, and sends it again", async (
   try {
     await act(async () =>
       root.render(
-        <ReviewSessionProvider session={session}>
-          <AskPanelContent selection={selection} agent="claude" />
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider session={session}>
+            <AskPanelContent selection={selection} agent="claude" />
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
 
@@ -1662,17 +1701,18 @@ it("keeps Ask while its host cannot list agents, and lets an agent be picked aga
   const render = async () =>
     act(async () =>
       root.render(
-        <ReviewSessionProvider
-          session={{
-            ...session,
-            review: { ...session.review!, host: "wb-a", hostState },
-          }}
-        >
-          <ReviewPanelProvider>
-            <AskHistoryControl />
-            <AskPanelContent selection={selection} header={header} />
-          </ReviewPanelProvider>
-        </ReviewSessionProvider>,
+        <TestCanvasQuery>
+          <ReviewSessionProvider
+            session={{
+              ...session,
+              review: { ...session.review!, host: "wb-a", hostState },
+            }}
+          >
+            <ReviewPanelProvider>
+              <AskPanelContent selection={selection} header={header} />
+            </ReviewPanelProvider>
+          </ReviewSessionProvider>
+        </TestCanvasQuery>,
       ),
     );
 
@@ -1684,7 +1724,6 @@ it("keeps Ask while its host cannot list agents, and lets an agent be picked aga
     await render();
     expect(picker()).toBeNull();
     expect(header.textContent).toBe("Claude Code");
-    expect(buttonNamed(container, "Saved conversations")).not.toBeNull();
 
     hostState = "online";
     await render();

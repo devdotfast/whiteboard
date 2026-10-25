@@ -1,14 +1,14 @@
 import type { LoadedAgentTrace } from "@canvas/use-agent-trace";
 import type {
   ReviewApiSummary,
+  ReviewBoardPlace,
   ReviewRemoteHostActions,
-  ReviewStackLayer,
+  ReviewStackResponse,
 } from "@dev.fast/review-protocol";
 
 export interface ReviewSessionData {
   trashedAt?: string | null;
-  /** Absent for a review. The scratchpad hides review-only chrome. */
-  kind?: "scratchpad";
+  reviewId: string;
   host?: string;
   hostState?: ReviewApiSummary["hostState"];
   hosts?: ReviewRemoteHostActions;
@@ -17,20 +17,28 @@ export interface ReviewSessionData {
   pins?: { base: string; head: string };
   /** `worktree` when the head side is the checkout's working files rather
    * than the pinned head commit. */
-  targetKind?: "worktree" | "commits";
+  targetKind?: "worktree" | "commits" | "project";
   historicalRevision: string | null;
   updatedAtMs: number;
   /** Head branch captured with the displayed snapshot. */
   headBranch?: string;
+  /** The target's base and head as written, a branch name or a commit. */
+  baseRef?: string;
+  headRef?: string;
   pullRequestNumber?: number;
   pullRequestUrl?: string;
   traces: ReadonlyMap<string, LoadedAgentTrace>;
-  stack(signal: AbortSignal): Promise<ReviewStackLayer[]>;
-  /** Creates an empty review of `branch` against `base` and returns its id. */
+  place(signal?: AbortSignal): Promise<ReviewBoardPlace>;
+  /** Its branch stack, apart from its place among boards. */
+  stack(signal?: AbortSignal): Promise<ReviewStackResponse>;
+  /** Creates an empty review of `branch` against `base` and returns its id:
+   * a branch in the board's stack that has no whiteboard yet. */
   createBranchReview(
     branch: string,
     base: string,
     title: string,
   ): Promise<string>;
-  dismiss(): Promise<void>;
+  /** Moves the board to Trash, asking first when other boards need it.
+   * False when the person kept it. */
+  dismiss(): Promise<boolean>;
 }

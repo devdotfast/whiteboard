@@ -4,13 +4,13 @@ import os from "node:os";
 import path from "node:path";
 
 import { openLocalReviewStore } from "@review/review-api/local-data";
-import { ReviewStore, SCRATCHPAD_ID } from "@review/review-api/store";
+import { ReviewStore } from "@review/review-api/store";
 import { ReviewTelemetry } from "@review/review-telemetry";
 import { expect, it, vi } from "vitest";
 
 import {
   createGlobalReviewServer,
-  sessionStartedSourceKind,
+  sessionStartedSource,
 } from "./desktop-server";
 import type { ReviewOpenContext } from "./review-open-watchdog";
 import { clientOccurredAt } from "./ui-telemetry";
@@ -27,7 +27,7 @@ it("keeps a client's occurrence time only within the recent past", () => {
   expect(clientOccurredAt(undefined, now)).toBe(now);
 });
 
-it("derives source_kind from the review's stored target, or the scratchpad kind", async () => {
+it("derives source_kind and pr_provider from the stored review", async () => {
   const store = new ReviewStore(":memory:", {
     validatePins: async () => {},
     validateSource: async () => {},
@@ -37,24 +37,48 @@ it("derives source_kind from the review's stored target, or the scratchpad kind"
   try {
     const repository = store.registerRepository(process.cwd());
 
-    const { reviewId } = await store.execute({
-      operation: {
-        type: "create",
-        title: "Pinned",
-        target: {
-          kind: "commits",
-          repositoryId: repository.id,
-          base: "base",
-          head: "head",
-        },
-      },
-    });
+    const create = async (pullRequestUrl?: string) =>
+      (
+        await store.execute({
+          operation: {
+            type: "create",
+            title: "Pinned",
+            target: {
+              kind: "commits",
+              repositoryId: repository.id,
+              base: "base",
+              head: "head",
+            },
+            ...(pullRequestUrl && { pullRequestUrl }),
+          },
+        })
+      ).reviewId;
 
-    expect(sessionStartedSourceKind(store, reviewId)).toBe("commits");
-    await store.ensureScratchpad();
-    expect(sessionStartedSourceKind(store, SCRATCHPAD_ID)).toBe("scratchpad");
-    expect(sessionStartedSourceKind(store, randomUUID())).toBeUndefined();
-    expect(sessionStartedSourceKind(store, undefined)).toBeUndefined();
+    expect(sessionStartedSource(store, await create())).toEqual({
+      source_kind: "commits",
+    });
+    expect(
+      sessionStartedSource(
+        store,
+        await create("https://github.com/devdotfast/review/pull/1"),
+      ),
+    ).toEqual({ source_kind: "commits", pr_provider: "github" });
+    expect(
+      sessionStartedSource(
+        store,
+        await create("https://git.example.com/devdotfast/review/pull/2"),
+      ).pr_provider,
+    ).toBe("github_enterprise");
+    expect(
+      sessionStartedSource(
+        store,
+        await create(
+          "https://dev.azure.com/org/project/_git/repository/pullrequest/3",
+        ),
+      ).pr_provider,
+    ).toBe("azure_devops");
+    expect(sessionStartedSource(store, randomUUID())).toEqual({});
+    expect(sessionStartedSource(store, undefined)).toEqual({});
   } finally {
     await store.close();
   }
@@ -68,7 +92,16 @@ it("enriches session_started with source_kind on the global /telemetry/event rou
   const local = openLocalReviewStore(path.join(home, "review-api.db"));
   const token = "session-telemetry-test-token";
 
-  await local.store.ensureScratchpad();
+  const { reviewId } = await local.store.execute({
+    operation: {
+      type: "create",
+      title: "Plan",
+      target: {
+        kind: "project",
+        repositoryId: local.store.registerRepository(process.cwd()).id,
+      },
+    },
+  });
 
   const telemetry = ReviewTelemetry.fromEnv({
     ...process.env,
@@ -93,7 +126,7 @@ it("enriches session_started with source_kind on the global /telemetry/event rou
     await server.listen();
 
     const context = {
-      reviewUuid: SCRATCHPAD_ID,
+      reviewUuid: reviewId,
       presentationSessionId: randomUUID(),
     };
 
@@ -110,7 +143,7 @@ it("enriches session_started with source_kind on the global /telemetry/event rou
     expect(response.status).toBe(200);
     expect(captureUiEvent).toHaveBeenCalledWith(
       "review_session_started",
-      { source_kind: "scratchpad" },
+      { source_kind: "project", remote: false },
       context,
       expect.any(Number),
     );
@@ -153,7 +186,7 @@ it("never trusts a client-supplied source_kind or agent_kind on session_started"
     await server.listen();
 
     // A review this store never had (a shared review, or one deleted between
-    // open and the event arriving): sessionStartedSourceKind cannot resolve it.
+    // open and the event arriving): sessionStartedSource cannot resolve it.
     const context = {
       reviewUuid: randomUUID(),
       presentationSessionId: randomUUID(),
@@ -172,7 +205,7 @@ it("never trusts a client-supplied source_kind or agent_kind on session_started"
     expect(response.status).toBe(200);
     expect(captureUiEvent).toHaveBeenCalledWith(
       "review_session_started",
-      {},
+      { remote: false },
       context,
       expect.any(Number),
     );

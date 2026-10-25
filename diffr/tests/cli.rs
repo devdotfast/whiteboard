@@ -1,5 +1,7 @@
+mod git_fixture;
 mod support;
 
+use std::collections::BTreeMap;
 use std::io::Write;
 use std::process::{Command, Stdio};
 use support::get_base_command;
@@ -669,4 +671,248 @@ fn upgrade_and_uninstall_leave_a_diffr_bundled_in_an_app_alone() {
             .join("node_modules/@dev.fast/diffr-darwin-arm64/bin/diffr")
             .exists());
     }
+}
+
+const SUMMARY: &str = "call the steps";
+
+/// A model endpoint that answers every request with `status`.
+fn model_stub(status: u16) -> String {
+    use std::io::{BufRead, BufReader, Read};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let endpoint = format!("http://{}", listener.local_addr().unwrap());
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let mut stream = stream.unwrap();
+            std::thread::spawn(move || {
+                let mut reader = BufReader::new(&mut stream);
+                let mut length = 0;
+                let mut line = String::new();
+                while reader.read_line(&mut line).unwrap() > 0 && line != "\r\n" {
+                    if let Some(value) = line.to_ascii_lowercase().strip_prefix("content-length:") {
+                        length = value.trim().parse().unwrap();
+                    }
+                    line.clear();
+                }
+                reader.read_exact(&mut vec![0; length]).unwrap();
+                let body = serde_json::json!({"candidates": [{"content": {"parts": [{"text": SUMMARY}]}}]})
+                    .to_string();
+                let _ = write!(
+                    stream,
+                    "HTTP/1.1 {status} X\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+            });
+        }
+    });
+    endpoint
+}
+
+/// A repository with two staged Python files whose functions the
+/// summarizer takes, one with a docstring, and one text file it does not, and
+/// a config that turns the summarizer on against `endpoint`.
+fn summarizable(endpoint: Option<&str>) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = dir.path().join("repo");
+    std::fs::create_dir(&repo).unwrap();
+    git_fixture::commit(&gix::init(&repo).unwrap(), "base");
+    for (name, doc) in [("a", "    \"\"\"Doc.\"\"\"\n"), ("b", "")] {
+        std::fs::write(
+            repo.join(format!("{name}.py")),
+            format!("def {name}():\n{doc}    first_step_of_work()\n    second_step_of_work()\n    third_step_of_work()\n    fourth_step_of_work()\n"),
+        )
+        .unwrap();
+    }
+    std::fs::write(repo.join("c.txt"), "x = 1\n").unwrap();
+    git_fixture::git(&repo, &["add", "-A"]);
+    let config = dir.path().join("config/diffr");
+    std::fs::create_dir_all(&config).unwrap();
+    let toml = endpoint.map_or(String::new(), |endpoint| {
+        format!("[plugins.shape.bundled.summarize]\nenabled = true\napi_key = 'test'\nendpoint = '{endpoint}'\nmin_lines = 3\nretries = 0\n")
+    });
+    std::fs::write(config.join("config.toml"), toml).unwrap();
+    dir
+}
+
+fn staged(dir: &std::path::Path, args: &[&str]) -> Command {
+    let mut cmd = get_base_command();
+    cmd.arg("--repo")
+        .arg(dir.join("repo"))
+        .args(["--cached", "--format", "ndjson"])
+        .args(args)
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_WORK_TREE")
+        .env("HOME", dir)
+        .env("XDG_CONFIG_HOME", dir.join("config"));
+    cmd
+}
+
+fn records(stdout: &[u8]) -> Vec<serde_json::Value> {
+    stdout
+        .split(|&byte| byte == b'\n')
+        .filter(|line| !line.is_empty())
+        .map(|line| serde_json::from_slice(line).unwrap())
+        .collect()
+}
+
+fn record_path(record: &serde_json::Value) -> &str {
+    record["file"]["rhs"]["path"].as_str().unwrap()
+}
+
+#[test]
+fn defer_sends_files_before_the_summarizer_answers_then_updates() {
+    let dir = summarizable(Some(&model_stub(200)));
+    let output = staged(dir.path(), &["--defer"]).output().unwrap();
+    assert!(output.status.success());
+    let records = records(&output.stdout);
+    let mut files = Vec::new();
+    let mut updated = Vec::new();
+    for record in &records[1..records.len() - 1] {
+        let path = record_path(record).to_owned();
+        let line = record.to_string();
+        match record["type"].as_str().unwrap() {
+            "file" => {
+                assert!(!line.contains(SUMMARY), "{path}");
+                files.push(path);
+            }
+            "update" => {
+                assert!(files.contains(&path), "{path} updated before its file");
+                assert!(line.contains(SUMMARY), "{path}");
+                updated.push(path);
+            }
+            other => panic!("unexpected {other} record"),
+        }
+    }
+    assert_eq!(files.len(), 3);
+    updated.sort();
+    assert_eq!(updated, ["a.py", "b.py"]);
+    let complete = records.last().unwrap();
+    assert_eq!(complete["type"], "complete");
+    assert_eq!(complete["succeeded"], 3);
+}
+
+/// Each file's diff, with its updates applied.
+fn applied(records: &[serde_json::Value]) -> BTreeMap<String, serde_json::Value> {
+    fn region<'a>(
+        value: &'a mut serde_json::Value,
+        id: &serde_json::Value,
+    ) -> Option<&'a mut serde_json::Value> {
+        if value.get("fold_state_id").is_some() && value["id"] == *id {
+            return Some(value);
+        }
+        match value {
+            serde_json::Value::Object(map) => map.values_mut().find_map(|value| region(value, id)),
+            serde_json::Value::Array(items) => items.iter_mut().find_map(|value| region(value, id)),
+            _ => None,
+        }
+    }
+    let mut diffs = BTreeMap::new();
+    for record in records {
+        let path = || record_path(record).to_owned();
+        match record["type"].as_str().unwrap() {
+            "file" => {
+                diffs.insert(path(), record["diff"].clone());
+            }
+            "update" => {
+                let diff = diffs.get_mut(&path()).unwrap();
+                for change in record["regions"].as_array().unwrap() {
+                    let mut visibility = change.as_object().unwrap().clone();
+                    let id = visibility.remove("id").unwrap();
+                    let region =
+                        region(diff, &id).unwrap_or_else(|| panic!("no region {id} in {}", path()));
+                    let region = region.as_object_mut().unwrap();
+                    if visibility.is_empty() {
+                        region.remove("visibility");
+                    } else {
+                        region.insert("visibility".to_owned(), visibility.into());
+                    }
+                }
+                diff["stats"]["visible"] = record["visible"].clone();
+            }
+            _ => {}
+        }
+    }
+    diffs
+}
+
+#[test]
+fn applying_updates_to_deferred_files_gives_the_files_without_defer() {
+    let dir = summarizable(Some(&model_stub(200)));
+    let diffs = |args: &[&str]| {
+        let output = staged(dir.path(), args).output().unwrap();
+        assert!(output.status.success());
+        applied(&records(&output.stdout))
+    };
+    let deferred = diffs(&["--defer"]);
+    assert!(!deferred.values().any(|diff| diff.is_null()));
+    assert_eq!(deferred, diffs(&[]));
+}
+
+#[test]
+fn a_deferred_failure_is_the_files_update_and_not_a_failed_run() {
+    let dir = summarizable(Some(&model_stub(400)));
+    let output = staged(dir.path(), &["--defer"]).output().unwrap();
+    assert_eq!(output.status.code(), Some(0));
+    let records = records(&output.stdout);
+    let mut errors: Vec<&str> = records
+        .iter()
+        .filter(|record| record["type"] == "update")
+        .map(|record| {
+            assert!(record["regions"].is_null(), "{record}");
+            assert!(record["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("HTTP 400"));
+            record_path(record)
+        })
+        .collect();
+    errors.sort();
+    assert_eq!(errors, ["a.py", "b.py"]);
+    let complete = records.last().unwrap();
+    assert_eq!(complete["type"], "complete");
+    assert_eq!(complete["failed"], 0);
+    assert!(complete.get("aborted").is_none(), "{complete}");
+}
+
+#[test]
+fn without_defer_the_summary_is_in_the_file_record() {
+    let dir = summarizable(Some(&model_stub(200)));
+    let output = staged(dir.path(), &[]).output().unwrap();
+    assert!(output.status.success());
+    let records = records(&output.stdout);
+    assert!(records.iter().all(|record| record["type"] != "update"));
+    let summarized = records
+        .iter()
+        .filter(|record| record["type"] == "file" && record.to_string().contains(SUMMARY))
+        .count();
+    assert_eq!(summarized, 2);
+}
+
+#[test]
+fn defer_without_a_deferred_plugin_changes_nothing() {
+    let dir = summarizable(None);
+    // Files arrive in completion order, so compare the records as a set.
+    let lines = |args: &[&str]| {
+        let output = staged(dir.path(), args).output().unwrap();
+        assert!(output.status.success());
+        let mut lines: Vec<String> = String::from_utf8(output.stdout)
+            .unwrap()
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        let last: serde_json::Value = serde_json::from_str(lines.last().unwrap()).unwrap();
+        assert_eq!(last["type"], "complete");
+        lines.sort();
+        lines
+    };
+    assert_eq!(lines(&["--defer"]), lines(&[]));
+}
+
+#[test]
+fn defer_needs_ndjson() {
+    get_base_command()
+        .arg("--defer")
+        .assert()
+        .failure()
+        .code(2)
+        .stderr(predicate::str::contains("--format <FORMAT>"));
 }

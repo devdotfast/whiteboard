@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
 import {
@@ -254,6 +254,25 @@ it.each([409, 503])(
     expect(revoked).toBe(lookupStatus === 409);
   },
 );
+
+it("rejects an invalid bundle before contacting the share service", async () => {
+  const root = await mkdtemp("/tmp/share-client-");
+  cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const fixture = await createShareFixture(root);
+  cleanup.push(async () => {
+    await fixture.data.close();
+    fixture.store.close();
+  });
+
+  const bundle = await exportShare(fixture);
+  bundle.objects.clear();
+  const network = vi.fn<typeof fetch>();
+
+  await expect(
+    new ShareClient("https://app.dev.fast", undefined, network).create(bundle),
+  ).rejects.toBeInstanceOf(SharePreflightError);
+  expect(network).not.toHaveBeenCalled();
+});
 
 it("bounds concurrent downloads and still rejects corrupt objects", async () => {
   const root = await mkdtemp("/tmp/share-download-");

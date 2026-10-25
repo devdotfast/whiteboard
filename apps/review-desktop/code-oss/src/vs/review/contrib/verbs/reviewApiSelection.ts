@@ -7,7 +7,7 @@ import { apiSourceTarget } from "../../services/reviewApiSourceService.js";
 export function apiSelectionEvent(
 	resource: URI,
 	selection: Selection,
-	anchor?: { x: number; y: number },
+	anchor?: { x: number; y: number; right?: number },
 ): Extract<ReviewSurfaceEvent, { event: "editorSelectionChanged" }> | undefined {
 	const source = apiSourceTarget(resource);
 	if (!source || new URLSearchParams(resource.query).has("empty")) return undefined;

@@ -18,11 +18,8 @@ import { readBody, send } from "./review-gateway-transport.js";
 
 const version = readReviewPackageVersion(import.meta.url);
 
-const handInstall = (v: string, target = "linux-x64") =>
-  [
-    `mkdir -p ~/.dev/whiteboard-remote && rm -rf ~/.dev/whiteboard-remote/whiteboard-remote && curl -fsSL https://install.dev.fast/releases/${v}/remote/whiteboard-remote-${v}-${target}.tar.xz | tar -xJ -C ~/.dev/whiteboard-remote`,
-    "mkdir -p ~/.local/bin && ln -sf ~/.dev/whiteboard-remote/whiteboard-remote/whiteboard ~/.local/bin/whiteboard",
-  ].join("\n");
+const handInstall = (v: string) =>
+  `curl -fsSL https://install.dev.fast/releases/${v}/remote/install.sh | sh -s -- --version ${v}`;
 
 let root: string;
 
@@ -88,7 +85,7 @@ it("refuses a host on another version, naming both versions, with the install co
   expect(gateway.online()).toEqual([]);
 });
 
-it("names this machine's install command for a host without Whiteboard, for the host's arch", () => {
+it("names this machine's install command for a host without Whiteboard", () => {
   const gateway = hosts("0.1.6");
 
   gateway.set([
@@ -97,14 +94,6 @@ it("names this machine's install command for a host without Whiteboard, for the 
       problem: {
         state: "not-installed",
         detail: "Whiteboard is not installed on devbox.",
-      },
-    },
-    {
-      alias: "graviton",
-      target: "linux-arm64",
-      problem: {
-        state: "not-installed",
-        detail: "Whiteboard is not installed on graviton.",
       },
     },
     {
@@ -119,12 +108,6 @@ it("names this machine's install command for a host without Whiteboard, for the 
       state: "not-installed",
       detail: "Whiteboard is not installed on devbox.",
       installCommand: handInstall("0.1.6"),
-    },
-    {
-      alias: "graviton",
-      state: "not-installed",
-      detail: "Whiteboard is not installed on graviton.",
-      installCommand: handInstall("0.1.6", "linux-arm64"),
     },
     { alias: "other", state: "auth-failed", detail: "Permission denied." },
   ]);
@@ -223,7 +206,7 @@ it("shows Desktop's language features on an online host, and keeps the host onli
   const gateway = hosts();
 
   const detail =
-    "language features need the same Whiteboard version on devbox: it runs 1111111, this Desktop 2222222";
+    "language features need the same Whiteboard version on devbox: its Whiteboard server runs 1111111, this Desktop 2222222";
 
   gateway.set([
     {
@@ -231,6 +214,7 @@ it("shows Desktop's language features on an online host, and keeps the host onli
       endpoint: fake.endpoint,
       languageFeatures: false,
       languageFeaturesDetail: detail,
+      languageFeaturesPending: true,
     },
   ]);
 
@@ -238,6 +222,7 @@ it("shows Desktop's language features on an online host, and keeps the host onli
   expect(gateway.states()[0]).toMatchObject({
     languageFeatures: false,
     languageFeaturesDetail: detail,
+    languageFeaturesPending: true,
   });
 
   const languageGroups = [
@@ -263,6 +248,7 @@ it("shows Desktop's language features on an online host, and keeps the host onli
     languageGroups,
   });
   expect(gateway.states()[0]?.languageFeaturesDetail).toBeUndefined();
+  expect(gateway.states()[0]?.languageFeaturesPending).toBeUndefined();
   expect(gateway.online().map((host) => host.alias)).toEqual(["devbox"]);
 });
 

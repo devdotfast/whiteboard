@@ -33,20 +33,15 @@ const entry = {
 
 it("keeps each server's last list under its last alias in an owner-only file", async () => {
   const memory = openGatewayMemory(home);
-  memory.setList("server-1", "devbox", "structural", [entry]);
-  memory.setList("server-1", "devbox", "structural", [
-    { ...entry, title: "Renamed" },
-  ]);
+  memory.setList("server-1", "devbox", [entry]);
+  memory.setList("server-1", "devbox", [{ ...entry, title: "Renamed" }]);
   memory.rename("server-1", "renamed");
   await memory.flush();
 
   expect((await stat(gatewayMemoryPath(home))).mode & 0o777).toBe(0o600);
 
   const reopened = openGatewayMemory(home);
-  expect(reopened.list("server-1", "structural")).toEqual([
-    { ...entry, title: "Renamed" },
-  ]);
-  expect(reopened.list("server-1", "textual")).toBeUndefined();
+  expect(reopened.list("server-1")).toEqual([{ ...entry, title: "Renamed" }]);
   expect(reopened.serverIdOf("renamed")).toBe("server-1");
   expect(reopened.serverIdOf("devbox")).toBeUndefined();
 });

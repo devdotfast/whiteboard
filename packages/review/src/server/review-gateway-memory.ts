@@ -5,10 +5,6 @@ import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { errorMessage, writePrivateJsonAtomic } from "@dev.fast/trace-core";
 import { z } from "zod";
 
-export const LIST_MODES = ["structural", "textual"] as const;
-
-export type ListMode = (typeof LIST_MODES)[number];
-
 export const UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -20,7 +16,7 @@ const listEntrySchema = z.looseObject({
   repositoryName: z.string(),
   viewedAt: z.string().nullable(),
   trashedAt: z.string().nullable(),
-  repositoryGroup: z.object({ key: z.string(), label: z.string() }).optional(),
+  project: z.object({ id: z.string(), name: z.string() }).optional(),
 });
 
 export const listEntriesSchema = z.array(z.unknown()).transform(
@@ -31,10 +27,7 @@ export const listEntriesSchema = z.array(z.unknown()).transform(
     ) as ReviewApiSummary[],
 );
 
-const lastListSchema = z.object({
-  structural: listEntriesSchema.optional(),
-  textual: listEntriesSchema.optional(),
-});
+const lastListSchema = z.object({ structural: listEntriesSchema.optional() });
 
 const memorySchema = z.record(
   z.string(),
@@ -43,7 +36,7 @@ const memorySchema = z.record(
 
 interface Server {
   alias: string;
-  lastList: Partial<Record<ListMode, ReviewApiSummary[]>>;
+  lastList: { structural?: ReviewApiSummary[] };
 }
 
 export function gatewayMemoryPath(home: string) {
@@ -93,14 +86,8 @@ export function openGatewayMemory(
 
       return undefined;
     },
-    list: (serverId: string, mode: ListMode) =>
-      servers.get(serverId)?.lastList[mode],
-    setList(
-      serverId: string,
-      alias: string,
-      mode: ListMode,
-      reviews: ReviewApiSummary[],
-    ) {
+    list: (serverId: string) => servers.get(serverId)?.lastList.structural,
+    setList(serverId: string, alias: string, reviews: ReviewApiSummary[]) {
       let server = servers.get(serverId);
 
       if (!server) {
@@ -108,12 +95,12 @@ export function openGatewayMemory(
         servers.set(serverId, server);
       } else if (
         server.alias === alias &&
-        JSON.stringify(server.lastList[mode]) === JSON.stringify(reviews)
+        JSON.stringify(server.lastList.structural) === JSON.stringify(reviews)
       )
         return;
 
       server.alias = alias;
-      server.lastList[mode] = reviews;
+      server.lastList.structural = reviews;
       save();
     },
     rename(serverId: string, alias: string) {

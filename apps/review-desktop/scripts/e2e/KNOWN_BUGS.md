@@ -22,8 +22,7 @@ Status values: `open`, `fix-pr #<n>`, `fixed`, `not-a-bug` (with the reason).
 - Home says nothing about a legacy review directory left behind by the JSON cutover — not-a-bug
 - Opening a Go file installs Go tools from the network without asking — fixed (#354)
 - A review's Rust language server never starts when the extension wins a race with the workspace folder — fix-pr #854
-- Home offers no way to dismiss an active review — open
-- The tutorial's live editor gets no hover or Go to Definition — fixed
+- Home offers no way to dismiss an active review — fixed (Trash replaced Dismiss, #1098)
 - Activating the Go extension opens its welcome page over the review — open
 - Peeks and tour stops never offer to show their element in the software map — open
 - A focus request that mounts the Map view loses to its default selection — fixed
@@ -135,7 +134,7 @@ Server` cannot help — the captured workspace is never re-read. The fix
 
 ## Home offers no way to dismiss an active review
 
-- **Journey:** `home-multi-review` · **Found:** 2026-09-28 · **Status:** open
+- **Journey:** `home-multi-review` · **Found:** 2026-09-28 · **Status:** fixed (Trash replaced Dismiss, #1098)
 - **Repro:** in Whiteboard Desktop with two or more reviews, open Home and open
   a row's `Actions for <title>` menu.
 - **Expected:** the row offers Dismiss, the reversible action the Dismissed
@@ -149,27 +148,6 @@ Server` cannot help — the captured workspace is never re-read. The fix
   both `onDelete` and `onDismiss` (`desktop-entry.tsx`, from
   `reviewCanvasPart.ts`), so its `review_dismissed` `via: "home"` event can
   never fire. The browser tests cover Dismiss only with no `onDelete`.
-
-## The tutorial's live editor gets no hover or Go to Definition
-
-- **Journey:** `tutorial` · **Found:** 2026-09-28 · **Status:** fixed
-- **Repro:** open the tutorial (`Whiteboard: Open Tutorial...`), pick a keymap,
-  then hover `totalCents` or any typed identifier in the Welcome section's
-  `src/orders/order-service.ts` editor and press `F12` on it.
-- **Expected:** tsserver's hover appears and completes the "Inspect a symbol"
-  step, and `F12` opens the definition in a Source window, as it does for a
-  TypeScript `code_peek` in any other review (`lsp-typescript` passes).
-- **Actual:** after a minute of hovers `.monaco-hover-content` is empty,
-  `showHover` stays unchecked in `review.tutorial.progress.v1`, and `F12` does
-  not check `gotoDefinition`. The extension host started TS Server
-  (`exthost/vscode.typescript-language-features/TypeScript.log` ends at
-  `<semantic> Starting...`). Reproduced with the Desktop built from origin/main
-  as well as the housekeeping stack. The journey asserts both absences, then
-  uses the guide's Next to go on.
-- **Notes:** the tutorial's checkout lives under
-  `<home>/tutorial/sample-service/.git/dev-fast/reviews/<uuid>/head/<sha>`;
-  whatever gives other reviews' peeks a file-backed model for tsserver does not
-  reach it. Not investigated further.
 
 ## Activating the Go extension opens its welcome page over the review
 
@@ -188,9 +166,9 @@ Server` cannot help — the captured workspace is never re-read. The fix
 ## Peeks and tour stops never offer to show their element in the software map
 
 - **Journey:** `canvas-resume` · **Found:** 2026-09-28 · **Status:** open
-- **Repro:** open a review whose database lens actors name `softwareMapPath`s
-  such as `orderService.application.orders` (`createDiagramReview` in
-  `harness.mjs`) and start the lens's tour.
+- **Repro:** with the software map enabled, open a review whose database lens
+  actors name `softwareMapPath`s (such as `orderService.application.orders`)
+  and start the lens tour.
 - **Expected:** a stop whose element is on the map shows its
   "Show … in software map" button, as the side peek and tour stop render it.
 - **Actual:** no `button[aria-label$=" in software map"]` renders anywhere, so
@@ -209,8 +187,8 @@ Server` cannot help — the captured workspace is never re-read. The fix
 - **Expected:** the picker lists the traces in document order and defaults to
   the first.
 - **Actual:** the order, and so the default trace, changes from load to load.
-  The journey delays the second trace's resource by 1.5 s so the first trace is
-  always the default, then asserts the reader's pick over it.
+  The journey opens the Trace view from one quote's peek, so it no longer
+  depends on the default.
 - **Notes:** `api-document.tsx:149` fills `data.traces` as each resource read
   resolves inside a `Promise.all`, and `ReviewTraceView.tsx` takes the list and
   default from that map's insertion order.

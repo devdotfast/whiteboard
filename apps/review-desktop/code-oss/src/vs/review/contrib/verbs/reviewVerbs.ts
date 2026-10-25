@@ -22,6 +22,7 @@ import {
 import { IReviewApiCatalogService } from "../../services/reviewApiCatalogService.js";
 import { IReviewCanvasEditorTabsService } from "../../services/reviewCanvasEditorTabsService.js";
 import { apiSourceTarget } from "../../services/reviewApiSourceService.js";
+import { InlineLineNumbers } from "../../services/reviewLineNumbers.js";
 import { selectedMonacoDiff } from "./reviewDiffSelection.js";
 import { apiSelectionEvent } from "./reviewApiSelection.js";
 
@@ -76,7 +77,6 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 		this.selectionEditors.set(editor.getId(), store);
 		store.add(editor.onDidChangeCursorSelection(() => this.emitSelection(editor)));
 		store.add(editor.onDidFocusEditorText(() => this.emitSelection(editor)));
-		store.add(editor.onDidScrollChange(() => this.emitSelection(editor)));
 	}
 
 	private emitSelection(editor: ICodeEditor): void {
@@ -89,9 +89,16 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 		const fromLine = start.lineNumber;
 		const toLine = Math.max(fromLine, end.lineNumber - (end.column === 1 && end.lineNumber > fromLine ? 1 : 0));
 		const rect = editor.getDomNode()?.getBoundingClientRect();
-		const cursor = selection.getPosition();
+		// Keep the action toolbar above the passage and its first-line coordinate hint.
+		const cursor = InlineLineNumbers.hasSelectionHint(editor) ? start : selection.getPosition();
 		const position = editor.getScrolledVisiblePosition(cursor.lineNumber > toLine ? { lineNumber: toLine, column: model.getLineMaxColumn(toLine) } : cursor);
-		const anchor = rect && position ? { x: rect.left + position.left, y: rect.top + position.top } : undefined;
+		const layout = editor.getLayoutInfo();
+		const right = layout.contentLeft + layout.contentWidth;
+		const anchor = rect && position ? {
+			x: rect.left + Math.min(Math.max(position.left, layout.contentLeft), right),
+			y: rect.top + Math.min(Math.max(position.top, 0), layout.height),
+			right: rect.left + right,
+		} : undefined;
 		const apiSelection = apiSelectionEvent(model.uri, selection, anchor);
 		if (apiSelection) {
 			const diff = this.codeEditorService.listDiffEditors().find(diff => diff.getOriginalEditor() === editor || diff.getModifiedEditor() === editor);
@@ -131,7 +138,10 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 				case "openReview": {
 					const review = this.apiCatalog.reviews.find((review) => review.reviewId === request.args.reviewUuid);
 					if (!review) throw new Error("Review not found. If this is an old Whiteboard review, ask your agent to migrate your old Whiteboard reviews.");
-					await this.tabsService.openApiReview(review.reviewId, review.title, request.args.active);
+					await this.tabsService.openApiReview(review.reviewId, review.title);
+					// The canvas scrolls to the block once the board loads.
+					if (request.args.blockId) this._onDidEmitSurfaceEvent.fire({ event: "revealBlock", reviewId: review.reviewId, blockId: request.args.blockId });
+					else if (request.args.view) this._onDidEmitSurfaceEvent.fire({ event: "showReviewView", reviewId: review.reviewId, view: request.args.view });
 					break;
 				}
 				case "openApiReview":

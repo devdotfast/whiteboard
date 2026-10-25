@@ -14,12 +14,28 @@ import type { ReviewDiffProgressState } from "../common/reviewProtocol.js";
 export interface ReviewTooltipContent {
 	readonly label: string;
 	readonly detail?: string;
+	/** A keyboard shortcut, faint after the label. */
+	readonly shortcut?: string;
 }
 
 export type ReviewTooltipHoverService = Pick<IHoverService, "showInstantHover">;
 
+/** Room a one-line tooltip and its pointer need above a target. */
+const TOOLTIP_ROOM = 36;
+
 /**
- * The Whiteboard tooltip: a raised card above its target, shown the moment the
+ * Where a tooltip opens: `side` beside its target, else above it, or below
+ * when above would reach into the title bar, which the window's own
+ * controls draw over.
+ */
+export function reviewTooltipPosition(targetTop: number, titleBarBottom: number, side?: "right"): HoverPosition {
+	if (side === "right") return HoverPosition.RIGHT;
+	return targetTop - TOOLTIP_ROOM < titleBarBottom ? HoverPosition.BELOW : HoverPosition.ABOVE;
+}
+
+/**
+ * The Whiteboard tooltip: a raised card above its target (below it near the
+ * title bar, or beside it when asked), shown the moment the
  * pointer or keyboard focus lands and gone on leave, click, scroll or key.
  * The `review-tooltip` class keeps its look off every other hover.
  */
@@ -32,6 +48,7 @@ export class ReviewTooltip extends Disposable {
 		private readonly hoverService: ReviewTooltipHoverService,
 		private readonly target: HTMLElement,
 		content?: ReviewTooltipContent,
+		private readonly side?: "right",
 	) {
 		super();
 		this.current = content;
@@ -45,7 +62,7 @@ export class ReviewTooltip extends Disposable {
 	}
 
 	set content(content: ReviewTooltipContent | undefined) {
-		if (content?.label === this.current?.label && content?.detail === this.current?.detail) return;
+		if (content?.label === this.current?.label && content?.detail === this.current?.detail && content?.shortcut === this.current?.shortcut) return;
 		this.current = content;
 		if (this.hover.value) this.show();
 	}
@@ -54,19 +71,26 @@ export class ReviewTooltip extends Disposable {
 		this.hide();
 		if (!this.current?.label) return;
 		const body = $("span.review-tooltip-body");
-		appendCounts(append(body, $("span.review-tooltip-label")), this.current.label);
+		const label = append(body, $("span.review-tooltip-label"));
+		appendCounts(label, this.current.label);
+		if (this.current.shortcut) append(label, $("span.review-tooltip-shortcut")).textContent = this.current.shortcut;
 		if (this.current.detail) appendCounts(append(body, $("span.review-tooltip-detail")), this.current.detail);
 		this.hover.value = this.hoverService.showInstantHover({
 			target: this.target,
 			content: body,
 			additionalClasses: ["review-tooltip"],
-			position: { hoverPosition: HoverPosition.ABOVE },
+			position: { hoverPosition: this.position() },
 			appearance: { compact: true, showPointer: true, skipFadeInAnimation: true },
 			persistence: { hideOnHover: true, hideOnKeyDown: true },
 		});
 		if (this.hover.value) {
 			this.scroll.value = addDisposableListener(this.target.ownerDocument, "scroll", () => this.hide(), true);
 		}
+	}
+
+	private position(): HoverPosition {
+		const titleBar = this.target.ownerDocument.querySelector(".part.titlebar")?.getBoundingClientRect().bottom ?? 0;
+		return reviewTooltipPosition(this.target.getBoundingClientRect().top, titleBar, this.side);
 	}
 
 	private hide(): void {

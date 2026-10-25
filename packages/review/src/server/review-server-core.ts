@@ -30,6 +30,7 @@ import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { z } from "zod";
 
+import { mountFeedback } from "./feedback";
 import type { ReviewDesktopVerbRelay } from "./global-verb-relay";
 import {
   type ReviewHonoEnv,
@@ -92,6 +93,7 @@ export function createReviewServerApp(input: {
     await next();
   });
   app.get("/control", (context) => openControlEvents(context, input.relay));
+  mountFeedback(app);
   app.post("/control/result", async (context) => {
     const accepted = input.relay.acceptResult(
       await readBoundedRequestJson(context.req.raw),
@@ -130,7 +132,6 @@ export interface WhiteboardCoreInput {
   token: string;
   instanceId: string;
   softwareMapEnabled?: boolean;
-  scratchpad: () => boolean;
   animations?: () => boolean;
   status: () => JsonObject;
   hooks?: ReviewApiHooks;
@@ -191,7 +192,6 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
     callbacks.open,
     shared,
     callbacks.capabilities,
-    input.scratchpad,
     () => traceMachineEnabled(),
     input.status,
     input.hooks,
@@ -236,9 +236,7 @@ export function relayReviewCallbacks(
 
       return z.object({ softwareMapEnabled: z.boolean() }).parse(result.result);
     },
-    async capabilities(): Promise<
-      Omit<AuthoringCapabilities, "scratchpadEnabled">
-    > {
+    async capabilities(): Promise<AuthoringCapabilities> {
       if (!relay.attached)
         return { desktopAvailable: false, softwareMapEnabled };
 

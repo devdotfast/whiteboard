@@ -185,6 +185,12 @@ const statusSchema = z.enum([
   "failed",
 ]);
 
+/** What an agent may do without asking: nothing that changes the checkout,
+ * what its own judgment calls safe, or everything. */
+export const askPermissionsSchema = z.enum(["read-only", "auto", "bypass"]);
+
+export type AskPermissions = z.infer<typeof askPermissionsSchema>;
+
 /** Everything the Ask panel renders. A watcher gets it whole once, then
  * follows it through `AskChange`s. */
 export const askThreadStateSchema = z.object({
@@ -197,8 +203,7 @@ export const askThreadStateSchema = z.object({
   signIn: z.string().optional(),
   /** The mode that keeps the agent from changing files was accepted. */
   readOnly: z.boolean(),
-  /** The agent edits and runs commands without asking. */
-  bypass: z.boolean(),
+  permissions: askPermissionsSchema,
   head: z.string(),
   /** The checkout the agent works in. */
   cwd: z.string(),
@@ -228,7 +233,7 @@ export const askChangeSchema = z.discriminatedUnion("type", [
     type: z.literal("set"),
     status: statusSchema.optional(),
     readOnly: z.boolean().optional(),
-    bypass: z.boolean().optional(),
+    permissions: askPermissionsSchema.optional(),
     choices: askChoicesSchema.optional(),
     commands: z.array(askCommandSchema).optional(),
     accepts: askAcceptsSchema.optional(),
@@ -290,7 +295,7 @@ export function applyAskChange(
         ...rest,
         status: change.status ?? state.status,
         readOnly: change.readOnly ?? state.readOnly,
-        bypass: change.bypass ?? state.bypass,
+        permissions: change.permissions ?? state.permissions,
       };
 
       const choices = change.choices ?? state.choices;
@@ -370,6 +375,10 @@ export const askHistoryEntrySchema = z.object({
   head: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  /** The board the conversation started on, and the block if it was about one. */
+  anchor: z
+    .object({ board: z.string(), block: z.string().optional() })
+    .optional(),
 });
 
 export type AskHistoryEntry = z.infer<typeof askHistoryEntrySchema>;

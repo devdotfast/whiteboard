@@ -166,13 +166,13 @@ it("resumes the view and lens a reader left, on the version they left them", asy
   await open();
   await act(async () => {
     for (const listener of listeners)
-      listener({ event: "showReviewView", view: "commits" });
+      listener({ event: "showReviewView", view: "diff" });
   });
-  expect(tab(container, "Commits")?.getAttribute("aria-pressed")).toBe("true");
+  expect(tab(container, "Diff")?.getAttribute("aria-pressed")).toBe("true");
 
   // A host-opened view survives a reload.
   await open();
-  expect(tab(container, "Commits")?.getAttribute("aria-pressed")).toBe("true");
+  expect(tab(container, "Diff")?.getAttribute("aria-pressed")).toBe("true");
 
   await act(async () => tab(container, "Diff")!.click());
   await act(async () => {
@@ -259,7 +259,7 @@ it("reopens a stored fullscreen tour only while its diagram is in the document",
 
   const container = document.createElement("div");
   document.body.append(container);
-  const key = reviewViewStateKey(bridge.config);
+  const key = reviewViewStateKey({ reviewId: review.reviewId });
 
   const open = async (overlayTour: {
     tourId: string;
@@ -287,16 +287,18 @@ it("reopens a stored fullscreen tour only while its diagram is in the document",
 
   await open({ tourId: sequence!.id!, activeAnchor: step });
   expect(container.querySelector(".diagram-tour-overlay")).toBeTruthy();
-  expect(readPersistedReviewViewState(bridge.config)).toMatchObject({
+  expect(
+    readPersistedReviewViewState({ reviewId: review.reviewId }),
+  ).toMatchObject({
     overlayTour: { tourId: sequence!.id, activeAnchor: step },
   });
 
   // The diagram that owned this tour is gone: nothing reopens or keeps it.
   await open({ tourId: "removed", activeAnchor: step });
   expect(container.querySelector(".diagram-tour-overlay")).toBeNull();
-  expect(readPersistedReviewViewState(bridge.config)).not.toHaveProperty(
-    "overlayTour",
-  );
+  expect(
+    readPersistedReviewViewState({ reviewId: review.reviewId }),
+  ).not.toHaveProperty("overlayTour");
 });
 
 it("keeps a flow diagram's tour in the canvas navigation", async () => {
@@ -364,14 +366,14 @@ it("keeps a flow diagram's tour in the canvas navigation", async () => {
       .click(),
   );
   expect(overlay()).toBeTruthy();
-  expect(readPersistedReviewViewState(bridge.config)).toMatchObject({
+  expect(
+    readPersistedReviewViewState({ reviewId: review.reviewId }),
+  ).toMatchObject({
     overlayTour: { kind: "flow" },
   });
 
   await open();
   expect(overlay()).toBeTruthy();
-  await act(async () => tab(container, "Commits")!.click());
-  expect(overlay()).toBeNull();
 });
 
 it("resumes a commit diff with its scope", async () => {
@@ -386,45 +388,52 @@ it("resumes a commit diff with its scope", async () => {
     },
   });
 
-  // Only the first version lists the commit.
+  // Only the first version lists the commits.
   const scopedVersion = store.read(review.reviewId).version;
   const app = new Hono();
+  const later = { ...commit, commit: "c".repeat(40), subject: "Use it" };
   app.get("/reviews-api/:id/commits", (context) =>
     context.json(
-      Number(context.req.query("version")) === scopedVersion ? [commit] : [],
+      Number(context.req.query("version")) === scopedVersion
+        ? [later, commit]
+        : [],
     ),
   );
   app.route("/reviews-api", createReviewApi(store));
 
   const { container, open } = canvasHarness(app, review.reviewId);
 
-  const scopeBar = () =>
-    container.querySelector(".review-diff-view--scoped > div:first-child");
+  // The picker in the Diff view's sidebar names the commit it shows.
+  const picked = () =>
+    container.querySelector('[aria-label^="Commit aaaaaaa"]');
 
   await open();
-  await act(async () => tab(container, "Commits")!.click());
+  await act(async () => tab(container, "Diff")!.click());
   await act(async () => {
     await vi.waitFor(() =>
       expect(
-        container.querySelector('button[aria-label="Open commit diff"]'),
+        container.querySelector('[aria-label="All 2 commits. Choose commits"]'),
       ).toBeTruthy(),
     );
   });
   await act(async () =>
     container
       .querySelector<HTMLButtonElement>(
-        'button[aria-label="Open commit diff"]',
+        '[aria-label="All 2 commits. Choose commits"]',
       )!
       .click(),
   );
-  expect(scopeBar()?.textContent).toContain("Add the API");
+  await act(async () =>
+    [...container.querySelectorAll<HTMLButtonElement>("[role=menuitemradio]")]
+      .find((row) => row.textContent?.includes("Add the API"))!
+      .click(),
+  );
+  expect(picked()).toBeTruthy();
 
   await open();
   expect(tab(container, "Diff")?.getAttribute("aria-pressed")).toBe("true");
   await act(async () => {
-    await vi.waitFor(() =>
-      expect(scopeBar()?.textContent).toContain("Add the API"),
-    );
+    await vi.waitFor(() => expect(picked()).toBeTruthy());
   });
 
   // A version that no longer lists the commit resumes the whole diff.
@@ -438,14 +447,14 @@ it("resumes a commit diff with its scope", async () => {
   });
   await open();
   expect(tab(container, "Diff")?.getAttribute("aria-pressed")).toBe("true");
-  expect(scopeBar()).toBeNull();
+  expect(picked()).toBeNull();
 
   // The reader moved on to the whole diff, so the earlier version opens it too.
   await act(async () => tab(container, "Whiteboard")!.click());
   await act(async () => tab(container, "Diff")!.click());
   await open(scopedVersion);
   expect(tab(container, "Diff")?.getAttribute("aria-pressed")).toBe("true");
-  expect(scopeBar()).toBeNull();
+  expect(picked()).toBeNull();
 });
 
 it("resumes the Trace view and the picked trace", async () => {
@@ -461,14 +470,14 @@ it("resumes the Trace view and the picked trace", async () => {
   ]);
 
   const trigger = () =>
-    container.querySelector<HTMLButtonElement>(
-      'button[aria-haspopup="listbox"]',
-    );
+    container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
 
   const option = (title: string) =>
-    [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')].find(
-      (item) => item.textContent?.includes(title),
-    );
+    [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        '[role="menuitemradio"]',
+      ),
+    ].find((item) => item.textContent?.includes(title));
 
   await open();
   await act(async () => {
@@ -487,8 +496,8 @@ it("resumes the Trace view and the picked trace", async () => {
   });
   expect(tab(container, "Trace")?.getAttribute("aria-pressed")).toBe("true");
   await act(async () => trigger()!.click());
-  expect(option("Second session")?.getAttribute("aria-selected")).toBe("true");
-  expect(option("Initial commit subject")?.getAttribute("aria-selected")).toBe(
+  expect(option("Second session")?.getAttribute("aria-checked")).toBe("true");
+  expect(option("Initial commit subject")?.getAttribute("aria-checked")).toBe(
     "false",
   );
 });

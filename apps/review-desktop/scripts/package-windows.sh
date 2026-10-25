@@ -13,6 +13,7 @@ npm --prefix "$CHECKOUT" run gulp -- vscode-win32-x64
 node "$APP_DIR/scripts/windows-path-command.mjs" "$PACKAGED_ROOT"
 node "$APP_DIR/scripts/copy-canvas.mjs" --packaged-root "$PACKAGED_ROOT"
 node "$APP_DIR/scripts/curated-extensions.mjs" --target=win32-x64 --copy-to "$PACKAGED_ROOT/resources/app/extensions"
+node "$APP_DIR/scripts/typescript-native.mjs" --target=win32-x64 --extension-dir "$PACKAGED_ROOT/resources/app/extensions/typescript-native"
 # ty links the Visual C++ runtime dynamically and a clean Windows install has none, so ship it beside ty.
 cp "$(cygpath -u "$SYSTEMROOT")/System32/vcruntime140.dll" "$PACKAGED_ROOT/resources/app/extensions/astral-sh.ty/bundled/libs/bin/"
 node "$APP_DIR/scripts/stage-review-runtime.mjs" --packaged-root "$PACKAGED_ROOT"

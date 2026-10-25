@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { request } from "node:http";
+import { get as httpsGet } from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -252,11 +253,12 @@ describe.each(["desktop", "headless"] as const)("the %s server", (kind) => {
 
 // The servers as they run: the Desktop's host process and `server start`.
 const processes = {
-  desktop: (home: string) =>
+  desktop: (home: string, env: Record<string, string> = {}) =>
     spawnSource("src/server/desktop-host.ts", [], {
       DEV_REVIEW_HOME: home,
       DEV_FAST_REVIEW_SERVER_PORT: "0",
       DEV_FAST_REVIEW_APP_PID: String(process.pid),
+      ...env,
     }),
   headless: (home: string, stateDir = path.join(home, "server")) =>
     spawnSource(
@@ -306,6 +308,52 @@ it("gives the Desktop and headless servers on one home one serverId, and another
     );
   }
 }, 30_000);
+
+it.each([true, false])(
+  "the Desktop server announces TLS only when its cert works (usable %s)",
+  async (usable) => {
+    const fixture = new URL(
+      "../../test/fixtures/loopback-tls/",
+      import.meta.url,
+    );
+
+    const cert = await readFile(new URL("cert.pem", fixture), "utf8");
+
+    const child = processes.desktop(root, {
+      DEV_FAST_REVIEW_SERVER_TLS_CERT: cert,
+      DEV_FAST_REVIEW_SERVER_TLS_KEY: usable
+        ? await readFile(new URL("key.pem", fixture), "utf8")
+        : "not a key",
+    });
+
+    try {
+      const server: Running & { tls?: true } = await discovery(
+        "desktop",
+        child,
+      );
+
+      const secureStatus = await new Promise<number | undefined>(
+        (resolve, reject) =>
+          httpsGet(
+            `${server.url.replace(/^http:/, "https:")}/health`,
+            { ca: cert },
+            (response) => resolve(response.resume().statusCode),
+          ).on("error", reject),
+      ).catch((error: NodeJS.ErrnoException) => error.code);
+
+      expect(server.tls).toBe(usable || undefined);
+      expect((await fetch(`${server.url}/health`)).status).toBe(200);
+      expect(secureStatus).toBe(usable ? 200 : "EPROTO");
+    } finally {
+      if (child.exitCode === null) {
+        const exited = once(child, "exit");
+        child.kill("SIGTERM");
+        await exited;
+      }
+    }
+  },
+  30_000,
+);
 
 it.each([
   ["desktop", 1],

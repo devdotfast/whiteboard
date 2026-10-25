@@ -3,7 +3,7 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import { REVIEW_DESKTOP_BACKGROUND_ENV } from "./reviewBackgroundLaunch.js";
+import { isBackgroundLaunch } from "./reviewBackgroundLaunch.js";
 
 export interface MoveToApplicationsContext {
 	readonly platform: NodeJS.Platform;
@@ -23,7 +23,7 @@ export function shouldOfferMoveToApplications(context: MoveToApplicationsContext
 	if (context.platform !== "darwin" || !context.isBuilt) return false;
 	if (context.inApplicationsFolder || context.declined) return false;
 	// A launch from `whiteboard app` stays in the background; a modal would steal focus.
-	if (context.env[REVIEW_DESKTOP_BACKGROUND_ENV] === "1") return false;
+	if (isBackgroundLaunch(context.env)) return false;
 	const harness = context.env.DEV_FAST_REVIEW_TELEMETRY_ENV;
 	return harness !== "e2e" && harness !== "smoke" && !context.env.CI;
 }

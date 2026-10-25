@@ -367,3 +367,56 @@ fn each_provider_sends_its_own_request_and_reads_its_own_answer() {
         }
     }
 }
+
+/// The default chain with the summarizer on, answering from `endpoint`.
+fn default_chain(endpoint: &str) -> Pipeline {
+    configured(&format!(
+        "[plugins.shape.bundled.summarize]\nenabled = true\n{}",
+        options(json!({
+            "api_key": "test-key",
+            "endpoint": endpoint,
+            "retries": 0,
+            "request_timeout_ms": 5000,
+            "min_lines": 3,
+        }))
+    ))
+    .unwrap()
+}
+
+#[test]
+fn deferring_the_summarizer_after_the_eager_chain_shapes_files_the_same() {
+    let kept = format!(
+        "def keep():\n{}",
+        (0..12).map(|i| format!("    k{i}()\n")).collect::<String>()
+    );
+    for (path, before, after) in [
+        ("a.py", String::new(), LARGE.to_owned()),
+        (
+            "a.rs",
+            String::new(),
+            "/// Sums three numbers.\n/// Used by tests.\nfn total(a: u32, b: u32, c: u32) -> u32 {\n    let x = a;\n    let y = b;\n    let z = c;\n    x + y + z\n}\n".to_owned(),
+        ),
+        ("b.py", kept.clone(), format!("{kept}\n{LARGE}")),
+    ] {
+        let (file, sides) = project(path, &before, &after);
+        let shaped = |passes: &[Pass]| {
+            let (endpoint, server) = serve(vec![(200, gemini_answer("a b c"))]);
+            let pipeline = default_chain(&endpoint);
+            let mut sides = sides.clone();
+            for pass in passes {
+                shape_in(&pipeline, &file, &mut sides, *pass).unwrap();
+            }
+            server.join().unwrap();
+            sides
+        };
+        let all = shaped(&[Pass::All]);
+        assert_eq!(shaped(&[Pass::Eager, Pass::Deferred]), all, "{path}");
+        let mut summarized = 0;
+        walk(std::slice::from_ref(&rhs(&all).root), &mut |region| {
+            if has_tag(region, FUNCTION) && region.visibility.label.ends_with("a b c") {
+                summarized += 1;
+            }
+        });
+        assert_eq!(summarized, 1, "{path}");
+    }
+}

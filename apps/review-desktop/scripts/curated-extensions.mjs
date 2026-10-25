@@ -183,12 +183,6 @@ function stampMatches(stamp, extension, targetKey, sha256) {
   );
 }
 
-function prunePayload(directory, extension) {
-  for (const relative of extension.prunePaths ?? []) {
-    fs.rmSync(path.join(directory, relative), { recursive: true, force: true });
-  }
-}
-
 /** Fails loudly when a payload's layout drifts instead of shipping a broken server. */
 function ensureExecutables(directory, extension, targetKey) {
   for (const relative of extension.executables) {
@@ -223,7 +217,6 @@ async function materializeVsix(vsix, extension, targetKey, sha256) {
     }
 
     const engine = await sanitizeVsixManifest(payload, extension);
-    prunePayload(payload, extension);
 
     ensureExecutables(payload, extension, targetKey);
     fs.writeFileSync(
@@ -323,12 +316,6 @@ export function verifyCuratedExtensions({
       throw new Error(
         `${extension.id}: sanitized manifest still declares extensionPack`,
       );
-    }
-
-    for (const relative of extension.prunePaths ?? []) {
-      if (fs.existsSync(path.join(directory, relative))) {
-        throw new Error(`${extension.id}: pruned path ${relative} is present`);
-      }
     }
 
     for (const relative of extension.executables) {
@@ -450,25 +437,31 @@ async function main() {
     return;
   }
 
-  if (!supportedTargets.includes(target)) {
+  // Remote hosts' targets let a development Desktop run on them too.
+  const localTargets = [...new Set([...supportedTargets, ...remoteTargets])];
+
+  if (!localTargets.includes(target)) {
     throw new Error(
-      `unsupported target ${target}; expected one of ${supportedTargets.join(", ")}`,
+      `unsupported target ${target}; expected one of ${localTargets.join(", ")}`,
     );
   }
 
-  // Groups that were deselected should not linger from an earlier run, or the
-  // picker would offer extensions this launch deliberately left out. --check is
-  // read-only, so it never prunes.
-  for (const extension of options.check ? [] : curatedExtensions) {
-    if (!groups.has(extension.group)) {
-      const stale = path.join(EXTENSIONS_DIR, extension.id);
+  // Deselected groups and extensions dropped from the manifest should not linger
+  // from an earlier run, or the picker would offer extensions this launch
+  // deliberately left out. --check is read-only, so it never prunes.
+  for (const entry of options.check ? [] : fs.readdirSync(EXTENSIONS_DIR)) {
+    const extension = curatedExtensions.find(({ id }) => id === entry);
 
-      if (fs.existsSync(stale)) {
-        fs.rmSync(stale, { recursive: true, force: true });
-        console.log(
-          `removed ${extension.id} (group ${extension.group} not selected)`,
-        );
-      }
+    const stale = extension
+      ? !groups.has(extension.group)
+      : fs.existsSync(path.join(EXTENSIONS_DIR, entry, STAMP_FILE));
+
+    if (stale) {
+      fs.rmSync(path.join(EXTENSIONS_DIR, entry), {
+        recursive: true,
+        force: true,
+      });
+      console.log(`removed ${entry}`);
     }
   }
 
@@ -479,7 +472,6 @@ async function main() {
     const destination = path.join(EXTENSIONS_DIR, extension.id);
 
     if (stampMatches(readStamp(destination), extension, targetKey, sha256)) {
-      prunePayload(destination, extension);
       verifyEngine(destination, extension);
       continue;
     }

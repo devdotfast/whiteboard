@@ -9,8 +9,6 @@ CLI telemetry.
 For a shorter overview of all product data, including local files, coding
 agents, and bug reports, see [Privacy](privacy.md).
 
-Last checked against this repository: 2026-09-24.
-
 ## The short version
 
 - Anonymous telemetry is on by default and can be turned off at any time.
@@ -58,8 +56,6 @@ The desktop app sets `DEV_FAST_REVIEW_TELEMETRY_DISABLED` for its own server
 from the in-app setting, so setting that one variable in your shell does not
 turn off app telemetry. Use `DO_NOT_TRACK` or the setting instead.
 
-Tests also turn telemetry off with `VITEST=1` or `NODE_ENV=test`.
-
 An explicit bug report is still sent if you choose **Send** in the bug-report
 dialog. Bug reports do not pass through the passive telemetry system.
 
@@ -80,48 +76,23 @@ The full event-by-event list begins at [Event reference](#event-reference).
 
 ## Identity and storage
 
-On first use, Whiteboard creates a random installation UUID and stores it at
-`${DEV_REVIEW_HOME:-~/.dev}/telemetry/progressive-review.json`. It does not call
-PostHog's `identify()` API. Events carry `$process_person_profile: false`, so
-PostHog keeps no person profile.
+On first use, Whiteboard creates a random installation ID in
+`~/.dev/telemetry/`. Whiteboard Preview keeps its own. Events carry
+`$process_person_profile: false`, so PostHog keeps no person profile.
 
-**Account alias.** The first GitHub sign-in (in the app or with
-`whiteboard login`) sends one `$create_alias` linking the installation ID to
-`gh_` plus a one-way HMAC of the account ID. The account ID, login, and email
-never leave the machine. After that, events carry
-`$process_person_profile: true`, so installations signed into the same account
-share one PostHog person. Later sign-ins to other accounts and sign-outs change
-nothing.
+**Signing in with GitHub** (in the app or with `whiteboard login`) sends one
+`$create_alias` linking the installation ID to `gh_` plus a one-way hash of
+your account ID. Your account ID, login and email never leave the machine.
+Installations signed into the same account then share one PostHog person.
 
-Whiteboard Preview keeps a separate installation ID in
-`telemetry/progressive-review.preview.json`. The standalone CLI always uses the
-stable ID.
+Events that concern one whiteboard carry `review_id` and `presentation_id`,
+one-way hashes keyed by the installation ID. The same whiteboard gets a
+different ID on another installation, and the raw IDs are never sent. Each CLI
+run has a random `command_run_id`.
 
-Pending events are kept in a local queue under
-`${DEV_REVIEW_HOME:-~/.dev}/telemetry/events`. The queue holds at most 1,000
-events, retries temporary failures, and deletes events after seven days. Each
-event keeps one random `uuid` across retries, so PostHog ingests a resent event
-once, and its `timestamp` is when it happened, not when it was sent. A
-`review_telemetry_dropped` count is queued the same way, so a resent count
-lands once too.
-Telemetry is best-effort and never blocks Whiteboard from working.
-
-Three identifiers support exact lifecycle correlation without PostHog identity
-or group profiles:
-
-- `command_run_id` is a new random UUID for each CLI invocation.
-- `review_id` is `rv_` plus 128 bits of a namespaced HMAC of the whiteboard's
-  ID.
-- `presentation_id` is `pr_` plus 128 bits of a namespaced HMAC of the ID of
-  one opening of a whiteboard in the app.
-
-The HMAC key is the random installation ID. The same whiteboard therefore has
-a stable `review_id` only on one installation; another installation produces a
-different value. The raw IDs are used only inside the local server and never
-reach the capture client.
-
-Whiteboard disables the built-in Microsoft telemetry inherited from Code -
-OSS. A hardening test enforces that rule.
+Unsent events wait in a local queue of at most 1,000 events and are deleted
+after seven days. Telemetry never blocks Whiteboard from working. Whiteboard
+disables the Microsoft telemetry built into Code - OSS.
 
 ## How events leave the app
 
@@ -141,23 +112,6 @@ User-initiated bug reports take a separate path:
 Whiteboard ─→ local server ─→ bug.dev.fast ─→ private Cloudflare R2
                                       └─→ attachment-free PostHog metadata
 ```
-
-## Inspect events during development
-
-Set `DEV_FAST_REVIEW_TELEMETRY_DEBUG` to `1` or `true` to see the events that
-Whiteboard emits. Whiteboard then prints one line for each event to stderr:
-
-```
-[review-telemetry] {"event":"review_command_succeeded","distinctId":"…","properties":{…}}
-```
-
-The sink replaces PostHog. Whiteboard sends nothing to PostHog while the switch
-is on. Set the variable before you start Whiteboard, because most events come
-from the local server, not from the CLI.
-
-The sink ignores the opt-out rules above, because the sink does not send the
-events. The sink also does not record the `review_installation_created` event as
-sent, so the real event still goes out on the next normal run.
 
 ## Event reference
 
@@ -183,15 +137,9 @@ Every event from the Whiteboard telemetry API includes these properties:
 | `$session_id`             | The same ID as `app_session_id`, so PostHog groups a launch's events into one session; absent when the ID is not a UUIDv7 |
 | `$process_person_profile` | `false` until this installation is aliased to a GitHub account (see "Identity and storage"), then `true`                  |
 
-`environment` is the first that applies: `smoke` or `e2e` (test harness), `ci`
-(`CI` set), `internal`, `production`. These variables set it and `channel`:
-
-- `DEV_FAST_REVIEW_TELEMETRY_ENV`: `e2e` or `smoke` for a test harness. Other
-  values are ignored.
-- `DEV_FAST_REVIEW_CHANNEL`: set by the app for its server to `stable`,
-  `preview`, or `dev`.
-- `PROGRESSIVE_REVIEW_TELEMETRY_INTERNAL`: `1` marks telemetry as internal and
-  `0` as external, overriding the stored marker and workspace detection.
+`environment` is `production` unless Whiteboard runs in CI (`ci`, when `CI` is
+set), in a test harness (`e2e` or `smoke`), or as a dev.fast team build
+(`internal`).
 
 The event names predate the Whiteboard name and are unchanged. UI events also
 include `source: review_app`.
@@ -212,7 +160,7 @@ dropped the events.
 | `review_command_succeeded`      | `command_path`, `command_run_id`, `exit_code`, `duration_ms`                                                                                   | A public CLI command succeeds                                                                |
 | `review_command_failed`         | The success properties plus `error_name` and `error_category` closed enums                                                                     | A public CLI command fails                                                                   |
 | `review_telemetry_dropped`      | `reason`, `count`                                                                                                                              | The queue drops one or more events                                                           |
-| `review_session_started`        | `source_kind`, `review_id`, `presentation_id`                                                                                                  | A whiteboard opens in the app canvas                                                         |
+| `review_session_started`        | `source_kind`; `remote`; `pr_provider` in github, github_enterprise, azure_devops; `review_id`, `presentation_id` | A whiteboard opens in the app canvas                                                         |
 | `review_review_presented`       | `load_ms`, `review_id`, `presentation_id`                                                                                                      | The canvas signals ready                                                                     |
 | `review_first_review_presented` | `review_id`, `presentation_id`                                                                                                                 | The first presented whiteboard on this installation                                          |
 | `review_session_ended`          | `outcome`, `duration_ms`, `review_id`, `presentation_id`                                                                                       | The whiteboard closes; see outcomes below                                                    |
@@ -220,9 +168,10 @@ dropped the events.
 | `review_hang_started`           | None                                                                                                                                           | An app window stops responding                                                               |
 | `review_hang_ended`             | `duration_ms`                                                                                                                                  | The window responds again, its process dies, or it closes                                    |
 | `review_app_ready`              | `duration_ms`; `install_location` on a packaged macOS build, see below                                                                          | The workbench restores, timed from the startup trace; once per app launch                    |
+| `review_loopback_tls_fallback`  | `error_name` of the failed request                                                                                                             | A window cannot reach the local server over HTTPS and falls back to plain HTTP               |
 | `review_error_burst`            | `message_hash`, `suppressed`                                                                                                                   | A `review_client_error` passes 5 reports for one message in one session; see "Error reports" |
 | `review_open_timeout`           | `elapsed_ms`, `review_id`, `presentation_id`                                                                                                   | A session starts and no presented or ended event follows within 30 seconds                   |
-| `review_review_created`         | `via` in `api`, `mcp`, `other`; `kind` in `review`, `scratchpad`; `blocks`; optional `agent_kind`                                              | A whiteboard or the scratchpad is created; `via` is `other` for the app's own UI             |
+| `review_review_created`         | `via` in `api`, `mcp`, `other`; `blocks`; optional `agent_kind`                                                                                | A whiteboard is created; `via` is `other` for the app's own UI                               |
 | `review_review_published`       | `version`                                                                                                                                      | A whiteboard is published for sharing                                                        |
 | `review_review_revoked`         | None                                                                                                                                           | A share link is revoked                                                                      |
 | `review_authoring_completed`    | `duration_ms`; optional `agent_kind`                                                                                                           | The first publish of a whiteboard created via `api` or `mcp`, timed from its creation        |
@@ -233,9 +182,8 @@ dropped the events.
 | `$exception`                    | Same fields as `review_client_error`, in PostHog's error-tracking shape                                                                        | Sent alongside every `review_client_error`, for one release                                  |
 | `$create_alias`                 | `alias`, `$process_person_profile: true`                                                                                                       | The first GitHub sign-in on this installation; see "Identity and storage"                    |
 
-`source_kind` is `worktree`, `commits`, or `scratchpad`, set by the server from
-the opened whiteboard. `agent_kind` is allowlisted for session events but not
-yet sent.
+`source_kind` is `worktree`, `commits`, or `project`, set by the server from
+the opened whiteboard.
 
 `agent_kind` comes from the agent's session environment (`CODEX_THREAD_ID`,
 `CLAUDE_CODE_SESSION_ID`, `PI_SESSION_ID`). Over MCP, the client name the agent
@@ -262,10 +210,6 @@ sends no arguments, refs, tokens, or storage credentials. `surface` is
 `headless` for `server.start`, `mcp` for `mcp`, `api` for `api`, and `cli`
 otherwise, on every event the command's process sends.
 
-The CLI writes `review_command_started` to the disk queue before entering the
-command handler. The queue normally begins its background flush after five
-seconds; Whiteboard does not wait for network delivery before starting the command.
-
 Error names and categories are closed enums. A failed command sends no exception
 message, stack, path, process output, project identifier, or remediation text.
 Only the `review_client_error` and `review_update_failed` events carry message
@@ -282,19 +226,16 @@ text, and only as described in "Error reports".
 
 ### Desktop and canvas events
 
-The server checks all properties in this table against
-`packages/review/src/ui-telemetry-events.ts`.
-
 | Event                             | Additional properties                                                                                                                                                          | When                                                                                                       |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | `review_app_opened`               | None                                                                                                                                                                           | The canvas app opens                                                                                       |
 | `review_tab_viewed`               | `tab` in review, commits, map, files, trace; `duration_ms`; `reason` in tab_change, visibility_hidden, pagehide, unmount                                                       | A tab dwell period ends                                                                                    |
 | `review_diff_viewed`              | `duration_ms`                                                                                                                                                                  | A files tab dwell period ends; the server derives it from `review_tab_viewed`, the canvas does not send it |
-| `review_peek_opened`              | `via` in prose_link, diagram, map, db_lens, call_stack_frame                                                                                                                   | A user opens a code peek                                                                                   |
+| `review_peek_opened`              | `via` in prose_link, diagram, map, db_lens, call_stack_frame, diff_definition                                                                                                                  | A user opens a code peek                                                                                   |
 | `review_peek_resolved`            | `root_kind` in range                                                                                                                                                           | A code peek the user opened resolves                                                                       |
-| `review_peek_resolve_failed`      | `root_kind` in range                                                                                                                                                           | A code peek the user opened does not resolve                                                               |
-| `review_diff_opened`              | `kind` in commit, file, structural; `via` in topbar, lens, locate                                                                                                              | A user opens a diff view                                                                                   |
-| `review_scratchpad_opened`        | None                                                                                                                                                                           | The one scratchpad document opens                                                                          |
+| `review_peek_resolve_failed`      | `root_kind` in range; `reason` in missing_file, no_alignment, outside_lines, other, error, unresolved                                                                          | A code peek the user opened does not resolve                                                               |
+| `review_diff_opened`              | `kind` in commit, structural; `via` in topbar, sidebar, lens, locate, file_picker                                                                                                                   | A user opens a diff view                                                                                   |
+| `review_diff_failed`              | `reason` in missing_binary, process_exit, stream_ended, aborted, file_error, other; `files`, 0 when diffr fails before listing files                                          | A diff comparison finishes with files diffr could not diff                                                 |
 | `review_discord_clicked`          | `via` in topbar, dialog, docs                                                                                                                                                  | A user clicks a Discord invite                                                                             |
 | `review_discord_dialog_shown`     | None                                                                                                                                                                           | The community invite dialog opens                                                                          |
 | `review_discord_dialog_dismissed` | None                                                                                                                                                                           | The community invite dialog closes unaccepted                                                              |
@@ -305,7 +246,6 @@ The server checks all properties in this table against
 | `review_tour_abandoned`           | `step`, `steps`                                                                                                                                                                | A user closes an incomplete tour                                                                           |
 | `review_tour_completed`           | `steps`                                                                                                                                                                        | A user completes a tour                                                                                    |
 | `review_map_expanded`             | `level` in system, container, component, code                                                                                                                                  | A user expands a map element                                                                               |
-| `review_commit_expanded`          | `expanded`                                                                                                                                                                     | A user expands or collapses a commit                                                                       |
 | `review_commit_diff_opened`       | `via` in row, file, footer                                                                                                                                                     | A user opens a commit diff                                                                                 |
 | `review_source_tree_opened`       | `via` in topbar, home                                                                                                                                                          | A user opens the source tree                                                                               |
 | `review_client_error`             | See "Error reports"                                                                                                                                                            | A part of Whiteboard reports an error                                                                      |
@@ -315,17 +255,24 @@ The server checks all properties in this table against
 | `review_bug_report_dialog_opened` | None                                                                                                                                                                           | A user opens the bug report dialog                                                                         |
 | `review_bug_report_cancelled`     | None                                                                                                                                                                           | A user closes the dialog without a report                                                                  |
 | `review_bug_report_send_failed`   | Short `error_name`                                                                                                                                                             | A bug report request fails                                                                                 |
-| `review_setting_changed`          | `setting` in telemetry_enabled, keymap, software_map_enabled, scratchpad_enabled, diffr_config, structural_diff, theme, ctrl_tab, ready_notification, document_width, code_font_size; `enabled`; `value` in dark, light, system (theme only) | A user changes a Whiteboard setting                                                                        |
+| `review_setting_changed`          | `setting` in telemetry_enabled, keymap, software_map_enabled, sharing_enabled, diffr_config, theme, ctrl_tab, ready_notification, document_width, code_font_size, document_font_size, reading_font, code_font_family, font_ligatures, diff_font_size, diff_word_wrap, diff_ignore_whitespace; `enabled`; `value` in dark, light (theme only) | A user changes a Whiteboard setting                                                                        |
 | `review_review_opened`            | `via` in home, other                                                                                                                                                           | A user opens a whiteboard                                                                                  |
 | `review_diff_layout_changed`      | `layout` in split, unified; `scope` in diff, peek                                                                                                                              | A user switches the diff layout                                                                            |
 | `review_home_empty_state_viewed`  | None                                                                                                                                                                           | The empty Home state opens                                                                                 |
+| `review_find_opened` | `surface` in review, diff | A user opens the find bar |
+| `review_ask_sent` | `agent` in claude, codex, cursor, opencode, pi; `follow_up`; `selection` in text, code, diff, review; `remote` | A user sends a question or follow-up in Ask |
+| `review_onboarding_step_viewed` | `step` in welcome, install, run | A first-run step opens |
+| `review_onboarding_skipped` | `step` in welcome, install, run | A user leaves first run for Home |
+| `review_onboarding_run_started` | `mode` in draw, copy; `agent` (draw only) | First run's last step: an agent starts drawing the first whiteboard in the app, or its prompt is copied |
+| `review_new_whiteboard_opened` | `via` in button, command, sidebar | A user opens New whiteboard from Home's New button, or with ⌘N or the menu |
+| `review_new_whiteboard_started` | `mode` in draw, copy, empty; `embedded`; `agent` (draw only) | An agent starts drawing a whiteboard from New whiteboard, or its prompt is copied; `embedded` is Home's empty state |
+| `review_remote_host_installed` | `ok`; `target` in linux-x64, linux-arm64; `duration_ms` | Installing Whiteboard on a remote host ends; a version already there is not counted |
+| `review_remote_host_connected` | `ok`; `problem` in unreachable, not_installed, auth_failed, unsupported, incompatible; `direct` | A remote host's connection outcome changes; a host retrying while down reports once |
 
 The canvas sends `review_review_dismissed`, `review_review_restored`, and
 `review_review_deleted` from Home's actions, with `via` set to `home`.
 `review_review_dismissed` also comes from the whiteboard's top bar, with `via`
-set to `review_topbar`. `review_review_restored`'s `open` (the implicit undo,
-where opening a dismissed whiteboard brings it back) is allowlisted but not yet
-sent.
+set to `review_topbar`.
 
 ### Hangs
 
@@ -411,9 +358,7 @@ as `ENOENT: no such file or directory, open '<REDACTED: user-file-path>'`.
 
 The cleaner is Microsoft's, taken from VS Code, which Whiteboard is built on.
 Whiteboard uses it rather than a rule of its own so that you can check it against a known
-implementation. The copy is in
-`packages/review/src/telemetry-clean-text.ts`, and its header lists
-every difference from the original.
+implementation.
 
 Two rules sit on top of the cleaner:
 
@@ -523,26 +468,5 @@ An explicit bug report submission overrides the passive telemetry opt-out.
 The local server sends this report even when Whiteboard telemetry is off. The
 passive event allowlist and telemetry disk queue do not process bug reports.
 
-## Code locations
-
-| Concern                     | File                                                                                           |
-| --------------------------- | ---------------------------------------------------------------------------------------------- |
-| Telemetry API and identity  | `packages/review/src/review-telemetry.ts`                                                      |
-| Batch queue                 | `packages/review/src/posthog-capture-client.ts`                                                |
-| Opt-out rules               | `packages/review/src/telemetry-config.ts`                                                      |
-| Developer sink              | `packages/review/src/telemetry-debug-sink.ts`                                                  |
-| UI allowlist                | `packages/review/src/ui-telemetry-events.ts`                                                   |
-| Error message and frames    | `packages/review/src/error-telemetry.ts`                                                       |
-| Message cleaner (VS Code)   | `packages/review/src/telemetry-clean-text.ts`                                                  |
-| Error reporting rules       | `apps/review-desktop/code-oss/src/vs/review/common/reviewErrorReport.ts`                       |
-| Pre-start crash note        | `apps/review-desktop/code-oss/src/vs/review/node/reviewBootstrapBreadcrumb.ts`                 |
-| Desktop setting             | `apps/review-desktop/code-oss/src/vs/review/common/reviewConfiguration.ts`                     |
-| Settings screen             | `packages/review/app/src/settings-page.tsx`                                                    |
-| First-use notice            | `apps/review-desktop/code-oss/src/vs/review/contrib/telemetry/reviewTelemetry.contribution.ts` |
-| Error budget and bursts     | `packages/review/src/server/client-error-budget.ts`                                            |
-| Account alias               | `packages/review/src/server/account-alias.ts`                                                  |
-| Whiteboard lifecycle events | `packages/review/src/server/review-lifecycle-telemetry.ts`                                     |
-| Open-timeout watchdog       | `packages/review/src/server/review-open-watchdog.ts`                                           |
-| Crash dump upload           | `packages/review/src/server/crash-report.ts`                                                   |
-| Crash and hang listeners    | `apps/review-desktop/code-oss/src/vs/review/electron-main/reviewCrashTelemetry.ts`             |
-| Crash dump reconciliation   | `apps/review-desktop/code-oss/src/vs/review/electron-main/reviewCrashDumps.ts`                 |
+To change telemetry or inspect events while developing Whiteboard, see
+[Contributing](https://github.com/devdotfast/whiteboard/blob/main/CONTRIBUTING.md#telemetry).

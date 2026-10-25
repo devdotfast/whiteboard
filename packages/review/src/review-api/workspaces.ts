@@ -5,7 +5,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { git, gitCommonDir } from "@dev.fast/local-vcs";
-import { errorMessage, processIsAlive } from "@dev.fast/trace-core";
+import {
+  errorMessage,
+  pidReused,
+  processIsAlive,
+  processStartIdentity,
+} from "@dev.fast/trace-core";
 import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
 import {
   ensureReviewPinnedCheckout,
@@ -48,9 +53,6 @@ interface Environment extends WorkspaceStatus {
   role: "base" | "head";
 }
 
-const OWNED_ELSEWHERE =
-  "Another Whiteboard server is managing this review's language workspaces. Retry once it stops.";
-
 /** Local lifecycle only: source and authored history never depend on preparation.
  * Status/queue/process lifecycle follows #334, retaining the legacy prepare config
  * and per-review managed checkout layout instead of a new settings system.
@@ -75,11 +77,21 @@ export class ReviewWorkspaces {
     this.db.exec(
       "PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS pinned_environments(id TEXT PRIMARY KEY, value TEXT NOT NULL)",
     );
+
     // Desktops sharing a profile each own the reviews they prepare; the
     // lease stops a second process from preparing or collecting them. The
     // profile-wide lock it replaces only ever shipped in preview builds.
+    // Older leases have no start identity and may name a reused pid.
+    if (
+      !this.db
+        .prepare(
+          "SELECT 1 FROM pragma_table_info('workspace_leases') WHERE name='started'",
+        )
+        .get()
+    )
+      this.db.exec("DROP TABLE IF EXISTS workspace_leases");
     this.db.exec(
-      "DROP TABLE IF EXISTS workspace_owner; CREATE TABLE IF NOT EXISTS workspace_leases(review_id TEXT PRIMARY KEY,owner TEXT NOT NULL,pid INTEGER NOT NULL)",
+      "DROP TABLE IF EXISTS workspace_owner; CREATE TABLE IF NOT EXISTS workspace_leases(review_id TEXT PRIMARY KEY,owner TEXT NOT NULL,pid INTEGER NOT NULL,started TEXT)",
     );
     this.db.exec("BEGIN IMMEDIATE");
 
@@ -284,7 +296,8 @@ export class ReviewWorkspaces {
   }
 
   async remove(reviewId: string) {
-    if (!this.claim(reviewId)) throw new ReviewInputError(OWNED_ELSEWHERE, 409);
+    if (!this.claim(reviewId))
+      throw new ReviewInputError(this.ownedElsewhere(reviewId), 409);
     await Promise.all(this.requests.values());
     this.collect(undefined, reviewId);
     await this.cleanup;
@@ -297,9 +310,19 @@ export class ReviewWorkspaces {
   }
 
   private lease(reviewId: string) {
-    return this.db
-      .prepare("SELECT owner,pid FROM workspace_leases WHERE review_id=?")
+    const row = this.db
+      .prepare(
+        "SELECT owner,pid,started FROM workspace_leases WHERE review_id=?",
+      )
       .get(reviewId);
+
+    return (
+      row && {
+        owner: String(row.owner),
+        pid: Number(row.pid),
+        started: String(row.started ?? ""),
+      }
+    );
   }
 
   private leasedElsewhere(reviewId: string): boolean {
@@ -308,8 +331,18 @@ export class ReviewWorkspaces {
     return Boolean(
       lease &&
       lease.owner !== this.ownerId &&
-      processIsAlive(Number(lease.pid)),
+      processIsAlive(lease.pid) &&
+      !pidReused(lease.pid, lease.started),
     );
+  }
+
+  /** The holder may release its lease after `claim` fails. */
+  private ownedElsewhere(reviewId: string) {
+    const pid = this.lease(reviewId)?.pid;
+
+    return pid
+      ? `Whiteboard process ${pid} is managing this review's language workspaces. Quit that Whiteboard Desktop or run \`whiteboard server stop\`, then retry.`
+      : "Another Whiteboard process was managing this review's language workspaces. Retry.";
   }
 
   /** Takes the review's lease unless another live Desktop holds it. */
@@ -323,8 +356,13 @@ export class ReviewWorkspaces {
 
       if (free)
         this.db
-          .prepare("INSERT OR REPLACE INTO workspace_leases VALUES(?,?,?)")
-          .run(reviewId, this.ownerId, process.pid);
+          .prepare("INSERT OR REPLACE INTO workspace_leases VALUES(?,?,?,?)")
+          .run(
+            reviewId,
+            this.ownerId,
+            process.pid,
+            processStartIdentity(process.pid),
+          );
       this.db.exec("COMMIT");
 
       return free;
@@ -437,7 +475,7 @@ export class ReviewWorkspaces {
               rootPath: null,
               generation: "",
               state: "pending",
-              log: OWNED_ELSEWHERE,
+              log: this.ownedElsewhere(reviewId),
             },
       );
     }
@@ -607,7 +645,8 @@ export class ReviewWorkspaces {
 
     if (this.jobs.has(id)) return this.status(environment);
 
-    if (!this.claim(reviewId)) throw new ReviewInputError(OWNED_ELSEWHERE, 409);
+    if (!this.claim(reviewId))
+      throw new ReviewInputError(this.ownedElsewhere(reviewId), 409);
 
     if (environment.state === "cleanup-failed") {
       this.collect();

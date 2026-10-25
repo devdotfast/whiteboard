@@ -16,7 +16,7 @@ import { fetchPinnedRepository } from "./repository.js";
 
 afterEach(() => vi.unstubAllEnvs());
 
-it("exposes the device URL while login is pending and allows retry after failure", async () => {
+it("exposes the device URL and code while login is pending and allows retry after failure", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "share-login-"));
   vi.stubEnv("DEV_REVIEW_HOME", root);
   const fixture = await createShareFixture(root);
@@ -32,6 +32,10 @@ it("exposes the device URL while login is pending and allows retry after failure
   );
   let finish!: (code: number) => void;
   login.mockImplementation(async (options) => {
+    options!.onDeviceCode!({
+      url: "https://app.dev.fast/device?user_code=ABCD",
+      userCode: "ABCD",
+    });
     await options!.openUrl!("https://app.dev.fast/device?user_code=ABCD");
 
     return new Promise<number>((resolve) => {
@@ -47,6 +51,7 @@ it("exposes the device URL while login is pending and allows retry after failure
       ).toMatchObject({
         pending: true,
         url: "https://app.dev.fast/device?user_code=ABCD",
+        userCode: "ABCD",
       });
     });
     await api.request("/sharing/login", { method: "POST" });

@@ -1,3 +1,4 @@
+import { azureDevOpsProvider } from "./azure-devops-provider.js";
 import { ReviewInputError } from "./document.js";
 import { githubProvider } from "./github-provider.js";
 import type { PullRequestDeps, PullRequestRecord } from "./pull-request.js";
@@ -22,7 +23,7 @@ export interface PullRequestProvider {
   matchesRemote(remoteUrl: string, address: PullRequestAddress): boolean;
 }
 
-const providers: PullRequestProvider[] = [githubProvider];
+const providers: PullRequestProvider[] = [githubProvider, azureDevOpsProvider];
 
 export function pullRequestProvider(url: string) {
   for (const provider of providers) {

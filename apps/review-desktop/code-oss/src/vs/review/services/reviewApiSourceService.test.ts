@@ -1,4 +1,4 @@
-import { sourceLocation, sourceTreeUri, sourceTreeRoot } from "../common/reviewSourceView.js";
+import { sourceLocation, sourceTreeUri } from "../common/reviewSourceView.js";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -80,7 +80,7 @@ test("a document diff retains its pinned comparison even if the review advances 
 	let source!: ReviewDiffViewSource;
 	let lens!: ReviewDiffLens;
 	const canvas = service.canvas(() => view(version), {} as never, {
-		openComparison: () => undefined,
+		openComparison: () => ({}),
 		createDocument: (_: unknown, scope: ReviewDiffLens, input: ReviewDiffViewSource) => { lens = scope; source = input; return {}; },
 	} as never);
 	canvas.inlineEditors.create({ path: "src/[route].ts", side: "base", ranges: [{ startLine: 2, endLine: 2 }] } as never);
@@ -115,7 +115,7 @@ test("diff entries keep rename paths and missing sides, even when the review adv
 		() => resolveReviewSourceView({ reviewId: "review-a", version, pins: { worktreeRevision: generation } }),
 		{} as never,
 		{
-			openComparison: () => undefined,
+			openComparison: () => ({}),
 			create: (_: unknown, input: ReviewDiffViewSource) => {
 				source = input;
 				return {};
@@ -194,7 +194,7 @@ test("opening a native diff preserves renames and empty sides at the selected ve
 });
 
 
-test("a refreshed current tree keeps its root when a file from the newer version opens", async t => {
+test("a refreshed current tree lists the newer version's files", async t => {
   const { service } = setup();
   t.after(() => service.dispose());
   let version = 3;
@@ -214,9 +214,6 @@ test("a refreshed current tree keeps its root when a file from the newer version
   assert.equal(first[0]!.resource.toString(), refreshed[0]!.resource.toString());
   assert.notEqual(first[1]!.resource.toString(), refreshed[1]!.resource.toString());
   assert.equal(new URLSearchParams(refreshed[1]!.resource.query).get("version"), "4");
-  assert.equal(sourceTreeRoot(refreshed[1]!.resource, root).toString(), root.toString());
-  const fixed = sourceTreeUri({ reviewId: "review-a", kind: "version", version: 3 });
-  assert.notEqual(sourceTreeRoot(refreshed[1]!.resource, fixed).toString(), fixed.toString());
 });
 
 test("a source at its own pins keeps them through its URI and reads them back from the server", async t => {

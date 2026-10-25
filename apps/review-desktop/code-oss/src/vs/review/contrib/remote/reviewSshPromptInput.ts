@@ -38,7 +38,7 @@ export function createSshPromptInput(
 		input = box;
 	}
 	input.title = title;
-	input.description = prompt.text;
+	input.description = prompt.kind === "install" ? undefined : prompt.text;
 	input.ignoreFocusOut = true;
 	return input;
 }

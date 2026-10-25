@@ -48,6 +48,39 @@
   overflow: hidden;
 }
 
+/* Native scrollers take the canvas's scrollbar pill. */
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar-track,
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar-thumb {
+  min-width: 32px;
+  min-height: 32px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--vscode-scrollbarSlider-background) padding-box;
+}
+
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar-thumb:hover {
+  background: var(--vscode-scrollbarSlider-hoverBackground) padding-box;
+}
+
+:where(.monaco-workbench.review-workbench, .monaco-workbench.review-workbench *)::-webkit-scrollbar-thumb:active {
+  background: var(--vscode-scrollbarSlider-activeBackground) padding-box;
+}
+
+/* The sidebar meets the board at a plain hairline: no depth shadow on the
+   editor's edges, which light themes draw. */
+.monaco-workbench .part.editor::after {
+  display: none;
+}
+
 /* KEEP IN SYNC WITH REVIEW_CHROME_HEIGHT in review/common/reviewChrome.ts. The
    overlay must be as tall as the editor tab strip below it, or the window
    controls and the navigation arrows stop aligning with the tab pills. */
@@ -196,11 +229,15 @@
 .monaco-workbench .part.review-explorer {
   display: flex;
   flex-direction: column;
+  /* Review's own chrome font; the workbench's default is the system
+     font. */
+  font-family: var(--review-chrome-font);
   height: 100%;
+  box-sizing: border-box;
   background-color: var(--vscode-editor-background);
-  /* An inset shadow rather than a border, so the tree keeps the full part width
-     and `ReviewExplorerPart.layout` needs no separator correction. */
-  box-shadow: inset -1px 0 0
+  /* A border, not an inset shadow, so no child background can paint over
+     the divider. Border-box keeps it inside the part's width. */
+  border-right: 1px solid
     var(--vscode-panel-border, var(--vscode-sideBar-border, transparent));
   overflow: hidden;
 }
@@ -215,7 +252,7 @@
    tabs carry no separators by design (see the pill-tab section below). A line on
    just the tree half stops dead at the sash and reads as an unfinished stub.
 
-   `ReviewExplorerPart` writes `--review-chrome-height` on this part and the
+   `ReviewSidebarPart` writes `--review-chrome-height` on this part and the
    workbench layout writes `--review-explorer-width` on the inset tab strip
    (never on the workbench root; see `publishReviewChromeInset`), so
    REVIEW_CHROME_HEIGHT stays the only source. The fallbacks cover the frame
@@ -229,21 +266,19 @@
   -webkit-app-region: drag;
 }
 
-/* Flex rather than `calc(100% - <chrome>)`: the row above is the only fixed
-   height, so the tree takes whatever is left and the height is written once. */
-.monaco-workbench .part.review-explorer > .review-explorer-tree {
-  flex: 1;
-  min-height: 0;
+/* The workbench outlines every focused element, so a click leaves a ring.
+   Here the ring shows only for keyboard focus. */
+.monaco-workbench .review-titlebar-container :focus:not(:focus-visible),
+.monaco-workbench .part.review-explorer :focus:not(:focus-visible),
+.monaco-workbench .review-canvas-root :focus:not(:focus-visible) {
+  outline: none;
 }
 
 /* ---------------------------------------------------------------------------
    The file-tree toggle
 
-   The button always occupies its 22px slot, so the titlebar's left cluster keeps
-   a constant width. That matters because a ResizeObserver on the cluster feeds
-   `--review-chrome-left-width`, which the editor tab strip pads itself by — a
-   button that grew from 0 would slide every tab as it appeared. Only opacity and
-   transform animate here, so nothing reflows.
+   Always in its slot, so the controls never shift; on Home, which has no
+   sidebar, it is disabled.
    --------------------------------------------------------------------------- */
 
 .monaco-workbench .review-titlebar-file-tree-toggle {
@@ -252,32 +287,23 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  margin-left: 4px;
+  margin-left: 12px;
   border-radius: 5px;
   flex-shrink: 0;
   color: var(--vscode-icon-foreground);
-  /* Nothing to toggle until a file or diff tab is active. */
-  opacity: 0;
-  transform: scale(0.8);
-  pointer-events: none;
+  cursor: pointer;
   /* The cluster around it drags the window; this button must not. */
   -webkit-app-region: no-drag;
 }
 
-.monaco-workbench.review-explorer-available .review-titlebar-file-tree-toggle {
-  opacity: 1;
-  transform: none;
-  pointer-events: auto;
-  cursor: pointer;
+/* Nothing to toggle until a board tab is active. */
+.monaco-workbench:not(.review-explorer-available) .review-titlebar-file-tree-toggle {
+  pointer-events: none;
+  cursor: default;
 }
 
-/* Reduced motion gets a straight cut: `monaco-enable-motion` is absent then,
-   because accessibility/browser/accessibilityService.ts toggles it from
-   `workbench.reduceMotion`. */
-.monaco-workbench.monaco-enable-motion .review-titlebar-file-tree-toggle {
-  transition:
-    opacity 120ms ease,
-    transform 120ms ease;
+.monaco-workbench:not(.review-explorer-available) .review-sidebar-toggle-icon {
+  stroke: var(--vscode-disabledForeground);
 }
 
 .monaco-workbench .review-titlebar-file-tree-toggle:hover {
@@ -289,18 +315,59 @@
   outline-offset: -1px;
 }
 
-/* One icon per state, picked here so the titlebar part needs no explorer state. */
-.monaco-workbench .review-titlebar-file-tree-toggle > .review-file-tree-icon-open,
-.monaco-workbench.review-explorer-visible
-  .review-titlebar-file-tree-toggle
-  > .review-file-tree-icon-closed {
-  display: none;
+/* Home, after back and forward; lit while Home shows. */
+.monaco-workbench .review-titlebar-home {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 24px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
 }
 
-.monaco-workbench.review-explorer-visible
-  .review-titlebar-file-tree-toggle
-  > .review-file-tree-icon-open {
-  display: block;
+.monaco-workbench .review-titlebar-home > svg {
+  fill: none;
+  stroke: var(--vscode-descriptionForeground);
+  stroke-width: 1.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.monaco-workbench .review-titlebar-home:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.monaco-workbench .review-titlebar-home:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}
+
+.monaco-workbench.review-home-active .review-titlebar-home {
+  background-color: color-mix(in srgb, var(--vscode-foreground) 8%, transparent);
+}
+
+.monaco-workbench.review-home-active .review-titlebar-home > svg {
+  stroke: var(--vscode-foreground);
+}
+
+/* A rounded window with a narrow left panel, filled while the sidebar is
+   open; the workbench class flips with the part, so Cmd+B and clicks show at
+   once. */
+.monaco-workbench .review-sidebar-toggle-icon {
+  fill: none;
+  stroke: var(--vscode-descriptionForeground);
+  stroke-width: 1.1;
+}
+
+.monaco-workbench .review-sidebar-toggle-icon > .review-sidebar-toggle-panel {
+  stroke: none;
+}
+
+.monaco-workbench.review-explorer-visible .review-sidebar-toggle-icon > .review-sidebar-toggle-panel {
+  fill: var(--vscode-descriptionForeground);
 }
 
 /* The tab strip pads itself past the traffic lights and the navigation arrows,
@@ -352,8 +419,8 @@
     var(--vscode-editorGroupHeader-tabsBackground)
   );
   --review-tab-separator: var(--vscode-panel-border);
-  --review-chrome-font: "Geist Mono", ui-monospace, SFMono-Regular, Menlo,
-    monospace;
+  --review-chrome-font: "Inter", system-ui, sans-serif;
+  --review-mono-font: "Geist Mono", ui-monospace, monospace;
 }
 
 /* Light themes: a board-colored pill. */
@@ -562,53 +629,6 @@ body
   padding: 2px 0;
 }
 
-/* Home carries no close button, but `sizing-fit` still stretches it to a fixed
-   120px. That leaves ~30px of dead space on each side of the home icon and the
-   name, which reads as an off-center label. The pill hugs them instead. */
-body
-  .monaco-workbench.review-workbench
-  .part.editor
-  > .content
-  .editor-group-container
-  > .title
-  .tabs-container
-  > .tab.sticky {
-  width: fit-content;
-}
-
-/* Home is the one sticky tab, so it is always the last one before the review
-   tabs. A rule after it separates the two groups. `redrawTabBorders` draws that
-   rule as an inline border-right, which the flat rule above removes, so the
-   pseudo-element below draws it instead. */
-body
-  .monaco-workbench.review-workbench
-  .part.editor
-  > .content
-  .editor-group-container
-  > .title
-  .tabs-container
-  > .tab.sticky:not(:last-child) {
-  margin-right: 8px;
-}
-
-body
-  .monaco-workbench.review-workbench
-  .part.editor
-  > .content
-  .editor-group-container
-  > .title
-  .tabs-container
-  > .tab.sticky:not(:last-child)::after {
-  content: "";
-  position: absolute;
-  right: -7px;
-  top: 4px;
-  bottom: 4px;
-  width: 1px;
-  pointer-events: none;
-  background-color: var(--review-tab-separator);
-}
-
 .monaco-workbench
   .part.titlebar.review-chrome-overlay
   .review-titlebar-container
@@ -667,7 +687,7 @@ body
   -webkit-app-region: no-drag;
 }
 
-/* Equal space on each side of the arrows.
+/* The space around the arrows.
 
    `CodeWindow.updateWindowControls` moves the traffic lights itself: it calls
    `setWindowButtonPosition({ x: floor((REVIEW_CHROME_HEIGHT - buttonHeight) / 2) + 1 })`.
@@ -676,14 +696,13 @@ body
    number moves.
 
    The arrow glyph carries 2px of side bearing inside its box, so the back arrow
-   starts drawing 19px after the last light. On the other side the tab strip
-   adds 6px of its own (`.review-chrome-inset`), so 8px here lands the Home tab
-   19px after the forward arrow draws. */
+   starts drawing 19px after the last light. The house follows the forward
+   arrow as closely. */
 .monaco-workbench
   .part.titlebar.review-chrome-overlay
   .review-titlebar-navigation {
-  margin-left: 12px;
-  margin-right: 8px;
+  margin-left: 6px;
+  margin-right: 4px;
 }
 
 /* Without no-drag the full-size .titlebar-drag-region takes the clicks and the
@@ -715,9 +734,9 @@ body
   height: 100%;
 }
 
-/* Whiteboard: every label on the tray is set in the same mono face as the
-   canvas chrome. The faces ship with the canvas stylesheet, whose @font-face
-   rules are hoisted out of its @scope so they apply document-wide. */
+/* Whiteboard: a tab names a board, in the chrome's Inter. The faces ship with
+   the canvas stylesheet, whose @font-face rules are hoisted out of its @scope
+   so they apply document-wide. */
 body
   .monaco-workbench.review-workbench
   .part.editor
@@ -750,6 +769,11 @@ body
   text-align: left;
 }
 
+/* A file's path, in the diff pane's header: mono, as a path is. */
+.review-path-label {
+  font-family: var(--review-mono-font);
+}
+
 .review-path-label .label-name {
   unicode-bidi: plaintext;
 }
@@ -759,6 +783,7 @@ body
   align-items: center;
   gap: 6px;
   padding: 0 4px;
+  font-family: var(--review-mono-font);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
@@ -843,7 +868,7 @@ body
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  font-family: var(--review-chrome-font, system-ui, sans-serif);
+  font-family: var(--review-mono-font);
 }
 
 .review-changed-files-tree {
@@ -856,7 +881,7 @@ body
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 22px;
+  height: 24px;
   padding-right: 8px;
 }
 
@@ -924,6 +949,21 @@ body
   display: none;
 }
 
+/* An embed that runs edge to edge sets --review-code-inset to move its header
+   and code in from the column edge. The editor is laid out 18px narrower than
+   its entry, so the code's inset fits without clipping. */
+.review-files-editor-diffs
+  .monaco-component.multiDiffEditor
+  .multiDiffEntry
+  > .header
+  > .header-content {
+  padding-inline: calc(5px + var(--review-code-inset, 0px));
+}
+
+.review-files-editor-diffs .multiDiffEntry .editorContainer {
+  padding-left: var(--review-code-inset, 0px);
+}
+
 .review-canvas-part > .review-canvas-container {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
@@ -985,8 +1025,15 @@ body
   padding: 8px 12px;
   border-bottom: 1px solid var(--vscode-sideBar-border, transparent);
   color: var(--vscode-descriptionForeground);
+  /* Words in Inter, the +/− totals in mono. */
+  font-family: var(--review-chrome-font);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+.review-files-editor-summary-added,
+.review-files-editor-summary-removed {
+  font-family: var(--review-mono-font);
 }
 
 .review-files-editor-summary[hidden] {
@@ -1026,7 +1073,44 @@ body
   font-size: 12px;
 }
 
+.review-multidiff-note.error {
+  max-width: 48ch;
+  overflow: hidden;
+  color: var(--vscode-errorForeground);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .review-multidiff-note[hidden] {
+  display: none;
+}
+
+/* A quote read at a commit other than the board's names it: the commit
+   glyph and its short ID, quietly, at the header's end. */
+.review-multidiff-commit {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background-color: var(--vscode-editor-background);
+  color: var(--vscode-descriptionForeground);
+  font: 10px/1 var(--review-mono-font);
+}
+
+.review-multidiff-commit > svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+
+.review-multidiff-commit[hidden] {
   display: none;
 }
 
@@ -1155,18 +1239,19 @@ body
   background: var(--review-tooltip-bg);
   color: var(--review-tooltip-fg);
   box-shadow: var(--review-tooltip-shadow);
-  font: 11px/16px var(--review-chrome-font, "Geist Mono", ui-monospace, monospace);
+  font: 11px/16px var(--review-chrome-font);
 }
 .monaco-hover.workbench-hover.review-tooltip .hover-contents { padding: 4px 8px; }
 .review-tooltip-label,
 .review-tooltip-detail { display: block; }
-.review-tooltip-detail { color: var(--review-tooltip-fg-muted); }
+.review-tooltip-detail { color: var(--review-tooltip-fg-muted); white-space: pre-line; }
+.review-tooltip-shortcut { margin-left: 8px; color: var(--vscode-disabledForeground); font: 11px/16px var(--review-chrome-font); }
 .workbench-hover-container:has(> .review-tooltip) > .workbench-hover-pointer::after {
   background-color: var(--review-tooltip-bg);
   border-right: 1px solid var(--review-tooltip-border);
   border-bottom: 1px solid var(--review-tooltip-border);
 }
-.review-tree-counts { display:inline-flex; flex-shrink:0; gap:6px; margin-left:auto; padding-left:8px; padding-right:8px; font:11px/22px var(--review-chrome-font, monospace); font-variant-numeric:tabular-nums; }
+.review-tree-counts { display:inline-flex; flex-shrink:0; gap:6px; margin-left:auto; padding-left:8px; padding-right:8px; font:11px/24px var(--review-mono-font); font-variant-numeric:tabular-nums; }
 .review-tree-added { color:var(--vscode-gitDecoration-addedResourceForeground); }
 .review-tree-removed { color:var(--vscode-gitDecoration-deletedResourceForeground); }
 
@@ -1186,6 +1271,8 @@ body
   justify-content: center;
 }
 .review-workbench .monaco-tl-twistie.codicon-tree-item-expanded::before,
+.monaco-workbench .review-sidebar-section-header > .codicon-chevron-down::before,
+.monaco-workbench .review-sidebar-section-header > .codicon-chevron-right::before,
 .review-workbench .collapse-button .codicon-chevron-down::before,
 .review-workbench .collapse-button .codicon-chevron-right::before,
 .review-workbench .review-diff-group-toggle .codicon-chevron-down::before,
@@ -1201,9 +1288,15 @@ body
   transition: transform 120ms ease;
 }
 .review-workbench .monaco-tl-twistie.collapsed.codicon-tree-item-expanded::before,
+.monaco-workbench .review-sidebar-section-header > .codicon-chevron-right::before,
 .review-workbench .collapse-button .codicon-chevron-right::before,
 .review-workbench .review-diff-group-toggle .codicon-chevron-right::before {
   transform: rotate(0deg);
+}
+
+/* Reference files have no file mark; match the changed-files name inset. */
+.review-workbench .reference-zone-widget .ref-tree .reference-file {
+  padding-left: 7px;
 }
 
 /* File marks in the changed-files tree: status is one stroke beside the name,
@@ -1254,19 +1347,15 @@ body
    shadow. The row keeps Monaco's 24px height: its view zone and the handle
    transforms assume it, and a shorter row rides up over the previous line. */
 .review-workbench .monaco-editor .diff-hidden-lines .center {
-  font: 11px/24px var(--review-chrome-font, monospace);
+  font: 11px/24px var(--review-mono-font);
 }
 .review-workbench .monaco-editor .diff-hidden-lines .center:hover {
   color: var(--vscode-descriptionForeground);
 }
 
-/* Scope chevrons, rails and braces in structural diffs. The marker blue is
-   fixed because some themes make focusBorder transparent. */
+/* Scope chevrons, rails and braces in structural diffs, in the accent. */
 .review-workbench .monaco-editor {
-  --review-scope-marker: #2B55E6;
-}
-.review-workbench .monaco-editor:is(.vs-dark, .hc-black) {
-  --review-scope-marker: #5B7CFF;
+  --review-scope-marker: var(--review-accent);
 }
 .review-workbench .monaco-editor .review-fold-chevron {
   display: flex;
@@ -1325,7 +1414,8 @@ body
   outline: 1px solid var(--review-scope-marker);
   border-radius: 2px;
 }
-.review-workbench .monaco-editor .review-fold-hint {
+.review-workbench .monaco-editor .review-fold-hint,
+.review-workbench .monaco-editor .review-selection-hint {
   margin-left: 2ch;
   color: var(--review-scope-marker);
   font-family: var(--review-chrome-font, inherit);
@@ -1405,8 +1495,8 @@ body
    section chevron and the file chevron sit on one vertical line. */
 .review-diff-group { height:48px; min-height:48px; box-sizing:border-box; display:flex; align-items:center; gap:12px; padding:12px 16px 4px 10px; border-top:1px solid var(--vscode-panel-border); background:var(--vscode-editor-background); color:var(--vscode-editor-foreground); }
 .review-diff-group[hidden] { display:none; }
-.review-diff-group-title { font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.review-diff-group-counts { margin-left:auto; font:11px var(--vscode-editor-font-family, monospace); color:var(--vscode-descriptionForeground); white-space:nowrap; }
+.review-diff-group-title { font-family:var(--review-chrome-font); font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.review-diff-group-counts { margin-left:auto; font:11px var(--review-mono-font); color:var(--vscode-descriptionForeground); white-space:nowrap; }
 .review-diff-group.is-viewed > span { opacity:.45; }
 
 .review-diff-group-toggle { display:flex; align-items:center; gap:5px; min-width:0; border:0; padding:0; color:inherit; background:transparent; cursor:pointer; text-align:left; }
@@ -1461,3 +1551,607 @@ body
   background: color-mix(in srgb, var(--vscode-editor-background) 70%, transparent);
 }
 .review-workbench .monaco-editor .review-fold-pill.is-viewed:not(.is-target) { opacity: .65; }
+.review-workbench .monaco-editor :is(.review-ask-lines, .review-ask-code) {
+  background: var(--accent-wash);
+}
+.review-workbench .monaco-editor .review-ask-pin {
+  opacity: var(--review-pin-lane-opacity, 1);
+  pointer-events: var(--review-pin-lane-pointer-events, auto);
+  overflow: visible;
+}
+/* The pin spans this lane too. */
+.review-workbench .monaco-editor .review-ask-lane {
+  pointer-events: none;
+}
+
+/* ---------------------------------------------------------------------------
+   The board sidebar
+
+   `ReviewSidebarPart` draws a row of tab icons under the window controls
+   and one pane at a time below it, with the whole height. The canvas bundle
+   mounts the lists into the panes; Changes holds the Diff view's tree.
+   --------------------------------------------------------------------------- */
+.monaco-workbench .part.review-explorer:has(> .review-sidebar-panes) {
+  background-color: var(--vscode-sideBar-background, var(--vscode-editorGroupHeader-tabsBackground));
+}
+
+.monaco-workbench .review-sidebar-tabs {
+  --review-tabs-trough: color-mix(in srgb, var(--vscode-sideBar-background), black 35%);
+  --review-tab-raised: color-mix(in srgb, var(--vscode-foreground) 10%, var(--vscode-sideBar-background));
+  --review-tab-raised-shadow: 0 1px 2px rgba(0, 0, 0, 0.45), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+  box-sizing: border-box;
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  margin: 4px 10px;
+  padding: 3px;
+  border: 1px solid var(--vscode-widget-border, transparent);
+  border-radius: 8px;
+  background-color: var(--review-tabs-trough);
+}
+
+.monaco-workbench.vs .review-sidebar-tabs,
+.monaco-workbench.hc-light .review-sidebar-tabs {
+  --review-tabs-trough: color-mix(in srgb, var(--vscode-sideBar-background), black 6%);
+  --review-tab-raised: var(--vscode-editor-background);
+  --review-tab-raised-shadow: 0 1px 2px rgba(21, 24, 30, 0.12), inset 0 0 0 1px rgba(21, 24, 30, 0.06);
+}
+
+/* Which commits the diff shows, between the Changes header and its
+   Lenses and Files; empty for a board without commits. */
+.monaco-workbench .review-sidebar-commit-picker {
+  flex-shrink: 0;
+}
+
+/* Sized by the picker, not as a canvas root's full height; its menu opens
+   over the panes. */
+.monaco-workbench .review-sidebar-commit-picker.review-canvas-root {
+  height: auto;
+  min-height: 0;
+  container-type: normal;
+  background-color: transparent;
+}
+
+.monaco-workbench .review-sidebar-commit-picker:empty {
+  display: none;
+}
+
+/* A hidden copy of the tabs that measures their labels. */
+.monaco-workbench .review-sidebar-tabs-probe {
+  position: absolute;
+  display: flex;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.monaco-workbench .review-sidebar-tabs-probe > .review-sidebar-tab {
+  flex: none;
+}
+
+/* An icon beside its label, the count faint after the label. Each tab is as
+   wide as its label, and the tabs share what is left over. A hidden tab
+   leaves no gap. Narrower than that, the labels fold away (below); the
+   sidebar's minimum holds all three folded. */
+.monaco-workbench .review-sidebar-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* Narrower than the labelled tabs need: each is its icon with its count
+   beside it, and the tabs share the row. Named in full by its tooltip. */
+.monaco-workbench .review-sidebar-tabs.folded > .review-sidebar-tab {
+  flex-basis: 0;
+}
+
+.monaco-workbench .review-sidebar-tabs.folded > .review-sidebar-tab .review-sidebar-tab-title {
+  display: none;
+}
+
+.monaco-workbench .review-sidebar-tab-icon {
+  position: relative;
+  display: flex;
+}
+
+.monaco-workbench .review-sidebar-tab-label {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+  font-family: var(--review-chrome-font);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.monaco-workbench .review-sidebar-tab-count {
+  color: var(--vscode-disabledForeground);
+  font: 11px/16px var(--review-chrome-font);
+  font-variant-numeric: tabular-nums;
+}
+
+.monaco-workbench .review-sidebar-tab-count:empty {
+  display: none;
+}
+
+.monaco-workbench .review-sidebar-tab:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+.monaco-workbench .review-sidebar-tab.active {
+  background-color: var(--review-tab-raised);
+  box-shadow: var(--review-tab-raised-shadow);
+  color: var(--vscode-foreground);
+}
+
+.monaco-workbench .review-sidebar-tab.active .review-sidebar-tab-label {
+  font-weight: 500;
+}
+
+.monaco-workbench .review-sidebar-tab[hidden],
+.monaco-workbench .review-sidebar-tab-badge[hidden],
+.monaco-workbench .review-sidebar-pane[hidden] {
+  display: none;
+}
+
+/* Another board in the project changed since it was last viewed. */
+.monaco-workbench .review-sidebar-tab-badge {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  box-sizing: border-box;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--vscode-sideBar-background, var(--vscode-editorGroupHeader-tabsBackground));
+  border-radius: 999px;
+  background-color: var(--vscode-charts-blue);
+}
+
+.monaco-workbench .review-sidebar-icon {
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.monaco-workbench .part.review-explorer > .review-sidebar-panes {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.monaco-workbench .review-sidebar-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding-top: 6px;
+}
+
+.monaco-workbench .review-sidebar-pane-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  height: 28px;
+  padding: 0 14px;
+  color: var(--vscode-descriptionForeground);
+  font: 11px/14px var(--review-chrome-font);
+}
+
+.monaco-workbench .review-sidebar-pane-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Search, This board and Recent, each a step below the one above. Only
+   Recent scrolls, unless a search lists matches. */
+.monaco-workbench .review-sidebar-pane-body.review-sidebar-stack {
+  display: flex;
+  flex-direction: column;
+  overflow-y: hidden;
+}
+
+.monaco-workbench .review-sidebar-stack-body.review-canvas-root {
+  flex: none;
+  height: auto;
+  min-height: 0;
+  /* The canvas root's size containment would collapse a list in a stack. */
+  container-type: normal;
+  background-color: transparent;
+}
+
+.monaco-workbench .review-sidebar-stack-body.review-sidebar-recent {
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.monaco-workbench .review-sidebar-pane-body.review-sidebar-stack:has([data-searching]) {
+  overflow-y: auto;
+}
+
+.monaco-workbench .review-sidebar-stack:has([data-searching]) > .review-sidebar-stack-body.review-sidebar-recent {
+  flex: none;
+  overflow-y: visible;
+}
+
+/* This board under Search, a section's step below it; it steps aside
+   while a search lists its matches. */
+.monaco-workbench .review-sidebar-stack-body.review-sidebar-family {
+  margin-top: 8px;
+}
+
+.monaco-workbench .review-sidebar-stack:has([data-searching]) .review-sidebar-family {
+  display: none;
+}
+
+.monaco-workbench .review-sidebar-stack-body[hidden],
+.monaco-workbench .review-sidebar-pane-header[hidden] {
+  display: none;
+}
+
+.monaco-workbench .review-sidebar-pane-body.review-sidebar-groups {
+  display: flex;
+  flex-direction: column;
+  padding-top: 6px;
+  overflow: hidden;
+}
+
+.monaco-workbench .review-sidebar-section {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.monaco-workbench .review-sidebar-section + .review-sidebar-section {
+  margin-top: 10px;
+}
+
+/* Remaining sits in the Changes header and takes only its own height. */
+.monaco-workbench .review-sidebar-remaining.review-canvas-root {
+  height: auto;
+  min-height: 0;
+  /* The canvas root's size containment would collapse it in the header. */
+  container-type: normal;
+  background-color: transparent;
+}
+
+/* The agent's cursor is positioned against the lens rows. */
+.monaco-workbench .review-sidebar-section-lenses > .review-sidebar-section-body {
+  position: relative;
+}
+
+.monaco-workbench .review-sidebar-section-body {
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* Matches the workbench's pane headers. */
+.monaco-workbench .review-sidebar-section-header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  padding: 0 14px 0 10px;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  font: 11px/14px var(--review-chrome-font);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* The same chevron as the file tree's folders. */
+.monaco-workbench .review-sidebar-section-header > .codicon-chevron-down,
+.monaco-workbench .review-sidebar-section-header > .codicon-chevron-right {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: -2px;
+  color: var(--vscode-icon-foreground);
+}
+
+.monaco-workbench .review-sidebar-section-title {
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.monaco-workbench .review-sidebar-section-count {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--vscode-disabledForeground);
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.monaco-workbench .review-sidebar-section-spacer {
+  flex: 1;
+}
+
+/* An action at the end of a pane header, aligned with the row tags below. */
+.monaco-workbench .review-sidebar-header-action {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin: 0 -6px 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+.monaco-workbench .review-sidebar-header-action:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+  color: var(--vscode-foreground);
+}
+
+.monaco-workbench .review-sidebar-header-action > .review-sidebar-icon {
+  stroke-width: 1.3;
+}
+
+.monaco-workbench .review-sidebar-section.collapsed {
+  flex: 0 0 auto;
+}
+
+/* Lenses keeps its own height, up to half the pane, and scrolls past it;
+   Files takes the rest, never less than a few rows. */
+.monaco-workbench .review-sidebar-section-lenses:not(.collapsed) {
+  flex: 0 0 auto;
+  max-height: 50%;
+}
+
+.monaco-workbench .review-sidebar-section-files:not(.collapsed) {
+  flex: 1 1 0;
+  min-height: 120px;
+}
+
+.monaco-workbench .review-sidebar-section-files:not(.collapsed) > .review-sidebar-section-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+/* The Diff view's tree sizes itself to its host. */
+.monaco-workbench .review-sidebar-file-trees,
+.monaco-workbench .review-sidebar-file-tree {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.monaco-workbench .review-sidebar-file-tree {
+  position: relative;
+}
+
+.monaco-workbench .review-sidebar-file-tree[hidden],
+.monaco-workbench .review-sidebar-files-note[hidden] {
+  display: none;
+}
+
+.monaco-workbench .review-sidebar-file-tree > .review-files-editor-tree {
+  width: 100%;
+  height: 100%;
+}
+
+/* The sidebar's lists share one size: 12px rows of 24px. */
+.monaco-workbench .review-sidebar-file-tree .review-changed-files-label {
+  font-size: 12px;
+}
+
+/* A file's empty twistie ends 3px past the indent, so its mark lines up
+   with a folder's chevron. */
+.monaco-workbench .review-sidebar-file-tree .monaco-tl-twistie:not(.collapsible) {
+  box-sizing: border-box;
+  width: 0;
+  padding-right: 3px;
+}
+
+.monaco-workbench .review-sidebar-files-note {
+  flex-shrink: 0;
+  padding: 6px 14px 6px 16px;
+  color: var(--vscode-disabledForeground);
+  font: 11px/16px var(--review-chrome-font);
+}
+
+.monaco-workbench .review-sidebar-additions {
+  color: var(--vscode-gitDecoration-addedResourceForeground);
+}
+
+.monaco-workbench .review-sidebar-deletions {
+  color: var(--vscode-gitDecoration-deletedResourceForeground);
+}
+
+/* Mounted lists show the sidebar background, not the board's. */
+.monaco-workbench .review-sidebar-section-body.review-canvas-root,
+.monaco-workbench .review-sidebar-pane-body.review-canvas-root {
+  background-color: transparent;
+}
+
+.monaco-workbench .review-sidebar-section[hidden] {
+  display: none;
+}
+
+/* The Threads tab: amber needs the reader, blue is an answer unseen, and
+   while an agent answers the icon pulses blue in the dot's place. */
+.monaco-workbench .review-sidebar-tab-badge-threads[data-mark="waiting"] {
+  background-color: var(--vscode-charts-yellow);
+}
+
+.monaco-workbench .review-sidebar-tab-badge-threads[data-mark="answering"],
+.monaco-workbench .review-sidebar-rail-badge[data-mark="answering"] {
+  display: none;
+}
+
+.monaco-workbench .review-sidebar-tab-icon:has(> .review-sidebar-tab-badge-threads[data-mark="answering"]) > svg,
+.monaco-workbench .review-sidebar-rail-tab:has(> .review-sidebar-rail-badge[data-mark="answering"]) > svg {
+  animation: review-sidebar-answering 1.4s ease-in-out infinite;
+}
+
+@keyframes review-sidebar-answering {
+  50% {
+    color: var(--vscode-charts-blue);
+    filter: drop-shadow(0 0 3px var(--vscode-charts-blue));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .monaco-workbench .review-sidebar-tab-icon:has(> .review-sidebar-tab-badge-threads[data-mark="answering"]) > svg,
+  .monaco-workbench .review-sidebar-rail-tab:has(> .review-sidebar-rail-badge[data-mark="answering"]) > svg {
+    color: var(--vscode-charts-blue);
+    animation: none;
+  }
+}
+
+/* The right column; its divider matches the sidebar's border. */
+.monaco-workbench .part.review-ask-part {
+  height: 100%;
+  box-sizing: border-box;
+  border-left: 1px solid
+    var(--vscode-panel-border, var(--vscode-sideBar-border, transparent));
+  overflow: hidden;
+}
+
+.monaco-workbench .review-ask-host.review-canvas-root {
+  height: 100%;
+  min-height: 0;
+  /* No canvas container, or Ask's narrow-canvas styles would apply. */
+  container-type: normal;
+  background-color: transparent;
+}
+
+.monaco-workbench .review-ask-host[hidden] {
+  display: none;
+}
+
+/* The header sits level with the window controls; its empty space drags
+   the window, as the tab strip does. */
+.monaco-workbench .review-ask-host .review-ask-chrome {
+  -webkit-app-region: drag;
+}
+
+.monaco-workbench .review-ask-host .review-ask-chrome :is(button, a, input) {
+  -webkit-app-region: no-drag;
+}
+
+/* ---------------------------------------------------------------------------
+   The collapsed sidebar
+
+   Closed beside a board, the sidebar leaves a 52px rail of its tabs under
+   the window controls, so Commits and Diff stay one click away. The rail
+   sits on the page's own surface with no divider, as the title row does;
+   the active tab is a chip of the sidebar's gray. The board moves over to
+   clear it; the page bar starts past the controls.
+   KEEP IN SYNC WITH REVIEW_SIDEBAR_RAIL_WIDTH in reviewSidebarPart.ts.
+   --------------------------------------------------------------------------- */
+.monaco-workbench .review-sidebar-rail {
+  position: absolute;
+  top: 40px;
+  bottom: 0;
+  left: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  width: 52px;
+  padding-top: 6px;
+  background-color: var(--vscode-editor-background);
+  font-family: var(--review-chrome-font);
+}
+
+.monaco-workbench .review-sidebar-rail[hidden],
+.monaco-workbench .review-sidebar-rail-tab[hidden],
+.monaco-workbench .review-sidebar-rail-badge[hidden] {
+  display: none;
+}
+
+.monaco-workbench .review-sidebar-rail-tab {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+
+.monaco-workbench .review-sidebar-rail-tab:hover {
+  background-color: var(--vscode-toolbar-hoverBackground);
+}
+
+/* A click leaves no ring; keyboard focus keeps the workbench's 1px outline,
+   as the open sidebar's tabs do. */
+.monaco-workbench .review-sidebar-rail-tab:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.monaco-workbench .review-sidebar-rail-tab.active {
+  background-color: var(--vscode-sideBar-background);
+  color: var(--vscode-foreground);
+}
+
+/* The tab's own mark, as the sidebar draws it: changed boards, or threads
+   that want the reader. Ringed in what it sits on, so it reads apart from
+   the tab's chip. */
+.monaco-workbench .review-sidebar-rail-badge {
+  position: absolute;
+  top: 5px;
+  right: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background-color: var(--vscode-charts-blue);
+  box-shadow: 0 0 0 1px var(--vscode-editor-background);
+}
+
+.monaco-workbench .review-sidebar-rail-tab.active > .review-sidebar-rail-badge {
+  box-shadow: 0 0 0 1px var(--vscode-sideBar-background);
+}
+
+.monaco-workbench .review-sidebar-rail-badge[data-mark="waiting"] {
+  background-color: var(--vscode-charts-yellow);
+}
+
+.monaco-workbench.review-sidebar-railed .review-canvas-part > .review-canvas-container {
+  box-sizing: border-box;
+  padding-left: 52px;
+}

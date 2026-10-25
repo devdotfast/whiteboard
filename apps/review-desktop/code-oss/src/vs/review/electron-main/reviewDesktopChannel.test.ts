@@ -20,7 +20,7 @@ function channelWith(workspaces: Record<string, unknown>) {
 		openedWorkspace,
 		close: () => closed.push(name),
 	}));
-	const channel = new ReviewDesktopChannel({} as never, { getWindows: () => windows } as never, () => false);
+	const channel = new ReviewDesktopChannel({} as never, { getWindows: () => windows } as never, () => false, {} as never);
 	return { channel, closed };
 }
 
@@ -48,9 +48,69 @@ test("matches a review by the storage segment the host names its directory with"
 	assert.deepEqual(closed, ["shared"]);
 });
 
+function launchingChannel(picked: string | null = null, commandLine = true) {
+	const launched: unknown[] = [];
+	const launcher = {
+		async openUrl(url: string) { launched.push(url); },
+		async openInApplication(application: string, filePath: string) { launched.push({ application, filePath }); },
+		async openEditorWorkspace(editor: string, folder: string, file: string) {
+			if (commandLine) launched.push({ [editor]: [folder, file] });
+			return commandLine;
+		},
+	};
+	const dialogs = { async showOpenDialog() { return { canceled: picked === null, filePaths: picked ? [picked] : [] }; } };
+	const channel = new ReviewDesktopChannel({} as never, { getWindows: () => [], getFocusedWindow: () => undefined } as never, () => false, dialogs as never, undefined, launcher);
+	return { channel, launched };
+}
+
+test("opens only a known editor's file URL from the main process", async () => {
+	const { channel, launched } = launchingChannel();
+
+	await channel.call("", "openInExternalEditor", { editor: "cursor", filePath: "/repo/a.ts", line: 3, column: 2 });
+	await assert.rejects(channel.call("", "openInExternalEditor", { editor: "whiteboard", filePath: "/repo/a.ts" }));
+	await assert.rejects(channel.call("", "openInExternalEditor", { editor: "vscode", filePath: "../a.ts" }));
+	await assert.rejects(channel.call("", "openInExternalEditor"));
+
+	assert.deepEqual(launched, ["cursor://file/repo/a.ts:3:2"]);
+});
+
+test("an editor's command line gets the checkout and file together", async () => {
+	const { channel, launched } = launchingChannel();
+
+	for (const editor of ["vscode", "cursor", "zed"])
+		await channel.call("", "openInExternalEditor", { editor, filePath: "/repo/src/a.ts", line: 3, folder: "/repo" });
+
+	assert.deepEqual(launched, ["vscode", "cursor", "zed"].map((editor) => ({ [editor]: ["/repo", "/repo/src/a.ts:3:1"] })));
+});
+
+test("without its command line, an editor gets the folder's URL before the file's, and Zed only the file's", async () => {
+	const { channel, launched } = launchingChannel(null, false);
+
+	await channel.call("", "openInExternalEditor", { editor: "vscode", filePath: "/repo/src/a.ts", line: 3, folder: "/repo" });
+	await channel.call("", "openInExternalEditor", { editor: "vscode", filePath: "/repo/src/b.ts", folder: "relative" });
+	await channel.call("", "openInExternalEditor", { editor: "zed", filePath: "/repo/src/a.ts", line: 3, folder: "/repo" });
+
+	assert.deepEqual(launched, ["vscode://file/repo", "vscode://file/repo/src/a.ts:3:1", "vscode://file/repo/src/b.ts", "zed://file/repo/src/a.ts:3:1"]);
+});
+
+test("opens a file in a picked application only by absolute paths", async () => {
+	const { channel, launched } = launchingChannel();
+
+	await channel.call("", "openInApplication", { application: "/Applications/TextEdit.app", filePath: "/repo/a.ts" });
+	await assert.rejects(channel.call("", "openInApplication", { application: "TextEdit", filePath: "/repo/a.ts" }));
+	await assert.rejects(channel.call("", "openInApplication", { application: "/Applications/TextEdit.app", filePath: "a.ts" }));
+
+	assert.deepEqual(launched, [{ application: "/Applications/TextEdit.app", filePath: "/repo/a.ts" }]);
+});
+
+test("the application picker returns the pick, or null when cancelled", async () => {
+	assert.equal(await launchingChannel("/Applications/TextEdit.app").channel.call("", "chooseApplication"), "/Applications/TextEdit.app");
+	assert.equal(await launchingChannel(null).channel.call("", "chooseApplication"), null);
+});
+
 test("relays ssh prompts to the window and takes its answer", async () => {
 	const relay = new ReviewSshPromptRelay();
-	const channel = new ReviewDesktopChannel({} as never, { getWindows: () => [] } as never, () => false, relay);
+	const channel = new ReviewDesktopChannel({} as never, { getWindows: () => [] } as never, () => false, {} as never, relay);
 	const events: ReviewSshPromptEvent[] = [];
 	channel.listen<ReviewSshPromptEvent>("", REVIEW_SSH_PROMPT_EVENT)((event) => events.push(event));
 
@@ -64,27 +124,28 @@ test("relays ssh prompts to the window and takes its answer", async () => {
 test("reads and connects a remote host's agents through the host, refusing malformed calls", async () => {
 	const calls: unknown[] = [];
 	const host = {
-		detectRemoteAgents: async (alias: string) => (calls.push(["detect", alias]), alias === "gpu" ? [{ id: "pi", connected: false }] : undefined),
+		detectRemoteAgents: async (alias: string, refresh: boolean) => (calls.push(["detect", alias, refresh]), alias === "gpu" ? [{ id: "pi", connected: false }] : undefined),
 		connectRemoteAgents: async (alias: string, ids: unknown[]) => (calls.push(["connect", alias, ids]), [{ id: "pi", connected: true, output: "" }]),
 	};
-	const channel = new ReviewDesktopChannel(host as never, { getWindows: () => [] } as never, () => false);
+	const channel = new ReviewDesktopChannel(host as never, { getWindows: () => [] } as never, () => false, {} as never);
 
 	assert.deepEqual(await channel.call("", "detectRemoteAgents", "gpu"), [{ id: "pi", connected: false }]);
 	assert.equal(await channel.call("", "detectRemoteAgents", "devbox"), null);
+	assert.equal(await channel.call("", "detectRemoteAgents", ["devbox", true]), null);
 	assert.deepEqual(await channel.call("", "connectRemoteAgents", { alias: "gpu", agents: ["pi"] }), [{ id: "pi", connected: true, output: "" }]);
 	for (const bad of [undefined, "gpu", { alias: 7, agents: ["pi"] }, { alias: "gpu", agents: "pi" }, { alias: "gpu", agents: Array(17).fill("pi") }]) {
 		await assert.rejects(channel.call("", "connectRemoteAgents", bad), /Unknown agents/);
 	}
 	await assert.rejects(channel.call("", "detectRemoteAgents", 7), /Unknown agents/);
 
-	assert.deepEqual(calls, [["detect", "gpu"], ["detect", "devbox"], ["connect", "gpu", ["pi"]]]);
+	assert.deepEqual(calls, [["detect", "gpu", false], ["detect", "devbox", false], ["detect", "devbox", true], ["connect", "gpu", ["pi"]]]);
 });
 
 test("hands a window a remote machine's VS Code server by its server id, and nothing for anything else", async () => {
 	const asked: string[] = [];
 	const endpoint = { host: "127.0.0.1", port: 50123, connectionToken: "vscode-token" };
 	const host = { getRemoteLanguageEndpoint: async (serverId: string) => (asked.push(serverId), serverId === "s1" ? endpoint : undefined) };
-	const channel = new ReviewDesktopChannel(host as never, { getWindows: () => [] } as never, () => false);
+	const channel = new ReviewDesktopChannel(host as never, { getWindows: () => [] } as never, () => false, {} as never);
 
 	assert.deepEqual(await channel.call("window", "getRemoteLanguageEndpoint", "s1"), endpoint);
 	assert.equal(await channel.call("window", "getRemoteLanguageEndpoint", "s2"), undefined);

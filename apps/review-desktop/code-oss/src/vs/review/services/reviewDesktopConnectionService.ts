@@ -6,16 +6,22 @@
 import { Emitter,Event } from "../../base/common/event.js";
 import { Disposable } from "../../base/common/lifecycle.js";
 import { createDecorator } from "../../platform/instantiation/common/instantiation.js";
+import { IStorageService } from "../../platform/storage/common/storage.js";
+import { markReviewFeedbackSubmitted } from "../common/reviewFeedbackState.js";
 import { IMainProcessService } from "../../platform/ipc/common/mainProcessService.js";
-import { IStorageService,StorageScope,StorageTarget } from "../../platform/storage/common/storage.js";
 import {
 REVIEW_DESKTOP_CHANNEL,
 REVIEW_DESKTOP_CONNECTION_VERSION,
 type ReviewDesktopConnection,
+reviewRendererServerUrl,
 } from "../common/reviewDesktopBootstrap.js";
 import { consumeReviewEventStream } from "../common/reviewEventStream.js";
+import type { ReviewExternalEditorTarget } from "../common/reviewExternalEditor.js";
 import {
 type JsonValue,
+	type ReviewFeedback,
+	type ReviewFeedbackContact,
+	type ReviewFeedbackSubmissionResult,
 	type ReviewDiffrConfig,
 	type ReviewDiffrSummarizerInput,
 	isJsonObject,
@@ -23,22 +29,18 @@ type JsonValue,
 parseReviewCliInstallApplyResponse,
 parseReviewCliInstallStatus,
 parseReviewDesktopVerbFrame,
-parseReviewTutorialOpenResponse,
 type ReviewCliInstallApplyResponse,
 type ReviewCliInstallStatus,
 type ReviewGatewayHostState,
 type ReviewRemoteAgent,
 type ReviewRemoteAgentId,
 type ReviewRemoteAgentResult,
-type ReviewTutorialOpenResponse,
 type ReviewVerbResponse
 } from "../common/reviewProtocol.js";
 import {
 	REVIEW_SERVER_STARTUP_TIMEOUT_MS,
 	reconnectUntilAborted,
 } from "../common/reviewReconnect.js";
-
-const REVIEW_TUTORIAL_AUTOPREPARE_SUPPRESSED_KEY = "review.tutorial.autoPrepareSuppressed.v1";
 
 export interface ReviewServerConnection {
 	readonly serverUrl: string;
@@ -66,17 +68,25 @@ export interface IReviewDesktopConnectionService {
 	readonly onDidChangeConnection: Event<void>;
 	initialize(): Promise<void>;
 	getConnection(): Promise<ReviewServerConnection>;
+	/** Why this connection fell back from https to plain HTTP, if it did. */
+	readonly secureUrlError: string | undefined;
+	submitFeedback(response: Omit<ReviewFeedback, "id">): Promise<ReviewFeedbackSubmissionResult>;
+	submitFeedbackContact(contact: Omit<ReviewFeedbackContact, "id">): Promise<ReviewFeedbackSubmissionResult>;
+	feedbackEligible(): Promise<boolean>;
 	/** Closes the reviews' source windows, whose checkouts dismissal and deletion free. */
 	closeSourceWindows(reviewIds: readonly string[]): Promise<void>;
+	/** Opens a file in the reader's editor, from the main process with a clean environment. */
+	openInExternalEditor(target: ReviewExternalEditorTarget): Promise<void>;
+	/** Opens a file in an application the reader picked, the same way. */
+	openInApplication(application: string, filePath: string): Promise<void>;
+	/** Shows the native application picker; null when the reader cancels. */
+	chooseApplication(): Promise<string | null>;
 	readDiffrConfig(): Promise<ReviewDiffrConfig>;
 	saveDiffrSummarizer(input: ReviewDiffrSummarizerInput): Promise<ReviewDiffrConfig>;
 	testDiffrSummarizer(input: ReviewDiffrSummarizerInput): Promise<string>;
 	setDiffrConfigValue(key: string, value: JsonValue): Promise<ReviewDiffrConfig>;
-	/** The scratchpad preference: a server preference, since the review server reads it. */
-	readScratchpadEnabled(): Promise<boolean>;
 	/** The agents answering in Ask in any review, which quitting would stop. */
 	workingAskAgents(): Promise<string[]>;
-	setScratchpadEnabled(enabled: boolean): Promise<boolean>;
 	readAnimationsEnabled(): Promise<boolean>;
 	setAnimationsEnabled(enabled: boolean): Promise<boolean>;
 	readRemoteHosts(): Promise<ReviewGatewayHostState[]>;
@@ -84,13 +94,9 @@ export interface IReviewDesktopConnectionService {
 	retryRemoteHost(alias: string): Promise<void>;
 	getRemoteLanguageEndpoint(serverId: string): Promise<ReviewRemoteLanguageEndpoint | undefined>;
 	installRemoteHost(alias: string): Promise<void>;
-	detectRemoteAgents(alias: string): Promise<ReviewRemoteAgent[] | null>;
+	detectRemoteAgents(alias: string, refresh?: boolean): Promise<ReviewRemoteAgent[] | null>;
 	connectRemoteAgents(alias: string, agents: ReviewRemoteAgentId[]): Promise<ReviewRemoteAgentResult[]>;
 	uninstallRemoteHost(alias: string): Promise<void>;
-	getTutorialStatus(): Promise<{ version: 1; reviewUuid: string | null }>;
-	prepareTutorial(): Promise<void>;
-	openTutorial(): Promise<ReviewTutorialOpenResponse>;
-	deleteTutorial(): Promise<void>;
 	getCliInstallStatus(): Promise<ReviewCliInstallStatus>;
 	applyCliInstall(request: {
 		autoUpdate?: boolean;
@@ -117,8 +123,6 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 	readonly onDidChangeConnection = this.connectionChanged.event;
 
 	private initializePromise: Promise<void> | null = null;
-	private tutorialPreparePromise: Promise<void> | undefined;
-	private tutorialPrepareAttempted = false;
 	private cliInstallStatusPromise: Promise<ReviewCliInstallStatus> | undefined;
 	private readonly controller = new AbortController();
 	private controlAttached = false;
@@ -128,14 +132,12 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 	 * publishes them only once it has validated the server's ready event.
 	 */
 	private connection: ReviewDesktopConnection | undefined;
+	secureUrlError: string | undefined;
 	private get serverUrl(): string {
-		return this.requireConnection().url;
+		return reviewRendererServerUrl(this.requireConnection());
 	}
 	private get token(): string {
 		return this.requireConnection().token;
-	}
-	private get instanceId(): string {
-		return this.requireConnection().instanceId;
 	}
 
 	constructor(
@@ -161,11 +163,26 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		if (connection?.version !== REVIEW_DESKTOP_CONNECTION_VERSION) {
 			throw new Error(`Unsupported Whiteboard Desktop connection version: ${String(connection?.version)}.`);
 		}
-		this.connection = connection;
+		await this.waitForHealth(connection);
+		this.connection = await this.withWorkingSecureUrl(connection);
+	}
+
+	private async withWorkingSecureUrl(connection: ReviewDesktopConnection): Promise<ReviewDesktopConnection> {
+		if (!connection.secureUrl) return connection;
+		try {
+			await fetch(`${connection.secureUrl}/health`, {
+				headers: { "x-review-token": connection.token },
+				signal: AbortSignal.timeout(5_000),
+			});
+			return connection;
+		} catch (error) {
+			this.secureUrlError = error instanceof Error ? error.name : "unknown";
+			return { ...connection, secureUrl: undefined };
+		}
 	}
 
 	initialize(): Promise<void> {
-		this.initializePromise ??= this.initializeGlobalState().catch((error) => {
+		this.initializePromise ??= this.connect().catch((error) => {
 			this.initializePromise = null;
 			throw error;
 		});
@@ -181,6 +198,63 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 	async closeSourceWindows(reviewIds: readonly string[]): Promise<void> {
 		if (reviewIds.length === 0) return;
 		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("closeSourceWindows", reviewIds);
+	}
+
+	async openInExternalEditor(target: ReviewExternalEditorTarget): Promise<void> {
+		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("openInExternalEditor", target);
+	}
+
+	async openInApplication(application: string, filePath: string): Promise<void> {
+		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("openInApplication", { application, filePath });
+	}
+
+	chooseApplication(): Promise<string | null> {
+		return this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call<string | null>("chooseApplication");
+	}
+
+	async submitFeedback(input: Omit<ReviewFeedback, "id">): Promise<ReviewFeedbackSubmissionResult> {
+		const result = await this.postFeedback("/feedback", input);
+		if (result.ok) markReviewFeedbackSubmitted(this.storageService);
+		return result;
+	}
+
+	async submitFeedbackContact(input: Omit<ReviewFeedbackContact, "id">): Promise<ReviewFeedbackSubmissionResult> {
+		return this.postFeedback("/feedback/contact", input);
+	}
+
+	private async postFeedback(path: string, input: Omit<ReviewFeedback, "id"> | Omit<ReviewFeedbackContact, "id">): Promise<ReviewFeedbackSubmissionResult> {
+		if (!this.connection) return { ok: false, error: "network" };
+		const id = this.connection.installationId;
+		if (!id) return { ok: false, error: "receiver" };
+		const signal = AbortSignal.timeout(5_000);
+		let response: Response;
+		try {
+			response = await fetch(`${this.serverUrl}${path}`, {
+				method: "POST",
+				headers: { ...this.authHeaders(), "content-type": "application/json" },
+				body: JSON.stringify({ ...input, id }),
+				signal,
+			});
+		} catch {
+			return { ok: false, error: "network" };
+		}
+		try {
+			const body = await response.json();
+			if (response.ok && body?.ok === true) return { ok: true };
+			return { ok: false, error: body?.code === "network" ? "network" : "receiver" };
+		} catch {
+			return { ok: false, error: signal.aborted ? "network" : "receiver" };
+		}
+	}
+
+	async feedbackEligible(): Promise<boolean> {
+		await this.initialize();
+		const response = await fetch(`${this.serverUrl}/reviews-api/feedback-eligibility`, {
+			headers: this.authHeaders(),
+			signal: AbortSignal.timeout(5_000),
+		});
+		if (!response.ok) throw new Error("Could not read feedback eligibility.");
+		return (await response.json()).eligible === true;
 	}
 
 	async readDiffrConfig(): Promise<ReviewDiffrConfig> {
@@ -216,28 +290,6 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		});
 		await this.requireOk(response, "working Ask agents");
 		return parseWorkingAskAgents(await response.json());
-	}
-
-	async readScratchpadEnabled(): Promise<boolean> {
-		await this.initialize();
-		const response = await fetch(`${this.serverUrl}/preferences/scratchpad`, {
-			headers: this.authHeaders(),
-			signal: AbortSignal.timeout(30_000),
-		});
-		await this.requireOk(response, "scratchpad preference");
-		return parseExperimentalPreference(await response.json());
-	}
-
-	async setScratchpadEnabled(enabled: boolean): Promise<boolean> {
-		await this.initialize();
-		const response = await fetch(`${this.serverUrl}/preferences/scratchpad`, {
-			method: "PUT",
-			headers: { ...this.authHeaders(), "content-type": "application/json" },
-			body: JSON.stringify({ enabled }),
-			signal: AbortSignal.timeout(120_000),
-		});
-		await this.requireOk(response, "scratchpad preference");
-		return parseExperimentalPreference(await response.json());
 	}
 
 	async readAnimationsEnabled(): Promise<boolean> {
@@ -289,8 +341,8 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		await this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("installRemoteHost", alias);
 	}
 
-	detectRemoteAgents(alias: string): Promise<ReviewRemoteAgent[] | null> {
-		return this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("detectRemoteAgents", alias);
+	detectRemoteAgents(alias: string, refresh?: boolean): Promise<ReviewRemoteAgent[] | null> {
+		return this.mainProcessService.getChannel(REVIEW_DESKTOP_CHANNEL).call("detectRemoteAgents", refresh ? [alias, true] : alias);
 	}
 
 	connectRemoteAgents(alias: string, agents: ReviewRemoteAgentId[]): Promise<ReviewRemoteAgentResult[]> {
@@ -326,84 +378,6 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		const result: unknown = await response.json();
 		if (!isJsonObject(result) || typeof result.summary !== "string") throw new Error("Malformed summary test response.");
 		return result.summary;
-	}
-
-	async getTutorialStatus(): Promise<{ version: 1; reviewUuid: string | null }> {
-		await this.initialize();
-		const response = await fetch(`${this.serverUrl}/tutorial/status`, {
-			headers: this.authHeaders(),
-			signal: AbortSignal.timeout(5_000),
-		});
-		await this.requireOk(response, "Whiteboard tutorial status");
-		const payload = (await response.json()) as {
-			version?: unknown;
-			reviewUuid?: unknown;
-		};
-		if (payload.version !== 1 || (payload.reviewUuid !== null && typeof payload.reviewUuid !== "string")) {
-			throw new Error("Whiteboard tutorial status is invalid.");
-		}
-		return { version: 1, reviewUuid: payload.reviewUuid as string | null };
-	}
-
-	prepareTutorial(): Promise<void> {
-		if (this.storageService.getBoolean(REVIEW_TUTORIAL_AUTOPREPARE_SUPPRESSED_KEY, StorageScope.APPLICATION, false)) {
-			return Promise.resolve();
-		}
-		if (this.tutorialPreparePromise) return this.tutorialPreparePromise;
-		if (this.tutorialPrepareAttempted) return Promise.resolve();
-		this.tutorialPrepareAttempted = true;
-		const operation = this.requestTutorialPreparation();
-		this.tutorialPreparePromise = operation;
-		const clearOperation = () => {
-			if (this.tutorialPreparePromise === operation) {
-				this.tutorialPreparePromise = undefined;
-			}
-		};
-		void operation.then(clearOperation, clearOperation);
-		return operation;
-	}
-
-	private async requestTutorialPreparation(): Promise<void> {
-		await this.initialize();
-		const response = await fetch(`${this.serverUrl}/tutorial/prepare`, {
-			method: "POST",
-			headers: this.authHeaders(),
-			signal: AbortSignal.timeout(120_000),
-		});
-		await this.requireOk(response, "Whiteboard tutorial preparation");
-	}
-
-	async openTutorial(): Promise<ReviewTutorialOpenResponse> {
-		await this.initialize();
-		const response = await fetch(`${this.serverUrl}/tutorial/open`, {
-			method: "POST",
-			headers: this.authHeaders(),
-			signal: AbortSignal.timeout(120_000),
-		});
-		await this.requireOk(response, "Whiteboard tutorial open");
-		const payload = parseReviewTutorialOpenResponse(await response.json());
-		this.tutorialPrepareAttempted = true;
-		this.storageService.remove(REVIEW_TUTORIAL_AUTOPREPARE_SUPPRESSED_KEY, StorageScope.APPLICATION);
-		return payload;
-	}
-
-	async deleteTutorial(): Promise<void> {
-		await this.initialize();
-		const response = await fetch(`${this.serverUrl}/tutorial`, {
-			method: "DELETE",
-			headers: this.authHeaders(),
-			signal: AbortSignal.timeout(30_000),
-		});
-		await this.requireOk(response, "Whiteboard tutorial delete");
-		this.tutorialPreparePromise = undefined;
-		this.tutorialPrepareAttempted = true;
-		this.storageService.store(
-			REVIEW_TUTORIAL_AUTOPREPARE_SUPPRESSED_KEY,
-			true,
-			StorageScope.APPLICATION,
-			StorageTarget.MACHINE,
-		);
-		this._onDidChangeLists.fire();
 	}
 
 	/** Raises the server's own error message when it sends one. */
@@ -536,11 +510,6 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		super.dispose();
 	}
 
-	private async initializeGlobalState(): Promise<void> {
-    await this.connect();
-    await this.waitForHealth();
-  }
-
 	private async initializeAndMaintainControl(
 		dispatch: (value: JsonValue) => Promise<ReviewVerbResponse>,
 	): Promise<void> {
@@ -556,15 +525,15 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		);
 	}
 
-	private async waitForHealth(): Promise<void> {
+	private async waitForHealth(connection: ReviewDesktopConnection): Promise<void> {
 		const deadline = Date.now() + REVIEW_SERVER_STARTUP_TIMEOUT_MS;
 		while (Date.now() < deadline) {
 			try {
-				const response = await fetch(`${this.serverUrl}/health`, {
+				const response = await fetch(`${connection.url}/health`, {
 					signal: AbortSignal.timeout(1_000),
 				});
 				const value = (await response.json()) as { instanceId?: unknown };
-				if (response.ok && value.instanceId === this.instanceId) return;
+				if (response.ok && value.instanceId === connection.instanceId) return;
 			} catch {
 				// The utility host may still be starting.
 			}
