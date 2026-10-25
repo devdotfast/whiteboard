@@ -344,7 +344,7 @@ body {
   overflow: hidden;
   background: transparent;
   color: var(--wb-ink);
-  font: 13px/1.5 var(--wb-font-sans, system-ui, sans-serif);
+  font: 13px/1.5 var(--wb-font-sans);
 }
 [data-enter], [data-exit], [data-only] {
   transition: opacity var(--wb-duration) ease, visibility 0s linear 0s;
