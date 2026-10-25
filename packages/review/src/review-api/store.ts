@@ -1606,17 +1606,49 @@ export class ReviewStore {
     const requestedTarget =
       op.type === "create" || op.type === "set_target" ? op.target : undefined;
 
-    const fromPullRequest = await pullRequest;
+    // A PR review's branch names are not its diff pins: the base must be the
+    // PR's merge-base, not the latest tip of the target branch. Re-fetch the
+    // PR when an agent repins its existing review with two branch names.
+    // Explicit SHA pairs and reviews without a retained PR are unaffected.
+    const branchPair =
+      requestedTarget?.kind === "commits" &&
+      requestedTarget.base !== undefined &&
+      !/^[a-f0-9]{7,40}$/i.test(requestedTarget.base) &&
+      !/^[a-f0-9]{7,40}$/i.test(requestedTarget.head);
 
-    // No commits to resolve; repositoryPath throws if it is unregistered.
+    const retainedReview =
+      op.type === "set_target" && op.pullRequestUrl === undefined && branchPair
+        ? this.read(op.reviewId)
+        : undefined;
+
+    // When PR fetching is unavailable, retain ordinary commit retargeting
+    // rather than blocking older review-store configurations.
+    const retainedPrUrl =
+      retainedReview?.pins?.repositoryId === requestedTarget?.repositoryId &&
+      this.providers.resolvePullRequest
+        ? retainedReview?.origin?.pullRequestUrl
+        : undefined;
+
+    const fromPullRequest =
+      (await pullRequest) ??
+      (retainedPrUrl
+        ? await this.providers.resolvePullRequest!(retainedPrUrl, {
+            id: requestedTarget!.repositoryId,
+          })
+        : undefined);
+
+    // PR resolution pins the merge base and head; resolving the named
+    // branches as ordinary commits here would lose the PR comparison.
     const resolvedTarget: { target: ReviewTarget; pins?: Pins } | undefined =
       requestedTarget?.kind === "project"
         ? (this.repositoryPath(requestedTarget.repositoryId),
           { target: requestedTarget })
-        : requestedTarget
-          ? await (this.providers.resolveTarget?.(requestedTarget) ??
-              namedCommits(requestedTarget))
-          : fromPullRequest;
+        : fromPullRequest
+          ? fromPullRequest
+          : requestedTarget
+            ? await (this.providers.resolveTarget?.(requestedTarget) ??
+                namedCommits(requestedTarget))
+            : undefined;
 
     if (requestedTarget && !resolvedTarget)
       throw new ReviewInputError("Review targets are unavailable.");
@@ -1636,7 +1668,8 @@ export class ReviewStore {
       resolvedTarget?.pins &&
       resolvedBranch &&
       (op.type === "create" || op.type === "set_target") &&
-      op.pullRequestUrl === undefined
+      op.pullRequestUrl === undefined &&
+      !fromPullRequest
         ? await this.providers
             .findPullRequest?.(resolvedTarget.pins, resolvedBranch)
             .catch(() => undefined)
@@ -1923,6 +1956,13 @@ export class ReviewStore {
             op.pullRequestUrl,
             fromPullRequest?.title,
             fromPullRequest?.baseBranch,
+          );
+        else if (fromPullRequest && previous?.origin?.pullRequestUrl)
+          setPullRequest(
+            snapshot,
+            previous.origin.pullRequestUrl,
+            fromPullRequest.title,
+            fromPullRequest.baseBranch,
           );
         else if (branch && discoveredPullRequest)
           setPullRequest(

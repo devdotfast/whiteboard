@@ -2947,6 +2947,144 @@ describe("create for a pull request", () => {
     ).rejects.toBeInstanceOf(ReviewInputError);
   });
 
+  it("preserves a PR merge-base comparison when retargeted with branch names", async () => {
+    const pullRequestUrl = "https://github.com/example/workspace/pull/42";
+
+    const prPins = {
+      repositoryId: "repo",
+      base: "a".repeat(40),
+      head: "b".repeat(40),
+    };
+
+    const resolvePullRequest = vi.fn<
+      NonNullable<ReviewProviders["resolvePullRequest"]>
+    >(async () => ({
+      target: { kind: "commits", ...prPins },
+      pins: prPins,
+      title: "Feature review",
+      branch: "feature",
+      baseBranch: "main",
+    }));
+
+    const resolveTarget = vi.fn<NonNullable<ReviewProviders["resolveTarget"]>>(
+      async (target) => ({
+        target,
+        pins: { ...prPins, base: "c".repeat(40) },
+      }),
+    );
+
+    providers.resolvePullRequest = resolvePullRequest;
+    providers.resolveTarget = resolveTarget;
+
+    const { reviewId } = await store.execute(
+      request({ type: "create", repositoryId: "repo", pullRequestUrl }),
+    );
+
+    expect(store.read(reviewId).pins).toEqual(prPins);
+
+    await store.execute(
+      request({
+        type: "set_target",
+        reviewId,
+        target: {
+          kind: "commits",
+          repositoryId: "repo",
+          base: "main",
+          head: "feature",
+        },
+      }),
+    );
+
+    expect(resolvePullRequest).toHaveBeenCalledTimes(2);
+    expect(resolvePullRequest).toHaveBeenLastCalledWith(pullRequestUrl, {
+      id: "repo",
+    });
+    expect(resolveTarget).not.toHaveBeenCalled();
+    expect(store.read(reviewId)).toMatchObject({
+      pins: prPins,
+      origin: {
+        pullRequestUrl,
+        pullRequestBaseBranch: "main",
+        branch: "feature",
+      },
+    });
+  });
+
+  it("honours explicit SHA retargets and non-PR branch comparisons", async () => {
+    const pullRequestUrl = "https://github.com/example/workspace/pull/43";
+
+    const prPins = {
+      repositoryId: "repo",
+      base: "a".repeat(40),
+      head: "b".repeat(40),
+    };
+
+    const resolvePullRequest = vi.fn<
+      NonNullable<ReviewProviders["resolvePullRequest"]>
+    >(async () => ({
+      target: { kind: "commits", ...prPins },
+      pins: prPins,
+      title: "PR review",
+      baseBranch: "main",
+    }));
+
+    const resolveTarget = vi.fn<NonNullable<ReviewProviders["resolveTarget"]>>(
+      async (target) => ({
+        target,
+        pins: { ...prPins, base: "c".repeat(40) },
+      }),
+    );
+
+    providers.resolvePullRequest = resolvePullRequest;
+    providers.resolveTarget = resolveTarget;
+
+    const { reviewId } = await store.execute(
+      request({ type: "create", repositoryId: "repo", pullRequestUrl }),
+    );
+
+    await store.execute(
+      request({
+        type: "set_target",
+        reviewId,
+        target: { kind: "commits", ...prPins },
+      }),
+    );
+    expect(store.read(reviewId).pins?.base).toBe("c".repeat(40));
+    expect(resolvePullRequest).toHaveBeenCalledTimes(1);
+    expect(resolveTarget).toHaveBeenCalledTimes(1);
+
+    const unrelated = await store.execute(
+      request({
+        type: "create",
+        title: "Unrelated commit review",
+        target: {
+          kind: "commits",
+          repositoryId: "repo",
+          base: "main",
+          head: "feature",
+        },
+      }),
+    );
+
+    await store.execute(
+      request({
+        type: "set_target",
+        reviewId: unrelated.reviewId,
+        target: {
+          kind: "commits",
+          repositoryId: "repo",
+          base: "main",
+          head: "feature",
+        },
+      }),
+    );
+    expect(resolveTarget).toHaveBeenCalledTimes(3);
+    expect(resolvePullRequest).toHaveBeenCalledTimes(1);
+    expect(
+      store.read(unrelated.reviewId).origin?.pullRequestUrl,
+    ).toBeUndefined();
+  });
+
   it("needs a source, and a title unless a PR supplies it", async () => {
     await expect(
       store.execute(request({ type: "create", title: "Nothing" })),
