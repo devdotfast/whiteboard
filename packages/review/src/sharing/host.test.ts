@@ -88,7 +88,10 @@ it("reports download and checkout preparation without starting duplicate imports
   vi.stubEnv("DEV_REVIEW_HOME", root);
   const fixture = await createShareFixture(root);
   const bundle = await exportShare(fixture);
-  let download!: (bundle: Awaited<ReturnType<typeof exportShare>>) => void;
+
+  let download!: (
+    received: Awaited<ReturnType<ShareClient["download"]>>,
+  ) => void;
 
   const downloadSpy = vi
     .spyOn(ShareClient.prototype, "download")
@@ -117,7 +120,7 @@ it("reports download and checkout preparation without starting duplicate imports
   await shared.load();
   const api = new Hono();
   mountSharingHost(api, fixture.store, fixture.data, shared);
-  const url = `https://app.dev.fast/s/${randomUUID()}#${"a".repeat(43)}`;
+  const url = `https://app.dev.fast/s/${"a".repeat(43)}`;
 
   const start = () =>
     api.request("/sharing/import", {
@@ -137,7 +140,7 @@ it("reports download and checkout preparation without starting duplicate imports
     expect(await status()).toMatchObject({ stage: "downloading" });
     await start();
     expect(downloadSpy).toHaveBeenCalledTimes(1);
-    download(bundle);
+    download({ bundle, attribution: { login: "sender", sharedAt: 1 } });
     await vi.waitFor(async () =>
       expect(await status()).toMatchObject({ stage: "fetching" }),
     );

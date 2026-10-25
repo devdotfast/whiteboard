@@ -69,9 +69,7 @@ class SharedReviewUrlHandler extends Disposable implements IURLHandler {
 		if (uri.authority !== "share") return false;
 		try {
 			const origin = new URLSearchParams(uri.query).get("origin") ?? "https://app.dev.fast";
-			const url = new URL(`/s${uri.path}`, origin);
-			url.hash = uri.fragment;
-			await openShare(url.href, this.session, this.tabs, this.notifications, this.progress);
+			await openShare(new URL(`/s${uri.path}`, origin).href, this.session, this.tabs, this.notifications, this.progress);
 		} catch {
 			this.notifications.error("Invalid Whiteboard share link.");
 		}

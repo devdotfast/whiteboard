@@ -25,7 +25,6 @@ function mount(options: {
   signedIn: boolean;
   publishFails?: boolean;
   publishExpired?: boolean;
-  preflightFails?: boolean;
   holdPublish?: Promise<void>;
 }) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -86,12 +85,6 @@ function mount(options: {
         );
       }
 
-      if (path.endsWith("/publish") && state.preflightFails)
-        return Response.json(
-          { error: "Push the reviewed commits to GitHub before sharing." },
-          { status: 422 },
-        );
-
       if (path.endsWith("/publish") && state.publishFails)
         return Response.json(
           { error: "Review exceeds the sharing limit." },
@@ -99,7 +92,7 @@ function mount(options: {
         );
 
       return Response.json({
-        url: "https://app.dev.fast/s/snapshot#capability",
+        url: "https://app.dev.fast/s/capability",
       });
     },
   );
@@ -181,7 +174,9 @@ it("asks a signed-out user to sign in, then uploads the version chosen before lo
   await vi.waitFor(
     async () => {
       await harness.settle();
-      expect(container.querySelector("input")?.value).toContain("#capability");
+      expect(container.querySelector("input")?.value).toContain(
+        "/s/capability",
+      );
     },
     { timeout: 4000 },
   );
@@ -205,7 +200,7 @@ it("uploads on open for a signed-in user, retries after a failure, and copies th
   await harness.click("Retry");
   await harness.settle();
   expect(publishes(harness)).toHaveLength(2);
-  expect(container.querySelector("input")?.value).toContain("#capability");
+  expect(container.querySelector("input")?.value).toContain("/s/capability");
   expect(container.textContent).not.toContain("Uploading");
   let copied = "";
   Object.defineProperty(document, "execCommand", {
@@ -237,7 +232,7 @@ it("knows the sign-in state before the popover opens and refreshes it on focus",
   await harness.click("Share review");
   await harness.click("Share review");
   expect(harness.accountReads()).toBe(1);
-  expect(container.querySelector("input")?.value).toContain("#capability");
+  expect(container.querySelector("input")?.value).toContain("/s/capability");
   await act(async () => window.dispatchEvent(new Event("focus")));
   await harness.settle();
   expect(harness.accountReads()).toBe(2);
@@ -262,7 +257,9 @@ it("falls back to sign-in when the stored login has expired, then uploads after 
   await vi.waitFor(
     async () => {
       await harness.settle();
-      expect(container.querySelector("input")?.value).toContain("#capability");
+      expect(container.querySelector("input")?.value).toContain(
+        "/s/capability",
+      );
     },
     { timeout: 4000 },
   );
@@ -279,11 +276,11 @@ it("reuses the link for a version that was already shared and uploads again for 
   await harness.click("Share review");
   await harness.settle();
   expect(publishes(harness)).toHaveLength(1);
-  expect(container.querySelector("input")?.value).toContain("#capability");
+  expect(container.querySelector("input")?.value).toContain("/s/capability");
   await harness.click("Share review");
   await harness.click("Share review");
   expect(container.textContent).not.toContain("Uploading");
-  expect(container.querySelector("input")?.value).toContain("#capability");
+  expect(container.querySelector("input")?.value).toContain("/s/capability");
   await harness.settle();
   expect(publishes(harness)).toHaveLength(1);
   await harness.click("Share review");
@@ -294,25 +291,6 @@ it("reuses the link for a version that was already shared and uploads again for 
     expect.objectContaining({ version: 4 }),
     expect.objectContaining({ version: 5 }),
   ]);
-});
-
-it("uses a fresh request after failed verification revokes the staged share", async () => {
-  const harness = mount({ signedIn: true, preflightFails: true });
-  await harness.render(1);
-  await harness.click("Share review");
-  await harness.settle();
-  harness.state.preflightFails = false;
-  await harness.click("Retry");
-  await harness.settle();
-
-  const requests = harness.posts.filter(({ path }) =>
-    path.endsWith("/publish"),
-  );
-
-  expect(requests).toHaveLength(2);
-  expect((requests[0]!.body as { requestId: string }).requestId).not.toBe(
-    (requests[1]!.body as { requestId: string }).requestId,
-  );
 });
 
 it("keeps one upload when the popover is reopened while it is in flight", async () => {
@@ -336,7 +314,7 @@ it("keeps one upload when the popover is reopened while it is in flight", async 
   release?.();
   await harness.settle();
   expect(harness.container.querySelector("input")?.value).toContain(
-    "#capability",
+    "/s/capability",
   );
   expect(publishes(harness)).toHaveLength(1);
 });

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 
-import { shareManifestSchema } from "@dev.fast/review-share-protocol";
+import { createShareSchema } from "@dev.fast/review-share-protocol";
 import { runReviewCli } from "@review/cli-runner.js";
 import { ReviewApiClient } from "@review/review-api/client.js";
 import type { ReviewServerDiscovery } from "@review/server-discovery.js";
@@ -38,53 +38,19 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
   vi.stubEnv("SHELL", "");
   const realFetch = globalThis.fetch;
   const requests: { url: string; headers: Headers; body?: string }[] = [];
-  const blobs = new Map<string, Buffer>();
   const shareId = randomUUID();
-  const link = `https://sharing.test/s/${shareId}#${"x".repeat(43)}`;
+  const link = `https://sharing.test/s/${"x".repeat(43)}`;
   vi.stubGlobal(
     "fetch",
     async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
       const url = new URL(String(input));
 
-      if (url.hostname !== "sharing.test" && url.hostname !== "objects.test")
-        return realFetch(input, init);
+      if (url.hostname !== "sharing.test") return realFetch(input, init);
       requests.push({
         url: url.href,
         headers: new Headers(init?.headers),
-        body:
-          init?.body && url.hostname === "sharing.test"
-            ? String(init.body)
-            : undefined,
+        body: init?.body ? String(init.body) : undefined,
       });
-
-      if (url.hostname === "objects.test") {
-        // SAFETY: ShareClient's object upload request body is a Buffer.
-        blobs.set(url.pathname, Buffer.from(init!.body as Uint8Array));
-
-        return new Response(null, { status: 200 });
-      }
-
-      const signed = (name: string) => ({
-        url: `https://objects.test/${name}`,
-        headers: {},
-        expiresAt: "2099",
-      });
-
-      if (url.pathname === "/api/shares")
-        return Response.json({ shareId, upload: signed("manifest") });
-
-      if (url.pathname.endsWith("/manifest")) {
-        const manifest = shareManifestSchema.parse(
-          JSON.parse(blobs.get("/manifest")!.toString()),
-        );
-
-        return Response.json({
-          registered: true,
-          uploads: Object.fromEntries(
-            manifest.objects.map(({ id }) => [id, signed(id)]),
-          ),
-        });
-      }
 
       return Response.json({ shareId, url: link });
     },
@@ -200,22 +166,23 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
       expect(output).not.toContain("ci-publish-token");
     }
 
-    expect(
-      requests
-        .values()
-        .filter((r) => r.url.endsWith("/api/shares"))
-        .map((r) => JSON.parse(r.body!).requestId)
-        .toArray(),
-    ).toEqual([requestId, requestId]);
-    expect(blobs.size).toBeGreaterThan(1);
-    expect(blobs.get("/manifest")!.toString()).toContain("CI review");
+    const posted = requests.map((r) =>
+      createShareSchema.parse(JSON.parse(r.body!)),
+    );
 
-    for (const request of requests)
+    expect(posted.map((r) => r.requestId)).toEqual([requestId, requestId]);
+    expect(posted[0]!.bundle).toMatchObject({
+      title: "CI review",
+      repository: fixture.repository,
+    });
+
+    for (const request of requests) {
+      expect(request.url).toBe("https://sharing.test/api/v2/shares");
       expect(request.headers.get("authorization")).toBe(
-        request.url.startsWith("https://sharing.test")
-          ? "Bearer ci-publish-token"
-          : null,
+        "Bearer ci-publish-token",
       );
+    }
+
     await expect(
       readFile(path.join(stateDir, "auth.json")),
     ).rejects.toMatchObject({ code: "ENOENT" });

@@ -173,19 +173,7 @@ export function ShareControl({
 
   const upload = (next: ShareTarget) => {
     login.reset();
-    publish.mutate(next, {
-      onError: (error) => {
-        if (!(error instanceof ReviewApiError)) return;
-
-        // Failed verification revokes the staged share; retry as a new one.
-        if (error.status === 422)
-          setTarget((current) =>
-            current?.requestId === next.requestId
-              ? { ...current, requestId: crypto.randomUUID() }
-              : current,
-          );
-      },
-    });
+    publish.mutate(next);
   };
 
   const toggle = () => {

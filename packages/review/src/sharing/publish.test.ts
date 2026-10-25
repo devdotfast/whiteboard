@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { createShareSchema } from "@dev.fast/review-share-protocol";
 import { readStoreAuth, writeStoreAuth } from "@dev.fast/trace-core";
 import { ReviewInputError } from "@review/review-api/document.js";
 import { Hono } from "hono";
@@ -17,24 +18,16 @@ it.each([
   { verified: true, protocol: "dev-fast-review-preview" },
   { verified: false, protocol: "dev-fast-review" },
 ])(
-  "overlaps share setup with verification and gates objects ($verified, $protocol)",
+  "posts one bundle, naming the repository only when GitHub has its commits ($verified, $protocol)",
   async ({ verified, protocol }) => {
     const root = await mkdtemp(path.join(tmpdir(), "sharing-publish-"));
     const fixture = await createShareFixture(root);
     vi.stubEnv("DEV_REVIEW_HOME", root);
     vi.stubEnv("DEV_FAST_REVIEW_APP_URL_PROTOCOL", protocol);
-    const check = Promise.withResolvers<void>();
-    const registered = Promise.withResolvers<void>();
     const shareId = randomUUID();
     const requests: string[] = [];
     const published: unknown[] = [];
-    let manifest: { objects: { id: string }[] };
-
-    const signed = (id: string) => ({
-      url: `https://objects.test/${id}`,
-      headers: {},
-      expiresAt: "2099",
-    });
+    let uploaded: unknown;
 
     try {
       await writeStoreAuth({
@@ -57,91 +50,44 @@ it.each([
         new SharedReviewStore(path.join(root, "shared")),
         {
           readRepository: async () => fixture.repository,
-          verifyRepository: () => check.promise,
+          verifyRepository: async () => {
+            if (!verified)
+              throw new ReviewInputError(
+                "Push the reviewed commits to GitHub before sharing.",
+                409,
+              );
+          },
           onPublished: (event) => published.push(event),
           fetch: async (input, init) => {
             const url = new URL(String(input));
             requests.push(`${init?.method} ${url.pathname}`);
 
-            if (url.hostname === "objects.test") {
-              if (url.pathname === "/manifest")
-                manifest = JSON.parse(
-                  Buffer.from(init?.body as Uint8Array).toString(),
-                );
-
-              return new Response(null);
-            }
-
-            if (url.pathname === "/api/shares")
-              return Response.json({ shareId, upload: signed("manifest") });
-
-            if (url.pathname.endsWith("/manifest")) {
-              registered.resolve();
-
-              return Response.json({
-                registered: true,
-                uploads: Object.fromEntries(
-                  manifest.objects.map(({ id }) => [id, signed(id)]),
-                ),
-              });
-            }
-
-            if (url.pathname.endsWith("/link"))
-              return new Response(null, { status: 409 });
-
-            if (init?.method === "DELETE")
-              return Response.json({ revoked: true });
+            uploaded = JSON.parse(String(init?.body));
 
             return Response.json({
               shareId,
-              url: `https://app.dev.fast/s/${shareId}#${"x".repeat(43)}`,
+              url: `https://app.dev.fast/s/${"x".repeat(43)}`,
             });
           },
         },
       );
 
-      const response = api.request("/sharing/publish", {
+      const response = await api.request("/sharing/publish", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ reviewId: fixture.reviewId }),
       });
 
-      await registered.promise;
-      expect(requests.filter((r) => r.startsWith("PUT"))).toEqual([
-        "PUT /manifest",
-      ]);
-
-      if (verified) check.resolve();
-      else
-        check.reject(
-          new ReviewInputError(
-            "Push the reviewed commits to GitHub before sharing.",
-            409,
-          ),
-        );
-      const result = await response;
-      expect(result.status).toBe(verified ? 200 : 422);
       const version = fixture.store.read(fixture.reviewId).version;
-      expect(published).toEqual(
-        verified ? [{ reviewId: fixture.reviewId, version }] : [],
-      );
-
-      expect(requests.filter((r) => r.startsWith("PUT")).length).toBe(
-        verified ? manifest!.objects.length + 1 : 1,
-      );
-      expect(requests.includes(`POST /api/shares/${shareId}/complete`)).toBe(
-        verified,
-      );
-      expect(requests.includes(`DELETE /api/shares/${shareId}`)).toBe(
-        !verified,
-      );
-      expect(await result.json()).toMatchObject(
-        verified
-          ? {
-              shareId,
-              url: `https://app.dev.fast/s/${shareId}${protocol === "dev-fast-review-preview" ? "?app=preview" : ""}#${"x".repeat(43)}`,
-            }
-          : { error: "Push the reviewed commits to GitHub before sharing." },
+      expect(await response.json()).toEqual({
+        shareId,
+        url: `https://app.dev.fast/s/${"x".repeat(43)}${protocol === "dev-fast-review-preview" ? "?app=preview" : ""}`,
+        version,
+      });
+      expect(published).toEqual([{ reviewId: fixture.reviewId, version }]);
+      expect(requests).toEqual(["POST /api/v2/shares"]);
+      expect(createShareSchema.parse(uploaded).bundle.repository).toEqual(
+        verified ? fixture.repository : undefined,
       );
     } finally {
       vi.unstubAllEnvs();

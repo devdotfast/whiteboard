@@ -7,28 +7,29 @@ export class SharedReviewData {
   constructor(private readonly store: SharedReviewStore) {}
 
   map(id: string, resourceId: string) {
-    const map = this.store.get(id).presentation.maps[resourceId];
+    const { maps } = this.store.get(id);
 
-    if (!map)
+    if (!Object.hasOwn(maps, resourceId))
       throw new ReviewInputError("Map is not included in this share.", 404);
 
-    return map;
+    return maps[resourceId]!;
   }
 
   async resource(id: string, resourceId: string) {
-    const resource = this.store
-      .get(id)
-      .manifest.resources.find((item) => item.id === resourceId);
+    const { bundle } = this.store.get(id);
 
-    if (!resource)
-      throw new ReviewInputError(
-        "Resource is not included in this share.",
-        404,
-      );
+    if (Object.hasOwn(bundle.images, resourceId))
+      return {
+        data: Buffer.from(bundle.images[resourceId]!.png, "base64"),
+        mimeType: "image/png",
+      };
 
-    return {
-      data: await this.store.readObject(id, resource.object),
-      mimeType: resource.mimeType,
-    };
+    if (Object.hasOwn(bundle.traces, resourceId))
+      return {
+        data: Buffer.from(JSON.stringify(bundle.traces[resourceId])),
+        mimeType: "application/json",
+      };
+
+    throw new ReviewInputError("Resource is not included in this share.", 404);
   }
 }

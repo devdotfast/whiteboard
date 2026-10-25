@@ -17,7 +17,7 @@ import type { Hono } from "hono";
 import { z } from "zod";
 
 import { readSharingAuth } from "./auth.js";
-import { ShareAuthError, ShareClient, SharePreflightError } from "./client.js";
+import { ShareAuthError, ShareClient } from "./client.js";
 import {
   exportShare,
   referenceCommits,
@@ -147,7 +147,7 @@ export function mountSharingHost(
         "This share uses an untrusted service. Sign in to that service before opening its links.",
         400,
       );
-    const id = sharedReviewId(parsed.origin, parsed.shareId);
+    const id = sharedReviewId(parsed.origin, parsed.capability);
 
     if (!imports.has(id)) {
       shared.setStatus(id, "downloading");
@@ -160,12 +160,16 @@ export function mountSharingHost(
           return;
         }
 
-        const bundle = await new ShareClient(parsed.origin).download(
-          parsed.shareId,
-          parsed.capability,
-        );
+        const { bundle, attribution } = await new ShareClient(
+          parsed.origin,
+        ).download(parsed.capability);
 
-        await shared.import(parsed.origin, parsed.shareId, bundle);
+        await shared.import(
+          parsed.origin,
+          parsed.capability,
+          bundle,
+          attribution,
+        );
       })()
         .catch((error) => {
           shared.setStatus(
@@ -234,49 +238,42 @@ export function mountSharingPublisher(
 
     const readRepository = options.readRepository ?? readShareRepository;
 
-    // Unpinned boards name their repository when they can, so receivers can
-    // group them.
-    const repository = !root
-      ? undefined
-      : snapshot.pins
-        ? await readRepository(root)
-        : await (async () => {
-            try {
-              return await readRepository(root);
-            } catch {
-              return undefined;
-            }
-          })();
+    const commits = referenceCommits(snapshot);
+
+    // Desktop imports need the commits on GitHub; without them the share is
+    // for the browser only.
+    const repository = (async () => {
+      if (!root) return undefined;
+
+      try {
+        const repository = await readRepository(root);
+
+        if (snapshot.pins || commits.length)
+          await verifyRepository(root, snapshot.pins, commits);
+
+        return repository;
+      } catch {
+        return undefined;
+      }
+    })();
 
     const bundle = await exportShare({
       store,
       data,
       reviewId: input.reviewId,
       version: snapshot.version,
-      repository,
     });
 
-    const commits = referenceCommits(snapshot);
+    const verified = await repository;
 
-    // The commits must be on GitHub for a recipient to fetch them.
-    const verification =
-      root && (snapshot.pins || commits.length) && repository
-        ? verifyRepository(root, snapshot.pins, commits).then(
-            () => ({ ok: true as const }),
-            (error: Error) => ({ ok: false as const, error }),
-          )
-        : Promise.resolve({ ok: true as const });
+    if (verified) bundle.repository = verified;
 
     try {
       const result = await new ShareClient(
         account.origin,
         account.token,
         options.fetch,
-      ).create(bundle, input.requestId ?? randomUUID(), async () => {
-        const result = await verification;
-
-        if (!result.ok) throw result.error;
-      });
+      ).create(bundle, input.requestId ?? randomUUID());
 
       const url = new URL(result.url);
 
@@ -297,8 +294,7 @@ export function mountSharingPublisher(
         version: snapshot.version,
       });
     } catch (error) {
-      if (error instanceof SharePreflightError)
-        return context.json({ error: error.message }, 422);
+      if (error instanceof ReviewInputError) throw error;
 
       if (error instanceof ShareAuthError) {
         // A CI token lives in the environment; only the saved login can go stale.
