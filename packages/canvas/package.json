@@ -1,8 +1,12 @@
 {
   "name": "@dev.fast/canvas",
-  "version": "0.0.1",
-  "private": true,
+  "version": "0.2.0",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devdotfast/review.git",
+    "directory": "packages/canvas"
+  },
   "files": [
     "dist"
   ],
@@ -17,18 +21,25 @@
     },
     "./canvas.css": "./dist/assets/canvas.css"
   },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
   "scripts": {
     "build": "vite build --config ../review/app/package.vite.config.ts && tsdown",
-    "test": "pnpm run build && node scripts/check-pack.mjs",
+    "test": "pnpm run build && node scripts/check-pack.mjs && vitest run",
     "typecheck": "pnpm -w exec tsc --noEmit -p packages/canvas"
   },
   "devDependencies": {
     "@dev.fast/review-canvas": "workspace:*",
     "@types/node": "24.12.2",
     "@types/react": "19.2.14",
+    "react": "19.2.5",
+    "react-dom": "19.2.5",
     "tsdown": "0.22.14",
     "typescript": "6.0.3",
-    "vite": "8.1.6"
+    "vite": "8.1.6",
+    "vitest": "4.1.11"
   },
   "peerDependencies": {
     "react": "^19.2.0",

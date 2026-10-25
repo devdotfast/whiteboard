@@ -81,8 +81,8 @@ export function canvasPlugins(): PluginOption[] {
   ];
 }
 
-export const canvasAliases: AliasOptions = {
+export const canvasAliases = {
   ...sourceAliases,
   "decode-named-character-reference": decodeNamedCharacterReferenceIndex,
   "@animejs-bundles": animeBundles,
-};
+} satisfies AliasOptions;

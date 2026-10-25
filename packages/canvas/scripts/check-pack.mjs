@@ -23,15 +23,15 @@ try {
   ])
     if (!files.includes(file)) throw new Error(`${tarball} lacks ${file}`);
 
+  if (files.filter((file) => file.endsWith(".css")).length !== 1)
+    throw new Error(`${tarball} splits its stylesheet`);
+
   if (!files.some((file) => file.endsWith(".wasm")))
     throw new Error(`${tarball} lacks the routing wasm`);
 
   execFileSync("tar", ["-xzf", path.join(out, tarball), "-C", out]);
 
-  const types = readFileSync(
-    path.join(out, "package/dist/index.d.ts"),
-    "utf8",
-  );
+  const types = readFileSync(path.join(out, "package/dist/index.d.ts"), "utf8");
 
   const imports = [...types.matchAll(/from\s+"([^"]+)"/g)].map(
     ([, source]) => source,
@@ -40,9 +40,34 @@ try {
   if (imports.some((source) => source !== "react"))
     throw new Error(`index.d.ts imports ${imports.join(", ")}`);
 
-  for (const name of ["WhiteboardProvider", "Whiteboard", "ReviewTopBar"])
+  for (const name of [
+    "WhiteboardProvider",
+    "Whiteboard",
+    "ReviewTopBar",
+    "openShare",
+  ])
     if (!types.includes(`function ${name}`))
       throw new Error(`index.d.ts lacks ${name}`);
+
+  // A read-only share never edits or typesets; both load on demand.
+  const entry = readFileSync(path.join(out, "package/dist/index.js"), "utf8");
+
+  for (const marker of ["ProseMirror-", "KaTeX parse error"])
+    if (entry.includes(marker))
+      throw new Error(`index.js bundles ${marker.replace(/-$/, "")}`);
+
+  for (const file of files.filter((name) => name.endsWith(".js"))) {
+    const code = readFileSync(path.join(out, file), "utf8");
+
+    // React is external: a CommonJS require of it throws in a browser.
+    if (/[\w$]\(\s*[`"']react(?:-dom)?(?:\/[^`"']*)?[`"']\s*\)/.test(code))
+      throw new Error(`${file} requires React`);
+
+    // TanStack Start babel-parses modules with `.handler(`, and Emscripten's
+    // glue does not parse there.
+    if (code.includes(".handler(") && code.includes("emscripten"))
+      throw new Error(`${file} mixes .handler( with Emscripten glue`);
+  }
 
   console.log(`${tarball}: ${files.length} files, opaque types`);
 } finally {

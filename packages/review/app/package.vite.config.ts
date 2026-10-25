@@ -28,7 +28,17 @@ export default defineConfig({
   ],
   resolve: {
     dedupe: ["react", "react-dom"],
-    alias: canvasAliases,
+    alias: [
+      ...Object.entries(canvasAliases).map(([find, replacement]) => ({
+        find,
+        replacement,
+      })),
+      // Its CommonJS shims require("react"), which an external React breaks.
+      {
+        find: /^use-sync-external-store\/shim(?:\/with-selector)?(?:\.js)?$/,
+        replacement: path.resolve(__dirname, "use-sync-external-store.ts"),
+      },
+    ],
   },
   base: "./",
   build: {
@@ -36,6 +46,8 @@ export default defineConfig({
     modulePreload: false,
     assetsInlineLimit: 0,
     copyPublicDir: false,
+    // light-dark(); lowering it would resolve the palette on the root.
+    cssTarget: ["chrome123", "firefox120", "safari17.5"],
     emptyOutDir: true,
     outDir: path.resolve(__dirname, "../../canvas/dist"),
     rollupOptions: {

@@ -29,3 +29,23 @@ export declare function WhiteboardProvider(props: {
 export declare function Whiteboard(): ReactElement;
 
 export declare function ReviewTopBar(): ReactElement;
+
+export interface ShareView {
+  title: string;
+  /** Present when Desktop can import the share. */
+  repository?: { cloneUrl: string };
+  data: WhiteboardData;
+  host: WhiteboardHost;
+  dispose(): void;
+}
+
+/** Opens a review-share/2 bundle, as parsed JSON, and validates it; a
+ * server can render the board and the client hydrate it. `theme` defaults
+ * to "system", the viewer's preference, and holds for the view's life.
+ * `wasmUrl` defaults to the routing wasm shipped beside this module.
+ * Images are not shared yet. */
+export declare function openShare(
+  // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Share boundary: openShare parses the bundle.
+  bundle: unknown,
+  options?: { theme?: "light" | "dark" | "system"; wasmUrl?: string },
+): Promise<ShareView>;
