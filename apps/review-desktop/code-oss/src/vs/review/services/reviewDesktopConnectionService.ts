@@ -87,6 +87,8 @@ export interface IReviewDesktopConnectionService {
 	setDiffrConfigValue(key: string, value: JsonValue): Promise<ReviewDiffrConfig>;
 	/** The agents answering in Ask in any review, which quitting would stop. */
 	workingAskAgents(): Promise<string[]>;
+	readAnimationsEnabled(): Promise<boolean>;
+	setAnimationsEnabled(enabled: boolean): Promise<boolean>;
 	readRemoteHosts(): Promise<ReviewGatewayHostState[]>;
 	listSshAliases(): Promise<string[]>;
 	retryRemoteHost(alias: string): Promise<void>;
@@ -288,6 +290,28 @@ export class ReviewDesktopConnectionService extends Disposable implements IRevie
 		});
 		await this.requireOk(response, "working Ask agents");
 		return parseWorkingAskAgents(await response.json());
+	}
+
+	async readAnimationsEnabled(): Promise<boolean> {
+		await this.initialize();
+		const response = await fetch(`${this.serverUrl}/preferences/animations`, {
+			headers: this.authHeaders(),
+			signal: AbortSignal.timeout(30_000),
+		});
+		await this.requireOk(response, "animations preference");
+		return parseExperimentalPreference(await response.json());
+	}
+
+	async setAnimationsEnabled(enabled: boolean): Promise<boolean> {
+		await this.initialize();
+		const response = await fetch(`${this.serverUrl}/preferences/animations`, {
+			method: "PUT",
+			headers: { ...this.authHeaders(), "content-type": "application/json" },
+			body: JSON.stringify({ enabled }),
+			signal: AbortSignal.timeout(120_000),
+		});
+		await this.requireOk(response, "animations preference");
+		return parseExperimentalPreference(await response.json());
 	}
 
 	async readRemoteHosts(): Promise<ReviewGatewayHostState[]> {
@@ -587,6 +611,13 @@ export async function reviewResponseError(response: Response, fallback: string):
 		error?: unknown;
 	} | null;
 	return new Error(typeof payload?.error === "string" && payload.error ? payload.error : fallback);
+}
+
+function parseExperimentalPreference(value: unknown): boolean {
+	if (typeof value !== "object" || value === null || !("enabled" in value) || typeof value.enabled !== "boolean") {
+		throw new Error("experimental preference response is malformed.");
+	}
+	return value.enabled;
 }
 
 /** The names of the agents a working-agents answer lists; anything else

@@ -10,6 +10,7 @@ packages:
 
 catalog:
   "@parcel/watcher": "2.6.0"
+  animejs: 4.5.0
   "fast-check": "4.10.2"
   zod: "4.6.5"
 

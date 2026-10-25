@@ -6,7 +6,7 @@ import {
   activityEndSchema,
   activityUpdateSchema,
 } from "./activity.js";
-import { pathTargetSchema, publishedEditSchema } from "./document.js";
+import { pathTargetSchema, publishedEdits } from "./document.js";
 import { instructionsQuerySchema } from "./instructions.js";
 import { uploadSchema } from "./local-data.js";
 import { inspectQuerySchema } from "./read-schemas.js";
@@ -14,9 +14,12 @@ import { REVIEW_STATUS_TOOL } from "./status-tool.js";
 import { commandSchema } from "./store.js";
 
 /** The host publishes its input schemas, except where agents write less than
- * the host accepts (publishedEditSchema, publishedLensEditSchema) or name a
+ * the host accepts (publishedEdits, publishedLensEditSchema) or name a
  * checkout by path (pathTargetSchema); adapters validate nothing. */
-export function authoringTools(traceEnabled = false) {
+export function authoringTools(
+  traceEnabled = false,
+  animationsEnabled = false,
+) {
   const id = z.string().min(1);
   const review = { reviewId: id };
 
@@ -97,7 +100,15 @@ export function authoringTools(traceEnabled = false) {
         (traceEnabled
           ? ' Call review_get_instructions({topic:"trace-archaeology"}) for why code exists, what an agent was thinking, or whether an agent solved this before.'
           : ""),
-      instructionsQuerySchema.partial(),
+      instructionsQuerySchema
+        .extend({
+          topic: animationsEnabled
+            ? instructionsQuerySchema.shape.topic
+            : z
+                .enum(["authoring", "file-lenses", "trace-archaeology"])
+                .default("authoring"),
+        })
+        .partial(),
       "GET",
       "/instructions",
     ),
@@ -144,7 +155,7 @@ export function authoringTools(traceEnabled = false) {
             open: z.boolean().optional(),
           }),
           ...(type === "set_target" && { target: pathTargetSchema }),
-          ...(type === "edit" && { edit: publishedEditSchema }),
+          ...(type === "edit" && { edit: publishedEdits(animationsEnabled) }),
         }),
         "POST",
         "/commands",

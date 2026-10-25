@@ -90,3 +90,6 @@ backend.hcl
 .dev/evidence/
 artifacts/devbox/
 scripts/acceptance/evidence/
+
+# Prebuilt, platform-specific diffr binary fetched at build time
+packages/review/bin/

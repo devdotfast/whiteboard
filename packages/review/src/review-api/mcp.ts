@@ -1,10 +1,11 @@
 import type { Readable, Writable } from "node:stream";
 
-import type { JsonValue } from "@dev.fast/json";
+import { type JsonValue, isJsonObject } from "@dev.fast/json";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
   CallToolRequestSchema,
+  type CallToolResult,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { ReviewToolCall } from "@review/review-telemetry.js";
@@ -13,6 +14,7 @@ import type { ReviewSessionAgent } from "@review/ui-telemetry-events.js";
 import {
   type AuthoringTool,
   type ConnectedReview,
+  ToolText,
   toolResultText,
 } from "./agent-client.js";
 import { authoringTools } from "./authoring-tools.js";
@@ -37,6 +39,7 @@ function mcpAuthoringGuidance(context: { traceEnabled: boolean }): string {
           'For why code exists, what an agent was thinking, or whether an agent solved something before, call session_get_instructions({topic:"trace-archaeology"}).',
         ]
       : []),
+    "For programmatic MCP calls, use structuredContent when present; otherwise parse JSON from the text content when the result is JSON. An insert through session_edit uses edit.content for the actual document component, never the MCP transport wrapper containing content or structuredContent.",
     "Never read or write Whiteboard files or SQL.",
   ].join(" ");
 }
@@ -168,19 +171,19 @@ export async function serveReviewMcp(
         )
           return { content: [{ type: "text" as const, text: RECOVERY }] };
 
-        if (request.params.name === REVIEW_STATUS_TOOL.name && offlineStatus)
-          return {
-            content: [
-              {
-                type: "text" as const,
-                text: JSON.stringify(
-                  await offlineStatus(
-                    error instanceof Error ? error.message : String(error),
-                  ),
-                ),
-              },
-            ],
+        if (request.params.name === REVIEW_STATUS_TOOL.name && offlineStatus) {
+          const result = await offlineStatus(
+            error instanceof Error ? error.message : String(error),
+          );
+
+          const response: CallToolResult = {
+            content: [{ type: "text", text: JSON.stringify(result) }],
           };
+
+          if (isJsonObject(result)) response.structuredContent = result;
+
+          return response;
+        }
 
         throw error;
       }
@@ -203,7 +206,7 @@ export async function serveReviewMcp(
       const text = toolResultText(tool, result);
       report();
 
-      return {
+      const response: CallToolResult = {
         content: [
           {
             type: "text",
@@ -214,6 +217,11 @@ export async function serveReviewMcp(
           },
         ],
       };
+
+      if (!(result instanceof ToolText) && isJsonObject(result))
+        response.structuredContent = result;
+
+      return response;
     } catch (error) {
       report(toolFailure(error, phase));
 

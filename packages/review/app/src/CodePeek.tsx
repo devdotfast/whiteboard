@@ -132,6 +132,7 @@ export function CodePeekCard({
   lenses: lensesOverride,
   reportOutcome = false,
   edgeToEdge = false,
+  xstyle,
 }: {
   source: DiffSelection;
   active?: boolean;
@@ -143,6 +144,8 @@ export function CodePeekCard({
   reportOutcome?: boolean;
   /** Run across its column like the Diff panel, not as an inset card. */
   edgeToEdge?: boolean;
+  /** Call-site styles, applied last. */
+  xstyle?: stylex.StyleXStyles;
 }) {
   const session = useReviewSession();
   const contextLenses = useReviewLenses();
@@ -193,6 +196,7 @@ export function CodePeekCard({
           styles.peek,
           edgeToEdge && styles.edgeToEdge,
           drawStyles.blockChild,
+          xstyle,
         )}
         role="status"
       >
@@ -207,6 +211,7 @@ export function CodePeekCard({
         styles.peek,
         edgeToEdge && styles.edgeToEdge,
         drawStyles.blockChild,
+        xstyle,
       )}
       data-code-rendering="inline-editor"
     >

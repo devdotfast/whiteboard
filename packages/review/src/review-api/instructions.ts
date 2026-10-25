@@ -4,10 +4,12 @@ import path from "node:path";
 import { findReviewPackageRoot } from "@review/package-paths.js";
 import { z } from "zod";
 
-import { COMPONENT_REFERENCE } from "./component-reference.js";
+import { componentReference } from "./component-reference.js";
+import { ReviewInputError } from "./input-error.js";
 
 export const INSTRUCTION_TOPICS = [
   "authoring",
+  "animation",
   "file-lenses",
   "trace-archaeology",
 ] as const;
@@ -20,6 +22,7 @@ export const instructionsQuerySchema = z.strictObject({
 
 export interface InstructionContext {
   traceEnabled: boolean;
+  animationsEnabled?: boolean;
 }
 
 const cache = new Map<string, Promise<string>>();
@@ -44,6 +47,12 @@ export async function renderInstructions(
   context: InstructionContext,
   root = findReviewPackageRoot(import.meta.url),
 ): Promise<string> {
+  if (topic === "animation" && !context.animationsEnabled)
+    throw new ReviewInputError(
+      "Animation authoring is disabled. Enable Animations in Settings under Experimental Features.",
+      409,
+    );
+
   if (topic === "trace-archaeology" && !context.traceEnabled)
     return "Trace capture is off on this machine, so no agent traces are available. It can be turned on in Whiteboard Desktop Settings under Experimental Features.";
 
@@ -59,7 +68,7 @@ export async function renderInstructions(
 
   return [
     await read(root, "authoring"),
-    COMPONENT_REFERENCE,
+    componentReference(context.animationsEnabled === true),
     ...(context.traceEnabled
       ? [
           '## Traces\n\nAt the end, run `whiteboard trace list --session <sessionId> --json`, which covers every commit in the review. If it lists no sessions, there are no traces to quote: skip this step. Otherwise read `session_get_instructions({topic:"trace-archaeology"})` and rewrite as much as possible of the what/why, design, and requirements sections in terms of literal trace quotes from the user.',

@@ -19,7 +19,7 @@ import {
 import { serveReviewMcp } from "./mcp.js";
 import { ReviewStore } from "./store.js";
 
-const live = { traceEnabled: true };
+const live = { traceEnabled: true, animationsEnabled: true };
 
 describe("renderInstructions", () => {
   let root: string;

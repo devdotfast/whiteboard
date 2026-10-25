@@ -859,6 +859,11 @@ export interface ReviewCanvasSettingsContent {
   setSoftwareMapEnabled(enabled: boolean): Promise<boolean>;
   sharingEnabled: boolean;
   setSharingEnabled(enabled: boolean): Promise<boolean>;
+  // Not a workbench setting: the review server reads it, so it lives in the
+  // server preferences file. Off by default. On, agents can author
+  // animations over MCP; off, existing animations still render.
+  animationsEnabled: boolean;
+  setAnimationsEnabled(enabled: boolean): Promise<boolean>;
   // Shared CLI configuration, read when its disclosure opens.
   diffrConfig: ReviewDiffrConfigActions;
   reloadWindow(): Promise<void>;

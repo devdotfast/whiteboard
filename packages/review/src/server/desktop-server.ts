@@ -47,6 +47,10 @@ import {
   reviewLegacyDiscoveryPath,
 } from "@review/review-home-paths";
 import {
+  readAnimationsEnabled,
+  writeAnimationsEnabled,
+} from "@review/review-preferences";
+import {
   ReviewTelemetry,
   type ReviewTelemetryContext,
 } from "@review/review-telemetry";
@@ -173,6 +177,10 @@ export function createGlobalReviewServer(
   let closing = false;
   const cliPath = path.join(input.packageRoot, "dist", "cli.js");
 
+  // The animations preference, read once at listen and kept current by the
+  // settings endpoint below: this server is the only writer while it runs.
+  let animationsEnabled = false;
+
   const discovery: ReviewDesktopDiscovery = {
     version: REVIEW_DESKTOP_DISCOVERY_VERSION,
     instanceId,
@@ -205,6 +213,7 @@ export function createGlobalReviewServer(
     relay,
     token,
     instanceId,
+    animations: () => animationsEnabled,
     status: () => {
       const { key, channel, checkout, appVersion, cliVersion, instanceId } =
         discovery;
@@ -257,6 +266,20 @@ export function createGlobalReviewServer(
   app.all("/reviews-api", (context) => gateway.fetch(context.req.raw));
   app.all("/reviews-api/*", (context) => gateway.fetch(context.req.raw));
   app.get("/remote-hosts", () => serverJson(200, gateway.hosts()));
+  app.get("/preferences/animations", () =>
+    serverJson(200, { enabled: animationsEnabled }),
+  );
+  app.put("/preferences/animations", async (context) => {
+    const request = z
+      .object({ enabled: z.boolean() })
+      .safeParse(await readBoundedRequestJson(context.req.raw));
+
+    if (!request.success)
+      throw new ReviewServerError("enabled must be a boolean.", 400);
+    animationsEnabled = await writeAnimationsEnabled(request.data.enabled);
+
+    return serverJson(200, { enabled: animationsEnabled });
+  });
   app.post("/app/focus", async () => {
     const result = await relay.dispatch({
       name: "focusWindow",
@@ -499,6 +522,7 @@ export function createGlobalReviewServer(
     },
     listen: async () => {
       await migrateDiffrConfig();
+      animationsEnabled = await readAnimationsEnabled();
       boundPort = await listen(loopback.server, input.port);
       discovery.url = urlForBoundPort();
 

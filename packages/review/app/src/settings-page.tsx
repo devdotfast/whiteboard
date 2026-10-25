@@ -116,6 +116,10 @@ export function SettingsPage({
 
   const [sharingEnabled, setSharingEnabled] = useState(settings.sharingEnabled);
 
+  const [animationsEnabled, setAnimationsEnabled] = useState(
+    settings.animationsEnabled,
+  );
+
   const [installStatus, setInstallStatus] = useState<
     ReviewCliInstallStatus | undefined
   >(settings.install?.status);
@@ -489,6 +493,24 @@ export function SettingsPage({
             <RemoteHostsSection hosts={settings.remoteHosts} />
 
             <Section label="Experimental Features">
+              <Row
+                label="Animations"
+                description="Let agents create and edit animations through MCP. Existing animations remain visible when off."
+              >
+                <label {...stylex.props(styles.toggle)}>
+                  <Checkbox
+                    aria-label="Animations"
+                    checked={animationsEnabled}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      void run(
+                        () => settings.setAnimationsEnabled(enabled),
+                        setAnimationsEnabled,
+                      );
+                    }}
+                  />
+                </label>
+              </Row>
               <Row
                 label="Software Map"
                 description="Show the experimental Software Map view in sessions."

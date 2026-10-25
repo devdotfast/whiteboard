@@ -196,6 +196,17 @@ export function documentText(
             `[${edge.id}] ${edge.from} → ${edge.to}${edge.label ? `: ${edge.label}` : ""}`,
           );
         break;
+      case "animation":
+        for (const [index, frame] of element.frames.entries())
+          detail(
+            `Frame ${index + 1} [${frame.key}]: ${frame.title}${frame.caption ? ` — ${frame.caption}` : ""}`,
+          );
+
+        for (const [name, anchor] of Object.entries(element.code))
+          detail(`Code ${name}: ${anchor}`);
+
+        if (detailed) code(depth + 1, { language: "html", text: element.html });
+        break;
       case "software_map":
         detail(
           `Map: ${element.mapVersionId}${element.focusElementId ? `, focus: ${element.focusElementId}` : ""}`,

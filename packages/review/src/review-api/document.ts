@@ -198,6 +198,11 @@ const unitTypes = new Set(["step", "flow_node", "flow_edge"]);
 export const isUnit = (element: Element): element is Unit =>
   unitTypes.has(element.type);
 
+/** The reference id of a code peek an animation names: the canvas finds the
+ * peek's resolved anchor by it. */
+export const animationCodeId = (blockId: string, name: string) =>
+  `${blockId}:code:${name}`;
+
 /** Rewrites old review-source: and review-trace: links to their whiteboard: form. */
 export function canonicalLink(href: string): string {
   return href.replace(
@@ -523,6 +528,16 @@ function documentReferences(
         ),
       );
 
+    if (element.type === "animation")
+      return Object.entries(element.code).flatMap(([name, anchor]) =>
+        select(anchor, element.pins).map((source) => ({
+          id: animationCodeId(element.id!, name),
+          source,
+          label: name,
+          peek: true,
+        })),
+      );
+
     if (element.type === "call_stack_diff")
       return [...element.base, ...element.head].flatMap((frame) => {
         const pins = frame.pins ?? element.pins;
@@ -774,11 +789,17 @@ const namedByType = (types: string[]) =>
 
 /** What agents are shown: content names only its type. The host parses
  * editSchema, reporting the named kind's issues. */
-export const publishedEditSchema = edits(
-  namedByType([...writableBlockTypes, "step", "flow_node", "flow_edge"]),
-  namedByType(writableBlockTypes),
-  z.unknown(),
-);
+export function publishedEdits(animationsEnabled = true) {
+  const types = writableBlockTypes.filter(
+    (type) => animationsEnabled || type !== "animation",
+  );
+
+  return edits(
+    namedByType([...types, "step", "flow_node", "flow_edge"]),
+    namedByType(types),
+    z.unknown(),
+  );
+}
 
 /**
  * What one saved version did, for a canvas drawing the document as the

@@ -11,6 +11,7 @@ export function DiagramHeader({
   meta,
   action,
   xstyle,
+  titleStyle,
   metaStyle,
 }: {
   kind: string;
@@ -18,6 +19,7 @@ export function DiagramHeader({
   meta?: string;
   action?: ReactNode;
   xstyle?: stylex.StaticStyles;
+  titleStyle?: stylex.StaticStyles;
   metaStyle?: stylex.StaticStyles;
 }) {
   return (
@@ -26,7 +28,11 @@ export function DiagramHeader({
         <Chip>{kind}</Chip>
         {title && (
           <span
-            {...stylex.props(textStyles.truncate, diagramStyles.title)}
+            {...stylex.props(
+              textStyles.truncate,
+              diagramStyles.title,
+              titleStyle,
+            )}
             data-review-copy-prose
           >
             {title}

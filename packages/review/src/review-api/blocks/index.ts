@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { animation } from "./animation.js";
 import { call_stack_diff } from "./call_stack_diff.js";
 import { type CalloutBlock, callout, calloutSchema } from "./callout.js";
 import { code } from "./code.js";
@@ -28,6 +29,7 @@ export const leafSchema = z.discriminatedUnion("type", [
   trace_quote.schema,
   software_map.schema,
   flow_diagram.schema,
+  animation.schema,
 ]);
 
 export type LeafBlock = z.infer<typeof leafSchema>;
@@ -53,6 +55,7 @@ export const blocks = {
   trace_quote,
   software_map,
   flow_diagram,
+  animation,
   section,
   callout,
 } satisfies Definitions;

@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <!-- The stage runs an agent's markup and scripts. It is loaded into a
+    sandboxed frame with an opaque origin; this policy also takes away the
+    network, so a stage can only draw. -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'unsafe-inline' blob:; style-src 'unsafe-inline'; img-src data: blob:; font-src data:; media-src data: blob:"
+    />
+    <script>
+      // Waits for the block's runtime and port, then runs the runtime.
+      addEventListener("message", function boot(event) {
+        var data = event.data;
+
+        if (
+          event.source !== parent ||
+          !data ||
+          data.type !== "whiteboard-stage" ||
+          typeof data.runtime !== "string" ||
+          !event.ports[0]
+        )
+          return;
+
+        removeEventListener("message", boot);
+        window.__whiteboardStagePort = event.ports[0];
+        var script = document.createElement("script");
+        script.src = URL.createObjectURL(
+          new Blob(["(" + data.runtime + ")(window.__whiteboardStagePort);"], {
+            type: "text/javascript",
+          }),
+        );
+        document.head.append(script);
+      });
+    </script>
+  </head>
+  <body></body>
+</html>

@@ -56,6 +56,8 @@ function settings(): ReviewCanvasSettingsContent {
     setSoftwareMapEnabled: async (enabled) => enabled,
     sharingEnabled: false,
     setSharingEnabled: async (enabled) => enabled,
+    animationsEnabled: false,
+    setAnimationsEnabled: async (enabled) => enabled,
     diffrConfig: {
       read: unexpected,
       set: unexpected,

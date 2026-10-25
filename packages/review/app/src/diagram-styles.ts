@@ -71,7 +71,7 @@ export const diagramStyles = stylex.create({
     borderStyle: "none",
     borderRadius: 0,
     backgroundColor: tokens.transparent,
-    color: tokens.inkFaint,
+    color: tokens.inkMuted,
     font: `${fontWeight.regular} ${fontSize.small} ${tokens.chromeFont}`,
     fontStyle: "normal",
     letterSpacing: 0,

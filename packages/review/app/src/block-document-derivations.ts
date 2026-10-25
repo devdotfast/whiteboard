@@ -17,6 +17,7 @@ export function blockSectionSummary(children: Block[]): ReviewSectionSummary {
       case "call_stack_diff":
       case "flow_diagram":
       case "software_map":
+      case "animation":
         summary.diagrams += 1;
         break;
       case "code_peek":

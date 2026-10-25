@@ -132,6 +132,7 @@ export interface WhiteboardCoreInput {
   token: string;
   instanceId: string;
   softwareMapEnabled?: boolean;
+  animations?: () => boolean;
   status: () => JsonObject;
   hooks?: ReviewApiHooks;
   ask?: {
@@ -198,6 +199,7 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
       threads: askThreads,
       agents: async () => detectAskAgents(await ask?.env),
     },
+    input.animations,
   );
 
   // A shared store mounts the publisher with the rest of sharing.
