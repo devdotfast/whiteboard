@@ -46,7 +46,7 @@
     "@types/node": "24.12.2",
     "typescript": "5.9.3",
     "vitest": "4.1.11",
-    "zod": "4.6.5"
+    "zod": "4.6.6"
   },
   "engines": {
     "node": ">=20"

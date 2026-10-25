@@ -13,8 +13,8 @@ catalogs:
       specifier: 4.10.2
       version: 4.10.2
     zod:
-      specifier: 4.6.5
-      version: 4.6.5
+      specifier: 4.6.6
+      version: 4.6.6
 
 overrides:
   '@dev.fast/local-vcs': workspace:0.1.0
@@ -52,7 +52,7 @@ importers:
         version: 7.0.2
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.6.6
 
   apps/review-desktop:
     dependencies:
@@ -103,8 +103,8 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
       zod:
-        specifier: 4.6.5
-        version: 4.6.5
+        specifier: 4.6.6
+        version: 4.6.6
     optionalDependencies:
       '@dev.fast/diffr-darwin-arm64':
         specifier: 0.1.21
@@ -140,8 +140,8 @@ importers:
         specifier: 4.1.11
         version: 4.1.11(@types/node@24.12.2)(@vitest/browser-playwright@4.1.11)(esbuild@0.28.1)(jsdom@29.1.1)(tsx@4.21.0)
       zod:
-        specifier: 4.6.5
-        version: 4.6.5
+        specifier: 4.6.6
+        version: 4.6.6
 
   diffr/packages/tui:
     dependencies:
@@ -192,8 +192,8 @@ importers:
         specifier: 8.1.0
         version: 8.1.0
       zod:
-        specifier: 4.6.5
-        version: 4.6.5
+        specifier: 4.6.6
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.12.2
@@ -232,7 +232,7 @@ importers:
     dependencies:
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.6.6
 
   packages/local-vcs:
     dependencies:
@@ -263,13 +263,13 @@ importers:
     dependencies:
       '@agentclientprotocol/claude-agent-acp':
         specifier: 0.84.0
-        version: 0.84.0(@modelcontextprotocol/sdk@1.32.0(zod@4.6.5))
+        version: 0.84.0(@modelcontextprotocol/sdk@1.32.0(zod@4.6.6))
       '@agentclientprotocol/codex-acp':
         specifier: 2.0.0
         version: 2.0.0
       '@agentclientprotocol/sdk':
         specifier: 1.5.1
-        version: 1.5.1(zod@4.6.5)
+        version: 1.5.1(zod@4.6.6)
       '@dev.fast/diffr':
         specifier: workspace:*
         version: link:../../diffr/diffr-ts
@@ -281,7 +281,7 @@ importers:
         version: 0.35.5
       '@modelcontextprotocol/sdk':
         specifier: 1.32.0
-        version: 1.32.0(zod@4.6.5)
+        version: 1.32.0(zod@4.6.6)
       '@parcel/watcher':
         specifier: 'catalog:'
         version: 2.6.0
@@ -329,7 +329,7 @@ importers:
         version: 3.4.0
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.6.6
     devDependencies:
       '@dev.fast/json':
         specifier: workspace:*
@@ -390,7 +390,7 @@ importers:
         version: link:../trace-protocol
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.6.6
     devDependencies:
       esbuild:
         specifier: 0.28.1
@@ -403,7 +403,7 @@ importers:
     dependencies:
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.6.6
     devDependencies:
       vitest:
         specifier: 4.1.11
@@ -464,7 +464,7 @@ importers:
         version: 19.2.5(react@19.2.5)
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.6.6
       zustand:
         specifier: 5.0.15
         version: 5.0.15(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
@@ -528,7 +528,7 @@ importers:
         version: 14.0.3
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.6.6
     devDependencies:
       '@types/node':
         specifier: 24.12.2
@@ -550,7 +550,7 @@ importers:
     dependencies:
       zod:
         specifier: 'catalog:'
-        version: 4.6.5
+        version: 4.6.6
     devDependencies:
       vitest:
         specifier: 4.1.11
@@ -3694,6 +3694,9 @@ packages:
   zod@4.6.5:
     resolution: {integrity: sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q==}
 
+  zod@4.6.6:
+    resolution: {integrity: sha512-4UmzQUF5fxvfcYHlbjBmejU+w+hbDnWFx4aS8kBx7nPBHcO2SqPbpAG8snbdg+Xse4pRefR98hgjFgIMCI/UhA==}
+
   zustand@4.5.7:
     resolution: {integrity: sha512-CHOUy7mu3lbD6o6LJLfllpjkzhHXSBlX8B9+qPddUsIfeF5S/UZ5q0kmCsnRqT1UHFQZchNFDDzMbQsuesHWlw==}
     engines: {node: '>=12.7.0'}
@@ -3740,10 +3743,10 @@ ignoredOptionalDependencies:
 
 snapshots:
 
-  '@agentclientprotocol/claude-agent-acp@0.84.0(@modelcontextprotocol/sdk@1.32.0(zod@4.6.5))':
+  '@agentclientprotocol/claude-agent-acp@0.84.0(@modelcontextprotocol/sdk@1.32.0(zod@4.6.6))':
     dependencies:
       '@agentclientprotocol/sdk': 1.5.1(zod@4.6.5)
-      '@anthropic-ai/claude-agent-sdk': 0.3.284(@modelcontextprotocol/sdk@1.32.0(zod@4.6.5))(zod@4.6.5)
+      '@anthropic-ai/claude-agent-sdk': 0.3.284(@modelcontextprotocol/sdk@1.32.0(zod@4.6.6))(zod@4.6.5)
       diff: 9.0.0
       zod: 4.6.5
     transitivePeerDependencies:
@@ -3767,9 +3770,13 @@ snapshots:
     dependencies:
       zod: 4.6.5
 
-  '@anthropic-ai/claude-agent-sdk@0.3.284(@modelcontextprotocol/sdk@1.32.0(zod@4.6.5))(zod@4.6.5)':
+  '@agentclientprotocol/sdk@1.5.1(zod@4.6.6)':
     dependencies:
-      '@modelcontextprotocol/sdk': 1.32.0(zod@4.6.5)
+      zod: 4.6.6
+
+  '@anthropic-ai/claude-agent-sdk@0.3.284(@modelcontextprotocol/sdk@1.32.0(zod@4.6.6))(zod@4.6.5)':
+    dependencies:
+      '@modelcontextprotocol/sdk': 1.32.0(zod@4.6.6)
       zod: 4.6.5
 
   '@asamuzakjp/css-color@5.1.11':
@@ -4097,7 +4104,7 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
 
-  '@modelcontextprotocol/sdk@1.32.0(zod@4.6.5)':
+  '@modelcontextprotocol/sdk@1.32.0(zod@4.6.6)':
     dependencies:
       '@hono/node-server': 2.0.12(hono@4.13.13)
       ajv: 8.20.0
@@ -4114,8 +4121,8 @@ snapshots:
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
       raw-body: 3.0.2
-      zod: 4.6.5
-      zod-to-json-schema: 3.25.2(zod@4.6.5)
+      zod: 4.6.6
+      zod-to-json-schema: 3.25.2(zod@4.6.6)
     transitivePeerDependencies:
       - supports-color
 
@@ -6657,13 +6664,15 @@ snapshots:
       '@yuku-parser/binding-win32-arm64': 0.8.4
       '@yuku-parser/binding-win32-x64': 0.8.4
 
-  zod-to-json-schema@3.25.2(zod@4.6.5):
+  zod-to-json-schema@3.25.2(zod@4.6.6):
     dependencies:
-      zod: 4.6.5
+      zod: 4.6.6
 
   zod@3.25.76: {}
 
   zod@4.6.5: {}
+
+  zod@4.6.6: {}
 
   zustand@4.5.7(@types/react@19.2.14)(react@19.2.5):
     dependencies:

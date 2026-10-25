@@ -11,7 +11,7 @@ packages:
 catalog:
   "@parcel/watcher": "2.6.0"
   "fast-check": "4.10.2"
-  zod: "4.6.5"
+  zod: "4.6.6"
 
 catalogMode: strict
 
