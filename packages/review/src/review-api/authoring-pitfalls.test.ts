@@ -119,7 +119,19 @@ beforeEach(async () => {
   local = openLocalReviewStore(path.join(directory, "reviews.db"));
   const registered = await local.data.register(repository);
   pins = await local.data.resolvePins(registered.id, "HEAD^", "HEAD");
-  app = createReviewApi(local.store, local.data);
+  // Animations sit behind a preference; the fixtures cover every block type.
+  app = createReviewApi(
+    local.store,
+    local.data,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => true,
+  );
 
   const created = await post("/commands", {
     operation: {
