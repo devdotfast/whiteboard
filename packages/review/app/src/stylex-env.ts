@@ -3,6 +3,7 @@
 export const stylexEnv = {
   reducedMotion: "@media (prefers-reduced-motion: reduce)",
   narrow: "@media (max-width: 720px)",
+  prefersLight: "@media (prefers-color-scheme: light)",
   tocRailHidden: "@container review-content (max-width: 720px)",
 } as const;
 

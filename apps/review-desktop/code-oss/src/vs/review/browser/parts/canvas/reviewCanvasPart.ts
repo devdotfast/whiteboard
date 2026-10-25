@@ -82,6 +82,7 @@ import type {
 	ReviewAppearance,
 	ReviewCanvasSettingsContent,
 	ReviewColorTheme,
+	ReviewColorThemeKind,
 	ReviewCanvasSetupActions,
 	ReviewCanvasWelcomeHost,
 	ReviewCliInstallStatus,
@@ -1457,7 +1458,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 }
 
-function themeKind(type: ColorScheme): ReviewTheme {
+function themeKind(type: ColorScheme): ReviewColorThemeKind {
 	return type === ColorScheme.LIGHT || type === ColorScheme.HIGH_CONTRAST_LIGHT ? "light" : "dark";
 }
 

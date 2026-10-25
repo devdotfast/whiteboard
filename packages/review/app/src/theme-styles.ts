@@ -1,7 +1,14 @@
+import type { ReviewTheme } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 
 import { fontSize, radius, tracking } from "./scale.stylex";
 import { tokens } from "./tokens.stylex";
+
+const lightCheckMark =
+  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5 9.5 17 19 7' fill='none' stroke='%23FFFFFF' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/></svg>\")";
+
+const lightBoardGrid =
+  "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='1' cy='1' r='0.8' fill='%23E6E8EC'/></svg>\")";
 
 // Theme classes for everything below the canvas root. The palette itself is
 // on the root, in global.css: only :scope reaches the @scope root.
@@ -83,13 +90,25 @@ export const themeStyles = stylex.create({
   // The palette's light-dark() values follow color-scheme; images cannot.
   light: {
     colorScheme: "light",
-    "--check-mark":
-      "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5 9.5 17 19 7' fill='none' stroke='%23FFFFFF' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/></svg>\")",
-    "--board-grid":
-      "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='1' cy='1' r='0.8' fill='%23E6E8EC'/></svg>\")",
+    "--check-mark": lightCheckMark,
+    "--board-grid": lightBoardGrid,
+  },
+  system: {
+    colorScheme: "light dark",
+    "--check-mark": {
+      default: null,
+      [stylex.env.prefersLight]: lightCheckMark,
+    },
+    "--board-grid": {
+      default: null,
+      [stylex.env.prefersLight]: lightBoardGrid,
+    },
   },
 });
 
-export function themeClass(theme: "dark" | "light") {
-  return theme === "light" && themeStyles.light;
+/** The palette class for a theme; dark is the root's own. */
+export function themeClass(theme: ReviewTheme) {
+  return theme === "light"
+    ? themeStyles.light
+    : theme === "system" && themeStyles.system;
 }

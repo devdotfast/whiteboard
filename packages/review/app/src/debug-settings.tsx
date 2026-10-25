@@ -12,7 +12,7 @@ import type { ReviewSession } from "./host/review-session";
 import { useReviewSession } from "./host/review-session";
 import { readReviewUiState, writeReviewUiState } from "./review-ui-state";
 
-export type ReviewTheme = "dark" | "light";
+export type ReviewTheme = "dark" | "light" | "system";
 
 export type ReviewNodeTint = "none" | "slate" | "mineral";
 

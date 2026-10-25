@@ -57,8 +57,9 @@ export const reviewViewSchema = z.enum(["review", "diff", "map", "trace"]);
 
 export type ReviewView = z.infer<typeof reviewViewSchema>;
 
-const reviewThemeSchema = z.enum(["light", "dark"], {
-  error: "must be light or dark",
+// Desktop sends light or dark; a server render cannot know, so it says system.
+const reviewThemeSchema = z.enum(["light", "dark", "system"], {
+  error: "must be light, dark or system",
 });
 
 function urlSchema(
