@@ -40,10 +40,11 @@ storage for 90 days, and are sent even with telemetry off.
 
 Sharing is explicit. `whiteboard share` uploads an immutable copy of one saved
 whiteboard version to the /dev/fast share service and returns a link. The copy
-includes the document text, images, software maps, the commits it is pinned
-to, your GitHub login, and the repository's GitHub clone URL. It does not
-upload source code: recipients fetch the pinned commits from GitHub with their
-own access. Anyone with the link can download the copy.
+includes the document text, software maps, complete trace
+conversations, the source lines the whiteboard references, the commits it is
+pinned to, your GitHub login, and the repository's GitHub clone URL. Anyone
+with the link can read the copy in a browser. Opening it in Whiteboard Desktop
+also fetches the pinned commits from GitHub with the recipient's own access.
 `whiteboard share revoke <share-id>` stops future downloads.
 
 ## Hosted trace store
