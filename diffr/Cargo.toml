@@ -29,7 +29,7 @@ include = [
 
 [dependencies]
 diffr-core = { path = "crates/diffr-core", version = "0.1.21" }
-gix = { version = "0.88", default-features = false, features = ["parallel", "revision", "status", "blob-diff", "attributes", "sha1"] }
+gix = { version = "0.90", default-features = false, features = ["parallel", "revision", "status", "blob-diff", "attributes", "sha1"] }
 clap = { version = "4.0.0", features = ["cargo", "derive", "env", "wrap_help", "string"] }
 typed-arena = "2.0.2"
 libc = "0.2.108"
