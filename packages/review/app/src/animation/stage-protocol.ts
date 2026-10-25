@@ -11,6 +11,8 @@ export interface StageFrame {
   caption?: string;
 }
 
+export type StageColorScheme = "light" | "dark";
+
 /** The first message on the port: everything the stage needs to draw. */
 export interface StageInit {
   type: "init";
@@ -23,6 +25,13 @@ export interface StageInit {
   blocks: string[];
   /** Whiteboard theme values, set as --wb-* properties on the stage root. */
   theme: Record<string, string>;
+  /** Whether that theme is light or dark, for the stage's color-scheme. */
+  colorScheme: StageColorScheme;
+  /** The canvas's scale steps, set as --wb-* properties like the theme. */
+  scale: Record<string, string>;
+  /** @font-face rules for the canvas's bundled faces, as data: URLs: the
+   * stage is its own document and may load no font from elsewhere. */
+  fonts: string;
   reducedMotion: boolean;
   frame: number;
   /** Library sources the stage runs before its own scripts: anime.js. */
@@ -38,7 +47,11 @@ export type HostMessage =
       direction: "forward" | "backward" | "none";
       adjacent: boolean;
     }
-  | { type: "theme"; theme: Record<string, string> }
+  | {
+      type: "theme";
+      theme: Record<string, string>;
+      colorScheme: StageColorScheme;
+    }
   /** The height the host's content in a slot takes. */
   | { type: "slot-size"; slot: string; height: number };
 

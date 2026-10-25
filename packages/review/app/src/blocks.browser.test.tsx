@@ -807,6 +807,88 @@ describe("block components", () => {
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
+  it("clears a later frame's note when the reader steps back", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Notes",
+          height: "auto",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+          frames: [
+            { key: "before", title: "Before" },
+            { key: "after", title: "After" },
+          ],
+          code: { proof: "head/order.ts#L1" },
+          html: [
+            "<script>",
+            "const s=whiteboard.scene({columns:1});",
+            'const canvas=s.actor({id:"canvas",at:[1,1],title:"Canvas"});',
+            's.on("after",canvas,{note:"redrawn"});',
+            'const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
+            'whiteboard.on("*",({frame})=>{setTimeout(()=>{const note=canvas.element.querySelector(".wb-card-note").textContent;proof.style.width=frame.key==="after"?(note==="redrawn"?"240px":"100px"):(note===""?"200px":"100px")},50)});',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    const width = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.width;
+
+    const step = (label: string) =>
+      act(async () =>
+        container
+          .querySelector<HTMLButtonElement>(`button[aria-label='${label}']`)!
+          .click(),
+      );
+
+    expect(await settled(() => width() === "200px")).toBe(true);
+    await step("Next frame");
+    expect(await settled(() => width() === "240px")).toBe(true);
+    await step("Previous frame");
+    expect(
+      await settled(() =>
+        width() === "100px" || width() === "200px" ? width() : undefined,
+      ),
+    ).toBe("200px");
+  });
+
+  it("draws the stage in the whiteboard's faces and color scheme", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Faces",
+          height: "auto",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+          frames: [{ key: "only", title: "Only" }],
+          code: { proof: "head/order.ts#L1" },
+          html: [
+            '<div class="wb-card"><span class="wb-mono">mono</span></div>',
+            "<script>",
+            'const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
+            'document.fonts.load(\'12px "Geist Mono"\').then(()=>{const loaded=[...document.fonts].some(face=>face.family.includes("Geist Mono")&&face.status==="loaded");const scheme=getComputedStyle(document.documentElement).colorScheme===whiteboard.colorScheme;proof.style.width=loaded&&scheme?"200px":"100px"});',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    const width = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.width;
+
+    expect(
+      await settled(() =>
+        width() === "100px" || width() === "200px" ? width() : undefined,
+      ),
+    ).toBe("200px");
+  });
+
   it("mounts a scene in its container and keeps narrow tables readable", async () => {
     const { container } = await mountFixture("animation", {
       document: [

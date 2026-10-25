@@ -103,7 +103,7 @@ The scene keeps three things consistent for you:
 ### The scene API
 
 ```ts
-whiteboard.scene(options?: { columns?: number }): Scene;   // default 3 columns
+whiteboard.scene(options?: { columns?: number; container?: string | Element; responsive?: boolean }): Scene;   // default 3 columns
 
 interface Scene {
   actor(options: CardOptions): Card;                 // a labeled card
@@ -148,7 +148,7 @@ The stage sets `data-frame="<key>"` on `<html>`, and `enter` / `exit` / `only` o
 
 When the scene cannot express a layout, drop to the toolkit. It is the same drawing underneath, so it mixes with a scene: pass the card returned by `scene.actor`, `scene.store`, or `scene.table` directly to `arrow`, or use its public `id` or `element` fields where another API needs one.
 
-- Lay out by hand with `.wb-row` (a centered row) and `.wb-stack` (a centered column); `.wb-node` is a box, `.wb-layers` stacks its children in one place.
+- Lay out by hand with the style kit's layout classes (below): `.wb-row`, `.wb-stack`, `.wb-grid`, `.wb-layers`, `.wb-lane`, with `.wb-node` or `.wb-card` boxes.
 - `whiteboard.arrow(from, to, { label, tone, dashed, arrowhead, bend, enter, exit, only, highlight })` draws an endpoint-bound connector that follows both ends. It is directed by default; pass `arrowhead: false` for a headless connector without changing its route, label, styling, lifecycle, or use with `travel`. It does not draw while either endpoint is detached from the document, and resumes when both endpoints reconnect. A default straight arrow reduces its endpoint clearance when necessary to preserve a directed segment in a narrow positive gap; overlapping endpoints still need more authored space. Labels avoid visible form controls and host-overlay slots as well as endpoint cards, other edge labels, and the swept bounds of packets travelling along their route. If both ends share an ancestor with clipped or scrollable overflow, the edge and its label are clipped to that viewport too. `bend` is a CSS-pixel distance: positive bows left relative to the arrow's direction and negative bows right. Reciprocal arrows need the same nonzero sign to bow onto opposite sides (for example, `bend: 32` on both); opposite signs put them on the same path. Use it only for a return path the scene cannot route.
 - `whiteboard.token({ label, tone, visible, enter, exit, only })` makes a dot or pill; labelled tokens automatically choose a readable foreground for their resolved tone color in each theme. Tokens start hidden for `travel`; pass `visible: true` for a static snapshot at its authored position. Lifecycle fields work like they do on scene parts. The token already centers itself with CSS `translate`, so position it with `left` and `top` and do not add a centering `transform` or `translate`. For example:
 
@@ -174,7 +174,47 @@ When the scene cannot express a layout, drop to the toolkit. It is the same draw
 
 ## Raw HTML
 
-For custom layouts, charts, shapes, or interactions, write HTML, SVG and CSS and drive it with:
+For custom layouts, charts, shapes, or interactions, write HTML, SVG and CSS. Build them from the style kit first, so a hand-made stage reads like the rest of the whiteboard, and drive them with the frame API after it.
+
+### The style kit
+
+Every stage loads these classes. They use the whiteboard's faces, colors and spacing in light and dark, so prefer them to your own CSS; add a `<style>` only for what the kit does not cover, and build it from the variables under "Theme and motion".
+
+| Class | Use it for |
+| --- | --- |
+| `.wb-row`, `.wb-stack` | A centered row or column of parts, with the scene's spacing. |
+| `.wb-grid` | A grid of equal columns; set `style="--wb-columns: 4"` (default 3). |
+| `.wb-layers` | Children stacked in one place, for states that replace each other. |
+| `.wb-lane` | A `position: relative` track with a dashed center line, for a static `token` snapshot. |
+| `.wb-card` | A box with a title and note: put `.wb-card-title` and `.wb-card-note` inside. The scene's cards are these. |
+| `.wb-node` | A centered box for a hand-made layout; a `<small>` inside is its second line. |
+| `.wb-well` | An inset area that groups parts, such as a process or a machine boundary. |
+| `.wb-rule` | A divider (`<hr class="wb-rule">`). |
+| `.wb-badge` | A pill for a status or version, e.g. `etag e1`. |
+| `.wb-chip` | A chip in a list, such as a queued job or a cached key; `.wb-items` lays a list of them out. |
+| `.wb-table` | A compact table of rows, such as a schema or a result set. |
+| `.wb-title` | A heading inside the stage. |
+| `.wb-caps` | An uppercase micro label, like the step strip's. |
+| `.wb-prose` | A sentence of explanation, in the board's reading face. |
+| `.wb-mono`, `.wb-code` | Ids, paths and values in the mono face; `.wb-code` is inline code on a well. |
+| `.wb-muted`, `.wb-faint` | Text that recedes. |
+| `.wb-shape`, `.wb-shape-text` | An SVG shape drawn like a card, and the text inside it. |
+
+`data-tone="accent|added|removed|modified|muted"` colors any card, node, chip, badge, shape or table row, like the scene's tones. `data-highlight="frameKey …"` rings a card, node or shape during those frames.
+
+```html
+<div class="wb-row">
+  <div class="wb-node" data-highlight="read">Reader<small>GET /v1</small></div>
+  <div class="wb-well wb-stack">
+    <span class="wb-caps">Cache</span>
+    <div class="wb-items">
+      <span class="wb-chip" data-tone="added" data-enter="fill">user:42</span>
+    </div>
+  </div>
+</div>
+```
+
+### The frame API
 
 - `whiteboard.on(key, handler)` runs when a frame shows (`"*"` on every frame), including a same-frame refresh when the reduced-motion preference changes. Shared `"*"` handlers run before frame-specific handlers, so they can render content before a frame handler animates it. Connection labels hide immediately when their frame ends, while the connecting stroke can fade. The handler receives `{ frame, previous, direction, instant }`; `frame` and `previous` are frame objects, so use `frame.key` when selecting keyed state. Return the animations it starts, or a finite promise for a simulation cycle, so playback waits for the represented work. Cancel earlier work when another frame shows. Use `instant` and the live `whiteboard.reducedMotion` value to draw a consistent skipped-motion pose; normal playback still needs to advance the model.
 - `whiteboard.animate(target, keyframes, options)` is `element.animate` that holds its end state and honors the current frame jump. After that frame settles, later button or slider callbacks animate normally. The current reduced-motion preference always skips motion, including animations started by later interactions.
@@ -192,7 +232,7 @@ goto(key: string): void; next(): void; prev(): void;
 reveal(name: string): void;        // open the named code beside the whiteboard
 readonly frames: readonly { key: string; title: string; caption?: string; index: number }[];
 readonly frame: { key: string; title: string; caption?: string; index: number };
-readonly theme; readonly reducedMotion;
+readonly theme; readonly colorScheme: "light" | "dark"; readonly reducedMotion;
 ```
 
 `whiteboard.frame` is the current frame object, not its key. For keyed state, read `whiteboard.frame.key` or use the handler argument: `whiteboard.on("*", ({ frame }) => render(frame.key))`.
@@ -219,7 +259,16 @@ Scene cards supply their own padding. For custom HTML or SVG, keep the full rend
 
 ## Theme and motion
 
-Use the whiteboard's colors and fonts so the stage matches light and dark: `var(--wb-ink)`, `--wb-ink-muted`, `--wb-ink-faint`, `--wb-accent`, `--wb-accent-soft`, `--wb-on-accent`, `--wb-surface`, `--wb-well`, `--wb-rule`, `--wb-added`, `--wb-removed`, `--wb-modified`, `--wb-added-bg`, `--wb-removed-bg`, `--wb-modified-bg`, `--wb-font-sans`, `--wb-font-mono`, `--wb-font-serif`. `--wb-duration` (450ms) is the default fade.
+Custom CSS should use the whiteboard's variables, never literal colors, sizes or font names, so the stage matches light and dark and the rest of the board:
+
+- Colors: `var(--wb-ink)`, `--wb-ink-muted`, `--wb-ink-faint`, `--wb-accent`, `--wb-accent-soft`, `--wb-on-accent`, `--wb-surface`, `--wb-surface-raised`, `--wb-well`, `--wb-rule`, `--wb-rule-soft`, `--wb-added`, `--wb-removed`, `--wb-modified`, `--wb-added-bg`, `--wb-removed-bg`, `--wb-modified-bg`.
+- Faces, by role: `--wb-font-sans` for labels and controls, `--wb-font-mono` for ids, paths and values, `--wb-font-serif` for prose, `--wb-font-code` for source text. The stage loads the whiteboard's own faces, so name no font yourself.
+- Spacing: `--wb-space-2` to `--wb-space-20` in 2px steps, then `24`, `28`, `32`, `36`, `40`, `48`, `56`, `72`, `96`, `120`, `160`.
+- Type: sizes `--wb-text-micro` (10px), `small`, `body` (12px), `ui`, `title`, `reading`, `heading`, `display`; line heights `--wb-leading-tight`, `normal`, `relaxed`, `prose`; weights `--wb-weight-regular`, `medium`, `semibold`, `bold`; `--wb-tracking-caps` and `--wb-tracking-chrome` for uppercase labels.
+- Radii: `--wb-radius-small`, `control`, `surface`, `pill`, `round`.
+- Motion: `--wb-motion-fast`, `medium`, `slow` and the easings `--wb-motion-ease`, `enter`, `settle`. `--wb-duration` (450ms) is the default fade.
+
+`<html>` carries `data-wb-theme="light|dark"` and the matching `color-scheme`, and `whiteboard.colorScheme` reads it, for the rare drawing that needs a different value per theme.
 
 `whiteboard.reducedMotion` reads the stage's current `prefers-reduced-motion` setting. Use it when custom rendering has motion that `whiteboard.animate` and the scene helpers do not manage.
 
@@ -229,4 +278,5 @@ Use the whiteboard's colors and fonts so the stage matches light and dark: `var(
 - Omit `height` unless the animation intentionally needs a fixed viewport; verify any numeric height in every frame and narrow layout.
 - Every frame reads correctly when reached by a jump, not only by playing.
 - Prefer a scene; drop to the toolkit or raw HTML only when it cannot fit.
+- In raw HTML, build from the style kit and the `--wb-*` variables; write no literal color, size or font name.
 - Script errors show under the stage. After writing, read the whiteboard back and fix any.

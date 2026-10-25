@@ -6,7 +6,9 @@ import { drawStyles } from "@canvas/draw-styles";
 import { useOptionalReviewPanel } from "@canvas/review-panel";
 import {
   fontSize,
+  fontWeight,
   leading,
+  motion,
   radius,
   space,
   tracking,
@@ -52,6 +54,54 @@ const loadAnime = () =>
     (module) => module.default,
   ));
 
+let fontRules: Promise<string> | undefined;
+
+const fontFiles = import.meta.glob<string>("../fonts/*.woff2", {
+  query: "?inline",
+  import: "default",
+});
+
+// The canvas's @font-face rules with each face inlined. The stage's policy
+// admits data: fonts only, and it cannot see the canvas's own faces.
+const loadFonts = () =>
+  (fontRules ??= (async () => {
+    const [{ default: rules }, files] = await Promise.all([
+      import("../fonts/fonts.css?raw"),
+      Promise.all(
+        Object.entries(fontFiles).map(
+          async ([file, load]): Promise<[string, string]> => [
+            file.replace("../fonts/", ""),
+            await load(),
+          ],
+        ),
+      ).then((entries) => new Map(entries)),
+    ]);
+
+    return rules.replace(/url\(\.\/([^)]+)\)/g, (source, file: string) => {
+      const data = files.get(file);
+
+      return data ? `url(${data})` : source;
+    });
+  })());
+
+const steps = (group: string, values: Record<string, string>) =>
+  Object.entries(values).map(([step, value]) => [`${group}-${step}`, value]);
+
+// The canvas scale a stage reads as --wb-<group>-<step>: --wb-space-12,
+// --wb-radius-surface, --wb-text-body. Space steps drop their leading "s".
+const SCALE: Record<string, string> = Object.fromEntries([
+  ...Object.entries(space).map(([step, value]) => [
+    `space-${step.slice(1)}`,
+    value,
+  ]),
+  ...steps("radius", radius),
+  ...steps("text", fontSize),
+  ...steps("leading", leading),
+  ...steps("weight", fontWeight),
+  ...steps("tracking", tracking),
+  ...steps("motion", motion),
+]);
+
 // The canvas properties a stage reads as --wb-<name>.
 const THEME = {
   ink: "--ink",
@@ -61,28 +111,36 @@ const THEME = {
   "accent-soft": "--accent-soft",
   "on-accent": "--on-accent",
   surface: "--surface",
+  "surface-raised": "--surface-raised",
   well: "--well",
   rule: "--rule",
+  "rule-soft": "--rule-soft",
   added: "--change-added",
   removed: "--change-removed",
   modified: "--change-modified",
   "added-bg": "--diff-added-bg",
   "removed-bg": "--diff-removed-bg",
   "modified-bg": "--diff-modified-bg",
-  "font-sans": "--font-sans",
+  // Each face by its role: the chrome's for labels, mono for what a
+  // terminal would print, the reading face for prose, and the code font.
+  "font-sans": "--chrome-font",
   "font-mono": "--font-mono",
   "font-serif": "--font-serif",
+  "font-code": "--font-code",
 } as const;
 
-function readTheme(element: Element): Record<string, string> {
+function readTheme(element: Element): Pick<StageInit, "theme" | "colorScheme"> {
   const computed = getComputedStyle(element);
 
-  return Object.fromEntries(
-    Object.entries(THEME).map(([name, property]) => [
-      name,
-      computed.getPropertyValue(property).trim(),
-    ]),
-  );
+  return {
+    theme: Object.fromEntries(
+      Object.entries(THEME).map(([name, property]) => [
+        name,
+        computed.getPropertyValue(property).trim(),
+      ]),
+    ),
+    colorScheme: computed.colorScheme.includes("dark") ? "dark" : "light",
+  };
 }
 
 const reducedMotion = () =>
@@ -335,7 +393,7 @@ export function AnimationBlock({
       [channel.port2],
     );
 
-    const init: Omit<StageInit, "libraries"> = {
+    const init: Omit<StageInit, "libraries" | "fonts"> = {
       type: "init",
       html: node.html,
       autoSize: node.height === "auto",
@@ -346,18 +404,20 @@ export function AnimationBlock({
       })),
       code: Object.keys(node.code),
       blocks: [...embeddable.keys()],
-      theme: readTheme(figure),
+      ...readTheme(figure),
+      scale: SCALE,
       reducedMotion: reducedMotion(),
       frame: indexRef.current,
     };
 
-    loadAnime().then(
-      (source) =>
+    Promise.all([loadAnime(), loadFonts()]).then(
+      ([source, fonts]) =>
         channel.port1.postMessage({
           ...init,
           libraries: [source],
+          fonts,
         } satisfies HostMessage),
-      () => setError("The animation library could not be loaded."),
+      () => setError("The animation library or its fonts could not be loaded."),
     );
   }, [node.html, node.code, node.height, frames, embeddable]);
 
@@ -368,7 +428,7 @@ export function AnimationBlock({
   // workbench colors with the previous semantic surface colors).
   useLayoutEffect(() => {
     if (figureRef.current)
-      send({ type: "theme", theme: readTheme(figureRef.current) });
+      send({ type: "theme", ...readTheme(figureRef.current) });
   }, [theme, send]);
 
   // Play: hold each active-sequence frame for its duration and until its motion ends.
