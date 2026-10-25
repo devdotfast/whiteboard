@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import {
   mkdir,
@@ -12,17 +13,12 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
-import { parseJsonText } from "@dev.fast/json";
+import { type JsonObject, type JsonValue } from "@dev.fast/review-protocol";
 import {
-  type JsonObject,
-  type JsonValue,
-  isJsonObject,
-} from "@dev.fast/review-protocol";
-import {
-  MAX_SHARE_MANIFEST_BYTES,
-  type ShareManifest,
-  shareIdSchema,
-  shareManifestSchema,
+  MAX_SHARE_BYTES,
+  type ShareBundle,
+  capabilitySchema,
+  shareBundleSchema,
 } from "@dev.fast/review-share-protocol";
 import { textIncludesQuote } from "@review/evidence.js";
 import { lensSchema } from "@review/review-api/diff-lenses.js";
@@ -50,12 +46,7 @@ import {
 } from "@review/stored-document-migration.js";
 import { z } from "zod";
 
-import {
-  type ShareBundle,
-  digestBytes,
-  referenceCommits,
-  validateShareSources,
-} from "./export.js";
+import { referenceCommits, validateShareSources } from "./export.js";
 import {
   COMMIT_ID,
   assertCommitIds,
@@ -132,59 +123,48 @@ export const sharePresentationSchema = z.strictObject({
   maps: z.record(z.string(), mapSchema),
 });
 
-export function validateShareBundle(bundle: ShareBundle) {
-  const manifest = shareManifestSchema.parse(bundle.manifest);
+export interface ShareAttribution {
+  login: string;
+  sharedAt: number;
+}
 
-  if (Buffer.byteLength(JSON.stringify(manifest)) > MAX_SHARE_MANIFEST_BYTES)
-    throw new Error("Share manifest is too large.");
+export function validateShareBundle(input: ShareBundle) {
+  const bundle = shareBundleSchema.parse(input);
+  // SAFETY: a bundle is parsed from JSON, so its snapshot is a JSON object.
+  const stored = bundle.snapshot as JsonObject;
 
-  if (bundle.objects.size !== manifest.objects.length)
-    throw new Error("Share object count does not match its manifest.");
-
-  for (const object of manifest.objects) {
-    const bytes = bundle.objects.get(object.id);
-
-    if (
-      !bytes ||
-      bytes.byteLength !== object.size ||
-      digestBytes(bytes) !== object.sha256
-    )
-      throw new Error(`Shared object ${object.id} is missing or corrupt.`);
-  }
-
-  const json = (id: string) =>
-    parseJsonText(Buffer.from(bundle.objects.get(id)!).toString());
-
-  const stored = json(manifest.snapshot);
-
-  // Bundles shared before a field was retired still open; the bytes stay
-  // sealed and only the parsed document drops the retired form. Lenses
-  // shared as document blocks read as the snapshot's lenses.
+  // Bundles shared before a field was retired still open; only the parsed
+  // document drops the retired form. Lenses shared as document blocks read
+  // as the snapshot's lenses.
   const snapshot = sharedSnapshotSchema.parse(
-    isJsonObject(stored) && "document" in stored
-      ? liftSharedLenses(stored, migrateStoredDocument(stored.document))
-      : stored,
+    stored.document === undefined
+      ? stored
+      : liftSharedLenses(stored, migrateStoredDocument(stored.document)),
   );
 
   if (
-    snapshot.reviewId !== manifest.reviewId ||
-    snapshot.version !== manifest.version ||
-    snapshot.title !== manifest.title
+    snapshot.reviewId !== bundle.reviewId ||
+    snapshot.version !== bundle.version ||
+    snapshot.title !== bundle.title
   )
-    throw new Error("Shared snapshot does not match its manifest.");
+    throw new Error("Shared snapshot does not match its bundle.");
   checkReferences(snapshot.document);
   validateShareSources(snapshot);
   // Every commit it quotes reaches git as an argument.
   assertCommitIds(referenceCommits(snapshot));
 
-  if (snapshot.pins && !manifest.repository)
-    throw new Error("Shared source pins require a repository.");
+  if (
+    (snapshot.pins || referenceCommits(snapshot).length) &&
+    !bundle.repository
+  )
+    throw new ReviewInputError(
+      "This share can only be viewed in the browser.",
+      409,
+    );
 
-  const presentation = sharePresentationSchema.parse(
-    json(manifest.presentation),
-  );
+  const maps = z.record(z.string(), mapSchema).parse(bundle.maps);
 
-  if (!snapshot.pins && Object.keys(presentation.maps).length)
+  if (!snapshot.pins && Object.keys(maps).length)
     throw new Error("Shared maps require source pins.");
 
   const traces = new Map<
@@ -193,25 +173,18 @@ export function validateShareBundle(bundle: ShareBundle) {
   >();
 
   for (const block of resourceReferences(snapshot.document)) {
-    const reference = resourceReference(block);
-
-    const resource = manifest.resources.find(
-      (item) => item.id === reference?.id,
-    );
-
-    if (!reference || !resource || resource.kind !== reference.kind)
-      throw new Error("Missing or mismatched shared resource.");
-
     if (block.type === "trace_quote") {
-      let events = traces.get(resource.object);
+      let events = traces.get(block.traceId);
 
       if (!events) {
-        const trace = traceSchema.parse(json(resource.object));
+        if (!Object.hasOwn(bundle.traces, block.traceId))
+          throw new Error("Missing shared trace.");
+        const trace = traceSchema.parse(bundle.traces[block.traceId]);
         events = new Map(trace.events.map((event) => [event.id, event]));
 
         if (events.size !== trace.events.length)
           throw new Error("Duplicate shared trace event.");
-        traces.set(resource.object, events);
+        traces.set(block.traceId, events);
       }
 
       const event = events.get(block.eventId);
@@ -221,14 +194,16 @@ export function validateShareBundle(bundle: ShareBundle) {
     }
 
     if (block.type === "software_map") {
-      const map = presentation.maps[block.mapVersionId];
+      const map = Object.hasOwn(maps, block.mapVersionId)
+        ? maps[block.mapVersionId]
+        : undefined;
 
       if (!map || map.commit !== snapshot.pins?.[map.side])
         throw new Error("Shared map pins do not match.");
     }
   }
 
-  return { manifest, snapshot, presentation };
+  return { bundle, snapshot, maps };
 }
 
 function liftSharedLenses(stored: JsonObject, migrated: JsonValue): JsonObject {
@@ -246,16 +221,21 @@ function liftSharedLenses(stored: JsonObject, migrated: JsonValue): JsonObject {
   };
 }
 
-export function sharedReviewId(origin: string, shareId: string) {
+export function sharedReviewId(origin: string, capability: string) {
   const url = new URL(origin);
-  shareIdSchema.parse(shareId);
+  capabilitySchema.parse(capability);
 
-  return `shared-${digestBytes(Buffer.from(JSON.stringify([url.origin, shareId])))}`;
+  return `shared-${createHash("sha256")
+    .update(JSON.stringify([url.origin, capability]))
+    .digest("hex")}`;
 }
 
 /** Separate immutable directory tree; authoring mutation handlers cannot write it. */
 export class SharedReviewStore {
-  private readonly loaded = new Map<string, Omit<ShareBundle, "objects">>();
+  private readonly loaded = new Map<
+    string,
+    { attribution?: ShareAttribution }
+  >();
   private readonly validated = new Map<
     string,
     ReturnType<typeof validateShareBundle>
@@ -383,7 +363,7 @@ export class SharedReviewStore {
       throw new ReviewInputError("Shared review is not available.", 404);
 
     if (!saved.snapshot.pins) {
-      await this.prepareUnpinned(id, saved.manifest.repository?.cloneUrl);
+      await this.prepareUnpinned(id, saved.bundle.repository?.cloneUrl);
 
       return;
     }
@@ -405,7 +385,7 @@ export class SharedReviewStore {
         await rm(root, { recursive: true, force: true });
         await this.fetchRepository(
           root,
-          saved.manifest.repository!.cloneUrl,
+          saved.bundle.repository!.cloneUrl,
           saved.snapshot.pins,
           false,
           commits,
@@ -481,7 +461,7 @@ export class SharedReviewStore {
       add({ ...anchorPins(source, pins), repositoryId }, source);
 
     if (pins)
-      for (const map of Object.values(saved.presentation.maps))
+      for (const map of Object.values(saved.maps))
         for (const element of map.elements)
           for (const range of element.sourceRanges ?? [])
             add(pins, { ...range, side: map.side });
@@ -588,6 +568,13 @@ export class SharedReviewStore {
 
     for (const id of await readdir(this.root)) {
       if (!/^shared-[a-f0-9]{64}$/.test(id)) continue;
+
+      // Earlier share formats are not read; reopening the link imports again.
+      if (!existsSync(path.join(this.root, id, "bundle.json"))) {
+        await rm(path.join(this.root, id), { recursive: true, force: true });
+        continue;
+      }
+
       let saved: Awaited<ReturnType<SharedReviewStore["readValidated"]>>;
 
       try {
@@ -603,11 +590,8 @@ export class SharedReviewStore {
         continue;
       }
 
-      const { bundle, validated } = saved;
-      this.loaded.set(id, {
-        manifest: bundle.manifest,
-        attribution: bundle.attribution,
-      });
+      const { attribution, validated } = saved;
+      this.loaded.set(id, { attribution });
       this.validated.set(id, validated);
 
       let prepared = false;
@@ -641,7 +625,7 @@ export class SharedReviewStore {
       }
 
       if (!validated.snapshot.pins) {
-        if (this.repositories.has(id) || !validated.manifest.repository)
+        if (this.repositories.has(id) || !validated.bundle.repository)
           this.setStatus(id, "ready");
         else void this.prepare(id).catch(() => {});
       } else if (
@@ -719,9 +703,9 @@ export class SharedReviewStore {
   }
 
   get(id: string) {
-    const bundle = this.loaded.get(id);
+    const loaded = this.loaded.get(id);
 
-    if (!bundle)
+    if (!loaded)
       throw new ReviewInputError("Shared review is not available.", 404);
     const validated = this.validated.get(id)!;
     const repositoryId = this.repositories.get(id);
@@ -757,8 +741,8 @@ export class SharedReviewStore {
             ? { kind: "project" as const, repositoryId }
             : undefined,
         shared: {
-          ...bundle.attribution,
-          cloneUrl: bundle.manifest.repository?.cloneUrl,
+          ...loaded.attribution,
+          cloneUrl: validated.bundle.repository?.cloneUrl,
         },
       },
     };
@@ -793,25 +777,6 @@ export class SharedReviewStore {
       .toArray();
 
     return this.local?.store.withDiffStats(reviews) ?? reviews;
-  }
-
-  async readObject(id: string, objectId: string) {
-    const entry = this.get(id).manifest.objects.find(
-      (object) => object.id === objectId,
-    );
-
-    if (!entry)
-      throw new ReviewInputError("Shared object is unavailable.", 404);
-    const file = path.join(this.root, id, objectId);
-
-    if ((await stat(file)).size !== entry.size)
-      throw new Error("Corrupt cached shared object.");
-    const bytes = await readFile(file);
-
-    if (digestBytes(bytes) !== entry.sha256)
-      throw new Error("Corrupt cached shared object.");
-
-    return bytes;
   }
 
   async removeLocal(id: string) {
@@ -893,29 +858,31 @@ export class SharedReviewStore {
     for (const listener of this.listeners) listener();
   }
 
-  async import(origin: string, shareId: string, bundle: ShareBundle) {
+  async import(
+    origin: string,
+    capability: string,
+    bundle: ShareBundle,
+    attribution?: ShareAttribution,
+  ) {
     const validated = validateShareBundle(bundle);
-    const id = sharedReviewId(origin, shareId);
+    const id = sharedReviewId(origin, capability);
     this.assertWritable(id);
     await mkdir(this.root, { recursive: true, mode: 0o700 });
     const staging = await mkdtemp(path.join(this.root, ".import-"));
 
     try {
       await writeFile(
-        path.join(staging, "manifest.json"),
-        JSON.stringify(bundle.manifest),
+        path.join(staging, "bundle.json"),
+        JSON.stringify(validated.bundle),
         { mode: 0o600 },
       );
 
-      if (bundle.attribution)
+      if (attribution)
         await writeFile(
           path.join(staging, "attribution.json"),
-          JSON.stringify(bundle.attribution),
+          JSON.stringify(attribution),
           { mode: 0o600 },
         );
-
-      for (const [objectId, bytes] of bundle.objects)
-        await writeFile(path.join(staging, objectId), bytes, { mode: 0o600 });
 
       try {
         await rename(staging, path.join(this.root, id));
@@ -930,19 +897,14 @@ export class SharedReviewStore {
           throw error;
         const existing = await this.read(id);
 
-        if (
-          JSON.stringify(existing.manifest) !== JSON.stringify(bundle.manifest)
-        )
-          throw new Error("An immutable share changed its manifest.");
+        if (JSON.stringify(existing) !== JSON.stringify(validated.bundle))
+          throw new Error("An immutable share changed its bundle.");
       }
     } finally {
       await rm(staging, { recursive: true, force: true });
     }
 
-    this.loaded.set(id, {
-      manifest: bundle.manifest,
-      attribution: bundle.attribution,
-    });
+    this.loaded.set(id, { attribution });
     this.validated.set(id, validated);
 
     for (const listener of this.listeners) listener();
@@ -953,35 +915,19 @@ export class SharedReviewStore {
   }
 
   async read(id: string): Promise<ShareBundle> {
-    return (await this.readValidated(id)).bundle;
+    return (await this.readValidated(id)).validated.bundle;
   }
 
   private async readValidated(id: string) {
     if (!/^shared-[a-f0-9]{64}$/.test(id))
       throw new Error("Invalid shared review ID.");
     const dir = path.join(this.root, id);
+    const file = path.join(dir, "bundle.json");
 
-    if (
-      (await stat(path.join(dir, "manifest.json"))).size >
-      MAX_SHARE_MANIFEST_BYTES
-    )
-      throw new Error("Shared manifest is too large.");
+    if ((await stat(file)).size > MAX_SHARE_BYTES)
+      throw new Error("Shared bundle is too large.");
 
-    const manifest: ShareManifest = shareManifestSchema.parse(
-      JSON.parse(await readFile(path.join(dir, "manifest.json"), "utf8")),
-    );
-
-    const objects = new Map<string, Uint8Array>();
-
-    for (const object of manifest.objects) {
-      const file = path.join(dir, object.id);
-
-      if ((await stat(file)).size !== object.size)
-        throw new Error("Corrupt cached shared object.");
-      objects.set(object.id, await readFile(file));
-    }
-
-    let attribution: ShareBundle["attribution"];
+    let attribution: ShareAttribution | undefined;
 
     try {
       attribution = z
@@ -995,9 +941,9 @@ export class SharedReviewStore {
       /* Local-only fixtures have no hosted sender. */
     }
 
-    const bundle = { manifest, objects, attribution };
-    const validated = validateShareBundle(bundle);
-
-    return { bundle, validated };
+    return {
+      attribution,
+      validated: validateShareBundle(JSON.parse(await readFile(file, "utf8"))),
+    };
   }
 }

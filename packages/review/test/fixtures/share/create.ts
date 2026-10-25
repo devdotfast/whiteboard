@@ -161,6 +161,7 @@ export async function createShareFixture(root: string) {
     ...local,
     repo,
     reviewId: created.reviewId,
+    imageId,
     repository: { cloneUrl },
     sourceFile,
     sourceText,

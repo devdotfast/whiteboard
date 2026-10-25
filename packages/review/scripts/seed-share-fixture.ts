@@ -1,5 +1,5 @@
 /** Seeds a received share into `<home>` for the shared-review e2e journey; the sender's repository is renamed away afterwards. */
-import { randomUUID } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -19,11 +19,7 @@ await mkdir(home, { recursive: true });
 
 const fixture = await createShareFixture(root);
 
-const bundle = await exportShare({
-  ...fixture,
-});
-
-bundle.attribution = { login: "fixture-sender", sharedAt: Date.now() };
+const bundle = await exportShare(fixture);
 
 const recipient = openLocalReviewStore(path.join(home, "review-api.db"));
 
@@ -40,8 +36,9 @@ await store.load();
 
 const reviewId = await store.import(
   "https://app.dev.fast",
-  randomUUID(),
+  randomBytes(32).toString("base64url"),
   bundle,
+  { login: "fixture-sender", sharedAt: Date.now() },
 );
 
 await recipient.data.close();
@@ -58,7 +55,7 @@ await writeFile(
   path.join(root, "fixture.json"),
   JSON.stringify({
     reviewId,
-    version: bundle.manifest.version,
+    version: bundle.version,
     sourceFile: fixture.sourceFile,
     sourceText: fixture.sourceText,
   }),

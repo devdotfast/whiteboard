@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { createShareSchema } from "@dev.fast/review-share-protocol";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
 import type { commandSchema } from "@review/review-api/store.js";
@@ -12,11 +13,13 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { z } from "zod";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
-import { type ShareBundle, digestBytes, exportShare } from "./export.js";
+import { exportShare } from "./export.js";
 import { mountSharingPublisher } from "./host.js";
 import { SharedReviewStore, validateShareBundle } from "./import.js";
 
 const cleanup: Array<() => Promise<void>> = [];
+
+const capability = () => randomBytes(32).toString("base64url");
 
 afterEach(async () => {
   vi.unstubAllEnvs();
@@ -63,14 +66,7 @@ it("uploads and opens a document without registering or fetching a repository, i
   const readRepository = vi.fn<() => Promise<{ cloneUrl: string }>>();
   const verifyRepository = vi.fn<() => Promise<void>>();
   const shareId = randomUUID();
-  const bytes = new Map<string, Uint8Array>();
-  let manifest: ShareBundle["manifest"];
-
-  const signed = (name: string) => ({
-    url: `https://objects.test/${name}`,
-    headers: {},
-    expiresAt: "2099",
-  });
+  let body: unknown;
 
   const app = new Hono();
   app.onError((error, context) => context.json({ error: error.message }, 500));
@@ -78,34 +74,13 @@ it("uploads and opens a document without registering or fetching a repository, i
     readRepository,
     verifyRepository,
     fetch: async (input, init) => {
-      const url = new URL(String(input));
-
-      if (url.hostname === "objects.test") {
-        bytes.set(url.pathname.slice(1), Buffer.from(init!.body as Uint8Array));
-
-        return new Response(null);
-      }
-
-      if (url.pathname === "/api/shares")
-        return Response.json({ shareId, upload: signed("manifest") });
-
-      if (url.pathname.endsWith("/manifest")) {
-        manifest = JSON.parse(Buffer.from(bytes.get("manifest")!).toString());
-
-        return Response.json({
-          registered: true,
-          uploads: Object.fromEntries(
-            manifest.objects.map(({ id }) => [id, signed(id)]),
-          ),
-        });
-      }
-
-      if (url.pathname.endsWith("/link"))
-        return new Response(null, { status: 409 });
+      expect(new URL(String(input)).pathname).toBe("/api/v2/shares");
+      expect(init?.method).toBe("POST");
+      body = JSON.parse(String(init?.body));
 
       return Response.json({
         shareId,
-        url: `https://sharing.test/s/${shareId}#${"x".repeat(43)}`,
+        url: `https://sharing.test/s/${"x".repeat(43)}`,
       });
     },
   });
@@ -119,9 +94,8 @@ it("uploads and opens a document without registering or fetching a repository, i
   expect(await response.json()).toMatchObject({ shareId });
   expect(response.status).toBe(200);
   expect(verifyRepository).not.toHaveBeenCalled();
-  expect(manifest!.repository).toBeUndefined();
-  bytes.delete("manifest");
-  const bundle = { manifest: manifest!, objects: bytes };
+  const { bundle } = createShareSchema.parse(body);
+  expect(bundle.repository).toBeUndefined();
   const fetchRepository = vi.fn<() => Promise<void>>();
 
   const shared = new SharedReviewStore(
@@ -129,7 +103,7 @@ it("uploads and opens a document without registering or fetching a repository, i
     fetchRepository,
   );
 
-  const id = await shared.import("https://sharing.test", shareId, bundle);
+  const id = await shared.import("https://sharing.test", capability(), bundle);
   await shared.assertReady(id);
   expect(shared.get(id).snapshot).toMatchObject({
     document: local.store.read(local.reviewId).document,
@@ -166,7 +140,7 @@ it("moves an imported board through Trash without losing its content, then permi
   const local = await fixture();
   const shared = new SharedReviewStore(path.join(local.root, "shared"));
   const bundle = await exportShare(local);
-  const id = await shared.import("https://sharing.test", randomUUID(), bundle);
+  const id = await shared.import("https://sharing.test", capability(), bundle);
   const api = createReviewApi(local.store, local.data, undefined, shared);
 
   const post = (operation: z.input<typeof commandSchema>["operation"]) =>
@@ -216,7 +190,7 @@ it("moves an imported board through Trash without losing its content, then permi
   expect(shared.list()).toEqual([]);
 });
 
-it("retains image and trace resources on a document without source pins", async () => {
+it("retains trace resources on a document without source pins and leaves images unshared", async () => {
   const local = await fixture();
 
   const resources = await createShareFixture(
@@ -239,27 +213,25 @@ it("retains image and trace resources on a document without source pins", async 
 
   const source = await exportShare(resources);
 
-  for (const resource of source.manifest.resources) {
-    if (resource.kind === "map") continue;
+  const assetId = resources.imageId;
+  const [traceId] = Object.keys(source.traces);
+
+  for (const content of [
+    { type: "image", assetId, alt: "Attached image" },
+    {
+      type: "trace_quote",
+      traceId,
+      eventId: "request",
+      text: "Please compute the answer.",
+    },
+  ])
     await resources.store.execute({
       operation: {
         type: "edit",
         reviewId,
-        edit: {
-          type: "insert",
-          content:
-            resource.kind === "image"
-              ? { type: "image", assetId: resource.id, alt: "Attached image" }
-              : {
-                  type: "trace_quote",
-                  traceId: resource.id,
-                  eventId: "request",
-                  text: "Please compute the answer.",
-                },
-        },
+        edit: { type: "insert", content },
       },
     });
-  }
 
   const bundle = await exportShare({
     store: resources.store,
@@ -267,20 +239,17 @@ it("retains image and trace resources on a document without source pins", async 
     reviewId,
   });
 
-  expect(
-    bundle.manifest.resources.map((resource) => resource.kind).sort(),
-  ).toEqual(["image", "trace"]);
+  expect(Object.keys(bundle.maps)).toEqual([]);
   const shared = new SharedReviewStore(path.join(local.root, "shared"));
-  const id = await shared.import("https://sharing.test", randomUUID(), bundle);
+  const id = await shared.import("https://sharing.test", capability(), bundle);
   const api = createReviewApi(local.store, local.data, undefined, shared);
 
-  for (const resource of bundle.manifest.resources) {
-    const response = await api.request(`/${id}/resources/${resource.id}`);
-    expect(response.status).toBe(200);
-    expect(Buffer.from(await response.arrayBuffer())).toEqual(
-      Buffer.from(bundle.objects.get(resource.object)!),
-    );
-  }
+  expect((await api.request(`/${id}/resources/${assetId}`)).status).toBe(404);
+  const response = await api.request(`/${id}/resources/${traceId}`);
+  expect(response.status).toBe(200);
+  expect(Buffer.from(await response.arrayBuffer())).toEqual(
+    Buffer.from(JSON.stringify(bundle.traces[traceId!])),
+  );
 });
 
 it("rejects source-dependent content disguised as a document-only share", async () => {
@@ -315,25 +284,9 @@ it("rejects source-dependent content disguised as a document-only share", async 
       ],
     },
   ]) {
-    const bytes = Buffer.from(JSON.stringify({ ...snapshot, ...extra }));
-    const id = digestBytes(bytes);
-    const objects = new Map(bundle.objects);
-    objects.delete(bundle.manifest.snapshot);
-    objects.set(id, bytes);
     expect(() =>
-      validateShareBundle({
-        objects,
-        manifest: {
-          ...bundle.manifest,
-          snapshot: id,
-          objects: bundle.manifest.objects.map((object) =>
-            object.id === bundle.manifest.snapshot
-              ? { id, sha256: id, size: bytes.length }
-              : object,
-          ),
-        },
-      }),
-    ).toThrow(/source pins|code references/i);
+      validateShareBundle({ ...bundle, snapshot: { ...snapshot, ...extra } }),
+    ).toThrow(/code references|viewed in the browser/i);
   }
 });
 
@@ -391,7 +344,7 @@ async function sharedPlan(cloneUrl?: string) {
   );
 
   shared.connect(local.store, local.data);
-  const id = await shared.import("https://sharing.test", randomUUID(), bundle);
+  const id = await shared.import("https://sharing.test", capability(), bundle);
 
   return { local, shared, id, repositoryId, cloneRepository };
 }

@@ -168,7 +168,7 @@ export function createJsonReviewReporting(
                 files: { "review.json": JSON.stringify(snapshot) },
                 omitted: [],
               }),
-              map: async () => JSON.stringify(imported.presentation.maps),
+              map: async () => JSON.stringify(imported.maps),
               diff: () => jsonReviewBugReportSource(store, snapshot).diff(),
             }
           : jsonReviewBugReportSource(store, snapshot),

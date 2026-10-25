@@ -1,166 +1,138 @@
+import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import {
+  MAX_SHARE_BYTES,
+  createShareSchema,
+} from "@dev.fast/review-share-protocol";
+import { ReviewInputError } from "@review/review-api/document.js";
 import { traceSchema } from "@review/review-api/trace-schema.js";
-import { expect, it } from "vitest";
+import { afterEach, expect, it } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
-import { digestBytes, exportShare } from "./export.js";
+import { exportShare, shareRequestBody } from "./export.js";
 import { validateShareBundle } from "./import.js";
 
-it("retains the document, images, maps and complete conversations without copying repository files or diff lists", async () => {
+const cleanup: Array<() => Promise<void>> = [];
+
+afterEach(async () => {
+  for (const close of cleanup.splice(0).reverse()) await close();
+});
+
+async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), "sharing-bundle-"));
-  const fixture = await createShareFixture(root);
+  cleanup.push(() => rm(root, { recursive: true, force: true }));
+  const shared = await createShareFixture(root);
+  cleanup.push(async () => {
+    await shared.data.close();
+    await shared.store.close();
+  });
 
-  try {
-    const bundle = await exportShare(fixture);
-    const parsed = validateShareBundle(bundle);
-    expect(parsed.snapshot.pins).toEqual(
-      fixture.store.read(fixture.reviewId).pins,
-    );
-    expect(bundle.manifest.repository).toEqual(fixture.repository);
+  return shared;
+}
 
-    const declared = new Set([
-      bundle.manifest.snapshot,
-      bundle.manifest.presentation,
-      ...bundle.manifest.resources.map((resource) => resource.object),
-    ]);
+it("carries the board, its resources, commits, resolved selections and exactly the lines it references", async () => {
+  const shared = await fixture();
+  const { pins } = shared.store.read(shared.reviewId);
 
-    expect([...bundle.objects.keys()].sort()).toEqual([...declared].sort());
-    expect(
-      bundle.manifest.resources.map((resource) => resource.kind).sort(),
-    ).toEqual(["image", "map", "trace"]);
+  const { bundle } = createShareSchema.parse(
+    JSON.parse(shareRequestBody(await exportShare(shared), randomUUID())),
+  );
 
-    const trace = bundle.manifest.resources.find(
-      (resource) => resource.kind === "trace",
-    )!;
+  expect(bundle.snapshot).not.toHaveProperty("target");
+  expect(bundle.repository).toEqual(shared.repository);
+  expect(bundle.images).toEqual({});
+  expect(Object.values(bundle.traces)).toEqual([
+    expect.objectContaining({ label: "Why the answer changed" }),
+  ]);
+  expect(Object.values(bundle.maps)).toEqual([
+    expect.objectContaining({ side: "head", commit: pins!.head }),
+  ]);
+  expect(bundle.commits).toEqual([
+    expect.objectContaining({ commit: pins!.head }),
+  ]);
+  expect(Object.values(bundle.selections).flat()).toEqual(
+    expect.arrayContaining([
+      { side: "head", file: "new.ts", fromLine: 1, toLine: 1 },
+      { side: "base", file: "removed.ts", fromLine: 1, toLine: 1 },
+    ]),
+  );
 
-    expect(
-      JSON.parse(Buffer.from(bundle.objects.get(trace.object)!).toString())
-        .events,
-    ).toHaveLength(2);
-    expect(Object.keys(parsed.presentation.maps)).toHaveLength(1);
-    expect(parsed.presentation).not.toHaveProperty("diffs");
-    expect(parsed.presentation).not.toHaveProperty("commits");
-    expect(bundle.manifest).not.toHaveProperty("files");
-    const corrupt = { ...bundle, objects: new Map(bundle.objects) };
-    corrupt.objects.set(bundle.manifest.snapshot, Buffer.from("tampered"));
-    expect(() => validateShareBundle(corrupt)).toThrow("corrupt");
-  } finally {
-    await fixture.data.close();
-    await fixture.store.close();
-    await rm(root, { recursive: true, force: true });
-  }
+  // The map's range and the peek of the same lines make one excerpt.
+  expect(bundle.sources).toEqual(
+    expect.arrayContaining([
+      {
+        kind: "excerpt",
+        file: "answer.ts",
+        commit: pins!.head,
+        fromLine: 1,
+        lines: ["export function answer() {", "  return 42;", "}"],
+      },
+      {
+        kind: "excerpt",
+        file: "new.ts",
+        commit: pins!.head,
+        fromLine: 1,
+        lines: ["export const added = true;"],
+      },
+      {
+        kind: "excerpt",
+        file: "removed.ts",
+        commit: pins!.base,
+        fromLine: 1,
+        lines: ["export const obsolete = true;"],
+      },
+    ]),
+  );
+  expect(
+    bundle.sources.filter(
+      ({ file, commit }) => file === "answer.ts" && commit === pins!.head,
+    ),
+  ).toHaveLength(1);
+  expect(validateShareBundle(bundle).snapshot.pins).toEqual(pins);
+
+  // A review whose target named its base, as a stacked one does, still opens.
+  const stacked = {
+    ...bundle,
+    snapshot: { ...bundle.snapshot, origin: { baseBranch: "main" } },
+  };
+
+  expect(validateShareBundle(stacked).snapshot.origin).toEqual({
+    baseBranch: "main",
+  });
 });
 
-it("checks every quote in a reused trace and rejects duplicate event IDs", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "sharing-quotes-"));
-  const fixture = await createShareFixture(root);
+it("refuses a bundle past the upload limit", async () => {
+  const shared = await fixture();
+  const bundle = await exportShare(shared);
+  bundle.traces.large = "x".repeat(MAX_SHARE_BYTES);
 
-  try {
-    const bundle = await exportShare(fixture);
-    const parsed = validateShareBundle(bundle);
-
-    const resource = bundle.manifest.resources.find(
-      (item) => item.kind === "trace",
-    )!;
-
-    await fixture.store.execute({
-      operation: {
-        type: "edit",
-        reviewId: fixture.reviewId,
-        edit: {
-          type: "insert",
-          content: {
-            type: "trace_quote",
-            traceId: resource.id,
-            eventId: "request",
-            text: "Please compute the answer.",
-          },
-        },
-      },
-    });
-    const repeated = await exportShare(fixture);
-    expect(
-      validateShareBundle(repeated).snapshot.document.length,
-    ).toBeGreaterThan(parsed.snapshot.document.length);
-
-    const trace = traceSchema.parse(
-      JSON.parse(
-        Buffer.from(repeated.objects.get(resource.object)!).toString(),
-      ),
-    );
-
-    const replaceTrace = () => {
-      const bytes = Buffer.from(JSON.stringify(trace));
-      const id = digestBytes(bytes);
-
-      return {
-        ...repeated,
-        objects: new Map(
-          [...repeated.objects].map(([key, value]) =>
-            key === resource.object ? [id, bytes] : [key, value],
-          ),
-        ),
-        manifest: {
-          ...repeated.manifest,
-          objects: repeated.manifest.objects.map((object) =>
-            object.id === resource.object
-              ? { id, sha256: id, size: bytes.length }
-              : object,
-          ),
-          resources: repeated.manifest.resources.map((item) =>
-            item.object === resource.object ? { ...item, object: id } : item,
-          ),
-        },
-      };
-    };
-
-    trace.events[0]!.text = "Different request";
-    expect(() => validateShareBundle(replaceTrace())).toThrow(
-      "quote does not match",
-    );
-    trace.events[0]!.text = "Please compute the answer.";
-    trace.events.push({ ...trace.events[0]! });
-    expect(() => validateShareBundle(replaceTrace())).toThrow(
-      "Duplicate shared trace event",
-    );
-  } finally {
-    await fixture.data.close();
-    fixture.store.close();
-    await rm(root, { recursive: true, force: true });
-  }
+  expect(() => shareRequestBody(bundle, randomUUID())).toThrow(
+    ReviewInputError,
+  );
 });
 
-it("imports a stacked board, whose origin names its base branch", async () => {
-  const root = await mkdtemp(path.join(tmpdir(), "sharing-stacked-"));
-  const fixture = await createShareFixture(root);
+it("checks every quote against its trace and opens only shares that name their repository", async () => {
+  const shared = await fixture();
+  const bundle = await exportShare(shared);
+  const [traceId] = Object.keys(bundle.traces);
+  const trace = traceSchema.parse(structuredClone(bundle.traces[traceId!]));
 
-  try {
-    const bundle = await exportShare({
-      ...fixture,
-      store: {
-        read: (...args) => ({
-          ...fixture.store.read(...args),
-          origin: {
-            branch: "top",
-            baseBranch: "bottom",
-            pullRequestBaseBranch: "main",
-          },
-        }),
-        resource: (...args) => fixture.store.resource(...args),
-      },
-    });
+  const original = trace.events[1]!.text;
+  trace.events[1]!.text = "Something else";
+  expect(() =>
+    validateShareBundle({ ...bundle, traces: { [traceId!]: trace } }),
+  ).toThrow("quote does not match");
+  trace.events[1]!.text = original;
+  trace.events.push({ ...trace.events[0]! });
+  expect(() =>
+    validateShareBundle({ ...bundle, traces: { [traceId!]: trace } }),
+  ).toThrow("Duplicate shared trace event");
 
-    expect(validateShareBundle(bundle).snapshot.origin).toEqual({
-      branch: "top",
-      baseBranch: "bottom",
-      pullRequestBaseBranch: "main",
-    });
-  } finally {
-    await fixture.data.close();
-    await fixture.store.close();
-    await rm(root, { recursive: true, force: true });
-  }
+  const { repository: _repository, ...browserOnly } = bundle;
+  expect(() => validateShareBundle(browserOnly)).toThrow(
+    "This share can only be viewed in the browser.",
+  );
 });

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rename, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -8,17 +8,20 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { type JsonObject, isJsonObject } from "@dev.fast/review-protocol";
+import type { ShareBundle } from "@dev.fast/review-share-protocol";
 import { rangeAnchor } from "@review/lens-selection";
 import { ReviewInputError } from "@review/review-api/document.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { type ShareBundle, digestBytes, exportShare } from "./export.js";
+import { exportShare } from "./export.js";
 import { SharedReviewStore, validateShareBundle } from "./import.js";
 import { fetchPinnedRepository, verifyShareRepository } from "./repository.js";
 
 const cleanup: Array<() => Promise<void>> = [];
+
+const capability = () => randomBytes(32).toString("base64url");
 
 afterEach(async () => {
   vi.unstubAllEnvs();
@@ -155,8 +158,13 @@ async function importFixture(
 
   imported.connect(recipient.store, recipient.data);
   await imported.load();
-  const shareId = randomUUID();
-  const id = await imported.import("https://app.dev.fast", shareId, bundle);
+  const shareCapability = capability();
+
+  const id = await imported.import(
+    "https://app.dev.fast",
+    shareCapability,
+    bundle,
+  );
 
   const app = createReviewApi(
     recipient.store,
@@ -170,7 +178,7 @@ async function importFixture(
     bundle,
     imported,
     recipient,
-    shareId,
+    shareCapability,
     id,
     app,
     fetchRepository,
@@ -180,31 +188,12 @@ async function importFixture(
 /** Stand in for a bundle shared by an older Review: its sealed snapshot
  * carries `status` on every section. */
 function withLegacySectionStatus(bundle: ShareBundle): ShareBundle {
-  const snapshot = JSON.parse(
-    Buffer.from(bundle.objects.get(bundle.manifest.snapshot)!).toString(),
-  );
-
-  for (const block of snapshot.document)
-    if (block.type === "section") block.status = "complete";
-  const bytes = Buffer.from(JSON.stringify(snapshot));
-  const id = digestBytes(bytes);
-  const objects = new Map(bundle.objects);
-  objects.delete(bundle.manifest.snapshot);
-  objects.set(id, bytes);
-
-  return {
-    ...bundle,
-    objects,
-    manifest: {
-      ...bundle.manifest,
-      snapshot: id,
-      objects: bundle.manifest.objects.map((object) =>
-        object.id === bundle.manifest.snapshot
-          ? { id, sha256: id, size: bytes.byteLength }
-          : object,
-      ),
-    },
-  };
+  return withSnapshot(bundle, (snapshot) => ({
+    ...snapshot,
+    document: (snapshot.document as JsonObject[]).map((block) =>
+      block.type === "section" ? { ...block, status: "complete" } : block,
+    ),
+  }));
 }
 
 it("exports a review saved with the retired section status and imports a bundle that still carries it", async () => {
@@ -236,11 +225,9 @@ it("exports a review saved with the retired section status and imports a bundle 
     },
   );
 
-  expect(
-    JSON.parse(
-      Buffer.from(bundle.objects.get(bundle.manifest.snapshot)!).toString(),
-    ).document[3],
-  ).toMatchObject({ status: "complete" });
+  expect((bundle.snapshot.document as JsonObject[])[3]).toMatchObject({
+    status: "complete",
+  });
   const shared = imported.get(id).snapshot.document[3];
   expect(shared).toMatchObject({ type: "section", title: "Notes" });
   expect(shared).not.toHaveProperty("status");
@@ -251,34 +238,8 @@ function withSnapshot(
   bundle: ShareBundle,
   rewrite: (snapshot: JsonObject) => JsonObject,
 ): ShareBundle {
-  const bytes = Buffer.from(
-    JSON.stringify(
-      rewrite(
-        JSON.parse(
-          Buffer.from(bundle.objects.get(bundle.manifest.snapshot)!).toString(),
-        ),
-      ),
-    ),
-  );
-
-  const id = digestBytes(bytes);
-  const objects = new Map(bundle.objects);
-  objects.delete(bundle.manifest.snapshot);
-  objects.set(id, bytes);
-
-  return {
-    ...bundle,
-    objects,
-    manifest: {
-      ...bundle.manifest,
-      snapshot: id,
-      objects: bundle.manifest.objects.map((object) =>
-        object.id === bundle.manifest.snapshot
-          ? { id, sha256: id, size: bytes.byteLength }
-          : object,
-      ),
-    },
-  };
+  // SAFETY: a bundle's snapshot is the JSON of a stored snapshot.
+  return { ...bundle, snapshot: rewrite(bundle.snapshot as JsonObject) };
 }
 
 it("shares a review's lenses and reads a bundle that holds them as document blocks", async () => {
@@ -355,13 +316,9 @@ it("fetches pinned source into an independent repository and retains complete tr
     ]),
   );
 
-  const resource = bundle.manifest.resources.find(
-    (item) => item.kind === "trace",
-  )!;
+  const [traceId] = Object.keys(bundle.traces);
 
-  const trace = await (
-    await app.request(`/${id}/resources/${resource.id}`)
-  ).json();
+  const trace = await (await app.request(`/${id}/resources/${traceId}`)).json();
 
   expect(trace.events).toHaveLength(2);
   const persisted = validateShareBundle(await imported.read(id));
@@ -408,8 +365,7 @@ it("uses normal source and workspace routes but rejects authoring mutations", as
   expect(await stat(path.join(language.rootPath, "main.ts"))).toBeTruthy();
   expect((await app.request(`/${id}/resources/not-included`)).status).toBe(404);
   expect(
-    (await app.request(`/resources/${bundle.manifest.resources[0]!.id}`))
-      .status,
+    (await app.request(`/resources/${Object.keys(bundle.traces)[0]}`)).status,
   ).toBe(404);
 
   const mutation = await app.request("/commands", {
@@ -462,27 +418,25 @@ it("shows a shared board's links to the sender's boards as not on this machine",
   ]);
 });
 
-it("rejects tampered bytes and keeps resource IDs isolated across shares", async () => {
+it("rejects an invalid bundle and keeps resource IDs isolated across shares", async () => {
   const { bundle, imported, id, app } = await importFixture();
 
   const other = await imported.import(
     "https://app.dev.fast",
-    randomUUID(),
+    capability(),
     bundle,
   );
 
   expect(other).not.toBe(id);
-  const corrupt = { ...bundle, objects: new Map(bundle.objects) };
-  corrupt.objects.set(bundle.manifest.snapshot, Buffer.from("{}"));
   await expect(
-    imported.import("https://app.dev.fast", randomUUID(), corrupt),
-  ).rejects.toThrow("corrupt");
+    imported.import("https://app.dev.fast", capability(), {
+      ...bundle,
+      snapshot: {},
+    }),
+  ).rejects.toThrow("Invalid input");
   expect(
-    (
-      await app.request(
-        `/${other}/resources/${bundle.manifest.resources[0]!.id}`,
-      )
-    ).status,
+    (await app.request(`/${other}/resources/${Object.keys(bundle.traces)[0]}`))
+      .status,
   ).toBe(200);
 });
 
@@ -491,14 +445,11 @@ it("isolates corrupt cached shares at restart", async () => {
 
   const other = await imported.import(
     "https://app.dev.fast",
-    randomUUID(),
+    capability(),
     bundle,
   );
 
-  await writeFile(
-    path.join(imported.root, id, bundle.manifest.snapshot),
-    "corrupt",
-  );
+  await writeFile(path.join(imported.root, id, "bundle.json"), "corrupt");
   const restarted = new SharedReviewStore(imported.root);
   restarted.connect(recipient.store, recipient.data);
   await restarted.load();
@@ -617,7 +568,7 @@ it("shares a plan whose links quote commits, and fetches them for its recipient"
   );
 
   shared.connect(recipient.store, recipient.data);
-  const id = await shared.import("https://app.dev.fast", randomUUID(), bundle);
+  const id = await shared.import("https://app.dev.fast", capability(), bundle);
 
   expect(shared.get(id).snapshot.target).toMatchObject({ kind: "project" });
   expect(
@@ -690,8 +641,15 @@ it("says Git needs its own credentials when origin refuses them", async () => {
 });
 
 it("repairs a missing checkout and removes owned workspaces before reimport", async () => {
-  const { imported, id, recipient, bundle, shareId, repo, fetchRepository } =
-    await importFixture();
+  const {
+    imported,
+    id,
+    recipient,
+    bundle,
+    shareCapability,
+    repo,
+    fetchRepository,
+  } = await importFixture();
 
   const checkout = imported.repositoryRoot(id);
 
@@ -712,9 +670,9 @@ it("repairs a missing checkout and removes owned workspaces before reimport", as
     "not registered",
   );
   expect(await stat(path.join(repo, ".git"))).toBeTruthy();
-  expect(await imported.import("https://app.dev.fast", shareId, bundle)).toBe(
-    id,
-  );
+  expect(
+    await imported.import("https://app.dev.fast", shareCapability, bundle),
+  ).toBe(id);
 });
 
 it("retains failed imports for retry and deduplicates preparation", async () => {
@@ -740,12 +698,12 @@ it("retains failed imports for retry and deduplicates preparation", async () => 
   const imported = new SharedReviewStore(path.join(root, "retry"), fetcher);
   imported.connect(local.store, local.data);
   await imported.load();
-  const shareId = randomUUID();
+  const shareCapability = capability();
   await expect(
-    imported.import("https://app.dev.fast", shareId, bundle),
+    imported.import("https://app.dev.fast", shareCapability, bundle),
   ).rejects.toThrow("Configure Git credentials");
   const { sharedReviewId } = await import("./import.js");
-  const id = sharedReviewId("https://app.dev.fast", shareId);
+  const id = sharedReviewId("https://app.dev.fast", shareCapability);
   expect(imported.status(id).stage).toBe("error");
   expect(imported.list()).toEqual([]);
   available = true;

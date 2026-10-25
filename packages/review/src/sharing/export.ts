@@ -1,18 +1,19 @@
-import { createHash } from "node:crypto";
-
 import {
   MAX_SHARE_BYTES,
-  MAX_SHARE_MANIFEST_BYTES,
-  MAX_SHARE_OBJECT_BYTES,
   SHARE_FORMAT,
-  type ShareManifest,
-  shareManifestSchema,
+  type ShareBundle,
+  type ShareSource,
 } from "@dev.fast/review-share-protocol";
-import { sourceAnchors } from "@review/lens-selection.js";
+import {
+  type LensSource,
+  selectionKey,
+  sourceAnchors,
+} from "@review/lens-selection.js";
 import { markdownNodes, parseMarkdown } from "@review/markdown.js";
 import { lensSelections } from "@review/review-api/diff-lenses.js";
-import { ReviewInputError } from "@review/review-api/document.js";
 import {
+  type Pins,
+  ReviewInputError,
   anchorPins,
   boardRepositoryId,
   checkReferences,
@@ -21,28 +22,13 @@ import {
   readsAtBoardPins,
   resourceReference,
   resourceReferences,
+  selectionReferences,
   sourceReferences,
 } from "@review/review-api/document.js";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
+import { reviewProgress } from "@review/review-api/review-progress.js";
 import type { ReviewStore, Snapshot } from "@review/review-api/store.js";
-import { z } from "zod";
-
-export interface ShareBundle {
-  manifest: ShareManifest;
-  objects: Map<string, Uint8Array>;
-  attribution?: { login: string; sharedAt: number };
-}
-
-export type ShareExportStore = Pick<ReviewStore, "read" | "resource">;
-
-export type ShareExportData = Pick<
-  LocalReviewData,
-  "map" | "validateResource" | "validateSource"
->;
-
-export function digestBytes(bytes: Uint8Array): string {
-  return createHash("sha256").update(bytes).digest("hex");
-}
+import type { FileLineRange } from "@review/source.js";
 
 export function validateShareSources(
   snapshot: Pick<Snapshot, "pins" | "document" | "lenses">,
@@ -55,8 +41,8 @@ export function validateShareSources(
 }
 
 /** The commits a board's references read at besides its base and head. A
- * recipient fetches them too. A shared board names no repository of its
- * own, so one stands in for its commit links. */
+ * Desktop recipient fetches them too. A shared board names no repository of
+ * its own, so one stands in for its commit links. */
 export function referenceCommits(
   snapshot: Pick<Snapshot, "pins" | "document" | "target">,
   repositoryId = boardRepositoryId(snapshot) ?? "shared",
@@ -74,13 +60,83 @@ export function referenceCommits(
   return [...commits].sort();
 }
 
+interface ExcerptRange {
+  pins: Pins;
+  side: "base" | "head";
+  file: string;
+  fromLine: number;
+  toLine: number;
+}
+
+/** One excerpt per run of overlapping or adjacent lines in a file at a commit. */
+async function cutExcerpts(
+  data: {
+    quote(
+      pins: Pins,
+      range: Omit<ExcerptRange, "pins">,
+    ): Promise<{ commit: string; text: string }>;
+  },
+  ranges: ExcerptRange[],
+): Promise<ShareSource[]> {
+  const groups = new Map<string, ExcerptRange[]>();
+
+  for (const range of ranges) {
+    const key = JSON.stringify([range.pins[range.side], range.file]);
+    groups.set(key, [...(groups.get(key) ?? []), range]);
+  }
+
+  const merged = [...groups.values()].flatMap((group) =>
+    group
+      .toSorted((a, b) => a.fromLine - b.fromLine)
+      .reduce<ExcerptRange[]>((runs, range) => {
+        const last = runs.at(-1);
+
+        if (last && range.fromLine <= last.toLine + 1)
+          last.toLine = Math.max(last.toLine, range.toLine);
+        else runs.push({ ...range });
+
+        return runs;
+      }, []),
+  );
+
+  return Promise.all(
+    merged.map(async ({ pins, ...range }) => {
+      const quote = await data.quote(pins, range);
+
+      return {
+        kind: "excerpt" as const,
+        file: range.file,
+        commit: quote.commit,
+        fromLine: range.fromLine,
+        lines: excerptLines(quote.text),
+      };
+    }),
+  );
+}
+
+// jsonb cannot store NUL.
+const excerptLines = (text: string) =>
+  text.split(/\r?\n/).map((line) => line.replaceAll("\0", "\uFFFD"));
+
+/** The create request body, within the upload limit. */
+export function shareRequestBody(bundle: ShareBundle, requestId: string) {
+  const body = JSON.stringify({ requestId, bundle });
+
+  if (Buffer.byteLength(body) > MAX_SHARE_BYTES)
+    throw new ReviewInputError(
+      `Review exceeds the ${MAX_SHARE_BYTES / 1024 / 1024} MB sharing limit. Remove large traces, then retry.`,
+    );
+
+  return body;
+}
+
 /** Freeze one stored version before any asynchronous source reads. */
 export async function exportShare(input: {
-  store: ShareExportStore;
-  data: ShareExportData;
+  store: ReviewStore;
+  data: LocalReviewData;
   reviewId: string;
   version?: number;
-  repository?: ShareManifest["repository"];
+  repository?: ShareBundle["repository"];
 }): Promise<ShareBundle> {
   const stored = structuredClone(
     input.store.read(input.reviewId, input.version),
@@ -106,47 +162,7 @@ export async function exportShare(input: {
 
   documentSchema.parse(snapshot.document);
   checkReferences(snapshot.document);
-  const objects = new Map<string, Uint8Array>();
-  let totalBytes = 0;
-
-  const add = (bytes: Uint8Array) => {
-    if (bytes.byteLength > MAX_SHARE_OBJECT_BYTES)
-      throw new ReviewInputError("A shared object exceeds the upload limit.");
-    const id = digestBytes(bytes);
-
-    if (!objects.has(id)) {
-      totalBytes += bytes.byteLength;
-
-      if (totalBytes > MAX_SHARE_BYTES)
-        throw new ReviewInputError("Review exceeds the sharing limit.");
-      objects.set(id, Uint8Array.from(bytes));
-    }
-
-    return id;
-  };
-
-  const json = <Value>(value: Value) => add(Buffer.from(JSON.stringify(value)));
-  const resources: ShareManifest["resources"] = [];
-  const maps: Record<string, Awaited<ReturnType<LocalReviewData["map"]>>> = {};
-
-  // Lens ranges travel with the snapshot and must resolve at its pins too.
-  const sources = [
-    ...sourceReferences(snapshot.document, { repositoryId }),
-    ...lensSelections(snapshot.lenses ?? []).flatMap((selection) =>
-      sourceAnchors(selection.source).map((source) => ({
-        ...selection,
-        source,
-        peek: false,
-      })),
-    ),
-  ];
-
-  const pins = snapshot.pins;
-
   validateShareSources(snapshot);
-
-  if ((pins || referenceCommits(stored).length) && !input.repository)
-    throw new ReviewInputError("Shared source pins require a repository.", 409);
 
   for (const block of elements(snapshot.document)) {
     if (block.type !== "markdown") continue;
@@ -158,68 +174,110 @@ export async function exportShare(input: {
         );
   }
 
+  const pins = snapshot.pins;
+
+  // Lens ranges travel with the snapshot and must resolve at its pins too.
+  const references: {
+    source: FileLineRange;
+    peek?: boolean;
+  }[] = [
+    ...sourceReferences(snapshot.document, { repositoryId }),
+    ...lensSelections(snapshot.lenses ?? []).flatMap((selection) =>
+      sourceAnchors(selection.source).map((source) => ({ source })),
+    ),
+  ];
+
+  const traces = new Map<string, unknown>();
+  const maps = new Map<string, Awaited<ReturnType<LocalReviewData["map"]>>>();
+
   for (const block of resourceReferences(snapshot.document)) {
     await input.data.validateResource(pins, block);
+    const id = resourceReference(block)?.id;
 
-    const reference = resourceReference(block);
-
-    if (
-      !reference ||
-      resources.some((resource) => resource.id === reference.id)
-    )
+    if (!id || block.type === "image" || traces.has(id) || maps.has(id))
       continue;
-    const { id } = reference;
-    const resource = input.store.resource(id);
-    resources.push({
-      id,
-      kind: z.enum(["image", "trace", "map"]).parse(resource.kind),
-      mimeType: z
-        .enum(["image/png", "application/json"])
-        .parse(resource.mimeType),
-      object: add(resource.data),
-    });
 
-    if (block.type === "software_map") {
+    if (block.type === "trace_quote")
+      traces.set(
+        id,
+        JSON.parse(Buffer.from(input.store.resource(id).data).toString()),
+      );
+    else if (block.type === "software_map") {
       const map = await input.data.map(pins, id);
-      Object.defineProperty(maps, id, { value: map, enumerable: true });
+      maps.set(id, map);
 
       for (const element of map.elements)
         for (const range of element.sourceRanges ?? [])
-          sources.push({
-            id: `${id}:${element.id}`,
-            source: { ...range, side: map.side },
-          });
-    }
+          references.push({ source: { ...range, side: map.side } });
+    } else throw new ReviewInputError("A shared resource has the wrong type.");
   }
 
-  for (const reference of sources)
+  for (const reference of references)
     await input.data.validateSource(
       anchorPins(reference.source, pins),
       reference.source,
       { peek: reference.peek ?? false },
     );
 
-  const snapshotId = json(snapshot);
-  const presentationId = json({ maps });
+  const { resolvedSelections } = await reviewProgress(
+    input.store,
+    input.data,
+    stored,
+  );
 
-  const manifest = shareManifestSchema.parse({
+  const selected = new Map<string, LensSource>(
+    [
+      ...lensSelections(snapshot.lenses ?? []),
+      ...selectionReferences(snapshot.document, {
+        tolerant: true,
+        repositoryId,
+      }),
+    ].map(({ source }) => [selectionKey(source), source]),
+  );
+
+  const selections = Object.fromEntries(
+    Object.entries(resolvedSelections).map(([key, ranges]) => {
+      const own = selected.get(key)?.pins;
+
+      return [
+        key,
+        ranges.map((range) => ({ ...range, ...(own && { pins: own }) })),
+      ];
+    }),
+  );
+
+  const excerpts: ExcerptRange[] = [
+    ...Object.values(selections).flat(),
+    ...[...maps.values()].flatMap((map) =>
+      map.elements.flatMap((element) =>
+        (element.sourceRanges ?? []).map((range) => ({
+          ...range,
+          side: map.side,
+        })),
+      ),
+    ),
+  ].map(({ side = "head", file, fromLine, toLine, ...range }) => ({
+    pins: anchorPins(range, pins),
+    side,
+    file,
+    fromLine,
+    toLine,
+  }));
+
+  return {
     format: SHARE_FORMAT,
     reviewId: snapshot.reviewId,
     version: snapshot.version,
     title: snapshot.title,
-    snapshot: snapshotId,
-    presentation: presentationId,
-    objects: [...objects].map(([id, bytes]) => ({
-      id,
-      sha256: id,
-      size: bytes.byteLength,
-    })),
-    resources,
-    repository: input.repository,
-  });
-
-  if (Buffer.byteLength(JSON.stringify(manifest)) > MAX_SHARE_MANIFEST_BYTES)
-    throw new ReviewInputError("The share manifest exceeds the upload limit.");
-
-  return { manifest, objects };
+    snapshot,
+    images: {},
+    traces: Object.fromEntries(traces),
+    maps: Object.fromEntries(maps),
+    commits: pins
+      ? await input.data.commits((await input.data.resolveSource(stored)).pins)
+      : [],
+    selections,
+    sources: await cutExcerpts(input.data, excerpts),
+    ...(input.repository && { repository: input.repository }),
+  };
 }
