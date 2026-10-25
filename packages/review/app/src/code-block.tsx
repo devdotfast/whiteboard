@@ -157,7 +157,9 @@ interface HighlightedToken {
   token: ShjToken | undefined;
 }
 
-function normalizeMarkdownCodeLanguage(language: string): ShjLanguage | null {
+export function normalizeMarkdownCodeLanguage(
+  language: string,
+): ShjLanguage | null {
   const normalized = language.trim().toLowerCase();
 
   switch (normalized) {
@@ -341,6 +343,6 @@ const syntaxStyles = stylex.create({
 });
 /* oxlint-enable stylex/no-unused */
 
-const syntaxByToken = new Map<string, stylex.StyleXStyles>(
+export const syntaxByToken = new Map<string, stylex.StyleXStyles>(
   Object.entries(syntaxStyles),
 );
