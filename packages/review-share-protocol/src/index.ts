@@ -1,31 +1,13 @@
 import { z } from "zod";
 
-export const SHARE_FORMAT = "review-share/1";
+export const SHARE_FORMAT = "review-share/2";
 
-export const MAX_SHARE_MANIFEST_BYTES = 2 * 1024 * 1024;
-
-export const MAX_SHARE_OBJECT_BYTES = 32 * 1024 * 1024;
-
-export const MAX_SHARE_BYTES = 128 * 1024 * 1024;
-
-export const MAX_SHARE_OBJECTS = 2048;
-
-export const objectIdSchema = z.string().regex(/^[a-f0-9]{64}$/);
+/** UTF-8 bytes of a bundle's JSON, as uploaded and as stored. */
+export const MAX_SHARE_BYTES = 16 * 1024 * 1024;
 
 export const shareIdSchema = z.uuid();
 
 export const capabilitySchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
-
-export const shareObjectSchema = z
-  .strictObject({
-    id: objectIdSchema,
-    size: z.number().int().min(0).max(MAX_SHARE_OBJECT_BYTES),
-    sha256: objectIdSchema,
-  })
-  .refine(
-    (object) => object.id === object.sha256,
-    "Object ID must match its digest.",
-  );
 
 export const sharePathSchema = z
   .string()
@@ -83,94 +65,83 @@ export const gitHubRepositoryUrlSchema = z.string().refine((value) => {
   }
 }, "Use a canonical GitHub HTTPS repository URL without credentials.");
 
-export const shareManifestSchema = z
-  .strictObject({
-    format: z.literal(SHARE_FORMAT),
-    reviewId: z.string().min(1).max(256),
-    version: z.number().int().nonnegative(),
-    title: z.string().min(1).max(4096),
-    snapshot: objectIdSchema,
-    presentation: objectIdSchema,
-    objects: z.array(shareObjectSchema).min(2).max(MAX_SHARE_OBJECTS),
-    resources: z
-      .array(
-        z.strictObject({
-          id: z.string().min(1).max(256),
-          kind: z.enum(["image", "trace", "map"]),
-          mimeType: z.enum(["image/png", "application/json"]),
-          object: objectIdSchema,
-        }),
-      )
-      .max(MAX_SHARE_OBJECTS),
-    repository: z
-      .strictObject({ cloneUrl: gitHubRepositoryUrlSchema })
-      .optional(),
-  })
-  .superRefine((manifest, context) => {
-    const ids = new Set(manifest.objects.map((object) => object.id));
+const commitSchema = z.string().regex(/^[a-f0-9]{40}([a-f0-9]{24})?$/);
 
-    const fail = (message: string) =>
-      context.addIssue({ code: "custom", message });
+const sideSchema = z.enum(["base", "head"]);
 
-    if (ids.size !== manifest.objects.length) fail("Duplicate object ID.");
+/** An excerpt is the lines a board references. */
+export const shareSourceSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("excerpt"),
+    file: sharePathSchema,
+    commit: commitSchema,
+    fromLine: z.number().int().positive(),
+    lines: z.array(z.string()).min(1),
+  }),
+]);
 
-    if (
-      manifest.objects.reduce((size, object) => size + object.size, 0) >
-      MAX_SHARE_BYTES
-    )
-      fail("Share exceeds the total byte limit.");
+const lineRangeSchema = z.strictObject({
+  side: sideSchema,
+  file: sharePathSchema,
+  fromLine: z.number().int().positive(),
+  toLine: z.number().int().positive(),
+  pins: z
+    .strictObject({
+      repositoryId: z.string(),
+      head: z.string(),
+      base: z.string().optional(),
+    })
+    .optional(),
+});
 
-    for (const id of [
-      manifest.snapshot,
-      manifest.presentation,
-      ...manifest.resources.map((resource) => resource.object),
-    ])
-      if (!ids.has(id)) fail("Reference to an undeclared object.");
+export const shareBundleSchema = z.strictObject({
+  format: z.literal(SHARE_FORMAT),
+  reviewId: z.string().min(1).max(256),
+  version: z.number().int().nonnegative(),
+  title: z.string().min(1).max(4096),
+  /** Validated against the document schema by the reader. */
+  snapshot: z.record(z.string(), z.unknown()),
+  images: z.record(z.string(), z.strictObject({ png: z.base64() })),
+  traces: z.record(z.string(), z.unknown()),
+  maps: z.record(z.string(), z.unknown()),
+  commits: z.array(z.unknown()),
+  /** Each reference's lines, resolved where the board was shared. */
+  selections: z.record(z.string(), z.array(lineRangeSchema)),
+  sources: z.array(shareSourceSchema),
+  repository: z
+    .strictObject({ cloneUrl: gitHubRepositoryUrlSchema })
+    .optional(),
+});
 
-    if (
-      new Set(manifest.resources.map((resource) => resource.id)).size !==
-      manifest.resources.length
-    )
-      fail("Duplicate resource ID.");
+export type ShareBundle = z.infer<typeof shareBundleSchema>;
 
-    for (const resource of manifest.resources)
-      if ((resource.kind === "image") !== (resource.mimeType === "image/png"))
-        fail("Resource MIME type does not match its kind.");
-  });
-
-export type ShareManifest = z.infer<typeof shareManifestSchema>;
-
-export type ShareObject = z.infer<typeof shareObjectSchema>;
+export type ShareSource = z.infer<typeof shareSourceSchema>;
 
 export const createShareSchema = z.strictObject({
   requestId: z.uuid(),
-  manifest: z.strictObject({
-    sha256: objectIdSchema,
-    size: z.number().int().positive().max(MAX_SHARE_MANIFEST_BYTES),
-  }),
+  bundle: shareBundleSchema,
 });
 
-export function shareLink(
-  origin: string,
-  id: string,
-  capability: string,
-): string {
-  return new URL(
-    `/s/${shareIdSchema.parse(id)}#${capabilitySchema.parse(capability)}`,
-    origin,
-  ).href;
+export function shareLink(origin: string, capability: string): string {
+  return new URL(`/s/${capabilitySchema.parse(capability)}`, origin).href;
 }
 
 export function parseShareLink(value: string) {
   const url = new URL(value);
 
-  if (url.protocol !== "https:" || url.username || url.password || url.search)
-    throw new Error("Use an HTTPS Review share link.");
-  const match = /^\/s\/([^/]+)$/.exec(url.pathname);
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.hash ||
+    [...url.searchParams.keys()].some((key) => key !== "app")
+  )
+    throw new Error("Use an HTTPS Whiteboard share link.");
 
   return {
     origin: url.origin,
-    shareId: shareIdSchema.parse(match?.[1]),
-    capability: capabilitySchema.parse(url.hash.slice(1)),
+    capability: capabilitySchema.parse(
+      /^\/s\/([^/]+)$/.exec(url.pathname)?.[1],
+    ),
   };
 }

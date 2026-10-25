@@ -1,31 +1,31 @@
 import { expect, it } from "vitest";
 
 import {
+  type ShareBundle,
   gitHubRepositoryUrlSchema,
   normalizeGitHubRemote,
   parseShareLink,
+  shareBundleSchema,
   shareLink,
-  shareManifestSchema,
   sharePathSchema,
 } from "./index.js";
 
-const id = "00000000-0000-4000-8000-000000000001";
-
-it("keeps the capability in a fragment and rejects credentials or unexpected link paths", () => {
+it("puts the capability in the path and rejects credentials, fragments or other paths", () => {
   const token = "a".repeat(43),
-    url = shareLink("https://app.dev.fast", id, token);
+    url = shareLink("https://app.dev.fast", token);
 
+  expect(url).toBe(`https://app.dev.fast/s/${token}`);
   expect(parseShareLink(url)).toEqual({
     origin: "https://app.dev.fast",
-    shareId: id,
     capability: token,
   });
-  expect(new URL(url).search).toBe("");
+  expect(parseShareLink(`${url}?app=preview`).capability).toBe(token);
   expect(() =>
     parseShareLink(url.replace("https://", "https://user:password@")),
   ).toThrow("HTTPS");
+  expect(() => parseShareLink(`${url}#x`)).toThrow("HTTPS");
   expect(() => parseShareLink(url.replace("/s/", "/other/"))).toThrow(
-    /UUID|string/i,
+    "expected string",
   );
 });
 
@@ -45,43 +45,37 @@ it("rejects traversal paths and platform-specific separators", () => {
   );
 });
 
-it("rejects references not declared by the immutable envelope", () => {
-  const a = "a".repeat(64),
-    b = "b".repeat(64);
+const bundle: ShareBundle = {
+  format: "review-share/2",
+  reviewId: "review",
+  version: 1,
+  title: "Title",
+  snapshot: {},
+  images: {},
+  traces: {},
+  maps: {},
+  commits: [],
+  selections: {},
+  sources: [
+    {
+      kind: "excerpt",
+      file: "src/a.ts",
+      commit: "a".repeat(40),
+      fromLine: 3,
+      lines: ["const a = 1;"],
+    },
+  ],
+};
 
-  const manifest = {
-    format: "review-share/1",
-    reviewId: "review",
-    version: 1,
-    title: "Title",
-    snapshot: a,
-    presentation: b,
-    objects: [
-      { id: a, sha256: a, size: 1 },
-      { id: b, sha256: b, size: 1 },
-    ],
-    resources: [],
-    repository: { cloneUrl: "https://github.com/fixture/review.git" },
-  };
-
-  expect(shareManifestSchema.safeParse(manifest).success).toBe(true);
+it("rejects an older format and an unknown source kind", () => {
   expect(
-    shareManifestSchema.safeParse({
-      ...manifest,
-      resources: [
-        {
-          id: "trace",
-          kind: "trace",
-          mimeType: "application/json",
-          object: "c".repeat(64),
-        },
-      ],
-    }).success,
+    shareBundleSchema.safeParse({ ...bundle, format: "review-share/1" })
+      .success,
   ).toBe(false);
   expect(
-    shareManifestSchema.safeParse({
-      ...manifest,
-      objects: [manifest.objects[0], manifest.objects[0]],
+    shareBundleSchema.safeParse({
+      ...bundle,
+      sources: [{ kind: "file", file: "a", commit: "a".repeat(40) }],
     }).success,
   ).toBe(false);
 });
@@ -114,32 +108,4 @@ it("normalizes GitHub transports without publishing credentials", () => {
     "https://github.com/owner/repo",
   ])
     expect(gitHubRepositoryUrlSchema.safeParse(remote).success).toBe(false);
-});
-
-it("accepts document-only manifests and rejects the previous source envelope", () => {
-  const a = "a".repeat(64),
-    b = "b".repeat(64);
-
-  const manifest = {
-    format: "review-share/1",
-    reviewId: "review",
-    version: 1,
-    title: "Review",
-    snapshot: a,
-    presentation: b,
-    objects: [
-      { id: a, sha256: a, size: 1 },
-      { id: b, sha256: b, size: 1 },
-    ],
-    resources: [],
-  };
-
-  expect(shareManifestSchema.safeParse(manifest).success).toBe(true);
-  expect(
-    shareManifestSchema.safeParse({
-      ...manifest,
-      repository: { cloneUrl: "https://github.com/owner/repo.git" },
-      files: [],
-    }).success,
-  ).toBe(false);
 });
