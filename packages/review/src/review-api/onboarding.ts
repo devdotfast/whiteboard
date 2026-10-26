@@ -151,6 +151,8 @@ export async function onboardingProjects(
 interface Worktree {
   path: string;
   branch?: string;
+  bare?: true;
+  prunable?: true;
 }
 
 /** `git worktree list --porcelain`: blocks of `worktree`, `HEAD`, `branch`. */
@@ -162,14 +164,25 @@ export function parseWorktrees(output: string): Worktree[] {
     if (line.startsWith("worktree ")) {
       current = { path: line.slice("worktree ".length) };
       worktrees.push(current);
-    } else if (current && line.startsWith("branch "))
+    } else if (!current) continue;
+    else if (line.startsWith("branch "))
       current.branch = line
         .slice("branch ".length)
         .replace(/^refs\/heads\//, "");
+    else if (line === "bare") current.bare = true;
+    else if (line.startsWith("prunable")) current.prunable = true;
   }
 
   return worktrees;
 }
+
+const drawable = (worktree: Worktree) =>
+  !worktree.bare &&
+  !worktree.prunable &&
+  // Whiteboard's own checkouts live under the git dir.
+  !worktree.path.split(/[\\/]/).includes("dev-fast") &&
+  // Scratch checkouts, such as an agent's throwaway worktree.
+  !isInside(TEMPORARY_ROOTS, worktree.path);
 
 const pullRequestsSchema = z.array(
   z.object({
@@ -311,10 +324,7 @@ export async function onboardingTargets(
       (worktree) =>
         worktree.branch &&
         path.resolve(worktree.path) !== path.resolve(root) &&
-        // Whiteboard's own checkouts live under the git dir.
-        !worktree.path.split(/[\\/]/).includes("dev-fast") &&
-        // Scratch checkouts, such as an agent's throwaway worktree.
-        !isInside(TEMPORARY_ROOTS, worktree.path),
+        drawable(worktree),
     )
     .map((worktree) =>
       local({
