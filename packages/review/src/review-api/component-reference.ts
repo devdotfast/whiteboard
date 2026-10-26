@@ -1,3 +1,9 @@
+/** The animation component, shown only while Animations are on. */
+const ANIMATION = [
+  '- animation {title, html, frames: {key, title, label?, caption?, duration? (ms)}[] (1 to 60), code?: {name: anchor}, height?: "auto" (default) | number (120 to 1200 CSS px), pins?}; declare every possible frame',
+  'Use an animation for change over time that a static diagram cannot show: state before and after, a cache filling, data changing as a request crosses layers. It can sit in design beside the diagram, or replace it when the motion is the point. If nothing changes between frames, use a sequence or flow_diagram instead: their steps and nodes link to code. Read session_get_instructions({topic:"animation"}) before writing one.',
+];
+
 /** Every component's fields, for session_get_instructions: the edit tool's
  * description must stay short enough that clients don't cut it off. */
 export const COMPONENT_REFERENCE = [
@@ -26,7 +32,7 @@ export const COMPONENT_REFERENCE = [
   "- store {label, storage: relational|document, collections: {key: {label, fields: {key: field}, source?: anchor of its schema declaration}}, dataStoreKind?: database|objectStore|bucket|artifactStore|fileStore}",
   "- field {label, dataType, nullable?, primaryKey?, references?: {store, collection, field}, fields?: {key: field}}",
   "- useCase {label, summary?, operations: operation[] (1 or more)}; operation {kind: read|write, actor, store, collection, label, source: anchor, field?, detail?, pins?}, naming declared keys",
-  '- animation {title, html, frames: {key, title, label?, caption?, duration? (ms)}[] (1 to 60), code?: {name: anchor}, height?: "auto" (default) | number (120 to 1200 CSS px), pins?}; declare every possible frame; stage scripts can select an ordered branch with whiteboard.setSequence(keys), and endpoint-bound arrow/link connectors accept arrowhead:false for an undirected line; read session_get_instructions({topic:"animation"}) before writing one',
+  ...ANIMATION,
   "",
   'Example (replace its path and lines with verified ones): {"type":"sequence","title":"Request","actors":{"a":"Client","b":"Server"},"steps":[{"from":"a","to":"b","label":"Send","source":"head/src/app.ts#L10-L20"}]}',
 ].join("\n");
@@ -36,6 +42,6 @@ export function componentReference(animationsEnabled: boolean): string {
   return animationsEnabled
     ? COMPONENT_REFERENCE
     : COMPONENT_REFERENCE.split("\n")
-        .filter((line) => !line.startsWith("- animation "))
+        .filter((line) => !ANIMATION.includes(line))
         .join("\n");
 }

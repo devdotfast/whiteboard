@@ -67,8 +67,8 @@ it("gates animation authoring live, including stale MCP tools, while keeping sav
 
     const disabledTools = await catalog();
     expect(JSON.stringify(disabledTools)).not.toContain('"animation"');
-    expect(await client.read<string>("/instructions")).not.toContain(
-      "- animation ",
+    expect(await client.read<string>("/instructions")).not.toMatch(
+      /animation/i,
     );
     expect((await app.request("/instructions?topic=animation")).status).toBe(
       409,

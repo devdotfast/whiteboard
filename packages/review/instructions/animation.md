@@ -1,5 +1,17 @@
 An `animation` component plays HTML you write, frame by frame, to show how a change behaves over time: a request moving through layers, state before and after, a cache filling. Use it when motion explains something a static diagram cannot. Do not use it for content a `sequence`, `flow_diagram` or `code_peek` already shows.
 
+## Choose how to build it
+
+Choose where to start by what changes between the frames:
+
+| Build with | When the frames show |
+| --- | --- |
+| The scene (`whiteboard.scene`) | A few cards whose notes and tones change, with chips moving along their edges. This is the default. |
+| Mermaid (`whiteboard.mermaid`) | A diagram too large to place card by card, whose nodes and edges appear, leave or light up from frame to frame. |
+| The style kit and raw HTML | Anything else: a chart, a timeline, a queue, a custom shape. |
+
+If no part of the drawing changes between frames, it is not an animation: use a `sequence` or `flow_diagram` block, whose steps and nodes link to code. The three mix: a stage can hold a scene, a Mermaid diagram and your own HTML together.
+
 ## The component
 
 ```json
@@ -146,7 +158,9 @@ The stage sets `data-frame="<key>"` on `<html>`, and `enter` / `exit` / `only` o
 
 ## Draw with Mermaid
 
-`whiteboard.mermaid(text)` draws a Mermaid diagram in the stage's theme and lays it out for you. Use it when the layout is the hard part: many nodes, branches, subgraphs, a state machine, a class or entity diagram. Use the scene when a few cards carry chips along their edges; Mermaid has no `send`.
+`whiteboard.mermaid(text)` draws a Mermaid diagram in the stage's theme, lays it out for you, and shows its parts frame by frame. Use it when the frames change a diagram too large to place card by card: a pipeline whose stages light up in turn, a state machine stepping through its states, a graph that grows as a request spreads. Use the scene when a few cards carry chips along their edges; Mermaid has no `send`.
+
+Mermaid nodes do not link to code. A diagram that stays the same in every frame belongs in a `flow_diagram` or `sequence` block, not in an animation.
 
 ```html
 <script>
@@ -326,6 +340,6 @@ Custom CSS should use the whiteboard's variables, never literal colors, sizes or
 - Each frame shows one idea; its title says what changed. 3 to 8 frames is usual.
 - Omit `height` unless the animation intentionally needs a fixed viewport; verify any numeric height in every frame and narrow layout.
 - Every frame reads correctly when reached by a jump, not only by playing.
-- Prefer a scene, or `whiteboard.mermaid` when the layout is the hard part; drop to the toolkit or raw HTML only when neither fits.
+- Build as "Choose how to build it" says: a scene by default, Mermaid for a large diagram whose parts change by frame, and the style kit or raw HTML for anything else.
 - In raw HTML, build from the style kit and the `--wb-*` variables; write no literal color, size or font name.
 - Script errors show under the stage. After writing, read the whiteboard back and fix any.
