@@ -2,27 +2,43 @@
    written next to the component that renders it. */
 
 /* The scope root: the canvas container the workbench mounts into. Inside
-   @scope only :scope reaches it, so its box and the dark palette live here.
+   @scope only :scope reaches it, so its box and the palette live here. Each
+   color is light-dark(light, dark): a theme only sets color-scheme.
    One board, one marker: chrome is the tray, content is the board, committed
    things are crisp vector, anything the agent is still thinking about is
    marker ink trailing one blue dot, and erased history lingers as ghost ink. */
 .review-canvas-root {
-  --ghost: #343a46;
-  --well: #1a1f29;
-  --raised: #1a1f29;
-  --tray: #12161e;
+  --ghost: light-dark(#cdd1d8, #343a46);
+  --well: light-dark(#e9ebef, #1a1f29);
+  --raised: light-dark(#ffffff, #1a1f29);
+  --tray: light-dark(#f3f4f6, #12161e);
   --tray-raised: color-mix(in srgb, var(--ink) 6%, var(--tray));
   --chevron-down: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 8.5 12 16l7-7.5' fill='none' stroke='%239AA0AB' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/></svg>");
   --check-mark: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='M5 12.5 9.5 17 19 7' fill='none' stroke='%230C0F15' stroke-width='3.6' stroke-linecap='round' stroke-linejoin='round'/></svg>");
-  --marker-tint: color-mix(in srgb, var(--accent) 14%, transparent);
-  --marker-glow: color-mix(in srgb, var(--accent) 30%, transparent);
+  --marker-tint: light-dark(
+    color-mix(in srgb, var(--accent) 8%, transparent),
+    color-mix(in srgb, var(--accent) 14%, transparent)
+  );
+  --marker-glow: light-dark(
+    color-mix(in srgb, var(--accent) 22%, transparent),
+    color-mix(in srgb, var(--accent) 30%, transparent)
+  );
   /* Agents after the first, in the order they begin: violet, then teal. */
-  --agent-1: #9b7bff;
-  --agent-1-tint: rgba(155, 123, 255, 0.14);
-  --agent-1-glow: rgba(155, 123, 255, 0.3);
-  --agent-2: #2bb3ad;
-  --agent-2-tint: rgba(43, 179, 173, 0.14);
-  --agent-2-glow: rgba(43, 179, 173, 0.3);
+  --agent-1: light-dark(#7a4fd6, #9b7bff);
+  --agent-1-tint: light-dark(
+    rgba(122, 79, 214, 0.08),
+    rgba(155, 123, 255, 0.14)
+  );
+  --agent-1-glow: light-dark(
+    rgba(122, 79, 214, 0.22),
+    rgba(155, 123, 255, 0.3)
+  );
+  --agent-2: light-dark(#0f8a86, #2bb3ad);
+  --agent-2-tint: light-dark(
+    rgba(15, 138, 134, 0.08),
+    rgba(43, 179, 173, 0.14)
+  );
+  --agent-2-glow: light-dark(rgba(15, 138, 134, 0.22), rgba(43, 179, 173, 0.3));
   --board-grid: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><circle cx='1' cy='1' r='0.8' fill='%231A1F2A'/></svg>");
   --review-header-height: 35px;
   /* The page bar, as tall as Desktop's window controls. */
@@ -47,83 +63,133 @@
      rules bridge editorWidget.border rather than widget.border: the
      latter is null on both stock themes, so its variable is never emitted and
      the dark fallback would leak into light. */
-  --bg: var(--vscode-editor-background, #0c0f15);
-  --surface: var(--vscode-editor-background, #0c0f15);
-  --surface-raised: var(--vscode-editorWidget-background, #1a1f29);
-  --control-bg: var(--vscode-input-background, #1a1f29);
-  --ink: var(--vscode-editor-foreground, #eef0f4);
-  --ink-muted: var(--vscode-descriptionForeground, #9199a8);
-  --ink-faint: var(--vscode-disabledForeground, #5f6776);
-  --rule: var(--vscode-panel-border, #262c37);
-  --rule-soft: var(--vscode-editorWidget-border, #39404d);
+  --bg: var(--vscode-editor-background, light-dark(#ffffff, #0c0f15));
+  --surface: var(--vscode-editor-background, light-dark(#ffffff, #0c0f15));
+  --surface-raised: var(
+    --vscode-editorWidget-background,
+    light-dark(#ffffff, #1a1f29)
+  );
+  --control-bg: var(--vscode-input-background, light-dark(#e9ebef, #1a1f29));
+  --ink: var(--vscode-editor-foreground, light-dark(#15181e, #eef0f4));
+  --ink-muted: var(
+    --vscode-descriptionForeground,
+    light-dark(#5d6472, #9199a8)
+  );
+  --ink-faint: var(--vscode-disabledForeground, light-dark(#9aa0ab, #5f6776));
+  --rule: var(--vscode-panel-border, light-dark(#d8dbe1, #262c37));
+  --rule-soft: var(--vscode-editorWidget-border, light-dark(#b9bec7, #39404d));
   /* Workbench controls the canvas mirrors: find toggles and error text. */
-  --toolbar-hover-bg: var(--vscode-toolbar-hoverBackground, #1a1f29);
-  --input-option-active-bg: var(--vscode-inputOption-activeBackground, #12161e);
-  --input-option-active-fg: var(--vscode-inputOption-activeForeground, #eef0f4);
+  --toolbar-hover-bg: var(
+    --vscode-toolbar-hoverBackground,
+    light-dark(#e9ebef, #1a1f29)
+  );
+  --input-option-active-bg: var(
+    --vscode-inputOption-activeBackground,
+    light-dark(#f3f4f6, #12161e)
+  );
+  --input-option-active-fg: var(
+    --vscode-inputOption-activeForeground,
+    light-dark(#15181e, #eef0f4)
+  );
   /* The canvas shares the workbench DOM, but selection already reads through
      its background and row highlights, so suppress the inherited
      focus/list/input chrome. The map is the exception: its selection ring is
      the only cue a node is selected, so it draws in the accent. */
   --selection: var(--accent);
   --selection-shadow: color-mix(in srgb, var(--accent) 40%, transparent);
-  --map-storage-border: #a4cedb;
+  --map-storage-border: light-dark(#4a7685, #a4cedb);
   --vscode-focusBorder: transparent;
   --vscode-list-focusOutline: transparent;
   --vscode-list-focusAndSelectionOutline: transparent;
   --vscode-list-inactiveFocusOutline: transparent;
   --vscode-inputOption-activeBorder: transparent;
-  --accent: var(--review-accent, #5b7cff);
-  --accent-soft: color-mix(in srgb, var(--accent) 18%, var(--bg));
-  --on-accent: var(--review-on-accent, #ffffff);
-  --on-accent-wash: color-mix(in srgb, var(--on-accent) 22%, transparent);
-  --rpc: color-mix(in srgb, var(--accent) 68%, #ffffff);
-  --text-selection-bg: color-mix(in srgb, var(--accent) 35%, transparent);
-  --text-selection-color: #ffffff;
-  --canvas-grid: #1a1f2a;
-  --minimap-mask: rgba(12, 15, 21, 0.78);
-  --minimap-node: #8796ad;
-  --minimap-node-selected: transparent;
-  --edge-muted: #6f7786;
-  --change-added: var(--review-success, #4ed990);
-  --change-removed: var(--review-danger, #f26a55);
-  --change-modified: var(--review-warning, #f2c14e);
-  --merged: #a371f7;
-  --warning-wash: color-mix(in srgb, var(--change-modified) 12%, transparent);
-  --warning-outline: color-mix(
-    in srgb,
-    var(--change-modified) 52%,
-    transparent
+  --accent: var(--review-accent, light-dark(#2b55e6, #5b7cff));
+  --accent-soft: light-dark(
+    color-mix(in srgb, var(--accent) 8%, var(--bg)),
+    color-mix(in srgb, var(--accent) 18%, var(--bg))
   );
-  --on-warning: #1a1405;
+  --on-accent: var(--review-on-accent, #ffffff);
+  --on-accent-wash: light-dark(
+    color-mix(in srgb, var(--on-accent) 34%, transparent),
+    color-mix(in srgb, var(--on-accent) 22%, transparent)
+  );
+  --rpc: light-dark(
+    var(--accent),
+    color-mix(in srgb, var(--accent) 68%, #ffffff)
+  );
+  --text-selection-bg: light-dark(
+    color-mix(in srgb, var(--accent) 16%, transparent),
+    color-mix(in srgb, var(--accent) 35%, transparent)
+  );
+  --text-selection-color: light-dark(var(--ink), #ffffff);
+  --canvas-grid: light-dark(#e6e8ec, #1a1f2a);
+  --minimap-mask: light-dark(rgba(255, 255, 255, 0.72), rgba(12, 15, 21, 0.78));
+  --minimap-node: light-dark(#b9bec7, #8796ad);
+  --minimap-node-selected: transparent;
+  --edge-muted: light-dark(#9aa0ab, #6f7786);
+  --change-added: var(--review-success, light-dark(#1b9a57, #4ed990));
+  --change-removed: var(--review-danger, light-dark(#d8402c, #f26a55));
+  --change-modified: var(--review-warning, light-dark(#c98a0b, #f2c14e));
+  --merged: light-dark(#8250df, #a371f7);
+  --warning-wash: light-dark(
+    color-mix(in srgb, var(--change-modified) 10%, transparent),
+    color-mix(in srgb, var(--change-modified) 12%, transparent)
+  );
+  --warning-outline: light-dark(
+    color-mix(in srgb, var(--change-modified) 24%, transparent),
+    color-mix(in srgb, var(--change-modified) 52%, transparent)
+  );
+  --on-warning: light-dark(#4a3514, #1a1405);
   --diff-added: var(--change-added);
   --diff-added-bg: color-mix(in srgb, var(--diff-added) 8%, var(--bg));
   --diff-modified: var(--change-modified);
   --diff-modified-bg: color-mix(in srgb, var(--diff-modified) 8%, var(--bg));
   --diff-removed: var(--change-removed);
   --diff-removed-bg: color-mix(in srgb, var(--diff-removed) 8%, var(--bg));
-  --shadow-color: rgb(0 0 0 / 45%);
-  --shadow-color-strong: rgba(0, 0, 0, 0.55);
+  --shadow-color: light-dark(rgba(21, 24, 30, 0.08), rgb(0 0 0 / 45%));
+  --shadow-color-strong: light-dark(rgba(21, 24, 30, 0.1), rgba(0, 0, 0, 0.55));
   --shadow-color-soft: rgb(0 0 0 / 0.16);
   --quote-mark: rgba(255, 230, 0, 0.35);
-  --backdrop: rgba(0, 0, 0, 0.56);
-  --accent-shadow: color-mix(in srgb, var(--accent) 20%, transparent);
-  --accent-stripe: color-mix(in srgb, var(--accent) 18%, transparent);
-  --accent-wash: color-mix(in srgb, var(--accent) 14%, transparent);
+  --backdrop: light-dark(rgba(21, 24, 30, 0.26), rgba(0, 0, 0, 0.56));
+  --accent-shadow: light-dark(
+    color-mix(in srgb, var(--accent) 8%, transparent),
+    color-mix(in srgb, var(--accent) 20%, transparent)
+  );
+  --accent-stripe: light-dark(
+    color-mix(in srgb, var(--accent) 12%, transparent),
+    color-mix(in srgb, var(--accent) 18%, transparent)
+  );
+  --accent-wash: light-dark(
+    color-mix(in srgb, var(--accent) 8%, transparent),
+    color-mix(in srgb, var(--accent) 14%, transparent)
+  );
   --accent-outline: color-mix(in srgb, var(--accent) 32%, transparent);
-  --link-open-wash: color-mix(in srgb, var(--accent) 15%, transparent);
-  --rpc-wash: color-mix(in srgb, var(--rpc) 12%, transparent);
+  --link-open-wash: light-dark(
+    color-mix(in srgb, var(--accent) 12%, transparent),
+    color-mix(in srgb, var(--accent) 15%, transparent)
+  );
+  --rpc-wash: light-dark(
+    color-mix(in srgb, var(--rpc) 8%, transparent),
+    color-mix(in srgb, var(--rpc) 12%, transparent)
+  );
   /* Code (Whiteboard Dark): ink at three strengths, the marker for keywords,
      sky and periwinkle for types and functions, straw strings, orchid
      numbers. Every value clears WCAG AA on the editor background. */
-  --syntax-comment: var(--review-syntax-comment, #778090);
+  --syntax-comment: var(--review-syntax-comment, light-dark(#6b7382, #778090));
   --syntax-keyword: var(--review-syntax-keyword, var(--accent));
-  --syntax-type: var(--review-syntax-type, #6fc3e6);
-  --syntax-function: var(--review-syntax-function, #b7c4ff);
-  --syntax-string: var(--review-syntax-string, #d9a85c);
-  --syntax-number: var(--review-syntax-number, #d48fd6);
-  --syntax-operator: var(--review-syntax-operator, #9199a8);
-  --syntax-inserted: #4ed990;
-  --syntax-deleted: #f26a55;
+  --syntax-type: var(--review-syntax-type, light-dark(#0c6e8e, #6fc3e6));
+  --syntax-function: var(
+    --review-syntax-function,
+    light-dark(#1f3f99, #b7c4ff)
+  );
+  --syntax-string: var(--review-syntax-string, light-dark(#8a5a1c, #d9a85c));
+  --syntax-number: var(--review-syntax-number, light-dark(#8b3f8a, #d48fd6));
+  --syntax-operator: var(
+    --review-syntax-operator,
+    light-dark(#5d6472, #9199a8)
+  );
+  --syntax-inserted: light-dark(#167a47, #4ed990);
+  --syntax-deleted: light-dark(#c93a27, #f26a55);
   --review-debug-layer: 2147483000;
   --review-find-match-background: color-mix(
     in srgb,
@@ -142,16 +208,20 @@
   --review-scrollbar-size: 10px;
   --review-scrollbar-thumb: var(
     --vscode-scrollbarSlider-background,
-    color-mix(in srgb, #5f6776 45%, transparent)
+    light-dark(
+      color-mix(in srgb, #9aa0ab 45%, transparent),
+      color-mix(in srgb, #5f6776 45%, transparent)
+    )
   );
   --review-scrollbar-thumb-hover: var(
     --vscode-scrollbarSlider-hoverBackground,
-    #5f6776
+    light-dark(#9aa0ab, #5f6776)
   );
   --review-scrollbar-thumb-active: var(
     --vscode-scrollbarSlider-activeBackground,
-    #9199a8
+    light-dark(#5d6472, #9199a8)
   );
+  color-scheme: dark;
   color: var(--ink);
   font-family: var(--font-display);
   font-synthesis: none;

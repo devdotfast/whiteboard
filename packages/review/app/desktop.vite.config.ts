@@ -20,6 +20,8 @@ export default defineConfig({
     // The workbench CSP refuses `data:` fonts.
     assetsInlineLimit: (file) => (file.endsWith(".woff2") ? false : undefined),
     copyPublicDir: false,
+    // Electron 42. Lowering light-dark() would resolve the palette on the root.
+    cssTarget: "chrome140",
     emptyOutDir: true,
     manifest: true,
     outDir: "dist/desktop",
