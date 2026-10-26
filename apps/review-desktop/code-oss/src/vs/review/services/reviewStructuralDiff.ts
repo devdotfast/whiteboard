@@ -9,7 +9,7 @@ import { IModelService } from "../../editor/common/services/model.js";
 import { ITextModelService } from "../../editor/common/services/resolverService.js";
 import { ILanguageService } from "../../editor/common/languages/language.js";
 import { URI } from "../../base/common/uri.js";
-import { Event } from "../../base/common/event.js";
+import { Emitter, Event } from "../../base/common/event.js";
 import { DisposableMap, DisposableStore, MutableDisposable, toDisposable } from "../../base/common/lifecycle.js";
 import { CancellationError } from "../../base/common/errors.js";
 import { IInstantiationService } from "../../platform/instantiation/common/instantiation.js";
@@ -28,7 +28,8 @@ import {
 	structuralHighlights,
 	type StructuralGap,
 } from "../common/reviewStructuralDiff.js";
-import type { ITextModel } from "../../editor/common/model.js";
+import { EndOfLinePreference, type ITextModel } from "../../editor/common/model.js";
+import { Range } from "../../editor/common/core/range.js";
 import type { ReviewFilesEditorEntry } from "./reviewFilesDiffView.js";
 import { InlineLineNumbers, type ReviewLineNumbersSetting } from "./reviewLineNumbers.js";
 import { StructuralFoldControls, StructuralFoldHover } from "./reviewStructuralFolds.js";
@@ -44,7 +45,7 @@ export function createStructuralDiffEditors(
 	viewed?: StructuralViewedState,
 	lineNumbers?: ReviewLineNumbersSetting,
 	onscreen?: IObservable<boolean>,
-): { instantiation: IInstantiationService; entries: readonly ReviewFilesEditorEntry[] } {
+): { instantiation: IInstantiationService; entries: readonly ReviewFilesEditorEntry[]; onWillEdit: Event<void> } {
 	// These models belong to this comparison. A live file can change while the
 	// comparison is open, so its editor text must come from diffr's own result.
 	const modelService = instantiation.invokeFunction((a) => a.get(IModelService));
@@ -52,6 +53,7 @@ export function createStructuralDiffEditors(
 	const languages = instantiation.invokeFunction((a) => a.get(ILanguageService));
 	const viewId = ++structuralViewId;
 	const sources = new Map<string, { path: string; side: "lhs" | "rhs"; unchangedBase?: URI }>();
+	const snapshots = new Map<string, URI>();
 	const unchangedTexts = new Map<string, Promise<string>>();
 	const snapshotUri = (uri: URI, path: string, side: "lhs" | "rhs", unchangedBase?: URI) => {
 		const query = new URLSearchParams(uri.query);
@@ -78,10 +80,12 @@ export function createStructuralDiffEditors(
 				}
 				text = await read;
 			} else {
-				const result = await session.fileResult(source.path);
+				// A refresh may have adopted newer text while this waited.
+				const result = await session.fileResult(source.path).then(result => session.getFileResult(source.path) ?? result);
 				// diffr's binary check is stricter than git's.
 				text = result.diff?.type === "text" ? result.diff[source.side]?.text ?? "" : "";
 			}
+			if (!source.unchangedBase) snapshots.set(uri.toString(), uri);
 			return modelService.getModel(uri) ?? modelService.createModel(text, languages.createByFilepathOrFirstLine(uri, text.split("\n", 1)[0]), uri);
 		},
 	}));
@@ -97,7 +101,19 @@ export function createStructuralDiffEditors(
 	const pairs = new Map(resolvedEntries.map(e => [e.original!.toString() + "\n" + e.modified!.toString(), e.file.path]));
 	// One provider per file, so they share one session listener.
 	const providers = new Set<(files: ReadonlySet<string>) => void>();
-	lifetime.add(session.onDidChange(change => { for (const notify of [...providers]) notify(change.files); }));
+	const willEdit = lifetime.add(new Emitter<void>());
+	lifetime.add(session.onDidChange(change => {
+		// A refreshed diff edits its snapshots before any diff is recomputed against them.
+		const edits = [...snapshots.values()].flatMap(uri => {
+			const source = sources.get(uri.with({ fragment: "" }).toString())!;
+			const diff = change.files.has(source.path) ? session.getFileResult(source.path)?.diff : undefined;
+			const model = diff && modelService.getModel(uri);
+			return model ? [{ model, text: diff.type === "text" ? diff[source.side]?.text ?? "" : "" }] : [];
+		});
+		if (edits.length) willEdit.fire();
+		for (const { model, text } of edits) replaceText(model, text);
+		for (const notify of [...providers]) notify(change.files);
+	}));
 	const onDidChangeFiles: Event<ReadonlySet<string>> = notify => { providers.add(notify); return toDisposable(() => providers.delete(notify)); };
 	const factory: IDiffProviderFactoryService = {
 		_serviceBrand: undefined,
@@ -107,10 +123,28 @@ export function createStructuralDiffEditors(
 		instantiation.createChild(new ServiceCollection([IDiffProviderFactoryService, factory])),
 	);
 	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime, viewed, lineNumbers, onscreen);
-	return { instantiation: child, entries: resolvedEntries };
+	return { instantiation: child, entries: resolvedEntries, onWillEdit: willEdit.event };
 }
 
 let structuralViewId = 0;
+
+/** Edits only the span that differs, so Monaco keeps the diff, folds and scroll around it. */
+function replaceText(model: ITextModel, text: string): void {
+	const before = model.getValue(EndOfLinePreference.LF);
+	const after = text.replace(/\r\n/g, "\n");
+	if (before === after) return;
+	const shorter = Math.min(before.length, after.length);
+	let head = 0;
+	while (head < shorter && before[head] === after[head]) head++;
+	let tail = 0;
+	while (tail < shorter - head && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+	const position = (offset: number) => {
+		const lines = before.slice(0, offset).split("\n");
+		return { line: lines.length, column: lines[lines.length - 1].length + 1 };
+	};
+	const start = position(head), end = position(before.length - tail);
+	model.applyEdits([{ range: new Range(start.line, start.column, end.line, end.column), text: after.slice(head, after.length - tail) }]);
+}
 
 /** Adapts session snapshots and fold state to Monaco's diff interface. */
 export class StructuralDiffProvider implements IDocumentDiffProvider {

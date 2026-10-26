@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { StructuralDiffSession } from './reviewStructuralDiffSession.js';
-import { STRUCTURAL_WIRE_VERSION, type StructuralEvent } from '../common/reviewStructuralDiff.js';
+import { STRUCTURAL_WIRE_VERSION, type StructuralEvent, type StructuralRegion } from '../common/reviewStructuralDiff.js';
 import { autorun } from '../../base/common/observable.js';
 
 const file = { rhs: { path: 'a.ts', oid: 'abc', mode: '100644' } };
@@ -262,4 +262,80 @@ test('load timing reports the first file, and stream completion only when an upd
 	assert.equal(typeof updated?.updatesMs, 'number');
 	assert.ok(updated!.updatesMs! >= updated!.firstFileMs);
 	assert.equal(await timed([start, complete]), undefined);
+});
+
+test('a refresh swaps results in place and keeps folds while the fold tree keeps its shape', async () => {
+	const pos = (line: number) => ({ line, column: 0 });
+	const leaf = (id: number, line: number): StructuralRegion => ({ kind: 'leaf', id, fold_state_id: id, alignment_id: id, start: pos(line), end: pos(line + 1) });
+	const fold = (id: number, children: StructuralRegion[]): StructuralRegion => ({ kind: 'fold', id, fold_state_id: id, indent: pos(0), start: pos(0), end: pos(9), children });
+	const diffed = (text: string, root: StructuralRegion) => ({
+		async *streamComparison() {
+			yield start;
+			yield { ...result, diff: { ...result.diff, rhs: { text, root } } } as StructuralEvent;
+			yield complete;
+		},
+	});
+	const session = new StructuralDiffSession(diffed('a', fold(1, [fold(2, [leaf(3, 0)])])));
+	await session.start();
+	session.setRegionCollapsed('a.ts', 2, true);
+	const changed: string[][] = [];
+	session.onDidChange(change => changed.push([...change.files]));
+
+	await session.refresh(diffed('b', fold(1, [fold(2, [leaf(3, 0)])])));
+	assert.equal(session.getTextDiff('a.ts')?.rhs?.text, 'b');
+	assert.deepEqual(changed, [['a.ts']]);
+	assert.equal(session.isRegionCollapsed('a.ts', 2), true);
+
+	await session.refresh(diffed('c', fold(1, [leaf(4, 0), fold(2, [leaf(3, 1)])])));
+	assert.equal(session.isRegionCollapsed('a.ts', 2), false);
+	session.dispose();
+});
+
+test('overlapping refreshes settle on the last, and a failed one keeps the shown diff', async () => {
+	let release!: () => void;
+	const gate = new Promise<void>(resolve => release = resolve);
+	const diffed = (text: string, stalled = false) => ({
+		async *streamComparison() {
+			yield start;
+			if (stalled) { await gate; throw new Error('diffr exited with 1: stale'); }
+			yield { ...result, diff: { ...result.diff, rhs: { ...(result as { diff: { rhs: object } }).diff.rhs, text } } } as StructuralEvent;
+			yield complete;
+		},
+	});
+	const session = new StructuralDiffSession(diffed('a', true));
+	const first = session.start();
+	try {
+		const stale = session.refresh(diffed('b', true));
+		const latest = session.refresh(diffed('c'));
+		assert.equal(session.complete, false);
+		await session.start();
+		assert.equal(await latest, true);
+		assert.equal(session.complete, true);
+		assert.equal(session.getTextDiff('a.ts')?.rhs?.text, 'c');
+		release();
+		assert.equal(await stale, false);
+		await first;
+		assert.equal(session.error, undefined, 'the first stream failed after the refresh replaced it');
+
+		assert.equal(await session.refresh({ async *streamComparison() { yield start; throw new Error('boom'); } }), false);
+		assert.equal(session.getTextDiff('a.ts')?.rhs?.text, 'c');
+		assert.equal(session.error, undefined);
+	} finally { release(); session.dispose(); }
+});
+
+test('a refresh shows its files before diffr\'s deferred updates, which keep the reader\'s folds', async () => {
+	let release!: () => void;
+	const gate = new Promise<void>(resolve => release = resolve);
+	const session = new StructuralDiffSession({ async *streamComparison() { yield start; yield foldedFile(); yield complete; } });
+	await session.start();
+	session.markSeen('a.ts');
+	try {
+		const refreshed = session.refresh({ async *streamComparison() { yield start; yield foldedFile(); await gate; yield summary; yield complete; } });
+		assert.equal(await Promise.race([refreshed, new Promise(resolve => setTimeout(() => resolve('waited for updates'), 500))]), true);
+		assert.equal(bodyOf(session)?.visibility, undefined);
+		release();
+		await new Promise(resolve => setTimeout(resolve, 10));
+		assert.deepEqual(bodyOf(session)?.visibility, { label: 'Sets up a' });
+		assert.equal(session.isRegionCollapsed('a.ts', 2), false);
+	} finally { release(); session.dispose(); }
 });

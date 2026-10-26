@@ -6,7 +6,7 @@ import { Range } from "../../editor/common/core/range.js";
  *--------------------------------------------------------------------------------------------*/
 
 import "../browser/media/review.css";
-import { $, addDisposableListener, append, Dimension, getWindow, scheduleAtNextAnimationFrame } from "../../base/browser/dom.js";
+import { $, addDisposableListener, append, Dimension, getWindow, isAncestorOfActiveElement, scheduleAtNextAnimationFrame } from "../../base/browser/dom.js";
 import { Orientation, SplitView } from "../../base/browser/ui/splitview/splitview.js";
 import { disposableTimeout } from "../../base/common/async.js";
 import { Emitter, Event } from "../../base/common/event.js";
@@ -21,6 +21,7 @@ import { MultiDiffEditorViewModel } from "../../editor/browser/widget/multiDiffE
 import { MultiDiffEditorWidget, type RevealOptions } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorWidget.js";
 import type { IMultiDiffEditorViewState } from "../../editor/browser/widget/multiDiffEditor/multiDiffEditorWidgetImpl.js";
 import { IDiffEditorOptions } from "../../editor/common/config/editorOptions.js";
+import { TrackedRangeStickiness } from "../../editor/common/model.js";
 import { ITextModelService } from "../../editor/common/services/resolverService.js";
 import { ITextResourceConfigurationService } from "../../editor/common/services/textResourceConfiguration.js";
 import { IHoverService } from "../../platform/hover/browser/hover.js";
@@ -186,6 +187,7 @@ export class ReviewFilesDiffView extends Disposable {
 	private readonly diffContainer: HTMLElement;
 
 	private readonly root: HTMLElement;
+	private readonly fileTree: HTMLElement;
 	private readonly splitView: SplitView<number>;
 	private readonly changedFilesTree: ReviewChangedFilesTree | undefined;
 	private readonly widget: MultiDiffEditorWidget;
@@ -240,7 +242,7 @@ export class ReviewFilesDiffView extends Disposable {
 	) {
 		super();
 		this.root = append(container, $(".review-files-editor"));
-		const fileTree = document ? container.ownerDocument.createElement("div") : append(this.fileTreeContainer ?? this.root, $(".review-files-editor-tree"));
+		const fileTree = this.fileTree = document ? container.ownerDocument.createElement("div") : append(this.fileTreeContainer ?? this.root, $(".review-files-editor-tree"));
 		const diffContainer = append(this.root, $(".review-files-editor-diffs"));
 		this.diffContainer = diffContainer;
 		if (document) fileTree.hidden = true;
@@ -417,15 +419,7 @@ export class ReviewFilesDiffView extends Disposable {
 		// The canvas mounts this view without a user gesture, so the widget's
 		// first-change navigation must never take keyboard focus.
 		this.widget.setViewModel(viewModel, { preserveFocus: true, viewState, initialScrollPosition: this.document ? "top" : "firstChange" });
-		if (viewState) {
-			this.settle(() => {
-				this.widget.setViewState(viewState);
-				this.syncFileSelectionFromWidget();
-			}).add(toDisposable(() => {
-				this.pendingViewState = undefined;
-				this.widget.clearPendingRestorationState();
-			}));
-		}
+		if (viewState) this.restoreViewState(viewState);
 		this.changedFilesTree?.setFiles(Array.from(new Map(input.entries.map(entry => [entry.file.path, entry.file])).values()));
 		this.syncFileSelectionFromWidget();
 		this._register(
@@ -458,6 +452,47 @@ export class ReviewFilesDiffView extends Disposable {
 		);
 	}
 
+	/** Keeps the line at the top of the viewport in place while edits above it change heights. */
+	holdPlace(): void {
+		const top = this.diffContainer.getBoundingClientRect().top;
+		const editorFor = (uri: URI) => this.widget.tryGetCodeEditor(uri)?.editor;
+		for (const { modified } of this.input?.entries ?? []) {
+			const editor = modified && editorFor(modified);
+			const model = editor?.getModel();
+			const node = editor?.getDomNode();
+			if (!modified || !editor || !model || !node) continue;
+			const y = node.getBoundingClientRect().top - editor.getScrollTop();
+			const line = editor.getVisibleRanges().flatMap(range => Array.from({ length: range.endLineNumber - range.startLineNumber + 1 }, (_, i) => range.startLineNumber + i))
+				.find(line => y + editor.getTopForLineNumber(line) >= top);
+			if (!line) continue;
+			const [id] = model.deltaDecorations([], [{ range: new Range(line, 1, line, 1), options: { description: "review-reader-place", stickiness: TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges } }]);
+			const position = () => {
+				const editor = editorFor(modified), at = model.getDecorationRange(id)?.startLineNumber;
+				return editor && at ? editor.getDomNode()!.getBoundingClientRect().top + editor.getTopForLineNumber(at) - editor.getScrollTop() : undefined;
+			};
+			const before = position()!;
+			const hold = this.settle(() => {
+				const now = position();
+				if (now !== undefined && Math.abs(now - before) >= 1) this.widget.setScrollTop(this.widget.getScrollTop() + now - before);
+			});
+			hold.add(toDisposable(() => model.deltaDecorations([id], [])));
+			return;
+		}
+	}
+
+	restoreViewState(viewState: IMultiDiffEditorViewState): void {
+		// Replacing a hold clears its state, so set this one's after.
+		const hold = this.settle(() => {
+			this.widget.setViewState(viewState);
+			this.syncFileSelectionFromWidget();
+		});
+		this.pendingViewState = viewState;
+		hold.add(toDisposable(() => {
+			this.pendingViewState = undefined;
+			this.widget.clearPendingRestorationState();
+		}));
+	}
+
 	startLoading(entries: readonly ReviewFilesEditorEntry[]): void {
 		this.changedFilesTree?.setFiles(Array.from(new Map(entries.map(entry => [entry.file.path, entry.file])).values()));
 		for (const entry of entries) {
@@ -475,6 +510,7 @@ export class ReviewFilesDiffView extends Disposable {
 		this.loadingFiles.delete(path);
 		this.readyFiles.add(path);
 		if (error) this.failedFiles.set(path, error);
+		else this.failedFiles.delete(path);
 		this.changedFilesTree?.setFileState(path, error ? "error" : undefined, error);
 		this.input?.setReadyFiles(this.readyFiles, this.loadingFiles.size > 0);
 		this.showStreamStatus();
@@ -617,6 +653,18 @@ export class ReviewFilesDiffView extends Disposable {
 		this.pendingPath = this.loadingFiles.has(path) ? path : undefined;
 		this.showStreamStatus();
 		if (!this.pendingPath) this.reveal(entry);
+	}
+
+	setStaged(staged: boolean): void {
+		this.root.classList.toggle("review-files-editor-staged", staged);
+		if (this.fileTreeContainer) this.fileTree.hidden = staged;
+		if (!staged) this.layout();
+	}
+
+	get entries(): readonly ReviewFilesEditorEntry[] { return this.input?.entries ?? []; }
+
+	hasFocus(): boolean {
+		return isAncestorOfActiveElement(this.root);
 	}
 
 	loadingFailed(message: string): void {
