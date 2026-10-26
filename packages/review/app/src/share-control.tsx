@@ -31,6 +31,7 @@ import {
 import { canvasQueryKeys } from "./canvas-query";
 import { useOptionalReviewSession } from "./host/review-session";
 import { topbarActionsMarker } from "./markers.stylex";
+import { useSharingAccount, useSignIn } from "./sharing-account";
 import { shellStyles } from "./shell-styles";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
@@ -43,21 +44,12 @@ export const SharingContext = createContext<{
   cloneUrl?: string;
 } | null>(null);
 
-interface SharingAccount {
-  account: { login: string; origin: string } | null;
-  pending: boolean;
-  userCode?: string;
-  error?: string;
-}
-
 /** The version a popover shares, frozen when it opens, and the idempotency
  * key the host deduplicates its upload by. */
 interface ShareTarget {
   version: number;
   requestId: string;
 }
-
-const POLL_WHILE_PENDING_MS = 2000;
 
 const actionError = (error: Error | null) =>
   error &&
@@ -89,20 +81,8 @@ export function ShareControl({
   const shared = context?.reviewId.startsWith("shared-");
   const accountKey = canvasQueryKeys.sharingAccount();
 
-  // Read while the review is open, refreshed on focus, polled while pending.
-  const accountQuery = useQuery({
-    queryKey: accountKey,
-    queryFn: client
-      ? ({ signal }) => client.read<SharingAccount>("/sharing/account", signal)
-      : skipToken,
-    enabled: !shared,
-    refetchInterval: (query) =>
-      query.state.data?.pending ? POLL_WHILE_PENDING_MS : false,
-    // Sign-in finishes in the browser, while this window is in the background.
-    refetchIntervalInBackground: true,
-  });
-
-  const { refetch: refetchAccount } = accountQuery;
+  const accountQuery = useSharingAccount(client, !shared);
+  const login = useSignIn(client);
   const account = accountQuery.data;
   const signedIn = Boolean(account?.account);
 
@@ -111,16 +91,6 @@ export function ShareControl({
     : "Share review";
 
   const tooltip = useTooltip(label);
-
-  // The library's focus refresh follows visibility; this follows window focus.
-  useEffect(() => {
-    if (!client || shared) return;
-    const refresh = () => void refetchAccount();
-
-    window.addEventListener("focus", refresh);
-
-    return () => window.removeEventListener("focus", refresh);
-  }, [client, shared, refetchAccount]);
 
   // Links created this canvas, so reopening a shared version skips the upload.
   const link = useQuery<string>({
@@ -138,18 +108,6 @@ export function ShareControl({
       if (session) captureUiEvent(session, "review_shared");
     },
     onFailed: () => setCopyError("Copy the link below."),
-  });
-
-  const login = useMutation({
-    mutationFn: () => client!.post("/sharing/login", {}),
-    onSuccess: async () => {
-      // An older read must not end the wait this login starts.
-      await queryClient.cancelQueries({ queryKey: accountKey });
-      queryClient.setQueryData<SharingAccount>(accountKey, {
-        account: null,
-        pending: true,
-      });
-    },
   });
 
   const publish = useMutation({
