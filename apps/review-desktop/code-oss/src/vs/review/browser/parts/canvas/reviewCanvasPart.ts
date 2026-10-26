@@ -1311,6 +1311,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				return {
 					focus: () => view.focus(),
 					setProgress: (progress) => view.setProgress?.(progress),
+					reload: (lens) => view.reload?.(lens),
 					revealSource: (source, sectionId) => view.revealSource?.(source, sectionId),
 					revealFile: (path, options) => view.revealFile?.(path, options),
 					setFindQuery: async (query) => await view.setFindQuery?.(query) ?? { matchCount: 0 },
