@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { mkdir } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 
 import { reviewInstanceIdentity } from "@review/desktop-discovery";
@@ -9,7 +10,6 @@ import { openReviewProfile } from "@review/review-api/profile";
 import { ensureBundledRustAnalyzer } from "@review/review-bundled-tools";
 import { devReviewHome } from "@review/review-home-paths";
 import { ReviewTelemetry } from "@review/review-telemetry";
-import { SharedReviewStore } from "@review/sharing/import.js";
 import { reviewTelemetryChannel } from "@review/telemetry-config";
 
 import {
@@ -83,7 +83,7 @@ export async function runDesktopHost(
   const log = (message: string) =>
     process.stdout.write(`[Whiteboard gateway] ${message}\n`);
 
-  const { local, shared, server } = await takeOverServerHome(home, async () => {
+  const { local, server } = await takeOverServerHome(home, async () => {
     const local = await openReviewProfile(home, {
       manageWorkspaces: true,
       // Desktop shows each PR's state beside its board.
@@ -93,14 +93,23 @@ export async function runDesktopHost(
     // JSON is the sole user-review store. A failure is surfaced, never replaced
     // by a second catalog or an old document renderer.
 
-    const shared = new SharedReviewStore(path.join(home, "shared-reviews"));
-    shared.connect(local.store, local.data);
-    await shared.load();
+    // Shares opened as read-only boards here, each with its own checkout;
+    // they open as copies now.
+    const legacy = path.join(home, "shared-reviews");
+
+    if (existsSync(legacy)) {
+      const root = await realpath(legacy);
+
+      for (const repository of local.store.repositories())
+        if (repository.path.startsWith(root + path.sep))
+          await local.store.unregisterRepository(repository.id);
+      await rm(legacy, { recursive: true, force: true });
+    }
 
     const server = createGlobalReviewServer({
       ...serverInput,
       log,
-      sharedReviews: shared,
+      sharing: true,
       reviewStore: local.store,
       reviewData: local.data,
       cliRuntimePath: env.DEV_FAST_REVIEW_CLI_RUNTIME,
@@ -117,7 +126,7 @@ export async function runDesktopHost(
       throw error;
     }
 
-    return { local, shared, server };
+    return { local, server };
   });
 
   process.stdout.write(
@@ -140,7 +149,6 @@ export async function runDesktopHost(
     if (!stopping) {
       stopping = server
         .close("app-exit")
-        .finally(() => shared.close())
         .finally(() => local?.data.close())
         .finally(() => local?.store.close());
     }

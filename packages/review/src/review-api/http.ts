@@ -54,8 +54,7 @@ import {
   type SharingHostEvents,
   mountSharingHost,
 } from "@review/sharing/host.js";
-import type { SharedReviewStore } from "@review/sharing/import.js";
-import { SharedReviewData } from "@review/sharing/routes.js";
+import { forgetSharedCommits } from "@review/sharing/repository.js";
 import type { ReviewSessionAgent } from "@review/ui-telemetry-events.js";
 import { scopedCoverage } from "@review/viewed-coverage.js";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
@@ -68,7 +67,6 @@ import { documentText } from "./document-text.js";
 import {
   ReviewInputError,
   type ReviewTarget,
-  boardLinks,
   boardRepositoryId,
   elements,
 } from "./document.js";
@@ -193,7 +191,8 @@ export function createReviewApi(
     reviewId: string;
     title: string;
   }) => Promise<{ softwareMapEnabled: boolean }>,
-  shared?: SharedReviewStore,
+  /** Desktop's: share sign-in and imports. */
+  sharing = false,
   capabilities: () =>
     | AuthoringCapabilities
     | Promise<AuthoringCapabilities> = () => ({
@@ -247,61 +246,15 @@ export function createReviewApi(
       await next();
     });
 
-  const sharedData = shared ? new SharedReviewData(shared) : undefined;
-  const isShared = (id: string) => id.startsWith("shared-");
-
-  const assertWritable = (id: string) => {
-    if (isShared(id)) shared?.assertWritable(id);
-    else store.assertWritable(id);
+  const writable: MiddlewareHandler = async (context, next) => {
+    store.assertWritable(context.req.param("id")!);
+    await next();
   };
 
-  const reviewAccess =
-    (access: "read" | "active" | "edit"): MiddlewareHandler =>
-    async (context, next) => {
-      const id = context.req.param("id")!;
+  if (sharing && data) mountSharingHost(app, store, data, hooks.sharing);
 
-      if (access !== "read") assertWritable(id);
-
-      if (access === "edit" && isShared(id))
-        throw new ReviewInputError("Shared reviews are read-only.", 409);
-      await next();
-    };
-
-  const sharedCommandSchema = z.object({
-    operation: z.object({ reviewId: z.string().optional() }),
-  });
-
-  const sharedGuard: MiddlewareHandler = async (context, next) => {
-    const id = context.req.param("id");
-
-    if (!id || !isShared(id)) return next();
-
-    const query = readQuerySchemas.get.parse({
-      version: context.req.query("version"),
-    });
-
-    readReview(id, query.version);
-
-    return next();
-  };
-
-  app.use("/:id", sharedGuard);
-  app.use("/:id/*", sharedGuard);
-
-  if (shared && data) {
-    shared.connect(store, data);
-    mountSharingHost(app, store, data, hooks.sharing);
-  }
-
-  const readReview = (id: string, version?: number): Snapshot => {
-    if (!id.startsWith("shared-")) return store.read(id, version);
-    const snapshot = shared?.get(id).snapshot;
-
-    if (!snapshot || (version !== undefined && version !== snapshot.version))
-      throw new ReviewInputError("Shared review version is unavailable.", 404);
-
-    return snapshot;
-  };
+  const readReview = (id: string, version?: number): Snapshot =>
+    store.read(id, version);
 
   /** Adds a PR board's state, as this host last read it from GitHub. */
   const withPullRequestState = <
@@ -319,15 +272,12 @@ export function createReviewApi(
     return state ? { ...board, pullRequestState: state } : board;
   };
 
-  const catalog = () => [
-    ...store.list().map(withPullRequestState),
-    ...(shared?.list() ?? []),
-  ];
+  const catalog = () => store.list().map(withPullRequestState);
 
   /** Where a board sits among its project's, and its PR's facts, for the
    * board's header. */
   const placeOf = (id: string): ReviewBoardPlace => {
-    if (isShared(id) || !store.has(id)) return { siblings: [] };
+    if (!store.has(id)) return { siblings: [] };
 
     const { board, parent, siblings, children } = store.place(id);
     const url = board.origin?.pullRequestUrl;
@@ -429,7 +379,7 @@ export function createReviewApi(
       await reviewProgress(store, data, snapshot, context.req.raw.signal),
     );
   });
-  app.post("/:id/progress", reviewAccess("edit"), async (context) => {
+  app.post("/:id/progress", writable, async (context) => {
     if (!data) throw new ReviewInputError("Source data is unavailable.", 409);
 
     const input = progressUpdateSchema.parse(
@@ -523,31 +473,23 @@ export function createReviewApi(
     const id = context.req.param("id");
     readReview(id);
 
-    return context.json(
-      isShared(id)
-        ? { workingCount: 0, expiresAt: null }
-        : store.activity.read(id),
-    );
+    return context.json(store.activity.read(id));
   });
 
   // One route per agent tool; the path names the action.
   for (const action of ["begin", "update", "end"] as const)
-    app.post(
-      `/:id/activity/${action}`,
-      reviewAccess("edit"),
-      async (context) => {
-        const input = await readBoundedRequestJson(context.req.raw);
-        const id = context.req.param("id");
-        store.assertExists(id);
+    app.post(`/:id/activity/${action}`, writable, async (context) => {
+      const input = await readBoundedRequestJson(context.req.raw);
+      const id = context.req.param("id");
+      store.assertExists(id);
 
-        return context.json(
-          store.activity.update(
-            id,
-            isJsonObject(input) ? { ...input, action } : input,
-          ),
-        );
-      },
-    );
+      return context.json(
+        store.activity.update(
+          id,
+          isJsonObject(input) ? { ...input, action } : input,
+        ),
+      );
+    });
   // The person's canvas, never an agent tool: a save of the whole board,
   // the block in focus, and discarding a board left untouched.
   app.post("/:id/person-edit", async (context) =>
@@ -602,7 +544,7 @@ export function createReviewApi(
     // The PR states its links show: only a change to one of them sends the
     // review again. GitHub answers for every PR on launch, a few at a time.
     const linksKey = (id: string) => {
-      if (!data || isShared(id) || !store.has(id)) return "";
+      if (!data || !store.has(id)) return "";
       const { outgoing, backlinks } = store.links(id);
 
       return JSON.stringify(
@@ -621,7 +563,7 @@ export function createReviewApi(
     // A digest of a review's place and its project's branches, so a later
     // stream's matches unless its header or stack moved.
     const placeKey = (id: string) => {
-      const project = !isShared(id) && store.summary(id)?.project;
+      const project = store.summary(id)?.project;
 
       const branches = project
         ? store
@@ -764,9 +706,6 @@ export function createReviewApi(
 
           if (marked) notify();
         }) ?? (() => {}),
-        shared?.subscribe(() => {
-          if (markLists()) notify();
-        }) ?? (() => {}),
         store.subscribeCatalog(() => {
           const marked = refreshPlaces();
 
@@ -829,12 +768,11 @@ export function createReviewApi(
     }
   };
 
-  app.post("/:id/open", reviewAccess("active"), async (context) => {
-    const id = context.req.param("id");
-
-    if (isShared(id)) await shared?.assertReady(id);
-
-    return context.json({ ok: true, ...(await openReview(readReview(id))) });
+  app.post("/:id/open", writable, async (context) => {
+    return context.json({
+      ok: true,
+      ...(await openReview(readReview(context.req.param("id")))),
+    });
   });
 
   if (data) {
@@ -878,7 +816,7 @@ export function createReviewApi(
 
       return context.json(result);
     });
-    app.post("/:id/navigator", reviewAccess("edit"), async (context) => {
+    app.post("/:id/navigator", writable, async (context) => {
       const input = readQuerySchemas.file
         .extend({
           side: z.enum(["base", "head"]).default("head"),
@@ -921,14 +859,6 @@ export function createReviewApi(
       const query = readQuerySchemas.maps.parse(context.req.query());
       const id = context.req.param("id");
 
-      if (id && isShared(id))
-        return context.json(
-          sharedData!.map(
-            id,
-            z.string().parse(context.req.param("resourceId")),
-          ),
-        );
-
       return context.json(
         await data.map(
           await data.sourcePins(readReview(id, query.version)),
@@ -968,16 +898,9 @@ export function createReviewApi(
       const id = context.req.param("id");
       const snapshot = readReview(id);
 
-      const resource =
-        id && isShared(id)
-          ? {
-              ...(await sharedData!.resource(
-                id,
-                z.string().parse(context.req.param("resourceId")),
-              )),
-              repositoryId: snapshot.pins?.repositoryId ?? "",
-            }
-          : store.resource(z.string().parse(context.req.param("resourceId")));
+      const resource = store.resource(
+        z.string().parse(context.req.param("resourceId")),
+      );
 
       // A document with pins serves only its repository's resources.
       if (snapshot.pins && resource.repositoryId !== snapshot.pins.repositoryId)
@@ -1023,7 +946,7 @@ export function createReviewApi(
         serverId: store.serverId(),
       } satisfies ReviewRemoteLanguageEnvironment);
     });
-    app.post("/:id/environment", reviewAccess("active"), async (context) => {
+    app.post("/:id/environment", writable, async (context) => {
       const input = z
         .strictObject({ retry: z.boolean().optional() })
         .parse(await readBoundedRequestJson(context.req.raw));
@@ -1052,7 +975,7 @@ export function createReviewApi(
     });
     app.post(
       "/:id/workspaces/:workspaceId/retry",
-      reviewAccess("active"),
+      writable,
       async (context) => {
         return context.json(
           await data.workspaces.retry(
@@ -1193,7 +1116,7 @@ export function createReviewApi(
     });
   }
 
-  app.post("/:id/copy-context", reviewAccess("read"), async (context) => {
+  app.post("/:id/copy-context", async (context) => {
     const query = readQuerySchemas.get
       .pick({ version: true })
       .extend({ mode: legacyModeSchema })
@@ -1300,9 +1223,7 @@ export function createReviewApi(
 
   if (ask && data) {
     const projectOf = (reviewId: string) =>
-      isShared(reviewId) || !store.has(reviewId)
-        ? undefined
-        : store.projectOf(reviewId);
+      store.has(reviewId) ? store.projectOf(reviewId) : undefined;
 
     const readThread = (reviewId: string, threadId: string) => {
       const thread = ask.threads.get(threadId);
@@ -1498,7 +1419,7 @@ export function createReviewApi(
       return context.json({ paths: files.slice(0, MENTION_LIMIT) });
     });
 
-    app.post("/:id/ask", reviewAccess("edit"), async (context) => {
+    app.post("/:id/ask", writable, async (context) => {
       const reviewId = context.req.param("id");
 
       const { version } = readQuerySchemas.get
@@ -1527,7 +1448,7 @@ export function createReviewApi(
         version,
       );
 
-      assertWritable(reviewId);
+      store.assertWritable(reviewId);
 
       // Asked on screen: seen from the start.
       store.askHistory.markViewed(id, createdAt);
@@ -1696,7 +1617,7 @@ export function createReviewApi(
 
     // The threads of every open Ask in a review, over one connection. Before
     // the route for one thread, which would read `watch` as its id.
-    app.post("/:id/ask/watch", reviewAccess("read"), async (context) => {
+    app.post("/:id/ask/watch", async (context) => {
       const reviewId = context.req.param("id");
 
       readReview(reviewId);
@@ -1759,206 +1680,182 @@ export function createReviewApi(
 
     // A saved conversation: attach to it if it is still running, else start
     // the agent and load it, at the commit it was asked about.
-    app.post(
-      "/:id/ask/:threadId/open",
-      reviewAccess("edit"),
-      async (context) => {
-        const reviewId = context.req.param("id");
-        const threadId = context.req.param("threadId");
-        const live = ask.threads.get(threadId);
+    app.post("/:id/ask/:threadId/open", writable, async (context) => {
+      const reviewId = context.req.param("id");
+      const threadId = context.req.param("threadId");
+      const live = ask.threads.get(threadId);
 
-        if (live) return context.json({ threadId });
-        const record = store.askHistory.get(threadId);
+      if (live) return context.json({ threadId });
+      const record = store.askHistory.get(threadId);
 
-        const { picks } = askOpenSchema.parse(
-          await readBoundedRequestJson(context.req.raw, undefined, {}),
-        );
+      const { picks } = askOpenSchema.parse(
+        await readBoundedRequestJson(context.req.raw, undefined, {}),
+      );
 
-        if (!record)
-          throw new ReviewInputError("This conversation was not found.", 404);
+      if (!record)
+        throw new ReviewInputError("This conversation was not found.", 404);
 
-        // The thread runs in the checkout of the board it started on.
-        const anchor = record.anchor.board;
-        const snapshot = readReview(anchor, record.version);
-        const checkout = await data.agentCheckout(snapshot);
-        const target = record.selection.target;
+      // The thread runs in the checkout of the board it started on.
+      const anchor = record.anchor.board;
+      const snapshot = readReview(anchor, record.version);
+      const checkout = await data.agentCheckout(snapshot);
+      const target = record.selection.target;
 
-        const initialContext = await askContext(
-          record.id,
-          record.agent,
-          snapshot,
-          checkout,
-          record.selection,
-          record.version,
-        );
+      const initialContext = await askContext(
+        record.id,
+        record.agent,
+        snapshot,
+        checkout,
+        record.selection,
+        record.version,
+      );
 
-        assertWritable(reviewId);
-        ask.threads.open({
-          id: record.id,
-          reviewId: anchor,
-          agent: record.agent,
-          cwd: checkout.rootPath,
-          head: checkout.head,
-          selection: {
-            title: record.selection.title,
-            quote: target.kind === "text" ? target.quote : undefined,
-          },
-          resume: { sessionId: record.sessionId, entries: record.entries },
-          // For a new session, should the agent no longer have this one.
-          context: initialContext,
-          ...historyHooks(record),
-          picks,
-          permissions: record.permissions,
-        });
+      store.assertWritable(reviewId);
+      ask.threads.open({
+        id: record.id,
+        reviewId: anchor,
+        agent: record.agent,
+        cwd: checkout.rootPath,
+        head: checkout.head,
+        selection: {
+          title: record.selection.title,
+          quote: target.kind === "text" ? target.quote : undefined,
+        },
+        resume: { sessionId: record.sessionId, entries: record.entries },
+        // For a new session, should the agent no longer have this one.
+        context: initialContext,
+        ...historyHooks(record),
+        picks,
+        permissions: record.permissions,
+      });
 
-        return context.json({ threadId: record.id });
-      },
-    );
+      return context.json({ threadId: record.id });
+    });
 
-    app.post(
-      "/:id/ask/:threadId/prompt",
-      reviewAccess("edit"),
-      async (context) => {
-        const thread = readThread(
-          context.req.param("id"),
-          context.req.param("threadId"),
-        );
+    app.post("/:id/ask/:threadId/prompt", writable, async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
 
-        const { question } = askFollowUpSchema.parse(
-          await readBoundedRequestJson(context.req.raw, ASK_REQUEST_MAX_BYTES),
-        );
+      const { question } = askFollowUpSchema.parse(
+        await readBoundedRequestJson(context.req.raw, ASK_REQUEST_MAX_BYTES),
+      );
 
-        const refusal = thread.askRefusal();
+      const refusal = thread.askRefusal();
 
-        if (refusal) throw new ReviewInputError(refusal, 409);
+      if (refusal) throw new ReviewInputError(refusal, 409);
 
-        void thread.ask(question);
+      void thread.ask(question);
 
-        return context.json({ ok: true });
-      },
-    );
+      return context.json({ ok: true });
+    });
 
-    app.post(
-      "/:id/ask/:threadId/permission",
-      reviewAccess("edit"),
-      async (context) => {
-        const thread = readThread(
-          context.req.param("id"),
-          context.req.param("threadId"),
-        );
+    app.post("/:id/ask/:threadId/permission", writable, async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
 
-        const decision = askDecisionSchema.parse(
-          await readBoundedRequestJson(context.req.raw),
-        );
+      const decision = askDecisionSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
 
-        if (!thread.decide(decision.permissionId, decision.optionId))
-          throw new ReviewInputError("This request was already answered.", 409);
+      if (!thread.decide(decision.permissionId, decision.optionId))
+        throw new ReviewInputError("This request was already answered.", 409);
 
-        return context.json({ ok: true });
-      },
-    );
+      return context.json({ ok: true });
+    });
 
     // The files an answer names, as the checkout's own paths, so the panel
     // can open them.
-    app.post(
-      "/:id/ask/:threadId/files",
-      reviewAccess("edit"),
-      async (context) => {
-        const thread = readThread(
-          context.req.param("id"),
-          context.req.param("threadId"),
-        );
+    app.post("/:id/ask/:threadId/files", writable, async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
 
-        const { paths } = askFilesSchema.parse(
-          await readBoundedRequestJson(context.req.raw),
-        );
+      const { paths } = askFilesSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
 
-        const { cwd, entries } = thread.read();
+      const { cwd, entries } = thread.read();
 
-        const touched = entries.flatMap((entry) =>
-          entry.kind === "tool"
-            ? `${entry.title} ${entry.input ?? ""}`
-                .split(/\s+/)
-                .flatMap((token) => parseFileRef(token)?.path ?? [])
-            : [],
-        );
+      const touched = entries.flatMap((entry) =>
+        entry.kind === "tool"
+          ? `${entry.title} ${entry.input ?? ""}`
+              .split(/\s+/)
+              .flatMap((token) => parseFileRef(token)?.path ?? [])
+          : [],
+      );
 
-        const files = resolveFileRefs(
-          cwd,
-          await checkoutFiles(cwd),
-          paths,
-          touched,
-        );
+      const files = resolveFileRefs(
+        cwd,
+        await checkoutFiles(cwd),
+        paths,
+        touched,
+      );
 
-        return context.json({
-          files: [...files].map(([path, file]) => ({ path, file })),
-        });
-      },
-    );
+      return context.json({
+        files: [...files].map(([path, file]) => ({ path, file })),
+      });
+    });
 
     // Another model or effort for the next answer.
-    app.post(
-      "/:id/ask/:threadId/choice",
-      reviewAccess("edit"),
-      async (context) => {
-        const thread = readThread(
-          context.req.param("id"),
-          context.req.param("threadId"),
+    app.post("/:id/ask/:threadId/choice", writable, async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const { kind, value } = askChoiceSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      if (thread.read().status !== "idle")
+        throw new ReviewInputError(
+          "Settings can change once the agent finishes answering.",
+          409,
         );
 
-        const { kind, value } = askChoiceSchema.parse(
-          await readBoundedRequestJson(context.req.raw),
-        );
+      try {
+        await thread.choose(kind, value);
+      } catch (error) {
+        throw new ReviewInputError(errorMessage(error), 409);
+      }
 
-        if (thread.read().status !== "idle")
-          throw new ReviewInputError(
-            "Settings can change once the agent finishes answering.",
-            409,
-          );
-
-        try {
-          await thread.choose(kind, value);
-        } catch (error) {
-          throw new ReviewInputError(errorMessage(error), 409);
-        }
-
-        return context.json({ ok: true });
-      },
-    );
+      return context.json({ ok: true });
+    });
 
     // Changes what the agent may do from the next answer.
-    app.post(
-      "/:id/ask/:threadId/permissions",
-      reviewAccess("edit"),
-      async (context) => {
-        const thread = readThread(
-          context.req.param("id"),
-          context.req.param("threadId"),
+    app.post("/:id/ask/:threadId/permissions", writable, async (context) => {
+      const thread = readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      );
+
+      const { permissions } = askPermitSchema.parse(
+        await readBoundedRequestJson(context.req.raw),
+      );
+
+      if (thread.read().status !== "idle")
+        throw new ReviewInputError(
+          "Settings can change once the agent finishes answering.",
+          409,
         );
 
-        const { permissions } = askPermitSchema.parse(
-          await readBoundedRequestJson(context.req.raw),
-        );
+      try {
+        await thread.permit(permissions);
+      } catch (error) {
+        throw new ReviewInputError(errorMessage(error), 409);
+      }
 
-        if (thread.read().status !== "idle")
-          throw new ReviewInputError(
-            "Settings can change once the agent finishes answering.",
-            409,
-          );
-
-        try {
-          await thread.permit(permissions);
-        } catch (error) {
-          throw new ReviewInputError(errorMessage(error), 409);
-        }
-
-        return context.json({ ok: true });
-      },
-    );
+      return context.json({ ok: true });
+    });
 
     // Starts a failed agent again, as after signing it back in, and asks
     // again what it did not answer. The state reports how that goes.
-    app.post("/:id/ask/:threadId/retry", reviewAccess("edit"), (context) => {
+    app.post("/:id/ask/:threadId/retry", writable, (context) => {
       const thread = readThread(
         context.req.param("id"),
         context.req.param("threadId"),
@@ -1974,18 +1871,14 @@ export function createReviewApi(
       return context.json({ ok: true });
     });
 
-    app.post(
-      "/:id/ask/:threadId/cancel",
-      reviewAccess("read"),
-      async (context) => {
-        await readThread(
-          context.req.param("id"),
-          context.req.param("threadId"),
-        ).cancel();
+    app.post("/:id/ask/:threadId/cancel", async (context) => {
+      await readThread(
+        context.req.param("id"),
+        context.req.param("threadId"),
+      ).cancel();
 
-        return context.json({ ok: true });
-      },
-    );
+      return context.json({ ok: true });
+    });
 
     app.post("/:id/ask/:threadId/viewed", (context) => {
       const threadId = context.req.param("threadId");
@@ -1999,7 +1892,7 @@ export function createReviewApi(
 
     // Closing an Ask ends its agent; the conversation stays saved. A tab
     // switched away from or a reload leaves it running, to come back to.
-    app.post("/:id/ask/:threadId/close", reviewAccess("read"), (context) => {
+    app.post("/:id/ask/:threadId/close", (context) => {
       readThread(context.req.param("id"), context.req.param("threadId"));
       ask.threads.close(
         context.req.param("threadId"),
@@ -2010,7 +1903,7 @@ export function createReviewApi(
     });
 
     // Forgets a saved conversation. The agent keeps its own transcript.
-    app.delete("/:id/ask/:threadId", reviewAccess("edit"), (context) => {
+    app.delete("/:id/ask/:threadId", writable, (context) => {
       const reviewId = context.req.param("id");
       const threadId = context.req.param("threadId");
 
@@ -2029,7 +1922,7 @@ export function createReviewApi(
   app.get("/:id/place", (context) => {
     const id = context.req.param("id");
 
-    if (!isShared(id)) store.assertExists(id);
+    store.assertExists(id);
 
     return context.json(placeOf(id));
   });
@@ -2042,7 +1935,7 @@ export function createReviewApi(
     const id = context.req.param("id");
     let snapshot = readReview(id, query.version);
 
-    if (isShared(id) || !snapshot.pins) return context.json({ layers: [] });
+    if (!snapshot.pins) return context.json({ layers: [] });
 
     if (data) snapshot = await data.discoverPullRequest(snapshot);
 
@@ -2077,8 +1970,6 @@ export function createReviewApi(
   app.get("/:id/project", (context) => {
     const id = context.req.param("id");
 
-    if (isShared(id)) return context.json({ project: null, boards: [] });
-
     const project = store.summary(id)?.project ?? null;
 
     return context.json({
@@ -2093,16 +1984,6 @@ export function createReviewApi(
   });
   app.get("/:id/links", (context) => {
     const id = context.req.param("id");
-
-    // A shared board's links name boards on the sender's machine: shown,
-    // but not followed.
-    if (isShared(id))
-      return context.json({
-        outgoing: boardLinks(id, readReview(id).document).map(
-          ({ from, to }) => ({ from, to, missing: true, elsewhere: true }),
-        ),
-        backlinks: [],
-      });
 
     const { version } = readQuerySchemas.get
       .pick({ version: true })
@@ -2119,8 +2000,6 @@ export function createReviewApi(
   app.get("/:id/links/peek", (context) => {
     const id = context.req.param("id");
 
-    if (isShared(id)) return context.json({});
-
     const { version } = readQuerySchemas.get
       .pick({ version: true })
       .parse({ version: context.req.query("version") });
@@ -2136,19 +2015,7 @@ export function createReviewApi(
   });
 
   app.get("/:id/history", (context) => {
-    const id = context.req.param("id");
-
-    if (!isShared(id)) return context.json(store.history(id));
-    const snapshot = readReview(id);
-
-    return context.json([
-      {
-        version: snapshot.version,
-        title: snapshot.title,
-        createdAt: snapshot.createdAt,
-        author: "agent",
-      },
-    ]);
+    return context.json(store.history(context.req.param("id")));
   });
 
   /** A board's relations as session_list reports them: only those it has. */
@@ -2195,14 +2062,14 @@ export function createReviewApi(
             snapshot,
             query.targetId,
             Boolean(query.full),
-            isShared(id) ? undefined : relatedBoards(id),
+            relatedBoards(id),
           )
         : query.targetId !== undefined
           ? inspectSnapshot(snapshot, query.targetId)
           : {
               ...(query.full ? snapshot : inspectSnapshot(snapshot)),
               // Its place among the project's boards, as session_list has it.
-              ...(!isShared(id) && listedRelations(store.relations(id))),
+              ...listedRelations(store.relations(id)),
             },
     );
   });
@@ -2211,12 +2078,7 @@ export function createReviewApi(
 
     let snapshot = { ...readReview(context.req.param("id"), query.version) };
 
-    if (
-      data &&
-      query.full &&
-      query.version === undefined &&
-      !isShared(snapshot.reviewId)
-    )
+    if (data && query.full && query.version === undefined)
       snapshot = await data.discoverPullRequest(snapshot);
 
     if (data && query.full) {
@@ -2306,51 +2168,6 @@ export function createReviewApi(
         );
     }
 
-    const command = sharedCommandSchema.safeParse(input);
-
-    if (
-      command.success &&
-      command.data.operation.reviewId?.startsWith("shared-")
-    ) {
-      const parsed = commandSchema.parse(input);
-
-      if (shared && parsed.operation.type === "delete") {
-        if (!shared.get(parsed.operation.reviewId).snapshot.trashedAt)
-          throw new ReviewInputError(
-            "Move this whiteboard to Trash before deleting it.",
-            409,
-          );
-        await shared.removeLocal(parsed.operation.reviewId);
-
-        return context.json({
-          reviewId: parsed.operation.reviewId,
-          version: 0,
-          deleted: true,
-        });
-      }
-
-      if (
-        shared &&
-        (parsed.operation.type === "attention" ||
-          parsed.operation.type === "lifecycle")
-      ) {
-        if (parsed.operation.type === "lifecycle")
-          await shared.setLifecycle(
-            parsed.operation.reviewId,
-            parsed.operation.state,
-          );
-        else await shared.setAttention(parsed.operation.reviewId);
-
-        return context.json({
-          reviewId: parsed.operation.reviewId,
-          version: shared.get(parsed.operation.reviewId).snapshot.version,
-          attention: true,
-        });
-      }
-
-      throw new ReviewInputError("Shared reviews are read-only.", 409);
-    }
-
     // Who is writing, trusted only from local callers: a person from
     // Desktop or the canvas, or an agent, perhaps a thread's. The store
     // keeps each author's rules.
@@ -2367,7 +2184,22 @@ export function createReviewApi(
             ...(threadId && { threadId }),
           };
 
+    // A copy's kept commits go when it is deleted for good.
+    const copy =
+      input.operation.type === "delete" && store.has(input.operation.reviewId)
+        ? store.read(input.operation.reviewId)
+        : undefined;
+
     const result = await store.execute(input, undefined, author);
+    const key = copy?.shared?.key;
+    const kept = copy && boardRepositoryId(copy);
+
+    if (result.deleted && key && kept)
+      await Promise.resolve()
+        .then(() => forgetSharedCommits(store.repositoryPath(kept), key))
+        .catch((error) =>
+          console.error("Could not drop a copy's kept commits:", error),
+        );
 
     if (input.operation.type === "edit" && data && !result.deleted) {
       const { quotes, unquoted } = await anchorQuotes(

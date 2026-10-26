@@ -245,19 +245,12 @@ it("attaches again when a remote drops its /control stream, without a storm", as
 });
 
 it("refuses every push from a remote but capabilities, focus and opening one of its reviews", async () => {
-  const shared = `shared-${"a".repeat(64)}`;
-
   const refused = [
     ["shot", { name: "captureScreenshot", args: {} }, "captureScreenshot"],
     [
       "home",
       { name: "openReview", args: { reviewUuid: randomUUID(), active: true } },
       "openReview",
-    ],
-    [
-      "shared",
-      { name: "openApiReview", args: { reviewId: shared, title: "S" } },
-      shared,
     ],
   ] as const;
 

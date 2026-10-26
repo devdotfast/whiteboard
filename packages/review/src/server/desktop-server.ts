@@ -54,7 +54,6 @@ import {
   ReviewTelemetry,
   type ReviewTelemetryContext,
 } from "@review/review-telemetry";
-import type { SharedReviewStore } from "@review/sharing/import.js";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -99,7 +98,8 @@ const UUID_PATTERN =
 export interface GlobalReviewServerInput {
   /** The desktop host owns this shared database and closes it after the server. */
   reviewStore: ReviewStore;
-  sharedReviews?: SharedReviewStore;
+  /** Share sign-in and imports. */
+  sharing?: boolean;
   reviewData: LocalReviewData;
   appPid: number;
   packageRoot: string;
@@ -208,8 +208,8 @@ export function createGlobalReviewServer(
     profile: {
       store: reviewStore,
       data: input.reviewData,
-      shared: input.sharedReviews,
     },
+    sharing: input.sharing,
     relay,
     token,
     instanceId,
@@ -244,9 +244,7 @@ export function createGlobalReviewServer(
 
   localApi.route(
     "/reviews-api",
-    createJsonReviewReporting(input.reviewStore, telemetry, {
-      shared: input.sharedReviews,
-    }),
+    createJsonReviewReporting(input.reviewStore, telemetry),
   );
 
   localApi.route("/reviews-api", core.api);

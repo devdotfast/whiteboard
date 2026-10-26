@@ -246,12 +246,7 @@ it("reports the saved sign-in and forgets it on sign-out", async () => {
   vi.stubEnv("DEV_REVIEW_HOME", root);
   const fixture = await createShareFixture(root);
   const api = new Hono();
-  mountSharingHost(
-    api,
-    fixture.store,
-    fixture.data,
-    new SharedReviewStore(path.join(root, "shared")),
-  );
+  mountSharingHost(api, fixture.store, fixture.data);
 
   try {
     await writeStoreAuth({

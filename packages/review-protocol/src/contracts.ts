@@ -1917,10 +1917,7 @@ const revealArgsSchema = z
 
 export const REVIEW_DISCORD_URL = "https://discord.gg/wYvd2cpMQg";
 
-const apiReviewIdSchema = z.union([
-  z.uuid(),
-  z.string().regex(/^shared-[a-f0-9]{64}$/),
-]);
+const apiReviewIdSchema = z.uuid();
 
 export const ReviewVerbRequestSchema = z.discriminatedUnion("name", [
   z.strictObject({

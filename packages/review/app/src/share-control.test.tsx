@@ -26,6 +26,7 @@ function mount(options: {
   publishFails?: boolean;
   publishExpired?: boolean;
   holdPublish?: Promise<void>;
+  sender?: string;
 }) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const state = { ...options };
@@ -104,7 +105,12 @@ function mount(options: {
 
   function Fixture({ version }: { version: number }) {
     const value = useMemo(
-      () => ({ client, reviewId: "authoring-review", version }),
+      () => ({
+        client,
+        reviewId: "authoring-review",
+        version,
+        sender: options.sender,
+      }),
       [version],
     );
 
@@ -184,6 +190,21 @@ it("asks a signed-out user to sign in, then uploads the version chosen before lo
     expect.objectContaining({ reviewId: "authoring-review", version: 4 }),
   ]);
   expect(container.textContent).not.toContain("Sign in");
+});
+
+it("names who shared a copy and shares it again like any review", async () => {
+  const harness = mount({ signedIn: true, sender: "ada" });
+
+  await harness.render(2);
+  await harness.click("Share review");
+  await harness.settle();
+  expect(harness.container.textContent).toContain("Shared by ada");
+  expect(publishes(harness).map((post) => post.body)).toEqual([
+    expect.objectContaining({ reviewId: "authoring-review", version: 2 }),
+  ]);
+  expect(harness.container.querySelector("input")?.value).toContain(
+    "/s/capability",
+  );
 });
 
 it("uploads on open for a signed-in user, retries after a failure, and copies the link", async () => {

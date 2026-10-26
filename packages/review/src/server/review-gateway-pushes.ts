@@ -7,7 +7,6 @@ import {
 
 import type { ReviewDesktopVerbRelay } from "./global-verb-relay.js";
 import type { GatewayHosts, GatewayRemote } from "./review-gateway-hosts.js";
-import { UUID } from "./review-gateway-memory.js";
 import {
   FIRST_BYTE_TIMEOUT_MS,
   errorText,
@@ -43,15 +42,7 @@ export function createGatewayPushes(input: {
       };
 
     if (request.name === "openApiReview") {
-      const { reviewId } = request.args;
-
-      if (!UUID.test(reviewId))
-        return {
-          ok: false,
-          error: `${reviewId} cannot be opened from ${remote.alias}: a review on another machine has a UUID.`,
-        };
-
-      const refused = await input.claim(remote, reviewId);
+      const refused = await input.claim(remote, request.args.reviewId);
 
       if (refused) return { ok: false, error: refused };
     }

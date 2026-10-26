@@ -267,28 +267,8 @@ export class ReviewWorkspaces {
     if (errors.length) throw new Error(errors.join("\n"));
   }
 
-  private external?: {
-    has(id: string): boolean;
-    subscribe(listener: () => void): () => void;
-  };
-  private stopExternal?: () => void;
-
-  attachExternalReviews(source: {
-    has(id: string): boolean;
-    subscribe(listener: () => void): () => void;
-  }) {
-    if (this.external === source) return;
-    this.stopExternal?.();
-    this.external = source;
-    this.stopExternal = source.subscribe(() => this.collect());
-    this.collect();
-  }
-
   private hasReview(id: string): boolean {
-    // The shared catalog loads after the local store during host startup.
-    if (id.startsWith("shared-") && !this.external) return true;
-
-    return this.store.has(id) || Boolean(this.external?.has(id));
+    return this.store.has(id);
   }
 
   private assertReview(id: string) {
@@ -763,7 +743,6 @@ export class ReviewWorkspaces {
   private async closeAll() {
     this.closed = true;
     this.stop();
-    this.stopExternal?.();
     await Promise.all(this.requests.values());
 
     for (const job of this.jobs.values()) job.abort.abort();

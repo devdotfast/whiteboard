@@ -55,12 +55,8 @@ it("starts empty from an unreadable file and says so", async () => {
   expect(messages).toHaveLength(1);
 });
 
-it("keeps only UUID reviews from a host's list, never its scratchpad or shared reviews", () => {
+it("keeps only UUID reviews from a host's list, never its scratchpad", () => {
   expect(
-    listEntriesSchema.parse([
-      { ...entry, reviewId: "scratchpad" },
-      { ...entry, reviewId: `shared-${"a".repeat(64)}` },
-      entry,
-    ]),
+    listEntriesSchema.parse([{ ...entry, reviewId: "scratchpad" }, entry]),
   ).toEqual([entry]);
 });
