@@ -32,7 +32,9 @@ export const stepSchema = z
     /** The call site this arrow stands for, then any ranges directly about
      * that call, each shown as its own card. */
     source: z
-      .union([anchorSchema, z.array(anchorSchema).min(1).max(4)])
+      .union([anchorSchema, z.array(anchorSchema).min(1).max(4)], {
+        error: "source must be one range or a list of 1 to 4 ranges",
+      })
       .optional(),
     pins: elementPins,
     explanation: label.optional(),

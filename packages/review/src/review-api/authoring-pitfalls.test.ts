@@ -319,7 +319,7 @@ describe("diagram rules", () => {
 
     await expectRejected(
       () => insert(sequence([step([...lines, call])])),
-      /steps\[0\]\.source/,
+      "a list of 1 to 4 ranges",
     );
     await expectRejected(
       () => insert(sequence([step([call, call])])),
