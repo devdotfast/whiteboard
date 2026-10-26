@@ -5,8 +5,9 @@
 //   - a partial clone never fetches a missing object as a side effect of a
 //     read (GIT_NO_LAZY_FETCH=1; a fetch or clone still fetches);
 //   - every call has a timeout unless the caller sets its own: 30 seconds
-//     for a quick query, 5 minutes for a read that can be large or a jj
-//     call (which may first rebuild a cold index), 10 minutes for a remote;
+//     for a quick query, 5 minutes for a read that can be large, a work-tree
+//     write or a jj call (which may first rebuild a cold index), 10 minutes
+//     for a remote;
 //   - a value that didn't come from the code (a commit, ref, path, remote,
 //     anything read from a board, a share or GitHub) is passed as an
 //     `Operand`: it is checked before anything runs, can never be read as
@@ -83,6 +84,8 @@ const LARGE_READS = new Set([
   "show",
 ]);
 
+const TREE_WRITES = new Set(["checkout", "read-tree", "reset", "worktree"]);
+
 const VALUED_OPTIONS = ["-C", "-c", "--git-dir", "--work-tree", "-R"];
 
 /** The subcommand's index; `args.length` if none. */
@@ -117,7 +120,10 @@ export function defaultVcsTimeout(
 
   const command = args[subcommandIndex(args)];
 
-  if (tool === "jj" || (command && LARGE_READS.has(command)))
+  if (
+    tool === "jj" ||
+    (command && (LARGE_READS.has(command) || TREE_WRITES.has(command)))
+  )
     return LARGE_READ_TIMEOUT_MS;
 
   return QUICK_TIMEOUT_MS;
