@@ -61,7 +61,7 @@ export async function* structuralDiff(
       args.push(`${comparison.base}...${comparison.head}`);
   }
 
-  args.push("--", ...(input.paths ?? []));
+  args.push("--defer", "--", ...(input.paths ?? []));
 
   // Plugins can exceed two minutes between records. Apply this timeout only
   // until the manifest arrives; plugins enforce their own request timeouts.

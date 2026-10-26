@@ -550,7 +550,7 @@ function NativeDiffView({
   const [error, setError] = useState<string | null>(null);
   const handle = useRef<ReviewDiffViewHandle | null>(null);
 
-  // A lens, commit or save replaces the view; find follows it.
+  // A lens or commit replaces the view; find follows it.
   const [findTarget, setFindTarget] = useState<ReviewDiffViewHandle | null>(
     null,
   );
@@ -559,15 +559,21 @@ function NativeDiffView({
   const revision = useReviewDiffFiles().revision;
   const liveRevision = scope ? undefined : revision;
 
+  const source = session.bridge.diffView;
+  // New pins, a save or an edited lens reload the shown view.
+  const comparison = JSON.stringify([liveRevision, lens]);
+  const compared = useRef({ source, comparison });
+
   const current = useRef({ progress, onToggleViewed, onSetViewed, hidden });
 
   current.current = { progress, onToggleViewed, onSetViewed, hidden };
   useLayoutEffect(() => {
     if (!container) return;
     setError(null);
+    compared.current = { source, comparison };
 
     try {
-      const view = session.bridge.diffView.create({
+      const view = source.create({
         container,
         scope,
         lens,
@@ -598,14 +604,23 @@ function NativeDiffView({
     }
   }, [
     container,
-    session.bridge.diffView,
+    // Outlives the host's pins; a new source needs a new view.
+    source.files,
     session.reviewId,
     scope?.commit,
-    lens,
+    lens?.id,
     treeContainer,
     sidebarFileTree,
-    liveRevision,
   ]);
+  useLayoutEffect(() => {
+    if (
+      compared.current.source === source &&
+      compared.current.comparison === comparison
+    )
+      return;
+    compared.current = { source, comparison };
+    handle.current?.reload?.(lens);
+  }, [source, comparison]);
   useLayoutEffect(() => {
     handle.current?.setFileTreeHidden?.(hidden);
   }, [hidden]);

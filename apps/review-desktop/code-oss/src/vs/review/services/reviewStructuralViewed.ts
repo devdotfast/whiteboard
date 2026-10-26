@@ -30,7 +30,10 @@ export class StructuralViewedState extends Disposable {
 		super();
 		const reset = () => { this.memo = undefined; this.sync(); };
 		this._register(onProgress(reset));
-		this._register(session.onDidChange(reset));
+		this._register(session.onDidChange(change => {
+			for (const path of change.files) this.scopes.delete(path);
+			reset();
+		}));
 		this.sync();
 	}
 
