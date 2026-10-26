@@ -422,7 +422,8 @@ fn select(
 fn merge_base(repo: &Repository, a: ObjectId, b: ObjectId) -> Result<Operand> {
     let a = repo.find_object(a)?.peel_to_commit()?.id();
     let b = repo.find_object(b)?.peel_to_commit()?.id();
-    Ok(Operand::revision(repo.merge_base(a, b)?.to_string()))
+    let base = repo.merge_base(a, b)?.ok_or("no merge base")?;
+    Ok(Operand::revision(base.to_string()))
 }
 
 /// What `c^!` compares `c` with: its one parent, or the empty tree for a root commit. A merge has
