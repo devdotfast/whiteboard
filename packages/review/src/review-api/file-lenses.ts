@@ -66,24 +66,29 @@ export function resolveFileLens(
     })),
   );
 
-  const fileCount = new Set(
-    sources.map(
-      (source) =>
-        files.find(
-          (file) =>
-            source.file ===
-            (source.side === "base"
-              ? (file.previousPath ?? file.path)
-              : file.path),
-        )?.path ?? source.file,
-    ),
-  ).size;
+  const fileCount = new Set(sources.map(changedPath(files))).size;
 
   return {
     sources,
     fileCount,
     wholeFiles: targets.every((target) => target.kind === "files"),
   };
+}
+
+/** The changed file a source names on its side, or the source's own file. */
+export function changedPath(
+  files: readonly CoverageFile[],
+): (source: FileLineRange) => string {
+  const paths = new Map<string, string>();
+
+  for (const file of files)
+    for (const key of [
+      `base:${file.previousPath ?? file.path}`,
+      `head:${file.path}`,
+    ])
+      if (!paths.has(key)) paths.set(key, file.path);
+
+  return (source) => paths.get(`${source.side}:${source.file}`) ?? source.file;
 }
 
 /** Evaluate authored patterns against the changed-file list, never the filesystem. */

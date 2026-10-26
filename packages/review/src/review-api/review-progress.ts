@@ -23,7 +23,11 @@ import {
   boardRepositoryId,
   selectionReferences,
 } from "./document.js";
-import { resolveFileLens, uncategorizedSources } from "./file-lenses.js";
+import {
+  changedPath,
+  resolveFileLens,
+  uncategorizedSources,
+} from "./file-lenses.js";
 import { ReviewInputError } from "./input-error.js";
 import { textualRows } from "./lens-alignment.js";
 import type { LocalReviewData } from "./local-data.js";
@@ -313,18 +317,7 @@ export async function reviewProgress(
     title: "Uncategorized changes",
     sources: uncategorized,
     wholeFiles: false,
-    fileCount: new Set(
-      uncategorized.map(
-        (source) =>
-          files.find(
-            (file) =>
-              source.file ===
-              (source.side === "base"
-                ? (file.previousPath ?? file.path)
-                : file.path),
-          )?.path ?? source.file,
-      ),
-    ).size,
+    fileCount: new Set(uncategorized.map(changedPath(files))).size,
     pending: counting,
     unavailable:
       counting || uncategorized.length
@@ -373,16 +366,10 @@ export function uncategorizedReport(
       ?.sources ?? [];
 
   const byPath = new Map<string, UncategorizedReport["files"][number]>();
+  const pathOf = changedPath(progress.files);
 
   for (const source of sources) {
-    const path =
-      progress.files.find(
-        (file) =>
-          source.file ===
-          (source.side === "base"
-            ? (file.previousPath ?? file.path)
-            : file.path),
-      )?.path ?? source.file;
+    const path = pathOf(source);
 
     const entry = byPath.get(path) ?? { path, lines: 0, ranges: [] };
     entry.lines += source.toLine - source.fromLine + 1;
