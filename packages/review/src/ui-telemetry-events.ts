@@ -621,6 +621,15 @@ export const UI_TELEMETRY_EVENTS = {
     event: "review_diff_failed",
     properties: { reason: DIFF_FAILED_REASON, files: "number" },
   },
+  diff_loaded: {
+    event: "review_diff_loaded",
+    properties: {
+      first_file_ms: "number",
+      updates_ms: "number",
+      files: "number",
+      update_errors: "number",
+    },
+  },
   discord_clicked: {
     event: "review_discord_clicked",
     properties: { via: DISCORD_VIA },

@@ -854,6 +854,12 @@ body
   background: var(--vscode-editor-background);
 }
 
+.review-files-editor-staged {
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+}
+
 /* The sidebar is one tray from the progress line to the last file: the tree
    paints no ground of its own and inherits the tray behind it (see the
    "Sidebar tone" board). Hover and selection come from the theme's list

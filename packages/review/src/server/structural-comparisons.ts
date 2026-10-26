@@ -42,19 +42,16 @@ export class StructuralComparisons {
     } finally {
       entry.readers--;
 
-      if (
-        (!entry.done && !entry.initialReady && !entry.readers) ||
-        entry.error ||
-        entry.failed
-      ) {
+      // Summaries arrive after the files, so a run nobody reads stops. Full
+      // comparisons keep coverage as a reader until diffr completes.
+      if ((!entry.done && !entry.readers) || entry.error || entry.failed) {
         entry.abort.abort();
         this.entries.delete(key);
       }
-      // Keep the most recently read idle comparisons, including background enrichment.
-      // Coverage can finish before an editor subscribes; it must not cancel summaries.
 
+      // Keep the most recently read finished comparisons.
       const idle = [...this.entries].filter(
-        ([, value]) => (value.done || value.initialReady) && !value.readers,
+        ([, value]) => value.done && !value.readers,
       );
 
       for (const [oldKey, old] of idle.slice(0, -IDLE_COMPARISONS)) {
@@ -124,7 +121,6 @@ class Comparison {
   done = false;
   error: unknown;
   failed = false;
-  initialReady = false;
   private remaining: Set<string> | undefined;
   private readonly listeners = new Set<() => void>();
 
@@ -144,13 +140,11 @@ class Comparison {
               (entry) => (entry.file.rhs ?? entry.file.lhs)!.path,
             ),
           );
-          this.initialReady = this.remaining.size === 0;
         } else if (event.type === "file") {
           const path = (event.file.rhs ?? event.file.lhs)!.path;
 
           if (!this.remaining?.delete(path))
             throw new Error(`Unexpected structural result: ${path}`);
-          this.initialReady = this.remaining.size === 0;
         }
 
         if (event.type === "complete")
