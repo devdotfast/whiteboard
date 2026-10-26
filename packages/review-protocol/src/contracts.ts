@@ -1710,6 +1710,13 @@ export const ReviewOnboardingRunRequestSchema = z.strictObject({
   target: ReviewOnboardingTargetSchema,
   agent: requiredString,
   prompt: z.string().trim().min(1).max(8000),
+  /** The model and effort to draw with, where the agent offers them. */
+  picks: z
+    .strictObject({
+      model: z.string().min(1).max(200).optional(),
+      effort: z.string().min(1).max(200).optional(),
+    })
+    .optional(),
 });
 
 export const ReviewDiffFileSchema = z.strictObject({

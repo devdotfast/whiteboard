@@ -1406,31 +1406,15 @@ export function createReviewApi(
       ].join("\n");
     };
 
-    registerOnboardingRoutes(app, store, ask, {
-      register: (root) => data.register(root),
-      historyHooks,
-      handOff,
-      open: openCreated,
-    });
-
-    // The agents answering in any review, which quitting the app would stop.
-    app.get("/ask/working", (context) =>
-      context.json({ agents: ask.threads.working() }),
-    );
-
-    // Each agent with the models and efforts it offered last; none until
-    // it has run.
-    app.get("/:id/ask/agents", async (context) =>
-      context.json({ agents: await ask.agents() }),
-    );
-
-    // What an agent offers: what it said last, else what a session
-    // started in the review's checkout says. With another model it offers,
-    // what it said last with that model, else what such a session says once
-    // it has the model: the efforts on offer depend on it.
-    app.get("/:id/ask/agents/:agent/offer", async (context) => {
-      const agent = z.enum(askAgentIds).parse(context.req.param("agent"));
-      const { model } = askOfferQuerySchema.parse(context.req.query());
+    // What an agent offers: what it said last, else what a session started
+    // in `cwd` says. With another model it offers, what it said last with
+    // that model, else what such a session says once it has the model: the
+    // efforts on offer depend on it.
+    const askOffer = async (
+      agent: AskAgentId,
+      model: string | undefined,
+      cwd: () => Promise<string>,
+    ) => {
       const stored = store.askHistory.offer(agent);
 
       // An offer of nothing to choose was saved before the agent's
@@ -1447,20 +1431,51 @@ export function createReviewApi(
 
       const known = another ? store.askHistory.offer(agent, model) : last;
 
-      if (known) return context.json({ offer: known });
-
-      const checkout = await data.agentCheckout(
-        readReview(context.req.param("id")),
-      );
+      if (known) return known;
 
       const offer = await ask.threads.offered(
         agent,
-        checkout.rootPath,
+        await cwd(),
         another ? model : undefined,
       );
 
       if (last) store.askHistory.saveModelOffer(agent, offer);
       else store.askHistory.saveOffer(agent, offer);
+
+      return offer;
+    };
+
+    registerOnboardingRoutes(app, store, ask, {
+      register: (root) => data.register(root),
+      historyHooks,
+      handOff,
+      open: openCreated,
+      offer: askOffer,
+    });
+
+    // The agents answering in any review, which quitting the app would stop.
+    app.get("/ask/working", (context) =>
+      context.json({ agents: ask.threads.working() }),
+    );
+
+    // Each agent with the models and efforts it offered last; none until
+    // it has run.
+    app.get("/:id/ask/agents", async (context) =>
+      context.json({ agents: await ask.agents() }),
+    );
+
+    // What an agent offers, from a session in the review's checkout.
+    app.get("/:id/ask/agents/:agent/offer", async (context) => {
+      const agent = z.enum(askAgentIds).parse(context.req.param("agent"));
+      const { model } = askOfferQuerySchema.parse(context.req.query());
+
+      const offer = await askOffer(
+        agent,
+        model,
+        async () =>
+          (await data.agentCheckout(readReview(context.req.param("id"))))
+            .rootPath,
+      );
 
       return context.json({ offer });
     });

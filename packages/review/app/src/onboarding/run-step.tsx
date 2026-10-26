@@ -1,3 +1,5 @@
+import { AskChoicePicker, choiceLabels } from "@canvas/ask-agent-picker";
+import { reviewPreferenceKey } from "@canvas/host/review-client";
 import { OptionMenu } from "@canvas/option-menu";
 import {
   elevation,
@@ -33,6 +35,12 @@ import type {
   ReviewOnboardingTarget,
   ReviewOnboardingTargetsResponse,
 } from "@dev.fast/review-protocol";
+import {
+  type AskChoiceKind,
+  type AskOffer,
+  type AskPicks,
+  askChoiceKinds,
+} from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -77,13 +85,43 @@ const breathe = stylex.keyframes({
 });
 
 /** The agents Whiteboard can run, best first. */
-const AGENT_ORDER: OnboardingRunAgent["id"][] = [
-  "claude",
-  "codex",
-  "cursor",
-  "opencode",
-  "pi",
-];
+const AGENT_ORDER: AgentId[] = ["claude", "codex", "cursor", "opencode", "pi"];
+
+type AgentId = OnboardingRunAgent["id"];
+
+const defaultKey = (...parts: string[]) =>
+  reviewPreferenceKey("new-whiteboard", ...parts);
+
+/** What the reader drew with last: the defaults for the next whiteboard. */
+function storedDefault(...parts: string[]) {
+  try {
+    return localStorage.getItem(defaultKey(...parts)) ?? undefined;
+  } catch {
+    /* Storage can be unavailable; the run's own defaults apply. */
+    return undefined;
+  }
+}
+
+function rememberDefault(value: string, ...parts: string[]) {
+  try {
+    localStorage.setItem(defaultKey(...parts), value);
+  } catch {
+    /* The default is a convenience; forgetting it is harmless. */
+  }
+}
+
+/** The model and effort drawn with last by this agent. */
+function storedPicks(agent: AgentId): AskPicks {
+  const picks: AskPicks = {};
+
+  for (const kind of askChoiceKinds) {
+    const value = storedDefault(agent, kind);
+
+    if (value) picks[kind] = value;
+  }
+
+  return picks;
+}
 
 /** What a screen says above its content; first run and Home word it
  * differently. */
@@ -135,7 +173,7 @@ export function RunStep({
   embedded?: boolean;
   projectPath?: string;
   /** The whiteboard is made and opening, with its agent at work. */
-  onStarted?(reviewId: string, agent: OnboardingRunAgent["id"]): void;
+  onStarted?(reviewId: string, agent: AgentId): void;
   onCopy(prompt: string): void;
   onStartEmpty?(projectPath: string): Promise<void>;
 }) {
@@ -156,7 +194,10 @@ export function RunStep({
   const [prompt, setPrompt] = useState("");
   const [edited, setEdited] = useState(false);
   const [agents, setAgents] = useState<OnboardingRunAgent[]>([]);
-  const [agent, setAgent] = useState<OnboardingRunAgent["id"]>();
+  const [agent, setAgent] = useState<AgentId>();
+  // Each agent's picks, from what it drew with last until changed here.
+  const [picked, setPicked] = useState<Partial<Record<AgentId, AskPicks>>>({});
+  const [offered, setOffered] = useState<{ agent: AgentId; offer: AskOffer }>();
   const [error, setError] = useState<string>();
   const [starting, setStarting] = useState(false);
   const [startingEmpty, setStartingEmpty] = useState(false);
@@ -250,7 +291,13 @@ export function RunStep({
 
         setProjects(known);
         setAgents(available);
-        setAgent((current) => current ?? available[0]?.id);
+
+        const last = storedDefault("agent");
+
+        const preferred =
+          available.find((candidate) => candidate.id === last) ?? available[0];
+
+        setAgent((current) => current ?? preferred?.id);
 
         const first = projectPath
           ? (known.find((candidate) => candidate.path === projectPath) ?? {
@@ -300,6 +347,65 @@ export function RunStep({
     if (!edited && discovered) setPrompt(defaultPrompt(next));
   };
 
+  const picks = useMemo(
+    () => (agent ? (picked[agent] ?? storedPicks(agent)) : {}),
+    [agent, picked],
+  );
+
+  const offerPath = project?.path;
+
+  // The agent's models and efforts, asked again for each model picked: the
+  // efforts on offer depend on it. Without them it draws with its defaults.
+  useEffect(() => {
+    if (!agent || !offerPath) return;
+    let live = true;
+
+    client.offer(agent, offerPath, picks.model).then(
+      (offer) => live && setOffered({ agent, offer }),
+      () => {},
+    );
+
+    return () => {
+      live = false;
+    };
+  }, [agent, client, offerPath, picks.model]);
+
+  const choices = offered?.agent === agent ? offered?.offer.choices : undefined;
+
+  // Each pick where the agent offers it, else the agent's default; before
+  // it says, the picks as they are.
+  const drawPicks = useMemo(() => {
+    const shown: AskPicks = {};
+
+    for (const kind of askChoiceKinds) {
+      const select = choices?.[kind];
+      const wanted = picks[kind];
+
+      const value =
+        !select || select.options.some((option) => option.value === wanted)
+          ? wanted
+          : select.current;
+
+      if (value) shown[kind] = value;
+    }
+
+    return shown;
+  }, [choices, picks]);
+
+  const chooseAgent = (next: AgentId) => {
+    setAgent(next);
+    rememberDefault(next, "agent");
+  };
+
+  const chooseSetting = (kind: AskChoiceKind, value: string) => {
+    if (!agent) return;
+    setPicked((current) => ({
+      ...current,
+      [agent]: { ...picks, [kind]: value },
+    }));
+    rememberDefault(value, agent, kind);
+  };
+
   const agentName = agents.find((candidate) => candidate.id === agent)?.name;
   const canChooseAgent = agents.length > 1;
 
@@ -321,6 +427,7 @@ export function RunStep({
         target,
         agent,
         prompt: prompt.trim(),
+        picks: drawPicks,
       });
 
       onStarted?.(reviewId, agent);
@@ -329,7 +436,16 @@ export function RunStep({
     } finally {
       setStarting(false);
     }
-  }, [agent, canDraw, client, discovered, onStarted, prompt, target]);
+  }, [
+    agent,
+    canDraw,
+    client,
+    discovered,
+    drawPicks,
+    onStarted,
+    prompt,
+    target,
+  ]);
 
   const startEmpty = useCallback(async () => {
     if (startingEmpty || !project || !onStartEmpty) return;
@@ -687,14 +803,29 @@ export function RunStep({
                       label: candidate.name,
                       icon: <AgentLogo agent={candidate.id} />,
                     }))}
-                    onChange={(next: OnboardingRunAgent["id"]) =>
-                      setAgent(next)
-                    }
+                    onChange={chooseAgent}
                   >
                     {null}
                   </OptionMenu>
                 ) : null}
               </span>
+              {askChoiceKinds.map((kind) => {
+                const select = choices?.[kind];
+                const current = drawPicks[kind];
+
+                return select && current ? (
+                  <AskChoicePicker
+                    key={kind}
+                    label={choiceLabels.get(kind) ?? kind}
+                    select={select}
+                    current={current}
+                    disabled={false}
+                    quiet
+                    end
+                    onPick={(value) => chooseSetting(kind, value)}
+                  />
+                ) : null;
+              })}
             </span>
           ) : loading ? null : (
             <span {...stylex.props(styles.source)}>

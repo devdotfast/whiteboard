@@ -12,8 +12,10 @@ import {
 } from "@dev.fast/review-protocol";
 import {
   type AskAgentId,
+  type AskOffer,
   type AskPicks,
   askAgentIds,
+  askPicksSchema,
 } from "@review/ask/thread-state.js";
 import type { AskThreadHooks } from "@review/ask/thread.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";
@@ -30,7 +32,8 @@ const COMMAND_TIMEOUT_MS = 15_000;
 
 const PULL_REQUEST_LIMIT = 10;
 
-/** Ignored when the agent does not offer the model. */
+/** Where the reader picks nothing; ignored when the agent does not offer
+ * the model. */
 const RUN_PICKS: Partial<Record<AskAgentId, AskPicks>> = {
   claude: { model: "sonnet" },
   codex: { model: "gpt-6-luna" },
@@ -436,6 +439,12 @@ export interface OnboardingRunHost {
   handOff(reviewId: string, threadId: string): void;
   /** Shows a review in Desktop; reports, rather than throws, a failure. */
   open(reviewId: string): Promise<{ opened: boolean }>;
+  /** What an agent offers to choose, from a session in `cwd`. */
+  offer(
+    agent: AskAgentId,
+    model: string | undefined,
+    cwd: () => Promise<string>,
+  ): Promise<AskOffer>;
 }
 
 /** First run's Run step, and Home's New whiteboard: make the whiteboard, open
@@ -450,6 +459,24 @@ export function registerOnboardingRoutes(
   app.get("/onboarding/agents", async (context) =>
     context.json({ agents: await ask.agents() }),
   );
+
+  // The models and efforts an agent offers to draw with: with the run's own
+  // model until the reader picks another.
+  app.get("/onboarding/agents/:agent/offer", async (context) => {
+    const agent = z.enum(askAgentIds).parse(context.req.param("agent"));
+
+    const { path: directory, model } = z
+      .object({ path: z.string().min(1), model: askPicksSchema.shape.model })
+      .parse(context.req.query());
+
+    return context.json({
+      offer: await host.offer(
+        agent,
+        model ?? RUN_PICKS[agent]?.model,
+        async () => directory,
+      ),
+    });
+  });
 
   app.get("/onboarding/projects", async (context) =>
     context.json({
@@ -550,7 +577,7 @@ export function registerOnboardingRoutes(
       head,
       selection: { title },
       context: await runContext(ask, input.agent, id, reviewId),
-      picks: RUN_PICKS[input.agent],
+      picks: { ...RUN_PICKS[input.agent], ...input.picks },
       question: { text: input.prompt },
     });
 
