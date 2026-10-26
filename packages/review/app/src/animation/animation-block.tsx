@@ -54,6 +54,16 @@ const loadAnime = () =>
     (module) => module.default,
   ));
 
+let peleSource: Promise<string> | undefined;
+
+// Pele's source, for a stage whose scripts draw Mermaid: fetched by the first
+// one that does, as anime.js is by the first animation.
+const loadPele = () =>
+  (peleSource ??= import("pele/global?raw").then((module) => module.default));
+
+/** Whether a stage's html draws Mermaid, which is all that needs Pele. */
+const drawsMermaid = (html: string) => /\.mermaid\s*\(/.test(html);
+
 let fontRules: Promise<string> | undefined;
 
 const fontFiles = import.meta.glob<string>("../fonts/*.woff2", {
@@ -410,14 +420,18 @@ export function AnimationBlock({
       frame: indexRef.current,
     };
 
-    Promise.all([loadAnime(), loadFonts()]).then(
-      ([source, fonts]) =>
+    Promise.all([
+      loadAnime(),
+      drawsMermaid(node.html) ? loadPele() : undefined,
+      loadFonts(),
+    ]).then(
+      ([anime, pele, fonts]) =>
         channel.port1.postMessage({
           ...init,
-          libraries: [source],
+          libraries: pele ? [anime, pele] : [anime],
           fonts,
         } satisfies HostMessage),
-      () => setError("The animation library or its fonts could not be loaded."),
+      () => setError("The animation libraries or fonts could not be loaded."),
     );
   }, [node.html, node.code, node.height, frames, embeddable]);
 

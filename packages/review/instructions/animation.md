@@ -144,6 +144,55 @@ table.row(cells: string[], { enter?; exit?; only?; tone? }): HTMLTableRowElement
 
 The stage sets `data-frame="<key>"` on `<html>`, and `enter` / `exit` / `only` on any scene part decide the frames it shows in. They are states, not events, so they land right when the reader jumps to a frame or steps back. With `setSequence`, `enter` / `exit` and held `scene.on` changes follow active-sequence order, not declaration order: a change whose key is outside the active path does not apply, an inactive `enter` never occurs, and an inactive `exit` does not end an already-entered part. `only` and highlight lists always match exact stable keys. Visible cards keep their declared wide-grid cells. Hidden cards, store items and table rows collapse from layout; put replacing cards in the same cell. For an intentionally stable footprint, give the container a min-height or choose a fixed stage height with an appropriate scrolling plan.
 
+## Draw with Mermaid
+
+`whiteboard.mermaid(text)` draws a Mermaid diagram in the stage's theme and lays it out for you. Use it when the layout is the hard part: many nodes, branches, subgraphs, a state machine, a class or entity diagram. Use the scene when a few cards carry chips along their edges; Mermaid has no `send`.
+
+```html
+<script>
+  const d = whiteboard.mermaid(`flowchart LR
+    agent[Agent] e1@-->|call| api(Review API)
+    api e2@-->|edit op| store[(Store)]
+    store e3@-.->|snapshot| canvas[Canvas]`);
+
+  d.highlight("call", "agent", "e1")
+    .enter("write", "store", "e2")
+    .on("write", "store", { tone: "modified" })
+    .enter("watch", "canvas", "e3")
+    .on("watch", "canvas", { tone: "added" });
+</script>
+```
+
+Name a part by its Mermaid id:
+
+- A node by its id: `api` above.
+- An edge by the id you give it with `@`: `a e1@--> b`. Name every edge you will reveal or light up. An unnamed flowchart edge is `L_<from>_<to>_<n>`, counting from 0.
+- In a sequence diagram, a participant by its name, and a message as `i0`, `i1`, … in the order they appear.
+
+`d.ids` lists every part in the drawing, and a call naming a part the drawing lacks throws with that list.
+
+```ts
+whiteboard.mermaid(text: string, options?: { container?: string | Element }): MermaidDiagram;
+
+interface MermaidDiagram {
+  readonly element: HTMLElement;     // the diagram's box
+  readonly ids: readonly string[];
+  enter(frame: string, ...ids: string[]): MermaidDiagram;   // show from this frame on
+  exit(frame: string, ...ids: string[]): MermaidDiagram;    // hide from this frame on
+  only(frames: string | string[], ...ids: string[]): MermaidDiagram;
+  highlight(frames: string | string[], ...ids: string[]): MermaidDiagram;   // ring during these frames
+  on(frame: string, ids: string | string[], change: { tone: Tone | "none" }): MermaidDiagram;
+}
+```
+
+- The whole diagram is laid out once, from its full text, and parts that have not entered keep their place. Nothing moves as parts appear, so write the text for the last frame and reveal it frame by frame.
+- `enter`, `exit`, `only` and `highlight` follow the same rules as on scene parts, active sequences included. A solid edge draws in along its line as it enters; a dashed one fades in. An edge's label shows and hides with it.
+- `on` gives nodes and edges a tone from that frame on, as `scene.on` does; `"none"` clears it.
+- The diagram follows the stage's colors, faces and theme. Leave out Mermaid's `style`, `classDef` and `%%{init}%%` theming: they fix colors that do not follow light and dark. Use tones instead. Links and `click` actions do nothing in the stage.
+- The diagram fits its box's width and draws again when that width changes. A diagram that runs across and does not fit a narrow box is drawn running down instead of shrunk, so a `flowchart LR` may show top to bottom in the document column. Your frame changes carry over to the new drawing, but an element you hold from `d.element` does not: look parts up again inside a frame handler.
+- Any Mermaid diagram type draws. Highlights and tones color nodes and edges. Flowchart and sequence diagrams name their parts as above. State, class and ER diagrams name nodes by their ids too, but make up their own edge ids, such as `edge0`; read them from `d.ids`.
+- Text Mermaid cannot parse shows its error under the stage.
+
 ## Going further: the toolkit
 
 When the scene cannot express a layout, drop to the toolkit. It is the same drawing underneath, so it mixes with a scene: pass the card returned by `scene.actor`, `scene.store`, or `scene.table` directly to `arrow`, or use its public `id` or `element` fields where another API needs one.
@@ -277,6 +326,6 @@ Custom CSS should use the whiteboard's variables, never literal colors, sizes or
 - Each frame shows one idea; its title says what changed. 3 to 8 frames is usual.
 - Omit `height` unless the animation intentionally needs a fixed viewport; verify any numeric height in every frame and narrow layout.
 - Every frame reads correctly when reached by a jump, not only by playing.
-- Prefer a scene; drop to the toolkit or raw HTML only when it cannot fit.
+- Prefer a scene, or `whiteboard.mermaid` when the layout is the hard part; drop to the toolkit or raw HTML only when neither fits.
 - In raw HTML, build from the style kit and the `--wb-*` variables; write no literal color, size or font name.
 - Script errors show under the stage. After writing, read the whiteboard back and fix any.

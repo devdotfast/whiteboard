@@ -889,6 +889,123 @@ describe("block components", () => {
     ).toBe("200px");
   });
 
+  it("draws Mermaid in the stage's theme, revealing and lighting its parts by frame", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Mermaid",
+          height: "auto",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+          frames: [
+            { key: "call", title: "Call" },
+            { key: "write", title: "Write" },
+          ],
+          code: { proof: "head/order.ts#L1" },
+          html: [
+            "<script>",
+            'const d=whiteboard.mermaid("flowchart LR\\n  api[API] e1@--> store[(Store)]");',
+            'd.highlight("call","api").enter("write","store","e1").on("write","store",{tone:"added"});',
+            'const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
+            'const part=(id)=>d.element.querySelector(`.pele-node[data-id="${id}"], .pele-edge[data-id="${id}"]`);',
+            'const probe=document.createElement("span");probe.style.color="var(--wb-surface)";document.body.append(probe);',
+            'whiteboard.on("*",({frame})=>{setTimeout(()=>{const api=part("api"),store=part("store"),edge=part("e1");const shown=(el)=>getComputedStyle(el).visibility==="visible";const themed=getComputedStyle(api.querySelector("rect")).fill===getComputedStyle(probe).color;',
+            'const ok=frame.key==="call"?api.hasAttribute("data-wb-highlit")&&!shown(store)&&!shown(edge)&&store.dataset.tone===undefined:!api.hasAttribute("data-wb-highlit")&&shown(store)&&shown(edge)&&store.dataset.tone==="added";',
+            'proof.style.width=themed&&ok?(frame.key==="call"?"200px":"240px"):"100px"},600)});',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    const width = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.width;
+
+    const step = (label: string) =>
+      act(async () =>
+        container
+          .querySelector<HTMLButtonElement>(`button[aria-label='${label}']`)!
+          .click(),
+      );
+
+    const landed = () =>
+      settled(() =>
+        width() === "100px" || width() === "200px" || width() === "240px"
+          ? width()
+          : undefined,
+      );
+
+    expect(await landed()).toBe("200px");
+    await step("Next frame");
+    expect(
+      await settled(() =>
+        width() === "100px" || width() === "240px" ? width() : undefined,
+      ),
+    ).toBe("240px");
+    await step("Previous frame");
+    expect(
+      await settled(() =>
+        width() === "100px" || width() === "200px" ? width() : undefined,
+      ),
+    ).toBe("200px");
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("does not report a ResizeObserver that resizes its own target", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Resize loop",
+          height: "auto",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+          frames: [{ key: "only", title: "Only" }],
+          code: { proof: "head/order.ts#L1" },
+          html: [
+            '<div id="grow" style="height:10px"></div><script>',
+            'const grow=document.querySelector("#grow");let n=0;',
+            "new ResizeObserver(()=>{if(n++<5)grow.style.height=`${10+n*10}px`}).observe(grow);",
+            'const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
+            'setTimeout(()=>{proof.style.width="200px"},300);',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    const width = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.width;
+
+    expect(await settled(() => width() === "200px")).toBe(true);
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("names a Mermaid part the diagram does not have", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Mermaid typo",
+          height: "auto",
+          frames: [{ key: "only", title: "Only" }],
+          code: {},
+          html: '<script>whiteboard.mermaid("flowchart LR\\n  api --> store").enter("only","stor");</script>',
+        },
+      ],
+    });
+
+    expect(
+      await settled(
+        () => container.querySelector("[role='alert']")?.textContent,
+      ),
+    ).toMatch(/The diagram has no part "stor"\. Its parts: .*\bstore\b/);
+  });
+
   it("mounts a scene in its container and keeps narrow tables readable", async () => {
     const { container } = await mountFixture("animation", {
       document: [
