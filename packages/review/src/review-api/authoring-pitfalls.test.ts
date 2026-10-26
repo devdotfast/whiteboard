@@ -319,7 +319,7 @@ describe("diagram rules", () => {
 
     await expectRejected(
       () => insert(sequence([step([...lines, call])])),
-      "expected array to have <=4 items",
+      /steps\[0\]\.source/,
     );
     await expectRejected(
       () => insert(sequence([step([call, call])])),
