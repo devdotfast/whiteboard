@@ -44,6 +44,7 @@ export const REVIEW_DOCUMENT_FONT_SIZE_SETTING = 'review.document.fontSize';
 export const REVIEW_DOCUMENT_FONT_SIZE_BASE = 15;
 export const REVIEW_READING_FONT_SETTING = 'review.readingFont';
 export const REVIEW_READING_FONTS = ['serif', 'sans'] as const;
+export const REVIEW_READING_FONT_FAMILY_SETTING = 'review.readingFontFamily';
 export const EDITOR_FONT_SIZE_SETTING = 'editor.fontSize';
 export const EDITOR_FONT_FAMILY_SETTING = 'editor.fontFamily';
 export const EDITOR_FONT_LIGATURES_SETTING = 'editor.fontLigatures';

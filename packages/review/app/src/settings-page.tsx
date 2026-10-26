@@ -348,10 +348,23 @@ export function SettingsPage({
                     />
                   </Row>
                   <Row
+                    label="Reading font"
+                    description="Any installed font for reading text. Clear it to use the typeface above."
+                  >
+                    <FontFamilyField
+                      label="Reading font"
+                      value={appearance.readingFontFamily}
+                      onChange={(family) =>
+                        changeAppearance("readingFontFamily", family)
+                      }
+                    />
+                  </Row>
+                  <Row
                     label="Code font"
                     description="Code blocks, diffs, peeks, and source tabs. Clear it for Geist Mono."
                   >
                     <FontFamilyField
+                      label="Code font"
                       value={appearance.codeFontFamily}
                       onChange={(family) =>
                         changeAppearance("codeFontFamily", family)
@@ -657,9 +670,11 @@ function SizeSelect({
 }
 
 function FontFamilyField({
+  label,
   value,
   onChange,
 }: {
+  label: string;
   value: string;
   onChange: (family: string) => void;
 }) {
@@ -673,7 +688,7 @@ function FontFamilyField({
 
   return (
     <TextField
-      aria-label="Code font"
+      aria-label={label}
       spellCheck={false}
       value={draft}
       onChange={(event) => setDraft(event.currentTarget.value)}

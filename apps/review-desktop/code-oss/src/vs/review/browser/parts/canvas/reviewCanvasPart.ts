@@ -57,6 +57,7 @@ import {
 	EDITOR_FONT_LIGATURES_SETTING,
 	EDITOR_FONT_SIZE_SETTING,
 	REVIEW_DOCUMENT_FONT_SIZE_SETTING,
+	REVIEW_READING_FONT_FAMILY_SETTING,
 	REVIEW_READING_FONT_SETTING,
 	REVIEW_OPEN_FILES_IN_APPLICATION_SETTING,
 	REVIEW_OPEN_FILES_IN_CHOICES,
@@ -145,6 +146,7 @@ type PendingBoardEvent = Extract<ReviewSurfaceEvent, { event: "revealBlock" | "s
 const APPEARANCE_SETTINGS = {
 	documentFontSize: { key: REVIEW_DOCUMENT_FONT_SIZE_SETTING, setting: "document_font_size" },
 	readingFont: { key: REVIEW_READING_FONT_SETTING, setting: "reading_font" },
+	readingFontFamily: { key: REVIEW_READING_FONT_FAMILY_SETTING, setting: "reading_font_family" },
 	codeFontSize: { key: EDITOR_FONT_SIZE_SETTING, setting: "code_font_size" },
 	codeFontFamily: { key: EDITOR_FONT_FAMILY_SETTING, setting: "code_font_family" },
 	fontLigatures: { key: EDITOR_FONT_LIGATURES_SETTING, setting: "font_ligatures" },
@@ -1131,6 +1133,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return {
 			documentFontSize: value<number>("documentFontSize"),
 			readingFont: value("readingFont") === "sans" ? "sans" : "serif",
+			readingFontFamily: value<string>("readingFontFamily") ?? "",
 			codeFontSize: value<number>("codeFontSize"),
 			codeFontFamily: value<string>("codeFontFamily"),
 			// `editor.fontLigatures` also takes font-feature-settings.

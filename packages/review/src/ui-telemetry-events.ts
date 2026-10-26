@@ -155,6 +155,7 @@ export const SETTING_NAME = [
   "code_font_size",
   "document_font_size",
   "reading_font",
+  "reading_font_family",
   "code_font_family",
   "font_ligatures",
   "diff_font_size",

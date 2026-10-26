@@ -743,6 +743,8 @@ export type ReviewDocumentWidthChoice = "standard" | "wide" | "full";
 export interface ReviewAppearance {
   documentFontSize: number;
   readingFont: "serif" | "sans";
+  // Any font-family list; when set, it replaces `readingFont`.
+  readingFontFamily: string;
   // `editor.*`: code blocks and source tabs.
   codeFontSize: number;
   codeFontFamily: string;
