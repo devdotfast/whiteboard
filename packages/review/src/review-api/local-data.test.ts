@@ -4204,3 +4204,46 @@ it("starts Ask on a plan, which has no pins, in its repository's live checkout",
   // Agent traces are optional for Ask; a plan reads them from its checkout.
   expect((await app.request(`/${reviewId}/agent-traces`)).status).toBe(200);
 });
+
+it("counts a comparison's changes with one diff however many files changed", async () => {
+  for (let index = 0; index < 30; index++)
+    writeFileSync(path.join(repository, `file${index}.ts`), `${index}\n`);
+  writeFileSync(path.join(repository, "old name.ts"), "a\nb\nc\nd\ne\n");
+  git("add", ".");
+  git("-c", "commit.gpgsign=false", "commit", "-qm", "Before");
+  const base = git("rev-parse", "HEAD");
+
+  for (let index = 0; index < 30; index++)
+    writeFileSync(path.join(repository, `file${index}.ts`), `${index + 1}\n`);
+  git("mv", "old name.ts", "new näme.ts");
+  writeFileSync(path.join(repository, "new näme.ts"), "a\nb\nC\nd\ne\n");
+  git("add", ".");
+  git("-c", "commit.gpgsign=false", "commit", "-qm", "After");
+
+  const changed = await local.data.resolvePins(pins.repositoryId, base, "HEAD");
+
+  const { reviewId } = await local.store.execute(
+    command({
+      type: "create",
+      title: "Many files",
+      target: { kind: "commits", ...changed },
+    }),
+  );
+
+  recordSpawns();
+  const coverage = await local.data.coverage(reviewId, changed);
+
+  expect(
+    spawns.filter((spawn) => spawn[0] === "git" && spawn.includes("diff")),
+  ).toHaveLength(2);
+  expect(coverage.files).toHaveLength(31);
+  expect(
+    coverage.files.find((file) => file.path === "new näme.ts"),
+  ).toMatchObject({
+    previousPath: "old name.ts",
+    changed: { base: [[2, 3]], head: [[2, 3]] },
+  });
+  expect(
+    coverage.files.find((file) => file.path === "file7.ts")?.changed,
+  ).toEqual({ base: [[0, 1]], head: [[0, 1]] });
+});

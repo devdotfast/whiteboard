@@ -24,6 +24,7 @@ import {
   readFileAtCommit,
   resolveRepoContext,
   runVcs,
+  splitGitPatchFiles,
 } from "@dev.fast/local-vcs";
 import { boardTitle, structuralChangeCounts } from "@dev.fast/review-protocol";
 import type {
@@ -1949,6 +1950,18 @@ export class LocalReviewData {
     return entry.state === "ready" && entry.partial
       ? Promise.resolve(entry.partial)
       : entry.promise;
+  }
+
+  /** Every changed file's patch from one diff, by path. */
+  async patches(pins: Pins): Promise<Map<string, string>> {
+    return new Map(
+      splitGitPatchFiles(await this.rawPatch(pins, {})).map(
+        ({ file, patch }) => [
+          file.path,
+          patch.endsWith("\n") ? patch : `${patch}\n`,
+        ],
+      ),
+    );
   }
 
   changes(pins: Pins): Promise<LocalVcsDiffFileSummary[]>;

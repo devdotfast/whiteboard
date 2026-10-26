@@ -48,9 +48,16 @@ export async function comparisonCoverage(
 
   const files: CoverageFile[] = [];
 
+  // One diff for every file; a patch too large for it falls back per file.
+  const patches = await data.patches(pins).catch(() => undefined);
+
   for (const file of await data.changes(pins)) {
     signal.throwIfAborted();
-    const patch = await data.changes(pins, file.path, file.previousPath);
+
+    const patch =
+      patches?.get(file.path) ??
+      (await data.changes(pins, file.path, file.previousPath));
+
     const changed = emptyCoverage();
 
     for (const hunk of parseUnifiedPatch(file.path, patch))
