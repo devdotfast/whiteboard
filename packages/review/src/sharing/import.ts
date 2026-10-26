@@ -411,11 +411,14 @@ export class SharedReviewStore {
       await this.validateReferences(saved, repository.id, pins);
       await local.data.workspaces.open(id, pins);
 
-      if (
-        local.data.workspaces.list(id).some((workspace) => !workspace.rootPath)
-      )
+      const failed = local.data.workspaces
+        .list(id)
+        .find((workspace) => !workspace.rootPath);
+
+      if (failed)
         throw new ReviewInputError(
-          "Could not prepare the pinned checkout. Retry opening the share.",
+          failed.log ||
+            "Could not prepare the pinned checkout. Retry opening the share.",
           409,
         );
       await writeFile(
