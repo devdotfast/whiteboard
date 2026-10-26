@@ -13,10 +13,12 @@ import {
 } from "@dev.fast/json";
 import {
   type ReviewDiffrConfig,
+  type ReviewDiffrLogin,
   type ReviewDiffrProvider,
   type ReviewDiffrSummarizerInput,
   type StructuralRegion,
   decodeStructuralDiffEvent,
+  reviewDiffrLoginsSchema,
   reviewDiffrSummarizerInputSchema,
 } from "@dev.fast/review-protocol";
 import { stringify } from "smol-toml";
@@ -39,6 +41,7 @@ function serialized<T>(operation: () => Promise<T>): Promise<T> {
 
 type DiffrArguments =
   | { command: "schema" }
+  | { command: "logins" }
   | { command: "show"; reveal: boolean }
   | { command: "set"; patch: JsonObject }
   | { command: "migrate" }
@@ -48,6 +51,8 @@ function diffrArgv(args: DiffrArguments): string[] {
   switch (args.command) {
     case "schema":
       return ["config", "schema"];
+    case "logins":
+      return ["config", "logins"];
     case "show":
       return ["config", "show", "--json", ...(args.reveal ? ["--reveal"] : [])];
     case "set":
@@ -188,6 +193,32 @@ function environmentKey(
     .find((key) => !!key);
 }
 
+function signedIn(
+  providers: ReviewDiffrProvider[],
+  logins: Record<string, ReviewDiffrLogin>,
+  id: string,
+): boolean {
+  const login = providers.find((provider) => provider.id === id)?.login;
+
+  return !!login && !!logins[login]?.ready;
+}
+
+/** Older diffr builds have no sign-ins. */
+async function readLogins(
+  rootPath?: string,
+  signal?: AbortSignal,
+): Promise<Record<string, ReviewDiffrLogin>> {
+  try {
+    const result = reviewDiffrLoginsSchema.safeParse(
+      json(await diffr({ command: "logins" }, rootPath, { signal })),
+    );
+
+    return result.success ? result.data : {};
+  } catch {
+    return {};
+  }
+}
+
 function keyOptional(
   providers: ReviewDiffrProvider[],
   id: string,
@@ -249,6 +280,7 @@ function configDefaults(
     const detail = isJsonObject(details) ? details[id] : undefined;
     const model = isJsonObject(models) ? models[id] : undefined;
     const endpoint = isJsonObject(detail) ? detail.endpoint : undefined;
+    const login = isJsonObject(detail) ? detail.login : undefined;
 
     return {
       id,
@@ -258,6 +290,7 @@ function configDefaults(
       keyVariables: isJsonObject(detail) ? strings(detail.key_variables) : [],
       keylessCustomEndpoint:
         isJsonObject(detail) && detail.keyless_custom_endpoint === true,
+      ...(isStringValue(login) && { login }),
     };
   });
 
@@ -273,14 +306,18 @@ function configDefaults(
 async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
   const config = await values(rootPath);
   const defaults = configDefaults(await readSchema(rootPath));
+  const logins = await readLogins(rootPath);
+  const providers = defaults.providers ?? [];
   const saved = valueAt(config, `${prefix}.api_key`);
 
   const credentialSource =
     isStringValue(saved) && saved.length > 0
       ? "config"
-      : environmentKey(defaults.providers ?? [], savedProvider(config))
+      : environmentKey(providers, savedProvider(config))
         ? "environment"
-        : "missing";
+        : signedIn(providers, logins, savedProvider(config))
+          ? "login"
+          : "missing";
 
   const plugins = valueAt(config, "plugins.shape");
 
@@ -293,7 +330,7 @@ async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
       if (isJsonObject(plugin)) delete plugin.api_key;
   }
 
-  return { values: config, credentialSource, ...defaults };
+  return { values: config, credentialSource, logins, ...defaults };
 }
 
 export function readDiffrConfig(rootPath?: string): Promise<ReviewDiffrConfig> {
@@ -371,12 +408,19 @@ export function saveDiffrSummarizer(
       !draft.apiKey &&
       !(savedKey && !moving) &&
       !environmentKey(providers, draft.provider) &&
+      !signedIn(providers, current.logins ?? {}, draft.provider) &&
       !keyOptional(providers, draft.provider, draft.endpoint)
     ) {
+      const login = providers.find(
+        (provider) => provider.id === draft.provider,
+      )?.login;
+
       return {
         ...current,
         changed: false,
-        error: "Add an API key before enabling summaries.",
+        error:
+          (login && current.logins?.[login]?.message) ||
+          "Add an API key before enabling summaries.",
       };
     }
 
@@ -437,7 +481,11 @@ export async function testDiffrSummarizer(
         : "") ||
       environmentKey(providers, provider);
 
-    if (!apiKey && !keyOptional(providers, provider, endpoint))
+    if (
+      !apiKey &&
+      !keyOptional(providers, provider, endpoint) &&
+      !signedIn(providers, await readLogins(rootPath, deadline), provider)
+    )
       throw new Error("Add an API key to test summaries.");
     directory = await mkdtemp(join(tmpdir(), "review-summary-"));
 
@@ -533,7 +581,7 @@ export async function testDiffrSummarizer(
     }
 
     throw new Error(
-      "No summary was produced. Check the API key, model, and network connection.",
+      "No summary was produced. Check the API key or sign-in, the model, and the network connection.",
     );
   } finally {
     testing = false;

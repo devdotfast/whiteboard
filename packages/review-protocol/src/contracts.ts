@@ -771,12 +771,21 @@ export interface ReviewDiffrProvider {
   endpoint: string;
   keyVariables: string[];
   keylessCustomEndpoint: boolean;
+  login?: string;
 }
+
+export const reviewDiffrLoginsSchema = z.record(
+  z.string(),
+  z.object({ ready: z.boolean(), message: z.string().optional() }),
+);
+
+export type ReviewDiffrLogin = z.infer<typeof reviewDiffrLoginsSchema>[string];
 
 export interface ReviewDiffrConfig {
   values: JsonObject;
-  credentialSource: "config" | "environment" | "missing";
+  credentialSource: "config" | "environment" | "login" | "missing";
   providers?: ReviewDiffrProvider[];
+  logins?: Record<string, ReviewDiffrLogin>;
   defaultPrompt?: string;
   defaultHiddenTags?: string[];
   changed?: boolean;
@@ -800,7 +809,7 @@ export type ReviewDiffrSummarizerInput = z.infer<
 
 const reviewDiffrConfigSchema = z.object({
   values: z.custom<JsonObject>(isJsonObject),
-  credentialSource: z.enum(["config", "environment", "missing"]),
+  credentialSource: z.enum(["config", "environment", "login", "missing"]),
   providers: z
     .array(
       z.object({
@@ -810,9 +819,11 @@ const reviewDiffrConfigSchema = z.object({
         endpoint: z.string(),
         keyVariables: z.array(z.string()),
         keylessCustomEndpoint: z.boolean(),
+        login: z.string().optional(),
       }),
     )
     .optional(),
+  logins: reviewDiffrLoginsSchema.optional(),
   defaultPrompt: z.string().optional(),
   defaultHiddenTags: z.array(z.string()).optional(),
   changed: z.boolean().optional(),

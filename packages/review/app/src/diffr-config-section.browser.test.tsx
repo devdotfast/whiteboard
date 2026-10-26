@@ -483,3 +483,53 @@ test("offers whatever providers diffr describes, with their defaults", async () 
     .element(page.getByLabelText("Endpoint URL", { exact: true }))
     .toHaveAttribute("placeholder", "https://api.mistral.ai/v1");
 });
+
+test("prefers a signed-in Codex when nothing has a key, and shows its sign-in in place of a key", async () => {
+  const providers = [
+    ...config().providers!,
+    {
+      id: "codex",
+      title: "Codex",
+      model: "gpt-6-luna",
+      endpoint: "https://chatgpt.com/backend-api/codex",
+      keyVariables: [],
+      keylessCustomEndpoint: false,
+      login: "codex",
+    },
+  ];
+
+  const { actions } = await mount({
+    credentialSource: "missing",
+    providers,
+    logins: {
+      codex: { ready: true },
+    },
+  });
+
+  await open();
+  await expect
+    .element(page.getByRole("button", { name: "Codex" }))
+    .toHaveAttribute("aria-pressed", "true");
+  await expect
+    .element(page.getByLabelText("Model", { exact: true }))
+    .toHaveValue("gpt-6-luna");
+  await expect
+    .element(page.getByText(/Uses the Codex sign-in saved on this computer/))
+    .toBeVisible();
+  expect(document.body.textContent).not.toContain("API key");
+
+  await act(async () => {
+    await page.getByLabelText("Enable summaries", { exact: true }).click();
+  });
+  await act(async () => {
+    await page.getByRole("button", { name: "Save summaries" }).click();
+  });
+  expect(actions.saveSummarizer).toHaveBeenCalledWith(
+    expect.objectContaining({
+      enabled: true,
+      provider: "codex",
+      model: "gpt-6-luna",
+      apiKey: "",
+    }),
+  );
+});

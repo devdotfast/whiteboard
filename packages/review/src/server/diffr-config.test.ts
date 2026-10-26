@@ -92,6 +92,20 @@ const log = ${JSON.stringify(log)};
 fs.appendFileSync(log, JSON.stringify(args) + '\\n');
 if (args[0] === 'config') {
   if (args[1] === 'schema' && process.env.FAIL_SCHEMA) process.exit(2);
+  if (args[1] === 'logins' && process.env.TEST_LOGINS) {
+    console.log(process.env.TEST_LOGINS);
+    process.exit(0);
+  }
+  if (args[1] === 'schema' && process.env.TEST_LOGINS) {
+    const schema = JSON.parse(require('node:child_process').execFileSync(${JSON.stringify(binary)}, args, {encoding:'utf8'}));
+    const options = schema.properties.plugins.properties.shape.properties.bundled.properties.summarize.properties;
+    options.provider.enum.push('codex');
+    options.provider['x-enum-titles'].push('Codex');
+    options.model['x-default-by'].values.codex = 'gpt-test';
+    options.provider_details['x-default-by'].values.codex = {endpoint:'https://chatgpt.example',key_variables:[],keyless_custom_endpoint:false,login:'codex'};
+    console.log(JSON.stringify(schema));
+    process.exit(0);
+  }
   if (args[1] === 'show' && process.env.TEST_VALUES) {
     console.log(fs.readFileSync(process.env.TEST_VALUES, 'utf8'));
     process.exit(0);
@@ -303,6 +317,38 @@ test("cannot enable summaries without credentials", async () => {
     changed: false,
     error: expect.stringContaining("API key"),
   });
+});
+
+test("a ready agent sign-in is a credential and a missing one says why", async () => {
+  const fake = await diffrTestProcess();
+  const values = path.join(fake.root, "values.json");
+  await writeFile(
+    values,
+    JSON.stringify({
+      plugins: {
+        // oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- Native diffr config key.
+        shape: {
+          bundled: { summarize: { enabled: false, provider: "codex" } },
+        },
+      },
+    }),
+  );
+  vi.stubEnv("TEST_VALUES", values);
+  vi.stubEnv("TEST_LOGINS", JSON.stringify({ codex: { ready: true } }));
+  const config = await readDiffrConfig();
+  expect(config.credentialSource).toBe("login");
+  expect(config.providers).toContainEqual(
+    expect.objectContaining({ id: "codex", login: "codex" }),
+  );
+
+  vi.stubEnv(
+    "TEST_LOGINS",
+    JSON.stringify({ codex: { ready: false, message: "run codex login" } }),
+  );
+  expect(
+    await saveDiffrSummarizer({ ...draft, provider: "codex" }),
+  ).toMatchObject({ changed: false, error: "run codex login" });
+  expect((await fake.calls()).some((args) => args[1] === "set")).toBe(false);
 });
 
 test("synthetic test returns a summary without saving and cleans its config", async () => {

@@ -64,17 +64,31 @@ function title(config: ReviewDiffrConfig, id: string): string {
   return described(config, id)?.title ?? id;
 }
 
+/** Codex when summaries are off, nothing else has a key, and it is signed in. */
+function preferCodex(config: ReviewDiffrConfig): boolean {
+  return (
+    setting(config, "plugins.shape.bundled.summarize.enabled") !== true &&
+    config.credentialSource === "missing" &&
+    !!described(config, "codex") &&
+    !!config.logins?.codex?.ready
+  );
+}
+
 function summaryDraft(config: ReviewDiffrConfig): ReviewDiffrSummarizerInput {
+  const codex = preferCodex(config);
+
   return {
     enabled:
       setting(config, "plugins.shape.bundled.summarize.enabled") === true,
-    provider: provider(config),
-    model: String(
-      setting(config, "plugins.shape.bundled.summarize.model") ?? "",
-    ),
-    endpoint: String(
-      setting(config, "plugins.shape.bundled.summarize.endpoint") ?? "",
-    ),
+    provider: codex ? "codex" : provider(config),
+    model: codex
+      ? (described(config, "codex")?.model ?? "")
+      : String(setting(config, "plugins.shape.bundled.summarize.model") ?? ""),
+    endpoint: codex
+      ? ""
+      : String(
+          setting(config, "plugins.shape.bundled.summarize.endpoint") ?? "",
+        ),
     systemPrompt: String(
       setting(config, "plugins.shape.bundled.summarize.system_prompt") ??
         config.defaultPrompt ??
@@ -171,6 +185,7 @@ export function DiffrConfigSection({
     setting(config, "plugins.shape.bundled.summarize.enabled") === undefined;
 
   const summaryValid = !!draft?.model.trim();
+  const login = config && draft && described(config, draft.provider)?.login;
   const savedDraft = config && summaryDraft(config);
   const hiddenTags = config && setting(config, hideKey);
 
@@ -304,35 +319,46 @@ export function DiffrConfigSection({
                         />
                       </Row>
                     )}
-                    <Row label="API key">
-                      <TextField
-                        xstyle={styles.input}
-                        aria-label="API key"
-                        type="password"
-                        autoComplete="off"
-                        placeholder="Enter replacement key"
-                        value={draft.apiKey}
-                        onChange={(event) =>
-                          setDraft({ ...draft, apiKey: event.target.value })
-                        }
-                      />
-                    </Row>
-                    <p {...stylex.props(styles.rowDescription)}>
-                      {draft.provider !== provider(config) ||
-                      draft.endpoint !== savedDraft?.endpoint
-                        ? config.credentialSource !== "config"
-                          ? `Enter a key for ${title(config, draft.provider)}, or leave blank to use its environment variable.`
-                          : draft.provider !== provider(config)
-                            ? `Saving clears the key saved for ${title(config, provider(config))}.`
-                            : "Saving clears the saved key, since the endpoint changed."
-                        : `${
-                            config.credentialSource === "config"
-                              ? "Saved key"
-                              : config.credentialSource === "environment"
-                                ? "Environment key available"
-                                : "Not configured"
-                          }. Replacement keys are stored in diffr’s config. Leave blank to keep the current key.`}
-                    </p>
+                    {login ? (
+                      <p {...stylex.props(styles.rowDescription)}>
+                        {config.logins?.[login]?.ready
+                          ? `Uses the ${title(config, draft.provider)} sign-in saved on this computer. No key needed.`
+                          : (config.logins?.[login]?.message ??
+                            "Sign-in status unavailable.")}
+                      </p>
+                    ) : (
+                      <>
+                        <Row label="API key">
+                          <TextField
+                            xstyle={styles.input}
+                            aria-label="API key"
+                            type="password"
+                            autoComplete="off"
+                            placeholder="Enter replacement key"
+                            value={draft.apiKey}
+                            onChange={(event) =>
+                              setDraft({ ...draft, apiKey: event.target.value })
+                            }
+                          />
+                        </Row>
+                        <p {...stylex.props(styles.rowDescription)}>
+                          {draft.provider !== provider(config) ||
+                          draft.endpoint !== savedDraft?.endpoint
+                            ? config.credentialSource !== "config"
+                              ? `Enter a key for ${title(config, draft.provider)}, or leave blank to use its environment variable.`
+                              : draft.provider !== provider(config)
+                                ? `Saving clears the key saved for ${title(config, provider(config))}.`
+                                : "Saving clears the saved key, since the endpoint changed."
+                            : `${
+                                config.credentialSource === "config"
+                                  ? "Saved key"
+                                  : config.credentialSource === "environment"
+                                    ? "Environment key available"
+                                    : "Not configured"
+                              }. Replacement keys are stored in diffr’s config. Leave blank to keep the current key.`}
+                        </p>
+                      </>
+                    )}
                     <Row label="Model">
                       <TextField
                         xstyle={styles.input}
