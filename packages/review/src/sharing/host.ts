@@ -71,15 +71,29 @@ export function mountSharingHost(
     pending: false,
   };
 
-  app.get("/sharing/account", async (context) => {
+  const readAccount = async () => {
     const account = await readStoreAuth();
 
-    return context.json({
+    return {
       account: account
-        ? { login: account.login, origin: account.origin }
+        ? {
+            login: account.login,
+            origin: account.origin,
+            email: account.email,
+            githubLogin: account.githubLogin,
+          }
         : null,
       ...login,
-    });
+    };
+  };
+
+  app.get("/sharing/account", async (context) =>
+    context.json(await readAccount()),
+  );
+  app.post("/sharing/logout", async (context) => {
+    await clearStoreAuth();
+
+    return context.json(await readAccount());
   });
   app.post("/sharing/login", async (context) => {
     if (!login.pending) {

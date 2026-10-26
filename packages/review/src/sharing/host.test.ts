@@ -3,7 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { openUrlInBrowser, runStoreLogin } from "@dev.fast/trace-core";
+import {
+  type openUrlInBrowser,
+  readStoreAuth,
+  type runStoreLogin,
+  writeStoreAuth,
+} from "@dev.fast/trace-core";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -239,6 +244,45 @@ it("reports one start and one outcome per login attempt", async () => {
       ["started", undefined],
       ["succeeded", undefined],
     ]);
+  } finally {
+    await fixture.data.close();
+    fixture.store.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("reports the saved sign-in and forgets it on sign-out", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "share-logout-"));
+  vi.stubEnv("DEV_REVIEW_HOME", root);
+  const fixture = await createShareFixture(root);
+  const api = new Hono();
+  mountSharingHost(
+    api,
+    fixture.store,
+    fixture.data,
+    new SharedReviewStore(path.join(root, "shared")),
+  );
+
+  try {
+    await writeStoreAuth({
+      origin: "https://app.dev.fast",
+      token: "token",
+      login: "Octo Cat",
+      githubLogin: "octocat",
+      savedAt: new Date().toISOString(),
+    });
+    expect(await (await api.request("/sharing/account")).json()).toEqual({
+      account: {
+        login: "Octo Cat",
+        origin: "https://app.dev.fast",
+        githubLogin: "octocat",
+      },
+      pending: false,
+    });
+    expect(
+      await (await api.request("/sharing/logout", { method: "POST" })).json(),
+    ).toEqual({ account: null, pending: false });
+    expect(await readStoreAuth()).toBeNull();
   } finally {
     await fixture.data.close();
     fixture.store.close();
