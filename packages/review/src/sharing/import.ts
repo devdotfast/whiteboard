@@ -745,6 +745,7 @@ export class SharedReviewStore {
             : undefined,
         shared: {
           ...loaded.attribution,
+          key: id,
           cloneUrl: validated.bundle.repository?.cloneUrl,
         },
       },
