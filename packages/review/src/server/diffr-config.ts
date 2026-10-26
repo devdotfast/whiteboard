@@ -203,27 +203,30 @@ function strings(value: JsonValue | undefined): string[] {
   return Array.isArray(value) ? value.filter(isStringValue) : [];
 }
 
+const summarizeSchema =
+  "properties.plugins.properties.shape.properties.bundled.properties.summarize.properties";
+
+async function readSchema(rootPath?: string): Promise<JsonObject | undefined> {
+  try {
+    return json(await diffr({ command: "schema" }, rootPath));
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Defaults supplied by diffr's schema for tag hiding and summary controls.
  * If the schema cannot be read, resolved settings still work.
  */
-async function configDefaults(
-  rootPath?: string,
-): Promise<
-  Pick<ReviewDiffrConfig, "providers" | "defaultPrompt" | "defaultHiddenTags">
+function configDefaults(
+  schema: JsonObject | undefined,
+): Pick<
+  ReviewDiffrConfig,
+  "providers" | "defaultPrompt" | "defaultHiddenTags"
 > {
-  let schema: JsonObject;
+  if (!schema) return {};
 
-  try {
-    schema = json(await diffr({ command: "schema" }, rootPath));
-  } catch {
-    return {};
-  }
-
-  const options = valueAt(
-    schema,
-    "properties.plugins.properties.shape.properties.bundled.properties.summarize.properties",
-  );
+  const options = valueAt(schema, summarizeSchema);
 
   const defaultHiddenTags = strings(
     valueAt(
@@ -269,7 +272,7 @@ async function configDefaults(
 
 async function read(rootPath?: string): Promise<ReviewDiffrConfig> {
   const config = await values(rootPath);
-  const defaults = await configDefaults(rootPath);
+  const defaults = configDefaults(await readSchema(rootPath));
   const saved = valueAt(config, `${prefix}.api_key`);
 
   const credentialSource =
@@ -421,7 +424,8 @@ export async function testDiffrSummarizer(
       throw new Error("The summarizer is not available in this configuration.");
 
     const { provider, endpoint, model, systemPrompt } = parsed.data;
-    const providers = (await configDefaults(rootPath)).providers ?? [];
+    const schema = await readSchema(rootPath);
+    const providers = configDefaults(schema).providers ?? [];
 
     const variables =
       providers.find((known) => known.id === provider)?.keyVariables ?? [];
@@ -444,6 +448,12 @@ export async function testDiffrSummarizer(
       model,
       ...(systemPrompt.trim() && { system_prompt: systemPrompt }),
       min_lines: 1,
+      ...(schema &&
+        isJsonObject(
+          valueAt(schema, `${summarizeSchema}.max_length_ratio`),
+        ) && {
+          max_length_ratio: 1000,
+        }),
       retries: 0,
       request_timeout_ms: 45_000,
     };

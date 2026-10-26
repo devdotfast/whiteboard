@@ -28,6 +28,7 @@ pub struct Options {
     pub min_lines: usize,
     pub tests: bool,
     pub test_min_lines: usize,
+    pub max_length_ratio: f64,
     pub api_key: Option<String>,
     pub endpoint: Option<String>,
     pub request_timeout_ms: u64,
@@ -119,7 +120,18 @@ impl Summarize {
             .text(&text)
             .ok_or_else(|| failed("no text in the response".to_owned()))?
             .trim();
+        let pseudocode = unfenced(pseudocode).trim();
         Ok((!pseudocode.is_empty()).then(|| pseudocode.to_owned()))
+    }
+}
+
+fn unfenced(text: &str) -> &str {
+    let Some((opening, rest)) = text.split_once('\n') else {
+        return text;
+    };
+    match rest.strip_suffix("```") {
+        Some(inner) if opening.starts_with("```") => inner,
+        _ => text,
     }
 }
 
@@ -204,10 +216,10 @@ impl GuestPlugin for Summarize {
         else {
             return Ok(false);
         };
-        // Pseudocode earns its place only when it is at most two thirds as
-        // long as the body; otherwise the body keeps its original visibility.
-        let size = |text: &str| text.chars().filter(|c| !c.is_whitespace()).count();
-        if size(&pseudocode) * 3 > size(&text) * 2 {
+        // Pseudocode earns its place only when it is short enough; otherwise
+        // the body keeps its original visibility.
+        let size = |text: &str| text.chars().filter(|c| !c.is_whitespace()).count() as f64;
+        if size(&pseudocode) > size(&text) * self.options.max_length_ratio {
             return Ok(false);
         }
         cursor.set_collapsed(data.id, true)?;

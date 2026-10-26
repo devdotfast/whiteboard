@@ -208,6 +208,22 @@ fn long_summaries_are_discarded_without_changing_initial_folding() {
 }
 
 #[test]
+fn a_higher_length_ratio_keeps_a_long_summary() {
+    let (file, mut sides) = project("a.py", "", LARGE);
+    let (endpoint, server) = serve(vec![(200, gemini_answer("a()\nb()\nc()"))]);
+    let pipeline = summarizer_with(json!({
+        "api_key": "test",
+        "endpoint": endpoint,
+        "min_lines": 3,
+        "retries": 0,
+        "max_length_ratio": 100.0,
+    }));
+    shape(&pipeline, &file, &mut sides).unwrap();
+    server.join().unwrap();
+    assert_eq!(fold_label(&sides), "a()\nb()\nc()");
+}
+
+#[test]
 fn summaries_collapse_selected_folds_behind_pseudocode() {
     let (file, mut sides) = project("a.py", "", LARGE);
     let (endpoint, server) = serve(vec![(200, gemini_answer("a b c"))]);
@@ -318,7 +334,7 @@ fn each_provider_sends_its_own_request_and_reads_its_own_answer() {
         (
             "anthropic",
             "",
-            json!({"content": [{"type": "thinking", "thinking": "hmm"}, {"type": "text", "text": "a b c"}]}),
+            json!({"content": [{"type": "thinking", "thinking": "hmm"}, {"type": "text", "text": "```pseudo\na b c\n```"}]}),
             "x-api-key: test-key",
         ),
     ] {

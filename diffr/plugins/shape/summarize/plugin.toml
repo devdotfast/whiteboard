@@ -34,6 +34,13 @@ title = "Shortest body to summarize (lines)"
 description = "New function bodies shorter than this are shown as code, not summarized: pseudocode only pays off once the body is long."
 default = 20
 
+[options.max_length_ratio]
+type = "number"
+exclusiveMinimum = 0
+title = "Longest summary"
+description = "Summaries longer than this fraction of the body are discarded."
+default = 0.67
+
 [options.api_key]
 type = "string"
 "x-reset-by" = "provider"
