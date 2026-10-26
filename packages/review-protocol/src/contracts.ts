@@ -501,7 +501,7 @@ export interface ReviewSidebarCommit {
 }
 
 export interface ReviewSidebarState {
-  view: string;
+  view: ReviewView;
   /** The board's commits, newest first in ancestry order, as git lists
    * them; absent or empty without any. */
   commits?: ReviewSidebarCommit[];
