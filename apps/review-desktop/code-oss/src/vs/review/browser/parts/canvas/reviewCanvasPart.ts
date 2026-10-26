@@ -769,6 +769,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return this.canvas.value?.showFind(seed) ?? false;
 	}
 
+	navigateFind(delta: 1 | -1): boolean {
+		return this.canvas.value?.navigateFind(delta) ?? false;
+	}
+
 	diffFiles(): Promise<readonly ReviewDiffFileWire[]> | undefined {
 		return this.canvas.value?.diffFiles();
 	}

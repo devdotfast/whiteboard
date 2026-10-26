@@ -42,3 +42,53 @@ class ReviewFindAction extends Action2 {
 }
 
 registerAction2(ReviewFindAction);
+
+async function navigateFind(accessor: ServicesAccessor, delta: 1 | -1, fallback: string): Promise<void> {
+  const pane = accessor.get(IEditorService).activeEditorPane;
+  if (pane instanceof ReviewCanvasEditorPane && pane.navigateFind(delta)) return;
+  await accessor.get(ICommandService).executeCommand(fallback);
+}
+
+class ReviewFindNextAction extends Action2 {
+  constructor() {
+    super({
+      id: "review.action.findNext",
+      title: localize2("review.action.findNext", "Find Next in session"),
+      keybinding: {
+        weight: KeybindingWeight.WorkbenchContrib,
+        primary: KeyCode.F3,
+        mac: { primary: KeyMod.CtrlCmd | KeyCode.KeyG, secondary: [KeyCode.F3] },
+        when: ActiveEditorContext.isEqualTo(ReviewCanvasEditorInput.EDITOR_ID),
+      },
+    });
+  }
+
+  override run(accessor: ServicesAccessor): Promise<void> {
+    return navigateFind(accessor, 1, "editor.action.nextMatchFindAction");
+  }
+}
+
+class ReviewFindPreviousAction extends Action2 {
+  constructor() {
+    super({
+      id: "review.action.findPrevious",
+      title: localize2("review.action.findPrevious", "Find Previous in session"),
+      keybinding: {
+        weight: KeybindingWeight.WorkbenchContrib,
+        primary: KeyMod.Shift | KeyCode.F3,
+        mac: {
+          primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyG,
+          secondary: [KeyMod.Shift | KeyCode.F3],
+        },
+        when: ActiveEditorContext.isEqualTo(ReviewCanvasEditorInput.EDITOR_ID),
+      },
+    });
+  }
+
+  override run(accessor: ServicesAccessor): Promise<void> {
+    return navigateFind(accessor, -1, "editor.action.previousMatchFindAction");
+  }
+}
+
+registerAction2(ReviewFindNextAction);
+registerAction2(ReviewFindPreviousAction);
