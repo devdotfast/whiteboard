@@ -1,4 +1,5 @@
 import { rangeAnchor, sourceAnchors } from "@review/lens-selection.js";
+import { type CoverageFile, coverageSources } from "@review/viewed-coverage.js";
 import { expect, it } from "vitest";
 
 import {
@@ -139,4 +140,48 @@ it("unions mixed targets and canonicalizes renamed files without losing unchange
       sourceAnchors,
     ).wholeFiles,
   ).toBe(true);
+});
+
+it("resolves overlapping lenses and what they leave uncategorized on a 10,000-file change without stalling the server", () => {
+  const hunks: [number, number][] = [
+    [0, 5],
+    [40, 45],
+    [80, 85],
+  ];
+
+  const files: CoverageFile[] = Array.from({ length: 10_000 }, (_, i) => ({
+    path: `${["src", "docs", "test"][i % 3]}/m${i % 37}/f${i}.ts`,
+    fingerprint: `${i}`,
+    changed: { base: hunks, head: hunks },
+    viewed: { base: [], head: [] },
+  }));
+
+  const fileSources = new Map(
+    files.map((file) => [file.path, coverageSources(file, file.changed)]),
+  );
+
+  const start = performance.now();
+
+  const lenses = [["src/**"], ["docs/**", "test/**"], ["**/m1*/**"]].map(
+    (patterns, index) =>
+      resolveFileLens(
+        {
+          id: `${index}`,
+          title: `${index}`,
+          targets: [{ kind: "files", patterns }],
+        },
+        files,
+        fileSources,
+        sourceAnchors,
+      ),
+  );
+
+  const uncategorized = uncategorizedSources(
+    files,
+    lenses.slice(0, 2).flatMap((lens) => lens.sources),
+  );
+
+  expect(performance.now() - start).toBeLessThan(3_000);
+  expect(lenses.map((lens) => lens.fileCount)).toEqual([3334, 6666, 2971]);
+  expect(uncategorized).toEqual([]);
 });
