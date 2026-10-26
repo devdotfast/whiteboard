@@ -30,10 +30,10 @@ async function openShare(
 		await progress.withProgress({ location: ProgressLocation.Notification, title: "Opening shared review" }, async (reporter) => {
 			const started = await client.post<{ reviewId: string }>("/sharing/import", { url });
 			for (;;) {
-				const status = await client.read<{ stage: string; title?: string; error?: string }>(`/sharing/import/${started.reviewId}`);
+				const status = await client.read<{ reviewId: string; stage: string; title?: string; error?: string }>(`/sharing/import/${started.reviewId}`);
 				if (status.stage === "error") throw new Error(status.error ?? "Could not open the shared session.");
 				if (status.stage === "ready") {
-					await tabs.openApiReview(started.reviewId, status.title ?? "Shared review");
+					await tabs.openApiReview(status.reviewId, status.title ?? "Shared review");
 					return;
 				}
 				const message = status.stage === "fetching"

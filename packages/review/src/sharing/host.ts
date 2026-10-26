@@ -23,8 +23,13 @@ import {
   referenceCommits,
   validateShareSources,
 } from "./export.js";
-import { SharedReviewStore, sharedReviewId } from "./import.js";
-import { readShareRepository, verifyShareRepository } from "./repository.js";
+import { importShare, shareKey } from "./import.js";
+import {
+  type cloneSharedRepository,
+  type fetchPinnedRepository,
+  readShareRepository,
+  verifyShareRepository,
+} from "./repository.js";
 
 interface LoginState {
   pending: boolean;
@@ -52,9 +57,18 @@ export interface SharingHostEvents {
 interface SharingHostOptions extends SharingHostEvents {
   verifyRepository?: typeof verifyShareRepository;
   readRepository?: typeof readShareRepository;
+  fetchRepository?: typeof fetchPinnedRepository;
+  cloneRepository?: typeof cloneSharedRepository;
   login?: typeof runStoreLogin;
   openUrl?: typeof openUrlInBrowser;
   fetch?: typeof fetch;
+}
+
+interface ImportStatus {
+  stage: "downloading" | "fetching" | "validating" | "ready" | "error";
+  /** The copy, once it is made. */
+  reviewId?: string;
+  error?: string;
 }
 
 /** Mounted behind local host authentication. Account credentials never enter the renderer. */
@@ -62,7 +76,6 @@ export function mountSharingHost(
   app: Hono,
   store: ReviewStore,
   data: LocalReviewData,
-  shared: SharedReviewStore,
   options: SharingHostOptions = {},
 ) {
   const startLogin = options.login ?? runStoreLogin;
@@ -133,17 +146,25 @@ export function mountSharingHost(
     return context.json(login);
   });
   mountSharingPublisher(app, store, data, options);
-  const imports = new Map<string, Promise<void>>();
+
+  const imports = new Map<string, ImportStatus>();
+
+  // One import at a time, so two links of one repository clone it once.
+  let importing = Promise.resolve();
+
   app.get("/sharing/import/:id", (context) => {
     const id = context.req.param("id");
-    const status = shared.status(id);
 
-    const result = { reviewId: id, ...status };
+    const { reviewId = id, ...status } = imports.get(id) ?? {
+      stage: "error" as const,
+      error: "Shared review is not available.",
+    };
 
-    if (status.stage === "ready")
-      return context.json({ ...result, title: shared.get(id).snapshot.title });
-
-    return context.json(result);
+    return context.json({
+      reviewId,
+      ...status,
+      ...(status.stage === "ready" && { title: store.read(reviewId).title }),
+    });
   });
   app.post("/sharing/import", async (context) => {
     const { url } = z
@@ -161,46 +182,54 @@ export function mountSharingHost(
         "This share uses an untrusted service. Sign in to that service before opening its links.",
         400,
       );
-    const id = sharedReviewId(parsed.origin, parsed.capability);
+    const id = shareKey(parsed.origin, parsed.capability);
+    const known = imports.get(id)?.stage;
 
-    if (!imports.has(id)) {
-      shared.setStatus(id, "downloading");
+    // A failed import retries, and a deleted copy imports again.
+    if (!known || known === "ready" || known === "error") {
+      const copy = store.copyOf(id);
 
-      const job = (async () => {
-        if (shared.has(id)) {
-          // Retained bytes survive a failed fetch and let retries work offline.
-          await shared.prepare(id);
+      const status: ImportStatus = copy
+        ? { stage: "ready", reviewId: copy }
+        : { stage: "downloading" };
 
-          return;
-        }
+      imports.set(id, status);
 
-        const { bundle, attribution } = await new ShareClient(
-          parsed.origin,
-        ).download(parsed.capability);
+      if (!copy)
+        importing = importing
+          .then(async () => {
+            const { bundle, attribution } = await new ShareClient(
+              parsed.origin,
+            ).download(parsed.capability);
 
-        await shared.import(
-          parsed.origin,
-          parsed.capability,
-          bundle,
-          attribution,
-        );
-      })()
-        .catch((error) => {
-          shared.setStatus(
-            id,
-            "error",
-            error instanceof ReviewInputError
-              ? error.message
-              : "This share is unavailable, revoked, or needs a newer Whiteboard version.",
-          );
-        })
-        .finally(() => imports.delete(id));
-
-      imports.set(id, job);
-      shared.trackImport(job);
+            status.reviewId = await importShare(
+              {
+                store,
+                data,
+                fetchRepository: options.fetchRepository,
+                cloneRepository: options.cloneRepository,
+                onStage: (stage) => {
+                  status.stage = stage;
+                },
+              },
+              id,
+              bundle,
+              attribution,
+            );
+            status.stage = "ready";
+          })
+          .catch((error) => {
+            status.stage = "error";
+            status.error =
+              error instanceof ReviewInputError
+                ? error.message
+                : "This share is unavailable, revoked, or needs a newer Whiteboard version.";
+          });
     }
 
-    return context.json({ reviewId: id, ...shared.status(id) }, 202);
+    const { reviewId: _reviewId, ...status } = imports.get(id)!;
+
+    return context.json({ reviewId: id, ...status }, 202);
   });
 }
 
@@ -224,11 +253,6 @@ export function mountSharingPublisher(
       await readBoundedRequestJson(context.req.raw),
     );
 
-    if (input.reviewId.startsWith("shared-"))
-      throw new ReviewInputError(
-        "Only the authoring review can be shared.",
-        409,
-      );
     const snapshot = store.read(input.reviewId, input.version);
 
     if (snapshot.target?.kind === "worktree")

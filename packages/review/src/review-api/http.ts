@@ -290,7 +290,7 @@ export function createReviewApi(
 
   if (shared && data) {
     shared.connect(store, data);
-    mountSharingHost(app, store, data, shared, hooks.sharing);
+    mountSharingHost(app, store, data, hooks.sharing);
   }
 
   const readReview = (id: string, version?: number): Snapshot => {

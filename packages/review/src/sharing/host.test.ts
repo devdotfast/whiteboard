@@ -16,7 +16,6 @@ import { createShareFixture } from "../../test/fixtures/share/create.js";
 import { ShareClient } from "./client.js";
 import { exportShare } from "./export.js";
 import { mountSharingHost } from "./host.js";
-import { SharedReviewStore } from "./import.js";
 import { fetchPinnedRepository } from "./repository.js";
 
 afterEach(() => vi.unstubAllEnvs());
@@ -28,13 +27,7 @@ it("exposes the device URL and code while login is pending and allows retry afte
   const api = new Hono();
   const login = vi.fn<typeof runStoreLogin>();
   const openUrl = vi.fn<typeof openUrlInBrowser>(async () => {});
-  mountSharingHost(
-    api,
-    fixture.store,
-    fixture.data,
-    new SharedReviewStore(path.join(root, "shared")),
-    { login, openUrl },
-  );
+  mountSharingHost(api, fixture.store, fixture.data, { login, openUrl });
   let finish!: (code: number) => void;
   login.mockImplementation(async (options) => {
     options!.onDeviceCode!({
@@ -88,7 +81,7 @@ it("exposes the device URL and code while login is pending and allows retry afte
   }
 });
 
-it("reports download and checkout preparation without starting duplicate imports", async () => {
+it("reports download and checkout preparation, and opens the same copy when the link is opened again", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "share-progress-"));
   vi.stubEnv("DEV_REVIEW_HOME", root);
   const fixture = await createShareFixture(root);
@@ -113,18 +106,19 @@ it("reports download and checkout preparation without starting duplicate imports
     fetched = resolve;
   });
 
-  const shared = new SharedReviewStore(
-    path.join(root, "shared"),
-    async (target, _url, pins) => {
-      await gate;
-      await fetchPinnedRepository(target, fixture.repo, pins);
-    },
-  );
-
-  shared.connect(fixture.store, fixture.data);
-  await shared.load();
   const api = new Hono();
-  mountSharingHost(api, fixture.store, fixture.data, shared);
+  mountSharingHost(api, fixture.store, fixture.data, {
+    fetchRepository: async (target, _url, pins, publishing, commits) => {
+      await gate;
+      await fetchPinnedRepository(
+        target,
+        fixture.repo,
+        pins,
+        publishing,
+        commits,
+      );
+    },
+  });
   const url = `https://app.dev.fast/s/${"a".repeat(43)}`;
 
   const start = () =>
@@ -158,9 +152,15 @@ it("reports download and checkout preparation without starting duplicate imports
         }),
       { timeout: 10000 },
     );
+
+    const { reviewId: copy } = await status();
+
+    expect(fixture.store.read(copy).shared).toMatchObject({ login: "sender" });
+    expect((await start()).status).toBe(202);
+    expect(await status()).toMatchObject({ stage: "ready", reviewId: copy });
+    expect(downloadSpy).toHaveBeenCalledTimes(1);
   } finally {
     fetched();
-    await shared.close();
     downloadSpy.mockRestore();
     await fixture.data.close();
     fixture.store.close();
@@ -180,13 +180,9 @@ it("reports a revoke through onRevoked", async () => {
     .spyOn(ShareClient.prototype, "revoke")
     .mockResolvedValue({});
 
-  mountSharingHost(
-    api,
-    fixture.store,
-    fixture.data,
-    new SharedReviewStore(path.join(root, "shared")),
-    { onRevoked: ({ shareId }) => revoked.push(shareId) },
-  );
+  mountSharingHost(api, fixture.store, fixture.data, {
+    onRevoked: ({ shareId }) => revoked.push(shareId),
+  });
 
   try {
     const shareId = randomUUID();
@@ -215,20 +211,14 @@ it("reports one start and one outcome per login attempt", async () => {
   const outcomes: Array<[string, string | undefined]> = [];
   const finishes: Array<(code: number) => void> = [];
 
-  mountSharingHost(
-    api,
-    fixture.store,
-    fixture.data,
-    new SharedReviewStore(path.join(root, "shared")),
-    {
-      login: async () =>
-        new Promise<number>((resolve) => {
-          finishes.push(resolve);
-        }),
-      openUrl: async () => {},
-      onLogin: (outcome, reason) => outcomes.push([outcome, reason]),
-    },
-  );
+  mountSharingHost(api, fixture.store, fixture.data, {
+    login: async () =>
+      new Promise<number>((resolve) => {
+        finishes.push(resolve);
+      }),
+    openUrl: async () => {},
+    onLogin: (outcome, reason) => outcomes.push([outcome, reason]),
+  });
 
   try {
     await api.request("/sharing/login", { method: "POST" });

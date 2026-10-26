@@ -11,7 +11,6 @@ import { expect, it, vi } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
 import { mountSharingHost } from "./host.js";
-import { SharedReviewStore } from "./import.js";
 
 it.each([
   { verified: true, protocol: "dev-fast-review" },
@@ -43,34 +42,28 @@ it.each([
           error instanceof ReviewInputError ? error.status : 500,
         ),
       );
-      mountSharingHost(
-        api,
-        fixture.store,
-        fixture.data,
-        new SharedReviewStore(path.join(root, "shared")),
-        {
-          readRepository: async () => fixture.repository,
-          verifyRepository: async () => {
-            if (!verified)
-              throw new ReviewInputError(
-                "Push the reviewed commits to GitHub before sharing.",
-                409,
-              );
-          },
-          onPublished: (event) => published.push(event),
-          fetch: async (input, init) => {
-            const url = new URL(String(input));
-            requests.push(`${init?.method} ${url.pathname}`);
-
-            uploaded = JSON.parse(String(init?.body));
-
-            return Response.json({
-              shareId,
-              url: `https://app.dev.fast/s/${"x".repeat(43)}`,
-            });
-          },
+      mountSharingHost(api, fixture.store, fixture.data, {
+        readRepository: async () => fixture.repository,
+        verifyRepository: async () => {
+          if (!verified)
+            throw new ReviewInputError(
+              "Push the reviewed commits to GitHub before sharing.",
+              409,
+            );
         },
-      );
+        onPublished: (event) => published.push(event),
+        fetch: async (input, init) => {
+          const url = new URL(String(input));
+          requests.push(`${init?.method} ${url.pathname}`);
+
+          uploaded = JSON.parse(String(init?.body));
+
+          return Response.json({
+            shareId,
+            url: `https://app.dev.fast/s/${"x".repeat(43)}`,
+          });
+        },
+      });
 
       const response = await api.request("/sharing/publish", {
         method: "POST",
@@ -117,17 +110,11 @@ it("signs the user out when the share service rejects the stored token", async (
         error instanceof ReviewInputError ? error.status : 500,
       ),
     );
-    mountSharingHost(
-      api,
-      fixture.store,
-      fixture.data,
-      new SharedReviewStore(path.join(root, "shared")),
-      {
-        readRepository: async () => fixture.repository,
-        verifyRepository: async () => {},
-        fetch: async () => new Response("unauthorized", { status: 401 }),
-      },
-    );
+    mountSharingHost(api, fixture.store, fixture.data, {
+      readRepository: async () => fixture.repository,
+      verifyRepository: async () => {},
+      fetch: async () => new Response("unauthorized", { status: 401 }),
+    });
 
     const response = await api.request("/sharing/publish", {
       method: "POST",
