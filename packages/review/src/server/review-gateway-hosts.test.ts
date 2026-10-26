@@ -490,6 +490,51 @@ it("a server that stops answering /health once its id is known is attached again
   expect(restarted).toEqual(["devbox"]);
 });
 
+it("keeps a server attached through two stalled /health checks, and attaches again after a third", async () => {
+  let stalls = 0;
+  let answered = 0;
+
+  const fake = await startFake({
+    version,
+    handle: (request) => {
+      if (request.url !== "/health") return false;
+
+      if (stalls > 0) {
+        stalls--;
+
+        return true;
+      }
+
+      answered++;
+
+      return false;
+    },
+  });
+
+  const restarted: string[] = [];
+
+  const gateway = createGatewayHosts({
+    version,
+    heartbeatMs: 50,
+    healthTimeoutMs: 200,
+    restarted: (alias) => restarted.push(alias),
+  });
+
+  closes.push(() => gateway.close());
+  gateway.set([{ alias: "devbox", endpoint: fake.endpoint }]);
+  await expect.poll(() => gateway.states()[0]?.state).toBe("online");
+
+  stalls = 2;
+  const before = answered;
+  await expect.poll(() => answered, { timeout: 5_000 }).toBeGreaterThan(before);
+  expect(gateway.states()[0]?.state).toBe("online");
+  expect(restarted).toEqual([]);
+
+  stalls = 3;
+  await expect.poll(() => restarted, { timeout: 5_000 }).toEqual(["devbox"]);
+  expect(gateway.states()[0]?.state).toBe("offline");
+});
+
 it("a 401 on a forwarded request marks the host restarted and asks Desktop to attach again once", async () => {
   const fake = await startFake({
     version,

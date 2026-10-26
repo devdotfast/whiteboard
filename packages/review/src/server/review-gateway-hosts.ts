@@ -17,6 +17,9 @@ import {
 
 const HEALTH_TIMEOUT_MS = 3_000;
 
+/** A busy server can miss a check; only this many in a row mean it is gone. */
+const MISSED_CHECKS = 3;
+
 const HEARTBEAT_MS = 10_000;
 
 const INSTALLS = new Set<ReviewGatewayHostState["state"]>([
@@ -67,6 +70,7 @@ interface Host extends GatewayRemote {
   retryMs: number;
   retry?: NodeJS.Timeout;
   checking?: AbortController;
+  missed?: number;
 }
 
 export function createGatewayHosts(input: {
@@ -162,6 +166,7 @@ export function createGatewayHosts(input: {
   ) {
     if (closed || !host.endpoint) return;
     host.endpoint = undefined;
+    host.missed = 0;
     clearTimeout(host.retry);
     host.checking?.abort();
     host.checking = undefined;
@@ -258,6 +263,15 @@ export function createGatewayHosts(input: {
 
     // /health leaves out serverId when it refuses the token, as after a restart.
     if (health && health.serverId === undefined) return restartedHost(host);
+
+    const missed = !health && timeout.aborted && host.serverId !== undefined;
+    host.missed = missed ? (host.missed ?? 0) + 1 : 0;
+
+    if (missed && host.missed < MISSED_CHECKS) {
+      log(`Host ${host.alias}: ${reason}; checking again.`);
+
+      return schedule(host, FIRST_RETRY_MS);
+    }
 
     if (!health && host.serverId !== undefined)
       return restartedHost(
