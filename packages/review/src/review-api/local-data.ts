@@ -1817,6 +1817,8 @@ export class LocalReviewData {
       state: "pending" | "ready" | "error";
       error?: unknown;
       partial?: ComparisonCoverage;
+      abort: AbortController;
+      worktree?: string;
     }
   >();
   private readonly coverageAbort = new AbortController();
@@ -1877,11 +1879,24 @@ export class LocalReviewData {
     let entry = this.coverageCache.get(key);
 
     if (!entry || entry.state === "error") {
+      const worktree = pins.worktreeRevision
+        ? JSON.stringify({ ...pins, worktreeRevision: undefined })
+        : undefined;
+
+      // A newer worktree revision cancels older ones.
+      for (const [cachedKey, cached] of this.coverageCache)
+        if (worktree && cached.worktree === worktree) {
+          cached.abort.abort();
+          this.coverageCache.delete(cachedKey);
+        }
+
+      const abort = new AbortController();
+
       const promise = comparisonCoverage(
         this,
         reviewId,
         pins,
-        this.coverageAbort.signal,
+        AbortSignal.any([this.coverageAbort.signal, abort.signal]),
         (partial) => {
           const current = this.coverageCache.get(key);
 
@@ -1890,7 +1905,7 @@ export class LocalReviewData {
         },
       );
 
-      entry = { promise, state: "pending" };
+      entry = { promise, state: "pending", abort, worktree };
       this.coverageCache.set(key, entry);
       const current = entry;
 
