@@ -41,20 +41,32 @@ async function share() {
   cleanup.push(() => sender.data.close());
   const pins = sender.store.read(sender.reviewId).pins!;
 
-  await sender.store.execute({
+  const { reviewId: other } = await sender.store.execute({
     operation: {
-      type: "edit",
-      reviewId: sender.reviewId,
-      edit: {
-        type: "insert",
-        content: {
-          type: "code_peek",
-          source: "head/answer.ts#L2",
-          pins: { repositoryId: pins.repositoryId, head: pins.base },
-        },
-      },
+      type: "create",
+      title: "Another of the sender's boards",
+      target: { kind: "commits", ...pins },
     },
   });
+
+  for (const content of [
+    {
+      type: "code_peek",
+      source: "head/answer.ts#L2",
+      pins: { repositoryId: pins.repositoryId, head: pins.base },
+    },
+    {
+      type: "markdown",
+      markdown: `[Here](whiteboard:board/${sender.reviewId}) and [there](whiteboard:board/${other}).`,
+    },
+  ])
+    await sender.store.execute({
+      operation: {
+        type: "edit",
+        reviewId: sender.reviewId,
+        edit: { type: "insert", content },
+      },
+    });
 
   const bundle = await exportShare(sender);
   const recipient = openLocalReviewStore(path.join(root, "recipient.db"));
@@ -66,11 +78,13 @@ async function share() {
       fetchPinnedRepository(target, sender.repo, ...rest),
   );
 
-  return { root, sender, pins, bundle, recipient, fetchRepository };
+  return { root, sender, other, pins, bundle, recipient, fetchRepository };
 }
 
 it("copies a share into a board the recipient edits like their own", async () => {
-  const { sender, pins, bundle, recipient, fetchRepository } = await share();
+  const { sender, other, pins, bundle, recipient, fetchRepository } =
+    await share();
+
   const link = key();
 
   const reviewId = await importShare(
@@ -106,6 +120,9 @@ it("copies a share into a board the recipient edits like their own", async () =>
         block.type === "code_peek" && block.pins !== undefined,
     )?.pins,
   ).toEqual({ repositoryId, head: pins.base });
+  expect(JSON.stringify(copy.document)).toContain(
+    `[Here](whiteboard:board/${reviewId}) and [there](whiteboard:board/${other}).`,
+  );
 
   const app = createReviewApi(recipient.store, recipient.data);
   const json = async (url: string) => (await app.request(url)).json();

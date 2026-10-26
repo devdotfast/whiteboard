@@ -370,6 +370,8 @@ export interface Seed {
   origin?: SnapshotOrigin;
   lenses?: Lens[];
   shared?: SharedProvenance;
+  /** The board it is copied from: its links to itself link to the copy. */
+  copiedFrom?: string;
 }
 
 /** The Ask thread a version names, on its edit or on itself; stored in
@@ -1837,11 +1839,7 @@ export class ReviewStore {
       switch (op.type) {
         case "create":
           if (initial) {
-            const repositoryId = boardRepositoryId(snapshot);
-
-            const { document, lenses } = repositoryId
-              ? inRepository(initial, repositoryId)
-              : structuredClone(initial);
+            const { document, lenses } = copiedContent(initial, snapshot);
 
             snapshot.document = await this.resolveCommitLinks(
               documentSchema.parse(document),
@@ -2274,8 +2272,9 @@ export class ReviewStore {
     // Check cross-references here; do not reparse the whole stored document.
     checkReferences(snapshot.document);
 
-    // A restore may bring back links to deleted boards, so skip the check.
-    if (!options.restore)
+    // A restore may bring back links to deleted boards, and a copy links to
+    // boards on another machine, so skip the check.
+    if (!options.restore && !options.copied)
       this.checkBoardLinks(snapshot, previous, options.person);
 
     if (
@@ -3628,14 +3627,23 @@ function highestIdNumber(document: Block[] | Lens[]): number {
   return highest;
 }
 
-/** A copied board's references read in its own repository. */
-function inRepository(
+/** A seed's content as the new board holds it: its references read in the
+ * board's repository, and its links to its source link to the board. */
+function copiedContent(
   seed: Seed,
-  repositoryId: string,
+  board: Snapshot,
 ): Pick<Seed, "document" | "lenses"> {
-  return JSON.parse(
-    JSON.stringify({ document: seed.document, lenses: seed.lenses }),
-    (key, value) => (key === "repositoryId" ? repositoryId : value),
+  const repositoryId = boardRepositoryId(board);
+  let json = JSON.stringify({ document: seed.document, lenses: seed.lenses });
+
+  if (seed.copiedFrom)
+    json = json.replaceAll(
+      `whiteboard:board/${seed.copiedFrom}`,
+      `whiteboard:board/${board.reviewId}`,
+    );
+
+  return JSON.parse(json, (key, value) =>
+    repositoryId && key === "repositoryId" ? repositoryId : value,
   );
 }
 

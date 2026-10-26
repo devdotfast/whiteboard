@@ -339,6 +339,7 @@ export async function importShare(
       lenses: snapshot.lenses,
       origin: snapshot.origin,
       shared: { ...attribution, cloneUrl, key },
+      copiedFrom: snapshot.reviewId,
     },
     { kind: "person" },
   );
