@@ -220,6 +220,8 @@ enum ConfigCommand {
         #[arg(long)]
         json: bool,
     },
+    /// Print which agent sign-ins are ready, as JSON
+    Logins,
 }
 
 pub(crate) fn run(runtime: &tokio::runtime::Runtime) -> Result<i32> {
@@ -734,6 +736,10 @@ fn run_config(config: &ConfigArgs) -> Result<i32> {
                 Ok(serde_json::json!({ "changed": changed }))
             })();
             return config_result(&mut stdout, result, *json);
+        }
+        Some(ConfigCommand::Logins) => {
+            serde_json::to_writer_pretty(&mut stdout, &crate::login::status())?;
+            stdout.write_all(b"\n")?;
         }
         Some(ConfigCommand::Init { json, answers }) => {
             return crate::init::run(*json, answers.as_deref())

@@ -47,6 +47,7 @@ mod files;
 mod git;
 mod init;
 mod install;
+mod login;
 mod options;
 mod plugin;
 mod pprint;

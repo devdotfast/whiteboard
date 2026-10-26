@@ -16,6 +16,7 @@ const KEY_INSTRUCTIONS: &str = "To enable pseudocode summarization, we need:
 1. An API Key from a supported provider (OpenAI, Anthropic, or Gemini-API compatible)
 2. This API key can also be sourced from the environment
 3. Otherwise, if that's not convenient, you can grab an API key and provide it to your agent (securely).
+Codex needs no key: diffr uses its saved ChatGPT sign-in.
 ";
 
 /// The summarizer's options in `config schema`.
@@ -72,6 +73,7 @@ struct State {
     config: Config,
     /// Each provider's id, title and key variables, from the schema.
     providers: Vec<(String, String, Vec<String>)>,
+    signed_in: Vec<String>,
 }
 
 impl State {
@@ -110,10 +112,19 @@ impl State {
                 )
             })
             .collect();
+        let signed_in = ids
+            .iter()
+            .filter_map(|id| {
+                let id = id.as_str()?;
+                let login = details[id]["login"].as_str()?;
+                crate::login::token(login).is_ok().then(|| id.to_owned())
+            })
+            .collect();
         Ok(Self {
             found: Agent::found(),
             config: Config::load()?,
             providers,
+            signed_in,
         })
     }
 
@@ -129,14 +140,17 @@ impl State {
             .any(|(name, _)| name == "bundled.summarize")
     }
 
-    /// The saved provider when summaries are on; otherwise the first with a
-    /// key, or the saved one.
+    /// The saved provider when summaries are on; otherwise Codex, the first
+    /// with a key, or the saved one.
     fn provider(&self) -> String {
         let saved = self.summarize()["provider"]
             .as_str()
             .expect("provider is a string");
         if self.on() {
             return saved.to_owned();
+        }
+        if self.signed_in.iter().any(|id| id == "codex") {
+            return "codex".to_owned();
         }
         self.providers
             .iter()
@@ -156,8 +170,11 @@ impl State {
     }
 
     /// Whether the summarizer has a key for `provider`: the saved one, which
-    /// belongs to the saved provider, or one in the environment.
+    /// belongs to the saved provider, one in the environment, or a sign-in.
     fn has_key(&self, provider: &str) -> bool {
+        if self.signed_in.iter().any(|id| id == provider) {
+            return true;
+        }
         let saved = self.summarize()["provider"] == provider
             && self
                 .summarize()

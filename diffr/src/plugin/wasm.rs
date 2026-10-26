@@ -661,11 +661,13 @@ fn compile(
     let pre = DiffrPluginPre::new(link(engine, linker, &entry.folder().component())?)
         .map_err(anyhow::Error::from)
         .context("not a shape plugin: it must export diffr:plugin/api")?;
+    let mut options = entry.options.clone();
+    crate::login::fill(name, &mut options);
     Ok(Component {
         name: entry.folder().name().into(),
         reference: name.to_owned(),
         pre,
-        options: Value::Object(entry.options.clone()).to_string(),
+        options: Value::Object(options).to_string(),
         deferred: entry.folder().deferred(),
     })
 }
