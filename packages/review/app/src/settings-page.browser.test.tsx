@@ -8,6 +8,7 @@ import { afterEach, expect, test } from "vitest";
 import { page } from "vitest/browser";
 
 import { SettingsPage } from "./settings-page";
+import type { SharingAccount } from "./sharing-account";
 
 let root: ReturnType<typeof createRoot>;
 
@@ -82,6 +83,7 @@ function settings(): ReviewCanvasSettingsContent {
       connectAgents: unexpected,
       uninstall: unexpected,
     },
+    request: async () => Response.json({ account: null, pending: false }),
   };
 }
 
@@ -158,4 +160,40 @@ test("Diff theme offers only themes as light or dark as Theme", async () => {
   );
   await expect.element(diffTheme).toHaveValue("Review Light");
   expect(options()).toEqual(["Same as Theme", "Whiteboard Light"]);
+});
+
+test("Account shows the GitHub sign-in and signs out", async () => {
+  const content = settings();
+
+  let current: SharingAccount = {
+    account: {
+      login: "Octo Cat",
+      origin: "https://app.dev.fast",
+      githubLogin: "octocat",
+    },
+    pending: false,
+  };
+
+  content.request = async (path) => {
+    if (path.endsWith("/logout")) current = { account: null, pending: false };
+
+    if (path.endsWith("/login")) current = { account: null, pending: true };
+
+    return Response.json(current);
+  };
+
+  const container = document.createElement("div");
+  container.style.height = "700px";
+  document.body.append(container);
+  root = createRoot(container);
+  await act(async () => root.render(<SettingsPage settings={content} />));
+
+  await expect.element(page.getByText("octocat")).toBeVisible();
+  await expect.element(page.getByText("Signed in with GitHub")).toBeVisible();
+  await act(async () => page.getByRole("button", { name: "Sign out" }).click());
+  await expect.element(page.getByText("Not signed in")).toBeVisible();
+  await act(async () => page.getByRole("button", { name: "Sign in" }).click());
+  await expect
+    .element(page.getByRole("button", { name: "Waiting for sign-in…" }))
+    .toBeEnabled();
 });

@@ -309,6 +309,15 @@ export function ShareIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+export function MailIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <Icon xstyle={xstyle}>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="m3.5 6.5 8.5 6.5 8.5-6.5" />
+    </Icon>
+  );
+}
+
 export function TrashIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <Icon xstyle={xstyle}>
