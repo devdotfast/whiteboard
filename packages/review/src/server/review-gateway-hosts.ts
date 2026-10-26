@@ -76,7 +76,9 @@ export function createGatewayHosts(input: {
   changed?(): void;
   restarted?(alias: string): void;
   heartbeatMs?: number;
+  healthTimeoutMs?: number;
 }) {
+  const healthTimeoutMs = input.healthTimeoutMs ?? HEALTH_TIMEOUT_MS;
   const log = input.log ?? (() => {});
   let hosts: Host[] = [];
   let closed = false;
@@ -227,7 +229,7 @@ export function createGatewayHosts(input: {
     host.checking?.abort();
     const abort = new AbortController();
     host.checking = abort;
-    const timeout = AbortSignal.timeout(HEALTH_TIMEOUT_MS);
+    const timeout = AbortSignal.timeout(healthTimeoutMs);
     let health: z.infer<typeof healthSchema> | undefined;
     let reason = "it did not answer";
 
@@ -247,7 +249,7 @@ export function createGatewayHosts(input: {
       else reason = "it did not answer as a Whiteboard server";
     } catch (error) {
       if (timeout.aborted)
-        reason = `it did not answer within ${HEALTH_TIMEOUT_MS / 1_000} seconds`;
+        reason = `it did not answer within ${healthTimeoutMs / 1_000} seconds`;
       else if (!abort.signal.aborted) reason = errorText(error);
     }
 
