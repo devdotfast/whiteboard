@@ -246,6 +246,8 @@ export class ReviewFilesDiffView extends Disposable {
 		const diffContainer = append(this.root, $(".review-files-editor-diffs"));
 		this.diffContainer = diffContainer;
 		if (document) fileTree.hidden = true;
+		// The Diff tab takes `review.diffColorTheme`; diff blocks keep the board's theme.
+		else this.root.classList.add("review-files-editor-tab");
 
 		const factory = this.reviewInstantiationService.createInstance(
 			ReviewMultiDiffUIElementFactory,

@@ -843,6 +843,11 @@ export interface ReviewCanvasSettingsContent {
   // A `colorThemes` id.
   theme: string;
   setTheme(id: string): Promise<string>;
+  // A `colorThemes` id for the Diff tab's colors, or "" to follow `theme`.
+  // Syntax colors always follow `theme`, so Desktop applies only a theme of
+  // the same kind and setDiffTheme refuses one of the other kind.
+  diffTheme: string;
+  setDiffTheme(id: string): Promise<string>;
   colorThemes: ReviewColorTheme[];
   // Installs a picked .vsix or theme .json and applies it; undefined when cancelled.
   importColorTheme(): Promise<ReviewColorThemeImport | undefined>;

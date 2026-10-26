@@ -37,6 +37,7 @@ export const REVIEW_OPEN_FILES_IN_APPLICATION_SETTING = 'review.openFilesInAppli
 export const REVIEW_READY_NOTIFICATION_SETTING = 'review.notifications.reviewReady';
 export const REVIEW_READY_NOTIFICATION_CHOICES = ['notificationAndBadge', 'notification', 'off'] as const;
 export const REVIEW_DOCUMENT_WIDTH_SETTING = 'review.documentWidth';
+export const REVIEW_DIFF_COLOR_THEME_SETTING = 'review.diffColorTheme';
 export const REVIEW_INLINE_LINE_NUMBERS_SETTING = 'review.inlineDiffs.showLineNumbers';
 export const REVIEW_PEEK_SIDE_BY_SIDE_SETTING = 'review.peeks.renderSideBySide';
 export const REVIEW_DOCUMENT_WIDTH_CHOICES = ['standard', 'wide', 'full'] as const;

@@ -148,6 +148,7 @@ export const SETTING_NAME = [
   "sharing_enabled",
   "diffr_config",
   "theme",
+  "diff_theme",
   "ctrl_tab",
   "open_files_in",
   "ready_notification",
