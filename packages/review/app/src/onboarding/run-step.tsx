@@ -84,10 +84,15 @@ const breathe = stylex.keyframes({
   "50%": { opacity: 0.45 },
 });
 
+// The model and effort pickers' text widths, held while they load.
+const CHOICE_PLACEHOLDERS = ["56px", "42px"] as const;
+
 /** The agents Whiteboard can run, best first. */
 const AGENT_ORDER: AgentId[] = ["claude", "codex", "cursor", "opencode", "pi"];
 
 type AgentId = OnboardingRunAgent["id"];
+
+type AgentOffers = Partial<Record<AgentId, AskOffer | null>>;
 
 const defaultKey = (...parts: string[]) =>
   reviewPreferenceKey("new-whiteboard", ...parts);
@@ -197,7 +202,9 @@ export function RunStep({
   const [agent, setAgent] = useState<AgentId>();
   // Each agent's picks, from what it drew with last until changed here.
   const [picked, setPicked] = useState<Partial<Record<AgentId, AskPicks>>>({});
-  const [offered, setOffered] = useState<{ agent: AgentId; offer: AskOffer }>();
+  // What each agent offers, kept across switches; null where it could not
+  // say.
+  const [offers, setOffers] = useState<AgentOffers>({});
   const [error, setError] = useState<string>();
   const [starting, setStarting] = useState(false);
   const [startingEmpty, setStartingEmpty] = useState(false);
@@ -354,23 +361,47 @@ export function RunStep({
 
   const offerPath = project?.path;
 
-  // The agent's models and efforts, asked again for each model picked: the
-  // efforts on offer depend on it. Without them it draws with its defaults.
+  // Every agent's offer up front, so switching agents swaps its pickers in
+  // place rather than waiting on it.
   useEffect(() => {
-    if (!agent || !offerPath) return;
+    if (!offerPath) return;
     let live = true;
 
-    client.offer(agent, offerPath, picks.model).then(
-      (offer) => live && setOffered({ agent, offer }),
+    for (const { id } of agents)
+      client.offer(id, offerPath, storedPicks(id).model).then(
+        (offer) =>
+          live &&
+          setOffers((current) =>
+            current[id] ? current : { ...current, [id]: offer },
+          ),
+        () => live && setOffers((current) => ({ [id]: null, ...current })),
+      );
+
+    return () => {
+      live = false;
+    };
+  }, [agents, client, offerPath]);
+
+  // Asked again for each model picked: the efforts on offer depend on it.
+  // The last offer stays up meanwhile. Without one the agent draws with its
+  // defaults.
+  useEffect(() => {
+    if (!agent || !offerPath || !picked[agent]?.model) return;
+    let live = true;
+
+    client.offer(agent, offerPath, picked[agent].model).then(
+      (offer) =>
+        live && setOffers((current) => ({ ...current, [agent]: offer })),
       () => {},
     );
 
     return () => {
       live = false;
     };
-  }, [agent, client, offerPath, picks.model]);
+  }, [agent, client, offerPath, picked]);
 
-  const choices = offered?.agent === agent ? offered?.offer.choices : undefined;
+  const offer = agent ? offers[agent] : undefined;
+  const choices = offer?.choices;
 
   // Each pick where the agent offers it, else the agent's default; before
   // it says, the picks as they are.
@@ -809,6 +840,19 @@ export function RunStep({
                   </OptionMenu>
                 ) : null}
               </span>
+              {/* Held at about their size while the agent says, so the
+                  sentence does not move when they arrive. */}
+              {offer === undefined ? (
+                <span aria-hidden="true" {...stylex.props(styles.choices)}>
+                  {CHOICE_PLACEHOLDERS.map((width) => (
+                    <span key={width} {...stylex.props(styles.choiceHeld)}>
+                      <span
+                        {...stylex.props(styles.bar, styles.barWidth(width))}
+                      />
+                    </span>
+                  ))}
+                </span>
+              ) : null}
               {askChoiceKinds.map((kind) => {
                 const select = choices?.[kind];
                 const current = drawPicks[kind];
@@ -1141,4 +1185,16 @@ const styles = stylex.create({
     color: tokens.inkMuted,
   },
   shortcut: { color: tokens.inkFaint },
+  choices: {
+    display: "flex",
+    alignItems: "center",
+    gap: space.s10,
+  },
+  // As tall and padded as a quiet picker.
+  choiceHeld: {
+    display: "inline-flex",
+    alignItems: "center",
+    height: tokens.chromeControlHeight,
+    paddingInline: space.s6,
+  },
 });
