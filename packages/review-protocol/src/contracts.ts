@@ -905,6 +905,8 @@ export interface ReviewCanvasSettingsContent {
   // install status endpoint is unavailable.
   install?: ReviewCanvasInstallContent;
   remoteHosts: ReviewRemoteHostsSettings;
+  /** `path` is `/reviews-api/…`; the host adds its origin and token. */
+  request(path: string, init?: RequestInit): Promise<Response>;
 }
 
 /** What a review or Home can do about the host a review lives on. */
