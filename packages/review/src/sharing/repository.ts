@@ -37,10 +37,7 @@ export function sharedGit(cwd: string, args: VcsArg[]) {
   return gitAt(
     cwd,
     ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", ...args],
-    {
-      env,
-      timeout: 300_000,
-    },
+    { env },
   );
 }
 
@@ -100,6 +97,10 @@ export async function fetchPinnedRepository(
   if (!publishing) {
     await sharedGit(root, ["config", "core.hooksPath", "/dev/null"]);
     await sharedGit(root, ["config", "core.fsmonitor", "false"]);
+
+    if (process.platform === "win32")
+      await sharedGit(root, ["config", "core.longpaths", "true"]);
+
     await sharedGit(root, ["remote", "add", "origin", { remote: url }]);
   }
 
@@ -190,6 +191,10 @@ export async function cloneSharedRepository(root: string, url: string) {
   await sharedGit(root, ["init", "--quiet"]);
   await sharedGit(root, ["config", "core.hooksPath", "/dev/null"]);
   await sharedGit(root, ["config", "core.fsmonitor", "false"]);
+
+  if (process.platform === "win32")
+    await sharedGit(root, ["config", "core.longpaths", "true"]);
+
   await sharedGit(root, ["remote", "add", "origin", { remote: url }]);
 
   try {
