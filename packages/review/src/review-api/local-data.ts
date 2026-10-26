@@ -879,6 +879,7 @@ export class LocalReviewData {
     clearTimeout(this.coverageNotification);
     this.coverageListeners.clear();
     this.coverageCache.clear();
+    this.coverageReaders.clear();
     this.structuralComparisons.close();
     this.closed = true;
     await this.workspaceManager?.close();
@@ -1823,10 +1824,25 @@ export class LocalReviewData {
     }
   >();
   private readonly coverageAbort = new AbortController();
-  private readonly coverageListeners = new Set<() => void>();
-  coverageRevision = 0;
+  private readonly coverageListeners = new Set<
+    (reviews: ReadonlySet<string>) => void
+  >();
 
-  subscribeCoverage(listener: () => void) {
+  /** The reviews that read each comparison, so its updates reach only them. */
+  private readonly coverageReaders = new Map<string, Set<string>>();
+  private readonly coverageRevisions = new Map<string, number>();
+  private readonly changedCoverage = new Set<string>();
+
+  coverageRevision(reviewId: string) {
+    return this.coverageRevisions.get(reviewId) ?? 0;
+  }
+
+  private forgetCoverage(key: string) {
+    this.coverageCache.delete(key);
+    this.coverageReaders.delete(key);
+  }
+
+  subscribeCoverage(listener: (reviews: ReadonlySet<string>) => void) {
     this.coverageListeners.add(listener);
 
     return () => {
@@ -1840,7 +1856,7 @@ export class LocalReviewData {
     const existing = this.coverageCache.get(key);
 
     if (existing?.state === "error") {
-      this.coverageCache.delete(key);
+      this.forgetCoverage(key);
       throw existing.error;
     }
 
@@ -1865,19 +1881,36 @@ export class LocalReviewData {
   }
 
   private coverageNotification: ReturnType<typeof setTimeout> | undefined;
-  private notifyCoverage() {
-    if (this.closed || this.coverageNotification) return;
-    this.coverageNotification = setTimeout(() => {
-      this.coverageNotification = undefined;
-      this.coverageRevision++;
+  private notifyCoverage(key: string) {
+    if (this.closed) return;
+    this.changedCoverage.add(key);
 
-      for (const listener of this.coverageListeners) listener();
+    this.coverageNotification ??= setTimeout(() => {
+      this.coverageNotification = undefined;
+      const reviews = new Set<string>();
+
+      for (const changed of this.changedCoverage)
+        for (const reviewId of this.coverageReaders.get(changed) ?? []) {
+          reviews.add(reviewId);
+          this.coverageRevisions.set(
+            reviewId,
+            this.coverageRevision(reviewId) + 1,
+          );
+        }
+
+      this.changedCoverage.clear();
+
+      for (const listener of this.coverageListeners) listener(reviews);
     }, 50);
   }
 
   coverage(reviewId: string, pins: Pins) {
     const key = JSON.stringify(pins);
     let entry = this.coverageCache.get(key);
+    const readers = this.coverageReaders.get(key) ?? new Set();
+
+    readers.add(reviewId);
+    this.coverageReaders.set(key, readers);
 
     if (!entry || entry.state === "error") {
       const worktree = pins.worktreeRevision
@@ -1888,7 +1921,7 @@ export class LocalReviewData {
       for (const [cachedKey, cached] of this.coverageCache)
         if (worktree && cached.worktree === worktree) {
           cached.abort.abort();
-          this.coverageCache.delete(cachedKey);
+          this.forgetCoverage(cachedKey);
         }
 
       const abort = new AbortController();
@@ -1902,7 +1935,7 @@ export class LocalReviewData {
           const current = this.coverageCache.get(key);
 
           if (current) current.partial = partial;
-          this.notifyCoverage();
+          this.notifyCoverage(key);
         },
       );
 
@@ -1913,14 +1946,14 @@ export class LocalReviewData {
       const settled = (state: "ready" | "error", error?: Error) => {
         current.state = state;
         current.error = error;
-        this.notifyCoverage();
+        this.notifyCoverage(key);
 
         // Never evict shared in-flight work. Trim only settled comparisons.
         for (const [cachedKey, cached] of this.coverageCache) {
           if (this.coverageCache.size <= 32) break;
 
           if (cached.state !== "pending" && cachedKey !== key)
-            this.coverageCache.delete(cachedKey);
+            this.forgetCoverage(cachedKey);
         }
       };
 

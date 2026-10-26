@@ -173,9 +173,10 @@ it("sends a list line only for what changed in the list", async () => {
     `review:${a}:value`,
   ]);
 
+  // B shares the pins but has not read coverage, so only A hears of it.
   await data.coverage(a, pins);
-  expect((await stream.take(3)).map(label).sort()).toEqual(
-    ["list:structural", `review:${a}:value`, `review:${b}:value`].sort(),
+  expect((await stream.take(2)).map(label).sort()).toEqual(
+    ["list:structural", `review:${a}:value`].sort(),
   );
 
   await command({

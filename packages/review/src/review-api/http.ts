@@ -652,7 +652,7 @@ export function createReviewApi(
           value: {
             ...readReview(reviewId),
             activity: store.activity.read(reviewId),
-            coverageRevision: data?.coverageRevision ?? 0,
+            coverageRevision: data?.coverageRevision(reviewId) ?? 0,
             linksRevision: linksRevision.get(reviewId) ?? 0,
             placeRevision: placeKeys.get(reviewId)!,
           },
@@ -723,9 +723,12 @@ export function createReviewApi(
     return watch(lines, (notify) => {
       const stops = [
         store.watchWorktrees(),
-        data?.subscribeCoverage(() => {
-          reviewIds.forEach((id) => dirtyReviews.add(id));
-          notify();
+        data?.subscribeCoverage((changed) => {
+          let marked = false;
+
+          for (const id of changed) marked = markReview(id) || marked;
+
+          if (marked) notify();
         }) ?? (() => {}),
         store.subscribe((result) => {
           let marked = markReview(result.reviewId);

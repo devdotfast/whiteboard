@@ -4149,10 +4149,12 @@ it("returns pending progress without waiting for coverage and signals completion
     const pending = await api.request(route);
     expect(pending.status).toBe(202);
     expect(await pending.json()).toMatchObject({ complete: false, files: [] });
-    expect(data.coverageRevision).toBe(0);
+    expect(data.coverageRevision(reviewId)).toBe(0);
     release();
     await data.coverage(reviewId, pins);
-    await vi.waitFor(() => expect(data.coverageRevision).toBeGreaterThan(0));
+    await vi.waitFor(() =>
+      expect(data.coverageRevision(reviewId)).toBeGreaterThan(0),
+    );
 
     const watch = await api.request(
       `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId }]))}`,
@@ -4170,6 +4172,75 @@ it("returns pending progress without waiting for coverage and signals completion
     expect(ready.status).toBe(200);
     expect((await ready.json()).files).toEqual([]);
     expect(data.changes).toHaveBeenCalledTimes(1);
+  } finally {
+    release();
+    await data.close();
+  }
+});
+
+it("signals coverage only to the reviews that read the comparison", async () => {
+  const { createReviewApi } = await import("./http.js");
+  const { reviewId: busy } = await create();
+
+  const { reviewId: idle } = await store.execute(
+    request({
+      type: "create",
+      title: "Idle",
+      target: { kind: "commits", ...pins, head: "idle-commit" },
+    }),
+  );
+
+  const data = new LocalReviewData(store);
+  let release!: () => void;
+
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+
+  vi.spyOn(data, "resolveSource").mockImplementation(async (snapshot) => ({
+    snapshot,
+    pins: snapshot.pins!,
+  }));
+  vi.spyOn(data, "changes").mockImplementation((async (
+    changed: typeof pins,
+    file?: string,
+  ) => {
+    if (changed.head === pins.head) await gate;
+
+    return file ? "" : [];
+  }) as typeof data.changes);
+  vi.spyOn(data, "structuralChanges").mockImplementation(async function* () {});
+  const api = createReviewApi(store, data);
+
+  try {
+    await api.request(`/${busy}/progress?version=0&wait=false`);
+    await api.request(`/${idle}/progress?version=0&wait=false`);
+    await vi.waitFor(() =>
+      expect(data.coverageRevision(idle)).toBeGreaterThan(0),
+    );
+    const idleRevision = data.coverageRevision(idle);
+
+    const watch = await api.request(
+      `/watch?subscriptions=${encodeURIComponent(JSON.stringify([{ reviewId: idle }]))}`,
+    );
+
+    const reader = watch.body!.getReader();
+    await reader.read();
+    const next = reader.read();
+
+    release();
+    await vi.waitFor(() =>
+      expect(data.coverageRevision(busy)).toBeGreaterThan(0),
+    );
+
+    expect(
+      await Promise.race([
+        next.then(() => "line"),
+        new Promise((resolve) => setTimeout(resolve, 300, "quiet")),
+      ]),
+    ).toBe("quiet");
+    expect(data.coverageRevision(idle)).toBe(idleRevision);
+    await reader.cancel();
   } finally {
     release();
     await data.close();
@@ -4197,7 +4268,9 @@ it("logs a provider failure and names its kind without returning its local detai
 
   try {
     await api.request(route);
-    await vi.waitFor(() => expect(data.coverageRevision).toBeGreaterThan(0));
+    await vi.waitFor(() =>
+      expect(data.coverageRevision(reviewId)).toBeGreaterThan(0),
+    );
     const response = await api.request(route);
     expect(response.status).toBe(500);
     const { error } = await response.json();
