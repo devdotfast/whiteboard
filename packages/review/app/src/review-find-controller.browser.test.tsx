@@ -124,6 +124,32 @@ it("orders duplicate editors with MDX and wraps navigation", async () => {
   ).toBe("rgba(0, 0, 0, 0)");
 });
 
+it("steps through matches from the host only while find is open", async () => {
+  const handle = findHandle();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const host = createReviewFindHost();
+  root = createRoot(container);
+  await act(async () => {
+    root?.render(<FindHarness host={host} handles={[handle]} />);
+  });
+  expect(host.navigateFind(1)).toBe(false);
+
+  await act(async () => {
+    host.showFind("Alpha");
+  });
+  await vi.waitFor(() => {
+    expect(findCount(container)?.textContent).toBe("1 of 3");
+  });
+  await act(async () => {
+    expect(host.navigateFind(1)).toBe(true);
+  });
+  expect(findCount(container)?.textContent).toBe("2 of 3");
+
+  await act(async () => host.hideFind());
+  expect(host.navigateFind(1)).toBe(false);
+});
+
 it("ignores results from an older query generation", async () => {
   let resolveSlow!: (value: { matchCount: number }) => void;
 

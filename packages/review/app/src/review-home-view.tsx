@@ -299,6 +299,9 @@ function ReviewHomeBody({
       hideFind() {
         input.current?.blur();
       },
+      navigateFind() {
+        return false;
+      },
     });
 
     return () => findHost?.attach(null);

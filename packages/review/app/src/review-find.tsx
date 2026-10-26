@@ -50,6 +50,7 @@ const SEARCH_DELAY_MS = 150;
 interface FindController {
   showFind(seed?: string): boolean;
   hideFind(): void;
+  navigateFind(delta: 1 | -1): boolean;
 }
 
 export interface ReviewFindHost extends FindController {
@@ -68,6 +69,9 @@ export function createReviewFindHost(): ReviewFindHost {
     },
     hideFind() {
       controller?.hideFind();
+    },
+    navigateFind(delta) {
+      return controller?.navigateFind(delta) ?? false;
     },
   };
 }
@@ -355,10 +359,14 @@ function createFindController(
     hideFind() {
       close(true);
     },
-    navigate(delta: number) {
-      const { searching, matches, activeIndex } = store.getState();
+    navigateFind(delta: 1 | -1) {
+      const { open, searching, matches, activeIndex } = store.getState();
+
+      if (!open) return false;
 
       if (!searching && matches.length > 0) reveal(activeIndex + delta);
+
+      return true;
     },
     resetForDocument() {
       close(true, true);
@@ -437,7 +445,7 @@ function ReviewFindWidget({
               controller.hideFind();
             } else if (event.key === "Enter") {
               event.preventDefault();
-              controller.navigate(event.shiftKey ? -1 : 1);
+              controller.navigateFind(event.shiftKey ? -1 : 1);
             }
           }}
         />
@@ -491,14 +499,14 @@ function ReviewFindWidget({
         label="Previous Match"
         description="Previous Match (Shift+Enter)"
         disabled={searching || matchCount === 0}
-        onClick={() => controller.navigate(-1)}
+        onClick={() => controller.navigateFind(-1)}
         icon="previous"
       />
       <FindActionButton
         label="Next Match"
         description="Next Match (Enter)"
         disabled={searching || matchCount === 0}
-        onClick={() => controller.navigate(1)}
+        onClick={() => controller.navigateFind(1)}
         icon="next"
       />
       <FindActionButton

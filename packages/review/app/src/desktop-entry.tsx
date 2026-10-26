@@ -461,6 +461,12 @@ export function mountReviewCanvas(
         findHost.showFind(seed)
       );
     },
+    navigateFind(delta) {
+      return (
+        (content.kind === "api" || content.kind === "home") &&
+        findHost.navigateFind(delta)
+      );
+    },
     diffFiles() {
       return diffFilePicker.current?.files();
     },
