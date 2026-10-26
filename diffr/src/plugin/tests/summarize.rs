@@ -384,6 +384,34 @@ fn each_provider_sends_its_own_request_and_reads_its_own_answer() {
     }
 }
 
+#[test]
+fn codex_streams_a_response_and_reads_the_completed_event() {
+    let (file, mut sides) = project("a.py", "", LARGE);
+    let completed = json!({"type": "response.completed", "response": {"output": [
+        {"type": "reasoning", "summary": []},
+        {"type": "message", "content": [{"type": "output_text", "text": "a b c"}]},
+    ]}});
+    let stream = format!(
+        "event: response.created\ndata: {{\"type\":\"response.created\"}}\n\nevent: response.completed\ndata: {completed}\n\n"
+    );
+    let (endpoint, server) = serve_requests(vec![(200, stream)]);
+    let pipeline = summarizer_with(json!({
+        "provider": "codex",
+        "model": "test-model",
+        "api_key": "test-token",
+        "endpoint": format!("{endpoint}/codex"),
+        "min_lines": 3,
+        "retries": 0,
+    }));
+    shape(&pipeline, &file, &mut sides).unwrap();
+    assert_eq!(fold_label(&sides), "a b c");
+    let request = server.join().unwrap().remove(0);
+    assert_eq!(request.line, "POST /codex/responses HTTP/1.1");
+    assert!(request
+        .headers
+        .contains(&"authorization: bearer test-token".to_owned()));
+}
+
 /// The default chain with the summarizer on, answering from `endpoint`.
 fn default_chain(endpoint: &str) -> Pipeline {
     configured(&format!(

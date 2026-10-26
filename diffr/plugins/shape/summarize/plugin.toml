@@ -11,10 +11,10 @@ description = "Summarize large new function bodies and new tests as pseudocode. 
 default = false
 
 [options.provider]
-enum = ["gemini", "openai", "anthropic"]
-"x-enum-titles" = ["Gemini", "OpenAI", "Anthropic"]
+enum = ["gemini", "openai", "anthropic", "codex"]
+"x-enum-titles" = ["Gemini", "OpenAI", "Anthropic", "Codex"]
 title = "Provider"
-description = "Which model API to call. `openai` also reaches OpenRouter and any other OpenAI-compatible server through `endpoint`."
+description = "Which model API to call. `openai` also reaches OpenRouter and any other OpenAI-compatible server through `endpoint`. `codex` uses Codex's saved sign-in."
 default = "gemini"
 
 [options.model]
@@ -25,7 +25,7 @@ description = "The model name sent to the provider. Unset uses the provider's de
 
 [options.model."x-default-by"]
 key = "provider"
-values = { gemini = "gemini-3.8-flash", openai = "gpt-6-luna", anthropic = "claude-haiku-5-5" }
+values = { gemini = "gemini-3.8-flash", openai = "gpt-6-luna", anthropic = "claude-haiku-5-5", codex = "gpt-6-luna" }
 
 [options.min_lines]
 type = "integer"
@@ -158,6 +158,7 @@ additionalProperties = false
 endpoint = { type = "string" }
 key_variables = { type = "array", items = { type = "string" } }
 keyless_custom_endpoint = { type = "boolean" }
+login = { enum = ["codex"] }
 
 [options.provider_details."x-default-by"]
 key = "provider"
@@ -176,6 +177,12 @@ keyless_custom_endpoint = true
 endpoint = "https://api.anthropic.com"
 key_variables = ["ANTHROPIC_API_KEY"]
 keyless_custom_endpoint = false
+
+[options.provider_details."x-default-by".values.codex]
+endpoint = "https://chatgpt.com/backend-api/codex"
+key_variables = []
+keyless_custom_endpoint = false
+login = "codex"
 
 # The fold queries for each language, as files in this folder.
 [queries]

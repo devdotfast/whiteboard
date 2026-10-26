@@ -498,7 +498,7 @@ mod tests {
         );
         assert_eq!(
             error("plugins.shape.bundled.summarize.provider", "mistral"),
-            "plugins.shape.bundled.summarize.provider: expected one of \"gemini\", \"openai\", \"anthropic\", got \"mistral\""
+            "plugins.shape.bundled.summarize.provider: expected one of \"gemini\", \"openai\", \"anthropic\", \"codex\", got \"mistral\""
         );
         assert_eq!(
             error("plugins.shape.mine.enabled", "true"),
