@@ -2110,16 +2110,34 @@ function stripDiffPathPrefix(value: string): string {
   return value;
 }
 
+const GIT_PATH_ESCAPES = new Map([
+  ["a", "\x07"],
+  ["b", "\b"],
+  ["f", "\f"],
+  ["n", "\n"],
+  ["r", "\r"],
+  ["t", "\t"],
+  ["v", "\v"],
+]);
+
+/** Git C-quotes unusual paths; octal escapes are the bytes of UTF-8 text. */
 function unquoteGitPath(value: string): string {
   if (!value.startsWith(`"`)) return value;
+  const body = value.slice(1, value.endsWith(`"`) ? -1 : undefined);
 
-  try {
-    // SAFETY: the text starts with a double quote, so the only JSON value it
-    // can parse to is a string.
-    return JSON.parse(value) as string;
-  } catch {
-    return value.slice(1, value.endsWith(`"`) ? -1 : undefined);
-  }
+  return Buffer.concat(
+    body
+      .split(/(\\[0-7]{3}|\\.)/)
+      .map((part) =>
+        /^\\[0-7]{3}$/.test(part)
+          ? Buffer.of(Number.parseInt(part.slice(1), 8))
+          : Buffer.from(
+              part.startsWith("\\")
+                ? (GIT_PATH_ESCAPES.get(part[1]!) ?? part[1]!)
+                : part,
+            ),
+      ),
+  ).toString("utf8");
 }
 
 function normalizeDiffPaths(paths: string[] | undefined): string[] {

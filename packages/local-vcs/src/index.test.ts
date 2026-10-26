@@ -488,6 +488,12 @@ describe("local vcs", () => {
       "+++ /dev/null",
       "@@ -1 +0,0 @@",
       "-x",
+      'diff --git "a/n\\303\\244me.ts" "b/n\\303\\244me.ts"',
+      '--- "a/n\\303\\244me.ts"',
+      '+++ "b/n\\303\\244me.ts"',
+      "@@ -1 +1 @@",
+      "-y",
+      "+z",
       "",
     ].join("\n");
 
@@ -506,6 +512,13 @@ describe("local vcs", () => {
         previousPath: undefined,
         status: "deleted",
         additions: 0,
+        deletions: 1,
+      },
+      {
+        path: "näme.ts",
+        previousPath: undefined,
+        status: "modified",
+        additions: 1,
         deletions: 1,
       },
     ]);
