@@ -26,6 +26,8 @@ function settings(): ReviewCanvasSettingsContent {
     setTelemetryEnabled: async (enabled) => enabled,
     theme: "Review Dark",
     setTheme: async (id) => id,
+    diffTheme: "",
+    setDiffTheme: async (id) => id,
     colorThemes: [
       { id: "Review Dark", label: "Whiteboard Dark", kind: "dark" },
       { id: "Tokyo Night", label: "Tokyo Night", kind: "dark" },
@@ -122,4 +124,38 @@ test("preferences stay enabled while overlapping saves settle independently", as
   await expect
     .element(page.getByText("Could not save width"))
     .not.toBeInTheDocument();
+});
+
+test("Diff theme offers only themes as light or dark as Theme", async () => {
+  const content = settings();
+  content.diffTheme = "Review Light";
+  content.setTheme = async () => "Review Light";
+  const container = document.createElement("div");
+  container.style.height = "700px";
+  document.body.append(container);
+  root = createRoot(container);
+  await act(async () => root.render(<SettingsPage settings={content} />));
+
+  const diffTheme = page.getByRole("combobox", { name: "Diff theme" });
+
+  const options = () =>
+    [...diffTheme.element().querySelectorAll("option")].map(
+      (option) => option.textContent,
+    );
+
+  // A saved theme of the other kind follows Theme.
+  await expect.element(diffTheme).toHaveValue("");
+  expect(options()).toEqual([
+    "Same as Theme",
+    "Whiteboard Dark",
+    "Tokyo Night",
+  ]);
+
+  await act(async () =>
+    page
+      .getByRole("combobox", { name: "Theme", exact: true })
+      .selectOptions("Review Light"),
+  );
+  await expect.element(diffTheme).toHaveValue("Review Light");
+  expect(options()).toEqual(["Same as Theme", "Whiteboard Light"]);
 });

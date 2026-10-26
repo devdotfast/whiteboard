@@ -98,7 +98,7 @@ export function DiffSidebarFolds(): ReactElement {
               onOpen={(reviewUuid, active) =>
                 void session.surface.post({
                   name: "openReview",
-                  args: { reviewUuid, active },
+                  args: { reviewUuid, active, view: "diff" },
                 })
               }
             />

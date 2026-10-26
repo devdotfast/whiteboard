@@ -3,7 +3,9 @@
  *  Licensed under the MIT License. See LICENSE in the repository root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { createStyleSheet } from '../../base/browser/domStylesheets.js';
 import { Color } from '../../base/common/color.js';
+import { Disposable, toDisposable } from '../../base/common/lifecycle.js';
 import { localize } from '../../nls.js';
 import { MenuId, MenuRegistry } from '../../platform/actions/common/actions.js';
 import { ConfigurationTarget, IConfigurationService } from '../../platform/configuration/common/configuration.js';
@@ -19,7 +21,13 @@ import { progressBarBackground } from '../../platform/theme/common/colors/miscCo
 import { isDark } from '../../platform/theme/common/theme.js';
 import { type IColorTheme, registerThemingParticipant } from '../../platform/theme/common/themeService.js';
 import { type IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../workbench/common/contributions.js';
+import { IExtensionResourceLoaderService } from '../../platform/extensionResourceLoader/common/extensionResourceLoader.js';
+import { IExtensionService } from '../../workbench/services/extensions/common/extensions.js';
+import { generateColorThemeCSS } from '../../workbench/services/themes/browser/colorThemeCss.js';
+import { ColorThemeData } from '../../workbench/services/themes/common/colorThemeData.js';
 import { IHostColorSchemeService } from '../../workbench/services/themes/common/hostColorSchemeService.js';
+import { IWorkbenchThemeService } from '../../workbench/services/themes/common/workbenchThemeService.js';
+import { REVIEW_DIFF_COLOR_THEME_SETTING } from '../common/reviewConfigurationDefaults.js';
 
 MenuRegistry.appendMenuItem(MenuId.MenubarPreferencesMenu, {
 	command: {
@@ -103,3 +111,62 @@ registerThemingParticipant((theme, collector) => {
 	}
 	collector.addRule(`.monaco-workbench { ${vars.join(' ')} }`);
 });
+
+/**
+ * Gives the Diff tab `review.diffColorTheme`'s colors. Monaco keeps one token
+ * color map per window, so syntax colors stay on the workbench theme; only the
+ * --vscode-* variables are rescoped, and only from a theme as light or dark as
+ * the workbench's, which keeps those syntax colors readable.
+ */
+class ReviewDiffColorTheme extends Disposable implements IWorkbenchContribution {
+	static readonly ID = 'workbench.contrib.reviewDiffColorTheme';
+
+	private generation = 0;
+
+	constructor(
+		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IWorkbenchThemeService private readonly themeService: IWorkbenchThemeService,
+		@IExtensionService private readonly extensionService: IExtensionService,
+		@IExtensionResourceLoaderService private readonly extensionResourceLoaderService: IExtensionResourceLoaderService,
+		@ILogService private readonly logService: ILogService,
+	) {
+		super();
+		const sheet = createStyleSheet();
+		this._register(toDisposable(() => sheet.remove()));
+		const update = () => this.css().then(
+			({ generation, css }) => {
+				if (generation === this.generation) {
+					sheet.textContent = css;
+				}
+			},
+			error => this.logService.warn('Could not apply the diff color theme', error),
+		);
+		this._register(configurationService.onDidChangeConfiguration(event => {
+			if (event.affectsConfiguration(REVIEW_DIFF_COLOR_THEME_SETTING)) {
+				update();
+			}
+		}));
+		// Matching the workbench theme needs no override; a reloaded theme needs a fresh one.
+		this._register(themeService.onDidColorThemeChange(() => update()));
+		update();
+	}
+
+	private async css(): Promise<{ generation: number; css: string }> {
+		const generation = ++this.generation;
+		const id = this.configurationService.getValue<string>(REVIEW_DIFF_COLOR_THEME_SETTING);
+		const current = this.themeService.getColorTheme();
+		if (!id || id === current.settingsId) {
+			return { generation, css: '' };
+		}
+		// Theme extensions register with the other extensions.
+		await this.extensionService.whenInstalledExtensionsRegistered();
+		const theme = (await this.themeService.getColorThemes()).find(theme => theme.settingsId === id);
+		if (!(theme instanceof ColorThemeData) || isDark(theme.type) !== isDark(current.type)) {
+			return { generation, css: '' };
+		}
+		await theme.ensureLoaded(this.extensionResourceLoaderService);
+		return { generation, css: generateColorThemeCSS(theme, '.monaco-workbench .review-files-editor-tab').code };
+	}
+}
+
+registerWorkbenchContribution2(ReviewDiffColorTheme.ID, ReviewDiffColorTheme, WorkbenchPhase.AfterRestored);

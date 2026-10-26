@@ -48,6 +48,8 @@ async function render(hosts: ReviewRemoteHostsSettings) {
     setTelemetryEnabled: reject,
     theme: "Review Dark",
     setTheme: reject,
+    diffTheme: "",
+    setDiffTheme: reject,
     colorThemes: [],
     importColorTheme: reject,
     keymap: "none",

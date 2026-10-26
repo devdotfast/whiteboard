@@ -4277,6 +4277,28 @@ it("shares pending comparison work even when more than 32 reviews are opened", a
   await Promise.all([first, ...others]);
 });
 
+it("stops comparing a worktree revision once a newer one starts", async () => {
+  const { reviewId } = await create();
+  const data = new LocalReviewData(store);
+  vi.spyOn(data, "changes").mockResolvedValue([]);
+
+  vi.spyOn(data, "structuralChanges").mockImplementation(async function* ({
+    signal,
+  }) {
+    if (!signal.aborted)
+      await new Promise((resolve) =>
+        signal.addEventListener("abort", resolve, { once: true }),
+      );
+    signal.throwIfAborted();
+  });
+
+  const stale = data.coverage(reviewId, { ...pins, worktreeRevision: "1" });
+  data.coverage(reviewId, { ...pins, worktreeRevision: "2" }).catch(() => {});
+
+  await expect(stale).rejects.toThrow("aborted");
+  void data.close();
+});
+
 it("reports a created review with the origin its headers claim", async () => {
   const { createReviewApi } = await import("./http.js");
   const created: unknown[] = [];

@@ -1,5 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, realpath, rm, utimes } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  realpath,
+  rm,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -216,6 +223,58 @@ describe("onboardingProjects", () => {
       { path: api.root, name: "api" },
       { path: web.root, name: "web" },
     ]);
+  });
+
+  it("resolves bare clones, submodules and separate git dirs", async () => {
+    const source = await repository("source", 0);
+
+    const git = (...args: string[]) =>
+      execFileSync("git", args, { cwd: directory, encoding: "utf8" });
+
+    const bare = path.join(directory, "bare");
+    git("clone", "-q", "--bare", source.root, bare);
+    git("-C", bare, "worktree", "add", "-q", "worktrees/main", "main");
+
+    const dotBare = path.join(directory, "dot-bare");
+    git("clone", "-q", "--bare", source.root, path.join(dotBare, ".bare"));
+    await writeFile(path.join(dotBare, ".git"), "gitdir: ./.bare\n");
+    git("-C", dotBare, "worktree", "add", "-q", "main", "main");
+
+    const separate = path.join(directory, "separate");
+    git(
+      "clone",
+      "-q",
+      `--separate-git-dir=${path.join(directory, "separate.git")}`,
+      source.root,
+      separate,
+    );
+
+    const parent = await repository("parent", 0);
+    parent.git(
+      "-c",
+      "protocol.file.allow=always",
+      "submodule",
+      "add",
+      "-q",
+      source.root,
+      "sub",
+    );
+    const submodule = path.join(parent.root, "sub");
+
+    const projects = await onboardingProjects(
+      [
+        path.join(bare, "worktrees", "main"),
+        dotBare,
+        path.join(dotBare, "main"),
+        separate,
+        submodule,
+      ],
+      { temporaryRoots: [] },
+    );
+
+    expect(projects.map((project) => project.path).sort()).toEqual(
+      [bare, dotBare, separate, submodule].sort(),
+    );
   });
 
   it("leaves out repositories in temporary folders", async () => {

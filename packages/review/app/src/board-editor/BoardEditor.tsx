@@ -462,6 +462,7 @@ export function BoardEditor({
           args: {
             reviewUuid: board.board,
             active: !(event.metaKey || event.ctrlKey || event.shiftKey),
+            view: "review",
             ...(board.block !== undefined && { blockId: board.block }),
           },
         });

@@ -73,7 +73,7 @@ export function ReviewBreadcrumb({
   status?: ReactNode;
 }): ReactElement | null {
   const session = useReviewSession();
-  const inDiff = useOptionalReviewPanel((state) => state.view) === "diff";
+  const view = useOptionalReviewPanel((state) => state.view);
   const [open, setOpen] = useState(false);
   const control = useRef<HTMLSpanElement>(null);
 
@@ -99,7 +99,7 @@ export function ReviewBreadcrumb({
           event.shiftKey ||
           event.button === 1
         ),
-        ...(inDiff && { view: "diff" }),
+        ...(view && { view }),
       },
     });
   };

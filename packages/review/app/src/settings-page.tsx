@@ -100,6 +100,7 @@ export function SettingsPage({
   );
 
   const [theme, setTheme] = useState(settings.theme);
+  const [diffTheme, setDiffTheme] = useState(settings.diffTheme);
   const [colorThemes, setColorThemes] = useState(settings.colorThemes);
   const [keymap, setKeymap] = useState(settings.keymap);
   const [openFilesIn, setOpenFilesIn] = useState(settings.openFilesIn);
@@ -136,6 +137,18 @@ export function SettingsPage({
     settings.install && installStatus
       ? { ...settings.install, status: installStatus }
       : settings.install;
+
+  // Syntax colors follow Theme, so the Diff tab only takes a theme of its
+  // kind; Desktop ignores a saved one of the other kind.
+  const themeKind = colorThemes.find((option) => option.id === theme)?.kind;
+
+  const diffThemes = colorThemes.filter(
+    (option) => !themeKind || option.kind === themeKind,
+  );
+
+  const shownDiffTheme = diffThemes.some((option) => option.id === diffTheme)
+    ? diffTheme
+    : "";
 
   const run = async <T,>(
     action: () => Promise<T>,
@@ -266,10 +279,25 @@ export function SettingsPage({
             <Section label="Appearance">
               <Row label="Theme" description="How Whiteboard looks.">
                 <ThemeSelect
+                  label="Theme"
                   themes={colorThemes}
                   value={theme}
                   onChange={(id) =>
                     void run(() => settings.setTheme(id), setTheme)
+                  }
+                />
+              </Row>
+              <Row
+                label="Diff theme"
+                description="Backgrounds and change colors in the Diff tab. Lists themes as light or dark as Theme."
+              >
+                <ThemeSelect
+                  label="Diff theme"
+                  themes={diffThemes}
+                  value={shownDiffTheme}
+                  followsTheme
+                  onChange={(id) =>
+                    void run(() => settings.setDiffTheme(id), setDiffTheme)
                   }
                 />
               </Row>
@@ -701,31 +729,39 @@ function FontFamilyField({
 }
 
 function ThemeSelect({
+  label,
   themes,
   value,
+  followsTheme = false,
   onChange,
 }: {
+  label: string;
   themes: ReviewColorTheme[];
   value: string;
+  /** Offers "Same as Theme", whose id is "". */
+  followsTheme?: boolean;
   onChange: (id: string) => void;
 }) {
   return (
     <Select
-      aria-label="Theme"
+      aria-label={label}
       value={value}
       onChange={(event) => onChange(event.currentTarget.value)}
     >
-      {COLOR_THEME_GROUPS.map(([kind, label]) => (
-        <optgroup key={kind} label={label}>
-          {themes
-            .filter((option) => option.kind === kind)
-            .map((option) => (
+      {followsTheme ? <option value="">Same as Theme</option> : null}
+      {COLOR_THEME_GROUPS.map(([kind, label]) => {
+        const options = themes.filter((option) => option.kind === kind);
+
+        return options.length ? (
+          <optgroup key={kind} label={label}>
+            {options.map((option) => (
               <option key={option.id} value={option.id}>
                 {option.label}
               </option>
             ))}
-        </optgroup>
-      ))}
+          </optgroup>
+        ) : null;
+      })}
     </Select>
   );
 }

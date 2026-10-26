@@ -62,6 +62,7 @@ import {
 	REVIEW_OPEN_FILES_IN_APPLICATION_SETTING,
 	REVIEW_OPEN_FILES_IN_CHOICES,
 	REVIEW_OPEN_FILES_IN_SETTING,
+	REVIEW_DIFF_COLOR_THEME_SETTING,
 	REVIEW_DOCUMENT_WIDTH_SETTING,
 	REVIEW_KEYMAP_SETTING,
 	REVIEW_READY_NOTIFICATION_SETTING,
@@ -985,6 +986,19 @@ export class ReviewCanvasEditorPane extends EditorPane {
 					value: themeKind(picked.type),
 				});
 				return this.applyColorTheme(picked);
+			},
+			diffTheme: this.configurationService.getValue<string>(REVIEW_DIFF_COLOR_THEME_SETTING) ?? "",
+			setDiffTheme: async (id) => {
+				const kind = themeKind(this.reviewThemeService.getColorTheme().type);
+				if (id && !(await this.reviewThemeService.getColorThemes()).some((theme) => theme.settingsId === id && themeKind(theme.type) === kind)) {
+					return this.configurationService.getValue<string>(REVIEW_DIFF_COLOR_THEME_SETTING) ?? "";
+				}
+				this.reviewTelemetryService.capture("setting_changed", {
+					setting: "diff_theme",
+					enabled: Boolean(id),
+				});
+				await this.configurationService.updateValue(REVIEW_DIFF_COLOR_THEME_SETTING, id, ConfigurationTarget.USER);
+				return this.configurationService.getValue<string>(REVIEW_DIFF_COLOR_THEME_SETTING) ?? "";
 			},
 			colorThemes: await this.colorThemeOptions(),
 			importColorTheme: async () => {
