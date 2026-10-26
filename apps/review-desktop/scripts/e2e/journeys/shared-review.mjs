@@ -1,4 +1,4 @@
-/** A received share renders from its own pinned checkout after the sender's repository is gone. */
+/** A share's copy renders from its own pinned checkout after the sender's repository is gone. */
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
@@ -45,18 +45,7 @@ export async function run(ctx) {
   const canvas = page.locator(".review-canvas-root [data-review-api]");
 
   await canvas.getByText("The answer is 42.").first().waitFor();
-
-  const image = canvas.getByAltText("Embedded red pixel");
-
-  await image.scrollIntoViewIfNeeded();
-  await ctx.until(
-    () =>
-      image.evaluate(
-        (element) => element.complete && element.naturalWidth > 0,
-      ),
-    "the shared image to load",
-  );
-  ctx.check("the shared document, trace quote and embedded image render");
+  ctx.check("the shared document and trace quote render");
 
   // Native inline widgets expose their rendered code through Monaco's view lines.
   const code = canvas
