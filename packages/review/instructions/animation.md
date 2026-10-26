@@ -6,9 +6,9 @@ Choose where to start by what changes between the frames:
 
 | Build with | When the frames show |
 | --- | --- |
-| The scene (`whiteboard.scene`) | A few cards whose notes and tones change, with chips moving along their edges. This is the default. |
-| Mermaid (`whiteboard.mermaid`) | A diagram too large to place card by card, whose nodes and edges appear, leave or light up from frame to frame. |
-| The style kit and raw HTML | Anything else: a chart, a timeline, a queue, a custom shape. |
+| The scene (`whiteboard.scene`) | Up to about 8 cards whose notes, text and tones change, with chips moving along their edges. This is the default. |
+| Mermaid (`whiteboard.mermaid`) | A larger diagram, or one with branches or subgroups, whose nodes and edges appear, leave or light up. Its labels stay fixed: use the scene if they must change. |
+| The toolkit, style kit and raw HTML | Anything else: a chart, a timeline, a queue, a custom shape, or motion the scene cannot express (`arrow`, `token`, `travel`, `timeline`). |
 
 If no part of the drawing changes between frames, it is not an animation: use a `sequence` or `flow_diagram` block, whose steps and nodes link to code. The three mix: a stage can hold a scene, a Mermaid diagram and your own HTML together.
 
@@ -340,6 +340,6 @@ Custom CSS should use the whiteboard's variables, never literal colors, sizes or
 - Each frame shows one idea; its title says what changed. 3 to 8 frames is usual.
 - Omit `height` unless the animation intentionally needs a fixed viewport; verify any numeric height in every frame and narrow layout.
 - Every frame reads correctly when reached by a jump, not only by playing.
-- Build as "Choose how to build it" says: a scene by default, Mermaid for a large diagram whose parts change by frame, and the style kit or raw HTML for anything else.
+- Build as "Choose how to build it" says: a scene by default, Mermaid for a larger or branching diagram, and the toolkit or raw HTML for anything else.
 - In raw HTML, build from the style kit and the `--wb-*` variables; write no literal color, size or font name.
 - Script errors show under the stage. After writing, read the whiteboard back and fix any.
