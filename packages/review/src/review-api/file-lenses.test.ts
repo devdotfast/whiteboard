@@ -2,7 +2,7 @@ import { rangeAnchor, sourceAnchors } from "@review/lens-selection.js";
 import { expect, it } from "vitest";
 
 import {
-  matchesFileLens,
+  fileLensMatcher,
   resolveFileLens,
   uncategorizedSources,
 } from "./file-lenses.js";
@@ -22,16 +22,16 @@ it("matches file paths, nested test globs, docs and dot directories without scan
     "docs/guide.md",
     ".github/workflows/check.yml",
   ])
-    expect(matchesFileLens(patterns, { path })).toBe(true);
-  expect(matchesFileLens(patterns, { path: "src/main.ts" })).toBe(false);
-  expect(matchesFileLens(["./docs/**"], { path: "docs/guide.md" })).toBe(true);
+    expect(fileLensMatcher(patterns)({ path })).toBe(true);
+  expect(fileLensMatcher(patterns)({ path: "src/main.ts" })).toBe(false);
+  expect(fileLensMatcher(["./docs/**"])({ path: "docs/guide.md" })).toBe(true);
 });
 
 it("keeps a renamed file in a group matching either side of the rename", () => {
   const file = { path: "guide/intro.md", previousPath: "docs/intro.md" };
-  expect(matchesFileLens(["docs/**"], file)).toBe(true);
-  expect(matchesFileLens(["guide/**"], file)).toBe(true);
-  expect(matchesFileLens(["src/**"], file)).toBe(false);
+  expect(fileLensMatcher(["docs/**"])(file)).toBe(true);
+  expect(fileLensMatcher(["guide/**"])(file)).toBe(true);
+  expect(fileLensMatcher(["src/**"])(file)).toBe(false);
 });
 
 it("keeps partially covered files until both sides are covered, regardless of viewed state", () => {

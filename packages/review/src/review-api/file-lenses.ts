@@ -1,5 +1,3 @@
-import { posix } from "node:path";
-
 import { type LensSource, anchorSelection } from "@review/lens-selection.js";
 import type { FileLineRange } from "@review/source.js";
 import {
@@ -10,6 +8,7 @@ import {
   subtractIntervals,
   unionIntervals,
 } from "@review/viewed-coverage.js";
+import { Minimatch } from "minimatch";
 
 import type { Lens } from "./diff-lenses.js";
 
@@ -39,13 +38,17 @@ export function resolveFileLens(
 ) {
   const targets = lens.targets;
 
-  const selected = targets.flatMap((target) =>
-    target.kind === "ranges"
-      ? target.sources.flatMap((source) => resolve(anchorSelection(source)))
-      : files
-          .filter((file) => matchesFileLens(target.patterns, file))
-          .flatMap((file) => fileSources.get(file.path) ?? []),
-  );
+  const selected = targets.flatMap((target) => {
+    if (target.kind === "ranges")
+      return target.sources.flatMap((source) =>
+        resolve(anchorSelection(source)),
+      );
+    const matches = fileLensMatcher(target.patterns);
+
+    return files
+      .filter(matches)
+      .flatMap((file) => fileSources.get(file.path) ?? []);
+  });
 
   const groups = new Map<string, FileLineRange[]>();
 
@@ -92,17 +95,29 @@ export function changedPath(
 }
 
 /** Evaluate authored patterns against the changed-file list, never the filesystem. */
-export function matchesFileLens(
+export function fileLensMatcher(
   patterns: readonly string[],
-  file: { path: string; previousPath?: string },
-): boolean {
-  return patterns.some((pattern) => {
+): (file: { path: string; previousPath?: string }) => boolean {
+  const matchers = patterns.map((pattern) => {
     const normalized = pattern.startsWith("./") ? pattern.slice(2) : pattern;
 
-    return [file.path, file.previousPath].some(
-      (path) =>
-        path !== undefined &&
-        (path === normalized || posix.matchesGlob(path, normalized)),
-    );
+    const glob = new Minimatch(normalized, {
+      nocase: process.platform === "darwin" || process.platform === "win32",
+      windowsPathsNoEscape: true,
+      nonegate: true,
+      nocomment: true,
+      optimizationLevel: 2,
+      platform: "linux",
+      nocaseMagicOnly: true,
+    });
+
+    return (path: string) => path === normalized || glob.match(path);
   });
+
+  return (file) =>
+    matchers.some(
+      (matches) =>
+        matches(file.path) ||
+        (file.previousPath !== undefined && matches(file.previousPath)),
+    );
 }
