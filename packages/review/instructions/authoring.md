@@ -20,7 +20,7 @@ For each board, follow these first five steps in order, with no tool calls beyon
 - create the whiteboard with a `target` naming the checkout by its `repositoryPath`: `{kind:"commits", head, base?}` for commits, `{kind:"pullRequest", pullRequest}` for a PR by URL or number, or `{kind:"project"}` for a plan with no change yet. if they name none, use a `worktree` target with no `base`: it reviews the checkout, uncommitted work included, against the default branch. for uncommitted work only, pass `base: "HEAD"`. untracked files are left out: run `git add -N <file>` on new files you want reviewed
 - for a change board only, trigger a subagent with this exact instruction: "Call `session_get_instructions({topic:\"file-lenses\"})` and follow it for whiteboard <sessionId>, whose change is `<base>..<head>` in `<repositoryPath>`."
 - call `session_activity_begin` and pass its `activityId` on every `session_edit`
-- for a project-target plan or overview, read the relevant source or the stack's combined diff; no diff is expected on the project target itself. For a change board, read the diff with git (or jj) in `repositoryPath`, at the commits `session_create` returned: `git diff <base> <head>`, or for a worktree target `git diff <base>` plus `git status` for untracked files. if it shows no changes, the target is wrong: fix it with `session_set_target` before writing
+- for a project-target plan or overview, read the relevant source or the stack's combined diff; no diff is expected on the project target itself. For a change board, read the diff with git (or jj) in `repositoryPath`, at the commits `session_create` returned: `git diff <base> <head>`, or for a worktree target `git diff <base>` plus `git status` for untracked files. if it shows no changes, the target is wrong: fix it with `session_set_target` before writing. for a PR, retarget with `{kind:"pullRequest", pullRequest}`, never its branch names: those pin the branch tips, not the PR's merge base, and widen the diff
 - immediately after reading the diff (and the PR description) - put down a first pass at the what/why section.
 
 - whiteboard structure - each of these should be written as a top-level `section`, in this order:
@@ -41,7 +41,7 @@ For each board, follow these first five steps in order, with no tool calls beyon
 
 **updating existing whiteboard**
 
-- move the whiteboard to the new commits with `session_set_target`
+- move the whiteboard to the new commits with `session_set_target`; for a PR, pass the `pullRequest` target again so it re-pins at the PR's head and merge base
 - read the existing whiteboard (if you haven't already,) read the diff since last whiteboard, make any necessary updates to the whiteboard.
 
 **guidelines**
