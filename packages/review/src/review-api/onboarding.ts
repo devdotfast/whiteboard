@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import crypto from "node:crypto";
-import { stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
@@ -82,25 +82,54 @@ async function modified(file: string): Promise<number> {
   }
 }
 
+/** The folder holding a bare clone's `.git` file, as in `project/.bare`;
+ * else the clone itself. */
+async function bareRoot(bare: string) {
+  const parent = path.dirname(bare);
+
+  try {
+    const gitdir = /^gitdir:\s*(.+)$/m.exec(
+      await readFile(path.join(parent, ".git"), "utf8"),
+    )?.[1];
+
+    if (gitdir && path.resolve(parent, gitdir.trim()) === bare) return parent;
+  } catch {
+    // No `.git` file beside it.
+  }
+
+  return bare;
+}
+
+/** A folder's project: its main checkout, its bare clone, or itself. */
+async function projectOf(folder: string, run: OnboardingRun) {
+  const git = (args: string[], cwd = folder) =>
+    run("git", args, cwd).then((output) => output.trim());
+
+  const common = path.resolve(
+    folder,
+    await git(["rev-parse", "--path-format=absolute", "--git-common-dir"]),
+  );
+
+  if (path.basename(common) === ".git")
+    return { root: path.dirname(common), common, bare: false };
+
+  if ((await git(["rev-parse", "--is-bare-repository"], common)) === "true")
+    return { root: await bareRoot(common), common, bare: true };
+
+  return {
+    root: await git(["rev-parse", "--show-toplevel"]),
+    common,
+    bare: false,
+  };
+}
+
 /** The repository a folder belongs to, and when it last saw Git activity.
  * Worktrees resolve to their main checkout, which lists them as targets. */
 async function repositoryOf(folder: string, run: OnboardingRun) {
   try {
     if (!(await stat(folder)).isDirectory()) return undefined;
 
-    const common = path.resolve(
-      folder,
-      (
-        await run(
-          "git",
-          ["rev-parse", "--path-format=absolute", "--git-common-dir"],
-          folder,
-        )
-      ).trim(),
-    );
-
-    // A bare repository has no checkout to draw from.
-    if (path.basename(common) !== ".git") return undefined;
+    const { root, common } = await projectOf(folder, run);
 
     const activity = await Promise.all(
       ["index", "FETCH_HEAD", path.join("logs", "HEAD")].map((file) =>
@@ -108,7 +137,7 @@ async function repositoryOf(folder: string, run: OnboardingRun) {
       ),
     );
 
-    return { root: path.dirname(common), active: Math.max(...activity) };
+    return { root, active: Math.max(...activity) };
   } catch {
     return undefined;
   }
@@ -183,6 +212,20 @@ const drawable = (worktree: Worktree) =>
   !worktree.path.split(/[\\/]/).includes("dev-fast") &&
   // Scratch checkouts, such as an agent's throwaway worktree.
   !isInside(TEMPORARY_ROOTS, worktree.path);
+
+/** In a bare clone, a pull request is drawn from the worktree on its branch. */
+async function checkoutOf(project: string, branch: string, run: OnboardingRun) {
+  const worktrees = parseWorktrees(
+    await run("git", ["worktree", "list", "--porcelain"], project).catch(
+      () => "",
+    ),
+  );
+
+  if (!worktrees[0]?.bare) return project;
+  const usable = worktrees.filter(drawable);
+
+  return (usable.find((tree) => tree.branch === branch) ?? usable[0])?.path;
+}
 
 const pullRequestsSchema = z.array(
   z.object({
@@ -294,20 +337,31 @@ export async function onboardingTargets(
   run: OnboardingRun = runCommand,
 ): Promise<ReviewOnboardingTargetsResponse> {
   let root: string;
+  let bare = false;
 
   try {
     root = (
       await run("git", ["rev-parse", "--show-toplevel"], directory)
     ).trim();
   } catch {
-    throw new ReviewInputError("Choose a folder inside a Git repository.", 400);
+    const project = await projectOf(directory, run).catch(() => undefined);
+
+    if (!project?.bare)
+      throw new ReviewInputError(
+        "Choose a folder inside a Git repository.",
+        400,
+      );
+    root = project.root;
+    bare = true;
   }
 
   const [branch, worktreeList, base, prs, times] = await Promise.all([
-    run("git", ["branch", "--show-current"], root).then(
-      (output) => output.trim(),
-      () => "",
-    ),
+    bare
+      ? ""
+      : run("git", ["branch", "--show-current"], root).then(
+          (output) => output.trim(),
+          () => "",
+        ),
     run("git", ["worktree", "list", "--porcelain"], root).catch(() => ""),
     defaultBase(root, run),
     pullRequests(root, run),
@@ -427,7 +481,17 @@ export function registerOnboardingRoutes(
     const { target } = input;
 
     // A pull request is drawn from the project; a branch from its checkout.
-    const cwd = target.kind === "pr" ? input.projectPath : target.path;
+    const cwd =
+      target.kind === "pr"
+        ? await checkoutOf(input.projectPath, target.branch, run)
+        : target.path;
+
+    if (!cwd)
+      throw new ReviewInputError(
+        "This bare clone has no worktrees. Add one with git worktree add.",
+        400,
+      );
+
     let head: string;
 
     try {
