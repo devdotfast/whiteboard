@@ -6,6 +6,7 @@ import {
   type CoverageFile,
   coverageSources,
   scopedCoverage,
+  sourcesForFile,
   subtractIntervals,
   unionIntervals,
 } from "@review/viewed-coverage.js";
@@ -17,8 +18,10 @@ export function uncategorizedSources(
   files: readonly CoverageFile[],
   sources: readonly FileLineRange[],
 ): FileLineRange[] {
+  const own = sourcesForFile(sources);
+
   return files.flatMap((file) => {
-    const covered = scopedCoverage(file, sources);
+    const covered = scopedCoverage(file, own(file));
 
     return coverageSources(file, {
       base: subtractIntervals(file.changed.base, covered.base),

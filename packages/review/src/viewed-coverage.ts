@@ -153,6 +153,22 @@ export function scopedCoverage(
   return { base: side("base"), head: side("head") };
 }
 
+/** Each file's own sources, grouped once. */
+export function sourcesForFile(
+  sources?: readonly FileLineRange[],
+): (file: CoverageFile) => FileLineRange[] | undefined {
+  if (!sources) return () => undefined;
+  const byFile = Map.groupBy(sources, (source) => source.file);
+
+  return (file) => {
+    const base = byFile.get(file.previousPath ?? file.path) ?? [];
+
+    return file.previousPath && file.previousPath !== file.path
+      ? [...base, ...(byFile.get(file.path) ?? [])]
+      : base;
+  };
+}
+
 export function coverageProgress(
   files: readonly CoverageFile[],
   sources?: readonly FileLineRange[],
@@ -161,8 +177,10 @@ export function coverageProgress(
     remaining = { additions: 0, deletions: 0 },
     folded = { additions: 0, deletions: 0 };
 
+  const own = sourcesForFile(sources);
+
   for (const file of files) {
-    const scope = scopedCoverage(file, sources);
+    const scope = scopedCoverage(file, own(file));
     const counts = structuralChangeCounts(scope);
 
     const side = (side: "base" | "head") => {
