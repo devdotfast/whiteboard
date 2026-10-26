@@ -695,7 +695,8 @@ export class ReviewSidebarPart extends Part {
 			reviewId,
 			onOpenBoard: (id) => {
 				const title = this.catalog.reviews.find((review) => review.reviewId === id)?.title ?? "Whiteboard";
-				void this.tabs.openApiReview(id, title);
+				const view = this.state.view;
+				void this.tabs.openApiReview(id, title).then(() => this.emitSurfaceEvent({ event: "showReviewView", view, reviewId: id }));
 			},
 			...(project && { project }),
 			// Recent spans every project: the catalog Home already keeps.

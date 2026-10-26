@@ -105,13 +105,13 @@ function cachedStack(
 
 const NO_STACK: ReviewStackResponse = { layers: [] };
 
-/** Opens a layer's whiteboard, creating it if needed; from Diff, in Diff. */
+/** Opens a layer's whiteboard, creating it if needed. */
 export function useOpenStackLayer(): (
   layer: ReviewStackLayer,
   active: boolean,
 ) => Promise<void> {
   const session = useReviewSession();
-  const inDiff = useOptionalReviewPanel((state) => state.view) === "diff";
+  const view = useOptionalReviewPanel((state) => state.view);
 
   return async (layer, active) => {
     if (!openable(layer)) return;
@@ -126,7 +126,7 @@ export function useOpenStackLayer(): (
 
     void session.surface.post({
       name: "openReview",
-      args: { reviewUuid, active, ...(inDiff && { view: "diff" }) },
+      args: { reviewUuid, active, ...(view && { view }) },
     });
   };
 }

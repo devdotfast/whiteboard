@@ -27,6 +27,7 @@ import { type MouseEvent, type ReactNode, useRef, useState } from "react";
 import { canvasQueryKeys } from "./canvas-query";
 import { formatRelativeTime } from "./format";
 import { useOptionalReviewSession } from "./host/review-session";
+import { useOptionalReviewPanelStore } from "./review-panel";
 import { tokens } from "./tokens.stylex";
 
 /** What a board link points at now. Missing if the board or block was deleted. */
@@ -88,6 +89,7 @@ export function BoardLink({
   children?: ReactNode;
 }) {
   const session = useOptionalReviewSession();
+  const panel = useOptionalReviewPanelStore();
   const [previewing, setPreviewing] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
 
@@ -113,12 +115,14 @@ export function BoardLink({
   const open = (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault();
     setPreviewing(false);
+    const view = panel?.getState().view;
     void session?.surface.post({
       name: "openReview",
       args: {
         reviewUuid: reviewId,
         active: !(event.metaKey || event.ctrlKey || event.shiftKey),
         ...(blockId !== undefined && { blockId }),
+        ...(view && { view }),
       },
     });
   };
