@@ -287,6 +287,20 @@ function SoftwareMapBlock({ node, data }: BlockProps<"software_map">) {
   );
 }
 
+function AnimationDiagramBlock(props: BlockProps<"animation">) {
+  const { height, title } = props.node;
+
+  return (
+    <ClientDiagram
+      kind="ANIMATION"
+      title={title}
+      height={height === "auto" ? 120 : height}
+    >
+      <AnimationBlock {...props} />
+    </ClientDiagram>
+  );
+}
+
 function FlowDiagramBlock({ node, data }: BlockProps<"flow_diagram">) {
   return (
     <ClientDiagram
@@ -314,7 +328,7 @@ export const blockComponents = {
   trace_quote: TraceQuoteBlock,
   flow_diagram: FlowDiagramBlock,
   software_map: SoftwareMapBlock,
-  animation: AnimationBlock,
+  animation: AnimationDiagramBlock,
   section: SectionBlock,
   callout: CalloutBlock,
 } satisfies Components;

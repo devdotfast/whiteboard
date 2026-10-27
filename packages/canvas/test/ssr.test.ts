@@ -40,5 +40,7 @@ it("renders a share on a server, leaving its diagram to the client", async () =>
   expect(html).not.toContain("src=");
   expect(html).toContain('data-diagram-placeholder="FLOW"');
   expect(html).not.toContain("Write order");
+  expect(html).toContain('data-diagram-placeholder="ANIMATION"');
+  expect(html).not.toContain("<iframe");
   view.dispose();
 });

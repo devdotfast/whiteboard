@@ -41,7 +41,8 @@ import {
 } from "./stage-protocol";
 import { stageRuntime } from "./stage-runtime";
 
-const stageUrl = new URL("./stage.html", import.meta.url).href;
+// Read on demand: a Worker may lack import.meta.url.
+const stageUrl = () => new URL("./stage.html", import.meta.url).href;
 
 const DEFAULT_DURATION = 3000;
 
@@ -498,7 +499,7 @@ export function AnimationBlock({
         <iframe
           key={stageKey}
           ref={frameRef}
-          src={stageUrl}
+          src={stageUrl()}
           title={node.title}
           sandbox="allow-scripts"
           onLoad={boot}

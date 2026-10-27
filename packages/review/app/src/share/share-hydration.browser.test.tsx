@@ -87,6 +87,9 @@ it("hydrates a server-rendered share, then draws its diagram and peeks", async (
   ).toBeTruthy();
 
   expect(container.querySelector("[data-diagram-placeholder]")).toBeNull();
+  expect(
+    container.querySelector('[data-review-node-id="replay"] iframe'),
+  ).not.toBeNull();
 
   const peek = container.querySelector(
     '[data-review-node-id="peek"] [data-review-inline-editor] > div',
