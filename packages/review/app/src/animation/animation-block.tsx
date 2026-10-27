@@ -2,6 +2,8 @@ import type { BlockProps } from "@canvas/blocks";
 import { CodePeekCard } from "@canvas/CodePeek";
 import { useReviewDebugSettings } from "@canvas/debug-settings";
 import { DiagramHeader } from "@canvas/diagram-header";
+import { diagramStyles } from "@canvas/diagram-styles";
+import { useDiagramTourShell } from "@canvas/diagram-tour";
 import { drawStyles } from "@canvas/draw-styles";
 import { useOptionalReviewPanel } from "@canvas/review-panel";
 import {
@@ -13,9 +15,11 @@ import {
   space,
   tracking,
 } from "@canvas/scale.stylex";
+import { shellStyles } from "@canvas/shell-styles";
 import { withClass } from "@canvas/stylex-props";
+import { themeClass, themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
-import { IconButton } from "@canvas/ui/button";
+import { Button, IconButton } from "@canvas/ui/button";
 import { useTooltip } from "@canvas/ui/tooltip";
 import { anchorSelection } from "@review/lens-selection";
 import { type Block, animationCodeId } from "@review/review-api/document";
@@ -30,6 +34,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { createPortal } from "react-dom";
 
 import {
   type HostMessage,
@@ -195,6 +200,11 @@ export function AnimationBlock({
   const [contentHeight, setContentHeight] = useState(120);
   const [slots, setSlots] = useState<SlotLayout[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // The inline figure's height while it is out fullscreen, held by a
+  // placeholder so the document keeps its place.
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const expandRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const indexRef = useRef(index);
   indexRef.current = index;
 
@@ -471,6 +481,22 @@ export function AnimationBlock({
     if (!activeFrames.some((item) => item.key === frame.key)) go(0, true);
   }, [activeFrames, frame.key, go]);
 
+  const collapse = useCallback(() => setExpanded(null), []);
+
+  const { portalTarget } = useDiagramTourShell(expanded !== null, collapse);
+
+  // Focus follows the figure in and back out to the control that opened it.
+  const wasExpanded = useRef(false);
+
+  useEffect(() => {
+    if (expanded !== null) closeRef.current?.focus();
+    else if (wasExpanded.current) expandRef.current?.focus();
+
+    wasExpanded.current = expanded !== null;
+  }, [expanded]);
+
+  const fullscreen = expanded !== null && portalTarget !== null;
+
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "ArrowRight") go(activeIndex + 1, false);
     else if (event.key === "ArrowLeft") go(activeIndex - 1, false);
@@ -479,10 +505,15 @@ export function AnimationBlock({
     event.preventDefault();
   };
 
-  return (
+  const figure = (
     <figure
       ref={figureRef}
-      {...withClass("animation-block", styles.figure, drawStyles.blockChild)}
+      {...withClass(
+        "animation-block",
+        styles.figure,
+        fullscreen && styles.figureFullscreen,
+        drawStyles.blockChild,
+      )}
       aria-label={node.title}
     >
       <DiagramHeader
@@ -490,41 +521,66 @@ export function AnimationBlock({
         title={node.title}
         titleStyle={styles.headerTitle}
         meta={`${activeIndex + 1} / ${activeFrames.length}`}
+        action={
+          <Button
+            ref={fullscreen ? closeRef : expandRef}
+            xstyle={diagramStyles.button}
+            aria-label={
+              fullscreen ? "Close expanded animation" : "Expand animation"
+            }
+            onClick={() =>
+              fullscreen
+                ? collapse()
+                : setExpanded(figureRef.current?.offsetHeight ?? 0)
+            }
+          >
+            {fullscreen ? "Close" : "Expand"}
+          </Button>
+        }
       />
       <div
-        {...stylex.props(styles.stage)}
-        style={{ height: node.height === "auto" ? contentHeight : node.height }}
+        {...stylex.props(styles.stage, fullscreen && styles.stageFullscreen)}
       >
-        <iframe
-          key={stageKey}
-          ref={frameRef}
-          src={stageUrl}
-          title={node.title}
-          sandbox="allow-scripts"
-          onLoad={boot}
-          {...stylex.props(styles.frame)}
-        />
-        <div {...stylex.props(styles.overlays)}>
-          {slots.map((slot) => (
-            <SlotOverlay
-              key={slot.slot}
-              slot={slot}
-              onHeight={(height) =>
-                send({ type: "slot-size", slot: slot.slot, height })
-              }
-            >
-              {slot.kind === "code"
-                ? node.code[slot.ref] && (
-                    <CodePeekCard
-                      source={anchorSelection(node.code[slot.ref]!, node.pins)}
-                      heightMode="capped"
-                      xstyle={styles.peek}
-                    />
-                  )
-                : embeddable.get(slot.ref) &&
-                  children([embeddable.get(slot.ref)!])}
-            </SlotOverlay>
-          ))}
+        <div
+          {...stylex.props(styles.canvas)}
+          style={{
+            height: node.height === "auto" ? contentHeight : node.height,
+          }}
+        >
+          <iframe
+            key={stageKey}
+            ref={frameRef}
+            src={stageUrl}
+            title={node.title}
+            sandbox="allow-scripts"
+            onLoad={boot}
+            {...stylex.props(styles.frame)}
+          />
+          <div {...stylex.props(styles.overlays)}>
+            {slots.map((slot) => (
+              <SlotOverlay
+                key={slot.slot}
+                slot={slot}
+                onHeight={(height) =>
+                  send({ type: "slot-size", slot: slot.slot, height })
+                }
+              >
+                {slot.kind === "code"
+                  ? node.code[slot.ref] && (
+                      <CodePeekCard
+                        source={anchorSelection(
+                          node.code[slot.ref]!,
+                          node.pins,
+                        )}
+                        heightMode="capped"
+                        xstyle={styles.peek}
+                      />
+                    )
+                  : embeddable.get(slot.ref) &&
+                    children([embeddable.get(slot.ref)!])}
+              </SlotOverlay>
+            ))}
+          </div>
         </div>
       </div>
       {steps && (
@@ -609,6 +665,33 @@ export function AnimationBlock({
         </p>
       )}
     </figure>
+  );
+
+  if (!fullscreen) return figure;
+
+  // Portaled outside .review-app, so it carries the theme itself, as the
+  // diagram tour overlay does.
+  return (
+    <>
+      <div aria-hidden="true" style={{ height: expanded }} />
+      {createPortal(
+        <div
+          {...withClass(
+            `review-app--theme-${theme}`,
+            themeStyles.vars,
+            themeClass(theme),
+            styles.overlay,
+            shellStyles.clearsWindowControls,
+          )}
+          role="dialog"
+          aria-modal="true"
+          aria-label={node.title ?? "Animation"}
+        >
+          {figure}
+        </div>,
+        portalTarget,
+      )}
+    </>
   );
 }
 
@@ -732,10 +815,43 @@ const styles = stylex.create({
     textOverflow: { default: null, [narrow]: "clip" },
     whiteSpace: { default: null, [narrow]: "normal" },
   },
+  figureFullscreen: {
+    display: "flex",
+    flex: "1 1 auto",
+    flexDirection: "column",
+    minHeight: 0,
+    margin: 0,
+  },
+  // Room around the stage so its drawing does not run into the card's edges.
   stage: {
-    position: "relative",
-    overflow: "hidden",
+    padding: space.s16,
     backgroundColor: tokens.surface,
+  },
+  // Fullscreen, the stage takes the room the controls leave and centers the
+  // drawing in it, scrolling when the drawing is taller.
+  stageFullscreen: {
+    display: "flex",
+    flex: "1 1 auto",
+    flexDirection: "column",
+    justifyContent: "safe center",
+    minHeight: 0,
+    overflowY: "auto",
+    padding: { default: space.s32, [narrow]: space.s16 },
+  },
+  canvas: {
+    position: "relative",
+    flex: "0 0 auto",
+    overflow: "hidden",
+  },
+  overlay: {
+    position: "fixed",
+    inset: 0,
+    zIndex: tokens.reviewDebugLayer,
+    boxSizing: "border-box",
+    display: "flex",
+    flexDirection: "column",
+    padding: { default: space.s24, [narrow]: space.s8 },
+    backgroundColor: tokens.bg,
   },
   frame: {
     display: "block",
@@ -743,7 +859,9 @@ const styles = stylex.create({
     height: "100%",
     borderWidth: 0,
     borderStyle: "none",
-    colorScheme: "normal",
+    // The page's own scheme, which is the one the stage is told to use. A
+    // frame whose scheme differs from its page gets an opaque backdrop.
+    colorScheme: "inherit",
     backgroundColor: tokens.transparent,
   },
   // Over the stage but out of the pointer's way; each slot takes it back.
