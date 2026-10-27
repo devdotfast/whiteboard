@@ -43,6 +43,9 @@ it.each(["dev-fast-review", "dev-fast-review-preview"])(
         onPublished: (event) => published.push(event),
         fetch: async (input, init) => {
           const url = new URL(String(input));
+
+          if (url.pathname === "/api/auth/token")
+            return new Response(null, { status: 404 });
           requests.push(`${init?.method} ${url.pathname}`);
 
           uploaded = JSON.parse(String(init?.body));

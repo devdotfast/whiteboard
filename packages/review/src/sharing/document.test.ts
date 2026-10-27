@@ -69,6 +69,8 @@ it("imports a document shared without a GitHub repository as a board of its own"
   app.onError((error, context) => context.json({ error: error.message }, 500));
   mountSharingPublisher(app, local.store, local.data, {
     fetch: async (input, init) => {
+      if (new URL(String(input)).pathname === "/api/auth/token")
+        return new Response(null, { status: 404 });
       expect(new URL(String(input)).pathname).toBe("/api/v2/shares");
       expect(init?.method).toBe("POST");
       body = JSON.parse(String(init?.body));

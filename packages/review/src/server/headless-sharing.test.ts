@@ -45,6 +45,9 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
       const url = new URL(String(input));
 
       if (url.hostname !== "sharing.test") return realFetch(input, init);
+
+      if (url.pathname === "/api/auth/token")
+        return new Response(null, { status: 404 });
       requests.push({
         url: url.href,
         headers: new Headers(init?.headers),

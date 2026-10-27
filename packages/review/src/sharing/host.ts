@@ -86,7 +86,7 @@ export function mountSharingHost(
     // An open review may be shared next; keep its upload off a cold start.
     if (account && Date.now() - warmedAt > 60_000) {
       warmedAt = Date.now();
-      void new ShareClient(account.origin, undefined, options.fetch)
+      void new ShareClient(account.origin, account.token, options.fetch)
         .warm()
         .catch(() => {});
     }
