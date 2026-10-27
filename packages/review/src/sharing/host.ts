@@ -78,8 +78,18 @@ export function mountSharingHost(
     pending: false,
   };
 
+  let warmedAt = 0;
+
   const readAccount = async () => {
     const account = await readStoreAuth();
+
+    // An open review may be shared next; keep its upload off a cold start.
+    if (account && Date.now() - warmedAt > 60_000) {
+      warmedAt = Date.now();
+      void new ShareClient(account.origin, undefined, options.fetch)
+        .warm()
+        .catch(() => {});
+    }
 
     return {
       account: account

@@ -240,7 +240,7 @@ it("uploads on open for a signed-in user, retries after a failure, and copies th
   delete (document as Partial<Document>).execCommand;
 });
 
-it("knows the sign-in state before the popover opens and refreshes it on focus", async () => {
+it("knows the sign-in state before the popover opens and refreshes it on each opening and on focus", async () => {
   const harness = mount({ signedIn: true });
   const { container } = harness;
 
@@ -250,13 +250,15 @@ it("knows the sign-in state before the popover opens and refreshes it on focus",
   await harness.click("Share review");
   expect(publishes(harness)).toHaveLength(1);
   await harness.settle();
+  expect(harness.accountReads()).toBe(2);
   await harness.click("Share review");
   await harness.click("Share review");
-  expect(harness.accountReads()).toBe(1);
+  await harness.settle();
+  expect(harness.accountReads()).toBe(3);
   expect(container.querySelector("input")?.value).toContain("/s/capability");
   await act(async () => window.dispatchEvent(new Event("focus")));
   await harness.settle();
-  expect(harness.accountReads()).toBe(2);
+  expect(harness.accountReads()).toBe(4);
 });
 
 it("falls back to sign-in when the stored login has expired, then uploads after re-login", async () => {
@@ -354,8 +356,9 @@ it("polls only while sign-in is pending and stops when the control unmounts", as
   await harness.click("Sign in to share");
   await wait(10);
   expect(harness.container.textContent).toContain("Waiting for sign-in…");
+  const reads = harness.accountReads();
   await act(async () => dispose?.());
   dispose = undefined;
   await wait(5000);
-  expect(harness.accountReads()).toBe(1);
+  expect(harness.accountReads()).toBe(reads);
 });

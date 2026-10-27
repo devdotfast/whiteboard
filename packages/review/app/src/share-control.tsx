@@ -144,6 +144,9 @@ export function ShareControl({
       setCopyError(undefined);
     }
 
+    // The read warms the host's connection to the share service.
+    if (!open) void accountQuery.refetch();
+
     setOpen(!open);
   };
 

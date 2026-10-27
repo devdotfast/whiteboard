@@ -11,11 +11,25 @@ import {
   StreamLimitError,
   readBoundedStream,
 } from "@review/server/bounded-stream.js";
+import { Agent } from "undici";
 import { z } from "zod";
 
 import { shareRequestBody } from "./export.js";
 
 const MAX_RESPONSE_BYTES = MAX_SHARE_BYTES;
+
+// Uploads reuse the connection `warm` opens, skipping a cold Worker start.
+const pool = new Agent({
+  keepAliveTimeout: 5 * 60_000,
+  keepAliveMaxTimeout: 5 * 60_000,
+});
+
+const pooledFetch: typeof fetch = (input, init) => {
+  // Node's fetch reads `dispatcher`; the DOM type omits it.
+  const pooled = { ...init, dispatcher: pool };
+
+  return fetch(input, pooled);
+};
 
 const linkSchema = z.strictObject({ shareId: z.uuid(), url: z.url() });
 
@@ -62,7 +76,7 @@ export class ShareClient {
   constructor(
     origin: string,
     private readonly token?: string,
-    private readonly send: typeof fetch = fetch,
+    private readonly send: typeof fetch = pooledFetch,
   ) {
     const url = new URL(origin);
 
@@ -119,6 +133,16 @@ export class ShareClient {
     }
 
     return readBoundedBytes(response, maxBytes);
+  }
+
+  /** Opens a connection for the next request to reuse. */
+  async warm() {
+    const response = await this.send(`${this.origin}/api/v2/shares`, {
+      redirect: "error",
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    await response.body?.cancel();
   }
 
   async create(bundle: ShareBundle, requestId: string = randomUUID()) {
