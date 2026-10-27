@@ -1139,6 +1139,48 @@ describe("block components", () => {
     expect(stages.count("ready")).toBe(1);
   });
 
+  it("folds a scene into fewer columns before one, and opens columns to fit a row's link labels", async () => {
+    const scene = (box: string) =>
+      `const ${box} = whiteboard.scene({ columns: 4, container: "#${box}" });` +
+      ["a", "b", "c", "d"]
+        .map(
+          (id, i) =>
+            `${box}.actor({ id: "${box}-${id}", at: [${i + 1}, 1], title: "${id}" });`,
+        )
+        .join("") +
+      `${box}.link("${box}-a", "${box}-b", { label: "init + port to the stage" });` +
+      `${box}.peek("status", { at: [1, 2, 1, 4] });`;
+
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Folds",
+          height: "auto",
+          frames: [{ key: "only", title: "Only" }],
+          code: { status: "head/order.ts#L1" },
+          // Each scene reports its column count and gap through the error line.
+          html:
+            '<div id="narrow" style="width: 760px"></div><div id="wide" style="width: 1400px"></div><script>' +
+            scene("narrow") +
+            scene("wide") +
+            'const report = (id) => { const s = getComputedStyle(document.querySelector(`#${id} .wb-scene`)); return `${id} ${s.gridTemplateColumns.split(" ").length} gap ${parseFloat(s.columnGap) > 48}`; };' +
+            'setTimeout(() => { throw new Error(`${report("narrow")}, ${report("wide")}`); }, 600);' +
+            "</script>",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    expect(await settled(() => alertText(container).includes("narrow"))).toBe(
+      true,
+    );
+    expect(alertText(container)).toContain(
+      "narrow 2 gap true, wide 4 gap true",
+    );
+  });
+
   it("boots the stage again each time it goes fullscreen and back", async () => {
     using stages = tapStages();
 

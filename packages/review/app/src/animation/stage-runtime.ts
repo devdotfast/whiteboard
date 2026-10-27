@@ -532,6 +532,9 @@ body {
 .wb-scene { display: grid; gap: var(--wb-space-28) var(--wb-space-48); padding: var(--wb-space-24); align-items: start; justify-items: stretch; min-width: 0; }
 .wb-scene-compact { grid-template-columns: minmax(0, 1fr) !important; row-gap: var(--wb-space-48); }
 .wb-scene-compact > * { grid-column: 1 / -1 !important; grid-row: auto !important; }
+.wb-scene-fold { grid-template-columns: repeat(var(--wb-fold), minmax(0, 1fr)) !important; }
+.wb-scene-fold > * { grid-column: auto !important; grid-row: auto !important; }
+.wb-scene-fold > [data-wb-wide] { grid-column: 1 / -1 !important; }
 .wb-scene > [data-wb-state="before"], .wb-scene > [data-wb-state="after"],
 .wb-items > [data-wb-state="before"], .wb-items > [data-wb-state="after"],
 .wb-table tr[data-wb-state="before"], .wb-table tr[data-wb-state="after"] { display: none; }
@@ -1807,34 +1810,81 @@ body {
       grid,
     );
 
-    if (options.responsive !== false && columns > 1) {
-      // Preserve declared cells on wider layouts. In a narrow container, use
-      // reading order rather than shrinking cards, tables and labels to fit.
-      const reflow = () => {
-        const style = getComputedStyle(grid);
+    // Labels of links between cards in one row: the columns open up to fit
+    // the widest, so it sits between its cards rather than off its line.
+    const rowLabels = new Set<string>();
 
-        const padding =
-          parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+    const sizeGap = () => {
+      if (!rowLabels.size) return;
+      const probe = document.createElement("span");
+      probe.className = "wb-label";
+      probe.style.cssText =
+        "position: absolute; visibility: hidden; white-space: nowrap";
+      grid.append(probe);
+      let widest = 0;
 
-        const gap = parseFloat(style.columnGap);
-        grid.classList.toggle(
-          "wb-scene-compact",
-          grid.clientWidth < columns * 140 + (columns - 1) * gap + padding,
-        );
-      };
+      for (const label of rowLabels) {
+        probe.textContent = label;
+        widest = Math.max(widest, probe.getBoundingClientRect().width);
+      }
 
-      let layoutFrame: number | undefined;
-      new ResizeObserver(() => {
-        wake();
+      probe.remove();
+      grid.style.columnGap = `${Math.min(160, Math.max(48, Math.ceil(widest) + 16))}px`;
+    };
 
-        if (layoutFrame !== undefined) return;
-        layoutFrame = requestAnimationFrame(() => {
-          layoutFrame = undefined;
-          reflow();
-        });
-      }).observe(grid);
-      reflow();
-    }
+    const responsive = options.responsive !== false && columns > 1;
+
+    // Preserve declared cells on wider layouts. In a narrower container, fold
+    // into fewer columns in reading order, and below that into one, rather
+    // than shrinking cards, tables and labels to fit.
+    const reflow = () => {
+      sizeGap();
+
+      if (!responsive) return;
+      const style = getComputedStyle(grid);
+
+      const padding =
+        parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+
+      const gap = parseFloat(style.columnGap);
+
+      const fits = (count: number) =>
+        grid.clientWidth >= count * 140 + (count - 1) * gap + padding;
+
+      let shown = columns;
+
+      if (!fits(columns)) {
+        shown = 1;
+
+        // An even fold, or two columns: four cards fold to two rows of two,
+        // not three and one.
+        for (let count = columns - 1; count >= 2; count--)
+          if ((columns % count === 0 || count === 2) && fits(count)) {
+            shown = count;
+            break;
+          }
+      }
+
+      grid.classList.toggle("wb-scene-compact", shown === 1);
+      grid.classList.toggle("wb-scene-fold", shown > 1 && shown < columns);
+      grid.style.setProperty("--wb-fold", String(shown));
+    };
+
+    let layoutFrame: number | undefined;
+
+    const scheduleLayout = () => {
+      if (layoutFrame !== undefined) return;
+      layoutFrame = requestAnimationFrame(() => {
+        layoutFrame = undefined;
+        reflow();
+      });
+    };
+
+    new ResizeObserver(() => {
+      wake();
+      scheduleLayout();
+    }).observe(grid);
+    reflow();
 
     const nodes = new Map<string, HTMLElement>();
     const links = new Map<string, ArrowRecord>();
@@ -1886,10 +1936,15 @@ body {
       }
     });
 
+    const rows = new Map<HTMLElement, number>();
+
     const place = (el: HTMLElement, [column, row, rowSpan, colSpan]: Cell) => {
       el.style.gridColumn = colSpan
         ? `${column} / span ${colSpan}`
         : String(column);
+      // Folded into fewer columns, a cell that spans columns takes the row.
+      el.toggleAttribute("data-wb-wide", (colSpan ?? 1) > 1);
+      rows.set(el, row);
       el.style.gridRow = rowSpan ? `${row} / span ${rowSpan}` : String(row);
       el.style.order = String((row - 1) * columns + column);
     };
@@ -1956,6 +2011,11 @@ body {
       const offset = n === 0 ? 0 : (n % 2 ? 1 : -1) * Math.ceil(n / 2) * 9;
       const record = createEdge(a, b, { ...options, offset });
       links.set(`${ak}>${bk}`, record);
+
+      if (options.label && rows.has(a) && rows.get(a) === rows.get(b)) {
+        rowLabels.add(options.label);
+        scheduleLayout();
+      }
 
       return record;
     };

@@ -103,11 +103,11 @@ If no part of the drawing changes between frames, it is not an animation: use a 
 
 A scene appends to the stage body by default. To compose it with your own headings, text or controls, pass a container selector or element: `whiteboard.scene({ columns: 3, container: "#diagram" })`. Badges stay with that container too.
 
-When the container is too narrow for readable cards, the scene stacks its cells in row/column order. Widening restores the declared grid. Tables wrap their content. Hidden cards, store items and table rows take no space, so auto height follows visible content. Use `responsive: false` for an intentional fixed grid with your own responsive or scrolling plan.
+When the container is too narrow for the declared columns, the scene folds into fewer, in row/column order: four columns become two rows of two, and a cell spanning columns takes a whole row. Narrower still, it stacks into one column. Widening restores the declared grid. Tables wrap their content. Hidden cards, store items and table rows take no space, so auto height follows visible content. Use `responsive: false` for an intentional fixed grid with your own responsive or scrolling plan.
 
 The scene keeps three things consistent for you:
 
-- **Spacing.** Cards sit in grid cells with a fixed gap. You choose the cell; the scene sets the gap and the padding. Four cards fit a sufficiently wide row; narrower containers stack them. Past four, prefer a second row.
+- **Spacing.** Cards sit in grid cells. You choose the cell; the scene sets the padding and the gap, widening the gap between columns to fit the longest label on a link within a row. At the default document width, three cards with short link labels fit a row; a fourth folds the row in two until the reader widens the document or goes fullscreen. Past four, prefer a second row.
 - **Edges.** `link` draws one straight line from the center of one card's nearest side to the other's, with one weight and one arrowhead. `dashed: true` means async (a reply, a stream, a background send). A second edge between the same two cards offsets beside the first.
 - **Moving blocks.** `send` is the only way to move a block along an edge. The chip rides the edge's line at one fixed speed, so a longer edge takes longer, and every chip moves at the same pace. It fades out on arrival unless you pass `stay: true`.
 
