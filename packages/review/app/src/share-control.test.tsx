@@ -26,6 +26,7 @@ function mount(options: {
   publishFails?: boolean;
   publishExpired?: boolean;
   holdPublish?: Promise<void>;
+  sender?: string;
 }) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const state = { ...options };
@@ -104,7 +105,12 @@ function mount(options: {
 
   function Fixture({ version }: { version: number }) {
     const value = useMemo(
-      () => ({ client, reviewId: "authoring-review", version }),
+      () => ({
+        client,
+        reviewId: "authoring-review",
+        version,
+        sender: options.sender,
+      }),
       [version],
     );
 
@@ -186,6 +192,21 @@ it("asks a signed-out user to sign in, then uploads the version chosen before lo
   expect(container.textContent).not.toContain("Sign in");
 });
 
+it("names who shared a copy and shares it again like any review", async () => {
+  const harness = mount({ signedIn: true, sender: "ada" });
+
+  await harness.render(2);
+  await harness.click("Share review");
+  await harness.settle();
+  expect(harness.container.textContent).toContain("Shared by ada");
+  expect(publishes(harness).map((post) => post.body)).toEqual([
+    expect.objectContaining({ reviewId: "authoring-review", version: 2 }),
+  ]);
+  expect(harness.container.querySelector("input")?.value).toContain(
+    "/s/capability",
+  );
+});
+
 it("uploads on open for a signed-in user, retries after a failure, and copies the link", async () => {
   const harness = mount({ signedIn: true, publishFails: true });
   const { container } = harness;
@@ -231,11 +252,12 @@ it("knows the sign-in state before the popover opens and refreshes it on focus",
   await harness.settle();
   await harness.click("Share review");
   await harness.click("Share review");
-  expect(harness.accountReads()).toBe(1);
+  await harness.settle();
   expect(container.querySelector("input")?.value).toContain("/s/capability");
+  const reads = harness.accountReads();
   await act(async () => window.dispatchEvent(new Event("focus")));
   await harness.settle();
-  expect(harness.accountReads()).toBe(2);
+  expect(harness.accountReads()).toBe(reads + 1);
 });
 
 it("falls back to sign-in when the stored login has expired, then uploads after re-login", async () => {
@@ -333,8 +355,9 @@ it("polls only while sign-in is pending and stops when the control unmounts", as
   await harness.click("Sign in to share");
   await wait(10);
   expect(harness.container.textContent).toContain("Waiting for sign-in…");
+  const reads = harness.accountReads();
   await act(async () => dispose?.());
   dispose = undefined;
   await wait(5000);
-  expect(harness.accountReads()).toBe(1);
+  expect(harness.accountReads()).toBe(reads);
 });

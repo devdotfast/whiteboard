@@ -29,6 +29,8 @@ const storeAuthSchema = z.object({
   origin: z.string().min(1),
   token: z.string().min(1),
   login: z.string(),
+  email: z.string().optional(),
+  githubLogin: z.string().optional(),
   savedAt: z.string(),
 });
 
@@ -241,14 +243,13 @@ export async function runStoreLogin(input: {
   }
 
   const authedClient = new StoreClient({ origin, token, fetch: input.fetch });
-  let login: string;
+  let user: Awaited<ReturnType<StoreClient["session"]>>["user"];
 
   try {
-    const session = await authedClient.session();
+    ({ user } = await authedClient.session());
 
-    if (expectedUser && session.user.id !== expectedUser)
+    if (expectedUser && user.id !== expectedUser)
       throw new Error("Authorize traces with the same GitHub account.");
-    login = session.user.name;
   } catch (error) {
     return failWithJsonError(
       output,
@@ -259,8 +260,17 @@ export async function runStoreLogin(input: {
     );
   }
 
+  const login = user.name;
+
   await writeStoreAuth(
-    { origin, token, login, savedAt: new Date().toISOString() },
+    {
+      origin,
+      token,
+      login,
+      email: user.email,
+      githubLogin: user.githubLogin ?? undefined,
+      savedAt: new Date().toISOString(),
+    },
     input.env,
   );
   emitJsonEvent(output, { event: "login", status: "ok", login });

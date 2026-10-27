@@ -90,6 +90,7 @@ async function render(hosts: ReviewRemoteHostsSettings) {
     importVsCodeSettings: () => {},
     uninstallApp: () => {},
     remoteHosts: hosts,
+    request: reject,
   };
 
   const container = document.createElement("div");

@@ -11,7 +11,11 @@ import {
   type ReviewOnboardingTargetsResponse,
   ReviewOnboardingTargetsResponseSchema,
 } from "@dev.fast/review-protocol";
-import { askAgentIds } from "@review/ask/thread-state";
+import {
+  type AskOffer,
+  askAgentIds,
+  askOfferSchema,
+} from "@review/ask/thread-state";
 import type { UiTelemetryEventName } from "@review/ui-telemetry-events";
 import { z } from "zod";
 
@@ -109,6 +113,23 @@ export class OnboardingClient {
   async runAgents(): Promise<OnboardingRunAgent[]> {
     return (await this.json(runAgentsSchema, "/reviews-api/onboarding/agents"))
       .agents;
+  }
+
+  /** The models and efforts the agent offers to draw with, from a session in
+   * the project: with the model given, since the efforts depend on it. */
+  async offer(
+    agent: OnboardingRunAgent["id"],
+    path: string,
+    model?: string,
+  ): Promise<AskOffer> {
+    const query = new URLSearchParams({ path, ...(model && { model }) });
+
+    return (
+      await this.json(
+        z.object({ offer: askOfferSchema }),
+        `/reviews-api/onboarding/agents/${agent}/offer?${query}`,
+      )
+    ).offer;
   }
 
   async projects(): Promise<ReviewOnboardingProject[]> {

@@ -5,7 +5,7 @@ import type { ReviewDisposable, ReviewNotification } from "../common/reviewProto
 
 export function showReviewNotification(
   notifications: Pick<INotificationService, "notify">,
-  { kind, text, actions, onClose }: ReviewNotification,
+  { kind, text, actions, closeAfterMs, onClose }: ReviewNotification,
 ): ReviewDisposable {
   const handle = notifications.notify({
     severity: kind === "error" ? Severity.Error : Severity.Info,
@@ -14,6 +14,10 @@ export function showReviewNotification(
       ? { primary: actions.map((action, index) => toAction({ id: `review.notification.${index}`, label: action.label, run: () => action.run() })) }
       : undefined,
   });
+  if (closeAfterMs !== undefined) {
+    const timer = setTimeout(() => handle.close(), closeAfterMs);
+    Event.once(handle.onDidClose)(() => clearTimeout(timer));
+  }
   if (onClose) Event.once(handle.onDidClose)(onClose);
   return { dispose: () => handle.close() };
 }

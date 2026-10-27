@@ -11,7 +11,6 @@ import {
 import { errorMessage, withFileLock } from "@dev.fast/trace-core";
 
 import {
-  type ReviewCheckoutRole,
   reviewManagedCheckoutDir,
   reviewManagedCheckoutRoot,
   reviewManagedCheckoutsDir,
@@ -20,7 +19,7 @@ import { removeReviewPrepareArtifacts } from "./review-prepare.js";
 
 // A review renders the pinned code on the canvas, but file reads against the
 // user's working tree see whatever is checked out there — including edits
-// made after the pin. Materialize any pinned commit (the head, the base) as a
+// made after the pin. Materialize the pinned head as a
 // detached, reusable git worktree beside the other dev-fast state in the
 // shared git dir so review sessions and graph builds read immutable bytes,
 // even when the working copy currently sits at the pinned commit. Returns the
@@ -30,12 +29,8 @@ export async function ensureReviewPinnedCheckout(input: {
   rootPath: string;
   ref: string;
   reviewUuid: string;
-  role?: ReviewCheckoutRole;
 }): Promise<string | null> {
-  const target = await resolveReviewPinnedCheckout({
-    ...input,
-    role: input.role ?? "head",
-  });
+  const target = await resolveReviewPinnedCheckout(input);
 
   if (!target) return null;
 
@@ -64,7 +59,6 @@ async function resolveReviewPinnedCheckout(input: {
   rootPath: string;
   ref: string;
   reviewUuid: string;
-  role: ReviewCheckoutRole;
 }): Promise<{ checkoutPath: string; commit: string } | null> {
   const commit = await resolveReviewPinnedCommit(input.rootPath, input.ref);
 
@@ -74,12 +68,7 @@ async function resolveReviewPinnedCheckout(input: {
   if (!commonDir) return null;
 
   return {
-    checkoutPath: reviewManagedCheckoutDir(
-      commonDir,
-      input.reviewUuid,
-      input.role ?? "head",
-      commit,
-    ),
+    checkoutPath: reviewManagedCheckoutDir(commonDir, input.reviewUuid, commit),
     commit,
   };
 }

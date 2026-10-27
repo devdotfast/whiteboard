@@ -249,7 +249,7 @@ it("gives a remote review's language context with its path on that machine and i
   await expect.poll(() => gateway.hosts()[0]?.state).toBe("online");
 
   const read = async () => {
-    const response = await request(`/${onA}/language-context?side=head`);
+    const response = await request(`/${onA}/language-context`);
     expect(response.status).toBe(200);
     expect(response.headers.get(REVIEW_HOST_HEADER)).toBe("wb-a");
 

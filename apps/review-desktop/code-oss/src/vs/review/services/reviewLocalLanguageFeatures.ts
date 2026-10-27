@@ -133,7 +133,7 @@ export class ReviewLocalLanguageFeatures extends Disposable {
 		const { serverUrl, token } = await this.connection.getConnection();
 		const target = sourceLocation(model.uri);
 		return this.environments.read(JSON.stringify([serverUrl, token]), target.view, target.side, async () => {
-			const params = new URLSearchParams({ side: target.side });
+			const params = new URLSearchParams();
 			for (const [key, value] of Object.entries(reviewSourceQuery(target.view))) {
 				if (value !== undefined) params.set(key, String(value));
 			}

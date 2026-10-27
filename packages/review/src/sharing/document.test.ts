@@ -1,21 +1,19 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
-import { mkdir, mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { createShareSchema } from "@dev.fast/review-share-protocol";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
-import type { commandSchema } from "@review/review-api/store.js";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
-import type { z } from "zod";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
 import { exportShare } from "./export.js";
 import { mountSharingPublisher } from "./host.js";
-import { SharedReviewStore, validateShareBundle } from "./import.js";
+import { importShare, shareKey, validateShareBundle } from "./import.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 
@@ -30,6 +28,7 @@ afterEach(async () => {
 async function fixture() {
   const root = await mkdtemp(path.join(tmpdir(), "document-sharing-"));
   cleanup.push(() => rm(root, { recursive: true, force: true }));
+  vi.stubEnv("DEV_REVIEW_HOME", root);
   const local = openLocalReviewStore(path.join(root, "review.db"));
   cleanup.push(() => local.store.close());
   cleanup.push(() => local.data.close());
@@ -59,21 +58,19 @@ async function fixture() {
   return { root, ...local, reviewId };
 }
 
-it("uploads and opens a document without registering or fetching a repository, including after restart", async () => {
+it("imports a document shared without a GitHub repository as a board of its own", async () => {
   const local = await fixture();
   vi.stubEnv("DEV_REVIEW_SHARE_TOKEN", "fixture");
   vi.stubEnv("DEV_REVIEW_SHARE_ORIGIN", "https://sharing.test");
-  const readRepository = vi.fn<() => Promise<{ cloneUrl: string }>>();
-  const verifyRepository = vi.fn<() => Promise<void>>();
   const shareId = randomUUID();
   let body: unknown;
 
   const app = new Hono();
   app.onError((error, context) => context.json({ error: error.message }, 500));
   mountSharingPublisher(app, local.store, local.data, {
-    readRepository,
-    verifyRepository,
     fetch: async (input, init) => {
+      if (new URL(String(input)).pathname === "/api/auth/token")
+        return new Response(null, { status: 404 });
       expect(new URL(String(input)).pathname).toBe("/api/v2/shares");
       expect(init?.method).toBe("POST");
       body = JSON.parse(String(init?.body));
@@ -93,101 +90,21 @@ it("uploads and opens a document without registering or fetching a repository, i
 
   expect(await response.json()).toMatchObject({ shareId });
   expect(response.status).toBe(200);
-  expect(verifyRepository).not.toHaveBeenCalled();
   const { bundle } = createShareSchema.parse(body);
   expect(bundle.repository).toBeUndefined();
-  const fetchRepository = vi.fn<() => Promise<void>>();
 
-  const shared = new SharedReviewStore(
-    path.join(local.root, "shared"),
-    fetchRepository,
+  const id = await importShare(
+    local,
+    shareKey("https://sharing.test", capability()),
+    bundle,
   );
 
-  const id = await shared.import("https://sharing.test", capability(), bundle);
-  await shared.assertReady(id);
-  expect(shared.get(id).snapshot).toMatchObject({
-    document: local.store.read(local.reviewId).document,
-  });
-  expect(shared.get(id).snapshot.pins).toBeUndefined();
-  expect(shared.get(id).snapshot.target).toBeUndefined();
-  expect(shared.list().map((review) => review.reviewId)).toEqual([id]);
+  const copy = local.store.read(id);
 
-  const api = createReviewApi(
-    local.store,
-    local.data,
-    async () => ({ softwareMapEnabled: false }),
-    shared,
-  );
-
-  expect((await api.request(`/${id}`)).status).toBe(200);
-  expect((await api.request(`/${id}/open`, { method: "POST" })).status).toBe(
-    200,
-  );
-  await expect(stat(shared.repositoryRoot(id))).rejects.toMatchObject({
-    code: "ENOENT",
-  });
-  const restarted = new SharedReviewStore(shared.root, fetchRepository);
-  await restarted.load();
-  await restarted.prepare(id);
-  await restarted.assertReady(id);
-  expect(restarted.list().map((review) => review.reviewId)).toEqual([id]);
-  expect(fetchRepository).not.toHaveBeenCalled();
-  await restarted.removeLocal(id);
-  expect(restarted.list()).toEqual([]);
-});
-
-it("moves an imported board through Trash without losing its content, then permits permanent deletion", async () => {
-  const local = await fixture();
-  const shared = new SharedReviewStore(path.join(local.root, "shared"));
-  const bundle = await exportShare(local);
-  const id = await shared.import("https://sharing.test", capability(), bundle);
-  const api = createReviewApi(local.store, local.data, undefined, shared);
-
-  const post = (operation: z.input<typeof commandSchema>["operation"]) =>
-    api.request("/commands", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ operation }),
-    });
-
-  const document = shared.get(id).snapshot.document;
-  expect((await post({ type: "delete", reviewId: id })).status).toBe(409);
-  expect(
-    (await post({ type: "lifecycle", reviewId: id, state: "trash" })).status,
-  ).toBe(200);
-  const timestamp = shared.get(id).snapshot.trashedAt;
-  expect(timestamp).toBeTruthy();
-  expect(
-    (await post({ type: "lifecycle", reviewId: id, state: "trash" })).status,
-  ).toBe(200);
-  expect(shared.get(id).snapshot.trashedAt).toBe(timestamp);
-  expect(
-    (await post({ type: "attention", reviewId: id, action: "view" })).status,
-  ).toBe(409);
-  const opening = await api.request(`/${id}/open`, { method: "POST" });
-  expect(opening.status).toBe(409);
-  expect(await opening.json()).toMatchObject({
-    error: expect.stringContaining("session_lifecycle"),
-  });
-  expect(shared.list()[0].viewedAt).toBeNull();
-  expect(shared.get(id).snapshot.trashedAt).toBe(timestamp);
-  const restarted = new SharedReviewStore(shared.root);
-  await restarted.load();
-  expect(restarted.get(id).snapshot.trashedAt).toBe(timestamp);
-  expect(restarted.list()[0].viewedAt).toBeNull();
-  expect(
-    (await post({ type: "lifecycle", reviewId: id, state: "active" })).status,
-  ).toBe(200);
-  expect(shared.get(id).snapshot.trashedAt).toBeNull();
-  expect(shared.get(id).snapshot.document).toEqual(document);
-  expect(
-    (await post({ type: "attention", reviewId: id, action: "view" })).status,
-  ).toBe(200);
-  expect(
-    (await post({ type: "lifecycle", reviewId: id, state: "trash" })).status,
-  ).toBe(200);
-  expect((await post({ type: "delete", reviewId: id })).status).toBe(200);
-  expect(shared.list()).toEqual([]);
+  expect(copy.target).toBeUndefined();
+  expect(copy.document).toMatchObject([
+    { type: "markdown", markdown: "# A plan\nJust a document." },
+  ]);
 });
 
 it("retains trace resources on a document without source pins and leaves images unshared", async () => {
@@ -237,19 +154,33 @@ it("retains trace resources on a document without source pins and leaves images 
     store: resources.store,
     data: resources.data,
     reviewId,
+    repository: { cloneUrl: "https://github.com/acme/app.git" },
   });
 
   expect(Object.keys(bundle.maps)).toEqual([]);
-  const shared = new SharedReviewStore(path.join(local.root, "shared"));
-  const id = await shared.import("https://sharing.test", capability(), bundle);
-  const api = createReviewApi(local.store, local.data, undefined, shared);
+  expect(bundle.images).toEqual({});
 
-  expect((await api.request(`/${id}/resources/${assetId}`)).status).toBe(404);
-  const response = await api.request(`/${id}/resources/${traceId}`);
-  expect(response.status).toBe(200);
-  expect(Buffer.from(await response.arrayBuffer())).toEqual(
-    Buffer.from(JSON.stringify(bundle.traces[traceId!])),
+  const id = await importShare(
+    { ...local, cloneRepository: initRepository },
+    shareKey("https://sharing.test", capability()),
+    bundle,
   );
+
+  const api = createReviewApi(local.store, local.data);
+  const copy = local.store.read(id).document;
+  const quote = copy.find((block) => block.type === "trace_quote");
+
+  expect(copy.find((block) => block.type === "image")).toMatchObject({
+    assetId,
+  });
+  expect((await api.request(`/${id}/resources/${assetId}`)).status).toBe(404);
+
+  const response = await api.request(
+    `/${id}/resources/${quote?.type === "trace_quote" && quote.traceId}`,
+  );
+
+  expect(response.status).toBe(200);
+  expect((await response.json()).events).toHaveLength(2);
 });
 
 it("rejects source-dependent content disguised as a document-only share", async () => {
@@ -290,7 +221,26 @@ it("rejects source-dependent content disguised as a document-only share", async 
   }
 });
 
-async function sharedPlan(cloneUrl?: string) {
+/** Stands in for a clone: an empty repository. */
+async function initRepository(root: string) {
+  await mkdir(root, { recursive: true });
+  execFileSync("git", ["init", "-q", root]);
+  execFileSync("git", [
+    "-C",
+    root,
+    "-c",
+    "user.name=Fixture",
+    "-c",
+    "user.email=fixture@example.invalid",
+    "commit",
+    "-q",
+    "--allow-empty",
+    "-m",
+    "Empty",
+  ]);
+}
+
+async function sharedPlan(cloneUrl = "https://github.com/acme/app.git") {
   const local = await fixture();
   const checkout = path.join(local.root, "app");
   execFileSync("git", ["init", "-q", checkout]);
@@ -327,38 +277,35 @@ async function sharedPlan(cloneUrl?: string) {
     store: local.store,
     data: local.data,
     reviewId,
-    ...(cloneUrl && { repository: { cloneUrl } }),
+    repository: { cloneUrl },
   });
 
-  const cloneRepository = vi.fn<(root: string) => Promise<void>>(
-    async (root) => {
-      await mkdir(root, { recursive: true });
-      execFileSync("git", ["init", "-q", root]);
-    },
+  const cloneRepository = vi.fn<typeof initRepository>(initRepository);
+
+  const id = await importShare(
+    { ...local, cloneRepository },
+    shareKey("https://sharing.test", capability()),
+    bundle,
   );
 
-  const shared = new SharedReviewStore(
-    path.join(local.root, "shared"),
-    undefined,
-    cloneRepository,
-  );
-
-  shared.connect(local.store, local.data);
-  const id = await shared.import("https://sharing.test", capability(), bundle);
-
-  return { local, shared, id, repositoryId, cloneRepository };
+  return { local, id, repositoryId, cloneRepository };
 }
 
 it("files a shared plan without pins on the receiver's checkout of its repository", async () => {
-  const { local, shared, id, repositoryId, cloneRepository } = await sharedPlan(
-    "https://github.com/acme/app.git",
-  );
+  const { local, id, repositoryId, cloneRepository } = await sharedPlan();
 
-  const { snapshot } = shared.get(id);
-
-  expect(snapshot.target).toEqual({ kind: "project", repositoryId });
+  expect(local.store.read(id).target).toEqual({
+    kind: "project",
+    repositoryId,
+  });
   expect(cloneRepository).not.toHaveBeenCalled();
-  expect(shared.list()[0]?.project).toEqual(
-    local.store.checkoutProject(repositoryId),
+});
+
+it("keeps a shared plan the receiver has no checkout of as a board of its own", async () => {
+  const { local, id, cloneRepository } = await sharedPlan(
+    "https://github.com/acme/other.git",
   );
+
+  expect(local.store.read(id).target).toBeUndefined();
+  expect(cloneRepository).not.toHaveBeenCalled();
 });

@@ -85,15 +85,10 @@ const THREAD_PROJECT_SQL =
 const THREAD_COLUMNS = `ask_conversations.*, ${THREAD_PROJECT_SQL} AS project_id`;
 
 /** Saved Ask conversations by project, each anchored on the board it started
- * on. No foreign key on the anchor: shared reviews are not in `reviews`.
- * So deleting a board removes its threads by hand (removeReview). */
+ * on. Deleting a board removes its threads by hand (removeReview). */
 export class AskHistory {
   private readonly listeners = new Set<() => void>();
 
-  private externalWriteGuard?: (reviewId: string) => void;
-  setExternalWriteGuard(guard: (reviewId: string) => void) {
-    this.externalWriteGuard = guard;
-  }
   constructor(
     private readonly db: DatabaseSync,
     /** The store's rule for writing about a board: one in Trash is
@@ -147,18 +142,13 @@ export class AskHistory {
     for (const listener of this.listeners) listener();
   }
 
-  private assertWritable(reviewId: string) {
-    if (reviewId.startsWith("shared-")) this.externalWriteGuard?.(reviewId);
-    else this.writable(reviewId);
-  }
-
   private assertThreadWritable(id: string) {
     const record = this.get(id);
 
-    if (record) this.assertWritable(record.anchor.board);
+    if (record) this.writable(record.anchor.board);
   }
   save(record: AskRecord) {
-    this.assertWritable(record.anchor.board);
+    this.writable(record.anchor.board);
     this.db
       .prepare(
         // Its columns, not the row: when it was last seen, and what the

@@ -107,6 +107,22 @@ describe("default timeout", () => {
     expect(jj).toBe(read);
     expect(fetch).toBeGreaterThan(read);
   });
+
+  it("gives a worktree checkout more than a quick query's time", () => {
+    const quick = defaultVcsTimeout("git", ["-C", "/repo", "status"]);
+
+    const add = defaultVcsTimeout("git", [
+      "-C",
+      "/repo",
+      "worktree",
+      "add",
+      "--detach",
+      "/checkout",
+      "HEAD",
+    ]);
+
+    expect(add).toBeGreaterThan(quick);
+  });
 });
 
 describe("the subcommand decides", () => {

@@ -810,7 +810,7 @@ it("gives a worktree file its local path and opens a source window", async () =>
 
     const remoteContext = async (reviewId: string) => {
       const response = await fetch(
-        `${server.discovery.url}/reviews-api/${reviewId}/language-context?side=head`,
+        `${server.discovery.url}/reviews-api/${reviewId}/language-context`,
         {
           headers: {
             "x-review-token": server.discovery.token,
@@ -1185,9 +1185,7 @@ it("frees the checkouts a structural diff made when the review is trashed or del
   for (const reviewId of [trashed, deleted]) {
     await structuralDiff(server.discovery, reviewId);
     expect(
-      existsSync(
-        reviewManagedCheckoutDir(commonDir, reviewId, "head", repo.head),
-      ),
+      existsSync(reviewManagedCheckoutDir(commonDir, reviewId, repo.head)),
     ).toBe(true);
   }
 
@@ -1228,7 +1226,7 @@ it("leaves a review's checkouts to a live lease owner and takes over a dead owne
   await first.stop();
 
   const checkout = (id: string) =>
-    reviewManagedCheckoutDir(commonDir, id, "head", repo.head);
+    reviewManagedCheckoutDir(commonDir, id, repo.head);
 
   expect(existsSync(checkout(reviewId))).toBe(true);
 

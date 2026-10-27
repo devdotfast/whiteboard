@@ -24,7 +24,6 @@ import {
 import type { LocalReviewData } from "@review/review-api/local-data.js";
 import type { ReviewStore } from "@review/review-api/store.js";
 import { mountSharingPublisher } from "@review/sharing/host.js";
-import type { SharedReviewStore } from "@review/sharing/import.js";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -126,8 +125,9 @@ export interface WhiteboardCoreInput {
   profile: {
     store: ReviewStore;
     data: LocalReviewData;
-    shared?: SharedReviewStore;
   };
+  /** Desktop's: share sign-in and imports. */
+  sharing?: boolean;
   relay: ReviewDesktopVerbRelay;
   token: string;
   instanceId: string;
@@ -145,7 +145,7 @@ export interface WhiteboardCoreInput {
 }
 
 export function createWhiteboardCore(input: WhiteboardCoreInput) {
-  const { store, data, shared } = input.profile;
+  const { store, data } = input.profile;
 
   const app = createReviewServerApp({
     token: input.token,
@@ -172,10 +172,8 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
     );
 
   const closeDeletedThreads = () =>
-    askThreads?.closeDeletedReviews((id) =>
-      id.startsWith("shared-")
-        ? !shared?.has(id) || Boolean(shared.get(id).snapshot.trashedAt)
-        : !store.has(id) || Boolean(store.read(id).trashedAt),
+    askThreads?.closeDeletedReviews(
+      (id) => !store.has(id) || Boolean(store.read(id).trashedAt),
     );
 
   const stopLocal =
@@ -184,13 +182,11 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
       if (result.deleted || result.lifecycle) closeDeletedThreads();
     });
 
-  const stopShared = askThreads && shared?.subscribe(closeDeletedThreads);
-
   const api = createReviewApi(
     store,
     data,
     callbacks.open,
-    shared,
+    input.sharing,
     callbacks.capabilities,
     () => traceMachineEnabled(),
     input.status,
@@ -202,15 +198,14 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
     input.animations,
   );
 
-  // A shared store mounts the publisher with the rest of sharing.
-  if (!shared) mountSharingPublisher(api, store, data);
+  // Desktop's sharing host mounts the publisher with the rest of sharing.
+  if (!input.sharing) mountSharingPublisher(api, store, data);
 
   return {
     app,
     api,
     close: () => {
       stopLocal?.();
-      stopShared?.();
       closeDeletedThreads();
       askThreads?.closeAll();
     },

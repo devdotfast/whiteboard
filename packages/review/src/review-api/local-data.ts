@@ -201,43 +201,28 @@ export class LocalReviewData {
     if (snapshot.target?.kind !== "commits" || !snapshot.pins) return [];
     const pins = snapshot.pins;
 
-    return this.workspaces.list(snapshot.reviewId).flatMap((environment) => {
-      const side =
-        environment.commit === pins.head
-          ? "head"
-          : environment.commit === pins.base
-            ? "base"
-            : undefined;
-
-      return side && environment.issue
-        ? [{ side, message: environment.issue }]
-        : [];
-    });
+    return this.workspaces
+      .list(snapshot.reviewId)
+      .flatMap((environment) =>
+        environment.commit === pins.head && environment.issue
+          ? [{ message: environment.issue }]
+          : [],
+      );
   }
 
-  async environmentIssues(snapshot: Snapshot, retryFailed = false) {
-    const issues: { side: "base" | "head"; message: string }[] = [];
+  async environmentIssues(
+    snapshot: Snapshot,
+    retryFailed = false,
+  ): Promise<{ message: string }[]> {
+    if (!snapshot.pins) return [];
 
-    if (!snapshot.pins) return issues;
+    const context = await this.languageEnvironment(
+      snapshot,
+      undefined,
+      retryFailed,
+    );
 
-    const sides: ("base" | "head")[] =
-      snapshot.target?.kind === "commits" &&
-      snapshot.pins.base !== snapshot.pins.head
-        ? ["head", "base"]
-        : ["head"];
-
-    for (const side of sides) {
-      const context = await this.languageEnvironment(
-        snapshot,
-        side,
-        undefined,
-        retryFailed,
-      );
-
-      if (context.issue) issues.push({ side, message: context.issue });
-    }
-
-    return issues;
+    return context.issue ? [{ message: context.issue }] : [];
   }
 
   private readonly untrackedCounts = new Map<
@@ -288,7 +273,6 @@ export class LocalReviewData {
   /** Source bytes and the language workspace have independent lifetimes. */
   async languageEnvironment(
     snapshot: Snapshot,
-    side: "base" | "head",
     commit?: string,
     retryFailed = false,
     anchor?: SourcePins,
@@ -301,7 +285,6 @@ export class LocalReviewData {
       const environment = await this.workspaces.source(
         snapshot.reviewId,
         pins,
-        side,
         retryFailed,
       );
 
@@ -383,8 +366,7 @@ export class LocalReviewData {
 
     const rootPath = pins.worktreeRevision
       ? await realpath(this.store.repositoryPath(pins.repositoryId))
-      : (await this.workspaces.source(snapshot.reviewId, pins, "head"))
-          .rootPath;
+      : (await this.workspaces.source(snapshot.reviewId, pins)).rootPath;
 
     if (!rootPath)
       throw new ReviewInputError(
@@ -399,7 +381,6 @@ export class LocalReviewData {
   async navigatorWorkspace(
     snapshot: Snapshot,
     source: {
-      side?: "base" | "head";
       file?: string;
       empty?: boolean;
       commit?: string;
@@ -413,25 +394,15 @@ export class LocalReviewData {
     );
 
     const repository = this.store.repositoryPath(pins.repositoryId);
-    const side = source.side ?? "head";
-
-    const live =
-      !!pins.worktreeRevision &&
-      (side === "head" || (source.empty && pins[side] === EMPTY_SOURCE));
-
-    const checkoutSide =
-      pins[side] === EMPTY_SOURCE && source.empty ? "head" : side;
-
-    const ref = pins[checkoutSide];
+    const live = !!pins.worktreeRevision;
 
     if (source.file) checkRelativePath(source.file);
 
-    // Browse the Review's own base/head checkout. The window opens while
+    // Browse the Review's own head checkout. The window opens while
     // preparation may still be installing dependencies beside the source.
     const rootPath = live
       ? await realpath(repository)
-      : (await this.workspaces.source(snapshot.reviewId, pins, checkoutSide))
-          .rootPath;
+      : (await this.workspaces.source(snapshot.reviewId, pins)).rootPath;
 
     const context = await resolveRepoContext(repository);
 
@@ -468,7 +439,7 @@ export class LocalReviewData {
       reviewManagedCheckoutRoot(context.commonDir, snapshot.reviewId),
       "navigator",
       "workspaces",
-      live ? "worktree" : ref,
+      live ? "worktree" : pins.head,
     );
 
     // VS Code labels a saved workspace by its file name and identifies its
@@ -495,7 +466,7 @@ export class LocalReviewData {
           ),
         ));
 
-      const title = `${boardTitle(snapshot.title)} — ${live ? "Live source" : side === "base" ? "Base source" : "Source"} — Whiteboard`;
+      const title = `${boardTitle(snapshot.title)} — ${live ? "Live source" : "Source"} — Whiteboard`;
 
       const workspace = previous ?? {
         folders: [],

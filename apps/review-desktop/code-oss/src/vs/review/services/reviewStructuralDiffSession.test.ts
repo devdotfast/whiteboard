@@ -339,3 +339,45 @@ test('a refresh shows its files before diffr\'s deferred updates, which keep the
 		assert.equal(session.isRegionCollapsed('a.ts', 2), false);
 	} finally { release(); session.dispose(); }
 });
+
+test('fold controls share their view\'s session listener', async () => {
+	const { createStructuralDiffEditors } = await import('./reviewStructuralDiff.js');
+	const { URI } = await import('../../base/common/uri.js');
+	const { DisposableStore } = await import('../../base/common/lifecycle.js');
+	const { Emitter } = await import('../../base/common/event.js');
+	const { observableValue } = await import('../../base/common/observable.js');
+	const { IModelService } = await import('../../editor/common/services/model.js');
+	const { ITextModelService } = await import('../../editor/common/services/resolverService.js');
+	const { ILanguageService } = await import('../../editor/common/languages/language.js');
+	const { ICodeEditorService } = await import('../../editor/browser/services/codeEditorService.js');
+	const session = new StructuralDiffSession({ async *streamComparison() { } });
+	const onDidChange = session.onDidChange;
+	let listeners = 0;
+	Object.defineProperty(session, 'onDidChange', { value: (...args: Parameters<typeof onDidChange>) => {
+		listeners++;
+		const subscription = onDidChange(...args);
+		return { dispose() { listeners--; subscription.dispose(); } };
+	} });
+	const added = new Emitter<unknown>();
+	const editors = { onDiffEditorAdd: added.event, onDiffEditorRemove: () => ({ dispose() {} }), listDiffEditors: () => [] };
+	const services = new Map<unknown, unknown>([[IModelService, {}], [ITextModelService, { registerTextModelContentProvider: () => ({ dispose() {} }) }], [ILanguageService, {}], [ICodeEditorService, editors]]);
+	const instantiation = { invokeFunction: (fn: (accessor: { get(id: unknown): unknown }) => unknown) => fn({ get: id => services.get(id) }), createChild() { return this; }, dispose() {} };
+	const lifetime = new DisposableStore();
+	try {
+		const original = URI.parse('review-api-source://review/a.ts?side=base');
+		const modified = URI.parse('review-api-source://review/a.ts?side=head');
+		const { entries } = createStructuralDiffEditors(instantiation as never, [{ file: { path: 'a.ts', status: 'modified' }, original, modified, goToFileResource: modified }] as never, lifetime, session);
+		const before = listeners;
+		const codeEditor = (uri: unknown) => new Proxy({}, { get: (_, key: string) =>
+			key === 'getModel' ? () => ({ uri }) :
+			key === 'getContainerDomNode' ? () => ({ ownerDocument: { createElement: () => ({}) } }) :
+			key === 'createDecorationsCollection' ? () => ({ clear() {}, set() {} }) :
+			key.startsWith('on') ? () => ({ dispose() {} }) : () => undefined });
+		for (let i = 0; i < 100; i++) {
+			const lhs = codeEditor(entries[0].original), rhs = codeEditor(entries[0].modified);
+			added.fire({ unchangedRegions: observableValue('regions', []), getModel: () => ({ original: { uri: entries[0].original }, modified: { uri: entries[0].modified } }), getOriginalEditor: () => lhs, getModifiedEditor: () => rhs, onDidChangeModel: () => ({ dispose() {} }) });
+		}
+		assert.equal(listeners, before);
+	} finally { lifetime.dispose(); session.dispose(); }
+	assert.equal(listeners, 0);
+});

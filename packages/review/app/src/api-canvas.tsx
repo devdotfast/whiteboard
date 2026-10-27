@@ -350,12 +350,9 @@ export function ApiCanvas({
     [content.bridge, nativeSources, findHost],
   );
 
-  // Only the latest version of a review this machine owns takes edits.
+  // Only the latest version takes edits.
   const editable =
-    version === undefined &&
-    data !== undefined &&
-    !data.snapshot.shared &&
-    !data.snapshot.trashedAt;
+    version === undefined && data !== undefined && !data.snapshot.trashedAt;
 
   const saveMarkdown = useMemo(
     () =>

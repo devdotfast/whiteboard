@@ -36,8 +36,6 @@ export interface BoardLinkTarget {
   missing: boolean;
   /** Set when this host recorded the board's deletion. */
   deletedAt?: string;
-  /** On a shared board: the board is on the sender's machine, not this one. */
-  elsewhere?: boolean;
   icon?: BoardIconKind;
   pullRequestNumber?: number;
   pullRequestUrl?: string;
@@ -53,8 +51,6 @@ export function missingLabel(
   target: BoardLinkTarget | undefined,
   blockId: string | undefined,
 ): string {
-  if (target?.elsewhere) return "Not on this machine";
-
   if (target?.deletedAt) {
     const day = new Intl.DateTimeFormat(undefined, {
       month: "short",

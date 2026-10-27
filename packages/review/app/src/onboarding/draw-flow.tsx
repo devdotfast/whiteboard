@@ -71,6 +71,7 @@ export function DrawFlow({
           ? {
               kind: "success",
               text: "Prompt copied. Paste it into your agent.",
+              closeAfterMs: 5_000,
             }
           : {
               kind: "error",

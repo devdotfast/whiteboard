@@ -92,14 +92,6 @@ describe("Home model", () => {
 
     expect(pills.map((pill) => pill.facet)).toEqual(["pullRequest"]);
   });
-  it("shows no worktree for a shared import", () => {
-    expect(
-      reviewMetadataPills(
-        { ...board, origin: {}, shared: {} },
-        defaultHomeFilters,
-      ),
-    ).toEqual([]);
-  });
   it("groups remote worktrees together without conflating same-name local repositories", () => {
     const imported = {
       ...board,

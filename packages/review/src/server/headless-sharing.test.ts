@@ -29,7 +29,6 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
   vi.spyOn(repository, "readShareRepository").mockResolvedValue(
     fixture.repository,
   );
-  vi.spyOn(repository, "verifyShareRepository").mockResolvedValue();
 
   vi.stubEnv("DEV_REVIEW_SHARE_TOKEN", "ci-publish-token");
   vi.stubEnv("DEV_REVIEW_SHARE_ORIGIN", "https://sharing.test");
@@ -46,6 +45,9 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
       const url = new URL(String(input));
 
       if (url.hostname !== "sharing.test") return realFetch(input, init);
+
+      if (url.pathname === "/api/auth/token")
+        return new Response(null, { status: 404 });
       requests.push({
         url: url.href,
         headers: new Headers(init?.headers),

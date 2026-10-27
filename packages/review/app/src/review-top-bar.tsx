@@ -243,7 +243,7 @@ export function ReviewTopBar(): ReactElement {
                 : undefined
             }
           />
-        ) : settled && !data.snapshot.shared ? (
+        ) : settled ? (
           <>
             <div aria-hidden="true" {...stylex.props(dividerStyles.vertical)} />
             <ReviewCornerAction />

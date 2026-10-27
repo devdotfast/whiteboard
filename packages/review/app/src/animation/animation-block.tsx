@@ -46,7 +46,8 @@ import {
 } from "./stage-protocol";
 import { stageRuntime } from "./stage-runtime";
 
-const stageUrl = new URL("./stage.html", import.meta.url).href;
+// Read on demand: a Worker may lack import.meta.url.
+const stageUrl = () => new URL("./stage.html", import.meta.url).href;
 
 const DEFAULT_DURATION = 3000;
 
@@ -378,13 +379,27 @@ export function AnimationBlock({
     }
   };
 
-  // Hand the stage its runtime and a private port once its page loads.
+  const bootedRef = useRef<HTMLIFrameElement | null>(null);
+
+  // Hand the stage its runtime and a private port when its page first loads.
+  // A later load in the same frame is a page the stage navigated to, which
+  // gets neither. A new frame, for an edit or for going fullscreen, boots.
   const boot = useCallback(() => {
     const target = frameRef.current?.contentWindow;
     const figure = figureRef.current;
 
     if (!target || !figure) return;
     portRef.current?.close();
+
+    if (bootedRef.current === frameRef.current) {
+      portRef.current = null;
+      setSlots([]);
+      setError("The animation left its stage.");
+
+      return;
+    }
+
+    bootedRef.current = frameRef.current;
     const channel = new MessageChannel();
     portRef.current = channel.port1;
     channel.port1.onmessage = (event: MessageEvent) => {
@@ -536,7 +551,7 @@ export function AnimationBlock({
           <iframe
             key={stageKey}
             ref={frameRef}
-            src={stageUrl}
+            src={stageUrl()}
             title={node.title}
             sandbox="allow-scripts"
             onLoad={boot}

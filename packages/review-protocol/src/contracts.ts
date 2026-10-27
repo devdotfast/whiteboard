@@ -370,6 +370,7 @@ export interface ReviewNotification {
   kind: "success" | "error";
   text: string;
   actions?: readonly { label: string; run(): void }[];
+  closeAfterMs?: number;
   onClose?(): void;
 }
 
@@ -905,6 +906,8 @@ export interface ReviewCanvasSettingsContent {
   // install status endpoint is unavailable.
   install?: ReviewCanvasInstallContent;
   remoteHosts: ReviewRemoteHostsSettings;
+  /** `path` is `/reviews-api/…`; the host adds its origin and token. */
+  request(path: string, init?: RequestInit): Promise<Response>;
 }
 
 /** What a review or Home can do about the host a review lives on. */
@@ -1721,6 +1724,13 @@ export const ReviewOnboardingRunRequestSchema = z.strictObject({
   target: ReviewOnboardingTargetSchema,
   agent: requiredString,
   prompt: z.string().trim().min(1).max(8000),
+  /** The model and effort to draw with, where the agent offers them. */
+  picks: z
+    .strictObject({
+      model: z.string().min(1).max(200).optional(),
+      effort: z.string().min(1).max(200).optional(),
+    })
+    .optional(),
 });
 
 export const ReviewDiffFileSchema = z.strictObject({
@@ -1908,10 +1918,7 @@ const revealArgsSchema = z
 
 export const REVIEW_DISCORD_URL = "https://discord.gg/wYvd2cpMQg";
 
-const apiReviewIdSchema = z.union([
-  z.uuid(),
-  z.string().regex(/^shared-[a-f0-9]{64}$/),
-]);
+const apiReviewIdSchema = z.uuid();
 
 export const ReviewVerbRequestSchema = z.discriminatedUnion("name", [
   z.strictObject({

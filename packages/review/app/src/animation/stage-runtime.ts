@@ -305,6 +305,7 @@ export function stageRuntime(port: MessagePort): void {
   let init: StageInit | undefined;
   let current = -1;
   let showing = 0;
+  let showsInProgress = 0;
   let instantMode = false;
   let activeSequence: string[] | undefined;
   const handlers = new Map<string, Set<FrameHandler>>();
@@ -313,6 +314,9 @@ export function stageRuntime(port: MessagePort): void {
   let nextSlot = 0;
   let nextSceneId = 0;
   let nextArrowClipId = 0;
+
+  // Restarts the measure loop next frame; set where the loop is defined.
+  let wake = () => {};
 
   // Scene parts set a value per frame; these run on every frame change so a
   // jump lands on the right one.
@@ -1514,6 +1518,31 @@ body {
     return record;
   };
 
+  // whiteboard.animate holds end states with fill. A frame change commits the
+  // finished ones to style and cancels them, so they do not pile up.
+  const held = new Set<Animation>();
+
+  const releaseFinished = () => {
+    for (const animation of held) {
+      if (animation.playState === "running" || animation.playState === "paused")
+        continue;
+
+      try {
+        if (
+          animation.playState === "finished" &&
+          animation.effect instanceof KeyframeEffect &&
+          animation.effect.target?.isConnected
+        )
+          animation.commitStyles();
+        animation.cancel();
+        held.delete(animation);
+      } catch {
+        // commitStyles throws for an element that is not rendered; keep its
+        // fill until a later frame change.
+      }
+    }
+  };
+
   const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
   const prefersReducedMotion = () => motionPreference.matches;
 
@@ -1541,10 +1570,12 @@ body {
         : undefined;
 
     const token = ++showing;
+    wake();
     instantMode = instant || prefersReducedMotion();
 
     if (instantMode) root.setAttribute("data-wb-instant", "");
 
+    releaseFinished();
     current = index;
     root.dataset.frame = frame.key;
     root.dataset.frameIndex = String(frame.index);
@@ -1585,22 +1616,29 @@ body {
       ),
     );
 
-    await nextFrame();
+    showsInProgress++;
 
-    if (instantMode) {
-      for (const animation of document.getAnimations())
-        if (finite(animation)) animation.finish();
-
+    try {
       await nextFrame();
-      root.removeAttribute("data-wb-instant");
-    } else {
-      waits.push(
-        ...document
-          .getAnimations()
-          .filter(finite)
-          .map((animation) => animation.finished),
-      );
-      await Promise.allSettled(waits);
+
+      if (instantMode) {
+        for (const animation of document.getAnimations())
+          if (finite(animation)) animation.finish();
+
+        await nextFrame();
+        root.removeAttribute("data-wb-instant");
+      } else {
+        waits.push(
+          ...document
+            .getAnimations()
+            .filter(finite)
+            .map((animation) => animation.finished),
+        );
+        await Promise.allSettled(waits);
+      }
+    } finally {
+      showsInProgress--;
+      wake();
     }
 
     if (token === showing) {
@@ -1787,6 +1825,8 @@ body {
 
       let layoutFrame: number | undefined;
       new ResizeObserver(() => {
+        wake();
+
         if (layoutFrame !== undefined) return;
         layoutFrame = requestAnimationFrame(() => {
           layoutFrame = undefined;
@@ -2091,6 +2131,8 @@ body {
 
       if ((instantMode || prefersReducedMotion()) && finite(animation))
         animation.finish();
+      held.add(animation);
+      wake();
 
       return animation;
     },
@@ -2117,6 +2159,7 @@ body {
       if (built) buildTimeline();
 
       if (current >= 0) applyStates();
+      wake();
 
       post({ type: "sequence", keys: sequence });
     },
@@ -2216,18 +2259,46 @@ body {
   };
 
   // The host draws over each slot, so it needs where each one is now. Read
-  // every frame and send only changes; rAF stops while the stage is hidden.
+  // each frame while something can move and send only changes; stop a few
+  // quiet frames later, so a settling frame is still sent.
   let lastLayout = "";
   let lastHeight = -1;
+  let measuring = false;
+  let looping = false;
+  let quietFrames = 0;
+  let slotLimitReported = false;
+
+  const clamp = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, Math.round(value)));
+
+  const moving = () =>
+    showsInProgress > 0 ||
+    (timeline !== undefined && !timeline.paused) ||
+    document
+      .getAnimations()
+      .some(
+        (animation) => animation.pending || animation.playState === "running",
+      );
 
   const measure = () => {
+    let changed = false;
     clipGeometryCache = new Map();
     arrows.forEach(route);
     placeArrowLabels();
     travels.forEach(placeTravel);
     const slots: SlotLayout[] = [];
 
-    document.querySelectorAll<HTMLElement>("[data-wb-slot]").forEach((el) => {
+    const placeholders = [
+      ...document.querySelectorAll<HTMLElement>("[data-wb-slot]"),
+    ];
+
+    // STAGE_MAX_SLOTS in stage-protocol.ts.
+    if (placeholders.length > 200 && !slotLimitReported) {
+      slotLimitReported = true;
+      fail("Animations may use at most 200 code or block slots.");
+    }
+
+    placeholders.slice(0, 200).forEach((el) => {
       const rect = el.getBoundingClientRect();
       let opacity = 1;
 
@@ -2242,11 +2313,13 @@ body {
         slot: el.dataset.wbSlot!,
         kind: el.dataset.wbCode !== undefined ? "code" : "block",
         ref: el.dataset.wbCode ?? el.dataset.wbBlock!,
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-        opacity: Math.round(opacity * 1000) / 1000,
+        // Whole pixels, within SLOT_MAX_OFFSET and SLOT_MAX_SIZE in
+        // stage-protocol.ts.
+        x: clamp(rect.x, -100_000, 100_000),
+        y: clamp(rect.y, -100_000, 100_000),
+        width: clamp(rect.width, 0, 20_000),
+        height: clamp(rect.height, 0, 20_000),
+        opacity: Math.round(opacity * 100) / 100,
         visible:
           rect.width > 0 &&
           opacity > 0.001 &&
@@ -2257,6 +2330,7 @@ body {
     const layout = JSON.stringify(slots);
 
     if (layout !== lastLayout) {
+      changed = true;
       lastLayout = layout;
       post({ type: "slots", slots });
     }
@@ -2290,17 +2364,55 @@ body {
         bottom = Math.max(bottom, visibleBottom);
       }
 
-      const height = Math.max(120, Math.ceil(bottom));
+      // STAGE_MAX_HEIGHT in stage-protocol.ts.
+      const height = Math.min(4000, Math.max(120, Math.ceil(bottom)));
 
       if (height !== lastHeight) {
+        changed = true;
         lastHeight = height;
         post({ type: "size", height });
       }
     }
 
     clipGeometryCache = undefined;
+    // Measuring routes arrows and places tokens; that is not a change.
+    watcher.takeRecords();
+    quietFrames = changed || moving() ? 0 : quietFrames + 1;
+
+    if (quietFrames < 3) requestAnimationFrame(measure);
+    else looping = false;
+  };
+
+  wake = () => {
+    quietFrames = 0;
+
+    if (!measuring || looping) return;
+    looping = true;
+    // Next frame, not now: callers include observers and event handlers.
     requestAnimationFrame(measure);
   };
+
+  const watcher = new MutationObserver(() => wake());
+
+  for (const type of [
+    "transitionrun",
+    "transitionend",
+    "transitioncancel",
+    "animationstart",
+    "animationend",
+    "animationcancel",
+    "scroll",
+    "load",
+    "input",
+    "pointerover",
+    "pointerout",
+    "focusin",
+    "focusout",
+  ])
+    document.addEventListener(type, () => wake(), true);
+
+  addEventListener("resize", () => wake());
+  document.fonts.addEventListener("loadingdone", () => wake());
 
   const start = async (message: StageInit) => {
     init = message;
@@ -2328,7 +2440,14 @@ body {
     arrows.forEach(route);
     buildTimeline();
     post({ type: "ready" });
-    requestAnimationFrame(measure);
+    watcher.observe(root, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+    measuring = true;
+    wake();
     const requestedKey = message.frames[message.frame]?.key;
     const firstActive = activeSequence?.[0];
 
@@ -2358,6 +2477,7 @@ body {
         break;
       case "theme":
         applyTheme(message.theme, message.colorScheme);
+        wake();
         break;
       case "slot-size": {
         const slot = document.querySelector<HTMLElement>(
@@ -2365,6 +2485,7 @@ body {
         );
 
         if (slot) slot.style.height = `${message.height}px`;
+        wake();
         break;
       }
     }

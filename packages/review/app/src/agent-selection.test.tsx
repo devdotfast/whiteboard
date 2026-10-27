@@ -137,6 +137,7 @@ it("copies only on click or Shift+Cmd+C, reports failures, and clears on revisio
     expect(notify).toHaveBeenLastCalledWith({
       kind: "success",
       text: expect.stringContaining("copied to clipboard"),
+      closeAfterMs: 5_000,
     });
     expect(container.querySelector('[role="status"]')).toBeNull();
     await act(async () => {

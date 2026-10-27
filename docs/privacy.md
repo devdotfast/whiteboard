@@ -7,9 +7,10 @@ governing Whiteboard.
 
 ## What stays local
 
-Whiteboard keeps whiteboards in `~/.dev/review-api.db`, whiteboards opened from
-share links in `~/.dev/shared-reviews/`, and app state in
-`~/.dev/review-desktop/`. These names predate the Whiteboard rename.
+Whiteboard keeps whiteboards, including copies opened from share links, in
+`~/.dev/review-api.db`, repositories it clones for share links in
+`~/.dev/shared-repositories/`, and app state in `~/.dev/review-desktop/`. These
+names predate the Whiteboard rename.
 
 ## Telemetry and error reports
 
@@ -44,7 +45,8 @@ includes the document text, software maps, complete trace
 conversations, the source lines the whiteboard references, the commits it is
 pinned to, your GitHub login, and the repository's GitHub clone URL. Anyone
 with the link can read the copy in a browser. Opening it in Whiteboard Desktop
-also fetches the pinned commits from GitHub with the recipient's own access.
+makes a copy you can edit and fetches the pinned commits from GitHub with the
+recipient's own access.
 `whiteboard share revoke <share-id>` stops future downloads.
 
 ## Hosted trace store

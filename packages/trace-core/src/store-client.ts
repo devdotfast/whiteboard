@@ -84,7 +84,12 @@ type DeviceTokenResult =
   | { pending: "authorization_pending" | "slow_down" };
 
 interface SessionResponse {
-  user: { id: string; name: string };
+  user: {
+    id: string;
+    name: string;
+    email?: string;
+    githubLogin?: string | null;
+  };
 }
 
 export class StoreClient {
@@ -172,7 +177,14 @@ export class StoreClient {
   async session(): Promise<SessionResponse> {
     return this.get(
       SESSION_PATH,
-      z.object({ user: z.object({ id: z.string().min(1), name: z.string() }) }),
+      z.object({
+        user: z.object({
+          id: z.string().min(1),
+          name: z.string(),
+          email: z.string().optional(),
+          githubLogin: z.string().nullish(),
+        }),
+      }),
     );
   }
 

@@ -188,7 +188,6 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		const empty = new URLSearchParams(resource.query).has("empty");
 		const result = await this.navigatorWorkspace(target.view.reviewId, {
 			...reviewSourceQuery(target.view),
-			side: target.side,
 			file: local ? undefined : target.file,
 			empty: empty ? "true" : undefined,
 		});

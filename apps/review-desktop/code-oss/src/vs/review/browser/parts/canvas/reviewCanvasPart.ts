@@ -1081,6 +1081,12 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				update: (key, value) => this.configurationService.updateValue(key, value, ConfigurationTarget.APPLICATION),
 				connection: this.desktopConnection,
 			}),
+			request: async (path, init) => {
+				const connection = await this.desktopConnection.getConnection();
+				const headers = new Headers(init?.headers);
+				if (connection.token) headers.set("x-review-token", connection.token);
+				return requestReviewApi(`${connection.serverUrl}${path}`, { ...init, headers });
+			},
 			reloadWindow: async () => { await this.commandService.executeCommand("workbench.action.reloadWindow"); },
 			diffrConfig: {
 				saveSummarizer: (input) => this.desktopConnection.saveDiffrSummarizer(input),

@@ -53,8 +53,10 @@ export async function ensureBackgroundServer(
   while (Date.now() < deadline) {
     const discovery = await healthyDiscovery(stateDir);
 
-    if (discovery)
-      return { discovery, started: discovery.serverPid === child.pid };
+    const started = discovery?.serverPid === child.pid;
+
+    // A child that lost the race exits once it finds the winner's lock.
+    if (discovery && (started || child.exited)) return { discovery, started };
 
     if (child.error)
       throw new Error(

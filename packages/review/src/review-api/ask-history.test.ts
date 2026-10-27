@@ -190,7 +190,6 @@ it("keeps each review's conversations, newest first, until the review is deleted
 
   history.save(record(reviewId, "older", "2026-09-01T10:00:00.000Z"));
   history.save(record(reviewId, "newer", "2026-09-01T11:00:00.000Z"));
-  history.save(record("shared-review", "shared", "2026-09-01T12:00:00.000Z"));
 
   expect(history.list(reviewId).map(({ id }) => id)).toEqual([
     "newer",
@@ -218,7 +217,6 @@ it("keeps each review's conversations, newest first, until the review is deleted
   expect(() => history.rename("older", "Changed")).toThrow(ReviewInputError);
   await store.execute(command({ type: "delete", reviewId }));
   expect(history.list(reviewId)).toEqual([]);
-  expect(history.list("shared-review").map(({ id }) => id)).toEqual(["shared"]);
 });
 
 it("keeps what the panel showed, and what each agent offered", () => {

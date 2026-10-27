@@ -45,10 +45,7 @@ export const homeGroups: { id: HomeGroup; label: string }[] = [
   { id: "earlier", label: "Older than 7 days" },
 ];
 
-/** Empty for shared imports, whose pinned checkouts aren't the user's worktrees. */
 export function worktreeLabel(review: ReviewApiSummary): string {
-  if (review.shared) return "";
-
   return review.repositoryPath?.split(/[\\/]/).filter(Boolean).at(-1) ?? "";
 }
 

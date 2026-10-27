@@ -55,16 +55,28 @@ export type HostMessage =
   /** The height the host's content in a slot takes. */
   | { type: "slot-size"; slot: string; height: number };
 
+/** The tallest an auto-sized stage may report itself. */
+export const STAGE_MAX_HEIGHT = 4000;
+
+/** The most code and block placeholders a stage may lay out. */
+export const STAGE_MAX_SLOTS = 200;
+
+/** How far from the stage's origin a placeholder may sit, either way. */
+export const SLOT_MAX_OFFSET = 100_000;
+
+/** The widest and tallest a placeholder may be. */
+export const SLOT_MAX_SIZE = 20_000;
+
 /** Where one placeholder sits in the stage, so the host can draw over it. */
 const slotLayoutSchema = z.strictObject({
   slot: z.string(),
   kind: z.enum(["code", "block"]),
   /** The code name or block id. */
   ref: z.string(),
-  x: z.number(),
-  y: z.number(),
-  width: z.number(),
-  height: z.number(),
+  x: z.number().min(-SLOT_MAX_OFFSET).max(SLOT_MAX_OFFSET),
+  y: z.number().min(-SLOT_MAX_OFFSET).max(SLOT_MAX_OFFSET),
+  width: z.number().min(0).max(SLOT_MAX_SIZE),
+  height: z.number().min(0).max(SLOT_MAX_SIZE),
   /** The product of the placeholder's and its ancestors' opacity. */
   opacity: z.number().min(0).max(1),
   visible: z.boolean(),
@@ -77,11 +89,11 @@ export const stageMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("ready") }),
   z.strictObject({
     type: z.literal("size"),
-    height: z.number().finite().nonnegative(),
+    height: z.number().finite().nonnegative().max(STAGE_MAX_HEIGHT),
   }),
   z.strictObject({
     type: z.literal("slots"),
-    slots: z.array(slotLayoutSchema).max(200),
+    slots: z.array(slotLayoutSchema).max(STAGE_MAX_SLOTS),
   }),
   /** Every animation the frame started has finished. */
   z.strictObject({ type: z.literal("settled"), index: z.number().int() }),

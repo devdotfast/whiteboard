@@ -10,13 +10,8 @@
   },
   "icon": "images/icon.png",
   "activationEvents": [
-    "onProfile",
-    "onProfile:github",
     "onLanguage:json",
     "onLanguage:jsonc"
-  ],
-  "enabledApiProposals": [
-    "profileContentHandlers"
   ],
   "main": "./out/configurationEditingMain",
   "browser": "./dist/browser/configurationEditingMain",

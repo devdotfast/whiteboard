@@ -235,6 +235,7 @@ export function AgentSelectionProvider({
       notify({
         kind: "success",
         text: "Selection copied to clipboard. Paste into your agent to chat about it.",
+        closeAfterMs: 5_000,
       });
     } catch {
       setCopiedSelection(null);

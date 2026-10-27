@@ -110,7 +110,14 @@ describe("store-auth", () => {
         }),
         json({ error: "authorization_pending" }, 400),
         json({ access_token: "tok", token_type: "Bearer" }),
-        json({ user: { id: "user-1", name: "dev" } }),
+        json({
+          user: {
+            id: "user-1",
+            name: "dev",
+            email: "dev@example.com",
+            githubLogin: null,
+          },
+        }),
       ];
 
       const fetch = vi.fn<typeof globalThis.fetch>(
@@ -135,7 +142,11 @@ describe("store-auth", () => {
       expect(code).toBe(0);
       expect(opened[0]).toContain("user_code=ABCD-1234");
       expect(codes).toEqual(["ABCD-1234"]);
-      expect((await readStoreAuth())?.token).toBe("tok");
+      expect(await readStoreAuth()).toMatchObject({
+        token: "tok",
+        login: "dev",
+        email: "dev@example.com",
+      });
     },
   );
 });

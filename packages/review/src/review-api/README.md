@@ -268,10 +268,10 @@ HTTP requests and restart. Existing desktop-server tests remain unchanged.
 
 ### Language information and committed source
 
-Committed reviews use Review-owned worktrees at their base/head commits for
+Committed reviews use a Review-owned worktree at their head commit for
 language services. The displayed source remains the immutable Git source.
-Existing matching managed checkouts are reused; an equal base/head shares one
-checkout. Opening a review prepares its current sides in the background; older
+Existing matching managed checkouts are reused. Opening a review prepares its
+current head in the background; older
 versions and selected commits acquire environments on demand.
 
 Configure preparation through the repository's existing Git configuration:
@@ -285,8 +285,8 @@ Commands run in order inside each managed checkout, never in the invoking user
 checkout. Successful preparation is cached by checkout and command-list hash;
 changed commands or recreated checkouts invalidate it. Preparation has no canvas
 disclosure. `review_open`, and `review_create` when it opens the review, starts acquisition in the background and returns any
-already-recorded acquisition issues. `review_environment` rechecks current base/head
-checkouts; `retry:true` explicitly reruns failed preparation. Missing setup, pending preparation,
+already-recorded acquisition issues. `review_environment` rechecks the current head
+checkout; `retry:true` explicitly reruns failed preparation. Missing setup, pending preparation,
 and failed commands with a usable checkout do not produce issues. These checks
 report acquisition failures (including transient errors), not end-to-end LSP health.
 `review_workspace_cleanup` lists failed cleanup of retired checkouts and accepts

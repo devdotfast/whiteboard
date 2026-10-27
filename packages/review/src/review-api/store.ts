@@ -38,6 +38,7 @@ import {
   type Lens,
   applyLensEdit,
   lensEditSchema,
+  lensSchema,
   lensSelections,
 } from "./diff-lenses.js";
 import {
@@ -55,7 +56,6 @@ import {
   adoptFlowUnits,
   anchorPins,
   applyEdit,
-  assignFreshIds,
   assignMissingIds,
   boardLinks,
   boardRepositoryId,
@@ -328,7 +328,7 @@ export function projectOfCheckout(
 export interface Snapshot {
   /** Current lifecycle state, projected onto every version when read. */
   trashedAt?: string | null;
-  shared?: { login?: string; sharedAt?: number; cloneUrl?: string };
+  shared?: SharedProvenance;
   reviewId: string;
   version: number;
   title: string;
@@ -353,6 +353,25 @@ export interface Snapshot {
   /** A person saved this version from the canvas: the blocks they added,
    * removed or changed. Absent on every other version. */
   personEdit?: { changed: string[]; ids?: Record<string, string> };
+}
+
+/** The share a board was copied from; `key` names its link when Desktop
+ * made the copy. */
+export interface SharedProvenance {
+  login?: string;
+  sharedAt?: number;
+  cloneUrl?: string;
+  key?: string;
+}
+
+/** Content a new board starts with, as another board left it. */
+export interface Seed {
+  document: Block[];
+  origin?: SnapshotOrigin;
+  lenses?: Lens[];
+  shared?: SharedProvenance;
+  /** The board it is copied from: its links to itself link to the copy. */
+  copiedFrom?: string;
 }
 
 /** The Ask thread a version names, on its edit or on itself; stored in
@@ -1091,6 +1110,17 @@ export class ReviewStore {
 
     return run;
   }
+  /** The board copied from a share link, until it is deleted. */
+  copyOf(key: string): string | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT reviews.id FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+        WHERE CASE WHEN json_valid(versions.snapshot) THEN json_extract(versions.snapshot,'$.shared.key') END=?`,
+      )
+      .get(key);
+
+    return row && String(row.id);
+  }
   /** Checkouts whose remote is cloneUrl, most recently used first. */
   checkoutsOf(cloneUrl: string): string[] {
     const key = remoteGroup(cloneUrl)?.key;
@@ -1541,7 +1571,7 @@ export class ReviewStore {
   execute(
     // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Command boundary: commandSchema.parse below rejects malformed input before mutation.
     input: unknown,
-    initial?: { document: Block[]; origin: SnapshotOrigin },
+    initial?: Seed,
     author: Author = { kind: "agent" },
   ): Promise<Result> {
     if (this.closing)
@@ -1588,7 +1618,8 @@ export class ReviewStore {
     const op = command.operation;
 
     if (op.type === "create") {
-      if (!op.target && !op.pullRequestUrl)
+      // A person's board may stand alone, as a document; agents name a target.
+      if (!op.target && !op.pullRequestUrl && author.kind !== "person")
         throw new ReviewInputError("Supply a target or a pullRequestUrl.");
 
       if (op.repositoryId && op.target)
@@ -1657,7 +1688,7 @@ export class ReviewStore {
 
   private applyPreparedCommand(
     prepared: PreparedCommand,
-    initial: { document: Block[]; origin: SnapshotOrigin } | undefined,
+    initial: Seed | undefined,
     author: Author,
   ) {
     const {
@@ -1752,7 +1783,7 @@ export class ReviewStore {
           ? createdSnapshot(
               id,
               op,
-              resolvedTarget!,
+              resolvedTarget,
               fromPullRequest &&
                 (fromPullRequest.title ||
                   `PR #${op.pullRequestUrl!.split("/").at(-1)}`),
@@ -1809,8 +1840,10 @@ export class ReviewStore {
       switch (op.type) {
         case "create":
           if (initial) {
+            const { document, lenses } = copiedContent(initial, snapshot);
+
             snapshot.document = await this.resolveCommitLinks(
-              documentSchema.parse(initial.document),
+              documentSchema.parse(document),
               snapshot,
             );
             snapshot.origin = {
@@ -1819,7 +1852,18 @@ export class ReviewStore {
             };
 
             for (const block of snapshot.document)
-              assignFreshIds(block, (prefix) => `${prefix}-${++nextId}`);
+              assignMissingIds(block, (prefix) => `${prefix}-${++nextId}`);
+            assertUniqueIds(snapshot.document);
+
+            if (lenses?.length) {
+              snapshot.lenses = z.array(lensSchema).parse(lenses);
+              nextId = Math.max(nextId, highestIdNumber(snapshot.lenses));
+            }
+
+            nextId = Math.max(nextId, highestIdNumber(snapshot.document));
+
+            if (initial.shared)
+              snapshot.shared = structuredClone(initial.shared);
           }
 
           setPullRequest(snapshot, op.pullRequestUrl, resolvedTitle);
@@ -1949,6 +1993,7 @@ export class ReviewStore {
         warnings,
         restore: op.type === "restore",
         repin: op.type === "set_target",
+        copied: initial !== undefined,
         projectLive: op.type !== "restore" && !resolvedTarget,
         result: {
           ...(op.type === "create" && { created: true }),
@@ -1992,6 +2037,8 @@ export class ReviewStore {
     warnings?: string[];
     restore?: boolean;
     repin?: boolean;
+    /** A board made from another's content, whose images stayed behind. */
+    copied?: boolean;
     projectLive: boolean;
     /** The ids a person's save gave new blocks, by client key. */
     personIds?: Record<string, string>;
@@ -2051,6 +2098,7 @@ export class ReviewStore {
     ({ snapshot, warnings } = await this.prepareVersion(snapshot, previous, {
       restore: change.restore,
       repin: change.repin,
+      copied: change.copied,
       projectLive: change.projectLive,
       person: author.kind === "person",
     }));
@@ -2210,6 +2258,7 @@ export class ReviewStore {
     options: {
       restore?: boolean;
       repin?: boolean;
+      copied?: boolean;
       projectLive: boolean;
       /** A person's save: links may name boards deleted since. */
       person?: boolean;
@@ -2224,8 +2273,9 @@ export class ReviewStore {
     // Check cross-references here; do not reparse the whole stored document.
     checkReferences(snapshot.document);
 
-    // A restore may bring back links to deleted boards, so skip the check.
-    if (!options.restore)
+    // A restore may bring back links to deleted boards, and a copy links to
+    // boards on another machine, so skip the check.
+    if (!options.restore && !options.copied)
       this.checkBoardLinks(snapshot, previous, options.person);
 
     if (
@@ -2242,7 +2292,12 @@ export class ReviewStore {
       ...documentAdvice(snapshot.document).filter(
         (advice) => !advised.has(advice),
       ),
-      ...(await this.validateExternal(snapshot, previous, options.repin)),
+      ...(await this.validateExternal(
+        snapshot,
+        previous,
+        options.repin,
+        options.copied,
+      )),
     ];
 
     snapshot.version = previous ? previous.version + 1 : 0;
@@ -3427,6 +3482,7 @@ export class ReviewStore {
     snapshot: Snapshot,
     previous?: Snapshot,
     repin = false,
+    copied = false,
   ) {
     const warnings: string[] = [];
 
@@ -3537,7 +3593,10 @@ export class ReviewStore {
     }
 
     for (const [key, block] of current.resources)
-      if (pinsChanged || !retained.resources.has(key))
+      if (
+        (pinsChanged || !retained.resources.has(key)) &&
+        !(copied && block.type === "image")
+      )
         checks.push(
           this.providers
             .validateResource(snapshot.pins, block)
@@ -3558,7 +3617,7 @@ export class ReviewStore {
 }
 
 /** The highest number in a document's `prefix-N` ids, units included. */
-function highestIdNumber(document: Block[]): number {
+function highestIdNumber(document: Block[] | Lens[]): number {
   let highest = 0;
 
   for (const [, number] of JSON.stringify(document).matchAll(
@@ -3567,6 +3626,26 @@ function highestIdNumber(document: Block[]): number {
     highest = Math.max(highest, Number(number));
 
   return highest;
+}
+
+/** A seed's content as the new board holds it: its references read in the
+ * board's repository, and its links to its source link to the board. */
+function copiedContent(
+  seed: Seed,
+  board: Snapshot,
+): Pick<Seed, "document" | "lenses"> {
+  const repositoryId = boardRepositoryId(board);
+  let json = JSON.stringify({ document: seed.document, lenses: seed.lenses });
+
+  if (seed.copiedFrom)
+    json = json.replaceAll(
+      `whiteboard:board/${seed.copiedFrom}`,
+      `whiteboard:board/${board.reviewId}`,
+    );
+
+  return JSON.parse(json, (key, value) =>
+    repositoryId && key === "repositoryId" ? repositoryId : value,
+  );
 }
 
 /** The title of a board a person made and has not named. */
@@ -3733,7 +3812,7 @@ function namedCommits(target: ReviewTarget) {
 function createdSnapshot(
   id: string,
   op: { title?: string },
-  resolved: { target: ReviewTarget; pins?: Pins },
+  resolved: { target: ReviewTarget; pins?: Pins } | undefined,
   defaultTitle?: string,
   /** A person's new board may start untitled. */
   untitled = false,
@@ -3746,12 +3825,12 @@ function createdSnapshot(
     reviewId: id,
     version: 0,
     title,
-    target: resolved.target,
+    ...(resolved && { target: resolved.target }),
     document: [],
     createdAt: "",
   };
 
-  if (resolved.pins) snapshot.pins = resolved.pins;
+  if (resolved?.pins) snapshot.pins = resolved.pins;
 
   return snapshot;
 }

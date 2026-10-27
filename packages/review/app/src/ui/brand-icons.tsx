@@ -6,7 +6,8 @@ import type { ReactElement } from "react";
 // Brand marks vendored from lobe-icons (MIT), unmodified paths:
 // https://github.com/lobehub/lobe-icons/tree/master/packages/static-svg/icons
 // Pi: pi.dev logo-auto.svg (MIT). oh-my-pi: drawn after its hero image (MIT).
-// All marks are their owners' trademarks, used nominatively to label agents.
+// GitHub: Primer Octicons mark-github (MIT).
+// All marks are their owners' trademarks, used nominatively.
 
 export function ClaudeCodeLogo({ xstyle }: IconProps = {}): ReactElement {
   return (
@@ -143,12 +144,25 @@ export function CopilotLogo({ xstyle }: IconProps = {}): ReactElement {
 export function DiscordIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <svg
-      {...stylex.props(styles.discord, xstyle)}
+      {...stylex.props(styles.mark, xstyle)}
       viewBox="0 0 24 24"
       aria-hidden="true"
       focusable="false"
     >
       <path d="M20.317 4.37a19.792 19.792 0 0 0-4.885-1.515c-.211.375-.457.88-.626 1.282a18.416 18.416 0 0 0-5.42 0 12.64 12.64 0 0 0-.635-1.282A19.736 19.736 0 0 0 3.86 4.37C.768 8.946-.07 13.408.35 17.807a19.9 19.9 0 0 0 5.993 3.03c.483-.66.914-1.36 1.286-2.095a12.87 12.87 0 0 1-2.025-.987c.17-.124.337-.253.498-.385 3.905 1.826 8.148 1.826 12.006 0 .163.132.33.26.498.385a12.91 12.91 0 0 1-2.029.989c.372.734.802 1.434 1.285 2.094a19.84 19.84 0 0 0 5.997-3.03c.493-5.1-.843-9.521-3.542-13.438ZM8.02 15.117c-1.182 0-2.153-1.084-2.153-2.405s.95-2.407 2.153-2.407c1.203 0 2.174 1.084 2.153 2.407 0 1.32-.95 2.405-2.153 2.405Zm7.957 0c-1.182 0-2.153-1.084-2.153-2.405s.95-2.407 2.153-2.407c1.203 0 2.174 1.084 2.153 2.407 0 1.32-.95 2.405-2.153 2.405Z" />
+    </svg>
+  );
+}
+
+export function GitHubIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <svg
+      {...stylex.props(styles.mark, xstyle)}
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z" />
     </svg>
   );
 }
@@ -197,7 +211,7 @@ const styles = stylex.create({
   fixed: {
     flex: "none",
   },
-  discord: {
+  mark: {
     width: "15px",
     height: "15px",
     fill: "currentColor",

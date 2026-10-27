@@ -19,6 +19,7 @@ import { type ReactNode, act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { STAGE_MAX_HEIGHT, STAGE_MAX_SLOTS } from "./animation/stage-protocol";
 import type { SavedMap } from "./api-document";
 import {
   BlockErrorBoundary,
@@ -918,6 +919,291 @@ describe("block components", () => {
 
     expect(await settled(() => width() === "200px")).toBe(true);
     expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  const alertText = (container: HTMLElement) =>
+    container.querySelector("[role='alert']")?.textContent ?? "";
+
+  it("stops measuring a still stage and measures again for a frame change", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Idle",
+          height: "auto",
+          frames: [
+            { key: "still", title: "Still" },
+            { key: "moved", title: "Moved" },
+          ],
+          code: { status: "head/order.ts#L1" },
+          html: [
+            '<div id="peek" data-wb-code="status" style="width:200px"></div>',
+            "<script>",
+            "let n=0;const raf=window.requestAnimationFrame.bind(window);",
+            "window.requestAnimationFrame=(cb)=>{n++;return raf(cb)};",
+            "const report=(label)=>{const s=n;setTimeout(()=>{throw new Error(`${label} ${n-s} frames`)},500)};",
+            'whiteboard.on("still",()=>setTimeout(()=>report("still"),1000));',
+            'whiteboard.on("moved",()=>{whiteboard.animate("#peek",[{transform:"translateX(0px)"},{transform:"translateX(80px)"}],300);setTimeout(()=>report("moved"),1000)});',
+            "</script>",
+          ].join(""),
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    const x = () => {
+      const slot = container.querySelector<HTMLElement>(
+        "[data-animation-slot='code']",
+      );
+
+      return (
+        slot && Number(/translate\(([-\d.]+)px/.exec(slot.style.transform)?.[1])
+      );
+    };
+
+    expect(
+      await settled(() => /still \d+ frames/.exec(alertText(container))),
+    ).toBeTruthy();
+    expect(alertText(container)).toContain("still 0 frames");
+    const start = x()!;
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+        .click(),
+    );
+    expect(await settled(() => x() === start + 80)).toBe(true);
+    expect(
+      await settled(() => /moved \d+ frames/.exec(alertText(container))),
+    ).toBeTruthy();
+    expect(alertText(container)).toContain("moved 0 frames");
+  });
+
+  // Records the type of every message a stage posts to its block.
+  const tapStages = () => {
+    const posted: string[] = [];
+    const Channel = window.MessageChannel;
+
+    window.MessageChannel = class extends Channel {
+      constructor() {
+        super();
+        this.port1.addEventListener("message", (event: MessageEvent) =>
+          posted.push(event.data?.type),
+        );
+      }
+    };
+
+    return {
+      posted,
+      count: (type: string) => posted.filter((item) => item === type).length,
+      [Symbol.dispose]: () => (window.MessageChannel = Channel),
+    };
+  };
+
+  it("does not resend slots for sub-pixel motion", async () => {
+    using stages = tapStages();
+
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Jitter",
+          height: 240,
+          frames: [{ key: "only", title: "Only" }],
+          code: { status: "head/order.ts#L1" },
+          html: [
+            "<style>@keyframes jitter { from { transform: translate(0.1px, 0.1px); opacity: 0.999; } to { transform: translate(0.4px, 0.4px); opacity: 0.996; } }</style>",
+            '<div data-wb-code="status" style="width:200px;animation:jitter 100ms linear infinite alternate"></div>',
+          ].join(""),
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    expect(
+      await settled(() =>
+        container.querySelector("[data-animation-slot='code']"),
+      ),
+    ).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const before = stages.count("slots");
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(stages.count("slots")).toBe(before);
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("caps an auto-sized stage's height", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Tall",
+          height: "auto",
+          frames: [{ key: "only", title: "Only" }],
+          code: {},
+          html: '<div style="height:10000000px">Tall</div>',
+        },
+      ],
+    });
+
+    const iframe = (await settled(() => container.querySelector("iframe")))!;
+
+    expect(
+      await settled(
+        () => iframe.parentElement!.offsetHeight === STAGE_MAX_HEIGHT,
+      ),
+    ).toBe(true);
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("lets go of a frame's finished animations on the next frame and keeps their end state", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Held",
+          height: 240,
+          frames: ["a", "b", "c", "d"].map((key) => ({ key, title: key })),
+          code: {},
+          html: [
+            ...["a", "b", "c", "d"].map(
+              (key) => `<div id="box-${key}" style="opacity:0">${key}</div>`,
+            ),
+            "<script>",
+            'whiteboard.on("*",({frame})=>whiteboard.animate(`#box-${frame.key}`,[{opacity:0},{opacity:1}],50));',
+            'whiteboard.on("d",()=>setTimeout(()=>{throw new Error(`held ${document.getAnimations().length}, a at ${getComputedStyle(document.querySelector("#box-a")).opacity}`)},400));',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    const next = async (meta: string) => {
+      await act(async () =>
+        container
+          .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+          .click(),
+      );
+      expect(await settled(() => text(container).includes(meta))).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    };
+
+    expect(await settled(() => text(container).includes("1 / 4"))).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await next("2 / 4");
+    await next("3 / 4");
+    await next("4 / 4");
+    expect(await settled(() => alertText(container).includes("held"))).toBe(
+      true,
+    );
+    expect(alertText(container)).toContain("held 1, a at 1");
+  });
+
+  it("does not boot a page the stage navigates to", async () => {
+    using stages = tapStages();
+
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Wanders",
+          height: 240,
+          frames: [{ key: "only", title: "Only" }],
+          code: { status: "head/order.ts#L1" },
+          html: '<div data-wb-code="status"></div><script>setTimeout(()=>location.reload(),300)</script>',
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    expect(
+      await settled(() =>
+        container.querySelector("[data-animation-slot='code']"),
+      ),
+    ).toBeTruthy();
+    expect(
+      await settled(() =>
+        alertText(container).includes("The animation left its stage."),
+      ),
+    ).toBe(true);
+    expect(container.querySelector("[data-animation-slot]")).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(stages.count("ready")).toBe(1);
+  });
+
+  it("boots the stage again each time it goes fullscreen and back", async () => {
+    using stages = tapStages();
+
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Expands",
+          height: "auto",
+          frames: [{ key: "only", title: "Only" }],
+          code: { status: "head/order.ts#L1" },
+          html: '<div data-wb-code="status"></div>',
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    const slot = () => document.querySelector("[data-animation-slot='code']");
+    expect(await settled(slot)).toBeTruthy();
+
+    for (const [boots, label] of [
+      [2, "Expand animation"],
+      [3, "Close expanded animation"],
+    ] as const) {
+      await act(async () =>
+        document
+          .querySelector<HTMLButtonElement>(`button[aria-label='${label}']`)!
+          .click(),
+      );
+      expect(await settled(() => stages.count("ready") === boots)).toBe(true);
+      expect(document.querySelectorAll("iframe")).toHaveLength(1);
+    }
+
+    expect(await settled(slot)).toBeTruthy();
+    expect(alertText(container)).toBe("");
+    expect(document.querySelector("[role='dialog']")).toBeNull();
+  });
+
+  it("draws the first slots of a stage with too many and says so", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Crowded",
+          height: 240,
+          frames: [{ key: "only", title: "Only" }],
+          code: { status: "head/order.ts#L1" },
+          html: `<script>for(let i=0;i<${STAGE_MAX_SLOTS + 1};i++)document.body.append(whiteboard.code("status"));</script>`,
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    expect(
+      await settled(() =>
+        alertText(container).includes(
+          `at most ${STAGE_MAX_SLOTS} code or block slots`,
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      await settled(
+        () =>
+          container.querySelectorAll("[data-animation-slot]").length ===
+          STAGE_MAX_SLOTS,
+      ),
+    ).toBe(true);
   });
 
   it("mounts a scene in its container and keeps narrow tables readable", async () => {

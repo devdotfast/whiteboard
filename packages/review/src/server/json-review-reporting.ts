@@ -6,7 +6,6 @@ import {
 import { readQuerySchemas } from "@review/review-api/read-schemas";
 import { ReviewStore, type Snapshot } from "@review/review-api/store";
 import { resolveReviewDiffFiles } from "@review/review-diff-files";
-import type { SharedReviewStore } from "@review/sharing/import.js";
 import type { ReviewTelemetry } from "@review/telemetry";
 import { Hono } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -100,10 +99,9 @@ export function createJsonReviewReporting(
   >,
   options: {
     submit?: typeof submitReviewBugReport;
-    shared?: SharedReviewStore;
   } = {},
 ) {
-  const { submit = submitReviewBugReport, shared } = options;
+  const { submit = submitReviewBugReport } = options;
   const app = new Hono();
   app.onError((error, context) =>
     context.json(
@@ -117,13 +115,7 @@ export function createJsonReviewReporting(
     ),
   );
   app.use("/:id/telemetry/*", async (context, next) => {
-    const id = context.req.param("id")!;
-
-    if (id.startsWith("shared-")) {
-      if (!shared)
-        throw new ReviewInputError("Shared review is not available.", 404);
-      shared.get(id);
-    } else store.assertExists(id);
+    store.assertExists(context.req.param("id")!);
     await next();
   });
   app.post("/:id/telemetry/event", async (c) => {
@@ -151,9 +143,7 @@ export function createJsonReviewReporting(
       version: context.req.query("version"),
     });
 
-    const id = context.req.param("id");
-    const imported = id.startsWith("shared-") ? shared?.get(id) : undefined;
-    const snapshot = imported?.snapshot ?? store.read(id, query.version);
+    const snapshot = store.read(context.req.param("id"), query.version);
 
     const report = parseReviewBugReportInput(
       await readBoundedRequestJson(context.req.raw, 6 * 1024 * 1024, {}),
@@ -162,16 +152,7 @@ export function createJsonReviewReporting(
     return context.json(
       await submit({
         report,
-        source: imported
-          ? {
-              review: async () => ({
-                files: { "review.json": JSON.stringify(snapshot) },
-                omitted: [],
-              }),
-              map: async () => JSON.stringify(imported.maps),
-              diff: () => jsonReviewBugReportSource(store, snapshot).diff(),
-            }
-          : jsonReviewBugReportSource(store, snapshot),
+        source: jsonReviewBugReportSource(store, snapshot),
         clientErrorNames: clientErrorsForSession(report.app_session_id),
         // A locked telemetry config must not cost the user their report.
         telemetryEnvelope: await telemetry.envelope().catch(() => undefined),

@@ -99,7 +99,7 @@ export function createStructuralDiffEditors(
 	}));
 	const unchanged = new Set(entries.filter(e => e.file.status === "unchanged").map(e => e.file.path));
 	const pairs = new Map(resolvedEntries.map(e => [e.original!.toString() + "\n" + e.modified!.toString(), e.file.path]));
-	// One provider per file, so they share one session listener.
+	// Providers and fold controls share one session listener per view.
 	const providers = new Set<(files: ReadonlySet<string>) => void>();
 	const willEdit = lifetime.add(new Emitter<void>());
 	lifetime.add(session.onDidChange(change => {
@@ -122,7 +122,7 @@ export function createStructuralDiffEditors(
 	const child = lifetime.add(
 		instantiation.createChild(new ServiceCollection([IDiffProviderFactoryService, factory])),
 	);
-	attachStructuralEditors(instantiation, resolvedEntries, session, lifetime, viewed, lineNumbers, onscreen);
+	attachStructuralEditors(instantiation, resolvedEntries, session, onDidChangeFiles, lifetime, viewed, lineNumbers, onscreen);
 	return { instantiation: child, entries: resolvedEntries, onWillEdit: willEdit.event };
 }
 
@@ -241,6 +241,7 @@ function attachStructuralEditors(
 	instantiation: IInstantiationService,
 	entries: readonly ReviewFilesEditorEntry[],
 	session: StructuralDiffSession,
+	onDidChangeFiles: Event<ReadonlySet<string>>,
 	lifetime: DisposableStore,
 	viewed?: StructuralViewedState,
 	lineNumbers?: ReviewLineNumbersSetting,
@@ -279,8 +280,8 @@ function attachStructuralEditors(
             store.add(new InlineLineNumbers(editor.getModifiedEditor(), lineNumbers));
         }
 		const hover = new StructuralFoldHover();
-		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", sideOf(editor.getOriginalEditor()), session, unchangedRegions, hover, viewed, onscreen));
-		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", sideOf(editor.getModifiedEditor()), session, unchangedRegions, hover, viewed, onscreen));
+		store.add(new StructuralFoldControls(editor.getOriginalEditor(), "lhs", sideOf(editor.getOriginalEditor()), session, onDidChangeFiles, unchangedRegions, hover, viewed, onscreen));
+		store.add(new StructuralFoldControls(editor.getModifiedEditor(), "rhs", sideOf(editor.getModifiedEditor()), session, onDidChangeFiles, unchangedRegions, hover, viewed, onscreen));
 		let revealed = new Set<UnchangedRegion>();
 		store.add(
 			autorun((reader) => {

@@ -11,11 +11,31 @@ import {
   StreamLimitError,
   readBoundedStream,
 } from "@review/server/bounded-stream.js";
+import { Agent } from "undici";
 import { z } from "zod";
 
 import { shareRequestBody } from "./export.js";
 
 const MAX_RESPONSE_BYTES = MAX_SHARE_BYTES;
+
+// Uploads reuse the connection `warm` opens, skipping a cold Worker start.
+const pool = new Agent({
+  keepAliveTimeout: 5 * 60_000,
+  keepAliveMaxTimeout: 5 * 60_000,
+});
+
+const pooledFetch: typeof fetch = (input, init) => {
+  // Node's fetch reads `dispatcher`; the DOM type omits it.
+  const pooled = { ...init, dispatcher: pool };
+
+  return fetch(input, pooled);
+};
+
+const jwtSchema = z.object({ token: z.string().min(1) });
+
+const jwtPayloadSchema = z.object({ exp: z.number() });
+
+const bearers = new Map<string, Promise<{ bearer: string; until: number }>>();
 
 const linkSchema = z.strictObject({ shareId: z.uuid(), url: z.url() });
 
@@ -62,7 +82,7 @@ export class ShareClient {
   constructor(
     origin: string,
     private readonly token?: string,
-    private readonly send: typeof fetch = fetch,
+    private readonly send: typeof fetch = pooledFetch,
   ) {
     const url = new URL(origin);
 
@@ -99,7 +119,7 @@ export class ShareClient {
     const headers = new Headers({ "content-type": "application/json" });
 
     if (this.token && !anonymous)
-      headers.set("authorization", `Bearer ${this.token}`);
+      headers.set("authorization", `Bearer ${await this.bearer(this.token)}`);
 
     const init: RequestInit = {
       method,
@@ -119,6 +139,70 @@ export class ShareClient {
     }
 
     return readBoundedBytes(response, maxBytes);
+  }
+
+  private async bearer(token: string): Promise<string> {
+    const key = `${this.origin} ${token}`;
+    const pending = bearers.get(key);
+
+    if (pending) {
+      const cached = await pending.catch(() => undefined);
+
+      if (cached && cached.until > Date.now()) return cached.bearer;
+
+      // Another caller already replaced the stale exchange.
+      if (bearers.get(key) !== pending) return this.bearer(token);
+    }
+
+    // Stored before any await, so callers in the same tick share it.
+    const next = this.exchange(token);
+    bearers.set(key, next);
+
+    return (await next).bearer;
+  }
+
+  private async exchange(token: string) {
+    const response = await this.send(`${this.origin}/api/auth/token`, {
+      redirect: "error",
+      signal: AbortSignal.timeout(30_000),
+      headers: { authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      await response.body?.cancel();
+
+      // A service without the JWT plugin still takes the device token.
+      if (response.status === 404 || response.status === 405)
+        return { bearer: token, until: Date.now() + 10 * 60_000 };
+
+      if (response.status === 401) throw new ShareAuthError();
+      throw new Error(`Share request failed (${response.status}).`);
+    }
+
+    const { token: jwt } = jwtSchema.parse(
+      parseJsonText(
+        Buffer.from(await readBoundedBytes(response, 64 * 1024)).toString(),
+      ),
+    );
+
+    const { exp } = jwtPayloadSchema.parse(
+      parseJsonText(
+        Buffer.from(jwt.split(".")[1] ?? "", "base64url").toString(),
+      ),
+    );
+
+    return { bearer: jwt, until: exp * 1000 - 60_000 };
+  }
+
+  async warm() {
+    if (this.token) await this.bearer(this.token);
+
+    const response = await this.send(`${this.origin}/api/v2/shares`, {
+      redirect: "error",
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    await response.body?.cancel();
   }
 
   async create(bundle: ShareBundle, requestId: string = randomUUID()) {

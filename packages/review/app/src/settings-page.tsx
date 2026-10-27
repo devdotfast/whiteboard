@@ -20,6 +20,7 @@ import type {
 import * as stylex from "@stylexjs/stylex";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 
+import { AccountSection } from "./account-section";
 import { ConnectCard, LegacySkillsRow } from "./connect-card";
 import { DiffrConfigSection } from "./diffr-config-section";
 import { homeStyles } from "./home-styles";
@@ -172,6 +173,7 @@ export function SettingsPage({
   const contents = useMemo(
     () =>
       [
+        "Account",
         ...(agents ? ["Agents"] : []),
         ...(commandLine ? ["Command line"] : []),
         "Privacy",
@@ -210,6 +212,8 @@ export function SettingsPage({
             <p {...stylex.props(styles.lede)}>
               Settings apply to Whiteboard on this machine.
             </p>
+
+            <AccountSection request={settings.request} />
 
             {install ? (
               <Section label="Agents">
