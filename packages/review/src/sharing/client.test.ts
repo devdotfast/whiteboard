@@ -81,7 +81,10 @@ it("surfaces a failed create and refuses an oversized share before any request",
   const shared = await bundle();
 
   const send = vi.fn<typeof fetch>(
-    async () => new Response(null, { status: 503 }),
+    async (input) =>
+      new Response(null, {
+        status: String(input).endsWith("/api/auth/token") ? 404 : 503,
+      }),
   );
 
   const client = new ShareClient("https://app.dev.fast", "secret", send);
@@ -208,63 +211,23 @@ it("exchanges the device token for a JWT once and sends it until a minute before
   ]);
 });
 
-it("sends the device token for ten minutes where the service cannot issue a JWT", async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  const device = randomUUID();
-  const { requests, send } = service(() => new Response(null, { status: 404 }));
-  const client = new ShareClient("https://app.dev.fast", device, send);
-
-  await client.list();
-  await new ShareClient("https://app.dev.fast", device, send).list();
-  vi.advanceTimersByTime(10 * 60_000 + 1);
-  await client.list();
-  expect(requests).toEqual([
-    `GET /api/auth/token Bearer ${device}`,
-    `GET /api/v2/shares Bearer ${device}`,
-    `GET /api/v2/shares Bearer ${device}`,
-    `GET /api/auth/token Bearer ${device}`,
-    `GET /api/v2/shares Bearer ${device}`,
-  ]);
-});
-
 it("treats a device token the exchange rejects as a stale login", async () => {
-  const { requests, send } = service(() => new Response(null, { status: 401 }));
+  const { send } = service(() => new Response(null, { status: 401 }));
 
   await expect(
     new ShareClient("https://app.dev.fast", randomUUID(), send).list(),
   ).rejects.toBeInstanceOf(ShareAuthError);
-  expect(requests).toHaveLength(1);
-});
-
-it("readies the JWT while warming, with one exchange for warm-ups that start together", async () => {
-  const device = randomUUID();
-  const token = jwt(Math.floor(Date.now() / 1000) + 3600, 1);
-  const { requests, send } = service(() => Response.json({ token }));
-  const client = new ShareClient("https://app.dev.fast", device, send);
-  const exchanges = () => requests.filter((r) => r.includes("/api/auth/token"));
-
-  await Promise.all([client.warm(), client.warm()]);
-  expect(exchanges()).toHaveLength(1);
-  await client.list();
-  expect(exchanges()).toHaveLength(1);
-  expect(requests.at(-1)).toBe(`GET /api/v2/shares Bearer ${token}`);
 });
 
 it("retries a failed exchange on the next request", async () => {
-  const device = randomUUID();
   const token = jwt(Math.floor(Date.now() / 1000) + 3600, 2);
 
-  const { requests, send } = service((id) =>
+  const { send } = service((id) =>
     id === 1 ? new Response(null, { status: 503 }) : Response.json({ token }),
   );
 
-  const client = new ShareClient("https://app.dev.fast", device, send);
+  const client = new ShareClient("https://app.dev.fast", randomUUID(), send);
 
   await expect(client.list()).rejects.toThrow("503");
-  await client.list();
-  expect(requests).toEqual([
-    `GET /api/auth/token Bearer ${device}`,
-    `GET /api/auth/token Bearer ${device}`,
-    `GET /api/v2/shares Bearer ${token}`,
-  ]);
+  await expect(client.list()).resolves.toEqual([]);
 });

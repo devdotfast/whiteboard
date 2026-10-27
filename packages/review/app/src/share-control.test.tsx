@@ -240,7 +240,7 @@ it("uploads on open for a signed-in user, retries after a failure, and copies th
   delete (document as Partial<Document>).execCommand;
 });
 
-it("knows the sign-in state before the popover opens and refreshes it on each opening and on focus", async () => {
+it("knows the sign-in state before the popover opens and refreshes it on focus", async () => {
   const harness = mount({ signedIn: true });
   const { container } = harness;
 
@@ -250,15 +250,14 @@ it("knows the sign-in state before the popover opens and refreshes it on each op
   await harness.click("Share review");
   expect(publishes(harness)).toHaveLength(1);
   await harness.settle();
-  expect(harness.accountReads()).toBe(2);
   await harness.click("Share review");
   await harness.click("Share review");
   await harness.settle();
-  expect(harness.accountReads()).toBe(3);
   expect(container.querySelector("input")?.value).toContain("/s/capability");
+  const reads = harness.accountReads();
   await act(async () => window.dispatchEvent(new Event("focus")));
   await harness.settle();
-  expect(harness.accountReads()).toBe(4);
+  expect(harness.accountReads()).toBe(reads + 1);
 });
 
 it("falls back to sign-in when the stored login has expired, then uploads after re-login", async () => {

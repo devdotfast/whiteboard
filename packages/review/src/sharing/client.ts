@@ -194,7 +194,6 @@ export class ShareClient {
     return { bearer: jwt, until: exp * 1000 - 60_000 };
   }
 
-  /** Opens a connection and readies the bearer for the next request. */
   async warm() {
     if (this.token) await this.bearer(this.token);
 

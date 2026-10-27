@@ -62,8 +62,8 @@ function fetchError(stderr: string): ReviewInputError {
   );
 }
 
-/** Recipients need complete history. `commits` are other commits the
- * board's references read at; a plan has only those. */
+/** `commits` are other commits the board's references read at; a plan has
+ * only those. */
 export async function fetchPinnedRepository(
   root: string,
   url: string,
