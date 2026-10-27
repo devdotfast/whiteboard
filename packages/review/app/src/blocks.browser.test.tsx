@@ -1181,6 +1181,58 @@ describe("block components", () => {
     );
   });
 
+  it("starts on the first scenario and switches the stage's path from the picker", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Branches",
+          height: "auto",
+          frames: [
+            { key: "a", title: "Start", label: "START" },
+            { key: "b", title: "Delivered", label: "DELIVER" },
+            { key: "c", title: "Dropped", label: "DROP" },
+          ],
+          scenarios: [
+            { key: "ok", label: "Delivered", frames: ["a", "b"] },
+            { key: "lost", label: "Dropped packet", frames: ["a", "c"] },
+          ],
+          code: {},
+          // The stage reports the path it was given through its error line.
+          html: '<script>whiteboard.on("*", () => { if (whiteboard.frames.some((f) => f.key === "c")) throw new Error("stage on dropped"); });</script>',
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    const steps = () =>
+      [...container.querySelectorAll("[aria-label='Steps'] button")].map(
+        (step) => step.textContent,
+      );
+
+    const picker = (name: string) =>
+      [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          "[role='group'][aria-label='Scenario'] button",
+        ),
+      ].find((button) => button.textContent === name)!;
+
+    expect(text(container)).toContain("Scenario");
+    expect(await settled(() => steps().join() === "1START,2DELIVER")).toBe(
+      true,
+    );
+    expect(picker("Delivered").getAttribute("aria-pressed")).toBe("true");
+
+    await act(async () => picker("Dropped packet").click());
+
+    expect(await settled(() => steps().join() === "1START,2DROP")).toBe(true);
+    expect(picker("Dropped packet").getAttribute("aria-pressed")).toBe("true");
+    expect(
+      await settled(() => alertText(container).includes("stage on dropped")),
+    ).toBe(true);
+  });
+
   it("boots the stage again each time it goes fullscreen and back", async () => {
     using stages = tapStages();
 

@@ -2476,6 +2476,11 @@ body {
 
   const start = async (message: StageInit) => {
     init = message;
+
+    // The scenario the reader picked, before the stage's scripts run; a
+    // script's own setSequence() still replaces it.
+    if (message.sequence) activeSequence = [...message.sequence];
+
     root.toggleAttribute("data-wb-auto-size", message.autoSize);
     setProperties(message.scale);
     applyTheme(message.theme, message.colorScheme);
@@ -2548,6 +2553,17 @@ body {
         wake();
         break;
       }
+
+      case "sequence":
+        if (!init) break;
+
+        try {
+          whiteboard.setSequence(message.keys);
+        } catch (error) {
+          fail(String(error));
+        }
+
+        break;
     }
   };
 }

@@ -45,6 +45,24 @@ export const animationFrameSchema = z.strictObject({
 
 export type AnimationFrame = z.infer<typeof animationFrameSchema>;
 
+export const animationScenarioSchema = z.strictObject({
+  key: handle.describe("Names the scenario."),
+  label: z
+    .string()
+    .min(1)
+    .max(32)
+    .describe(
+      "What the reader picks above the stage, e.g. Retried request. Keep it short.",
+    ),
+  frames: z
+    .array(handle)
+    .min(1)
+    .max(60)
+    .describe("The frame keys this scenario plays, in order."),
+});
+
+export type AnimationScenario = z.infer<typeof animationScenarioSchema>;
+
 export const animationSchema = defineBlock("animation", {
   title: label,
   html: text
@@ -59,6 +77,14 @@ export const animationSchema = defineBlock("animation", {
     .max(60)
     .describe(
       "Every possible frame. Stage scripts may select an ordered branch with whiteboard.setSequence(keys); keys stay unique and stable.",
+    ),
+  scenarios: z
+    .array(animationScenarioSchema)
+    .min(2)
+    .max(8)
+    .optional()
+    .describe(
+      "Alternate paths through the frames. The whiteboard draws a labelled scenario picker above the stage and starts on the first one.",
     ),
   code: z
     .record(handle, anchorSchema)
@@ -94,5 +120,29 @@ export const animation = {
       throw new ReviewInputError(
         "Give every animation frame a label, or none: the step strip needs one per frame.",
       );
+
+    const scenarios = block.scenarios ?? [];
+
+    if (
+      new Set(scenarios.map((scenario) => scenario.key)).size !==
+      scenarios.length
+    )
+      throw new ReviewInputError(
+        "Animation scenario keys must be unique within the animation.",
+      );
+
+    for (const scenario of scenarios) {
+      if (new Set(scenario.frames).size !== scenario.frames.length)
+        throw new ReviewInputError(
+          `Scenario "${scenario.key}" lists a frame twice.`,
+        );
+
+      const unknown = scenario.frames.find((key) => !keys.has(key));
+
+      if (unknown)
+        throw new ReviewInputError(
+          `Scenario "${scenario.key}" names frame "${unknown}", which the animation does not declare.`,
+        );
+    }
   },
 } satisfies BlockDefinition<AnimationBlock>;

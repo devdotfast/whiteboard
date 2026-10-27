@@ -112,6 +112,22 @@ describe("block definitions", () => {
         ),
       );
     });
+    it("animation: scenarios name declared frames", async () => {
+      const [animation] = await fixture("animation");
+
+      const scenarios = (missing: string) => ({
+        ...animation!,
+        scenarios: [
+          { key: "short", label: "Short", frames: ["before"] },
+          { key: "long", label: "Long", frames: ["before", missing] },
+        ],
+      });
+
+      expect(() => checkReferences([scenarios("change")])).not.toThrow();
+      expect(() => checkReferences([scenarios("chnage")])).toThrow(
+        /names frame "chnage"/,
+      );
+    });
     it("animation: frame labels are all or none", async () => {
       const [animation] = await fixture("animation");
 

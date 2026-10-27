@@ -20,6 +20,8 @@ import { withClass } from "@canvas/stylex-props";
 import { themeClass, themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
 import { Button, IconButton } from "@canvas/ui/button";
+import { SegmentedControl } from "@canvas/ui/segmented";
+import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
 import { anchorSelection } from "@review/lens-selection";
 import { type Block, animationCodeId } from "@review/review-api/document";
@@ -293,6 +295,45 @@ export function AnimationBlock({
     [data.anchors, node.id, openPeek],
   );
 
+  // A stage script's setSequence() and the scenario picker both land here.
+  const selectSequence = (keys: string[]) => {
+    const unique = new Set(keys);
+
+    const valid =
+      unique.size === keys.length &&
+      keys.every((key) => frames.some((frame) => frame.key === key));
+
+    if (!valid) return;
+
+    if (
+      sequenceRef.current?.length === keys.length &&
+      sequenceRef.current.every((key, index) => key === keys[index])
+    )
+      return;
+
+    sequenceRef.current = keys;
+    setSequenceKeys(keys);
+    setPlaying(false);
+    setTimeUp(-1);
+    const currentKey = frames[indexRef.current]?.key;
+
+    const fallback = frames.findIndex((frame) => frame.key === keys[0]);
+
+    const next = keys.includes(currentKey) ? indexRef.current : fallback;
+
+    if (next !== indexRef.current) setIndex(next);
+
+    // Refresh even a preserved key: lifecycle ranges, held scene changes,
+    // and its timeline can differ when active order changes.
+    send({
+      type: "frame",
+      index: next,
+      instant: true,
+      direction: "none",
+      adjacent: false,
+    });
+  };
+
   const onMessage = useRef<(message: StageMessage) => void>(() => {});
 
   onMessage.current = (message) => {
@@ -322,51 +363,9 @@ export function AnimationBlock({
         break;
       }
 
-      case "sequence": {
-        const unique = new Set(message.keys);
-
-        const valid =
-          unique.size === message.keys.length &&
-          message.keys.every((key) =>
-            frames.some((frame) => frame.key === key),
-          );
-
-        if (!valid) break;
-
-        if (
-          sequenceRef.current?.length === message.keys.length &&
-          sequenceRef.current.every((key, index) => key === message.keys[index])
-        )
-          break;
-
-        sequenceRef.current = message.keys;
-        setSequenceKeys(message.keys);
-        setPlaying(false);
-        setTimeUp(-1);
-        const currentKey = frames[indexRef.current]?.key;
-
-        const fallback = frames.findIndex(
-          (frame) => frame.key === message.keys[0],
-        );
-
-        const next = message.keys.includes(currentKey)
-          ? indexRef.current
-          : fallback;
-
-        if (next !== indexRef.current) setIndex(next);
-
-        // Refresh even a preserved key: lifecycle ranges, held scene changes,
-        // and its timeline can differ when active order changes.
-        send({
-          type: "frame",
-          index: next,
-          instant: true,
-          direction: "none",
-          adjacent: false,
-        });
-
+      case "sequence":
+        selectSequence(message.keys);
         break;
-      }
 
       case "reveal":
         reveal(message.name);
@@ -408,8 +407,22 @@ export function AnimationBlock({
       if (message.success) onMessage.current(message.data);
     };
 
-    sequenceRef.current = null;
-    setSequenceKeys(null);
+    // A new stage starts in the scenario the reader had picked, or the first.
+    const sequence =
+      (
+        node.scenarios?.find((scenario) =>
+          sameKeys(scenario.frames, sequenceRef.current),
+        ) ?? node.scenarios?.[0]
+      )?.frames ?? null;
+
+    sequenceRef.current = sequence;
+    setSequenceKeys(sequence);
+
+    if (sequence && !sequence.includes(frames[indexRef.current]!.key)) {
+      indexRef.current = frames.findIndex((item) => item.key === sequence[0]);
+      setIndex(indexRef.current);
+    }
+
     setSlots([]);
     setError(null);
     target.postMessage(
@@ -433,6 +446,7 @@ export function AnimationBlock({
       scale: SCALE,
       reducedMotion: reducedMotion(),
       frame: indexRef.current,
+      ...(sequence && { sequence }),
     };
 
     Promise.all([loadAnime(), loadFonts()]).then(
@@ -444,7 +458,7 @@ export function AnimationBlock({
         } satisfies HostMessage),
       () => setError("The animation libraries or fonts could not be loaded."),
     );
-  }, [node.html, node.code, node.height, frames, embeddable]);
+  }, [node.html, node.code, node.height, node.scenarios, frames, embeddable]);
 
   useEffect(() => () => portRef.current?.close(), []);
 
@@ -539,6 +553,36 @@ export function AnimationBlock({
           </Button>
         }
       />
+      {node.scenarios && (
+        <div {...stylex.props(styles.scenarios)}>
+          <span
+            aria-hidden="true"
+            {...stylex.props(textStyles.eyebrow, styles.scenarioLabel)}
+          >
+            Scenario
+          </span>
+          <SegmentedControl
+            label="Scenario"
+            value={
+              node.scenarios.find((scenario) =>
+                sameKeys(scenario.frames, sequenceKeys),
+              )?.key
+            }
+            options={node.scenarios.map(({ key, label }) => ({
+              value: key,
+              label,
+            }))}
+            onChange={(key) => {
+              const keys = node.scenarios!.find(
+                (scenario) => scenario.key === key,
+              )!.frames;
+
+              send({ type: "sequence", keys });
+              selectSequence(keys);
+            }}
+          />
+        </div>
+      )}
       <div
         {...stylex.props(styles.stage, fullscreen && styles.stageFullscreen)}
       >
@@ -696,6 +740,9 @@ export function AnimationBlock({
   );
 }
 
+const sameKeys = (left: readonly string[], right: readonly string[] | null) =>
+  right?.length === left.length && left.every((key, i) => key === right[i]);
+
 /** A host component drawn where the stage put its placeholder. */
 function SlotOverlay({
   slot,
@@ -822,6 +869,21 @@ const styles = stylex.create({
     flexDirection: "column",
     minHeight: 0,
     margin: 0,
+  },
+  // The scenario picker, a strip between the header and the stage that
+  // scrolls sideways when its scenarios outrun the width.
+  scenarios: {
+    display: "flex",
+    alignItems: "center",
+    gap: space.s8,
+    overflowX: "auto",
+    padding: `${space.s6} ${space.s12}`,
+    borderBottomWidth: "1px",
+    borderBottomStyle: "solid",
+    borderBottomColor: tokens.rule,
+  },
+  scenarioLabel: {
+    flex: "0 0 auto",
   },
   // Room around the stage so its drawing does not run into the card's edges.
   stage: {

@@ -38,7 +38,8 @@ If no part of the drawing changes between frames, it is not an animation: use a 
 }
 ```
 
-- `frames`: every possible step. `key` names the frame for your markup and scripts; `title` and `caption` show under the stage. `label` is a short step name (e.g. `SEND`); give every frame one, or none, and the reader gets a named step strip instead of dots. `duration` (ms, default 3000) is how long the frame holds while playing. For a flow with alternate branches, declare every stable frame here and select the active ordered path with `whiteboard.setSequence(...)`.
+- `frames`: every possible step. `key` names the frame for your markup and scripts; `title` and `caption` show under the stage. `label` is a short step name (e.g. `SEND`); give every frame one, or none, and the reader gets a named step strip instead of dots. `duration` (ms, default 3000) is how long the frame holds while playing. For a flow with alternate paths, declare every frame here and list the paths in `scenarios`.
+- `scenarios`: alternate paths through the frames, 2 to 8, each `{ "key", "label", "frames": [frame keys in order] }`. The whiteboard draws a picker labelled Scenario above the stage and starts on the first. `label` is what the reader picks, e.g. `Retried request`. Omit it for an animation with one path.
 - `code`: the source ranges the stage shows, by name. The server checks each anchor like any other reference, so verify paths and lines. Use `head/` for the new code and `base/` for the old.
 - `pins`: as on any block that quotes code. A review with a target lends its own; a board without one needs them on the block.
 - `html`: the stage's body. It runs in a sandboxed frame with no network: inline `<style>` and `<script>` only, no external URLs. Images must be `data:` URLs.
@@ -153,7 +154,7 @@ table.row(cells: string[], { enter?; exit?; only?; tone? }): HTMLTableRowElement
 
 ### Frames
 
-The stage sets `data-frame="<key>"` on `<html>`, and `enter` / `exit` / `only` on any scene part decide the frames it shows in. They are states, not events, so they land right when the reader jumps to a frame or steps back. With `setSequence`, `enter` / `exit` and held `scene.on` changes follow active-sequence order, not declaration order: a change whose key is outside the active path does not apply, an inactive `enter` never occurs, and an inactive `exit` does not end an already-entered part. `only` and highlight lists always match exact stable keys. Visible cards keep their declared wide-grid cells. Hidden cards, store items and table rows collapse from layout; put replacing cards in the same cell. For an intentionally stable footprint, give the container a min-height or choose a fixed stage height with an appropriate scrolling plan.
+The stage sets `data-frame="<key>"` on `<html>`, and `enter` / `exit` / `only` on any scene part decide the frames it shows in. They are states, not events, so they land right when the reader jumps to a frame or steps back. With an active path (a scenario, or `setSequence`), `enter` / `exit` and held `scene.on` changes follow active-path order, not declaration order: a change whose key is outside the active path does not apply, an inactive `enter` never occurs, and an inactive `exit` does not end an already-entered part. `only` and highlight lists always match exact stable keys. Visible cards keep their declared wide-grid cells. Hidden cards, store items and table rows collapse from layout; put replacing cards in the same cell. For an intentionally stable footprint, give the container a min-height or choose a fixed stage height with an appropriate scrolling plan.
 
 ## Going further: the toolkit
 
@@ -248,18 +249,18 @@ readonly theme; readonly colorScheme: "light" | "dark"; readonly reducedMotion;
 
 `whiteboard.frame` is the current frame object, not its key. For keyed state, read `whiteboard.frame.key` or use the handler argument: `whiteboard.on("*", ({ frame }) => render(frame.key))`.
 
-For alternate paths, call `whiteboard.setSequence(["start", "branch-a", "done"])`. Every key must be a unique frame declared in the component. Repeating the same sequence is a no-op, so it is safe to call from a render path. The selected order controls the host step labels, titles, count, Previous/Next, keyboard navigation, Play/Replay, and `whiteboard.next()` / `prev()`; changing it stops current playback and clears its hold timer. Changing the sequence preserves the current frame when it remains in the new path; otherwise it lands instantly on the new path's first frame. `whiteboard.frames` contains the active ordered path and its `index` values, and `whiteboard.frame.index` is the current active-path position; keys remain the stable identity. `goto(key)` accepts only a frame in the active sequence and is a direct jump, while adjacent forward steps still play the destination frame's motion even when declaration indexes move backward. Call `setSequence` before `goto` when a control switches branches:
+For alternate paths, declare `scenarios` on the component rather than drawing your own buttons in the stage: the reader gets a labelled picker that works the same on every whiteboard.
 
-```js
-const delivered = ["push", "gossip", "replicate", "serve"];
-const dropped = ["push", "gossip-dropped", "catch-up", "serve-recovered"];
-
-function selectPath(drop) {
-  const path = drop ? dropped : delivered;
-  whiteboard.setSequence(path);
-  whiteboard.goto(path[1]);
-}
+```json
+"scenarios": [
+  { "key": "delivered", "label": "Delivered", "frames": ["push", "gossip", "replicate", "serve"] },
+  { "key": "dropped", "label": "Dropped packet", "frames": ["push", "gossip-dropped", "catch-up", "serve-recovered"] }
+]
 ```
+
+Picking a scenario selects its frames as the active path. The active path controls the host step labels, titles, count, Previous/Next, keyboard navigation, Play/Replay, and `whiteboard.next()` / `prev()`; changing it stops current playback and clears its hold timer. It preserves the current frame when that frame is in the new path; otherwise it lands instantly on the new path's first frame. `whiteboard.frames` contains the active ordered path and its `index` values, and `whiteboard.frame.index` is the current active-path position; keys remain the stable identity. `goto(key)` accepts only a frame in the active path and is a direct jump, while adjacent forward steps still play the destination frame's motion even when declaration indexes move backward.
+
+`whiteboard.setSequence(keys)` selects a path from a script, for a branch the drawing itself decides. Every key must be a unique declared frame, and repeating the same sequence is a no-op, so it is safe to call from a render path. When the path matches a scenario, the picker shows that scenario.
 
 - `scene.peek(name, ...)`, `whiteboard.code(name)` and `<div data-wb-code="name">` all draw the real code peek over a placeholder. Give `scene.peek` a cell, and span columns (the cell's `colSpan`) when the code needs width — a one-column peek clips long lines; a raw `data-wb-code` div takes a CSS width instead. Its height follows the code, up to about 18 lines. A peek is always on top of your drawing, so do not draw or travel over it.
 - A code peek is about 40px of header plus 18px per line, up to about 400px. Rows of cards take about 90px each. With the default `height: "auto"`, the stage grows to fit them. If you intentionally use a numeric fixed height, leave enough room because overflow clips at that height.
@@ -288,6 +289,7 @@ Custom CSS should use the whiteboard's variables, never literal colors, sizes or
 - Each frame shows one idea; its title says what changed. 3 to 8 frames is usual.
 - Omit `height` unless the animation intentionally needs a fixed viewport; verify any numeric height in every frame and narrow layout.
 - Every frame reads correctly when reached by a jump, not only by playing.
+- Alternate paths are `scenarios` on the component, not buttons drawn in the stage.
 - Build as "Choose how to build it" says: a scene by default, and the toolkit or raw HTML for anything else.
 - In raw HTML, build from the style kit and the `--wb-*` variables; write no literal color, size or font name.
 - Script errors show under the stage. After writing, read the whiteboard back and fix any.
