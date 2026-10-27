@@ -2485,6 +2485,10 @@ body {
   let measuring = false;
   let looping = false;
   let quietFrames = 0;
+  let slotLimitReported = false;
+
+  const clamp = (value: number, min: number, max: number) =>
+    Math.min(max, Math.max(min, Math.round(value)));
 
   const moving = () =>
     showsInProgress > 0 ||
@@ -2503,7 +2507,17 @@ body {
     travels.forEach(placeTravel);
     const slots: SlotLayout[] = [];
 
-    document.querySelectorAll<HTMLElement>("[data-wb-slot]").forEach((el) => {
+    const placeholders = [
+      ...document.querySelectorAll<HTMLElement>("[data-wb-slot]"),
+    ];
+
+    // STAGE_MAX_SLOTS in stage-protocol.ts.
+    if (placeholders.length > 200 && !slotLimitReported) {
+      slotLimitReported = true;
+      fail("Animations may use at most 200 code or block slots.");
+    }
+
+    placeholders.slice(0, 200).forEach((el) => {
       const rect = el.getBoundingClientRect();
       let opacity = 1;
 
@@ -2518,11 +2532,12 @@ body {
         slot: el.dataset.wbSlot!,
         kind: el.dataset.wbCode !== undefined ? "code" : "block",
         ref: el.dataset.wbCode ?? el.dataset.wbBlock!,
-        // Whole pixels, so sub-pixel jitter is not a change to send.
-        x: Math.round(rect.x),
-        y: Math.round(rect.y),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
+        // Whole pixels, within SLOT_MAX_OFFSET and SLOT_MAX_SIZE in
+        // stage-protocol.ts.
+        x: clamp(rect.x, -100_000, 100_000),
+        y: clamp(rect.y, -100_000, 100_000),
+        width: clamp(rect.width, 0, 20_000),
+        height: clamp(rect.height, 0, 20_000),
         opacity: Math.round(opacity * 100) / 100,
         visible:
           rect.width > 0 &&
@@ -2568,7 +2583,8 @@ body {
         bottom = Math.max(bottom, visibleBottom);
       }
 
-      const height = Math.max(120, Math.ceil(bottom));
+      // STAGE_MAX_HEIGHT in stage-protocol.ts.
+      const height = Math.min(4000, Math.max(120, Math.ceil(bottom)));
 
       if (height !== lastHeight) {
         changed = true;

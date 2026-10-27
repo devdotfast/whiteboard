@@ -19,6 +19,7 @@ import { type ReactNode, act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { STAGE_MAX_HEIGHT, STAGE_MAX_SLOTS } from "./animation/stage-protocol";
 import type { SavedMap } from "./api-document";
 import {
   BlockErrorBoundary,
@@ -1117,6 +1118,63 @@ describe("block components", () => {
     await new Promise((resolve) => setTimeout(resolve, 1000));
     expect(stages.count("slots")).toBe(before);
     expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("caps an auto-sized stage's height", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Tall",
+          height: "auto",
+          frames: [{ key: "only", title: "Only" }],
+          code: {},
+          html: '<div style="height:10000000px">Tall</div>',
+        },
+      ],
+    });
+
+    const iframe = (await settled(() => container.querySelector("iframe")))!;
+
+    expect(
+      await settled(
+        () => iframe.parentElement!.offsetHeight === STAGE_MAX_HEIGHT,
+      ),
+    ).toBe(true);
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("draws the first slots of a stage with too many and says so", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Crowded",
+          height: 240,
+          frames: [{ key: "only", title: "Only" }],
+          code: { status: "head/order.ts#L1" },
+          html: `<script>for(let i=0;i<${STAGE_MAX_SLOTS + 1};i++)document.body.append(whiteboard.code("status"));</script>`,
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    expect(
+      await settled(() =>
+        alertText(container).includes(
+          `at most ${STAGE_MAX_SLOTS} code or block slots`,
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      await settled(
+        () =>
+          container.querySelectorAll("[data-animation-slot]").length ===
+          STAGE_MAX_SLOTS,
+      ),
+    ).toBe(true);
   });
 
   it("mounts a scene in its container and keeps narrow tables readable", async () => {
