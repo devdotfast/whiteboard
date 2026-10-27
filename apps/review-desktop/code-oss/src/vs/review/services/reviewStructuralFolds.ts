@@ -5,6 +5,7 @@
 
 import { InlineLineNumbers } from "./reviewLineNumbers.js";
 import { Codicon } from "../../base/common/codicons.js";
+import type { Event } from "../../base/common/event.js";
 import { Disposable } from "../../base/common/lifecycle.js";
 import { autorun, observableValue, type IObservable } from "../../base/common/observable.js";
 import { ThemeIcon } from "../../base/common/themables.js";
@@ -64,6 +65,8 @@ export class StructuralFoldControls extends Disposable {
 		private readonly side: "lhs" | "rhs",
 		private readonly path: () => string | undefined,
 		private readonly session: StructuralDiffSession,
+		/** The view's files whose diff or fold state changed. */
+		onDidChangeFiles: Event<ReadonlySet<string>>,
 		/** The regions the diff editor hides now. */
 		private readonly regions: IObservable<readonly UnchangedRegion[]>,
 		private readonly sharedHover: StructuralFoldHover,
@@ -120,9 +123,9 @@ export class StructuralFoldControls extends Disposable {
 			}
 			this.render();
 		}));
-		this._register(session.onDidChange(change => {
+		this._register(onDidChangeFiles(files => {
 			const path = this.path();
-			if (path && change.files.has(path)) {
+			if (path && files.has(path)) {
 				this.hovered = undefined;
 				this.render();
 			}
