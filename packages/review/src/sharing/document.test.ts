@@ -58,7 +58,7 @@ async function fixture() {
   return { root, ...local, reviewId };
 }
 
-it("uploads a document without a GitHub repository for the browser alone", async () => {
+it("imports a document shared without a GitHub repository as a board of its own", async () => {
   const local = await fixture();
   vi.stubEnv("DEV_REVIEW_SHARE_TOKEN", "fixture");
   vi.stubEnv("DEV_REVIEW_SHARE_ORIGIN", "https://sharing.test");
@@ -96,9 +96,18 @@ it("uploads a document without a GitHub repository for the browser alone", async
   const { bundle } = createShareSchema.parse(body);
   expect(bundle.repository).toBeUndefined();
 
-  await expect(
-    importShare(local, shareKey("https://sharing.test", capability()), bundle),
-  ).rejects.toThrow("This share can only be viewed in the browser.");
+  const id = await importShare(
+    local,
+    shareKey("https://sharing.test", capability()),
+    bundle,
+  );
+
+  const copy = local.store.read(id);
+
+  expect(copy.target).toBeUndefined();
+  expect(copy.document).toMatchObject([
+    { type: "markdown", markdown: "# A plan\nJust a document." },
+  ]);
 });
 
 it("retains trace resources on a document without source pins and leaves images unshared", async () => {
@@ -295,17 +304,11 @@ it("files a shared plan without pins on the receiver's checkout of its repositor
   expect(cloneRepository).not.toHaveBeenCalled();
 });
 
-it("clones the repository of a shared plan the receiver has no checkout of", async () => {
-  const { local, id, repositoryId, cloneRepository } = await sharedPlan(
+it("keeps a shared plan the receiver has no checkout of as a board of its own", async () => {
+  const { local, id, cloneRepository } = await sharedPlan(
     "https://github.com/acme/other.git",
   );
 
-  const { target } = local.store.read(id);
-
-  expect(cloneRepository).toHaveBeenCalledWith(
-    expect.any(String),
-    "https://github.com/acme/other.git",
-  );
-  expect(target).toMatchObject({ kind: "project" });
-  expect(target?.repositoryId).not.toBe(repositoryId);
+  expect(local.store.read(id).target).toBeUndefined();
+  expect(cloneRepository).not.toHaveBeenCalled();
 });

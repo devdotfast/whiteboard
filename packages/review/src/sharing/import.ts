@@ -115,6 +115,18 @@ export interface ShareAttribution {
   sharedAt: number;
 }
 
+/** Commits and traces live in a checkout; a document alone needs none. */
+function needsRepository(
+  bundle: ShareBundle,
+  snapshot: Parameters<typeof referenceCommits>[0],
+) {
+  return Boolean(
+    snapshot.pins ||
+    referenceCommits(snapshot).length ||
+    Object.keys(bundle.traces).length,
+  );
+}
+
 export function validateShareBundle(input: ShareBundle) {
   const bundle = shareBundleSchema.parse(input);
   // SAFETY: a bundle is parsed from JSON, so its snapshot is a JSON object.
@@ -140,10 +152,7 @@ export function validateShareBundle(input: ShareBundle) {
   // Every commit it quotes reaches git as an argument.
   assertCommitIds(referenceCommits(snapshot));
 
-  if (
-    (snapshot.pins || referenceCommits(snapshot).length) &&
-    !bundle.repository
-  )
+  if (needsRepository(bundle, snapshot) && !bundle.repository)
     throw new ReviewInputError(
       "This share can only be viewed in the browser.",
       409,
@@ -240,24 +249,28 @@ export async function importShare(
   if (existing) return existing;
   const { bundle, snapshot, maps } = validateShareBundle(received);
   const cloneUrl = bundle.repository?.cloneUrl;
+  let repositoryId: string | undefined;
 
-  if (!cloneUrl)
-    throw new ReviewInputError(
-      "This share can only be viewed in the browser.",
-      409,
+  // A document is filed on a checkout the receiver already has; it is not
+  // worth a clone.
+  if (
+    cloneUrl &&
+    (needsRepository(bundle, snapshot) || store.checkoutsOf(cloneUrl).length)
+  ) {
+    input.onStage?.("fetching");
+    repositoryId = await shareRepository(
+      input,
+      cloneUrl,
+      snapshot.pins,
+      referenceCommits(snapshot),
+      key,
     );
+  }
 
-  input.onStage?.("fetching");
-
-  const repositoryId = await shareRepository(
-    input,
-    cloneUrl,
-    snapshot.pins,
-    referenceCommits(snapshot),
-    key,
-  );
-
-  const pins = snapshot.pins && { ...snapshot.pins, repositoryId };
+  const pins =
+    snapshot.pins && repositoryId
+      ? { ...snapshot.pins, repositoryId }
+      : undefined;
 
   input.onStage?.("validating");
 
@@ -280,19 +293,27 @@ export async function importShare(
     ]),
   );
 
-  for (const [id, trace] of Object.entries(bundle.traces))
-    await data.upload({ kind: "trace", id: ids.get(id), repositoryId, trace });
+  if (repositoryId) {
+    for (const [id, trace] of Object.entries(bundle.traces))
+      await data.upload({
+        kind: "trace",
+        id: ids.get(id),
+        repositoryId,
+        trace,
+      });
 
-  for (const [id, { commit, side, elements, relationships }] of Object.entries(
-    maps,
-  ))
-    store.putResource(
-      ids.get(id)!,
-      repositoryId,
-      "map",
-      "application/json",
-      Buffer.from(JSON.stringify({ commit, side, elements, relationships })),
-    );
+    for (const [
+      id,
+      { commit, side, elements, relationships },
+    ] of Object.entries(maps))
+      store.putResource(
+        ids.get(id)!,
+        repositoryId,
+        "map",
+        "application/json",
+        Buffer.from(JSON.stringify({ commit, side, elements, relationships })),
+      );
+  }
 
   let document = JSON.stringify(snapshot.document);
 
@@ -303,9 +324,11 @@ export async function importShare(
       operation: {
         type: "create",
         ...(snapshot.title && { title: snapshot.title }),
-        target: pins
-          ? { kind: "commits", ...pins }
-          : { kind: "project", repositoryId },
+        ...(pins
+          ? { target: { kind: "commits", ...pins } }
+          : repositoryId && {
+              target: { kind: "project", repositoryId },
+            }),
       },
     },
     {
