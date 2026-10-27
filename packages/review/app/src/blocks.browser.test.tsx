@@ -1145,6 +1145,39 @@ describe("block components", () => {
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
+  it("does not boot a page the stage navigates to", async () => {
+    using stages = tapStages();
+
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Wanders",
+          height: 240,
+          frames: [{ key: "only", title: "Only" }],
+          code: { status: "head/order.ts#L1" },
+          html: '<div data-wb-code="status"></div><script>setTimeout(()=>location.reload(),300)</script>',
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    expect(
+      await settled(() =>
+        container.querySelector("[data-animation-slot='code']"),
+      ),
+    ).toBeTruthy();
+    expect(
+      await settled(() =>
+        alertText(container).includes("The animation left its stage."),
+      ),
+    ).toBe(true);
+    expect(container.querySelector("[data-animation-slot]")).toBeNull();
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    expect(stages.count("ready")).toBe(1);
+  });
+
   it("draws the first slots of a stage with too many and says so", async () => {
     const { container } = await mountFixture("animation", {
       document: [

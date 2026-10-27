@@ -379,13 +379,26 @@ export function AnimationBlock({
     }
   };
 
-  // Hand the stage its runtime and a private port once its page loads.
+  const bootedRef = useRef<string | null>(null);
+
+  // Hand the stage its runtime and a private port when its page first loads.
+  // A later load is a page the stage navigated to, which gets neither.
   const boot = useCallback(() => {
     const target = frameRef.current?.contentWindow;
     const figure = figureRef.current;
 
     if (!target || !figure) return;
     portRef.current?.close();
+
+    if (bootedRef.current === stageKey) {
+      portRef.current = null;
+      setSlots([]);
+      setError("The animation left its stage.");
+
+      return;
+    }
+
+    bootedRef.current = stageKey;
     const channel = new MessageChannel();
     portRef.current = channel.port1;
     channel.port1.onmessage = (event: MessageEvent) => {
@@ -434,7 +447,7 @@ export function AnimationBlock({
         } satisfies HostMessage),
       () => setError("The animation libraries or fonts could not be loaded."),
     );
-  }, [node.html, node.code, node.height, frames, embeddable]);
+  }, [stageKey, node.html, node.code, node.height, frames, embeddable]);
 
   useEffect(() => () => portRef.current?.close(), []);
 
