@@ -350,21 +350,33 @@ function RichBlock({
   const [hint, setHint] = useState<{ top: number; right: number }>();
 
   // The hint sits under the block's own card, which may be narrower than
-  // the page.
+  // the page, and follows it when the card resizes: an animation grows as
+  // its frames add code peeks.
   useLayoutEffect(() => {
-    const card = ref.current?.querySelector(
-      ":scope > [data-review-node-id] > *",
-    );
+    const container = ref.current;
 
-    if (!selected || !card || !ref.current) {
+    const card = container?.querySelector(":scope > [data-review-node-id] > *");
+
+    if (!selected || !card || !container) {
       setHint(undefined);
 
       return;
     }
 
-    const box = ref.current.getBoundingClientRect();
-    const rect = card.getBoundingClientRect();
-    setHint({ top: rect.bottom - box.top + 7, right: box.right - rect.right });
+    const measure = () => {
+      const box = container.getBoundingClientRect();
+      const rect = card.getBoundingClientRect();
+      setHint({
+        top: rect.bottom - box.top + 7,
+        right: box.right - rect.right,
+      });
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(card);
+
+    return () => observer.disconnect();
   }, [selected]);
 
   if (!renderer) return null;
