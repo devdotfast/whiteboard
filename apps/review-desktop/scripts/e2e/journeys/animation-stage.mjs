@@ -33,6 +33,9 @@ const HTML = [
 ].join("\n");
 
 export async function run(ctx) {
+  // Authoring is gated; the board below is created through the API.
+  await ctx.apiOk("/preferences/animations", "PUT", { enabled: true });
+
   const { canvas } = await createReview(ctx, {
     title: "Animation e2e",
     blocks: [
