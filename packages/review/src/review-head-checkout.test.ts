@@ -38,7 +38,6 @@ describe("ensureReviewPinnedCheckout", () => {
       reviewManagedCheckoutDir(
         repo.commonDir,
         TEST_REVIEW_UUID,
-        "head",
         repo.headCommit,
       ),
     );
@@ -209,12 +208,7 @@ describe("ensureReviewPinnedCheckout", () => {
     });
 
     expect(checkoutPath).toBe(
-      reviewManagedCheckoutDir(
-        commonDir,
-        TEST_REVIEW_UUID,
-        "head",
-        pinnedCommit,
-      ),
+      reviewManagedCheckoutDir(commonDir, TEST_REVIEW_UUID, pinnedCommit),
     );
     expect(
       readFileSync(path.join(checkoutPath ?? "", "README.md"), "utf8"),

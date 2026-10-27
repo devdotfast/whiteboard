@@ -50,7 +50,6 @@ interface Environment extends WorkspaceStatus {
   repositoryId: string;
   repository: string;
   commandsHash: string;
-  role: "base" | "head";
 }
 
 /** Local lifecycle only: source and authored history never depend on preparation.
@@ -419,16 +418,9 @@ export class ReviewWorkspaces {
     await this.cleanup;
   }
 
-  async open(reviewId: string, pins: Pins): Promise<void> {
-    await this.source(reviewId, pins, "head");
-
-    if (pins.base !== pins.head) await this.source(reviewId, pins, "base");
-  }
-
   source(
     reviewId: string,
     pins: Pins,
-    side: "base" | "head",
     retryFailed = false,
   ): Promise<WorkspaceStatus> {
     if (this.closed)
@@ -436,7 +428,7 @@ export class ReviewWorkspaces {
     this.assertReview(reviewId);
 
     const id = createHash("sha256")
-      .update(JSON.stringify([reviewId, pins.repositoryId, pins[side]]))
+      .update(JSON.stringify([reviewId, pins.repositoryId, pins.head]))
       .digest("hex");
 
     const current = this.requests.get(id);
@@ -451,7 +443,7 @@ export class ReviewWorkspaces {
           ? this.status(environment)
           : {
               id,
-              commit: pins[side],
+              commit: pins.head,
               rootPath: null,
               generation: "",
               state: "pending",
@@ -460,8 +452,8 @@ export class ReviewWorkspaces {
       );
     }
 
-    const request = this.acquire(id, reviewId, pins, side, retryFailed).finally(
-      () => this.requests.delete(id),
+    const request = this.acquire(id, reviewId, pins, retryFailed).finally(() =>
+      this.requests.delete(id),
     );
 
     this.requests.set(id, request);
@@ -473,7 +465,6 @@ export class ReviewWorkspaces {
     id: string,
     reviewId: string,
     pins: Pins,
-    side: "base" | "head",
     retryFailed: boolean,
   ): Promise<WorkspaceStatus> {
     await this.released(reviewId);
@@ -485,11 +476,10 @@ export class ReviewWorkspaces {
       reviewId,
       repositoryId: pins.repositoryId,
       repository: "",
-      commit: pins[side],
+      commit: pins.head,
       rootPath: null,
       generation: randomUUID(),
       commandsHash: "",
-      role: pins.base === pins.head ? "head" : side,
       state: "pending",
       log: "",
     };
@@ -526,8 +516,7 @@ export class ReviewWorkspaces {
       const checkout = await ensureReviewPinnedCheckout({
         rootPath: existsSync(root) ? root : repository,
         reviewUuid: reviewId,
-        ref: pins[side],
-        role: environment.role,
+        ref: pins.head,
       });
 
       if (!checkout) throw new Error("Pinned checkout is unavailable.");
@@ -642,15 +631,11 @@ export class ReviewWorkspaces {
     environment.generation = randomUUID();
     this.save(environment);
 
-    return this.source(
-      reviewId,
-      {
-        repositoryId: environment.repositoryId,
-        base: environment.commit,
-        head: environment.commit,
-      },
-      "head",
-    );
+    return this.source(reviewId, {
+      repositoryId: environment.repositoryId,
+      base: environment.commit,
+      head: environment.commit,
+    });
   }
 
   private collect(retryId?: string, removedReviewId?: string) {

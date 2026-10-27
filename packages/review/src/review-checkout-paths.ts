@@ -2,8 +2,6 @@ import path from "node:path";
 
 import { safeStorageSegment } from "./review-home-paths";
 
-export type ReviewCheckoutRole = "head" | "base";
-
 /**
  * Root for Review-owned checkouts. A Review UUID identifies one subtree.
  */
@@ -22,16 +20,15 @@ export function reviewManagedCheckoutRoot(
   );
 }
 
-/** A detached checkout owned by one Review revision and source role. */
+/** A detached checkout of one Review's head commit. */
 export function reviewManagedCheckoutDir(
   gitCommonDir: string,
   reviewUuid: string,
-  role: ReviewCheckoutRole,
   commit: string,
 ): string {
   return path.join(
     reviewManagedCheckoutRoot(gitCommonDir, reviewUuid),
-    role,
+    "head",
     safeStorageSegment(commit),
   );
 }
