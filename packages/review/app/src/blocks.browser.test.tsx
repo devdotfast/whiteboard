@@ -1145,6 +1145,50 @@ describe("block components", () => {
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
+  it("lets go of a frame's finished animations on the next frame and keeps their end state", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Held",
+          height: 240,
+          frames: ["a", "b", "c", "d"].map((key) => ({ key, title: key })),
+          code: {},
+          html: [
+            ...["a", "b", "c", "d"].map(
+              (key) => `<div id="box-${key}" style="opacity:0">${key}</div>`,
+            ),
+            "<script>",
+            'whiteboard.on("*",({frame})=>whiteboard.animate(`#box-${frame.key}`,[{opacity:0},{opacity:1}],50));',
+            'whiteboard.on("d",()=>setTimeout(()=>{throw new Error(`held ${document.getAnimations().length}, a at ${getComputedStyle(document.querySelector("#box-a")).opacity}`)},400));',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    const next = async (meta: string) => {
+      await act(async () =>
+        container
+          .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+          .click(),
+      );
+      expect(await settled(() => text(container).includes(meta))).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    };
+
+    expect(await settled(() => text(container).includes("1 / 4"))).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    await next("2 / 4");
+    await next("3 / 4");
+    await next("4 / 4");
+    expect(await settled(() => alertText(container).includes("held"))).toBe(
+      true,
+    );
+    expect(alertText(container)).toContain("held 1, a at 1");
+  });
+
   it("does not boot a page the stage navigates to", async () => {
     using stages = tapStages();
 

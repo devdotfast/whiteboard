@@ -1599,6 +1599,31 @@ body {
     return record;
   };
 
+  // whiteboard.animate holds end states with fill. A frame change commits the
+  // finished ones to style and cancels them, so they do not pile up.
+  const held = new Set<Animation>();
+
+  const releaseFinished = () => {
+    for (const animation of held) {
+      if (animation.playState === "running" || animation.playState === "paused")
+        continue;
+
+      try {
+        if (
+          animation.playState === "finished" &&
+          animation.effect instanceof KeyframeEffect &&
+          animation.effect.target?.isConnected
+        )
+          animation.commitStyles();
+        animation.cancel();
+        held.delete(animation);
+      } catch {
+        // commitStyles throws for an element that is not rendered; keep its
+        // fill until a later frame change.
+      }
+    }
+  };
+
   const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
   const prefersReducedMotion = () => motionPreference.matches;
 
@@ -1631,6 +1656,7 @@ body {
 
     if (instantMode) root.setAttribute("data-wb-instant", "");
 
+    releaseFinished();
     current = index;
     root.dataset.frame = frame.key;
     root.dataset.frameIndex = String(frame.index);
@@ -2355,6 +2381,7 @@ body {
 
       if ((instantMode || prefersReducedMotion()) && finite(animation))
         animation.finish();
+      held.add(animation);
       wake();
 
       return animation;
