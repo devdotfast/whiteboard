@@ -1618,7 +1618,8 @@ export class ReviewStore {
     const op = command.operation;
 
     if (op.type === "create") {
-      if (!op.target && !op.pullRequestUrl)
+      // A person's board may stand alone, as a document; agents name a target.
+      if (!op.target && !op.pullRequestUrl && author.kind !== "person")
         throw new ReviewInputError("Supply a target or a pullRequestUrl.");
 
       if (op.repositoryId && op.target)
@@ -1782,7 +1783,7 @@ export class ReviewStore {
           ? createdSnapshot(
               id,
               op,
-              resolvedTarget!,
+              resolvedTarget,
               fromPullRequest &&
                 (fromPullRequest.title ||
                   `PR #${op.pullRequestUrl!.split("/").at(-1)}`),
@@ -3811,7 +3812,7 @@ function namedCommits(target: ReviewTarget) {
 function createdSnapshot(
   id: string,
   op: { title?: string },
-  resolved: { target: ReviewTarget; pins?: Pins },
+  resolved: { target: ReviewTarget; pins?: Pins } | undefined,
   defaultTitle?: string,
   /** A person's new board may start untitled. */
   untitled = false,
@@ -3824,12 +3825,12 @@ function createdSnapshot(
     reviewId: id,
     version: 0,
     title,
-    target: resolved.target,
+    ...(resolved && { target: resolved.target }),
     document: [],
     createdAt: "",
   };
 
-  if (resolved.pins) snapshot.pins = resolved.pins;
+  if (resolved?.pins) snapshot.pins = resolved.pins;
 
   return snapshot;
 }
