@@ -594,3 +594,50 @@ it("rebuilds a checkout requested while its release is running", async () => {
   ).toContain("42");
   expect(local.data.workspaces.list(reviewId)).toContainEqual(requested);
 });
+
+it("removes a base checkout left by an earlier version on startup and keeps the head", async () => {
+  const head = await local.data.workspaces.source(reviewId, pins);
+  await local.data.close();
+  await local.store.close();
+  const rows = new DatabaseSync(`${database}.workspaces`);
+
+  const { repository: commonDir } = JSON.parse(
+    String(
+      rows
+        .prepare("SELECT value FROM pinned_environments WHERE id=?")
+        .get(head.id)!.value,
+    ),
+  );
+
+  const legacy = path.join(
+    reviewManagedCheckoutRoot(commonDir, reviewId),
+    "base",
+    pins.base,
+  );
+
+  git("worktree", "add", "--detach", legacy, pins.base);
+  rows
+    .prepare("INSERT INTO pinned_environments VALUES('legacy-base', json(?))")
+    .run(
+      JSON.stringify({
+        id: "legacy-base",
+        reviewId,
+        repositoryId: pins.repositoryId,
+        repository: commonDir,
+        commit: pins.base,
+        rootPath: legacy,
+        generation: "old",
+        commandsHash: "",
+        role: "base",
+        state: "unconfigured",
+        log: "",
+      }),
+    );
+  rows.close();
+
+  local = openLocalReviewStore(database);
+  await local.data.workspaces.idle();
+  expect(existsSync(legacy)).toBe(false);
+  expect(local.data.workspaces.list(reviewId)).toMatchObject([{ id: head.id }]);
+  expect(existsSync(path.join(head.rootPath!, "value.ts"))).toBe(true);
+});

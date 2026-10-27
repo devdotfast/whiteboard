@@ -50,7 +50,11 @@ interface Environment extends WorkspaceStatus {
   repositoryId: string;
   repository: string;
   commandsHash: string;
+  /** Legacy rows only; collected on startup. */
+  role?: "base" | "head";
 }
+
+const legacyBase = (environment: Environment) => environment.role === "base";
 
 /** Local lifecycle only: source and authored history never depend on preparation.
  * Status/queue/process lifecycle follows #334, retaining the legacy prepare config
@@ -643,6 +647,7 @@ export class ReviewWorkspaces {
     const deleted = this.all().filter(
       (environment) =>
         (environment.reviewId === removedReviewId ||
+          legacyBase(environment) ||
           !this.hasReview(environment.reviewId)) &&
         (environment.state !== "cleanup-failed" ||
           environment.id === retryId ||
