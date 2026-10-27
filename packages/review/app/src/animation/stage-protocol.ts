@@ -34,8 +34,7 @@ export interface StageInit {
   fonts: string;
   reducedMotion: boolean;
   frame: number;
-  /** Library sources the stage runs before its own scripts: anime.js, and
-   * Pele when the stage draws Mermaid. */
+  /** Library sources the stage runs before its own scripts: anime.js. */
   libraries: string[];
 }
 

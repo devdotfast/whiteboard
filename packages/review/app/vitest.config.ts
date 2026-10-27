@@ -83,10 +83,10 @@ export default defineConfig({
       {
         plugins: [stylexDevCss(), react()],
         resolve: { alias, dedupe: ["react", "react-dom"] },
-        // The stage needs anime.js's and Pele's files as text; prebundling
-        // would make them modules.
+        // The stage needs anime.js's file as text; prebundling would make it
+        // a module.
         optimizeDeps: {
-          exclude: ["@animejs-bundles/anime.umd.min.js?raw", "pele/global?raw"],
+          exclude: ["@animejs-bundles/anime.umd.min.js?raw"],
         },
         test: {
           name: "browser",
