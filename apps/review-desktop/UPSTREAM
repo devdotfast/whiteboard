@@ -505,6 +505,14 @@ one of these entries:
 - `extensions/markdown-language-features/src/languageFeatures/copyFiles/snippets.ts`:
   parse snippet variables linearly instead of using an ambiguous regular
   expression that can backtrack exponentially on a short workspace setting.
+- `extensions/configuration-editing/` (`package.json`, `tsconfig.json`,
+  `src/configurationEditingMain.ts`, and the deleted
+  `src/importExportProfiles.ts`) and
+  `src/vs/workbench/api/common/extHostProfileContentHandler.ts` (with its
+  constructor call in `extHost.api.impl.ts`): Review has no profiles UI and
+  no `MainThreadProfileContentHandlers`, so the GitHub gist profile handler is
+  removed and `registerProfileContentHandler` returns an inert disposable
+  instead of calling the missing actor.
 - `src/vs/platform/terminal/common/terminalEnvironment.ts`: quote complete path
   arguments with each shell's native rules instead of stripping metacharacters
   and emitting invalid POSIX quoting for apostrophes.
