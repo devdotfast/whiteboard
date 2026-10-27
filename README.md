@@ -22,7 +22,7 @@ Whiteboard plugs into the tools you already use - e.g. Claude Code, Codex, etc. 
   <img
     src=".github/assets/whiteboard-demo.gif"
     width="880"
-    alt="An agent writes a Whiteboard review from a terminal prompt, which includes a sequence diagram"
+    alt="An agent writes a Whiteboard review from a terminal prompt, which includes a sequence diagram and a call tree"
   />
 </p>
 
