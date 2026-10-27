@@ -29,7 +29,6 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
   vi.spyOn(repository, "readShareRepository").mockResolvedValue(
     fixture.repository,
   );
-  vi.spyOn(repository, "verifyShareRepository").mockResolvedValue();
 
   vi.stubEnv("DEV_REVIEW_SHARE_TOKEN", "ci-publish-token");
   vi.stubEnv("DEV_REVIEW_SHARE_ORIGIN", "https://sharing.test");

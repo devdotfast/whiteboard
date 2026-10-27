@@ -62,16 +62,12 @@ it("imports a document shared without a GitHub repository as a board of its own"
   const local = await fixture();
   vi.stubEnv("DEV_REVIEW_SHARE_TOKEN", "fixture");
   vi.stubEnv("DEV_REVIEW_SHARE_ORIGIN", "https://sharing.test");
-  const readRepository = vi.fn<() => Promise<{ cloneUrl: string }>>();
-  const verifyRepository = vi.fn<() => Promise<void>>();
   const shareId = randomUUID();
   let body: unknown;
 
   const app = new Hono();
   app.onError((error, context) => context.json({ error: error.message }, 500));
   mountSharingPublisher(app, local.store, local.data, {
-    readRepository,
-    verifyRepository,
     fetch: async (input, init) => {
       expect(new URL(String(input)).pathname).toBe("/api/v2/shares");
       expect(init?.method).toBe("POST");
@@ -92,7 +88,6 @@ it("imports a document shared without a GitHub repository as a board of its own"
 
   expect(await response.json()).toMatchObject({ shareId });
   expect(response.status).toBe(200);
-  expect(verifyRepository).not.toHaveBeenCalled();
   const { bundle } = createShareSchema.parse(body);
   expect(bundle.repository).toBeUndefined();
 

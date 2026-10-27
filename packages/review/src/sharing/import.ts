@@ -385,7 +385,6 @@ async function shareRepository(
           managed,
           cloneUrl,
           pins,
-          false,
           commits,
         );
         await sharedGit(managed, [

@@ -99,7 +99,6 @@ it("copies a share into a board the recipient edits like their own", async () =>
     expect.any(String),
     sender.repository.cloneUrl,
     expect.objectContaining({ base: pins.base, head: pins.head }),
-    false,
     [],
   );
 

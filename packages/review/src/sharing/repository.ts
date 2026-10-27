@@ -1,6 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import path from "node:path";
+import { mkdir } from "node:fs/promises";
 
 import { type VcsArg, gitAt } from "@dev.fast/local-vcs";
 import { normalizeGitHubRemote } from "@dev.fast/review-share-protocol";
@@ -41,12 +39,10 @@ export function sharedGit(cwd: string, args: VcsArg[]) {
   );
 }
 
-function fetchError(stderr: string, publishing: boolean): ReviewInputError {
+function fetchError(stderr: string): ReviewInputError {
   if (/not our ref|couldn't find remote ref|unadvertised object/i.test(stderr))
     return new ReviewInputError(
-      publishing
-        ? "Push the reviewed commits to GitHub before sharing."
-        : "The shared commits are no longer available on GitHub. Ask the sender to restore them, then retry.",
+      "The shared commits are no longer available on GitHub. Ask the sender to restore them, then retry.",
       409,
     );
 
@@ -66,14 +62,12 @@ function fetchError(stderr: string, publishing: boolean): ReviewInputError {
   );
 }
 
-/** Recipients need complete history; publication only checks that the commits exist.
- * `commits` are other commits the board's references read at; a plan has
- * only those. */
+/** Recipients need complete history. `commits` are other commits the
+ * board's references read at; a plan has only those. */
 export async function fetchPinnedRepository(
   root: string,
   url: string,
   pins: Pick<Pins, "base" | "head"> | undefined,
-  publishing = false,
   commits: readonly string[] = [],
 ) {
   // Each commit and the ref it is fetched to.
@@ -93,41 +87,32 @@ export async function fetchPinnedRepository(
     );
   await mkdir(root, { recursive: true, mode: 0o700 });
   await sharedGit(root, ["init", "--quiet"]);
+  await sharedGit(root, ["config", "core.hooksPath", "/dev/null"]);
+  await sharedGit(root, ["config", "core.fsmonitor", "false"]);
 
-  if (!publishing) {
-    await sharedGit(root, ["config", "core.hooksPath", "/dev/null"]);
-    await sharedGit(root, ["config", "core.fsmonitor", "false"]);
+  if (process.platform === "win32")
+    await sharedGit(root, ["config", "core.longpaths", "true"]);
 
-    if (process.platform === "win32")
-      await sharedGit(root, ["config", "core.longpaths", "true"]);
-
-    await sharedGit(root, ["remote", "add", "origin", { remote: url }]);
-  }
-
-  // Branch refs make Git reject non-commit objects during the fetch itself.
-  const refs = publishing ? "refs/heads/review" : "refs/review";
+  await sharedGit(root, ["remote", "add", "origin", { remote: url }]);
 
   try {
     await sharedGit(root, [
       "fetch",
       "--no-tags",
       "--force",
-      ...(publishing ? ["--depth=1", "--filter=tree:0"] : []),
-      { remote: publishing ? url : "origin" },
+      "origin",
       ...named.map(({ commit, ref }) => ({
-        refspec: { from: commit, to: `${refs}/${ref}` },
+        refspec: { from: commit, to: `refs/review/${ref}` },
       })),
     ]);
   } catch (error) {
     throw fetchError(
       error instanceof Error && "stderr" in error ? String(error.stderr) : "",
-      publishing,
     );
   }
 
-  if (!publishing)
-    for (const { commit } of named)
-      await sharedGit(root, ["cat-file", "-e", { rev: `${commit}^{commit}` }]);
+  for (const { commit } of named)
+    await sharedGit(root, ["cat-file", "-e", { rev: `${commit}^{commit}` }]);
 }
 
 /** Fetches the commits a shared board's links read at into a checkout of
@@ -166,7 +151,6 @@ export async function fetchSharedCommits(
   } catch (error) {
     throw fetchError(
       error instanceof Error && "stderr" in error ? String(error.stderr) : "",
-      false,
     );
   }
 }
@@ -202,7 +186,6 @@ export async function cloneSharedRepository(root: string, url: string) {
   } catch (error) {
     throw fetchError(
       error instanceof Error && "stderr" in error ? String(error.stderr) : "",
-      false,
     );
   }
 
@@ -247,23 +230,4 @@ export async function readShareRepository(root: string) {
   }
 
   return { cloneUrl };
-}
-
-/** Fetches through origin itself, so its transport and credentials apply. */
-export async function verifyShareRepository(
-  root: string,
-  pins: Pins | undefined,
-  commits: readonly string[] = [],
-) {
-  const origin = (
-    await sharedGit(root, ["remote", "get-url", "origin"])
-  ).stdout.trim();
-
-  const temporary = await mkdtemp(path.join(tmpdir(), "review-share-check-"));
-
-  try {
-    await fetchPinnedRepository(temporary, origin, pins, true, commits);
-  } finally {
-    await rm(temporary, { recursive: true, force: true });
-  }
 }

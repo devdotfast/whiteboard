@@ -12,13 +12,9 @@ import { expect, it, vi } from "vitest";
 import { createShareFixture } from "../../test/fixtures/share/create.js";
 import { mountSharingHost } from "./host.js";
 
-it.each([
-  { verified: true, protocol: "dev-fast-review" },
-  { verified: true, protocol: "dev-fast-review-preview" },
-  { verified: false, protocol: "dev-fast-review" },
-])(
-  "posts one bundle, naming the repository only when GitHub has its commits ($verified, $protocol)",
-  async ({ verified, protocol }) => {
+it.each(["dev-fast-review", "dev-fast-review-preview"])(
+  "posts one bundle naming the repository (%s)",
+  async (protocol) => {
     const root = await mkdtemp(path.join(tmpdir(), "sharing-publish-"));
     const fixture = await createShareFixture(root);
     vi.stubEnv("DEV_REVIEW_HOME", root);
@@ -44,13 +40,6 @@ it.each([
       );
       mountSharingHost(api, fixture.store, fixture.data, {
         readRepository: async () => fixture.repository,
-        verifyRepository: async () => {
-          if (!verified)
-            throw new ReviewInputError(
-              "Push the reviewed commits to GitHub before sharing.",
-              409,
-            );
-        },
         onPublished: (event) => published.push(event),
         fetch: async (input, init) => {
           const url = new URL(String(input));
@@ -80,7 +69,7 @@ it.each([
       expect(published).toEqual([{ reviewId: fixture.reviewId, version }]);
       expect(requests).toEqual(["POST /api/v2/shares"]);
       expect(createShareSchema.parse(uploaded).bundle.repository).toEqual(
-        verified ? fixture.repository : undefined,
+        fixture.repository,
       );
     } finally {
       vi.unstubAllEnvs();
@@ -112,7 +101,6 @@ it("signs the user out when the share service rejects the stored token", async (
     );
     mountSharingHost(api, fixture.store, fixture.data, {
       readRepository: async () => fixture.repository,
-      verifyRepository: async () => {},
       fetch: async () => new Response("unauthorized", { status: 401 }),
     });
 

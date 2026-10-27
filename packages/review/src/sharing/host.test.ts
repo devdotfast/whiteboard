@@ -108,15 +108,9 @@ it("reports download and checkout preparation, and opens the same copy when the 
 
   const api = new Hono();
   mountSharingHost(api, fixture.store, fixture.data, {
-    fetchRepository: async (target, _url, pins, publishing, commits) => {
+    fetchRepository: async (target, _url, ...rest) => {
       await gate;
-      await fetchPinnedRepository(
-        target,
-        fixture.repo,
-        pins,
-        publishing,
-        commits,
-      );
+      await fetchPinnedRepository(target, fixture.repo, ...rest);
     },
   });
   const url = `https://app.dev.fast/s/${"a".repeat(43)}`;

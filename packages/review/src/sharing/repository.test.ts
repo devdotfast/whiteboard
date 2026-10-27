@@ -192,52 +192,6 @@ it("keeps a shared board's commits under refs, so gc can't prune them from the p
   ).toBe("");
 });
 
-it("rejects an unpushed commit even when the sender has its objects", async () => {
-  const { root, remote, git, pins } = await remoteFixture();
-  git("commit", "--allow-empty", "-qm", "not pushed");
-  const head = git("rev-parse", "HEAD");
-  await expect(
-    fetchPinnedRepository(
-      path.join(root, "recipient"),
-      remote,
-      { ...pins, head },
-      true,
-    ),
-  ).rejects.toThrow("Push the reviewed commits to GitHub before sharing.");
-});
-
-it("checks published pins without downloading trees, blobs, or intervening history", async () => {
-  const { root, remote, git, pins } = await remoteFixture();
-  git("commit", "--allow-empty", "-qm", "third commit");
-  const head = git("rev-parse", "HEAD");
-  git("push", remote, "HEAD:refs/heads/published");
-  execFileSync("git", [
-    "-C",
-    remote,
-    "config",
-    "uploadpack.allowFilter",
-    "true",
-  ]);
-  const checkout = path.join(root, "preflight");
-
-  await fetchPinnedRepository(
-    checkout,
-    `file://${remote}`,
-    { ...pins, head },
-    true,
-  );
-
-  const objects = await sharedGit(checkout, [
-    "cat-file",
-    "--batch-all-objects",
-    "--batch-check=%(objectname) %(objecttype)",
-  ]);
-
-  expect(objects.stdout.trim().split("\n").sort()).toEqual(
-    [`${pins.base} commit`, `${head} commit`].sort(),
-  );
-});
-
 it("reports access and connection failures without leaking Git output", async () => {
   const { root, pins } = await remoteFixture();
   await expect(
@@ -247,23 +201,4 @@ it("reports access and connection failures without leaking Git output", async ()
       pins,
     ),
   ).rejects.toThrow("Check your connection and Git credentials");
-});
-
-it("rejects non-commit pins during publication", async () => {
-  const { root, remote, git, pins } = await remoteFixture();
-
-  for (const [kind, spec] of [
-    ["tree", "HEAD^{tree}"],
-    ["blob", "HEAD:answer.ts"],
-  ]) {
-    const head = git("rev-parse", spec!);
-    await expect(
-      fetchPinnedRepository(
-        path.join(root, kind!),
-        remote,
-        { ...pins, head },
-        true,
-      ),
-    ).rejects.toThrow("Could not fetch the GitHub repository.");
-  }
 });

@@ -1,8 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
-import { createServer } from "node:http";
-import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -16,7 +14,7 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import { exportShare } from "./export.js";
 import { importShare, shareKey, validateShareBundle } from "./import.js";
-import { fetchPinnedRepository, verifyShareRepository } from "./repository.js";
+import { fetchPinnedRepository } from "./repository.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 
@@ -452,66 +450,6 @@ it("shares a plan whose links quote commits, and fetches them for its recipient"
       { encoding: "utf8" },
     ).trim(),
   ).toBe("commit");
-});
-
-it("refuses to publish a link to a commit GitHub doesn't have", async () => {
-  const { root, repo } = await fixture();
-  const remote = path.join(root, "remote.git");
-  execFileSync("git", ["init", "-q", "--bare", remote]);
-  execFileSync("git", [
-    "-C",
-    repo,
-    "push",
-    "-q",
-    remote,
-    "feature/shared-head",
-  ]);
-
-  const git = (...args: string[]) =>
-    execFileSync("git", args, { cwd: repo, encoding: "utf8" }).trim();
-
-  git("remote", "add", "origin", remote);
-  const pushed = git("rev-parse", "HEAD");
-  git("commit", "-q", "--allow-empty", "-m", "unpushed");
-  const unpushed = git("rev-parse", "HEAD");
-
-  await expect(
-    verifyShareRepository(repo, undefined, [pushed]),
-  ).resolves.toBeUndefined();
-  await expect(
-    verifyShareRepository(repo, undefined, [unpushed]),
-  ).rejects.toThrow("Push the reviewed commits to GitHub before sharing.");
-});
-
-it("says Git needs its own credentials when origin refuses them", async () => {
-  const { root, repo } = await fixture();
-
-  const server = createServer((_request, response) =>
-    response
-      .writeHead(401, { "WWW-Authenticate": 'Basic realm="GitHub"' })
-      .end(),
-  );
-
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  cleanup.push(() => new Promise((resolve) => server.close(() => resolve())));
-  const { port } = server.address() as AddressInfo;
-  vi.stubEnv("HOME", root);
-  execFileSync("git", [
-    "-C",
-    repo,
-    "remote",
-    "add",
-    "origin",
-    `http://127.0.0.1:${port}/org/repo.git`,
-  ]);
-
-  const head = execFileSync("git", ["-C", repo, "rev-parse", "HEAD"], {
-    encoding: "utf8",
-  }).trim();
-
-  await expect(verifyShareRepository(repo, undefined, [head])).rejects.toThrow(
-    "doesn't grant repository access",
-  );
 });
 
 it("keeps the copy and its code after the sender edits and moves the branch", async () => {

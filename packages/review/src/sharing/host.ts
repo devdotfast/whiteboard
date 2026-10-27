@@ -18,17 +18,12 @@ import { z } from "zod";
 
 import { readSharingAuth } from "./auth.js";
 import { ShareAuthError, ShareClient } from "./client.js";
-import {
-  exportShare,
-  referenceCommits,
-  validateShareSources,
-} from "./export.js";
+import { exportShare, validateShareSources } from "./export.js";
 import { importShare, shareKey } from "./import.js";
 import {
   type cloneSharedRepository,
   type fetchPinnedRepository,
   readShareRepository,
-  verifyShareRepository,
 } from "./repository.js";
 
 interface LoginState {
@@ -55,7 +50,6 @@ export interface SharingHostEvents {
 }
 
 interface SharingHostOptions extends SharingHostEvents {
-  verifyRepository?: typeof verifyShareRepository;
   readRepository?: typeof readShareRepository;
   fetchRepository?: typeof fetchPinnedRepository;
   cloneRepository?: typeof cloneSharedRepository;
@@ -240,14 +234,9 @@ export function mountSharingPublisher(
   data: LocalReviewData,
   options: Pick<
     SharingHostOptions,
-    | "verifyRepository"
-    | "readRepository"
-    | "fetch"
-    | "onPublished"
-    | "onRevoked"
+    "readRepository" | "fetch" | "onPublished" | "onRevoked"
   > = {},
 ) {
-  const verifyRepository = options.verifyRepository ?? verifyShareRepository;
   app.post("/sharing/publish", async (context) => {
     const input = publishSchema.parse(
       await readBoundedRequestJson(context.req.raw),
@@ -274,26 +263,12 @@ export function mountSharingPublisher(
 
     const root = repositoryId ? store.repositoryPath(repositoryId) : undefined;
 
-    const readRepository = options.readRepository ?? readShareRepository;
-
-    const commits = referenceCommits(snapshot);
-
-    // Desktop imports need the commits on GitHub; without them the share is
-    // for the browser only.
-    const repository = (async () => {
-      if (!root) return undefined;
-
-      try {
-        const repository = await readRepository(root);
-
-        if (snapshot.pins || commits.length)
-          await verifyRepository(root, snapshot.pins, commits);
-
-        return repository;
-      } catch {
-        return undefined;
-      }
-    })();
+    // Recipients learn about unpushed commits when they fetch them.
+    const repository = root
+      ? (options.readRepository ?? readShareRepository)(root).catch(
+          () => undefined,
+        )
+      : undefined;
 
     const bundle = await exportShare({
       store,
