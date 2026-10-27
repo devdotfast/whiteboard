@@ -5,7 +5,9 @@ import {
 import { codeType } from "@canvas/document-type.stylex";
 import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
+import { focusStyles } from "@canvas/ui/focus";
 import type {
+  ReviewCanvasBridge,
   ReviewDiffSide,
   ReviewFindQuery,
   ReviewInlineEditorFactory,
@@ -16,6 +18,7 @@ import type {
 import type { ShareSource } from "@dev.fast/review-share-protocol";
 import { type ShjToken, tokenize } from "@speed-highlight/core";
 import * as stylex from "@stylexjs/stylex";
+import { diffArrays } from "diff";
 
 interface Piece {
   text: string;
@@ -26,12 +29,25 @@ interface Row {
   n: number;
   text?: string;
   pieces?: Piece[];
+  change?: "added" | "removed";
+  /** The base line an unchanged row of a diff reads at. */
+  base?: number;
 }
 
 interface Block {
   side: ReviewDiffSide;
   rows: Row[];
+  diff?: boolean;
 }
+
+/** What the reader chose in Diff settings. */
+export type PeekSettings = Pick<
+  ReviewCanvasBridge,
+  | "currentDiffLayout"
+  | "onDidChangeDiffLayout"
+  | "currentInlineLineNumbers"
+  | "onDidChangeInlineLineNumbers"
+>;
 
 interface Match {
   start: number;
@@ -99,16 +115,36 @@ async function excerpts(sources: readonly ShareSource[]): Promise<Excerpt> {
     files.get(`${commit}\0${file}`)?.get(line) ?? {};
 }
 
-/** Each range read at its own side; a range reading the same as one on the
- * other side is shown once. */
+/** The head's lines with the base's removed lines between them, as the
+ * Desktop's unified peek shows them. */
+function unified(base: Block, head: Block): Block[] {
+  if (![...base.rows, ...head.rows].every((row) => row.text !== undefined))
+    return [base, head];
+
+  const rows: Row[] = [];
+  let [b, h] = [0, 0];
+
+  for (const part of diffArrays(
+    base.rows.map((row) => row.text),
+    head.rows.map((row) => row.text),
+  ))
+    for (let i = 0; i < part.value.length; i++)
+      if (part.removed) rows.push({ ...base.rows[b++], change: "removed" });
+      else if (part.added) rows.push({ ...head.rows[h++], change: "added" });
+      else rows.push({ ...head.rows[h++], base: base.rows[b++].n });
+
+  return [{ side: "head", rows, diff: true }];
+}
+
+/** Each range read at its own side. A selection resolves to a base range and
+ * a head range, which read as one diff. */
 function rangeBlocks(
   excerpt: Excerpt,
   boardPins: ReviewSourcePins | undefined,
   spec: Spec,
 ) {
   const pins = spec.pins ?? boardPins;
-  const blocks: Block[] = [];
-  const shown = new Map<string, ReviewDiffSide>();
+  const sides: Record<ReviewDiffSide, Block[]> = { base: [], head: [] };
 
   for (const range of spec.ranges) {
     const side = range.side ?? spec.side;
@@ -118,18 +154,18 @@ function rangeBlocks(
     for (let n = Math.max(1, range.startLine); n <= range.endLine; n++)
       rows.push({ n, ...(commit && excerpt(spec.path, commit, n)) });
 
-    const key = JSON.stringify(rows.map((row) => row.text ?? null));
-    const seen = shown.get(key);
-
-    if (seen && seen !== side) continue;
-    shown.set(key, side);
-    blocks.push({ side, rows });
+    sides[side].push({ side, rows });
   }
 
-  return blocks;
+  const { base, head } = sides;
+
+  return [
+    ...head.flatMap((block, k) => (base[k] ? unified(base[k], block) : block)),
+    ...base.slice(head.length),
+  ];
 }
 
-const lineKey = (block: number, line: number) => `${block}:${line}`;
+const lineKey = (block: number, row: number) => `${block}:${row}`;
 
 function matcher(query: ReviewFindQuery) {
   if (!query.text) return;
@@ -155,7 +191,7 @@ function find(blocks: readonly Block[], regex: RegExp | undefined): Found {
   if (!regex) return { byLine, count };
 
   for (const [index, block] of blocks.entries())
-    for (const { n, text } of block.rows) {
+    for (const [at, { text }] of block.rows.entries()) {
       const matches: Match[] = [];
 
       for (const match of text?.matchAll(regex) ?? [])
@@ -166,7 +202,7 @@ function find(blocks: readonly Block[], regex: RegExp | undefined): Found {
             index: count++,
           });
 
-      if (matches.length) byLine.set(lineKey(index, n), matches);
+      if (matches.length) byLine.set(lineKey(index, at), matches);
     }
 
   return { byLine, count };
@@ -245,17 +281,102 @@ function code(
   return element("span", styles.code, inner);
 }
 
+function lineHtml(
+  row: Row,
+  matches: readonly Match[],
+  found: Found,
+  settings: PeekSettings,
+  n = row.n,
+) {
+  const { change } = row;
+  const numbered = settings.currentInlineLineNumbers();
+
+  return element(
+    "div",
+    [styles.line, !numbered && styles.bare, change && styles[change]],
+    (numbered ? element("span", styles.gutter, String(n)) : "") +
+      code(row.text ?? "", row.pieces, matches, found.active),
+    ` data-line="${n}"${change ? ` data-change="${change}"` : ""}`,
+  );
+}
+
+/** A diff's rows as base and head columns: each change's removed lines
+ * beside its added ones, the shorter side filled. */
+function splitHtml(
+  { rows }: Block,
+  index: number,
+  found: Found,
+  settings: PeekSettings,
+) {
+  const filler = element(
+    "div",
+    [styles.line, styles.filler],
+    "",
+    " data-filler",
+  );
+
+  const columns = { base: "", head: "" };
+  let removed: string[] = [];
+  let added: string[] = [];
+
+  const flush = () => {
+    for (let i = 0; i < Math.max(removed.length, added.length); i++) {
+      columns.base += removed[i] ?? filler;
+      columns.head += added[i] ?? filler;
+    }
+
+    [removed, added] = [[], []];
+  };
+
+  for (const [at, row] of rows.entries()) {
+    const line = lineHtml(
+      row,
+      found.byLine.get(lineKey(index, at)) ?? [],
+      found,
+      settings,
+    );
+
+    if (row.change === "removed") removed.push(line);
+    else if (row.change === "added") added.push(line);
+    else {
+      flush();
+      // An unchanged row's matches count once, on its head side.
+      columns.base += lineHtml(row, [], found, settings, row.base ?? row.n);
+      columns.head += line;
+    }
+  }
+
+  flush();
+
+  return element(
+    "div",
+    [styles.range, styles.split],
+    Object.entries(columns)
+      .map(([side, inner]) =>
+        element("div", styles.column, inner, ` data-column="${side}"`),
+      )
+      .join(""),
+    ' data-range data-side="head"',
+  );
+}
+
 function rangeHtml(
-  { side, rows }: Block,
+  block: Block,
   index: number,
   labelled: boolean,
   found: Found,
+  settings: PeekSettings,
 ) {
+  if (block.diff && settings.currentDiffLayout("peek") === "split")
+    return splitHtml(block, index, found, settings);
+
+  const { side, rows } = block;
+
   let inner =
     labelled && side === "base" ? element("div", styles.notice, "Base") : "";
 
-  for (const [at, { n, text, pieces }] of rows.entries()) {
-    if (text === undefined) {
+  for (const [at, row] of rows.entries()) {
+    if (row.text === undefined) {
       if (rows[at - 1]?.text !== undefined || at === 0)
         inner += element(
           "div",
@@ -267,17 +388,11 @@ function rangeHtml(
       continue;
     }
 
-    inner += element(
-      "div",
-      styles.line,
-      element("span", styles.gutter, String(n)) +
-        code(
-          text,
-          pieces,
-          found.byLine.get(lineKey(index, n)) ?? [],
-          found.active,
-        ),
-      ` data-line="${n}"`,
+    inner += lineHtml(
+      row,
+      found.byLine.get(lineKey(index, at)) ?? [],
+      found,
+      settings,
     );
   }
 
@@ -286,18 +401,26 @@ function rangeHtml(
 
 function peekClass(heightMode: string, collapsed: boolean) {
   return className([
+    focusStyles.ringInset,
     styles.peek,
     heightMode === "capped" && styles.capped,
     collapsed && styles.collapsed,
   ]);
 }
 
-function peekInner(title: string, blocks: readonly Block[], found: Found) {
+function peekInner(
+  title: string,
+  blocks: readonly Block[],
+  found: Found,
+  settings: PeekSettings,
+) {
   const labelled = new Set(blocks.map((block) => block.side)).size > 1;
 
   const body = blocks.length
     ? blocks
-        .map((block, index) => rangeHtml(block, index, labelled, found))
+        .map((block, index) =>
+          rangeHtml(block, index, labelled, found, settings),
+        )
         .join("")
     : element("div", styles.notice, UNAVAILABLE, " data-unavailable");
 
@@ -307,36 +430,43 @@ function peekInner(title: string, blocks: readonly Block[], found: Found) {
   );
 }
 
-/** Read-only peeks of the lines a share carries. */
+/** Read-only peeks of the lines a share carries, laid out as the reader's
+ * Diff settings say. */
 export async function shareInlineEditors(
   sources: readonly ShareSource[],
   boardPins: ReviewSourcePins | undefined,
-): Promise<ReviewInlineEditorFactory> {
+): Promise<(settings: PeekSettings) => ReviewInlineEditorFactory> {
   const excerpt = await excerpts(sources);
 
-  const markup = (spec: ReviewInlineStaticSpec) =>
-    `<div class="${peekClass(spec.heightMode, false)}">${peekInner(spec.title, rangeBlocks(excerpt, boardPins, spec), find([], undefined))}</div>`;
-
-  return {
+  return (settings) => ({
     async find(spec, query) {
       return {
         matchCount: find(rangeBlocks(excerpt, boardPins, spec), matcher(query))
           .count,
       };
     },
-    renderStatic: markup,
+    renderStatic: (spec: ReviewInlineStaticSpec) =>
+      `<div class="${peekClass(spec.heightMode, false)}">${peekInner(spec.title, rangeBlocks(excerpt, boardPins, spec), find([], undefined), settings)}</div>`,
     create(spec) {
       const blocks = rangeBlocks(excerpt, boardPins, spec);
       const listeners = new Set<(height: number) => void>();
       let found = find([], undefined);
       let collapsed = false;
 
+      // Focusable, so a click gives it the wheel as a Desktop editor's does.
       const peek = document.createElement("div");
+      peek.tabIndex = 0;
+      peek.addEventListener("focusin", () => spec.onDidFocus?.());
 
       const render = () => {
         peek.className = peekClass(spec.heightMode, collapsed);
-        peek.innerHTML = peekInner(spec.title, blocks, found);
+        peek.innerHTML = peekInner(spec.title, blocks, found, settings);
       };
+
+      const subscriptions = [
+        settings.onDidChangeDiffLayout("peek", render),
+        settings.onDidChangeInlineLineNumbers(render),
+      ];
 
       // Replaces a server render's markup with the same HTML, so nothing
       // moves.
@@ -384,10 +514,16 @@ export async function shareInlineEditors(
           );
 
           if (!mark) return;
-          peek.scrollTop =
-            mark.offsetTop - (peek.clientHeight - mark.offsetHeight) / 2;
-          peek.scrollLeft =
-            mark.offsetLeft - (peek.clientWidth - mark.offsetWidth) / 2;
+          const at = mark.getBoundingClientRect();
+          const across = mark.closest<HTMLElement>("[data-column]") ?? peek;
+          peek.scrollTop +=
+            at.top -
+            peek.getBoundingClientRect().top -
+            (peek.clientHeight - at.height) / 2;
+          across.scrollLeft +=
+            at.left -
+            across.getBoundingClientRect().left -
+            (across.clientWidth - at.width) / 2;
         },
         clearActiveFindMatch() {
           found = { ...found, active: undefined };
@@ -398,13 +534,14 @@ export async function shareInlineEditors(
           render();
         },
         dispose() {
+          for (const subscription of subscriptions) subscription.dispose();
           observer.disconnect();
           listeners.clear();
           peek.remove();
         },
       };
     },
-  };
+  });
 }
 
 const styles = stylex.create({
@@ -450,7 +587,31 @@ const styles = stylex.create({
     display: "flex",
     width: "max-content",
     minWidth: "100%",
+    minHeight: "1lh",
     whiteSpace: "pre",
+  },
+  bare: {
+    paddingInlineStart: space.s12,
+  },
+  split: {
+    display: "flex",
+  },
+  column: {
+    flex: "1 1 0",
+    minWidth: 0,
+    overflowX: "auto",
+    borderRightWidth: { default: "1px", ":last-child": "0" },
+    borderRightStyle: "solid",
+    borderRightColor: tokens.ruleSoft,
+  },
+  filler: {
+    backgroundColor: `color-mix(in srgb, ${tokens.ruleSoft} 35%, ${tokens.transparent})`,
+  },
+  added: {
+    backgroundColor: tokens.diffAddedBg,
+  },
+  removed: {
+    backgroundColor: tokens.diffRemovedBg,
   },
   gutter: {
     flexShrink: 0,

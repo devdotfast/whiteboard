@@ -8,6 +8,8 @@ import type {
   ReviewTheme,
 } from "@dev.fast/review-protocol";
 
+import type { PeekSettings } from "./inline-editors";
+
 // Shipped beside the package's index.js; Vite serves it from node_modules in
 // tests and dev. Read on demand: a Worker may lack import.meta.url.
 export const libavoidWasmUrl = () =>
@@ -36,7 +38,7 @@ function listeners<T>() {
 export function shareHost(options: {
   theme: ReviewTheme;
   wasmUrl: string;
-  inlineEditors: ReviewInlineEditorFactory;
+  inlineEditors: (settings: PeekSettings) => ReviewInlineEditorFactory;
 }): WhiteboardHost & ReviewDisposable {
   let lineNumbers = false;
 
@@ -53,10 +55,19 @@ export function shareHost(options: {
     peek: listeners<ReviewDiffLayout>(),
   };
 
+  const settings: PeekSettings = {
+    currentDiffLayout: (scope) => layouts[scope],
+    onDidChangeDiffLayout: (scope, listener) =>
+      layoutListeners[scope].add(listener),
+    currentInlineLineNumbers: () => lineNumbers,
+    onDidChangeInlineLineNumbers: lineNumberListeners.add,
+  };
+
   return {
+    ...settings,
     wasmUrl: options.wasmUrl,
     appVersion: "share",
-    inlineEditors: options.inlineEditors,
+    inlineEditors: options.inlineEditors(settings),
     diffView: {
       files: async () => [],
       create: () => ({
@@ -69,19 +80,14 @@ export function shareHost(options: {
     subscribe: events.add,
     currentTheme: () => options.theme,
     onDidChangeTheme: () => ({ dispose() {} }),
-    currentDiffLayout: (scope) => layouts[scope],
     async setDiffLayout(scope, layout) {
       layouts[scope] = layout;
       layoutListeners[scope].fire(layout);
     },
-    onDidChangeDiffLayout: (scope, listener) =>
-      layoutListeners[scope].add(listener),
-    currentInlineLineNumbers: () => lineNumbers,
     async setInlineLineNumbers(show) {
       lineNumbers = show;
       lineNumberListeners.fire(show);
     },
-    onDidChangeInlineLineNumbers: lineNumberListeners.add,
     ready() {},
     dispose() {
       for (const set of [
