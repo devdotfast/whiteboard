@@ -186,14 +186,14 @@ export function authoringTools(
     ),
     tool(
       "open",
-      "Show an active review immediately; restore it from Trash before opening it. Prepare current pinned checkouts in the background. Returns softwareMapEnabled and any already-recorded environmentIssues. Missing optional setup is not an issue; use review_environment to recheck.",
+      "Show an active review immediately; restore it from Trash before opening it. Prepare its pinned checkout in the background. Returns softwareMapEnabled and any already-recorded environmentIssues. Missing optional setup is not an issue; use review_environment to recheck.",
       z.strictObject(review),
       "POST",
       "/:reviewId/open",
     ),
     tool(
       "environment",
-      "Acquire and recheck this review's current base/head language checkouts (not historical or selected commits). Returns acquisition issues, not full LSP health. Missing optional setup and failed setup with a usable checkout stay silent. Set retry:true to rerun failed preparation after an actual language-feature failure; preparation runs in the background.",
+      "Acquire and recheck this review's current head language checkout (not historical or selected commits). Returns acquisition issues, not full LSP health. Missing optional setup and failed setup with a usable checkout stay silent. Set retry:true to rerun failed preparation after an actual language-feature failure; preparation runs in the background.",
       z.strictObject({ ...review, retry: z.boolean().optional() }),
       "POST",
       "/:reviewId/environment",

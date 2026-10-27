@@ -41,6 +41,7 @@ import { ReviewApiClient } from "./client.js";
 import { type Pins, ReviewInputError, elements } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";
+import type { WorkspaceStatus } from "./workspaces.js";
 
 let directory: string, repository: string, database: string, pins: Pins;
 
@@ -295,10 +296,10 @@ it("opens without waiting for acquisition and keeps diagnostic failures nonfatal
     softwareMapEnabled: false,
   }));
 
-  const pending = Promise.withResolvers<void>();
+  const pending = Promise.withResolvers<WorkspaceStatus>();
 
   const preparation = vi
-    .spyOn(local.data.workspaces, "open")
+    .spyOn(local.data.workspaces, "source")
     .mockReturnValue(pending.promise);
 
   let timer: ReturnType<typeof setTimeout>;
@@ -582,18 +583,13 @@ it("only reports acquisition issues to agents and clears them after recovery", a
     expect(result.environmentIssues).toEqual(checked.issues);
     expect(result.environmentIssues).toEqual([
       {
-        side: "head",
-        message: expect.stringContaining("Pinned checkout is unavailable."),
-      },
-      {
-        side: "base",
         message: expect.stringContaining("Pinned checkout is unavailable."),
       },
     ]);
     expect(await check()).toEqual({ issues: result.environmentIssues });
 
     const context = await (
-      await app.request(`/${created.reviewId}/language-context?side=head`)
+      await app.request(`/${created.reviewId}/language-context`)
     ).json();
 
     expect(context.rootPath).toBeNull();
@@ -999,14 +995,12 @@ it("gives a remote caller a commit review's checkout as remoteRootPath, with the
     }),
   );
 
-  await local.data.languageEnvironment(local.store.read(reviewId), "head");
+  await local.data.languageEnvironment(local.store.read(reviewId));
   await local.data.workspaces.idle();
   const app = createReviewApi(local.store, local.data);
 
   const read = async (headers: Record<string, string> = {}) =>
-    (
-      await app.request(`/${reviewId}/language-context?side=head`, { headers })
-    ).json();
+    (await app.request(`/${reviewId}/language-context`, { headers })).json();
 
   const ownMachine = await read();
   expect(ownMachine.rootPath).toEqual(expect.any(String));
@@ -1046,13 +1040,13 @@ it("answers a remote caller's navigator with the host paths a local caller gets,
   };
 
   const remote = { [REVIEW_CLIENT_HEADER]: REVIEW_CLIENT_REMOTE };
-  const file = { version: "0", side: "base", file: source.file };
+  const file = { version: "0", file: source.file };
   const { serverId, ...answer } = await open(file, remote);
   const { folders } = JSON.parse(readFileSync(answer.workspacePath, "utf8"));
   expect(serverId).toBe(local.store.serverId());
   expect(answer).toEqual(await open(file));
   expect(answer.filePath).toBe(path.join(folders[0].path, source.file));
-  expect(readFileSync(answer.filePath, "utf8")).toContain("value = 1");
+  expect(readFileSync(answer.filePath, "utf8")).toContain("value = 2");
 
   const added = { ...file, file: "added.ts", empty: "true" };
   expect(await open(added, remote)).toEqual({
@@ -1072,12 +1066,11 @@ it("opens a stable native workspace on the Review's pinned checkout at the selec
     }),
   );
 
-  await local.data.languageEnvironment(local.store.read(reviewId), "head");
+  await local.data.languageEnvironment(local.store.read(reviewId));
   await local.data.workspaces.idle();
 
   const language = await local.data.languageEnvironment(
     local.store.read(reviewId),
-    "head",
   );
 
   expect(language.rootPath).not.toBeNull();
@@ -1145,7 +1138,7 @@ it("opens a stable native workspace on the Review's pinned checkout at the selec
   ).toBe(404);
 });
 
-it("opens navigator files at their base, head, commit and explicit pins", async () => {
+it("opens navigator files at their head, a selected commit and explicit pins", async () => {
   const { reviewId } = await local.store.execute(
     command({
       type: "create",
@@ -1167,38 +1160,24 @@ it("opens navigator files at their base, head, commit and explicit pins", async 
     return response.json();
   };
 
-  const head = await open({ version: "0", side: "head", file: source.file });
-  const base = await open({ version: "0", side: "base", file: source.file });
+  const head = await open({ version: "0", file: source.file });
+
+  const base = await open({
+    version: "0",
+    repositoryId: pins.repositoryId,
+    head: pins.base,
+    file: source.file,
+  });
+
   expect(readFileSync(head.filePath, "utf8")).toContain("value = 2");
   expect(readFileSync(base.filePath, "utf8")).toContain("value = 1");
   expect(head.workspacePath).not.toBe(base.workspacePath);
   expect(
-    (
-      await open({
-        version: "0",
-        commit: pins.head,
-        side: "base",
-        file: source.file,
-      })
-    ).filePath,
-  ).toBe(base.filePath);
-  expect(
-    (
-      await open({
-        version: "0",
-        repositoryId: pins.repositoryId,
-        head: pins.base,
-        file: source.file,
-      })
-    ).filePath,
-  ).toBe(base.filePath);
+    (await open({ version: "0", commit: pins.head, file: source.file }))
+      .filePath,
+  ).toBe(head.filePath);
 
-  const empty = await open({
-    version: "0",
-    side: "base",
-    file: "added.ts",
-    empty: "true",
-  });
+  const empty = await open({ version: "0", file: "added.ts", empty: "true" });
 
   expect(readFileSync(empty.filePath, "utf8")).toBe("");
   expect(
@@ -1254,12 +1233,6 @@ it("keeps a live navigator attached to the live checkout without preparing it", 
   expect(live.filePath).toBe(path.join(root, source.file));
   expect(live.rootPath).toBe(root);
 
-  const base = await local.data.navigatorWorkspace(local.store.read(reviewId), {
-    side: "base",
-    file: source.file,
-  });
-
-  expect(readFileSync(base.filePath!, "utf8")).toContain("value = 1");
   const outside = path.join(directory, "outside.ts");
   writeFileSync(outside, "outside source\n");
   symlinkSync(outside, path.join(repository, "outside-link.ts"));
@@ -3455,16 +3428,14 @@ it("worktree language contexts never prepare or create checkouts, including hist
     (await app.request(`/${created.reviewId}/open`, { method: "POST" })).status,
   ).toBe(200);
 
-  for (const side of ["base", "head"]) {
-    const response = await app.request(
-      `/${created.reviewId}/language-context?version=0&side=${side}`,
-    );
+  const response = await app.request(
+    `/${created.reviewId}/language-context?version=0`,
+  );
 
-    expect(await response.json()).toMatchObject({
-      rootPath: realpathSync(repository),
-      identity: expect.any(String),
-    });
-  }
+  expect(await response.json()).toMatchObject({
+    rootPath: realpathSync(repository),
+    identity: expect.any(String),
+  });
 
   await local.data.workspaces.idle();
   expect(local.data.workspaces.list(created.reviewId)).toEqual([]);
@@ -3672,20 +3643,18 @@ it("keeps live language identity across edits but replaces it with a checkout at
   );
 
   const saved = local.store.read(created.reviewId, created.version);
-  const before = await local.data.languageEnvironment(saved, "head");
+  const before = await local.data.languageEnvironment(saved);
   const retained = await local.data.file(saved.pins!, "head", source.file);
   writeFileSync(path.join(repository, "identity.ts"), "const changed = true;");
-  expect(await local.data.languageEnvironment(saved, "head")).toEqual(before);
+  expect(await local.data.languageEnvironment(saved)).toEqual(before);
   const moved = `${repository}-previous`;
   renameSync(repository, moved);
 
   try {
-    expect(
-      (await local.data.languageEnvironment(saved, "head")).rootPath,
-    ).toBeNull();
+    expect((await local.data.languageEnvironment(saved)).rootPath).toBeNull();
     mkdirSync(repository);
     execFileSync("git", ["clone", "--quiet", moved, repository]);
-    const replacement = await local.data.languageEnvironment(saved, "head");
+    const replacement = await local.data.languageEnvironment(saved);
     expect(replacement.rootPath).toBe(before.rootPath);
     expect(replacement.identity).not.toBe(before.identity);
     expect(local.data.workspaces.list(created.reviewId)).toEqual([]);

@@ -20,9 +20,8 @@ function sourceResolver(t: TestContext, options: { openFilesIn?: string; applica
 		const request = new URL(url);
 		requests.push(request);
 		if (state.fail) return Response.json({ error: "Checkout unavailable" }, { status: 409 });
-		const side = request.searchParams.get("side");
 		const file = request.searchParams.get("file");
-		return Response.json({ workspacePath: `/navigator/${side}.code-workspace`, filePath: file ? `/navigator/${side}/${file}` : undefined, rootPath: `/navigator/${side}` });
+		return Response.json({ workspacePath: "/navigator/head.code-workspace", filePath: file ? `/navigator/head/${file}` : undefined, rootPath: "/navigator/head" });
 	});
 	const tabs = new ReviewCanvasEditorTabsService(
 		{} as never, { onDidCloseEditor: Event.None } as never, {} as never,
@@ -56,8 +55,8 @@ test("source tree, selected code, definitions and diffs hand off before creating
 	assert.equal(await resolver.resolveEditor({ resource: head }, undefined), ResolvedStatus.ABORT);
 	assert.equal(await resolver.resolveEditor({ resource: base, options: { selection: { startLineNumber: 42, startColumn: 3 } } }, undefined), ResolvedStatus.ABORT);
 	assert.deepEqual(windows[1].openables, [
-		{ workspaceUri: URI.file("/navigator/base.code-workspace") },
-		{ fileUri: URI.file("/navigator/base/old-name.ts:42:3") },
+		{ workspaceUri: URI.file("/navigator/head.code-workspace") },
+		{ fileUri: URI.file("/navigator/head/old-name.ts:42:3") },
 	]);
 	assert.equal(windows[1].options.remoteAuthority, undefined);
 	assert.equal(requests[1].searchParams.get("version"), "7");
@@ -71,7 +70,7 @@ test("source tree, selected code, definitions and diffs hand off before creating
 	assert.equal(await resolver.resolveEditor({ original: { resource: base }, modified: { resource: head } }, undefined), ResolvedStatus.ABORT);
 	assert.deepEqual(windows[3].openables, [
 		{ workspaceUri: URI.file("/navigator/head.code-workspace") },
-		{ fileUri: URI.file("/navigator/base/old-name.ts") },
+		{ fileUri: URI.file("/navigator/head/old-name.ts") },
 		{ fileUri: URI.file("/navigator/head/nested/source.ts") },
 	]);
 	assert.equal(windows[3].options.diffMode, true);
@@ -98,7 +97,7 @@ test("source files, pinned revisions included, open in the chosen editor; diffs 
 	await resolver.resolveEditor({ resource: dependency }, undefined);
 	assert.deepEqual(external, [
 		{ editor: "cursor", filePath: "/navigator/head/nested/my source.ts", line: 42, column: 3, folder: "/navigator/head" },
-		{ editor: "cursor", filePath: "/navigator/base/nested/my source.ts", line: undefined, column: undefined, folder: "/navigator/base" },
+		{ editor: "cursor", filePath: "/navigator/head/nested/my source.ts", line: undefined, column: undefined, folder: "/navigator/head" },
 		{ editor: "cursor", filePath: "/prepared/node_modules/lib/index.d.ts", line: undefined, column: undefined, folder: "/navigator/head" },
 	]);
 	assert.equal(windows.length, 0);

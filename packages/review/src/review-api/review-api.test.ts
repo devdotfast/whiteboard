@@ -3093,10 +3093,7 @@ it("serves the experiment through the real desktop HTTP server and existing auth
         { reviewId },
       ),
     ).toEqual({
-      issues: [
-        { side: "head" as const, message: expect.any(String) },
-        { side: "base", message: expect.any(String) },
-      ],
+      issues: [{ message: expect.any(String) }],
     });
 
     relay.close();

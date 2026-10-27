@@ -810,7 +810,7 @@ it("gives a worktree file its local path and opens a source window", async () =>
 
     const remoteContext = async (reviewId: string) => {
       const response = await fetch(
-        `${server.discovery.url}/reviews-api/${reviewId}/language-context?side=head`,
+        `${server.discovery.url}/reviews-api/${reviewId}/language-context`,
         {
           headers: {
             "x-review-token": server.discovery.token,

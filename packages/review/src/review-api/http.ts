@@ -726,12 +726,12 @@ export function createReviewApi(
       title: review.title,
     });
 
-    let environmentIssues: { side?: string; message: string }[] | undefined;
+    let environmentIssues: { message: string }[] | undefined;
 
     try {
       if (review.target?.kind === "commits" && review.pins)
         void data?.workspaces
-          .open(review.reviewId, review.pins)
+          .source(review.reviewId, review.pins)
           .catch(() => {});
       environmentIssues = data?.currentEnvironmentIssues(review);
     } catch (error) {
@@ -818,8 +818,8 @@ export function createReviewApi(
     });
     app.post("/:id/navigator", writable, async (context) => {
       const input = readQuerySchemas.file
+        .omit({ side: true })
         .extend({
-          side: z.enum(["base", "head"]).default("head"),
           file: z.string().min(1).optional(),
           empty: z.literal("true").optional(),
         })
@@ -916,7 +916,6 @@ export function createReviewApi(
     app.get("/:id/language-context", async (context) => {
       const input = readQuerySchemas.maps
         .extend({
-          side: z.enum(["base", "head"]).default("head"),
           commit: z.string().optional(),
           repositoryId: z.string().optional(),
           head: z.string().optional(),
@@ -928,7 +927,6 @@ export function createReviewApi(
 
       const environment = await data.languageEnvironment(
         snapshot,
-        input.side,
         input.commit,
         false,
         queryAnchor(input),
