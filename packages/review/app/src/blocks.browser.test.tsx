@@ -1065,6 +1065,60 @@ describe("block components", () => {
     expect(alertText(container)).toContain("moved 0 frames");
   });
 
+  // Records the type of every message a stage posts to its block.
+  const tapStages = () => {
+    const posted: string[] = [];
+    const Channel = window.MessageChannel;
+
+    window.MessageChannel = class extends Channel {
+      constructor() {
+        super();
+        this.port1.addEventListener("message", (event: MessageEvent) =>
+          posted.push(event.data?.type),
+        );
+      }
+    };
+
+    return {
+      posted,
+      count: (type: string) => posted.filter((item) => item === type).length,
+      [Symbol.dispose]: () => (window.MessageChannel = Channel),
+    };
+  };
+
+  it("does not resend slots for sub-pixel motion", async () => {
+    using stages = tapStages();
+
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Jitter",
+          height: 240,
+          frames: [{ key: "only", title: "Only" }],
+          code: { status: "head/order.ts#L1" },
+          html: [
+            "<style>@keyframes jitter { from { transform: translate(0.1px, 0.1px); opacity: 0.999; } to { transform: translate(0.4px, 0.4px); opacity: 0.996; } }</style>",
+            '<div data-wb-code="status" style="width:200px;animation:jitter 100ms linear infinite alternate"></div>',
+          ].join(""),
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    expect(
+      await settled(() =>
+        container.querySelector("[data-animation-slot='code']"),
+      ),
+    ).toBeTruthy();
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    const before = stages.count("slots");
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    expect(stages.count("slots")).toBe(before);
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
   it("mounts a scene in its container and keeps narrow tables readable", async () => {
     const { container } = await mountFixture("animation", {
       document: [

@@ -2518,11 +2518,12 @@ body {
         slot: el.dataset.wbSlot!,
         kind: el.dataset.wbCode !== undefined ? "code" : "block",
         ref: el.dataset.wbCode ?? el.dataset.wbBlock!,
-        x: rect.x,
-        y: rect.y,
-        width: rect.width,
-        height: rect.height,
-        opacity: Math.round(opacity * 1000) / 1000,
+        // Whole pixels, so sub-pixel jitter is not a change to send.
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+        opacity: Math.round(opacity * 100) / 100,
         visible:
           rect.width > 0 &&
           opacity > 0.001 &&
