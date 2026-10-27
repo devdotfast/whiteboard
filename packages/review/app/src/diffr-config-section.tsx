@@ -369,23 +369,30 @@ export function DiffrConfigSection({
                         }
                       />
                     </Row>
-                    <Row label="Endpoint URL">
-                      <TextField
-                        xstyle={styles.input}
-                        aria-label="Endpoint URL"
-                        placeholder={
-                          described(config, draft.provider)?.endpoint
-                        }
-                        value={draft.endpoint}
-                        onChange={(event) =>
-                          setDraft({ ...draft, endpoint: event.target.value })
-                        }
-                      />
-                    </Row>
-                    <p {...stylex.props(styles.rowDescription)}>
-                      Optional. With OpenAI, point this at any compatible
-                      server, such as OpenRouter or Ollama.
-                    </p>
+                    {!login && (
+                      <>
+                        <Row label="Endpoint URL">
+                          <TextField
+                            xstyle={styles.input}
+                            aria-label="Endpoint URL"
+                            placeholder={
+                              described(config, draft.provider)?.endpoint
+                            }
+                            value={draft.endpoint}
+                            onChange={(event) =>
+                              setDraft({
+                                ...draft,
+                                endpoint: event.target.value,
+                              })
+                            }
+                          />
+                        </Row>
+                        <p {...stylex.props(styles.rowDescription)}>
+                          Optional. With OpenAI, point this at any compatible
+                          server, such as OpenRouter or Ollama.
+                        </p>
+                      </>
+                    )}
                     <label {...stylex.props(styles.prompt)}>
                       <span {...stylex.props(styles.rowLabel)}>
                         Prompt{" "}

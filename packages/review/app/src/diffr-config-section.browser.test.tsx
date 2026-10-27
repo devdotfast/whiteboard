@@ -517,6 +517,7 @@ test("prefers a signed-in Codex when nothing has a key, and shows its sign-in in
     .element(page.getByText(/Uses the Codex sign-in saved on this computer/))
     .toBeVisible();
   expect(document.body.textContent).not.toContain("API key");
+  expect(document.body.textContent).not.toContain("Endpoint URL");
 
   await act(async () => {
     await page.getByLabelText("Enable summaries", { exact: true }).click();
