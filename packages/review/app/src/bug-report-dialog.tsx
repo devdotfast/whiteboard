@@ -132,6 +132,7 @@ export function BugReportControl({
       notify({
         kind: "success",
         text: "Bug report was sent.",
+        closeAfterMs: 5_000,
       });
       reset();
       setOpen(false);

@@ -370,6 +370,7 @@ export interface ReviewNotification {
   kind: "success" | "error";
   text: string;
   actions?: readonly { label: string; run(): void }[];
+  closeAfterMs?: number;
   onClose?(): void;
 }
 

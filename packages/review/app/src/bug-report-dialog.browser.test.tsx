@@ -70,6 +70,7 @@ describe("BugReportControl", () => {
     expect(notify).toHaveBeenCalledWith({
       kind: "success",
       text: "Bug report was sent.",
+      closeAfterMs: 5_000,
     });
     expect(container.querySelector("dialog")).toBeNull();
   });

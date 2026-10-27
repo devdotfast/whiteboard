@@ -955,6 +955,7 @@ function ReviewHomeBody({
             ? {
                 kind: "success",
                 text: "Copied 'founders@dev.fast' to clipboard",
+                closeAfterMs: 5_000,
               }
             : { kind: "error", text: "Couldn't copy email. Please try again." },
         );
