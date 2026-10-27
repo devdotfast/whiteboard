@@ -1006,6 +1006,65 @@ describe("block components", () => {
     ).toMatch(/The diagram has no part "stor"\. Its parts: .*\bstore\b/);
   });
 
+  // The stage reports through an error: the host cannot reach into its frame.
+  const alertText = (container: HTMLElement) =>
+    container.querySelector("[role='alert']")?.textContent ?? "";
+
+  it("stops measuring a still stage and measures again for a frame change", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Idle",
+          height: "auto",
+          frames: [
+            { key: "still", title: "Still" },
+            { key: "moved", title: "Moved" },
+          ],
+          code: { status: "head/order.ts#L1" },
+          html: [
+            '<div id="peek" data-wb-code="status" style="width:200px"></div>',
+            "<script>",
+            "let n=0;const raf=window.requestAnimationFrame.bind(window);",
+            "window.requestAnimationFrame=(cb)=>{n++;return raf(cb)};",
+            "const report=(label)=>{const s=n;setTimeout(()=>{throw new Error(`${label} ${n-s} frames`)},500)};",
+            'whiteboard.on("still",()=>setTimeout(()=>report("still"),1000));',
+            'whiteboard.on("moved",()=>{whiteboard.animate("#peek",[{transform:"translateX(0px)"},{transform:"translateX(80px)"}],300);setTimeout(()=>report("moved"),1000)});',
+            "</script>",
+          ].join(""),
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    const x = () => {
+      const slot = container.querySelector<HTMLElement>(
+        "[data-animation-slot='code']",
+      );
+
+      return (
+        slot && Number(/translate\(([-\d.]+)px/.exec(slot.style.transform)?.[1])
+      );
+    };
+
+    expect(
+      await settled(() => /still \d+ frames/.exec(alertText(container))),
+    ).toBeTruthy();
+    expect(alertText(container)).toContain("still 0 frames");
+    const start = x()!;
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+        .click(),
+    );
+    expect(await settled(() => x() === start + 80)).toBe(true);
+    expect(
+      await settled(() => /moved \d+ frames/.exec(alertText(container))),
+    ).toBeTruthy();
+    expect(alertText(container)).toContain("moved 0 frames");
+  });
+
   it("mounts a scene in its container and keeps narrow tables readable", async () => {
     const { container } = await mountFixture("animation", {
       document: [
