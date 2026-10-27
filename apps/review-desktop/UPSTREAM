@@ -644,7 +644,7 @@ one of these entries:
   main-process pre-bootstrap window" in `README.md`.
 - `src/vs/code/electron-browser/workbench/workbench.html` and
   `workbench-dev.html`: allow the local Review session connection and the
-  native canvas Trusted Types policy in built and development launches.
+  canvas Trusted Types policies in built and development launches.
 - `src/vs/base/common/product.ts`: declares the `reviewVersion` field described
   above, so the About panel can read it typed, and `whiteboardRemote`, the
   per-arch remote tarballs that release builds pin for remote installs.
