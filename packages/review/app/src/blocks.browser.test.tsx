@@ -1059,6 +1059,8 @@ describe("block components", () => {
   });
 
   it("lets go of a frame's finished animations on the next frame and keeps their end state", async () => {
+    using stages = tapStages();
+
     const { container } = await mountFixture("animation", {
       document: [
         {
@@ -1091,7 +1093,9 @@ describe("block components", () => {
       await new Promise((resolve) => setTimeout(resolve, 200));
     };
 
-    expect(await settled(() => text(container).includes("1 / 4"))).toBe(true);
+    // The count shows before the stage boots: wait for the stage itself, so
+    // frame a's animation has run before stepping on.
+    expect(await settled(() => stages.count("ready") === 1)).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 200));
     await next("2 / 4");
     await next("3 / 4");
