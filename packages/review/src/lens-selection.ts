@@ -1,7 +1,7 @@
 import { z } from "zod";
 
+import { unionIntervals } from "./intervals.js";
 import { type FileLineRange, type SourcePins } from "./source.js";
-import { unionIntervals } from "./viewed-coverage.js";
 
 const ANCHOR_FORMS =
   '"head/path#L10-L24" or "base/path#L7" (one side, lines 10–24 or line 7); across sides, GitHub diff style "diff/path#L84-R90" (L = base line, R = head line)';
