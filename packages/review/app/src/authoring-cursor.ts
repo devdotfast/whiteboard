@@ -129,3 +129,51 @@ export function nextCursor(
 
   return cursor;
 }
+
+/** Both surfaces' cursors, with the memory that folded them. */
+export interface CursorFold {
+  reviewId: string;
+  message: CursorMessage;
+  cursors: Record<ActivitySurface, AuthoringCursor | null>;
+  memory: Record<ActivitySurface, CursorMemory>;
+}
+
+const surfaces = ["document", "lenses"] as const;
+
+/** Folds a board's latest message into both cursors; another board starts over. */
+export function foldCursors(
+  fold: CursorFold | undefined,
+  reviewId: string,
+  message: CursorMessage,
+): CursorFold {
+  const same = fold?.reviewId === reviewId;
+
+  if (
+    same &&
+    fold.message.version === message.version &&
+    fold.message.lastEdit === message.lastEdit &&
+    fold.message.activity === message.activity
+  )
+    return fold;
+
+  const cursors = same ? { ...fold.cursors } : { document: null, lenses: null };
+
+  const memory = same
+    ? {
+        document: { ...fold.memory.document },
+        lenses: { ...fold.memory.lenses },
+      }
+    : { document: {}, lenses: {} };
+
+  // A lost stream moves no courier it has not placed.
+  for (const scope of surfaces)
+    if (message.activity !== "unknown" || cursors[scope])
+      cursors[scope] = nextCursor(
+        cursors[scope],
+        memory[scope],
+        message,
+        scope,
+      );
+
+  return { reviewId, message, cursors, memory };
+}

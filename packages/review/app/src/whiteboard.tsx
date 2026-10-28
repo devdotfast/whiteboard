@@ -6,6 +6,7 @@ import {
   parseReviewBoardPlace,
   parseReviewStackResponse,
 } from "@dev.fast/review-protocol";
+import type { ActivitySnapshot } from "@review/review-api/activity";
 import type { ReviewApiClient } from "@review/review-api/client";
 import { elements } from "@review/review-api/document";
 import type { ReviewProgress } from "@review/review-api/review-progress";
@@ -33,11 +34,14 @@ import {
   AskProjectContext,
   readOpenAsks,
 } from "./ask-open-state";
+import { AuthoringActivityContext } from "./authoring-activity-context";
+import { type CursorFold, foldCursors } from "./authoring-cursor";
 import { BoardCommitsContext } from "./board-commits";
 import { BoardEditorHostContext } from "./board-editor/host";
 import { CanvasQueryProvider, useCanvasQueryScope } from "./canvas-query";
 import { ReviewDebugSettingsProvider } from "./debug-settings";
 import { DisplayedReviewVersionContext } from "./displayed-review-version-context";
+import { DrawQueueProvider } from "./draw-queue-provider";
 import { CanvasUiContext } from "./host/canvas-ui";
 import {
   type ReviewSession,
@@ -74,6 +78,8 @@ export interface WhiteboardData extends ApiDocumentData {
   coverageRevision?: number;
   /** For a host that cannot read it. */
   progress?: ReviewProgress;
+  /** Animates a new version's `lastEdit`; "unknown" once the stream is lost. */
+  activity?: ActivitySnapshot | "unknown";
 }
 
 export interface WhiteboardHost extends ReviewCanvasBridge {
@@ -107,6 +113,21 @@ export function WhiteboardProvider({
   const queries = useCanvasQueryScope(host.request, snapshot.reviewId);
 
   useEffect(() => host.ready(), [host.ready]);
+
+  const history = data.version !== undefined;
+  const activity = history ? undefined : data.activity;
+  const [fold, setFold] = useState<CursorFold>();
+
+  const folded =
+    activity === undefined
+      ? undefined
+      : foldCursors(fold, snapshot.reviewId, {
+          version: snapshot.version,
+          lastEdit: snapshot.lastEdit,
+          activity,
+        });
+
+  if (folded !== fold) setFold(folded);
 
   const boardCommits = useMemo(
     () => (pins ? [pins.head, pins.base] : []),
@@ -143,75 +164,89 @@ export function WhiteboardProvider({
   );
 
   return (
-    <CanvasQueryProvider scope={queries}>
-      <ReviewSessionProvider session={session}>
-        <AskProjectContext.Provider value={data.projectId}>
-          <AskBoardTitleContext.Provider value={title}>
-            <ReviewPanelProvider
-              restore={() => ({
-                asks: readOpenAsks(session, data.projectId),
-                ...readReviewNavigationRestore(session, {
-                  softwareMapEnabled:
-                    softwareMapEnabled &&
-                    elements(snapshot.document).some(
-                      (node) => node.type === "software_map",
-                    ),
-                  hasChangeRange: (pins?.base ?? "") !== (pins?.head ?? ""),
-                  version: snapshot.version,
-                  commits: data.commits,
-                }),
-              })}
-            >
-              <BoardCommitsContext.Provider value={boardCommits}>
-                <BoardData.Provider value={data}>
-                  <BoardDocument.Provider value={document}>
-                    <DisplayedReviewVersionContext.Provider
-                      value={snapshot.version}
-                    >
-                      <BoardSettings.Provider value={settings}>
-                        <ReviewLensesProvider
-                          client={client}
-                          snapshot={snapshot}
-                          coverageRevision={data.coverageRevision}
-                          loaded={data.progress}
-                        >
-                          <ReviewDiffFilesProvider
-                            documentKey={`/\0review:${snapshot.reviewId}`}
-                            revision={pins?.worktreeRevision}
-                            unavailable={!!snapshot.sourceUnavailable}
+    <AuthoringActivityContext.Provider value={activity}>
+      <DrawQueueProvider
+        cursor={history ? undefined : (folded?.cursors.document ?? null)}
+      >
+        <DrawQueueProvider
+          scope="lenses"
+          cursor={history ? undefined : (folded?.cursors.lenses ?? null)}
+        >
+          <CanvasQueryProvider scope={queries}>
+            <ReviewSessionProvider session={session}>
+              <AskProjectContext.Provider value={data.projectId}>
+                <AskBoardTitleContext.Provider value={title}>
+                  <ReviewPanelProvider
+                    restore={() => ({
+                      asks: readOpenAsks(session, data.projectId),
+                      ...readReviewNavigationRestore(session, {
+                        softwareMapEnabled:
+                          softwareMapEnabled &&
+                          elements(snapshot.document).some(
+                            (node) => node.type === "software_map",
+                          ),
+                        hasChangeRange:
+                          (pins?.base ?? "") !== (pins?.head ?? ""),
+                        version: snapshot.version,
+                        commits: data.commits,
+                      }),
+                    })}
+                  >
+                    <BoardCommitsContext.Provider value={boardCommits}>
+                      <BoardData.Provider value={data}>
+                        <BoardDocument.Provider value={document}>
+                          <DisplayedReviewVersionContext.Provider
+                            value={snapshot.version}
                           >
-                            <ReviewRootsProvider roots={roots}>
-                              <ReviewFindProvider
-                                articleRef={articleRef}
-                                documentKey={snapshot.reviewId}
-                                host={host.find}
+                            <BoardSettings.Provider value={settings}>
+                              <ReviewLensesProvider
+                                client={client}
+                                snapshot={snapshot}
+                                coverageRevision={data.coverageRevision}
+                                loaded={data.progress}
                               >
-                                <ReviewDebugSettingsProvider>
-                                  <BoardReview softwareMapEnabled={mapsShown}>
-                                    <AskHistoryProvider>
-                                      <AskDesktopSync />
-                                      <AgentSelectionProvider
-                                        revision={snapshot.reviewId}
-                                      >
-                                        {children}
-                                      </AgentSelectionProvider>
-                                    </AskHistoryProvider>
-                                  </BoardReview>
-                                </ReviewDebugSettingsProvider>
-                              </ReviewFindProvider>
-                            </ReviewRootsProvider>
-                          </ReviewDiffFilesProvider>
-                        </ReviewLensesProvider>
-                      </BoardSettings.Provider>
-                    </DisplayedReviewVersionContext.Provider>
-                  </BoardDocument.Provider>
-                </BoardData.Provider>
-              </BoardCommitsContext.Provider>
-            </ReviewPanelProvider>
-          </AskBoardTitleContext.Provider>
-        </AskProjectContext.Provider>
-      </ReviewSessionProvider>
-    </CanvasQueryProvider>
+                                <ReviewDiffFilesProvider
+                                  documentKey={`/\0review:${snapshot.reviewId}`}
+                                  revision={pins?.worktreeRevision}
+                                  unavailable={!!snapshot.sourceUnavailable}
+                                >
+                                  <ReviewRootsProvider roots={roots}>
+                                    <ReviewFindProvider
+                                      articleRef={articleRef}
+                                      documentKey={snapshot.reviewId}
+                                      host={host.find}
+                                    >
+                                      <ReviewDebugSettingsProvider>
+                                        <BoardReview
+                                          softwareMapEnabled={mapsShown}
+                                        >
+                                          <AskHistoryProvider>
+                                            <AskDesktopSync />
+                                            <AgentSelectionProvider
+                                              revision={snapshot.reviewId}
+                                            >
+                                              {children}
+                                            </AgentSelectionProvider>
+                                          </AskHistoryProvider>
+                                        </BoardReview>
+                                      </ReviewDebugSettingsProvider>
+                                    </ReviewFindProvider>
+                                  </ReviewRootsProvider>
+                                </ReviewDiffFilesProvider>
+                              </ReviewLensesProvider>
+                            </BoardSettings.Provider>
+                          </DisplayedReviewVersionContext.Provider>
+                        </BoardDocument.Provider>
+                      </BoardData.Provider>
+                    </BoardCommitsContext.Provider>
+                  </ReviewPanelProvider>
+                </AskBoardTitleContext.Provider>
+              </AskProjectContext.Provider>
+            </ReviewSessionProvider>
+          </CanvasQueryProvider>
+        </DrawQueueProvider>
+      </DrawQueueProvider>
+    </AuthoringActivityContext.Provider>
   );
 }
 

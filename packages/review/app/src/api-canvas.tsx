@@ -18,12 +18,6 @@ import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import { type ApiDocumentData, createDocumentLoader } from "./api-document";
-import { AuthoringActivityContext } from "./authoring-activity-context";
-import {
-  type AuthoringCursor,
-  type CursorMemory,
-  nextCursor,
-} from "./authoring-cursor";
 import { SaveMarkdown } from "./blocks";
 import {
   type BoardEditorHost,
@@ -37,7 +31,6 @@ import {
   useCanvasQueryScope,
 } from "./canvas-query";
 import { ConnectionContext, HostWaiting } from "./connection-chip";
-import { DrawQueueProvider } from "./draw-queue-provider";
 import { hostApiClient, useReviewSession } from "./host/review-session";
 import { useBoardPlace } from "./review-doc-meta";
 import type { ReviewTocEntry } from "./review-document-headings";
@@ -76,8 +69,6 @@ export function ApiCanvas({
   const [version, setVersion] = useState(content.version);
   const [coverageRevision, setCoverageRevision] = useState(0);
   const [activity, setActivity] = useState<ActivitySnapshot | "unknown">();
-  const [cursor, setCursor] = useState<AuthoringCursor | null>(null);
-  const [lensCursor, setLensCursor] = useState<AuthoringCursor | null>(null);
   useEffect(() => setVersion(content.version), [content.version]);
 
   const loader = useMemo(
@@ -149,11 +140,6 @@ export function ApiCanvas({
     setTrashedAt(cached?.trashedAt ?? null);
     setLost(undefined);
     setActivity(undefined);
-    setCursor(null);
-    setLensCursor(null);
-    // One stream, two couriers: each scope folds its own edits and focus.
-    const cursorMemory: CursorMemory = {};
-    const lensMemory: CursorMemory = {};
 
     // Only the shown snapshot's reads draw.
     let current: Snapshot | undefined;
@@ -216,10 +202,6 @@ export function ApiCanvas({
         async (snapshot) => {
           setLost(undefined);
           setActivity(snapshot.activity);
-          setCursor((current) => nextCursor(current, cursorMemory, snapshot));
-          setLensCursor((current) =>
-            nextCursor(current, lensMemory, snapshot, "lenses"),
-          );
           setCoverageRevision(snapshot.coverageRevision ?? 0);
           const place = snapshot.placeRevision ?? 0;
 
@@ -257,28 +239,6 @@ export function ApiCanvas({
         },
         (cause) => {
           setActivity("unknown");
-          setCursor((current) =>
-            current
-              ? nextCursor(current, cursorMemory, {
-                  version: cursorMemory.version ?? 0,
-                  activity: "unknown",
-                })
-              : current,
-          );
-
-          setLensCursor((current) =>
-            current
-              ? nextCursor(
-                  current,
-                  lensMemory,
-                  {
-                    version: lensMemory.version ?? 0,
-                    activity: "unknown",
-                  },
-                  "lenses",
-                )
-              : current,
-          );
 
           if (
             cause instanceof ReviewApiError &&
@@ -483,6 +443,7 @@ export function ApiCanvas({
         available: content.available,
         contents,
         coverageRevision,
+        activity,
       },
     [
       data,
@@ -493,6 +454,7 @@ export function ApiCanvas({
       content.available,
       contents,
       coverageRevision,
+      activity,
     ],
   );
 
@@ -531,47 +493,34 @@ export function ApiCanvas({
         <SharedCanvasQueryClient.Provider value={queries.queryClient}>
           <SharingContext.Provider value={sharing}>
             <ConnectionContext.Provider value={connection}>
-              <AuthoringActivityContext.Provider
-                value={version === undefined ? activity : undefined}
-              >
-                <DrawQueueProvider
-                  cursor={version === undefined ? cursor : undefined}
-                >
-                  <DrawQueueProvider
-                    scope="lenses"
-                    cursor={version === undefined ? lensCursor : undefined}
-                  >
-                    <SaveMarkdown.Provider value={saveMarkdown}>
-                      <BoardPaintedContext.Provider value={painted}>
-                        <BoardEditorHostContext.Provider value={editorHost}>
-                          <WhiteboardProvider
-                            data={board}
-                            host={host}
-                            settings={settings}
-                          >
-                            {error && (
-                              <p {...stylex.props(styles.error)} role="status">
-                                {error}
-                              </p>
-                            )}
-                            {trashBanner}
-                            <div {...stylex.props(styles.canvasFrame)}>
-                              {version === undefined && (
-                                <NearbyBoards
-                                  painted={painted}
-                                  client={client}
-                                  loader={loader}
-                                />
-                              )}
-                              {children}
-                            </div>
-                          </WhiteboardProvider>
-                        </BoardEditorHostContext.Provider>
-                      </BoardPaintedContext.Provider>
-                    </SaveMarkdown.Provider>
-                  </DrawQueueProvider>
-                </DrawQueueProvider>
-              </AuthoringActivityContext.Provider>
+              <SaveMarkdown.Provider value={saveMarkdown}>
+                <BoardPaintedContext.Provider value={painted}>
+                  <BoardEditorHostContext.Provider value={editorHost}>
+                    <WhiteboardProvider
+                      data={board}
+                      host={host}
+                      settings={settings}
+                    >
+                      {error && (
+                        <p {...stylex.props(styles.error)} role="status">
+                          {error}
+                        </p>
+                      )}
+                      {trashBanner}
+                      <div {...stylex.props(styles.canvasFrame)}>
+                        {version === undefined && (
+                          <NearbyBoards
+                            painted={painted}
+                            client={client}
+                            loader={loader}
+                          />
+                        )}
+                        {children}
+                      </div>
+                    </WhiteboardProvider>
+                  </BoardEditorHostContext.Provider>
+                </BoardPaintedContext.Provider>
+              </SaveMarkdown.Provider>
             </ConnectionContext.Provider>
           </SharingContext.Provider>
         </SharedCanvasQueryClient.Provider>

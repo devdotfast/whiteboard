@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   type AuthoringCursor,
+  foldCursors,
   nextCursor,
   scopeLive,
 } from "./authoring-cursor";
@@ -221,5 +222,48 @@ describe("nextCursor", () => {
         "document",
       ),
     ).toBe(true);
+  });
+});
+
+describe("foldCursors", () => {
+  const edit = (targetId: string, kind: EditSummary["kind"] = "markdown") => ({
+    type: "insert" as const,
+    targetId,
+    blockId: targetId,
+    kind,
+  });
+
+  it("stands on the board as found, draws each later version, and leaves its input as it was", () => {
+    const found = foldCursors(undefined, "board", {
+      version: 1,
+      lastEdit: edit("a"),
+      activity: working(),
+    });
+
+    expect(found.cursors.document).toMatchObject({ source: "standing" });
+    expect(foldCursors(found, "board", { ...found.message })).toBe(found);
+
+    const next = foldCursors(found, "board", {
+      version: 2,
+      lastEdit: edit("lens", "lens"),
+      activity: working(),
+    });
+
+    expect(next.cursors.lenses).toMatchObject({ source: "edit" });
+    expect(next.cursors.document).toBe(found.cursors.document);
+    expect(found.memory.lenses.version).toBe(1);
+    expect(
+      foldCursors(next, "other", next.message).cursors.lenses,
+    ).toMatchObject({ source: "standing" });
+  });
+
+  it("places no courier while the stream is lost", () => {
+    const lost = foldCursors(undefined, "board", {
+      version: 1,
+      lastEdit: edit("a"),
+      activity: "unknown",
+    });
+
+    expect(lost.cursors).toEqual({ document: null, lenses: null });
   });
 });

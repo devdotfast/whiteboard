@@ -73,28 +73,32 @@ export function mountWhiteboard(
     settings?: WhiteboardSettings;
     ui?: ReviewCanvasUi;
   } = {},
-): ReviewDisposable {
+): ReviewDisposable & { update(data: WhiteboardData): void } {
   container.classList.add("review-canvas-root");
   const root = createRoot(container);
+  const host = options.host ?? fixtureHost();
 
-  root.render(
-    <ReviewContainerProvider container={container}>
-      <CanvasUiContext.Provider value={options.ui}>
-        <div {...stylex.props(themeStyles.vars, shellStyles.apiCanvas)}>
-          <WhiteboardProvider
-            data={data}
-            host={options.host ?? fixtureHost()}
-            settings={options.settings ?? {}}
-          >
-            <ReviewTopBar />
-            <Whiteboard />
-          </WhiteboardProvider>
-        </div>
-      </CanvasUiContext.Provider>
-    </ReviewContainerProvider>,
-  );
+  const render = (shown: WhiteboardData) =>
+    root.render(
+      <ReviewContainerProvider container={container}>
+        <CanvasUiContext.Provider value={options.ui}>
+          <div {...stylex.props(themeStyles.vars, shellStyles.apiCanvas)}>
+            <WhiteboardProvider
+              data={shown}
+              host={host}
+              settings={options.settings ?? {}}
+            >
+              <ReviewTopBar />
+              <Whiteboard />
+            </WhiteboardProvider>
+          </div>
+        </CanvasUiContext.Provider>
+      </ReviewContainerProvider>,
+    );
 
-  return { dispose: () => root.unmount() };
+  render(data);
+
+  return { update: render, dispose: () => root.unmount() };
 }
 
 /**
