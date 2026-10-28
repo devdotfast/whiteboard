@@ -36,6 +36,7 @@ export const REVIEW_OPEN_FILES_IN_CHOICES = ['whiteboard', 'vscode', 'cursor', '
 export const REVIEW_OPEN_FILES_IN_APPLICATION_SETTING = 'review.openFilesInApplication';
 export const REVIEW_READY_NOTIFICATION_SETTING = 'review.notifications.reviewReady';
 export const REVIEW_READY_NOTIFICATION_CHOICES = ['notificationAndBadge', 'notification', 'off'] as const;
+export const REVIEW_DIAGRAM_FULLSCREEN_ON_CLICK_SETTING = 'review.diagrams.fullscreenOnClick';
 export const REVIEW_DOCUMENT_WIDTH_SETTING = 'review.documentWidth';
 export const REVIEW_DIFF_COLOR_THEME_SETTING = 'review.diffColorTheme';
 export const REVIEW_INLINE_LINE_NUMBERS_SETTING = 'review.inlineDiffs.showLineNumbers';

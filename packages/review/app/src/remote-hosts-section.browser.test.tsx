@@ -57,6 +57,7 @@ async function render(hosts: ReviewRemoteHostsSettings) {
     documentWidth: "standard",
     setDocumentWidth: reject,
     appearance: {
+      diagramFullscreenOnClick: true,
       documentFontSize: 15,
       readingFont: "serif",
       readingFontFamily: "",

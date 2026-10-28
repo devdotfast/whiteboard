@@ -185,6 +185,7 @@ async function mountFixture(
   kind: Kind,
   options: {
     trace?: null;
+    diagramFullscreenOnClick?: boolean;
     document?: Snapshot["document"];
     host?: Partial<WhiteboardHost>;
   } = {},
@@ -244,7 +245,10 @@ async function mountFixture(
         },
         ...options.host,
       }),
-      settings: { softwareMapEnabled: true },
+      settings: {
+        softwareMapEnabled: true,
+        diagramFullscreenOnClick: options.diagramFullscreenOnClick,
+      },
     });
   });
 
@@ -391,7 +395,7 @@ describe("block components", () => {
 
       const target = container.querySelector<HTMLElement>(
         kind === "sequence"
-          ? ".sequence-diagram .react-flow__node span[title]"
+          ? ".sequence-diagram .react-flow__node button[title]"
           : kind === "database_lens"
             ? ".database-lens header"
             : ".software-map .react-flow__node",
@@ -1551,7 +1555,10 @@ describe("BlockErrorBoundary", () => {
 });
 
 it("opens a flow node in a full-screen tour with all its code attachments", async () => {
-  const { container } = await mountFixture("flow_diagram");
+  const { container } = await mountFixture("flow_diagram", {
+    diagramFullscreenOnClick: true,
+  });
+
   await settled(() => container.querySelector(".lens-flow-node"));
   await act(async () =>
     container
@@ -1579,6 +1586,203 @@ it("opens a flow node in a full-screen tour with all its code attachments", asyn
   expect(container.querySelector('[role="dialog"]')).toBeNull();
   expect(container.querySelector(".lens-flow-node")).not.toBeNull();
 });
+
+it.each([
+  {
+    kind: "database_lens" as const,
+    selector: ".database-lens .react-flow__node [role='group'][aria-label]",
+    editors: 1,
+    pressed: null,
+  },
+  {
+    kind: "flow_diagram" as const,
+    selector: ".lens-flow-node",
+    editors: 2,
+    pressed: "true",
+  },
+  {
+    kind: "sequence" as const,
+    selector: ".react-flow__node button[title='API']",
+    editors: 1,
+    pressed: null,
+  },
+  {
+    kind: "sequence" as const,
+    selector: "button[data-review-anchor-id='step-1']",
+    editors: 1,
+    pressed: "true",
+  },
+])(
+  "opens $kind selections inline when expansion is off",
+  async ({ kind, selector, editors, pressed }) => {
+    const { container } = await mountFixture(kind, {
+      diagramFullscreenOnClick: false,
+    });
+
+    const node = await settled(() => container.querySelector(selector));
+
+    expect(node).toBeTruthy();
+    await act(async () =>
+      node!.dispatchEvent(new MouseEvent("click", { bubbles: true })),
+    );
+    expect(
+      await settled(() => container.querySelector(".fixture-inline-editor")),
+    ).toBeTruthy();
+    expect(
+      container.querySelector('[role="dialog"][aria-modal="true"]'),
+    ).toBeNull();
+
+    expect(node!.getAttribute("aria-pressed")).toBe(pressed);
+    expect(
+      await settled(
+        () =>
+          container.querySelectorAll(".fixture-inline-editor").length ===
+          editors,
+      ),
+    ).toBe(true);
+
+    const expand = container.querySelector<HTMLButtonElement>(
+      ".diagram-tour-button",
+    );
+
+    await act(async () => expand!.click());
+    expect(
+      await settled(() =>
+        container.querySelector('[role="dialog"][aria-modal="true"]'),
+      ),
+    ).toBeTruthy();
+  },
+);
+
+it.each(["sequence", "flow_diagram"] as const)(
+  "tracks the highlighted %s stop while scrolling the inline tour",
+  async (kind) => {
+    const explanation = Array.from(
+      { length: 30 },
+      (_, index) => `Detail ${index + 1}: follow this step before continuing.`,
+    ).join("\n\n");
+
+    const block =
+      kind === "sequence"
+        ? {
+            id: "scroll-sequence",
+            type: "sequence" as const,
+            title: "Scrollable sequence",
+            actors: { a: "Caller", b: "Worker" },
+            steps: Array.from({ length: 5 }, (_, index) => ({
+              id: `scroll-step-${index}`,
+              type: "step" as const,
+              from: "a",
+              to: "b",
+              label: `Stage ${index + 1}`,
+              explanation,
+            })),
+          }
+        : {
+            id: "scroll-flow",
+            type: "flow_diagram" as const,
+            title: "Scrollable flow",
+            nodes: Array.from({ length: 5 }, (_, index) => ({
+              key: `node-${index}`,
+              label: `Stage ${index + 1}`,
+              description: explanation,
+              attachments: [],
+            })),
+            edges: Array.from({ length: 4 }, (_, index) => ({
+              from: `node-${index}`,
+              to: `node-${index + 1}`,
+            })),
+          };
+
+    const { container } = await mountFixture(
+      kind,
+      {
+        document: documentSchema.parse([
+          block,
+          {
+            id: "scroll-filler",
+            type: "markdown",
+            markdown: explanation.repeat(3),
+          },
+        ]),
+      },
+      "height:800px;max-height:800px;overflow:hidden",
+    );
+
+    const trigger = await settled(() =>
+      container.querySelector<HTMLElement>(
+        kind === "sequence"
+          ? "button[data-review-anchor-id='scroll-step-0']"
+          : ".lens-flow-node",
+      ),
+    );
+
+    await act(async () => trigger!.click());
+
+    const sections = await settled(() => {
+      const result = container.querySelectorAll<HTMLElement>(
+        "aside section[data-review-anchor-id]",
+      );
+
+      return result.length === 5 ? result : null;
+    });
+
+    expect(sections).toBeTruthy();
+    let scroller = sections![0]!.parentElement;
+
+    while (
+      scroller &&
+      !/auto|scroll/.test(getComputedStyle(scroller).overflowY)
+    )
+      scroller = scroller.parentElement;
+    expect(scroller).toBeTruthy();
+    const figure = container.querySelector("figure")!;
+    let boardScroller = figure.parentElement;
+
+    while (
+      boardScroller &&
+      !/auto|scroll/.test(getComputedStyle(boardScroller).overflowY)
+    )
+      boardScroller = boardScroller.parentElement;
+    expect(boardScroller).toBeTruthy();
+    await act(async () => {
+      boardScroller!.scrollTop = boardScroller!.scrollHeight;
+    });
+    expect(figure.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+      boardScroller!.getBoundingClientRect().top,
+    );
+    await act(async () => {
+      scroller!.dispatchEvent(new WheelEvent("wheel", { bubbles: true }));
+      scroller!.scrollTop +=
+        sections![3]!.getBoundingClientRect().top -
+        scroller!.getBoundingClientRect().top;
+      scroller!.dispatchEvent(new Event("scroll"));
+    });
+    expect(
+      await settled(
+        () =>
+          container.querySelector(".tour-pill-count")?.textContent === "4/5",
+      ),
+    ).toBe(true);
+
+    const selected =
+      kind === "sequence"
+        ? container.querySelector(
+            "button[data-review-anchor-id='scroll-step-3']",
+          )
+        : container.querySelectorAll(".lens-flow-node")[3];
+
+    expect(selected?.getAttribute("aria-pressed")).toBe("true");
+    expect(container.querySelector(".diagram-tour-overlay")).toBeNull();
+    expect(
+      await settled(
+        () =>
+          figure.getBoundingClientRect().bottom >
+          boardScroller!.getBoundingClientRect().top,
+      ),
+    ).toBe(true);
+  },
+);
 
 it("grows a tall, wide sequence diagram to its height instead of scrolling it vertically", async () => {
   const actors = ["a", "b", "c", "d", "e", "f", "g", "h"];

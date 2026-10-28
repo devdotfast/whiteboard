@@ -104,6 +104,7 @@ export interface ReviewNavigationState {
 export interface ReviewPanelActions {
   suppressMotion: () => void;
   openPeek: (panel: PeekPanel) => void;
+  moveInlineTour: (anchor: string, options: { reveal: boolean }) => void;
   openAsk: (
     selection: AgentSelection,
     agent?: AskAgentId,
@@ -314,6 +315,29 @@ export function createReviewPanelStore({
         columnHidden: false,
         motion: "live",
       })),
+    moveInlineTour: (anchor, { reveal }) =>
+      set((state) => {
+        const panel = state.active;
+        const tour = panel?.tour;
+
+        const stop = tour?.definition.stops.find(
+          (item) => item.anchor.id === anchor,
+        );
+
+        if (!panel || !tour || !stop) return state;
+
+        return {
+          active: {
+            ...panel,
+            anchor: stop.anchor,
+            content: stop.content,
+            tour: {
+              ...tour,
+              revealRequest: tour.revealRequest + Number(reveal),
+            },
+          },
+        };
+      }),
     openAsk: (selection, agent, options = {}) =>
       set((state) => ({
         ...showAsk(state, { type: "new", selection, agent }, options),

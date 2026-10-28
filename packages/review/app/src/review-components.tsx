@@ -522,6 +522,7 @@ function keepAnchorLinkVisible(link: HTMLElement) {
 export function ReviewPanelHost() {
   const activePanel = useReviewPanel((state) => state.active);
   const close = useReviewPanel((state) => state.close);
+  const moveInlineTour = useReviewPanel((state) => state.moveInlineTour);
   const columnHost = useAskPanelHost();
   // Put away, the peek stays mounted, to come back where it was.
   const hidden = !useReviewPanel(peekShown);
@@ -530,11 +531,21 @@ export function ReviewPanelHost() {
     <>
       {activePanel ? (
         <AskDock host={columnHost} hidden={hidden}>
-          <ReviewPeekPanel
-            anchor={activePanel.anchor}
-            content={activePanel.content}
-            onClose={close}
-          />
+          {activePanel.tour && activePanel.anchor ? (
+            <GuidedTourPanel
+              tour={activePanel.tour.definition}
+              activeAnchor={activePanel.anchor.id}
+              revealRequest={activePanel.tour.revealRequest}
+              onActiveAnchorChange={moveInlineTour}
+              onClose={close}
+            />
+          ) : (
+            <ReviewPeekPanel
+              anchor={activePanel.anchor}
+              content={activePanel.content}
+              onClose={close}
+            />
+          )}
         </AskDock>
       ) : null}
       <AskHost />

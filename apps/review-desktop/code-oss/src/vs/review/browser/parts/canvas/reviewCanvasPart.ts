@@ -64,6 +64,7 @@ import {
 	REVIEW_OPEN_FILES_IN_SETTING,
 	REVIEW_DIFF_COLOR_THEME_SETTING,
 	REVIEW_DOCUMENT_WIDTH_SETTING,
+	REVIEW_DIAGRAM_FULLSCREEN_ON_CLICK_SETTING,
 	REVIEW_KEYMAP_SETTING,
 	REVIEW_READY_NOTIFICATION_SETTING,
 	REVIEW_SHARING_SETTING,
@@ -145,6 +146,7 @@ type ReviewCanvasState = "home" | "connecting" | "active" | "completed" | "error
 type PendingBoardEvent = Extract<ReviewSurfaceEvent, { event: "revealBlock" | "showReviewView" }> & { reviewId: string };
 
 const APPEARANCE_SETTINGS = {
+	diagramFullscreenOnClick: { key: REVIEW_DIAGRAM_FULLSCREEN_ON_CLICK_SETTING, setting: "diagram_fullscreen_on_click" },
 	documentFontSize: { key: REVIEW_DOCUMENT_FONT_SIZE_SETTING, setting: "document_font_size" },
 	readingFont: { key: REVIEW_READING_FONT_SETTING, setting: "reading_font" },
 	readingFontFamily: { key: REVIEW_READING_FONT_FAMILY_SETTING, setting: "reading_font_family" },
@@ -333,7 +335,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				if (
 					!event.affectsConfiguration(REVIEW_SOFTWARE_MAP_SETTING) &&
 					!event.affectsConfiguration(REVIEW_SHARING_SETTING) &&
-					!event.affectsConfiguration(REVIEW_DOCUMENT_WIDTH_SETTING)
+					!event.affectsConfiguration(REVIEW_DOCUMENT_WIDTH_SETTING) &&
+					!event.affectsConfiguration(REVIEW_DIAGRAM_FULLSCREEN_ON_CLICK_SETTING)
 				)
 					return;
 				if (this.apiContent) {
@@ -1151,6 +1154,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	private currentAppearance(): ReviewAppearance {
 		const value = <T,>(name: keyof ReviewAppearance) => this.configurationService.getValue<T>(APPEARANCE_SETTINGS[name].key);
 		return {
+			diagramFullscreenOnClick: value<boolean>("diagramFullscreenOnClick") === true,
 			documentFontSize: value<number>("documentFontSize"),
 			readingFont: value("readingFont") === "sans" ? "sans" : "serif",
 			readingFontFamily: value<string>("readingFontFamily") ?? "",
@@ -1454,6 +1458,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	private canvasSettings(): ReviewCanvasSettings {
 		return {
+			diagramFullscreenOnClick: this.configurationService.getValue<boolean>(REVIEW_DIAGRAM_FULLSCREEN_ON_CLICK_SETTING) === true,
 			softwareMapEnabled: this.currentSoftwareMapEnabled(),
 			sharingEnabled: this.currentSharingEnabled(),
 			documentWidth: this.currentDocumentWidth(),

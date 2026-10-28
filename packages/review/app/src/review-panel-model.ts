@@ -42,6 +42,7 @@ export interface GuidedTour {
 
 export interface PeekPanel {
   kind: "peek";
+  tour?: { definition: GuidedTour; revealRequest: number };
   anchor?: PeekAnchor;
   content: ReviewPeekContent;
 }

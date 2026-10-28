@@ -40,6 +40,7 @@ function settings(): ReviewCanvasSettingsContent {
     documentWidth: "standard",
     setDocumentWidth: async (choice) => choice,
     appearance: {
+      diagramFullscreenOnClick: true,
       documentFontSize: 15,
       readingFont: "serif",
       readingFontFamily: "",

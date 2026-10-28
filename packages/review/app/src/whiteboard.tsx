@@ -63,6 +63,7 @@ import {
   ReviewRootsProvider,
 } from "./review-root-context";
 import { readReviewNavigationRestore } from "./review-view-state";
+import { BoardSettings } from "./whiteboard-settings";
 
 export interface WhiteboardData extends ApiDocumentData {
   /** The version pinned on screen; undefined follows the latest. */
@@ -91,8 +92,6 @@ const BoardData = createContext<WhiteboardData | null>(null);
 
 // The document alone: it changes only when the board loads.
 const BoardDocument = createContext<ApiDocumentData | null>(null);
-
-const BoardSettings = createContext<WhiteboardSettings>({});
 
 export function WhiteboardProvider({
   data,

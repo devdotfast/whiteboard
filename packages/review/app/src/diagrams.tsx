@@ -7,7 +7,8 @@ import {
   radius,
   space,
 } from "@canvas/scale.stylex";
-import { Button } from "@canvas/ui/button";
+import { Button, buttonStyles } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
 import { textStyles } from "@canvas/ui/text";
 import {
   type DiffSelection,
@@ -33,6 +34,7 @@ import {
 } from "@xyflow/react";
 import {
   type CSSProperties,
+  type Ref,
   useCallback,
   useEffect,
   useMemo,
@@ -62,12 +64,14 @@ import {
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
+import { useDiagramSelection } from "./use-diagram-selection";
 
 type SequenceParticipantNodeData = {
   participant: SequenceParticipant;
   height: number;
   messages: SequenceMessage[];
   rows: SequenceRow[];
+  openTour: (anchor?: string) => void;
 };
 
 type SequenceParticipantFlowNode = ReactFlowNode<
@@ -314,11 +318,19 @@ export function SequenceDiagram(block: SequenceDiagramProps) {
   const tourAnchor = tourState?.anchor ?? null;
   const tourOpen = tourState !== null;
 
+  const {
+    anchor: inlineAnchor,
+    selectInline,
+    figureRef,
+  } = useDiagramSelection(tour, tourOpen);
+
   const openTour = useCallback(
     (anchor?: string) => {
       if (anchor) {
         captureUiEvent(session, "peek_opened", { via: "diagram" });
       }
+
+      if (anchor && selectInline(anchor)) return;
 
       const nextAnchor = anchor ?? tourAnchor ?? tour.stops[0]?.anchor.id;
 
@@ -332,7 +344,7 @@ export function SequenceDiagram(block: SequenceDiagramProps) {
         .getState()
         .openOverlayTour({ tourId: tour.id, kind: "sequence" }, nextAnchor);
     },
-    [panelStore, session, tour, tourAnchor, tourOpen],
+    [panelStore, session, tour, tourAnchor, tourOpen, selectInline],
   );
 
   const { closeOverlayTour: closeTour, moveOverlayTour: changeTourAnchor } =
@@ -347,7 +359,8 @@ export function SequenceDiagram(block: SequenceDiagramProps) {
         theme={theme}
         stopCount={tour.stops.length}
         openTour={openTour}
-        activeTourAnchor={null}
+        activeTourAnchor={inlineAnchor}
+        figureRef={figureRef}
       />
       {tourOpen && portalTarget
         ? createPortal(
@@ -375,6 +388,7 @@ export function SequenceDiagram(block: SequenceDiagramProps) {
 }
 
 function SequenceDiagramFigure({
+  figureRef,
   sequence,
   theme,
   stopCount,
@@ -382,6 +396,7 @@ function SequenceDiagramFigure({
   activeTourAnchor,
   onCloseTour,
 }: {
+  figureRef?: Ref<HTMLElement>;
   sequence: SequenceView;
   theme: ReturnType<typeof useReviewDebugSettings>["theme"];
   stopCount: number;
@@ -454,11 +469,12 @@ function SequenceDiagramFigure({
           height,
           messages: sequence.messages,
           rows,
+          openTour,
         },
         draggable: false,
         selectable: false,
       })),
-    [height, laneWidth, rows, sequence],
+    [height, laneWidth, rows, sequence, openTour],
   );
 
   const reactFlowEdges: SequenceMessageFlowEdge[] = useMemo(
@@ -595,6 +611,7 @@ function SequenceDiagramFigure({
   return (
     <>
       <figure
+        ref={figureRef}
         {...withClass(
           "sequence-diagram",
           styles.figure,
@@ -664,7 +681,7 @@ function SequenceDiagramFigure({
 function SequenceParticipantNode({
   data,
 }: ReactFlowNodeProps<SequenceParticipantFlowNode>) {
-  const { participant, height, messages, rows } = data;
+  const { participant, height, messages, rows, openTour } = data;
 
   const activeMessages = messages.filter(
     (message) =>
@@ -674,12 +691,24 @@ function SequenceParticipantNode({
   return (
     <div {...stylex.props(styles.participant)} style={{ height }}>
       <div {...stylex.props(styles.participantLabelAnchor)}>
-        <span
-          {...stylex.props(textStyles.truncate, styles.participantLabel)}
+        <button
+          type="button"
+          {...stylex.props(
+            buttonStyles.reset,
+            focusStyles.ring,
+            textStyles.truncate,
+            styles.participantLabel,
+          )}
           title={participant.label}
+          onClick={(event) => {
+            event.stopPropagation();
+            const message = activeMessages[0];
+
+            if (message) openTour(message.id);
+          }}
         >
           {participant.label}
-        </span>
+        </button>
       </div>
       <div {...stylex.props(styles.lifeline)} />
       {activeMessages.flatMap((message, index) => {
@@ -847,6 +876,7 @@ function SequenceMessageEdge(
             data.openTour(data.message.id);
           }}
           aria-label={data.message.label}
+          aria-pressed={data.active}
         >
           {data.stepNumber}
         </button>

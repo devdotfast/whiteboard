@@ -53,6 +53,7 @@ import {
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 import { captureUiEvent } from "./ui-telemetry";
+import { useDiagramSelection } from "./use-diagram-selection";
 
 type OperationKind = "read" | "write";
 
@@ -448,6 +449,12 @@ export function DatabaseLens(block: DatabaseLensProps) {
     if (nextUseCase) openUseCase(nextUseCase);
   };
 
+  const {
+    anchor: inlineAnchor,
+    selectInline,
+    figureRef,
+  } = useDiagramSelection(activeTour ?? { id: lensId, stops: [] }, tourOpen);
+
   const openLensTour = useCallback(
     (anchor?: string) => {
       if (!activeTour) return;
@@ -455,6 +462,8 @@ export function DatabaseLens(block: DatabaseLensProps) {
       if (anchor) {
         captureUiEvent(session, "peek_opened", { via: "db_lens" });
       }
+
+      if (anchor && selectInline(anchor)) return;
 
       const nextAnchor = anchor ?? tourAnchor ?? activeTour.stops[0]?.anchor.id;
 
@@ -473,7 +482,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
           nextAnchor,
         );
     },
-    [activeTour, panelStore, session, tourAnchor, tourOpen],
+    [activeTour, panelStore, session, tourAnchor, tourOpen, selectInline],
   );
 
   const { closeOverlayTour: closeTour, moveOverlayTour: changeTourAnchor } =
@@ -484,6 +493,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
   // database-lens is a marker: document-embed-scroll.ts finds it.
   const renderLensFigure = (stage: boolean) => (
     <figure
+      ref={stage ? undefined : figureRef}
       {...withClass(
         "database-lens",
         styles.figure,
@@ -541,7 +551,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
             navigation={navigation}
             useCase={activeUseCase}
             stores={stores}
-            activeAnchor={stage ? tourAnchor : null}
+            activeAnchor={stage ? tourAnchor : inlineAnchor}
             onOpenAnchor={(anchor) => openLensTour(anchor)}
           />
         ) : (
@@ -733,6 +743,26 @@ function DatabaseC4UseCaseDiagram({
   const handleSelectNode = (node: SoftwareMapNodeSnapshot) => {
     setSelectedNodeId(node.id);
     setViewportFocusNodeId(null);
+
+    const operation = resolvedOperations.find(
+      ({ actor, target }) =>
+        actorNodeId(actor) === node.id ||
+        storeNodeId(target) === node.id ||
+        storeCollectionNodeId(target) === node.id,
+    );
+
+    if (!operation) return;
+
+    const schema =
+      node.type === "dataStoreCollection"
+        ? useCase.schemas?.find((stop) =>
+            stop.id.endsWith(
+              `:schema:${operation.target.storeId}:${operation.target.collectionId}`,
+            ),
+          )
+        : undefined;
+
+    onOpenAnchor(schema?.id ?? operation.id);
   };
 
   const handleToggleNodeExpansion = (node: SoftwareMapNodeSnapshot) => {

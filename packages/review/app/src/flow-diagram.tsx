@@ -22,6 +22,7 @@ import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { GuidedTour, GuidedTourStop } from "./review-panel-model";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
+import { useDiagramSelection } from "./use-diagram-selection";
 
 /** Each attachment is a tour stop; selection still belongs to its graph node. */
 export function flowTourStops(
@@ -90,14 +91,22 @@ export function FlowDiagram({
 
   const { portalTarget } = useDiagramTourShell(selection !== null, close);
 
+  const {
+    anchor: inlineAnchor,
+    selectInline,
+    figureRef,
+  } = useDiagramSelection(tour, selection !== null);
+
   const selectedKey = stops.find(
-    (stop) => stop.anchor.id === selection?.anchor,
+    (stop) => stop.anchor.id === (selection?.anchor ?? inlineAnchor),
   )?.nodeKey;
 
   const open = (nodeKey?: string) => {
     const anchor = (
       nodeKey ? stops.find((stop) => stop.nodeKey === nodeKey) : stops[0]
     )?.anchor.id;
+
+    if (nodeKey && anchor && selectInline(anchor)) return;
 
     if (anchor)
       panelStore
@@ -108,6 +117,7 @@ export function FlowDiagram({
   const figure = (fullscreen: boolean) => (
     // The class is how document-embed-scroll.ts recognizes the embed.
     <figure
+      ref={fullscreen ? undefined : figureRef}
       {...withClass(
         "flow-diagram",
         surfaceStyles.card,
@@ -141,7 +151,7 @@ export function FlowDiagram({
         <div {...stylex.props(styles.canvas)}>
           <FlowGraph
             block={node}
-            selectedKey={fullscreen ? selectedKey : undefined}
+            selectedKey={selectedKey}
             onSelect={(item) => open(item.key)}
             interactive={fullscreen}
             // Inline, a top-to-bottom flow stacks its layers and wants the

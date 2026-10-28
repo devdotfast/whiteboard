@@ -325,6 +325,23 @@ export function SettingsPage({
                 </Button>
               </Row>
               <Row
+                label="Expand diagrams on click"
+                description="Open inline diagrams fullscreen when selecting a node. When off, select the node and open its sidebar."
+              >
+                <label {...stylex.props(styles.toggle)}>
+                  <Checkbox
+                    aria-label="Expand diagrams on click"
+                    checked={appearance.diagramFullscreenOnClick}
+                    onChange={(event) =>
+                      changeAppearance(
+                        "diagramFullscreenOnClick",
+                        event.target.checked,
+                      )
+                    }
+                  />
+                </label>
+              </Row>
+              <Row
                 label="Document width"
                 description="Wide and Full give diagrams and code more room. Text keeps a reading width."
               >

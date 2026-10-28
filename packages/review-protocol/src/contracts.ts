@@ -441,6 +441,7 @@ export interface ReviewCanvasBridge {
 }
 
 export interface ReviewCanvasSettings {
+  diagramFullscreenOnClick?: boolean;
   softwareMapEnabled?: boolean;
   sharingEnabled?: boolean;
   documentWidth?: ReviewDocumentWidthChoice;
@@ -742,6 +743,7 @@ export interface ReviewOpenFilesIn {
 export type ReviewDocumentWidthChoice = "standard" | "wide" | "full";
 
 export interface ReviewAppearance {
+  diagramFullscreenOnClick: boolean;
   documentFontSize: number;
   readingFont: "serif" | "sans";
   // Any font-family list; when set, it replaces `readingFont`.
