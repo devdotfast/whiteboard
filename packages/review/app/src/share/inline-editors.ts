@@ -436,8 +436,17 @@ export async function shareInlineEditors(
   sources: readonly ShareSource[],
   boardPins: ReviewSourcePins | undefined,
 ): Promise<(settings: PeekSettings) => ReviewInlineEditorFactory> {
-  const excerpt = await excerpts(sources);
+  return excerptEditors(await excerpts(sources), boardPins);
+}
 
+/** Peeks with no lines to show: each says its source is unavailable. */
+export const sourcelessEditors = (settings: PeekSettings) =>
+  excerptEditors(() => ({}), undefined)(settings);
+
+function excerptEditors(
+  excerpt: Excerpt,
+  boardPins: ReviewSourcePins | undefined,
+): (settings: PeekSettings) => ReviewInlineEditorFactory {
   return (settings) => ({
     async find(spec, query) {
       return {

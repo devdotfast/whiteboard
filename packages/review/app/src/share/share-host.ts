@@ -8,7 +8,7 @@ import type {
   ReviewTheme,
 } from "@dev.fast/review-protocol";
 
-import type { PeekSettings } from "./inline-editors";
+import { type PeekSettings, sourcelessEditors } from "./inline-editors";
 
 // Shipped beside the package's index.js; Vite serves it from node_modules in
 // tests and dev. Read on demand: a Worker may lack import.meta.url.
@@ -99,4 +99,19 @@ export function shareHost(options: {
         set.clear();
     },
   };
+}
+
+/** `shareHost` with openShare's defaults. */
+export function readOnlyHost(
+  options: {
+    theme?: ReviewTheme;
+    wasmUrl?: string;
+    inlineEditors?: (settings: PeekSettings) => ReviewInlineEditorFactory;
+  } = {},
+): WhiteboardHost & ReviewDisposable {
+  return shareHost({
+    theme: options.theme ?? "system",
+    wasmUrl: options.wasmUrl ?? libavoidWasmUrl(),
+    inlineEditors: options.inlineEditors ?? sourcelessEditors,
+  });
 }

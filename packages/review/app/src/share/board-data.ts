@@ -8,9 +8,16 @@ import { createCanvasQueryClient } from "@canvas/canvas-query";
 import { hostApiClient } from "@canvas/host/review-session";
 import type { WhiteboardData } from "@canvas/whiteboard";
 import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
-import { resourceReferences } from "@review/review-api/document";
+import type { ActivitySnapshot } from "@review/review-api/activity";
+import { lensSchema } from "@review/review-api/diff-lenses";
+import {
+  documentSchema,
+  pinsSchema,
+  resourceReferences,
+} from "@review/review-api/document";
 import type { ReviewProgress } from "@review/review-api/review-progress";
 import type { Snapshot } from "@review/review-api/store";
+import { z } from "zod";
 
 export interface BoardImage {
   bytes: Uint8Array<ArrayBuffer>;
@@ -66,5 +73,36 @@ export function boardData(parts: BoardParts): WhiteboardData {
     ...data,
     commits: parts.commits ?? [],
     progress: parts.progress,
+  };
+}
+
+/** One saved version, as a host that replays a board's edits holds it. */
+export interface BoardSnapshot extends Omit<Snapshot, "document"> {
+  /** Parsed with documentSchema. */
+  document: readonly unknown[];
+  activity?: ActivitySnapshot | "unknown";
+}
+
+export const boardSnapshotSchema = z.looseObject({
+  reviewId: z.string().min(1),
+  version: z.number().int().nonnegative(),
+  title: z.string(),
+  pins: pinsSchema.optional(),
+  document: documentSchema,
+  lenses: z.array(lensSchema).optional(),
+  createdAt: z.string(),
+});
+
+/** Validates a version and reads it whole, with its activity. */
+export function boardView(
+  { activity, ...snapshot }: BoardSnapshot,
+  parts: Omit<BoardParts, "snapshot"> = {},
+): WhiteboardData {
+  return {
+    ...boardData({
+      ...parts,
+      snapshot: { ...snapshot, ...boardSnapshotSchema.parse(snapshot) },
+    }),
+    ...(activity && { activity }),
   };
 }
