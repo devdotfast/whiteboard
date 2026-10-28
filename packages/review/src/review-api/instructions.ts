@@ -71,7 +71,7 @@ export async function renderInstructions(
     componentReference(context.animationsEnabled === true),
     ...(context.traceEnabled
       ? [
-          '## Traces\n\nAt the end, run `whiteboard trace list --session <sessionId> --json`, which covers every commit in the review. If it lists no sessions, there are no traces to quote: skip this step. Otherwise read `session_get_instructions({topic:"trace-archaeology"})` and rewrite as much as possible of the what/why, design, and requirements sections in terms of literal trace quotes from the user.',
+          '## Traces\n\nAt the end, run `whiteboard trace list --session <sessionId> --json`, which covers every commit in the review. If it lists no sessions, there are no traces to quote: skip this step. Otherwise read `session_get_instructions({topic:"trace-archaeology"})` and separate the findings by purpose. Attach exact trace evidence to user requirements and verification claims. Put architecture decisions and implementation guidance beside the relevant design, diagram, or file lens. Do not add a generic requirements section just because traces exist; omit unsupported claims and distinguish requested behavior from observed verification.',
         ]
       : []),
     ...(more.length ? [`## More guidance\n\n${more.join("\n")}`] : []),

@@ -111,3 +111,21 @@ This flow is complete when you inspected the source events and checked the resul
 - Cite session, trace, and event locators for event evidence.
 - Cite commit IDs and source lines for current code evidence.
 - Report missing or uncertain provenance. Never invent an explanation.
+
+## Place findings where they explain the change
+
+Separate the result into two kinds of context:
+
+- **Requirements and verification:** retain the user's requested behavior in
+  their own words and attach exact session, trace, and event evidence to each
+  claim. A request is not proof that it was implemented. For verification, cite
+  the observed command and result, and state what remains unverified. Omit a
+  requirements section when there are no supported requirements to report.
+- **Architecture and guidance:** place the rationale beside the design or
+  diagram it explains, or in the relevant file lens or component. Cite the
+  source event and check that the current code still follows that decision.
+  Do not turn implementation suggestions into user requirements.
+
+Keep evidence next to its claim instead of collecting unrelated trace excerpts
+in a requirements preamble. If later events supersede an earlier decision,
+explain the change and cite the final decision; mark uncertainty explicitly.

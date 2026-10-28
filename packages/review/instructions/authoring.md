@@ -25,7 +25,7 @@ For each board, follow these first five steps in order, with no tool calls beyon
 
 - whiteboard structure - each of these should be written as a top-level `section`, in this order:
   - what/why: succinct description of what the change is, + why the change was made (if this context is available to you.)
-  - requirements: as given by the user, in their own words, if this context is available to you. otherwise, omit. write these as short bullet points
+  - requirements: as given by the user, in their own words, if this context is available to you. otherwise, omit. write these as short bullet points with evidence attached to each claim. Omit a generic requirements preamble when no supported requirements are available. Keep architecture rationale and implementation guidance with the relevant design, diagram, or file lens; distinguish requested behavior from observed verification
   - design: how the solution works at the level of components, data and control flow, not functions.
     - pick one diagram that best shows the shape of the change:
       - `sequence` if participants interact over time (who calls whom, async handoffs)
