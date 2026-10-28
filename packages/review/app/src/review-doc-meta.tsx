@@ -102,8 +102,8 @@ export const BoardSaveRetryContext = createContext<(() => void) | undefined>(
 
 /**
  * The board's header: for a child, its parent and its place among the
- * parent's children; the title; then one faint line with the PR, the
- * compared branches and the diff.
+ * parent's children; the title; then one faint line with the repository,
+ * the PR, the compared branches and the diff.
  */
 export function ReviewDocumentMetaLine({
   children,
@@ -134,6 +134,12 @@ export function ReviewDocumentMetaLine({
     facts.push({
       key: "host",
       node: <span {...stylex.props(styles.fixed)}>{review.host}</span>,
+    });
+
+  if (place.repository)
+    facts.push({
+      key: "repository",
+      node: <span {...stylex.props(styles.fixed)}>{place.repository}</span>,
     });
 
   if (review.pullRequestNumber)
