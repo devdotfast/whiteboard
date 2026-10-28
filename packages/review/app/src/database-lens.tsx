@@ -106,6 +106,7 @@ export interface ParsedSchemaStop {
   id: string;
   label: string;
   source: DiffSelection;
+  nodeId: string;
   /** Every row of the table, so the whole table lights up. */
   targetKeys: string[];
 }
@@ -235,6 +236,7 @@ export function lensUseCases(block: DatabaseLensProps): ParsedUseCase[] {
         id: `${block.id}:schema:${operation.store}:${operation.collection}`,
         label: `${collection.label} schema`,
         source: anchorSelection(collection.source, block.pins),
+        nodeId: storeCollectionNodeId(target),
         targetKeys: flattenSchemaRows(collection.fields).map((row) =>
           targetKey(target, row.path),
         ),
@@ -453,7 +455,7 @@ export function DatabaseLens(block: DatabaseLensProps) {
     anchor: inlineAnchor,
     selectInline,
     figureRef,
-  } = useDiagramSelection(activeTour ?? { id: lensId, stops: [] }, tourOpen);
+  } = useDiagramSelection(activeTour, tourOpen);
 
   const openLensTour = useCallback(
     (anchor?: string) => {
@@ -744,25 +746,16 @@ function DatabaseC4UseCaseDiagram({
     setSelectedNodeId(node.id);
     setViewportFocusNodeId(null);
 
-    const operation = resolvedOperations.find(
-      ({ actor, target }) =>
-        actorNodeId(actor) === node.id ||
-        storeNodeId(target) === node.id ||
-        storeCollectionNodeId(target) === node.id,
-    );
+    const anchor =
+      useCase.schemas?.find((stop) => stop.nodeId === node.id)?.id ??
+      resolvedOperations.find(
+        ({ actor, target }) =>
+          actorNodeId(actor) === node.id ||
+          storeNodeId(target) === node.id ||
+          storeCollectionNodeId(target) === node.id,
+      )?.id;
 
-    if (!operation) return;
-
-    const schema =
-      node.type === "dataStoreCollection"
-        ? useCase.schemas?.find((stop) =>
-            stop.id.endsWith(
-              `:schema:${operation.target.storeId}:${operation.target.collectionId}`,
-            ),
-          )
-        : undefined;
-
-    onOpenAnchor(schema?.id ?? operation.id);
+    if (anchor) onOpenAnchor(anchor);
   };
 
   const handleToggleNodeExpansion = (node: SoftwareMapNodeSnapshot) => {

@@ -4,21 +4,19 @@ import { useReviewPanel, useReviewPanelStore } from "./review-panel";
 import type { GuidedTour } from "./review-panel-model";
 import { useWhiteboardSettings } from "./whiteboard-settings";
 
-export function useDiagramSelection(tour: GuidedTour, fullscreen: boolean) {
+export function useDiagramSelection(
+  tour: GuidedTour | null,
+  fullscreen: boolean,
+) {
   const panelStore = useReviewPanelStore();
   const figureRef = useRef<HTMLElement | null>(null);
+  const { diagramFullscreenOnClick } = useWhiteboardSettings();
 
-  const expandOnClick =
-    useWhiteboardSettings().diagramFullscreenOnClick === true;
-
-  const anchor = useReviewPanel((state) => {
-    const id = state.active?.anchor?.id;
-
-    return !state.columnHidden &&
-      tour.stops.some((stop) => stop.anchor.id === id)
-      ? (id ?? null)
-      : null;
-  });
+  const anchor = useReviewPanel((state) =>
+    !state.columnHidden && tour && state.active?.tour?.definition.id === tour.id
+      ? (state.active.anchor?.id ?? null)
+      : null,
+  );
 
   useEffect(() => {
     const figure = figureRef.current;
@@ -47,10 +45,10 @@ export function useDiagramSelection(tour: GuidedTour, fullscreen: boolean) {
 
   const selectInline = useCallback(
     (id: string) => {
-      if (fullscreen || expandOnClick) return false;
-      const stop = tour.stops.find((item) => item.anchor.id === id);
+      if (fullscreen || diagramFullscreenOnClick) return false;
+      const stop = tour?.stops.find((item) => item.anchor.id === id);
 
-      if (!stop) return false;
+      if (!tour || !stop) return false;
       panelStore.getState().openPeek({
         kind: "peek",
         anchor: stop.anchor,
@@ -64,7 +62,7 @@ export function useDiagramSelection(tour: GuidedTour, fullscreen: boolean) {
 
       return true;
     },
-    [expandOnClick, fullscreen, panelStore, tour],
+    [diagramFullscreenOnClick, fullscreen, panelStore, tour],
   );
 
   return { anchor, selectInline, figureRef };
