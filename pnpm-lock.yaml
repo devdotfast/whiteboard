@@ -210,6 +210,15 @@ importers:
 
   packages/agent-plugins/pi: {}
 
+  packages/board-protocol:
+    dependencies:
+      '@dev.fast/whiteboard-document':
+        specifier: workspace:*
+        version: link:../whiteboard-document
+      zod:
+        specifier: 'catalog:'
+        version: 4.6.6
+
   packages/canvas:
     devDependencies:
       '@dev.fast/review-canvas':
@@ -3845,12 +3854,12 @@ snapshots:
 
   '@agentclientprotocol/codex-acp@2.0.0':
     dependencies:
-      '@agentclientprotocol/sdk': 1.5.1(zod@4.6.5)
+      '@agentclientprotocol/sdk': 1.5.1(zod@4.6.6)
       '@openai/codex': 0.158.0
       diff: 9.0.0
       open: 11.0.4
       vscode-jsonrpc: 9.0.2
-      zod: 4.6.5
+      zod: 4.6.6
 
   '@agentclientprotocol/sdk@0.26.0(zod@3.25.76)':
     dependencies:

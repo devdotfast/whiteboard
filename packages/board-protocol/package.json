@@ -1,0 +1,38 @@
+{
+  "name": "@dev.fast/board-protocol",
+  "version": "0.1.0",
+  "description": "Wire contract between a hosted whiteboard board server and its clients.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devdotfast/review.git",
+    "directory": "packages/board-protocol"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org"
+  },
+  "scripts": {
+    "build": "pnpm -w exec tsc -p packages/board-protocol/tsconfig.build.json",
+    "typecheck": "pnpm -w exec tsc -p packages/board-protocol/tsconfig.json --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "dependencies": {
+    "@dev.fast/whiteboard-document": "workspace:*",
+    "zod": "catalog:"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
