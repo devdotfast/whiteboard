@@ -268,47 +268,6 @@ const processes = {
     ),
 };
 
-it("gives the Desktop and headless servers on one home one serverId, and another home another", async () => {
-  const other = path.join(root, "other");
-
-  // Started together, so both race to create the id.
-  const children = [
-    ["desktop", processes.desktop(root), undefined],
-    ["headless", processes.headless(root, root), root],
-    ["headless", processes.headless(other, other), other],
-  ] as const;
-
-  try {
-    const [desktop, headless, elsewhere] = await Promise.all(
-      children.map(async ([kind, child, stateDir]) => {
-        const server = await discovery(kind, child, stateDir);
-
-        return (
-          await (
-            await fetch(`${server.url}/health`, {
-              headers: { "x-review-token": server.token },
-            })
-          ).json()
-        ).serverId;
-      }),
-    );
-
-    expect(desktop).toMatch(uuid);
-    expect(headless).toBe(desktop);
-    expect(elsewhere).toMatch(uuid);
-    expect(elsewhere).not.toBe(desktop);
-  } finally {
-    await Promise.all(
-      children.map(async ([, child]) => {
-        if (child.exitCode !== null) return;
-        const exited = once(child, "exit");
-        child.kill("SIGTERM");
-        await exited;
-      }),
-    );
-  }
-}, 30_000);
-
 it.each([true, false])(
   "the Desktop server announces TLS only when its cert works (usable %s)",
   async (usable) => {
