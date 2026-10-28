@@ -1,11 +1,11 @@
 import { boardTitle } from "@dev.fast/review-protocol";
-
 import {
   type Element,
   ReviewInputError,
   elements,
   stepSources,
-} from "./document.js";
+} from "@dev.fast/whiteboard-document";
+
 import type { Snapshot } from "./store.js";
 
 interface RelatedBoard {

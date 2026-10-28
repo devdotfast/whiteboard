@@ -6,9 +6,8 @@ import {
   parseReviewBoardPlace,
   parseReviewStackResponse,
 } from "@dev.fast/review-protocol";
-import type { ActivitySnapshot } from "@review/review-api/activity";
+import { type ActivitySnapshot, elements } from "@dev.fast/whiteboard-document";
 import type { ReviewApiClient } from "@review/review-api/client";
-import { elements } from "@review/review-api/document";
 import type { ReviewProgress } from "@review/review-api/review-progress";
 import {
   type ReactNode,

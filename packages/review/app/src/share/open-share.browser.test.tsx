@@ -1,5 +1,5 @@
 import { mountWhiteboard, settled } from "@canvas/whiteboard-fixture";
-import { selectionKey } from "@review/lens-selection";
+import { selectionKey } from "@dev.fast/whiteboard-document";
 import { act } from "react";
 import { afterEach, expect, it } from "vitest";
 

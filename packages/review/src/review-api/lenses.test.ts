@@ -7,7 +7,7 @@ import {
   STRUCTURAL_DIFF_WIRE_VERSION,
   type StructuralSource,
 } from "@dev.fast/review-protocol";
-import { rangeAnchor } from "@review/lens-selection.js";
+import { rangeAnchor } from "@dev.fast/whiteboard-document";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { type AuthoringTool, callAuthoringTool } from "./agent-client.js";

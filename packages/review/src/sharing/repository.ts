@@ -2,7 +2,7 @@ import { mkdir } from "node:fs/promises";
 
 import { type VcsArg, gitAt } from "@dev.fast/local-vcs";
 import { normalizeGitHubRemote } from "@dev.fast/review-share-protocol";
-import { type Pins, ReviewInputError } from "@review/review-api/document.js";
+import { type Pins, ReviewInputError } from "@dev.fast/whiteboard-document";
 
 /** A full commit id, SHA-1 or SHA-256. */
 export const COMMIT_ID = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;

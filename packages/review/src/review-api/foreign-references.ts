@@ -1,12 +1,12 @@
 import path from "node:path";
 
 import { type JsonValue, isJsonObject, isStringValue } from "@dev.fast/json";
-import { parseAnchor } from "@review/lens-selection.js";
 import {
   markdownNodes,
   markdownText,
+  parseAnchor,
   parseMarkdown,
-} from "@review/markdown.js";
+} from "@dev.fast/whiteboard-document";
 
 /** A file's text at a commit; undefined when it can't be read. */
 export type ReadAtCommit = (

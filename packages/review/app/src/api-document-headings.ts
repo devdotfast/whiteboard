@@ -1,4 +1,4 @@
-import type { Block } from "@review/review-api/document";
+import type { Block } from "@dev.fast/whiteboard-document";
 import { documentHeadings } from "@review/review-api/document-headings";
 
 import type { ReviewTocEntry } from "./review-document-headings";

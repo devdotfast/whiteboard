@@ -9,16 +9,16 @@ import {
   capabilitySchema,
   shareBundleSchema,
 } from "@dev.fast/review-share-protocol";
-import { textIncludesQuote } from "@review/evidence.js";
-import { lensSchema } from "@review/review-api/diff-lenses.js";
-import { ReviewInputError } from "@review/review-api/document.js";
 import {
   type Pins,
+  ReviewInputError,
   checkReferences,
   documentSchema,
+  lensSchema,
   pinsSchema,
   resourceReferences,
-} from "@review/review-api/document.js";
+} from "@dev.fast/whiteboard-document";
+import { textIncludesQuote } from "@review/evidence.js";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
 import { pullRequestUrl } from "@review/review-api/origin.js";
 import type { ReviewStore } from "@review/review-api/store.js";

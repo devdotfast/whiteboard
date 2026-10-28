@@ -24,9 +24,14 @@ import {
   REVIEW_CLIENT_HEADER,
   REVIEW_CLIENT_REMOTE,
 } from "@dev.fast/review-protocol";
+import {
+  type Pins,
+  ReviewInputError,
+  elements,
+  rangeAnchor,
+} from "@dev.fast/whiteboard-document";
 import { type SubscribeCallback, subscribe } from "@parcel/watcher";
 import { AskThreads } from "@review/ask/threads.js";
-import { rangeAnchor } from "@review/lens-selection";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { Hono } from "hono";
 import sharp from "sharp";
@@ -38,7 +43,6 @@ import {
   callAuthoringTool,
 } from "./agent-client.js";
 import { ReviewApiClient } from "./client.js";
-import { type Pins, ReviewInputError, elements } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";
 import type { WorkspaceStatus } from "./workspaces.js";

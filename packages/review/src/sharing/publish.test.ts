@@ -5,7 +5,7 @@ import path from "node:path";
 
 import { createShareSchema } from "@dev.fast/review-share-protocol";
 import { readStoreAuth, writeStoreAuth } from "@dev.fast/trace-core";
-import { ReviewInputError } from "@review/review-api/document.js";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { Hono } from "hono";
 import { expect, it, vi } from "vitest";
 

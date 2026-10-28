@@ -10,8 +10,7 @@ import {
 } from "@dev.fast/local-vcs";
 import type { PullRequestState } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
-
-import { ReviewInputError } from "./document.js";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 
 /** Runs one subprocess and resolves its stdout; rejects on failure or
  * timeout. git, jj and gh go through the VCS runner; Azure DevOps's az (by

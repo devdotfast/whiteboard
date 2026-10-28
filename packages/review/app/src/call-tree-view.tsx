@@ -4,8 +4,10 @@ import { iconStyles } from "@canvas/ui/icon-styles";
 import { CheckIcon } from "@canvas/ui/icons";
 import { Spinner } from "@canvas/ui/spinner";
 import { surfaceStyles } from "@canvas/ui/surface";
-import type { DiffSelection } from "@review/lens-selection";
-import type { CallStackDiffBlock } from "@review/review-api/blocks/call_stack_diff";
+import type {
+  CallStackDiffBlock,
+  DiffSelection,
+} from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import { useState } from "react";
 

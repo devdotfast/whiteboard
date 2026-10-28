@@ -6,10 +6,11 @@ import type {
 } from "@dev.fast/review-protocol";
 import {
   type DiffSelection,
+  type FileLineRange,
+  codePeekSource,
   selectionKey,
   sourceAnchor,
-} from "@review/lens-selection";
-import { type FileLineRange, codePeekSource } from "@review/source";
+} from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import { Fragment, useEffect, useMemo, useRef } from "react";
 

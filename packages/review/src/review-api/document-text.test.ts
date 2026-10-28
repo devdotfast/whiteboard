@@ -1,8 +1,7 @@
-import { rangeAnchor } from "@review/lens-selection.js";
+import { documentSchema, rangeAnchor } from "@dev.fast/whiteboard-document";
 import { expect, it } from "vitest";
 
 import { documentText } from "./document-text.js";
-import { documentSchema } from "./document.js";
 import type { Snapshot } from "./store.js";
 
 const source = {

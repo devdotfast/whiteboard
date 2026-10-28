@@ -2,23 +2,20 @@ import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
 import {
-  ReviewInputError,
-  documentSchema,
-} from "@review/review-api/document.js";
-import { describe, expect, it } from "vitest";
-
-import {
   type BlockType,
   type Definitions,
+  ReviewInputError,
   blocks,
   checkReferences,
-} from "./index.js";
+  documentSchema,
+} from "@dev.fast/whiteboard-document";
+import { describe, expect, it } from "vitest";
 
-const fixturesDir = path.resolve(import.meta.dirname, "../../fixtures/blocks");
+const fixturesDir = path.resolve(import.meta.dirname, "../fixtures/blocks");
 
 const goldensDir = path.resolve(
   import.meta.dirname,
-  "../../../app/src/fixtures/saved-reviews",
+  "../../app/src/fixtures/saved-reviews",
 );
 
 async function fixture<T extends BlockType>(type: T) {

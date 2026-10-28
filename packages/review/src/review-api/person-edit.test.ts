@@ -2,9 +2,9 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { elements } from "@dev.fast/whiteboard-document";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import { elements } from "./document.js";
 import { createReviewApi } from "./http.js";
 import {
   FOCUS_LEASE_TTL_MS,

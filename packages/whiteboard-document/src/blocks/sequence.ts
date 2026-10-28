@@ -1,12 +1,12 @@
+import { z } from "zod";
+
+import { ReviewInputError } from "../input-error.js";
 import {
   type Anchor,
   type DiffSelection,
   anchorSchema,
   parseAnchor,
-} from "@review/lens-selection.js";
-import { ReviewInputError } from "@review/review-api/input-error.js";
-import { z } from "zod";
-
+} from "../lens-selection.js";
 import { codeFields } from "./code.js";
 import {
   type BlockDefinition,

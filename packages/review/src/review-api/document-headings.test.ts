@@ -1,7 +1,7 @@
+import type { Block } from "@dev.fast/whiteboard-document";
 import { describe, expect, it } from "vitest";
 
 import { documentHeadings } from "./document-headings.js";
-import type { Block } from "./document.js";
 
 describe("documentHeadings", () => {
   it("slugs the whole heading text, inline code and links included", () => {

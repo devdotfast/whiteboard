@@ -1,5 +1,5 @@
 import type { ApiDocumentData } from "@canvas/api-document";
-import { traceQuoteLink } from "@review/review-api/document";
+import { traceQuoteLink } from "@dev.fast/whiteboard-document";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 

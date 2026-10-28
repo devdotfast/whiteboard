@@ -44,7 +44,8 @@ export default defineConfig({
   format: "esm",
   outDir: "dist",
   fixedExtension: false,
-  dts: true,
+  // Built document declarations: from source, the dts plugin runs out of heap.
+  dts: { tsconfig: "tsconfig.dts.json" },
   // The external declaration edge has no global augmentation or runtime effect.
   // Used bindings stay bundled; the published declarations need no core package.
   treeshake: {
@@ -61,6 +62,7 @@ export default defineConfig({
       /^@dev\.fast\/review-protocol$/,
       /^@dev\.fast\/review-share-protocol$/,
       /^@dev\.fast\/trace-protocol$/,
+      /^@dev\.fast\/whiteboard-document$/,
       // Bundled to keep its KaTeX dependency out of the runtime.
       /^micromark-extension-math$/,
     ],

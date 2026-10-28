@@ -1,9 +1,9 @@
-import lensFixture from "@review/fixtures/blocks/database_lens.json";
 import {
   type Block,
   documentSchema,
   elements,
-} from "@review/review-api/document";
+} from "@dev.fast/whiteboard-document";
+import lensFixture from "@review/fixtures/blocks/database_lens.json";
 import type { Snapshot } from "@review/review-api/store";
 import { act } from "react";
 import { afterEach, expect, it } from "vitest";

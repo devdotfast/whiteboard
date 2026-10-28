@@ -1,9 +1,9 @@
 import { parseGitRemote } from "@dev.fast/local-vcs";
 import type { PullRequestState } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { z } from "zod";
 
-import { ReviewInputError } from "./document.js";
 import type { PullRequestProvider } from "./provider.js";
 import { GitHubRefusedRead, firstLine } from "./pull-request.js";
 

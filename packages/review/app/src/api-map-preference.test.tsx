@@ -1,4 +1,4 @@
-import type { Block } from "@review/review-api/document";
+import type { Block } from "@dev.fast/whiteboard-document";
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it } from "vitest";

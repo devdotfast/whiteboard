@@ -1,7 +1,7 @@
 import {
   type FlowDiagramBlock,
   flowDiagramSchema,
-} from "@review/review-api/blocks/flow_diagram";
+} from "@dev.fast/whiteboard-document";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";

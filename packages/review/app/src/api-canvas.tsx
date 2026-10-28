@@ -7,7 +7,7 @@ import {
   boardTitle,
   resolveReviewSourceView,
 } from "@dev.fast/review-protocol";
-import type { ActivitySnapshot } from "@review/review-api/activity";
+import type { ActivitySnapshot } from "@dev.fast/whiteboard-document";
 import {
   type ReviewApiClient,
   ReviewApiError,

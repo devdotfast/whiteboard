@@ -1,8 +1,8 @@
 import type {
   ActivitySnapshot,
   ActivitySurface,
-} from "@review/review-api/activity";
-import type { EditSummary } from "@review/review-api/document";
+  EditSummary,
+} from "@dev.fast/whiteboard-document";
 
 /**
  * Where the agent is on the board. The stream carries two signals: the edit

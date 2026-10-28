@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { isDeepStrictEqual } from "node:util";
 
 import { type JsonValue, isJsonObject, isStringValue } from "@dev.fast/json";
-import { respellDocumentLinks } from "@review/review-api/document";
+import { respellDocumentLinks } from "@dev.fast/whiteboard-document";
 import { personDocument } from "@review/review-api/store";
 import { readStoredDocument } from "@review/stored-document-migration";
 import { type Attrs, Fragment, type Node as PMNode } from "@tiptap/pm/model";

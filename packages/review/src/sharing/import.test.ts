@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import type { Block } from "@review/review-api/document.js";
+import type { Block } from "@dev.fast/whiteboard-document";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
 import { afterEach, expect, it, vi } from "vitest";

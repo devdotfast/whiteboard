@@ -1,13 +1,12 @@
-import { rangeAnchor } from "@review/lens-selection.js";
-import { describe, expect, it } from "vitest";
-
 import {
   ReviewInputError,
   boardLinks,
+  rangeAnchor,
   respellCommitLinks,
   respellLinks,
   sourceReferences,
-} from "./document.js";
+} from "@dev.fast/whiteboard-document";
+import { describe, expect, it } from "vitest";
 
 const sources = (markdown: string) =>
   sourceReferences([{ type: "markdown", id: "n-1", markdown }]);

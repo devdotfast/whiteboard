@@ -1,6 +1,6 @@
 import type { ApiDocumentData } from "@canvas/api-document";
 import { struckLinkStyles } from "@canvas/ui/struck-link";
-import { boardLink } from "@review/review-api/document";
+import { boardLink } from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import { type EditorState, Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";

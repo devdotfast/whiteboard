@@ -1,17 +1,15 @@
 import type { ReviewDiffLens } from "@dev.fast/review-protocol";
 import {
+  type FileLineRange,
+  type Lens,
   type LensSource,
+  UNCATEGORIZED_LENS_ID,
   comparisonKey,
   selectionKey,
-} from "@review/lens-selection";
+} from "@dev.fast/whiteboard-document";
 import type { ReviewApiClient } from "@review/review-api/client";
-import {
-  type Lens,
-  UNCATEGORIZED_LENS_ID,
-} from "@review/review-api/diff-lenses";
 import type { ReviewProgress } from "@review/review-api/review-progress";
 import type { Snapshot } from "@review/review-api/store";
-import type { FileLineRange } from "@review/source";
 import {
   type CoverageProgress,
   coverageProgress,

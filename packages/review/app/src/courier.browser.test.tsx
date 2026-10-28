@@ -1,5 +1,4 @@
-import type { ActivitySnapshot } from "@review/review-api/activity";
-import type { Block } from "@review/review-api/document";
+import type { ActivitySnapshot, Block } from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";

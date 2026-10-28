@@ -1,34 +1,31 @@
 import {
+  type DiffLens,
+  type FileLineRange,
+  type Lens,
   type LensSource,
+  type Pins,
+  ReviewInputError,
   SelectionUnavailableError,
   type SelectionUnavailableReason,
+  UNCATEGORIZED_LENS_ID,
+  anchorPins,
+  boardRepositoryId,
   comparisonKey,
+  fileLineRangeSchema,
+  lensSelections,
   resolveDiffSelection,
   selectionKey,
-} from "@review/lens-selection.js";
-import { type FileLineRange, fileLineRangeSchema } from "@review/source.js";
+  selectionReferences,
+} from "@dev.fast/whiteboard-document";
 import { type CoverageFile, emptyCoverage } from "@review/viewed-coverage.js";
 import { z } from "zod";
 
 import type { ComparisonCoverage } from "./comparison-coverage.js";
 import {
-  type DiffLens,
-  type Lens,
-  UNCATEGORIZED_LENS_ID,
-  lensSelections,
-} from "./diff-lenses.js";
-import {
-  type Pins,
-  anchorPins,
-  boardRepositoryId,
-  selectionReferences,
-} from "./document.js";
-import {
   changedPath,
   resolveFileLens,
   uncategorizedSources,
 } from "./file-lenses.js";
-import { ReviewInputError } from "./input-error.js";
 import { textualRows } from "./lens-alignment.js";
 import type { LocalReviewData } from "./local-data.js";
 import type { ReviewStore, Snapshot } from "./store.js";

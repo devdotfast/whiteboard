@@ -1,10 +1,10 @@
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import type {
   ReviewTelemetryErrorCategory,
   ReviewTelemetryErrorName,
 } from "@review/review-telemetry.js";
 
 import { ReviewApiError } from "./client.js";
-import { ReviewInputError } from "./input-error.js";
 
 export interface ToolFailure {
   errorName: ReviewTelemetryErrorName;

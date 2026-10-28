@@ -1,11 +1,11 @@
 import { fontSize, leading, radius, space } from "@canvas/scale.stylex";
-import { anchorSelection } from "@review/lens-selection";
 import {
   type Block,
   type BlockType,
+  anchorSelection,
   boardLink,
   traceQuoteLink,
-} from "@review/review-api/document";
+} from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import {
   Component,

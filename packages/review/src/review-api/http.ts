@@ -23,6 +23,12 @@ import {
 } from "@dev.fast/review-protocol";
 import { errorMessage } from "@dev.fast/trace-core";
 import {
+  ReviewInputError,
+  type ReviewTarget,
+  boardRepositoryId,
+  elements,
+} from "@dev.fast/whiteboard-document";
+import {
   type AgentSelection,
   AgentSelectionSchema,
   selectionMarkdown,
@@ -64,12 +70,6 @@ import { anchorQuotes } from "./anchor-quotes.js";
 import type { AskRecord } from "./ask-history.js";
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
-import {
-  ReviewInputError,
-  type ReviewTarget,
-  boardRepositoryId,
-  elements,
-} from "./document.js";
 import { instructionsQuerySchema, renderInstructions } from "./instructions.js";
 import type { LocalReviewData } from "./local-data.js";
 import { registerOnboardingRoutes } from "./onboarding.js";

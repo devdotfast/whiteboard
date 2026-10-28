@@ -5,7 +5,7 @@ import stylex from "@stylexjs/unplugin";
 import react from "@vitejs/plugin-react";
 import type { AliasOptions, PluginOption } from "vite";
 
-import { sourceAliases } from "../test-config";
+import { documentSource, sourceAliases } from "../test-config";
 import { scopeReviewCanvasCss } from "./desktop-css-scope";
 import {
   hardenLibavoidForTrustedTypes,
@@ -83,6 +83,7 @@ export function canvasPlugins(): PluginOption[] {
 
 export const canvasAliases = {
   ...sourceAliases,
+  "@dev.fast/whiteboard-document": documentSource,
   "decode-named-character-reference": decodeNamedCharacterReferenceIndex,
   "@animejs-bundles": animeBundles,
 } satisfies AliasOptions;

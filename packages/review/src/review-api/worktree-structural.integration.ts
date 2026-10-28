@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { formatAnchor, selectionKey } from "@review/lens-selection";
+import { formatAnchor, selectionKey } from "@dev.fast/whiteboard-document";
 import { expect, it } from "vitest";
 
 import { createReviewApi } from "./http";

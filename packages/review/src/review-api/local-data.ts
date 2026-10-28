@@ -34,6 +34,26 @@ import type {
   StructuralDiffEvent,
 } from "@dev.fast/review-protocol";
 import { writePrivateJsonAtomic } from "@dev.fast/trace-core";
+import {
+  type Block,
+  type FileLineRange,
+  type Pins,
+  ReviewInputError,
+  type ReviewTarget,
+  type SourcePins,
+  SourceRangeError,
+  anchorPins,
+  boardRepositoryId,
+  checkSourcePath,
+  elements,
+  fileLineRangeSchema,
+  pinnedRepositoryIds,
+  pinsSchema,
+  requireVisibleSource,
+  resourceReference,
+  sliceSourceRange,
+  sourceReferences,
+} from "@dev.fast/whiteboard-document";
 import type {
   AsyncSubscription,
   Event as WatcherEvent,
@@ -54,12 +74,6 @@ import {
   SoftwareModelValidationError,
   defineSoftwareMap,
 } from "@review/software-map-model.js";
-import {
-  SourceRangeError,
-  checkSourcePath,
-  requireVisibleSource,
-  sliceSourceRange,
-} from "@review/source.js";
 import { z } from "zod";
 
 import { checkoutFs } from "./checkout-fs.js";
@@ -67,22 +81,6 @@ import {
   type ComparisonCoverage,
   comparisonCoverage,
 } from "./comparison-coverage.js";
-import { resourceReference } from "./document.js";
-import {
-  type Block,
-  type FileLineRange,
-  type Pins,
-  ReviewInputError,
-  type ReviewTarget,
-  type SourcePins,
-  anchorPins,
-  boardRepositoryId,
-  elements,
-  fileLineRangeSchema,
-  pinnedRepositoryIds,
-  pinsSchema,
-  sourceReferences,
-} from "./document.js";
 import { decodeImage } from "./image-decode.js";
 import { mapInputSchema } from "./map-input.js";
 import { pullRequestKey, sourceBranchName } from "./origin.js";

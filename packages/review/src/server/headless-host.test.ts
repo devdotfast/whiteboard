@@ -31,6 +31,7 @@ import {
   STRUCTURAL_DIFF_WIRE_VERSION,
   parseReviewDesktopVerbFrame,
 } from "@dev.fast/review-protocol";
+import type { Pins } from "@dev.fast/whiteboard-document";
 import type { AskAgentLauncher } from "@review/ask/agents.js";
 import { runReviewCli } from "@review/cli-runner.js";
 import {
@@ -38,7 +39,6 @@ import {
   connectReviewInstance,
 } from "@review/review-api/agent-client.js";
 import { ReviewApiClient } from "@review/review-api/client.js";
-import type { Pins } from "@review/review-api/document.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import { serveReviewMcp } from "@review/review-api/mcp.js";
 import { openReviewProfile } from "@review/review-api/profile.js";

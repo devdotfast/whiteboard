@@ -1,4 +1,4 @@
-import type { Block } from "./blocks/index.js";
+import type { Block } from "@dev.fast/whiteboard-document";
 
 /** What a board link's hover card shows of the board or block it links to. */
 export interface BoardLinkPreview {

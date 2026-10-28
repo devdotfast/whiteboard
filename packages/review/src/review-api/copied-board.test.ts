@@ -2,11 +2,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-import { rangeAnchor } from "@review/lens-selection.js";
+import {
+  type Block,
+  ReviewInputError,
+  rangeAnchor,
+} from "@dev.fast/whiteboard-document";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import type { Block } from "./document.js";
-import { ReviewInputError } from "./input-error.js";
 import { type ReviewProviders, ReviewStore, type Seed } from "./store.js";
 
 const pins = {

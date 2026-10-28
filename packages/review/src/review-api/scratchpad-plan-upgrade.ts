@@ -2,9 +2,9 @@ import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 
 import type { JsonValue } from "@dev.fast/json";
+import { type Block, sourceReferences } from "@dev.fast/whiteboard-document";
 import { migrateStoredDocument } from "@review/stored-document-migration.js";
 
-import { type Block, sourceReferences } from "./document.js";
 import { snapshotForeignReferences } from "./foreign-references.js";
 import type { StoreUpgradeContext } from "./store-migrations.js";
 import { BOARD_REPOSITORY_ID_SQL, columnsOf } from "./store-schema.js";

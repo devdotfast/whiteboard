@@ -1,5 +1,5 @@
 import { mountWhiteboard, settled } from "@canvas/whiteboard-fixture";
-import type { ActivitySnapshot } from "@review/review-api/activity";
+import type { ActivitySnapshot } from "@dev.fast/whiteboard-document";
 import { act } from "react";
 import { afterEach, expect, it } from "vitest";
 

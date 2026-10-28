@@ -1,4 +1,4 @@
-import type { ActivitySurface } from "@review/review-api/activity";
+import type { ActivitySurface } from "@dev.fast/whiteboard-document";
 import {
   type Context,
   type ReactNode,

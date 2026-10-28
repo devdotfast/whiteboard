@@ -1,5 +1,7 @@
-import { anchorSelection } from "@review/lens-selection";
-import { call_stack_diff } from "@review/review-api/blocks/call_stack_diff";
+import {
+  anchorSelection,
+  call_stack_diff,
+} from "@dev.fast/whiteboard-document";
 import { expect, it } from "vitest";
 
 import { callTreeStops } from "./call-tree";

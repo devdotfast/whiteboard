@@ -1,6 +1,7 @@
-import { ReviewInputError } from "@review/review-api/input-error.js";
-import { sourcePinsSchema } from "@review/source.js";
 import { z } from "zod";
+
+import { ReviewInputError } from "../input-error.js";
+import { sourcePinsSchema } from "../source.js";
 
 export const text = z.string();
 

@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { findReviewPackageRoot } from "@review/package-paths.js";
 import { z } from "zod";
 
 import { componentReference } from "./component-reference.js";
-import { ReviewInputError } from "./input-error.js";
 
 export const INSTRUCTION_TOPICS = [
   "authoring",

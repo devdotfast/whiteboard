@@ -7,7 +7,10 @@ import {
 } from "@canvas/scale.stylex";
 import { Checkbox } from "@canvas/ui/checkbox";
 import { isNumberValue, isStringValue } from "@dev.fast/review-protocol";
-import { type MarkdownNode, parseMarkdown } from "@review/markdown";
+import {
+  type MarkdownNode,
+  parseMarkdown,
+} from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 // Deliberately separate from the MDX document pipeline: this renderer walks the
 // mdast of untrusted runtime strings (agent trace message bodies) and never

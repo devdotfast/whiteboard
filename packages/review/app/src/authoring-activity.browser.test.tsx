@@ -1,4 +1,4 @@
-import type { ActivitySnapshot } from "@review/review-api/activity";
+import type { ActivitySnapshot } from "@dev.fast/whiteboard-document";
 import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it } from "vitest";

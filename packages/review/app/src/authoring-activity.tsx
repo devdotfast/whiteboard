@@ -9,7 +9,7 @@ import {
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
 import { useTooltip } from "@canvas/ui/tooltip";
-import type { ActivityPresence } from "@review/review-api/activity";
+import type { ActivityPresence } from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import { useContext, useState } from "react";
 

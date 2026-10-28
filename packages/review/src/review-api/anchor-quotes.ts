@@ -1,15 +1,13 @@
 import {
   type LensSource,
-  formatAnchor,
-  selectionKey,
-} from "@review/lens-selection.js";
-
-import {
   type Pins,
   anchorPins,
   boardRepositoryId,
+  formatAnchor,
+  selectionKey,
   selectionReferences,
-} from "./document.js";
+} from "@dev.fast/whiteboard-document";
+
 import type { Snapshot } from "./store.js";
 
 export interface AnchorQuote {

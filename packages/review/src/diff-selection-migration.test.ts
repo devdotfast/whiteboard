@@ -1,6 +1,9 @@
+import {
+  anchorSelection,
+  resolveDiffSelection,
+} from "@dev.fast/whiteboard-document";
 import { expect, it } from "vitest";
 
-import { anchorSelection, resolveDiffSelection } from "./lens-selection";
 import { migrateStoredDocument } from "./stored-document-migration";
 
 it("migrates retained peeks and lens endpoints without altering IDs or unrelated line data", () => {

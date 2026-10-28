@@ -8,6 +8,7 @@ import {
   type StructuralDiffEvent,
   type StructuralRegion,
 } from "@dev.fast/review-protocol";
+import { UNCATEGORIZED_LENS_ID } from "@dev.fast/whiteboard-document";
 import { coverageProgress, coverageSources } from "@review/viewed-coverage.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -17,7 +18,6 @@ import {
   comparisonCoverage,
   foldedChanges,
 } from "./comparison-coverage.js";
-import { UNCATEGORIZED_LENS_ID } from "./diff-lenses.js";
 import { createReviewApi } from "./http.js";
 import { LocalReviewData } from "./local-data.js";
 import type { ReviewProgress } from "./review-progress.js";

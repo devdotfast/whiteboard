@@ -1,5 +1,9 @@
-import { type LensSource, anchorSelection } from "@review/lens-selection.js";
-import type { FileLineRange } from "@review/source.js";
+import {
+  type FileLineRange,
+  type Lens,
+  type LensSource,
+  anchorSelection,
+} from "@dev.fast/whiteboard-document";
 import {
   type CoverageFile,
   coverageSources,
@@ -9,8 +13,6 @@ import {
   unionIntervals,
 } from "@review/viewed-coverage.js";
 import { Minimatch } from "minimatch";
-
-import type { Lens } from "./diff-lenses.js";
 
 /** Subtract authored coverage, independently of viewed state. */
 export function uncategorizedSources(

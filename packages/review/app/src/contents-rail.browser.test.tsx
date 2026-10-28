@@ -1,7 +1,7 @@
 import type { ReviewMenuRequest } from "@dev.fast/review-protocol";
+import { type Block, documentSchema } from "@dev.fast/whiteboard-document";
 import codeFixture from "@review/fixtures/blocks/code.json";
 import flowFixture from "@review/fixtures/blocks/flow_diagram.json";
-import { type Block, documentSchema } from "@review/review-api/document";
 import type { Snapshot } from "@review/review-api/store";
 import { act, useRef } from "react";
 import { type Root, createRoot } from "react-dom/client";

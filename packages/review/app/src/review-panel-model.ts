@@ -1,6 +1,6 @@
+import type { DiffSelection } from "@dev.fast/whiteboard-document";
 import type { AgentSelection } from "@review/agent-selection";
 import type { AskAgentId } from "@review/ask/thread-state";
-import { type DiffSelection } from "@review/lens-selection";
 
 export type ReviewPeekContent =
   /** `more` follows `source` for a step with several ranges. */

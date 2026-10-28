@@ -25,7 +25,7 @@ import {
   reviewUiStateKey,
   writeReviewUiState,
 } from "@canvas/review-ui-state";
-import { boardLink, traceQuoteLink } from "@review/review-api/document";
+import { boardLink, traceQuoteLink } from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import type { Mark, ResolvedPos } from "@tiptap/pm/model";
 import {

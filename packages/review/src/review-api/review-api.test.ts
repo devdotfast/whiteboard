@@ -9,7 +9,7 @@ import {
   STRUCTURAL_DIFF_WIRE_VERSION,
   type StructuralSource,
 } from "@dev.fast/review-protocol";
-import { rangeAnchor } from "@review/lens-selection.js";
+import { ReviewInputError, rangeAnchor } from "@dev.fast/whiteboard-document";
 import { createGlobalReviewServer } from "@review/server/desktop-server.js";
 import { GlobalReviewDesktopVerbRelay } from "@review/server/global-verb-relay.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -19,7 +19,6 @@ import { type AuthoringTool, callAuthoringTool } from "./agent-client.js";
 import { authoringTools } from "./authoring-tools.js";
 import { ReviewApiClient } from "./client.js";
 import { documentText } from "./document-text.js";
-import { ReviewInputError } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { LocalReviewData } from "./local-data";
 import { callPublicTool, publicTool } from "./public-tools.js";

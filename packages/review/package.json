@@ -41,7 +41,7 @@
   "scripts": {
     "prebuild": "pnpm run build:workspace-deps",
     "build": "node --max-old-space-size=8192 node_modules/tsdown/dist/run.mjs",
-    "build:workspace-deps": "pnpm --filter @dev.fast/diffr --filter @dev.fast/json --filter @dev.fast/local-vcs --filter @dev.fast/review-protocol --filter @dev.fast/review-share-protocol --filter @dev.fast/trace-protocol --filter @dev.fast/trace-core build",
+    "build:workspace-deps": "pnpm --filter @dev.fast/diffr --filter @dev.fast/json --filter @dev.fast/local-vcs --filter @dev.fast/review-protocol --filter @dev.fast/review-share-protocol --filter @dev.fast/trace-protocol --filter @dev.fast/trace-core --filter @dev.fast/whiteboard-document build",
     "prepack": "pnpm run build",
     "start": "tsx src/cli.ts",
     "review": "tsx src/cli.ts",
@@ -85,6 +85,7 @@
     "@dev.fast/review-share-protocol": "workspace:*",
     "@dev.fast/trace-core": "workspace:*",
     "@dev.fast/trace-protocol": "workspace:*",
+    "@dev.fast/whiteboard-document": "workspace:*",
     "@types/node": "24.12.2",
     "@types/semver": "7.7.1",
     "@types/yauzl": "3.4.0",

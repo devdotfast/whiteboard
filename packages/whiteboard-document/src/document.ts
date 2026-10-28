@@ -4,28 +4,6 @@ import {
   isJsonObject,
   isStringValue,
 } from "@dev.fast/json";
-import {
-  type Anchor,
-  type LensSource,
-  commitLinkTarget,
-  parseAnchor,
-  selectionProblem,
-  sourceAnchors,
-} from "@review/lens-selection.js";
-import {
-  type MarkdownNode,
-  linkDestinations,
-  markdownNodes,
-  markdownText,
-  parseMarkdown,
-  rewriteLinkDestinations,
-} from "@review/markdown.js";
-import {
-  type FileLineRange,
-  type SourcePins,
-  fileLineRangeSchema,
-  sourcePinsSchema,
-} from "@review/source.js";
 import { z } from "zod";
 
 import {
@@ -44,6 +22,28 @@ import {
 import { type Step, stepSchema, stepSources } from "./blocks/sequence.js";
 import type { Lens } from "./diff-lenses.js";
 import { ReviewInputError } from "./input-error.js";
+import {
+  type Anchor,
+  type LensSource,
+  commitLinkTarget,
+  parseAnchor,
+  selectionProblem,
+  sourceAnchors,
+} from "./lens-selection.js";
+import {
+  type MarkdownNode,
+  linkDestinations,
+  markdownNodes,
+  markdownText,
+  parseMarkdown,
+  rewriteLinkDestinations,
+} from "./markdown.js";
+import {
+  type FileLineRange,
+  type SourcePins,
+  fileLineRangeSchema,
+  sourcePinsSchema,
+} from "./source.js";
 
 export { ReviewInputError } from "./input-error.js";
 

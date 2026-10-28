@@ -8,13 +8,13 @@ import { createCanvasQueryClient } from "@canvas/canvas-query";
 import { hostApiClient } from "@canvas/host/review-session";
 import type { WhiteboardData } from "@canvas/whiteboard";
 import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
-import type { ActivitySnapshot } from "@review/review-api/activity";
-import { lensSchema } from "@review/review-api/diff-lenses";
 import {
+  type ActivitySnapshot,
   documentSchema,
+  lensSchema,
   pinsSchema,
   resourceReferences,
-} from "@review/review-api/document";
+} from "@dev.fast/whiteboard-document";
 import type { ReviewProgress } from "@review/review-api/review-progress";
 import type { Snapshot } from "@review/review-api/store";
 import { z } from "zod";

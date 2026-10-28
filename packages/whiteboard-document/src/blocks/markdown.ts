@@ -1,5 +1,4 @@
-import { sourcePinsSchema } from "@review/source.js";
-
+import { sourcePinsSchema } from "../source.js";
 import { defineBlock, text } from "./definition.js";
 
 export const markdown = {

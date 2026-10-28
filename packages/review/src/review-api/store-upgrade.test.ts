@@ -5,10 +5,10 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 
+import { sourceReferences } from "@dev.fast/whiteboard-document";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CheckoutGroups, type CheckoutProbe } from "./checkout-groups.js";
-import { sourceReferences } from "./document.js";
 import {
   STORE_UPGRADES,
   STORE_VERSION,

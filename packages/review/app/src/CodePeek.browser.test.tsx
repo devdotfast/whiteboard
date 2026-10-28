@@ -2,7 +2,7 @@ import type {
   ReviewInlineEditorSpec,
   ReviewVerbRequest,
 } from "@dev.fast/review-protocol";
-import { selectSource, sourceAnchors } from "@review/lens-selection";
+import { selectSource, sourceAnchors } from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import { type ReactNode, act } from "react";
 import { createRoot } from "react-dom/client";

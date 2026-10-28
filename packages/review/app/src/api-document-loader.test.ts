@@ -1,5 +1,5 @@
+import { documentSchema } from "@dev.fast/whiteboard-document";
 import type { ReviewApiClient } from "@review/review-api/client";
-import { documentSchema } from "@review/review-api/document";
 import type { Snapshot } from "@review/review-api/store";
 import { expect, it } from "vitest";
 

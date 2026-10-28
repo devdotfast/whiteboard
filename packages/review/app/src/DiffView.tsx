@@ -21,7 +21,7 @@ import type {
 import {
   type Lens,
   UNCATEGORIZED_LENS_ID,
-} from "@review/review-api/diff-lenses";
+} from "@dev.fast/whiteboard-document";
 import {
   type CoverageProgress,
   coverageProgress,

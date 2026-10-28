@@ -9,12 +9,13 @@ import {
 } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { textStyles } from "@canvas/ui/text";
-import { type DiffSelection, anchorSelection } from "@review/lens-selection";
 import {
+  type DiffSelection,
   type SourcePins,
   type Step,
+  anchorSelection,
   stepSources,
-} from "@review/review-api/document";
+} from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import {
   BaseEdge,

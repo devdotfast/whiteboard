@@ -1,4 +1,7 @@
-import { type MarkdownNode, parseMarkdown } from "@review/markdown";
+import {
+  type MarkdownNode,
+  parseMarkdown,
+} from "@dev.fast/whiteboard-document";
 import type { Fragment, Mark, Node as PMNode, Schema } from "@tiptap/pm/model";
 import { gfmToMarkdown } from "mdast-util-gfm";
 import { mathToMarkdown } from "mdast-util-math";

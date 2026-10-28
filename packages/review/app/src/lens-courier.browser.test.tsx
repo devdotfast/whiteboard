@@ -1,5 +1,4 @@
-import type { ActivitySnapshot } from "@review/review-api/activity";
-import type { Lens } from "@review/review-api/diff-lenses";
+import type { ActivitySnapshot, Lens } from "@dev.fast/whiteboard-document";
 import type { Snapshot } from "@review/review-api/store";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";

@@ -1,7 +1,8 @@
-import type { SourcePins } from "@review/source.js";
+import {
+  ReviewInputError,
+  type SourcePins,
+} from "@dev.fast/whiteboard-document";
 import { z } from "zod";
-
-import { ReviewInputError } from "./input-error.js";
 
 // Query schemas for the read routes Desktop and review_get call. http.ts
 // parses query strings with them, and authoring-tools.ts publishes get's.

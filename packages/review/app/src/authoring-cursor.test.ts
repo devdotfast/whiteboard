@@ -1,8 +1,8 @@
 import type {
   ActivityFocus,
   ActivitySnapshot,
-} from "@review/review-api/activity";
-import type { EditSummary } from "@review/review-api/document";
+  EditSummary,
+} from "@dev.fast/whiteboard-document";
 import { describe, expect, it } from "vitest";
 
 import {

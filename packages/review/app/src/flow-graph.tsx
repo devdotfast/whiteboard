@@ -7,12 +7,12 @@ import {
 } from "@canvas/scale.stylex";
 import { Button } from "@canvas/ui/button";
 import { Spinner } from "@canvas/ui/spinner";
-import type { DiffSelection } from "@review/lens-selection";
 import {
+  type DiffSelection,
   type FlowDiagramBlock,
   type FlowDiagramNode,
   nodeSources,
-} from "@review/review-api/blocks/flow_diagram";
+} from "@dev.fast/whiteboard-document";
 import {
   type CoverageProgress,
   coverageProgress,

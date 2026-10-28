@@ -5,12 +5,12 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { setLocalVcsCommandObserver } from "@dev.fast/local-vcs";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { type AuthoringTool } from "./agent-client.js";
 import { authoringTools } from "./authoring-tools.js";
 import { ReviewApiClient } from "./client.js";
-import { ReviewInputError } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { callPublicTool, publicTool } from "./public-tools.js";
 import { type ReviewProviders, ReviewStore } from "./store.js";

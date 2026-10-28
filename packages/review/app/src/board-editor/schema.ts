@@ -5,7 +5,7 @@ import { documentNodeMarker, proseMarker } from "@canvas/markers.stylex";
 import { fontWeight, space } from "@canvas/scale.stylex";
 import type { StyleArg } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
-import { boardLink, traceQuoteLink } from "@review/review-api/document";
+import { boardLink, traceQuoteLink } from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import {
   type DOMOutputSpec,

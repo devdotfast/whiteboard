@@ -15,12 +15,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
+import type { Pins } from "@dev.fast/whiteboard-document";
 import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
 import { runPrepareCommand } from "@review/review-prepare.js";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { z } from "zod";
 
-import type { Pins } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";
 import type { commandSchema } from "./store.js";

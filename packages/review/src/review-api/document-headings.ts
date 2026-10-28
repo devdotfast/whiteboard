@@ -1,11 +1,13 @@
 import {
+  type Block,
+  markdownText,
+  parseMarkdown,
+} from "@dev.fast/whiteboard-document";
+import {
   headingAnchors,
   isBoardHeading,
   markdownHeadingDepth,
 } from "@review/heading-anchors.js";
-import { markdownText, parseMarkdown } from "@review/markdown.js";
-
-import type { Block } from "./document.js";
 
 export type ReviewHeadingLevel = "h2" | "h3";
 

@@ -7,8 +7,11 @@ import {
   applyStructuralUpdate,
   structuralRows,
 } from "@dev.fast/review-protocol";
-import type { AlignmentRow } from "@review/lens-selection.js";
-import type { FileLineRange } from "@review/source.js";
+import type {
+  AlignmentRow,
+  FileLineRange,
+  Pins,
+} from "@dev.fast/whiteboard-document";
 import { parseUnifiedPatch } from "@review/unified-diff.js";
 import {
   type Coverage,
@@ -20,7 +23,6 @@ import {
   unionIntervals,
 } from "@review/viewed-coverage.js";
 
-import type { Pins } from "./document.js";
 import { textualRows } from "./lens-alignment.js";
 import type { LocalReviewData } from "./local-data.js";
 

@@ -7,7 +7,7 @@ import {
   space,
 } from "@canvas/scale.stylex";
 import { buttonStyles } from "@canvas/ui/button";
-import type { ActivitySurface } from "@review/review-api/activity";
+import type { ActivitySurface } from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import {
   type Context,

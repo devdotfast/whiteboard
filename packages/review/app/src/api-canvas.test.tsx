@@ -14,10 +14,12 @@ import type {
   ReviewInlineEditorSpec,
   ReviewSurfaceEvent,
 } from "@dev.fast/review-protocol";
-import { rangeAnchor } from "@review/lens-selection";
-import type { ReviewTarget } from "@review/review-api/document";
+import {
+  ReviewInputError,
+  type ReviewTarget,
+  rangeAnchor,
+} from "@dev.fast/whiteboard-document";
 import { createReviewApi } from "@review/review-api/http";
-import { ReviewInputError } from "@review/review-api/input-error";
 import { LocalReviewData } from "@review/review-api/local-data";
 import { ReviewStore } from "@review/review-api/store";
 import { Hono } from "hono";

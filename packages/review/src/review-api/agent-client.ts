@@ -1,3 +1,4 @@
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import {
   ReviewInstanceUnavailableError,
   healthyReviewInstance,
@@ -12,7 +13,6 @@ import {
 } from "@review/server-discovery.js";
 
 import { ReviewApiClient, ReviewApiError } from "./client.js";
-import { ReviewInputError } from "./input-error.js";
 
 export interface AuthoringTool {
   name: string;

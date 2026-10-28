@@ -12,7 +12,7 @@ import {
   testApiDocumentData,
   testReviewSession,
 } from "@canvas/review-session-test-utils";
-import type { ActivitySnapshot } from "@review/review-api/activity";
+import type { ActivitySnapshot } from "@dev.fast/whiteboard-document";
 import { ReviewApiClient } from "@review/review-api/client";
 import { act, createRef } from "react";
 import { type Root, createRoot } from "react-dom/client";

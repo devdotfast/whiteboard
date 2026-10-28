@@ -3,11 +3,11 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { resolveReviewStackLayers } from "@review/review-stack.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { azureDevOpsProvider } from "./azure-devops-provider.js";
-import { ReviewInputError } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { openLocalReviewStore } from "./local-data.js";
 import { resolvePullRequest } from "./provider.js";

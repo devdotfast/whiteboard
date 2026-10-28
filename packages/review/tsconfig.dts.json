@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  // tsconfig.base.json's paths, with the document model on its built types.
+  "compilerOptions": {
+    "paths": {
+      "@dev.fast/trace-core": ["../trace-core/src/index.ts"],
+      "@dev.fast/whiteboard-document": [
+        "../whiteboard-document/dist/index.d.ts"
+      ],
+      "@dev.fast/*": ["../*/src"],
+      "@review/*": ["./src/*"],
+      "@canvas/*": ["./app/src/*"]
+    }
+  }
+}

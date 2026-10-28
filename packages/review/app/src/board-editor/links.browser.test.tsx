@@ -11,8 +11,8 @@ import type {
   ReviewNotification,
   ReviewVerbRequest,
 } from "@dev.fast/review-protocol";
+import { selectionReferences } from "@dev.fast/whiteboard-document";
 import { ReviewApiClient } from "@review/review-api/client";
-import { selectionReferences } from "@review/review-api/document";
 import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";

@@ -5,13 +5,8 @@ import {
   type ShareSource,
 } from "@dev.fast/review-share-protocol";
 import {
+  type FileLineRange,
   type LensSource,
-  selectionKey,
-  sourceAnchors,
-} from "@review/lens-selection.js";
-import { markdownNodes, parseMarkdown } from "@review/markdown.js";
-import { lensSelections } from "@review/review-api/diff-lenses.js";
-import {
   type Pins,
   ReviewInputError,
   anchorPins,
@@ -19,16 +14,20 @@ import {
   checkReferences,
   documentSchema,
   elements,
+  lensSelections,
+  markdownNodes,
+  parseMarkdown,
   readsAtBoardPins,
   resourceReference,
   resourceReferences,
+  selectionKey,
   selectionReferences,
+  sourceAnchors,
   sourceReferences,
-} from "@review/review-api/document.js";
+} from "@dev.fast/whiteboard-document";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
 import { reviewProgress } from "@review/review-api/review-progress.js";
 import type { ReviewStore, Snapshot } from "@review/review-api/store.js";
-import type { FileLineRange } from "@review/source.js";
 
 export function validateShareSources(
   snapshot: Pick<Snapshot, "pins" | "document" | "lenses">,

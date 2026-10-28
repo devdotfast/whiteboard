@@ -7,7 +7,7 @@ import {
   MAX_SHARE_BYTES,
   createShareSchema,
 } from "@dev.fast/review-share-protocol";
-import { ReviewInputError } from "@review/review-api/document.js";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";

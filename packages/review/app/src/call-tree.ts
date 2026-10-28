@@ -1,9 +1,9 @@
 import {
+  type CallStackDiffBlock,
   type DiffSelection,
   type LensSource,
   anchorSelection,
-} from "@review/lens-selection";
-import type { CallStackDiffBlock } from "@review/review-api/blocks/call_stack_diff";
+} from "@dev.fast/whiteboard-document";
 
 export interface CallTreeStop {
   id: string;

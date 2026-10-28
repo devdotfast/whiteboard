@@ -1,4 +1,4 @@
-import { ReviewInputError } from "./document.js";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 
 /** The one decoder for images entering the store, whether uploaded by a client
  * or read from a legacy review: bounded, single frame, re-encoded as PNG. */

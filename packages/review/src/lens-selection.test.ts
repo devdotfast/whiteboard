@@ -1,5 +1,3 @@
-import { expect, it } from "vitest";
-
 import {
   anchorSchema,
   anchorSelection,
@@ -10,7 +8,9 @@ import {
   selectionKey,
   selectionProblem,
   sourceAnchors,
-} from "./lens-selection.js";
+} from "@dev.fast/whiteboard-document";
+import { expect, it } from "vitest";
+
 import { textualRows } from "./review-api/lens-alignment.js";
 import {
   type CoverageFile,

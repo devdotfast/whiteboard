@@ -1,4 +1,8 @@
 import { type JsonValue, isJsonObject } from "@dev.fast/json";
+import {
+  pathTargetSchema,
+  publishedEdits,
+} from "@dev.fast/whiteboard-document";
 import { z } from "zod";
 
 import {
@@ -6,7 +10,6 @@ import {
   activityEndSchema,
   activityUpdateSchema,
 } from "./activity.js";
-import { pathTargetSchema, publishedEdits } from "./document.js";
 import { instructionsQuerySchema } from "./instructions.js";
 import { uploadSchema } from "./local-data.js";
 import { inspectQuerySchema } from "./read-schemas.js";

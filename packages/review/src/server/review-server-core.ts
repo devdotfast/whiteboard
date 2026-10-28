@@ -4,6 +4,7 @@ import type {
   ReviewServerHealthWithToken,
 } from "@dev.fast/review-protocol";
 import { traceMachineEnabled } from "@dev.fast/trace-core";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import {
   type AskAgentLauncher,
   askAgentTakesMcp,
@@ -15,7 +16,6 @@ import {
   readBuildCommit,
   readReviewPackageVersion,
 } from "@review/package-paths.js";
-import { ReviewInputError } from "@review/review-api/document.js";
 import {
   type AuthoringCapabilities,
   type ReviewApiHooks,

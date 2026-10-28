@@ -1,4 +1,4 @@
-import { blockSchema } from "@review/review-api/blocks/index.js";
+import { blockSchema } from "@dev.fast/whiteboard-document";
 import { boardLinkPreview } from "@review/review-api/link-preview.js";
 import { expect, it } from "vitest";
 import { z } from "zod";

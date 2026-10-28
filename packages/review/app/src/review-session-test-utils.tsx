@@ -1,5 +1,5 @@
 import type { ReviewCanvasBridge } from "@dev.fast/review-protocol";
-import type { Block } from "@review/review-api/document";
+import type { Block } from "@dev.fast/whiteboard-document";
 import type { ReactNode } from "react";
 
 import type { ApiDocumentData } from "./api-document";

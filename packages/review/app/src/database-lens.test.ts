@@ -1,5 +1,7 @@
-import { selectSource } from "@review/lens-selection";
-import type { DatabaseOperation } from "@review/review-api/document";
+import {
+  type DatabaseOperation,
+  selectSource,
+} from "@dev.fast/whiteboard-document";
 import { describe, expect, it } from "vitest";
 
 import {

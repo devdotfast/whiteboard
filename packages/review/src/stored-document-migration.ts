@@ -6,6 +6,13 @@ import {
   isNumberValue,
   isStringValue,
 } from "@dev.fast/review-protocol";
+import {
+  type Lens,
+  formatAnchor,
+  label,
+  lensTargetsSchema,
+  respellLinks,
+} from "@dev.fast/whiteboard-document";
 import { z } from "zod";
 
 import {
@@ -13,10 +20,6 @@ import {
   migrateDiffSelections,
   retiredSelection,
 } from "./diff-selection-migration.js";
-import { formatAnchor } from "./lens-selection.js";
-import { label } from "./review-api/blocks/definition.js";
-import { type Lens, lensTargetsSchema } from "./review-api/diff-lenses.js";
-import { respellLinks } from "./review-api/document.js";
 
 /** Upgrade a saved or shared Review document to the current block schema at the
  * read/import boundary. New edits use the strict schema and never accept these

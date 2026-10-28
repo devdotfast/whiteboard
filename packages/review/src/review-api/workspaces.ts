@@ -11,6 +11,7 @@ import {
   processIsAlive,
   processStartIdentity,
 } from "@dev.fast/trace-core";
+import { type Pins, ReviewInputError } from "@dev.fast/whiteboard-document";
 import { reviewManagedCheckoutRoot } from "@review/review-checkout-paths.js";
 import {
   ensureReviewPinnedCheckout,
@@ -25,7 +26,6 @@ import {
   reviewPrepareMarkerPath,
 } from "@review/review-prepare.js";
 
-import { type Pins, ReviewInputError } from "./document.js";
 import type { ReviewStore } from "./store.js";
 
 export interface WorkspaceStatus {

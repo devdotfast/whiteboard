@@ -2,7 +2,7 @@ import { isJsonObject } from "@dev.fast/review-protocol";
 import {
   ReviewInputError,
   resourceReferences,
-} from "@review/review-api/document";
+} from "@dev.fast/whiteboard-document";
 import { readQuerySchemas } from "@review/review-api/read-schemas";
 import { ReviewStore, type Snapshot } from "@review/review-api/store";
 import { resolveReviewDiffFiles } from "@review/review-diff-files";

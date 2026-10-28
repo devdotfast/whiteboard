@@ -1,5 +1,4 @@
-import { anchorSchema } from "@review/lens-selection.js";
-
+import { anchorSchema } from "../lens-selection.js";
 import { defineBlock, elementPins, text } from "./definition.js";
 
 export const code_peek = {

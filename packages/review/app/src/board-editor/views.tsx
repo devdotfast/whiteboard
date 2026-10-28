@@ -9,7 +9,7 @@ import { fontSize, leading } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { Shortcut } from "@canvas/ui/kbd";
 import { UNTITLED_BOARD } from "@dev.fast/review-protocol";
-import { parseMarkdown } from "@review/markdown";
+import { parseMarkdown } from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import { NodeSelection } from "@tiptap/pm/state";

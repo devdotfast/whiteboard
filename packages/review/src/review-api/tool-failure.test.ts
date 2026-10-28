@@ -1,7 +1,7 @@
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { expect, it } from "vitest";
 
 import { ReviewApiError } from "./client.js";
-import { ReviewInputError } from "./input-error.js";
 import { toolFailure } from "./tool-failure.js";
 
 it("separates agent input, review state and host failures by reply status", () => {

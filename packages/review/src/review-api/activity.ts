@@ -1,17 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
 
+import {
+  type ActivityPresence,
+  type ActivitySnapshot,
+  type ActivitySurface,
+  ReviewInputError,
+  focusSchema,
+} from "@dev.fast/whiteboard-document";
 import { z } from "zod";
-
-import { ReviewInputError } from "./document.js";
-
-const focusSchema = z.strictObject({
-  description: z.string().trim().min(1).max(160),
-  targetId: z.string().min(1).optional(),
-});
-
-/** Which page an agent last wrote on, so the app knows where its courier is. */
-export type ActivitySurface = "document" | "lenses";
 
 // One schema per action, so each agent tool states exactly what it needs.
 export const activityBeginSchema = z.strictObject({
@@ -32,27 +29,6 @@ export const activitySchema = z.discriminatedUnion("action", [
   activityUpdateSchema.extend({ action: z.literal("update") }),
   activityEndSchema.extend({ action: z.literal("end") }),
 ]);
-
-export type ActivityFocus = z.infer<typeof focusSchema>;
-
-/** One agent working on a review. */
-export interface ActivityPresence {
-  activityId: string;
-  /** The agent's color: the lowest slot free when it began, kept until it ends. */
-  slot: number;
-  focus?: ActivityFocus;
-  /** Where it last wrote; absent until its first attributed write. */
-  surface?: ActivitySurface;
-}
-
-export interface ActivitySnapshot {
-  /** Live presences. */
-  workingCount: number;
-  /** The latest expiry among live presences. */
-  expiresAt: number | null;
-  /** Each live presence, in the order they began. */
-  activities?: ActivityPresence[];
-}
 
 // A presence lasts until end, or three minutes without an attributed write or
 // an update, so a crashed agent stops showing within that long.

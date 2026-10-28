@@ -1,8 +1,8 @@
 import { errorMessage } from "@dev.fast/trace-core";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { z } from "zod";
 
 import { azureRepositoryOf, slugOf } from "./azure-remote.js";
-import { ReviewInputError } from "./document.js";
 import type { PullRequestProvider } from "./provider.js";
 import { firstLine } from "./pull-request.js";
 

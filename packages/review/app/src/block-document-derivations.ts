@@ -1,5 +1,9 @@
-import { markdownNodes, parseMarkdown } from "@review/markdown";
-import { type Block, canonicalLink } from "@review/review-api/document";
+import {
+  type Block,
+  canonicalLink,
+  markdownNodes,
+  parseMarkdown,
+} from "@dev.fast/whiteboard-document";
 
 import type { ReviewSectionSummary } from "./review-section-summary";
 

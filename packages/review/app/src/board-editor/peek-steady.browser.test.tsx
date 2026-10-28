@@ -6,7 +6,7 @@ import {
   testApiDocumentData,
   testReviewSession,
 } from "@canvas/review-session-test-utils";
-import { anchorSelection, selectionKey } from "@review/lens-selection";
+import { anchorSelection, selectionKey } from "@dev.fast/whiteboard-document";
 import { ReviewApiClient } from "@review/review-api/client";
 import { act } from "react";
 import { type Root, createRoot } from "react-dom/client";

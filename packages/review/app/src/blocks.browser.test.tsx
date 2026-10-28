@@ -1,17 +1,17 @@
 import type { JsonValue } from "@dev.fast/review-protocol";
 import {
+  assignFreshIds,
+  documentSchema,
+  elements,
+  isUnit,
+  selectionKey,
+} from "@dev.fast/whiteboard-document";
+import {
   FIXTURE_IMAGE_ID,
   FIXTURE_MAP_ID,
   FIXTURE_TRACE_EVENT_ID,
   FIXTURE_TRACE_ID,
 } from "@review/fixtures/blocks/ids";
-import { selectionKey } from "@review/lens-selection";
-import {
-  assignFreshIds,
-  documentSchema,
-  elements,
-  isUnit,
-} from "@review/review-api/document";
 import type { ReviewProgress } from "@review/review-api/review-progress";
 import type { Snapshot } from "@review/review-api/store";
 import { defineSoftwareMap } from "@review/software-map-model";

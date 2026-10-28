@@ -2,17 +2,17 @@ import {
   type ReviewCommitSummary,
   boardTitle,
 } from "@dev.fast/review-protocol";
-import { type DiffSelection } from "@review/lens-selection";
-import type { ReviewApiClient } from "@review/review-api/client";
 import {
   type Block,
   type BoardRef,
+  type DiffSelection,
   boardLinks,
   boardRepositoryId,
   elements,
   resourceReferences,
   selectionReferences,
-} from "@review/review-api/document";
+} from "@dev.fast/whiteboard-document";
+import type { ReviewApiClient } from "@review/review-api/client";
 import type { LocalReviewData } from "@review/review-api/local-data";
 import type { Snapshot } from "@review/review-api/store";
 import { VersionCache } from "@review/review-api/version-cache";

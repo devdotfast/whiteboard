@@ -5,10 +5,10 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import type { ReviewProjectThreads } from "@dev.fast/review-protocol";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import type { AskAgentLauncher } from "@review/ask/agents.js";
 import { AskThreads } from "@review/ask/threads.js";
 import { AskHistory, type AskRecord } from "@review/review-api/ask-history.js";
-import { ReviewInputError } from "@review/review-api/document.js";
 import { createReviewApi } from "@review/review-api/http.js";
 import { LocalReviewData } from "@review/review-api/local-data.js";
 import { ReviewStore } from "@review/review-api/store.js";

@@ -10,6 +10,7 @@ import {
   type ReviewOnboardingTarget,
   type ReviewOnboardingTargetsResponse,
 } from "@dev.fast/review-protocol";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import {
   type AskAgentId,
   type AskOffer,
@@ -23,7 +24,6 @@ import type { Hono } from "hono";
 import { z } from "zod";
 
 import type { AskRecord } from "./ask-history.js";
-import { ReviewInputError } from "./document.js";
 import type { AskHost } from "./http.js";
 import { recentFolders } from "./recent-folders.js";
 import type { ReviewStore } from "./store.js";

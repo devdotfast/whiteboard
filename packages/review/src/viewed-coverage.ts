@@ -1,8 +1,10 @@
 import { structuralChangeCounts } from "@dev.fast/review-protocol";
+import {
+  type FileLineRange,
+  type LineInterval,
+  unionIntervals,
+} from "@dev.fast/whiteboard-document";
 import { z } from "zod";
-
-import { type LineInterval, unionIntervals } from "./intervals.js";
-import type { FileLineRange } from "./source.js";
 
 export { type LineInterval, unionIntervals };
 

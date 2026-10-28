@@ -23,8 +23,11 @@ import { Button, IconButton } from "@canvas/ui/button";
 import { SegmentedControl } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
-import { anchorSelection } from "@review/lens-selection";
-import { type Block, animationCodeId } from "@review/review-api/document";
+import {
+  type Block,
+  anchorSelection,
+  animationCodeId,
+} from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import {
   type KeyboardEvent,

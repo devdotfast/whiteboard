@@ -17,6 +17,7 @@
     "@dev.fast/review-share-protocol": "workspace:*",
     "@dev.fast/trace-protocol": "workspace:*",
     "@dev.fast/whiteboard": "workspace:*",
+    "@dev.fast/whiteboard-document": "workspace:*",
     "@mr_mint/elkjs-libavoid": "0.5.0",
     "@speed-highlight/core": "1.2.15",
     "@stylexjs/stylex": "0.19.1",

@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import {
   type AskAgentId,
   type AskEntry,
@@ -12,8 +13,6 @@ import {
   askPermissionsSchema,
 } from "@review/ask/thread-state.js";
 import { z } from "zod";
-
-import { ReviewInputError } from "./document.js";
 
 /** A saved Ask conversation: its history entry, and how to reopen it. */
 export const askRecordSchema = askHistoryEntrySchema.extend({

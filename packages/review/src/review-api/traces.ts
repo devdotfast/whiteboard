@@ -9,8 +9,7 @@ import {
   resolveTraceStorage,
   selectTraceStorage,
 } from "@dev.fast/trace-core";
-
-import type { Pins } from "./document.js";
+import type { Pins } from "@dev.fast/whiteboard-document";
 
 export async function listPinnedTraces(
   cwd: string,

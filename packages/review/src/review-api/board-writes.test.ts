@@ -4,11 +4,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
-import { rangeAnchor } from "@review/lens-selection.js";
+import { ReviewInputError, rangeAnchor } from "@dev.fast/whiteboard-document";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ReviewApiClient } from "./client.js";
-import { ReviewInputError } from "./document.js";
 import { createReviewApi } from "./http.js";
 import { type Author, ReviewStore } from "./store.js";
 

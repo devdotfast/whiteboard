@@ -1,6 +1,7 @@
 import type { Readable, Writable } from "node:stream";
 
 import { type JsonValue, isJsonObject } from "@dev.fast/json";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -20,7 +21,6 @@ import {
 import { authoringTools } from "./authoring-tools.js";
 import type { ReviewApiClient } from "./client.js";
 import { ReviewApiError } from "./client.js";
-import { ReviewInputError } from "./input-error.js";
 import { mcpClientAgent } from "./mcp-client-agent.js";
 import { callPublicTool, publicTool } from "./public-tools.js";
 import { RECOVERY } from "./recovery.js";

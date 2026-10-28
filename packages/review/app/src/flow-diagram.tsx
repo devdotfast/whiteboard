@@ -4,7 +4,7 @@ import { surfaceStyles } from "@canvas/ui/surface";
 import {
   type FlowDiagramBlock,
   nodeSources,
-} from "@review/review-api/blocks/flow_diagram";
+} from "@dev.fast/whiteboard-document";
 import type { Snapshot } from "@review/review-api/store";
 import * as stylex from "@stylexjs/stylex";
 import { useMemo } from "react";

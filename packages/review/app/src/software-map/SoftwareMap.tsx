@@ -41,7 +41,7 @@ import { surfaceStyles } from "@canvas/ui/surface";
 import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
 import { useCanvasScrollLock } from "@canvas/use-canvas-scroll-lock";
-import { codePeekSource } from "@review/source";
+import { codePeekSource } from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import {
   Background,

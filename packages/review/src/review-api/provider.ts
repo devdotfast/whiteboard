@@ -1,5 +1,6 @@
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
+
 import { azureDevOpsProvider } from "./azure-devops-provider.js";
-import { ReviewInputError } from "./document.js";
 import { githubProvider } from "./github-provider.js";
 import type { PullRequestDeps, PullRequestRecord } from "./pull-request.js";
 

@@ -9,7 +9,7 @@ import {
   readStoreAuth,
   runStoreLogin,
 } from "@dev.fast/trace-core";
-import { ReviewInputError } from "@review/review-api/document.js";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
 import type { ReviewStore } from "@review/review-api/store.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";

@@ -11,13 +11,14 @@ import { EmptyState } from "@canvas/ui/empty-state";
 import { textStyles } from "@canvas/ui/text";
 import { Select } from "@canvas/ui/text-field";
 import { type JsonValue, isStringValue } from "@dev.fast/review-protocol";
-import { type DiffSelection, anchorSelection } from "@review/lens-selection";
-import type {
-  DatabaseField,
-  DatabaseLensBlock,
-  DatabaseOperation,
-  DatabaseStore,
-} from "@review/review-api/document";
+import {
+  type DatabaseField,
+  type DatabaseLensBlock,
+  type DatabaseOperation,
+  type DatabaseStore,
+  type DiffSelection,
+  anchorSelection,
+} from "@dev.fast/whiteboard-document";
 import * as stylex from "@stylexjs/stylex";
 import {
   type ChangeEvent,

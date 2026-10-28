@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
-import { anchorSelection } from "@review/lens-selection";
-import type { Frame } from "@review/review-api/document";
+import { type Frame, anchorSelection } from "@dev.fast/whiteboard-document";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";

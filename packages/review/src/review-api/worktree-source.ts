@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 import { type LocalVcs, gitCommonDir, runVcs } from "@dev.fast/local-vcs";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { isMissingFileError } from "@review/fs-utils.js";
 
 import { checkoutFs } from "./checkout-fs.js";
-import { ReviewInputError } from "./document.js";
 
 const { lstat, readFile, readlink, realpath } = checkoutFs;
 

@@ -1,4 +1,4 @@
-import { rangeAnchor, sourceAnchors } from "@review/lens-selection.js";
+import { rangeAnchor, sourceAnchors } from "@dev.fast/whiteboard-document";
 import { type CoverageFile, coverageSources } from "@review/viewed-coverage.js";
 import { expect, it } from "vitest";
 

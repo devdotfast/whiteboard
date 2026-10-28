@@ -26,10 +26,10 @@ import {
   jsonNumber,
   jsonString,
 } from "@dev.fast/review-protocol";
+import { SELECTION_UNAVAILABLE_REASONS } from "@dev.fast/whiteboard-document";
 import { z } from "zod";
 
 import { askAgentIds } from "./ask/thread-state";
-import { SELECTION_UNAVAILABLE_REASONS } from "./lens-selection";
 import { containsFilePath, hasPossibleUserInfo } from "./telemetry-clean-text";
 
 /** Property value validators: an enum of allowed strings, or a scalar type. */

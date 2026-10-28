@@ -12,8 +12,49 @@ import {
   boardIconKind,
   boardTitle,
 } from "@dev.fast/review-protocol";
+import {
+  type ActivitySurface,
+  type Applied,
+  type Block,
+  type BoardLinkRef,
+  type EditSummary,
+  type Element,
+  type FileLineRange,
+  type Lens,
+  type Pins,
+  ReviewInputError,
+  type ReviewTarget,
+  type SourcePins,
+  type WrittenComponent,
+  adoptFlowUnits,
+  anchorPins,
+  applyEdit,
+  applyLensEdit,
+  assignMissingIds,
+  boardLinks,
+  boardRepositoryId,
+  checkReferences,
+  commitLinkCommits,
+  documentAdvice,
+  documentSchema,
+  editSchema,
+  elements,
+  explicitPins,
+  lensEditSchema,
+  lensSchema,
+  lensSelections,
+  pinDocumentReferences,
+  pinnedRepositoryIds,
+  resourceReferences,
+  respellCommitLinks,
+  respellDocumentLinks,
+  respellEditLinks,
+  reviewTargetSchema,
+  sourceAnchors,
+  sourceReferences,
+  summarizeEdit,
+} from "@dev.fast/whiteboard-document";
 import type { GitHubPullRequest } from "@review/github-pr-graph.js";
-import { sourceAnchors } from "@review/lens-selection.js";
 import {
   migrateStoredLenses,
   readStoredDocument,
@@ -26,7 +67,7 @@ import {
 } from "@review/viewed-coverage.js";
 import { z } from "zod";
 
-import { type ActivitySurface, ReviewActivity } from "./activity.js";
+import { ReviewActivity } from "./activity.js";
 import { AskHistory } from "./ask-history.js";
 import {
   type SiblingFacts,
@@ -34,48 +75,6 @@ import {
   orderSiblings,
 } from "./board-order.js";
 import { CheckoutGroups, remoteGroup } from "./checkout-groups.js";
-import {
-  type Lens,
-  applyLensEdit,
-  lensEditSchema,
-  lensSchema,
-  lensSelections,
-} from "./diff-lenses.js";
-import {
-  type Applied,
-  type Block,
-  type BoardLinkRef,
-  type EditSummary,
-  type Element,
-  type FileLineRange,
-  type Pins,
-  ReviewInputError,
-  type ReviewTarget,
-  type SourcePins,
-  type WrittenComponent,
-  adoptFlowUnits,
-  anchorPins,
-  applyEdit,
-  assignMissingIds,
-  boardLinks,
-  boardRepositoryId,
-  checkReferences,
-  commitLinkCommits,
-  documentAdvice,
-  documentSchema,
-  editSchema,
-  elements,
-  explicitPins,
-  pinDocumentReferences,
-  pinnedRepositoryIds,
-  resourceReferences,
-  respellCommitLinks,
-  respellDocumentLinks,
-  respellEditLinks,
-  reviewTargetSchema,
-  sourceReferences,
-  summarizeEdit,
-} from "./document.js";
 import { type BoardLinkPreview, boardLinkPreview } from "./link-preview.js";
 import {
   pullRequestKey,

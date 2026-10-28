@@ -1,5 +1,5 @@
 import type { ReviewSectionSummary } from "@canvas/review-section-summary";
-import { canonicalLink } from "@review/review-api/document";
+import { canonicalLink } from "@dev.fast/whiteboard-document";
 import type { Mark, Node as PMNode } from "@tiptap/pm/model";
 
 import { nodes } from "./schema";

@@ -1,4 +1,4 @@
-import type { AlignmentRow } from "@review/lens-selection.js";
+import type { AlignmentRow } from "@dev.fast/whiteboard-document";
 import { parseUnifiedPatch } from "@review/unified-diff.js";
 
 /** Project the already-computed patch's runs, including unchanged gaps. */

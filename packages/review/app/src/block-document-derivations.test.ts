@@ -1,4 +1,4 @@
-import { rangeAnchor } from "@review/lens-selection";
+import { rangeAnchor } from "@dev.fast/whiteboard-document";
 import { describe, expect, it } from "vitest";
 
 import { blockSectionSummary } from "./block-document-derivations";

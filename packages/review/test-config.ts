@@ -6,6 +6,11 @@ export const sourceAliases = {
   "@canvas": fileURLToPath(new URL("app/src", import.meta.url)),
 };
 
+// The document model resolves to source in dev builds and tests, not dist.
+export const documentSource = fileURLToPath(
+  new URL("../whiteboard-document/src/index.ts", import.meta.url),
+);
+
 export const reviewTestAliases = {
   ...sourceAliases,
   "@dev.fast/review-share-protocol": fileURLToPath(
@@ -20,6 +25,7 @@ export const reviewTestAliases = {
   "@dev.fast/local-vcs": fileURLToPath(
     new URL("../local-vcs/src/index.ts", import.meta.url),
   ),
+  "@dev.fast/whiteboard-document": documentSource,
   "@dev.fast/review-protocol": fileURLToPath(
     new URL("../review-protocol/src/index.ts", import.meta.url),
   ),

@@ -1,4 +1,4 @@
-import type { ActivitySnapshot } from "@review/review-api/activity";
+import type { ActivitySnapshot } from "@dev.fast/whiteboard-document";
 import { createContext } from "react";
 
 export const AuthoringActivityContext = createContext<

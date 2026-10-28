@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { type JsonObject, isJsonObject } from "@dev.fast/review-protocol";
 import type { ShareBundle } from "@dev.fast/review-share-protocol";
-import { rangeAnchor } from "@review/lens-selection";
+import { rangeAnchor } from "@dev.fast/whiteboard-document";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
 import { afterEach, expect, it, vi } from "vitest";

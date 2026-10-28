@@ -1,13 +1,13 @@
-import {
-  type LensSource,
-  anchorSchema,
-  anchorSelection,
-} from "@review/lens-selection.js";
-import type { FileLineRange } from "@review/source.js";
 import { z } from "zod";
 
 import { label } from "./blocks/definition.js";
 import { ReviewInputError } from "./input-error.js";
+import {
+  type LensSource,
+  anchorSchema,
+  anchorSelection,
+} from "./lens-selection.js";
+import type { FileLineRange } from "./source.js";
 
 /**
  * Lenses partition a review's change for the Diff view. They live on the
