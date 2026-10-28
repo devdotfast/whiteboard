@@ -188,6 +188,22 @@ it("counts a board's place among the siblings the sidebar lists, not ones in Tra
   expect(store.place(first).children).toBeUndefined();
 });
 
+it("names a board's repository in its place", async () => {
+  const repo = path.join(directory, "repo");
+
+  execFileSync("git", ["init", "-q", repo]);
+  execFileSync("git", [
+    "-C",
+    repo,
+    "remote",
+    "add",
+    "origin",
+    "git@github.com:acme/widgets.git",
+  ]);
+
+  expect(store.place(await board("Plan")).repository).toBe("acme / widgets");
+});
+
 it("orders a PR stack by its commits unless a dependency says otherwise", async () => {
   const stack = await board("Stack");
 

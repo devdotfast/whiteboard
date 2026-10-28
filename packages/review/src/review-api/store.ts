@@ -2615,8 +2615,12 @@ export class ReviewStore {
       };
     };
 
+    const board = placed(id);
+    const repository = this.repositoryLabel(board);
+
     return {
-      board: placed(id),
+      board,
+      ...(repository && { repository }),
       ...(parentId && { parent: placed(parentId) }),
       siblings: parentId
         ? this.orderChildren(
@@ -3017,7 +3021,9 @@ export class ReviewStore {
   }
 
   /** "owner / repo" for a board whose origin names one, else its folder. */
-  private repositoryLabel(board: Snapshot): string | undefined {
+  private repositoryLabel(board: {
+    target?: ReviewTarget;
+  }): string | undefined {
     const repositoryId = board.target?.repositoryId;
 
     if (!repositoryId) return undefined;

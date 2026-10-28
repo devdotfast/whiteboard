@@ -1490,6 +1490,7 @@ export const ReviewBoardPlaceSchema = z.strictObject({
   pullRequestState: z.enum(PULL_REQUEST_STATES).optional(),
   baseBranch: requiredString.optional(),
   headBranch: requiredString.optional(),
+  repository: requiredString.optional(),
   /** The board itself. */
   board: ReviewPlaceBoardSchema.optional(),
   parent: ReviewPlaceBoardSchema.optional(),

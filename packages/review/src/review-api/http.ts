@@ -279,7 +279,7 @@ export function createReviewApi(
   const placeOf = (id: string): ReviewBoardPlace => {
     if (!store.has(id)) return { siblings: [] };
 
-    const { board, parent, siblings, children } = store.place(id);
+    const { board, repository, parent, siblings, children } = store.place(id);
     const url = board.origin?.pullRequestUrl;
     const state = data?.pullRequestState(url);
     const baseBranch = url && data?.pullRequestBaseBranch(url);
@@ -307,6 +307,7 @@ export function createReviewApi(
       ...(state && { pullRequestState: state }),
       ...(baseBranch && { baseBranch }),
       ...(headBranch && { headBranch }),
+      ...(repository && { repository }),
       board: place(board),
       ...(parent && { parent: place(parent) }),
       siblings: siblings.map(listed),
