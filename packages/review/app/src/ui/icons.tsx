@@ -238,6 +238,15 @@ export function HelpIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+export function InfoIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <Icon xstyle={xstyle}>
+      <circle cx="12" cy="12" r="9.4" />
+      <path d="M12 11v5.5M12 7.6h.01" />
+    </Icon>
+  );
+}
+
 export function StackIcon({ xstyle }: IconProps = {}): ReactElement {
   return (
     <Icon xstyle={xstyle}>

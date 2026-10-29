@@ -10,21 +10,26 @@ export function sectionId(label: string): string {
 
 export function Section({
   label,
+  info,
   ref,
   children,
 }: {
   label: string;
+  info?: ReactNode;
   ref?: Ref<HTMLElement>;
   children: ReactNode;
 }) {
   return (
     <section ref={ref} {...stylex.props(styles.section)} aria-label={label}>
-      <h2
-        id={sectionId(label)}
-        {...stylex.props(textStyles.eyebrow, styles.sectionLabel)}
-      >
-        {label}
-      </h2>
+      <div {...stylex.props(styles.sectionLabel)}>
+        <h2
+          id={sectionId(label)}
+          {...stylex.props(textStyles.eyebrow, styles.sectionHeading)}
+        >
+          {label}
+        </h2>
+        {info}
+      </div>
       {children}
     </section>
   );

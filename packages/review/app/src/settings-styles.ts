@@ -44,11 +44,17 @@ export const settingsStyles = stylex.create({
     marginBottom: space.s28,
   },
   sectionLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: space.s4,
     margin: `0 0 ${space.s2}`,
     paddingBottom: space.s6,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
+  },
+  sectionHeading: {
+    margin: 0,
     color: tokens.inkMuted,
   },
   connect: {
