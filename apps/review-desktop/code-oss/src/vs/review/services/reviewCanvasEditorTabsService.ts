@@ -60,6 +60,8 @@ export interface IReviewCanvasEditorTabsService {
 	openHome(active: boolean): Promise<ReviewCanvasEditorInput>;
 	openWelcome(active: boolean): Promise<ReviewCanvasEditorInput>;
 	openSettings(active: boolean): Promise<ReviewCanvasEditorInput>;
+	/** One tab per version. */
+	openReleaseNotes(version: string, active: boolean): Promise<ReviewCanvasEditorInput>;
 	registerReviewEditor(reviewUuid: string, input: EditorInput): void;
 	closeReview(reviewUuid: string): Promise<void>;
 }
@@ -229,16 +231,21 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		return this.openSingleton({ kind: "settings" }, active);
 	}
 
+	openReleaseNotes(version: string, active: boolean): Promise<ReviewCanvasEditorInput> {
+		return this.openSingleton({ kind: "release-notes", version }, active);
+	}
+
 	/** One tab per non-review kind; `configure` runs before the tab opens. */
 	private async openSingleton(
-		target: { kind: "home" } | { kind: "welcome" } | { kind: "settings" },
+		target: Extract<ReviewCanvasEditorTarget, { kind: "home" | "welcome" | "settings" | "release-notes" }>,
 		active: boolean,
 		configure?: (input: ReviewCanvasEditorInput) => void,
 	): Promise<ReviewCanvasEditorInput> {
-		let input = this.inputs.get(target.kind);
+		const key = target.kind === "release-notes" ? `${target.kind}/${target.version}` : target.kind;
+		let input = this.inputs.get(key);
 		if (!input || input.isDisposed()) {
 			input = this.instantiationService.createInstance(ReviewCanvasEditorInput, target);
-			this.inputs.set(target.kind, input);
+			this.inputs.set(key, input);
 			if (target.kind === "welcome") {
 				Event.once(input.onWillDispose)(() => void this.finishCliInstallUpdate());
 			}

@@ -22,6 +22,7 @@ export type ReviewCanvasEditorTarget =
 	| { readonly kind: "home" }
 	| { readonly kind: "welcome" }
 	| { readonly kind: "settings" }
+	| { readonly kind: "release-notes"; readonly version: string }
 	| {
 		readonly kind: "api-source";
 		readonly reviewId: string;
@@ -51,7 +52,9 @@ export class ReviewCanvasEditorInput extends EditorInput {
 					? `/${sourceSelectionIdentity(target.selection)}`
 					: target.kind === "api"
 						? `/${target.reviewId}`
-						: `/${target.kind}`,
+						: target.kind === "release-notes"
+							? `/${target.kind}/${target.version}`
+							: `/${target.kind}`,
 		});
 	}
 
@@ -101,6 +104,7 @@ export class ReviewCanvasEditorInput extends EditorInput {
 		if (this.target.kind === "home") return "Home";
 		if (this.target.kind === "welcome") return "Welcome";
 		if (this.target.kind === "settings") return "Settings";
+		if (this.target.kind === "release-notes") return "Release Notes";
 		return "Session";
 	}
 
@@ -120,7 +124,7 @@ export class ReviewCanvasEditorInput extends EditorInput {
 
 /** Tabs beside which the sidebar shows Recent alone. */
 export function keepsSidebar(editor: EditorInput | undefined): boolean {
-	return editor instanceof ReviewCanvasEditorInput && editor.target.kind === "settings";
+	return editor instanceof ReviewCanvasEditorInput && (editor.target.kind === "settings" || editor.target.kind === "release-notes");
 }
 
 /** The board in a tab, when the tab is a board. */

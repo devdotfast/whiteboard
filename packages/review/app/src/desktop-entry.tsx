@@ -38,6 +38,7 @@ import { CanvasUiContext } from "./host/canvas-ui";
 import { loadKatex } from "./markdown-math";
 import { FirstRun, readOnboardingSkipped } from "./onboarding/first-run";
 import { NewWhiteboard } from "./onboarding/new-whiteboard";
+import { ReleaseNotesPage } from "./release-notes-page";
 import { type ReviewFindHost, createReviewFindHost } from "./review-find";
 import { ReviewHome } from "./review-home-view";
 import { ReviewContainerProvider } from "./review-root-context";
@@ -102,6 +103,9 @@ function ReviewCanvas({
   if (content.kind === "settings") {
     return <SettingsPage settings={content.settings} />;
   }
+
+  if (content.kind === "release-notes")
+    return <ReleaseNotesPage releaseNotes={content.releaseNotes} />;
 
   if (content.kind === "error") {
     return (
