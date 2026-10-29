@@ -1605,7 +1605,6 @@ async function mountPeekReview(content: {
     kind: "api" as const,
     reviewId: review.reviewId,
     bridge: { ...bridge, setSourceView: () => {} },
-    settings: { sharingEnabled: true },
     ...content,
   };
 

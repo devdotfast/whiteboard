@@ -18,11 +18,13 @@ export const elementPins = sourcePinsSchema
 
 /**
  * One block kind: the strict schema the store parses with, and the rules a
- * field schema cannot express. `check` throws ReviewInputError; `advise`
- * returns warnings for content that is allowed but usually a mistake.
+ * field schema cannot express. `reference` documents its fields, and its
+ * units', for agents. `check` throws ReviewInputError; `advise` returns
+ * warnings for content that is allowed but usually a mistake.
  */
 export interface BlockDefinition<Content extends { type: string }> {
   type: Content["type"];
+  reference: readonly string[];
   schema: z.ZodType<Content>;
   check?(block: Content): void;
   advise?(block: Content): string[];

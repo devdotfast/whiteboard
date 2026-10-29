@@ -88,9 +88,8 @@ export async function pruneReviewRuntime(root) {
           category = "tests";
         else if (relative.includes("/zod/src/")) category = "zod-source";
         else if (
-          relative.startsWith(
-            "node_modules/@modelcontextprotocol/sdk/dist/cjs/",
-          )
+          relative.startsWith("node_modules/@modelcontextprotocol/") &&
+          entry.name.endsWith(".cjs")
         )
           category = "mcp-cjs";
         else if (relative.startsWith("node_modules/hono/dist/cjs/"))

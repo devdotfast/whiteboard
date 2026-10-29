@@ -60,6 +60,44 @@ export const blocks = {
   callout,
 } satisfies Definitions;
 
+/** Every block type an agent may write. */
+export const writableBlockTypes: readonly BlockType[] = Object.values(
+  blocks,
+).map((block) => block.type);
+
+// The order agents have always read the reference in, not the record's.
+const referenceOrder: readonly BlockType[] = [
+  "markdown",
+  "code",
+  "divider",
+  "code_peek",
+  "section",
+  "callout",
+  "image",
+  "trace_quote",
+  "software_map",
+  "sequence",
+  "flow_diagram",
+  "call_stack_diff",
+  "database_lens",
+  "animation",
+];
+
+/** The selected blocks' fields, for agent guidance. */
+export function componentReference(
+  types: readonly BlockType[] = writableBlockTypes,
+): string {
+  return [
+    "## Components",
+    "",
+    "session_edit's content is one component, named by its type. Fields, with ? for optional and anchor for a source anchor string:",
+    "",
+    ...referenceOrder
+      .filter((type) => types.includes(type))
+      .flatMap((type) => blocks[type].reference),
+  ].join("\n");
+}
+
 /** Discriminated by type, so a malformed block reports its own kind's
  * issues rather than every kind's. */
 export const blockSchema: z.ZodType<Block> = z.lazy(() =>

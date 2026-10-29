@@ -1,73 +1,46 @@
 # diffr configuration
 
-diffr computes the diffs in Whiteboard. Its settings apply to every
-repository, and the diffr command line uses the same settings.
+diffr computes Whiteboard's diffs. Its settings apply to every repository and
+to the diffr command line.
 
 ## Change a setting
 
-- In Whiteboard, open Settings, then **Tools**, then **Diff display and AI
-  summaries**.
-- In a terminal, run `diffr config` to open the settings screen, or
-  `diffr config set <key> <value>` to change one setting.
-- Edit `~/.config/diffr/config.toml`. Reopen the review after you edit it.
+- In Whiteboard: Settings → **Tools** → **Diff display and AI summaries**.
+- In a terminal: `diffr config`, or `diffr config set <key> <value>`.
+- In `~/.config/diffr/config.toml`. Reopen the review after you edit it.
 
 ## Display
 
-| Setting | What it does | Key |
-| --- | --- | --- |
-| Collapse unchanged lines | Keeps a few unchanged lines around each change and collapses the rest. **Context lines** sets how many. | `plugins.shape.bundled.context` |
-| Collapse test bodies | Collapses the bodies of tests. | `plugins.shape.bundled.test-bodies` |
-| Collapse deleted function bodies | Collapses long functions that were deleted. | `plugins.shape.bundled.deleted-bodies` |
-| Collapse long removed stretches | Collapses long runs of removed lines. | `plugins.shape.bundled.removed-runs` |
-| Hide files by tag | Hides generated and vendored files. See [Hidden files](configuration.md#hidden-files). | `plugins.classify.bundled.hide` |
-| Hide deleted files | Hides files that were deleted. | `plugins.classify.bundled.hide_deleted` |
+| Setting                          | Key                                     |
+| -------------------------------- | --------------------------------------- |
+| Collapse unchanged lines         | `plugins.shape.bundled.context`         |
+| Collapse test bodies             | `plugins.shape.bundled.test-bodies`     |
+| Collapse deleted function bodies | `plugins.shape.bundled.deleted-bodies`  |
+| Collapse long removed stretches  | `plugins.shape.bundled.removed-runs`    |
+| Hide files by tag                | `plugins.classify.bundled.hide`         |
+| Hide deleted files               | `plugins.classify.bundled.hide_deleted` |
+
+Hide files by tag defaults to generated and vendored files. To override it for
+one path, see [Hidden files](configuration.md#hidden-files).
 
 ## AI summaries
 
 diffr can replace large new functions and tests with short pseudocode. It
-sends those bodies to the provider you pick, so summaries are off until you
-turn them on.
+sends that code to the provider you pick, so summaries are off by default.
 
-### Turn on AI summaries
+To turn them on, check **Enable summaries**, pick a provider, and click
+**Save summaries**. **Test setup** tries the provider on sample code without
+saving.
 
-1. Open Settings, then **Tools**, then **Diff display and AI summaries**.
-2. Pick a provider under **AI summaries**.
-3. Check **Enable summaries** and click **Save summaries**.
+| Provider                  | Credential                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------- |
+| Codex                     | Codex's ChatGPT sign-in. Counts against your ChatGPT plan.                            |
+| Gemini, OpenAI, Anthropic | An API key in Settings, or `GEMINI_API_KEY`, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. |
 
-**Test setup** sends a sample function and shows the summary without saving.
+Summaries longer than two thirds of the function are dropped. Set
+`max_length_ratio` to change that.
 
-### Providers
-
-| Provider | Credential |
-| --- | --- |
-| Codex | Codex's ChatGPT sign-in. No key needed. |
-| Gemini, OpenAI, Anthropic | An API key, entered in Settings or set as `GEMINI_API_KEY`, `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`. |
-
-If Codex is signed in and no other provider has a key, Settings picks Codex.
-
-### Codex
-
-Sign in once with `codex login`. diffr reads `~/.codex/auth.json` (or
-`$CODEX_HOME/auth.json`) on every run. Summaries count against your ChatGPT
-plan.
-
-If Codex keeps its sign-in in the system keyring, add this to
-`~/.codex/config.toml` and sign in again:
-
-```toml
-cli_auth_credentials_store = "file"
-```
-
-diffr never refreshes the sign-in, so Codex's own session is untouched. The
-token lasts about 10 days after Codex last ran. If it has expired, summaries
-skip that run and Settings says so. Open Codex once to renew it.
-
-### Short summaries only
-
-A summary that is longer than two thirds of the function is dropped, and the
-function stays as code. To change that, set `max_length_ratio`.
-
-### From the command line
+From the command line:
 
 ```toml
 [plugins.shape.bundled.summarize]
@@ -75,4 +48,13 @@ enabled = true
 provider = "codex"
 ```
 
-`diffr config logins` prints whether the Codex sign-in is ready.
+### Codex
+
+Run `codex login` once. diffr reads `~/.codex/auth.json` (or
+`$CODEX_HOME/auth.json`) and never refreshes it. If Codex stores its sign-in in
+the system keyring, add `cli_auth_credentials_store = "file"` to
+`~/.codex/config.toml` and sign in again.
+
+The sign-in expires about 10 days after Codex last ran. Summaries then skip
+and Settings says so; open Codex to renew it. `diffr config logins` shows
+whether the sign-in is ready.

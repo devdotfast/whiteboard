@@ -20,5 +20,6 @@ export const sectionSchema = defineBlock("section", {
 
 export const section: BlockDefinition<SectionBlock> = {
   type: "section",
+  reference: ["- section {title, children: component[], defaultCollapsed?}"],
   schema: sectionSchema,
 };

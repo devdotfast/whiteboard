@@ -1,16 +1,25 @@
-import { fontSize, fontWeight, radius, space } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { GitHubIcon } from "@canvas/ui/brand-icons";
-import { Button } from "@canvas/ui/button";
+import { Button, IconButton } from "@canvas/ui/button";
 import { iconStyles } from "@canvas/ui/icon-styles";
-import { MailIcon } from "@canvas/ui/icons";
+import { InfoIcon, MailIcon } from "@canvas/ui/icons";
+import { menuStyles } from "@canvas/ui/menu";
+import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
 import type { ReviewCanvasSettingsContent } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { createCanvasQueryClient } from "./canvas-query";
 import { hostApiClient } from "./host/review-session";
+import { newTabLinkProps } from "./link-props";
 import { Row, Section } from "./settings-section";
 import { settingsStyles } from "./settings-styles";
 import { useSharingAccount, useSignIn, useSignOut } from "./sharing-account";
@@ -44,7 +53,7 @@ function Account({ request }: Pick<ReviewCanvasSettingsContent, "request">) {
     (accountQuery.isError ? "Could not read sign-in status." : state?.error);
 
   return (
-    <Section label="Account">
+    <Section label="Account" info={<PrivacyInfo />}>
       {!state ? null : signedIn ? (
         <div {...stylex.props(settingsStyles.row)}>
           <div {...stylex.props(styles.identity)}>
@@ -110,7 +119,67 @@ function Account({ request }: Pick<ReviewCanvasSettingsContent, "request">) {
   );
 }
 
+const privacyUrl = "https://dev.fast/docs/privacy/";
+
+function PrivacyInfo() {
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <>
+      <IconButton
+        ref={trigger}
+        size="small"
+        xstyle={styles.info}
+        aria-label="About account data"
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((open) => !open)}
+      >
+        <InfoIcon xstyle={iconStyles.inline} />
+      </IconButton>
+      {isOpen && (
+        <Popover
+          anchor={trigger}
+          onDismiss={() => setIsOpen(false)}
+          role="dialog"
+          aria-label="About account data"
+          xstyle={[menuStyles.popover, styles.popover]}
+        >
+          <p {...stylex.props(styles.note)}>
+            Account features like sharing upload data to /dev/fast servers. See{" "}
+            <a
+              href={privacyUrl}
+              {...newTabLinkProps(privacyUrl)}
+              {...stylex.props(styles.link)}
+            >
+              Privacy
+            </a>{" "}
+            for details.
+          </p>
+        </Popover>
+      )}
+    </>
+  );
+}
+
 const styles = stylex.create({
+  info: {
+    marginBlock: `calc(-1 * ${space.s4})`,
+  },
+  popover: {
+    width: "268px",
+    padding: `${space.s8} ${space.s10}`,
+  },
+  note: {
+    margin: 0,
+    color: tokens.ink,
+    fontSize: fontSize.body,
+    lineHeight: leading.normal,
+  },
+  link: {
+    color: tokens.accent,
+  },
   identity: {
     display: "flex",
     alignItems: "center",

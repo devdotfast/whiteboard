@@ -118,6 +118,11 @@ export class ReviewCanvasEditorInput extends EditorInput {
 	}
 }
 
+/** Tabs beside which the sidebar shows Recent alone. */
+export function keepsSidebar(editor: EditorInput | undefined): boolean {
+	return editor instanceof ReviewCanvasEditorInput && editor.target.kind === "settings";
+}
+
 /** The board in a tab, when the tab is a board. */
 export function boardOf(editor: EditorInput | undefined): string | undefined {
 	return editor instanceof ReviewCanvasEditorInput && editor.target.kind === "api" ? editor.target.reviewId : undefined;

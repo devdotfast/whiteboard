@@ -145,7 +145,6 @@ export const SETTING_NAME = [
   "telemetry_enabled",
   "keymap",
   "software_map_enabled",
-  "sharing_enabled",
   "diffr_config",
   "theme",
   "diff_theme",

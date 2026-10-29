@@ -1,16 +1,15 @@
 import { type JsonValue, isJsonObject } from "@dev.fast/json";
 import {
-  pathTargetSchema,
-  publishedEdits,
-} from "@dev.fast/whiteboard-document";
-import { z } from "zod";
-
-import {
   activityBeginSchema,
   activityEndSchema,
   activityUpdateSchema,
-} from "./activity.js";
-import { instructionsQuerySchema } from "./instructions.js";
+  pathTargetSchema,
+  publishedEdits,
+} from "@dev.fast/whiteboard-document";
+import type { Tool } from "@modelcontextprotocol/server";
+import { z } from "zod";
+
+import { desktopBlockTypes, instructionsQuerySchema } from "./instructions.js";
 import { uploadSchema } from "./local-data.js";
 import { inspectQuerySchema } from "./read-schemas.js";
 import { REVIEW_STATUS_TOOL } from "./status-tool.js";
@@ -165,8 +164,8 @@ export function authoringTools(
           ...(type === "set_target" && { target: pathTargetSchema }),
           ...(type === "edit" && {
             edit: animationsEnabled
-              ? withDraftFiles(publishedEdits(animationsEnabled))
-              : publishedEdits(animationsEnabled),
+              ? withDraftFiles(publishedEdits(desktopBlockTypes(true)))
+              : publishedEdits(desktopBlockTypes(false)),
           }),
         }),
         "POST",
@@ -266,7 +265,9 @@ function withDraftFiles(edit: ReturnType<typeof publishedEdits>) {
 }
 
 /** Drops repositoryId from pins: the host fills in the board's own. */
-function withoutRepositoryIds<T>(schema: T): T {
+function withoutRepositoryIds(
+  schema: z.core.JSONSchema.JSONSchema,
+): Tool["inputSchema"] {
   // SAFETY: a JSON round trip of a JSON Schema, dropping one property.
   return JSON.parse(JSON.stringify(schema), (_key, value: JsonValue) => {
     if (
@@ -286,5 +287,5 @@ function withoutRepositoryIds<T>(schema: T): T {
         required: value.required.filter((name) => name !== "repositoryId"),
       }),
     };
-  }) as T;
+  }) as Tool["inputSchema"];
 }

@@ -16,7 +16,6 @@ export interface WhiteboardHost {
 
 export interface WhiteboardSettings {
   softwareMapEnabled?: boolean;
-  sharingEnabled?: boolean;
   documentWidth?: "standard" | "wide" | "full";
 }
 

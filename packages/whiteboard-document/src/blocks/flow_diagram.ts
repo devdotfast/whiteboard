@@ -92,6 +92,11 @@ export type FlowDiagramEdge = z.infer<typeof flowEdgeSchema>;
 
 export const flow_diagram = {
   type: "flow_diagram",
+  reference: [
+    "- flow_diagram {title, nodes: flow_node[] (1 to 100), edges: flow_edge[], description?, direction?: right|down, pins?}",
+    "- flow_node {key, label, description?, kind?: process|decision|terminal, attachments?: {label, sources: anchor[], pins?}[], link?: {from or to, label?, style?}}",
+    "- flow_edge {from, to (node keys), label?, style?: solid|dashed}",
+  ],
   schema: flowDiagramSchema,
   check(block: FlowDiagramBlock) {
     const keys = new Set(block.nodes.map((node) => node.key));

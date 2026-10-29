@@ -6,23 +6,12 @@ import {
   type ActivitySnapshot,
   type ActivitySurface,
   ReviewInputError,
+  activityBeginSchema,
+  activityEndSchema,
+  activityUpdateSchema,
   focusSchema,
 } from "@dev.fast/whiteboard-document";
 import { z } from "zod";
-
-// One schema per action, so each agent tool states exactly what it needs.
-export const activityBeginSchema = z.strictObject({
-  focus: focusSchema.nullable().optional(),
-});
-
-export const activityUpdateSchema = z.strictObject({
-  activityId: z.string().min(1),
-  focus: focusSchema.nullable().optional(),
-});
-
-export const activityEndSchema = z.strictObject({
-  activityId: z.string().min(1),
-});
 
 export const activitySchema = z.discriminatedUnion("action", [
   activityBeginSchema.extend({ action: z.literal("begin") }),

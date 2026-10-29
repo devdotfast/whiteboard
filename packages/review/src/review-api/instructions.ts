@@ -1,11 +1,13 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { ReviewInputError } from "@dev.fast/whiteboard-document";
+import {
+  ReviewInputError,
+  componentReference,
+  writableBlockTypes,
+} from "@dev.fast/whiteboard-document";
 import { findReviewPackageRoot } from "@review/package-paths.js";
 import { z } from "zod";
-
-import { componentReference } from "./component-reference.js";
 
 export const INSTRUCTION_TOPICS = [
   "authoring",
@@ -24,6 +26,15 @@ export interface InstructionContext {
   traceEnabled: boolean;
   animationsEnabled?: boolean;
 }
+
+/** Keep disabled experimental components out of agent guidance. */
+export const desktopBlockTypes = (animationsEnabled: boolean) =>
+  writableBlockTypes.filter(
+    (type) => animationsEnabled || type !== "animation",
+  );
+
+const COMPONENT_EXAMPLE =
+  'Example (replace its path and lines with verified ones): {"type":"sequence","title":"Request","actors":{"a":"Client","b":"Server"},"steps":[{"from":"a","to":"b","label":"Send","source":"head/src/app.ts#L10-L20"}]}';
 
 const cache = new Map<string, Promise<string>>();
 
@@ -68,7 +79,11 @@ export async function renderInstructions(
 
   return [
     await read(root, "authoring"),
-    componentReference(context.animationsEnabled === true),
+    [
+      componentReference(desktopBlockTypes(context.animationsEnabled === true)),
+      "",
+      COMPONENT_EXAMPLE,
+    ].join("\n"),
     ...(context.traceEnabled
       ? [
           '## Traces\n\nAt the end, run `whiteboard trace list --session <sessionId> --json`, which covers every commit in the review. If it lists no sessions, there are no traces to quote: skip this step. Otherwise read `session_get_instructions({topic:"trace-archaeology"})` and rewrite as much as possible of the what/why, design, and requirements sections in terms of literal trace quotes from the user.',

@@ -3,6 +3,9 @@ export {
   type ActivityPresence,
   type ActivitySnapshot,
   type ActivitySurface,
+  activityBeginSchema,
+  activityEndSchema,
+  activityUpdateSchema,
   focusSchema,
 } from "./activity.js";
 
@@ -68,6 +71,7 @@ export {
   canonicalLink,
   checkReferences,
   commitLinkCommits,
+  componentReference,
   contentSchema,
   documentAdvice,
   documentSchema,
@@ -93,6 +97,7 @@ export {
   stepSources,
   summarizeEdit,
   traceQuoteLink,
+  writableBlockTypes,
 } from "./document.js";
 
 export { ReviewInputError } from "./input-error.js";

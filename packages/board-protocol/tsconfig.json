@@ -7,5 +7,5 @@
     "noEmit": true,
     "paths": {}
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "tsdown.config.ts"]
 }
