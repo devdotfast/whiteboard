@@ -585,7 +585,8 @@ export interface ReviewSidebarSectionProps {
     | "lenses"
     | "remaining";
   connection: { serverUrl: string; token: string };
-  /** The board in the active tab. */
+  /** The board in the active tab; "" beside Settings, where only Recent
+   * mounts. */
   reviewId: string;
   onOpenBoard(reviewId: string, active: boolean): void;
   /** Whiteboards: the board's project and its boards, from Desktop's

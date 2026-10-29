@@ -45,7 +45,7 @@ import { IReviewDesktopConnectionService } from "../../../services/reviewDesktop
 
 import "../../media/review.css";
 import { loadReviewCanvasAssets } from "../canvas/reviewCanvasAssets.js";
-import { boardOf } from "../canvas/reviewCanvasEditorInput.js";
+import { boardOf, keepsSidebar } from "../canvas/reviewCanvasEditorInput.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
 import { type ReviewSidebarPaneId, ReviewSidebarTabs } from "./reviewSidebarTabs.js";
 import { REVIEW_SIDEBAR_TAB_COMMANDS } from "../../../contrib/tabs/reviewWindowKeys.js";
@@ -237,7 +237,7 @@ export class ReviewSidebarPart extends Part {
 	private foldTabs(width: number): void {
 		const tabs = this.tabsRow.get();
 		if (!tabs) return;
-		const shown = REVIEW_SIDEBAR_PANES.flatMap(({ id }, index) => this.offers(id) ? [tabs.labelled[index]] : []);
+		const shown = REVIEW_SIDEBAR_PANES.flatMap(({ id }, index) => this.shows(id) ? [tabs.labelled[index]] : []);
 		const folded = width < tabsRowWidth(shown, tabs.gap, tabs.inset);
 		if (this.tabRow?.classList.contains("folded") === folded) return;
 		this.tabRow?.classList.toggle("folded", folded);
@@ -456,6 +456,7 @@ export class ReviewSidebarPart extends Part {
 	/** A click on a tab: Whiteboard and Diff show their view as well as
 	 * their pane; Threads leaves the view where it is. */
 	pick(id: ReviewSidebarPaneId): void {
+		if (!this.shows(id)) return;
 		const view = this.lit.pick(id, this.state.view);
 		if (view && this.reviewId) this.emitSurfaceEvent({ event: "showReviewView", view, reviewId: this.reviewId });
 		this.applyPane();
@@ -468,12 +469,23 @@ export class ReviewSidebarPart extends Part {
 		return true;
 	}
 
+	/** Off a board, only Whiteboard; the board's lit tab waits for the next. */
+	private shows(id: ReviewSidebarPaneId): boolean {
+		return this.reviewId ? this.offers(id) : id === "whiteboard";
+	}
+
+	private get active(): ReviewSidebarPaneId {
+		return this.reviewId ? this.lit.active : "whiteboard";
+	}
+
 	private applyPane(): void {
+		// Off a board, Whiteboard would be the only tab.
+		if (this.tabRow) this.tabRow.style.display = this.reviewId ? "" : "none";
 		for (const pane of this.panes) {
-			const selected = pane.id === this.lit.active;
+			const selected = pane.id === this.active;
 			pane.tab.classList.toggle("active", selected);
 			pane.tab.setAttribute("aria-selected", String(selected));
-			pane.tab.hidden = !this.offers(pane.id);
+			pane.tab.hidden = !this.shows(pane.id);
 			pane.element.hidden = !selected;
 		}
 	}
@@ -482,8 +494,8 @@ export class ReviewSidebarPart extends Part {
 	tabStates(): { id: ReviewSidebarPaneId; active: boolean; offered: boolean; count: string; badge: HTMLElement | undefined }[] {
 		return this.panes.map((pane) => ({
 			id: pane.id,
-			active: pane.id === this.lit.active,
-			offered: this.offers(pane.id),
+			active: pane.id === this.active,
+			offered: this.shows(pane.id),
 			count: pane.count.textContent ?? "",
 			badge: pane.tab.querySelector<HTMLElement>(".review-sidebar-tab-badge") ?? undefined,
 		}));
@@ -681,20 +693,24 @@ export class ReviewSidebarPart extends Part {
 
 	private async mountSections(): Promise<void> {
 		const reviewId = this.reviewId;
-		if (!reviewId) return;
 
 		const [assets, connection] = await Promise.all([loadReviewCanvasAssets(), this.connection.getConnection()]);
 		if (reviewId !== this.reviewId) return;
+
+		if (this.whiteboardsBody) this.whiteboardsBody.hidden = !reviewId;
+		if (this.familyBody) this.familyBody.hidden = !reviewId;
 
 		const newWhiteboardShortcut = this.shortcut(REVIEW_NEW_WHITEBOARD_COMMAND_ID);
 		const props: ReviewSidebarSectionProps = {
 			section: "whiteboards",
 			connection: { serverUrl: connection.serverUrl, token: connection.token },
-			reviewId,
+			reviewId: reviewId ?? "",
 			onOpenBoard: (id) => {
 				const title = this.catalog.reviews.find((review) => review.reviewId === id)?.title ?? "Whiteboard";
-				const view = this.state.view;
-				void this.tabs.openApiReview(id, title).then(() => this.emitSurfaceEvent({ event: "showReviewView", view, reviewId: id }));
+				const view = reviewId && this.state.view;
+				void this.tabs.openApiReview(id, title).then(() => {
+					if (view) this.emitSurfaceEvent({ event: "showReviewView", view, reviewId: id });
+				});
 			},
 			// Recent spans every project: the catalog Home already keeps.
 			recent: [...this.catalog.reviews],
@@ -702,18 +718,20 @@ export class ReviewSidebarPart extends Part {
 			onNewWhiteboard: () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID, "sidebar"),
 			onNewChildWhiteboard: (parentId) => openChildWhiteboard(this.catalog, this.tabs, parentId),
 			...(newWhiteboardShortcut && { newWhiteboardShortcut }),
-			...this.boardProps(reviewId),
+			...(reviewId && this.boardProps(reviewId)),
 		};
 
-		const mounts: [ReviewSidebarSectionProps["section"], HTMLElement | undefined][] = [
-			["family", this.familyBody],
-			["recent", this.recentBody],
-			["whiteboards", this.whiteboardsBody],
-			["commitPicker", this.commitPicker],
-			["threads", this.threadsBody],
-			["remaining", this.remaining],
-			["lenses", this.lenses?.body],
-		];
+		const mounts: [ReviewSidebarSectionProps["section"], HTMLElement | undefined][] = reviewId
+			? [
+				["family", this.familyBody],
+				["recent", this.recentBody],
+				["whiteboards", this.whiteboardsBody],
+				["commitPicker", this.commitPicker],
+				["threads", this.threadsBody],
+				["remaining", this.remaining],
+				["lenses", this.lenses?.body],
+			]
+			: [["recent", this.recentBody]];
 		for (const [section, element] of mounts) {
 			if (!element) continue;
 			const handle = this.handles.get(section);
@@ -830,15 +848,16 @@ export interface IReviewSidebarPartsService {
 /** Set on the workbench while the closed sidebar shows as its rail. */
 const REVIEW_SIDEBAR_RAILED_CLASS = "review-sidebar-railed";
 
-/** Set on the workbench while a board is active, so the toggle shows. */
+/** Set on the workbench while the sidebar can show, so the toggle shows. */
 const REVIEW_SIDEBAR_AVAILABLE_CLASS = "review-explorer-available";
 
 /** Remembers a close across reloads. */
 const REVIEW_SIDEBAR_USER_CLOSED_KEY = "review.sidebar.userClosed";
 
 /**
- * Creates the sidebar part and decides when it shows: beside a board tab,
- * unless the reader closed it. A close is remembered across reloads.
+ * Creates the sidebar part and decides when it shows: beside a board tab, or
+ * Recent alone beside Settings, unless the reader closed it. A close is
+ * remembered across reloads.
  */
 export class ReviewSidebarParts extends Disposable implements IReviewSidebarPartsService {
 	declare readonly _serviceBrand: undefined;
@@ -851,6 +870,8 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 	readonly onDidChangeBoard: Event<void>;
 
 	private available = false;
+	/** Off a board, a closed sidebar has no rail: it would hold Whiteboard alone. */
+	private onBoard = false;
 	private userClosed: boolean;
 	private applying = false;
 	/** The tabs alone, at the window's left edge while the sidebar is
@@ -963,7 +984,7 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 	}
 
 	private renderRail(): void {
-		const railed = this.available && this.userClosed;
+		const railed = this.onBoard && this.userClosed;
 		this.rail.hidden = !railed;
 		const main = this.layoutService.mainContainer;
 		// The page bar starts past the window controls, which the rail is
@@ -991,13 +1012,15 @@ export class ReviewSidebarParts extends Disposable implements IReviewSidebarPart
 	}
 
 	private update(): void {
-		const reviewId = boardOf(this.editorService.activeEditor ?? undefined);
+		const editor = this.editorService.activeEditor ?? undefined;
+		const reviewId = boardOf(editor);
 		this.part.setBoard(reviewId);
-		this.available = reviewId !== undefined;
+		this.onBoard = reviewId !== undefined;
+		this.available = this.onBoard || keepsSidebar(editor);
 		const visible = this.available && !this.userClosed;
 
 		this.layoutService.mainContainer.classList.toggle(REVIEW_SIDEBAR_AVAILABLE_CLASS, this.available);
-		this.layoutService.mainContainer.classList.toggle(REVIEW_SIDEBAR_RAILED_CLASS, this.available && this.userClosed);
+		this.layoutService.mainContainer.classList.toggle(REVIEW_SIDEBAR_RAILED_CLASS, this.onBoard && this.userClosed);
 		this.renderRail();
 		this.applying = true;
 		try {
