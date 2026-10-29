@@ -71,6 +71,7 @@ export {
   canonicalLink,
   checkReferences,
   commitLinkCommits,
+  componentReference,
   contentSchema,
   documentAdvice,
   documentSchema,
@@ -96,6 +97,7 @@ export {
   stepSources,
   summarizeEdit,
   traceQuoteLink,
+  writableBlockTypes,
 } from "./document.js";
 
 export { ReviewInputError } from "./input-error.js";

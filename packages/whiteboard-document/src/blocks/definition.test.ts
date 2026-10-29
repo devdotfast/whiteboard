@@ -14,6 +14,7 @@ describe("defineBlock", () => {
 
   const note = {
     type: "note",
+    reference: [],
     schema,
     check(block: z.infer<typeof schema>) {
       if (block.body === "forbidden")

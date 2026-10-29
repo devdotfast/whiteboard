@@ -20,5 +20,8 @@ export const calloutSchema = defineBlock("callout", {
 
 export const callout: BlockDefinition<CalloutBlock> = {
   type: "callout",
+  reference: [
+    "- callout {children: component[], title?, tone?: info|warning|danger|success}",
+  ],
   schema: calloutSchema,
 };

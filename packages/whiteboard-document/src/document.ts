@@ -15,9 +15,11 @@ import {
 } from "./blocks/flow_diagram.js";
 import {
   type Block,
+  type BlockType,
   blockKindSchemas,
   blockSchema,
   blocks,
+  writableBlockTypes,
 } from "./blocks/index.js";
 import { type Step, stepSchema, stepSources } from "./blocks/sequence.js";
 import type { Lens } from "./diff-lenses.js";
@@ -55,7 +57,9 @@ export {
   blockSchema,
   blocks,
   checkReferences,
+  componentReference,
   documentAdvice,
+  writableBlockTypes,
 } from "./blocks/index.js";
 
 export { type Frame, frameSchema } from "./blocks/call_stack_diff.js";
@@ -780,20 +784,17 @@ export const editSchema = edits(contentSchema, blockSchema, z.json());
 
 export type Edit = z.infer<typeof editSchema>;
 
-const writableBlockTypes = Object.keys(blocks);
-
-const namedByType = (types: string[]) =>
+const namedByType = (types: readonly string[]) =>
   z
     .looseObject({ type: z.enum(types) })
     .describe("Fields depend on type; see the tool description.");
 
-/** What agents are shown: content names only its type. The host parses
- * editSchema, reporting the named kind's issues. */
-export function publishedEdits(animationsEnabled = true) {
-  const types = writableBlockTypes.filter(
-    (type) => animationsEnabled || type !== "animation",
-  );
-
+/** What agents are shown: content names only its type, from the types a
+ * host publishes. The host parses editSchema, reporting the named kind's
+ * issues. */
+export function publishedEdits(
+  types: readonly BlockType[] = writableBlockTypes,
+) {
   return edits(
     namedByType([...types, "step", "flow_node", "flow_edge"]),
     namedByType(types),

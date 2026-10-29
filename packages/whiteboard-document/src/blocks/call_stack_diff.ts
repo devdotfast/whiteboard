@@ -47,6 +47,10 @@ export type CallStackDiffBlock = z.infer<typeof schema>;
 
 export const call_stack_diff = {
   type: "call_stack_diff",
+  reference: [
+    "- call_stack_diff {title, base: frame[], head: frame[], pins?}; either side may be empty",
+    "- frame {source: anchor, label?, key?, parentKey? (an earlier frame on that side), callSite?: anchor, contextSources?: anchor[], via?: {kind: call|queue|callback|rpc, reason}, pins?}",
+  ],
   schema,
   check(block: CallStackDiffBlock) {
     for (const side of ["base", "head"] as const) {

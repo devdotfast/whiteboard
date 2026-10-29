@@ -66,6 +66,11 @@ export type SequenceBlock = z.infer<typeof sequenceSchema>;
 
 export const sequence = {
   type: "sequence",
+  reference: [
+    "- sequence {title, actors: {key: label}, steps: step[], pins?}",
+    "- step {from, to (actor keys), label, style?: call|return|async, and exactly one of source: anchor or anchor[] (at most 4), explanation, or code: {text, language?}; pins?}",
+    "A step's source is the line where its arrow leaves `from` (the call, return or emit). Add an additional range only when that line can't be read without it: the type or schema of what it passes, or the code that builds its argument. Never the callee's body; that is the next step.",
+  ],
   schema: sequenceSchema,
   check(block: SequenceBlock) {
     const pins = (step: Step) => JSON.stringify(step.pins ?? block.pins);

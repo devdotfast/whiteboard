@@ -109,6 +109,12 @@ export type DatabaseLensBlock = z.infer<typeof databaseLensSchema>;
 
 export const database_lens = {
   type: "database_lens",
+  reference: [
+    "- database_lens {title, actors: {key: label}, stores: {key: store}, useCases: useCase[] (1 or more), pins?}",
+    "- store {label, storage: relational|document, collections: {key: {label, fields: {key: field}, source?: anchor of its schema declaration}}, dataStoreKind?: database|objectStore|bucket|artifactStore|fileStore}",
+    "- field {label, dataType, nullable?, primaryKey?, references?: {store, collection, field}, fields?: {key: field}}",
+    "- useCase {label, summary?, operations: operation[] (1 or more)}; operation {kind: read|write, actor, store, collection, label, source: anchor, field?, detail?, pins?}, naming declared keys",
+  ],
   schema: databaseLensSchema,
   check(block: DatabaseLensBlock) {
     const field = (store: string, collection: string, name?: string) => {

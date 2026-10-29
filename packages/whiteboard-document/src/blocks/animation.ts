@@ -105,6 +105,10 @@ export type AnimationBlock = z.infer<typeof animationSchema>;
 
 export const animation = {
   type: "animation",
+  reference: [
+    '- animation {title, html, frames: {key, title, label?, caption?, duration? (ms)}[] (1 to 60), code?: {name: anchor}, height?: "auto" (default) | number (120 to 1200 CSS px), pins?}; declare every possible frame',
+    'Use an animation for change over time that a static diagram cannot show: state before and after, a cache filling, data changing as a request crosses layers. It can sit in design beside the diagram, or replace it when the motion is the point. If nothing changes between frames, use a sequence or flow_diagram instead: their steps and nodes link to code. Read session_get_instructions({topic:"animation"}) before writing one.',
+  ],
   schema: animationSchema,
   check(block: AnimationBlock) {
     const keys = new Set(block.frames.map((frame) => frame.key));
