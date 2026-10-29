@@ -5,6 +5,20 @@ export const focusSchema = z.strictObject({
   targetId: z.string().min(1).optional(),
 });
 
+// One schema per action, so each agent tool states exactly what it needs.
+export const activityBeginSchema = z.strictObject({
+  focus: focusSchema.nullable().optional(),
+});
+
+export const activityUpdateSchema = z.strictObject({
+  activityId: z.string().min(1),
+  focus: focusSchema.nullable().optional(),
+});
+
+export const activityEndSchema = z.strictObject({
+  activityId: z.string().min(1),
+});
+
 /** Which page an agent last wrote on, so the app knows where its courier is. */
 export type ActivitySurface = "document" | "lenses";
 

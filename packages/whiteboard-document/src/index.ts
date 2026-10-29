@@ -3,6 +3,9 @@ export {
   type ActivityPresence,
   type ActivitySnapshot,
   type ActivitySurface,
+  activityBeginSchema,
+  activityEndSchema,
+  activityUpdateSchema,
   focusSchema,
 } from "./activity.js";
 
