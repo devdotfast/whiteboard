@@ -2,6 +2,7 @@
 // on a MessagePort the block hands the stage with the runtime's source, so
 // nothing else on the page can speak on the channel.
 
+import type { JsonValue } from "@dev.fast/json";
 import { z } from "zod";
 
 /** What the stage's script reads about one frame. */
@@ -9,6 +10,8 @@ export interface StageFrame {
   key: string;
   title: string;
   caption?: string;
+  /** The frame's own state, for a script that draws each frame from it. */
+  data?: JsonValue;
 }
 
 export type StageColorScheme = "light" | "dark";
@@ -17,6 +20,8 @@ export type StageColorScheme = "light" | "dark";
 export interface StageInit {
   type: "init";
   html: string;
+  /** The style kit: the CSS every stage loads before its markup. */
+  kit: string;
   autoSize: boolean;
   frames: StageFrame[];
   /** The names whiteboard.code() accepts. */

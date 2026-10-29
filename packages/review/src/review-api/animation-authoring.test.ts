@@ -67,6 +67,10 @@ it("gates animation authoring live, including stale MCP tools, while keeping sav
 
     const disabledTools = await catalog();
     expect(JSON.stringify(disabledTools)).not.toContain('"animation"');
+    expect(JSON.stringify(disabledTools)).not.toContain("fromFiles");
+    expect(disabledTools.map((tool) => tool.name)).not.toContain(
+      "session_checkout",
+    );
     expect(await client.read<string>("/instructions")).not.toMatch(
       /animation/i,
     );
@@ -77,6 +81,7 @@ it("gates animation authoring live, including stale MCP tools, while keeping sav
     enabled = true;
     const tools = await catalog();
     const editTool = tools.find((tool) => tool.name === "session_edit")!;
+    expect(tools.map((tool) => tool.name)).toContain("session_checkout");
     expect(await client.read<string>("/instructions")).toContain(
       "- animation ",
     );

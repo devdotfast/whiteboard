@@ -509,6 +509,18 @@ export function createReviewApi(
       ),
     ),
   );
+  // The canvas, never an agent tool: what an animation's script did when it
+  // ran there, which session_get shows the agent that wrote it.
+  app.post("/:id/animation-run", async (context) =>
+    context.json(
+      store.reportAnimationRun(context.req.param("id"), {
+        ...z
+          .strictObject({ version: z.coerce.number().int().nonnegative() })
+          .parse(context.req.query()),
+        report: await readBoundedRequestJson(context.req.raw),
+      }),
+    ),
+  );
   app.post("/:id/discard", async (context) =>
     context.json(await store.discard(context.req.param("id"))),
   );
@@ -2062,6 +2074,7 @@ export function createReviewApi(
             query.targetId,
             Boolean(query.full),
             relatedBoards(id),
+            query.version === undefined ? store.animationRunsOf(id) : undefined,
           )
         : query.targetId !== undefined
           ? inspectSnapshot(snapshot, query.targetId)

@@ -51,6 +51,11 @@ export function authoringTools(
       "insert adds content: parentId nests it, afterId places it, and omitted placement appends. update patches a component's own fields; null removes an optional one. A section's children and a diagram's units change through their own IDs; a call stack's frames change by replacing the call stack. move and remove take a targetId; removing a flow_node removes its edges.",
       "The host assigns short durable IDs. The result names the edited component and, for an insert or replace, its first-level children, and quotes the first and last line of each anchor the edit added or changed (the first 20; unquotedAnchors counts the rest): check they are the lines you meant. Accepted edits save at once. An edit to a block the user is editing is refused with an error: edit another block, or retry later.",
       "While a reader may be watching, write small and often: one paragraph per edit. Insert a new diagram whole. Change one already drawn a unit at a time (a flow_node, flow_edge or step, with parentId naming the diagram), and link each added flow_node to a node already drawn.",
+      ...(animationsEnabled
+        ? [
+            "An animation is edited as files: review_checkout writes it to a folder, you edit the files with your own file tools, and an edit with fromFiles naming that folder publishes it in place of content or changes. Publish the same folder again after each round of edits.",
+          ]
+        : []),
     ].join("\n"),
     lens_edit:
       "Edit one Diff-view lens. Lenses partition the review's change for the Diff view; they sit beside the document (never in it) and version with it. The host assigns durable lens IDs; updates replace only the fields supplied. Write one lens per call while a reader may be watching; each draws in on the Diffs page. Pass your activityId so your courier draws each lens. The result identifies the lens and reports uncategorized: changed lines no lens selects yet, grouped by file. Keep adding lenses until it is empty or what remains is deliberate. review_lens_get reads the current lenses and gaps.",
@@ -158,13 +163,28 @@ export function authoringTools(
             open: z.boolean().optional(),
           }),
           ...(type === "set_target" && { target: pathTargetSchema }),
-          ...(type === "edit" && { edit: publishedEdits(animationsEnabled) }),
+          ...(type === "edit" && {
+            edit: animationsEnabled
+              ? withDraftFiles(publishedEdits(animationsEnabled))
+              : publishedEdits(animationsEnabled),
+          }),
         }),
         "POST",
         "/commands",
         type,
       );
     }),
+    ...(animationsEnabled
+      ? [
+          tool(
+            "checkout",
+            "Write an animation to a folder of files to edit with your own file tools: animation.html (its html), frames.json (its frames, each with its data), scenarios.json and block.json (title, code, height, pins). Then publish the folder with review_edit, giving fromFiles instead of content or changes. dir defaults to a folder Whiteboard manages; checking out again overwrites it. A publish is refused if the animation changed after the checkout.",
+            z.strictObject({ ...review, targetId: id, dir: id.optional() }),
+            "GET",
+            "/:reviewId/inspect",
+          ),
+        ]
+      : []),
     tool("list", "List saved reviews.", z.strictObject({}), "GET", ""),
     tool(
       "get",
@@ -216,6 +236,33 @@ export function authoringTools(
       "/resources",
     ),
   ];
+}
+
+/** Agents may publish an animation's draft folder in place of content or
+ * changes; the agent boundary reads the files before the host sees the edit. */
+function withDraftFiles(edit: ReturnType<typeof publishedEdits>) {
+  const fromFiles = z
+    .string()
+    .min(1)
+    .describe(
+      "An animation's draft folder, from review_checkout or written yourself: publishes its files as the content (insert, replace) or changes (update).",
+    );
+
+  const [insert, replace, update, move, remove] = edit.options;
+
+  return z.discriminatedUnion("type", [
+    insert
+      .partial({ content: true })
+      .extend({ fromFiles: fromFiles.optional() }),
+    replace
+      .partial({ content: true })
+      .extend({ fromFiles: fromFiles.optional() }),
+    update
+      .partial({ changes: true })
+      .extend({ fromFiles: fromFiles.optional() }),
+    move,
+    remove,
+  ]);
 }
 
 /** Drops repositoryId from pins: the host fills in the board's own. */

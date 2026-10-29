@@ -288,7 +288,14 @@ function SoftwareMapBlock({ node, data }: BlockProps<"software_map">) {
 }
 
 function AnimationDiagramBlock(props: BlockProps<"animation">) {
-  const { height, title } = props.node;
+  const { height, title, html, frames, scenarios, code } = props.node;
+
+  // An edit to the animation draws it again from a fresh block, at its first
+  // frame, rather than updating a stage whose frames may have gone.
+  const revision = useMemo(
+    () => JSON.stringify([html, frames, scenarios, code, height]),
+    [html, frames, scenarios, code, height],
+  );
 
   return (
     <ClientDiagram
@@ -296,7 +303,7 @@ function AnimationDiagramBlock(props: BlockProps<"animation">) {
       title={title}
       height={height === "auto" ? 120 : height}
     >
-      <AnimationBlock {...props} />
+      <AnimationBlock key={revision} {...props} />
     </ClientDiagram>
   );
 }

@@ -208,25 +208,28 @@ async function mountFixture(
 
   const image = { bytes: png, type: "image/png" };
 
-  const data = loadFixture({
-    snapshot,
-    progress: fixtureProgress,
-    commits: [
-      {
-        commit: "a".repeat(40),
-        parentCommit: "b".repeat(40),
-        subject: "Fixture",
-        author: "Developer",
-        authoredAt: "2026-09-16T00:00:00.000Z",
-        fileCount: 1,
-        additions: 1,
-        deletions: 0,
-      },
-    ],
-    images: { [FIXTURE_IMAGE_ID]: image },
-    traces: options.trace === null ? {} : { [FIXTURE_TRACE_ID]: trace },
-    maps: { [FIXTURE_MAP_ID]: savedMap },
-  });
+  const load = (saved: Snapshot) =>
+    loadFixture({
+      snapshot: saved,
+      progress: fixtureProgress,
+      commits: [
+        {
+          commit: "a".repeat(40),
+          parentCommit: "b".repeat(40),
+          subject: "Fixture",
+          author: "Developer",
+          authoredAt: "2026-09-16T00:00:00.000Z",
+          fileCount: 1,
+          additions: 1,
+          deletions: 0,
+        },
+      ],
+      images: { [FIXTURE_IMAGE_ID]: image },
+      traces: options.trace === null ? {} : { [FIXTURE_TRACE_ID]: trace },
+      maps: { [FIXTURE_MAP_ID]: savedMap },
+    });
+
+  const data = load(snapshot);
 
   const container = document.createElement("div");
 
@@ -252,7 +255,15 @@ async function mountFixture(
     });
   });
 
-  return { container, snapshot };
+  // A later version of the document, as the canvas receives an edit.
+  const edit = (document: Snapshot["document"]) =>
+    act(async () =>
+      canvas?.update(
+        load({ ...snapshot, version: snapshot.version + 1, document }),
+      ),
+    );
+
+  return { container, snapshot, edit };
 }
 
 describe("block components", () => {
@@ -1234,6 +1245,129 @@ describe("block components", () => {
     expect(picker("Dropped packet").getAttribute("aria-pressed")).toBe("true");
     expect(
       await settled(() => alertText(container).includes("stage on dropped")),
+    ).toBe(true);
+  });
+
+  it("draws an edited animation again from its first frame", async () => {
+    const animation = (caption: string) => ({
+      id: "block-1",
+      type: "animation" as const,
+      title: "Raft",
+      height: "auto" as const,
+      frames: [
+        { key: "a", title: "Start", label: "START" },
+        { key: "b", title: "Middle", label: "MIDDLE", caption },
+        { key: "c", title: "End", label: "END" },
+      ],
+      code: {},
+      html: "<p>Stage</p>",
+      pins: { repositoryId: "repo", base: "base", head: "head" },
+    });
+
+    const { container, edit } = await mountFixture("animation", {
+      document: [animation("First draft")],
+    });
+
+    const step = (name: string) =>
+      [
+        ...container.querySelectorAll<HTMLButtonElement>(
+          "[aria-label='Steps'] button",
+        ),
+      ].find((button) => button.textContent?.includes(name))!;
+
+    await settled(() => step("END"));
+    await act(async () => step("END").click());
+    expect(await settled(() => text(container).includes("3 / 3"))).toBe(true);
+
+    await edit([animation("Second draft")]);
+
+    expect(await settled(() => text(container).includes("1 / 3"))).toBe(true);
+    expect(container.querySelector("[data-block-error]")).toBeNull();
+  });
+
+  it("hands the stage each frame's own data", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Raft",
+          height: "auto",
+          frames: [
+            {
+              key: "steady",
+              title: "Steady",
+              data: { leader: "S1", terms: [1] },
+            },
+          ],
+          code: {},
+          // The stage reports the data it was given through its error line.
+          html: '<script>whiteboard.on("*", ({ frame }) => { throw new Error(`leader ${frame.data.leader} terms ${whiteboard.frames[0].data.terms}`); });</script>',
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    expect(
+      await settled(() => alertText(container).includes("leader S1 terms 1")),
+    ).toBe(true);
+  });
+
+  it("tells the server what its script did, so the agent that wrote it can see", async () => {
+    const reports: { path: string; error: string | null }[] = [];
+
+    const throwing = (name: string): Snapshot["document"][number] => ({
+      id: "block-1",
+      type: "animation",
+      title: "Throws",
+      height: "auto",
+      frames: [{ key: "only", title: "Only" }],
+      code: {},
+      html: `<script>whiteboard.on("*", () => { throw new Error("${name} is not defined"); });</script>`,
+      pins: { repositoryId: "repo", base: "base", head: "head" },
+    });
+
+    const { edit } = await mountFixture("animation", {
+      document: [throwing("render")],
+      host: {
+        request: async (path, init) => {
+          if (path.includes("/animation-run"))
+            reports.push({
+              path,
+              ...JSON.parse(String(init?.body)),
+            });
+
+          return Response.json({ ok: true });
+        },
+      },
+    });
+
+    await settled(() => reports.length >= 2);
+    expect(reports).toEqual(
+      expect.arrayContaining([
+        {
+          path: expect.stringContaining("/animation-run?version=0"),
+          blockId: "block-1",
+          error: null,
+        },
+        {
+          path: expect.stringContaining("/animation-run?version=0"),
+          blockId: "block-1",
+          error: expect.stringContaining("render is not defined"),
+        },
+      ]),
+    );
+
+    // An edit's new script reports at the version the canvas now shows.
+    await edit([throwing("draw")]);
+    expect(
+      await settled(() =>
+        reports.some(
+          ({ path, error }) =>
+            path.includes("version=1") &&
+            error?.includes("draw is not defined"),
+        ),
+      ),
     ).toBe(true);
   });
 

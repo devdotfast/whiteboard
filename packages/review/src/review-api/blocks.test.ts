@@ -1,6 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 
+import type { JsonValue } from "@dev.fast/json";
 import {
   type BlockType,
   type Definitions,
@@ -150,6 +151,26 @@ describe("block definitions", () => {
       };
 
       expect(() => checkReferences([all])).not.toThrow();
+    });
+    it("animation: a frame holds its own data, within a size limit", async () => {
+      const [animation] = await fixture("animation");
+
+      const withData = (data: JsonValue) => ({
+        ...animation!,
+        frames: [
+          { ...animation!.frames[0]!, data },
+          ...animation!.frames.slice(1),
+        ],
+      });
+
+      const state = { nodes: [{ name: "S1", log: ["x←1"], commit: 1 }] };
+
+      expect(
+        blocks.animation.schema.parse(withData(state)).frames[0]!.data,
+      ).toEqual(state);
+      expect(() =>
+        blocks.animation.schema.parse(withData({ log: "x".repeat(20_001) })),
+      ).toThrow(/under 20 KB/);
     });
     it("animation: code names a source anchor", async () => {
       const [animation] = await fixture("animation");

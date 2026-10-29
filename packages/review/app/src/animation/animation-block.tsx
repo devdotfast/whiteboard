@@ -8,9 +8,7 @@ import { drawStyles } from "@canvas/draw-styles";
 import { useOptionalReviewPanel } from "@canvas/review-panel";
 import {
   fontSize,
-  fontWeight,
   leading,
-  motion,
   radius,
   space,
   tracking,
@@ -28,6 +26,7 @@ import {
   anchorSelection,
   animationCodeId,
 } from "@dev.fast/whiteboard-document";
+import { STAGE_KIT_CSS, STAGE_THEME } from "@review/animation-stage-kit";
 import * as stylex from "@stylexjs/stylex";
 import {
   type KeyboardEvent,
@@ -41,6 +40,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { useReportAnimationRun } from "./report-run";
 import {
   type HostMessage,
   STAGE_BOOT,
@@ -50,6 +50,7 @@ import {
   stageMessageSchema,
 } from "./stage-protocol";
 import { stageRuntime } from "./stage-runtime";
+import { SCALE } from "./stage-scale";
 
 // Read on demand: a Worker may lack import.meta.url.
 const stageUrl = () => new URL("./stage.html", import.meta.url).href;
@@ -95,57 +96,12 @@ const loadFonts = () =>
     });
   })());
 
-const steps = (group: string, values: Record<string, string>) =>
-  Object.entries(values).map(([step, value]) => [`${group}-${step}`, value]);
-
-// The canvas scale a stage reads as --wb-<group>-<step>: --wb-space-12,
-// --wb-radius-surface, --wb-text-body. Space steps drop their leading "s".
-const SCALE: Record<string, string> = Object.fromEntries([
-  ...Object.entries(space).map(([step, value]) => [
-    `space-${step.slice(1)}`,
-    value,
-  ]),
-  ...steps("radius", radius),
-  ...steps("text", fontSize),
-  ...steps("leading", leading),
-  ...steps("weight", fontWeight),
-  ...steps("tracking", tracking),
-  ...steps("motion", motion),
-]);
-
-// The canvas properties a stage reads as --wb-<name>.
-const THEME = {
-  ink: "--ink",
-  "ink-muted": "--ink-muted",
-  "ink-faint": "--ink-faint",
-  accent: "--accent",
-  "accent-soft": "--accent-soft",
-  "on-accent": "--on-accent",
-  surface: "--surface",
-  "surface-raised": "--surface-raised",
-  well: "--well",
-  rule: "--rule",
-  "rule-soft": "--rule-soft",
-  added: "--change-added",
-  removed: "--change-removed",
-  modified: "--change-modified",
-  "added-bg": "--diff-added-bg",
-  "removed-bg": "--diff-removed-bg",
-  "modified-bg": "--diff-modified-bg",
-  // Each face by its role: the chrome's for labels, mono for what a
-  // terminal would print, the reading face for prose, and the code font.
-  "font-sans": "--chrome-font",
-  "font-mono": "--font-mono",
-  "font-serif": "--font-serif",
-  "font-code": "--font-code",
-} as const;
-
 function readTheme(element: Element): Pick<StageInit, "theme" | "colorScheme"> {
   const computed = getComputedStyle(element);
 
   return {
     theme: Object.fromEntries(
-      Object.entries(THEME).map(([name, property]) => [
+      Object.entries(STAGE_THEME).map(([name, property]) => [
         name,
         computed.getPropertyValue(property).trim(),
       ]),
@@ -196,6 +152,9 @@ export function AnimationBlock({
   const [contentHeight, setContentHeight] = useState(120);
   const [slots, setSlots] = useState<SlotLayout[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const reportRun = useReportAnimationRun(data.snapshot.reviewId, node.id);
+
   // The inline figure's height while it is out fullscreen, held by a
   // placeholder so the document keeps its place.
   const [expanded, setExpanded] = useState<number | null>(null);
@@ -375,8 +334,10 @@ export function AnimationBlock({
         break;
       case "error":
         setError(message.message);
+        reportRun(message.message);
         break;
       case "ready":
+        reportRun(null);
         break;
     }
   };
@@ -437,11 +398,13 @@ export function AnimationBlock({
     const init: Omit<StageInit, "libraries" | "fonts"> = {
       type: "init",
       html: node.html,
+      kit: STAGE_KIT_CSS,
       autoSize: node.height === "auto",
-      frames: frames.map(({ key, title, caption }) => ({
+      frames: frames.map(({ key, title, caption, data }) => ({
         key,
         title,
         caption,
+        data,
       })),
       code: Object.keys(node.code),
       blocks: [...embeddable.keys()],

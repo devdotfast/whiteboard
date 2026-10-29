@@ -1,15 +1,4 @@
-An `animation` component plays HTML you write, frame by frame, to show how a change behaves over time: a request moving through layers, state before and after, a cache filling. Use it when motion explains something a static diagram cannot. Do not use it for content a `sequence`, `flow_diagram` or `code_peek` already shows.
-
-## Choose how to build it
-
-Choose where to start by what changes between the frames:
-
-| Build with | When the frames show |
-| --- | --- |
-| The scene (`whiteboard.scene`) | Up to about 8 cards whose notes, text and tones change, with chips moving along their edges. This is the default. |
-| The toolkit, style kit and raw HTML | Anything else: a chart, a timeline, a queue, a custom shape, or motion the scene cannot express (`arrow`, `token`, `travel`, `timeline`). |
-
-If no part of the drawing changes between frames, it is not an animation: use a `sequence` or `flow_diagram` block, whose steps and nodes link to code. For a larger graph, animate only the part that changes as a scene, and put the whole graph in a `flow_diagram` beside it. The two mix: a stage can hold a scene and your own HTML together.
+An `animation` component draws HTML you write on the whiteboard, in a sandboxed iframe. The reader steps through its frames, or plays them.
 
 ## The component
 
@@ -18,278 +7,78 @@ If no part of the drawing changes between frames, it is not an animation: use a 
   "type": "animation",
   "title": "Retry with backoff",
   "frames": [
-    {
-      "key": "send",
-      "title": "The client sends",
-      "label": "SEND",
-      "caption": "The first request times out."
-    },
-    {
-      "key": "wait",
-      "title": "It backs off",
-      "label": "WAIT",
-      "duration": 4000
-    },
-    { "key": "retry", "title": "The retry succeeds", "label": "RETRY" }
+    { "key": "send", "title": "The client sends", "caption": "The first request times out.", "data": { "attempts": ["timeout"] } },
+    { "key": "retry", "title": "The retry succeeds", "data": { "attempts": ["timeout", "ok"] } }
   ],
   "code": { "retry": "head/src/http/retry.ts#L12-L40" },
-  "pins": { "repositoryId": "…", "head": "…" },
   "html": "…"
 }
 ```
 
-- `frames`: every possible step. `key` names the frame for your markup and scripts; `title` and `caption` show under the stage. `label` is a short step name (e.g. `SEND`); give every frame one, or none, and the reader gets a named step strip instead of dots. `duration` (ms, default 3000) is how long the frame holds while playing. For a flow with alternate paths, declare every frame here and list the paths in `scenarios`.
-- `scenarios`: alternate paths through the frames, 2 to 8, each `{ "key", "label", "frames": [frame keys in order] }`. The whiteboard draws a picker labelled Scenario above the stage and starts on the first. `label` is what the reader picks, e.g. `Retried request`. Omit it for an animation with one path.
-- `code`: the source ranges the stage shows, by name. The server checks each anchor like any other reference, so verify paths and lines. Use `head/` for the new code and `base/` for the old.
-- `pins`: as on any block that quotes code. A review with a target lends its own; a board without one needs them on the block.
-- `html`: the stage's body. It runs in a sandboxed frame with no network: inline `<style>` and `<script>` only, no external URLs. Images must be `data:` URLs.
-- `height`: defaults to `"auto"`, which fits the stage to its content, including host code peeks and blocks. Omit it for most animations. Set a number (120 to 1200 CSS pixels) only when the animation intentionally needs a fixed viewport; fixed-height stages clip overflow, so verify every frame at narrow widths. The width is the document column.
+- `scenarios` are the paths a reader can pick, 2 to 8, each `{ "key": "retried", "label": "Retried", "frames": ["send", "retry"] }`. The animation starts on the first. Use them instead of drawing your own buttons.
+- `code` names source ranges. Your HTML shows one inline with `<div data-wb-code="retry">` (or `scene.peek` in a scene), and opens it beside the whiteboard with `whiteboard.reveal("retry")`.
 
-## Build with the scene
+## Work in files
 
-`whiteboard.scene` is a convenient starting point for cards and message flows. It provides grid layout, bound edges, and moving chips. You can combine it with custom HTML, SVG, CSS, or animation code whenever that better fits the explanation; the scene is optional. A complete example:
+1. `session_checkout({ sessionId, targetId })` writes the animation to a folder: `animation.html`, `frames.json`, `scenarios.json` (once it has scenarios) and `block.json` (`title`, and `code` and `pins` when it shows code).
+2. Edit those files with your file tools.
+3. Publish the folder: `session_edit({ sessionId, edit: { type: "update", targetId, fromFiles: "<folder>" } })`. Only the files you changed are saved. Keep editing and publishing the same folder; it records what it last published in `checkout.json`.
+4. Read it back with `session_get({ sessionId, targetId })`. Its script runs only where the whiteboard is open, a moment after you publish, so the read says whether it ran there without an error, threw (with the error), or has not run yet. Fix an error and publish again.
+
+For a new animation, write the same files into a folder of your own and publish with `{ type: "insert", fromFiles: "<folder>", parentId, afterId }`. If someone else changed the animation after your checkout, the publish is refused: check it out again.
+
+## Draw it
+
+Before you write HTML, read the two files whose paths `session_checkout` and these instructions give: `whiteboard.css`, the classes and `--wb-*` variables every animation loads, and `whiteboard.d.ts`, the `whiteboard` API. Use the classes and variables rather than your own colors, sizes or fonts, so the animation matches the board in light and dark.
+
+There are two ways to draw.
+
+### A scene: cards and messages
+
+For a few services, processes or stores with messages moving between them, use `whiteboard.scene`. You place cards on a grid and say what changes in which frame:
 
 ```html
 <script>
-  const s = whiteboard.scene({ columns: 4 });
+  const s = whiteboard.scene({ columns: 2 });
+  const client = s.actor({ id: "client", at: [1, 1], title: "Client" });
+  const api = s.actor({ id: "api", at: [2, 1], title: "API" });
 
-  // Cards sit on a 1-based grid: [column, row].
-  const agent = s.actor({
-    id: "agent",
-    at: [1, 1],
-    title: "Agent",
-    note: "session_edit",
-  });
-  const api = s.actor({
-    id: "api",
-    at: [2, 1],
-    title: "Review API",
-    note: "POST /commands",
-  });
-  const store = s.store({
-    id: "store",
-    at: [3, 1],
-    title: "Store",
-    note: "SQLite",
-  });
-  const canvas = s.actor({ id: "canvas", at: [4, 1], title: "Canvas" });
-
-  // Edges follow their cards. They draw in on the frame you name.
-  s.link(agent, api, { label: "call", enter: "write" });
-  s.link(api, store, { label: "edit op", enter: "write" });
-  s.link(store, canvas, {
-    label: "snapshot",
-    tone: "added",
-    dashed: true,
-    enter: "watch",
-  });
-
-  // A chip rides the edge during a frame, then fades out on arrival.
-  s.send(agent, api, "edit", "write");
-  s.send(api, store, "v9", "write", { stay: true, only: ["write"] });
-
-  // Per-frame changes. Each holds until the next frame that changes it.
-  s.on("write", store, { note: "version 9", tone: "modified" });
-  s.on("watch", canvas, { note: "redrawn", tone: "added" });
-  store.item("reviews", { enter: "write", tone: "added" });
-
-  // A code peek in a cell. It spans all four columns of row 2 so the
-  // source has room: [column, row, rowSpan, colSpan].
-  s.peek("handler", { at: [1, 2, 1, 4], enter: "write" });
-
-  const etag = s.badge({ text: "etag e0" });
-  s.on("watch", etag, { text: "etag e1" });
+  s.send(client, api, "GET", "send");
+  s.on("send", api, { note: "timed out", tone: "removed" });
+  s.send(client, api, "GET", "retry");
+  s.on("retry", api, { note: "200 OK", tone: "added" });
 </script>
 ```
 
-A scene appends to the stage body by default. To compose it with your own headings, text or controls, pass a container selector or element: `whiteboard.scene({ columns: 3, container: "#diagram" })`. Badges stay with that container too.
+A scene names frame keys, so a new scenario means new frames and a few new lines like these.
 
-When the container is too narrow for the declared columns, the scene folds into fewer, in row/column order: four columns become two rows of two, and a cell spanning columns takes a whole row. Narrower still, it stacks into one column. Widening restores the declared grid. Tables wrap their content. Hidden cards, store items and table rows take no space, so auto height follows visible content. Use `responsive: false` for an intentional fixed grid with your own responsive or scrolling plan.
+### Your own HTML: draw each frame from its data
 
-The scene keeps three things consistent for you:
+For anything else (a log, a table, a chart, a state machine), put what each frame shows in its `data`, and write one script that draws any frame from it. The script never names a frame key, so a new frame or scenario only adds entries to `frames.json`, and `animation.html` stays as it is.
 
-- **Spacing.** Cards sit in grid cells. You choose the cell; the scene sets the padding and the gap, widening the gap between columns to fit the longest label on a link within a row. At the default document width, three cards with short link labels fit a row; a fourth folds the row in two until the reader widens the document or goes fullscreen. Past four, prefer a second row.
-- **Edges.** `link` draws one straight line from the center of one card's nearest side to the other's, with one weight and one arrowhead. `dashed: true` means async (a reply, a stream, a background send). A second edge between the same two cards offsets beside the first.
-- **Moving blocks.** `send` is the only way to move a block along an edge. The chip rides the edge's line at one fixed speed, so a longer edge takes longer, and every chip moves at the same pace. It fades out on arrival unless you pass `stay: true`.
-
-### The scene API
-
-```ts
-whiteboard.scene(options?: { columns?: number; container?: string | Element; responsive?: boolean }): Scene;   // default 3 columns
-
-interface Scene {
-  actor(options: CardOptions): Card;                 // a labeled card
-  store(options: CardOptions): Store;                // a card that holds items
-  table(options: CardOptions & { columns: string[] }): Table;
-  peek(name: string, options: { at: Cell; enter?; exit?; only? }): HTMLElement;
-  badge(options: { text?: string; tone?: Tone }): HTMLElement;  // a pill above the scene
-  link(from: Ref, to: Ref, options?: { label?; tone?; dashed?; arrowhead?: boolean; enter?; exit?; only? }): SVGGElement;
-  send(from: Ref, to: Ref, label: string, frame: string, options?: { tone?; stay?: boolean; enter?; exit?; only? }): void;
-  on(frame: string, part: Ref, change: { text?: string; tone?: Tone | "none" }): void;
-}
-
-type Cell = [column: number, row: number, rowSpan?: number, colSpan?: number];   // 1-based
-type Ref = Card | string /* its id */ | Element;
-type Tone = "accent" | "added" | "removed" | "modified" | "muted";
-
-interface CardOptions {
-  id: string;            // names the card for link, send and on
-  at: Cell;
-  title?: string;        // the first line; defaults to the id
-  note?: string;         // the second line
-  tone?: Tone;
-  enter?: string; exit?: string; only?: string[];   // which frames it shows in
-  highlight?: string[];  // frames during which it is ringed
-}
-
-store.item(label, { enter?; exit?; only?; tone? }): HTMLElement;   // a chip inside the store
-table.row(cells: string[], { enter?; exit?; only?; tone? }): HTMLTableRowElement;
-```
-
-- `on(frame, part, { text, tone })` changes a card, item, or badge from that frame on. `text` sets a card's note line, or an item's or badge's text — `note` works too, since that is the field cards declare. The change holds until the next frame that changes the same part, so a jump lands right. An unknown field throws rather than being ignored.
-- `send` draws its edge for you if no `link` joins the two cards yet. Keep edge and chip labels short (about 12 characters): a label sits at the middle of its edge, in the space between the two cards. `stay: true` retains the chip at its destination; use `enter`, `exit`, or `only` separately to scope when that retained chip is visible. For example, `s.send(a, b, "PACK", "upload", { stay: true, only: ["upload"] })` keeps the arrived packet visible only in `upload`.
-- Use `tone` `added` / `removed` / `modified` for what the change adds, deletes or alters. `accent` draws the eye; `muted` recedes. In `on`, `tone: "none"` clears a part back to the neutral surface, e.g. to un-highlight the previous step.
-- Links are directed by default. Pass `arrowhead: false` to `link` for an undirected guide, boundary, or relationship while retaining endpoint binding, routing, labels, tones, dashed styling, lifecycle, and travel support.
-- Edges route straight, but bow clear of any card that sits on the line between their ends. Labels use their rendered bounds to avoid endpoint cards, intervening cards, and other visible edge labels, and are reconsidered as the stage resizes. Prefer a layout where the cells between two linked cards are empty; automatic routing is a fallback, not the look to design for.
-
-### Frames
-
-The stage sets `data-frame="<key>"` on `<html>`, and `enter` / `exit` / `only` on any scene part decide the frames it shows in. They are states, not events, so they land right when the reader jumps to a frame or steps back. With an active path (a scenario, or `setSequence`), `enter` / `exit` and held `scene.on` changes follow active-path order, not declaration order: a change whose key is outside the active path does not apply, an inactive `enter` never occurs, and an inactive `exit` does not end an already-entered part. `only` and highlight lists always match exact stable keys. Visible cards keep their declared wide-grid cells. Hidden cards, store items and table rows collapse from layout; put replacing cards in the same cell. For an intentionally stable footprint, give the container a min-height or choose a fixed stage height with an appropriate scrolling plan.
-
-## Going further: the toolkit
-
-When the scene cannot express a layout, drop to the toolkit. It is the same drawing underneath, so it mixes with a scene: pass the card returned by `scene.actor`, `scene.store`, or `scene.table` directly to `arrow`, or use its public `id` or `element` fields where another API needs one.
-
-- Lay out by hand with the style kit's layout classes (below): `.wb-row`, `.wb-stack`, `.wb-grid`, `.wb-layers`, `.wb-lane`, with `.wb-node` or `.wb-card` boxes.
-- `whiteboard.arrow(from, to, { label, tone, dashed, arrowhead, bend, enter, exit, only, highlight })` draws an endpoint-bound connector that follows both ends. It is directed by default; pass `arrowhead: false` for a headless connector without changing its route, label, styling, lifecycle, or use with `travel`. It does not draw while either endpoint is detached from the document, and resumes when both endpoints reconnect. A default straight arrow reduces its endpoint clearance when necessary to preserve a directed segment in a narrow positive gap; overlapping endpoints still need more authored space. Labels avoid visible form controls and host-overlay slots as well as endpoint cards, other edge labels, and the swept bounds of packets travelling along their route. If both ends share an ancestor with clipped or scrollable overflow, the edge and its label are clipped to that viewport too. `bend` is a CSS-pixel distance: positive bows left relative to the arrow's direction and negative bows right. Reciprocal arrows need the same nonzero sign to bow onto opposite sides (for example, `bend: 32` on both); opposite signs put them on the same path. Use it only for a return path the scene cannot route.
-- `whiteboard.token({ label, tone, visible, enter, exit, only })` makes a dot or pill; labelled tokens automatically choose a readable foreground for their resolved tone color in each theme. Tokens start hidden for `travel`; pass `visible: true` for a static snapshot at its authored position. Lifecycle fields work like they do on scene parts. The token already centers itself with CSS `translate`, so position it with `left` and `top` and do not add a centering `transform` or `translate`. For example:
-
-  ```js
-  const packet = whiteboard.token({
-    label: "PACK",
-    tone: "accent",
-    visible: true,
-    only: ["upload"],
-  });
-  lane.append(packet); // lane has position: relative
-  Object.assign(packet.style, { left: "45%", top: "50%" });
-  ```
-
-  `whiteboard.travel(token, arrow, frame, { duration, ease, position, stay })` moves a token along an arrow. Its path coordinates are stage-relative, so leave an SDK token in its default stage overlay for travel; do not reparent the positioned snapshot from the preceding example and then travel it. You can make that SDK token square by changing its shape styles without changing its positioning. For a caller-owned travelling element, use an explicit document origin such as `position: absolute; left: 0; top: 0`, with any deliberate centering in CSS; travel preserves that authored origin and existing transforms. Static lane snapshots and travelling packets are separate layout choices, and `stay` controls arrival retention rather than frame visibility—use `enter`, `exit`, or `only` for lifecycle scope.
-
-  Trips append to the frame by default. Pass `position: 0` to start parallel trips together, or a millisecond position to sequence a reply after its request. Equivalent wide/narrow layout trips should use the same positions, so a hidden layout does not add a second wait. `position` uses the same syntax as `whiteboard.timeline` below.
-
-  The default token remains hidden until travel starts. Travel progress stays bound to the live arrow geometry, so an active or retained token follows its edge when responsive layout or code-peek sizing moves the endpoints. You may reuse a token for later trips without reparenting it; the trip active at the current timeline position owns its placement, including after jumps, backward seeks, and resizes.
-
-- `whiteboard.timeline(frame)` is that frame's part of one anime.js timeline: `.add(targets, params, position)`, `.set(...)`, `.call(...)`. A tween starts from where the frames before it left the element, so write only where it goes: `{ translateX: 120 }`. A numeric `position` counts milliseconds from the frame's start; `"<"` starts at the previous call's end, while `"<<"` starts at its beginning.
-- `data-enter` / `data-exit` / `data-only` / `data-highlight` work on any element you write, arrows included.
-
-## Raw HTML
-
-For custom layouts, charts, shapes, or interactions, write HTML, SVG and CSS. Build them from the style kit first, so a hand-made stage reads like the rest of the whiteboard, and drive them with the frame API after it.
-
-### The style kit
-
-Every stage loads these classes. They use the whiteboard's faces, colors and spacing in light and dark, so prefer them to your own CSS; add a `<style>` only for what the kit does not cover, and build it from the variables under "Theme and motion".
-
-| Class | Use it for |
-| --- | --- |
-| `.wb-row`, `.wb-stack` | A centered row or column of parts, with the scene's spacing. |
-| `.wb-grid` | A grid of equal columns; set `style="--wb-columns: 4"` (default 3). |
-| `.wb-layers` | Children stacked in one place, for states that replace each other. |
-| `.wb-lane` | A `position: relative` track with a dashed center line, for a static `token` snapshot. |
-| `.wb-card` | A box with a title and note: put `.wb-card-title` and `.wb-card-note` inside. The scene's cards are these. |
-| `.wb-node` | A centered box for a hand-made layout; a `<small>` inside is its second line. |
-| `.wb-well` | An inset area that groups parts, such as a process or a machine boundary. |
-| `.wb-rule` | A divider (`<hr class="wb-rule">`). |
-| `.wb-badge` | A pill for a status or version, e.g. `etag e1`. |
-| `.wb-chip` | A chip in a list, such as a queued job or a cached key; `.wb-items` lays a list of them out. |
-| `.wb-table` | A compact table of rows, such as a schema or a result set. |
-| `.wb-title` | A heading inside the stage. |
-| `.wb-caps` | An uppercase micro label, like the step strip's. |
-| `.wb-prose` | A sentence of explanation, in the board's reading face. |
-| `.wb-mono`, `.wb-code` | Ids, paths and values in the mono face; `.wb-code` is inline code on a well. |
-| `.wb-muted`, `.wb-faint` | Text that recedes. |
-| `.wb-shape`, `.wb-shape-text` | An SVG shape drawn like a card, and the text inside it. |
-
-`data-tone="accent|added|removed|modified|muted"` colors any card, node, chip, badge, shape or table row, like the scene's tones. `data-highlight="frameKey …"` rings a card, node or shape during those frames.
+Draw the frame in full, then animate what is new since the previous frame:
 
 ```html
-<div class="wb-row">
-  <div class="wb-node" data-highlight="read">Reader<small>GET /v1</small></div>
-  <div class="wb-well wb-stack">
-    <span class="wb-caps">Cache</span>
-    <div class="wb-items">
-      <span class="wb-chip" data-tone="added" data-enter="fill">user:42</span>
-    </div>
-  </div>
-</div>
+<div class="wb-row attempts"></div>
+<script>
+  const row = document.querySelector(".attempts");
+
+  whiteboard.on("*", ({ frame, previous }) => {
+    const chips = frame.data.attempts.map((result) => {
+      const chip = document.createElement("span");
+      chip.className = "wb-chip";
+      chip.dataset.tone = result === "ok" ? "added" : "removed";
+      chip.textContent = result;
+      return chip;
+    });
+    row.replaceChildren(...chips);
+
+    const before = previous?.data.attempts.length ?? 0;
+    return chips.slice(before).map((chip) =>
+      whiteboard.animate(chip, [{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "none" }], 300),
+    );
+  });
+</script>
 ```
 
-### The frame API
-
-- `whiteboard.on(key, handler)` runs when a frame shows (`"*"` on every frame), including a same-frame refresh when the reduced-motion preference changes. Shared `"*"` handlers run before frame-specific handlers, so they can render content before a frame handler animates it. Connection labels hide immediately when their frame ends, while the connecting stroke can fade. The handler receives `{ frame, previous, direction, instant }`; `frame` and `previous` are frame objects, so use `frame.key` when selecting keyed state. Return the animations it starts, or a finite promise for a simulation cycle, so playback waits for the represented work. Cancel earlier work when another frame shows. Use `instant` and the live `whiteboard.reducedMotion` value to draw a consistent skipped-motion pose; normal playback still needs to advance the model.
-- `whiteboard.animate(target, keyframes, options)` is `element.animate` that holds its end state and honors the current frame jump. After that frame settles, later button or slider callbacks animate normally. The current reduced-motion preference always skips motion, including animations started by later interactions.
-- `whiteboard.anime` is anime.js v4 (also the global `anime`): easings, stagger, utils.
-
-Prefer `link` / `send` (or `arrow` / `travel`) for ordinary message flows: they handle endpoint geometry, labels, and navigation. Custom connectors and motion are also supported; keep them readable, responsive, and coherent when the reader jumps frames or requests reduced motion.
-
-## The rest of the `whiteboard` shim
-
-```ts
-code(name: string): HTMLElement;   // a placeholder the whiteboard fills with that code peek
-block(id: string): HTMLElement;    // a placeholder for another component of this whiteboard
-setSequence(keys: string[]): void; // select the ordered path shown by host controls
-goto(key: string): void; next(): void; prev(): void;
-reveal(name: string): void;        // open the named code beside the whiteboard
-readonly frames: readonly { key: string; title: string; caption?: string; index: number }[];
-readonly frame: { key: string; title: string; caption?: string; index: number };
-readonly theme; readonly colorScheme: "light" | "dark"; readonly reducedMotion;
-```
-
-`whiteboard.frame` is the current frame object, not its key. For keyed state, read `whiteboard.frame.key` or use the handler argument: `whiteboard.on("*", ({ frame }) => render(frame.key))`.
-
-For alternate paths, declare `scenarios` on the component rather than drawing your own buttons in the stage: the reader gets a labelled picker that works the same on every whiteboard.
-
-```json
-"scenarios": [
-  { "key": "delivered", "label": "Delivered", "frames": ["push", "gossip", "replicate", "serve"] },
-  { "key": "dropped", "label": "Dropped packet", "frames": ["push", "gossip-dropped", "catch-up", "serve-recovered"] }
-]
-```
-
-Picking a scenario selects its frames as the active path. The active path controls the host step labels, titles, count, Previous/Next, keyboard navigation, Play/Replay, and `whiteboard.next()` / `prev()`; changing it stops current playback and clears its hold timer. It preserves the current frame when that frame is in the new path; otherwise it lands instantly on the new path's first frame. `whiteboard.frames` contains the active ordered path and its `index` values, and `whiteboard.frame.index` is the current active-path position; keys remain the stable identity. `goto(key)` accepts only a frame in the active path and is a direct jump, while adjacent forward steps still play the destination frame's motion even when declaration indexes move backward.
-
-`whiteboard.setSequence(keys)` selects a path from a script, for a branch the drawing itself decides. Every key must be a unique declared frame, and repeating the same sequence is a no-op, so it is safe to call from a render path. When the path matches a scenario, the picker shows that scenario.
-
-- `scene.peek(name, ...)`, `whiteboard.code(name)` and `<div data-wb-code="name">` all draw the real code peek over a placeholder. Give `scene.peek` a cell, and span columns (the cell's `colSpan`) when the code needs width — a one-column peek clips long lines; a raw `data-wb-code` div takes a CSS width instead. Its height follows the code, up to about 18 lines. A peek is always on top of your drawing, so do not draw or travel over it.
-- A code peek is about 40px of header plus 18px per line, up to about 400px. Rows of cards take about 90px each. With the default `height: "auto"`, the stage grows to fit them. If you intentionally use a numeric fixed height, leave enough room because overflow clips at that height.
-
-## Text inside shapes
-
-Scene cards supply their own padding. For custom HTML or SVG, keep the full rendered text bounds at least 12 CSS pixels inside the container boundary at the displayed size. Check every text-box corner against a curved boundary, not only the shape’s rectangular bounding box. Wrap or shorten the label, or enlarge the shape, while keeping the font readable. Verify this inset in each frame and supported viewport.
-
-## Theme and motion
-
-Custom CSS should use the whiteboard's variables, never literal colors, sizes or font names, so the stage matches light and dark and the rest of the board:
-
-- Colors: `var(--wb-ink)`, `--wb-ink-muted`, `--wb-ink-faint`, `--wb-accent`, `--wb-accent-soft`, `--wb-on-accent`, `--wb-surface`, `--wb-surface-raised`, `--wb-well`, `--wb-rule`, `--wb-rule-soft`, `--wb-added`, `--wb-removed`, `--wb-modified`, `--wb-added-bg`, `--wb-removed-bg`, `--wb-modified-bg`.
-- Faces, by role: `--wb-font-sans` for labels and controls, `--wb-font-mono` for ids, paths and values, `--wb-font-serif` for prose, `--wb-font-code` for source text. The stage loads the whiteboard's own faces, so name no font yourself.
-- Spacing: `--wb-space-2` to `--wb-space-20` in 2px steps, then `24`, `28`, `32`, `36`, `40`, `48`, `56`, `72`, `96`, `120`, `160`.
-- Type: sizes `--wb-text-micro` (10px), `small`, `body` (12px), `ui`, `title`, `reading`, `heading`, `display`; line heights `--wb-leading-tight`, `normal`, `relaxed`, `prose`; weights `--wb-weight-regular`, `medium`, `semibold`, `bold`; `--wb-tracking-caps` and `--wb-tracking-chrome` for uppercase labels.
-- Radii: `--wb-radius-small`, `control`, `surface`, `pill`, `round`.
-- Motion: `--wb-motion-fast`, `medium`, `slow` and the easings `--wb-motion-ease`, `enter`, `settle`. `--wb-duration` (450ms) is the default fade.
-
-`<html>` carries `data-wb-theme="light|dark"` and the matching `color-scheme`, and `whiteboard.colorScheme` reads it, for the rare drawing that needs a different value per theme.
-
-`whiteboard.reducedMotion` reads the stage's current `prefers-reduced-motion` setting. Use it when custom rendering has motion that `whiteboard.animate` and the scene helpers do not manage.
-
-## Checklist
-
-- Each frame shows one idea; its title says what changed. 3 to 8 frames is usual.
-- Omit `height` unless the animation intentionally needs a fixed viewport; verify any numeric height in every frame and narrow layout.
-- Every frame reads correctly when reached by a jump, not only by playing.
-- Alternate paths are `scenarios` on the component, not buttons drawn in the stage.
-- Build as "Choose how to build it" says: a scene by default, and the toolkit or raw HTML for anything else.
-- In raw HTML, build from the style kit and the `--wb-*` variables; write no literal color, size or font name.
-- Script errors show under the stage. After writing, read the whiteboard back and fix any.
+Write each frame's data in full, not as a change from the one before: a reader can jump straight to any frame. `whiteboard.animate` skips the motion on a jump and under reduced motion, and returning its animations makes playback wait for them.

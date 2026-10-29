@@ -10,7 +10,7 @@ import {
   text,
 } from "./definition.js";
 
-/** A name the stage's script passes to the `whiteboard` shim. */
+/** A name the animation's script passes to the `whiteboard` shim. */
 const handle = z
   .string()
   .regex(
@@ -18,9 +18,12 @@ const handle = z
     "Use a short name: a letter, then letters, digits, _ or -.",
   );
 
+/** Characters of serialized JSON one frame's data may hold. */
+const frameDataLimit = 20_000;
+
 export const animationFrameSchema = z.strictObject({
   key: handle.describe(
-    "Names the frame for the stage: data-frame on <html>, data-enter/data-exit, and whiteboard.on(key, ...).",
+    "Names the frame for the html: data-frame on <html>, data-enter/data-exit, and whiteboard.on(key, ...).",
   ),
   title: label,
   label: z
@@ -29,11 +32,11 @@ export const animationFrameSchema = z.strictObject({
     .max(24)
     .optional()
     .describe(
-      "A short name for the step strip under the stage, e.g. PUSH. Give every frame one, or none.",
+      "A short name for the step strip under the animation, e.g. PUSH. Give every frame one, or none.",
     ),
   caption: text
     .optional()
-    .describe("One or two short sentences shown under the stage."),
+    .describe("One or two short sentences shown under the animation."),
   duration: z
     .number()
     .int()
@@ -41,6 +44,17 @@ export const animationFrameSchema = z.strictObject({
     .max(30_000)
     .optional()
     .describe("Milliseconds this frame stays up while playing. Default 3000."),
+  data: z
+    .json()
+    .optional()
+    .refine(
+      (value) =>
+        value === undefined || JSON.stringify(value).length <= frameDataLimit,
+      `Keep a frame's data under ${frameDataLimit / 1000} KB.`,
+    )
+    .describe(
+      "This frame's state, as JSON the html's script draws: frame.data in whiteboard.on handlers, whiteboard.frame and whiteboard.frames.",
+    ),
 });
 
 export type AnimationFrame = z.infer<typeof animationFrameSchema>;
@@ -52,7 +66,7 @@ export const animationScenarioSchema = z.strictObject({
     .min(1)
     .max(32)
     .describe(
-      "What the reader picks above the stage, e.g. Retried request. Keep it short.",
+      "What the reader picks above the animation, e.g. Retried request. Keep it short.",
     ),
   frames: z
     .array(handle)
@@ -69,14 +83,14 @@ export const animationSchema = defineBlock("animation", {
     .min(1)
     .max(200_000)
     .describe(
-      'The stage\'s body markup: elements, <style> and <script>. It runs in a sandboxed frame with a global `whiteboard` shim; see session_get_instructions({topic:"animation"}).',
+      'The animation\'s body markup: elements, <style> and <script>. It runs in a sandboxed iframe with a global `whiteboard` shim; see session_get_instructions({topic:"animation"}).',
     ),
   frames: z
     .array(animationFrameSchema)
     .min(1)
     .max(60)
     .describe(
-      "Every possible frame. Stage scripts may select an ordered branch with whiteboard.setSequence(keys); keys stay unique and stable.",
+      "Every possible frame. Scripts may select an ordered branch with whiteboard.setSequence(keys); keys stay unique and stable.",
     ),
   scenarios: z
     .array(animationScenarioSchema)
@@ -84,19 +98,19 @@ export const animationSchema = defineBlock("animation", {
     .max(8)
     .optional()
     .describe(
-      "Alternate paths through the frames. The whiteboard draws a labelled scenario picker above the stage and starts on the first one.",
+      "Alternate paths through the frames. The whiteboard draws a labelled scenario picker above the animation and starts on the first one.",
     ),
   code: z
     .record(handle, anchorSchema)
     .default({})
     .describe(
-      "Source ranges the stage shows as code peeks, by name: whiteboard.code(name).",
+      "Source ranges the html shows as code peeks, by name: whiteboard.code(name).",
     ),
   height: z
     .union([z.literal("auto"), z.number().int().min(120).max(1200)])
     .default("auto")
     .describe(
-      "Fit the stage to its content by default, or set a fixed height in CSS pixels.",
+      "Fit the animation to its content by default, or set a fixed height in CSS pixels.",
     ),
   pins: elementPins,
 });

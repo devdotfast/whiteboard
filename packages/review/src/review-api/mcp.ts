@@ -40,7 +40,7 @@ function mcpAuthoringGuidance(context: { traceEnabled: boolean }): string {
         ]
       : []),
     "For programmatic MCP calls, use structuredContent when present; otherwise parse JSON from the text content when the result is JSON. An insert through session_edit uses edit.content for the actual document component, never the MCP transport wrapper containing content or structuredContent.",
-    "Never read or write Whiteboard files or SQL.",
+    "Never read or write Whiteboard's own files or SQL, except a draft folder a Whiteboard tool hands you to edit.",
   ].join(" ");
 }
 

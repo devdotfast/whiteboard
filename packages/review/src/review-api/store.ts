@@ -68,6 +68,7 @@ import {
 import { z } from "zod";
 
 import { ReviewActivity } from "./activity.js";
+import { AnimationRuns, animationReportSchema } from "./animation-runs.js";
 import { AskHistory } from "./ask-history.js";
 import {
   type SiblingFacts,
@@ -2133,6 +2134,7 @@ export class ReviewStore {
       result,
       () => {
         this.saveVersion(snapshot, change.nextId, projectId, change.author);
+        this.animationRuns.forget(id, touched);
 
         if (change.relations?.parentId)
           this.setParent(id, change.relations.parentId);
@@ -2366,6 +2368,7 @@ export class ReviewStore {
 
     this.commitCommand(result, () => this.removePermanently(reviewId), rules);
     this.leases.delete(reviewId);
+    this.animationRuns.drop(reviewId);
 
     return result;
   }
@@ -2471,6 +2474,35 @@ export class ReviewStore {
       return { deleted: true };
     });
   }
+  private readonly animationRuns = new AnimationRuns();
+
+  /** Records what a canvas showing `version` saw when it ran an animation's
+   * script. A report about a version whose block has changed since is out of
+   * date: ignored. */
+  reportAnimationRun(
+    reviewId: string,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Report boundary: animationReportSchema.parse below validates incoming JSON.
+    { version, report }: { version: number; report: unknown },
+  ) {
+    const run = { ...animationReportSchema.parse(report), version };
+
+    const ran = ownBlocks(this.read(reviewId, run.version).document).get(
+      run.blockId,
+    );
+
+    const now = ownBlocks(this.read(reviewId).document).get(run.blockId);
+
+    if (ran !== undefined && isDeepStrictEqual(ran, now))
+      this.animationRuns.record(reviewId, run);
+
+    return { ok: true as const };
+  }
+
+  /** Each animation's last run in a canvas, by block id. */
+  animationRunsOf(reviewId: string) {
+    return this.animationRuns.of(reviewId);
+  }
+
   /** Each board's canvas leases by client: the board is open there, and
    * `blockId` is the block the person is in, if any. In memory: a lease
    * outlives neither its renewals nor the host. */
