@@ -6,6 +6,7 @@ import {
   pathTargetSchema,
   publishedEdits,
 } from "@dev.fast/whiteboard-document";
+import type { Tool } from "@modelcontextprotocol/server";
 import { z } from "zod";
 
 import { desktopBlockTypes, instructionsQuerySchema } from "./instructions.js";
@@ -219,7 +220,9 @@ export function authoringTools(
 }
 
 /** Drops repositoryId from pins: the host fills in the board's own. */
-function withoutRepositoryIds<T>(schema: T): T {
+function withoutRepositoryIds(
+  schema: z.core.JSONSchema.JSONSchema,
+): Tool["inputSchema"] {
   // SAFETY: a JSON round trip of a JSON Schema, dropping one property.
   return JSON.parse(JSON.stringify(schema), (_key, value: JsonValue) => {
     if (
@@ -239,5 +242,5 @@ function withoutRepositoryIds<T>(schema: T): T {
         required: value.required.filter((name) => name !== "repositoryId"),
       }),
     };
-  }) as T;
+  }) as Tool["inputSchema"];
 }

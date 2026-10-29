@@ -2,13 +2,8 @@ import type { Readable, Writable } from "node:stream";
 
 import { type JsonValue, isJsonObject } from "@dev.fast/json";
 import { ReviewInputError } from "@dev.fast/whiteboard-document";
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import {
-  CallToolRequestSchema,
-  type CallToolResult,
-  ListToolsRequestSchema,
-} from "@modelcontextprotocol/sdk/types.js";
+import { type CallToolResult, Server } from "@modelcontextprotocol/server";
+import { StdioServerTransport } from "@modelcontextprotocol/server/stdio";
 import type { ReviewToolCall } from "@review/review-telemetry.js";
 import type { ReviewSessionAgent } from "@review/ui-telemetry-events.js";
 
@@ -103,11 +98,11 @@ export async function serveReviewMcp(
     return { client, tools: catalog };
   };
 
-  server.setRequestHandler(ListToolsRequestSchema, async (_request, extra) => {
+  server.setRequestHandler("tools/list", async (_request, ctx) => {
     let tools = catalog;
 
     try {
-      ({ tools } = await load(extra.signal));
+      ({ tools } = await load(ctx.mcpReq.signal));
       listedWhileDown = false;
     } catch (error) {
       announceCatalog = true;
@@ -139,7 +134,7 @@ export async function serveReviewMcp(
       ),
     };
   });
-  server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
+  server.setRequestHandler("tools/call", async (request, ctx) => {
     const startedAt = Date.now();
     // The requested name is agent input; only a catalog name is reported.
     let tool: AuthoringTool | undefined;
@@ -161,7 +156,7 @@ export async function serveReviewMcp(
       let tools: AuthoringTool[];
 
       try {
-        ({ client, tools } = await load(extra.signal));
+        ({ client, tools } = await load(ctx.mcpReq.signal));
       } catch (error) {
         announceCatalog = true;
 
@@ -169,7 +164,7 @@ export async function serveReviewMcp(
           request.params.name === instructionsTool.name &&
           !(error instanceof ReviewApiError)
         )
-          return { content: [{ type: "text" as const, text: RECOVERY }] };
+          return { content: [{ type: "text", text: RECOVERY }] };
 
         if (request.params.name === REVIEW_STATUS_TOOL.name && offlineStatus) {
           const result = await offlineStatus(
@@ -200,7 +195,7 @@ export async function serveReviewMcp(
         client,
         tool,
         request.params.arguments ?? {},
-        extra.signal,
+        ctx.mcpReq.signal,
       );
 
       const text = toolResultText(tool, result);

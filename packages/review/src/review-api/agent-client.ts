@@ -208,4 +208,4 @@ import {
   type JsonValue,
   parseJsonText,
 } from "@dev.fast/json";
-import type { CallToolRequest, Tool } from "@modelcontextprotocol/sdk/types.js";
+import type { CallToolRequest, Tool } from "@modelcontextprotocol/server";

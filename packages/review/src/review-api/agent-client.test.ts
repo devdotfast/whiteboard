@@ -8,7 +8,7 @@ import { PassThrough, Readable, Writable } from "node:stream";
 
 import type { JsonObject } from "@dev.fast/json";
 import { REVIEW_DESKTOP_DISCOVERY_VERSION } from "@dev.fast/review-protocol";
-import { ListToolsResultSchema } from "@modelcontextprotocol/sdk/types.js";
+import { ListToolsResultSchema } from "@modelcontextprotocol/core";
 import { readReviewServerDiscovery } from "@review/server-discovery.js";
 import {
   isolatedEnv,
