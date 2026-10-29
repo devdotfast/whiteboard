@@ -59,6 +59,8 @@ function settings(): ReviewCanvasSettingsContent {
     chooseOpenFilesInApplication: unexpected,
     softwareMapEnabled: false,
     setSoftwareMapEnabled: async (enabled) => enabled,
+    showReleaseNotes: true,
+    setShowReleaseNotes: async (enabled) => enabled,
     animationsEnabled: false,
     setAnimationsEnabled: async (enabled) => enabled,
     diffrConfig: {

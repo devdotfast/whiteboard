@@ -1,4 +1,5 @@
-import { space } from "@canvas/scale.stylex";
+import { fontSize, space } from "@canvas/scale.stylex";
+import { Checkbox } from "@canvas/ui/checkbox";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { Spinner } from "@canvas/ui/spinner";
 import {
@@ -70,6 +71,10 @@ function ReleaseNotes({
 }) {
   const { version } = releaseNotes;
 
+  const [showAfterUpdate, setShowAfterUpdate] = useState(
+    releaseNotes.showAfterUpdate,
+  );
+
   const release = useQuery({
     queryKey: ["release-notes", version],
     queryFn: () => fetchRelease(version),
@@ -101,6 +106,21 @@ function ReleaseNotes({
             <h1 {...stylex.props(homeStyles.heading)}>
               What's new in {version}
             </h1>
+            <label {...stylex.props(styles.toggle)}>
+              <Checkbox
+                checked={showAfterUpdate}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  setShowAfterUpdate(enabled);
+                  void releaseNotes
+                    .setShowAfterUpdate(enabled)
+                    .then(setShowAfterUpdate, () =>
+                      setShowAfterUpdate(!enabled),
+                    );
+                }}
+              />
+              Show after an update
+            </label>
           </div>
           <p {...stylex.props(settingsStyles.lede, styles.lede)}>
             {published ? `Released ${published} · ` : null}
@@ -131,6 +151,15 @@ function ReleaseNotes({
 }
 
 const styles = stylex.create({
+  toggle: {
+    display: "flex",
+    alignItems: "center",
+    flexShrink: 0,
+    gap: space.s8,
+    color: tokens.inkMuted,
+    fontSize: fontSize.ui,
+    cursor: "pointer",
+  },
   lede: {
     marginTop: space.s8,
   },

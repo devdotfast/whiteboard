@@ -890,6 +890,9 @@ export interface ReviewCanvasSettingsContent {
   ): Promise<ReviewReadyNotificationChoice>;
   softwareMapEnabled: boolean;
   setSoftwareMapEnabled(enabled: boolean): Promise<boolean>;
+  // Backed by `update.showReleaseNotes`, as the Release notes tab's checkbox.
+  showReleaseNotes: boolean;
+  setShowReleaseNotes(enabled: boolean): Promise<boolean>;
   // Not a workbench setting: the review server reads it, so it lives in the
   // server preferences file. Off by default. On, agents can author
   // animations over MCP; off, existing animations still render.
@@ -1110,6 +1113,9 @@ export type ReviewCanvasContent =
 /** The Release notes tab: one version's GitHub release. */
 export interface ReviewCanvasReleaseNotes {
   version: string;
+  // Backed by the `update.showReleaseNotes` workbench setting.
+  showAfterUpdate: boolean;
+  setShowAfterUpdate(enabled: boolean): Promise<boolean>;
 }
 
 const WHITEBOARD_REPOSITORY = "devdotfast/whiteboard";

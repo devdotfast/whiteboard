@@ -66,6 +66,7 @@ import {
 	REVIEW_DIAGRAM_FULLSCREEN_ON_CLICK_SETTING,
 	REVIEW_KEYMAP_SETTING,
 	REVIEW_READY_NOTIFICATION_SETTING,
+	REVIEW_SHOW_RELEASE_NOTES_SETTING,
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_TELEMETRY_SETTING,
 } from "../../../common/reviewConfigurationDefaults.js";
@@ -690,7 +691,11 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			this.setCanvasState("home");
 			await this.render({
 				kind: "release-notes",
-				releaseNotes: { version: input.target.version },
+				releaseNotes: {
+					version: input.target.version,
+					showAfterUpdate: this.currentShowReleaseNotes(),
+					setShowAfterUpdate: (enabled) => this.setShowReleaseNotes(enabled),
+				},
 			}, generation);
 			return;
 		}
@@ -1074,6 +1079,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				await this.configurationService.updateValue(REVIEW_SOFTWARE_MAP_SETTING, enabled, ConfigurationTarget.USER);
 				return this.currentSoftwareMapEnabled();
 			},
+			showReleaseNotes: this.currentShowReleaseNotes(),
+			setShowReleaseNotes: (enabled) => this.setShowReleaseNotes(enabled),
 			animationsEnabled: await this.desktopConnection.readAnimationsEnabled().catch(() => false),
 			setAnimationsEnabled: (enabled) => this.desktopConnection.setAnimationsEnabled(enabled),
 			remoteHosts: reviewRemoteHostsSettings({
@@ -1171,6 +1178,16 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	private currentSoftwareMapEnabled(): boolean {
 		return this.configurationService.getValue<boolean>(REVIEW_SOFTWARE_MAP_SETTING) === true;
+	}
+
+	private currentShowReleaseNotes(): boolean {
+		return this.configurationService.getValue<boolean>(REVIEW_SHOW_RELEASE_NOTES_SETTING) !== false;
+	}
+
+	private async setShowReleaseNotes(enabled: boolean): Promise<boolean> {
+		this.reviewTelemetryService.capture("setting_changed", { setting: "show_release_notes", enabled });
+		await this.configurationService.updateValue(REVIEW_SHOW_RELEASE_NOTES_SETTING, enabled, ConfigurationTarget.USER);
+		return this.currentShowReleaseNotes();
 	}
 
 	// The setting ships as true, so only an explicit false means opted out.

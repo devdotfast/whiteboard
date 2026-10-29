@@ -76,6 +76,8 @@ async function render(hosts: ReviewRemoteHostsSettings) {
     chooseOpenFilesInApplication: reject,
     softwareMapEnabled: false,
     setSoftwareMapEnabled: reject,
+    showReleaseNotes: true,
+    setShowReleaseNotes: reject,
     animationsEnabled: false,
     setAnimationsEnabled: async (enabled) => enabled,
     diffrConfig: {

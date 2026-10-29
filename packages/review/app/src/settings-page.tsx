@@ -116,6 +116,10 @@ export function SettingsPage({
     settings.softwareMapEnabled,
   );
 
+  const [showReleaseNotes, setShowReleaseNotes] = useState(
+    settings.showReleaseNotes,
+  );
+
   const [animationsEnabled, setAnimationsEnabled] = useState(
     settings.animationsEnabled,
   );
@@ -528,6 +532,24 @@ export function SettingsPage({
                     )
                   }
                 />
+              </Row>
+              <Row
+                label="Release notes"
+                description="Show what's new on the first launch after an update."
+              >
+                <label {...stylex.props(styles.toggle)}>
+                  <Checkbox
+                    aria-label="Release notes"
+                    checked={showReleaseNotes}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      void run(
+                        () => settings.setShowReleaseNotes(enabled),
+                        setShowReleaseNotes,
+                      );
+                    }}
+                  />
+                </label>
               </Row>
             </Section>
 
