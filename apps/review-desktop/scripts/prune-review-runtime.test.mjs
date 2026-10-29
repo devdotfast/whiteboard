@@ -15,7 +15,7 @@ test("desktop pruning retains runnable variants, licenses, maps, native and runt
     "src/cli.ts",
     "node_modules/zod/src/index.ts",
     "node_modules/pino/test/transport.js",
-    "node_modules/@modelcontextprotocol/sdk/dist/cjs/server/index.js",
+    "node_modules/@modelcontextprotocol/server/dist/index.cjs",
     "node_modules/hono/dist/cjs/index.js",
     "node_modules/zod/index.d.cts",
   ];
@@ -25,7 +25,7 @@ test("desktop pruning retains runnable variants, licenses, maps, native and runt
     "src/cli.ts.map",
     "node_modules/zod/LICENSE",
     "node_modules/hono/dist/index.js",
-    "node_modules/@modelcontextprotocol/sdk/dist/esm/server/index.js",
+    "node_modules/@modelcontextprotocol/server/dist/index.mjs",
     "node_modules/hono/dist/cjs/index.js.map",
     "node_modules/sharp/lib/index.d.ts",
     "node_modules/@img/sharp-wasm32/lib/sharp.node",
