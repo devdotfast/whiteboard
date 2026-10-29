@@ -686,8 +686,6 @@ export class ReviewSidebarPart extends Part {
 		const [assets, connection] = await Promise.all([loadReviewCanvasAssets(), this.connection.getConnection()]);
 		if (reviewId !== this.reviewId) return;
 
-		const project = this.project(reviewId);
-		const lenses = this.lensReports.get(reviewId);
 		const newWhiteboardShortcut = this.shortcut(REVIEW_NEW_WHITEBOARD_COMMAND_ID);
 		const props: ReviewSidebarSectionProps = {
 			section: "whiteboards",
@@ -698,34 +696,13 @@ export class ReviewSidebarPart extends Part {
 				const view = this.state.view;
 				void this.tabs.openApiReview(id, title).then(() => this.emitSurfaceEvent({ event: "showReviewView", view, reviewId: id }));
 			},
-			...(project && { project }),
 			// Recent spans every project: the catalog Home already keeps.
 			recent: [...this.catalog.reviews],
-			...(lenses && { lenses }),
-			onSelectLens: (lensId) => this.emitSurfaceEvent({ event: "selectLens", reviewId, lensId }),
-			onMarkLens: (lensId) => this.emitSurfaceEvent({ event: "markLens", reviewId, lensId }),
 			setupTooltip: this.setupTooltip,
-			threads: {
-				list: this.threads.get(reviewId)?.threads ?? [],
-				...(this.threads.get(reviewId)?.project && { project: this.threads.get(reviewId)!.project }),
-				filter: this.threadsFilter,
-				open: this.askThreads.get(reviewId) ?? [],
-			},
-			onFilterThreads: (filter) => this.setThreadsFilter(filter),
-			onOpenThread: (threadId) => this.emitSurfaceEvent({ event: "openAskThread", reviewId, threadId }),
-			...(this.state.commits?.length && {
-				commits: {
-					list: this.state.commits,
-					...(this.state.commit && { selected: this.state.commit }),
-					...(this.state.compare && { compare: this.state.compare }),
-				},
-			}),
-			onPickCommit: (commit) => this.emitSurfaceEvent({ event: "pickCommit", reviewId, commit }),
-			...(this.state.stack && { stack: this.state.stack }),
-			onOpenStackLayer: (branch, active) => this.emitSurfaceEvent({ event: "openStackLayer", reviewId, branch, active }),
 			onNewWhiteboard: () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID, "sidebar"),
 			onNewChildWhiteboard: (parentId) => openChildWhiteboard(this.catalog, this.tabs, parentId),
 			...(newWhiteboardShortcut && { newWhiteboardShortcut }),
+			...this.boardProps(reviewId),
 		};
 
 		const mounts: [ReviewSidebarSectionProps["section"], HTMLElement | undefined][] = [
@@ -743,6 +720,36 @@ export class ReviewSidebarPart extends Part {
 			if (handle) handle.update({ ...props, section });
 			else this.handles.set(section, assets.mountReviewSidebarSection(element, { ...props, section }));
 		}
+	}
+
+	private boardProps(reviewId: string): Partial<ReviewSidebarSectionProps> {
+		const project = this.project(reviewId);
+		const lenses = this.lensReports.get(reviewId);
+		const threads = this.threads.get(reviewId);
+		return {
+			...(project && { project }),
+			...(lenses && { lenses }),
+			onSelectLens: (lensId) => this.emitSurfaceEvent({ event: "selectLens", reviewId, lensId }),
+			onMarkLens: (lensId) => this.emitSurfaceEvent({ event: "markLens", reviewId, lensId }),
+			threads: {
+				list: threads?.threads ?? [],
+				...(threads?.project && { project: threads.project }),
+				filter: this.threadsFilter,
+				open: this.askThreads.get(reviewId) ?? [],
+			},
+			onFilterThreads: (filter) => this.setThreadsFilter(filter),
+			onOpenThread: (threadId) => this.emitSurfaceEvent({ event: "openAskThread", reviewId, threadId }),
+			...(this.state.commits?.length && {
+				commits: {
+					list: this.state.commits,
+					...(this.state.commit && { selected: this.state.commit }),
+					...(this.state.compare && { compare: this.state.compare }),
+				},
+			}),
+			onPickCommit: (commit) => this.emitSurfaceEvent({ event: "pickCommit", reviewId, commit }),
+			...(this.state.stack && { stack: this.state.stack }),
+			onOpenStackLayer: (branch, active) => this.emitSurfaceEvent({ event: "openStackLayer", reviewId, branch, active }),
+		};
 	}
 
 	/** The board's project and its boards, from the catalog; undefined until
