@@ -67,7 +67,6 @@ import {
 	REVIEW_DIAGRAM_FULLSCREEN_ON_CLICK_SETTING,
 	REVIEW_KEYMAP_SETTING,
 	REVIEW_READY_NOTIFICATION_SETTING,
-	REVIEW_SHARING_SETTING,
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_TELEMETRY_SETTING,
 } from "../../../common/reviewConfigurationDefaults.js";
@@ -334,7 +333,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			configurationService.onDidChangeConfiguration((event) => {
 				if (
 					!event.affectsConfiguration(REVIEW_SOFTWARE_MAP_SETTING) &&
-					!event.affectsConfiguration(REVIEW_SHARING_SETTING) &&
 					!event.affectsConfiguration(REVIEW_DOCUMENT_WIDTH_SETTING) &&
 					!event.affectsConfiguration(REVIEW_DIAGRAM_FULLSCREEN_ON_CLICK_SETTING)
 				)
@@ -1070,15 +1068,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			},
 			animationsEnabled: await this.desktopConnection.readAnimationsEnabled().catch(() => false),
 			setAnimationsEnabled: (enabled) => this.desktopConnection.setAnimationsEnabled(enabled),
-			sharingEnabled: this.currentSharingEnabled(),
-			setSharingEnabled: async (enabled) => {
-				this.reviewTelemetryService.capture("setting_changed", {
-					setting: "sharing_enabled",
-					enabled,
-				});
-				await this.configurationService.updateValue(REVIEW_SHARING_SETTING, enabled, ConfigurationTarget.USER);
-				return this.currentSharingEnabled();
-			},
 			remoteHosts: reviewRemoteHostsSettings({
 				get: (key) => this.configurationService.getValue(key),
 				update: (key, value) => this.configurationService.updateValue(key, value, ConfigurationTarget.APPLICATION),
@@ -1174,10 +1163,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	private currentSoftwareMapEnabled(): boolean {
 		return this.configurationService.getValue<boolean>(REVIEW_SOFTWARE_MAP_SETTING) === true;
-	}
-
-	private currentSharingEnabled(): boolean {
-		return this.configurationService.getValue<boolean>(REVIEW_SHARING_SETTING) === true;
 	}
 
 	// The setting ships as true, so only an explicit false means opted out.
@@ -1460,7 +1445,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return {
 			diagramFullscreenOnClick: this.configurationService.getValue<boolean>(REVIEW_DIAGRAM_FULLSCREEN_ON_CLICK_SETTING) === true,
 			softwareMapEnabled: this.currentSoftwareMapEnabled(),
-			sharingEnabled: this.currentSharingEnabled(),
 			documentWidth: this.currentDocumentWidth(),
 		};
 	}

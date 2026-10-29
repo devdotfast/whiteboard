@@ -116,8 +116,6 @@ export function SettingsPage({
     settings.softwareMapEnabled,
   );
 
-  const [sharingEnabled, setSharingEnabled] = useState(settings.sharingEnabled);
-
   const [animationsEnabled, setAnimationsEnabled] = useState(
     settings.animationsEnabled,
   );
@@ -586,21 +584,6 @@ export function SettingsPage({
                       void run(
                         () => settings.setSoftwareMapEnabled(enabled),
                         setSoftwareMapEnabled,
-                      );
-                    }}
-                  />
-                </label>
-              </Row>
-              <Row label="Sharing" description="Show Share on whiteboards.">
-                <label {...stylex.props(styles.toggle)}>
-                  <Checkbox
-                    aria-label="Sharing"
-                    checked={sharingEnabled}
-                    onChange={(event) => {
-                      const enabled = event.target.checked;
-                      void run(
-                        () => settings.setSharingEnabled(enabled),
-                        setSharingEnabled,
                       );
                     }}
                   />
