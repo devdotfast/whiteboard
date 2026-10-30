@@ -159,6 +159,17 @@ export async function exportShare(input: {
   if (target?.kind === "worktree")
     throw new ReviewInputError("Pin this review to commits before sharing it.");
 
+  // A viewer has no PR state to read the base branch from.
+  const pullRequestUrl = snapshot.origin?.pullRequestUrl;
+
+  const baseBranch =
+    pullRequestUrl &&
+    !snapshot.origin?.baseBranch &&
+    (snapshot.origin?.pullRequestBaseBranch ??
+      input.data.pullRequestBaseBranch(pullRequestUrl));
+
+  if (baseBranch) snapshot.origin = { ...snapshot.origin, baseBranch };
+
   documentSchema.parse(snapshot.document);
   checkReferences(snapshot.document);
   validateShareSources(snapshot);

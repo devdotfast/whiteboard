@@ -126,6 +126,25 @@ async function fixture() {
 
 const repository = { cloneUrl: "https://github.com/fixture/review.git" };
 
+it("names a pull request's base branch so a viewer can show it", async () => {
+  const { local, reviewId } = await fixture();
+  const pullRequestUrl = "https://github.com/fixture/review/pull/7";
+  await local.store.execute({
+    operation: {
+      type: "set_target",
+      reviewId,
+      target: local.store.read(reviewId).target,
+      pullRequestUrl,
+    },
+  });
+  vi.spyOn(local.data, "pullRequestBaseBranch").mockReturnValue("main");
+  const exported = await exportShare({ ...local, reviewId, repository });
+  expect(exported.snapshot.origin).toMatchObject({
+    pullRequestUrl,
+    baseBranch: "main",
+  });
+});
+
 async function importFixture(
   prepare: (
     fixtureData: Awaited<ReturnType<typeof fixture>>,
