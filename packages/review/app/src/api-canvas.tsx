@@ -363,7 +363,10 @@ export function ApiCanvas({
 
   const sharing = useMemo(
     () =>
-      data && !content.host && !data.snapshot.trashedAt
+      data &&
+      !content.host &&
+      !data.snapshot.trashedAt &&
+      !data.snapshot.sourceUnavailable
         ? {
             client,
             reviewId: content.reviewId,

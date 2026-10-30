@@ -21,7 +21,7 @@ import {
 } from "@dev.fast/whiteboard-document";
 import { createReviewApi } from "@review/review-api/http";
 import { LocalReviewData } from "@review/review-api/local-data";
-import { ReviewStore } from "@review/review-api/store";
+import { type ReviewProviders, ReviewStore } from "@review/review-api/store";
 import { Hono } from "hono";
 import { act } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -32,6 +32,8 @@ import { createSequenceTourEntry, sequenceView } from "./diagrams";
 import { testReviewBridge } from "./review-session-test-utils";
 
 let store: ReviewStore, directory: string;
+
+let providers: ReviewProviders;
 
 let canvas: ReturnType<typeof mount> | undefined;
 
@@ -44,11 +46,12 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   directory = mkdtempSync(path.join(tmpdir(), "review-api-canvas-"));
-  store = new ReviewStore(path.join(directory, "review.db"), {
+  providers = {
     validatePins: async () => {},
     validateSource: async () => {},
     validateResource: async () => {},
-  });
+  };
+  store = new ReviewStore(path.join(directory, "review.db"), providers);
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.stubGlobal(
     "ResizeObserver",
@@ -1508,6 +1511,8 @@ it("shows why a remote review has not loaded, with its host's next step", async 
 async function mountPeekReview(content: {
   host?: string;
   available?: ReviewApiSummary["available"];
+  /** The review's checkout is gone. */
+  sourceUnavailable?: boolean;
 }) {
   const review = await command({
     type: "create",
@@ -1544,7 +1549,28 @@ async function mountPeekReview(content: {
       },
     }),
   );
-  app.route("/reviews-api", createReviewApi(store));
+  let data: LocalReviewData | undefined;
+
+  // The store's refresh, which runs before each read with local data, finds
+  // the checkout gone.
+  if (content.sourceUnavailable) {
+    const gone = async () => {
+      throw new ReviewInputError("Checkout is gone.", 404);
+    };
+
+    providers.resolveTarget = async (target, pinned) => ({
+      target,
+      pins: pinned ?? pins,
+    });
+    providers.sourcePins = gone;
+    data = new LocalReviewData(store);
+    vi.spyOn(data, "discoverPullRequest").mockImplementation(
+      async (snapshot) => snapshot,
+    );
+    vi.spyOn(data, "sourcePins").mockImplementation(gone);
+  }
+
+  app.route("/reviews-api", createReviewApi(store, data));
   app.get("/reviews-api/:id/commits", (context) => context.json([]));
   const requested: string[] = [];
   const inline: ReviewInlineEditorSpec[] = [];
@@ -1608,11 +1634,16 @@ async function mountPeekReview(content: {
     ...content,
   };
 
+  // A gone checkout shows its banner and opens no peek.
+  const ready = content.sourceUnavailable
+    ? () => container.textContent?.includes("Local checkout unavailable.")
+    : () => inline.length === 1;
+
   await act(async () => {
     canvas = mount(container, mounted);
   });
   await act(async () => {
-    await vi.waitFor(() => expect(inline).toHaveLength(1));
+    await vi.waitFor(() => expect(ready()).toBe(true));
   });
 
   const setAvailable = (available: (typeof content)["available"]) =>
@@ -1700,3 +1731,9 @@ it.each([
     );
   },
 );
+
+it("hides the share control while the review's checkout is gone", async () => {
+  const { button } = await mountPeekReview({ sourceUnavailable: true });
+
+  expect(button("Share review")).toBeUndefined();
+});
