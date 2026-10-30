@@ -16,7 +16,6 @@ import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
 import {
-  PULL_REQUEST_STATE_LABELS,
   type ReviewStackLayer,
   type ReviewStackResponse,
   boardTitle,
@@ -224,8 +223,7 @@ export function StackPill({
             <span>
               {layers.some((layer) => layer.pullRequestUrl)
                 ? "from GitHub"
-                : "from branch bases"}{" "}
-              · newest first
+                : "from branch bases"}
             </span>
           </div>
           {[...layers].reverse().map((layer) => (
@@ -343,9 +341,6 @@ function LayerRow({
           {...stylex.props(styles.trailing, current && styles.trailingCurrent)}
         >
           #{layer.pullRequestNumber}
-          {layer.pullRequestState
-            ? ` ${PULL_REQUEST_STATE_LABELS[layer.pullRequestState].toLowerCase()}`
-            : ""}
         </span>
       ) : !reviewed && !disabled ? (
         <span {...stylex.props(styles.create)}>Create</span>

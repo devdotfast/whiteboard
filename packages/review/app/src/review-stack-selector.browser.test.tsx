@@ -328,9 +328,7 @@ describe("ReviewStackSelector", () => {
       expect(rows.map((row) => row.textContent)).toEqual([
         expect.stringContaining("Review c"),
         expect.stringContaining("Review b"),
-        expect.stringMatching(
-          pullRequests ? /Review a.*#10 merged/ : /Review a/,
-        ),
+        expect.stringMatching(pullRequests ? /Review a.*#10/ : /Review a/),
       ]);
       expect(
         container.querySelector("[role=separator]")?.nextElementSibling
