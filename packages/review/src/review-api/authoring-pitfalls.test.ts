@@ -290,10 +290,10 @@ describe("diagram rules", () => {
           type: "animation",
           title: "Checkout",
           html: "<p>Folder</p>",
-          frames: [{ key: "write", title: "Writes", code: "write" }],
+          frames: [{ key: "write", title: "Writes", code: ["write"] }],
           code: { read: "head/src/drafts.ts#L1" },
         }),
-      'Frame "write" links code "write", which the animation\'s code does not name.',
+      'Frame "write" lists code "write", which the animation\'s code does not name.',
     ));
 
   it("rejects a step with none or two of source, explanation and code", async () => {

@@ -12,6 +12,8 @@ export interface StageFrame {
   caption?: string;
   /** The frame's own state, for a script that draws each frame from it. */
   data?: JsonValue;
+  /** The code names the frame lists. */
+  code?: string[];
 }
 
 export type StageColorScheme = "light" | "dark";
@@ -26,6 +28,8 @@ export interface StageInit {
   frames: StageFrame[];
   /** The names whiteboard.code() accepts. */
   code: string[];
+  /** What hovering an element that opens each code says. */
+  codeTitles: Record<string, string>;
   /** The block ids whiteboard.block() accepts. */
   blocks: string[];
   /** Whiteboard theme values, set as --wb-* properties on the stage root. */

@@ -1371,63 +1371,6 @@ describe("block components", () => {
     ).toBe(true);
   });
 
-  it("links a frame's code beside its caption by its label and opens it", async () => {
-    const { container } = await mountFixture("animation", {
-      document: [
-        {
-          id: "block-1",
-          type: "animation",
-          title: "Checks out",
-          height: "auto",
-          frames: [
-            { key: "write", title: "Writes", code: "write" },
-            { key: "read", title: "Reads", code: "read" },
-            { key: "done", title: "Done" },
-          ],
-          code: {
-            write: {
-              source: "head/src/drafts.ts#L12-L40",
-              label: "writeDraft",
-            },
-            read: "head/src/drafts.ts#L50-L60",
-          },
-          html: "<p>Folder</p>",
-          pins: { repositoryId: "repo", base: "base", head: "head" },
-        },
-      ],
-    });
-
-    const link = () =>
-      container.querySelector<HTMLAnchorElement>(
-        "[data-review-anchor-id^='block-1:code:']",
-      );
-
-    const next = () =>
-      act(async () =>
-        container
-          .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
-          .click(),
-      );
-
-    expect(await settled(() => link()?.textContent === "writeDraft")).toBe(
-      true,
-    );
-
-    await act(async () => link()!.click());
-    expect(
-      await settled(() => link()?.dataset.reviewAnchorOpen === "true"),
-    ).toBe(true);
-
-    // Without a label, the link names the file and first line.
-    await next();
-    expect(await settled(() => link()?.textContent === "drafts.ts:50")).toBe(
-      true,
-    );
-
-    await next();
-    expect(await settled(() => link() === null)).toBe(true);
-  });
-
   it("boots the stage again each time it goes fullscreen and back", async () => {
     using stages = tapStages();
 

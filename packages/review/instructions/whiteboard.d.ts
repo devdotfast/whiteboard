@@ -19,6 +19,8 @@ export interface Frame {
   caption?: string;
   /** The frame's own state, from its `data`: draw the frame from this. */
   data?: unknown;
+  /** The code names the frame lists, for data-wb-open. */
+  code?: string[];
   /** Its position in the active path. */
   index: number;
 }
@@ -79,7 +81,8 @@ export interface Whiteboard {
   code(name: string): HTMLElement;
   /** A placeholder for another block of this whiteboard, by id. */
   block(id: string): HTMLElement;
-  /** Open the named code beside the whiteboard. */
+  /** Open the named code beside the whiteboard. An element with
+   * data-wb-open="name" does this when clicked, with no script. */
   reveal(name: string): void;
 
   /** Select the ordered path the host's controls step through, for a branch
@@ -226,6 +229,8 @@ export interface SceneCardOptions extends Lifecycle {
   tone?: Tone;
   /** Frames during which the card is ringed. */
   highlight?: string[];
+  /** The code the card opens when clicked: a name in the block's code. */
+  code?: string;
 }
 
 export interface SceneItemOptions extends Lifecycle {

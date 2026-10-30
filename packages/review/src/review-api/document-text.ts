@@ -206,11 +206,7 @@ export function documentText(
             `Frame ${index + 1} [${frame.key}]: ${frame.title}${frame.caption ? ` — ${frame.caption}` : ""}`,
           );
 
-          if (frame.code)
-            write(
-              depth + 2,
-              `Code [${frame.code}]: ${animationCode(element.code[frame.code]!).source}`,
-            );
+          if (frame.code) write(depth + 2, `Code: ${frame.code.join(", ")}`);
 
           if (detailed && frame.data !== undefined)
             write(depth + 2, `Data: ${JSON.stringify(frame.data)}`);

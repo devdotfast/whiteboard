@@ -202,6 +202,8 @@ body {
 }
 .wb-arrow[data-wb-state="before"] text, .wb-arrow[data-wb-state="after"] text { visibility: hidden; }
 [data-wb-slot] { display: block; max-width: 100%; min-height: 40px; }
+[data-wb-openable] { cursor: pointer; }
+[data-wb-openable]:is(:hover, :focus-visible) { outline: 1.5px solid var(--wb-accent); outline-offset: 2px; }
 
 /* Layout. */
 .wb-row { display: flex; align-items: center; justify-content: space-around; gap: var(--wb-space-48); padding: var(--wb-space-20) var(--wb-space-24); }

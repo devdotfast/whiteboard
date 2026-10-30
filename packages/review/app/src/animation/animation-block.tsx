@@ -5,7 +5,6 @@ import { DiagramHeader } from "@canvas/diagram-header";
 import { diagramStyles } from "@canvas/diagram-styles";
 import { useDiagramTourShell } from "@canvas/diagram-tour";
 import { drawStyles } from "@canvas/draw-styles";
-import { ProsePeekAnchor } from "@canvas/review-components";
 import { useOptionalReviewPanel } from "@canvas/review-panel";
 import type { SourcePeekAnchor } from "@canvas/review-panel-model";
 import {
@@ -191,11 +190,6 @@ export function AnimationBlock({
     0,
     activeFrames.findIndex((item) => item.key === frame.key),
   );
-
-  const frameCode =
-    frame.code === undefined
-      ? undefined
-      : data.anchors.get(animationCodeId(node.id, frame.code));
 
   const steps = activeFrames.every((item) => item.label) ? activeFrames : null;
 
@@ -408,13 +402,15 @@ export function AnimationBlock({
       html: node.html,
       kit: STAGE_KIT_CSS,
       autoSize: node.height === "auto",
-      frames: frames.map(({ key, title, caption, data }) => ({
+      frames: frames.map(({ key, title, caption, data, code }) => ({
         key,
         title,
         caption,
         data,
+        code,
       })),
       code: Object.keys(node.code),
+      codeTitles: codeTitles(node, data.anchors),
       blocks: [...embeddable.keys()],
       ...readTheme(figure),
       scale: SCALE,
@@ -662,16 +658,6 @@ export function AnimationBlock({
           {frame.caption && (
             <span data-review-copy-prose> {frame.caption}</span>
           )}
-          {frameCode && (
-            <>
-              {" "}
-              <FrameCode
-                anchor={frameCode}
-                label={animationCode(node.code[frame.code!]!).label}
-                onOpen={() => reveal(frame.code!)}
-              />
-            </>
-          )}
         </div>
         {!steps && (
           <div {...stylex.props(styles.dots)} role="group" aria-label="Frames">
@@ -805,46 +791,25 @@ function ControlButton({
   );
 }
 
-/** The code behind the frame, named by its label or else by file and first
- * line; the tooltip gives the whole path and range. */
-function FrameCode({
-  anchor,
-  label: named,
-  onOpen,
-}: {
-  anchor: SourcePeekAnchor;
-  label?: string;
-  onOpen(): void;
-}) {
-  const { file, start, end } = anchor.peek;
+/** What hovering a drawn element that opens code says: its label, file and
+ * lines. */
+function codeTitles(
+  node: BlockProps<"animation">["node"],
+  anchors: ReadonlyMap<string, SourcePeekAnchor>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(node.code).flatMap(([name, entry]) => {
+      const anchor = anchors.get(animationCodeId(node.id, name));
 
-  const lines =
-    start.line === end.line
-      ? `Line ${start.line}`
-      : `Lines ${start.line}–${end.line}`;
+      if (!anchor) return [];
+      const { file, start, end } = anchor.peek;
+      const label = animationCode(entry).label ?? name;
 
-  const tooltip = useTooltip<HTMLSpanElement>(file, { detail: lines });
+      const lines =
+        start.line === end.line ? `${start.line}` : `${start.line}–${end.line}`;
 
-  const open = useOptionalReviewPanel(
-    (state) =>
-      state.active?.kind === "peek" && state.active.anchor?.id === anchor.id,
-  );
-
-  const label = named ?? `${file.split("/").at(-1)}:${start.line}`;
-
-  return (
-    <span ref={tooltip}>
-      <ProsePeekAnchor
-        href={`#review-anchor-${anchor.id}`}
-        anchorId={anchor.id}
-        isOpen={open ?? false}
-        onOpen={onOpen}
-        inertFallback={label}
-        xstyle={styles.frameCode}
-      >
-        {label}
-      </ProsePeekAnchor>
-    </span>
+      return [[name, `${label} · ${file.split("/").at(-1)}:${lines}`]];
+    }),
   );
 }
 
@@ -1000,9 +965,6 @@ const styles = stylex.create({
     paddingBlock: space.s8,
     color: tokens.inkMuted,
     lineHeight: leading.px18,
-  },
-  frameCode: {
-    whiteSpace: "nowrap",
   },
   dots: {
     display: "flex",

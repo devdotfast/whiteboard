@@ -59,6 +59,8 @@ export interface SceneCardOptions {
   only?: string[];
   /** Frames during which the card is highlighted. */
   highlight?: string[];
+  /** The code the card opens when clicked: a name in the block's code. */
+  code?: string;
 }
 
 export interface SceneItemOptions {
@@ -411,7 +413,42 @@ export function stageRuntime(port: MessagePort): void {
       );
   };
 
+  // An element marked data-wb-open shows the named code beside the
+  // whiteboard when clicked, and takes focus like a button.
+  const openable = (element: HTMLElement | SVGElement) => {
+    const name = element.dataset.wbOpen;
+
+    if (name === undefined) {
+      element.removeAttribute("data-wb-openable");
+
+      return;
+    }
+
+    if (!init?.code.includes(name)) {
+      fail(
+        `Unknown code name "${name}" in data-wb-open. Declare it in the block's code field: ${init?.code.join(", ") || "none declared"}.`,
+      );
+
+      return;
+    }
+
+    if (element.hasAttribute("data-wb-openable")) return;
+    element.setAttribute("data-wb-openable", "");
+
+    if (!element.hasAttribute("tabindex")) element.tabIndex = 0;
+
+    if (!element.hasAttribute("role")) element.setAttribute("role", "button");
+
+    const title = init?.codeTitles[name];
+
+    if (title && !element.hasAttribute("title"))
+      element.setAttribute("title", title);
+  };
+
   const upgrade = (element: Element) => {
+    if (element instanceof HTMLElement || element instanceof SVGElement)
+      openable(element);
+
     if (!(element instanceof HTMLElement) || element.dataset.wbSlot) return;
     const code = element.dataset.wbCode;
     const block = element.dataset.wbBlock;
@@ -435,7 +472,28 @@ export function stageRuntime(port: MessagePort): void {
   };
 
   const upgradeAll = (scope: ParentNode) =>
-    scope.querySelectorAll("[data-wb-code], [data-wb-block]").forEach(upgrade);
+    scope
+      .querySelectorAll("[data-wb-code], [data-wb-block], [data-wb-open]")
+      .forEach(upgrade);
+
+  const openTarget = (target: EventTarget | null) =>
+    target instanceof Element
+      ? target.closest<HTMLElement | SVGElement>("[data-wb-openable]")
+      : null;
+
+  document.addEventListener("click", (event) => {
+    const target = openTarget(event.target);
+
+    if (target) post({ type: "reveal", name: target.dataset.wbOpen! });
+  });
+
+  document.addEventListener("keydown", (event) => {
+    const target = openTarget(event.target);
+
+    if (!target || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    post({ type: "reveal", name: target.dataset.wbOpen! });
+  });
 
   const placeholder = (attribute: "wbCode" | "wbBlock", ref: string) => {
     const element = document.createElement("div");
@@ -1775,6 +1833,8 @@ export function stageRuntime(port: MessagePort): void {
       el.className = "wb-card";
       el.dataset.kind = kind;
       el.id = options.id;
+
+      if (options.code !== undefined) el.dataset.wbOpen = options.code;
       place(el, options.at);
       applyLifecycle(el, options);
 
@@ -2298,14 +2358,28 @@ export function stageRuntime(port: MessagePort): void {
     upgradeAll(document.body);
 
     new MutationObserver((records) => {
-      for (const record of records)
+      for (const record of records) {
+        // A script may mark or unmark an element already on the page.
+        if (
+          record.type === "attributes" &&
+          (record.target instanceof HTMLElement ||
+            record.target instanceof SVGElement)
+        )
+          openable(record.target);
+
         record.addedNodes.forEach((node) => {
           if (node instanceof Element) {
             upgrade(node);
             upgradeAll(node);
           }
         });
-    }).observe(document.body, { childList: true, subtree: true });
+      }
+    }).observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["data-wb-open"],
+    });
 
     await runSources(message.libraries);
     await runScripts([...document.body.querySelectorAll("script")]);
