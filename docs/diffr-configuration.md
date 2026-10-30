@@ -51,10 +51,10 @@ provider = "codex"
 ### Codex
 
 Run `codex login` once. diffr reads `~/.codex/auth.json` (or
-`$CODEX_HOME/auth.json`) and never refreshes it. If Codex stores its sign-in in
+`$CODEX_HOME/auth.json`). If Codex stores its sign-in in
 the system keyring, add `cli_auth_credentials_store = "file"` to
 `~/.codex/config.toml` and sign in again.
 
-The sign-in expires about 10 days after Codex last ran. Summaries then skip
-and Settings says so; open Codex to renew it. `diffr config logins` shows
+diffr renews the sign-in with the `codex` command, so keep `codex` on PATH.
+`diffr config logins` shows
 whether the sign-in is ready.

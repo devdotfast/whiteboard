@@ -1,11 +1,15 @@
-//! Agent sign-ins used in place of an API key. They are never refreshed, so
-//! the agent's own session is untouched.
+//! Agent sign-ins used in place of an API key. The agent refreshes them
+//! itself, so its own session is untouched.
 use base64::Engine;
 use serde_json::{json, Map, Value};
 use std::{
+    io::{BufRead, BufReader, Write},
     path::{Path, PathBuf},
+    process::{Command, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
+
+const REFRESH_MARGIN_MS: u64 = 5 * 60 * 1000;
 
 pub(crate) const LOGINS: [&str; 1] = ["codex"];
 
@@ -76,8 +80,13 @@ fn codex() -> Result<String, String> {
         .ok_or("no home directory for this user")?
         .join("auth.json");
     let token = codex_token(&path)?;
+    if expiry_ms(&token).is_none_or(|at| at > now_ms() + REFRESH_MARGIN_MS) {
+        return Ok(token);
+    }
+    refresh_codex();
+    let token = codex_token(&path)?;
     if expiry_ms(&token).is_some_and(|at| at <= now_ms()) {
-        return Err("the Codex sign-in expired: open Codex to renew it".into());
+        return Err("the Codex sign-in expired: run `codex login`, and keep `codex` on PATH so diffr can renew it".into());
     }
     Ok(token)
 }
@@ -95,6 +104,31 @@ fn codex_token(path: &Path) -> Result<String, String> {
         .as_str()
         .map(str::to_owned)
         .ok_or("Codex is not signed in with ChatGPT: run `codex login`, or use the OpenAI provider with an API key".into())
+}
+
+fn refresh_codex() -> Option<()> {
+    let mut child = Command::new("codex")
+        .arg("app-server")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .ok()?;
+    let mut stdin = child.stdin.take()?;
+    for request in [
+        json!({ "id": 1, "method": "initialize", "params": { "clientInfo": { "name": "diffr", "version": env!("CARGO_PKG_VERSION") } } }),
+        json!({ "method": "initialized" }),
+        json!({ "id": 2, "method": "account/read", "params": { "refreshToken": true } }),
+    ] {
+        writeln!(stdin, "{request}").ok()?;
+    }
+    // Codex exits without answering once stdin closes.
+    BufReader::new(child.stdout.take()?)
+        .lines()
+        .map_while(Result::ok)
+        .any(|line| serde_json::from_str::<Value>(&line).is_ok_and(|reply| reply["id"] == 2));
+    drop(stdin);
+    child.wait().ok().map(drop)
 }
 
 /// A JWT's `exp`, in milliseconds.
