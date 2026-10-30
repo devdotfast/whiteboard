@@ -10,7 +10,7 @@ import {
   text,
 } from "./definition.js";
 
-/** A name the animation's script passes to the `whiteboard` shim. */
+/** A name the animation's script passes to the `whiteboard` API. */
 const handle = z
   .string()
   .regex(
@@ -61,7 +61,7 @@ export const animationFrameSchema = z.strictObject({
     .max(8)
     .optional()
     .describe(
-      "The code this frame shows, by name in the block's code: frame.code in the html's script, to mark what opens it with data-wb-open.",
+      "The code this frame shows, by name in the block's code. The html's script reads it as frame.code.",
     ),
 });
 
@@ -112,14 +112,14 @@ export const animationSchema = defineBlock("animation", {
     .min(1)
     .max(200_000)
     .describe(
-      'The animation\'s body markup: elements, <style> and <script>. It runs in a sandboxed iframe with a global `whiteboard` shim; see session_get_instructions({topic:"animation"}).',
+      'The animation\'s body markup: elements, <style> and <script>. It runs in a sandboxed iframe with the `whiteboard` API; see session_get_instructions({topic:"animation"}).',
     ),
   frames: z
     .array(animationFrameSchema)
     .min(1)
     .max(60)
     .describe(
-      "Every possible frame. Scripts may select an ordered branch with whiteboard.setSequence(keys); keys stay unique and stable.",
+      "Every possible frame, with unique, stable keys. Paths the reader picks are scenarios.",
     ),
   scenarios: z
     .array(animationScenarioSchema)

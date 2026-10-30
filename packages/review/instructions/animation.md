@@ -1,22 +1,6 @@
-An `animation` component draws HTML you write on the whiteboard, in a sandboxed iframe. The reader steps through its frames, or plays them.
+An `animation` component draws HTML you write on the whiteboard, in a sandboxed iframe. The reader steps through its frames, or plays them. The `session_edit` schema lists its fields.
 
-## The component
-
-```json
-{
-  "type": "animation",
-  "title": "Retry with backoff",
-  "frames": [
-    { "key": "send", "title": "The client sends", "caption": "The first request times out.", "data": { "attempts": ["timeout"] } },
-    { "key": "retry", "title": "The retry succeeds", "code": ["retry"], "data": { "attempts": ["timeout", "ok"] } }
-  ],
-  "code": { "retry": { "source": "head/src/http/retry.ts#L12-L40", "label": "retryWithBackoff" } },
-  "html": "…"
-}
-```
-
-- `scenarios` are the paths a reader can pick, 2 to 8, each `{ "key": "retried", "label": "Retried", "frames": ["send", "retry"] }`. The animation starts on the first. Use them instead of drawing your own buttons.
-- `code` names source ranges, each a range or `{ "source", "label" }`. Label each with what it is, such as the function. Make the parts of your drawing that the code explains clickable with `data-wb-open="retry"` (or `code: "retry"` on a scene card): the whiteboard opens the code beside the whiteboard when the reader clicks them, and names it when they hover. A frame's `code` lists the ranges that frame shows; your script reads it as `frame.code`. To show a range inside the drawing instead, use `<div data-wb-code="retry">` (or `scene.peek`).
+For paths a reader can pick, such as a retry that succeeds or one that gives up, use `scenarios`: the whiteboard draws the picker, so do not draw your own buttons.
 
 ## Work in files
 
@@ -82,3 +66,11 @@ Draw the frame in full, then animate what is new since the previous frame:
 ```
 
 Write each frame's data in full, not as a change from the one before: a reader can jump straight to any frame. `whiteboard.animate` skips the motion on a jump and under reduced motion, and returning its animations makes playback wait for them.
+
+## Link the code
+
+Name the ranges the animation explains in `code`, then link the drawing to them:
+
+- `data-wb-open="retry"` (or `code: "retry"` on a scene card) opens the code beside the whiteboard when the reader clicks that element, and names it when they hover. Put it on the part of the drawing the code explains.
+- A frame's `code` lists the ranges that frame shows. Your script reads it as `frame.code`, so one script can mark what to open in every frame.
+- `<div data-wb-code="retry">` (or `scene.peek`) shows a range inside the drawing instead.
