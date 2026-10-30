@@ -152,6 +152,13 @@ export function AnimationBlock({
   const [playing, setPlaying] = useState(false);
   const [settled, setSettled] = useState(-1);
   const [contentHeight, setContentHeight] = useState(120);
+  // The tallest frame of the scenario, from a hidden measuring copy.
+  const [measuredHeight, setMeasuredHeight] = useState(0);
+  const [measureRun, setMeasureRun] = useState<number | null>(null);
+  const slotSizesRef = useRef(new Map<string, number>());
+  const remeasureTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const measureRuns = useRef(0);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [slots, setSlots] = useState<SlotLayout[]>([]);
   const [error, setError] = useState<string | null>(null);
 
@@ -344,6 +351,41 @@ export function AnimationBlock({
     }
   };
 
+  const stageInit = useCallback(
+    async (
+      figure: Element,
+      frame: number,
+      sequence: string[] | null,
+    ): Promise<StageInit> => {
+      const [anime, fonts] = await Promise.all([loadAnime(), loadFonts()]);
+
+      return {
+        type: "init",
+        html: node.html,
+        kit: STAGE_KIT_CSS,
+        autoSize: node.height === "auto",
+        frames: frames.map(({ key, title, caption, data, code }) => ({
+          key,
+          title,
+          caption,
+          data,
+          code,
+        })),
+        code: Object.keys(node.code),
+        codeTitles: codeTitles(node, data.anchors),
+        blocks: [...embeddable.keys()],
+        ...readTheme(figure),
+        scale: SCALE,
+        reducedMotion: reducedMotion(),
+        frame,
+        ...(sequence && { sequence }),
+        libraries: [anime],
+        fonts,
+      };
+    },
+    [node, frames, data.anchors, embeddable],
+  );
+
   const bootedRef = useRef<HTMLIFrameElement | null>(null);
 
   // Hand the stage its runtime and a private port when its page first loads.
@@ -397,38 +439,11 @@ export function AnimationBlock({
       [channel.port2],
     );
 
-    const init: Omit<StageInit, "libraries" | "fonts"> = {
-      type: "init",
-      html: node.html,
-      kit: STAGE_KIT_CSS,
-      autoSize: node.height === "auto",
-      frames: frames.map(({ key, title, caption, data, code }) => ({
-        key,
-        title,
-        caption,
-        data,
-        code,
-      })),
-      code: Object.keys(node.code),
-      codeTitles: codeTitles(node, data.anchors),
-      blocks: [...embeddable.keys()],
-      ...readTheme(figure),
-      scale: SCALE,
-      reducedMotion: reducedMotion(),
-      frame: indexRef.current,
-      ...(sequence && { sequence }),
-    };
-
-    Promise.all([loadAnime(), loadFonts()]).then(
-      ([anime, fonts]) =>
-        channel.port1.postMessage({
-          ...init,
-          libraries: [anime],
-          fonts,
-        } satisfies HostMessage),
+    stageInit(figure, indexRef.current, sequence).then(
+      (init) => channel.port1.postMessage(init satisfies HostMessage),
       () => setError("The animation libraries or fonts could not be loaded."),
     );
-  }, [node.html, node.code, node.height, node.scenarios, frames, embeddable]);
+  }, [node.scenarios, frames, stageInit]);
 
   useEffect(() => () => portRef.current?.close(), []);
 
@@ -466,6 +481,21 @@ export function AnimationBlock({
     if (!activeFrames.some((item) => item.key === frame.key)) go(0, true);
   }, [activeFrames, frame.key, go]);
 
+  // Measure again in a new copy after anything that can move a frame's layout.
+  const remeasure = useCallback(() => {
+    clearTimeout(remeasureTimer.current);
+    setMeasureRun(++measureRuns.current);
+  }, []);
+
+  useEffect(() => {
+    setMeasuredHeight(0);
+    slotSizesRef.current.clear();
+    remeasure();
+  }, [stageKey, remeasure]);
+
+  useEffect(() => remeasure(), [sequenceKeys, theme, remeasure]);
+  useEffect(() => () => clearTimeout(remeasureTimer.current), []);
+
   const collapse = useCallback(() => setExpanded(null), []);
 
   const { portalTarget } = useDiagramTourShell(expanded !== null, collapse);
@@ -481,6 +511,25 @@ export function AnimationBlock({
   }, [expanded]);
 
   const fullscreen = expanded !== null && portalTarget !== null;
+
+  // Going fullscreen draws a new canvas; a resize changes its width.
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) return;
+    let width = canvas.clientWidth;
+    remeasure();
+
+    const observer = new ResizeObserver(() => {
+      if (canvas.clientWidth === width) return;
+      width = canvas.clientWidth;
+      remeasure();
+    });
+
+    observer.observe(canvas);
+
+    return () => observer.disconnect();
+  }, [fullscreen, remeasure]);
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "ArrowRight") go(activeIndex + 1, false);
@@ -557,9 +606,13 @@ export function AnimationBlock({
         {...stylex.props(styles.stage, fullscreen && styles.stageFullscreen)}
       >
         <div
+          ref={canvasRef}
           {...stylex.props(styles.canvas)}
           style={{
-            height: node.height === "auto" ? contentHeight : node.height,
+            height:
+              node.height === "auto"
+                ? Math.max(contentHeight, measuredHeight)
+                : node.height,
           }}
         >
           <iframe
@@ -571,14 +624,41 @@ export function AnimationBlock({
             onLoad={boot}
             {...stylex.props(styles.frame)}
           />
+          {node.height === "auto" && measureRun !== null && (
+            <MeasuringStage
+              key={measureRun}
+              init={() => {
+                const first = sequenceRef.current?.[0];
+
+                return stageInit(
+                  figureRef.current!,
+                  first ? frames.findIndex((item) => item.key === first) : 0,
+                  sequenceRef.current,
+                ).then((init) => ({
+                  ...init,
+                  measure: true,
+                  slotSizes: Object.fromEntries(slotSizesRef.current),
+                }));
+              }}
+              onMeasured={(height) => {
+                setMeasuredHeight(height);
+                setMeasureRun(null);
+              }}
+            />
+          )}
           <div {...stylex.props(styles.overlays)}>
             {slots.map((slot) => (
               <SlotOverlay
                 key={slot.slot}
                 slot={slot}
-                onHeight={(height) =>
-                  send({ type: "slot-size", slot: slot.slot, height })
-                }
+                onHeight={(height) => {
+                  send({ type: "slot-size", slot: slot.slot, height });
+
+                  if (slotSizesRef.current.get(slot.slot) === height) return;
+                  slotSizesRef.current.set(slot.slot, height);
+                  clearTimeout(remeasureTimer.current);
+                  remeasureTimer.current = setTimeout(remeasure, 100);
+                }}
               >
                 {slot.kind === "code"
                   ? node.code[slot.ref] && (
@@ -732,6 +812,66 @@ export function AnimationBlock({
 
 const sameKeys = (left: readonly string[], right: readonly string[] | null) =>
   right?.length === left.length && left.every((key, i) => key === right[i]);
+
+/** A hidden copy of the stage that shows every frame of the scenario in
+ * turn and reports the tallest. Each frame's scripts run while it shows, as
+ * they would for a reader, so nothing they leave behind reaches the stage the
+ * reader sees. */
+function MeasuringStage({
+  init,
+  onMeasured,
+}: {
+  init(): Promise<StageInit>;
+  onMeasured(height: number): void;
+}) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const portRef = useRef<MessagePort | null>(null);
+  const initRef = useRef(init);
+  const onMeasuredRef = useRef(onMeasured);
+  onMeasuredRef.current = onMeasured;
+
+  // Boot on the first load only; a later one is a page the stage navigated to.
+  const boot = useCallback(() => {
+    const target = ref.current?.contentWindow;
+
+    if (!target || portRef.current) return;
+    const channel = new MessageChannel();
+    portRef.current = channel.port1;
+
+    channel.port1.onmessage = (event: MessageEvent) => {
+      const message = stageMessageSchema.safeParse(event.data);
+
+      if (message.success && message.data.type === "measured")
+        onMeasuredRef.current(message.data.height);
+    };
+
+    target.postMessage(
+      { type: STAGE_BOOT, runtime: stageRuntime.toString() },
+      "*",
+      [channel.port2],
+    );
+    initRef.current().then(
+      (message) => channel.port1.postMessage(message satisfies HostMessage),
+      () => {},
+    );
+  }, []);
+
+  useEffect(() => () => portRef.current?.close(), []);
+
+  return (
+    <iframe
+      ref={ref}
+      src={stageUrl()}
+      title="Measuring copy"
+      sandbox="allow-scripts"
+      aria-hidden="true"
+      tabIndex={-1}
+      inert
+      onLoad={boot}
+      {...stylex.props(styles.frame, styles.measuring)}
+    />
+  );
+}
 
 /** A host component drawn where the stage put its placeholder. */
 function SlotOverlay({
@@ -940,6 +1080,14 @@ const styles = stylex.create({
     backgroundColor: tokens.transparent,
   },
   // Over the stage but out of the pointer's way; each slot takes it back.
+  // Laid out at the stage's width but never seen; still rendered, so the
+  // browser does not throttle its frames.
+  measuring: {
+    position: "absolute",
+    inset: 0,
+    opacity: 0,
+    pointerEvents: "none",
+  },
   overlays: {
     position: "absolute",
     inset: 0,

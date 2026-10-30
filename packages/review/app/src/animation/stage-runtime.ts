@@ -274,7 +274,12 @@ export interface WhiteboardShim {
  */
 export function stageRuntime(port: MessagePort): void {
   const root = document.documentElement;
-  const post = (message: StageMessage) => port.postMessage(message);
+
+  // A measuring copy reports its measurement and nothing else.
+  const post = (message: StageMessage) => {
+    if (!init?.measure || message.type === "measured")
+      port.postMessage(message);
+  };
 
   // The host shows the first 2000 characters.
   const fail = (message: string) =>
@@ -1410,21 +1415,6 @@ export function stageRuntime(port: MessagePort): void {
     }
   };
 
-  const runHandlers = (change: FrameChange) => {
-    const waits: Promise<unknown>[] = [];
-
-    for (const key of ["*", change.frame.key])
-      for (const handler of handlers.get(key) ?? []) {
-        try {
-          waits.push(...finished(handler(change)));
-        } catch (error) {
-          fail(String(error));
-        }
-      }
-
-    return waits;
-  };
-
   const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
   const prefersReducedMotion = () => motionPreference.matches;
 
@@ -1478,7 +1468,16 @@ export function stageRuntime(port: MessagePort): void {
       instant: instantMode,
     };
 
-    const waits = runHandlers(change);
+    const waits: Promise<unknown>[] = [];
+
+    for (const key of ["*", frame.key])
+      for (const handler of handlers.get(key) ?? []) {
+        try {
+          waits.push(...finished(handler(change)));
+        } catch (error) {
+          fail(String(error));
+        }
+      }
 
     waits.push(
       playSegment(
@@ -2087,7 +2086,6 @@ export function stageRuntime(port: MessagePort): void {
         return;
 
       activeSequence = sequence;
-      framesStale = true;
 
       if (built) buildTimeline();
 
@@ -2213,9 +2211,9 @@ export function stageRuntime(port: MessagePort): void {
         (animation) => animation.pending || animation.playState === "running",
       );
 
-  // Natural body height includes slot-size feedback from host overlays.
-  // Exclude viewport-sized drawing layers to avoid a resize feedback loop.
   const contentBottom = () => {
+    // Natural body height includes slot-size feedback from host overlays.
+    // Exclude viewport-sized drawing layers to avoid a resize feedback loop.
     let bottom = document.body.getBoundingClientRect().bottom;
 
     for (const element of document.body.querySelectorAll("*")) {
@@ -2245,68 +2243,42 @@ export function stageRuntime(port: MessagePort): void {
     return bottom;
   };
 
-  // An auto-sized stage is as tall as its tallest frame, so stepping through
-  // frames never changes its height. Show each frame in turn, as an instant
-  // jump does, within one task so none of them paints, then jump back.
-  let framesBottom = 0;
-  let framesStale = true;
+  // Anything that may move the layout wakes the measuring loop; a measuring
+  // copy waits for that to stop before it reads a frame.
+  let wakes = 0;
 
-  const measureFrames = () => {
-    const declared = declaredFrames();
-    const shown = current;
-    const running = new Set(document.getAnimations());
-    instantMode = true;
-    root.setAttribute("data-wb-instant", "");
+  const quiet = async () => {
+    const deadline = performance.now() + 1000;
+    let still = 0;
 
-    const lay = (index: number) => {
-      const previous = declared[current];
-      const frame = declared[index]!;
-      current = index;
-      root.dataset.frame = frame.key;
-      root.dataset.frameIndex = String(activeFrameIndex(frame.key));
-      applyStates();
-      runHandlers({
-        frame: { ...frame, index: activeFrameIndex(frame.key) },
-        previous: previous && {
-          ...previous,
-          index: activeFrameIndex(previous.key),
-        },
-        direction: "none",
-        instant: true,
-      });
-      playSegment(frame.key, false);
-    };
+    while (still < 3 && performance.now() < deadline) {
+      const before = wakes;
+      await nextFrame();
+      still = wakes === before && !moving() ? still + 1 : 0;
+    }
+  };
 
-    framesBottom = 0;
+  // A measuring copy shows every frame of its scenario as a reader would, so
+  // each frame's handlers and their deferred work run while it shows, and
+  // reports the tallest.
+  const measureFrames = async () => {
+    let tallest = 0;
 
     for (const frame of activeFrames()) {
-      lay(frameIndex(frame.key));
-      framesBottom = Math.max(framesBottom, contentBottom());
+      await show(frameIndex(frame.key), true);
+      await quiet();
+      tallest = Math.max(tallest, contentBottom());
     }
 
-    lay(shown);
-
-    // Showing frames starts their motion; land it, as a jump does.
-    for (const animation of document.getAnimations())
-      if (!running.has(animation) && finite(animation)) animation.finish();
-
-    instantMode = false;
-    requestAnimationFrame(() => root.removeAttribute("data-wb-instant"));
-    framesStale = false;
+    // STAGE_MAX_HEIGHT in stage-protocol.ts.
+    post({
+      type: "measured",
+      height: Math.min(4000, Math.max(120, Math.ceil(tallest))),
+    });
   };
 
   const measure = () => {
     let changed = false;
-
-    // Not while a frame change is underway: the sweep would cut it short.
-    const sweep =
-      init?.autoSize &&
-      framesStale &&
-      current >= 0 &&
-      showsInProgress === 0 &&
-      (timeline === undefined || timeline.paused);
-
-    if (sweep) measureFrames();
     clipGeometryCache = new Map();
     arrows.forEach(route);
     placeArrowLabels();
@@ -2360,14 +2332,11 @@ export function stageRuntime(port: MessagePort): void {
       post({ type: "slots", slots });
     }
 
-    // Until every frame is measured, a size would only be the current
-    // frame's, so wait for the sweep rather than resize twice.
-    if (init?.autoSize && !framesStale) {
+    if (init?.autoSize) {
+      const bottom = contentBottom();
+
       // STAGE_MAX_HEIGHT in stage-protocol.ts.
-      const height = Math.min(
-        4000,
-        Math.max(120, Math.ceil(Math.max(framesBottom, contentBottom()))),
-      );
+      const height = Math.min(4000, Math.max(120, Math.ceil(bottom)));
 
       if (height !== lastHeight) {
         changed = true;
@@ -2386,6 +2355,7 @@ export function stageRuntime(port: MessagePort): void {
   };
 
   wake = () => {
+    wakes++;
     quietFrames = 0;
 
     if (!measuring || looping) return;
@@ -2404,6 +2374,7 @@ export function stageRuntime(port: MessagePort): void {
     "animationend",
     "animationcancel",
     "scroll",
+    "load",
     "input",
     "pointerover",
     "pointerout",
@@ -2412,15 +2383,8 @@ export function stageRuntime(port: MessagePort): void {
   ])
     document.addEventListener(type, () => wake(), true);
 
-  // What changes every frame's layout: measure them all again.
-  const remeasure = () => {
-    framesStale = true;
-    wake();
-  };
-
-  document.addEventListener("load", remeasure, true);
-  addEventListener("resize", remeasure);
-  document.fonts.addEventListener("loadingdone", remeasure);
+  addEventListener("resize", () => wake());
+  document.fonts.addEventListener("loadingdone", () => wake());
 
   const start = async (message: StageInit) => {
     init = message;
@@ -2465,6 +2429,15 @@ export function stageRuntime(port: MessagePort): void {
 
     await runSources(message.libraries);
     await runScripts([...document.body.querySelectorAll("script")]);
+
+    for (const [slot, height] of Object.entries(message.slotSizes ?? {})) {
+      const element = document.querySelector<HTMLElement>(
+        `[data-wb-slot="${slot}"]`,
+      );
+
+      if (element) element.style.height = `${height}px`;
+    }
+
     arrows.forEach(route);
     buildTimeline();
     post({ type: "ready" });
@@ -2485,6 +2458,8 @@ export function stageRuntime(port: MessagePort): void {
         : message.frame;
 
     await show(initial, true);
+
+    if (message.measure) await measureFrames();
   };
 
   port.onmessage = (event: MessageEvent<HostMessage>) => {
@@ -2505,7 +2480,7 @@ export function stageRuntime(port: MessagePort): void {
         break;
       case "theme":
         applyTheme(message.theme, message.colorScheme);
-        remeasure();
+        wake();
         break;
       case "slot-size": {
         const slot = document.querySelector<HTMLElement>(
@@ -2513,7 +2488,7 @@ export function stageRuntime(port: MessagePort): void {
         );
 
         if (slot) slot.style.height = `${message.height}px`;
-        remeasure();
+        wake();
         break;
       }
 

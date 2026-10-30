@@ -1429,7 +1429,10 @@ describe("block components", () => {
           .click(),
       );
       expect(await settled(() => stages.count("ready") === boots)).toBe(true);
-      expect(document.querySelectorAll("iframe")).toHaveLength(1);
+      // The hidden copy that measures the frames goes once it has.
+      expect(
+        await settled(() => document.querySelectorAll("iframe").length === 1),
+      ).toBe(true);
     }
 
     expect(await settled(slot)).toBeTruthy();
@@ -1539,11 +1542,9 @@ describe("block components", () => {
         width() === "100px" || width() === "280px" ? width() : undefined,
       ),
     ).toBe("280px");
-    expect(
-      await settled(
-        () => iframe.getBoundingClientRect().height < expandedHeight - 30,
-      ),
-    ).toBe(true);
+    // The stage keeps the wide frame's height; the script checked above that
+    // the future content takes no room.
+    expect(iframe.getBoundingClientRect().height).toBe(expandedHeight);
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
