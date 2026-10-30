@@ -63,16 +63,19 @@ const STAGED_UPDATE_STORAGE_KEY = 'review.update.staged.v1';
 const SKIPPED_UPDATE_STORAGE_KEY = 'review.update.skipped.v1';
 /** Failed update attempt that Review already announced. */
 const FAILED_UPDATE_NOTICE_STORAGE_KEY = 'review.update.failedNotice.v1';
+/** Release whose notes the tab last opened. */
+const SHOWN_RELEASE_NOTES_STORAGE_KEY = 'review.update.releaseNotesShown.v1';
 
-/** Releases opt into opening the tab after an update; the rest only toast. */
-const SHOW_RELEASE_NOTES_MARKER = '<!-- whiteboard:show-notes -->';
+/** Releases opt into opening the tab after an update; the rest only toast. `<!-- whiteboard:show-notes 0.4.0 -->` opens 0.4.0's notes. */
+const SHOW_RELEASE_NOTES_MARKER = /<!-- whiteboard:show-notes(?: v?(\S+))? -->/;
 
-async function opensReleaseNotes(version: string): Promise<boolean> {
+async function releaseNotesToOpen(version: string): Promise<string | undefined> {
 	try {
 		const response = await fetch(whiteboardReleaseApiUrl(version));
-		return response.ok && ((await response.json()) as { body?: string }).body?.includes(SHOW_RELEASE_NOTES_MARKER) === true;
+		const match = response.ok ? ((await response.json()) as { body?: string }).body?.match(SHOW_RELEASE_NOTES_MARKER) : undefined;
+		return match ? match[1] ?? version : undefined;
 	} catch {
-		return false;
+		return undefined;
 	}
 }
 
@@ -168,8 +171,10 @@ class ReviewUpdateNotifications extends Disposable {
 		this.storageService.remove(SKIPPED_UPDATE_STORAGE_KEY, StorageScope.APPLICATION);
 		this.logService.info(`[WhiteboardUpdate] running the staged update (${this.productService.commit})`);
 		const version = this.productService.reviewVersion ?? notice.productVersion;
-		if (version && this.configurationService.getValue<boolean>(REVIEW_SHOW_RELEASE_NOTES_SETTING) !== false && await opensReleaseNotes(version)) {
-			await this.tabsService.openReleaseNotes(version, true);
+		const notes = version && this.configurationService.getValue<boolean>(REVIEW_SHOW_RELEASE_NOTES_SETTING) !== false && await releaseNotesToOpen(version);
+		if (notes && notes !== this.storageService.get(SHOWN_RELEASE_NOTES_STORAGE_KEY, StorageScope.APPLICATION)) {
+			this.storageService.store(SHOWN_RELEASE_NOTES_STORAGE_KEY, notes, StorageScope.APPLICATION, StorageTarget.MACHINE);
+			await this.tabsService.openReleaseNotes(notes, true);
 			return;
 		}
 		this.notificationService.notify({
