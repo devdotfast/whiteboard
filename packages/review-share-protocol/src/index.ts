@@ -98,7 +98,7 @@ export const shareBundleSchema = z.strictObject({
   format: z.literal(SHARE_FORMAT),
   reviewId: z.string().min(1).max(256),
   version: z.number().int().nonnegative(),
-  title: z.string().min(1).max(4096),
+  title: z.string().max(4096),
   /** Validated against the document schema by the reader. */
   snapshot: z.record(z.string(), z.unknown()),
   images: z.record(z.string(), z.strictObject({ png: z.base64() })),
