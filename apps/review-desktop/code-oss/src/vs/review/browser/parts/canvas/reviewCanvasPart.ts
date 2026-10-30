@@ -1247,7 +1247,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 					environment: !this.workbenchEnvironment.isBuilt ? "development" : this.productService.quality === "preview" ? "preview" : "production",
 					submit: response => this.desktopConnection.submitFeedback(response),
 					submitContact: contact => this.desktopConnection.submitFeedbackContact(contact),
-					openReleaseNotes: () => void this.commandService.executeCommand(REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID),
+					openReleaseNotes: () => void this.commandService.executeCommand(REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID, undefined, "feedback"),
 				},
 				setupTooltip: this.setupTooltip,
 				notify: (notification) => showReviewNotification(this.notificationService, notification),

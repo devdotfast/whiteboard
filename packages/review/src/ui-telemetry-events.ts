@@ -308,6 +308,13 @@ export const FIND_SURFACE = ["review", "diff"] as const;
 
 export const DISCORD_VIA = ["topbar", "dialog", "docs"] as const;
 
+export const RELEASE_NOTES_VIA = [
+  "update",
+  "toast",
+  "command",
+  "feedback",
+] as const;
+
 const REVIEW_DELETED_VIA = ["home"] as const;
 
 export const ERROR_PROCESS = ["main", "renderer", "canvas", "server"] as const;
@@ -643,6 +650,10 @@ export const UI_TELEMETRY_EVENTS = {
   discord_dialog_dismissed: {
     event: "review_discord_dialog_dismissed",
     properties: {},
+  },
+  release_notes_opened: {
+    event: "review_release_notes_opened",
+    properties: { via: RELEASE_NOTES_VIA, version: "release_version" },
   },
   peek_resolved: {
     event: "review_peek_resolved",

@@ -46,6 +46,7 @@ import { REVIEW_DESKTOP_CHANNEL } from '../../common/reviewDesktopBootstrap.js';
 import { WHITEBOARD_RELEASES_URL, whiteboardReleaseApiUrl } from '../../common/reviewProtocol.js';
 import { REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID } from '../../common/reviewReleaseNotes.js';
 import { IReviewCanvasEditorTabsService } from '../../services/reviewCanvasEditorTabsService.js';
+import { IReviewTelemetryService } from '../../services/reviewTelemetryService.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../workbench/common/contributions.js';
 import {
 	decideUpdateNotice,
@@ -98,7 +99,6 @@ class ReviewUpdateNotifications extends Disposable {
 		@ILogService private readonly logService: ILogService,
 		@IMainProcessService private readonly mainProcessService: IMainProcessService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
-		@IReviewCanvasEditorTabsService private readonly tabsService: IReviewCanvasEditorTabsService,
 		@ICommandService private readonly commandService: ICommandService,
 	) {
 		super();
@@ -174,7 +174,7 @@ class ReviewUpdateNotifications extends Disposable {
 		const notes = version && this.configurationService.getValue<boolean>(REVIEW_SHOW_RELEASE_NOTES_SETTING) !== false && await releaseNotesToOpen(version);
 		if (notes && notes !== this.storageService.get(SHOWN_RELEASE_NOTES_STORAGE_KEY, StorageScope.APPLICATION)) {
 			this.storageService.store(SHOWN_RELEASE_NOTES_STORAGE_KEY, notes, StorageScope.APPLICATION, StorageTarget.MACHINE);
-			await this.tabsService.openReleaseNotes(notes, true);
+			await this.commandService.executeCommand(REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID, notes, 'update');
 			return;
 		}
 		this.notificationService.notify({
@@ -184,7 +184,7 @@ class ReviewUpdateNotifications extends Disposable {
 				: localize('review.update.applied.unknownVersion', "Whiteboard has been updated."),
 			actions: { primary: [toAction({
 				id: 'review.update.releaseNotes', label: localize('review.update.whatsNew', "What's New"),
-				run: () => this.commandService.executeCommand(REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID, version),
+				run: () => this.commandService.executeCommand(REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID, version, 'toast'),
 			})] },
 		});
 	}
@@ -356,12 +356,13 @@ class ReviewShowReleaseNotesAction extends Action2 {
 		});
 	}
 
-	async run(accessor: ServicesAccessor, version?: unknown): Promise<void> {
+	async run(accessor: ServicesAccessor, version?: unknown, via: unknown = 'command'): Promise<void> {
 		const shown = typeof version === 'string' && version ? version : accessor.get(IProductService).reviewVersion;
 		if (!shown) {
 			await accessor.get(IOpenerService).open(WHITEBOARD_RELEASES_URL, { openExternal: true });
 			return;
 		}
+		accessor.get(IReviewTelemetryService).capture('release_notes_opened', { via: String(via), version: shown });
 		await accessor.get(IReviewCanvasEditorTabsService).openReleaseNotes(shown, true);
 	}
 }
