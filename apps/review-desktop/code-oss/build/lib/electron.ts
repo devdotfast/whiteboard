@@ -89,6 +89,13 @@ export const config = {
 		name: product.nameLong,
 		urlSchemes: [product.urlProtocol]
 	}],
+	darwinBundleDocumentTypes: [{
+		name: 'Whiteboard',
+		role: 'Editor',
+		ostypes: ['TEXT'],
+		extensions: ['whiteboard'],
+		iconFile: 'resources/darwin/code.icns'
+	}],
 	darwinForceDarkModeSupport: true,
 	darwinCredits: darwinCreditsTemplate ? Buffer.from(darwinCreditsTemplate({ commit: commit, date: new Date().toISOString() })) : undefined,
 	linuxExecutableName: product.applicationName,

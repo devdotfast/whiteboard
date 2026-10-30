@@ -101,7 +101,7 @@ exec ${share}/${app} "$@"
 	await write(`usr/share/applications/${name}.desktop`, `[Desktop Entry]
 Name=${appName}
 Comment=Guided code reviews with your coding agents
-Exec=/usr/bin/${app}-desktop
+Exec=/usr/bin/${app}-desktop %F
 Icon=${app}
 Type=Application
 Terminal=false
@@ -109,6 +109,16 @@ StartupNotify=true
 StartupWMClass=${appName}
 Categories=Development;
 Keywords=review;code;agents;
+MimeType=application/x-whiteboard;
+`);
+	await write(`usr/share/mime/packages/${name}.xml`, `<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-whiteboard">
+    <comment>Whiteboard</comment>
+    <sub-class-of type="application/json"/>
+    <glob pattern="*.whiteboard"/>
+  </mime-type>
+</mime-info>
 `);
 	await write(`usr/share/applications/${name}-url-handler.desktop`, `[Desktop Entry]
 Name=${appName} - URL Handler
@@ -180,10 +190,12 @@ cp -a %{_builddir}/usr %{buildroot}/
 
 %post
 if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database -q || :; fi
+if command -v update-mime-database >/dev/null 2>&1; then update-mime-database /usr/share/mime || :; fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || :; fi
 
 %postun
 if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database -q || :; fi
+if command -v update-mime-database >/dev/null 2>&1; then update-mime-database /usr/share/mime || :; fi
 if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || :; fi
 
 %files
@@ -195,6 +207,7 @@ ${share}/
 /usr/share/applications/${legacyName}.desktop
 /usr/share/applications/${legacyName}-url-handler.desktop
 /usr/share/metainfo/${legacyName}.metainfo.xml
+/usr/share/mime/packages/${legacyName}.xml
 /usr/share/icons/hicolor/512x512/apps/${app}.png
 `);
 }
@@ -299,6 +312,7 @@ if [ "$1" = configure ]; then
     apparmor_parser -r /etc/apparmor.d/${pkg.legacyName}
   fi
   if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database -q; fi
+  if command -v update-mime-database >/dev/null 2>&1; then update-mime-database /usr/share/mime; fi
   if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor; fi
 fi
 `, 0o755);
@@ -312,6 +326,7 @@ fi
 set -e
 if [ "$1" = remove ] || [ "$1" = purge ]; then
   if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database -q; fi
+  if command -v update-mime-database >/dev/null 2>&1; then update-mime-database /usr/share/mime; fi
   if command -v gtk-update-icon-cache >/dev/null 2>&1; then gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor; fi
 fi
 `, 0o755);

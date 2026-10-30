@@ -42,6 +42,7 @@ let
 [MIME Cache]
 x-scheme-handler/dev-fast-review=dev-fast-review-url-handler.desktop;
 x-scheme-handler/dev-fast-review-preview=dev-fast-review-preview-url-handler.desktop;
+application/x-whiteboard=dev-fast-review.desktop;dev-fast-review-preview.desktop;
 CACHE
       runHook postInstall
     '';
