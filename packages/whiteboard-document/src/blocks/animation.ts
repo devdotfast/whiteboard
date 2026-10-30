@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { ReviewInputError } from "../input-error.js";
-import { anchorSchema } from "../lens-selection.js";
+import { type Anchor, anchorSchema } from "../lens-selection.js";
 import {
   type BlockDefinition,
   defineBlock,
@@ -82,6 +82,27 @@ export const animationScenarioSchema = z.strictObject({
 
 export type AnimationScenario = z.infer<typeof animationScenarioSchema>;
 
+const animationCodeSchema = z.union([
+  anchorSchema,
+  z.strictObject({
+    source: anchorSchema,
+    label: z
+      .string()
+      .min(1)
+      .max(48)
+      .describe("What the range is, e.g. checkoutAnimation."),
+  }),
+]);
+
+/** One of an animation's named ranges, with its label when it has one. */
+export function animationCode(entry: z.infer<typeof animationCodeSchema>): {
+  source: Anchor;
+  label?: string;
+} {
+  // oxlint-disable-next-line anti-slop/no-runtime-typeof -- entry is already parsed: this picks between the schema's two forms.
+  return typeof entry === "string" ? { source: entry } : entry;
+}
+
 export const animationSchema = defineBlock("animation", {
   title: label,
   html: text
@@ -106,10 +127,10 @@ export const animationSchema = defineBlock("animation", {
       "Alternate paths through the frames. The whiteboard draws a labelled scenario picker above the animation and starts on the first one.",
     ),
   code: z
-    .record(handle, anchorSchema)
+    .record(handle, animationCodeSchema)
     .default({})
     .describe(
-      "Source ranges the html shows as code peeks, by name: whiteboard.code(name).",
+      "Source ranges by name, each an anchor or {source, label}: the label names the range where the whiteboard links it. Frames link them by code; the html shows them with data-wb-code or opens them with whiteboard.reveal(name).",
     ),
   height: z
     .union([z.literal("auto"), z.number().int().min(120).max(1200)])
@@ -125,7 +146,7 @@ export type AnimationBlock = z.infer<typeof animationSchema>;
 export const animation = {
   type: "animation",
   reference: [
-    '- animation {title, html, frames: {key, title, label?, caption?, duration? (ms), data? (JSON the html draws the frame from), code? (a name in code: the source linked beside the caption)}[] (1 to 60), scenarios?: {key, label, frames: [frame keys in order]}[] (2 to 8), code?: {name: anchor}, height?: "auto" (default) | number (120 to 1200 CSS px), pins?}; declare every possible frame',
+    '- animation {title, html, frames: {key, title, label?, caption?, duration? (ms), data? (JSON the html draws the frame from), code? (a name in code: the source linked beside the caption)}[] (1 to 60), scenarios?: {key, label, frames: [frame keys in order]}[] (2 to 8), code?: {name: anchor | {source: anchor, label}}, height?: "auto" (default) | number (120 to 1200 CSS px), pins?}; declare every possible frame',
     'Use an animation for change over time that a static diagram cannot show: state before and after, a cache filling, data changing as a request crosses layers. It can sit in design beside the diagram, or replace it when the motion is the point. Read session_get_instructions({topic:"animation"}) before writing one.',
   ],
   schema: animationSchema,

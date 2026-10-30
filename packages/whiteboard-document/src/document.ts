@@ -6,6 +6,7 @@ import {
 } from "@dev.fast/json";
 import { z } from "zod";
 
+import { animationCode } from "./blocks/animation.js";
 import {
   type FlowDiagramEdge,
   type FlowDiagramNode,
@@ -533,14 +534,16 @@ function documentReferences(
       );
 
     if (element.type === "animation")
-      return Object.entries(element.code).flatMap(([name, anchor]) =>
-        select(anchor, element.pins).map((source) => ({
+      return Object.entries(element.code).flatMap(([name, entry]) => {
+        const code = animationCode(entry);
+
+        return select(code.source, element.pins).map((source) => ({
           id: animationCodeId(element.id!, name),
           source,
-          label: name,
+          label: code.label ?? name,
           peek: true,
-        })),
-      );
+        }));
+      });
 
     if (element.type === "call_stack_diff")
       return [...element.base, ...element.head].flatMap((frame) => {

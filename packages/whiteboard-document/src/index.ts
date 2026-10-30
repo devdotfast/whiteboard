@@ -14,6 +14,8 @@ export {
   call_stack_diff,
 } from "./blocks/call_stack_diff.js";
 
+export { animationCode } from "./blocks/animation.js";
+
 export { label } from "./blocks/definition.js";
 
 export type { Definitions } from "./blocks/index.js";

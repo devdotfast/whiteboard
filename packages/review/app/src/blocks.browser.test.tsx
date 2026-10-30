@@ -1371,7 +1371,7 @@ describe("block components", () => {
     ).toBe(true);
   });
 
-  it("links a frame's code beside its caption and opens it", async () => {
+  it("links a frame's code beside its caption by its label and opens it", async () => {
     const { container } = await mountFixture("animation", {
       document: [
         {
@@ -1381,9 +1381,16 @@ describe("block components", () => {
           height: "auto",
           frames: [
             { key: "write", title: "Writes", code: "write" },
-            { key: "edit", title: "Edits" },
+            { key: "read", title: "Reads", code: "read" },
+            { key: "done", title: "Done" },
           ],
-          code: { write: "head/src/drafts.ts#L12-L40" },
+          code: {
+            write: {
+              source: "head/src/drafts.ts#L12-L40",
+              label: "writeDraft",
+            },
+            read: "head/src/drafts.ts#L50-L60",
+          },
           html: "<p>Folder</p>",
           pins: { repositoryId: "repo", base: "base", head: "head" },
         },
@@ -1392,10 +1399,17 @@ describe("block components", () => {
 
     const link = () =>
       container.querySelector<HTMLAnchorElement>(
-        "[data-review-anchor-id='block-1:code:write']",
+        "[data-review-anchor-id^='block-1:code:']",
       );
 
-    expect(await settled(() => link()?.textContent === "drafts.ts:12")).toBe(
+    const next = () =>
+      act(async () =>
+        container
+          .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+          .click(),
+      );
+
+    expect(await settled(() => link()?.textContent === "writeDraft")).toBe(
       true,
     );
 
@@ -1404,11 +1418,13 @@ describe("block components", () => {
       await settled(() => link()?.dataset.reviewAnchorOpen === "true"),
     ).toBe(true);
 
-    await act(async () =>
-      container
-        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
-        .click(),
+    // Without a label, the link names the file and first line.
+    await next();
+    expect(await settled(() => link()?.textContent === "drafts.ts:50")).toBe(
+      true,
     );
+
+    await next();
     expect(await settled(() => link() === null)).toBe(true);
   });
 

@@ -26,6 +26,7 @@ import { useTooltip } from "@canvas/ui/tooltip";
 import {
   type Block,
   anchorSelection,
+  animationCode,
   animationCodeId,
 } from "@dev.fast/whiteboard-document";
 import { STAGE_KIT_CSS, STAGE_THEME } from "@review/animation-stage-kit";
@@ -587,7 +588,7 @@ export function AnimationBlock({
                   ? node.code[slot.ref] && (
                       <CodePeekCard
                         source={anchorSelection(
-                          node.code[slot.ref]!,
+                          animationCode(node.code[slot.ref]!).source,
                           node.pins,
                         )}
                         heightMode="capped"
@@ -666,6 +667,7 @@ export function AnimationBlock({
               {" "}
               <FrameCode
                 anchor={frameCode}
+                label={animationCode(node.code[frame.code!]!).label}
                 onOpen={() => reveal(frame.code!)}
               />
             </>
@@ -803,13 +805,15 @@ function ControlButton({
   );
 }
 
-/** The code behind the frame, named by file and first line; the tooltip
- * gives the whole path and range. */
+/** The code behind the frame, named by its label or else by file and first
+ * line; the tooltip gives the whole path and range. */
 function FrameCode({
   anchor,
+  label: named,
   onOpen,
 }: {
   anchor: SourcePeekAnchor;
+  label?: string;
   onOpen(): void;
 }) {
   const { file, start, end } = anchor.peek;
@@ -826,7 +830,7 @@ function FrameCode({
       state.active?.kind === "peek" && state.active.anchor?.id === anchor.id,
   );
 
-  const label = `${file.split("/").at(-1)}:${start.line}`;
+  const label = named ?? `${file.split("/").at(-1)}:${start.line}`;
 
   return (
     <span ref={tooltip}>

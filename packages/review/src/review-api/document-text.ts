@@ -2,6 +2,7 @@ import { boardTitle } from "@dev.fast/review-protocol";
 import {
   type Element,
   ReviewInputError,
+  animationCode,
   elements,
   stepSources,
 } from "@dev.fast/whiteboard-document";
@@ -208,7 +209,7 @@ export function documentText(
           if (frame.code)
             write(
               depth + 2,
-              `Code [${frame.code}]: ${element.code[frame.code]}`,
+              `Code [${frame.code}]: ${animationCode(element.code[frame.code]!).source}`,
             );
 
           if (detailed && frame.data !== undefined)
@@ -234,8 +235,11 @@ export function documentText(
           );
         }
 
-        for (const [name, anchor] of Object.entries(element.code))
-          detail(`Code ${name}: ${anchor}`);
+        for (const [name, entry] of Object.entries(element.code)) {
+          const { source, label } = animationCode(entry);
+
+          detail(`Code ${name}${label ? ` (${label})` : ""}: ${source}`);
+        }
 
         if (detailed) code(depth + 1, { language: "html", text: element.html });
         break;

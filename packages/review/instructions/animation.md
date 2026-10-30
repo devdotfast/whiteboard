@@ -10,13 +10,13 @@ An `animation` component draws HTML you write on the whiteboard, in a sandboxed 
     { "key": "send", "title": "The client sends", "caption": "The first request times out.", "data": { "attempts": ["timeout"] } },
     { "key": "retry", "title": "The retry succeeds", "code": "retry", "data": { "attempts": ["timeout", "ok"] } }
   ],
-  "code": { "retry": "head/src/http/retry.ts#L12-L40" },
+  "code": { "retry": { "source": "head/src/http/retry.ts#L12-L40", "label": "retryWithBackoff" } },
   "html": "…"
 }
 ```
 
 - `scenarios` are the paths a reader can pick, 2 to 8, each `{ "key": "retried", "label": "Retried", "frames": ["send", "retry"] }`. The animation starts on the first. Use them instead of drawing your own buttons.
-- `code` names source ranges. A frame's `code` names the one behind that frame: the whiteboard links it beside the caption, by file and line, and opens it beside the whiteboard. Do not draw your own button for it. Your HTML can also show a range inline with `<div data-wb-code="retry">` (or `scene.peek` in a scene), or open one when the reader clicks something you drew, with `whiteboard.reveal("retry")`.
+- `code` names source ranges, each a range or `{ "source", "label" }`. Label each one with what it is, such as the function. A frame's `code` names the one behind that frame: the whiteboard links it beside the caption by its label (or file and line) and opens it beside the whiteboard. Do not draw your own button for it. Your HTML can also show a range inline with `<div data-wb-code="retry">` (or `scene.peek` in a scene), or open one when the reader clicks something you drew, with `whiteboard.reveal("retry")`.
 
 ## Work in files
 
