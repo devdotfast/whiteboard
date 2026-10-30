@@ -1007,6 +1007,49 @@ describe("Home interactions", () => {
     expect(titles("Unread")).toEqual(["Two"]);
     expect(container.textContent).toContain("1 selected");
   });
+  it("marks read, trashes and deletes a parent's children with it", async () => {
+    const calls: string[] = [];
+
+    const record =
+      (action: string) =>
+      async ({ title }: ReviewApiSummary) => {
+        calls.push(`${action} ${title}`);
+      };
+
+    const handlers = {
+      onMarkRead: record("read"),
+      onTrash: record("trash"),
+      onDelete: record("delete"),
+    };
+
+    await render(
+      [
+        summary("Plan", { ...read, children: ["Child"] }),
+        summary("Child", { parentId: "Plan" }),
+      ],
+      handlers,
+    );
+    await select("Plan");
+    await click("Mark Read");
+    await select("Plan");
+    await key("Backspace", { metaKey: true });
+    await render(
+      [
+        summary("Plan", { trashedAt: "2026-10-01", children: ["Child"] }),
+        summary("Child", { trashedAt: "2026-10-01", parentId: "Plan" }),
+      ],
+      { ...handlers, view: "trash" },
+    );
+    await select("Plan");
+    await key("Backspace", { metaKey: true });
+    expect(calls).toEqual([
+      "read Child",
+      "trash Plan",
+      "trash Child",
+      "delete Plan",
+      "delete Child",
+    ]);
+  });
   it("removes the whole selected batch while requests are pending", async () => {
     const pending: Array<() => void> = [];
 

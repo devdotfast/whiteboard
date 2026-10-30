@@ -204,6 +204,28 @@ export function isUnread(review: ReviewApiSummary): boolean {
   );
 }
 
+/** Adds the children of `boards` that are in `pool`. */
+export function withChildBoards(
+  boards: readonly ReviewApiSummary[],
+  pool: readonly ReviewApiSummary[],
+): ReviewApiSummary[] {
+  const byId = new Map(pool.map((board) => [board.reviewId, board]));
+  const seen = new Set(boards.map((board) => board.reviewId));
+
+  const children = boards
+    .flatMap((board) => board.children ?? [])
+    .flatMap((id) => {
+      const child = byId.get(id);
+
+      if (!child || seen.has(id)) return [];
+      seen.add(id);
+
+      return [child];
+    });
+
+  return [...boards, ...children];
+}
+
 export function groupFor(review: ReviewApiSummary, now: number): HomeGroup {
   if (isUnread(review)) return "unread";
 

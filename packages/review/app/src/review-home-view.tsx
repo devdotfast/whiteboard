@@ -88,6 +88,7 @@ import {
   sortHomeReviews,
   trashDaysLeft,
   trashRetentionDays,
+  withChildBoards,
 } from "./review-home-model";
 import { styles } from "./review-home-styles";
 import { withClass } from "./stylex-props";
@@ -659,8 +660,9 @@ function ReviewHomeBody({
     undoing = false,
   ) {
     const action = restore ? onRestore : onTrash;
+    const targets = withChildBoards(chosen, listed);
 
-    if (!action || busyRef.current || !chosen.length) return;
+    if (!action || busyRef.current || !targets.length) return;
 
     // Boards other boards need ask first, together, naming their children
     // and the boards that link to them; the host lets the rest through.
@@ -669,16 +671,15 @@ function ReviewHomeBody({
       !undoing &&
       ui?.confirmDelete &&
       !(await ui.confirmDelete(
-        chosen.map((review) => boardTitle(review.title)),
+        targets.map((review) => boardTitle(review.title)),
         {
-          reviewIds: chosen.map((review) => review.reviewId),
+          reviewIds: targets.map((review) => review.reviewId),
           trash: true,
         },
       ))
     )
       return;
 
-    const targets = chosen;
     const timestamp = restore ? null : new Date().toISOString();
 
     setLifecycle((current) =>
@@ -719,7 +720,9 @@ function ReviewHomeBody({
       setNotice({ kind: restore ? "restored" : "trash", targets: succeeded });
   }
 
-  async function deletePermanently(targets: ReviewApiSummary[]) {
+  async function deletePermanently(chosen: ReviewApiSummary[]) {
+    const targets = withChildBoards(chosen, listed);
+
     if (
       !onDelete ||
       busyRef.current ||
@@ -749,7 +752,9 @@ function ReviewHomeBody({
     if (succeeded.length) setNotice({ kind: "permanent", targets: succeeded });
   }
 
-  async function markRead(targets: ReviewApiSummary[]) {
+  async function markRead(chosen: ReviewApiSummary[]) {
+    const targets = withChildBoards(chosen, listed).filter(isUnread);
+
     if (!onMarkRead || busyRef.current || !targets.length) return;
     const timestamp = new Date().toISOString();
 
@@ -1454,7 +1459,9 @@ function ReviewHomeBody({
                                 }))
                               }
                               onMarkRead={
-                                !inTrash && onMarkRead
+                                !inTrash &&
+                                onMarkRead &&
+                                withChildBoards([review], listed).some(isUnread)
                                   ? () => markRead([review])
                                   : undefined
                               }
@@ -1552,15 +1559,16 @@ function ReviewHomeBody({
               Restore <Shortcut>R</Shortcut>
             </Button>
           )}
-          {!inTrash && selectedReviews.some(isUnread) && (
-            <Button
-              variant="ghost"
-              disabled={busy || !onMarkRead}
-              onClick={() => void markRead(selectedReviews.filter(isUnread))}
-            >
-              Mark Read
-            </Button>
-          )}
+          {!inTrash &&
+            withChildBoards(selectedReviews, listed).some(isUnread) && (
+              <Button
+                variant="ghost"
+                disabled={busy || !onMarkRead}
+                onClick={() => void markRead(selectedReviews)}
+              >
+                Mark Read
+              </Button>
+            )}
           <Button
             variant="ghost"
             disabled={busy || !(inTrash ? onDelete : onTrash)}
@@ -1839,9 +1847,7 @@ function HomeRowMenu({
           ? `Open pull request ${pill.label}`
           : `Filter ${pill.facet === "branches" ? "branch" : "worktree"}: ${pill.label}`,
     })),
-    ...(onMarkRead && isUnread(review)
-      ? [{ id: "read", label: "Mark as read" }]
-      : []),
+    ...(onMarkRead ? [{ id: "read", label: "Mark as read" }] : []),
   ];
 
   const menu = useCanvasMenu({
