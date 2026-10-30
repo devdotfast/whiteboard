@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { Writable } from "node:stream";
 
 import {
@@ -23,7 +25,12 @@ import { z } from "zod";
 import { readSharingAuth } from "./auth.js";
 import { ShareAuthError, ShareClient } from "./client.js";
 import { exportShare, validateShareSources } from "./export.js";
-import { whiteboardFileName, whiteboardFileText } from "./file.js";
+import {
+  parseWhiteboardFile,
+  whiteboardFileKey,
+  whiteboardFileName,
+  whiteboardFileText,
+} from "./file.js";
 import {
   type ShareAttribution,
   importShare,
@@ -68,8 +75,19 @@ interface SharingHostOptions extends SharingHostEvents {
   fetch?: typeof fetch;
 }
 
+const importSchema = z.union([
+  z.strictObject({ url: z.string().max(2048) }),
+  z.strictObject({ path: z.string().min(1).max(4096) }),
+]);
+
 interface ImportStatus {
-  stage: "downloading" | "fetching" | "validating" | "ready" | "error";
+  stage:
+    | "downloading"
+    | "reading"
+    | "fetching"
+    | "validating"
+    | "ready"
+    | "error";
   /** The copy, once it is made. */
   reviewId?: string;
   error?: string;
@@ -183,6 +201,7 @@ export function mountSharingHost(
 
   const startImport = (
     id: string,
+    initial: "downloading" | "reading",
     load: () => Promise<{
       bundle: ShareBundle;
       attribution?: ShareAttribution;
@@ -196,7 +215,7 @@ export function mountSharingHost(
 
       const status: ImportStatus = copy
         ? { stage: "ready", reviewId: copy }
-        : { stage: "downloading" };
+        : { stage: initial };
 
       imports.set(id, status);
 
@@ -236,11 +255,30 @@ export function mountSharingHost(
   };
 
   app.post("/sharing/import", async (context) => {
-    const { url } = z
-      .strictObject({ url: z.string().max(2048) })
-      .parse(await readBoundedRequestJson(context.req.raw));
+    const input = importSchema.parse(
+      await readBoundedRequestJson(context.req.raw),
+    );
 
-    const parsed = parseShareLink(url);
+    if ("path" in input) {
+      if (!path.isAbsolute(input.path))
+        throw new ReviewInputError("Use an absolute file path.", 400);
+
+      const text = await readFile(input.path, "utf8").catch(() => {
+        throw new ReviewInputError(
+          `Could not read ${path.basename(input.path)}. Check that the file still exists and Whiteboard can open it.`,
+          400,
+        );
+      });
+
+      return context.json(
+        startImport(whiteboardFileKey(text), "reading", async () => ({
+          bundle: parseWhiteboardFile(text),
+        })),
+        202,
+      );
+    }
+
+    const parsed = parseShareLink(input.url);
     const account = await readStoreAuth();
 
     if (
@@ -253,8 +291,10 @@ export function mountSharingHost(
       );
 
     return context.json(
-      startImport(shareKey(parsed.origin, parsed.capability), () =>
-        new ShareClient(parsed.origin).download(parsed.capability),
+      startImport(
+        shareKey(parsed.origin, parsed.capability),
+        "downloading",
+        () => new ShareClient(parsed.origin).download(parsed.capability),
       ),
       202,
     );
