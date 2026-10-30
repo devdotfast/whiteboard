@@ -8,7 +8,7 @@ import { Emitter, Event } from "../../../base/common/event.js";
 import { Disposable, DisposableMap, DisposableStore, type IDisposable } from "../../../base/common/lifecycle.js";
 import { type ICodeEditor, type IDiffEditor } from "../../../editor/browser/editorBrowser.js";
 import { ICodeEditorService } from "../../../editor/browser/services/codeEditorService.js";
-import { createDecorator } from "../../../platform/instantiation/common/instantiation.js";
+import { createDecorator, IInstantiationService } from "../../../platform/instantiation/common/instantiation.js";
 import { IOpenerService } from "../../../platform/opener/common/opener.js";
 import { IHostService } from "../../../workbench/services/host/browser/host.js";
 import {
@@ -25,6 +25,7 @@ import { apiSourceTarget } from "../../services/reviewApiSourceService.js";
 import { InlineLineNumbers } from "../../services/reviewLineNumbers.js";
 import { selectedMonacoDiff } from "./reviewDiffSelection.js";
 import { apiSelectionEvent } from "./reviewApiSelection.js";
+import { exportReviewFile } from "../sharing/reviewFileExport.js";
 
 export const IReviewVerbsService = createDecorator<IReviewVerbsService>("reviewVerbsService");
 
@@ -54,6 +55,7 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 		@IOpenerService private readonly openerService: IOpenerService,
 		@IReviewApiCatalogService
 		private readonly apiCatalog: IReviewApiCatalogService,
+		@IInstantiationService private readonly instantiationService: IInstantiationService,
 	) {
 		super();
 		for (const editor of this.codeEditorService.listCodeEditors()) this.trackSelection(editor);
@@ -146,6 +148,9 @@ export class ReviewVerbsService extends Disposable implements IReviewVerbsServic
 				}
 				case "openApiReview":
 					await this.tabsService.openApiReview(request.args.reviewId, request.args.title);
+					break;
+				case "exportReviewFile":
+					await this.instantiationService.invokeFunction(exportReviewFile, request.args);
 					break;
 			}
 			return { ok: true };
