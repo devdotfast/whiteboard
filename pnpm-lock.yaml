@@ -110,20 +110,20 @@ importers:
         version: 4.6.6
     optionalDependencies:
       '@dev.fast/diffr-darwin-arm64':
-        specifier: 0.1.22
-        version: 0.1.22
+        specifier: 0.1.23
+        version: 0.1.23
       '@dev.fast/diffr-darwin-x64':
-        specifier: 0.1.22
-        version: 0.1.22
+        specifier: 0.1.23
+        version: 0.1.23
       '@dev.fast/diffr-linux-arm64':
-        specifier: 0.1.22
-        version: 0.1.22
+        specifier: 0.1.23
+        version: 0.1.23
       '@dev.fast/diffr-linux-x64':
-        specifier: 0.1.22
-        version: 0.1.22
+        specifier: 0.1.23
+        version: 0.1.23
       '@dev.fast/diffr-win32-x64':
-        specifier: 0.1.22
-        version: 0.1.22
+        specifier: 0.1.23
+        version: 0.1.23
 
   diffr/packages/claude-code:
     devDependencies:
@@ -822,30 +822,30 @@ packages:
     resolution: {integrity: sha512-QxULHAm7cNu72w97JUNCBFODFaXpbDg+dP8b/oWFAZ2MTRppA3U00Y2L1HqaS4J6yBqxwa/Y3nMBaxVKbB/NsA==}
     engines: {node: '>=20.19.0'}
 
-  '@dev.fast/diffr-darwin-arm64@0.1.22':
-    resolution: {integrity: sha512-B9L71WxFRj/D+8G7rs4hDCgwIkrJnxbKnxlQ0sZag2dyAYChzqjfwYPK0AL2YBgttfTQZhmieyaM1W6aLft+GA==}
+  '@dev.fast/diffr-darwin-arm64@0.1.23':
+    resolution: {integrity: sha512-8FsULvNGYfR+557p2g4PDcEBPBcXY9Pg4OVVNTd7lvaRH69gtW4Ugg6/flTq7r6IDfd8AEbR0eTuYtiuOrOMJg==}
     cpu: [arm64]
     os: [darwin]
 
-  '@dev.fast/diffr-darwin-x64@0.1.22':
-    resolution: {integrity: sha512-fjIhhU+qWJnJp1DrgfqMbcajLlvYjl8K+bhTabCwfQ9afJlziUANhcUHZ6GobSuwB8mjGyhgAM3t3Jg249kWJA==}
+  '@dev.fast/diffr-darwin-x64@0.1.23':
+    resolution: {integrity: sha512-lwGakKv3OqMOZx2BxHeizChqCcVFQBWAtyBxPVIRa6gDgmln6F+6omqZ5//1STVH14VbiTmDaULUAKiB5Ry2Aw==}
     cpu: [x64]
     os: [darwin]
 
-  '@dev.fast/diffr-linux-arm64@0.1.22':
-    resolution: {integrity: sha512-Lotz3w7uA6IOyTYy73rmiEmxzAzIjQbjFucGso0Ga5T9nZ/DcytFbng4ng3wXC7LpwlXSU2sa1Mwb7ROQ8QKNQ==}
+  '@dev.fast/diffr-linux-arm64@0.1.23':
+    resolution: {integrity: sha512-E+aA4gGqy7NFzMdFV7i2IagvKHyF3c5m06UioHM0lALXrv+ilbeiVJCFSYh1k43oR+rsI6Wxn7BhCFQRXPRcig==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@dev.fast/diffr-linux-x64@0.1.22':
-    resolution: {integrity: sha512-6AwTdaPvDPxBYMlcgzFjltRJlNfTlLBPo1DwFqm3Pe0tdaJ0WmOuDmjE3tEs+pY5B6bU1TdEPEIzD5xkQol6Uw==}
+  '@dev.fast/diffr-linux-x64@0.1.23':
+    resolution: {integrity: sha512-LNGRY6yu7J0j6G1Q++yc9dncB2fa9Xur4yNTSb2cXkdM4lf6mISye/zF66mhMWoLIyBuJ14uyA6sYV8L4JxBCw==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@dev.fast/diffr-win32-x64@0.1.22':
-    resolution: {integrity: sha512-c55f1QSVPyyMjP1BmoDQF2bOS4f/y1hUqrA/by7EHuRWXc5x9Z3wpUWlAm6XYz1bnmDRW/19V8zdPy4VG1CIYg==}
+  '@dev.fast/diffr-win32-x64@0.1.23':
+    resolution: {integrity: sha512-RpuPDxkLjZvti6o5SSsvDe3lf0cfMwAYl+r02IISgW4JdEBF2daemPr4MhobrgEcjSSvJq39YwOj0tVN7T63WA==}
     cpu: [x64]
     os: [win32]
 
@@ -3758,19 +3758,19 @@ snapshots:
 
   '@csstools/css-tokenizer@4.0.0': {}
 
-  '@dev.fast/diffr-darwin-arm64@0.1.22':
+  '@dev.fast/diffr-darwin-arm64@0.1.23':
     optional: true
 
-  '@dev.fast/diffr-darwin-x64@0.1.22':
+  '@dev.fast/diffr-darwin-x64@0.1.23':
     optional: true
 
-  '@dev.fast/diffr-linux-arm64@0.1.22':
+  '@dev.fast/diffr-linux-arm64@0.1.23':
     optional: true
 
-  '@dev.fast/diffr-linux-x64@0.1.22':
+  '@dev.fast/diffr-linux-x64@0.1.23':
     optional: true
 
-  '@dev.fast/diffr-win32-x64@0.1.22':
+  '@dev.fast/diffr-win32-x64@0.1.23':
     optional: true
 
   '@dual-bundle/import-meta-resolve@4.2.1': {}
