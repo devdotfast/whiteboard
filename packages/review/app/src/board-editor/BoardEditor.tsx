@@ -101,7 +101,8 @@ function useStableData(data: ApiDocumentData): ApiDocumentData {
     snapshot.target,
     snapshot.staleSources,
     snapshot.sourceUnavailable,
-    [...data.anchors.keys()],
+    // A range edited under the same name keeps its id: compare what peeks show.
+    [...data.anchors.values()].map(({ id, title, peek }) => [id, title, peek]),
     [...data.images.keys()],
     [...data.traces.keys()],
     [...data.boards.keys()],
