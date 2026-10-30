@@ -474,7 +474,7 @@ describe("block components", () => {
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
-  it("sizes an animation to host code peeks and shrinks when content is removed", async () => {
+  it("sizes an animation to its tallest frame before the reader steps to it", async () => {
     const { container } = await mountFixture("animation", {
       document: [
         {
@@ -483,8 +483,8 @@ describe("block components", () => {
           title: "Auto size",
           height: "auto",
           frames: [
-            { key: "peek", title: "Code" },
             { key: "small", title: "Small" },
+            { key: "peek", title: "Code" },
           ],
           code: { status: "head/order.ts#L1" },
           html: '<style>html[data-frame="small"] [data-wb-code] { display: none; }</style><div style="padding: 24px"><div style="height: 100px">Content</div><div data-wb-code="status"></div></div>',
@@ -499,37 +499,64 @@ describe("block components", () => {
     const slot = () =>
       container.querySelector<HTMLElement>("[data-animation-slot='code']");
 
-    expect(
-      await settled(() => {
-        const peek = slot();
+    // The small frame alone is 148px; the stage already fits the code peek.
+    expect(await settled(() => stage.offsetHeight > 148)).toBe(true);
+    const tallest = stage.offsetHeight;
 
-        return (
-          peek &&
-          peek.offsetHeight > 0 &&
-          stage.getBoundingClientRect().bottom >=
-            peek.getBoundingClientRect().bottom + 23
-        );
-      }),
-    ).toBe(true);
-    const expanded = stage.offsetHeight;
     await act(async () =>
       container
         .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
         .click(),
     );
     expect(
-      await settled(
-        () => stage.offsetHeight === 148 && stage.offsetHeight < expanded,
-      ),
+      await settled(() => {
+        const peek = slot();
+
+        return (
+          peek?.style.visibility === "visible" &&
+          stage.getBoundingClientRect().bottom >=
+            peek.getBoundingClientRect().bottom + 23
+        );
+      }),
     ).toBe(true);
+    expect(stage.offsetHeight).toBe(tallest);
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
+  it("sizes an animation to its tallest frame when frame handlers build it", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Handler size",
+          height: "auto",
+          frames: [
+            { key: "short", title: "Short", data: { rows: 1 } },
+            { key: "tall", title: "Tall", data: { rows: 6 } },
+          ],
+          code: {},
+          html: '<div class="rows"></div><script>whiteboard.on("*", ({ frame }) => { document.querySelector(".rows").replaceChildren(...Array.from({ length: frame.data.rows }, () => Object.assign(document.createElement("div"), { style: "height: 50px" }))); });</script>',
+        },
+      ],
+    });
+
+    const iframe = (await settled(() => container.querySelector("iframe")))!;
+    const stage = iframe.parentElement!;
+
+    // Six 50px rows, though the reader is on the one-row frame.
+    expect(await settled(() => stage.offsetHeight >= 300)).toBe(true);
+    const tallest = stage.offsetHeight;
+
     await act(async () =>
       container
-        .querySelector<HTMLButtonElement>(
-          "button[aria-label='Previous frame']",
-        )!
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
         .click(),
     );
-    expect(await settled(() => stage.offsetHeight === expanded)).toBe(true);
+    expect(await settled(() => text(container).includes("Tall"))).toBe(true);
+    expect(await settled(() => stage.offsetHeight !== tallest, 500)).toBe(
+      false,
+    );
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
@@ -1402,7 +1429,10 @@ describe("block components", () => {
           .click(),
       );
       expect(await settled(() => stages.count("ready") === boots)).toBe(true);
-      expect(document.querySelectorAll("iframe")).toHaveLength(1);
+      // The hidden copy that measures the frames goes once it has.
+      expect(
+        await settled(() => document.querySelectorAll("iframe").length === 1),
+      ).toBe(true);
     }
 
     expect(await settled(slot)).toBeTruthy();
@@ -1512,11 +1542,9 @@ describe("block components", () => {
         width() === "100px" || width() === "280px" ? width() : undefined,
       ),
     ).toBe("280px");
-    expect(
-      await settled(
-        () => iframe.getBoundingClientRect().height < expandedHeight - 30,
-      ),
-    ).toBe(true);
+    // The stage keeps the wide frame's height; the script checked above that
+    // the future content takes no room.
+    expect(iframe.getBoundingClientRect().height).toBe(expandedHeight);
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 

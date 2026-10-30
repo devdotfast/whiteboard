@@ -274,7 +274,12 @@ export interface WhiteboardShim {
  */
 export function stageRuntime(port: MessagePort): void {
   const root = document.documentElement;
-  const post = (message: StageMessage) => port.postMessage(message);
+
+  // A measuring copy reports its measurement and nothing else.
+  const post = (message: StageMessage) => {
+    if (!init?.measure || message.type === "measured")
+      port.postMessage(message);
+  };
 
   // The host shows the first 2000 characters.
   const fail = (message: string) =>
@@ -1410,6 +1415,21 @@ export function stageRuntime(port: MessagePort): void {
     }
   };
 
+  const runHandlers = (change: FrameChange) => {
+    const waits: Promise<unknown>[] = [];
+
+    for (const key of ["*", change.frame.key])
+      for (const handler of handlers.get(key) ?? []) {
+        try {
+          waits.push(...finished(handler(change)));
+        } catch (error) {
+          fail(String(error));
+        }
+      }
+
+    return waits;
+  };
+
   const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
   const prefersReducedMotion = () => motionPreference.matches;
 
@@ -1463,16 +1483,7 @@ export function stageRuntime(port: MessagePort): void {
       instant: instantMode,
     };
 
-    const waits: Promise<unknown>[] = [];
-
-    for (const key of ["*", frame.key])
-      for (const handler of handlers.get(key) ?? []) {
-        try {
-          waits.push(...finished(handler(change)));
-        } catch (error) {
-          fail(String(error));
-        }
-      }
+    const waits = runHandlers(change);
 
     waits.push(
       playSegment(
@@ -2206,6 +2217,75 @@ export function stageRuntime(port: MessagePort): void {
         (animation) => animation.pending || animation.playState === "running",
       );
 
+  const contentBottom = () => {
+    // Natural body height includes slot-size feedback from host overlays.
+    // Exclude viewport-sized drawing layers to avoid a resize feedback loop.
+    let bottom = document.body.getBoundingClientRect().bottom;
+
+    for (const element of document.body.querySelectorAll("*")) {
+      // Global drawing layers are viewport-sized. Their descendants can
+      // have geometry far outside authored overflow viewports, but neither
+      // the layers nor those descendants are layout content.
+      if (element.closest(".wb-arrows, .wb-tokens")) continue;
+
+      if (
+        !element.checkVisibility({
+          visibilityProperty: true,
+          opacityProperty: true,
+        })
+      )
+        continue;
+      const rect = element.getBoundingClientRect();
+      const clipped = clipBounds(element);
+      const left = Math.max(rect.left, clipped.left);
+      const right = Math.min(rect.right, clipped.right);
+      const top = Math.max(rect.top, clipped.top);
+      const visibleBottom = Math.min(rect.bottom, clipped.bottom);
+
+      if (right <= left || visibleBottom <= top) continue;
+      bottom = Math.max(bottom, visibleBottom);
+    }
+
+    return bottom;
+  };
+
+  // A measuring copy shows each frame of its scenario in turn, as an instant
+  // jump does, all within one task, and reports the tallest. What a frame
+  // leaves behind does not matter: the copy is thrown away.
+  const measureFrames = () => {
+    const declared = declaredFrames();
+    let previous: FrameChange["previous"];
+    let tallest = 0;
+    instantMode = true;
+    root.setAttribute("data-wb-instant", "");
+
+    for (const active of activeFrames()) {
+      const frame = {
+        ...declared[frameIndex(active.key)]!,
+        index: active.index,
+      };
+
+      current = frameIndex(frame.key);
+      root.dataset.frame = frame.key;
+      root.dataset.frameIndex = String(frame.index);
+      applyStates();
+      runHandlers({ frame, previous, direction: "none", instant: true });
+      playSegment(frame.key, false);
+
+      for (const animation of document.getAnimations())
+        if (finite(animation)) animation.finish();
+
+      tallest = Math.max(tallest, contentBottom());
+      previous = frame;
+    }
+
+    // STAGE_MAX_HEIGHT in stage-protocol.ts.
+    post({
+      type: "measured",
+      height: Math.min(4000, Math.max(120, Math.ceil(tallest))),
+    });
+  };
+
   const measure = () => {
     let changed = false;
     clipGeometryCache = new Map();
@@ -2262,33 +2342,7 @@ export function stageRuntime(port: MessagePort): void {
     }
 
     if (init?.autoSize) {
-      // Natural body height includes slot-size feedback from host overlays.
-      // Exclude viewport-sized drawing layers to avoid a resize feedback loop.
-      let bottom = document.body.getBoundingClientRect().bottom;
-
-      for (const element of document.body.querySelectorAll("*")) {
-        // Global drawing layers are viewport-sized. Their descendants can
-        // have geometry far outside authored overflow viewports, but neither
-        // the layers nor those descendants are layout content.
-        if (element.closest(".wb-arrows, .wb-tokens")) continue;
-
-        if (
-          !element.checkVisibility({
-            visibilityProperty: true,
-            opacityProperty: true,
-          })
-        )
-          continue;
-        const rect = element.getBoundingClientRect();
-        const clipped = clipBounds(element);
-        const left = Math.max(rect.left, clipped.left);
-        const right = Math.min(rect.right, clipped.right);
-        const top = Math.max(rect.top, clipped.top);
-        const visibleBottom = Math.min(rect.bottom, clipped.bottom);
-
-        if (right <= left || visibleBottom <= top) continue;
-        bottom = Math.max(bottom, visibleBottom);
-      }
+      const bottom = contentBottom();
 
       // STAGE_MAX_HEIGHT in stage-protocol.ts.
       const height = Math.min(4000, Math.max(120, Math.ceil(bottom)));
@@ -2383,8 +2437,26 @@ export function stageRuntime(port: MessagePort): void {
 
     await runSources(message.libraries);
     await runScripts([...document.body.querySelectorAll("script")]);
+
+    for (const [slot, height] of Object.entries(message.slotSizes ?? {})) {
+      const element = document.querySelector<HTMLElement>(
+        `[data-wb-slot="${slot}"]`,
+      );
+
+      if (element) element.style.height = `${height}px`;
+    }
+
     arrows.forEach(route);
     buildTimeline();
+
+    // Fonts change text metrics; measure with the faces the stage draws in.
+    if (message.measure) {
+      await document.fonts.ready;
+      measureFrames();
+
+      return;
+    }
+
     post({ type: "ready" });
     watcher.observe(root, {
       subtree: true,

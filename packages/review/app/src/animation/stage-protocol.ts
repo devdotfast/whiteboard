@@ -47,6 +47,13 @@ export interface StageInit {
   sequence?: string[];
   /** Library sources the stage runs before its own scripts: anime.js. */
   libraries: string[];
+  /** A hidden copy that steps through every frame of its scenario and
+   * reports the tallest, so the stage the reader sees can take that height
+   * before they reach it. */
+  measure?: boolean;
+  /** The heights the host's content takes in each slot, for a measuring
+   * copy, which has no content of its own drawn over it. */
+  slotSizes?: Record<string, number>;
 }
 
 export type HostMessage =
@@ -102,6 +109,11 @@ export const stageMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("ready") }),
   z.strictObject({
     type: z.literal("size"),
+    height: z.number().finite().nonnegative().max(STAGE_MAX_HEIGHT),
+  }),
+  /** A measuring copy's tallest frame. */
+  z.strictObject({
+    type: z.literal("measured"),
     height: z.number().finite().nonnegative().max(STAGE_MAX_HEIGHT),
   }),
   z.strictObject({
