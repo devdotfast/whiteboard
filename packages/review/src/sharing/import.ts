@@ -116,7 +116,7 @@ export interface ShareAttribution {
 }
 
 /** Commits and traces live in a checkout; a document alone needs none. */
-function needsRepository(
+export function needsRepository(
   bundle: ShareBundle,
   snapshot: Parameters<typeof referenceCommits>[0],
 ) {

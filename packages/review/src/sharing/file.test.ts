@@ -2,6 +2,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
+import { Hono } from "hono";
 import { afterEach, expect, it } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
@@ -11,6 +13,7 @@ import {
   whiteboardFileName,
   whiteboardFileText,
 } from "./file.js";
+import { mountSharingPublisher } from "./host.js";
 
 const cleanup: Array<() => Promise<void>> = [];
 
@@ -75,4 +78,59 @@ it("exports an untitled board to a file that reads back", async () => {
   const text = whiteboardFileText(await exportShare({ ...sender, reviewId }));
 
   expect(parseWhiteboardFile(text).title).toBe("");
+});
+
+it("serves a board as a named .whiteboard file", async () => {
+  const sender = await fixture();
+  const api = new Hono();
+  api.onError((error, context) =>
+    context.json(
+      { error: error.message },
+      error instanceof ReviewInputError ? error.status : 500,
+    ),
+  );
+  mountSharingPublisher(api, sender.store, sender.data, {
+    readRepository: async () => sender.repository,
+  });
+
+  const response = await api.request("/sharing/export", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ reviewId: sender.reviewId }),
+  });
+
+  expect(response.status).toBe(200);
+  const { filename, text } = await response.json();
+  expect(filename).toBe("sharing-pinned-commits.whiteboard");
+  const bundle = parseWhiteboardFile(text);
+  expect(bundle.reviewId).toBe(sender.reviewId);
+  expect(bundle.repository).toEqual(sender.repository);
+});
+
+it("refuses to export pinned code without a GitHub remote to fetch it from", async () => {
+  const sender = await fixture();
+  const api = new Hono();
+  api.onError((error, context) =>
+    context.json(
+      { error: error.message },
+      error instanceof ReviewInputError ? error.status : 500,
+    ),
+  );
+  mountSharingPublisher(api, sender.store, sender.data, {
+    readRepository: async () => {
+      throw new Error("Sharing requires a GitHub repository remote.");
+    },
+  });
+
+  const response = await api.request("/sharing/export", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ reviewId: sender.reviewId }),
+  });
+
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({
+    error:
+      "Exporting pinned code needs a GitHub remote the file's reader can fetch from.",
+  });
 });

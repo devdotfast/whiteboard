@@ -23,7 +23,13 @@ import { z } from "zod";
 import { readSharingAuth } from "./auth.js";
 import { ShareAuthError, ShareClient } from "./client.js";
 import { exportShare, validateShareSources } from "./export.js";
-import { type ShareAttribution, importShare, shareKey } from "./import.js";
+import { whiteboardFileName, whiteboardFileText } from "./file.js";
+import {
+  type ShareAttribution,
+  importShare,
+  needsRepository,
+  shareKey,
+} from "./import.js";
 import {
   type cloneSharedRepository,
   type fetchPinnedRepository,
@@ -305,6 +311,24 @@ export function mountSharingPublisher(
     return bundle;
   };
 
+  app.post("/sharing/export", async (context) => {
+    const snapshot = shareable(
+      publishSchema.parse(await readBoundedRequestJson(context.req.raw)),
+    );
+
+    const bundle = await shareBundle(snapshot);
+
+    // A link falls back to the browser viewer; a file has no such reader.
+    if (!bundle.repository && needsRepository(bundle, snapshot))
+      throw new ReviewInputError(
+        "Exporting pinned code needs a GitHub remote the file's reader can fetch from.",
+      );
+
+    return context.json({
+      filename: whiteboardFileName(snapshot.title),
+      text: whiteboardFileText(bundle),
+    });
+  });
   app.post("/sharing/publish", async (context) => {
     const input = publishSchema.parse(
       await readBoundedRequestJson(context.req.raw),
