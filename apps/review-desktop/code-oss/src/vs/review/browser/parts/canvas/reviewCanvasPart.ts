@@ -70,7 +70,7 @@ import {
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_TELEMETRY_SETTING,
 } from "../../../common/reviewConfigurationDefaults.js";
-import { REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID } from "../../../common/reviewReleaseNotes.js";
+import { fetchWhiteboardRelease, REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID } from "../../../common/reviewReleaseNotes.js";
 import { ReviewApiClient, type ReviewApiSummary, resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
 import type {
 	ReviewCanvasBridge,
@@ -687,12 +687,14 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			return;
 		}
 		if (input.target.kind === "release-notes") {
+			const { version } = input.target;
 			this.renderedInput = input;
 			this.setCanvasState("home");
 			await this.render({
 				kind: "release-notes",
 				releaseNotes: {
-					version: input.target.version,
+					version,
+					readRelease: () => fetchWhiteboardRelease(version),
 					showAfterUpdate: this.currentShowReleaseNotes(),
 					setShowAfterUpdate: (enabled) => this.setShowReleaseNotes(enabled),
 				},

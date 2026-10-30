@@ -43,8 +43,8 @@ import {
 import { IUpdateService, StateType, type State } from '../../../platform/update/common/update.js';
 import { REVIEW_SHOW_RELEASE_NOTES_SETTING } from '../../common/reviewConfigurationDefaults.js';
 import { REVIEW_DESKTOP_CHANNEL } from '../../common/reviewDesktopBootstrap.js';
-import { WHITEBOARD_RELEASES_URL, whiteboardReleaseApiUrl } from '../../common/reviewProtocol.js';
-import { REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID } from '../../common/reviewReleaseNotes.js';
+import { WHITEBOARD_RELEASES_URL } from '../../common/reviewProtocol.js';
+import { fetchWhiteboardRelease, REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID } from '../../common/reviewReleaseNotes.js';
 import { IReviewCanvasEditorTabsService } from '../../services/reviewCanvasEditorTabsService.js';
 import { IReviewTelemetryService } from '../../services/reviewTelemetryService.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../workbench/common/contributions.js';
@@ -72,8 +72,7 @@ const SHOW_RELEASE_NOTES_MARKER = /<!-- whiteboard:show-notes(?: v?(\S+))? -->/;
 
 async function releaseNotesToOpen(version: string): Promise<string | undefined> {
 	try {
-		const response = await fetch(whiteboardReleaseApiUrl(version));
-		const match = response.ok ? ((await response.json()) as { body?: string }).body?.match(SHOW_RELEASE_NOTES_MARKER) : undefined;
+		const match = (await fetchWhiteboardRelease(version)).body.match(SHOW_RELEASE_NOTES_MARKER);
 		return match ? match[1] ?? version : undefined;
 	} catch {
 		return undefined;

@@ -1110,9 +1110,17 @@ export type ReviewCanvasContent =
     }
   | { kind: "release-notes"; releaseNotes: ReviewCanvasReleaseNotes };
 
+/** The GitHub API's release fields the tab reads. */
+export interface ReviewCanvasRelease {
+  body: string;
+  published_at: string | null;
+}
+
 /** The Release notes tab: one version's GitHub release. */
 export interface ReviewCanvasReleaseNotes {
   version: string;
+  // Rejects with a message the tab shows.
+  readRelease(): Promise<ReviewCanvasRelease>;
   // Backed by the `update.showReleaseNotes` workbench setting.
   showAfterUpdate: boolean;
   setShowAfterUpdate(enabled: boolean): Promise<boolean>;

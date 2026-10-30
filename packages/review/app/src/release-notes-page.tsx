@@ -4,7 +4,6 @@ import { EmptyState } from "@canvas/ui/empty-state";
 import { Spinner } from "@canvas/ui/spinner";
 import {
   type ReviewCanvasReleaseNotes,
-  whiteboardReleaseApiUrl,
   whiteboardReleaseUrl,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
@@ -19,11 +18,6 @@ import { settingsStyles } from "./settings-styles";
 import { withClass } from "./stylex-props";
 import { tokens } from "./tokens.stylex";
 
-interface Release {
-  body: string;
-  published_at: string | null;
-}
-
 /** GitHub release bodies mix Markdown with HTML, which renders as text here:
  * an <img> becomes a Markdown image and its wrappers drop. */
 function releaseMarkdown(body: string): string {
@@ -35,21 +29,6 @@ function releaseMarkdown(body: string): string {
       return src ? `![${alt.replace(/[[\]]/g, "")}](${src})` : "";
     })
     .replace(/<\/?(?:p|div|br|center)\b[^>]*>/gi, "");
-}
-
-async function fetchRelease(version: string): Promise<Release> {
-  const response = await fetch(whiteboardReleaseApiUrl(version), {
-    headers: { Accept: "application/vnd.github+json" },
-  });
-
-  if (!response.ok)
-    throw new Error(
-      response.status === 404
-        ? `Whiteboard ${version} has no release notes yet.`
-        : `GitHub answered ${response.status}.`,
-    );
-
-  return response.json();
 }
 
 export function ReleaseNotesPage(props: {
@@ -77,7 +56,7 @@ function ReleaseNotes({
 
   const release = useQuery({
     queryKey: ["release-notes", version],
-    queryFn: () => fetchRelease(version),
+    queryFn: () => releaseNotes.readRelease(),
     staleTime: Number.POSITIVE_INFINITY,
   });
 
