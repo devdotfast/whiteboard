@@ -3,7 +3,7 @@
 use base64::Engine;
 use serde_json::{json, Map, Value};
 use std::{
-    path::PathBuf,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -75,7 +75,15 @@ fn codex() -> Result<String, String> {
     let path = home("CODEX_HOME", ".codex")
         .ok_or("no home directory for this user")?
         .join("auth.json");
-    let saved = std::fs::read_to_string(&path).map_err(|_| {
+    let token = codex_token(&path)?;
+    if expiry_ms(&token).is_some_and(|at| at <= now_ms()) {
+        return Err("the Codex sign-in expired: open Codex to renew it".into());
+    }
+    Ok(token)
+}
+
+fn codex_token(path: &Path) -> Result<String, String> {
+    let saved = std::fs::read_to_string(path).map_err(|_| {
         format!(
             "no Codex sign-in found in {}: run `codex login`, with cli_auth_credentials_store = \"file\" if Codex keeps it in the system keyring",
             path.display()
@@ -83,13 +91,10 @@ fn codex() -> Result<String, String> {
     })?;
     let saved: Value =
         serde_json::from_str(&saved).map_err(|_| "the Codex sign-in is unreadable")?;
-    let token = saved["tokens"]["access_token"]
+    saved["tokens"]["access_token"]
         .as_str()
-        .ok_or("Codex is not signed in with ChatGPT: run `codex login`, or use the OpenAI provider with an API key")?;
-    if expiry_ms(token).is_some_and(|at| at <= now_ms()) {
-        return Err("the Codex sign-in expired: open Codex to renew it".into());
-    }
-    Ok(token.to_owned())
+        .map(str::to_owned)
+        .ok_or("Codex is not signed in with ChatGPT: run `codex login`, or use the OpenAI provider with an API key".into())
 }
 
 /// A JWT's `exp`, in milliseconds.
