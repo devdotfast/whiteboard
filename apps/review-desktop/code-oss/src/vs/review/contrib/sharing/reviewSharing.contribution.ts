@@ -1,7 +1,9 @@
 import { Disposable } from "../../../base/common/lifecycle.js";
+import { ipcRenderer } from "../../../base/parts/sandbox/electron-browser/globals.js";
 import { URI } from "../../../base/common/uri.js";
 import { localize2 } from "../../../nls.js";
 import { Action2, registerAction2 } from "../../../platform/actions/common/actions.js";
+import { IFileDialogService } from "../../../platform/dialogs/common/dialogs.js";
 import type { ServicesAccessor } from "../../../platform/instantiation/common/instantiation.js";
 import {
 	INotificationService,
@@ -18,8 +20,10 @@ import { ReviewApiClient } from "../../common/reviewProtocol.js";
 import { IReviewCanvasEditorTabsService } from "../../services/reviewCanvasEditorTabsService.js";
 import { IReviewDesktopConnectionService } from "../../services/reviewDesktopConnectionService.js";
 
+type ShareSource = { url: string } | { path: string };
+
 async function openShare(
-	url: string,
+	source: ShareSource,
 	session: IReviewDesktopConnectionService,
 	tabs: IReviewCanvasEditorTabsService,
 	notifications: INotificationService,
@@ -27,8 +31,9 @@ async function openShare(
 ) {
 	try {
 		const client = new ReviewApiClient(await session.getConnection());
-		await progress.withProgress({ location: ProgressLocation.Notification, title: "Opening shared review" }, async (reporter) => {
-			const started = await client.post<{ reviewId: string }>("/sharing/import", { url });
+		const title = "path" in source ? "Opening whiteboard file" : "Opening shared review";
+		await progress.withProgress({ location: ProgressLocation.Notification, title }, async (reporter) => {
+			const started = await client.post<{ reviewId: string }>("/sharing/import", source);
 			for (;;) {
 				const status = await client.read<{ reviewId: string; stage: string; title?: string; error?: string }>(`/sharing/import/${started.reviewId}`);
 				if (status.stage === "error") throw new Error(status.error ?? "Could not open the shared session.");
@@ -40,7 +45,9 @@ async function openShare(
 					? "Fetching pinned GitHub commits…"
 					: status.stage === "validating"
 						? "Preparing pinned source…"
-						: "Downloading review resources…";
+						: status.stage === "reading"
+							? "Reading the file…"
+							: "Downloading review resources…";
 				reporter.report({ message });
 				await new Promise((resolve) => setTimeout(resolve, 500));
 			}
@@ -49,7 +56,7 @@ async function openShare(
 		notifications.prompt(
 			Severity.Error,
 			error instanceof Error ? error.message : "Could not open the shared session.",
-			[{ label: "Retry", run: () => openShare(url, session, tabs, notifications, progress) }],
+			[{ label: "Retry", run: () => openShare(source, session, tabs, notifications, progress) }],
 		);
 	}
 }
@@ -64,12 +71,18 @@ class SharedReviewUrlHandler extends Disposable implements IURLHandler {
 	) {
 		super();
 		this._register(urls.registerHandler(this));
+		const onFile = (_event: unknown, ...args: unknown[]) => {
+			const [path] = args;
+			if (typeof path === "string") void openShare({ path }, this.session, this.tabs, this.notifications, this.progress);
+		};
+		ipcRenderer.on("vscode:openWhiteboardFile", onFile);
+		this._register({ dispose: () => ipcRenderer.removeListener("vscode:openWhiteboardFile", onFile) });
 	}
 	async handleURL(uri: URI): Promise<boolean> {
 		if (uri.authority !== "share") return false;
 		try {
 			const origin = new URLSearchParams(uri.query).get("origin") ?? "https://app.dev.fast";
-			await openShare(new URL(`/s${uri.path}`, origin).href, this.session, this.tabs, this.notifications, this.progress);
+			await openShare({ url: new URL(`/s${uri.path}`, origin).href }, this.session, this.tabs, this.notifications, this.progress);
 		} catch {
 			this.notifications.error("Invalid Whiteboard share link.");
 		}
@@ -102,7 +115,33 @@ registerAction2(
 					placeHolder: "https://app.dev.fast/s/…",
 					ignoreFocusLost: true,
 				});
-			if (url) await openShare(url, session, tabs, notifications, progress);
+			if (url) await openShare({ url }, session, tabs, notifications, progress);
+		}
+	},
+);
+registerAction2(
+	class extends Action2 {
+		constructor() {
+			super({
+				id: "whiteboard.openWhiteboardFile",
+				title: localize2("whiteboard.openWhiteboardFile", "Open Whiteboard File…"),
+				f1: true,
+			});
+		}
+		async run(accessor: ServicesAccessor) {
+			const session = accessor.get(IReviewDesktopConnectionService),
+				tabs = accessor.get(IReviewCanvasEditorTabsService),
+				notifications = accessor.get(INotificationService),
+				progress = accessor.get(IProgressService);
+			const [file] = (await accessor.get(IFileDialogService).showOpenDialog({
+				title: "Open Whiteboard File",
+				openLabel: "Open",
+				canSelectFiles: true,
+				canSelectFolders: false,
+				canSelectMany: false,
+				filters: [{ name: "Whiteboard", extensions: ["whiteboard"] }],
+			})) ?? [];
+			if (file) await openShare({ path: file.fsPath }, session, tabs, notifications, progress);
 		}
 	},
 );

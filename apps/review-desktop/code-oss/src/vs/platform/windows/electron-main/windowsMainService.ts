@@ -15,7 +15,7 @@ import { isWindowsDriveLetter, parseLineAndColumnAware, sanitizeFilePath, toSlas
 import { getPathLabel } from '../../../base/common/labels.js';
 import { Disposable, DisposableStore, IDisposable } from '../../../base/common/lifecycle.js';
 import { Schemas } from '../../../base/common/network.js';
-import { basename, join, normalize, posix } from '../../../base/common/path.js';
+import { basename, extname, join, normalize, posix } from '../../../base/common/path.js';
 import { getMarks, mark } from '../../../base/common/performance.js';
 import { IProcessEnvironment, isMacintosh, isWindows, OS } from '../../../base/common/platform.js';
 import { cwd } from '../../../base/common/process.js';
@@ -314,7 +314,15 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 		let maybeOpenEmptyWindow = false;
 
 		// Identify things to open from open config
-		const pathsToOpen = await this.getPathsToOpen(openConfig);
+		// Whiteboard: .whiteboard files import as boards instead of opening as text.
+		const whiteboardFiles: URI[] = [];
+		const pathsToOpen = (await this.getPathsToOpen(openConfig)).filter(path => {
+			const file = path.fileUri?.scheme === Schemas.file && extname(path.fileUri.path).toLowerCase() === '.whiteboard' ? path.fileUri : undefined;
+			if (file) {
+				whiteboardFiles.push(file);
+			}
+			return !file;
+		});
 		this.logService.trace('windowsManager#open pathsToOpen', pathsToOpen);
 		for (const path of pathsToOpen) {
 			if (isSingleFolderWorkspacePathToOpen(path)) {
@@ -452,7 +460,24 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
 		// Handle `<app> chat`
 		this.handleChatRequest(openConfig, usedWindows);
 
+		if (whiteboardFiles.length) {
+			await this.openWhiteboardFiles(whiteboardFiles, usedWindows);
+		}
+
 		return usedWindows;
+	}
+
+	// Whiteboard: hand .whiteboard files to a window's share importer.
+	private async openWhiteboardFiles(files: URI[], usedWindows: ICodeWindow[]): Promise<void> {
+		let window = usedWindows.at(0) ?? this.getLastActiveWindow();
+		if (!window) {
+			window = (await this.open({ context: OpenContext.API, cli: { ...this.environmentMainService.args, _: [] }, forceEmpty: true, forceNewWindow: true })).at(0);
+		}
+		// A double-clicked file brings the app forward.
+		window?.focus();
+		for (const file of files) {
+			window?.sendWhenReady('vscode:openWhiteboardFile', CancellationToken.None, file.fsPath);
+		}
 	}
 
 	private handleWaitMarkerFile(openConfig: IOpenConfiguration, usedWindows: ICodeWindow[]): void {
