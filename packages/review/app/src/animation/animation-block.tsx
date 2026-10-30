@@ -653,11 +653,31 @@ export function AnimationBlock({
         >
           <path d="M9.5 6.5 15 12l-5.5 5.5" />
         </ControlButton>
+        {/* Every caption shares one cell, so the row keeps the tallest. */}
         <div {...stylex.props(styles.caption)} aria-live="polite">
-          <strong data-review-copy-prose>{frame.title}</strong>
-          {frame.caption && (
-            <span data-review-copy-prose> {frame.caption}</span>
-          )}
+          {activeFrames.map((item) => {
+            const current = item.key === frame.key;
+
+            return (
+              <div
+                key={item.key}
+                {...stylex.props(
+                  styles.captionText,
+                  !current && styles.captionHidden,
+                )}
+              >
+                <strong data-review-copy-prose={current || undefined}>
+                  {item.title}
+                </strong>
+                {item.caption && (
+                  <span data-review-copy-prose={current || undefined}>
+                    {" "}
+                    {item.caption}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
         {!steps && (
           <div {...stylex.props(styles.dots)} role="group" aria-label="Frames">
@@ -963,8 +983,15 @@ const styles = stylex.create({
     minWidth: 0,
     marginLeft: space.s6,
     paddingBlock: space.s8,
+    display: "grid",
     color: tokens.inkMuted,
     lineHeight: leading.px18,
+  },
+  captionText: {
+    gridArea: "1 / 1",
+  },
+  captionHidden: {
+    visibility: "hidden",
   },
   dots: {
     display: "flex",

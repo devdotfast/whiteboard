@@ -1410,6 +1410,21 @@ export function stageRuntime(port: MessagePort): void {
     }
   };
 
+  const runHandlers = (change: FrameChange) => {
+    const waits: Promise<unknown>[] = [];
+
+    for (const key of ["*", change.frame.key])
+      for (const handler of handlers.get(key) ?? []) {
+        try {
+          waits.push(...finished(handler(change)));
+        } catch (error) {
+          fail(String(error));
+        }
+      }
+
+    return waits;
+  };
+
   const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
   const prefersReducedMotion = () => motionPreference.matches;
 
@@ -1463,16 +1478,7 @@ export function stageRuntime(port: MessagePort): void {
       instant: instantMode,
     };
 
-    const waits: Promise<unknown>[] = [];
-
-    for (const key of ["*", frame.key])
-      for (const handler of handlers.get(key) ?? []) {
-        try {
-          waits.push(...finished(handler(change)));
-        } catch (error) {
-          fail(String(error));
-        }
-      }
+    const waits = runHandlers(change);
 
     waits.push(
       playSegment(
@@ -2081,6 +2087,7 @@ export function stageRuntime(port: MessagePort): void {
         return;
 
       activeSequence = sequence;
+      framesStale = true;
 
       if (built) buildTimeline();
 
@@ -2206,8 +2213,100 @@ export function stageRuntime(port: MessagePort): void {
         (animation) => animation.pending || animation.playState === "running",
       );
 
+  // Natural body height includes slot-size feedback from host overlays.
+  // Exclude viewport-sized drawing layers to avoid a resize feedback loop.
+  const contentBottom = () => {
+    let bottom = document.body.getBoundingClientRect().bottom;
+
+    for (const element of document.body.querySelectorAll("*")) {
+      // Global drawing layers are viewport-sized. Their descendants can
+      // have geometry far outside authored overflow viewports, but neither
+      // the layers nor those descendants are layout content.
+      if (element.closest(".wb-arrows, .wb-tokens")) continue;
+
+      if (
+        !element.checkVisibility({
+          visibilityProperty: true,
+          opacityProperty: true,
+        })
+      )
+        continue;
+      const rect = element.getBoundingClientRect();
+      const clipped = clipBounds(element);
+      const left = Math.max(rect.left, clipped.left);
+      const right = Math.min(rect.right, clipped.right);
+      const top = Math.max(rect.top, clipped.top);
+      const visibleBottom = Math.min(rect.bottom, clipped.bottom);
+
+      if (right <= left || visibleBottom <= top) continue;
+      bottom = Math.max(bottom, visibleBottom);
+    }
+
+    return bottom;
+  };
+
+  // An auto-sized stage is as tall as its tallest frame, so stepping through
+  // frames never changes its height. Show each frame in turn, as an instant
+  // jump does, within one task so none of them paints, then jump back.
+  let framesBottom = 0;
+  let framesStale = true;
+
+  const measureFrames = () => {
+    const declared = declaredFrames();
+    const shown = current;
+    const running = new Set(document.getAnimations());
+    instantMode = true;
+    root.setAttribute("data-wb-instant", "");
+
+    const lay = (index: number) => {
+      const previous = declared[current];
+      const frame = declared[index]!;
+      current = index;
+      root.dataset.frame = frame.key;
+      root.dataset.frameIndex = String(activeFrameIndex(frame.key));
+      applyStates();
+      runHandlers({
+        frame: { ...frame, index: activeFrameIndex(frame.key) },
+        previous: previous && {
+          ...previous,
+          index: activeFrameIndex(previous.key),
+        },
+        direction: "none",
+        instant: true,
+      });
+      playSegment(frame.key, false);
+    };
+
+    framesBottom = 0;
+
+    for (const frame of activeFrames()) {
+      lay(frameIndex(frame.key));
+      framesBottom = Math.max(framesBottom, contentBottom());
+    }
+
+    lay(shown);
+
+    // Showing frames starts their motion; land it, as a jump does.
+    for (const animation of document.getAnimations())
+      if (!running.has(animation) && finite(animation)) animation.finish();
+
+    instantMode = false;
+    requestAnimationFrame(() => root.removeAttribute("data-wb-instant"));
+    framesStale = false;
+  };
+
   const measure = () => {
     let changed = false;
+
+    // Not while a frame change is underway: the sweep would cut it short.
+    const sweep =
+      init?.autoSize &&
+      framesStale &&
+      current >= 0 &&
+      showsInProgress === 0 &&
+      (timeline === undefined || timeline.paused);
+
+    if (sweep) measureFrames();
     clipGeometryCache = new Map();
     arrows.forEach(route);
     placeArrowLabels();
@@ -2261,37 +2360,14 @@ export function stageRuntime(port: MessagePort): void {
       post({ type: "slots", slots });
     }
 
-    if (init?.autoSize) {
-      // Natural body height includes slot-size feedback from host overlays.
-      // Exclude viewport-sized drawing layers to avoid a resize feedback loop.
-      let bottom = document.body.getBoundingClientRect().bottom;
-
-      for (const element of document.body.querySelectorAll("*")) {
-        // Global drawing layers are viewport-sized. Their descendants can
-        // have geometry far outside authored overflow viewports, but neither
-        // the layers nor those descendants are layout content.
-        if (element.closest(".wb-arrows, .wb-tokens")) continue;
-
-        if (
-          !element.checkVisibility({
-            visibilityProperty: true,
-            opacityProperty: true,
-          })
-        )
-          continue;
-        const rect = element.getBoundingClientRect();
-        const clipped = clipBounds(element);
-        const left = Math.max(rect.left, clipped.left);
-        const right = Math.min(rect.right, clipped.right);
-        const top = Math.max(rect.top, clipped.top);
-        const visibleBottom = Math.min(rect.bottom, clipped.bottom);
-
-        if (right <= left || visibleBottom <= top) continue;
-        bottom = Math.max(bottom, visibleBottom);
-      }
-
+    // Until every frame is measured, a size would only be the current
+    // frame's, so wait for the sweep rather than resize twice.
+    if (init?.autoSize && !framesStale) {
       // STAGE_MAX_HEIGHT in stage-protocol.ts.
-      const height = Math.min(4000, Math.max(120, Math.ceil(bottom)));
+      const height = Math.min(
+        4000,
+        Math.max(120, Math.ceil(Math.max(framesBottom, contentBottom()))),
+      );
 
       if (height !== lastHeight) {
         changed = true;
@@ -2328,7 +2404,6 @@ export function stageRuntime(port: MessagePort): void {
     "animationend",
     "animationcancel",
     "scroll",
-    "load",
     "input",
     "pointerover",
     "pointerout",
@@ -2337,8 +2412,15 @@ export function stageRuntime(port: MessagePort): void {
   ])
     document.addEventListener(type, () => wake(), true);
 
-  addEventListener("resize", () => wake());
-  document.fonts.addEventListener("loadingdone", () => wake());
+  // What changes every frame's layout: measure them all again.
+  const remeasure = () => {
+    framesStale = true;
+    wake();
+  };
+
+  document.addEventListener("load", remeasure, true);
+  addEventListener("resize", remeasure);
+  document.fonts.addEventListener("loadingdone", remeasure);
 
   const start = async (message: StageInit) => {
     init = message;
@@ -2423,7 +2505,7 @@ export function stageRuntime(port: MessagePort): void {
         break;
       case "theme":
         applyTheme(message.theme, message.colorScheme);
-        wake();
+        remeasure();
         break;
       case "slot-size": {
         const slot = document.querySelector<HTMLElement>(
@@ -2431,7 +2513,7 @@ export function stageRuntime(port: MessagePort): void {
         );
 
         if (slot) slot.style.height = `${message.height}px`;
-        wake();
+        remeasure();
         break;
       }
 
