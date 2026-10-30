@@ -1371,6 +1371,47 @@ describe("block components", () => {
     ).toBe(true);
   });
 
+  it("links a frame's code beside its caption and opens it", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Checks out",
+          height: "auto",
+          frames: [
+            { key: "write", title: "Writes", code: "write" },
+            { key: "edit", title: "Edits" },
+          ],
+          code: { write: "head/src/drafts.ts#L12-L40" },
+          html: "<p>Folder</p>",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    const link = () =>
+      container.querySelector<HTMLAnchorElement>(
+        "[data-review-anchor-id='block-1:code:write']",
+      );
+
+    expect(await settled(() => link()?.textContent === "drafts.ts:12")).toBe(
+      true,
+    );
+
+    await act(async () => link()!.click());
+    expect(
+      await settled(() => link()?.dataset.reviewAnchorOpen === "true"),
+    ).toBe(true);
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Next frame']")!
+        .click(),
+    );
+    expect(await settled(() => link() === null)).toBe(true);
+  });
+
   it("boots the stage again each time it goes fullscreen and back", async () => {
     using stages = tapStages();
 

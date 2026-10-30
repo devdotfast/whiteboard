@@ -5,7 +5,9 @@ import { DiagramHeader } from "@canvas/diagram-header";
 import { diagramStyles } from "@canvas/diagram-styles";
 import { useDiagramTourShell } from "@canvas/diagram-tour";
 import { drawStyles } from "@canvas/draw-styles";
+import { ProsePeekAnchor } from "@canvas/review-components";
 import { useOptionalReviewPanel } from "@canvas/review-panel";
+import type { SourcePeekAnchor } from "@canvas/review-panel-model";
 import {
   fontSize,
   leading,
@@ -188,6 +190,11 @@ export function AnimationBlock({
     0,
     activeFrames.findIndex((item) => item.key === frame.key),
   );
+
+  const frameCode =
+    frame.code === undefined
+      ? undefined
+      : data.anchors.get(animationCodeId(node.id, frame.code));
 
   const steps = activeFrames.every((item) => item.label) ? activeFrames : null;
 
@@ -654,6 +661,15 @@ export function AnimationBlock({
           {frame.caption && (
             <span data-review-copy-prose> {frame.caption}</span>
           )}
+          {frameCode && (
+            <>
+              {" "}
+              <FrameCode
+                anchor={frameCode}
+                onOpen={() => reveal(frame.code!)}
+              />
+            </>
+          )}
         </div>
         {!steps && (
           <div {...stylex.props(styles.dots)} role="group" aria-label="Frames">
@@ -784,6 +800,47 @@ function ControlButton({
         {children}
       </svg>
     </IconButton>
+  );
+}
+
+/** The code behind the frame, named by file and first line; the tooltip
+ * gives the whole path and range. */
+function FrameCode({
+  anchor,
+  onOpen,
+}: {
+  anchor: SourcePeekAnchor;
+  onOpen(): void;
+}) {
+  const { file, start, end } = anchor.peek;
+
+  const lines =
+    start.line === end.line
+      ? `Line ${start.line}`
+      : `Lines ${start.line}–${end.line}`;
+
+  const tooltip = useTooltip<HTMLSpanElement>(file, { detail: lines });
+
+  const open = useOptionalReviewPanel(
+    (state) =>
+      state.active?.kind === "peek" && state.active.anchor?.id === anchor.id,
+  );
+
+  const label = `${file.split("/").at(-1)}:${start.line}`;
+
+  return (
+    <span ref={tooltip}>
+      <ProsePeekAnchor
+        href={`#review-anchor-${anchor.id}`}
+        anchorId={anchor.id}
+        isOpen={open ?? false}
+        onOpen={onOpen}
+        inertFallback={label}
+        xstyle={styles.frameCode}
+      >
+        {label}
+      </ProsePeekAnchor>
+    </span>
   );
 }
 
@@ -939,6 +996,9 @@ const styles = stylex.create({
     paddingBlock: space.s8,
     color: tokens.inkMuted,
     lineHeight: leading.px18,
+  },
+  frameCode: {
+    whiteSpace: "nowrap",
   },
   dots: {
     display: "flex",

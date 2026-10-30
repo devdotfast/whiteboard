@@ -55,6 +55,11 @@ export const animationFrameSchema = z.strictObject({
     .describe(
       "This frame's state, as JSON the html's script draws: frame.data in whiteboard.on handlers, whiteboard.frame and whiteboard.frames.",
     ),
+  code: handle
+    .optional()
+    .describe(
+      "The code behind this frame, by its name in the block's code. The whiteboard links it beside the caption.",
+    ),
 });
 
 export type AnimationFrame = z.infer<typeof animationFrameSchema>;
@@ -120,7 +125,7 @@ export type AnimationBlock = z.infer<typeof animationSchema>;
 export const animation = {
   type: "animation",
   reference: [
-    '- animation {title, html, frames: {key, title, label?, caption?, duration? (ms), data? (JSON the html draws the frame from)}[] (1 to 60), scenarios?: {key, label, frames: [frame keys in order]}[] (2 to 8), code?: {name: anchor}, height?: "auto" (default) | number (120 to 1200 CSS px), pins?}; declare every possible frame',
+    '- animation {title, html, frames: {key, title, label?, caption?, duration? (ms), data? (JSON the html draws the frame from), code? (a name in code: the source linked beside the caption)}[] (1 to 60), scenarios?: {key, label, frames: [frame keys in order]}[] (2 to 8), code?: {name: anchor}, height?: "auto" (default) | number (120 to 1200 CSS px), pins?}; declare every possible frame',
     'Use an animation for change over time that a static diagram cannot show: state before and after, a cache filling, data changing as a request crosses layers. It can sit in design beside the diagram, or replace it when the motion is the point. Read session_get_instructions({topic:"animation"}) before writing one.',
   ],
   schema: animationSchema,
@@ -137,6 +142,15 @@ export const animation = {
     if (labelled && labelled !== block.frames.length)
       throw new ReviewInputError(
         "Give every animation frame a label, or none: the step strip needs one per frame.",
+      );
+
+    const linked = block.frames.find(
+      (frame) => frame.code !== undefined && !(frame.code in block.code),
+    );
+
+    if (linked)
+      throw new ReviewInputError(
+        `Frame "${linked.key}" links code "${linked.code}", which the animation's code does not name.`,
       );
 
     const scenarios = block.scenarios ?? [];

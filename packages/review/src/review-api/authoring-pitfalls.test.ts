@@ -283,6 +283,19 @@ describe("diagram rules", () => {
       "Unknown component name: cache",
     ));
 
+  it("rejects an animation frame linking code the animation does not name", () =>
+    expectRejected(
+      () =>
+        insert({
+          type: "animation",
+          title: "Checkout",
+          html: "<p>Folder</p>",
+          frames: [{ key: "write", title: "Writes", code: "write" }],
+          code: { read: "head/src/drafts.ts#L1" },
+        }),
+      'Frame "write" links code "write", which the animation\'s code does not name.',
+    ));
+
   it("rejects a step with none or two of source, explanation and code", async () => {
     await expectRejected(
       () => insert(sequence([{ from: "app", to: "db", label: "Write" }])),
