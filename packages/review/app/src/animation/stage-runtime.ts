@@ -1415,6 +1415,21 @@ export function stageRuntime(port: MessagePort): void {
     }
   };
 
+  const runHandlers = (change: FrameChange) => {
+    const waits: Promise<unknown>[] = [];
+
+    for (const key of ["*", change.frame.key])
+      for (const handler of handlers.get(key) ?? []) {
+        try {
+          waits.push(...finished(handler(change)));
+        } catch (error) {
+          fail(String(error));
+        }
+      }
+
+    return waits;
+  };
+
   const motionPreference = matchMedia("(prefers-reduced-motion: reduce)");
   const prefersReducedMotion = () => motionPreference.matches;
 
@@ -1468,16 +1483,7 @@ export function stageRuntime(port: MessagePort): void {
       instant: instantMode,
     };
 
-    const waits: Promise<unknown>[] = [];
-
-    for (const key of ["*", frame.key])
-      for (const handler of handlers.get(key) ?? []) {
-        try {
-          waits.push(...finished(handler(change)));
-        } catch (error) {
-          fail(String(error));
-        }
-      }
+    const waits = runHandlers(change);
 
     waits.push(
       playSegment(
@@ -2243,31 +2249,34 @@ export function stageRuntime(port: MessagePort): void {
     return bottom;
   };
 
-  // Anything that may move the layout wakes the measuring loop; a measuring
-  // copy waits for that to stop before it reads a frame.
-  let wakes = 0;
-
-  const quiet = async () => {
-    const deadline = performance.now() + 1000;
-    let still = 0;
-
-    while (still < 3 && performance.now() < deadline) {
-      const before = wakes;
-      await nextFrame();
-      still = wakes === before && !moving() ? still + 1 : 0;
-    }
-  };
-
-  // A measuring copy shows every frame of its scenario as a reader would, so
-  // each frame's handlers and their deferred work run while it shows, and
-  // reports the tallest.
-  const measureFrames = async () => {
+  // A measuring copy shows each frame of its scenario in turn, as an instant
+  // jump does, all within one task, and reports the tallest. What a frame
+  // leaves behind does not matter: the copy is thrown away.
+  const measureFrames = () => {
+    const declared = declaredFrames();
+    let previous: FrameChange["previous"];
     let tallest = 0;
+    instantMode = true;
+    root.setAttribute("data-wb-instant", "");
 
-    for (const frame of activeFrames()) {
-      await show(frameIndex(frame.key), true);
-      await quiet();
+    for (const active of activeFrames()) {
+      const frame = {
+        ...declared[frameIndex(active.key)]!,
+        index: active.index,
+      };
+
+      current = frameIndex(frame.key);
+      root.dataset.frame = frame.key;
+      root.dataset.frameIndex = String(frame.index);
+      applyStates();
+      runHandlers({ frame, previous, direction: "none", instant: true });
+      playSegment(frame.key, false);
+
+      for (const animation of document.getAnimations())
+        if (finite(animation)) animation.finish();
+
       tallest = Math.max(tallest, contentBottom());
+      previous = frame;
     }
 
     // STAGE_MAX_HEIGHT in stage-protocol.ts.
@@ -2355,7 +2364,6 @@ export function stageRuntime(port: MessagePort): void {
   };
 
   wake = () => {
-    wakes++;
     quietFrames = 0;
 
     if (!measuring || looping) return;
@@ -2440,6 +2448,15 @@ export function stageRuntime(port: MessagePort): void {
 
     arrows.forEach(route);
     buildTimeline();
+
+    // Fonts change text metrics; measure with the faces the stage draws in.
+    if (message.measure) {
+      await document.fonts.ready;
+      measureFrames();
+
+      return;
+    }
+
     post({ type: "ready" });
     watcher.observe(root, {
       subtree: true,
@@ -2458,8 +2475,6 @@ export function stageRuntime(port: MessagePort): void {
         : message.frame;
 
     await show(initial, true);
-
-    if (message.measure) await measureFrames();
   };
 
   port.onmessage = (event: MessageEvent<HostMessage>) => {

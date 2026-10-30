@@ -59,6 +59,13 @@ const stageUrl = () => new URL("./stage.html", import.meta.url).href;
 
 const DEFAULT_DURATION = 3000;
 
+// An auto-sized stage's height before it has reported one.
+const STAGE_MIN_HEIGHT = 120;
+
+// How long a new stage waits for its frames' measurement before it takes
+// its current frame's height instead.
+const MEASURE_WAIT = 1000;
+
 let animeSource: Promise<string> | undefined;
 
 // anime.js's source, for the stage: its own chunk, fetched by the first
@@ -151,10 +158,11 @@ export function AnimationBlock({
   const sequenceRef = useRef<string[] | null>(null);
   const [playing, setPlaying] = useState(false);
   const [settled, setSettled] = useState(-1);
-  const [contentHeight, setContentHeight] = useState(120);
+  const [contentHeight, setContentHeight] = useState(STAGE_MIN_HEIGHT);
   // The tallest frame of the scenario, from a hidden measuring copy.
   const [measuredHeight, setMeasuredHeight] = useState(0);
   const [measureRun, setMeasureRun] = useState<number | null>(null);
+  const [measureLate, setMeasureLate] = useState(false);
   const slotSizesRef = useRef(new Map<string, number>());
   const remeasureTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const measureRuns = useRef(0);
@@ -487,10 +495,16 @@ export function AnimationBlock({
     setMeasureRun(++measureRuns.current);
   }, []);
 
+  // A new stage keeps its first height until its frames are measured, so it
+  // grows once, to its tallest frame, rather than to its current one first.
   useEffect(() => {
     setMeasuredHeight(0);
+    setMeasureLate(false);
     slotSizesRef.current.clear();
     remeasure();
+    const timer = setTimeout(() => setMeasureLate(true), MEASURE_WAIT);
+
+    return () => clearTimeout(timer);
   }, [stageKey, remeasure]);
 
   useEffect(() => remeasure(), [sequenceKeys, theme, remeasure]);
@@ -610,9 +624,11 @@ export function AnimationBlock({
           {...stylex.props(styles.canvas)}
           style={{
             height:
-              node.height === "auto"
-                ? Math.max(contentHeight, measuredHeight)
-                : node.height,
+              node.height !== "auto"
+                ? node.height
+                : measuredHeight || measureLate
+                  ? Math.max(contentHeight, measuredHeight)
+                  : STAGE_MIN_HEIGHT,
           }}
         >
           <iframe
