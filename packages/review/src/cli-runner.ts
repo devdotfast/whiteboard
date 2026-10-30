@@ -1191,6 +1191,35 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     });
   });
 
+  configureJsonOutput(
+    program
+      .command("export")
+      .description("Write a review snapshot as a .whiteboard file"),
+    "plain",
+  )
+    .option("--review <id>", "review ID")
+    .option("--version <number>", "Saved version to export")
+    .option(
+      "--out <path>",
+      "File to write, or - for stdout; defaults to <title>.whiteboard here",
+    )
+    .action(
+      async (options: {
+        review?: string;
+        version?: string;
+        out?: string;
+        json?: boolean;
+      }) => {
+        const { runExportCli } = await import("./sharing/cli.js");
+        state.exitCode = await runExportCli({
+          ...input,
+          ...options,
+          cwd,
+          env: authoringEnv(),
+        });
+      },
+    );
+
   // Hosted trace store login. Logging in authenticates a user; it selects
   // no storage by itself.
   configureJsonOutput(

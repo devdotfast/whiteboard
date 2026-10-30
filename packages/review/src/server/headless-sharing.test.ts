@@ -8,6 +8,7 @@ import { createShareSchema } from "@dev.fast/review-share-protocol";
 import { runReviewCli } from "@review/cli-runner.js";
 import { ReviewApiClient } from "@review/review-api/client.js";
 import type { ReviewServerDiscovery } from "@review/server-discovery.js";
+import { parseWhiteboardFile } from "@review/sharing/file.js";
 import * as repository from "@review/sharing/repository.js";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -188,6 +189,37 @@ it("commits and uploads through a real headless server and CLI without Desktop, 
     await expect(
       readFile(path.join(stateDir, "auth.json")),
     ).rejects.toMatchObject({ code: "ENOENT" });
+
+    const file = path.join(root, "exported", "ci.whiteboard");
+    const stdout = new PassThrough();
+    let exported = "";
+    stdout.on("data", (chunk) => {
+      exported += chunk;
+    });
+
+    expect(
+      await runReviewCli({
+        argv: [
+          "--state-dir",
+          stateDir,
+          "export",
+          "--review",
+          d.reviewId,
+          "--out",
+          file,
+          "--json",
+        ],
+        env: process.env,
+        stdout,
+        stderr: new PassThrough(),
+      }),
+    ).toBe(0);
+    expect(JSON.parse(exported)).toEqual({ path: file });
+    expect(parseWhiteboardFile(await readFile(file, "utf8"))).toMatchObject({
+      reviewId: d.reviewId,
+      title: "CI review",
+      repository: fixture.repository,
+    });
   } finally {
     abort.abort();
     await running;
