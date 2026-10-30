@@ -1976,6 +1976,13 @@ export const ReviewVerbRequestSchema = z.discriminatedUnion("name", [
       title: requiredString,
     }),
   }),
+  z.strictObject({
+    name: z.literal("exportReviewFile"),
+    args: z.strictObject({
+      reviewId: apiReviewIdSchema,
+      version: z.number().int().nonnegative().optional(),
+    }),
+  }),
 ]);
 
 export type ReviewVerbRequest = z.infer<typeof ReviewVerbRequestSchema>;

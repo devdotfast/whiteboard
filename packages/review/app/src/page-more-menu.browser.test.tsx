@@ -1,4 +1,5 @@
 import type {
+  ReviewApiClient,
   ReviewCanvasBridge,
   ReviewMenuRequest,
 } from "@dev.fast/review-protocol";
@@ -12,8 +13,12 @@ import { PageMoreMenu } from "./page-more-menu";
 import { ReviewProvider } from "./review-context";
 import { ReviewCornerAction } from "./review-corner-action";
 import { testReviewSession } from "./review-session-test-utils";
+import { SharingContext } from "./share-control";
 
 let root: Root | null = null;
+
+// SAFETY: the menu never calls the client.
+const shareable = { client: {} as ReviewApiClient, reviewId: "r1", version: 3 };
 
 /** The last menu the canvas asked the host to show. */
 let menu: Omit<ReviewMenuRequest, "anchor" | "onHide"> | undefined;
@@ -120,4 +125,38 @@ it("keeps the corner's Move to Trash enabled and focused while the move is in fl
   expect(button.disabled).toBe(false);
   expect(button.getAttribute("aria-busy")).toBe("true");
   expect(document.activeElement).toBe(button);
+});
+
+it("offers Export file… while the board can be shared, and asks the host to write it", async () => {
+  const post = vi.fn<ReviewCanvasBridge["post"]>(async () => ({ ok: true }));
+  const session = testReviewSession({}, { post });
+
+  const container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+
+  await act(async () =>
+    root?.render(
+      <ReviewSessionProvider session={session}>
+        <CanvasUiContext.Provider value={ui}>
+          <ReviewProvider>
+            <SharingContext.Provider value={shareable}>
+              <PageMoreMenu views={[]} onShowView={() => {}} />
+            </SharingContext.Provider>
+          </ReviewProvider>
+        </CanvasUiContext.Provider>
+      </ReviewSessionProvider>,
+    ),
+  );
+
+  await act(async () =>
+    container.querySelector<HTMLElement>('[aria-label="More"]')!.click(),
+  );
+  expect(menu?.items.map((item) => item.label)).toContain("Export file…");
+
+  await act(async () => menu!.onSelect("export"));
+  expect(post).toHaveBeenCalledWith({
+    name: "exportReviewFile",
+    args: { reviewId: "r1", version: 3 },
+  });
 });

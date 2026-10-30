@@ -422,6 +422,10 @@ export const UI_TELEMETRY_EVENTS = {
     event: "review_source_tree_opened",
     properties: { via: SOURCE_TREE_OPENED_VIA },
   },
+  whiteboard_file_exported: {
+    event: "review_whiteboard_file_exported",
+    properties: {},
+  },
   diff_layout_changed: {
     event: "review_diff_layout_changed",
     properties: {

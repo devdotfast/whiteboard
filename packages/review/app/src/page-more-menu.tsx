@@ -4,12 +4,13 @@ import { MoreIcon } from "@canvas/ui/icons";
 import { useTooltip } from "@canvas/ui/tooltip";
 import type { ReviewView } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { type ReactElement, useRef, useState } from "react";
+import { type ReactElement, useContext, useRef, useState } from "react";
 
 import { useCanvasMenu } from "./host/canvas-ui";
 import { useReviewSession } from "./host/review-session";
 import { useNotify } from "./notify";
 import { useReviewActions, useReviewState } from "./review-context";
+import { SharingContext } from "./share-control";
 import { shellStyles } from "./shell-styles";
 import { captureUiEvent } from "./ui-telemetry";
 
@@ -48,6 +49,7 @@ export function PageMoreMenu({
   const dismissing = useRef(false);
   const [busy, setBusy] = useState(false);
 
+  const sharing = useContext(SharingContext);
   const historical = Boolean(session.review?.historicalRevision);
   const finished = submissionOutcome !== null;
 
@@ -55,6 +57,7 @@ export function PageMoreMenu({
     items: [
       ...(onOpenContents ? [{ id: "contents", label: "Contents" }] : []),
       ...folded.map(({ id, label }) => ({ id: `folded:${id}`, label })),
+      ...(sharing ? [{ id: "export", label: "Export file…" }] : []),
       ...(!historical && !finished
         ? [{ id: "trash", label: "Move to Trash", enabled: !busy }]
         : []),
@@ -86,6 +89,25 @@ export function PageMoreMenu({
         } finally {
           dismissing.current = false;
           setBusy(false);
+        }
+      }
+
+      if (id === "export" && sharing) {
+        captureUiEvent(session, "whiteboard_file_exported", {});
+
+        try {
+          await session.surface.post({
+            name: "exportReviewFile",
+            args: { reviewId: sharing.reviewId, version: sharing.version },
+          });
+        } catch (error) {
+          notify({
+            kind: "error",
+            text:
+              error instanceof Error
+                ? error.message
+                : "Could not export the whiteboard.",
+          });
         }
       }
 
