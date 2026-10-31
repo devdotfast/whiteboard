@@ -41,6 +41,6 @@
     "micromark-util-types": "2.0.2",
     "tsdown": "0.22.14",
     "typescript": "6.0.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   }
 }
