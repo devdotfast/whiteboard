@@ -15,6 +15,11 @@ Before hosted setup, explain: full transcripts go to the chosen origin. Writers 
 FFF setup is human-owned. If FFF is unavailable, report the setup gap. Do not replace or reconfigure it.
 
 Local commit trailers and blame resolution work without trace storage access.
+Without a configured store, `trace pull` discovers local Claude Code, Codex,
+and Pi transcripts for the current working directory, including sessions with
+no commit trailers. `trace pull --agent-session <id>` and `trace show <id>`
+read those raw transcripts directly. Pull refreshes the normalized search files;
+it does not upload transcripts or require capture hooks, login, or a Git remote.
 Read commands use the machine's selected trace store. When both an S3/R2
 bucket and the hosted store are configured, add `--storage s3|hosted` to
 read the other one; it changes nothing about capture or consent.
