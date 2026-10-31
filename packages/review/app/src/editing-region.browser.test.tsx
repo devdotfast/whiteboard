@@ -137,6 +137,21 @@ it("drops the ring when the document lease ends", async () => {
   expect(region("failures")).toBe("off");
 });
 
+it("rings the sections an agent holds, at rest, until it ends", async () => {
+  const holding: ActivitySnapshot = {
+    workingCount: 1,
+    expiresAt: null,
+    activities: [{ activityId: "b", slot: 1, hold: ["p3"] }],
+  };
+
+  await render(null, holding);
+  expect(region("testing")).toBe("idle");
+  expect(region("failures")).toBe("off");
+
+  await render(null, ended);
+  expect(region("testing")).toBe("off");
+});
+
 it("draws a section's ring around its chevron, not through it", async () => {
   await render(on("p1"));
 

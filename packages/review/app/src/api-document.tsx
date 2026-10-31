@@ -371,6 +371,7 @@ export function ApiDocument({
   );
 
   const region = useEditingRegion(data.snapshot.document);
+  const held = useHeldRegions(data.snapshot.document);
 
   return (
     <>
@@ -384,6 +385,7 @@ export function ApiDocument({
         data={data}
         softwareMapEnabled={softwareMapEnabled}
         region={region}
+        held={held}
       />
       <Courier />
     </>
@@ -442,6 +444,28 @@ function useEditingRegion(document: Block[]) {
   return useEditingBlock(topOf);
 }
 
+/** The top-level blocks agents hold, by the holder's color slot. */
+function useHeldRegions(document: Block[]): Map<string, number> {
+  const activity = useContext(AuthoringActivityContext);
+
+  return useMemo(() => {
+    const held = new Map<string, number>();
+
+    if (!activity || activity === "unknown") return held;
+
+    for (const presence of activity.activities ?? [])
+      for (const id of presence.hold ?? []) {
+        const top = document.find((node) =>
+          elements([node]).some((inner) => inner.id === id),
+        );
+
+        if (top?.id !== undefined) held.set(top.id, presence.slot);
+      }
+
+    return held;
+  }, [activity, document]);
+}
+
 /** Follows a `#fragment` link to one of the document's headings, which can sit
  * in a collapsed section the browser cannot reach; other fragments are left to it. */
 function useHeadingFragments(): void {
@@ -486,12 +510,15 @@ function DocumentBlocks({
   data,
   softwareMapEnabled,
   region,
+  held,
 }: {
   nodes: Block[];
   data: ApiDocumentData;
   softwareMapEnabled: boolean;
   /** Only the top level has a region: the block the agent is editing. */
   region?: { id: string; writing: boolean; slot?: number } | null;
+  /** Blocks other agents hold wear their holder's ring, at rest. */
+  held?: Map<string, number>;
 }) {
   const phases = useMotionPhases();
   const previous = useRef(nodes);
@@ -501,24 +528,37 @@ function DocumentBlocks({
     previous.current = shown;
   });
 
-  return shown.map((node) => (
-    <DocumentNode
-      key={node.id}
-      node={node}
-      data={data}
-      softwareMapEnabled={softwareMapEnabled}
-      region={
-        region === undefined
-          ? undefined
-          : !region || region.id !== node.id
-            ? "off"
-            : region.writing
-              ? "writing"
-              : "idle"
-      }
-      regionSlot={region?.id === node.id ? region?.slot : undefined}
-    />
-  ));
+  return shown.map((node) => {
+    const holder = node.id === undefined ? undefined : held?.get(node.id);
+
+    const ring =
+      region === undefined
+        ? undefined
+        : region?.id === node.id
+          ? region
+          : holder === undefined
+            ? null
+            : { writing: false, slot: holder };
+
+    return (
+      <DocumentNode
+        key={node.id}
+        node={node}
+        data={data}
+        softwareMapEnabled={softwareMapEnabled}
+        region={
+          ring === undefined
+            ? undefined
+            : !ring
+              ? "off"
+              : ring.writing
+                ? "writing"
+                : "idle"
+        }
+        regionSlot={ring?.slot}
+      />
+    );
+  });
 }
 
 // Memoized: unrelated App renders must not rebuild every block's view models.
