@@ -76,6 +76,8 @@ export interface BoardActivity {
     slot: number;
     focus?: { description: string; targetId?: string };
     surface?: "document" | "lenses";
+    /** Blocks reserved for it, ringed in its color. */
+    hold?: string[];
   }[];
 }
 

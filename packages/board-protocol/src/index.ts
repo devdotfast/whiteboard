@@ -40,6 +40,7 @@ export const activitySnapshotSchema = z.object({
         slot: z.number(),
         focus: focusSchema.optional(),
         surface: z.enum(["document", "lenses"]).optional(),
+        hold: z.array(z.string()).optional(),
       }),
     )
     .optional(),
@@ -111,7 +112,8 @@ export const editResultSchema = z.object({
 
 export type EditResult = z.infer<typeof editResultSchema>;
 
-/** Upserts by `activityId` (minted when omitted); `focus: null` clears, `end` removes. */
+/** Upserts by `activityId` (minted when omitted); `focus: null` clears, `end`
+ * removes. `hold` replaces the activity's held blocks; `[]` clears them. */
 export const presenceRequestSchema = z.object({
   activityId: z.string().min(1).optional(),
   focus: z
@@ -121,6 +123,7 @@ export const presenceRequestSchema = z.object({
     })
     .nullable()
     .optional(),
+  hold: z.array(z.string().min(1).max(64)).max(64).optional(),
   end: z.boolean().optional(),
 });
 

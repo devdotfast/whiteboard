@@ -32,6 +32,8 @@ export interface ActivityPresence {
   focus?: ActivityFocus;
   /** Where it last wrote; absent until its first attributed write. */
   surface?: ActivitySurface;
+  /** Blocks reserved for it; others' edits on them or inside them are refused. */
+  hold?: string[];
 }
 
 export interface ActivitySnapshot {
