@@ -575,6 +575,7 @@ const styles = stylex.create({
   // One above the fullscreen diagrams.
   layer: {
     position: "fixed",
+    userSelect: "text",
     zIndex: `calc(${tokens.reviewDebugLayer} + 1)`,
   },
   fill: {

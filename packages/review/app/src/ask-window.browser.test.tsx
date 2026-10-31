@@ -1,8 +1,14 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it } from "vitest";
+import { userEvent } from "vitest/browser";
 
-import { AskSlot } from "./ask-window";
+import { AskDock } from "./ask-dock";
+import { AskSlot, AskWindow } from "./ask-window";
+import { ReviewDebugSettingsProvider } from "./debug-settings";
+import { ReviewSessionProvider } from "./host/review-session";
+import { ReviewPanelProvider } from "./review-panel";
+import { testReviewSession } from "./review-session-test-utils";
 
 // A conversation whose thread scrolls, as Ask's does.
 function conversation() {
@@ -67,3 +73,58 @@ it("reopens a minimized Ask at its latest when it was there", async () => {
   expect(thread.scrollHeight - thread.scrollTop - thread.clientHeight).toBe(0);
   await slot.done();
 });
+
+it.each(["docked", "floating"])(
+  "selects conversation text in a %s Ask outside the canvas host",
+  async (placement) => {
+    const container = document.createElement("div");
+    const host = document.createElement("div");
+    const node = document.createElement("div");
+    const message = document.createElement("p");
+    const root = createRoot(container);
+    const previous = document.body.style.userSelect;
+
+    document.body.style.userSelect = "none";
+    message.textContent = "Selectable";
+    node.append(message);
+    document.body.append(container, host);
+
+    try {
+      const content = <AskSlot node={node} />;
+
+      await act(async () =>
+        root.render(
+          <ReviewSessionProvider session={testReviewSession()}>
+            <ReviewDebugSettingsProvider>
+              <ReviewPanelProvider>
+                {placement === "docked" ? (
+                  <AskDock host={host}>{content}</AskDock>
+                ) : (
+                  <AskWindow
+                    askKey={0}
+                    actions={null}
+                    onHide={() => {}}
+                    onClose={() => {}}
+                    onEscape={() => {}}
+                  >
+                    {content}
+                  </AskWindow>
+                )}
+              </ReviewPanelProvider>
+            </ReviewDebugSettingsProvider>
+          </ReviewSessionProvider>,
+        ),
+      );
+
+      await userEvent.dblClick(message, { position: { x: 10, y: 8 } });
+
+      expect(document.getSelection()?.toString()).toBe("Selectable");
+    } finally {
+      document.getSelection()?.removeAllRanges();
+      document.body.style.userSelect = previous;
+      await act(async () => root.unmount());
+      container.remove();
+      host.remove();
+    }
+  },
+);

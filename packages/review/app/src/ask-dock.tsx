@@ -178,6 +178,7 @@ export function AskDesktopSync(): null {
 const styles = stylex.create({
   panel: {
     display: "flex",
+    userSelect: "text",
     flexDirection: "column",
     height: "100%",
     minHeight: 0,
