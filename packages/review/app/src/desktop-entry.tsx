@@ -48,6 +48,7 @@ import { shellStyles } from "./shell-styles";
 import { ReviewSidebarSection } from "./sidebar-sections";
 import { themeClass, themeStyles } from "./theme-styles";
 import { tokens } from "./tokens.stylex";
+import { UpdateChip } from "./update-chip";
 import { Whiteboard, preloadBoardEditor } from "./whiteboard";
 
 import "./styles.css";
@@ -434,6 +435,7 @@ export function mountReviewCanvas(
             <SharedCanvasQueryClient.Provider value={queryClient}>
               <ReviewCanvas content={content} findHost={findHost} />
             </SharedCanvasQueryClient.Provider>
+            {ui?.update && <UpdateChip host={ui.update} />}
             {feedbackOpen && ui?.feedback && (
               <FeedbackDialog
                 host={ui.feedback}

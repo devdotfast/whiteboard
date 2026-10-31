@@ -26,6 +26,7 @@ import { ILogService } from "../../../../platform/log/common/log.js";
 import { FocusMode } from "../../../../platform/native/common/native.js";
 import { INotificationService } from "../../../../platform/notification/common/notification.js";
 import { IProductService } from "../../../../platform/product/common/productService.js";
+import { IUpdateService, StateType, type State } from "../../../../platform/update/common/update.js";
 import { IWorkbenchEnvironmentService } from "../../../../workbench/services/environment/common/environmentService.js";
 import { IEditorProgressService, LongRunningOperation } from "../../../../platform/progress/common/progress.js";
 import { IStorageService, StorageScope } from "../../../../platform/storage/common/storage.js";
@@ -45,7 +46,7 @@ import type { IEditorGroup } from "../../../../workbench/services/editor/common/
 import { IHostService } from "../../../../workbench/services/host/browser/host.js";
 import { IWorkbenchThemeService, type IWorkbenchColorTheme } from "../../../../workbench/services/themes/common/workbenchThemeService.js";
 import { importColorThemes } from "../../reviewThemeImport.js";
-import { isMacintosh } from "../../../../base/common/platform.js";
+import { isLinux, isMacintosh } from "../../../../base/common/platform.js";
 import { ILifecycleService, ShutdownReason } from "../../../../workbench/services/lifecycle/common/lifecycle.js";
 import { IWorkbenchLayoutService, Parts } from "../../../../workbench/services/layout/browser/layoutService.js";
 import {
@@ -83,7 +84,9 @@ import type {
 	ReviewCanvasNewWhiteboardRequest,
 	ReviewCanvasOnboarding,
 	ReviewAppearance,
+	ReviewCanvasPendingUpdate,
 	ReviewCanvasSettingsContent,
+	ReviewCanvasUpdateHost,
 	ReviewColorTheme,
 	ReviewColorThemeKind,
 	ReviewCanvasSetupActions,
@@ -208,6 +211,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		@IWorkbenchThemeService private readonly reviewThemeService: IWorkbenchThemeService,
 		@IStorageService private readonly storageService: IStorageService,
 		@IProductService private readonly productService: IProductService,
+		@IUpdateService private readonly updateService: IUpdateService,
 		@IWorkbenchEnvironmentService private readonly workbenchEnvironment: IWorkbenchEnvironmentService,
 		@IReviewDesktopConnectionService
 		private readonly desktopConnection: IReviewDesktopConnectionService,
@@ -1182,6 +1186,22 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		return this.configurationService.getValue<boolean>(REVIEW_SOFTWARE_MAP_SETTING) === true;
 	}
 
+	private updateHost(): ReviewCanvasUpdateHost {
+		let current = pendingUpdateOf(this.updateService.state);
+		const changes = this._register(new Emitter<void>());
+		this._register(this.updateService.onStateChange((state) => {
+			const next = pendingUpdateOf(state);
+			if (next?.action === current?.action && next?.version === current?.version) return;
+			current = next;
+			changes.fire();
+		}));
+		return {
+			current: () => current,
+			onDidChange: (listener) => changes.event(listener),
+			apply: () => void (current?.action === "instructions" ? this.updateService.downloadUpdate(true) : this.updateService.quitAndInstall()),
+		};
+	}
+
 	private currentShowReleaseNotes(): boolean {
 		return this.configurationService.getValue<boolean>(REVIEW_SHOW_RELEASE_NOTES_SETTING) !== false;
 	}
@@ -1251,6 +1271,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 					submitContact: contact => this.desktopConnection.submitFeedbackContact(contact),
 					openReleaseNotes: () => void this.commandService.executeCommand(REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID, undefined, "feedback"),
 				},
+				update: this.updateHost(),
 				setupTooltip: this.setupTooltip,
 				notify: (notification) => showReviewNotification(this.notificationService, notification),
 				confirmDelete: async (titles, options) => {
@@ -1554,4 +1575,12 @@ export class ReviewCanvasParts extends Disposable implements IReviewCanvasPartsS
 		super();
 		this._register(instantiationService.createInstance(ReviewCanvasPlaceholderPart));
 	}
+}
+
+/** Linux never reaches Ready: its package manager installs the update. */
+function pendingUpdateOf(state: State): ReviewCanvasPendingUpdate | undefined {
+	const action = state.type === StateType.Ready ? "restart" : isLinux && state.type === StateType.AvailableForDownload ? "instructions" : undefined;
+	if (!action || !("update" in state)) return undefined;
+	const version = state.update?.productVersion;
+	return { action, ...(version && { version }) };
 }

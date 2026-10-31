@@ -1116,6 +1116,20 @@ export interface ReviewCanvasRelease {
   published_at: string | null;
 }
 
+/** An update waiting on a restart, or on Linux on the package manager. */
+export interface ReviewCanvasPendingUpdate {
+  version?: string;
+  action: "restart" | "instructions";
+}
+
+export interface ReviewCanvasUpdateHost {
+  /** The same object until the update changes. */
+  current(): ReviewCanvasPendingUpdate | undefined;
+  onDidChange(listener: () => void): ReviewDisposable;
+  /** Restarts into the update, or opens the package manager instructions. */
+  apply(): void;
+}
+
 /** The Release notes tab: one version's GitHub release. */
 export interface ReviewCanvasReleaseNotes {
   version: string;
@@ -1257,6 +1271,7 @@ export interface ReviewCanvasUi {
     ): Promise<ReviewFeedbackSubmissionResult>;
     openReleaseNotes(): void;
   };
+  update?: ReviewCanvasUpdateHost;
   setupTooltip?: ReviewCanvasBridge["setupTooltip"];
   /** Asks before deleting the boards with these titles. reviewIds let the
    * host name the whiteboards that link to them and the children that move
