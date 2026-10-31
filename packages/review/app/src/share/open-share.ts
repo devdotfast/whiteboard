@@ -53,7 +53,11 @@ export async function openShare(
 
   const host = readOnlyHost({
     ...options,
-    inlineEditors: await shareInlineEditors(bundle.sources, pins),
+    inlineEditors: await shareInlineEditors(
+      bundle.sources,
+      pins,
+      bundle.alignments,
+    ),
   });
 
   return {

@@ -526,3 +526,22 @@ it("requires a pinned review before sharing saved worktree changes", async () =>
     snapshot.pins!.head,
   );
 });
+
+it("carries the alignment each reference resolved through, at the excerpts' commits", async () => {
+  const { local, reviewId } = await fixture();
+
+  const { bundle } = validateShareBundle(
+    await exportShare({ ...local, reviewId, repository }),
+  );
+
+  expect(bundle.alignments).toHaveLength(2);
+  expect(bundle.alignments).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ file: "new.ts", rows: [[null, 1]] }),
+      expect.objectContaining({ file: "main.ts", rows: [[1, 1]] }),
+    ]),
+  );
+  expect(new Set(bundle.sources.map((source) => source.commit))).toEqual(
+    new Set(bundle.alignments!.flatMap(({ base, head }) => [base, head])),
+  );
+});

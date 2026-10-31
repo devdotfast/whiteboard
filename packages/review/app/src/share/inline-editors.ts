@@ -15,7 +15,10 @@ import type {
   ReviewInlineStaticSpec,
   ReviewSourcePins,
 } from "@dev.fast/review-protocol";
-import type { ShareSource } from "@dev.fast/review-share-protocol";
+import type {
+  ShareAlignment,
+  ShareSource,
+} from "@dev.fast/review-share-protocol";
 import { type ShjToken, tokenize } from "@speed-highlight/core";
 import * as stylex from "@stylexjs/stylex";
 import { diffArrays } from "diff";
@@ -136,22 +139,102 @@ function unified(base: Block, head: Block): Block[] {
   return [{ side: "head", rows, diff: true }];
 }
 
+type SideRange = Spec["ranges"][number] & { side: ReviewDiffSide };
+
+/** The sharer's diff over the ranges an alignment reaches, one block per run of
+ * rows; the ranges none reaches stay in `ranges`. */
+function alignedBlocks(
+  excerpt: Excerpt,
+  pins: ReviewSourcePins | undefined,
+  alignments: readonly ShareAlignment[],
+  ranges: Set<SideRange>,
+): Block[] {
+  const blocks: Block[] = [];
+
+  if (!pins) return blocks;
+  const reached = new Set<SideRange>();
+
+  for (const alignment of alignments) {
+    if (alignment.head !== pins.head || alignment.base !== pins.base) continue;
+    let run: Row[] | undefined;
+
+    for (const [b, h] of alignment.rows) {
+      const hit = [...ranges].filter((range) => {
+        const n = range.side === "base" ? b : h;
+
+        return n !== null && range.startLine <= n && n <= range.endLine;
+      });
+
+      if (!hit.length) {
+        run = undefined;
+
+        continue;
+      }
+
+      for (const range of hit) reached.add(range);
+
+      if (!run) blocks.push({ side: "head", rows: (run = []), diff: true });
+
+      const before =
+        b === null
+          ? undefined
+          : {
+              n: b,
+              ...excerpt(
+                alignment.previousFile ?? alignment.file,
+                pins.base ?? pins.head,
+                b,
+              ),
+            };
+
+      const after =
+        h === null
+          ? undefined
+          : { n: h, ...excerpt(alignment.file, pins.head, h) };
+
+      if (before && after && before.text === after.text)
+        run.push({ ...after, base: b! });
+      else {
+        if (before) run.push({ ...before, change: "removed" });
+
+        if (after) run.push({ ...after, change: "added" });
+      }
+    }
+  }
+
+  for (const range of reached) ranges.delete(range);
+
+  return blocks;
+}
+
 /** Each range read at its own side. A selection resolves to a base range and
  * a head range, which read as one diff. */
 function rangeBlocks(
   excerpt: Excerpt,
   boardPins: ReviewSourcePins | undefined,
+  alignments: readonly ShareAlignment[],
   spec: Spec,
 ) {
   const pins = spec.pins ?? boardPins;
+
+  const ranges = new Set<SideRange>(
+    spec.ranges.map((range) => ({ ...range, side: range.side ?? spec.side })),
+  );
+
+  const aligned = alignedBlocks(
+    excerpt,
+    pins,
+    alignments.filter((alignment) => alignment.file === spec.path),
+    ranges,
+  );
+
   const sides: Record<ReviewDiffSide, Block[]> = { base: [], head: [] };
 
-  for (const range of spec.ranges) {
-    const side = range.side ?? spec.side;
+  for (const { side, startLine, endLine } of ranges) {
     const commit = side === "base" ? (pins?.base ?? pins?.head) : pins?.head;
     const rows: Row[] = [];
 
-    for (let n = Math.max(1, range.startLine); n <= range.endLine; n++)
+    for (let n = Math.max(1, startLine); n <= endLine; n++)
       rows.push({ n, ...(commit && excerpt(spec.path, commit, n)) });
 
     sides[side].push({ side, rows });
@@ -160,6 +243,7 @@ function rangeBlocks(
   const { base, head } = sides;
 
   return [
+    ...aligned,
     ...head.flatMap((block, k) => (base[k] ? unified(base[k], block) : block)),
     ...base.slice(head.length),
   ];
@@ -435,29 +519,33 @@ function peekInner(
 export async function shareInlineEditors(
   sources: readonly ShareSource[],
   boardPins: ReviewSourcePins | undefined,
+  alignments: readonly ShareAlignment[] = [],
 ): Promise<(settings: PeekSettings) => ReviewInlineEditorFactory> {
-  return excerptEditors(await excerpts(sources), boardPins);
+  return excerptEditors(await excerpts(sources), boardPins, alignments);
 }
 
 /** Peeks with no lines to show: each says its source is unavailable. */
 export const sourcelessEditors = (settings: PeekSettings) =>
-  excerptEditors(() => ({}), undefined)(settings);
+  excerptEditors(() => ({}), undefined, [])(settings);
 
 function excerptEditors(
   excerpt: Excerpt,
   boardPins: ReviewSourcePins | undefined,
+  alignments: readonly ShareAlignment[],
 ): (settings: PeekSettings) => ReviewInlineEditorFactory {
+  const blocksOf = (spec: Spec) =>
+    rangeBlocks(excerpt, boardPins, alignments, spec);
+
   return (settings) => ({
     async find(spec, query) {
       return {
-        matchCount: find(rangeBlocks(excerpt, boardPins, spec), matcher(query))
-          .count,
+        matchCount: find(blocksOf(spec), matcher(query)).count,
       };
     },
     renderStatic: (spec: ReviewInlineStaticSpec) =>
-      `<div class="${peekClass(spec.heightMode, false)}">${peekInner(spec.title, rangeBlocks(excerpt, boardPins, spec), find([], undefined), settings)}</div>`,
+      `<div class="${peekClass(spec.heightMode, false)}">${peekInner(spec.title, blocksOf(spec), find([], undefined), settings)}</div>`,
     create(spec) {
-      const blocks = rangeBlocks(excerpt, boardPins, spec);
+      const blocks = blocksOf(spec);
       const listeners = new Set<(height: number) => void>();
       let found = find([], undefined);
       let collapsed = false;

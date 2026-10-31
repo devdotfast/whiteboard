@@ -1,10 +1,12 @@
 import {
   MAX_SHARE_BYTES,
   SHARE_FORMAT,
+  type ShareAlignment,
   type ShareBundle,
   type ShareSource,
 } from "@dev.fast/review-share-protocol";
 import {
+  type AlignmentRow,
   type FileLineRange,
   type LensSource,
   type Pins,
@@ -26,7 +28,10 @@ import {
   sourceReferences,
 } from "@dev.fast/whiteboard-document";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
-import { reviewProgress } from "@review/review-api/review-progress.js";
+import {
+  type ResolvedAlignment,
+  reviewProgress,
+} from "@review/review-api/review-progress.js";
 import type { ReviewStore, Snapshot } from "@review/review-api/store.js";
 
 export function validateShareSources(
@@ -229,11 +234,18 @@ export async function exportShare(input: {
       { peek: reference.peek ?? false },
     );
 
+  const resolvedAlignments = new Map<string, ResolvedAlignment>();
+
   const { resolvedSelections } = await reviewProgress(
     input.store,
     input.data,
     stored,
+    undefined,
+    undefined,
+    resolvedAlignments,
   );
+
+  const alignments = alignmentRuns(resolvedAlignments.values());
 
   const selected = new Map<string, LensSource>(
     [
@@ -288,6 +300,53 @@ export async function exportShare(input: {
       : [],
     selections,
     sources: await cutExcerpts(input.data, excerpts),
+    ...(alignments.length > 0 && { alignments }),
     ...(input.repository && { repository: input.repository }),
   };
+}
+
+/** The rows the references resolved through, one run per stretch of a file's
+ * alignment they cover, with lines counted from 1. */
+function alignmentRuns(
+  resolved: Iterable<ResolvedAlignment>,
+): ShareAlignment[] {
+  const files = new Map<
+    string,
+    { sample: ResolvedAlignment; rows: Map<number, AlignmentRow> }
+  >();
+
+  for (const entry of resolved) {
+    const key = JSON.stringify([entry.pins.base, entry.pins.head, entry.file]);
+    const file = files.get(key) ?? { sample: entry, rows: new Map() };
+    files.set(key, file);
+
+    for (const [offset, row] of entry.rows.entries())
+      file.rows.set(entry.at + offset, row);
+  }
+
+  return [...files.values()].flatMap(({ sample, rows }) => {
+    const runs: ShareAlignment[] = [];
+    let last: number | undefined;
+
+    for (const [index, [base, head]] of [...rows].sort(([a], [b]) => a - b)) {
+      const pair: ShareAlignment["rows"][number] = [
+        base === null ? null : base + 1,
+        head === null ? null : head + 1,
+      ];
+
+      if (last === index - 1) runs.at(-1)!.rows.push(pair);
+      else
+        runs.push({
+          file: sample.file,
+          ...(sample.previousFile && { previousFile: sample.previousFile }),
+          head: sample.pins.head,
+          ...(sample.pins.base && { base: sample.pins.base }),
+          rows: [pair],
+        });
+
+      last = index;
+    }
+
+    return runs;
+  });
 }

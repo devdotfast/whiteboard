@@ -65,6 +65,7 @@ const bundle: ShareBundle = {
       lines: ["const a = 1;"],
     },
   ],
+  alignments: [{ file: "src/a.ts", head: "a".repeat(40), rows: [[null, 3]] }],
 };
 
 it("rejects an older format and an unknown source kind", () => {
