@@ -1,4 +1,5 @@
 import {
+  type AlignmentRow,
   type DiffLens,
   type FileLineRange,
   type Lens,
@@ -8,12 +9,13 @@ import {
   SelectionUnavailableError,
   type SelectionUnavailableReason,
   UNCATEGORIZED_LENS_ID,
+  alignmentRanges,
   anchorPins,
   boardRepositoryId,
   comparisonKey,
   fileLineRangeSchema,
   lensSelections,
-  resolveDiffSelection,
+  selectAlignmentRows,
   selectionKey,
   selectionReferences,
 } from "@dev.fast/whiteboard-document";
@@ -65,6 +67,15 @@ export interface ReviewProgress {
   untrackedFiles?: number;
 }
 
+/** The alignment rows a selection resolved through, for a share to carry. */
+export interface ResolvedAlignment {
+  pins: Pins;
+  file: string;
+  previousFile?: string;
+  at: number;
+  rows: AlignmentRow[];
+}
+
 /** Coverage survives new pins only when both complete file contents are unchanged. */
 export async function reviewProgress(
   store: ReviewStore,
@@ -72,6 +83,7 @@ export async function reviewProgress(
   snapshot: Snapshot,
   signal: AbortSignal = new AbortController().signal,
   partial?: ComparisonCoverage,
+  resolvedAlignments?: Map<string, ResolvedAlignment>,
 ): Promise<ReviewProgress> {
   const marks = store.viewedCoverage(snapshot.reviewId);
 
@@ -222,13 +234,20 @@ export async function reviewProgress(
         "File has no text alignment.",
       );
 
-    const result = resolveDiffSelection(
-      source,
-      rows,
+    const selected = selectAlignmentRows(source, rows);
+
+    const result = alignmentRanges(
+      selected.rows,
       file ?? { path: source.file },
     );
 
     resolvedSelections[key] = result;
+    resolvedAlignments?.set(key, {
+      pins: sourcePins,
+      file: file?.path ?? source.file,
+      previousFile: file?.previousPath,
+      ...selected,
+    });
 
     return result;
   };

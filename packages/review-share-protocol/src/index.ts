@@ -94,6 +94,24 @@ const lineRangeSchema = z.strictObject({
     .optional(),
 });
 
+/** A base line and a head line the sharer's diff paired, 1-based; null is a
+ * line the other side lacks. */
+const alignmentRowSchema = z.tuple([
+  z.number().int().positive().nullable(),
+  z.number().int().positive().nullable(),
+]);
+
+/** One contiguous run of the diff alignment a board's references span, so a
+ * reader paints the sharer's diff instead of pairing excerpts itself. */
+export const shareAlignmentSchema = z.strictObject({
+  file: sharePathSchema,
+  /** The base side's path when the file was renamed. */
+  previousFile: sharePathSchema.optional(),
+  head: z.string(),
+  base: z.string().optional(),
+  rows: z.array(alignmentRowSchema).min(1),
+});
+
 export const shareBundleSchema = z.strictObject({
   format: z.literal(SHARE_FORMAT),
   reviewId: z.string().min(1).max(256),
@@ -108,6 +126,8 @@ export const shareBundleSchema = z.strictObject({
   /** Each reference's lines, resolved where the board was shared. */
   selections: z.record(z.string(), z.array(lineRangeSchema)),
   sources: z.array(shareSourceSchema),
+  /** The sharer's diff over the selections, since 0.4. */
+  alignments: z.array(shareAlignmentSchema).optional(),
   repository: z
     .strictObject({ cloneUrl: gitHubRepositoryUrlSchema })
     .optional(),
@@ -116,6 +136,8 @@ export const shareBundleSchema = z.strictObject({
 export type ShareBundle = z.infer<typeof shareBundleSchema>;
 
 export type ShareSource = z.infer<typeof shareSourceSchema>;
+
+export type ShareAlignment = z.infer<typeof shareAlignmentSchema>;
 
 export const createShareSchema = z.strictObject({
   requestId: z.uuid(),

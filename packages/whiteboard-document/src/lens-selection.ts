@@ -230,12 +230,11 @@ export class SelectionUnavailableError extends Error {
   }
 }
 
-/** Resolve once against the renderer's rows. No matching or context expansion. */
-export function resolveDiffSelection(
+/** The rows a selection spans, in diff order, and the index of the first. */
+export function selectAlignmentRows(
   source: LensSource,
   rows: readonly AlignmentRow[],
-  file: { path: string; previousPath?: string },
-): FileLineRange[] {
+) {
   const locate = (endpoint: DiffSelection["start"]): number =>
     rows.findIndex(
       (row) => row[endpoint.side === "base" ? 0 : 1] === endpoint.line - 1,
@@ -249,11 +248,27 @@ export function resolveDiffSelection(
       "outside_lines",
       "Lens endpoints do not identify an ordered interval in this diff.",
     );
-  const selected = rows.slice(start, end + 1);
 
+  return { at: start, rows: rows.slice(start, end + 1) };
+}
+
+/** Resolve once against the renderer's rows. No matching or context expansion. */
+export function resolveDiffSelection(
+  source: LensSource,
+  rows: readonly AlignmentRow[],
+  file: { path: string; previousPath?: string },
+): FileLineRange[] {
+  return alignmentRanges(selectAlignmentRows(source, rows).rows, file);
+}
+
+/** Each side's lines among `rows`, as ranges. */
+export function alignmentRanges(
+  rows: readonly AlignmentRow[],
+  file: { path: string; previousPath?: string },
+): FileLineRange[] {
   return (["base", "head"] as const).flatMap((side, index) =>
     unionIntervals(
-      selected.flatMap((row) =>
+      rows.flatMap((row) =>
         row[index] === null ? [] : [[row[index]!, row[index]! + 1]],
       ),
     ).map(([from, to]) => ({
