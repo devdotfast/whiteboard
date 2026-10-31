@@ -78,5 +78,4 @@ const repositoryLabel = (cloneUrl: string) =>
   new URL(cloneUrl).pathname
     .slice(1)
     .replace(/\.git$/, "")
-    .split("/")
-    .join(" / ");
+    .replaceAll("/", " / ");
