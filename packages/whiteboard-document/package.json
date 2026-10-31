@@ -1,6 +1,6 @@
 {
   "name": "@dev.fast/whiteboard-document",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "The whiteboard document: block schemas, the edit reducer and its summary, for any runtime.",
   "license": "MIT",
   "repository": {
