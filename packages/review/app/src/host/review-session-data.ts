@@ -29,6 +29,8 @@ export interface ReviewSessionData {
   pullRequestUrl?: string;
   traces: ReadonlyMap<string, LoadedAgentTrace>;
   place(signal?: AbortSignal): Promise<ReviewBoardPlace>;
+  /** Its place, for a host that cannot read it. */
+  knownPlace?: ReviewBoardPlace;
   /** Its branch stack, apart from its place among boards. */
   stack(signal?: AbortSignal): Promise<ReviewStackResponse>;
   /** Creates an empty review of `branch` against `base` and returns its id:

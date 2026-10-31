@@ -1,5 +1,6 @@
 import {
   type ReviewApiSummary,
+  type ReviewBoardPlace,
   type ReviewCanvasBridge,
   type ReviewCanvasSettings,
   boardTitle,
@@ -78,6 +79,8 @@ export interface WhiteboardData extends ApiDocumentData {
   coverageRevision?: number;
   /** For a host that cannot read it. */
   progress?: ReviewProgress;
+  /** For a host that cannot read it. */
+  place?: ReviewBoardPlace;
   /** Animates a new version's `lastEdit`; "unknown" once the stream is lost. */
   activity?: ActivitySnapshot | "unknown";
 }
@@ -274,7 +277,7 @@ function useBoardSession(
   }, [host, reviewId]);
 
   // Not all of `data`: coverage and the editor's headings change often.
-  const { snapshot, version, hostState, available, traces } = data;
+  const { snapshot, version, hostState, available, traces, place } = data;
   const remoteHost = data.host;
 
   return useMemo(() => {
@@ -309,6 +312,7 @@ function useBoardSession(
         traces: new Map(
           [...traces].map(([id, trace]) => [id, retainedTrace(id, trace)]),
         ),
+        knownPlace: place,
         place: async (signal?: AbortSignal) =>
           parseReviewBoardPlace(
             await client.read(`/${reviewId}/place`, signal),
@@ -369,6 +373,7 @@ function useBoardSession(
     hostState,
     available,
     traces,
+    place,
     host.remoteHosts,
     reviewId,
     ui,

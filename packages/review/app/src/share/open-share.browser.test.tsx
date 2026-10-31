@@ -36,6 +36,7 @@ it("renders a share's document and its excerpts read-only", async () => {
       reviewId: "shared-board",
       version: 3,
       title: "Order status",
+      repository: { cloneUrl: "https://github.com/octo/widgets.git" },
       snapshot: {
         reviewId: "shared-board",
         version: 3,
@@ -79,6 +80,9 @@ it("renders a share's document and its excerpts read-only", async () => {
 
   expect(
     await settled(() => container.textContent?.includes("Orders now queue.")),
+  ).toBe(true);
+  expect(
+    await settled(() => container.textContent?.includes("octo / widgets")),
   ).toBe(true);
 
   const keyword = await settled(() =>

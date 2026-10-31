@@ -29,12 +29,13 @@ export async function openShare(
   const bundle = shareBundleSchema.parse(share);
   const snapshot = boardSnapshotSchema.parse(bundle.snapshot);
   const { pins } = snapshot;
+  const cloneUrl = bundle.repository?.cloneUrl;
 
   const data = boardView(
     {
       ...snapshot,
       ...(pins && { target: { kind: "commits", ...pins } }),
-      shared: { cloneUrl: bundle.repository?.cloneUrl },
+      shared: { cloneUrl },
     },
     {
       traces: z.record(z.string(), traceSchema).parse(bundle.traces),
@@ -58,10 +59,24 @@ export async function openShare(
   return {
     title: bundle.title,
     ...(bundle.repository && { repository: bundle.repository }),
-    data,
+    data: {
+      ...data,
+      place: {
+        siblings: [],
+        ...(cloneUrl && { repository: repositoryLabel(cloneUrl) }),
+      },
+    },
     host,
     dispose() {
       host.dispose();
     },
   };
 }
+
+/** "owner / repo", as Desktop names a board's repository. */
+const repositoryLabel = (cloneUrl: string) =>
+  new URL(cloneUrl).pathname
+    .slice(1)
+    .replace(/\.git$/, "")
+    .split("/")
+    .join(" / ");

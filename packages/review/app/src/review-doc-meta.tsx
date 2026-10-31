@@ -45,6 +45,7 @@ export function useBoardPlace(): ReviewBoardPlace {
     queryFn: ({ signal }) => review!.place(signal),
     enabled: review !== undefined,
     staleTime: Infinity,
+    initialData: review?.knownPlace,
     placeholderData: (previous) => previous ?? cachedPlace(queryClient, board),
   });
 
