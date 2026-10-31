@@ -65,6 +65,7 @@ const bundle: ShareBundle = {
       lines: ["const a = 1;"],
     },
   ],
+  alignments: [{ file: "src/a.ts", head: "a".repeat(40), rows: [[null, 3]] }],
 };
 
 it("rejects an older format and an unknown source kind", () => {
@@ -78,6 +79,17 @@ it("rejects an older format and an unknown source kind", () => {
       sources: [{ kind: "file", file: "a", commit: "a".repeat(40) }],
     }).success,
   ).toBe(false);
+});
+
+it("drops fields a newer sharer adds instead of rejecting the bundle", () => {
+  const parsed = shareBundleSchema.parse({
+    ...bundle,
+    later: true,
+    sources: [{ ...bundle.sources[0], later: true }],
+    alignments: [{ ...bundle.alignments![0], later: true }],
+  });
+
+  expect(parsed).toEqual(bundle);
 });
 
 it("normalizes GitHub transports without publishing credentials", () => {
