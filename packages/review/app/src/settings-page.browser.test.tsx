@@ -61,6 +61,8 @@ function settings(): ReviewCanvasSettingsContent {
     setSoftwareMapEnabled: async (enabled) => enabled,
     showReleaseNotes: true,
     setShowReleaseNotes: async (enabled) => enabled,
+    updatePill: true,
+    setUpdatePill: async (enabled) => enabled,
     animationsEnabled: false,
     setAnimationsEnabled: async (enabled) => enabled,
     diffrConfig: {

@@ -120,6 +120,8 @@ export function SettingsPage({
     settings.showReleaseNotes,
   );
 
+  const [updatePill, setUpdatePill] = useState(settings.updatePill);
+
   const [animationsEnabled, setAnimationsEnabled] = useState(
     settings.animationsEnabled,
   );
@@ -546,6 +548,24 @@ export function SettingsPage({
                       void run(
                         () => settings.setShowReleaseNotes(enabled),
                         setShowReleaseNotes,
+                      );
+                    }}
+                  />
+                </label>
+              </Row>
+              <Row
+                label="Update pill"
+                description="Show a pill at the bottom left while an update waits for a relaunch."
+              >
+                <label {...stylex.props(styles.toggle)}>
+                  <Checkbox
+                    aria-label="Update pill"
+                    checked={updatePill}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      void run(
+                        () => settings.setUpdatePill(enabled),
+                        setUpdatePill,
                       );
                     }}
                   />

@@ -146,6 +146,7 @@ export const SETTING_NAME = [
   "keymap",
   "software_map_enabled",
   "show_release_notes",
+  "update_pill",
   "diffr_config",
   "theme",
   "diff_theme",

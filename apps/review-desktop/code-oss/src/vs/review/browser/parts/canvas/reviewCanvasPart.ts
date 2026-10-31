@@ -70,6 +70,7 @@ import {
 	REVIEW_SHOW_RELEASE_NOTES_SETTING,
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_TELEMETRY_SETTING,
+	REVIEW_UPDATE_PILL_SETTING,
 } from "../../../common/reviewConfigurationDefaults.js";
 import { fetchWhiteboardRelease, REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID } from "../../../common/reviewReleaseNotes.js";
 import { ReviewApiClient, type ReviewApiSummary, resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
@@ -1087,6 +1088,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			},
 			showReleaseNotes: this.currentShowReleaseNotes(),
 			setShowReleaseNotes: (enabled) => this.setShowReleaseNotes(enabled),
+			updatePill: this.currentUpdatePill(),
+			setUpdatePill: (enabled) => this.setUpdatePill(enabled),
 			animationsEnabled: await this.desktopConnection.readAnimationsEnabled().catch(() => false),
 			setAnimationsEnabled: (enabled) => this.desktopConnection.setAnimationsEnabled(enabled),
 			remoteHosts: reviewRemoteHostsSettings({
@@ -1187,19 +1190,34 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	private updateHost(): ReviewCanvasUpdateHost {
-		let current = pendingUpdateOf(this.updateService.state);
+		const pending = () => this.currentUpdatePill() ? pendingUpdateOf(this.updateService.state) : undefined;
+		let current = pending();
 		const changes = this._register(new Emitter<void>());
-		this._register(this.updateService.onStateChange((state) => {
-			const next = pendingUpdateOf(state);
+		const refresh = () => {
+			const next = pending();
 			if (next?.action === current?.action && next?.version === current?.version) return;
 			current = next;
 			changes.fire();
+		};
+		this._register(this.updateService.onStateChange(refresh));
+		this._register(this.configurationService.onDidChangeConfiguration((event) => {
+			if (event.affectsConfiguration(REVIEW_UPDATE_PILL_SETTING)) refresh();
 		}));
 		return {
 			current: () => current,
 			onDidChange: (listener) => changes.event(listener),
 			apply: () => void (current?.action === "instructions" ? this.updateService.downloadUpdate(true) : this.updateService.quitAndInstall()),
 		};
+	}
+
+	private currentUpdatePill(): boolean {
+		return this.configurationService.getValue<boolean>(REVIEW_UPDATE_PILL_SETTING) !== false;
+	}
+
+	private async setUpdatePill(enabled: boolean): Promise<boolean> {
+		this.reviewTelemetryService.capture("setting_changed", { setting: "update_pill", enabled });
+		await this.configurationService.updateValue(REVIEW_UPDATE_PILL_SETTING, enabled, ConfigurationTarget.USER);
+		return this.currentUpdatePill();
 	}
 
 	private currentShowReleaseNotes(): boolean {

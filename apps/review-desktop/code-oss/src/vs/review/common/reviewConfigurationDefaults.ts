@@ -27,6 +27,7 @@ export const REVIEW_TELEMETRY_SETTING = 'review.telemetry.enabled';
 export const REVIEW_SOFTWARE_MAP_SETTING = 'review.experimental.softwareMap.enabled';
 /** Code OSS's own setting, registered in `update.config.contribution.ts`. */
 export const REVIEW_SHOW_RELEASE_NOTES_SETTING = 'update.showReleaseNotes';
+export const REVIEW_UPDATE_PILL_SETTING = 'review.update.showPill';
 export const REVIEW_REMOTE_HOSTS_SETTING = 'review.remote.hosts';
 export const REVIEW_REMOTE_INSTALL_SETTING = 'review.remote.install';
 export const REVIEW_REMOTE_INSTALL_MODES = ['ask', 'always', 'never'] as const;
