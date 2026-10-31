@@ -107,11 +107,11 @@ export abstract class EditorTabsControl extends Themable implements IEditorTabsC
 		// --editor-group-tab-height CSS value (24px / 14px) plus that 8px padding.
 		styleOverride: 32 as const,        // 24px tab  + 4px top + 4px bottom padding
 		styleOverrideCompact: 28 as const, // 20px tab  + 4px top + 4px bottom padding (20px = minimum to fit 16px icon + 2px padding)
-		// Review pill tabs (review/browser/media/review.css) add 6px top + 6px
+		// Review pill tabs (review/browser/media/review.css) add 12px top + 12px
 		// bottom padding to the tabs-and-actions-container. The total must equal
 		// REVIEW_CHROME_HEIGHT, because the Review titlebar overlays this row.
-		review: 40 as const,        // 28px pill + 6px top + 6px bottom padding
-		reviewCompact: 32 as const, // 20px pill + 6px top + 6px bottom padding
+		review: 52 as const,        // 28px pill + 12px top + 12px bottom padding
+		reviewCompact: 44 as const, // 20px pill + 12px top + 12px bottom padding
 	};
 
 	protected editorActionsToolbarContainer: HTMLElement | undefined;

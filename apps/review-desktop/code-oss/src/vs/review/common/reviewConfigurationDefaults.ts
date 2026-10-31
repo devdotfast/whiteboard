@@ -74,6 +74,9 @@ export const reviewConfigurationDefaults = {
 	'workbench.commandPalette.experimental.enableNaturalLanguageSearch': false,
 	'workbench.settings.enableNaturalLanguageSearch': false,
 	'window.autoDetectColorScheme': true,
+	// Native window chrome follows the color theme. The main process repeats this
+	// default in `Setting.SYSTEM_COLOR_THEME` (themeMainServiceImpl.ts).
+	'window.systemColorTheme': 'auto',
 	'workbench.colorTheme': 'Review Dark',
 	'workbench.preferredDarkColorTheme': 'Review Dark',
 	'workbench.preferredLightColorTheme': 'Review Light',
