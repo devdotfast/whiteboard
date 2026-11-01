@@ -3,9 +3,11 @@ import { CodePeekCard } from "@canvas/CodePeek";
 import { useReviewDebugSettings } from "@canvas/debug-settings";
 import { DiagramHeader } from "@canvas/diagram-header";
 import { diagramStyles } from "@canvas/diagram-styles";
-import { useDiagramTourShell } from "@canvas/diagram-tour";
+import { DiagramTourOverlay, useDiagramTourShell } from "@canvas/diagram-tour";
 import { drawStyles } from "@canvas/draw-styles";
-import { useOptionalReviewPanel } from "@canvas/review-panel";
+import { countLabel } from "@canvas/format";
+import { useReviewSession } from "@canvas/host/review-session";
+import { useReviewPanel, useReviewPanelStore } from "@canvas/review-panel";
 import type { SourcePeekAnchor } from "@canvas/review-panel-model";
 import {
   fontSize,
@@ -18,10 +20,13 @@ import { shellStyles } from "@canvas/shell-styles";
 import { withClass } from "@canvas/stylex-props";
 import { themeClass, themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
+import { captureUiEvent } from "@canvas/ui-telemetry";
 import { Button, IconButton } from "@canvas/ui/button";
 import { SegmentedControl } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
+import { useDiagramSelection } from "@canvas/use-diagram-selection";
+import { useWhiteboardSettings } from "@canvas/whiteboard-settings";
 import {
   type Block,
   anchorSelection,
@@ -33,8 +38,10 @@ import * as stylex from "@stylexjs/stylex";
 import {
   type KeyboardEvent,
   type ReactNode,
+  type RefObject,
   useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -42,6 +49,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { animationTour, frameAnchorId, frameContent } from "./animation-tour";
 import { useReportAnimationRun } from "./report-run";
 import {
   type HostMessage,
@@ -142,8 +150,9 @@ export function AnimationBlock({
   children,
 }: BlockProps<"animation">) {
   const { theme } = useReviewDebugSettings();
-  const openPeek = useOptionalReviewPanel((state) => state.openPeek);
-  const figureRef = useRef<HTMLElement>(null);
+  const panelStore = useReviewPanelStore();
+  const session = useReviewSession();
+  const { diagramFullscreenOnClick } = useWhiteboardSettings();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const portRef = useRef<MessagePort | null>(null);
   const [index, setIndex] = useState(0);
@@ -157,10 +166,11 @@ export function AnimationBlock({
 
   const reportRun = useReportAnimationRun(data.snapshot.reviewId, node.id);
 
-  // The inline figure's height while it is out fullscreen, held by a
-  // placeholder so the document keeps its place.
-  const [expanded, setExpanded] = useState<number | null>(null);
-  const expandRef = useRef<HTMLButtonElement>(null);
+  // Fullscreen without a tour. Either way, a placeholder holds the inline
+  // figure's height so the document keeps its place.
+  const [expanded, setExpanded] = useState(false);
+  const [held, setHeld] = useState(0);
+  const openRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const indexRef = useRef(index);
   indexRef.current = index;
@@ -192,6 +202,33 @@ export function AnimationBlock({
   );
 
   const steps = activeFrames.every((item) => item.label) ? activeFrames : null;
+
+  // A stop per frame of the path showing, when its frames show code.
+  const tour = useMemo(
+    () =>
+      animationTour(
+        { id: node.id, title: node.title },
+        data.anchors,
+        activeFrames,
+      ),
+    [node.id, node.title, data.anchors, activeFrames],
+  );
+
+  const frameAnchor = tour && frameAnchorId(node.id, frame.key);
+
+  // Unlike a diagram's, the tour stays open on a stop it no longer has: a
+  // scenario switch moves it to the frame showing instead.
+  const overlay = useReviewPanel((state) =>
+    tour && state.overlayTour?.tourId === node.id ? state.overlayTour : null,
+  );
+
+  const tourOpen = overlay !== null;
+
+  // Set while the column shows this tour.
+  const { anchor: inlineAnchor, figureRef } = useDiagramSelection(
+    tour,
+    tourOpen || expanded,
+  );
 
   // A new stage for each edit of what it runs; frame changes reuse it.
   const stageKey = useMemo(
@@ -245,19 +282,53 @@ export function AnimationBlock({
     [frames, send],
   );
 
-  const reveal = useCallback(
-    (name: string) => {
-      const anchor = data.anchors.get(animationCodeId(node.id, name));
+  const openTour = () => {
+    if (!tour || !frameAnchor) return;
 
-      if (!anchor || !openPeek) return;
-      openPeek({
+    if (!tourOpen) {
+      captureUiEvent(session, "tour_started", { steps: tour.stops.length });
+
+      if (!expanded) setHeld(figureRef.current?.offsetHeight ?? 0);
+    }
+
+    setExpanded(false);
+    panelStore
+      .getState()
+      .openOverlayTour({ tourId: node.id, kind: "animation" }, frameAnchor);
+  };
+
+  // A drawn element's code opens beside the board with the tour, at the
+  // frame showing, or with the tour fullscreen.
+  const reveal = (name: string) => {
+    const anchor = data.anchors.get(animationCodeId(node.id, name));
+
+    if (!anchor) return;
+    captureUiEvent(session, "peek_opened", { via: "diagram" });
+    const { openPeek, moveOverlayTour, active } = panelStore.getState();
+
+    const stop = tour?.stops.find((item) => item.anchor.id === frameAnchor);
+
+    if (!tour || !stop)
+      return openPeek({
         kind: "peek",
         anchor,
         content: { kind: "source", source: anchor.peek },
       });
-    },
-    [data.anchors, node.id, openPeek],
-  );
+
+    if (tourOpen) return moveOverlayTour(stop.anchor.id, { reveal: true });
+
+    if (expanded || diagramFullscreenOnClick) return openTour();
+
+    openPeek({
+      kind: "peek",
+      anchor: stop.anchor,
+      content: frameContent(node.id, data.anchors, frame, name),
+      tour: {
+        definition: tour,
+        revealRequest: (active?.tour?.revealRequest ?? 0) + 1,
+      },
+    });
+  };
 
   // A stage script's setSequence() and the scenario picker both land here.
   const selectSequence = (keys: string[]) => {
@@ -466,21 +537,108 @@ export function AnimationBlock({
     if (!activeFrames.some((item) => item.key === frame.key)) go(0, true);
   }, [activeFrames, frame.key, go]);
 
-  const collapse = useCallback(() => setExpanded(null), []);
+  const { closeOverlayTour, moveOverlayTour } = panelStore.getState();
+  const collapse = useCallback(() => setExpanded(false), []);
+  const close = tourOpen ? closeOverlayTour : collapse;
 
-  const { portalTarget } = useDiagramTourShell(expanded !== null, collapse);
+  const { portalTarget } = useDiagramTourShell(tourOpen || expanded, close);
+
+  const fullscreen = (tourOpen || expanded) && portalTarget !== null;
 
   // Focus follows the figure in and back out to the control that opened it.
-  const wasExpanded = useRef(false);
+  const wasFullscreen = useRef(false);
 
   useEffect(() => {
-    if (expanded !== null) closeRef.current?.focus();
-    else if (wasExpanded.current) expandRef.current?.focus();
+    if (fullscreen) closeRef.current?.focus();
+    else if (wasFullscreen.current) openRef.current?.focus();
 
-    wasExpanded.current = expanded !== null;
-  }, [expanded]);
+    wasFullscreen.current = fullscreen;
+  }, [fullscreen]);
 
-  const fullscreen = expanded !== null && portalTarget !== null;
+  // The tour's panel picked a stop (its Next, a click, its scroll): show
+  // that frame, moving to it when it is the next one. A stop the tour no
+  // longer has, after a scenario switch, gives way to the frame showing.
+  const followPanel = useEffectEvent(() => {
+    const anchor = panelStore.getState().overlayTour?.anchor;
+
+    if (!tour || !frameAnchor || !anchor) return;
+    const position = tour.stops.findIndex((stop) => stop.anchor.id === anchor);
+
+    if (position < 0) moveOverlayTour(frameAnchor, { reveal: true });
+    else if (position !== activeIndex)
+      go(position, Math.abs(position - activeIndex) > 1);
+  });
+
+  const overlayAnchor = overlay?.anchor;
+
+  useEffect(() => {
+    if (overlayAnchor) followPanel();
+  }, [overlayAnchor, tour]);
+
+  // The column's tour picked a stop (its Next, a click, its scroll): show
+  // that frame, as the overlay's panel does.
+  const followColumn = useEffectEvent(() => {
+    if (!tour || fullscreen || !inlineAnchor) return;
+
+    const position = tour.stops.findIndex(
+      (stop) => stop.anchor.id === inlineAnchor,
+    );
+
+    if (position >= 0 && position !== activeIndex)
+      go(position, Math.abs(position - activeIndex) > 1);
+  });
+
+  useEffect(() => {
+    if (inlineAnchor) followColumn();
+  }, [inlineAnchor, tour]);
+
+  // The frame changed some other way (the controls, playback, the stage, a
+  // scenario): the open tour follows it, fullscreen or in the column. Each
+  // side writes only what differs, so neither echoes the other.
+  const followFrame = useEffectEvent(() => {
+    const { overlayTour, active, openPeek } = panelStore.getState();
+
+    if (!tour || !frameAnchor) return;
+
+    if (overlayTour?.tourId === node.id) {
+      if (overlayTour.anchor !== frameAnchor)
+        moveOverlayTour(frameAnchor, { reveal: true });
+
+      return;
+    }
+
+    const stop = tour.stops.find((item) => item.anchor.id === frameAnchor);
+
+    if (
+      !inlineAnchor ||
+      fullscreen ||
+      !stop ||
+      (active?.anchor?.id === frameAnchor && active.tour?.definition === tour)
+    )
+      return;
+    openPeek({
+      kind: "peek",
+      anchor: stop.anchor,
+      content: stop.content,
+      tour: {
+        definition: tour,
+        revealRequest: (active?.tour?.revealRequest ?? 0) + 1,
+      },
+    });
+  });
+
+  // Not on mount: a restored tour's stop leads the frame there.
+  const followed = useRef({ frameAnchor, tour });
+
+  useEffect(() => {
+    if (
+      followed.current.frameAnchor === frameAnchor &&
+      followed.current.tour === tour
+    )
+      return;
+    followed.current = { frameAnchor, tour };
+    followFrame();
+  }, [frameAnchor, tour]);
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key === "ArrowRight") go(activeIndex + 1, false);
@@ -507,20 +665,34 @@ export function AnimationBlock({
         titleStyle={styles.headerTitle}
         meta={`${activeIndex + 1} / ${activeFrames.length}`}
         action={
-          <Button
-            ref={fullscreen ? closeRef : expandRef}
-            xstyle={diagramStyles.button}
-            aria-label={
-              fullscreen ? "Close expanded animation" : "Expand animation"
-            }
-            onClick={() =>
-              fullscreen
-                ? collapse()
-                : setExpanded(figureRef.current?.offsetHeight ?? 0)
-            }
-          >
-            {fullscreen ? "Close" : "Expand"}
-          </Button>
+          fullscreen ? (
+            <Button
+              ref={closeRef}
+              xstyle={diagramStyles.button}
+              aria-label={tourOpen ? "Close tour" : "Close expanded animation"}
+              onClick={close}
+            >
+              Close
+            </Button>
+          ) : tour ? (
+            <TourButton
+              buttonRef={openRef}
+              stops={tour.stops.length}
+              onClick={openTour}
+            />
+          ) : (
+            <Button
+              ref={openRef}
+              xstyle={diagramStyles.button}
+              aria-label="Expand animation"
+              onClick={() => {
+                setHeld(figureRef.current?.offsetHeight ?? 0);
+                setExpanded(true);
+              }}
+            >
+              Expand
+            </Button>
+          )
         }
       />
       {node.scenarios && (
@@ -684,11 +856,32 @@ export function AnimationBlock({
 
   if (!fullscreen) return figure;
 
+  const placeholder = <div aria-hidden="true" style={{ height: held }} />;
+
+  if (tour && overlay)
+    return (
+      <>
+        {placeholder}
+        {createPortal(
+          <DiagramTourOverlay
+            tour={tour}
+            activeAnchor={overlay.anchor}
+            revealRequest={overlay.revealRequest}
+            onActiveAnchorChange={moveOverlayTour}
+            onClose={closeOverlayTour}
+          >
+            {figure}
+          </DiagramTourOverlay>,
+          portalTarget,
+        )}
+      </>
+    );
+
   // Portaled outside .review-app, so it carries the theme itself, as the
   // diagram tour overlay does.
   return (
     <>
-      <div aria-hidden="true" style={{ height: expanded }} />
+      {placeholder}
       {createPortal(
         <div
           {...withClass(
@@ -755,6 +948,40 @@ function SlotOverlay({
     >
       {children}
     </div>
+  );
+}
+
+/** Opens the tour; its tooltip counts the stops. */
+function TourButton({
+  buttonRef,
+  stops,
+  onClick,
+}: {
+  buttonRef: RefObject<HTMLButtonElement | null>;
+  stops: number;
+  onClick(): void;
+}) {
+  const tooltip = useTooltip(countLabel(stops, "stop"), { quick: true });
+
+  const ref = useCallback(
+    (button: HTMLButtonElement | null) => {
+      buttonRef.current = button;
+
+      return tooltip(button);
+    },
+    [buttonRef, tooltip],
+  );
+
+  return (
+    <Button
+      ref={ref}
+      className="diagram-tour-button"
+      xstyle={diagramStyles.button}
+      data-tour-target="diagram-tour"
+      onClick={onClick}
+    >
+      Tour
+    </Button>
   );
 }
 
