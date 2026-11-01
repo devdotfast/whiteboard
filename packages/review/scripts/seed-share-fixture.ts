@@ -1,56 +1,47 @@
-/** Seeds a share's copy into `<home>` for the shared-review e2e journey; the sender's repository is renamed away afterwards. */
-import { randomBytes } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+/** Writes a share's two revisions as `bundle-1.json` and `bundle-2.json` into `<root>` for the shared-review e2e journey. */
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { openLocalReviewStore } from "@review/review-api/local-data.js";
 import { exportShare } from "@review/sharing/export.js";
-import { importShare, shareKey } from "@review/sharing/import.js";
-import { fetchPinnedRepository } from "@review/sharing/repository.js";
 
 import { createShareFixture } from "../test/fixtures/share/create.js";
 
-const [root, home] = process.argv.slice(2).map((arg) => path.resolve(arg));
+const root = process.argv[2] && path.resolve(process.argv[2]);
 
-if (!root || !home)
-  throw new Error("Usage: tsx scripts/seed-share-fixture.ts <root> <home>");
-
-await mkdir(home, { recursive: true });
+if (!root) throw new Error("Usage: tsx scripts/seed-share-fixture.ts <root>");
 
 const fixture = await createShareFixture(root);
 
-const bundle = await exportShare(fixture);
+const note = "The second revision adds this note.";
 
-const recipient = openLocalReviewStore(path.join(home, "review-api.db"));
-
-const reviewId = await importShare(
-  {
-    ...recipient,
-    fetchRepository: (target, _url, ...rest) =>
-      fetchPinnedRepository(target, fixture.repo, ...rest),
-  },
-  shareKey("https://app.dev.fast", randomBytes(32).toString("base64url")),
-  bundle,
-  { login: "fixture-sender", sharedAt: Date.now() },
+await writeFile(
+  path.join(root, "bundle-1.json"),
+  JSON.stringify(await exportShare(fixture)),
 );
 
-const { version } = recipient.store.read(reviewId);
+await fixture.store.execute({
+  operation: {
+    type: "edit",
+    reviewId: fixture.reviewId,
+    edit: { type: "insert", content: { type: "markdown", markdown: note } },
+  },
+});
 
-await recipient.data.close();
-
-recipient.store.close();
+await writeFile(
+  path.join(root, "bundle-2.json"),
+  JSON.stringify(await exportShare(fixture)),
+);
 
 await fixture.data.close();
 
 fixture.store.close();
 
-await rename(fixture.repo, path.join(root, "sender-unavailable"));
-
 await writeFile(
   path.join(root, "fixture.json"),
   JSON.stringify({
-    reviewId,
-    version,
+    reviewId: fixture.reviewId,
+    repo: fixture.repo,
+    note,
     sourceFile: fixture.sourceFile,
     sourceText: fixture.sourceText,
   }),
