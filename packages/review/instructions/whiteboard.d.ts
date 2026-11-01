@@ -44,7 +44,8 @@ export type FrameResult =
   | Promise<void>;
 
 export interface Whiteboard {
-  /** The active path's frames, in order: a scenario's, or all of them. */
+  /** The active path's frames, in order: a scenario's, or all of them. A
+   * frame outside the active scenario is not listed. */
   readonly frames: readonly Frame[];
   /** The current frame object; read `.key` for its name. */
   readonly frame: Frame;
@@ -62,7 +63,9 @@ export interface Whiteboard {
    * another frame shows. Returns an unsubscribe function. */
   on(key: string, handler: (change: FrameChange) => FrameResult): () => void;
   /** element.animate that holds its end state, lands at the end on a jump, and
-   * skips motion under reduced motion. */
+   * skips motion under reduced motion. Give every keyframe its start value, and
+   * measure positions before starting one: a started animation already
+   * reports its transform. */
   animate(
     target: Element | string,
     keyframes: Keyframe[] | PropertyIndexedKeyframes,
@@ -70,7 +73,8 @@ export interface Whiteboard {
   ): Animation;
   /** The frame's part of one anime.js timeline: it plays when the reader steps
    * into the frame and lands at its end on a jump. A tween starts where the
-   * frames before it left the element, so write only where it goes. */
+   * frames before it left the element, so write only where it goes. Add to it
+   * while the script first runs, not from a frame handler. */
   timeline(key: string): FrameTimeline;
   /** anime.js v4, also the global `anime`: easings, stagger, utils. */
   readonly anime: unknown;
@@ -106,7 +110,8 @@ export interface Whiteboard {
   /** Move a token along an arrow during a frame, at the arrow's live geometry.
    * It fades out on arrival unless `stay` keeps it at the head. Trips append
    * to the frame; `position: 0` starts trips together, a number of
-   * milliseconds sequences one after another. */
+   * milliseconds sequences one after another. Declare trips while the script
+   * first runs, not from a frame handler. */
   travel(
     token: HTMLElement | string,
     arrow: SVGGElement,
@@ -140,7 +145,9 @@ export interface TravelOptions {
   stay?: boolean;
 }
 
-/** A scene card, its id, or an element. */
+/** A scene card, its id, or an element. In `whiteboard.arrow` and `travel`
+ * a string is a CSS selector (`"#api"`); in a scene's methods it is a card
+ * id. */
 export type CardRef = SceneCard | string | Element;
 
 /** 1-based column and row, with optional row and column spans: [1, 2, 1, 4] is

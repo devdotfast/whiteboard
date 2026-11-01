@@ -15,7 +15,9 @@ For a new animation, write the same files into a folder of your own and publish 
 
 Before you write HTML, read the two files whose paths `session_checkout` and these instructions give: `whiteboard.css`, the classes and `--wb-*` variables every animation loads, and `whiteboard.d.ts`, the `whiteboard` API. Use the classes and variables rather than your own colors, sizes or fonts, so the animation matches the board in light and dark.
 
-There are two ways to draw.
+Start from the reference closest to what you are drawing, listed under References at the end of these instructions: copy its folder into your draft, then change the data, the prose and the code links.
+
+There are three ways to draw.
 
 ### A scene: cards and messages
 
@@ -34,7 +36,17 @@ For a few services, processes or stores with messages moving between them, use `
 </script>
 ```
 
-A scene names frame keys, so a new scenario means new frames and a few new lines like these.
+A scene names frame keys, so a new scenario means new frames and a few new lines like these. A card's `id` is its element's id, so your own CSS can address it as `#api`.
+
+### A hand-made layout: lanes, axes, graphs
+
+When the drawing is not a grid of cards (attempts on a time axis, two lanes interleaving, a state graph), lay out your own elements with the kit (`wb-node`, `wb-lane`, `wb-table`) and connect them:
+
+- `whiteboard.arrow("#caller", "#service", { enter: "a1" })` draws an SVG arrow that follows the two elements. A string here is a CSS selector; in a scene's methods it is a card id.
+- `whiteboard.token({ label: "GET" })` and `whiteboard.travel(token, arrow, "a1")` ride a chip along the arrow during that frame.
+- `whiteboard.timeline("a1").add(".wait", { scaleX: [0, 1], duration: 600 })` adds tweens that play when the reader steps into the frame and land at their end on a jump.
+
+Declare arrows, tokens, travels and timelines while the script first runs, naming the frames they play in; they cannot be added from a frame handler. `data-enter="a1"`, `data-exit="a3"`, `data-only="a1 a3"` and `data-highlight="a1 a3"` on any element show, hide or ring it in those frames with no script.
 
 ### Your own HTML: draw each frame from its data
 
@@ -65,7 +77,11 @@ Draw the frame in full, then animate what is new since the previous frame:
 </script>
 ```
 
-Write each frame's data in full, not as a change from the one before: a reader can jump straight to any frame. `whiteboard.animate` skips the motion on a jump and under reduced motion, and returning its animations makes playback wait for them.
+Write each frame's data in full, not as a change from the one before: a reader can jump straight to any frame. `whiteboard.animate` skips the motion on a jump and under reduced motion, and returning its animations makes playback wait for them. Give every keyframe its start value (`[{ opacity: 0 }, { opacity: 1 }]`, not `[{ opacity: 1 }]`): a jump finishes the animation, and a missing start lands wrong.
+
+Something that moves between frames (a job changing queue slot, a record regrouped under a new parent) is drawn the same way: measure every element's position, redraw, then animate each moved element from its old position to `transform: none`. Measure everything before starting any animation; one that has started already reports its transform.
+
+`whiteboard.frames` and `frame.index` follow the active scenario, so a frame outside it is not listed. Key your drawing on `frame.data`, not on positions.
 
 ## Link the code
 

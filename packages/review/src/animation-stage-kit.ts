@@ -149,7 +149,7 @@ const CLASSES: [selector: string, use: string][] = [
   ],
   [
     ".wb-card",
-    "A box with a title and note: put .wb-card-title and .wb-card-note inside. The scene's cards are these.",
+    "A box with a title and note: a .wb-card-head holding a .wb-card-dot and the .wb-card-title, then a .wb-card-note. The scene's cards are these.",
   ],
   [
     ".wb-node",
