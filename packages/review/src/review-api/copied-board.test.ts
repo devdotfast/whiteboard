@@ -196,6 +196,35 @@ it("refreshes a copy in place with a newer share, even in Trash, and refuses onc
   ).rejects.toMatchObject({ status: 409 });
 });
 
+it("refreshes only a copy of the same link", async () => {
+  const { reviewId } = await copy();
+
+  const { reviewId: own } = await store.execute({
+    operation: {
+      type: "create",
+      title: "Own",
+      target: { kind: "commits", ...pins },
+    },
+  });
+
+  const create = {
+    operation: {
+      type: "create",
+      title: "Copy v2",
+      target: { kind: "commits", ...pins },
+    },
+  };
+
+  const other = { ...seed, shared: { ...seed.shared, key: "other" } };
+
+  await expect(store.refreshCopy(own, 0, create, seed)).rejects.toMatchObject({
+    status: 400,
+  });
+  await expect(
+    store.refreshCopy(reviewId, 0, create, other),
+  ).rejects.toMatchObject({ status: 400 });
+});
+
 it("still checks the images of a board made from scratch", async () => {
   const { reviewId } = await store.execute({
     operation: {

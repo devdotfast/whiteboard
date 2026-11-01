@@ -1840,6 +1840,14 @@ export class ReviewStore {
       const previous =
         op.type === "create" && !into ? undefined : this.read(id);
 
+      if (
+        into &&
+        (!previous?.shared?.key || previous.shared.key !== initial?.shared?.key)
+      )
+        throw new ReviewInputError(
+          "Only a copy of the same share link refreshes in place.",
+        );
+
       let snapshot: Snapshot =
         op.type === "create"
           ? createdSnapshot(
@@ -2225,7 +2233,8 @@ export class ReviewStore {
       previous
         ? () => {
             // A board in Trash is read-only, whoever writes.
-            if (!change.inPlace) this.assertWritable(id);
+            if (change.inPlace) this.assertExists(id);
+            else this.assertWritable(id);
 
             if (change.baseVersion !== undefined)
               assertBaseVersion(change.baseVersion, this.currentVersion(id));

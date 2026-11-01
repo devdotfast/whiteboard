@@ -13,6 +13,8 @@ import { createShareFixture } from "../../test/fixtures/share/create.js";
 import { exportShare } from "./export.js";
 import {
   importShare,
+  planShareCopy,
+  receiveShare,
   shareKey,
   sharePresentationSchema,
   sharedSnapshotSchema,
@@ -29,6 +31,13 @@ afterEach(async () => {
 
 const key = () =>
   shareKey("https://app.dev.fast", randomBytes(32).toString("base64url"));
+
+const [R1old, R1, R2, R3] = ["r0", "r1", "r2", "r3"];
+
+const served = (id: string, latest: string) => ({
+  revision: { id, version: 1, createdAt: 1 },
+  latest,
+});
 
 /** A sender's share, with a block pinned to commits of its own, and a
  * recipient with an empty store. */
@@ -91,7 +100,7 @@ it("copies a share into a board the recipient edits like their own", async () =>
     { ...recipient, fetchRepository },
     link,
     bundle,
-    { login: "ada", sharedAt: 1 },
+    { login: "ada", sharedAt: 1, revisionId: R1 },
   );
 
   await rename(sender.repo, `${sender.repo}-gone`);
@@ -110,6 +119,7 @@ it("copies a share into a board the recipient edits like their own", async () =>
     sharedAt: 1,
     cloneUrl: sender.repository.cloneUrl,
     key: link,
+    revisionId: R1,
     importedVersion: 0,
   });
   expect(repositoryId).not.toBe(pins.repositoryId);
@@ -160,40 +170,97 @@ it("copies a share into a board the recipient edits like their own", async () =>
   expect(recipient.store.read(reviewId).title).toBe("Mine now");
 });
 
-it("opens the copy a link already made, even from Trash", async () => {
+it("plans the three rules", () => {
+  const c = (over: object) => ({
+    reviewId: "a",
+    version: 3,
+    shared: { key: "k", revisionId: R1, importedVersion: 3, ...over },
+  });
+
+  expect(
+    planShareCopy([c({})], {
+      revision: { id: R1, version: 4, createdAt: 1 },
+      latest: R2,
+    }),
+  ).toEqual({ kind: "open", reviewId: "a" });
+  expect(planShareCopy([c({})], served(R2, R2))).toEqual({
+    kind: "refresh",
+    reviewId: "a",
+    version: 3,
+  });
+  expect(planShareCopy([{ ...c({}), version: 4 }], served(R2, R2))).toEqual({
+    kind: "import",
+  });
+  expect(planShareCopy([c({})], served(R1old, R2))).toEqual({
+    kind: "import",
+  });
+  expect(
+    planShareCopy(
+      [{ reviewId: "l", version: 0, shared: { key: "k" } }],
+      served(R2, R2),
+    ),
+  ).toEqual({ kind: "refresh", reviewId: "l", version: 0 });
+  expect(
+    planShareCopy(
+      [{ reviewId: "l", version: 1, shared: { key: "k" } }],
+      served(R2, R2),
+    ),
+  ).toEqual({ kind: "import" });
+});
+
+it("reopens, refreshes in place from Trash, and copies beside an edited board", async () => {
   const { bundle, recipient, fetchRepository } = await share();
+  const input = { ...recipient, fetchRepository };
   const link = key();
 
-  const reviewId = await importShare(
-    { ...recipient, fetchRepository },
-    link,
+  const download = vi.fn(async () => ({
     bundle,
-  );
+    attribution: { login: "ada", sharedAt: 1 },
+  }));
+
+  const a = await receiveShare(input, link, served(R1, R1), download);
+
+  expect(await receiveShare(input, link, served(R1, R1), download)).toBe(a);
+  expect(download).toHaveBeenCalledTimes(1);
 
   await recipient.store.execute(
-    { operation: { type: "lifecycle", state: "trash", reviewId } },
+    { operation: { type: "lifecycle", state: "trash", reviewId: a } },
     undefined,
     { kind: "person" },
   );
 
-  expect(
-    await importShare({ ...recipient, fetchRepository }, link, bundle),
-  ).toBe(reviewId);
+  expect(await receiveShare(input, link, served(R2, R2), download)).toBe(a);
+  expect(recipient.store.read(a)).toMatchObject({
+    version: 1,
+    trashedAt: expect.any(String),
+    shared: { revisionId: R2, importedVersion: 1 },
+  });
+
+  await recipient.store.execute(
+    { operation: { type: "lifecycle", state: "active", reviewId: a } },
+    undefined,
+    { kind: "person" },
+  );
+  await recipient.store.execute(
+    {
+      operation: {
+        type: "edit",
+        reviewId: a,
+        edit: {
+          type: "insert",
+          content: { type: "markdown", markdown: "Mine" },
+        },
+      },
+    },
+    undefined,
+    { kind: "person" },
+  );
+
+  const b = await receiveShare(input, link, served(R3, R3), download);
+
+  expect(b).not.toBe(a);
+  expect(recipient.store.copiesOf(link).map((x) => x.reviewId)).toEqual([b, a]);
   expect(fetchRepository).toHaveBeenCalledTimes(1);
-  expect(recipient.store.list().map((board) => board.reviewId)).toEqual([
-    reviewId,
-  ]);
-
-  const other = await importShare(
-    { ...recipient, fetchRepository },
-    key(),
-    bundle,
-  );
-
-  expect(other).not.toBe(reviewId);
-  expect(recipient.store.read(other).pins!.repositoryId).toBe(
-    recipient.store.read(reviewId).pins!.repositoryId,
-  );
 });
 
 it("fetches the shared commits into the recipient's own checkout", async () => {

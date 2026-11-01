@@ -235,18 +235,85 @@ export interface ShareImport {
   onStage?: (stage: "fetching" | "validating") => void;
 }
 
-/** Imports a share as an ordinary board, once per link: the link's copy
- * comes back while it exists, even from Trash. */
+export const FRESH_IMPORT_VERSION = 0;
+
+/** The revision a link serves and its share's latest. */
+export interface ServedRevision {
+  revision: { id: string; version: number; createdAt: number };
+  latest: string;
+}
+
+export type ShareCopyPlan =
+  | { kind: "open"; reviewId: string }
+  | { kind: "refresh"; reviewId: string; version: number }
+  | { kind: "import" };
+
+/** A copy made from the served revision opens; an unedited copy takes the
+ * latest revision in place; anything else gets a new copy. */
+export function planShareCopy(
+  copies: ReturnType<ReviewStore["copiesOf"]>,
+  served: ServedRevision,
+): ShareCopyPlan {
+  const same = copies.find(
+    (copy) => copy.shared.revisionId === served.revision.id,
+  );
+
+  if (same) return { kind: "open", reviewId: same.reviewId };
+
+  const unedited =
+    served.revision.id === served.latest &&
+    copies.find(
+      (copy) =>
+        copy.version === (copy.shared.importedVersion ?? FRESH_IMPORT_VERSION),
+    );
+
+  return unedited
+    ? {
+        kind: "refresh",
+        reviewId: unedited.reviewId,
+        version: unedited.version,
+      }
+    : { kind: "import" };
+}
+
+/** Opens, refreshes or copies a link's board by the revision it serves. */
+export async function receiveShare(
+  input: ShareImport,
+  key: string,
+  served: ServedRevision,
+  download: () => Promise<{
+    bundle: ShareBundle;
+    attribution: ShareAttribution;
+  }>,
+): Promise<string> {
+  const plan = planShareCopy(input.store.copiesOf(key), served);
+
+  if (plan.kind === "open") return plan.reviewId;
+  const { bundle, attribution } = await download();
+  const provenance = { ...attribution, revisionId: served.revision.id };
+
+  if (plan.kind === "import")
+    return importShare(input, key, bundle, provenance);
+
+  try {
+    return await importShare(input, key, bundle, provenance, plan);
+  } catch (error) {
+    // The board was edited since the plan read it.
+    if (error instanceof ReviewInputError && error.status === 409)
+      return importShare(input, key, bundle, provenance);
+    throw error;
+  }
+}
+
+/** Imports a share as an ordinary board, or into a copy of its link. */
 export async function importShare(
   input: ShareImport,
   key: string,
   received: ShareBundle,
-  attribution?: ShareAttribution,
+  provenance?: ShareAttribution & { revisionId?: string },
+  into?: { reviewId: string; version: number },
 ): Promise<string> {
   const { store, data } = input;
-  const existing = store.copiesOf(key)[0]?.reviewId;
-
-  if (existing) return existing;
   const { bundle, snapshot, maps } = validateShareBundle(received);
   const cloneUrl = bundle.repository?.cloneUrl;
   let repositoryId: string | undefined;
@@ -319,27 +386,29 @@ export async function importShare(
 
   for (const [id, copy] of ids) document = document.replaceAll(id, copy);
 
-  const { reviewId } = await store.execute(
-    {
-      operation: {
-        type: "create",
-        ...(snapshot.title && { title: snapshot.title }),
-        ...(pins
-          ? { target: { kind: "commits", ...pins } }
-          : repositoryId && {
-              target: { kind: "project", repositoryId },
-            }),
-      },
+  const create = {
+    operation: {
+      type: "create",
+      ...(snapshot.title && { title: snapshot.title }),
+      ...(pins
+        ? { target: { kind: "commits", ...pins } }
+        : repositoryId && {
+            target: { kind: "project", repositoryId },
+          }),
     },
-    {
-      document: JSON.parse(document),
-      lenses: snapshot.lenses,
-      origin: snapshot.origin,
-      shared: { ...attribution, cloneUrl, key },
-      copiedFrom: snapshot.reviewId,
-    },
-    { kind: "person" },
-  );
+  };
+
+  const seed = {
+    document: JSON.parse(document),
+    lenses: snapshot.lenses,
+    origin: snapshot.origin,
+    shared: { ...provenance, cloneUrl, key },
+    copiedFrom: snapshot.reviewId,
+  };
+
+  const { reviewId } = into
+    ? await store.refreshCopy(into.reviewId, into.version, create, seed)
+    : await store.execute(create, seed, { kind: "person" });
 
   return reviewId;
 }
