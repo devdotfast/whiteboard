@@ -1,12 +1,15 @@
 import { layer, space } from "@canvas/scale.stylex";
-import { Button, IconButton } from "@canvas/ui/button";
+import { Button, IconButton, buttonStyles } from "@canvas/ui/button";
 import { useCopy } from "@canvas/ui/copy";
+import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { ShareIcon } from "@canvas/ui/icons";
+import { listRowStyles } from "@canvas/ui/list-row";
 import { Popover } from "@canvas/ui/popover";
 import { textStyles } from "@canvas/ui/text";
 import { TextField } from "@canvas/ui/text-field";
 import { useTooltip } from "@canvas/ui/tooltip";
+import type { ShareRevisions } from "@dev.fast/review-share-protocol";
 import {
   type ReviewApiClient,
   ReviewApiError,
@@ -29,6 +32,7 @@ import {
 } from "react";
 
 import { canvasQueryKeys } from "./canvas-query";
+import { formatBytes, formatRelativeTime } from "./format";
 import { useOptionalReviewSession } from "./host/review-session";
 import { topbarActionsMarker } from "./markers.stylex";
 import { useSharingAccount, useSignIn } from "./sharing-account";
@@ -119,15 +123,24 @@ export function ShareControl({
         requestId,
       }),
     // An older version's upload can land after a newer one's.
-    onSuccess: (shared) =>
+    onSuccess: (shared) => {
       queryClient.setQueryData<SharedLink>(linkKey, (cached) =>
         cached && cached.version > shared.version ? cached : shared,
-      ),
+      );
+      void queryClient.invalidateQueries({
+        queryKey: canvasQueryKeys.shareHistory(shared.shareId),
+      });
+    },
     onError: (error) => {
       // The host forgot a stale login; show sign-in and upload again after it.
       if (error instanceof ReviewApiError && error.status === 401)
         void queryClient.invalidateQueries({ queryKey: accountKey });
     },
+  });
+
+  const openRevision = useMutation({
+    mutationFn: (url: string) =>
+      context!.client.post<{ opened: true }>("/sharing/open", { url }),
   });
 
   const upload = (next: ShareTarget) => {
@@ -146,6 +159,7 @@ export function ShareControl({
       });
       publish.reset();
       login.reset();
+      openRevision.reset();
       setCopyError(undefined);
     }
 
@@ -164,6 +178,20 @@ export function ShareControl({
   const current =
     link && target && link.version >= target.version ? link : undefined;
 
+  const historyQuery = useQuery({
+    queryKey: canvasQueryKeys.shareHistory(current?.shareId ?? ""),
+    queryFn:
+      open && current
+        ? ({ signal }) =>
+            context!.client.read<ShareRevisions>(
+              `/sharing/history/${current.shareId}`,
+              signal,
+            )
+        : skipToken,
+  });
+
+  const history = historyQuery.data;
+
   // Upload once per opening; a failure waits for Retry or a new sign-in.
   useEffect(() => {
     if (open && signedIn && target && publish.isIdle && !current)
@@ -172,7 +200,11 @@ export function ShareControl({
 
   if (!context) return null;
 
-  const error = copyError ?? actionError(publish.error ?? login.error);
+  const error =
+    copyError ??
+    actionError(
+      publish.error ?? login.error ?? openRevision.error ?? historyQuery.error,
+    );
 
   const accountError = accountQuery.isError
     ? "Could not read sign-in status."
@@ -233,6 +265,30 @@ export function ShareControl({
                 <Button variant="primary" onClick={() => copy(current.url)}>
                   {copied === current.url ? "Copied" : "Copy link"}
                 </Button>
+                {history && history.items.length > 0 && (
+                  <ul
+                    aria-label="Share history"
+                    {...stylex.props(styles.history)}
+                  >
+                    {history.items.map((revision) => (
+                      <li key={revision.id}>
+                        <button
+                          type="button"
+                          data-share-revision=""
+                          {...stylex.props(
+                            focusStyles.ringInset,
+                            buttonStyles.reset,
+                            listRowStyles.row,
+                            listRowStyles.wash,
+                          )}
+                          onClick={() => openRevision.mutate(revision.url)}
+                        >
+                          {`${formatRelativeTime(revision.createdAt)} · v${revision.version} · ${formatBytes(revision.size)}${revision.id === history.latest ? " · Latest" : ""}`}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </>
             ) : error ? (
               <Button
@@ -322,6 +378,11 @@ const styles = stylex.create({
   },
   link: {
     width: "100%",
+  },
+  history: {
+    margin: 0,
+    padding: 0,
+    listStyle: "none",
   },
   code: {
     color: tokens.chromeFg,

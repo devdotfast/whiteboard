@@ -11,6 +11,16 @@ import { ShareControl, SharingContext } from "./share-control";
 
 let dispose: (() => void) | undefined;
 
+const shareId = "6f1c2b0e-8e0a-4b8e-9a51-0d6f1e2c3b4a";
+
+const revision5 = "0b8d6c3e-3a9f-4c1e-8f2a-5d7e9b1c4a60";
+
+const revision4 = "1c9e7d4f-4b0a-4d2f-9a3b-6e8f0c2d5b71";
+
+const u5 = `https://app.dev.fast/s/capability?rev=${revision5}`;
+
+const u4 = `https://app.dev.fast/s/capability?rev=${revision4}`;
+
 afterEach(async () => {
   await act(async () => dispose?.());
   document.body.replaceChildren();
@@ -75,6 +85,29 @@ function mount(options: {
         });
       }
 
+      if (path.includes("/history/"))
+        return Response.json({
+          latest: revision5,
+          items: [
+            {
+              id: revision5,
+              version: 5,
+              size: 2048,
+              createdAt: Date.now(),
+              url: u5,
+            },
+            {
+              id: revision4,
+              version: 4,
+              size: 1024,
+              createdAt: Date.now() - 2 * 3_600_000,
+              url: u4,
+            },
+          ],
+        });
+
+      if (path.endsWith("/open")) return Response.json({ opened: true });
+
       if (state.holdPublish) await state.holdPublish;
 
       if (
@@ -101,7 +134,7 @@ function mount(options: {
         );
 
       return Response.json({
-        shareId: "6f1c2b0e-8e0a-4b8e-9a51-0d6f1e2c3b4a",
+        shareId,
         url: "https://app.dev.fast/s/capability",
         version: JSON.parse(String(init!.body)).version,
       });
@@ -408,6 +441,25 @@ it("shows a newer version's link when the popover opens on an older version", as
   expect(publishes(harness)).toHaveLength(1);
   expect(container.textContent).not.toContain("Uploading");
   expect(container.querySelector("input")?.value).toContain("/s/capability");
+});
+
+it("lists the link's revisions newest first, marks the latest and opens one in the browser", async () => {
+  const harness = mount({ signedIn: true });
+  const { container } = harness;
+
+  await harness.render(5);
+  await harness.click("Share review");
+  await harness.settle();
+  expect(
+    [...container.querySelectorAll("[role=dialog] [data-share-revision]")].map(
+      (row) => row.textContent,
+    ),
+  ).toEqual(["just now · v5 · 2 KB · Latest", "2 hours ago · v4 · 1 KB"]);
+  await harness.click("2 hours ago · v4 · 1 KB");
+  expect(harness.posts.at(-1)).toEqual({
+    path: "/reviews-api/sharing/open",
+    body: { url: u4 },
+  });
 });
 
 it("polls only while sign-in is pending and stops when the control unmounts", async () => {

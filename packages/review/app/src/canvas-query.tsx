@@ -35,6 +35,7 @@ export function createCanvasQueryClient(): QueryClient {
 export const canvasQueryKeys = {
   sharingAccount: () => ["sharing", "account"] as const,
   shareLink: (board: string) => ["sharing", "link", board] as const,
+  shareHistory: (shareId: string) => ["sharing", "history", shareId] as const,
   traceList: (
     board: string,
     version: number | undefined,
