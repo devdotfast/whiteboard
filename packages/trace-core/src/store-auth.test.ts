@@ -6,7 +6,12 @@ import { PassThrough } from "node:stream";
 import type { JsonValue } from "@dev.fast/json";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { readStoreAuth, runStoreLogin, writeStoreAuth } from "./store-auth";
+import {
+  browserOpenCommand,
+  readStoreAuth,
+  runStoreLogin,
+  writeStoreAuth,
+} from "./store-auth";
 
 function json(body: JsonValue, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -18,6 +23,18 @@ function json(body: JsonValue, status = 200): Response {
 function outputStream(): PassThrough {
   return new PassThrough();
 }
+
+describe("browserOpenCommand", () => {
+  const url = "https://app.dev.fast/s/abc?rev=1&app=preview";
+
+  it.each([
+    ["darwin", ["open", [url]]],
+    ["linux", ["xdg-open", [url]]],
+    ["win32", ["rundll32.exe", ["url.dll,FileProtocolHandler", url]]],
+  ] as const)("opens URLs on %s", (platform, argv) => {
+    expect(browserOpenCommand(url, platform)).toEqual(argv);
+  });
+});
 
 describe("store-auth", () => {
   let tmp: string;

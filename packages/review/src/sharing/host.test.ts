@@ -509,13 +509,21 @@ it("opens a share revision in the browser and refuses any other URL", async () =
       (await post("/sharing/open", { url: `${url}?rev=${R}` })).status,
     ).toBe(200);
     expect(openUrl).toHaveBeenCalledWith(`${url}?rev=${R}`);
+    expect(
+      (
+        await post("/sharing/open", {
+          url: ` HTTPS://APP.dev.fast:443/s/${capability}?rev=${R}`,
+        })
+      ).status,
+    ).toBe(200);
+    expect(openUrl).toHaveBeenLastCalledWith(`${url}?rev=${R}`);
 
     for (const url of [
       "https://evil.test/s/" + capability,
       "file:///etc/passwd",
     ])
       expect((await post("/sharing/open", { url })).status).toBe(400);
-    expect(openUrl).toHaveBeenCalledTimes(1);
+    expect(openUrl).toHaveBeenCalledTimes(2);
   } finally {
     await fixture.data.close();
     fixture.store.close();

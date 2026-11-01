@@ -186,20 +186,22 @@ export function mountSharingHost(
       .strictObject({ url: z.string().max(2048) })
       .parse(await readBoundedRequestJson(context.req.raw));
 
-    const origin = (() => {
+    const link = (() => {
       try {
-        return parseShareLink(url).origin;
+        parseShareLink(url);
+
+        return new URL(url);
       } catch {
         return undefined;
       }
     })();
 
     if (
-      origin !== DEFAULT_STORE_ORIGIN &&
-      (!origin || origin !== (await readStoreAuth())?.origin)
+      link?.origin !== DEFAULT_STORE_ORIGIN &&
+      (!link || link.origin !== (await readStoreAuth())?.origin)
     )
       throw new ReviewInputError("Only Whiteboard share links open here.", 400);
-    await (options.openUrl ?? openUrlInBrowser)(url);
+    await (options.openUrl ?? openUrlInBrowser)(link.href);
 
     return context.json({ opened: true });
   });

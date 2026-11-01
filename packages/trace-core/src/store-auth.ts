@@ -110,18 +110,27 @@ async function defaultSleep(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** The command that opens a URL in the user's browser on this platform. */
+/** The command and arguments that open a URL in the browser on this platform.
+ * Windows skips `cmd /c start`, which splits URLs at `&`. */
 export function browserOpenCommand(
+  url: string,
   platform: NodeJS.Platform = process.platform,
-): string {
-  return platform === "darwin" ? "open" : "xdg-open";
+): [string, string[]] {
+  if (platform === "darwin") return ["open", [url]];
+
+  if (platform === "win32")
+    return ["rundll32.exe", ["url.dll,FileProtocolHandler", url]];
+
+  return ["xdg-open", [url]];
 }
 
 /** Opens a URL in the browser. Callers inject a stub in tests. */
 export async function openUrlInBrowser(url: string): Promise<void> {
   const { spawn } = await import("node:child_process");
 
-  const child = spawn(browserOpenCommand(), [url], {
+  const [command, args] = browserOpenCommand(url);
+
+  const child = spawn(command, args, {
     stdio: "ignore",
     detached: true,
   });
