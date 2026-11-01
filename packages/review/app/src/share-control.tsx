@@ -160,16 +160,18 @@ export function ShareControl({
   });
 
   const confirm = session?.bridge.confirm;
+  const confirming = useRef(false);
 
   const revokeLink = async (shareId: string) => {
-    if (!confirm || revoke.isPending) return;
+    if (!confirm || confirming.current || revoke.isPending) return;
+    confirming.current = true;
 
     const confirmed = await confirm({
       message: "Revoke this share link?",
       detail:
         "Anyone with the link loses access to every version shared behind it.",
       primaryButton: "Revoke",
-    });
+    }).finally(() => (confirming.current = false));
 
     // The host's dialog can dismiss the popover; bring it back.
     setOpen(true);
@@ -182,20 +184,21 @@ export function ShareControl({
     publish.mutate(next);
   };
 
+  const shareAgain = () => {
+    setTarget({ version: context!.version, requestId: crypto.randomUUID() });
+    publish.reset();
+    setRevoked(false);
+  };
+
   const toggle = () => {
     if (!context) return;
 
     // An upload of this version in flight keeps its request.
     if (!open && !(publish.isPending && target?.version === context.version)) {
-      setTarget({
-        version: context.version,
-        requestId: crypto.randomUUID(),
-      });
-      publish.reset();
+      shareAgain();
       login.reset();
       openRevision.reset();
       revoke.reset();
-      setRevoked(false);
       setCopyError(undefined);
     }
 
@@ -228,6 +231,14 @@ export function ShareControl({
 
   const history = historyQuery.data;
 
+  useEffect(() => {
+    if (
+      historyQuery.error instanceof ReviewApiError &&
+      historyQuery.error.status === 401
+    )
+      void queryClient.invalidateQueries({ queryKey: accountKey });
+  }, [historyQuery.error]);
+
   // Upload once per opening; a failure waits for Retry or a new sign-in.
   useEffect(() => {
     if (open && signedIn && target && publish.isIdle && !current && !revoked)
@@ -239,11 +250,7 @@ export function ShareControl({
   const error =
     copyError ??
     actionError(
-      publish.error ??
-        login.error ??
-        openRevision.error ??
-        revoke.error ??
-        historyQuery.error,
+      publish.error ?? login.error ?? openRevision.error ?? revoke.error,
     );
 
   const accountError = accountQuery.isError
@@ -291,14 +298,19 @@ export function ShareControl({
           )}
           {signedIn ? (
             revoked ? (
-              <p
-                ref={focusOnMount}
-                role="status"
-                tabIndex={-1}
-                {...stylex.props(styles.paragraph, styles.notice)}
-              >
-                Link revoked. Sharing this board again creates a new link.
-              </p>
+              <>
+                <p
+                  ref={focusOnMount}
+                  role="status"
+                  tabIndex={-1}
+                  {...stylex.props(styles.paragraph, styles.notice)}
+                >
+                  Link revoked. Sharing this board again creates a new link.
+                </p>
+                <Button variant="primary" onClick={shareAgain}>
+                  Share again
+                </Button>
+              </>
             ) : current ? (
               <>
                 <TextField
@@ -337,6 +349,11 @@ export function ShareControl({
                       </li>
                     ))}
                   </ul>
+                )}
+                {historyQuery.isError && (
+                  <p {...stylex.props(styles.paragraph, styles.status)}>
+                    Could not load share history.
+                  </p>
                 )}
                 {confirm && (
                   <Button

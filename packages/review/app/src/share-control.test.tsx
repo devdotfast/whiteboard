@@ -39,6 +39,7 @@ function mount(options: {
   holdVersion?: { version: number; until: Promise<void> };
   sender?: string;
   confirm?: () => Promise<boolean>;
+  historyStatus?: number;
 }) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const state = { ...options };
@@ -90,6 +91,14 @@ function mount(options: {
 
       if (path.includes("/history/")) {
         historyReads += 1;
+
+        if (state.historyStatus === 401) state.signedIn = false;
+
+        if (state.historyStatus)
+          return Response.json(
+            { error: "History is unavailable." },
+            { status: state.historyStatus },
+          );
 
         return Response.json({
           latest: revision5,
@@ -507,6 +516,93 @@ it("revokes the link after the host confirms, and the next opening shares a new 
   await harness.click("Share review");
   await harness.settle();
   expect(publishes(harness)).toHaveLength(2);
+  expect(container.querySelector("input")?.value).toContain("/s/capability");
+  expect(container.textContent).not.toContain("Link revoked");
+});
+
+it("shows a history failure under the link and keeps it usable", async () => {
+  const harness = mount({ signedIn: true, historyStatus: 500 });
+  const { container } = harness;
+
+  await harness.render(5);
+  await harness.click("Share review");
+  await vi.waitFor(async () => {
+    await harness.settle();
+    expect(container.textContent).toContain("Could not load share history.");
+  });
+  expect(container.querySelector("[role=alert]")).toBeNull();
+  expect(container.querySelector("input")?.value).toContain("/s/capability");
+  const dialog = container.querySelector("[role=dialog]")!;
+  expect(
+    [...dialog.children].findIndex((child) =>
+      child.textContent?.includes("Could not load share history."),
+    ),
+  ).toBeGreaterThan(
+    [...dialog.children].findIndex((child) => child.tagName === "INPUT"),
+  );
+  expect(
+    [...dialog.querySelectorAll("button")].map((button) => button.textContent),
+  ).toContain("Copy link");
+});
+
+it("shows sign-in when the history read finds the login expired", async () => {
+  const harness = mount({ signedIn: true, historyStatus: 401 });
+  const { container } = harness;
+
+  await harness.render(5);
+  await harness.settle();
+  await harness.click("Share review");
+  const reads = harness.accountReads();
+  await vi.waitFor(async () => {
+    await harness.settle();
+    expect(harness.accountReads()).toBeGreaterThan(reads);
+    expect(
+      [...container.querySelectorAll("[role=dialog] button")].map(
+        (button) => button.textContent,
+      ),
+    ).toContain("Sign in to share");
+  });
+});
+
+it("opens one confirmation while the first is unanswered", async () => {
+  let answer: (confirmed: boolean) => void = () => {};
+
+  const confirm = vi.fn<() => Promise<boolean>>(
+    () => new Promise((resolve) => (answer = resolve)),
+  );
+
+  const harness = mount({ signedIn: true, confirm });
+
+  await harness.render(5);
+  await harness.click("Share review");
+  await harness.settle();
+  await harness.click("Revoke link");
+  await harness.click("Revoke link");
+  expect(confirm).toHaveBeenCalledTimes(1);
+  await act(async () => answer(false));
+  await harness.click("Revoke link");
+  expect(confirm).toHaveBeenCalledTimes(2);
+});
+
+it("shares again from the revoked state without closing", async () => {
+  const harness = mount({ signedIn: true, confirm: async () => true });
+  const { container } = harness;
+
+  await harness.render(5);
+  await harness.click("Share review");
+  await harness.settle();
+  await harness.click("Revoke link");
+  await harness.settle();
+  expect(container.textContent).toContain("Link revoked");
+  await harness.click("Share again");
+  await harness.settle();
+
+  const [first, second] = publishes(harness).map(
+    (post) => (post.body as { requestId: string }).requestId,
+  );
+
+  expect(second).toBeDefined();
+  expect(second).not.toBe(first);
   expect(container.querySelector("input")?.value).toContain("/s/capability");
   expect(container.textContent).not.toContain("Link revoked");
 });

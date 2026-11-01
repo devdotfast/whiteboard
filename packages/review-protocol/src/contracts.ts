@@ -404,6 +404,7 @@ export interface ReviewCanvasBridge {
     listener: (show: boolean) => void,
   ): ReviewDisposable;
   notify?(notification: ReviewNotification): ReviewDisposable;
+  /** Asks in the host's modal dialog; resolves true when the primary button is chosen. */
   confirm?(request: {
     message: string;
     detail?: string;
