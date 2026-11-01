@@ -133,7 +133,14 @@ it("reports download and checkout preparation, and opens the same copy when the 
     expect(await status()).toMatchObject({ stage: "downloading" });
     await start();
     expect(downloadSpy).toHaveBeenCalledTimes(1);
-    download({ bundle, attribution: { login: "sender", sharedAt: 1 } });
+    const shareId = randomUUID();
+
+    download({
+      bundle,
+      attribution: { login: "sender", sharedAt: 1 },
+      revision: { id: shareId, version: 0, createdAt: 1 },
+      latest: shareId,
+    });
     await vi.waitFor(async () =>
       expect(await status()).toMatchObject({ stage: "fetching" }),
     );
