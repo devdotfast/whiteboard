@@ -68,6 +68,7 @@ import {
   type HostMessage,
   STAGE_BOOT,
   type SlotLayout,
+  type StageColorScheme,
   type StageInit,
   type StageMessage,
   stageMessageSchema,
@@ -127,8 +128,21 @@ function readTheme(element: Element): Pick<StageInit, "theme" | "colorScheme"> {
         computed.getPropertyValue(property).trim(),
       ]),
     ),
-    colorScheme: computed.colorScheme.includes("dark") ? "dark" : "light",
+    colorScheme: schemeOf(computed.colorScheme),
   };
+}
+
+// The host's own light or dark palette, or the reader's where it follows the
+// system: "light dark" names both, and would read as dark on a light page.
+export function schemeOf(colorScheme: string): StageColorScheme {
+  const named = colorScheme.split(/\s+/);
+
+  if (named.includes("light") && named.includes("dark"))
+    return matchMedia("(prefers-color-scheme: dark)").matches
+      ? "dark"
+      : "light";
+
+  return named.includes("dark") ? "dark" : "light";
 }
 
 const reducedMotion = () =>
@@ -319,8 +333,6 @@ function StageBlock({
   const onPhase = useEffectEvent(paintStage);
 
   useEffect(() => onPhase(), [motion]);
-
-  useEffect(() => endPaint, [endPaint]);
 
   const openTour = () => {
     if (!tour || !frameAnchor) return;

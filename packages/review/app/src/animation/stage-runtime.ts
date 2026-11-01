@@ -672,6 +672,18 @@ export function stageRuntime(port: MessagePort): void {
   const finite = (animation: Animation) =>
     Number.isFinite(animation.effect?.getComputedTiming().endTime ?? Infinity);
 
+  // The default painter's animations. A frame or marker reached without
+  // motion finishes every other animation on the page, never these: a clip
+  // jumps to its first marker as it activates, in the same frame its paint
+  // begins.
+  const paintAnimations = new Set<Animation>();
+
+  const finishOthers = () => {
+    for (const animation of document.getAnimations())
+      if (finite(animation) && !paintAnimations.has(animation))
+        animation.finish();
+  };
+
   const lib = (): typeof Anime => {
     const anime = window.anime;
 
@@ -1049,9 +1061,7 @@ export function stageRuntime(port: MessagePort): void {
 
     if (skip)
       nextFrame().then(() => {
-        for (const animation of document.getAnimations())
-          if (finite(animation)) animation.finish();
-
+        finishOthers();
         root.removeAttribute("data-wb-instant");
       });
 
@@ -1993,9 +2003,7 @@ export function stageRuntime(port: MessagePort): void {
       await nextFrame();
 
       if (instantMode) {
-        for (const animation of document.getAnimations())
-          if (finite(animation)) animation.finish();
-
+        finishOthers();
         await nextFrame();
         root.removeAttribute("data-wb-instant");
       } else {
@@ -2323,6 +2331,8 @@ export function stageRuntime(port: MessagePort): void {
       const custom = paintHandlers.size > 0 || paintTimeline !== undefined;
 
       if (!custom && !instant) started.push(...defaultPaint());
+
+      for (const animation of started) paintAnimations.add(animation);
       waits.push(playPaintTimeline(!instant), ...runPaintHandlers(instant));
 
       if (instant) {
@@ -2338,7 +2348,11 @@ export function stageRuntime(port: MessagePort): void {
     } catch (error) {
       fail(String(error));
     } finally {
-      for (const animation of started) animation.cancel();
+      for (const animation of started) {
+        animation.cancel();
+        paintAnimations.delete(animation);
+      }
+
       paintDone = true;
       post({ type: "painted" });
       wake();

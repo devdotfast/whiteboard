@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -94,6 +95,10 @@ export function useMotionPhase(
  * the cursor the courier stands on (the head of the queue), and each
  * element's motion phase. Timers advance the queue; the pure model in
  * draw-queue.ts decides what happens. `undefined` is history: no queue.
+ *
+ * Every updater reads the clock before it is queued, never inside: React may
+ * run a queued updater again later, and one that told the time itself would
+ * then end a step early.
  */
 export function DrawQueueProvider({
   cursor,
@@ -110,6 +115,11 @@ export function DrawQueueProvider({
   children: ReactNode;
 }) {
   const [state, setState] = useState<DrawState>(EMPTY_QUEUE);
+  // The state as last rendered, for a control that must not queue an update
+  // it knows changes nothing: a stale no-op update can be replayed over a
+  // later arrival and lose it.
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const [seen, setSeen] = useState<AuthoringCursor | null | undefined>(
     undefined,
@@ -123,7 +133,8 @@ export function DrawQueueProvider({
     if (!cursor) setState(EMPTY_QUEUE);
     else {
       const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-      setState((current) => arrive(current, cursor, clock.now(), reduced));
+      const now = clock.now();
+      setState((current) => arrive(current, cursor, now, reduced));
     }
   }
 
@@ -135,7 +146,10 @@ export function DrawQueueProvider({
     // A timer can fire a hair before its due time; the step it was set for
     // is due regardless, or the queue would stall with no timer to follow.
     const timer = clock.setTimeout(
-      () => setState((current) => tick(current, Math.max(due, clock.now()))),
+      () => {
+        const now = Math.max(due, clock.now());
+        setState((current) => tick(current, now));
+      },
       Math.max(0, due - clock.now()),
     );
 
@@ -143,7 +157,12 @@ export function DrawQueueProvider({
   }, [state, clock]);
 
   const onPainted = useCallback(
-    (id: string) => setState((current) => painted(current, id, clock.now())),
+    (id: string) => {
+      const now = clock.now();
+
+      if (painted(stateRef.current, id, now) === stateRef.current) return;
+      setState((current) => painted(current, id, now));
+    },
     [clock],
   );
 

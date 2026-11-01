@@ -233,6 +233,32 @@ it("paints a streamed clip in at time 0, as an animation, and moves on", async (
   expect(new DOMMatrix(slot("Lead note")!.style.transform).m41).toBe(start);
 });
 
+it("paints a clip that arrives with the queue idle, past its jump to the first marker", async () => {
+  const clip = documentSchema.parse([
+    {
+      id: "anim",
+      type: "clip",
+      title: "Paint",
+      markers: [{ key: "a", title: "First" }],
+      html: `${nodes}<div id="slot" data-wb-block="note"></div><script>
+        whiteboard.clip().marker("a").add("#slot", { translateX: [0, 80], duration: 400 });
+      </script>`,
+    },
+  ])[0]!;
+
+  await render(null, [before, note, late]);
+  await render(insert("anim", "clip"), [before, clip, note, late]);
+  expect(motion()).toBe("painting");
+
+  // Activating the clip jumps to its first marker without motion, which
+  // finishes the page's other animations: the paint still runs its course.
+  await waitFor(() => expect(slot("Lead note")).toBeTruthy());
+  await new Promise((resolve) => setTimeout(resolve, 150));
+  expect(shown("Lead note")).toBe(false);
+  await waitFor(() => expect(shown("Lead note")).toBe(true));
+  await waitFor(() => expect(motion()).toBeUndefined());
+});
+
 it("shows an animation loaded with the board at once, without painting", async () => {
   await render(null, [
     animationBlock(`${nodes}<div data-wb-block="note"></div>`),
