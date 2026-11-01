@@ -118,7 +118,11 @@ export function ShareControl({
         version,
         requestId,
       }),
-    onSuccess: (shared) => queryClient.setQueryData(linkKey, shared),
+    // An older version's upload can land after a newer one's.
+    onSuccess: (shared) =>
+      queryClient.setQueryData<SharedLink>(linkKey, (cached) =>
+        cached && cached.version > shared.version ? cached : shared,
+      ),
     onError: (error) => {
       // The host forgot a stale login; show sign-in and upload again after it.
       if (error instanceof ReviewApiError && error.status === 401)
