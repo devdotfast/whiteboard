@@ -1,0 +1,95 @@
+<style>
+  .machine {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    justify-items: center;
+    row-gap: var(--wb-space-72);
+    padding: var(--wb-space-24);
+  }
+  .machine [data-state="cancelled"] { grid-column: 2 / span 2; }
+  .wb-node[data-current] { box-shadow: 0 0 0 var(--wb-space-4) var(--wb-accent-soft); }
+  .status { padding-top: 0; justify-content: center; gap: var(--wb-space-8); }
+</style>
+
+<div class="machine">
+  <div class="wb-node" data-state="draft">draft<small>editable</small></div>
+  <div class="wb-node" data-state="queued">queued<small>awaiting payment</small></div>
+  <div class="wb-node" data-state="paid">paid<small>awaiting shipment</small></div>
+  <div class="wb-node" data-state="shipped">shipped<small>final</small></div>
+  <div class="wb-node" data-state="cancelled">cancelled<small>final</small></div>
+</div>
+<div class="wb-row status">
+  <span class="wb-badge" data-wb-open="transitions"></span>
+  <span class="wb-chip" data-tone="removed"></span>
+</div>
+
+<script>
+  const nodes = Object.fromEntries(
+    [...document.querySelectorAll(".wb-node")].map((node) => [node.dataset.state, node]),
+  );
+  const [badge, refusal] = document.querySelectorAll(".status > *");
+  const token = whiteboard.token();
+  const arrows = new Map();
+
+  const arrow = (from, to, options) => {
+    const made = whiteboard.arrow(nodes[from], nodes[to], options);
+    arrows.set(`${from}>${to}`, made);
+    return made;
+  };
+
+  // The legal transitions. A refused one gets its arrow when a frame tries it.
+  arrow("draft", "queued", { label: "submit" });
+  arrow("queued", "paid", { label: "pay" });
+  arrow("paid", "shipped", { label: "ship" });
+  arrow("queued", "cancelled", { label: "cancel" });
+  arrow("paid", "cancelled", { label: "cancel" });
+
+  const mark = (state) => {
+    for (const [name, node] of Object.entries(nodes)) {
+      node.toggleAttribute("data-current", name === state);
+      if (name === state) node.dataset.tone = "accent";
+      else delete node.dataset.tone;
+    }
+    badge.textContent = `status = ${state}`;
+  };
+
+  let ride;
+
+  whiteboard.on("*", ({ frame, direction, instant }) => {
+    const { state, transition: move } = frame.data;
+    const key = move && `${move.from}>${move.to}`;
+
+    if (move?.refused && !arrows.has(key))
+      arrow(move.from, move.to, { label: move.event, tone: "removed", dashed: true, bend: -36 }).dataset.refused = "";
+
+    for (const [name, line] of arrows) {
+      if ("refused" in line.dataset) line.style.display = name === key ? "" : "none";
+      else if (name === key) line.dataset.tone = "accent";
+      else delete line.dataset.tone;
+    }
+
+    refusal.style.display = move?.refused ? "" : "none";
+    refusal.textContent = move?.refused ? `${move.event}: 409 ${move.refused}` : "";
+
+    ride?.cancel();
+    const plays = move && direction === "forward" && !instant;
+    mark(plays && !move.refused ? move.from : state);
+    if (!plays) return;
+
+    // Sample the routed line: a refused move stops partway and fades.
+    const line = arrows.get(key).querySelector(".wb-line");
+    const reach = line.getTotalLength() * (move.refused ? 0.3 : 1);
+    const steps = Array.from({ length: 13 }, (_, i) => line.getPointAtLength((reach * i) / 12));
+    token.dataset.tone = move.refused ? "removed" : "accent";
+    ride = whiteboard.animate(
+      token,
+      steps.map(({ x, y }, i) => ({ transform: `translate(${x}px, ${y}px)`, opacity: i === 12 ? 0 : 1 })),
+      { duration: 900, easing: "ease-in-out" },
+    );
+    ride.finished.then(
+      () => whiteboard.frame.key === frame.key && mark(state),
+      () => {},
+    );
+    return ride;
+  });
+</script>

@@ -1,0 +1,234 @@
+[
+  {
+    "key": "n-start",
+    "title": "Two deposits, one row",
+    "label": "START",
+    "caption": "Account 7 holds 100. A deposits 50 and B deposits 20, each by reading the balance, adding, and writing it back, with no lock.",
+    "data": {
+      "columns": 6,
+      "steps": [],
+      "local": { "A": "—", "B": "—" },
+      "record": { "row": { "id": "acct 7", "balance": "100" } }
+    }
+  },
+  {
+    "key": "n-read",
+    "title": "Both read 100",
+    "label": "BOTH READ",
+    "caption": "A reads 100, then B reads 100 before A has written. Each now holds its own copy.",
+    "data": {
+      "columns": 6,
+      "steps": [
+        { "actor": "A", "at": 1, "text": "read 100" },
+        { "actor": "B", "at": 2, "text": "read 100" }
+      ],
+      "local": { "A": "100", "B": "100" },
+      "record": { "row": { "id": "acct 7", "balance": "100" } }
+    }
+  },
+  {
+    "key": "n-modify",
+    "title": "Both add locally",
+    "label": "BOTH ADD",
+    "caption": "A computes 150 and B computes 120, each from the 100 it read. The row has not changed yet.",
+    "data": {
+      "columns": 6,
+      "steps": [
+        { "actor": "A", "at": 1, "text": "read 100" },
+        { "actor": "B", "at": 2, "text": "read 100" },
+        { "actor": "A", "at": 3, "text": "+50 → 150" },
+        { "actor": "B", "at": 4, "text": "+20 → 120" }
+      ],
+      "local": { "A": "150", "B": "120" },
+      "record": { "row": { "id": "acct 7", "balance": "100" } }
+    }
+  },
+  {
+    "key": "n-write-a",
+    "title": "A writes 150",
+    "label": "A WRITES",
+    "caption": "The row now holds 150, A's deposit included.",
+    "data": {
+      "columns": 6,
+      "steps": [
+        { "actor": "A", "at": 1, "text": "read 100" },
+        { "actor": "B", "at": 2, "text": "read 100" },
+        { "actor": "A", "at": 3, "text": "+50 → 150" },
+        { "actor": "B", "at": 4, "text": "+20 → 120" },
+        { "actor": "A", "at": 5, "text": "write 150", "tone": "modified" }
+      ],
+      "local": { "A": "150", "B": "120" },
+      "record": {
+        "row": { "id": "acct 7", "balance": "150" },
+        "tone": "modified"
+      }
+    }
+  },
+  {
+    "key": "n-write-b",
+    "title": "B overwrites with 120",
+    "label": "LOST UPDATE",
+    "caption": "B writes the 120 it computed from a stale read and clobbers A's write. The row should hold 170; A's 50 is lost.",
+    "data": {
+      "columns": 6,
+      "steps": [
+        { "actor": "A", "at": 1, "text": "read 100" },
+        { "actor": "B", "at": 2, "text": "read 100" },
+        { "actor": "A", "at": 3, "text": "+50 → 150" },
+        { "actor": "B", "at": 4, "text": "+20 → 120" },
+        { "actor": "A", "at": 5, "text": "write 150", "tone": "removed" },
+        { "actor": "B", "at": 6, "text": "write 120", "tone": "modified" }
+      ],
+      "local": { "A": "150", "B": "120" },
+      "record": {
+        "row": { "id": "acct 7", "balance": "120" },
+        "tone": "removed"
+      }
+    }
+  },
+  {
+    "key": "l-start",
+    "title": "Two deposits, one locked row",
+    "label": "START",
+    "caption": "Account 7 holds 100. This time each actor locks the row before it reads, and releases the lock when it writes.",
+    "data": {
+      "columns": 7,
+      "steps": [],
+      "local": { "A": "—", "B": "—" },
+      "record": { "row": { "id": "acct 7", "balance": "100", "lock": "free" } }
+    }
+  },
+  {
+    "key": "l-lock",
+    "title": "A locks and reads 100",
+    "label": "A LOCKS",
+    "caption": "A takes the row lock and reads 100. B asks for the same lock and blocks.",
+    "data": {
+      "columns": 7,
+      "steps": [
+        { "actor": "A", "at": 1, "text": "read 100" },
+        {
+          "actor": "B",
+          "at": 2,
+          "text": "blocked",
+          "span": 1,
+          "wait": true,
+          "tone": "muted"
+        }
+      ],
+      "local": { "A": "100", "B": "—" },
+      "record": {
+        "row": { "id": "acct 7", "balance": "100", "lock": "held by A" }
+      }
+    }
+  },
+  {
+    "key": "l-modify",
+    "title": "A adds while B waits",
+    "label": "A ADDS",
+    "caption": "A computes 150. B is still blocked, so it cannot read the old balance.",
+    "data": {
+      "columns": 7,
+      "steps": [
+        { "actor": "A", "at": 1, "text": "read 100" },
+        {
+          "actor": "B",
+          "at": 2,
+          "text": "blocked",
+          "span": 2,
+          "wait": true,
+          "tone": "muted"
+        },
+        { "actor": "A", "at": 3, "text": "+50 → 150" }
+      ],
+      "local": { "A": "150", "B": "—" },
+      "record": {
+        "row": { "id": "acct 7", "balance": "100", "lock": "held by A" }
+      }
+    }
+  },
+  {
+    "key": "l-write-a",
+    "title": "A writes and unlocks",
+    "label": "A WRITES",
+    "caption": "A writes 150 and releases the lock, which wakes B.",
+    "data": {
+      "columns": 7,
+      "steps": [
+        { "actor": "A", "at": 1, "text": "read 100" },
+        {
+          "actor": "B",
+          "at": 2,
+          "text": "blocked",
+          "span": 3,
+          "wait": true,
+          "tone": "muted"
+        },
+        { "actor": "A", "at": 3, "text": "+50 → 150" },
+        { "actor": "A", "at": 4, "text": "write 150", "tone": "modified" }
+      ],
+      "local": { "A": "150", "B": "—" },
+      "record": {
+        "row": { "id": "acct 7", "balance": "150", "lock": "free" },
+        "tone": "modified"
+      }
+    }
+  },
+  {
+    "key": "l-read-b",
+    "title": "B reads A's write",
+    "label": "B READS",
+    "caption": "B takes the lock and reads 150: it sees A's deposit because it had to wait for it.",
+    "data": {
+      "columns": 7,
+      "steps": [
+        { "actor": "A", "at": 1, "text": "read 100" },
+        {
+          "actor": "B",
+          "at": 2,
+          "text": "blocked",
+          "span": 3,
+          "wait": true,
+          "tone": "muted"
+        },
+        { "actor": "A", "at": 3, "text": "+50 → 150" },
+        { "actor": "A", "at": 4, "text": "write 150" },
+        { "actor": "B", "at": 5, "text": "read 150" }
+      ],
+      "local": { "A": "150", "B": "150" },
+      "record": {
+        "row": { "id": "acct 7", "balance": "150", "lock": "held by B" }
+      }
+    }
+  },
+  {
+    "key": "l-write-b",
+    "title": "B writes 170",
+    "label": "B WRITES",
+    "caption": "B writes 170 and releases the lock. Both deposits are in the row: the lock turned the race into a queue.",
+    "data": {
+      "columns": 7,
+      "steps": [
+        { "actor": "A", "at": 1, "text": "read 100" },
+        {
+          "actor": "B",
+          "at": 2,
+          "text": "blocked",
+          "span": 3,
+          "wait": true,
+          "tone": "muted"
+        },
+        { "actor": "A", "at": 3, "text": "+50 → 150" },
+        { "actor": "A", "at": 4, "text": "write 150" },
+        { "actor": "B", "at": 5, "text": "read 150" },
+        { "actor": "B", "at": 6, "text": "+20 → 170" },
+        { "actor": "B", "at": 7, "text": "write 170", "tone": "modified" }
+      ],
+      "local": { "A": "150", "B": "170" },
+      "record": {
+        "row": { "id": "acct 7", "balance": "170", "lock": "free" },
+        "tone": "modified"
+      }
+    }
+  }
+]

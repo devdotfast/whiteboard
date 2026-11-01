@@ -263,8 +263,20 @@ it("hands agents whiteboard.css and whiteboard.d.ts, read-only, from checkout an
     { topic: "animation" },
   );
 
-  expect(JSON.stringify(instructions)).toContain(styles);
-  expect(JSON.stringify(instructions)).toContain(api);
+  const text = JSON.stringify(instructions);
+
+  expect(text).toContain(styles);
+  expect(text).toContain(api);
+
+  // The reference animations shipped with the package, copied read-only
+  // beside the drafts and listed after the guidance.
+  expect(text).toContain("## References");
+  const copies = path.join(path.dirname(styles), "references");
+  expect(text).toContain(path.join(copies, "retry-backoff"));
+  expect(
+    (await stat(path.join(copies, "retry-backoff", "animation.html"))).mode &
+      0o222,
+  ).toBe(0);
 });
 
 it("shows the agent what the script did when a canvas last ran it", async () => {

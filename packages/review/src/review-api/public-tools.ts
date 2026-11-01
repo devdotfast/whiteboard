@@ -12,7 +12,7 @@ import {
   checkoutAnimation,
   recordPublish,
   resolveDraftEdit,
-  stageReferenceHint,
+  stageReferenceText,
   writeStageReference,
 } from "./animation-drafts.js";
 import type { ReviewApiClient } from "./client.js";
@@ -131,7 +131,7 @@ export async function callPublicTool(
 
   if (tool.name === "session_get_instructions" && rest.topic === "animation") {
     const instructions = await callAuthoringTool(client, tool, fields, signal);
-    const hint = stageReferenceHint(await writeStageReference());
+    const hint = stageReferenceText(await writeStageReference());
 
     if (instructions instanceof ToolText)
       return new ToolText(`${instructions.text}\n\n${hint}`);

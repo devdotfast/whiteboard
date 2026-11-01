@@ -1,0 +1,57 @@
+<script>
+  const s = whiteboard.scene({ columns: 4 });
+
+  // Ring the card that reshapes the payload in each frame.
+  const client = s.actor({
+    id: "client",
+    at: [1, 1],
+    title: "Client",
+    highlight: ["request", "respond", "bad-request"],
+  });
+  const api = s.actor({ id: "api", at: [2, 1], title: "API", code: "validate", highlight: ["validate", "rejected"] });
+  const service = s.actor({
+    id: "service",
+    at: [3, 1],
+    title: "OrderService",
+    code: "service",
+    highlight: ["persist", "map"],
+  });
+  const db = s.actor({ id: "db", at: [4, 1], title: "Postgres", code: "repository", highlight: ["stored"] });
+
+  // Requests travel solid edges; replies ride dashed ones beside them.
+  s.link(client, api);
+  s.link(api, service);
+  s.link(service, db);
+  s.link(db, service, { dashed: true });
+  s.link(service, api, { dashed: true });
+  s.link(api, client, { dashed: true });
+
+  // Success: each layer holds the payload in its own shape.
+  s.on("request", client, { text: '{ sku, qty: "2" }' });
+  s.send(client, api, "POST /orders", "request");
+
+  s.on("validate", api, { text: "CreateOrderDto { sku, qty: 2 }" });
+  s.send(api, service, "dto", "validate");
+
+  s.on("persist", service, { text: "Order { id: null }" });
+  s.send(service, db, "INSERT", "persist");
+
+  s.on("stored", db, { text: "orders row id=812" });
+  s.send(db, service, "row 812", "stored");
+
+  s.on("map", service, { text: "Order { id: 812 }" });
+  s.send(service, api, "Order", "map");
+
+  s.on("respond", client, { text: '201 { id: "ord_812" }', tone: "added" });
+  s.send(api, client, "201", "respond");
+
+  // Validation failure: the API answers and the request stops there.
+  s.on("bad-request", client, { text: '{ sku, qty: "-1" }' });
+  s.send(client, api, "POST /orders", "bad-request");
+
+  s.on("rejected", api, { text: "qty: must be ≥ 1", tone: "removed" });
+  s.on("rejected", client, { text: "422 { field: qty }", tone: "removed" });
+  s.on("rejected", service, { text: "not called", tone: "muted" });
+  s.on("rejected", db, { text: "not called", tone: "muted" });
+  s.send(api, client, "422", "rejected", { tone: "removed" });
+</script>

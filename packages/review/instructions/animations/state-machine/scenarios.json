@@ -1,0 +1,12 @@
+[
+  {
+    "key": "happy",
+    "label": "Happy path",
+    "frames": ["draft", "submitted", "paid", "shipped", "cancel-refused"]
+  },
+  {
+    "key": "cancellation",
+    "label": "Cancellation",
+    "frames": ["draft", "submitted", "cancelled", "pay-refused"]
+  }
+]

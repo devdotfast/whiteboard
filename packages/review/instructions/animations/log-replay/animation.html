@@ -1,0 +1,86 @@
+<style>
+  .replay { --wb-columns: 2; }
+  .seq { width: var(--wb-space-40); }
+  .wb-table tr[data-current] td { color: var(--wb-ink); background: var(--wb-accent-soft); }
+  .wb-table tr[data-touched] td { box-shadow: inset 0 -2px 0 var(--wb-accent); }
+  .aside { margin-left: var(--wb-space-6); }
+  .checkpoint { align-self: flex-start; }
+  .outcome { align-self: flex-start; margin-top: var(--wb-space-4); }
+</style>
+<div class="wb-grid replay">
+  <div class="wb-card">
+    <div class="wb-card-head"><i class="wb-card-dot"></i><span class="wb-card-title">events</span></div>
+    <div class="wb-card-note">append-only log, replayed in order</div>
+    <table class="wb-table">
+      <thead><tr><th class="seq">seq</th><th>event</th></tr></thead>
+      <tbody class="log"></tbody>
+    </table>
+  </div>
+  <div class="wb-card">
+    <div class="wb-card-head"><i class="wb-card-dot"></i><span class="wb-card-title">accounts</span></div>
+    <div class="wb-card-note">derived state, built by apply(event)</div>
+    <span class="wb-badge checkpoint"></span>
+    <table class="wb-table">
+      <thead><tr><th>account</th><th>balance</th></tr></thead>
+      <tbody class="state"></tbody>
+    </table>
+    <span class="wb-chip outcome"></span>
+  </div>
+</div>
+<script>
+  const log = document.querySelector(".log");
+  const state = document.querySelector(".state");
+  const checkpoint = document.querySelector(".checkpoint");
+
+  function row(cells) {
+    const tr = document.createElement("tr");
+    for (const cell of cells) tr.insertCell().append(cell);
+    return tr;
+  }
+
+  function chip(text, tone, className = "aside") {
+    const el = document.createElement("span");
+    el.className = `wb-chip ${className}`;
+    el.dataset.tone = tone;
+    el.textContent = text;
+    return el;
+  }
+
+  const enter = (el) =>
+    whiteboard.animate(el, [{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "none" }], 300);
+
+  whiteboard.on("*", ({ frame, previous }) => {
+    const { events, accounts, touched, applied, result } = frame.data;
+
+    const logRows = events.map((event, index) => {
+      const tr = row([`#${event.seq}`, event.text]);
+      if (event.redelivered) tr.cells[1].append(chip("redelivered", "muted"));
+      tr.toggleAttribute("data-current", index === events.length - 1);
+      return tr;
+    });
+    log.replaceChildren(...logRows);
+
+    const before = new Map((previous?.data.accounts ?? []).map((account) => [account.id, account.balance]));
+    const motion = [];
+    state.replaceChildren(
+      ...accounts.map((account) => {
+        const tr = row([account.id, String(account.balance)]);
+        if (account.tone) tr.dataset.tone = account.tone;
+        if (account.note) tr.cells[1].append(chip(account.note, "muted"));
+        tr.toggleAttribute("data-touched", account.id === touched);
+        if (!before.has(account.id)) motion.push(enter(tr));
+        else if (before.get(account.id) !== account.balance) motion.push(enter(tr.cells[1]));
+        return tr;
+      }),
+    );
+
+    checkpoint.textContent = `checkpoint #${applied}`;
+    // A fresh element per frame, so its code tooltip follows the frame's code name.
+    const outcome = chip(result.text, result.tone, "outcome");
+    if (frame.code) outcome.dataset.wbOpen = frame.code[0];
+    document.querySelector(".outcome").replaceWith(outcome);
+
+    const newEvents = logRows.slice(previous?.data.events.length ?? 0);
+    return [...newEvents.map(enter), enter(outcome), ...motion];
+  });
+</script>

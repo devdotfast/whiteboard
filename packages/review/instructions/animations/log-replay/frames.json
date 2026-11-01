@@ -1,0 +1,143 @@
+[
+  {
+    "key": "open-a",
+    "title": "#1 opens account A",
+    "label": "OPEN A",
+    "code": ["apply"],
+    "caption": "apply() inserts A with a zero balance and moves the checkpoint to #1.",
+    "data": {
+      "events": [{ "seq": 1, "text": "AccountOpened A" }],
+      "accounts": [{ "id": "A", "balance": 0, "tone": "added" }],
+      "touched": "A",
+      "applied": 1,
+      "result": { "text": "#1 applied: insert A", "tone": "added" }
+    }
+  },
+  {
+    "key": "deposit-a",
+    "title": "#2 deposits into A",
+    "label": "DEPOSIT 50",
+    "code": ["apply"],
+    "caption": "Each event touches one row. The deposit raises A's balance and the checkpoint follows.",
+    "data": {
+      "events": [
+        { "seq": 1, "text": "AccountOpened A" },
+        { "seq": 2, "text": "Deposited A 50" }
+      ],
+      "accounts": [{ "id": "A", "balance": 50, "tone": "modified" }],
+      "touched": "A",
+      "applied": 2,
+      "result": { "text": "#2 applied: A 0 → 50", "tone": "modified" }
+    }
+  },
+  {
+    "key": "open-b",
+    "title": "#3 opens account B",
+    "label": "OPEN B",
+    "code": ["apply"],
+    "caption": "A second account is a new row; A is untouched.",
+    "data": {
+      "events": [
+        { "seq": 1, "text": "AccountOpened A" },
+        { "seq": 2, "text": "Deposited A 50" },
+        { "seq": 3, "text": "AccountOpened B" }
+      ],
+      "accounts": [
+        { "id": "A", "balance": 50 },
+        { "id": "B", "balance": 0, "tone": "added" }
+      ],
+      "touched": "B",
+      "applied": 3,
+      "result": { "text": "#3 applied: insert B", "tone": "added" }
+    }
+  },
+  {
+    "key": "withdraw-a",
+    "title": "#4 withdraws from A",
+    "label": "WITHDRAW 20",
+    "code": ["apply"],
+    "caption": "The replay ends at checkpoint #4 with A at 30 and B at 0, the same state the live handler built.",
+    "data": {
+      "events": [
+        { "seq": 1, "text": "AccountOpened A" },
+        { "seq": 2, "text": "Deposited A 50" },
+        { "seq": 3, "text": "AccountOpened B" },
+        { "seq": 4, "text": "Withdrew A 20" }
+      ],
+      "accounts": [
+        { "id": "A", "balance": 30, "tone": "modified" },
+        { "id": "B", "balance": 0 }
+      ],
+      "touched": "A",
+      "applied": 4,
+      "result": { "text": "#4 applied: A 50 → 30", "tone": "modified" }
+    }
+  },
+  {
+    "key": "redeliver",
+    "title": "#2 arrives again",
+    "label": "REDELIVER #2",
+    "code": ["guard"],
+    "duration": 4500,
+    "caption": "The broker redelivers #2. Its seq is not past the checkpoint, so apply() skips it: A stays at 50 and the checkpoint stays at #2.",
+    "data": {
+      "events": [
+        { "seq": 1, "text": "AccountOpened A" },
+        { "seq": 2, "text": "Deposited A 50" },
+        { "seq": 2, "text": "Deposited A 50", "redelivered": true }
+      ],
+      "accounts": [{ "id": "A", "balance": 50, "note": "unchanged" }],
+      "touched": "A",
+      "applied": 2,
+      "result": {
+        "text": "#2 ≤ checkpoint #2: skipped, no change",
+        "tone": "muted"
+      }
+    }
+  },
+  {
+    "key": "dup-open-b",
+    "title": "#3 opens account B",
+    "label": "OPEN B",
+    "code": ["apply"],
+    "caption": "Replay continues from the checkpoint as if the duplicate never arrived.",
+    "data": {
+      "events": [
+        { "seq": 1, "text": "AccountOpened A" },
+        { "seq": 2, "text": "Deposited A 50" },
+        { "seq": 2, "text": "Deposited A 50", "redelivered": true },
+        { "seq": 3, "text": "AccountOpened B" }
+      ],
+      "accounts": [
+        { "id": "A", "balance": 50 },
+        { "id": "B", "balance": 0, "tone": "added" }
+      ],
+      "touched": "B",
+      "applied": 3,
+      "result": { "text": "#3 applied: insert B", "tone": "added" }
+    }
+  },
+  {
+    "key": "dup-withdraw-a",
+    "title": "#4 withdraws from A",
+    "label": "WITHDRAW 20",
+    "code": ["apply"],
+    "caption": "The replay ends with A at 30, B at 0 and checkpoint #4, the same state as the clean replay. Applying #2 twice would have left A at 80.",
+    "data": {
+      "events": [
+        { "seq": 1, "text": "AccountOpened A" },
+        { "seq": 2, "text": "Deposited A 50" },
+        { "seq": 2, "text": "Deposited A 50", "redelivered": true },
+        { "seq": 3, "text": "AccountOpened B" },
+        { "seq": 4, "text": "Withdrew A 20" }
+      ],
+      "accounts": [
+        { "id": "A", "balance": 30, "tone": "modified" },
+        { "id": "B", "balance": 0 }
+      ],
+      "touched": "A",
+      "applied": 4,
+      "result": { "text": "#4 applied: A 50 → 30", "tone": "modified" }
+    }
+  }
+]

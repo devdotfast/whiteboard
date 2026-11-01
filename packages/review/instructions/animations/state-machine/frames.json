@@ -1,0 +1,79 @@
+[
+  {
+    "key": "draft",
+    "title": "A new order starts as a draft",
+    "label": "DRAFT",
+    "caption": "Only a draft can be edited. Every later state is reached through one named transition.",
+    "data": { "state": "draft" }
+  },
+  {
+    "key": "submitted",
+    "title": "Submit queues it for payment",
+    "label": "SUBMIT",
+    "caption": "submit moves draft to queued; the line items are now fixed.",
+    "data": {
+      "state": "queued",
+      "transition": { "event": "submit", "from": "draft", "to": "queued" }
+    }
+  },
+  {
+    "key": "paid",
+    "title": "The payment webhook marks it paid",
+    "label": "PAY",
+    "caption": "pay is legal only from queued, so a duplicate webhook cannot charge twice.",
+    "data": {
+      "state": "paid",
+      "transition": { "event": "pay", "from": "queued", "to": "paid" }
+    }
+  },
+  {
+    "key": "shipped",
+    "title": "Fulfilment ships it",
+    "label": "SHIP",
+    "caption": "shipped is final: no transition leaves it.",
+    "data": {
+      "state": "shipped",
+      "transition": { "event": "ship", "from": "paid", "to": "shipped" }
+    }
+  },
+  {
+    "key": "cancel-refused",
+    "title": "Cancelling a shipped order is refused",
+    "label": "CANCEL REFUSED",
+    "caption": "The table has no cancel from shipped, so the API answers 409 and the status stays shipped.",
+    "data": {
+      "state": "shipped",
+      "transition": {
+        "event": "cancel",
+        "from": "shipped",
+        "to": "cancelled",
+        "refused": "already shipped"
+      }
+    }
+  },
+  {
+    "key": "cancelled",
+    "title": "The customer cancels before paying",
+    "label": "CANCEL",
+    "caption": "cancel is legal from queued and from paid; from paid it also starts a refund.",
+    "data": {
+      "state": "cancelled",
+      "transition": { "event": "cancel", "from": "queued", "to": "cancelled" }
+    }
+  },
+  {
+    "key": "pay-refused",
+    "title": "A late payment is refused",
+    "label": "PAY REFUSED",
+    "caption": "A webhook that arrives after the cancel tries pay from cancelled. It is refused and the order stays cancelled.",
+    "data": {
+      "state": "cancelled",
+      "transition": {
+        "event": "pay",
+        "from": "cancelled",
+        "to": "paid",
+        "refused": "order cancelled"
+      }
+    }
+  }
+]

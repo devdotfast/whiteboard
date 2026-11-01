@@ -1,0 +1,18 @@
+[
+  {
+    "key": "steady",
+    "label": "Steady load",
+    "frames": ["steady-put", "steady-take", "steady-refill", "steady-done"]
+  },
+  {
+    "key": "burst",
+    "label": "Burst hits the bound",
+    "frames": [
+      "burst-busy",
+      "burst-fill",
+      "burst-wait",
+      "burst-drain",
+      "burst-resume"
+    ]
+  }
+]

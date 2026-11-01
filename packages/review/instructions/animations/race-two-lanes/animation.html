@@ -1,0 +1,97 @@
+<div class="race">
+  <div class="wb-card" data-actor="A">
+    <span class="wb-card-title">A · deposit +50</span>
+    <span class="wb-card-note"></span>
+  </div>
+  <div class="wb-lane steps" data-actor="A"></div>
+  <div class="wb-card" data-actor="B">
+    <span class="wb-card-title">B · deposit +20</span>
+    <span class="wb-card-note"></span>
+  </div>
+  <div class="wb-lane steps" data-actor="B"></div>
+  <div class="record">
+    <span class="wb-caps">accounts</span>
+    <table class="wb-table"><thead><tr></tr></thead><tbody><tr></tr></tbody></table>
+  </div>
+</div>
+
+<style>
+  .race {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    gap: var(--wb-space-16);
+    padding: var(--wb-space-20) var(--wb-space-24);
+  }
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+    align-items: center;
+    gap: var(--wb-space-4);
+  }
+  .steps .wb-chip { position: relative; justify-self: center; max-width: 100%; text-align: center; }
+  .steps .wait { justify-self: stretch; transform-origin: left; }
+  .record {
+    grid-column: 1 / -1;
+    justify-self: center;
+    width: min(100%, calc(var(--wb-space-160) * 2));
+    margin-top: var(--wb-space-12);
+  }
+</style>
+
+<script>
+  const lanes = document.querySelectorAll(".steps");
+  const head = document.querySelector(".record thead tr");
+  const row = document.querySelector(".record tbody tr");
+
+  const cell = (tag, text) => {
+    const element = document.createElement(tag);
+    element.textContent = text;
+    return element;
+  };
+
+  const slideIn = (element) =>
+    whiteboard.animate(element, [{ opacity: 0, transform: "translateY(-4px)" }, { opacity: 1, transform: "none" }], 300);
+
+  whiteboard.on("*", ({ frame, previous }) => {
+    const { columns, steps, local, record } = frame.data;
+    const before = previous?.data ?? { steps: [], record: { row: {} } };
+    const animations = [];
+
+    for (const lane of lanes) {
+      lane.style.setProperty("--columns", columns);
+      lane.replaceChildren();
+    }
+
+    steps.forEach((step, index) => {
+      const chip = cell("span", step.text);
+      chip.className = step.wait ? "wb-chip wait" : "wb-chip";
+      chip.style.gridColumn = `${step.at} / span ${step.span ?? 1}`;
+      if (step.tone) chip.dataset.tone = step.tone;
+      document.querySelector(`.steps[data-actor="${step.actor}"]`).append(chip);
+
+      const old = before.steps[index];
+      if (!old) animations.push(slideIn(chip));
+      // A wait that lasts into this frame grows from where it ended.
+      else if ((old.span ?? 1) < (step.span ?? 1))
+        animations.push(whiteboard.animate(chip, [{ transform: `scaleX(${(old.span ?? 1) / step.span})` }, { transform: "none" }], 400));
+      else if (old.tone !== step.tone) animations.push(whiteboard.animate(chip, [{ opacity: 0.3 }, { opacity: 1 }], 400));
+    });
+
+    for (const [actor, value] of Object.entries(local))
+      document.querySelector(`.wb-card[data-actor="${actor}"] .wb-card-note`).textContent = `local ${value}`;
+
+    head.replaceChildren(...Object.keys(record.row).map((key) => cell("th", key)));
+    row.replaceChildren(
+      ...Object.entries(record.row).map(([key, value]) => {
+        const td = cell("td", value);
+        if (before.record.row[key] !== undefined && before.record.row[key] !== value) animations.push(slideIn(td));
+        return td;
+      }),
+    );
+    if (record.tone) row.dataset.tone = record.tone;
+    else delete row.dataset.tone;
+
+    return animations;
+  });
+</script>

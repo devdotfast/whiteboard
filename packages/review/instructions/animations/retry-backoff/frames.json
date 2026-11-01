@@ -1,0 +1,65 @@
+[
+  {
+    "key": "a1",
+    "title": "First attempt fails",
+    "label": "ATTEMPT 1",
+    "caption": "At 0s the caller sends the request and the service answers 503. The loop treats it as retryable instead of returning it.",
+    "code": ["retry"]
+  },
+  {
+    "key": "w1",
+    "title": "Wait 1s",
+    "label": "WAIT 1S",
+    "caption": "The delay is base × 2^(attempt − 1), so 1s after the first failure. The caller sleeps and sends nothing.",
+    "code": ["backoff"]
+  },
+  {
+    "key": "a2",
+    "title": "Second attempt fails",
+    "label": "ATTEMPT 2",
+    "caption": "At 1s the caller tries again and gets another 503.",
+    "code": ["retry"]
+  },
+  {
+    "key": "w2",
+    "title": "Wait 2s",
+    "label": "WAIT 2S",
+    "caption": "The delay doubles to 2s, so the next attempt lands at 3s. Each failure gives the service longer to recover.",
+    "code": ["backoff"]
+  },
+  {
+    "key": "a3ok",
+    "title": "Third attempt succeeds",
+    "label": "ATTEMPT 3",
+    "caption": "At 3s the service answers 200. The loop returns that response, after 3s spent waiting.",
+    "code": ["retry"]
+  },
+  {
+    "key": "a3fail",
+    "title": "Third attempt fails",
+    "label": "ATTEMPT 3",
+    "caption": "At 3s the service still answers 503.",
+    "code": ["retry"]
+  },
+  {
+    "key": "w3",
+    "title": "Wait 4s",
+    "label": "WAIT 4S",
+    "caption": "The delay doubles again to 4s. Attempts thin out as failures pile up, so a struggling service is not hammered.",
+    "code": ["backoff"]
+  },
+  {
+    "key": "a4",
+    "title": "Last attempt fails",
+    "label": "ATTEMPT 4",
+    "caption": "At 7s the fourth attempt, the maximum, gets a 503 too.",
+    "code": ["retry"]
+  },
+  {
+    "key": "giveup",
+    "title": "Give up",
+    "label": "GIVE UP",
+    "caption": "With no attempts left, the loop stops and throws the last 503 to the caller instead of waiting 8s more.",
+    "code": ["retry"]
+  }
+]

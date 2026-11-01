@@ -3,7 +3,15 @@
 // agent's output.
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -23,6 +31,11 @@ import { stageStyleReference } from "@review/animation-stage-kit.js";
 import { isMissingFileError } from "@review/fs-utils.js";
 import { findReviewPackageRoot } from "@review/package-paths.js";
 import { z } from "zod";
+
+import {
+  type AnimationReference,
+  readAnimationReferences,
+} from "./animation-references.js";
 
 const FILES = {
   html: "animation.html",
@@ -57,10 +70,12 @@ const handle = /^[\w-]{1,128}$/;
 
 /** The animation references, read-only beside the drafts so they always match
  * the Whiteboard that wrote them: whiteboard.css, the style kit every
- * animation loads, and whiteboard.d.ts, the API its scripts call. */
+ * animation loads, whiteboard.d.ts, the API its scripts call, and the
+ * reference animations an agent copies from. */
 export interface StageReference {
   styles: string;
   api: string;
+  references: AnimationReference[];
 }
 
 async function writeReadOnly(file: string, content: string): Promise<void> {
@@ -69,27 +84,83 @@ async function writeReadOnly(file: string, content: string): Promise<void> {
   await writeFile(file, content, { mode: 0o444 });
 }
 
-export async function writeStageReference(): Promise<StageReference> {
+/** Copies `source` to `target` with every file read-only, replacing what was there. */
+async function copyReadOnly(source: string, target: string): Promise<void> {
+  await rm(target, { recursive: true, force: true });
+  await cp(source, target, { recursive: true });
+
+  for (const entry of await readdir(target, {
+    recursive: true,
+    withFileTypes: true,
+  }))
+    if (entry.isFile())
+      await chmod(path.join(entry.parentPath, entry.name), 0o444);
+}
+
+export async function writeStageReference(
+  root = findReviewPackageRoot(import.meta.url),
+): Promise<StageReference> {
   const directory = path.join(devReviewHome(), "animation-drafts");
   const styles = path.join(directory, "whiteboard.css");
   const api = path.join(directory, "whiteboard.d.ts");
+  const copies = path.join(directory, "references");
+  const sources = await readAnimationReferences(root, { strict: false });
 
-  const source = path.join(
-    findReviewPackageRoot(import.meta.url),
-    "instructions",
-    "whiteboard.d.ts",
+  await mkdir(copies, { recursive: true });
+  await writeReadOnly(styles, stageStyleReference());
+  await writeReadOnly(
+    api,
+    await readFile(path.join(root, "instructions", "whiteboard.d.ts"), "utf8"),
   );
 
-  await mkdir(directory, { recursive: true });
-  await writeReadOnly(styles, stageStyleReference());
-  await writeReadOnly(api, await readFile(source, "utf8"));
+  const names = new Set(sources.map(({ name }) => name));
 
-  return { styles, api };
+  for (const stale of await readdir(copies))
+    if (!names.has(stale))
+      await rm(path.join(copies, stale), { recursive: true, force: true });
+
+  const references = await Promise.all(
+    sources.map(async (reference) => {
+      const copy = path.join(copies, reference.name);
+
+      await copyReadOnly(reference.directory, copy);
+
+      return { ...reference, directory: copy };
+    }),
+  );
+
+  return { styles, api, references };
 }
 
 /** The line that sends an agent to the references before it writes an animation. */
-export const stageReferenceHint = ({ styles, api }: StageReference) =>
-  `Before writing or restyling an animation's HTML, read ${styles} (the classes and --wb-* variables every animation loads) and ${api} (the whiteboard API its scripts call). Both are read-only and rewritten by Whiteboard.`;
+export const stageReferenceHint = ({
+  styles,
+  api,
+  references,
+}: StageReference) =>
+  `Before writing or restyling an animation's HTML, read ${styles} (the classes and --wb-* variables every animation loads) and ${api} (the whiteboard API its scripts call).${references.length ? ` Reference animations to start from are in ${path.dirname(references[0]!.directory)}: read the README of the closest one.` : ""} All are read-only and rewritten by Whiteboard.`;
+
+/** Lists the reference animations where the agent can read them. */
+function referencesSection({ references }: StageReference): string[] {
+  if (!references.length) return [];
+
+  return [
+    [
+      "## References",
+      "",
+      "Before you write an animation, read the README of the reference closest to what you are drawing, then copy its files into your draft folder as a starting point.",
+      "",
+      ...references.map(
+        ({ name, summary, directory }) =>
+          `- \`${name}\`: ${summary} ${directory}`,
+      ),
+    ].join("\n"),
+  ];
+}
+
+/** What follows the animation instructions: the hint, then the references. */
+export const stageReferenceText = (reference: StageReference) =>
+  [stageReferenceHint(reference), ...referencesSection(reference)].join("\n\n");
 
 export function draftDirectory(
   sessionId: string,
@@ -167,7 +238,8 @@ export async function checkoutAnimation(
   return {
     directory,
     files,
-    ...reference,
+    styles: reference.styles,
+    api: reference.api,
     next: `Edit these files with your file tools, then publish the folder: session_edit {sessionId, edit: {type: "update", targetId: "${targetId}", fromFiles: "${directory}"}}. ${stageReferenceHint(reference)}`,
   };
 }
@@ -205,14 +277,15 @@ async function readJson(directory: string, name: string, required: boolean) {
   }
 }
 
-/** The animation a folder holds, as a block's fields, and where it came from. */
-async function readDraft(directory: string) {
-  const [html, frames, scenarios, block, checkout] = await Promise.all([
+/** The animation a folder holds, as a block's fields, checked as a publish would be. */
+export async function readAnimationFolder(
+  directory: string,
+): Promise<JsonObject> {
+  const [html, frames, scenarios, block] = await Promise.all([
     readText(directory, FILES.html, true),
     readJson(directory, FILES.frames, true),
     readJson(directory, FILES.scenarios, false),
     readJson(directory, FILES.block, true),
-    readJson(directory, FILES.checkout, false),
   ]);
 
   if (!isJsonObject(block))
@@ -230,6 +303,16 @@ async function readDraft(directory: string) {
   if (scenarios !== undefined) fields.scenarios = scenarios;
 
   validate(fields);
+
+  return fields;
+}
+
+/** The animation a folder holds, as a block's fields, and where it came from. */
+async function readDraft(directory: string) {
+  const [fields, checkout] = await Promise.all([
+    readAnimationFolder(directory),
+    readJson(directory, FILES.checkout, false),
+  ]);
 
   const parsed = checkoutSchema.safeParse(checkout);
 

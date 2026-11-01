@@ -1,0 +1,79 @@
+[
+  {
+    "key": "request",
+    "title": "The handler asks the cache",
+    "label": "GET",
+    "caption": "getUser(42) checks UserCache before touching the database.",
+    "code": ["lookup"]
+  },
+  {
+    "key": "miss",
+    "title": "Miss: load from Postgres",
+    "label": "MISS",
+    "caption": "user:42 is not cached, so the cache loads it from the source. The handler waits on this read.",
+    "code": ["lookup"]
+  },
+  {
+    "key": "fill",
+    "title": "The cache stores the row",
+    "label": "FILL",
+    "caption": "Two of three slots were taken, so user:42 joins as the newest entry and nothing is evicted.",
+    "code": ["lookup"]
+  },
+  {
+    "key": "serve",
+    "title": "The handler gets the value",
+    "label": "SERVE",
+    "caption": "The first read paid the database round trip; the next read of user:42 will not.",
+    "code": ["lookup"]
+  },
+  {
+    "key": "hit-request",
+    "title": "The handler asks for user:7",
+    "label": "GET",
+    "caption": "The cache is full and already holds user:7.",
+    "code": ["lookup"]
+  },
+  {
+    "key": "hit-found",
+    "title": "Hit: Postgres is not called",
+    "label": "HIT",
+    "caption": "The value comes from memory. The read also counts as a use, which matters for eviction.",
+    "code": ["lookup"]
+  },
+  {
+    "key": "hit-serve",
+    "title": "Served, and user:7 is the newest",
+    "label": "SERVE",
+    "caption": "user:7 moves to the newest end, so user:3 is now the next to be evicted.",
+    "code": ["lookup"]
+  },
+  {
+    "key": "evict-request",
+    "title": "The handler asks for user:51",
+    "label": "GET",
+    "caption": "All three slots are taken; user:7 is the least recently used.",
+    "code": ["lookup"]
+  },
+  {
+    "key": "evict-miss",
+    "title": "Miss on a full cache",
+    "label": "MISS",
+    "caption": "The cache loads user:51 and picks the oldest entry, user:7, to make room.",
+    "code": ["lookup", "evict"]
+  },
+  {
+    "key": "evict-fill",
+    "title": "user:7 leaves, user:51 enters",
+    "label": "EVICT",
+    "caption": "The cache never grows past its capacity: one entry out for each new one in.",
+    "code": ["evict"]
+  },
+  {
+    "key": "evict-serve",
+    "title": "The handler gets user:51",
+    "label": "SERVE",
+    "caption": "A later read of user:7 is a miss again and pays the database round trip.",
+    "code": ["lookup"]
+  }
+]

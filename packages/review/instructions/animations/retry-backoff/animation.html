@@ -1,0 +1,122 @@
+<div class="retry">
+  <div class="top">
+    <span class="wb-badge" data-wb-open="backoff">base 1s · ×2 · max 4 attempts</span>
+    <span class="wb-layers">
+      <span class="wb-badge" data-tone="added" data-enter="a3ok">returned 200 at 3s</span>
+      <span class="wb-badge" data-tone="removed" data-enter="giveup">threw 503 at 7s</span>
+    </span>
+  </div>
+  <span class="wb-caps">caller</span>
+  <div class="wb-lane track caller"></div>
+  <span class="wb-caps service-name">service</span>
+  <div class="wb-lane track service"></div>
+  <span></span>
+  <div class="track axis"></div>
+</div>
+
+<style>
+  .retry {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: center;
+    gap: var(--wb-space-12) var(--wb-space-16);
+    padding: var(--wb-space-20) var(--wb-space-24);
+  }
+  .top {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--wb-space-24);
+  }
+  .top .wb-layers { justify-items: end; }
+  .service-name, .service { margin-top: var(--wb-space-56); }
+  .track { position: relative; margin-inline: var(--wb-space-16); }
+  /* Seconds become a share of the track: the axis spans 0 to 8s. */
+  .at, .wait, .tick { position: absolute; left: calc(var(--t) * 100% / 8); }
+  .at { top: 50%; translate: -50% -50%; }
+  .wait { top: 50%; width: calc(var(--span) * 100% / 8); }
+  .wait-line {
+    height: var(--wb-space-2);
+    margin-top: calc(var(--wb-space-2) / -2);
+    background: var(--wb-accent);
+    transform-origin: left;
+  }
+  .wait-label {
+    position: absolute;
+    left: 50%;
+    bottom: var(--wb-space-6);
+    translate: -50% 0;
+    color: var(--wb-accent);
+    font: var(--wb-text-micro) var(--wb-font-mono);
+    white-space: nowrap;
+  }
+  .caller .wb-chip { background: var(--wb-surface); }
+  .axis { height: var(--wb-space-20); border-top: 1px solid var(--wb-rule); }
+  .tick {
+    top: 0;
+    translate: -50% 0;
+    padding-top: var(--wb-space-4);
+    color: var(--wb-ink-faint);
+    font: var(--wb-text-micro) var(--wb-font-mono);
+  }
+  .tick::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    height: var(--wb-space-4);
+    border-left: 1px solid var(--wb-rule);
+  }
+</style>
+
+<script>
+  // Attempt n starts after waiting base × 2^(n−1) seconds: at 0, 1, 3 and 7s.
+  const attempts = [
+    { frame: "a1", n: 1, t: 0, status: "503" },
+    { frame: "a2", n: 2, t: 1, status: "503" },
+    { frame: "a3ok", n: 3, t: 3, status: "200", tone: "added" },
+    { frame: "a3fail", n: 3, t: 3, status: "503" },
+    { frame: "a4", n: 4, t: 7, status: "503" },
+  ];
+  const waits = [
+    { frame: "w1", t: 0, span: 1 },
+    { frame: "w2", t: 1, span: 2 },
+    { frame: "w3", t: 3, span: 4 },
+  ];
+
+  const caller = document.querySelector(".caller");
+  const service = document.querySelector(".service");
+  const axis = document.querySelector(".axis");
+  const request = whiteboard.token({ label: "GET" });
+
+  const place = (parent, className, vars, html) => {
+    const element = document.createElement("div");
+    element.className = className;
+    for (const [name, value] of Object.entries(vars)) element.style.setProperty(`--${name}`, value);
+    element.innerHTML = html;
+    parent.append(element);
+    return element;
+  };
+
+  for (let t = 0; t <= 8; t++) place(axis, "tick", { t }, `${t}s`);
+
+  for (const { frame, t, span } of waits) {
+    const wait = place(caller, "wait", { t, span }, `<div class="wait-line"></div><span class="wait-label">wait ${span}s</span>`);
+    wait.dataset.enter = frame;
+    wait.dataset.wbOpen = "backoff";
+    // The line grows at 0.5s per second of delay, so a longer wait reads as longer.
+    whiteboard.timeline(frame).add(wait.firstChild, { scaleX: [0, 1], duration: span * 500, ease: "linear" });
+  }
+
+  for (const { frame, n, t, status, tone = "removed" } of attempts) {
+    const marker = place(caller, "at", { t }, `<span class="wb-chip">#${n}</span>`);
+    marker.dataset.enter = frame;
+    marker.dataset.wbOpen = "retry";
+    const result = place(service, "at", { t }, `<span class="wb-chip" data-tone="${tone}">${status}</span>`);
+    result.dataset.enter = frame;
+
+    const arrow = whiteboard.arrow(marker, result, { enter: frame });
+    whiteboard.travel(request, arrow, frame);
+    whiteboard.timeline(frame).add(result.firstChild, { opacity: [0, 1], duration: 250 }, 900);
+  }
+</script>

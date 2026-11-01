@@ -1,0 +1,17 @@
+{
+  "title": "An order request across the layers",
+  "code": {
+    "validate": {
+      "source": "head/src/api/orders/validate.ts#L12-L40",
+      "label": "validateCreateOrder"
+    },
+    "service": {
+      "source": "head/src/orders/service.ts#L20-L58",
+      "label": "OrderService.create"
+    },
+    "repository": {
+      "source": "head/src/orders/repository.ts#L8-L31",
+      "label": "insertOrder"
+    }
+  }
+}

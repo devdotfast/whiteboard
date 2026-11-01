@@ -1,0 +1,313 @@
+[
+  {
+    "key": "before",
+    "title": "A flat list of orders",
+    "label": "BEFORE",
+    "caption": "Before the change, orders is one array, and every reader that needs a customer's orders filters it.",
+    "data": {
+      "root": {
+        "id": "root",
+        "title": "orders",
+        "note": "Order[]",
+        "layout": "row",
+        "children": [
+          {
+            "id": "o1",
+            "title": "o1",
+            "open": "order",
+            "fields": [
+              { "name": "customer", "value": "acme" },
+              { "name": "total", "value": 40 }
+            ]
+          },
+          {
+            "id": "o2",
+            "title": "o2",
+            "open": "order",
+            "fields": [
+              { "name": "customer", "value": "globex" },
+              { "name": "total", "value": 15 }
+            ]
+          },
+          {
+            "id": "o3",
+            "title": "o3",
+            "open": "order",
+            "fields": [
+              { "name": "customer", "value": "acme" },
+              { "name": "total", "value": 70 }
+            ]
+          },
+          {
+            "id": "o4",
+            "title": "o4",
+            "open": "order",
+            "fields": [
+              { "name": "customer", "value": "globex" },
+              { "name": "total", "value": 30 }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "key": "key",
+    "title": "customer becomes the key",
+    "label": "KEY",
+    "code": ["group"],
+    "caption": "groupByCustomer reads each order's customer field and uses it as the map key.",
+    "data": {
+      "root": {
+        "id": "root",
+        "title": "orders",
+        "note": "Order[]",
+        "layout": "row",
+        "children": [
+          {
+            "id": "o1",
+            "title": "o1",
+            "open": "order",
+            "fields": [
+              { "name": "customer", "value": "acme", "tone": "modified" },
+              { "name": "total", "value": 40 }
+            ]
+          },
+          {
+            "id": "o2",
+            "title": "o2",
+            "open": "order",
+            "fields": [
+              { "name": "customer", "value": "globex", "tone": "modified" },
+              { "name": "total", "value": 15 }
+            ]
+          },
+          {
+            "id": "o3",
+            "title": "o3",
+            "open": "order",
+            "fields": [
+              { "name": "customer", "value": "acme", "tone": "modified" },
+              { "name": "total", "value": 70 }
+            ]
+          },
+          {
+            "id": "o4",
+            "title": "o4",
+            "open": "order",
+            "fields": [
+              { "name": "customer", "value": "globex", "tone": "modified" },
+              { "name": "total", "value": 30 }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "key": "move",
+    "title": "Orders move under their customer",
+    "label": "GROUP",
+    "code": ["group"],
+    "caption": "One entry per customer, in first-seen order; each order keeps its place within its customer.",
+    "data": {
+      "root": {
+        "id": "root",
+        "title": "ordersByCustomer",
+        "note": "Map<CustomerId, Order[]>",
+        "open": "group",
+        "tone": "modified",
+        "layout": "row",
+        "children": [
+          {
+            "id": "g-acme",
+            "title": "acme",
+            "note": "Order[]",
+            "open": "group",
+            "tone": "added",
+            "children": [
+              {
+                "id": "o1",
+                "title": "o1",
+                "open": "order",
+                "fields": [
+                  { "name": "customer", "value": "acme" },
+                  { "name": "total", "value": 40 }
+                ]
+              },
+              {
+                "id": "o3",
+                "title": "o3",
+                "open": "order",
+                "fields": [
+                  { "name": "customer", "value": "acme" },
+                  { "name": "total", "value": 70 }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "g-globex",
+            "title": "globex",
+            "note": "Order[]",
+            "open": "group",
+            "tone": "added",
+            "children": [
+              {
+                "id": "o2",
+                "title": "o2",
+                "open": "order",
+                "fields": [
+                  { "name": "customer", "value": "globex" },
+                  { "name": "total", "value": 15 }
+                ]
+              },
+              {
+                "id": "o4",
+                "title": "o4",
+                "open": "order",
+                "fields": [
+                  { "name": "customer", "value": "globex" },
+                  { "name": "total", "value": 30 }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "key": "trim",
+    "title": "Order drops its customer field",
+    "label": "TRIM",
+    "code": ["order"],
+    "caption": "The key already names the customer, so Order no longer carries it.",
+    "data": {
+      "root": {
+        "id": "root",
+        "title": "ordersByCustomer",
+        "note": "Map<CustomerId, Order[]>",
+        "open": "group",
+        "tone": "modified",
+        "layout": "row",
+        "children": [
+          {
+            "id": "g-acme",
+            "title": "acme",
+            "note": "Order[]",
+            "open": "group",
+            "children": [
+              {
+                "id": "o1",
+                "title": "o1",
+                "open": "order",
+                "tone": "modified",
+                "fields": [
+                  { "name": "customer", "value": "acme", "tone": "removed" },
+                  { "name": "total", "value": 40 }
+                ]
+              },
+              {
+                "id": "o3",
+                "title": "o3",
+                "open": "order",
+                "tone": "modified",
+                "fields": [
+                  { "name": "customer", "value": "acme", "tone": "removed" },
+                  { "name": "total", "value": 70 }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "g-globex",
+            "title": "globex",
+            "note": "Order[]",
+            "open": "group",
+            "children": [
+              {
+                "id": "o2",
+                "title": "o2",
+                "open": "order",
+                "tone": "modified",
+                "fields": [
+                  { "name": "customer", "value": "globex", "tone": "removed" },
+                  { "name": "total", "value": 15 }
+                ]
+              },
+              {
+                "id": "o4",
+                "title": "o4",
+                "open": "order",
+                "tone": "modified",
+                "fields": [
+                  { "name": "customer", "value": "globex", "tone": "removed" },
+                  { "name": "total", "value": 30 }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  {
+    "key": "after",
+    "title": "After: orders keyed by customer",
+    "label": "AFTER",
+    "code": ["group", "order"],
+    "caption": "A customer's orders are one lookup away, and no order can disagree with the customer it sits under.",
+    "data": {
+      "root": {
+        "id": "root",
+        "title": "ordersByCustomer",
+        "note": "Map<CustomerId, Order[]>",
+        "open": "group",
+        "layout": "row",
+        "children": [
+          {
+            "id": "g-acme",
+            "title": "acme",
+            "note": "Order[]",
+            "open": "group",
+            "children": [
+              {
+                "id": "o1",
+                "title": "o1",
+                "open": "order",
+                "fields": [{ "name": "total", "value": 40 }]
+              },
+              {
+                "id": "o3",
+                "title": "o3",
+                "open": "order",
+                "fields": [{ "name": "total", "value": 70 }]
+              }
+            ]
+          },
+          {
+            "id": "g-globex",
+            "title": "globex",
+            "note": "Order[]",
+            "open": "group",
+            "children": [
+              {
+                "id": "o2",
+                "title": "o2",
+                "open": "order",
+                "fields": [{ "name": "total", "value": 15 }]
+              },
+              {
+                "id": "o4",
+                "title": "o4",
+                "open": "order",
+                "fields": [{ "name": "total", "value": 30 }]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+]

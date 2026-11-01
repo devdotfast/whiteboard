@@ -1,0 +1,12 @@
+[
+  {
+    "key": "succeeds",
+    "label": "Succeeds on attempt 3",
+    "frames": ["a1", "w1", "a2", "w2", "a3ok"]
+  },
+  {
+    "key": "gives-up",
+    "label": "Gives up after 4 attempts",
+    "frames": ["a1", "w1", "a2", "w2", "a3fail", "w3", "a4", "giveup"]
+  }
+]

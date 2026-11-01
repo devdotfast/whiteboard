@@ -1,0 +1,66 @@
+<style>
+  /* Narrow end cards leave the cache its width and the edges room for a
+     message chip to read while it travels. */
+  .wb-scene:not(.wb-scene-compact) :is(#caller, #source) { width: var(--wb-space-120); }
+  .wb-scene:not(.wb-scene-compact) #caller { justify-self: start; }
+  .wb-scene:not(.wb-scene-compact) #source { justify-self: end; }
+</style>
+<script>
+  const s = whiteboard.scene({ columns: 3 });
+  const caller = s.actor({ id: "caller", at: [1, 1], title: "Handler", note: "getUser(id)" });
+  const cache = s.store({ id: "cache", at: [2, 1], title: "UserCache", note: "LRU · capacity 3", code: "lookup" });
+  const source = s.actor({ id: "source", at: [3, 1], title: "Postgres", note: "~120 ms a read" });
+
+  // Items keep their order, so each scenario seeds its own entries, oldest first.
+
+  // Miss, then fill: there is room, so the loaded value joins as the newest.
+  cache.item("user:7", { enter: "request" });
+  cache.item("user:3", { enter: "request" });
+  cache.item("user:42", { enter: "fill", tone: "added" });
+  s.send(caller, cache, "get user:42", "request");
+  s.on("miss", cache, { text: "miss · 2 of 3", tone: "modified" });
+  s.on("miss", caller, { text: "awaiting value" });
+  s.send(cache, source, "load user:42", "miss");
+  s.on("miss", source, { tone: "accent" });
+  s.on("fill", source, { text: "row user:42", tone: "none" });
+  s.send(source, cache, "user:42", "fill");
+  s.on("fill", cache, { text: "stored · 3 of 3", tone: "none" });
+  s.send(cache, caller, "user:42", "serve");
+  s.on("serve", caller, { text: "served · 120 ms" });
+
+  // Hit: served from memory, and the entry moves to the newest end.
+  const hit = cache.item("user:7", { enter: "hit-request", exit: "hit-serve" });
+  cache.item("user:3", { enter: "hit-request" });
+  cache.item("user:42", { enter: "hit-request" });
+  cache.item("user:7", { enter: "hit-serve", tone: "added" });
+  s.send(caller, cache, "get user:7", "hit-request");
+  s.on("hit-request", source, { text: "not called", tone: "muted" });
+  s.on("hit-found", hit, { tone: "modified" });
+  s.on("hit-found", cache, { text: "hit · 3 of 3", tone: "added" });
+  s.send(cache, caller, "user:7", "hit-serve");
+  s.on("hit-serve", cache, { text: "user:3 is now oldest", tone: "none" });
+  s.on("hit-serve", caller, { text: "served · <1 ms" });
+
+  // Eviction: the cache is full, so the oldest entry leaves as the new one enters.
+  const oldest = cache.item("user:7", { enter: "evict-request", exit: "evict-fill" });
+  cache.item("user:3", { enter: "evict-request" });
+  cache.item("user:42", { enter: "evict-request" });
+  cache.item("user:51", { enter: "evict-fill", tone: "added" });
+  s.send(caller, cache, "get user:51", "evict-request");
+  s.on("evict-miss", cache, { text: "miss · 3 of 3, full", tone: "modified" });
+  s.on("evict-miss", oldest, { tone: "removed" });
+  s.on("evict-miss", caller, { text: "awaiting value" });
+  s.send(cache, source, "load user:51", "evict-miss");
+  s.on("evict-miss", source, { tone: "accent" });
+  s.on("evict-fill", source, { text: "row user:51", tone: "none" });
+  s.send(source, cache, "user:51", "evict-fill");
+  s.on("evict-fill", cache, { text: "evicted user:7", tone: "removed" });
+  s.send(cache, caller, "user:51", "evict-serve");
+  s.on("evict-serve", cache, { text: "stored · 3 of 3", tone: "none" });
+  s.on("evict-serve", caller, { text: "served · 120 ms" });
+
+  // Clicking the cache opens the range the current frame is about.
+  whiteboard.on("*", ({ frame }) => {
+    cache.element.dataset.wbOpen = frame.code?.[0] ?? "lookup";
+  });
+</script>
