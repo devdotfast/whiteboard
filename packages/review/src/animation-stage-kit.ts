@@ -402,7 +402,8 @@ export function stageStyleReference(): string {
  * animation.html only for what they do not cover, written with the variables:
  * no literal colors, sizes or font names. data-tone="accent|added|removed|
  * modified|muted" colors any card, node, chip, badge, shape or table row;
- * data-highlight="frameKey ..." rings a card, node or shape in those frames.
+ * data-highlight="frameKey ..." rings a card, node or shape in those frames
+ * (in a clip, those markers).
  *
  * Classes:
 ${classes}

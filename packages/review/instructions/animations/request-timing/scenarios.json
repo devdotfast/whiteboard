@@ -1,0 +1,4 @@
+[
+  { "key": "hit", "label": "Cache hit" },
+  { "key": "miss", "label": "Cache miss" }
+]

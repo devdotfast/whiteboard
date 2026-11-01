@@ -1,6 +1,7 @@
-// An animation checked out as files, so an agent edits it with its own file
-// tools and publishes the folder: the bytes travel by path, not through the
-// agent's output.
+// An animation or clip checked out as files, so an agent edits it with its
+// own file tools and publishes the folder: the bytes travel by path, not
+// through the agent's output. A clip's folder holds markers.json where an
+// animation's holds frames.json.
 
 import { createHash } from "node:crypto";
 import {
@@ -40,6 +41,7 @@ import {
 const FILES = {
   html: "animation.html",
   frames: "frames.json",
+  markers: "markers.json",
   scenarios: "scenarios.json",
   block: "block.json",
   checkout: "checkout.json",
@@ -48,8 +50,11 @@ const FILES = {
 /** The fields block.json holds: everything but the ones with files of their own. */
 const BLOCK_FIELDS = ["title", "code", "height", "pins"];
 
-/** Every field an animation's files can set. */
-const FIELDS = ["html", "frames", "scenarios", ...BLOCK_FIELDS];
+/** Every field an animation's or clip's files can set. */
+const FIELDS = ["html", "frames", "markers", "scenarios", ...BLOCK_FIELDS];
+
+/** The block types that check out as files. */
+type DraftType = "animation" | "clip";
 
 /** What checkout.json records: the block the folder came from, as it was. */
 const checkoutSchema = z.strictObject({
@@ -181,9 +186,12 @@ const fingerprint = (block: JsonValue) =>
 const json = (value: JsonValue) => `${JSON.stringify(value, null, 2)}\n`;
 
 function animationBlock(block: JsonValue, targetId: string): JsonObject {
-  if (!isJsonObject(block) || block.type !== "animation")
+  if (
+    !isJsonObject(block) ||
+    (block.type !== "animation" && block.type !== "clip")
+  )
     throw new ReviewInputError(
-      `${targetId} is ${isJsonObject(block) ? `a ${String(block.type)}` : "not a component"}; only animations check out as files.`,
+      `${targetId} is ${isJsonObject(block) ? `a ${String(block.type)}` : "not a component"}; only animations and clips check out as files.`,
     );
 
   return block;
@@ -214,7 +222,9 @@ export async function checkoutAnimation(
   };
 
   await put("html", String(block.html));
-  await put("frames", json(block.frames ?? []));
+
+  if (block.type === "clip") await put("markers", json(block.markers ?? []));
+  else await put("frames", json(block.frames ?? []));
 
   if (block.scenarios !== undefined)
     await put("scenarios", json(block.scenarios));
@@ -256,7 +266,7 @@ async function readText(directory: string, name: string, required: boolean) {
 
     if (required)
       throw new ReviewInputError(
-        `${path.join(directory, name)} does not exist. Check the animation out with session_checkout, or write the file.`,
+        `${path.join(directory, name)} does not exist. Check the animation or clip out with session_checkout, or write the file.`,
       );
 
     return undefined;
@@ -277,16 +287,29 @@ async function readJson(directory: string, name: string, required: boolean) {
   }
 }
 
-/** The animation a folder holds, as a block's fields, checked as a publish would be. */
+/** The animation or clip a folder holds, as a block's fields with its type,
+ * checked as a publish would be. frames.json makes it an animation and
+ * markers.json a clip. */
 export async function readAnimationFolder(
   directory: string,
-): Promise<JsonObject> {
-  const [html, frames, scenarios, block] = await Promise.all([
+): Promise<JsonObject & { type: DraftType }> {
+  const [html, frames, markers, scenarios, block] = await Promise.all([
     readText(directory, FILES.html, true),
-    readJson(directory, FILES.frames, true),
+    readJson(directory, FILES.frames, false),
+    readJson(directory, FILES.markers, false),
     readJson(directory, FILES.scenarios, false),
     readJson(directory, FILES.block, true),
   ]);
+
+  if (frames !== undefined && markers !== undefined)
+    throw new ReviewInputError(
+      `${directory} holds both ${FILES.frames} and ${FILES.markers}. Keep ${FILES.frames} for an animation or ${FILES.markers} for a clip, not both.`,
+    );
+
+  if (frames === undefined && markers === undefined)
+    throw new ReviewInputError(
+      `${path.join(directory, FILES.frames)} does not exist. Write ${FILES.frames} for an animation or ${FILES.markers} for a clip, or check one out with session_checkout.`,
+    );
 
   if (!isJsonObject(block))
     throw new ReviewInputError(`${FILES.block} must hold a JSON object.`);
@@ -295,10 +318,13 @@ export async function readAnimationFolder(
 
   if (stray.length)
     throw new ReviewInputError(
-      `${FILES.block} holds only ${BLOCK_FIELDS.join(", ")}; move ${stray.join(", ")} out (html is ${FILES.html}, frames ${FILES.frames}, scenarios ${FILES.scenarios}).`,
+      `${FILES.block} holds only ${BLOCK_FIELDS.join(", ")}; move ${stray.join(", ")} out (html is ${FILES.html}, frames ${FILES.frames} or markers ${FILES.markers}, scenarios ${FILES.scenarios}).`,
     );
 
-  const fields: JsonObject = { ...block, html: html!, frames: frames! };
+  const fields: JsonObject & { type: DraftType } =
+    markers === undefined
+      ? { ...block, type: "animation", html: html!, frames: frames! }
+      : { ...block, type: "clip", html: html!, markers };
 
   if (scenarios !== undefined) fields.scenarios = scenarios;
 
@@ -329,7 +355,7 @@ function located(issuePath: PropertyKey[]): string {
 
   if (field === "html") return FILES.html;
 
-  if (field === "frames" || field === "scenarios")
+  if (field === "frames" || field === "markers" || field === "scenarios")
     return `${FILES[field]} ${at.replace(/^\./, "") || "(top level)"}`;
 
   return `${FILES.block} ${field ?? ""}${at}`;
@@ -337,13 +363,9 @@ function located(issuePath: PropertyKey[]): string {
 
 /** Checks the files before anything is sent, so an issue names its file. The
  * host checks pins: agents write them without the repository it fills in. */
-function validate(fields: JsonObject) {
+function validate(fields: JsonObject & { type: DraftType }) {
   const { pins: _pins, ...rest } = fields;
-
-  const parsed = blocks.animation.schema.safeParse({
-    ...rest,
-    type: "animation",
-  });
+  const parsed = blocks[fields.type].schema.safeParse(rest);
 
   if (!parsed.success)
     throw new ReviewInputError(
@@ -357,8 +379,8 @@ function validate(fields: JsonObject) {
 
 /**
  * Turns an edit that names a draft folder into the edit the host takes: the
- * folder's animation as an insert's or replace's content, or as an update's
- * changed fields. An update from a checkout is refused once the block has
+ * folder's animation or clip as an insert's or replace's content, or as an
+ * update's changed fields. An update from a checkout is refused once the block has
  * changed since. Returns `unchanged` when the files match the block.
  */
 export async function resolveDraftEdit(
@@ -378,10 +400,7 @@ export async function resolveDraftEdit(
   const { fields, checkout } = await readDraft(directory);
 
   if (rest.type === "insert")
-    return {
-      directory,
-      edit: { ...rest, content: { type: "animation", ...fields } },
-    };
+    return { directory, edit: { ...rest, content: fields } };
 
   const targetId = String(rest.targetId);
   const current = animationBlock(await read(sessionId, targetId), targetId);
@@ -398,14 +417,16 @@ export async function resolveDraftEdit(
     );
 
   if (rest.type === "replace")
-    return {
-      directory,
-      edit: { ...rest, content: { type: "animation", ...fields } },
-    };
+    return { directory, edit: { ...rest, content: fields } };
 
   if (rest.type !== "update")
     throw new ReviewInputError(
       "fromFiles publishes an insert, replace or update.",
+    );
+
+  if (current.type !== fields.type)
+    throw new ReviewInputError(
+      `${directory} holds ${fields.type === "clip" ? "a clip" : "an animation"} but ${targetId} is ${current.type === "clip" ? "a clip" : "an animation"}. Publish it with type "replace" to change its kind.`,
     );
 
   const changes: JsonObject = {};

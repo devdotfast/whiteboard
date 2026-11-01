@@ -201,21 +201,36 @@ export function documentText(
           );
         break;
       case "animation":
-        for (const [index, frame] of element.frames.entries()) {
-          detail(
-            `Frame ${index + 1} [${frame.key}]: ${frame.title}${frame.caption ? ` — ${frame.caption}` : ""}`,
-          );
+      case "clip":
+        if (element.type === "animation") {
+          for (const [index, frame] of element.frames.entries()) {
+            detail(
+              `Frame ${index + 1} [${frame.key}]: ${frame.title}${frame.caption ? ` — ${frame.caption}` : ""}`,
+            );
 
-          if (frame.code) write(depth + 2, `Code: ${frame.code.join(", ")}`);
+            if (frame.code) write(depth + 2, `Code: ${frame.code.join(", ")}`);
 
-          if (detailed && frame.data !== undefined)
-            write(depth + 2, `Data: ${JSON.stringify(frame.data)}`);
+            if (detailed && frame.data !== undefined)
+              write(depth + 2, `Data: ${JSON.stringify(frame.data)}`);
+          }
+
+          for (const scenario of element.scenarios ?? [])
+            detail(
+              `Scenario [${scenario.key}] ${scenario.label}: ${scenario.frames.join(" → ")}`,
+            );
+        } else {
+          for (const [index, marker] of element.markers.entries()) {
+            detail(
+              `Marker ${index + 1} [${marker.key}]: ${marker.title}${marker.caption ? ` — ${marker.caption}` : ""}`,
+            );
+
+            if (marker.code)
+              write(depth + 2, `Code: ${marker.code.join(", ")}`);
+          }
+
+          for (const scenario of element.scenarios ?? [])
+            detail(`Scenario [${scenario.key}] ${scenario.label}`);
         }
-
-        for (const scenario of element.scenarios ?? [])
-          detail(
-            `Scenario [${scenario.key}] ${scenario.label}: ${scenario.frames.join(" → ")}`,
-          );
 
         if (runs) {
           const run =

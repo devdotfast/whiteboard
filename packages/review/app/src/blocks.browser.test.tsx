@@ -173,6 +173,12 @@ const rendered: Record<
       c,
       "[data-animation-slot='code'] .fixture-inline-editor[data-path='order.ts']",
     ) && text(c).includes("An order arrives"),
+  // A clip boots the same stage, and lists its markers under it.
+  clip: (c) =>
+    has(
+      c,
+      "[data-animation-slot='code'] .fixture-inline-editor[data-path='order.ts']",
+    ) && text(c).includes("Status queued"),
 };
 
 let canvas: ReturnType<typeof mount> | undefined;

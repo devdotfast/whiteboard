@@ -1,0 +1,32 @@
+[
+  {
+    "key": "sent",
+    "title": "Request sent",
+    "caption": "The client asks for order 7.",
+    "code": ["client"]
+  },
+  {
+    "key": "accepted",
+    "title": "API accepts",
+    "caption": "getOrder parses the id and asks the cache first.",
+    "code": ["handler"]
+  },
+  {
+    "key": "lookup",
+    "title": "Cache lookup",
+    "caption": "The cache either holds orders:7 or sends the read on to Postgres.",
+    "code": ["cache", "query"]
+  },
+  {
+    "key": "reply",
+    "title": "API replies",
+    "caption": "The order is back in the API, which answers 200.",
+    "code": ["handler"]
+  },
+  {
+    "key": "received",
+    "title": "Client renders",
+    "caption": "The reply lands. The elapsed bar shows what the cache saved.",
+    "code": ["client"]
+  }
+]

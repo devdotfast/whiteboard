@@ -9,6 +9,7 @@ import {
   type AnimationFrame,
   animationTour,
   frameContent,
+  markerAnchorId,
 } from "./animation-tour";
 
 const block = { id: "anim", title: "Order flow" };
@@ -93,6 +94,22 @@ describe("animationTour", () => {
     expect(
       animationTour(block, new Map(), [frames[1]!, frames[2]!]),
     ).toBeNull();
+  });
+});
+
+describe("animationTour over a clip's markers", () => {
+  it("has a stop per marker, named for the marker", () => {
+    const markers = [
+      { key: "sent", title: "Sent", code: ["send"] },
+      { key: "saved", title: "Saved", caption: "The row lands." },
+    ];
+
+    const tour = animationTour(block, anchors, markers, markerAnchorId);
+
+    expect(tour?.stops.map((stop) => [stop.anchor.id, stop.content])).toEqual([
+      ["anim:marker:sent", { kind: "source", source: selection(2) }],
+      ["anim:marker:saved", { kind: "explanation", text: "The row lands." }],
+    ]);
   });
 });
 

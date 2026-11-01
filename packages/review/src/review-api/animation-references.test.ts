@@ -96,7 +96,7 @@ describe("the reference animations are what the API accepts", () => {
   it("inserts every reference through the API", async () => {
     for (const reference of await readAnimationReferences()) {
       const fields = await readAnimationFolder(reference.directory);
-      const content: JsonObject = { type: "animation", ...fields };
+      const content: JsonObject = { ...fields };
 
       if (isJsonObject(fields.code))
         content.code = Object.fromEntries(

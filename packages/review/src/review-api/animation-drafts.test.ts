@@ -1,4 +1,11 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -226,6 +233,89 @@ it("inserts an animation written as files, and later publishes update it", async
   expect(block()).toMatchObject({ title: "Raft again" });
 });
 
+const clip = {
+  type: "clip",
+  title: "Token race",
+  html: "<script>whiteboard.clip().marker('go').marker('won');</script>",
+  markers: [
+    { key: "go", title: "Go", caption: "Both set off." },
+    { key: "won", title: "A wins", caption: "A crosses first." },
+  ],
+};
+
+it("round-trips a clip through its folder: markers.json, not frames.json", async () => {
+  await call("session_edit", { edit: { type: "insert", content: clip } });
+  const targetId = block().id!;
+
+  const checkout = (await call("session_checkout", {
+    targetId,
+    dir: drafts,
+  })) as { files: Record<string, string> };
+
+  expect(Object.keys(checkout.files).sort()).toEqual([
+    "block",
+    "html",
+    "markers",
+  ]);
+  await expect(stat(draftFile("frames.json"))).rejects.toThrow(/ENOENT/);
+  expect(JSON.parse(await readFile(draftFile("markers.json"), "utf8"))).toEqual(
+    clip.markers,
+  );
+
+  await editJson("markers.json", (markers) =>
+    markers.splice(1, 0, { key: "half", title: "Halfway" }),
+  );
+  await call("session_edit", {
+    edit: { type: "update", targetId, fromFiles: drafts },
+  });
+  expect(store.read(sessionId).lastEdit).toMatchObject({
+    fields: ["markers"],
+  });
+  expect(block()).toMatchObject({
+    type: "clip",
+    markers: [
+      expect.objectContaining({ key: "go" }),
+      expect.objectContaining({ key: "half" }),
+      expect.objectContaining({ key: "won" }),
+    ],
+  });
+
+  // A new clip from a folder of its own.
+  const fresh = path.join(drafts, "fresh");
+  await mkdir(fresh);
+  await writeFile(path.join(fresh, "animation.html"), clip.html);
+  await writeFile(
+    path.join(fresh, "markers.json"),
+    JSON.stringify(clip.markers),
+  );
+  await writeFile(
+    path.join(fresh, "block.json"),
+    JSON.stringify({ title: "Second race" }),
+  );
+
+  const inserted = (await call("session_edit", {
+    edit: { type: "insert", fromFiles: fresh },
+  })) as { targetId: string };
+
+  expect(
+    store
+      .read(sessionId)
+      .document.find((item) => item.id === inserted.targetId),
+  ).toMatchObject({ type: "clip", title: "Second race" });
+});
+
+it("refuses a folder holding both frames.json and markers.json", async () => {
+  const targetId = await inserted();
+
+  await call("session_checkout", { targetId, dir: drafts });
+  await writeFile(draftFile("markers.json"), JSON.stringify(clip.markers));
+  await expect(
+    call("session_edit", {
+      edit: { type: "update", targetId, fromFiles: drafts },
+    }),
+  ).rejects.toThrow(/holds both frames\.json and markers\.json/);
+});
+
 it("checks out only animations", async () => {
   await call("session_edit", {
     edit: { type: "insert", content: { type: "markdown", markdown: "Prose" } },
@@ -233,7 +323,7 @@ it("checks out only animations", async () => {
 
   await expect(
     call("session_checkout", { targetId: block().id!, dir: drafts }),
-  ).rejects.toThrow(/is a markdown; only animations check out/);
+  ).rejects.toThrow(/is a markdown; only animations and clips check out/);
 });
 
 it("hands agents whiteboard.css and whiteboard.d.ts, read-only, from checkout and the animation instructions", async () => {

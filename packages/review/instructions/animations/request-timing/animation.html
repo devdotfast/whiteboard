@@ -1,0 +1,120 @@
+<div class="trip">
+  <div class="stops">
+    <div class="wb-node" data-wb-open="client">Client<small>fetchOrder(7)</small></div>
+    <div class="wb-node" data-wb-open="handler">API<small>GET /orders/7</small></div>
+    <div class="wb-node" id="cache" data-wb-open="cache">Cache<small>orders:7</small></div>
+    <div class="wb-node" id="db" data-wb-open="query">Postgres<small>SELECT</small></div>
+  </div>
+  <div class="wb-lane track">
+    <span class="wb-token packet out" data-visible data-labelled>GET</span>
+    <span class="wb-token packet back" data-labelled data-tone="added">200</span>
+  </div>
+  <div class="wb-layers results">
+    <span class="wb-chip result hit" data-tone="added">hit: served from memory</span>
+    <span class="wb-chip result miss" data-tone="modified">miss: read from Postgres, then cached</span>
+  </div>
+  <div class="clock">
+    <span class="wb-caps">elapsed</span>
+    <div class="bar"><div class="fill"></div></div>
+    <span class="wb-layers totals">
+      <span class="wb-mono total hit">38 ms</span>
+      <span class="wb-mono total miss">212 ms</span>
+    </span>
+  </div>
+</div>
+
+<style>
+  .trip {
+    display: grid;
+    gap: var(--wb-space-16);
+    padding: var(--wb-space-20) var(--wb-space-24);
+  }
+  .stops {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    justify-items: center;
+    gap: var(--wb-space-16);
+  }
+  .packet { top: 50%; }
+  .packet.out { left: 12.5%; }
+  .packet.back { left: 62.5%; }
+  .results { justify-items: center; min-height: var(--wb-space-24); }
+  .result, .total { opacity: 0; }
+  .clock {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr) max-content;
+    align-items: center;
+    gap: var(--wb-space-12);
+  }
+  .bar {
+    height: var(--wb-space-6);
+    border-radius: var(--wb-radius-control);
+    background: var(--wb-well);
+    overflow: hidden;
+  }
+  .fill {
+    height: 100%;
+    background: var(--wb-accent);
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  .totals { justify-items: end; color: var(--wb-ink-muted); }
+</style>
+
+<script>
+  // The centers of the four columns, as the packet's left edge.
+  const [client, api, cache, db] = ["12.5%", "37.5%", "62.5%", "87.5%"];
+  const out = document.querySelector(".packet.out");
+  const back = document.querySelector(".packet.back");
+
+  // One timeline per scenario. Every marker is placed on both, at the moment
+  // the request reaches it, so the strip jumps to the same beat in either.
+  const build = (key, miss) => {
+    const clip = whiteboard.clip(key);
+    let elapsed = 0;
+
+    const hop = (token, from, to, duration) => {
+      clip.add(token, { left: [from, to], duration, ease: "inOutQuad" });
+      elapsed += duration;
+    };
+
+    const hold = (target, duration) => {
+      clip.add(target, { scale: [1, 1.06, 1], duration });
+      elapsed += duration;
+    };
+
+    clip.marker("sent");
+    hop(out, client, api, 700);
+    clip.marker("accepted");
+    hop(out, api, cache, 600);
+    clip.marker("lookup");
+
+    if (miss) {
+      clip.set(".result.miss", { opacity: 1 });
+      hop(out, cache, db, 600);
+      hold("#db", 900);
+      clip.set(out, { opacity: 0 }).set(back, { left: db, opacity: 1 });
+      hop(back, db, cache, 600);
+    } else {
+      clip.set(".result.hit", { opacity: 1 });
+      hold("#cache", 300);
+      clip.set(out, { opacity: 0 }).set(back, { left: cache, opacity: 1 });
+    }
+
+    hop(back, cache, api, 600);
+    clip.marker("reply");
+    hop(back, api, client, 700);
+    clip.set(`.total.${miss ? "miss" : "hit"}`, { opacity: 1 });
+    clip.marker("received");
+
+    // The elapsed bar fills over the whole trip, from the start, on one
+    // scale for both scenarios: the miss's trip fills it.
+    clip.add(".fill", { scaleX: [0, elapsed / LONGEST], duration: elapsed, ease: "linear" }, 0);
+  };
+
+  // The miss's trip, in milliseconds: the sum of its hops and its hold.
+  const LONGEST = 4700;
+
+  build("hit", false);
+  build("miss", true);
+</script>

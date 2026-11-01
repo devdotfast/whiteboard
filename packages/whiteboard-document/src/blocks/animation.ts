@@ -11,7 +11,7 @@ import {
 } from "./definition.js";
 
 /** A name the animation's script passes to the `whiteboard` API. */
-const handle = z
+export const handle = z
   .string()
   .regex(
     /^[A-Za-z][\w-]{0,63}$/,
@@ -85,7 +85,9 @@ export const animationScenarioSchema = z.strictObject({
 
 export type AnimationScenario = z.infer<typeof animationScenarioSchema>;
 
-const animationCodeSchema = z.union([
+/** One named source range of an animation or clip: an anchor, or one with
+ * the label it opens under. */
+export const animationCodeSchema = z.union([
   anchorSchema,
   z.strictObject({
     source: anchorSchema,

@@ -52,7 +52,7 @@ export function authoringTools(
       "While a reader may be watching, write small and often: one paragraph per edit. Insert a new diagram whole. Change one already drawn a unit at a time (a flow_node, flow_edge or step, with parentId naming the diagram), and link each added flow_node to a node already drawn.",
       ...(animationsEnabled
         ? [
-            "An animation is edited as files: review_checkout writes it to a folder, you edit the files with your own file tools, and an edit with fromFiles naming that folder publishes it in place of content or changes. Publish the same folder again after each round of edits.",
+            "An animation or clip is edited as files: review_checkout writes it to a folder, you edit the files with your own file tools, and an edit with fromFiles naming that folder publishes it in place of content or changes. Publish the same folder again after each round of edits.",
           ]
         : []),
     ].join("\n"),
@@ -177,7 +177,7 @@ export function authoringTools(
       ? [
           tool(
             "checkout",
-            "Write an animation to a folder of files to edit with your own file tools: animation.html (its html), frames.json (its frames, each with its data), scenarios.json and block.json (title, code, height, pins). Then publish the folder with review_edit, giving fromFiles instead of content or changes. dir defaults to a folder Whiteboard manages; checking out again overwrites it. A publish is refused if the animation changed after the checkout.",
+            "Write an animation or clip to a folder of files to edit with your own file tools: animation.html (its html), frames.json (an animation's frames, each with its data) or markers.json (a clip's markers), scenarios.json and block.json (title, code, height, pins). Then publish the folder with review_edit, giving fromFiles instead of content or changes. dir defaults to a folder Whiteboard manages; checking out again overwrites it. A publish is refused if the block changed after the checkout.",
             z.strictObject({ ...review, targetId: id, dir: id.optional() }),
             "GET",
             "/:reviewId/inspect",
@@ -244,7 +244,7 @@ function withDraftFiles(edit: ReturnType<typeof publishedEdits>) {
     .string()
     .min(1)
     .describe(
-      "An animation's draft folder, from review_checkout or written yourself: publishes its files as the content (insert, replace) or changes (update).",
+      "An animation's or clip's draft folder, from review_checkout or written yourself: publishes its files as the content (insert, replace) or changes (update). frames.json makes it an animation, markers.json a clip.",
     );
 
   const [insert, replace, update, move, remove] = edit.options;

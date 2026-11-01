@@ -5,6 +5,9 @@
  *
  * Frames are states, not events: whatever a frame shows must also be right
  * when the reader jumps to it or steps back, not only when it plays.
+ *
+ * A clip has no frames: its script builds one timeline with clip(), places
+ * the block's markers on it, and the reader plays it or jumps to a marker.
  */
 
 /* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-object-parameters -- Documents a script API; anime.js parses its own targets and params. */
@@ -35,10 +38,36 @@ export interface FrameChange {
   instant: boolean;
 }
 
+/** One of a clip's markers, as your scripts read it. */
+export interface Marker {
+  key: string;
+  title: string;
+  caption?: string;
+  /** The code names the marker lists, for data-wb-open. */
+  code?: string[];
+  /** Milliseconds into the active timeline, once the scripts have run. */
+  at?: number;
+}
+
+/** A marker the playhead reached: placed, with its place in time order. */
+export interface ReachedMarker extends Marker {
+  at: number;
+  index: number;
+}
+
+/** What a marker handler learns as a clip's playhead reaches its marker. */
+export interface MarkerChange {
+  marker: ReachedMarker;
+  /** A jump to the marker, the first draw, or reduced motion: draw the
+   * marker's state at once. */
+  instant: boolean;
+}
+
 /** What a paint handler learns as the block paints its first frame in. */
 export interface PaintChange {
-  /** The first frame, already drawn in its end state. */
-  frame: Frame;
+  /** The first frame, already drawn in its end state. A clip has none: it
+   * paints in at time 0. */
+  frame?: Frame;
   /** Skip motion and leave everything in its end state: the block loaded
    * without painting in, or the reader prefers reduced motion. */
   instant: boolean;
@@ -77,6 +106,11 @@ export interface Whiteboard {
    * handlers, and again when reduced motion changes. Cancel earlier work when
    * another frame shows. Returns an unsubscribe function. */
   on(key: string, handler: (change: FrameChange) => FrameResult): () => void;
+  /** In a clip: run when the playhead crosses the marker playing forward, or
+   * lands on it after a jump (`instant: true`); "*" runs on every marker.
+   * What a marker sets must also be right when the reader jumps there.
+   * Returns an unsubscribe function. */
+  on(key: string, handler: (change: MarkerChange) => FrameResult): () => void;
   /** element.animate that holds its end state, lands at the end on a jump, and
    * skips motion under reduced motion. Give every keyframe its start value, and
    * measure positions before starting one: a started animation already
@@ -94,6 +128,16 @@ export interface Whiteboard {
    * the block paints in, in place of the default painter; it lands at its end
    * otherwise. Numeric positions count from its start. */
   timeline(key: string): FrameTimeline;
+  /** A clip's one timeline: build it while the script first runs and place
+   * every marker on it. With scenarios, call it once per scenario key, each
+   * a timeline of its own; one built without a key serves every scenario
+   * without its own. Throws in an animation. */
+  clip(scenario?: string): ClipTimeline;
+  /** A clip's markers as declared, each with `at` once placed. Empty in an
+   * animation. */
+  readonly markers: readonly Marker[];
+  /** The marker a clip's playhead last reached, if any. */
+  readonly marker: ReachedMarker | undefined;
   /** anime.js v4, also the global `anime`: easings, stagger, utils. */
   readonly anime: unknown;
 
@@ -154,6 +198,25 @@ export interface FrameTimeline {
     position?: number | string,
   ): FrameTimeline;
   call(callback: () => void, position?: number | string): FrameTimeline;
+}
+
+/** A clip's timeline. Numeric positions count milliseconds from its start;
+ * "<" starts at the previous call's end and "<<" at its beginning. */
+export interface ClipTimeline {
+  add(
+    targets: unknown,
+    params: object,
+    position?: number | string,
+  ): ClipTimeline;
+  set(
+    targets: unknown,
+    params: object,
+    position?: number | string,
+  ): ClipTimeline;
+  call(callback: () => void, position?: number | string): ClipTimeline;
+  /** Place a declared marker at the timeline's end so far, or at an anime.js
+   * position. Every marker must be placed once on each timeline. */
+  marker(key: string, position?: number | string): ClipTimeline;
 }
 
 export interface TravelOptions {

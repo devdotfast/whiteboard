@@ -287,19 +287,21 @@ function SoftwareMapBlock({ node, data }: BlockProps<"software_map">) {
   );
 }
 
-function AnimationDiagramBlock(props: BlockProps<"animation">) {
-  const { height, title, html, frames, scenarios, code } = props.node;
+function AnimationDiagramBlock(props: BlockProps<"animation" | "clip">) {
+  const { node } = props;
+  const { height, title, html, scenarios, code } = node;
+  const steps = node.type === "clip" ? node.markers : node.frames;
 
-  // An edit to the animation draws it again from a fresh block, at its first
-  // frame, rather than updating a stage whose frames may have gone.
+  // An edit to the animation or clip draws it again from a fresh block, at
+  // its start, rather than updating a stage whose frames may have gone.
   const revision = useMemo(
-    () => JSON.stringify([html, frames, scenarios, code, height]),
-    [html, frames, scenarios, code, height],
+    () => JSON.stringify([html, steps, scenarios, code, height]),
+    [html, steps, scenarios, code, height],
   );
 
   return (
     <ClientDiagram
-      kind="ANIMATION"
+      kind={node.type === "clip" ? "CLIP" : "ANIMATION"}
       title={title}
       height={height === "auto" ? 120 : height}
     >
@@ -336,6 +338,7 @@ export const blockComponents = {
   flow_diagram: FlowDiagramBlock,
   software_map: SoftwareMapBlock,
   animation: AnimationDiagramBlock,
+  clip: AnimationDiagramBlock,
   section: SectionBlock,
   callout: CalloutBlock,
 } satisfies Components;

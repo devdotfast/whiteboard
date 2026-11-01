@@ -2,6 +2,8 @@ An `animation` component draws HTML you write on the whiteboard, in a sandboxed 
 
 For paths a reader can pick, such as a retry that succeeds or one that gives up, use `scenarios`: the whiteboard draws the picker, so do not draw your own buttons.
 
+A `clip` component runs in the same stage with the same API, but it has no frames: it is one timeline the reader plays, pauses and jumps around by named markers. See "Clips: one timeline, played" below.
+
 ## Work in files
 
 1. `session_checkout({ sessionId, targetId })` writes the animation to a folder: `animation.html`, `frames.json`, `scenarios.json` (once it has scenarios) and `block.json` (`title`, and `code` and `pins` when it shows code).
@@ -98,3 +100,34 @@ Name the ranges the animation explains in `code`, then link the drawing to them:
 - `data-wb-open="retry"` (or `code: "retry"` on a scene card) opens the code beside the whiteboard when the reader clicks that element, and names it when they hover. Put it on the part of the drawing the code explains.
 - A frame's `code` lists the ranges that frame shows. Your script reads it as `frame.code`, so one script can mark what to open in every frame.
 - `<div data-wb-code="retry">` (or `scene.peek`) shows a range inside the drawing instead.
+
+## Clips: one timeline, played
+
+Pick a clip when the motion itself is the point and the timing carries the meaning: a token crossing a system, two requests racing, a queue draining, a timeout firing while a reply is on its way. Pick an animation when the reader needs to compare discrete states, one frame against the next.
+
+A clip's folder holds `markers.json` where an animation's holds `frames.json`; `session_checkout` writes whichever the block has, and publishing a folder with `markers.json` makes a clip. A marker is `{ key, title, caption?, code? }`: a named moment the reader jumps to and the tour stops at. The strip under the clip shows each title, so keep titles to a few words. Markers have no `data` or `duration`: the script decides when each one happens.
+
+Build the timeline while the script first runs, and place every marker on it:
+
+```html
+<script>
+  whiteboard
+    .clip()
+    .marker("sent")
+    .add(".packet", { left: ["10%", "50%"], duration: 700 })
+    .marker("accepted")
+    .add(".packet", { left: ["50%", "90%"], duration: 900 })
+    .marker("stored");
+</script>
+```
+
+- `whiteboard.clip()` returns a timeline with `add`, `set` and `call`, as `whiteboard.timeline` does, and `.marker(key)`, which places a declared marker at the timeline's end so far, or at an anime.js position (`.marker("timeout", 1500)`). Numeric positions count from the clip's start. Markers are labels on the timeline, so later calls can start at one: `.add(".retry", { opacity: [0, 1] }, "timeout")`.
+- A marker the script leaves unplaced shows an error under the clip, naming it.
+- With `scenarios` (`[{ key, label }]` in `scenarios.json`), each scenario is a timeline of its own: call `whiteboard.clip("fast")`, `whiteboard.clip("slow")`, once each, and place every marker on each. A `whiteboard.clip()` without a key serves every scenario that has no timeline of its own.
+- Write each tween with its start value (`left: ["10%", "50%"]`, not `left: "50%"`), and make what differs between beats a `set` or a tween on the timeline: jumping back to a marker then undoes everything after it.
+- `whiteboard.on("stored", ({ marker, instant }) => ...)` runs when the playhead crosses that marker playing forward, or lands on it after a jump with `instant: true`; `"*"` runs on every marker. Use it for what a tween cannot draw, such as changing text, and set the whole state for that marker, since the reader can jump straight to it. `whiteboard.markers` lists the markers with their `at` (milliseconds) once placed, and `whiteboard.marker` is the one the playhead last reached.
+- In a clip, `data-enter`, `data-exit`, `data-only`, `data-highlight` and `scene.on` name markers instead of frames, and follow the marker the playhead last reached.
+- `whiteboard.frames`, `frame`, `goto`, `next`, `prev`, `setSequence`, `timeline(key)`, `travel` and `scene.send` belong to frames and throw in a clip. Move tokens with tweens on the clip instead.
+- Under reduced motion the clip never animates: Play steps from marker to marker, holding each for a few seconds and landing on its time at once, and a jump lands at once. Marker handlers get `instant: true`.
+- Painting in and code linking work as for an animation: the clip paints in at time 0, before anything plays, and a marker's `code` gives its tour stop, as a frame's does.
+

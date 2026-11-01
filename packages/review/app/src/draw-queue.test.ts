@@ -38,11 +38,14 @@ const block = (id: string): AuthoringCursor => ({
   seq: ++seq,
 });
 
-const animation = (id: string): AuthoringCursor => ({
+const animation = (
+  id: string,
+  kind: "animation" | "clip" = "animation",
+): AuthoringCursor => ({
   targetId: id,
   blockId: id,
   source: "edit",
-  edit: { type: "insert", targetId: id, blockId: id, kind: "animation" },
+  edit: { type: "insert", targetId: id, blockId: id, kind },
   seq: ++seq,
 });
 
@@ -377,6 +380,15 @@ describe("draw queue", () => {
     const capped = tick(arrive(EMPTY_QUEUE, animation("anim-3"), 0), PAINT_CAP);
     expect(capped.head).toBeNull();
     expect(standingCursor(capped)?.targetId).toBe("anim-3");
+  });
+
+  it("holds a new clip while it paints, as an animation", () => {
+    let state = arrive(EMPTY_QUEUE, animation("clip-1", "clip"), 0);
+    expect(phases(state)).toEqual(new Map([["clip-1", "painting"]]));
+    expect(nextDue(state)).toBe(PAINT_CAP);
+
+    state = painted(state, "clip-1", 400);
+    expect(state.head).toBeNull();
   });
 
   it("ignores a painted report for another block, or when the head is not painting", () => {

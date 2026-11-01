@@ -144,7 +144,7 @@ let seq = 0;
 
 const insert = (
   id: string,
-  kind: "markdown" | "animation",
+  kind: "markdown" | "animation" | "clip",
 ): AuthoringCursor => ({
   targetId: id,
   blockId: id,
@@ -200,6 +200,37 @@ it("keeps a streamed animation unseen until the queue reaches it, then paints it
   // The stage paints and reports it before the cap.
   await waitFor(() => expect(shown("Lead note")).toBe(true));
   await waitFor(() => expect(motion()).toBeUndefined());
+});
+
+it("paints a streamed clip in at time 0, as an animation, and moves on", async () => {
+  const clip = documentSchema.parse([
+    {
+      id: "anim",
+      type: "clip",
+      title: "Paint",
+      markers: [
+        { key: "a", title: "First" },
+        { key: "b", title: "Last" },
+      ],
+      html: `${nodes}<div id="slot" data-wb-block="note"></div><script>
+        whiteboard.clip().marker("a").add("#slot", { translateX: [0, 80], duration: 400 }).marker("b");
+      </script>`,
+    },
+  ])[0]!;
+
+  await render(insert("b1", "markdown"), [before, note, late]);
+  await render(insert("anim", "clip"), [before, clip, note, late]);
+  expect(motion()).toBe("queued");
+  await waitFor(() => expect(slot("Lead note")).toBeTruthy());
+  expect(slot("Lead note")!.style.visibility).toBe("hidden");
+  const start = new DOMMatrix(slot("Lead note")!.style.transform).m41;
+
+  await manualClock.advance(680);
+  expect(motion()).toBe("painting");
+  await waitFor(() => expect(shown("Lead note")).toBe(true));
+  await waitFor(() => expect(motion()).toBeUndefined());
+  // Painted at time 0: nothing has played.
+  expect(new DOMMatrix(slot("Lead note")!.style.transform).m41).toBe(start);
 });
 
 it("shows an animation loaded with the board at once, without painting", async () => {

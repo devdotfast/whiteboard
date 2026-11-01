@@ -16,16 +16,39 @@ export interface StageFrame {
   code?: string[];
 }
 
+/** What the stage's script reads about one of a clip's markers. */
+export interface StageMarker {
+  key: string;
+  title: string;
+  caption?: string;
+  /** The code names the marker lists. */
+  code?: string[];
+}
+
+/** A placed marker: where it sits on the active timeline, in milliseconds. */
+export interface PlacedMarker {
+  key: string;
+  at: number;
+}
+
 export type StageColorScheme = "light" | "dark";
 
 /** The first message on the port: everything the stage needs to draw. */
 export interface StageInit {
   type: "init";
+  /** An animation's frames, stepped through, or a clip's one timeline,
+   * played. */
+  mode: "frames" | "clip";
   html: string;
   /** The style kit: the CSS every stage loads before its markup. */
   kit: string;
   autoSize: boolean;
+  /** An animation's frames; empty for a clip. */
   frames: StageFrame[];
+  /** A clip's markers, as declared; empty for an animation. */
+  markers: StageMarker[];
+  /** A clip's scenario keys, which whiteboard.clip() accepts. */
+  scenarios: string[];
   /** The names whiteboard.code() accepts. */
   code: string[];
   /** What hovering an element that opens each code says. */
@@ -49,6 +72,8 @@ export interface StageInit {
   frame: number;
   /** The scenario the reader picked: the frame keys the stage starts on. */
   sequence?: string[];
+  /** The clip scenario the reader picked: the timeline the stage starts on. */
+  scenario?: string;
   /** Library sources the stage runs before its own scripts: anime.js. */
   libraries: string[];
 }
@@ -72,7 +97,14 @@ export type HostMessage =
   /** The reader picked a scenario: play these frame keys, in order. */
   | { type: "sequence"; keys: string[] }
   /** The board's turn to draw this block came: paint the first frame in. */
-  | { type: "paint" };
+  | { type: "paint" }
+  /** A clip: play from the playhead, or from the start at the end. */
+  | { type: "play" }
+  | { type: "pause" }
+  /** A clip: land on a marker, still playing if it was. */
+  | { type: "seek"; marker: string }
+  /** A clip: the reader picked a scenario, a timeline of its own. */
+  | { type: "scenario"; key: string };
 
 /** The tallest an auto-sized stage may report itself. */
 export const STAGE_MAX_HEIGHT = 4000;
@@ -116,6 +148,30 @@ export const stageMessageSchema = z.discriminatedUnion("type", [
   }),
   /** Every animation the frame started has finished. */
   z.strictObject({ type: z.literal("settled"), index: z.number().int() }),
+  /** A clip's timeline is built: its length and every placed marker, by
+   * time. Sent again on a scenario change. */
+  z.strictObject({
+    type: z.literal("clip"),
+    duration: z.number().finite().nonnegative(),
+    markers: z
+      .array(
+        z.strictObject({
+          key: z.string(),
+          at: z.number().finite().nonnegative(),
+        }),
+      )
+      .max(60),
+  }),
+  /** A clip's playhead, while it plays and whenever it stops or jumps. */
+  z.strictObject({
+    type: z.literal("time"),
+    at: z.number().finite().nonnegative(),
+    playing: z.boolean(),
+  }),
+  /** A clip's playhead reached this marker. */
+  z.strictObject({ type: z.literal("marker"), key: z.string() }),
+  /** A clip played to its end and paused there. */
+  z.strictObject({ type: z.literal("ended") }),
   /** The first frame has painted in, after a `paint` message. */
   z.strictObject({ type: z.literal("painted") }),
   z.strictObject({ type: z.literal("goto"), key: z.string() }),

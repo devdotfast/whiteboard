@@ -1,6 +1,7 @@
 // Every reference animation under packages/review/instructions/animations
 // runs here as a reader would see it: mounted on a board, stepped through
-// every frame of every scenario, with no script error. Set
+// every frame of every scenario, with no script error. A reference clip
+// jumps to each marker of every scenario, then plays to its end. Set
 // VITE_ANIMATION_SHOTS=1 to save a screenshot of each frame under
 // __screenshots__/references/<name>/<path>/ beside this file (gitignored),
 // the way an author looks at their work without opening Desktop:
@@ -36,12 +37,23 @@ const ANCHOR = "head/order.ts#L1";
 
 const shots = Boolean(import.meta.env.VITE_ANIMATION_SHOTS);
 
-interface Reference {
+interface AnimationReference {
+  kind: "animation";
   name: string;
   block: JsonObject;
   frames: { key: string; title: string }[];
   scenarios: { key: string; label: string; frames: string[] }[] | undefined;
 }
+
+interface ClipReference {
+  kind: "clip";
+  name: string;
+  block: JsonObject;
+  markers: { key: string; title: string }[];
+  scenarios: { key: string; label: string }[] | undefined;
+}
+
+type Reference = AnimationReference | ClipReference;
 
 function readReferences(): Reference[] {
   const folders = new Map<string, Record<string, string>>();
@@ -51,7 +63,7 @@ function readReferences(): Reference[] {
     folders.set(name, { ...folders.get(name), [base]: text });
   }
 
-  return [...folders].flatMap(([name, folder]) => {
+  return [...folders].flatMap(([name, folder]): Reference[] => {
     if (!("animation.html" in folder)) return [];
 
     const block = parseJsonText(folder["block.json"] ?? "{}");
@@ -69,25 +81,40 @@ function readReferences(): Reference[] {
       : {};
 
     const scenariosText = folder["scenarios.json"];
+    const markersText = folder["markers.json"];
 
     const raw: JsonObject = {
       id: `reference-${name}`,
-      type: "animation",
+      type: markersText ? "clip" : "animation",
       ...block,
       code,
       html: folder["animation.html"]!,
-      frames: parseJsonText(folder["frames.json"] ?? "[]"),
+      ...(markersText
+        ? { markers: parseJsonText(markersText) }
+        : { frames: parseJsonText(folder["frames.json"] ?? "[]") }),
       ...(scenariosText && { scenarios: parseJsonText(scenariosText) }),
       pins: { repositoryId: "repo", base: "base", head: "head" },
     };
 
     const [parsed] = documentSchema.parse([raw]);
 
+    if (parsed?.type === "clip")
+      return [
+        {
+          kind: "clip" as const,
+          name,
+          block: raw,
+          markers: parsed.markers,
+          scenarios: parsed.scenarios,
+        },
+      ];
+
     if (parsed?.type !== "animation")
-      throw new Error(`${name}: not an animation`);
+      throw new Error(`${name}: not an animation or clip`);
 
     return [
       {
+        kind: "animation" as const,
         name,
         block: raw,
         frames: parsed.frames,
@@ -198,7 +225,7 @@ async function shoot(
 
 async function stepThrough(
   container: HTMLElement,
-  reference: Reference,
+  reference: AnimationReference,
   path: string,
   keys: string[],
 ) {
@@ -230,6 +257,76 @@ async function stepThrough(
   expect(next().disabled, `${path}: next past the last frame`).toBe(true);
 }
 
+/** Jumps to each marker through the Markers strip, then plays the clip from
+ * its start to its end. */
+async function playThrough(
+  container: HTMLElement,
+  reference: ClipReference,
+  path: string,
+) {
+  const strip = () => [
+    ...container.querySelectorAll<HTMLButtonElement>(
+      "[role='group'][aria-label='Markers'] button",
+    ),
+  ];
+
+  const count = reference.markers.length;
+
+  // The strip lists the markers in time order, so walk it by position.
+  for (let position = 0; position < count; position++) {
+    const button = strip()[position];
+
+    expect(button, `${path}: marker ${position + 1}`).toBeTruthy();
+    await act(async () => button!.click());
+    await shown(container, position, count);
+    await shoot(
+      container,
+      reference,
+      path,
+      `${position + 1}-${button!.textContent?.replace(/^\d+/, "")}`,
+    );
+  }
+
+  await act(async () => strip()[0]!.click());
+  await shown(container, 0, count);
+
+  // Back at the start, the button reads Play once the stage says so.
+  const play = await settled(() =>
+    container.querySelector<HTMLButtonElement>("button[aria-label='Play']"),
+  );
+
+  expect(play, `${path}: play`).toBeTruthy();
+  await act(async () => play!.click());
+  expect(
+    await settled(
+      () =>
+        container.querySelector("button[aria-label='Replay']") ||
+        alertIn(container),
+      30_000,
+    ),
+    `${path}: plays to its end`,
+  ).toBeTruthy();
+  expect(alertIn(container)).toBeNull();
+  expect(text(container)).toContain(`${count} / ${count}`);
+}
+
+/** Plays a clip through, in each of its scenarios. */
+async function playScenarios(container: HTMLElement, reference: ClipReference) {
+  if (!reference.scenarios) return playThrough(container, reference, "all");
+
+  for (const scenario of reference.scenarios) {
+    const option = [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        "[role='group'][aria-label='Scenario'] button",
+      ),
+    ].find((button) => button.textContent === scenario.label);
+
+    expect(option, `scenario ${scenario.label}`).toBeTruthy();
+    await act(async () => option!.click());
+    await playThrough(container, reference, scenario.key);
+  }
+}
+
 describe.skipIf(!references.length)("reference animations", () => {
   it.each(references.map((reference) => [reference.name, reference] as const))(
     "%s runs every frame of every scenario without an error",
@@ -239,6 +336,8 @@ describe.skipIf(!references.length)("reference animations", () => {
       expect(
         await settled(() => container.querySelector("iframe")),
       ).toBeTruthy();
+
+      if (reference.kind === "clip") return playScenarios(container, reference);
 
       if (!reference.scenarios) {
         await stepThrough(

@@ -2170,12 +2170,15 @@ export function createReviewApi(
             )
           : undefined;
 
+      const animated = (type: string | undefined) =>
+        type === "animation" || type === "clip";
+
       if (
-        incoming.some((element) => element.type === "animation") ||
-        target?.type === "animation"
+        incoming.some((element) => animated(element.type)) ||
+        animated(target?.type)
       )
         throw new ReviewInputError(
-          "Animation authoring is disabled. Enable Animations in Settings under Experimental Features to edit animations. Existing animations can still be viewed.",
+          "Animation authoring is disabled. Enable Animations in Settings under Experimental Features to edit animations and clips. Existing ones can still be viewed.",
           409,
         );
     }

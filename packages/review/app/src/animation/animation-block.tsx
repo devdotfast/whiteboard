@@ -25,7 +25,8 @@ import { withClass } from "@canvas/stylex-props";
 import { themeClass, themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
 import { captureUiEvent } from "@canvas/ui-telemetry";
-import { Button, IconButton } from "@canvas/ui/button";
+import { Button } from "@canvas/ui/button";
+import { focusStyles } from "@canvas/ui/focus";
 import { SegmentedControl } from "@canvas/ui/segmented";
 import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
@@ -40,7 +41,6 @@ import {
 import { STAGE_KIT_CSS, STAGE_THEME } from "@review/animation-stage-kit";
 import * as stylex from "@stylexjs/stylex";
 import {
-  type KeyboardEvent,
   type ReactNode,
   type RefObject,
   useCallback,
@@ -53,8 +53,17 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { animationTour, frameAnchorId, frameContent } from "./animation-tour";
+import {
+  animationTour,
+  frameAnchorId,
+  frameContent,
+  markerAnchorId,
+} from "./animation-tour";
+import { useClipPlayer } from "./clip-player";
+import { useFramePlayer } from "./frame-player";
 import { useReportAnimationRun } from "./report-run";
+import { StepStrip } from "./stage-controls";
+import type { StagePlayer } from "./stage-player";
 import {
   type HostMessage,
   STAGE_BOOT,
@@ -68,8 +77,6 @@ import { SCALE } from "./stage-scale";
 
 // Read on demand: a Worker may lack import.meta.url.
 const stageUrl = () => new URL("./stage.html", import.meta.url).href;
-
-const DEFAULT_DURATION = 3000;
 
 let animeSource: Promise<string> | undefined;
 
@@ -127,13 +134,14 @@ function readTheme(element: Element): Pick<StageInit, "theme" | "colorScheme"> {
 const reducedMotion = () =>
   matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-/** Blocks a stage may show with whiteboard.block(): any but animations,
- * which would nest stages. */
+/** Blocks a stage may show with whiteboard.block(): any but animations and
+ * clips, which would nest stages. */
 function embeddableBlocks(document: Block[]): Map<string, Block> {
   const found = new Map<string, Block>();
 
   const visit = (block: Block) => {
-    if (block.id && block.type !== "animation") found.set(block.id, block);
+    if (block.id && block.type !== "animation" && block.type !== "clip")
+      found.set(block.id, block);
 
     if ("children" in block) block.children.forEach(visit);
   };
@@ -143,30 +151,76 @@ function embeddableBlocks(document: Block[]): Map<string, Block> {
   return found;
 }
 
+type StageBlockProps = BlockProps<"animation" | "clip">;
+
+/** The channel to the stage showing: set when it boots. */
+function useStagePort() {
+  const portRef = useRef<MessagePort | null>(null);
+
+  const send = useCallback((message: HostMessage) => {
+    portRef.current?.postMessage(message);
+  }, []);
+
+  return { portRef, send };
+}
+
+type StagePort = ReturnType<typeof useStagePort>;
+
 /**
- * An agent's HTML animation, run in a sandboxed stage. Whiteboard pieces the
- * stage asks for (code peeks, other blocks) are drawn here, over the
- * placeholders the stage lays out, so they are the real components.
+ * An agent's HTML animation or clip, run in a sandboxed stage. Whiteboard
+ * pieces the stage asks for (code peeks, other blocks) are drawn here, over
+ * the placeholders the stage lays out, so they are the real components. An
+ * animation's reader steps through frames; a clip's plays one timeline.
  */
-export function AnimationBlock({
+export function AnimationBlock(props: StageBlockProps) {
+  return props.node.type === "clip" ? (
+    <ClipStage {...props} node={props.node} />
+  ) : (
+    <FrameStage {...props} node={props.node} />
+  );
+}
+
+function FrameStage(props: BlockProps<"animation">) {
+  const port = useStagePort();
+
+  return (
+    <StageBlock
+      {...props}
+      port={port}
+      player={useFramePlayer(props.node, port.send)}
+    />
+  );
+}
+
+function ClipStage(props: BlockProps<"clip">) {
+  const port = useStagePort();
+
+  return (
+    <StageBlock
+      {...props}
+      port={port}
+      player={useClipPlayer(props.node, port.send)}
+    />
+  );
+}
+
+function StageBlock({
   node,
   data,
   children,
-}: BlockProps<"animation">) {
+  port: { portRef, send },
+  player,
+}: StageBlockProps & { port: StagePort; player: StagePlayer }) {
   const { theme } = useReviewDebugSettings();
   const panelStore = useReviewPanelStore();
   const session = useReviewSession();
   const { diagramFullscreenOnClick } = useWhiteboardSettings();
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const portRef = useRef<MessagePort | null>(null);
-  const [index, setIndex] = useState(0);
-  const [sequenceKeys, setSequenceKeys] = useState<string[] | null>(null);
-  const sequenceRef = useRef<string[] | null>(null);
-  const [playing, setPlaying] = useState(false);
-  const [settled, setSettled] = useState(-1);
   const [contentHeight, setContentHeight] = useState(120);
   const [slots, setSlots] = useState<SlotLayout[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const clip = node.type === "clip";
+  const noun = clip ? "clip" : "animation";
 
   const reportRun = useReportAnimationRun(data.snapshot.reviewId, node.id);
 
@@ -197,49 +251,29 @@ export function AnimationBlock({
   const [held, setHeld] = useState(0);
   const openRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const indexRef = useRef(index);
-  indexRef.current = index;
 
   const embeddable = useMemo(
     () => embeddableBlocks(data.snapshot.document),
     [data.snapshot.document],
   );
 
-  const frames = node.frames;
+  const { stops, activeIndex } = player;
+  const stop = stops[activeIndex];
+  const anchorId = clip ? markerAnchorId : frameAnchorId;
 
-  const activeFrames = useMemo(() => {
-    if (!sequenceKeys) return frames;
-    const byKey = new Map(frames.map((item) => [item.key, item]));
-
-    return sequenceKeys.flatMap((key) => {
-      const item = byKey.get(key);
-
-      return item ? [item] : [];
-    });
-  }, [frames, sequenceKeys]);
-
-  const last = activeFrames.length - 1;
-  const frame = frames[Math.min(index, frames.length - 1)]!;
-
-  const activeIndex = Math.max(
-    0,
-    activeFrames.findIndex((item) => item.key === frame.key),
-  );
-
-  const steps = activeFrames.every((item) => item.label) ? activeFrames : null;
-
-  // A stop per frame of the path showing, when its frames show code.
+  // A stop per frame of the path showing, or per marker, when they show code.
   const tour = useMemo(
     () =>
       animationTour(
         { id: node.id, title: node.title },
         data.anchors,
-        activeFrames,
+        stops,
+        anchorId,
       ),
-    [node.id, node.title, data.anchors, activeFrames],
+    [node.id, node.title, data.anchors, stops, anchorId],
   );
 
-  const frameAnchor = tour && frameAnchorId(node.id, frame.key);
+  const frameAnchor = tour && stop ? anchorId(node.id, stop.key) : null;
 
   // Unlike a diagram's, the tour stays open on a stop it no longer has: a
   // scenario switch moves it to the frame showing instead.
@@ -261,16 +295,12 @@ export function AnimationBlock({
       JSON.stringify([
         node.html,
         node.height,
-        node.frames,
+        node.type === "clip" ? node.markers : node.frames,
         node.code,
         [...embeddable.keys()],
       ]),
-    [node.html, node.height, node.frames, node.code, embeddable],
+    [node, embeddable],
   );
-
-  const send = useCallback((message: HostMessage) => {
-    portRef.current?.postMessage(message);
-  }, []);
 
   // Paint once the stage is ready and the queue has reached this block, or
   // has given up on it: the content must appear either way.
@@ -291,41 +321,6 @@ export function AnimationBlock({
   useEffect(() => onPhase(), [motion]);
 
   useEffect(() => endPaint, [endPaint]);
-
-  const go = useCallback(
-    (target: number, instant: boolean) => {
-      const keys = sequenceRef.current;
-
-      const path = keys
-        ? keys.flatMap((key) => {
-            const item = frames.find((candidate) => candidate.key === key);
-
-            return item ? [item] : [];
-          })
-        : frames;
-
-      const currentKey = frames[indexRef.current]?.key;
-      const currentPosition = path.findIndex((item) => item.key === currentKey);
-      const position = Math.max(0, Math.min(path.length - 1, target));
-      const next = frames.findIndex((item) => item.key === path[position]?.key);
-
-      if (next < 0 || next === indexRef.current) return;
-      setIndex(next);
-      send({
-        type: "frame",
-        index: next,
-        instant,
-        direction:
-          currentPosition < 0 || position === currentPosition
-            ? "none"
-            : position > currentPosition
-              ? "forward"
-              : "backward",
-        adjacent: currentPosition >= 0 && position === currentPosition + 1,
-      });
-    },
-    [frames, send],
-  );
 
   const openTour = () => {
     if (!tour || !frameAnchor) return;
@@ -351,66 +346,27 @@ export function AnimationBlock({
     captureUiEvent(session, "peek_opened", { via: "diagram" });
     const { openPeek, moveOverlayTour, active } = panelStore.getState();
 
-    const stop = tour?.stops.find((item) => item.anchor.id === frameAnchor);
+    const tourStop = tour?.stops.find((item) => item.anchor.id === frameAnchor);
 
-    if (!tour || !stop)
+    if (!tour || !tourStop || !stop)
       return openPeek({
         kind: "peek",
         anchor,
         content: { kind: "source", source: anchor.peek },
       });
 
-    if (tourOpen) return moveOverlayTour(stop.anchor.id, { reveal: true });
+    if (tourOpen) return moveOverlayTour(tourStop.anchor.id, { reveal: true });
 
     if (expanded || diagramFullscreenOnClick) return openTour();
 
     openPeek({
       kind: "peek",
-      anchor: stop.anchor,
-      content: frameContent(node.id, data.anchors, frame, name),
+      anchor: tourStop.anchor,
+      content: frameContent(node.id, data.anchors, stop, name),
       tour: {
         definition: tour,
         revealRequest: (active?.tour?.revealRequest ?? 0) + 1,
       },
-    });
-  };
-
-  // A stage script's setSequence() and the scenario picker both land here.
-  const selectSequence = (keys: string[]) => {
-    const unique = new Set(keys);
-
-    const valid =
-      unique.size === keys.length &&
-      keys.every((key) => frames.some((frame) => frame.key === key));
-
-    if (!valid) return;
-
-    if (
-      sequenceRef.current?.length === keys.length &&
-      sequenceRef.current.every((key, index) => key === keys[index])
-    )
-      return;
-
-    sequenceRef.current = keys;
-    setSequenceKeys(keys);
-    setPlaying(false);
-    setTimeUp(-1);
-    const currentKey = frames[indexRef.current]?.key;
-
-    const fallback = frames.findIndex((frame) => frame.key === keys[0]);
-
-    const next = keys.includes(currentKey) ? indexRef.current : fallback;
-
-    if (next !== indexRef.current) setIndex(next);
-
-    // Refresh even a preserved key: lifecycle ranges, held scene changes,
-    // and its timeline can differ when active order changes.
-    send({
-      type: "frame",
-      index: next,
-      instant: true,
-      direction: "none",
-      adjacent: false,
     });
   };
 
@@ -424,29 +380,6 @@ export function AnimationBlock({
       case "slots":
         setSlots(message.slots);
         break;
-      case "settled":
-        setSettled(message.index);
-        break;
-      case "goto": {
-        const keys = sequenceRef.current;
-        const path = keys ?? frames.map((item) => item.key);
-        const position = path.indexOf(message.key);
-        go(position, true);
-        break;
-      }
-
-      case "step": {
-        const keys = sequenceRef.current;
-        const path = keys ?? frames.map((item) => item.key);
-        const currentKey = frames[indexRef.current]?.key;
-        go(path.indexOf(currentKey) + message.delta, false);
-        break;
-      }
-
-      case "sequence":
-        selectSequence(message.keys);
-        break;
-
       case "reveal":
         reveal(message.name);
         break;
@@ -465,10 +398,13 @@ export function AnimationBlock({
       case "painted":
         endPaint();
         break;
+      default:
+        player.receive(message);
     }
   };
 
   const bootedRef = useRef<HTMLIFrameElement | null>(null);
+  const bootPlayer = useEffectEvent(() => player.boot());
 
   // Hand the stage its runtime and a private port when its page first loads.
   // A later load in the same frame is a page the stage navigated to, which
@@ -483,7 +419,7 @@ export function AnimationBlock({
     if (bootedRef.current === frameRef.current) {
       portRef.current = null;
       setSlots([]);
-      setError("The animation left its stage.");
+      setError(`The ${noun} left its stage.`);
       endPaint();
 
       return;
@@ -498,22 +434,7 @@ export function AnimationBlock({
       if (message.success) onMessage.current(message.data);
     };
 
-    // A new stage starts in the scenario the reader had picked, or the first.
-    const sequence =
-      (
-        node.scenarios?.find((scenario) =>
-          sameKeys(scenario.frames, sequenceRef.current),
-        ) ?? node.scenarios?.[0]
-      )?.frames ?? null;
-
-    sequenceRef.current = sequence;
-    setSequenceKeys(sequence);
-
-    if (sequence && !sequence.includes(frames[indexRef.current]!.key)) {
-      indexRef.current = frames.findIndex((item) => item.key === sequence[0]);
-      setIndex(indexRef.current);
-    }
-
+    const kind = bootPlayer();
     setSlots([]);
     setError(null);
 
@@ -539,16 +460,10 @@ export function AnimationBlock({
 
     const init: Omit<StageInit, "libraries" | "fonts"> = {
       type: "init",
+      ...kind,
       html: node.html,
       kit: STAGE_KIT_CSS,
       autoSize: node.height === "auto",
-      frames: frames.map(({ key, title, caption, data, code }) => ({
-        key,
-        title,
-        caption,
-        data,
-        code,
-      })),
       code: Object.keys(node.code),
       codeTitles: codeTitles(node, data.anchors),
       blocks: [...embeddable.keys()],
@@ -556,8 +471,6 @@ export function AnimationBlock({
       scale: SCALE,
       reducedMotion: reducedMotion(),
       paint,
-      frame: indexRef.current,
-      ...(sequence && { sequence }),
     };
 
     Promise.all([loadAnime(), loadFonts()]).then(
@@ -568,21 +481,13 @@ export function AnimationBlock({
           fonts,
         } satisfies HostMessage),
       () => {
-        setError("The animation libraries or fonts could not be loaded.");
+        setError(`The ${noun} libraries or fonts could not be loaded.`);
         endPaint();
       },
     );
-  }, [
-    node.html,
-    node.code,
-    node.height,
-    node.scenarios,
-    frames,
-    embeddable,
-    endPaint,
-  ]);
+  }, [node, noun, embeddable, endPaint, portRef]);
 
-  useEffect(() => () => portRef.current?.close(), []);
+  useEffect(() => () => portRef.current?.close(), [portRef]);
 
   // Read after React commits the matching theme class. Listening to the host
   // event directly can race that commit and export a mixed palette (new neutral
@@ -591,32 +496,6 @@ export function AnimationBlock({
     if (figureRef.current)
       send({ type: "theme", ...readTheme(figureRef.current) });
   }, [theme, send]);
-
-  // Play: hold each active-sequence frame for its duration and until its motion ends.
-  const [timeUp, setTimeUp] = useState(-1);
-
-  useEffect(() => {
-    if (!playing) return;
-
-    const timer = setTimeout(
-      () => setTimeUp(index),
-      frame.duration ?? DEFAULT_DURATION,
-    );
-
-    return () => clearTimeout(timer);
-  }, [playing, index, frame.duration]);
-
-  useEffect(() => {
-    if (!playing || timeUp !== index || settled !== index) return;
-
-    if (activeIndex >= last) setPlaying(false);
-    else go(activeIndex + 1, false);
-  }, [playing, timeUp, settled, index, activeIndex, last, go]);
-
-  // An edit can drop frames or a sequence selection from under the current one.
-  useEffect(() => {
-    if (!activeFrames.some((item) => item.key === frame.key)) go(0, true);
-  }, [activeFrames, frame.key, go]);
 
   const { closeOverlayTour, moveOverlayTour } = panelStore.getState();
   const collapse = useCallback(() => setExpanded(false), []);
@@ -643,11 +522,10 @@ export function AnimationBlock({
     const anchor = panelStore.getState().overlayTour?.anchor;
 
     if (!tour || !frameAnchor || !anchor) return;
-    const position = tour.stops.findIndex((stop) => stop.anchor.id === anchor);
+    const position = tour.stops.findIndex((item) => item.anchor.id === anchor);
 
     if (position < 0) moveOverlayTour(frameAnchor, { reveal: true });
-    else if (position !== activeIndex)
-      go(position, Math.abs(position - activeIndex) > 1);
+    else if (position !== activeIndex) player.pick(position, "tour");
   });
 
   const overlayAnchor = overlay?.anchor;
@@ -662,11 +540,11 @@ export function AnimationBlock({
     if (!tour || fullscreen || !inlineAnchor) return;
 
     const position = tour.stops.findIndex(
-      (stop) => stop.anchor.id === inlineAnchor,
+      (item) => item.anchor.id === inlineAnchor,
     );
 
     if (position >= 0 && position !== activeIndex)
-      go(position, Math.abs(position - activeIndex) > 1);
+      player.pick(position, "tour");
   });
 
   useEffect(() => {
@@ -688,19 +566,19 @@ export function AnimationBlock({
       return;
     }
 
-    const stop = tour.stops.find((item) => item.anchor.id === frameAnchor);
+    const tourStop = tour.stops.find((item) => item.anchor.id === frameAnchor);
 
     if (
       !inlineAnchor ||
       fullscreen ||
-      !stop ||
+      !tourStop ||
       (active?.anchor?.id === frameAnchor && active.tour?.definition === tour)
     )
       return;
     openPeek({
       kind: "peek",
-      anchor: stop.anchor,
-      content: stop.content,
+      anchor: tourStop.anchor,
+      content: tourStop.content,
       tour: {
         definition: tour,
         revealRequest: (active?.tour?.revealRequest ?? 0) + 1,
@@ -721,14 +599,6 @@ export function AnimationBlock({
     followFrame();
   }, [frameAnchor, tour]);
 
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "ArrowRight") go(activeIndex + 1, false);
-    else if (event.key === "ArrowLeft") go(activeIndex - 1, false);
-    else return;
-
-    event.preventDefault();
-  };
-
   const figure = (
     <figure
       ref={figureRef}
@@ -737,20 +607,23 @@ export function AnimationBlock({
         styles.figure,
         fullscreen && styles.figureFullscreen,
         drawStyles.blockChild,
+        player.onFigureKeyDown !== undefined && focusStyles.ring,
       )}
       aria-label={node.title}
+      tabIndex={player.onFigureKeyDown ? 0 : undefined}
+      onKeyDown={player.onFigureKeyDown}
     >
       <DiagramHeader
-        kind="ANIMATION"
+        kind={clip ? "CLIP" : "ANIMATION"}
         title={node.title}
         titleStyle={styles.headerTitle}
-        meta={`${activeIndex + 1} / ${activeFrames.length}`}
+        meta={`${activeIndex + 1} / ${stops.length}`}
         action={
           fullscreen ? (
             <Button
               ref={closeRef}
               xstyle={diagramStyles.button}
-              aria-label={tourOpen ? "Close tour" : "Close expanded animation"}
+              aria-label={tourOpen ? "Close tour" : `Close expanded ${noun}`}
               onClick={close}
             >
               Close
@@ -765,7 +638,7 @@ export function AnimationBlock({
             <Button
               ref={openRef}
               xstyle={diagramStyles.button}
-              aria-label="Expand animation"
+              aria-label={`Expand ${noun}`}
               onClick={() => {
                 setHeld(figureRef.current?.offsetHeight ?? 0);
                 setExpanded(true);
@@ -786,23 +659,12 @@ export function AnimationBlock({
           </span>
           <SegmentedControl
             label="Scenario"
-            value={
-              node.scenarios.find((scenario) =>
-                sameKeys(scenario.frames, sequenceKeys),
-              )?.key
-            }
+            value={player.scenario}
             options={node.scenarios.map(({ key, label }) => ({
               value: key,
               label,
             }))}
-            onChange={(key) => {
-              const keys = node.scenarios!.find(
-                (scenario) => scenario.key === key,
-              )!.frames;
-
-              send({ type: "sequence", keys });
-              selectSequence(keys);
-            }}
+            onChange={player.selectScenario}
           />
         </div>
       )}
@@ -851,85 +713,22 @@ export function AnimationBlock({
           </div>
         </div>
       </div>
-      {steps && (
-        <div
-          {...stylex.props(styles.steps)}
-          role="group"
-          aria-label="Steps"
-          onKeyDown={onKeyDown}
-        >
-          {steps.map((item, position) => (
-            <button
-              key={item.key}
-              type="button"
-              aria-current={position === activeIndex ? "step" : undefined}
-              onClick={() => go(position, Math.abs(position - activeIndex) > 1)}
-              {...stylex.props(
-                styles.step,
-                position === activeIndex && styles.stepCurrent,
-              )}
-            >
-              <span {...stylex.props(styles.stepIndex)}>{position + 1}</span>
-              <span data-review-copy-prose>{item.label}</span>
-            </button>
-          ))}
-        </div>
+      {player.afterStage}
+      {player.strip && (
+        <StepStrip
+          label={player.strip.label}
+          items={player.strip.items}
+          activeIndex={activeIndex}
+          onPick={(position) => player.pick(position, "controls")}
+          onKeyDown={player.onKeyDown}
+        />
       )}
-      <div {...stylex.props(styles.controls)} onKeyDown={onKeyDown}>
-        <ControlButton
-          label="Previous frame"
-          disabled={activeIndex === 0}
-          onClick={() => go(activeIndex - 1, false)}
-        >
-          <path d="M14.5 6.5 9 12l5.5 5.5" />
-        </ControlButton>
-        <ControlButton
-          label={playing ? "Pause" : activeIndex >= last ? "Replay" : "Play"}
-          onClick={() => {
-            if (playing) return setPlaying(false);
-
-            if (activeIndex >= last) go(0, true);
-
-            setPlaying(true);
-          }}
-        >
-          {playing ? (
-            <path d="M9 6.5v11M15 6.5v11" />
-          ) : (
-            <path d="M8.5 6.5v11l9-5.5z" />
-          )}
-        </ControlButton>
-        <ControlButton
-          label="Next frame"
-          disabled={activeIndex >= last}
-          onClick={() => go(activeIndex + 1, false)}
-        >
-          <path d="M9.5 6.5 15 12l-5.5 5.5" />
-        </ControlButton>
-        <div {...stylex.props(styles.caption)} aria-live="polite">
-          <strong data-review-copy-prose>{frame.title}</strong>
-          {frame.caption && (
-            <span data-review-copy-prose> {frame.caption}</span>
-          )}
-        </div>
-        {!steps && (
-          <div {...stylex.props(styles.dots)} role="group" aria-label="Frames">
-            {activeFrames.map((item, position) => (
-              <FrameDot
-                key={item.key}
-                title={item.title}
-                current={position === activeIndex}
-                onClick={() =>
-                  go(position, Math.abs(position - activeIndex) > 1)
-                }
-              />
-            ))}
-          </div>
-        )}
+      <div {...stylex.props(styles.controls)} onKeyDown={player.onKeyDown}>
+        {player.controls}
       </div>
       {error && (
         <p role="alert" {...stylex.props(styles.error)}>
-          The animation reported an error: {error}
+          The {noun} reported an error: {error}
         </p>
       )}
     </figure>
@@ -974,7 +773,7 @@ export function AnimationBlock({
           )}
           role="dialog"
           aria-modal="true"
-          aria-label={node.title ?? "Animation"}
+          aria-label={node.title ?? (clip ? "Clip" : "Animation")}
         >
           {figure}
         </div>,
@@ -983,9 +782,6 @@ export function AnimationBlock({
     </>
   );
 }
-
-const sameKeys = (left: readonly string[], right: readonly string[] | null) =>
-  right?.length === left.length && left.every((key, i) => key === right[i]);
 
 /** A host component drawn where the stage put its placeholder. */
 function SlotOverlay({
@@ -1066,43 +862,10 @@ function TourButton({
   );
 }
 
-function ControlButton({
-  label,
-  disabled,
-  onClick,
-  children,
-}: {
-  label: string;
-  disabled?: boolean;
-  onClick(): void;
-  children: ReactNode;
-}) {
-  const tooltip = useTooltip(label, { quick: true });
-
-  return (
-    <IconButton
-      ref={tooltip}
-      aria-label={label}
-      size="small"
-      disabled={disabled}
-      onClick={onClick}
-    >
-      <svg
-        aria-hidden="true"
-        focusable="false"
-        viewBox="0 0 24 24"
-        {...stylex.props(styles.icon)}
-      >
-        {children}
-      </svg>
-    </IconButton>
-  );
-}
-
 /** What hovering a drawn element that opens code says: its label, file and
  * lines. */
 function codeTitles(
-  node: BlockProps<"animation">["node"],
+  node: StageBlockProps["node"],
   anchors: ReadonlyMap<string, SourcePeekAnchor>,
 ): Record<string, string> {
   return Object.fromEntries(
@@ -1118,29 +881,6 @@ function codeTitles(
 
       return [[name, `${label} · ${file.split("/").at(-1)}:${lines}`]];
     }),
-  );
-}
-
-function FrameDot({
-  title,
-  current,
-  onClick,
-}: {
-  title: string;
-  current: boolean;
-  onClick(): void;
-}) {
-  const tooltip = useTooltip(title, { instant: true });
-
-  return (
-    <button
-      ref={tooltip}
-      type="button"
-      aria-label={title}
-      aria-current={current ? "step" : undefined}
-      onClick={onClick}
-      {...stylex.props(styles.dot, current && styles.dotCurrent)}
-    />
   );
 }
 
@@ -1256,90 +996,6 @@ const styles = stylex.create({
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
-  },
-  icon: {
-    width: "16px",
-    height: "16px",
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.6,
-    strokeLinecap: "round",
-    strokeLinejoin: "round",
-  },
-  caption: {
-    flex: "1 1 auto",
-    minWidth: 0,
-    marginLeft: space.s6,
-    paddingBlock: space.s8,
-    color: tokens.inkMuted,
-    lineHeight: leading.px18,
-  },
-  dots: {
-    display: "flex",
-    flex: "0 0 auto",
-    gap: space.s6,
-  },
-  dot: {
-    width: "8px",
-    height: "8px",
-    padding: 0,
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: tokens.inkFaint,
-    borderRadius: radius.round,
-    backgroundColor: tokens.transparent,
-    cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: "2px",
-  },
-  dotCurrent: {
-    borderColor: tokens.accent,
-    backgroundColor: tokens.accent,
-  },
-  // A named step per frame, like a progress strip, instead of plain dots.
-  steps: {
-    display: { default: "flex", [narrow]: "grid" },
-    gridTemplateColumns: {
-      default: null,
-      [narrow]: "repeat(4, minmax(0, 1fr))",
-    },
-    overflowX: { default: "auto", [narrow]: "visible" },
-    borderTopWidth: "1px",
-    borderTopStyle: "solid",
-    borderTopColor: tokens.rule,
-  },
-  step: {
-    display: "flex",
-    flex: "1 1 0",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: space.s4,
-    minWidth: { default: "fit-content", [narrow]: 0 },
-    padding: {
-      default: `${space.s6} ${space.s10}`,
-      [narrow]: `${space.s6} ${space.s4}`,
-    },
-    borderStyle: "none",
-    borderBottomWidth: "2px",
-    borderBottomStyle: "solid",
-    borderBottomColor: tokens.transparent,
-    backgroundColor: tokens.transparent,
-    color: tokens.inkMuted,
-    font: `${fontSize.micro} ${tokens.fontMono}`,
-    letterSpacing: tracking.chrome,
-    textAlign: "center",
-    textTransform: "uppercase",
-    whiteSpace: { default: "nowrap", [narrow]: "normal" },
-    cursor: "pointer",
-    outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
-    outlineOffset: "-2px",
-  },
-  stepCurrent: {
-    borderBottomColor: tokens.accent,
-    color: tokens.ink,
-  },
-  stepIndex: {
-    color: "inherit",
   },
   error: {
     margin: 0,

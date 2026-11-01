@@ -4,18 +4,25 @@ import type {
   ReviewPeekContent,
   SourcePeekAnchor,
 } from "@canvas/review-panel-model";
-import { type Block, animationCodeId } from "@dev.fast/whiteboard-document";
+import { animationCodeId } from "@dev.fast/whiteboard-document";
 
-export type AnimationFrame = Extract<
-  Block,
-  { type: "animation" }
->["frames"][number];
+/** What a tour stop is drawn from: an animation's frame or a clip's marker. */
+export interface AnimationFrame {
+  key: string;
+  title: string;
+  caption?: string;
+  code?: string[];
+}
 
 type Anchors = ReadonlyMap<string, SourcePeekAnchor>;
 
 /** The tour stop, and panel anchor, a frame stands for. */
 export const frameAnchorId = (blockId: string, frameKey: string) =>
   `${blockId}:frame:${frameKey}`;
+
+/** The tour stop, and panel anchor, a clip's marker stands for. */
+export const markerAnchorId = (blockId: string, markerKey: string) =>
+  `${blockId}:marker:${markerKey}`;
 
 /** The code a frame lists that resolves, `lead` first when it resolves. */
 function frameSources(
@@ -50,13 +57,16 @@ export function frameContent(
 }
 
 /**
- * An animation's tour: a stop per frame of the path being shown, in order.
- * There is none unless some frame of the path shows code that resolves.
+ * An animation's tour: a stop per frame of the path being shown, in order,
+ * or a clip's: a stop per marker. There is none unless some frame or marker
+ * shows code that resolves. `anchorId` names each stop: `frameAnchorId`, or
+ * `markerAnchorId` for a clip.
  */
 export function animationTour(
   block: { id: string; title?: string },
   anchors: Anchors,
   path: readonly AnimationFrame[],
+  anchorId: (blockId: string, key: string) => string = frameAnchorId,
 ): GuidedTour | null {
   if (!path.some((frame) => frameSources(block.id, anchors, frame).length))
     return null;
@@ -69,7 +79,7 @@ export function animationTour(
 
       return {
         anchor: {
-          id: frameAnchorId(block.id, frame.key),
+          id: anchorId(block.id, frame.key),
           title: frame.title,
           ...(frame.caption && { detail: frame.caption }),
           ...(content.kind === "source" && { peek: content.source }),
