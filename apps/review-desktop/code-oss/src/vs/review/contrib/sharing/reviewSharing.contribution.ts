@@ -17,6 +17,7 @@ import {
 	WorkbenchPhase,
 } from "../../../workbench/common/contributions.js";
 import { ReviewApiClient } from "../../common/reviewProtocol.js";
+import { shareUrlFromDeepLink } from "../../common/reviewShareLink.js";
 import { IReviewCanvasEditorTabsService } from "../../services/reviewCanvasEditorTabsService.js";
 import { IReviewDesktopConnectionService } from "../../services/reviewDesktopConnectionService.js";
 
@@ -81,8 +82,7 @@ class SharedReviewUrlHandler extends Disposable implements IURLHandler {
 	async handleURL(uri: URI): Promise<boolean> {
 		if (uri.authority !== "share") return false;
 		try {
-			const origin = new URLSearchParams(uri.query).get("origin") ?? "https://app.dev.fast";
-			await openShare({ url: new URL(`/s${uri.path}`, origin).href }, this.session, this.tabs, this.notifications, this.progress);
+			await openShare({ url: shareUrlFromDeepLink(uri.path, uri.query) }, this.session, this.tabs, this.notifications, this.progress);
 		} catch {
 			this.notifications.error("Invalid Whiteboard share link.");
 		}
