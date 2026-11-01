@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
 
-import { formatRelativeTime } from "./format";
+import { formatBytes, formatRelativeTime } from "./format";
 
 const now = Date.parse("2026-10-15T12:00:00Z");
 
@@ -26,4 +26,10 @@ it("writes hours and days in short for a narrow row", () => {
   expect(formatRelativeTime(now - 2 * 86_400_000, now, { short: true })).toBe(
     "2d ago",
   );
+});
+
+it("writes a size in B, KB or MB", () => {
+  expect(formatBytes(512)).toBe("512 B");
+  expect(formatBytes(2048)).toBe("2 KB");
+  expect(formatBytes(1_572_864)).toBe("1.5 MB");
 });

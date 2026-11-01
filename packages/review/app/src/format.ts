@@ -65,3 +65,13 @@ export function formatDuration(durationMs: number): string {
 
   return rest ? `${hours}h ${rest}m` : `${hours}h`;
 }
+
+/** A byte count to one decimal: "512 B", "2 KB", "1.5 MB". */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kilobytes = bytes / 1024;
+
+  if (kilobytes < 1024) return `${Number(kilobytes.toFixed(1))} KB`;
+
+  return `${Number((kilobytes / 1024).toFixed(1))} MB`;
+}
