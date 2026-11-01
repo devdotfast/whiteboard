@@ -51,6 +51,12 @@ interface ShareTarget {
   requestId: string;
 }
 
+interface SharedLink {
+  shareId: string;
+  url: string;
+  version: number;
+}
+
 const actionError = (error: Error | null) =>
   error &&
   (error instanceof ReviewApiError && error.status < 500
@@ -88,12 +94,11 @@ export function ShareControl({
   const label = "Share review";
   const tooltip = useTooltip(label);
 
-  // Links created this canvas, so reopening a shared version skips the upload.
-  const link = useQuery<string>({
-    queryKey: canvasQueryKeys.shareLink(
-      context?.reviewId ?? "",
-      target?.version,
-    ),
+  // The board's one link; a new version uploads behind the same URL.
+  const linkKey = canvasQueryKeys.shareLink(context?.reviewId ?? "");
+
+  const link = useQuery<SharedLink>({
+    queryKey: linkKey,
     queryFn: skipToken,
     staleTime: Infinity,
     gcTime: Infinity,
@@ -108,16 +113,12 @@ export function ShareControl({
 
   const publish = useMutation({
     mutationFn: ({ version, requestId }: ShareTarget) =>
-      context!.client.post<{ url: string }>("/sharing/publish", {
+      context!.client.post<SharedLink>("/sharing/publish", {
         reviewId: context!.reviewId,
         version,
         requestId,
       }),
-    onSuccess: ({ url }, { version }) =>
-      queryClient.setQueryData(
-        canvasQueryKeys.shareLink(context!.reviewId, version),
-        url,
-      ),
+    onSuccess: (shared) => queryClient.setQueryData(linkKey, shared),
     onError: (error) => {
       // The host forgot a stale login; show sign-in and upload again after it.
       if (error instanceof ReviewApiError && error.status === 401)
@@ -156,10 +157,13 @@ export function ShareControl({
     },
   }));
 
+  const current = link && link.version === target?.version ? link : undefined;
+
   // Upload once per opening; a failure waits for Retry or a new sign-in.
   useEffect(() => {
-    if (open && signedIn && target && publish.isIdle && !link) upload(target);
-  }, [open, signedIn, target, publish.isIdle, link]);
+    if (open && signedIn && target && publish.isIdle && !current)
+      upload(target);
+  }, [open, signedIn, target, publish.isIdle, current]);
 
   if (!context) return null;
 
@@ -209,17 +213,20 @@ export function ShareControl({
             </p>
           )}
           {signedIn ? (
-            link ? (
+            current ? (
               <>
                 <TextField
                   xstyle={styles.link}
                   aria-label="Share link"
                   readOnly
-                  value={link}
+                  value={current.url}
                   onFocus={(event) => event.target.select()}
                 />
-                <Button variant="primary" onClick={() => copy(link)}>
-                  {copied === link ? "Copied" : "Copy link"}
+                <p {...stylex.props(styles.paragraph, styles.status)}>
+                  This link always opens the latest share of this board.
+                </p>
+                <Button variant="primary" onClick={() => copy(current.url)}>
+                  {copied === current.url ? "Copied" : "Copy link"}
                 </Button>
               </>
             ) : error ? (

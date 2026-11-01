@@ -93,7 +93,9 @@ function mount(options: {
         );
 
       return Response.json({
+        shareId: "6f1c2b0e-8e0a-4b8e-9a51-0d6f1e2c3b4a",
         url: "https://app.dev.fast/s/capability",
+        version: JSON.parse(String(init!.body)).version,
       });
     },
   );
@@ -289,7 +291,7 @@ it("falls back to sign-in when the stored login has expired, then uploads after 
   expect(container.textContent).not.toContain("expired");
 });
 
-it("reuses the link for a version that was already shared and uploads again for a new one", async () => {
+it("keeps one link per board: reuses it while the version holds and uploads a new version behind it", async () => {
   const harness = mount({ signedIn: true });
   const { container } = harness;
 
@@ -299,6 +301,9 @@ it("reuses the link for a version that was already shared and uploads again for 
   await harness.settle();
   expect(publishes(harness)).toHaveLength(1);
   expect(container.querySelector("input")?.value).toContain("/s/capability");
+  expect(container.textContent).toContain(
+    "This link always opens the latest share of this board.",
+  );
   await harness.click("Share review");
   await harness.click("Share review");
   expect(container.textContent).not.toContain("Uploading");
@@ -313,6 +318,13 @@ it("reuses the link for a version that was already shared and uploads again for 
     expect.objectContaining({ version: 4 }),
     expect.objectContaining({ version: 5 }),
   ]);
+  expect(container.querySelector("input")?.value).toBe(
+    "https://app.dev.fast/s/capability",
+  );
+  await harness.click("Share review");
+  await harness.click("Share review");
+  await harness.settle();
+  expect(publishes(harness)).toHaveLength(2);
 });
 
 it("keeps one upload when the popover is reopened while it is in flight", async () => {
