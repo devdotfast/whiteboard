@@ -7,6 +7,7 @@ import path from "node:path";
 import type { Block } from "@dev.fast/whiteboard-document";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
+import type { SharedProvenance } from "@review/review-api/store.js";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
@@ -171,7 +172,7 @@ it("copies a share into a board the recipient edits like their own", async () =>
 });
 
 it("plans the three rules", () => {
-  const c = (over: object) => ({
+  const c = (over: Partial<SharedProvenance>) => ({
     reviewId: "a",
     version: 3,
     shared: { key: "k", revisionId: R1, importedVersion: 3, ...over },
@@ -213,7 +214,7 @@ it("reopens, refreshes in place from Trash, and copies beside an edited board", 
   const input = { ...recipient, fetchRepository };
   const link = key();
 
-  const download = vi.fn(async () => ({
+  const download = vi.fn<Parameters<typeof receiveShare>[3]>(async () => ({
     bundle,
     attribution: { login: "ada", sharedAt: 1 },
   }));
@@ -291,6 +292,7 @@ it("keeps a share's commits until its link's last copy is deleted", async () => 
   );
 
   const b = await receiveShare(input, link, served(R2, R2), download);
+
   const root = recipient.store.repositoryPath(
     recipient.store.read(a).pins!.repositoryId,
   );

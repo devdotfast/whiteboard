@@ -16,9 +16,27 @@ import { createShareFixture } from "../../test/fixtures/share/create.js";
 import { ShareClient } from "./client.js";
 import { exportShare } from "./export.js";
 import { mountSharingHost } from "./host.js";
+import { shareKey } from "./import.js";
 import { fetchPinnedRepository } from "./repository.js";
 
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
+
+const R = randomUUID();
+
+const capability = "a".repeat(43);
+
+const url = `https://app.dev.fast/s/${capability}`;
+
+const meta = {
+  sender: { login: "sender" },
+  sharedAt: 1,
+  size: 1,
+  revision: { id: R, version: 1, createdAt: 1 },
+  latest: R,
+};
 
 it("exposes the device URL and code while login is pending and allows retry after failure", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "share-login-"));
@@ -100,6 +118,10 @@ it("reports download and checkout preparation, and opens the same copy when the 
         }),
     );
 
+  const sharedSpy = vi
+    .spyOn(ShareClient.prototype, "shared")
+    .mockResolvedValue(meta);
+
   let fetched!: () => void;
 
   const gate = new Promise<void>((resolve) => {
@@ -113,7 +135,6 @@ it("reports download and checkout preparation, and opens the same copy when the 
       await fetchPinnedRepository(target, fixture.repo, ...rest);
     },
   });
-  const url = `https://app.dev.fast/s/${"a".repeat(43)}`;
 
   const start = () =>
     api.request("/sharing/import", {
@@ -132,14 +153,13 @@ it("reports download and checkout preparation, and opens the same copy when the 
 
     expect(await status()).toMatchObject({ stage: "downloading" });
     await start();
-    expect(downloadSpy).toHaveBeenCalledTimes(1);
-    const shareId = randomUUID();
+    await vi.waitFor(() => expect(downloadSpy).toHaveBeenCalledTimes(1));
 
     download({
       bundle,
       attribution: { login: "sender", sharedAt: 1 },
-      revision: { id: shareId, version: 0, createdAt: 1 },
-      latest: shareId,
+      revision: meta.revision,
+      latest: R,
     });
     await vi.waitFor(async () =>
       expect(await status()).toMatchObject({ stage: "fetching" }),
@@ -158,14 +178,119 @@ it("reports download and checkout preparation, and opens the same copy when the 
 
     expect(fixture.store.read(copy).shared).toMatchObject({ login: "sender" });
     expect((await start()).status).toBe(202);
-    expect(await status()).toMatchObject({ stage: "ready", reviewId: copy });
+    await vi.waitFor(async () =>
+      expect(await status()).toMatchObject({ stage: "ready", reviewId: copy }),
+    );
+    expect(sharedSpy).toHaveBeenCalledTimes(2);
     expect(downloadSpy).toHaveBeenCalledTimes(1);
+    expect(downloadSpy).toHaveBeenCalledWith(capability, R);
   } finally {
     fetched();
-    downloadSpy.mockRestore();
     await fixture.data.close();
     fixture.store.close();
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+async function importer() {
+  const root = await mkdtemp(path.join(tmpdir(), "share-import-"));
+  vi.stubEnv("DEV_REVIEW_HOME", root);
+  const fixture = await createShareFixture(root);
+  const bundle = await exportShare(fixture);
+  const api = new Hono();
+
+  mountSharingHost(api, fixture.store, fixture.data, {
+    fetchRepository: (target, _url, ...rest) =>
+      fetchPinnedRepository(target, fixture.repo, ...rest),
+  });
+
+  const start = async (link = url) =>
+    (
+      await api.request("/sharing/import", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: link }),
+      })
+    ).json();
+
+  const status = async (id: string) =>
+    (await api.request(`/sharing/import/${id}`)).json();
+
+  const close = async () => {
+    await fixture.data.close();
+    fixture.store.close();
+    await rm(root, { recursive: true, force: true });
+  };
+
+  return { bundle, start, status, close };
+}
+
+it("opens the newest copy when the share service cannot answer, else reports it unavailable", async () => {
+  const { bundle, start, status, close } = await importer();
+  const sharedSpy = vi.spyOn(ShareClient.prototype, "shared");
+
+  vi.spyOn(ShareClient.prototype, "download").mockResolvedValue({
+    bundle,
+    attribution: { login: "sender", sharedAt: 1 },
+    revision: meta.revision,
+    latest: R,
+  });
+
+  try {
+    sharedSpy.mockRejectedValue(new Error("Share request failed (404)."));
+
+    const { reviewId: id } = await start();
+
+    await vi.waitFor(async () =>
+      expect(await status(id)).toMatchObject({
+        stage: "error",
+        error:
+          "This share is unavailable, revoked, or needs a newer Whiteboard version.",
+      }),
+    );
+
+    sharedSpy.mockResolvedValue(meta);
+    await start();
+    await vi.waitFor(
+      async () => expect(await status(id)).toMatchObject({ stage: "ready" }),
+      { timeout: 10000 },
+    );
+
+    const { reviewId: copy } = await status(id);
+
+    sharedSpy.mockRejectedValue(new Error("Share request failed (404)."));
+    await start();
+    await vi.waitFor(async () =>
+      expect(await status(id)).toMatchObject({
+        stage: "ready",
+        reviewId: copy,
+      }),
+    );
+    expect(sharedSpy).toHaveBeenCalledTimes(3);
+  } finally {
+    await close();
+  }
+});
+
+it("keeps a revision link's import apart from the live link's", async () => {
+  const { start, status, close } = await importer();
+
+  const sharedSpy = vi
+    .spyOn(ShareClient.prototype, "shared")
+    .mockRejectedValue(new Error("Share request failed (404)."));
+
+  try {
+    const { reviewId } = await start(`${url}?rev=${R}`);
+
+    expect(reviewId).toBe(
+      `${shareKey("https://app.dev.fast", capability)}-${R}`,
+    );
+    await vi.waitFor(async () =>
+      expect(await status(reviewId)).toMatchObject({ stage: "error" }),
+    );
+    expect(sharedSpy).toHaveBeenCalledWith(capability, R);
+  } finally {
+    await close();
   }
 });
 
