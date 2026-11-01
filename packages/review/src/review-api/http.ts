@@ -2197,7 +2197,7 @@ export function createReviewApi(
             ...(threadId && { threadId }),
           };
 
-    // A copy's kept commits go when it is deleted for good.
+    // A link's kept commits go when its last copy is deleted for good.
     const copy =
       input.operation.type === "delete" && store.has(input.operation.reviewId)
         ? store.read(input.operation.reviewId)
@@ -2207,7 +2207,7 @@ export function createReviewApi(
     const key = copy?.shared?.key;
     const kept = copy && boardRepositoryId(copy);
 
-    if (result.deleted && key && kept)
+    if (result.deleted && key && kept && !store.copiesOf(key).length)
       await Promise.resolve()
         .then(() => forgetSharedCommits(store.repositoryPath(kept), key))
         .catch((error) =>

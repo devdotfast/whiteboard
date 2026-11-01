@@ -263,6 +263,68 @@ it("reopens, refreshes in place from Trash, and copies beside an edited board", 
   expect(fetchRepository).toHaveBeenCalledTimes(1);
 });
 
+it("keeps a share's commits until its link's last copy is deleted", async () => {
+  const { bundle, recipient, fetchRepository, pins } = await share();
+  const input = { ...recipient, fetchRepository };
+  const link = key();
+
+  const download = async () => ({
+    bundle,
+    attribution: { login: "ada", sharedAt: 1 },
+  });
+
+  const a = await receiveShare(input, link, served(R1, R1), download);
+
+  await recipient.store.execute(
+    {
+      operation: {
+        type: "edit",
+        reviewId: a,
+        edit: {
+          type: "insert",
+          content: { type: "markdown", markdown: "Mine" },
+        },
+      },
+    },
+    undefined,
+    { kind: "person" },
+  );
+
+  const b = await receiveShare(input, link, served(R2, R2), download);
+  const root = recipient.store.repositoryPath(
+    recipient.store.read(a).pins!.repositoryId,
+  );
+
+  const git = (...args: string[]) =>
+    execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
+
+  const app = createReviewApi(recipient.store, recipient.data);
+
+  const remove = async (reviewId: string) => {
+    await recipient.store.execute(
+      { operation: { type: "lifecycle", state: "trash", reviewId } },
+      undefined,
+      { kind: "person" },
+    );
+
+    const response = await app.request("/commands", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ operation: { type: "delete", reviewId } }),
+    });
+
+    expect(response.status).toBe(200);
+  };
+
+  await remove(a);
+  expect(git("rev-parse", `refs/review/shared/${link}/${pins.head}`)).toBe(
+    pins.head,
+  );
+
+  await remove(b);
+  expect(git("for-each-ref", `refs/review/shared/${link}`)).toBe("");
+});
+
 it("fetches the shared commits into the recipient's own checkout", async () => {
   const { root, sender, pins, bundle, recipient, fetchRepository } =
     await share();
