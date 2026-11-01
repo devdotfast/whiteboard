@@ -9,6 +9,7 @@ import {
   type runStoreLogin,
   writeStoreAuth,
 } from "@dev.fast/trace-core";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import type { SharedProvenance } from "@review/review-api/store.js";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
@@ -475,6 +476,46 @@ it("reports the saved sign-in and forgets it on sign-out", async () => {
       await (await api.request("/sharing/logout", { method: "POST" })).json(),
     ).toEqual({ account: null, pending: false });
     expect(await readStoreAuth()).toBeNull();
+  } finally {
+    await fixture.data.close();
+    fixture.store.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("opens a share revision in the browser and refuses any other URL", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "share-open-"));
+  vi.stubEnv("DEV_REVIEW_HOME", root);
+  const fixture = await createShareFixture(root);
+  const api = new Hono();
+  const openUrl = vi.fn<typeof openUrlInBrowser>(async () => {});
+  api.onError((error, context) =>
+    context.json(
+      { error: error.message },
+      error instanceof ReviewInputError ? error.status : 500,
+    ),
+  );
+  mountSharingHost(api, fixture.store, fixture.data, { openUrl });
+
+  const post = (path: string, body: { url: string }) =>
+    api.request(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+  try {
+    expect(
+      (await post("/sharing/open", { url: `${url}?rev=${R}` })).status,
+    ).toBe(200);
+    expect(openUrl).toHaveBeenCalledWith(`${url}?rev=${R}`);
+
+    for (const url of [
+      "https://evil.test/s/" + capability,
+      "file:///etc/passwd",
+    ])
+      expect((await post("/sharing/open", { url })).status).toBe(400);
+    expect(openUrl).toHaveBeenCalledTimes(1);
   } finally {
     await fixture.data.close();
     fixture.store.close();

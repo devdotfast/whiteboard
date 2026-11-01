@@ -12,7 +12,7 @@ import {
 import {
   DEFAULT_STORE_ORIGIN,
   clearStoreAuth,
-  type openUrlInBrowser,
+  openUrlInBrowser,
   readStoreAuth,
   runStoreLogin,
 } from "@dev.fast/trace-core";
@@ -180,6 +180,28 @@ export function mountSharingHost(
     }
 
     return context.json(login);
+  });
+  app.post("/sharing/open", async (context) => {
+    const { url } = z
+      .strictObject({ url: z.string().max(2048) })
+      .parse(await readBoundedRequestJson(context.req.raw));
+
+    const origin = (() => {
+      try {
+        return parseShareLink(url).origin;
+      } catch {
+        return undefined;
+      }
+    })();
+
+    if (
+      origin !== DEFAULT_STORE_ORIGIN &&
+      (!origin || origin !== (await readStoreAuth())?.origin)
+    )
+      throw new ReviewInputError("Only Whiteboard share links open here.", 400);
+    await (options.openUrl ?? openUrlInBrowser)(url);
+
+    return context.json({ opened: true });
   });
   mountSharingPublisher(app, store, data, options);
 
