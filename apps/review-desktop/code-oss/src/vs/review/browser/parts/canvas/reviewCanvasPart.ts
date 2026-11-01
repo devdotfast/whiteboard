@@ -1450,6 +1450,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		| "onDidChangeDiffLayout"
 		| "setupTooltip"
 		| "notify"
+		| "confirm"
 		| "ready"
 		| "reportDiagnostic"
 		| "reportSidebar"
@@ -1472,6 +1473,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			setDiffLayout: (scope, layout) => this.diffViews.layout(scope).set(layout),
 			onDidChangeDiffLayout: (scope, listener) => this.diffViews.layout(scope).onDidChange(listener),
 			notify: (notification) => showReviewNotification(this.notificationService, notification),
+			confirm: async (request) => (await this.dialogService.confirm({ type: 'warning', ...request })).confirmed,
 			setupTooltip: this.setupTooltip,
 			ready: () => {
 				if (generation !== this.loadGeneration || !this.targetDocument) return;

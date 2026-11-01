@@ -404,6 +404,11 @@ export interface ReviewCanvasBridge {
     listener: (show: boolean) => void,
   ): ReviewDisposable;
   notify?(notification: ReviewNotification): ReviewDisposable;
+  confirm?(request: {
+    message: string;
+    detail?: string;
+    primaryButton: string;
+  }): Promise<boolean>;
   setupTooltip?(
     target: HTMLElement,
     text: string,
