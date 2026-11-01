@@ -125,3 +125,124 @@ it("signs the user out when the share service rejects the stored token", async (
     await rm(root, { recursive: true, force: true });
   }
 });
+
+const historyHost = async (
+  root: string,
+  fetch: typeof globalThis.fetch,
+  token = "fixture",
+) => {
+  const fixture = await createShareFixture(root);
+  await writeStoreAuth({
+    origin: "https://app.dev.fast",
+    token,
+    login: "fixture",
+    savedAt: new Date().toISOString(),
+  });
+  const api = new Hono();
+  api.onError((error, context) =>
+    context.json(
+      { error: error.message },
+      error instanceof ReviewInputError ? error.status : 500,
+    ),
+  );
+  mountSharingHost(api, fixture.store, fixture.data, { fetch });
+
+  return { api, fixture };
+};
+
+it.each(["dev-fast-review", "dev-fast-review-preview"])(
+  "lists a link's revisions newest first (%s)",
+  async (protocol) => {
+    const root = await mkdtemp(path.join(tmpdir(), "sharing-history-"));
+    vi.stubEnv("DEV_REVIEW_HOME", root);
+    vi.stubEnv("DEV_FAST_REVIEW_APP_URL_PROTOCOL", protocol);
+    const preview = protocol === "dev-fast-review-preview";
+    const [shareId, R1, R2] = [randomUUID(), randomUUID(), randomUUID()];
+    const link = `https://app.dev.fast/s/${"x".repeat(43)}`;
+    const requests: string[] = [];
+
+    const { api, fixture } = await historyHost(root, async (input, init) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === "/api/auth/token")
+        return new Response(null, { status: 404 });
+      requests.push(`${init?.method ?? "GET"} ${url.pathname}`);
+
+      return Response.json({
+        latest: R2,
+        items: [
+          {
+            id: R2,
+            version: 5,
+            size: 2048,
+            createdAt: 2,
+            url: `${link}?rev=${R2}`,
+          },
+          {
+            id: R1,
+            version: 4,
+            size: 1024,
+            createdAt: 1,
+            url: `${link}?rev=${R1}`,
+          },
+        ],
+      });
+    });
+
+    try {
+      expect(
+        await (await api.request(`/sharing/history/${shareId}`)).json(),
+      ).toEqual({
+        latest: R2,
+        items: [
+          {
+            id: R2,
+            version: 5,
+            size: 2048,
+            createdAt: 2,
+            url: `${link}?rev=${R2}${preview ? "&app=preview" : ""}`,
+          },
+          {
+            id: R1,
+            version: 4,
+            size: 1024,
+            createdAt: 1,
+            url: `${link}?rev=${R1}${preview ? "&app=preview" : ""}`,
+          },
+        ],
+      });
+      expect(requests).toEqual([`GET /api/v2/shares/${shareId}/revisions`]);
+    } finally {
+      vi.unstubAllEnvs();
+      await fixture.data.close();
+      await fixture.store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
+it("signs the user out when loading a link's history is unauthorized", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "sharing-history-"));
+  vi.stubEnv("DEV_REVIEW_HOME", root);
+
+  const { api, fixture } = await historyHost(
+    root,
+    async () => new Response("unauthorized", { status: 401 }),
+    "expired",
+  );
+
+  try {
+    const response = await api.request(`/sharing/history/${randomUUID()}`);
+
+    expect(await response.json()).toEqual({
+      error: "Your sign-in has expired. Sign in again to share.",
+    });
+    expect(response.status).toBe(401);
+    expect(await readStoreAuth()).toBeNull();
+  } finally {
+    vi.unstubAllEnvs();
+    await fixture.data.close();
+    await fixture.store.close();
+    await rm(root, { recursive: true, force: true });
+  }
+});

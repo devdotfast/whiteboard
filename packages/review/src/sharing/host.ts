@@ -401,6 +401,40 @@ export function remoteShare(
       : undefined;
 }
 
+const appUrl = (href: string) => {
+  const url = new URL(href);
+
+  if (
+    process.env.DEV_FAST_REVIEW_APP_URL_PROTOCOL === "dev-fast-review-preview"
+  )
+    url.searchParams.set("app", "preview");
+
+  return url.href;
+};
+
+const shareRequest = async <T>(
+  request: () => Promise<T>,
+  message: string,
+): Promise<T> => {
+  try {
+    return await request();
+  } catch (error) {
+    if (error instanceof ReviewInputError) throw error;
+
+    if (error instanceof ShareAuthError) {
+      // A CI token lives in the environment; only the saved login can go stale.
+      if (process.env.DEV_REVIEW_SHARE_TOKEN === undefined)
+        await clearStoreAuth();
+      throw new ReviewInputError(
+        "Your sign-in has expired. Sign in again to share.",
+        401,
+      );
+    }
+
+    throw new ReviewInputError(message, 409);
+  }
+};
+
 /** Publishing needs only an authored store, never Desktop or recipient workspaces. */
 export function mountSharingPublisher(
   app: Hono,
@@ -498,49 +532,48 @@ export function mountSharingPublisher(
 
     const { bundle, version } = await prepare(input);
 
-    try {
-      const result = await new ShareClient(
-        account.origin,
-        account.token,
-        options.fetch,
-      ).create(bundle, input.requestId ?? randomUUID());
+    const result = await shareRequest(
+      () =>
+        new ShareClient(account.origin, account.token, options.fetch).create(
+          bundle,
+          input.requestId ?? randomUUID(),
+        ),
+      "Sharing failed. Check your connection and login, then retry.",
+    );
 
-      const url = new URL(result.url);
+    options.onPublished?.({
+      reviewId: input.reviewId,
+      version,
+    });
 
-      if (
-        process.env.DEV_FAST_REVIEW_APP_URL_PROTOCOL ===
-        "dev-fast-review-preview"
-      )
-        url.searchParams.set("app", "preview");
+    return context.json({
+      ...result,
+      url: appUrl(result.url),
+      version,
+    });
+  });
+  app.get("/sharing/history/:shareId", async (context) => {
+    const shareId = shareIdSchema.parse(context.req.param("shareId"));
+    const account = await readSharingAuth();
 
-      options.onPublished?.({
-        reviewId: input.reviewId,
-        version,
-      });
-
-      return context.json({
-        ...result,
-        url: url.href,
-        version,
-      });
-    } catch (error) {
-      if (error instanceof ReviewInputError) throw error;
-
-      if (error instanceof ShareAuthError) {
-        // A CI token lives in the environment; only the saved login can go stale.
-        if (process.env.DEV_REVIEW_SHARE_TOKEN === undefined)
-          await clearStoreAuth();
-        throw new ReviewInputError(
-          "Your sign-in has expired. Sign in again to share.",
-          401,
-        );
-      }
-
+    if (!account)
       throw new ReviewInputError(
-        "Sharing failed. Check your connection and login, then retry.",
+        "Set DEV_REVIEW_SHARE_TOKEN for CI, or run whiteboard login first.",
         409,
       );
-    }
+
+    const history = await shareRequest(
+      () =>
+        new ShareClient(account.origin, account.token, options.fetch).revisions(
+          shareId,
+        ),
+      "Could not load this link's history. Check your connection, then retry.",
+    );
+
+    return context.json({
+      ...history,
+      items: history.items.map((item) => ({ ...item, url: appUrl(item.url) })),
+    });
   });
   app.post("/sharing/revoke", async (context) => {
     const { shareId } = z
