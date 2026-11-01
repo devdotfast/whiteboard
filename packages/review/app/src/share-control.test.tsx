@@ -38,6 +38,7 @@ function mount(options: {
   holdPublish?: Promise<void>;
   holdVersion?: { version: number; until: Promise<void> };
   sender?: string;
+  confirm?: () => Promise<boolean>;
 }) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const state = { ...options };
@@ -54,6 +55,7 @@ function mount(options: {
 
         return Response.json({ ok: true });
       },
+      confirm: options.confirm,
     },
   );
 
@@ -107,6 +109,9 @@ function mount(options: {
         });
 
       if (path.endsWith("/open")) return Response.json({ opened: true });
+
+      if (path.endsWith("/revoke"))
+        return Response.json({ shareId, revoked: true });
 
       if (state.holdPublish) await state.holdPublish;
 
@@ -460,6 +465,39 @@ it("lists the link's revisions newest first, marks the latest and opens one in t
     path: "/reviews-api/sharing/open",
     body: { url: u4 },
   });
+  expect(container.textContent).not.toContain("Revoke link");
+});
+
+it("revokes the link after the host confirms, and the next opening shares a new one", async () => {
+  let answer = false;
+  const confirm = vi.fn<() => Promise<boolean>>(async () => answer);
+  const harness = mount({ signedIn: true, confirm });
+  const { container } = harness;
+
+  const posts = (suffix: string) =>
+    harness.posts.filter((post) => post.path.endsWith(suffix));
+
+  await harness.render(5);
+  await harness.click("Share review");
+  await harness.settle();
+  await harness.click("Revoke link");
+  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(posts("/revoke")).toHaveLength(0);
+  answer = true;
+  await harness.click("Revoke link");
+  await harness.settle();
+  expect(posts("/revoke").map((post) => post.body)).toEqual([{ shareId }]);
+  expect(container.textContent).toContain(
+    "Link revoked. Sharing this board again creates a new link.",
+  );
+  expect(container.querySelector("input")).toBeNull();
+  expect(publishes(harness)).toHaveLength(1);
+  await harness.click("Share review");
+  await harness.click("Share review");
+  await harness.settle();
+  expect(publishes(harness)).toHaveLength(2);
+  expect(container.querySelector("input")?.value).toContain("/s/capability");
+  expect(container.textContent).not.toContain("Link revoked");
 });
 
 it("polls only while sign-in is pending and stops when the control unmounts", async () => {

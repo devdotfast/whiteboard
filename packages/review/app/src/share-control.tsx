@@ -67,6 +67,9 @@ const actionError = (error: Error | null) =>
     ? error.message
     : "Could not complete this action. Please retry.");
 
+// Keeps focus in the popover when the control that had it goes away.
+const focusOnMount = (element: HTMLElement | null) => element?.focus();
+
 /** Whether this review can be shared, so a menu may offer Share. */
 export function useCanShare(): boolean {
   return useContext(SharingContext) !== null;
@@ -87,6 +90,7 @@ export function ShareControl({
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<ShareTarget>();
   const [copyError, setCopyError] = useState<string>();
+  const [revoked, setRevoked] = useState(false);
   const control = useRef<HTMLDivElement>(null);
   const accountKey = canvasQueryKeys.sharingAccount();
 
@@ -143,6 +147,36 @@ export function ShareControl({
       context!.client.post<{ opened: true }>("/sharing/open", { url }),
   });
 
+  const revoke = useMutation({
+    mutationFn: (shareId: string) =>
+      context!.client.post("/sharing/revoke", { shareId }),
+    onSuccess: (_, shareId) => {
+      queryClient.removeQueries({ queryKey: linkKey });
+      queryClient.removeQueries({
+        queryKey: canvasQueryKeys.shareHistory(shareId),
+      });
+      setRevoked(true);
+    },
+  });
+
+  const confirm = session?.bridge.confirm;
+
+  const revokeLink = async (shareId: string) => {
+    if (!confirm || revoke.isPending) return;
+
+    const confirmed = await confirm({
+      message: "Revoke this share link?",
+      detail:
+        "Anyone with the link loses access to every version shared behind it.",
+      primaryButton: "Revoke",
+    });
+
+    // The host's dialog can dismiss the popover; bring it back.
+    setOpen(true);
+
+    if (confirmed) revoke.mutate(shareId);
+  };
+
   const upload = (next: ShareTarget) => {
     login.reset();
     publish.mutate(next);
@@ -160,6 +194,8 @@ export function ShareControl({
       publish.reset();
       login.reset();
       openRevision.reset();
+      revoke.reset();
+      setRevoked(false);
       setCopyError(undefined);
     }
 
@@ -194,16 +230,20 @@ export function ShareControl({
 
   // Upload once per opening; a failure waits for Retry or a new sign-in.
   useEffect(() => {
-    if (open && signedIn && target && publish.isIdle && !current)
+    if (open && signedIn && target && publish.isIdle && !current && !revoked)
       upload(target);
-  }, [open, signedIn, target, publish.isIdle, current]);
+  }, [open, signedIn, target, publish.isIdle, current, revoked]);
 
   if (!context) return null;
 
   const error =
     copyError ??
     actionError(
-      publish.error ?? login.error ?? openRevision.error ?? historyQuery.error,
+      publish.error ??
+        login.error ??
+        openRevision.error ??
+        revoke.error ??
+        historyQuery.error,
     );
 
   const accountError = accountQuery.isError
@@ -250,7 +290,16 @@ export function ShareControl({
             </p>
           )}
           {signedIn ? (
-            current ? (
+            revoked ? (
+              <p
+                ref={focusOnMount}
+                role="status"
+                tabIndex={-1}
+                {...stylex.props(styles.paragraph, styles.notice)}
+              >
+                Link revoked. Sharing this board again creates a new link.
+              </p>
+            ) : current ? (
               <>
                 <TextField
                   xstyle={styles.link}
@@ -288,6 +337,14 @@ export function ShareControl({
                       </li>
                     ))}
                   </ul>
+                )}
+                {confirm && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => void revokeLink(current.shareId)}
+                  >
+                    Revoke link
+                  </Button>
                 )}
               </>
             ) : error ? (
@@ -378,6 +435,9 @@ const styles = stylex.create({
   },
   link: {
     width: "100%",
+  },
+  notice: {
+    outline: "none",
   },
   history: {
     margin: 0,
