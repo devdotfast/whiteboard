@@ -4,6 +4,10 @@ import { useReviewDebugSettings } from "@canvas/debug-settings";
 import { DiagramHeader } from "@canvas/diagram-header";
 import { diagramStyles } from "@canvas/diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "@canvas/diagram-tour";
+import {
+  useDrawQueueControls,
+  useMotionPhase,
+} from "@canvas/draw-queue-provider";
 import { drawStyles } from "@canvas/draw-styles";
 import { countLabel } from "@canvas/format";
 import { useReviewSession } from "@canvas/host/review-session";
@@ -166,6 +170,27 @@ export function AnimationBlock({
 
   const reportRun = useReportAnimationRun(data.snapshot.reviewId, node.id);
 
+  // A block from the agent's stream paints its first frame in when the board
+  // gets to it, and holds the draw queue until its stage says it is done.
+  const motion = useMotionPhase(node.id);
+  const motionRef = useRef(motion);
+  motionRef.current = motion;
+  const { painted } = useDrawQueueControls();
+
+  // The stage showing now: whether it boots unseen, has run its scripts, was
+  // told to paint, and reported an error.
+  const paintRef = useRef({
+    wanted: false,
+    ready: false,
+    sent: false,
+    failed: false,
+  });
+
+  // A no-op unless the queue is painting this block.
+  const endPaint = useCallback(() => {
+    if (node.id) painted(node.id);
+  }, [node.id, painted]);
+
   // Fullscreen without a tour. Either way, a placeholder holds the inline
   // figure's height so the document keeps its place.
   const [expanded, setExpanded] = useState(false);
@@ -246,6 +271,26 @@ export function AnimationBlock({
   const send = useCallback((message: HostMessage) => {
     portRef.current?.postMessage(message);
   }, []);
+
+  // Paint once the stage is ready and the queue has reached this block, or
+  // has given up on it: the content must appear either way.
+  const paintStage = () => {
+    const stage = paintRef.current;
+    const phase = motionRef.current;
+
+    if (phase === "painting" && stage.failed) endPaint();
+
+    if (!stage.wanted || !stage.ready || stage.sent || phase === "queued")
+      return;
+    stage.sent = true;
+    send({ type: "paint" });
+  };
+
+  const onPhase = useEffectEvent(paintStage);
+
+  useEffect(() => onPhase(), [motion]);
+
+  useEffect(() => endPaint, [endPaint]);
 
   const go = useCallback(
     (target: number, instant: boolean) => {
@@ -408,9 +453,17 @@ export function AnimationBlock({
       case "error":
         setError(message.message);
         reportRun(message.message);
+        // A broken stage must not hold the queue.
+        paintRef.current.failed = true;
+        endPaint();
         break;
       case "ready":
         reportRun(null);
+        paintRef.current.ready = true;
+        paintStage();
+        break;
+      case "painted":
+        endPaint();
         break;
     }
   };
@@ -431,6 +484,7 @@ export function AnimationBlock({
       portRef.current = null;
       setSlots([]);
       setError("The animation left its stage.");
+      endPaint();
 
       return;
     }
@@ -462,6 +516,21 @@ export function AnimationBlock({
 
     setSlots([]);
     setError(null);
+
+    // Unseen until painted only while the queue is drawing (or about to draw)
+    // this block. A stage replaced mid-paint starts over.
+    const paint =
+      (motionRef.current === "painting" || motionRef.current === "queued") &&
+      !reducedMotion();
+
+    paintRef.current = {
+      wanted: paint,
+      ready: false,
+      sent: false,
+      failed: false,
+    };
+
+    if (!paint) endPaint();
     target.postMessage(
       { type: STAGE_BOOT, runtime: stageRuntime.toString() },
       "*",
@@ -486,6 +555,7 @@ export function AnimationBlock({
       ...readTheme(figure),
       scale: SCALE,
       reducedMotion: reducedMotion(),
+      paint,
       frame: indexRef.current,
       ...(sequence && { sequence }),
     };
@@ -497,9 +567,20 @@ export function AnimationBlock({
           libraries: [anime],
           fonts,
         } satisfies HostMessage),
-      () => setError("The animation libraries or fonts could not be loaded."),
+      () => {
+        setError("The animation libraries or fonts could not be loaded.");
+        endPaint();
+      },
     );
-  }, [node.html, node.code, node.height, node.scenarios, frames, embeddable]);
+  }, [
+    node.html,
+    node.code,
+    node.height,
+    node.scenarios,
+    frames,
+    embeddable,
+    endPaint,
+  ]);
 
   useEffect(() => () => portRef.current?.close(), []);
 

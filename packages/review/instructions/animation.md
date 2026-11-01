@@ -83,6 +83,14 @@ Something that moves between frames (a job changing queue slot, a record regroup
 
 `whiteboard.frames` and `frame.index` follow the active scenario, so a frame outside it is not listed. Key your drawing on `frame.data`, not on positions.
 
+## Painting in
+
+When you write an animation, the reader watches it arrive: its first frame paints in, part by part, instead of appearing at once. It paints only then, not when the board loads with it already there, and not under reduced motion. The test harness and a cold load do not paint, so you see it only by watching your own write land on the board.
+
+- By default the kit's parts (cards, nodes, chips, badges, table rows, lanes, labels, peeks, tokens) fade in one after another in document order, and arrows draw along their path, all within about a second and a half. A part inside another goes in with it.
+- `data-wb-paint="1"` orders a part: numbered parts first, the rest in document order. `data-wb-paint="none"` shows an element and everything in it at once. `data-wb-paint-style="fade"`, `"draw"` (an SVG line), `"wipe"` (left to right) or `"none"` picks the effect. Any element with either attribute paints on its own.
+- `whiteboard.on("paint", ({ frame, instant }) => ...)` replaces the default painter: draw the first frame in yourself and return the animations, as a frame handler does. It also runs with `instant: true` when the block does not paint in; leave everything in its end state then. `whiteboard.timeline("paint")` is a timeline that plays once as the block paints in and lands at its end otherwise; it also replaces the default painter. Do not name a frame `paint`.
+
 ## Link the code
 
 Name the ranges the animation explains in `code`, then link the drawing to them:

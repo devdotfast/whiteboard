@@ -42,6 +42,10 @@ export interface StageInit {
    * stage is its own document and may load no font from elsewhere. */
   fonts: string;
   reducedMotion: boolean;
+  /** The block arrived from the agent's stream: build the stage but keep it
+   * unseen until a `paint` message, then paint the first frame in and post
+   * `painted`. False on a cold load, in history and under reduced motion. */
+  paint: boolean;
   frame: number;
   /** The scenario the reader picked: the frame keys the stage starts on. */
   sequence?: string[];
@@ -66,7 +70,9 @@ export type HostMessage =
   /** The height the host's content in a slot takes. */
   | { type: "slot-size"; slot: string; height: number }
   /** The reader picked a scenario: play these frame keys, in order. */
-  | { type: "sequence"; keys: string[] };
+  | { type: "sequence"; keys: string[] }
+  /** The board's turn to draw this block came: paint the first frame in. */
+  | { type: "paint" };
 
 /** The tallest an auto-sized stage may report itself. */
 export const STAGE_MAX_HEIGHT = 4000;
@@ -110,6 +116,8 @@ export const stageMessageSchema = z.discriminatedUnion("type", [
   }),
   /** Every animation the frame started has finished. */
   z.strictObject({ type: z.literal("settled"), index: z.number().int() }),
+  /** The first frame has painted in, after a `paint` message. */
+  z.strictObject({ type: z.literal("painted") }),
   z.strictObject({ type: z.literal("goto"), key: z.string() }),
   z.strictObject({ type: z.literal("step"), delta: z.literal([-1, 1]) }),
   z.strictObject({

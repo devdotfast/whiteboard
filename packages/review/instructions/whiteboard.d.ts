@@ -35,6 +35,15 @@ export interface FrameChange {
   instant: boolean;
 }
 
+/** What a paint handler learns as the block paints its first frame in. */
+export interface PaintChange {
+  /** The first frame, already drawn in its end state. */
+  frame: Frame;
+  /** Skip motion and leave everything in its end state: the block loaded
+   * without painting in, or the reader prefers reduced motion. */
+  instant: boolean;
+}
+
 /** Return the animations a handler starts, or a finite promise, so playback
  * waits for them. */
 export type FrameResult =
@@ -58,6 +67,12 @@ export interface Whiteboard {
    * helpers do not manage when it is true. */
   readonly reducedMotion: boolean;
 
+  /** Paint the first frame in yourself, in place of the default painter. Runs
+   * once, after the first frame is drawn: with motion when an agent writes
+   * the block, with `instant: true` on a cold load or under reduced motion,
+   * when it must leave everything in its end state. Painting ends when what
+   * it returns has finished. */
+  on(key: "paint", handler: (paint: PaintChange) => FrameResult): () => void;
   /** Run when a frame shows; "*" runs on every frame, before frame-specific
    * handlers, and again when reduced motion changes. Cancel earlier work when
    * another frame shows. Returns an unsubscribe function. */
@@ -74,7 +89,10 @@ export interface Whiteboard {
   /** The frame's part of one anime.js timeline: it plays when the reader steps
    * into the frame and lands at its end on a jump. A tween starts where the
    * frames before it left the element, so write only where it goes. Add to it
-   * while the script first runs, not from a frame handler. */
+   * while the script first runs, not from a frame handler. "paint" is a
+   * timeline of its own that plays once, after the first frame is drawn, as
+   * the block paints in, in place of the default painter; it lands at its end
+   * otherwise. Numeric positions count from its start. */
   timeline(key: string): FrameTimeline;
   /** anime.js v4, also the global `anime`: easings, stagger, utils. */
   readonly anime: unknown;

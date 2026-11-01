@@ -3,6 +3,7 @@ import {
   type Context,
   type ReactNode,
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -17,6 +18,7 @@ import {
   type MotionPhase,
   arrive,
   nextDue,
+  painted,
   phases,
   standingCursor,
   tick,
@@ -49,6 +51,26 @@ const MotionPhasesContexts: Record<
   document: createContext<Map<string, MotionPhase>>(new Map()),
   lenses: createContext<Map<string, MotionPhase>>(new Map()),
 };
+
+/** What a block may tell its queue about its own drawing. */
+export interface DrawQueueControls {
+  /** The block's stage finished painting it in. */
+  painted: (id: string) => void;
+}
+
+const noControls: DrawQueueControls = { painted: () => {} };
+
+const ControlsContexts: Record<ActivitySurface, Context<DrawQueueControls>> = {
+  document: createContext<DrawQueueControls>(noControls),
+  lenses: createContext<DrawQueueControls>(noControls),
+};
+
+/** The queue's controls; outside a queue (history) they do nothing. */
+export function useDrawQueueControls(
+  scope: ActivitySurface = "document",
+): DrawQueueControls {
+  return useContext(ControlsContexts[scope]);
+}
 
 /** Every element's phase, for a list that must keep an erased block around. */
 export function useMotionPhases(
@@ -120,14 +142,23 @@ export function DrawQueueProvider({
     return () => clock.clearTimeout(timer);
   }, [state, clock]);
 
+  const onPainted = useCallback(
+    (id: string) => setState((current) => painted(current, id, clock.now())),
+    [clock],
+  );
+
+  const controls = useMemo(() => ({ painted: onPainted }), [onPainted]);
   const standing = standingCursor(state);
   const map = useMemo(() => phases(state), [state]);
   const CursorContext = cursorContext(scope);
   const PhasesContext = MotionPhasesContexts[scope];
+  const ControlsContext = ControlsContexts[scope];
 
   return (
     <CursorContext.Provider value={cursor === undefined ? undefined : standing}>
-      <PhasesContext.Provider value={map}>{children}</PhasesContext.Provider>
+      <ControlsContext.Provider value={controls}>
+        <PhasesContext.Provider value={map}>{children}</PhasesContext.Provider>
+      </ControlsContext.Provider>
     </CursorContext.Provider>
   );
 }

@@ -35,6 +35,17 @@ type FrameResult = void | Animation | readonly Animation[] | Promise<void>;
 
 type FrameHandler = (change: FrameChange) => FrameResult;
 
+/** What a paint handler learns when the block paints its first frame in. */
+export interface PaintChange {
+  /** The first frame, already drawn in its end state. */
+  frame: StageFrame & { index: number };
+  /** Skip motion and leave everything in its end state: the block loaded
+   * without painting, or the reader prefers reduced motion. */
+  instant: boolean;
+}
+
+type PaintHandler = (paint: PaintChange) => FrameResult;
+
 type Tone = "accent" | "added" | "removed" | "modified" | "muted";
 
 /** Where a scene part sits: 1-based column and row, with optional row and
@@ -219,6 +230,9 @@ export interface WhiteboardShim {
   code(name: string): HTMLElement;
   /** A placeholder the host fills with another block of this whiteboard. */
   block(id: string): HTMLElement;
+  /** Run when the block paints its first frame in, replacing the default
+   * painter. */
+  on(key: "paint", handler: PaintHandler): () => void;
   /** Run when a frame shows; "*" runs on every frame. */
   on(key: string, handler: FrameHandler): () => void;
   /** element.animate that holds its end state and honors instant changes. */
@@ -245,7 +259,8 @@ export interface WhiteboardShim {
   /** Removed. Throws, so a stage written for it says how to rebuild. */
   mermaid(...args: unknown[]): never;
   /** The frame's segment of the stage timeline: it plays when the reader
-   * steps into the frame, and lands at its end on a jump. */
+   * steps into the frame, and lands at its end on a jump. "paint" is a
+   * timeline of its own that plays once as the block paints in. */
   timeline(key: string): FrameTimeline;
   /** An SVG arrow between two elements that follows them as they move. */
   arrow(from: CardRef, to: CardRef, options?: ArrowOptions): SVGGElement;
@@ -311,6 +326,7 @@ export function stageRuntime(port: MessagePort): void {
   let instantMode = false;
   let activeSequence: string[] | undefined;
   const handlers = new Map<string, Set<FrameHandler>>();
+  const paintHandlers = new Set<PaintHandler>();
   let theme: Record<string, string> = {};
   let colorScheme: StageColorScheme = "dark";
   let nextSlot = 0;
@@ -618,18 +634,24 @@ export function stageRuntime(port: MessagePort): void {
     | { kind: "call"; callback: () => void; position?: TimelinePosition };
 
   const queued = new Map<string, Entry[]>();
+  const paintQueued: Entry[] = [];
   let built = false;
   let timeline: Timeline | undefined;
+  let paintTimeline: Timeline | undefined;
+
+  // "paint" names the painting-in timeline, unless a frame has that key.
+  const isPaint = (key: string) => key === "paint" && frameIndex(key) < 0;
 
   const frameTimeline = (key: string): FrameTimeline => {
-    if (frameIndex(key) < 0) throw new Error(`Unknown frame "${key}".`);
+    if (!isPaint(key) && frameIndex(key) < 0)
+      throw new Error(`Unknown frame "${key}".`);
 
     if (built)
       throw new Error(
         "Add to frame timelines while the animation's scripts first run.",
       );
 
-    let entries = queued.get(key);
+    let entries = isPaint(key) ? paintQueued : queued.get(key);
 
     if (!entries) queued.set(key, (entries = []));
     const list = entries;
@@ -692,6 +714,59 @@ export function stageRuntime(port: MessagePort): void {
     }
 
     timeline = next;
+  };
+
+  // The paint timeline is its own: numeric positions count from its start.
+  const buildPaintTimeline = () => {
+    if (!paintQueued.length) return;
+
+    const next = lib().createTimeline({
+      autoplay: false,
+      defaults: { duration: 600, ease: "outQuad" },
+    });
+
+    for (const [order, entry] of paintQueued.entries()) {
+      const position = entry.position ?? (order ? undefined : 0);
+
+      if (entry.kind === "call") next.call(entry.callback, position);
+      else if (entry.kind === "add")
+        next.add(entry.targets, entry.params, position);
+      else next.set(entry.targets, entry.params, position);
+    }
+
+    paintTimeline = next;
+  };
+
+  // Land on the paint timeline's end, or play it from its start.
+  const playPaintTimeline = (play: boolean): Promise<void> => {
+    const tl = paintTimeline;
+
+    if (!tl) return Promise.resolve();
+    tl.pause();
+
+    if (!play || tl.duration <= 0) {
+      tl.seek(tl.duration);
+
+      return Promise.resolve();
+    }
+
+    tl.seek(0);
+    tl.resume();
+
+    return new Promise((done) => {
+      const watch = () => {
+        if (tl.currentTime >= tl.duration || tl.completed) {
+          tl.pause();
+          tl.seek(tl.duration);
+
+          return done();
+        }
+
+        requestAnimationFrame(watch);
+      };
+
+      requestAnimationFrame(watch);
+    });
   };
 
   let segmentToken = 0;
@@ -1523,6 +1598,322 @@ export function stageRuntime(port: MessagePort): void {
     if (current >= 0) show(current, true).catch((error) => fail(String(error)));
   });
 
+  // Painting in: a block that arrived from the agent's stream is built
+  // unseen, then its first frame is drawn in when the host says the board
+  // has reached it. The default painter brings the kit's parts in one after
+  // another, in document order unless data-wb-paint orders them; a paint
+  // handler or timeline replaces it.
+  const PAINTED = [
+    ".wb-card",
+    ".wb-node",
+    ".wb-well",
+    ".wb-chip",
+    ".wb-item",
+    ".wb-badge",
+    ".wb-token",
+    ".wb-table tr",
+    ".wb-lane",
+    ".wb-title",
+    ".wb-caps",
+    ".wb-prose",
+    ".wb-shape",
+    ".wb-shape-text",
+    ".wb-arrow",
+    "[data-wb-slot]",
+    "[data-wb-paint]",
+    "[data-wb-paint-style]",
+  ].join(", ");
+
+  type PaintStyle = "fade" | "draw" | "wipe" | "none";
+
+  const PAINT_STYLES: PaintStyle[] = ["fade", "draw", "wipe", "none"];
+
+  // Every part is in by then, however many there are.
+  const PAINT_TOTAL = 1400;
+
+  // A stage told to paint in that never hears the host's word shows itself.
+  const PAINT_FALLBACK = 20_000;
+
+  // Beyond this many parts, neighbours paint together.
+  const PAINT_BEATS = 40;
+  const PAINT_GAP = 90;
+  const PAINT_EASE = "cubic-bezier(0.2, 0, 0, 1)";
+
+  const PAINT_MS: Record<PaintStyle, number> = {
+    fade: 280,
+    draw: 420,
+    wipe: 360,
+    none: 1,
+  };
+
+  let paintPending = false;
+  let paintAsked = false;
+  let paintDone = false;
+  let paintInstant = false;
+  let firstShown = false;
+  let paintTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const paintOrder = (element: Element) => {
+    const value = element.getAttribute("data-wb-paint");
+
+    if (value === null || value.trim() === "") return Infinity;
+    const order = Number(value);
+
+    if (Number.isFinite(order)) return order;
+    fail(
+      `data-wb-paint="${value}": use a number for the order, or "none" to show the element at once.`,
+    );
+
+    return Infinity;
+  };
+
+  const paintStyle = (element: Element): PaintStyle => {
+    const named = element.getAttribute("data-wb-paint-style");
+
+    if (named !== null) {
+      const style = PAINT_STYLES.find((item) => item === named);
+
+      if (style) return style;
+      fail(`data-wb-paint-style="${named}": use ${PAINT_STYLES.join(", ")}.`);
+    }
+
+    return element.matches(".wb-arrow, path, line, polyline") ? "draw" : "fade";
+  };
+
+  // The parts of the frame showing, each with what its paint holds: a part
+  // inside another painted part goes in with it, unless it is marked.
+  const paintParts = () => {
+    const candidates = [...document.body.querySelectorAll(PAINTED)].filter(
+      (element) =>
+        !element.closest('[data-wb-paint="none"]') &&
+        element.checkVisibility({
+          visibilityProperty: true,
+          opacityProperty: true,
+        }),
+    );
+
+    const painted = new Set(candidates);
+
+    const parts = candidates.filter((element) => {
+      if (
+        element.hasAttribute("data-wb-paint") ||
+        element.hasAttribute("data-wb-paint-style")
+      )
+        return true;
+
+      for (
+        let parent = element.parentElement;
+        parent && parent !== document.body;
+        parent = parent.parentElement
+      )
+        if (painted.has(parent)) return false;
+
+      return true;
+    });
+
+    // A stable sort: numbered parts first, the rest in document order.
+    return parts
+      .map((element) => ({ element, order: paintOrder(element) }))
+      .sort((a, b) => (a.order === b.order ? 0 : a.order < b.order ? -1 : 1))
+      .map(({ element }) => element);
+  };
+
+  const solidStroke = (stroke: SVGGeometryElement, length: number) => {
+    const dashes = getComputedStyle(stroke).strokeDasharray;
+
+    if (dashes === "none") return true;
+
+    return (dashes.match(/[\d.]+/g) ?? []).every(
+      (dash) => Number(dash) >= length * 0.99,
+    );
+  };
+
+  const fadeIn = (element: Element, delay: number) =>
+    element.animate([{ opacity: 0, translate: "0 6px", scale: "0.98" }, {}], {
+      duration: PAINT_MS.fade,
+      delay,
+      easing: PAINT_EASE,
+      fill: "backwards",
+    });
+
+  // A line draws along its path, its arrowhead last; a dashed line, which
+  // cannot draw, fades. Labels come in as the line arrives.
+  const drawIn = (element: Element, delay: number): Animation[] => {
+    const strokes =
+      element instanceof SVGGeometryElement
+        ? [element]
+        : [
+            ...element.querySelectorAll<SVGGeometryElement>(
+              "path, line, polyline, polygon, rect, circle, ellipse",
+            ),
+          ];
+
+    const animations: Animation[] = [];
+
+    for (const stroke of strokes) {
+      const length = stroke.getTotalLength();
+
+      if (!(length > 0) || !solidStroke(stroke, length)) {
+        animations.push(fadeIn(stroke, delay));
+        continue;
+      }
+
+      const dashes = `${length} ${length}`;
+
+      animations.push(
+        stroke.animate(
+          [
+            {
+              offset: 0,
+              strokeDasharray: dashes,
+              strokeDashoffset: `${length}`,
+              markerStart: "none",
+              markerEnd: "none",
+            },
+            { offset: 0.85, markerStart: "none", markerEnd: "none" },
+            { offset: 1, strokeDasharray: dashes, strokeDashoffset: "0" },
+          ],
+          {
+            duration: PAINT_MS.draw,
+            delay,
+            easing: "ease-in-out",
+            fill: "backwards",
+          },
+        ),
+      );
+    }
+
+    if (!strokes.length) animations.push(fadeIn(element, delay));
+
+    for (const text of element.querySelectorAll("text"))
+      animations.push(fadeIn(text, delay + PAINT_MS.draw * 0.6));
+
+    return animations;
+  };
+
+  const paintPart = (
+    element: Element,
+    style: PaintStyle,
+    delay: number,
+  ): Animation[] => {
+    switch (style) {
+      case "none":
+        return [
+          element.animate([{ opacity: 0 }, { opacity: 0 }], {
+            duration: Math.max(delay, PAINT_MS.none),
+          }),
+        ];
+      case "wipe":
+        return [
+          element.animate(
+            [{ clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0 0 0)" }],
+            {
+              duration: PAINT_MS.wipe,
+              delay,
+              easing: PAINT_EASE,
+              fill: "backwards",
+            },
+          ),
+        ];
+      case "draw":
+        return drawIn(element, delay);
+      case "fade":
+        return [fadeIn(element, delay)];
+    }
+  };
+
+  // Starts every part's paint now, in this task, so nothing shows before its
+  // turn. Each animation fills only backwards: once it ends, the part is in
+  // its own styles.
+  const defaultPaint = (): Animation[] => {
+    const parts = paintParts();
+    const beats = Math.min(parts.length, PAINT_BEATS);
+    const longest = Math.max(...Object.values(PAINT_MS));
+
+    const gap =
+      beats > 1
+        ? Math.min(PAINT_GAP, (PAINT_TOTAL - longest) / (beats - 1))
+        : 0;
+
+    return parts.flatMap((element, index) => {
+      const beat = Math.floor((index * beats) / parts.length);
+
+      try {
+        return paintPart(element, paintStyle(element), beat * gap);
+      } catch {
+        // A part the browser cannot animate this way simply shows.
+        return [];
+      }
+    });
+  };
+
+  const runPaintHandlers = (instant: boolean): Promise<unknown>[] => {
+    const waits: Promise<unknown>[] = [];
+    const paint: PaintChange = { frame: whiteboard.frame, instant };
+    const wasInstant = instantMode;
+    instantMode = instant;
+
+    try {
+      for (const handler of paintHandlers) {
+        try {
+          waits.push(...finished(handler(paint)));
+        } catch (error) {
+          fail(String(error));
+        }
+      }
+    } finally {
+      instantMode = wasInstant;
+    }
+
+    return waits;
+  };
+
+  const paintIn = async () => {
+    paintPending = false;
+    const instant = paintInstant || prefersReducedMotion();
+    const started: Animation[] = [];
+    const waits: Promise<unknown>[] = [];
+
+    try {
+      root.removeAttribute("data-wb-unpainted");
+      const custom = paintHandlers.size > 0 || paintTimeline !== undefined;
+
+      if (!custom && !instant) started.push(...defaultPaint());
+      waits.push(playPaintTimeline(!instant), ...runPaintHandlers(instant));
+
+      if (instant) {
+        for (const animation of document.getAnimations())
+          if (finite(animation)) animation.finish();
+      }
+
+      wake();
+      await Promise.allSettled([
+        ...waits,
+        ...started.map((animation) => animation.finished),
+      ]);
+    } catch (error) {
+      fail(String(error));
+    } finally {
+      for (const animation of started) animation.cancel();
+      paintDone = true;
+      post({ type: "painted" });
+      wake();
+    }
+  };
+
+  // The host's word, or the stage's own timeout: a host that never asks must
+  // not leave the block blank. Long, since a block queued behind many others
+  // waits unseen like any other block would.
+  const askPaint = (instant: boolean) => {
+    if (!paintPending || paintAsked) return;
+    paintAsked = true;
+    paintInstant = instant;
+    clearTimeout(paintTimer);
+
+    if (firstShown) paintIn().catch((error) => fail(String(error)));
+    else if (instant) root.removeAttribute("data-wb-unpainted");
+  };
+
   const makeToken = (label?: string, tone?: Tone) => {
     const element = document.createElement("div");
     element.className = "wb-token";
@@ -2029,15 +2420,25 @@ export function stageRuntime(port: MessagePort): void {
     },
     code: (name) => placeholder("wbCode", name),
     block: (id) => placeholder("wbBlock", id),
-    on(key, handler) {
+    on(key: string, handler: FrameHandler | PaintHandler) {
+      if (isPaint(key)) {
+        // SAFETY: the "paint" overload takes a paint handler.
+        const paint = handler as PaintHandler;
+        paintHandlers.add(paint);
+
+        return () => paintHandlers.delete(paint);
+      }
+
       if (key !== "*" && frameIndex(key) < 0)
         throw new Error(`Unknown frame "${key}".`);
       let set = handlers.get(key);
 
       if (!set) handlers.set(key, (set = new Set()));
-      set.add(handler);
+      // SAFETY: any other key's overload takes a frame handler.
+      const frame = handler as FrameHandler;
+      set.add(frame);
 
-      return () => set.delete(handler);
+      return () => set.delete(frame);
     },
     animate(target, keyframes, options) {
       const element =
@@ -2272,9 +2673,10 @@ export function stageRuntime(port: MessagePort): void {
         // the layers nor those descendants are layout content.
         if (element.closest(".wb-arrows, .wb-tokens")) continue;
 
+        // Unpainted, the body is hidden; size the stage as it will show.
         if (
           !element.checkVisibility({
-            visibilityProperty: true,
+            visibilityProperty: !root.hasAttribute("data-wb-unpainted"),
             opacityProperty: true,
           })
         )
@@ -2348,6 +2750,13 @@ export function stageRuntime(port: MessagePort): void {
     if (message.sequence) activeSequence = [...message.sequence];
 
     root.toggleAttribute("data-wb-auto-size", message.autoSize);
+
+    if (message.paint) {
+      paintPending = true;
+      root.setAttribute("data-wb-unpainted", "");
+      paintTimer = setTimeout(() => askPaint(true), PAINT_FALLBACK);
+    }
+
     setProperties(message.scale);
     applyTheme(message.theme, message.colorScheme);
     style.textContent = message.kit;
@@ -2385,6 +2794,11 @@ export function stageRuntime(port: MessagePort): void {
     await runScripts([...document.body.querySelectorAll("script")]);
     arrows.forEach(route);
     buildTimeline();
+    buildPaintTimeline();
+
+    // Not painting in: the paint timeline lands at its end before the first
+    // frame.
+    if (!paintPending) playPaintTimeline(false);
     post({ type: "ready" });
     watcher.observe(root, {
       subtree: true,
@@ -2403,6 +2817,10 @@ export function stageRuntime(port: MessagePort): void {
         : message.frame;
 
     await show(initial, true);
+    firstShown = true;
+
+    if (!message.paint) runPaintHandlers(true);
+    else if (paintAsked) await paintIn();
   };
 
   port.onmessage = (event: MessageEvent<HostMessage>) => {
@@ -2435,6 +2853,11 @@ export function stageRuntime(port: MessagePort): void {
         break;
       }
 
+      case "paint":
+        // The stage's own timeout may have painted it already.
+        if (paintDone) post({ type: "painted" });
+        else askPaint(false);
+        break;
       case "sequence":
         if (!init) break;
 

@@ -11,7 +11,8 @@ import { tokens } from "./tokens.stylex";
 // then fill: a new flow node is traced clockwise from its top-left on its real
 // geometry (pathLength=1 on the rect), pulses once, and its label composes; an
 // edge is one stroke from source to target; a new block gets a slot, then
-// wipes in behind the marker dot; a rewritten block is erased in three
+// wipes in behind the marker dot (an animation gets the slot alone: its stage
+// paints its own content in); a rewritten block is erased in three
 // diagonal passes and rewritten; the top-level block being edited wears the
 // section ring. Queued content waits unseen so nothing lands twice. Reduced
 // motion shows every phase as its finished frame.

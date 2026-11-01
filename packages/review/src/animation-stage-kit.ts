@@ -178,6 +178,10 @@ const CLASSES: [selector: string, use: string][] = [
     ".wb-shape, .wb-shape-text",
     "An SVG shape drawn like a card, and the text inside it.",
   ],
+  [
+    "[data-wb-paint]",
+    'When an agent writes the block, its parts paint in: data-wb-paint="3" orders a part (numbers first, then document order), "none" shows it and its subtree at once; data-wb-paint-style="fade|draw|wipe|none" picks the effect.',
+  ],
 ];
 
 /** The CSS every stage loads before its own markup. */
@@ -186,6 +190,7 @@ export const STAGE_KIT_CSS = `:root { --wb-duration: 450ms; color-scheme: light 
 button { color: inherit; font: inherit; }
 html, body { margin: 0; height: 100%; }
 html[data-wb-auto-size] body { height: auto; display: flow-root; }
+html[data-wb-unpainted] body { visibility: hidden; }
 body {
   overflow: hidden;
   background: transparent;
