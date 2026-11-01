@@ -45,6 +45,7 @@ function mount(options: {
   const posts: Array<{ path: string; body: unknown }> = [];
   const telemetry: string[] = [];
   let accountReads = 0;
+  let historyReads = 0;
 
   const session = testReviewSession(
     {},
@@ -87,7 +88,9 @@ function mount(options: {
         });
       }
 
-      if (path.includes("/history/"))
+      if (path.includes("/history/")) {
+        historyReads += 1;
+
         return Response.json({
           latest: revision5,
           items: [
@@ -107,6 +110,7 @@ function mount(options: {
             },
           ],
         });
+      }
 
       if (path.endsWith("/open")) return Response.json({ opened: true });
 
@@ -201,6 +205,7 @@ function mount(options: {
     click,
     settle,
     accountReads: () => accountReads,
+    historyReads: () => historyReads,
   };
 }
 
@@ -466,6 +471,12 @@ it("lists the link's revisions newest first, marks the latest and opens one in t
     body: { url: u4 },
   });
   expect(container.textContent).not.toContain("Revoke link");
+  await harness.click("Share review");
+  await harness.render(6);
+  await harness.click("Share review");
+  await harness.settle();
+  expect(publishes(harness)).toHaveLength(2);
+  expect(harness.historyReads()).toBe(2);
 });
 
 it("revokes the link after the host confirms, and the next opening shares a new one", async () => {

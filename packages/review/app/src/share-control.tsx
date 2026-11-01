@@ -442,6 +442,8 @@ const styles = stylex.create({
   history: {
     margin: 0,
     padding: 0,
+    maxBlockSize: space.s120,
+    overflowY: "auto",
     listStyle: "none",
   },
   code: {
