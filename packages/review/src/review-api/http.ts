@@ -2207,7 +2207,16 @@ export function createReviewApi(
     const key = copy?.shared?.key;
     const kept = copy && boardRepositoryId(copy);
 
-    if (result.deleted && key && kept && !store.copiesOf(key).length)
+    if (
+      result.deleted &&
+      key &&
+      kept &&
+      !store
+        .copiesOf(key)
+        .some(
+          ({ reviewId }) => boardRepositoryId(store.read(reviewId)) === kept,
+        )
+    )
       await Promise.resolve()
         .then(() => forgetSharedCommits(store.repositoryPath(kept), key))
         .catch((error) =>

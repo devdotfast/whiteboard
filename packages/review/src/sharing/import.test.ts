@@ -327,6 +327,51 @@ it("keeps a share's commits until its link's last copy is deleted", async () => 
   expect(git("for-each-ref", `refs/review/shared/${link}`)).toBe("");
 });
 
+it("drops a share's commits when its link's last copy in that repository is deleted", async () => {
+  const { bundle, recipient, fetchRepository } = await share();
+  const link = key();
+
+  const a = await receiveShare(
+    { ...recipient, fetchRepository },
+    link,
+    served(R1, R1),
+    async () => ({ bundle, attribution: { login: "ada", sharedAt: 1 } }),
+  );
+
+  await recipient.store.execute(
+    { operation: { type: "create", title: "Elsewhere" } },
+    { document: [], shared: { login: "ada", key: link } },
+    { kind: "person" },
+  );
+
+  const root = recipient.store.repositoryPath(
+    recipient.store.read(a).pins!.repositoryId,
+  );
+
+  await recipient.store.execute(
+    { operation: { type: "lifecycle", state: "trash", reviewId: a } },
+    undefined,
+    { kind: "person" },
+  );
+
+  const response = await createReviewApi(
+    recipient.store,
+    recipient.data,
+  ).request("/commands", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ operation: { type: "delete", reviewId: a } }),
+  });
+
+  expect(response.status).toBe(200);
+  expect(
+    execFileSync("git", ["for-each-ref", `refs/review/shared/${link}`], {
+      cwd: root,
+      encoding: "utf8",
+    }).trim(),
+  ).toBe("");
+});
+
 it("fetches the shared commits into the recipient's own checkout", async () => {
   const { root, sender, pins, bundle, recipient, fetchRepository } =
     await share();

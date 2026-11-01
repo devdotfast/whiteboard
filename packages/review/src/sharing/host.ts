@@ -36,6 +36,7 @@ import {
   type ShareImport,
   importShare,
   needsRepository,
+  planShareCopy,
   receiveShare,
   shareKey,
 } from "./import.js";
@@ -184,8 +185,19 @@ export function mountSharingHost(
 
   const imports = new Map<string, ImportStatus>();
 
-  // One import at a time, so two links of one repository clone it once.
+  // One download at a time, so two links of one repository clone it once.
   let importing = Promise.resolve();
+
+  const serially = (task: () => Promise<string>) => {
+    const run = importing.then(task);
+
+    importing = run.then(
+      () => {},
+      () => {},
+    );
+
+    return run;
+  };
 
   app.get("/sharing/import/:id", (context) => {
     const id = context.req.param("id");
@@ -222,11 +234,11 @@ export function mountSharingHost(
       const status: ImportStatus = { stage: initial };
 
       imports.set(id, status);
-      importing = importing
-        .then(async () => {
-          status.reviewId = await receive((stage) => {
-            status.stage = stage;
-          });
+      receive((stage) => {
+        status.stage = stage;
+      })
+        .then((reviewId) => {
+          status.reviewId = reviewId;
           status.stage = "ready";
         })
         .catch((error) => {
@@ -260,14 +272,23 @@ export function mountSharingHost(
       });
 
       const key = whiteboardFileKey(text);
+      const copy = () => store.copiesOf(key)[0]?.reviewId;
 
       return context.json(
         startImport(
           key,
           "reading",
           async (onStage) =>
-            store.copiesOf(key)[0]?.reviewId ??
-            importShare(shareInput(onStage), key, parseWhiteboardFile(text)),
+            copy() ??
+            serially(
+              async () =>
+                copy() ??
+                importShare(
+                  shareInput(onStage),
+                  key,
+                  parseWhiteboardFile(text),
+                ),
+            ),
         ),
         202,
       );
@@ -307,9 +328,16 @@ export function mountSharingHost(
             return copy;
           }
 
-          return receiveShare(shareInput(onStage), key, meta, () =>
-            client.download(capability, meta.revision.id),
-          );
+          const plan = planShareCopy(store.copiesOf(key), meta);
+
+          // receiveShare plans again: the queue may have made a copy since.
+          return plan.kind === "open"
+            ? plan.reviewId
+            : serially(() =>
+                receiveShare(shareInput(onStage), key, meta, () =>
+                  client.download(capability, meta.revision.id),
+                ),
+              );
         },
       ),
       202,

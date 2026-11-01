@@ -272,6 +272,48 @@ it("opens the newest copy when the share service cannot answer, else reports it 
   }
 });
 
+it("opens an existing copy while another link's import is still downloading", async () => {
+  const { bundle, start, status, close } = await importer();
+  const other = `https://app.dev.fast/s/${"b".repeat(43)}`;
+
+  vi.spyOn(ShareClient.prototype, "shared").mockResolvedValue(meta);
+  vi.spyOn(ShareClient.prototype, "download").mockImplementation(
+    async (link) => {
+      if (link !== capability) await new Promise(() => {});
+
+      return {
+        bundle,
+        attribution: { login: "sender", sharedAt: 1 },
+        revision: meta.revision,
+        latest: R,
+      };
+    },
+  );
+
+  try {
+    const { reviewId: id } = await start();
+
+    await vi.waitFor(
+      async () => expect(await status(id)).toMatchObject({ stage: "ready" }),
+      { timeout: 10000 },
+    );
+
+    const { reviewId: copy } = await status(id);
+    const { reviewId: held } = await start(other);
+
+    await start();
+    await vi.waitFor(async () =>
+      expect(await status(id)).toMatchObject({
+        stage: "ready",
+        reviewId: copy,
+      }),
+    );
+    expect(await status(held)).toMatchObject({ stage: "downloading" });
+  } finally {
+    await close();
+  }
+});
+
 it("keeps a revision link's import apart from the live link's", async () => {
   const { start, status, close } = await importer();
 
