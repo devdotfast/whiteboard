@@ -161,7 +161,8 @@ export function ShareControl({
     },
   }));
 
-  const current = link && link.version === target?.version ? link : undefined;
+  const current =
+    link && target && link.version >= target.version ? link : undefined;
 
   // Upload once per opening; a failure waits for Retry or a new sign-in.
   useEffect(() => {

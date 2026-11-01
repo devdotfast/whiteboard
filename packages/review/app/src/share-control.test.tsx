@@ -79,7 +79,8 @@ function mount(options: {
 
       if (
         path.endsWith("/publish") &&
-        JSON.parse(String(init!.body)).version === state.holdVersion?.version
+        state.holdVersion &&
+        JSON.parse(String(init!.body)).version === state.holdVersion.version
       )
         await state.holdVersion.until;
 
@@ -389,6 +390,22 @@ it("keeps a newer version's link when an older upload lands after it", async () 
     expect.objectContaining({ version: 4 }),
     expect.objectContaining({ version: 5 }),
   ]);
+  expect(container.textContent).not.toContain("Uploading");
+  expect(container.querySelector("input")?.value).toContain("/s/capability");
+});
+
+it("shows a newer version's link when the popover opens on an older version", async () => {
+  const harness = mount({ signedIn: true });
+  const { container } = harness;
+
+  await harness.render(5);
+  await harness.click("Share review");
+  await harness.settle();
+  await harness.click("Share review");
+  await harness.render(4);
+  await harness.click("Share review");
+  await harness.settle();
+  expect(publishes(harness)).toHaveLength(1);
   expect(container.textContent).not.toContain("Uploading");
   expect(container.querySelector("input")?.value).toContain("/s/capability");
 });
