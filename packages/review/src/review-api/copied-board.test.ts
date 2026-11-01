@@ -148,6 +148,54 @@ it("lists a link's copies newest first, Trash included, until each is deleted", 
   expect(store.copiesOf("link").map((c) => c.reviewId)).toEqual([second]);
 });
 
+it("refreshes a copy in place with a newer share, even in Trash, and refuses once it was edited", async () => {
+  const { reviewId } = await copy();
+
+  await store.execute(
+    { operation: { type: "lifecycle", state: "trash", reviewId } },
+    undefined,
+    { kind: "person" },
+  );
+
+  const next: Seed = {
+    ...structuredClone(seed),
+    document: [
+      { id: "markdown-3", type: "markdown", markdown: "Why, revised" },
+    ],
+    shared: { ...seed.shared, revisionId: "r2", sharedAt: 2 },
+  };
+
+  const create = {
+    operation: {
+      type: "create",
+      title: "Copy v2",
+      target: { kind: "commits", ...pins },
+    },
+  };
+
+  const result = await store.refreshCopy(reviewId, 0, create, next);
+
+  expect(result).toMatchObject({ reviewId, version: 1 });
+
+  const snapshot = store.read(reviewId);
+
+  expect(snapshot).toMatchObject({
+    title: "Copy v2",
+    trashedAt: expect.any(String),
+    shared: {
+      revisionId: "r2",
+      sharedAt: 2,
+      key: "link",
+      importedVersion: 1,
+    },
+  });
+  expect(snapshot.document).toEqual(next.document);
+  expect(store.copiesOf("link").map((c) => c.reviewId)).toEqual([reviewId]);
+  await expect(
+    store.refreshCopy(reviewId, 0, create, next),
+  ).rejects.toMatchObject({ status: 409 });
+});
+
 it("still checks the images of a board made from scratch", async () => {
   const { reviewId } = await store.execute({
     operation: {
