@@ -6,8 +6,11 @@ import {
   normalizeGitHubRemote,
   parseShareLink,
   shareBundleSchema,
+  shareCreatedSchema,
   shareLink,
   sharePathSchema,
+  shareRevisionsSchema,
+  sharedMetaSchema,
 } from "./index.js";
 
 it("puts the capability in the path and rejects credentials, fragments or other paths", () => {
@@ -54,6 +57,38 @@ it("carries a revision as ?rev= and rejects any other query", () => {
   expect(parseShareLink(`https://app.dev.fast/s/${token}`)).not.toHaveProperty(
     "revision",
   );
+});
+
+it("reads a link's revisions and the revision a capability serves", () => {
+  const id = "5b0e9a52-4a43-4f7e-9d8e-3c1f0e7b2a11",
+    url = `https://app.dev.fast/s/${"a".repeat(43)}?rev=${id}`;
+
+  expect(
+    shareRevisionsSchema.parse({
+      latest: id,
+      items: [{ id, version: 3, size: 10, createdAt: 1, url, extra: true }],
+    }).items[0],
+  ).toEqual({ id, version: 3, size: 10, createdAt: 1, url });
+  expect(
+    sharedMetaSchema.safeParse({
+      sender: { login: "ada" },
+      sharedAt: 1,
+      size: 10,
+    }).success,
+  ).toBe(false);
+  expect(
+    sharedMetaSchema.parse({
+      title: "T",
+      sender: { login: "ada" },
+      sharedAt: 1,
+      size: 10,
+      revision: { id, version: 3, createdAt: 1 },
+      latest: id,
+    }).revision.id,
+  ).toBe(id);
+  expect(
+    shareCreatedSchema.safeParse({ shareId: id, url, revision: id }).success,
+  ).toBe(false);
 });
 
 it("rejects traversal paths and platform-specific separators", () => {
