@@ -110,6 +110,7 @@ it("copies a share into a board the recipient edits like their own", async () =>
     sharedAt: 1,
     cloneUrl: sender.repository.cloneUrl,
     key: link,
+    importedVersion: 0,
   });
   expect(repositoryId).not.toBe(pins.repositoryId);
   expect(JSON.stringify(copy.document)).not.toContain(pins.repositoryId);

@@ -213,7 +213,7 @@ export function mountSharingHost(
 
     // A failed import retries, and a deleted copy imports again.
     if (!known || known === "ready" || known === "error") {
-      const copy = store.copyOf(id);
+      const copy = store.copiesOf(id)[0]?.reviewId;
 
       const status: ImportStatus = copy
         ? { stage: "ready", reviewId: copy }

@@ -362,6 +362,10 @@ export interface SharedProvenance {
   sharedAt?: number;
   cloneUrl?: string;
   key?: string;
+  /** The link revision the board was made or last refreshed from. */
+  revisionId?: string;
+  /** The version that import wrote; a later version is the receiver's edit. */
+  importedVersion?: number;
 }
 
 /** Content a new board starts with, as another board left it. */
@@ -1110,16 +1114,24 @@ export class ReviewStore {
 
     return run;
   }
-  /** The board copied from a share link, until it is deleted. */
-  copyOf(key: string): string | undefined {
-    const row = this.db
+  /** The boards copied from a share link, newest first, until each is deleted. */
+  copiesOf(
+    key: string,
+  ): { reviewId: string; version: number; shared: SharedProvenance }[] {
+    return this.db
       .prepare(
-        `SELECT reviews.id FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
-        WHERE CASE WHEN json_valid(versions.snapshot) THEN json_extract(versions.snapshot,'$.shared.key') END=?`,
+        `SELECT reviews.id, reviews.version, json_extract(versions.snapshot,'$.shared') AS shared
+        FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+        WHERE CASE WHEN json_valid(versions.snapshot) THEN json_extract(versions.snapshot,'$.shared.key') END=?
+        ORDER BY reviews.rowid DESC`,
       )
-      .get(key);
-
-    return row && String(row.id);
+      .all(key)
+      .map((row) => ({
+        reviewId: String(row.id),
+        version: Number(row.version),
+        // SAFETY: the key matched, so `shared` is the object a seed wrote.
+        shared: JSON.parse(String(row.shared)) as SharedProvenance,
+      }));
   }
   /** Checkouts whose remote is cloneUrl, most recently used first. */
   checkoutsOf(cloneUrl: string): string[] {
@@ -2103,6 +2115,9 @@ export class ReviewStore {
       person: author.kind === "person",
     }));
     warnings = [...(change.warnings ?? []), ...warnings];
+
+    if (change.copied && snapshot.shared)
+      snapshot.shared.importedVersion = snapshot.version;
 
     const result: Result = {
       ...change.result,

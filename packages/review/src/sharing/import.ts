@@ -244,7 +244,7 @@ export async function importShare(
   attribution?: ShareAttribution,
 ): Promise<string> {
   const { store, data } = input;
-  const existing = store.copyOf(key);
+  const existing = store.copiesOf(key)[0]?.reviewId;
 
   if (existing) return existing;
   const { bundle, snapshot, maps } = validateShareBundle(received);
