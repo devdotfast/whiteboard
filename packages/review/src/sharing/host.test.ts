@@ -9,6 +9,7 @@ import {
   type runStoreLogin,
   writeStoreAuth,
 } from "@dev.fast/trace-core";
+import type { SharedProvenance } from "@review/review-api/store.js";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -222,7 +223,7 @@ async function importer() {
     await rm(root, { recursive: true, force: true });
   };
 
-  return { bundle, start, status, close };
+  return { bundle, start, status, close, store: fixture.store };
 }
 
 it("opens the newest copy when the share service cannot answer, else reports it unavailable", async () => {
@@ -331,6 +332,44 @@ it("keeps a revision link's import apart from the live link's", async () => {
       expect(await status(reviewId)).toMatchObject({ stage: "error" }),
     );
     expect(sharedSpy).toHaveBeenCalledWith(capability, R);
+  } finally {
+    await close();
+  }
+});
+
+it("opens the copy a link prefers when the share service cannot answer", async () => {
+  const { start, status, close, store } = await importer();
+  const key = shareKey("https://app.dev.fast", capability);
+  const [older, newer] = [randomUUID(), randomUUID()];
+
+  vi.spyOn(ShareClient.prototype, "shared").mockRejectedValue(
+    new Error("Share request failed (404)."),
+  );
+
+  const copy = async (shared: SharedProvenance) =>
+    (
+      await store.execute(
+        { operation: { type: "create", title: "Copy" } },
+        { document: [], shared: { key, ...shared } },
+        { kind: "person" },
+      )
+    ).reviewId;
+
+  const opens = async (link: string, reviewId: string) => {
+    const { reviewId: id } = await start(link);
+
+    await vi.waitFor(async () =>
+      expect(await status(id)).toMatchObject({ stage: "ready", reviewId }),
+    );
+  };
+
+  try {
+    const live = await copy({ revisionId: older });
+    const pinned = await copy({ revisionId: newer, pinned: true });
+
+    await opens(url, live);
+    await opens(`${url}?rev=${older}`, live);
+    await opens(`${url}?rev=${randomUUID()}`, pinned);
   } finally {
     await close();
   }

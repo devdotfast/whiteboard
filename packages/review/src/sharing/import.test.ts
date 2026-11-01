@@ -207,6 +207,25 @@ it("plans the three rules", () => {
       served(R2, R2),
     ),
   ).toEqual({ kind: "import" });
+  expect(
+    planShareCopy(
+      [{ reviewId: "l", version: 1, shared: { key: "k", sharedAt: 1 } }],
+      served(R1old, R2),
+    ),
+  ).toEqual({ kind: "open", reviewId: "l" });
+  expect(planShareCopy([c({ sharedAt: 1 })], served(R1old, R2))).toEqual({
+    kind: "import",
+  });
+  expect(planShareCopy([c({ pinned: true })], served(R2, R2))).toEqual({
+    kind: "import",
+  });
+  expect(planShareCopy([c({ pinned: true })], served(R1, R2))).toEqual({
+    kind: "open",
+    reviewId: "a",
+  });
+  expect(planShareCopy([c({})], served(R2, R2), true)).toEqual({
+    kind: "import",
+  });
 });
 
 it("reopens, refreshes in place from Trash, and copies beside an edited board", async () => {
@@ -261,7 +280,111 @@ it("reopens, refreshes in place from Trash, and copies beside an edited board", 
 
   expect(b).not.toBe(a);
   expect(recipient.store.copiesOf(link).map((x) => x.reviewId)).toEqual([b, a]);
+
+  const other = await receiveShare(input, key(), served(R1, R1), download);
+
+  expect(recipient.store.read(other).pins!.repositoryId).toBe(
+    recipient.store.read(a).pins!.repositoryId,
+  );
   expect(fetchRepository).toHaveBeenCalledTimes(1);
+});
+
+it("keeps a revision link's copy pinned, apart from the live copy's refreshes", async () => {
+  const { bundle, recipient, fetchRepository } = await share();
+  const input = { ...recipient, fetchRepository };
+  const link = key();
+
+  const download = async () => ({
+    bundle,
+    attribution: { login: "ada", sharedAt: 1 },
+  });
+
+  const a = await receiveShare(input, link, served(R1, R1), download);
+
+  const pinned = await receiveShare(
+    input,
+    link,
+    served(R2, R2),
+    download,
+    true,
+  );
+
+  expect(pinned).not.toBe(a);
+  expect(recipient.store.read(pinned).shared).toMatchObject({
+    revisionId: R2,
+    pinned: true,
+  });
+  expect(recipient.store.read(a).shared).toMatchObject({ revisionId: R1 });
+
+  expect(await receiveShare(input, link, served(R3, R3), download)).toBe(a);
+  expect(recipient.store.read(a).shared).toMatchObject({ revisionId: R3 });
+  expect(recipient.store.read(pinned).shared).toMatchObject({
+    revisionId: R2,
+  });
+});
+
+it("copies beside a board edited or deleted while its refresh downloads", async () => {
+  const { bundle, recipient, fetchRepository } = await share();
+  const input = { ...recipient, fetchRepository };
+  const app = createReviewApi(recipient.store, recipient.data);
+  const link = key();
+  let during = async () => {};
+
+  const download = async () => {
+    await during();
+
+    return { bundle, attribution: { login: "ada", sharedAt: 1 } };
+  };
+
+  const a = await receiveShare(input, link, served(R1, R1), download);
+
+  during = async () => {
+    await recipient.store.execute(
+      {
+        operation: {
+          type: "edit",
+          reviewId: a,
+          edit: {
+            type: "insert",
+            content: { type: "markdown", markdown: "Mine" },
+          },
+        },
+      },
+      undefined,
+      { kind: "person" },
+    );
+  };
+
+  const edited = recipient.store.read(a);
+  const b = await receiveShare(input, link, served(R2, R2), download);
+  const after = recipient.store.read(a);
+
+  expect(b).not.toBe(a);
+  expect(after.version).toBe(edited.version + 1);
+  expect(after.shared).toMatchObject({ revisionId: R1 });
+  expect(JSON.stringify(after.document)).toContain("Mine");
+
+  during = async () => {
+    await recipient.store.execute(
+      { operation: { type: "lifecycle", state: "trash", reviewId: b } },
+      undefined,
+      { kind: "person" },
+    );
+
+    const response = await app.request("/commands", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ operation: { type: "delete", reviewId: b } }),
+    });
+
+    expect(response.status).toBe(200);
+  };
+
+  const c = await receiveShare(input, link, served(R3, R3), download);
+
+  expect([a, b]).not.toContain(c);
+  expect(recipient.store.read(c).shared).toMatchObject({ revisionId: R3 });
+  expect(recipient.store.copiesOf(link).map((x) => x.reviewId)).toEqual([c, a]);
 });
 
 it("keeps a share's commits until its link's last copy is deleted", async () => {

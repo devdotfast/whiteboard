@@ -320,22 +320,32 @@ export function mountSharingHost(
           try {
             meta = await client.shared(capability, revision);
           } catch (error) {
-            // Offline, the link's newest copy still opens.
-            const copy = store.copiesOf(key)[0]?.reviewId;
+            // Offline, the copy the link prefers still opens.
+            const copies = store.copiesOf(key);
+
+            const copy =
+              copies.find(({ shared }) =>
+                revision ? shared.revisionId === revision : !shared.pinned,
+              ) ?? copies[0];
 
             if (!copy) throw error;
 
-            return copy;
+            return copy.reviewId;
           }
 
-          const plan = planShareCopy(store.copiesOf(key), meta);
+          const pinned = revision !== undefined;
+          const plan = planShareCopy(store.copiesOf(key), meta, pinned);
 
           // receiveShare plans again: the queue may have made a copy since.
           return plan.kind === "open"
             ? plan.reviewId
             : serially(() =>
-                receiveShare(shareInput(onStage), key, meta, () =>
-                  client.download(capability, meta.revision.id),
+                receiveShare(
+                  shareInput(onStage),
+                  key,
+                  meta,
+                  () => client.download(capability, meta.revision.id),
+                  pinned,
                 ),
               );
         },

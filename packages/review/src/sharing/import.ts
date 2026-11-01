@@ -21,7 +21,10 @@ import {
 import { textIncludesQuote } from "@review/evidence.js";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
 import { pullRequestUrl } from "@review/review-api/origin.js";
-import type { ReviewStore } from "@review/review-api/store.js";
+import type {
+  ReviewStore,
+  SharedProvenance,
+} from "@review/review-api/store.js";
 import { traceSchema } from "@review/review-api/trace-schema.js";
 import {
   devReviewHome,
@@ -248,22 +251,28 @@ export type ShareCopyPlan =
   | { kind: "refresh"; reviewId: string; version: number }
   | { kind: "import" };
 
-/** A copy made from the served revision opens; an unedited copy takes the
- * latest revision in place; anything else gets a new copy. */
+/** A copy made from the served revision opens; an unedited, unpinned copy
+ * takes the latest revision in place; anything else gets a new copy. A
+ * pinned link never refreshes. */
 export function planShareCopy(
   copies: ReturnType<ReviewStore["copiesOf"]>,
   served: ServedRevision,
+  pinned = false,
 ): ShareCopyPlan {
-  const same = copies.find(
-    (copy) => copy.shared.revisionId === served.revision.id,
+  const same = copies.find(({ shared }) =>
+    shared.revisionId === undefined
+      ? shared.sharedAt === served.revision.createdAt
+      : shared.revisionId === served.revision.id,
   );
 
   if (same) return { kind: "open", reviewId: same.reviewId };
 
   const unedited =
+    !pinned &&
     served.revision.id === served.latest &&
     copies.find(
       (copy) =>
+        !copy.shared.pinned &&
         copy.version === (copy.shared.importedVersion ?? FRESH_IMPORT_VERSION),
     );
 
@@ -285,12 +294,18 @@ export async function receiveShare(
     bundle: ShareBundle;
     attribution: ShareAttribution;
   }>,
+  pinned = false,
 ): Promise<string> {
-  const plan = planShareCopy(input.store.copiesOf(key), served);
+  const plan = planShareCopy(input.store.copiesOf(key), served, pinned);
 
   if (plan.kind === "open") return plan.reviewId;
   const { bundle, attribution } = await download();
-  const provenance = { ...attribution, revisionId: served.revision.id };
+
+  const provenance = {
+    ...attribution,
+    revisionId: served.revision.id,
+    ...(pinned && { pinned }),
+  };
 
   if (plan.kind === "import")
     return importShare(input, key, bundle, provenance);
@@ -298,8 +313,11 @@ export async function receiveShare(
   try {
     return await importShare(input, key, bundle, provenance, plan);
   } catch (error) {
-    // The board was edited since the plan read it.
-    if (error instanceof ReviewInputError && error.status === 409)
+    // The board was edited or deleted since the plan read it.
+    if (
+      error instanceof ReviewInputError &&
+      (error.status === 409 || error.status === 404)
+    )
       return importShare(input, key, bundle, provenance);
     throw error;
   }
@@ -310,7 +328,8 @@ export async function importShare(
   input: ShareImport,
   key: string,
   received: ShareBundle,
-  provenance?: ShareAttribution & { revisionId?: string },
+  provenance?: ShareAttribution &
+    Pick<SharedProvenance, "revisionId" | "pinned">,
   into?: { reviewId: string; version: number },
 ): Promise<string> {
   const { store, data } = input;

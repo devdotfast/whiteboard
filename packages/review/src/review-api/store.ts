@@ -366,6 +366,8 @@ export interface SharedProvenance {
   revisionId?: string;
   /** The version that import wrote; a later version is the receiver's edit. */
   importedVersion?: number;
+  /** Opened from a link naming a revision: never refreshed. */
+  pinned?: boolean;
 }
 
 /** Content a new board starts with, as another board left it. */
