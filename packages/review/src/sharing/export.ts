@@ -307,7 +307,7 @@ export async function exportShare(input: {
     excerpts,
   );
 
-  return {
+  const bundle: ShareBundle = {
     format: SHARE_FORMAT,
     reviewId: snapshot.reviewId,
     version: snapshot.version,
@@ -322,6 +322,9 @@ export async function exportShare(input: {
     selections,
     sources,
     ...(input.repository && { repository: input.repository }),
-    ...(frozen ? { frozen: true as const } : {}),
   };
+
+  if (frozen) bundle.frozen = true;
+
+  return bundle;
 }
