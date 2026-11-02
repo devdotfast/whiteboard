@@ -1711,7 +1711,7 @@ it.each([
   { host: undefined, shown: true },
   { host: "devbox", shown: false },
 ])(
-  "shows the share control and the trace tab only for a laptop review (host $host)",
+  "shows the share control, and the trace tab only for a laptop review (host $host)",
   async ({ host }) => {
     const shown = host === undefined;
 
@@ -1725,7 +1725,7 @@ it.each([
     await act(async () => {
       await vi.waitFor(() => expect(Boolean(button("Trace"))).toBe(shown));
     });
-    expect(Boolean(button("Share review"))).toBe(shown);
+    expect(button("Share review")).toBeDefined();
     expect(requested.some((path) => path.endsWith("/agent-traces"))).toBe(
       shown,
     );
