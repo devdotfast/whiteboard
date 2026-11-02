@@ -22,6 +22,7 @@ import { tokens } from "./tokens.stylex";
  * an <img> becomes a Markdown image and its wrappers drop. */
 function releaseMarkdown(body: string): string {
   return body
+    .replace(/<!--[\s\S]*?(?:-->|$)/g, "")
     .replace(/<img\b[^>]*>/gi, (tag) => {
       const src = /\bsrc="([^"]+)"/i.exec(tag)?.[1];
       const alt = /\balt="([^"]*)"/i.exec(tag)?.[1] ?? "";
