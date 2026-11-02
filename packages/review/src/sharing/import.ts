@@ -132,6 +132,12 @@ export function needsRepository(
 
 export function validateShareBundle(input: ShareBundle) {
   const bundle = shareBundleSchema.parse(input);
+
+  if (bundle.frozen)
+    throw new ReviewInputError(
+      "This whiteboard is a read-only snapshot of uncommitted changes. View it in the browser.",
+      409,
+    );
   // SAFETY: a bundle is parsed from JSON, so its snapshot is a JSON object.
   const stored = bundle.snapshot as JsonObject;
 

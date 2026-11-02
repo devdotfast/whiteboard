@@ -126,6 +126,8 @@ export const shareBundleSchema = z.object({
   /** The sharer's diff over the selections, since 0.4. */
   alignments: z.array(shareAlignmentSchema).optional(),
   repository: z.object({ cloneUrl: gitHubRepositoryUrlSchema }).optional(),
+  /** Quotes uncommitted changes: view only, never imported. Since 0.6. */
+  frozen: z.literal(true).optional(),
 });
 
 export type ShareBundle = z.infer<typeof shareBundleSchema>;

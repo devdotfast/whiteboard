@@ -156,8 +156,16 @@ export async function exportShare(input: {
     ...snapshot
   } = stored;
 
-  if (target?.kind === "worktree")
-    throw new ReviewInputError("Pin this review to commits before sharing it.");
+  // A worktree board reads its checkout as it is now, and shares at HEAD.
+  const live =
+    target?.kind === "worktree"
+      ? await input.data.sourcePins(stored)
+      : undefined;
+
+  if (live) {
+    const { worktreeRevision: _worktreeRevision, ...committed } = live;
+    snapshot.pins = committed;
+  }
 
   // A viewer has no PR state to read the base branch from.
   const pullRequestUrl = snapshot.origin?.pullRequestUrl;
@@ -184,7 +192,7 @@ export async function exportShare(input: {
         );
   }
 
-  const pins = snapshot.pins;
+  const pins = live ?? snapshot.pins;
 
   // Lens ranges travel with the snapshot and must resolve at its pins too.
   const references: {
@@ -274,7 +282,32 @@ export async function exportShare(input: {
     toLine,
   }));
 
-  return {
+  // Quoting uncommitted lines makes the share view only.
+  let frozen = false;
+
+  const sources = await cutExcerpts(
+    {
+      async quote(at, range) {
+        const quote = await input.data.quote(at, range);
+
+        if (at.worktreeRevision && range.side === "head" && !frozen) {
+          const { worktreeRevision: _worktreeRevision, ...committed } = at;
+
+          const changed = await input.data.quote(committed, range).then(
+            (head) => head.text !== quote.text,
+            () => true,
+          );
+
+          if (changed) frozen = true;
+        }
+
+        return quote;
+      },
+    },
+    excerpts,
+  );
+
+  const bundle: ShareBundle = {
     format: SHARE_FORMAT,
     reviewId: snapshot.reviewId,
     version: snapshot.version,
@@ -287,7 +320,11 @@ export async function exportShare(input: {
       ? await input.data.commits((await input.data.resolveSource(stored)).pins)
       : [],
     selections,
-    sources: await cutExcerpts(input.data, excerpts),
+    sources,
     ...(input.repository && { repository: input.repository }),
   };
+
+  if (frozen) bundle.frozen = true;
+
+  return bundle;
 }
