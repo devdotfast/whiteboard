@@ -141,8 +141,7 @@ function unified(base: Block, head: Block): Block[] {
 
 type SideRange = Spec["ranges"][number] & { side: ReviewDiffSide };
 
-/** The sharer's diff over the ranges an alignment reaches, one block per run of
- * rows; the ranges none reaches stay in `ranges`. */
+/** Blocks for the ranges an alignment reaches; the rest stay in `ranges`. */
 function alignedBlocks(
   excerpt: Excerpt,
   pins: ReviewSourcePins | undefined,

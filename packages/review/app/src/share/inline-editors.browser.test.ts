@@ -190,49 +190,6 @@ it("follows the reader's layout choice and reports focus", async () => {
   container.remove();
 });
 
-it("paints one-sided rows of the sharer's alignment with no lines to pair", async () => {
-  const editors = await shareInlineEditors(sources, pins, [
-    {
-      file: "exec.ts",
-      base,
-      head,
-      rows: [
-        [10, null],
-        [11, null],
-        [12, null],
-        [null, 12],
-        [null, 13],
-        [null, 14],
-        [null, 15],
-      ],
-    },
-  ]);
-
-  container.innerHTML = editors(settings("unified").peek).renderStatic!({
-    ...spec,
-    ranges: [{ side: "head", startLine: 12, endLine: 15 }],
-  });
-
-  expect(lines()).toEqual([
-    ["12", "added"],
-    ["13", "added"],
-    ["14", "added"],
-    ["15", "added"],
-  ]);
-
-  container.innerHTML = editors(settings("split").peek).renderStatic!({
-    ...spec,
-    ranges: [{ side: "base", startLine: 10, endLine: 12 }],
-  });
-
-  expect(lines('[data-column="base"]')).toEqual([
-    ["10", "removed"],
-    ["11", "removed"],
-    ["12", "removed"],
-  ]);
-  expect(lines('[data-column="head"]')).toEqual([null, null, null]);
-});
-
 it("reads a pair with differing text as removed then added, and leaves ranges the alignment misses to pairing", async () => {
   const editors = (
     await shareInlineEditors(

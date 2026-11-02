@@ -94,26 +94,21 @@ const lineRangeSchema = z.object({
     .optional(),
 });
 
-/** A base line and a head line the sharer's diff paired, 1-based; null is a
- * line the other side lacks. */
+/** 1-based base and head lines; null when a side lacks the line. */
 const alignmentRowSchema = z.tuple([
   z.number().int().positive().nullable(),
   z.number().int().positive().nullable(),
 ]);
 
-/** One contiguous run of the diff alignment a board's references span, so a
- * reader paints the sharer's diff instead of pairing excerpts itself. */
 export const shareAlignmentSchema = z.object({
   file: sharePathSchema,
-  /** The base side's path when the file was renamed. */
   previousFile: sharePathSchema.optional(),
   head: z.string(),
   base: z.string().optional(),
   rows: z.array(alignmentRowSchema).min(1),
 });
 
-/** Readers drop fields from newer sharers, so a Desktop can open any later
- * bundle. */
+/** Unknown fields drop, so a reader opens bundles from newer sharers. */
 export const shareBundleSchema = z.object({
   format: z.literal(SHARE_FORMAT),
   reviewId: z.string().min(1).max(256),

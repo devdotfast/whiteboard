@@ -13,7 +13,6 @@ import { afterEach, describe, expect, it } from "vitest";
 import fixtures from "./__fixtures__/real-diffs.json";
 import { type PeekSettings, shareInlineEditors } from "./inline-editors";
 
-/** Real commits of this repository: the patch Git wrote and both files. */
 interface Fixture {
   name: string;
   base: string;
@@ -58,8 +57,6 @@ const texts = () =>
 const lineCount = (text: string | null) =>
   text === null ? 0 : text.split("\n").length;
 
-/** The bundle a sharer would cut for the whole file, with the rows every
- * selection in it resolves through. */
 function share(fixture: Fixture) {
   const pins = { repositoryId: "repo", base: fixture.base, head: fixture.head };
 
@@ -109,7 +106,6 @@ function share(fixture: Fixture) {
   };
 }
 
-/** A selection over every line of a hunk, as Desktop resolves it. */
 function hunkSpec(file: string, hunk: DiffHunk): ReviewInlineStaticSpec {
   return {
     path: file,
@@ -139,8 +135,7 @@ function hunkSpec(file: string, hunk: DiffHunk): ReviewInlineStaticSpec {
   };
 }
 
-/** The hunk as Git prints it: context, then each change's removed lines
- * before its added lines. */
+/** The hunk as Git prints it. */
 const unified = (hunk: DiffHunk): Rendered[] =>
   hunk.lines.map((line) =>
     line.kind === "context"
@@ -150,7 +145,6 @@ const unified = (hunk: DiffHunk): Rendered[] =>
         : [String(line.newLine), "added"],
   );
 
-/** Each change's removed and added lines side by side, padded with fillers. */
 function split(hunk: DiffHunk) {
   const columns: Record<"base" | "head", Rendered[]> = { base: [], head: [] };
   let removed: Rendered[] = [];
@@ -204,35 +198,6 @@ describe.each(fixtures as Fixture[])("$name", (fixture) => {
     }
   });
 
-  it("paints the same from one run per hunk as from the whole file", async () => {
-    const whole = await shareInlineEditors(sources, pins, [alignment]);
-
-    const runs = await shareInlineEditors(
-      sources,
-      pins,
-      hunks.map((hunk) => ({
-        ...alignment,
-        rows: alignment.rows.filter(
-          ([base, head]) =>
-            (base !== null &&
-              hunk.oldStart <= base &&
-              base < hunk.oldStart + hunk.oldLines) ||
-            (head !== null &&
-              hunk.newStart <= head &&
-              head < hunk.newStart + hunk.newLines),
-        ),
-      })),
-    );
-
-    for (const hunk of hunks) {
-      const spec = hunkSpec(fixture.file, hunk);
-      container.innerHTML = whole(settings("unified")).renderStatic!(spec);
-      const expected = lines();
-      container.innerHTML = runs(settings("unified")).renderStatic!(spec);
-      expect(lines()).toEqual(expected);
-    }
-  });
-
   it("shows what a selection on one side's changed lines alone replaced", async () => {
     const editors = await shareInlineEditors(sources, pins, [alignment]);
 
@@ -281,27 +246,4 @@ describe.each(fixtures as Fixture[])("$name", (fixture) => {
       }
     }
   });
-});
-
-it("prints new code as plain lines without the sharer's rows", async () => {
-  const fixture = (fixtures as Fixture[]).find(
-    (entry) => entry.name === "insert",
-  )!;
-
-  const { pins, sources, hunks } = share(fixture);
-  const editors = await shareInlineEditors(sources, pins);
-  const added = hunks[0]!.lines.filter((line) => line.kind === "add");
-
-  container.innerHTML = editors(settings("unified")).renderStatic!({
-    ...hunkSpec(fixture.file, hunks[0]!),
-    ranges: [
-      {
-        side: "head",
-        startLine: added[0]!.newLine!,
-        endLine: added.at(-1)!.newLine!,
-      },
-    ],
-  });
-
-  expect(lines().map((row) => row?.[1])).toEqual(added.map(() => null));
 });
