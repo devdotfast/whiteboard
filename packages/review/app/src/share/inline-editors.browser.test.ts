@@ -189,3 +189,50 @@ it("follows the reader's layout choice and reports focus", async () => {
   handle.dispose();
   container.remove();
 });
+
+it("reads a pair with differing text as removed then added, and leaves ranges the alignment misses to pairing", async () => {
+  const editors = (
+    await shareInlineEditors(
+      [
+        { ...sources[0], lines: ["a", "old", "b"] },
+        { ...sources[1], lines: ["a", "new", "b", "c"] },
+      ],
+      pins,
+      [
+        {
+          file: "exec.ts",
+          base,
+          head,
+          rows: [
+            [10, 12],
+            [11, 13],
+            [12, 14],
+          ],
+        },
+      ],
+    )
+  )(settings("unified").peek);
+
+  container.innerHTML = editors.renderStatic!({
+    ...spec,
+    ranges: [
+      { side: "base", startLine: 10, endLine: 12 },
+      { side: "head", startLine: 12, endLine: 14 },
+    ],
+  });
+
+  expect(lines()).toEqual([
+    ["12", null],
+    ["11", "removed"],
+    ["13", "added"],
+    ["14", null],
+  ]);
+  expect(container.querySelectorAll("[data-range]")).toHaveLength(1);
+
+  container.innerHTML = editors.renderStatic!({
+    ...spec,
+    ranges: [{ side: "head", startLine: 15, endLine: 15 }],
+  });
+
+  expect(lines()).toEqual([["15", null]]);
+});

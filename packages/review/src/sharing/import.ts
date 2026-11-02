@@ -45,7 +45,7 @@ import {
   sharedGit,
 } from "./repository.js";
 
-export const sharedSnapshotSchema = z.strictObject({
+export const sharedSnapshotSchema = z.object({
   reviewId: z.string().min(1),
   version: z.number().int().nonnegative(),
   /** Empty for a board never named; it reads "Untitled". */
@@ -60,7 +60,7 @@ export const sharedSnapshotSchema = z.strictObject({
   lenses: z.array(lensSchema).optional(),
   createdAt: z.string(),
   origin: z
-    .strictObject({
+    .object({
       branch: z.string().optional(),
       baseRef: z.string().optional(),
       baseBranch: z.string().optional(),
@@ -75,7 +75,7 @@ export const sharedSnapshotSchema = z.strictObject({
 
 const count = z.number().int().nonnegative();
 
-const counts = z.strictObject({ additions: count, deletions: count });
+const counts = z.object({ additions: count, deletions: count });
 
 const mapSchema = softwareModelDataSchema.extend({
   commit: z.string().regex(COMMIT_ID),
@@ -88,10 +88,10 @@ const mapSchema = softwareModelDataSchema.extend({
         counts.extend({
           file: z.string(),
           hunks: z.array(
-            z.strictObject({
+            z.object({
               startLine: count,
               lines: z.array(
-                z.strictObject({
+                z.object({
                   kind: z.enum(["add", "remove"]),
                   oldLine: count.nullable(),
                   newLine: count.nullable(),
@@ -106,7 +106,7 @@ const mapSchema = softwareModelDataSchema.extend({
   ),
 });
 
-export const sharePresentationSchema = z.strictObject({
+export const sharePresentationSchema = z.object({
   maps: z.record(z.string(), mapSchema),
 });
 

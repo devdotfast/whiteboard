@@ -71,7 +71,7 @@ const sideSchema = z.enum(["base", "head"]);
 
 /** An excerpt is the lines a board references. */
 export const shareSourceSchema = z.discriminatedUnion("kind", [
-  z.strictObject({
+  z.object({
     kind: z.literal("excerpt"),
     file: sharePathSchema,
     commit: commitSchema,
@@ -80,13 +80,13 @@ export const shareSourceSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const lineRangeSchema = z.strictObject({
+const lineRangeSchema = z.object({
   side: sideSchema,
   file: sharePathSchema,
   fromLine: z.number().int().positive(),
   toLine: z.number().int().positive(),
   pins: z
-    .strictObject({
+    .object({
       repositoryId: z.string(),
       head: z.string(),
       base: z.string().optional(),
@@ -94,30 +94,47 @@ const lineRangeSchema = z.strictObject({
     .optional(),
 });
 
-export const shareBundleSchema = z.strictObject({
+/** 1-based base and head lines; null when a side lacks the line. */
+const alignmentRowSchema = z.tuple([
+  z.number().int().positive().nullable(),
+  z.number().int().positive().nullable(),
+]);
+
+export const shareAlignmentSchema = z.object({
+  file: sharePathSchema,
+  previousFile: sharePathSchema.optional(),
+  head: z.string(),
+  base: z.string().optional(),
+  rows: z.array(alignmentRowSchema).min(1),
+});
+
+/** Unknown fields drop, so a reader opens bundles from newer sharers. */
+export const shareBundleSchema = z.object({
   format: z.literal(SHARE_FORMAT),
   reviewId: z.string().min(1).max(256),
   version: z.number().int().nonnegative(),
   title: z.string().max(4096),
   /** Validated against the document schema by the reader. */
   snapshot: z.record(z.string(), z.unknown()),
-  images: z.record(z.string(), z.strictObject({ png: z.base64() })),
+  images: z.record(z.string(), z.object({ png: z.base64() })),
   traces: z.record(z.string(), z.unknown()),
   maps: z.record(z.string(), z.unknown()),
   commits: z.array(z.unknown()),
   /** Each reference's lines, resolved where the board was shared. */
   selections: z.record(z.string(), z.array(lineRangeSchema)),
   sources: z.array(shareSourceSchema),
-  repository: z
-    .strictObject({ cloneUrl: gitHubRepositoryUrlSchema })
-    .optional(),
+  /** The sharer's diff over the selections, since 0.4. */
+  alignments: z.array(shareAlignmentSchema).optional(),
+  repository: z.object({ cloneUrl: gitHubRepositoryUrlSchema }).optional(),
 });
 
 export type ShareBundle = z.infer<typeof shareBundleSchema>;
 
 export type ShareSource = z.infer<typeof shareSourceSchema>;
 
-export const createShareSchema = z.strictObject({
+export type ShareAlignment = z.infer<typeof shareAlignmentSchema>;
+
+export const createShareSchema = z.object({
   requestId: z.uuid(),
   bundle: shareBundleSchema,
 });
