@@ -158,6 +158,14 @@ function alignedBlocks(
     if (alignment.head !== pins.head || alignment.base !== pins.base) continue;
     let run: Row[] | undefined;
 
+    // A change's removed lines come before its added lines, as in a patch.
+    let added: Row[] = [];
+
+    const flush = () => {
+      run?.push(...added);
+      added = [];
+    };
+
     for (const [b, h] of alignment.rows) {
       const hit = [...ranges].filter((range) => {
         const n = range.side === "base" ? b : h;
@@ -166,6 +174,7 @@ function alignedBlocks(
       });
 
       if (!hit.length) {
+        flush();
         run = undefined;
 
         continue;
@@ -192,14 +201,17 @@ function alignedBlocks(
           ? undefined
           : { n: h, ...excerpt(alignment.file, pins.head, h) };
 
-      if (before && after && before.text === after.text)
+      if (before && after && before.text === after.text) {
+        flush();
         run.push({ ...after, base: b! });
-      else {
+      } else {
         if (before) run.push({ ...before, change: "removed" });
 
-        if (after) run.push({ ...after, change: "added" });
+        if (after) added.push({ ...after, change: "added" });
       }
     }
+
+    flush();
   }
 
   for (const range of reached) ranges.delete(range);
