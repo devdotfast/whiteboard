@@ -82,6 +82,7 @@ export interface ReviewServerSupervisorOptions {
   readonly logError: (message: string) => void;
   readonly createProcess: () => IReviewServerProcess;
   readonly telemetryEnabled?: boolean;
+  readonly serviceOrigin?: string;
   readonly userExtensionsPath?: string;
   /** Electron's Review crash dump directory; the server uploads only from it. */
   readonly crashDumpsDir?: string;
@@ -105,6 +106,7 @@ export function createReviewServerEnvironment(options: {
   readonly instanceId: string;
   readonly appPid: number;
   readonly telemetryEnabled: boolean;
+  readonly serviceOrigin?: string;
   readonly rustAnalyzerSource?: string;
   readonly appSessionId: string;
   readonly channel: ReviewReleaseChannel;
@@ -127,6 +129,9 @@ export function createReviewServerEnvironment(options: {
     DEV_FAST_REVIEW_TELEMETRY_DISABLED: options.telemetryEnabled
       ? undefined
       : "1",
+    ...(options.serviceOrigin && {
+      DEV_REVIEW_SERVICE_ORIGIN: options.serviceOrigin,
+    }),
     // The app's own Electron binary doubles as the CLI's Node runtime
     // (ELECTRON_RUN_AS_NODE), so an installed `whiteboard` command never
     // depends on a system Node.
@@ -461,6 +466,7 @@ export class ReviewServerSupervisor extends Disposable {
       instanceId: this.instanceId,
       appPid,
       telemetryEnabled: this.telemetryEnabled,
+      serviceOrigin: this.options.serviceOrigin,
       rustAnalyzerSource,
       appSessionId: this.appSessionId,
       channel: this.options.channel,
