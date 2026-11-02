@@ -25,13 +25,6 @@ import { DEFAULT_HOSTED_ORIGIN } from "./trace-storage/config";
 
 export const DEFAULT_STORE_ORIGIN = DEFAULT_HOSTED_ORIGIN;
 
-/** The service Sign in uses: DEV_REVIEW_SERVICE_ORIGIN, or the default. */
-function defaultStoreOrigin(env: NodeJS.ProcessEnv = process.env): string {
-  return normalizeStoreOrigin(
-    env.DEV_REVIEW_SERVICE_ORIGIN || DEFAULT_STORE_ORIGIN,
-  );
-}
-
 const storeAuthSchema = z.object({
   origin: z.string().min(1),
   token: z.string().min(1),
@@ -160,9 +153,11 @@ export async function runStoreLogin(input: {
   let origin: string;
 
   try {
-    origin = input.origin
-      ? normalizeStoreOrigin(input.origin)
-      : defaultStoreOrigin(input.env);
+    origin = normalizeStoreOrigin(
+      input.origin ||
+        (input.env ?? process.env).DEV_REVIEW_SERVICE_ORIGIN ||
+        DEFAULT_STORE_ORIGIN,
+    );
   } catch (error) {
     return failWithJsonError(output, "login", errorMessage(error));
   }

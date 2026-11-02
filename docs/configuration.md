@@ -26,15 +26,3 @@ vendored. To show one, override it in the root `.gitattributes`, or in
 `linguist-generated=false` works the same way. Git attributes take precedence
 over [Hide files by tag](diffr-configuration.md#display), which sets the hidden
 tags for every repository. Reopen the review after you edit either.
-
-## Developer: service URL
-
-To sign in and share against another Whiteboard service, such as staging, add
-this to `User/settings.json`:
-
-```json
-"review.serviceUrl": "https://stg.dev.fast"
-```
-
-Restart Whiteboard, then sign out and in again. The CLI reads
-`DEV_REVIEW_SERVICE_ORIGIN`; `whiteboard login --origin` overrides both.
