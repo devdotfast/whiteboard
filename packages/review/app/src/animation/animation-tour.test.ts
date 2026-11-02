@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   type AnimationFrame,
   animationTour,
-  frameContent,
+  frameAnchorId,
   markerAnchorId,
 } from "./animation-tour";
 
@@ -113,12 +113,26 @@ describe("animationTour over a clip's markers", () => {
   });
 });
 
-describe("frameContent", () => {
-  it("leads with the named code", () => {
-    expect(frameContent(block.id, anchors, frames[2]!, "save")).toEqual({
-      kind: "source",
-      source: selection(1),
-      more: [selection(2)],
+describe("code opened from the drawing", () => {
+  it("replaces its stop's code and leaves the other stops alone", () => {
+    const plain = animationTour(block, anchors, frames);
+
+    const tour = animationTour(block, anchors, frames, frameAnchorId, {
+      stop: frames[2]!.key,
+      name: "save",
     });
+
+    const opened = tour?.stops.find(
+      (stop) => stop.anchor.id === frameAnchorId(block.id, frames[2]!.key),
+    );
+
+    expect(opened?.content).toEqual({ kind: "source", source: selection(1) });
+    expect(
+      tour?.stops.filter((stop) => stop !== opened).map((s) => s.content),
+    ).toEqual(
+      plain?.stops
+        .filter((stop) => stop.anchor.id !== opened?.anchor.id)
+        .map((s) => s.content),
+    );
   });
 });

@@ -27,8 +27,10 @@ const rewritingChild =
 
 const erasingChild = ':is([data-review-node-id][data-motion="erasing"] > *)';
 
-// A top-level section wears the ring on its own box, not the block's outline.
-const ringOnSection = ":is([data-region]):has(> .review-section)";
+// A top-level section wears the ring on its own box, not the block's outline,
+// and so does a hero, whose box is the pane rather than the block's column.
+const ringOnOwnBox =
+  ":is([data-region]):has(> :is(.review-section, [data-hero]))";
 
 // The section a top-level block renders.
 const regionOff = ':is([data-review-node-id][data-region="off"] > *)';
@@ -397,38 +399,38 @@ export const drawStyles = stylex.create({
     borderRadius: radius.surface,
     outline: {
       default: `1px solid ${tokens.transparent}`,
-      [ringOnSection]: "none",
+      [ringOnOwnBox]: "none",
     },
     outlineOffset: "12px",
     transition: `outline-color ${drawMotion.ring} ${motion.ease}`,
   },
   regionOn: {
-    outline: { default: `1px solid ${tokens.accent}`, [ringOnSection]: "none" },
+    outline: { default: `1px solid ${tokens.accent}`, [ringOnOwnBox]: "none" },
   },
   // A block's own animation.
   blockLand: {
     animationName: {
       default: landSlot,
-      [ringOnSection]: "none",
+      [ringOnOwnBox]: "none",
       [stylex.env.reducedMotion]: "none",
       ...childAnimationName,
     },
     animationDuration: {
       default: drawMotion.land,
-      [ringOnSection]: motion.instant,
+      [ringOnOwnBox]: motion.instant,
       [stylex.env.reducedMotion]: motion.instant,
       ...childAnimationDuration,
     },
     animationTimingFunction: {
       default: motion.enter,
-      [ringOnSection]: "ease",
+      [ringOnOwnBox]: "ease",
       [stylex.env.reducedMotion]: "ease",
       ...childAnimationTimingFunction,
     },
     animationDelay: { default: null, ...childAnimationDelay },
     animationFillMode: {
       default: "both",
-      [ringOnSection]: "none",
+      [ringOnOwnBox]: "none",
       [stylex.env.reducedMotion]: "none",
       ...childAnimationFillMode,
     },
@@ -439,31 +441,31 @@ export const drawStyles = stylex.create({
   blockCollapse: {
     animationName: {
       default: collapse,
-      [ringOnSection]: "none",
+      [ringOnOwnBox]: "none",
       [stylex.env.reducedMotion]: "none",
       ...childAnimationName,
     },
     animationDuration: {
       default: drawMotion.collapse,
-      [ringOnSection]: motion.instant,
+      [ringOnOwnBox]: motion.instant,
       [stylex.env.reducedMotion]: motion.instant,
       ...childAnimationDuration,
     },
     animationTimingFunction: {
       default: motion.enter,
-      [ringOnSection]: "ease",
+      [ringOnOwnBox]: "ease",
       [stylex.env.reducedMotion]: "ease",
       ...childAnimationTimingFunction,
     },
     animationDelay: {
       default: drawMotion.pass,
-      [ringOnSection]: motion.instant,
+      [ringOnOwnBox]: motion.instant,
       [stylex.env.reducedMotion]: motion.instant,
       ...childAnimationDelay,
     },
     animationFillMode: {
       default: "both",
-      [ringOnSection]: "none",
+      [ringOnOwnBox]: "none",
       [stylex.env.reducedMotion]: "none",
       ...childAnimationFillMode,
     },
@@ -474,19 +476,19 @@ export const drawStyles = stylex.create({
   blockPulse: {
     animationName: {
       default: regionPulse,
-      [ringOnSection]: "none",
+      [ringOnOwnBox]: "none",
       [stylex.env.reducedMotion]: "none",
       ...childAnimationName,
     },
     animationDuration: {
       default: motion.pulse,
-      [ringOnSection]: motion.instant,
+      [ringOnOwnBox]: motion.instant,
       [stylex.env.reducedMotion]: motion.instant,
       ...childAnimationDuration,
     },
     animationTimingFunction: {
       default: "ease-in-out",
-      [ringOnSection]: "ease",
+      [ringOnOwnBox]: "ease",
       [stylex.env.reducedMotion]: "ease",
       ...childAnimationTimingFunction,
     },
@@ -494,7 +496,7 @@ export const drawStyles = stylex.create({
     animationFillMode: { default: null, ...childAnimationFillMode },
     animationIterationCount: {
       default: "infinite",
-      [ringOnSection]: "1",
+      [ringOnOwnBox]: "1",
       [stylex.env.reducedMotion]: "1",
       ...childAnimationList,
     },
@@ -571,6 +573,15 @@ export const drawStyles = stylex.create({
           [stylex.env.reducedMotion]: "1",
         },
       },
+    },
+  },
+  // A hero's ring, after `sectionRing`: on the hero's box, over its stage,
+  // inside the pane's edges.
+  heroRing: {
+    "::before": {
+      inset: { default: null, [regionOff]: 0, [regionOn]: 0 },
+      zIndex: { default: null, [regionOff]: 1, [regionOn]: 1 },
+      borderRadius: { default: null, [regionOff]: 0, [regionOn]: 0 },
     },
   },
   // Retitle: a section heading recomposes; its children stay.

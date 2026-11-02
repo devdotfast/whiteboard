@@ -292,6 +292,12 @@ export function useFramePlayer(
     activeIndex,
     pick,
     boot,
+    play() {
+      heldRef.current = { index: -1, fraction: 0 };
+      go(0, true);
+      setPlaying(true);
+    },
+    pause: () => setPlaying(false),
     receive,
     scenario: node.scenarios?.find((scenario) =>
       sameKeys(scenario.frames, sequenceKeys),

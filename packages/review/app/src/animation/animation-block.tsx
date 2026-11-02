@@ -24,6 +24,7 @@ import { shellStyles } from "@canvas/shell-styles";
 import { withClass } from "@canvas/stylex-props";
 import { themeClass, themeStyles } from "@canvas/theme-styles";
 import { tokens } from "@canvas/tokens.stylex";
+import { typingIn } from "@canvas/typing-target";
 import { captureUiEvent } from "@canvas/ui-telemetry";
 import { Button } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
@@ -45,6 +46,7 @@ import {
   type ReactNode,
   type RefObject,
   useCallback,
+  useContext,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -52,16 +54,17 @@ import {
   useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 
 import {
+  type OpenedCode,
   animationTour,
   frameAnchorId,
-  frameContent,
   markerAnchorId,
 } from "./animation-tour";
 import { useClipPlayer } from "./clip-player";
 import { useFramePlayer } from "./frame-player";
+import { HeroContext, heroFit, useHeroBox } from "./hero";
 import { useReportAnimationRun } from "./report-run";
 import { StepStrip } from "./stage-controls";
 import type { PlayerStop, StagePlayer } from "./stage-player";
@@ -309,6 +312,8 @@ function StageBlock({
   // The tallest frame of the scenario, from a hidden measuring copy, so the
   // stage does not change height as the reader steps through frames.
   const [measuredHeight, setMeasuredHeight] = useState(0);
+  // Where the drawing runs across those frames, for a hero to fit.
+  const [ink, setInk] = useState<{ left: number; right: number } | null>(null);
   const [measureRun, setMeasureRun] = useState<number | null>(null);
   const [measureLate, setMeasureLate] = useState(false);
   const slotSizesRef = useRef(new Map<string, number>());
@@ -377,16 +382,33 @@ function StageBlock({
   const stop = stops[activeIndex];
   const anchorId = clip ? markerAnchorId : frameAnchorId;
 
+  // Code the reader opened from the drawing: its stop shows that, in the
+  // column and fullscreen alike, until the reader steps away.
+  const [openedCode, setOpenedCode] = useState<OpenedCode | null>(null);
+  const opened = openedCode?.stop === stop?.key ? openedCode : null;
+
+  useEffect(() => {
+    if (openedCode && !opened) setOpenedCode(null);
+  }, [openedCode, opened]);
+
   // A stop per frame of the path showing, or per marker, when they show code.
-  const tour = useMemo(
-    () =>
+  const tourWith = useCallback(
+    (code: OpenedCode | null) =>
       animationTour(
         { id: node.id, title: node.title },
         data.anchors,
         stops,
         anchorId,
+        code,
       ),
     [node.id, node.title, data.anchors, stops, anchorId],
+  );
+
+  const pathTour = useMemo(() => tourWith(null), [tourWith]);
+
+  const tour = useMemo(
+    () => (opened ? tourWith(opened) : pathTour),
+    [tourWith, opened, pathTour],
   );
 
   const frameAnchor = tour && stop ? anchorId(node.id, stop.key) : null;
@@ -404,6 +426,12 @@ function StageBlock({
     tour,
     tourOpen || expanded,
   );
+
+  // The board's hero: edge to edge, without a card. It goes fullscreen as
+  // any animation does, and plays once for each stage.
+  const hero = useContext(HeroContext) === node.id && !tourOpen && !expanded;
+  const heroBox = useHeroBox(figureRef, hero);
+  const heroPlayed = useRef<string | null>(null);
 
   // A new stage for each edit of what it runs; frame changes reuse it.
   const stageKey = useMemo(
@@ -453,21 +481,30 @@ function StageBlock({
 
   // A drawn element's code opens beside the board with the tour, at the
   // frame showing, or with the tour fullscreen.
+  // An element of the drawing was clicked: its own code opens, whatever the
+  // frame lists, and playback holds so the code stays.
   const reveal = (name: string) => {
     const anchor = data.anchors.get(animationCodeId(node.id, name));
 
     if (!anchor) return;
     captureUiEvent(session, "peek_opened", { via: "diagram" });
+    player.pause();
     const { openPeek, moveOverlayTour, active } = panelStore.getState();
+    const code = stop ? { stop: stop.key, name } : null;
+    const definition = tourWith(code);
 
-    const tourStop = tour?.stops.find((item) => item.anchor.id === frameAnchor);
+    const tourStop = definition?.stops.find(
+      (item) => item.anchor.id === frameAnchor,
+    );
 
-    if (!tour || !tourStop || !stop)
+    if (!definition || !tourStop)
       return openPeek({
         kind: "peek",
         anchor,
         content: { kind: "source", source: anchor.peek },
       });
+
+    setOpenedCode(code);
 
     if (tourOpen) return moveOverlayTour(tourStop.anchor.id, { reveal: true });
 
@@ -476,12 +513,22 @@ function StageBlock({
     openPeek({
       kind: "peek",
       anchor: tourStop.anchor,
-      content: frameContent(node.id, data.anchors, stop, name),
+      content: tourStop.content,
       tour: {
-        definition: tour,
+        definition,
         revealRequest: (active?.tour?.revealRequest ?? 0) + 1,
       },
     });
+  };
+
+  // A hero plays once and holds its last frame, or with reduced motion shows
+  // that frame at once. A restored tour's stop leads the frame instead.
+  const playHero = () => {
+    if (!hero || inlineAnchor || heroPlayed.current === stageKey) return;
+    heroPlayed.current = stageKey;
+
+    if (reducedMotion()) player.pick(stops.length - 1, "render");
+    else player.play?.();
   };
 
   const onMessage = useRef<(message: StageMessage) => void>(() => {});
@@ -500,6 +547,10 @@ function StageBlock({
       case "slots":
         setSlots(message.slots);
         break;
+      case "goto":
+        // Now, not batched: a reveal behind it reads the frame it reached.
+        flushSync(() => player.receive(message));
+        break;
       case "reveal":
         reveal(message.name);
         break;
@@ -514,10 +565,13 @@ function StageBlock({
         reportRun(null);
         paintRef.current.ready = true;
         paintStage();
+
+        if (!paintRef.current.wanted) playHero();
         break;
       case "painted":
         paintRef.current.painted = true;
         endPaint();
+        playHero();
         break;
       case "settled":
         showing.shownFrame = message.index;
@@ -823,6 +877,7 @@ function StageBlock({
   // grows once, to its tallest frame, rather than to its current one first.
   useEffect(() => {
     setMeasuredHeight(0);
+    setInk(null);
     setMeasureLate(false);
     slotSizesRef.current.clear();
     remeasure();
@@ -928,9 +983,11 @@ function StageBlock({
 
   const overlayAnchor = overlay?.anchor;
 
+  // On the path, not the tour: opening code changes a stop's content, which
+  // is no pick.
   useEffect(() => {
     if (overlayAnchor) followPanel();
-  }, [overlayAnchor, tour]);
+  }, [overlayAnchor, pathTour]);
 
   // The column's tour picked a stop (its Next, a click, its scroll): show
   // that frame, as the overlay's panel does.
@@ -947,7 +1004,7 @@ function StageBlock({
 
   useEffect(() => {
     if (inlineAnchor) followColumn();
-  }, [inlineAnchor, tour]);
+  }, [inlineAnchor, pathTour]);
 
   // The frame changed some other way (the controls, playback, the stage, a
   // scenario): the open tour follows it, fullscreen or in the column. Each
@@ -1009,6 +1066,16 @@ function StageBlock({
   // down beside the tour's pane. A narrower stage would fold the drawing.
   const scaled = fullscreen && inlineWidth > 0;
 
+  // A hero's view of its stage, which keeps its width. Until its frames are
+  // measured, and with a height of its own, the whole stage is the drawing.
+  const fit =
+    hero && heroBox
+      ? heroFit(heroBox, {
+          ...(ink && ink.right > ink.left ? ink : { left: 0, right: minWidth }),
+          height: stageHeight,
+        })
+      : null;
+
   const scale =
     scaled && room
       ? Math.min(
@@ -1025,50 +1092,66 @@ function StageBlock({
       ref={figureRef}
       {...withClass(
         "animation-block",
-        styles.figure,
+        hero ? styles.hero : styles.figure,
         fullscreen && styles.figureFullscreen,
         drawStyles.blockChild,
+        hero && drawStyles.sectionRing,
+        hero && drawStyles.heroRing,
         player.onFigureKeyDown !== undefined && focusStyles.ring,
       )}
+      style={
+        heroBox ? { marginLeft: heroBox.left, width: heroBox.width } : undefined
+      }
       aria-label={node.title}
+      data-hero={hero || undefined}
       tabIndex={player.onFigureKeyDown ? 0 : undefined}
-      onKeyDown={player.onFigureKeyDown}
+      // ← and → step from anywhere in a hero: its controls, or the drawing,
+      // whose stage forwards them.
+      onKeyDown={
+        hero
+          ? (event) => {
+              if (!typingIn(event.target)) player.onKeyDown(event);
+            }
+          : player.onFigureKeyDown
+      }
     >
-      <DiagramHeader
-        kind={clip ? "CLIP" : "ANIMATION"}
-        title={node.title}
-        meta={`${activeIndex + 1} / ${stops.length}`}
-        action={
-          fullscreen ? (
-            <Button
-              ref={closeRef}
-              xstyle={diagramStyles.button}
-              aria-label={tourOpen ? "Close tour" : `Close expanded ${noun}`}
-              onClick={close}
-            >
-              Close
-            </Button>
-          ) : tour ? (
-            <TourButton
-              buttonRef={openRef}
-              stops={tour.stops.length}
-              onClick={openTour}
-            />
-          ) : (
-            <Button
-              ref={openRef}
-              xstyle={diagramStyles.button}
-              aria-label={`Expand ${noun}`}
-              onClick={() => {
-                holdInline();
-                setExpanded(true);
-              }}
-            >
-              Expand
-            </Button>
-          )
-        }
-      />
+      {!hero && (
+        <DiagramHeader
+          kind={clip ? "CLIP" : "ANIMATION"}
+          title={node.title}
+          meta={`${activeIndex + 1} / ${stops.length}`}
+          action={
+            fullscreen ? (
+              <Button
+                ref={closeRef}
+                xstyle={diagramStyles.button}
+                aria-label={tourOpen ? "Close tour" : `Close expanded ${noun}`}
+                onClick={close}
+              >
+                Close
+              </Button>
+            ) : tour ? (
+              <TourButton
+                buttonRef={openRef}
+                stops={tour.stops.length}
+                onClick={openTour}
+              />
+            ) : (
+              <Button
+                ref={openRef}
+                xstyle={diagramStyles.button}
+                aria-label={`Expand ${noun}`}
+                onClick={() => {
+                  holdInline();
+                  setExpanded(true);
+                }}
+              >
+                Expand
+              </Button>
+            )
+          }
+        />
+      )}
       {node.scenarios && (
         <div {...stylex.props(styles.scenarios)}>
           <span
@@ -1090,21 +1173,34 @@ function StageBlock({
       )}
       <div
         ref={roomRef}
-        {...stylex.props(styles.stage, fullscreen && styles.stageFullscreen)}
+        {...stylex.props(
+          styles.stage,
+          fullscreen && styles.stageFullscreen,
+          hero && styles.heroStage,
+        )}
       >
         <div
-          {...stylex.props(styles.zoom)}
+          {...stylex.props(styles.zoom, fit && styles.heroZoom)}
           style={
-            scaled
-              ? { width: inlineWidth * scale, height: stageHeight * scale }
-              : undefined
+            fit
+              ? { height: Math.ceil(stageHeight * fit.zoom) }
+              : scaled
+                ? { width: inlineWidth * scale, height: stageHeight * scale }
+                : undefined
           }
         >
           <div
             ref={canvasRef}
-            {...stylex.props(styles.canvas, scaled && styles.canvasScaled)}
+            {...stylex.props(
+              styles.canvas,
+              (scaled || fit) && styles.canvasScaled,
+            )}
             style={{
               height: stageHeight,
+              ...(fit && {
+                width: minWidth,
+                transform: `translateX(${fit.x}px) scale(${fit.zoom})`,
+              }),
               ...(scaled && {
                 width: inlineWidth,
                 transform: `scale(${scale})`,
@@ -1137,8 +1233,9 @@ function StageBlock({
                         }),
                       );
                     }}
-                    onMeasured={(height) => {
+                    onMeasured={({ height, left, right }) => {
                       setMeasuredHeight(height);
+                      setInk({ left, right });
                       setMeasureRun(null);
                     }}
                   />
@@ -1179,7 +1276,7 @@ function StageBlock({
         </div>
       </div>
       {player.afterStage}
-      {player.strip && (
+      {player.strip && !hero && (
         <StepStrip
           label={player.strip.label}
           items={player.strip.items}
@@ -1189,8 +1286,18 @@ function StageBlock({
           onKeyDown={player.onKeyDown}
         />
       )}
-      <div {...stylex.props(styles.controls)} onKeyDown={player.onKeyDown}>
+      <div
+        {...stylex.props(styles.controls, hero && styles.heroControls)}
+        onKeyDown={hero ? undefined : player.onKeyDown}
+      >
         {player.controls}
+        {hero && tour && (
+          <TourButton
+            buttonRef={openRef}
+            stops={tour.stops.length}
+            onClick={openTour}
+          />
+        )}
       </div>
       {error && (
         <p role="alert" {...stylex.props(styles.error)}>
@@ -1258,7 +1365,7 @@ function MeasuringStage({
   onMeasured,
 }: {
   init(): Promise<StageInit>;
-  onMeasured(height: number): void;
+  onMeasured(measured: { height: number; left: number; right: number }): void;
 }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const portRef = useRef<MessagePort | null>(null);
@@ -1278,7 +1385,7 @@ function MeasuringStage({
       const message = stageMessageSchema.safeParse(event.data);
 
       if (message.success && message.data.type === "measured")
-        onMeasuredRef.current(message.data.height);
+        onMeasuredRef.current(message.data);
     };
 
     target.postMessage(
@@ -1413,6 +1520,30 @@ function codeTitles(
 const narrow = "@media (max-width: 720px)";
 
 const styles = stylex.create({
+  // The board's hero: no card, frame or padding; the pane is its stage.
+  hero: {
+    position: "relative",
+    margin: 0,
+    color: tokens.ink,
+    font: `${fontSize.body}/${leading.normal} ${tokens.fontMono}`,
+  },
+  // The hero's stage has no room around it, and its view clips to the pane.
+  heroStage: {
+    padding: 0,
+    backgroundColor: tokens.transparent,
+  },
+  heroZoom: {
+    overflow: "hidden",
+  },
+  // The hero's controls and caption, in the document's column with a
+  // gutter of their own, though the hero has none.
+  heroControls: {
+    boxSizing: "border-box",
+    width: `min(100%, calc(${tokens.reviewProseMaxWidth} + 2 * ${space.s24}))`,
+    marginInline: "auto",
+    paddingInline: space.s24,
+    borderTopWidth: 0,
+  },
   figure: {
     overflow: "hidden",
     margin: `${space.s18} 0 ${space.s4}`,
