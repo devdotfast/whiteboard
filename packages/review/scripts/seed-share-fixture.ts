@@ -1,4 +1,4 @@
-/** Writes a share's two revisions as `bundle-1.json` and `bundle-2.json` into `<root>` for the shared-review e2e journey. */
+/** Writes two revisions of one share into `<root>` for the shared-review journey. */
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
 

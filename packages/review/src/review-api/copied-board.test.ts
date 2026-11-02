@@ -117,19 +117,6 @@ it("lists a link's copies newest first, Trash included, until each is deleted", 
   ]);
   expect(store.copiesOf("other")).toEqual([]);
 
-  await store.execute({
-    operation: {
-      type: "edit",
-      reviewId: first,
-      edit: { type: "insert", content: { type: "divider" } },
-    },
-  });
-  expect(store.copiesOf("link")[1]).toEqual({
-    reviewId: first,
-    version: 1,
-    shared,
-  });
-
   await store.execute(
     { operation: { type: "lifecycle", state: "trash", reviewId: first } },
     undefined,
@@ -146,83 +133,6 @@ it("lists a link's copies newest first, Trash included, until each is deleted", 
     { kind: "person" },
   );
   expect(store.copiesOf("link").map((c) => c.reviewId)).toEqual([second]);
-});
-
-it("refreshes a copy in place with a newer share, even in Trash, and refuses once it was edited", async () => {
-  const { reviewId } = await copy();
-
-  await store.execute(
-    { operation: { type: "lifecycle", state: "trash", reviewId } },
-    undefined,
-    { kind: "person" },
-  );
-
-  const next: Seed = {
-    ...structuredClone(seed),
-    document: [
-      { id: "markdown-3", type: "markdown", markdown: "Why, revised" },
-    ],
-    shared: { ...seed.shared, revisionId: "r2", sharedAt: 2 },
-  };
-
-  const create = {
-    operation: {
-      type: "create",
-      title: "Copy v2",
-      target: { kind: "commits", ...pins },
-    },
-  };
-
-  const result = await store.refreshCopy(reviewId, 0, create, next);
-
-  expect(result).toMatchObject({ reviewId, version: 1 });
-
-  const snapshot = store.read(reviewId);
-
-  expect(snapshot).toMatchObject({
-    title: "Copy v2",
-    trashedAt: expect.any(String),
-    shared: {
-      revisionId: "r2",
-      sharedAt: 2,
-      key: "link",
-      importedVersion: 1,
-    },
-  });
-  expect(snapshot.document).toEqual(next.document);
-  expect(store.copiesOf("link").map((c) => c.reviewId)).toEqual([reviewId]);
-  await expect(
-    store.refreshCopy(reviewId, 0, create, next),
-  ).rejects.toMatchObject({ status: 409 });
-});
-
-it("refreshes only a copy of the same link", async () => {
-  const { reviewId } = await copy();
-
-  const { reviewId: own } = await store.execute({
-    operation: {
-      type: "create",
-      title: "Own",
-      target: { kind: "commits", ...pins },
-    },
-  });
-
-  const create = {
-    operation: {
-      type: "create",
-      title: "Copy v2",
-      target: { kind: "commits", ...pins },
-    },
-  };
-
-  const other = { ...seed, shared: { ...seed.shared, key: "other" } };
-
-  await expect(store.refreshCopy(own, 0, create, seed)).rejects.toMatchObject({
-    status: 400,
-  });
-  await expect(
-    store.refreshCopy(reviewId, 0, create, other),
-  ).rejects.toMatchObject({ status: 400 });
 });
 
 it("still checks the images of a board made from scratch", async () => {

@@ -362,9 +362,8 @@ export interface SharedProvenance {
   sharedAt?: number;
   cloneUrl?: string;
   key?: string;
-  /** The link revision the board was made or last refreshed from. */
   revisionId?: string;
-  /** The version that import wrote; a later version is the receiver's edit. */
+  /** The version import wrote; anything later is the receiver's edit. */
   importedVersion?: number;
   /** Opened from a link naming a revision: never refreshed. */
   pinned?: boolean;
@@ -1131,7 +1130,7 @@ export class ReviewStore {
       .map((row) => ({
         reviewId: String(row.id),
         version: Number(row.version),
-        // SAFETY: the key matched, so `shared` is the object a seed wrote.
+        // SAFETY: the key matched this row's seed.
         shared: JSON.parse(String(row.shared)) as SharedProvenance,
       }));
   }
@@ -1617,8 +1616,7 @@ export class ReviewStore {
     return this.track(prepared);
   }
 
-  /** Replaces a share copy's content with a newer revision of its link: same board id, Trash state kept.
-   * Refuses (409) once the board has moved past `baseVersion`. */
+  /** Replaces a share copy's content under the same board id; 409 once it moved past `baseVersion`. */
   refreshCopy(
     reviewId: string,
     baseVersion: number,
@@ -1749,7 +1747,6 @@ export class ReviewStore {
     prepared: PreparedCommand,
     initial: Seed | undefined,
     author: Author,
-    /** A share copy whose content the create replaces in place. */
     into?: { reviewId: string; baseVersion: number },
   ) {
     const {

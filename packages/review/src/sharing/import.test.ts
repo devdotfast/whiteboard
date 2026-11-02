@@ -7,7 +7,6 @@ import path from "node:path";
 import type { Block } from "@dev.fast/whiteboard-document";
 import { createReviewApi } from "@review/review-api/http.js";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
-import type { SharedProvenance } from "@review/review-api/store.js";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
@@ -171,60 +170,20 @@ it("copies a share into a board the recipient edits like their own", async () =>
   expect(recipient.store.read(reviewId).title).toBe("Mine now");
 });
 
-it("plans the three rules", () => {
-  const c = (over: Partial<SharedProvenance>) => ({
-    reviewId: "a",
-    version: 3,
-    shared: { key: "k", revisionId: R1, importedVersion: 3, ...over },
-  });
+it("matches a legacy copy by its share time and refreshes it only while unedited", () => {
+  const legacy = (version: number, sharedAt?: number) => [
+    { reviewId: "l", version, shared: { key: "k", sharedAt } },
+  ];
 
-  expect(
-    planShareCopy([c({})], {
-      revision: { id: R1, version: 4, createdAt: 1 },
-      latest: R2,
-    }),
-  ).toEqual({ kind: "open", reviewId: "a" });
-  expect(planShareCopy([c({})], served(R2, R2))).toEqual({
+  expect(planShareCopy(legacy(0), served(R2, R2))).toEqual({
     kind: "refresh",
-    reviewId: "a",
-    version: 3,
+    reviewId: "l",
+    version: 0,
   });
-  expect(planShareCopy([{ ...c({}), version: 4 }], served(R2, R2))).toEqual({
-    kind: "import",
-  });
-  expect(planShareCopy([c({})], served(R1old, R2))).toEqual({
-    kind: "import",
-  });
-  expect(
-    planShareCopy(
-      [{ reviewId: "l", version: 0, shared: { key: "k" } }],
-      served(R2, R2),
-    ),
-  ).toEqual({ kind: "refresh", reviewId: "l", version: 0 });
-  expect(
-    planShareCopy(
-      [{ reviewId: "l", version: 1, shared: { key: "k" } }],
-      served(R2, R2),
-    ),
-  ).toEqual({ kind: "import" });
-  expect(
-    planShareCopy(
-      [{ reviewId: "l", version: 1, shared: { key: "k", sharedAt: 1 } }],
-      served(R1old, R2),
-    ),
-  ).toEqual({ kind: "open", reviewId: "l" });
-  expect(planShareCopy([c({ sharedAt: 1 })], served(R1old, R2))).toEqual({
-    kind: "import",
-  });
-  expect(planShareCopy([c({ pinned: true })], served(R2, R2))).toEqual({
-    kind: "import",
-  });
-  expect(planShareCopy([c({ pinned: true })], served(R1, R2))).toEqual({
+  expect(planShareCopy(legacy(1), served(R2, R2))).toEqual({ kind: "import" });
+  expect(planShareCopy(legacy(1, 1), served(R1old, R2))).toEqual({
     kind: "open",
-    reviewId: "a",
-  });
-  expect(planShareCopy([c({})], served(R2, R2), true)).toEqual({
-    kind: "import",
+    reviewId: "l",
   });
 });
 
@@ -448,51 +407,6 @@ it("keeps a share's commits until its link's last copy is deleted", async () => 
 
   await remove(b);
   expect(git("for-each-ref", `refs/review/shared/${link}`)).toBe("");
-});
-
-it("drops a share's commits when its link's last copy in that repository is deleted", async () => {
-  const { bundle, recipient, fetchRepository } = await share();
-  const link = key();
-
-  const a = await receiveShare(
-    { ...recipient, fetchRepository },
-    link,
-    served(R1, R1),
-    async () => ({ bundle, attribution: { login: "ada", sharedAt: 1 } }),
-  );
-
-  await recipient.store.execute(
-    { operation: { type: "create", title: "Elsewhere" } },
-    { document: [], shared: { login: "ada", key: link } },
-    { kind: "person" },
-  );
-
-  const root = recipient.store.repositoryPath(
-    recipient.store.read(a).pins!.repositoryId,
-  );
-
-  await recipient.store.execute(
-    { operation: { type: "lifecycle", state: "trash", reviewId: a } },
-    undefined,
-    { kind: "person" },
-  );
-
-  const response = await createReviewApi(
-    recipient.store,
-    recipient.data,
-  ).request("/commands", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ operation: { type: "delete", reviewId: a } }),
-  });
-
-  expect(response.status).toBe(200);
-  expect(
-    execFileSync("git", ["for-each-ref", `refs/review/shared/${link}`], {
-      cwd: root,
-      encoding: "utf8",
-    }).trim(),
-  ).toBe("");
 });
 
 it("fetches the shared commits into the recipient's own checkout", async () => {

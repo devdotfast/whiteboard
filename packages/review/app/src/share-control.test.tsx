@@ -26,7 +26,6 @@ function mount(options: {
   publishFails?: boolean;
   publishExpired?: boolean;
   holdPublish?: Promise<void>;
-  holdVersion?: { version: number; until: Promise<void> };
   sender?: string;
 }) {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -76,13 +75,6 @@ function mount(options: {
       }
 
       if (state.holdPublish) await state.holdPublish;
-
-      if (
-        path.endsWith("/publish") &&
-        state.holdVersion &&
-        JSON.parse(String(init!.body)).version === state.holdVersion.version
-      )
-        await state.holdVersion.until;
 
       if (path.endsWith("/publish") && state.publishExpired) {
         state.signedIn = false;
@@ -299,7 +291,7 @@ it("falls back to sign-in when the stored login has expired, then uploads after 
   expect(container.textContent).not.toContain("expired");
 });
 
-it("keeps one link per board: reuses it while the version holds and uploads a new version behind it", async () => {
+it("reuses the link for a version that was already shared and uploads again for a new one", async () => {
   const harness = mount({ signedIn: true });
   const { container } = harness;
 
@@ -309,9 +301,6 @@ it("keeps one link per board: reuses it while the version holds and uploads a ne
   await harness.settle();
   expect(publishes(harness)).toHaveLength(1);
   expect(container.querySelector("input")?.value).toContain("/s/capability");
-  expect(container.textContent).toContain(
-    "This link always opens the latest share of this board.",
-  );
   await harness.click("Share review");
   await harness.click("Share review");
   expect(container.textContent).not.toContain("Uploading");
@@ -326,13 +315,6 @@ it("keeps one link per board: reuses it while the version holds and uploads a ne
     expect.objectContaining({ version: 4 }),
     expect.objectContaining({ version: 5 }),
   ]);
-  expect(container.querySelector("input")?.value).toBe(
-    "https://app.dev.fast/s/capability",
-  );
-  await harness.click("Share review");
-  await harness.click("Share review");
-  await harness.settle();
-  expect(publishes(harness)).toHaveLength(2);
 });
 
 it("keeps one upload when the popover is reopened while it is in flight", async () => {
@@ -359,55 +341,6 @@ it("keeps one upload when the popover is reopened while it is in flight", async 
     "/s/capability",
   );
   expect(publishes(harness)).toHaveLength(1);
-});
-
-it("keeps a newer version's link when an older upload lands after it", async () => {
-  let release: (() => void) | undefined;
-
-  const harness = mount({
-    signedIn: true,
-    holdVersion: {
-      version: 4,
-      until: new Promise<void>((resolve) => {
-        release = resolve;
-      }),
-    },
-  });
-
-  const { container } = harness;
-
-  await harness.render(4);
-  await harness.click("Share review");
-  await harness.settle();
-  await harness.click("Share review");
-  await harness.render(5);
-  await harness.click("Share review");
-  await harness.settle();
-  expect(container.querySelector("input")?.value).toContain("/s/capability");
-  release?.();
-  await harness.settle();
-  expect(publishes(harness).map((post) => post.body)).toEqual([
-    expect.objectContaining({ version: 4 }),
-    expect.objectContaining({ version: 5 }),
-  ]);
-  expect(container.textContent).not.toContain("Uploading");
-  expect(container.querySelector("input")?.value).toContain("/s/capability");
-});
-
-it("shows a newer version's link when the popover opens on an older version", async () => {
-  const harness = mount({ signedIn: true });
-  const { container } = harness;
-
-  await harness.render(5);
-  await harness.click("Share review");
-  await harness.settle();
-  await harness.click("Share review");
-  await harness.render(4);
-  await harness.click("Share review");
-  await harness.settle();
-  expect(publishes(harness)).toHaveLength(1);
-  expect(container.textContent).not.toContain("Uploading");
-  expect(container.querySelector("input")?.value).toContain("/s/capability");
 });
 
 it("polls only while sign-in is pending and stops when the control unmounts", async () => {

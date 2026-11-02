@@ -251,9 +251,7 @@ export type ShareCopyPlan =
   | { kind: "refresh"; reviewId: string; version: number }
   | { kind: "import" };
 
-/** A copy made from the served revision opens; an unedited, unpinned copy
- * takes the latest revision in place; anything else gets a new copy. A
- * pinned link never refreshes. */
+/** Which copy a served revision opens or refreshes in place; otherwise a new copy. */
 export function planShareCopy(
   copies: ReturnType<ReviewStore["copiesOf"]>,
   served: ServedRevision,

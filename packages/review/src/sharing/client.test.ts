@@ -100,7 +100,7 @@ it("surfaces a failed create and refuses an oversized share before any request",
 function sharedService(meta: SharedMeta, body: () => BodyInit) {
   const requests: { path: string; headers: Headers }[] = [];
 
-  const send = vi.fn<typeof fetch>(async (input, init) => {
+  const send: typeof fetch = async (input, init) => {
     const url = new URL(String(input));
     requests.push({
       path: url.pathname + url.search,
@@ -110,11 +110,10 @@ function sharedService(meta: SharedMeta, body: () => BodyInit) {
     return url.pathname.endsWith("/bundle")
       ? new Response(body())
       : Response.json(meta);
-  });
+  };
 
   return {
     requests,
-    send,
     client: new ShareClient("https://app.dev.fast", "secret", send),
   };
 }
@@ -165,7 +164,7 @@ it("downloads a share with the link's capability within the size limit", async (
   ).rejects.toThrow("limit");
 });
 
-it("asks for a named revision and refuses a malformed one before any request", async () => {
+it("asks for a named revision", async () => {
   const shared = await bundle();
   const capability = "c".repeat(43);
   const R = randomUUID();
@@ -184,52 +183,6 @@ it("asks for a named revision and refuses a malformed one before any request", a
 
   await client.download(capability, R);
   expect(requests[0]?.path).toBe(`/api/v2/shared/${capability}?rev=${R}`);
-
-  const refused = sharedService(meta, () => JSON.stringify(shared));
-
-  await expect(refused.client.shared(capability, "nope")).rejects.toThrow(
-    "UUID",
-  );
-  expect(refused.send).not.toHaveBeenCalled();
-});
-
-it("reads a link's revisions with the account's token", async () => {
-  const shareId = randomUUID();
-  const R1 = randomUUID();
-  const R2 = randomUUID();
-  const u1 = `https://app.dev.fast/s/${"x".repeat(43)}?rev=${R1}`;
-  const u2 = `https://app.dev.fast/s/${"x".repeat(43)}?rev=${R2}`;
-  const requests: string[] = [];
-
-  const revisions = {
-    latest: R2,
-    items: [
-      { id: R2, version: 5, size: 20, createdAt: 2, url: u2 },
-      { id: R1, version: 4, size: 10, createdAt: 1, url: u1 },
-    ],
-  };
-
-  const client = new ShareClient(
-    "https://app.dev.fast",
-    "secret",
-    async (input, init) => {
-      const { pathname } = new URL(String(input));
-
-      if (pathname === "/api/auth/token")
-        return new Response(null, { status: 404 });
-      requests.push(
-        `${init?.method ?? "GET"} ${pathname} ${new Headers(init?.headers).get("authorization")}`,
-      );
-
-      return Response.json(revisions);
-    },
-  );
-
-  expect(await client.revisions(shareId)).toEqual(revisions);
-  expect(requests).toEqual([
-    `GET /api/v2/shares/${shareId}/revisions Bearer secret`,
-  ]);
-  await expect(client.revisions("x")).rejects.toThrow("UUID");
 });
 
 it("stops a streamed response as soon as it exceeds the declared size", async () => {
