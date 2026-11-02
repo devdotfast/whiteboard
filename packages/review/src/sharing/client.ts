@@ -74,6 +74,66 @@ export class ShareAuthError extends Error {
   }
 }
 
+export class ShareRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ShareRequestError";
+  }
+}
+
+const errorSchema = z.object({ error: z.object({ code: z.string() }) });
+
+async function requestError(response: Response) {
+  const contentType = response.headers.get("content-type") ?? "";
+  const ray = response.headers.get("cf-ray");
+
+  const reference =
+    ray && /^[a-f0-9]{16}(?:-[a-z]{3})?$/i.test(ray)
+      ? ` Reference: ${ray}.`
+      : "";
+
+  let code: string | undefined;
+
+  if (contentType.includes("application/json") && response.body) {
+    try {
+      const bytes = await readBoundedStream(response.body, 16 * 1024);
+      const parsed = errorSchema.safeParse(parseJsonText(bytes.toString()));
+
+      if (parsed.success) code = parsed.data.error.code;
+    } catch {
+      // Error bodies are optional and never shown to the reader.
+    }
+  } else await response.body?.cancel();
+
+  let message = `The sharing service refused this request (HTTP ${response.status}). Please report this issue.`;
+
+  if (
+    response.status === 403 &&
+    contentType.includes("text/html") &&
+    response.headers.get("server")?.toLowerCase() === "cloudflare"
+  )
+    message =
+      "The sharing service's security filter blocked this request. Please report this issue.";
+  else if (response.status === 413)
+    message =
+      "This review is too large to share. Remove large resources, then retry.";
+  else if (response.status === 429)
+    message =
+      code === "share_quota_exceeded"
+        ? "Your sharing storage limit has been reached. Please contact support."
+        : "Too many sharing requests. Wait a moment, then retry.";
+  else if (response.status === 400 && code === "invalid_request")
+    message =
+      "The sharing service could not accept this review. Update Whiteboard or report this issue.";
+  else if (response.status >= 500)
+    message = `The sharing service is temporarily unavailable (HTTP ${response.status}). Try again shortly.`;
+
+  return new ShareRequestError(response.status, message + reference);
+}
+
 /** Account tokens go only to the configured API origin. */
 export class ShareClient {
   private readonly origin: string;
@@ -130,10 +190,12 @@ export class ShareClient {
     const response = await this.send(this.origin + route, init);
 
     if (!response.ok) {
-      await response.body?.cancel();
+      if (response.status === 401 && !anonymous) {
+        await response.body?.cancel();
+        throw new ShareAuthError();
+      }
 
-      if (response.status === 401 && !anonymous) throw new ShareAuthError();
-      throw new Error(`Share request failed (${response.status}).`);
+      throw await requestError(response);
     }
 
     return readBoundedBytes(response, maxBytes);
@@ -167,14 +229,19 @@ export class ShareClient {
     });
 
     if (!response.ok) {
-      await response.body?.cancel();
-
       // A service without the JWT plugin still takes the device token.
-      if (response.status === 404 || response.status === 405)
-        return { bearer: token, until: Date.now() + 10 * 60_000 };
+      if (response.status === 404 || response.status === 405) {
+        await response.body?.cancel();
 
-      if (response.status === 401) throw new ShareAuthError();
-      throw new Error(`Share request failed (${response.status}).`);
+        return { bearer: token, until: Date.now() + 10 * 60_000 };
+      }
+
+      if (response.status === 401) {
+        await response.body?.cancel();
+        throw new ShareAuthError();
+      }
+
+      throw await requestError(response);
     }
 
     const { token: jwt } = jwtSchema.parse(
