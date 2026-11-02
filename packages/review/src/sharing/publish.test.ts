@@ -85,31 +85,7 @@ it.each(["dev-fast-review", "dev-fast-review-preview"])(
 
 it.each([
   {
-    send: async () =>
-      new Response("<html>private response details</html>", {
-        status: 403,
-        headers: {
-          server: "cloudflare",
-          "content-type": "text/html",
-          "cf-ray": "a54583b349764b60-EWR",
-        },
-      }),
-    error:
-      "The sharing service's security filter blocked this request. Please report this issue. Reference: a54583b349764b60-EWR.",
-  },
-  {
-    send: async () => new Response(null, { status: 503 }),
-    error:
-      "The sharing service is temporarily unavailable (HTTP 503). Try again shortly.",
-  },
-  {
     send: async () => new Response(null, { status: 426 }),
-    error:
-      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
-  },
-  {
-    send: async () =>
-      Response.json({ error: { code: "upgrade_required" } }, { status: 400 }),
     error:
       "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
   },

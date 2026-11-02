@@ -245,7 +245,7 @@ export function mountSharingHost(
           status.stage = "error";
           status.error =
             error instanceof ReviewInputError ||
-            error instanceof ShareRequestError
+            (error instanceof ShareRequestError && error.status !== 404)
               ? error.message
               : "This share is unavailable, revoked, or could not be read.";
         });

@@ -41,7 +41,7 @@ export function parseWhiteboardFile(text: string): ShareBundle {
   const version = /^review-share\/([1-9]\d*)$/.exec(header.data.format);
 
   if (version && Number(version[1]) > Number(SHARE_FORMAT.split("/")[1]))
-    throw new ReviewInputError(WHITEBOARD_UPGRADE_REQUIRED_MESSAGE, 426);
+    throw new ReviewInputError(WHITEBOARD_UPGRADE_REQUIRED_MESSAGE, 400);
 
   if (header.data.format !== SHARE_FORMAT)
     throw new ReviewInputError(

@@ -304,21 +304,25 @@ it("opens the copy a link prefers when the share service cannot answer", async (
 });
 
 it.each([
-  new ReviewInputError(
-    "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
-    426,
-  ),
-  new ShareRequestError(
-    426,
-    "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
-  ),
-])("preserves safe update guidance while importing: %s", async (error) => {
+  {
+    error: new ShareRequestError(
+      426,
+      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+    ),
+    message:
+      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  },
+  {
+    error: new ShareRequestError(404, "Not shown."),
+    message: "This share is unavailable, revoked, or could not be read.",
+  },
+])("explains a failed import: $message", async ({ error, message }) => {
   const root = await mkdtemp(path.join(tmpdir(), "share-update-"));
   vi.stubEnv("DEV_REVIEW_HOME", root);
   const fixture = await createShareFixture(root);
 
-  const download = vi
-    .spyOn(ShareClient.prototype, "download")
+  const shared = vi
+    .spyOn(ShareClient.prototype, "shared")
     .mockRejectedValue(error);
 
   const api = new Hono();
@@ -339,12 +343,11 @@ it.each([
 
       expect(await response.json()).toMatchObject({
         stage: "error",
-        error:
-          "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+        error: message,
       });
     });
   } finally {
-    download.mockRestore();
+    shared.mockRestore();
     await fixture.data.close();
     await fixture.store.close();
     await rm(root, { recursive: true, force: true });

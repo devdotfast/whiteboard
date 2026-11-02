@@ -89,52 +89,63 @@ export class ShareRequestError extends Error {
 
 const errorSchema = z.object({ error: z.object({ code: z.string() }) });
 
+async function errorCode(response: Response) {
+  if (!response.body) return undefined;
+
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    await response.body.cancel();
+
+    return undefined;
+  }
+
+  try {
+    const bytes = await readBoundedStream(response.body, 16 * 1024);
+
+    return errorSchema.safeParse(parseJsonText(bytes.toString())).data?.error
+      .code;
+  } catch {
+    return undefined;
+  }
+}
+
+function requestErrorMessage(response: Response, code: string | undefined) {
+  const { status, headers } = response;
+
+  if (status === 426 || code === "upgrade_required")
+    return WHITEBOARD_UPGRADE_REQUIRED_MESSAGE;
+
+  if (
+    status === 403 &&
+    headers.get("content-type")?.includes("text/html") &&
+    headers.get("server")?.toLowerCase() === "cloudflare"
+  )
+    return "The sharing service's security filter blocked this request. Please report this issue.";
+
+  if (status === 413)
+    return "This review is too large to share. Remove large resources, then retry.";
+
+  if (status === 429)
+    return code === "share_quota_exceeded"
+      ? "Your sharing storage limit has been reached. Please contact support."
+      : "Too many sharing requests. Wait a moment, then retry.";
+
+  if (status === 400 && code === "invalid_request")
+    return "The sharing service could not accept this review. Update Whiteboard or report this issue.";
+
+  if (status >= 500)
+    return `The sharing service is temporarily unavailable (HTTP ${status}). Try again shortly.`;
+
+  return `The sharing service refused this request (HTTP ${status}). Please report this issue.`;
+}
+
 async function requestError(response: Response) {
-  const contentType = response.headers.get("content-type") ?? "";
+  const message = requestErrorMessage(response, await errorCode(response));
   const ray = response.headers.get("cf-ray");
 
   const reference =
     ray && /^[a-f0-9]{16}(?:-[a-z]{3})?$/i.test(ray)
       ? ` Reference: ${ray}.`
       : "";
-
-  let code: string | undefined;
-
-  if (contentType.includes("application/json") && response.body) {
-    try {
-      const bytes = await readBoundedStream(response.body, 16 * 1024);
-      const parsed = errorSchema.safeParse(parseJsonText(bytes.toString()));
-
-      if (parsed.success) code = parsed.data.error.code;
-    } catch {
-      // Error bodies are optional and never shown to the reader.
-    }
-  } else await response.body?.cancel();
-
-  let message = `The sharing service refused this request (HTTP ${response.status}). Please report this issue.`;
-
-  if (response.status === 426 || code === "upgrade_required")
-    message = WHITEBOARD_UPGRADE_REQUIRED_MESSAGE;
-  else if (
-    response.status === 403 &&
-    contentType.includes("text/html") &&
-    response.headers.get("server")?.toLowerCase() === "cloudflare"
-  )
-    message =
-      "The sharing service's security filter blocked this request. Please report this issue.";
-  else if (response.status === 413)
-    message =
-      "This review is too large to share. Remove large resources, then retry.";
-  else if (response.status === 429)
-    message =
-      code === "share_quota_exceeded"
-        ? "Your sharing storage limit has been reached. Please contact support."
-        : "Too many sharing requests. Wait a moment, then retry.";
-  else if (response.status === 400 && code === "invalid_request")
-    message =
-      "The sharing service could not accept this review. Update Whiteboard or report this issue.";
-  else if (response.status >= 500)
-    message = `The sharing service is temporarily unavailable (HTTP ${response.status}). Try again shortly.`;
 
   return new ShareRequestError(response.status, message + reference);
 }

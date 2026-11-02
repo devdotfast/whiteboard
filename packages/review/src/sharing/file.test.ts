@@ -53,11 +53,7 @@ it("requires an update only for a strictly newer share format", () => {
   expect(() =>
     parseWhiteboardFile(JSON.stringify({ format: `review-share/${next}` })),
   ).toThrow(
-    expect.objectContaining({
-      status: 426,
-      message:
-        "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
-    }),
+    "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
   );
   expect(() =>
     parseWhiteboardFile(JSON.stringify({ format: "other-format/999" })),
