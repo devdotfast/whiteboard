@@ -551,10 +551,11 @@ it("shows sign-in when the history read finds the login expired", async () => {
 
   await harness.render(5);
   await harness.settle();
-  await harness.click("Share review");
   const reads = harness.accountReads();
+  await harness.click("Share review");
   await vi.waitFor(async () => {
     await harness.settle();
+    expect(harness.historyReads()).toBe(1);
     expect(harness.accountReads()).toBeGreaterThan(reads);
     expect(
       [...container.querySelectorAll("[role=dialog] button")].map(
