@@ -57,6 +57,7 @@ import { resolveReviewStackLayers } from "@review/review-stack.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";
 import { HttpJsonError } from "@review/server/http-json.js";
 import {
+  type RemoteShare,
   type SharingHostEvents,
   mountSharingHost,
 } from "@review/sharing/host.js";
@@ -172,7 +173,7 @@ export interface ReviewApiHooks {
     via: ReviewRequestVia;
     agentKind?: ReviewSessionAgent;
   }) => void;
-  sharing?: SharingHostEvents;
+  sharing?: SharingHostEvents & { remoteShare?: RemoteShare };
 }
 
 /** A person's save carries the whole board, which edits one at a time can

@@ -6,6 +6,7 @@ import { Writable } from "node:stream";
 import {
   type ShareBundle,
   parseShareLink,
+  shareBundleSchema,
   shareIdSchema,
 } from "@dev.fast/review-share-protocol";
 import {
@@ -17,7 +18,7 @@ import {
 } from "@dev.fast/trace-core";
 import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
-import type { ReviewStore, Snapshot } from "@review/review-api/store.js";
+import type { ReviewStore } from "@review/review-api/store.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";
 import type { Hono } from "hono";
 import { z } from "zod";
@@ -73,6 +74,7 @@ interface SharingHostOptions extends SharingHostEvents {
   login?: typeof runStoreLogin;
   openUrl?: typeof openUrlInBrowser;
   fetch?: typeof fetch;
+  remoteShare?: RemoteShare;
 }
 
 const importSchema = z.union([
@@ -301,6 +303,52 @@ export function mountSharingHost(
   });
 }
 
+const preparedShareSchema = z.strictObject({
+  title: z.string(),
+  version: z.number().int().nonnegative(),
+  bundle: shareBundleSchema,
+  needsRepository: z.boolean(),
+});
+
+type PreparedShare = z.infer<typeof preparedShareSchema>;
+
+/** `undefined` for a board on this machine. */
+export type RemoteShare = (
+  input: z.infer<typeof publishSchema>,
+) => Promise<PreparedShare> | undefined;
+
+export function remoteShare(
+  isRemote: (reviewId: string) => boolean,
+  fetch: (request: Request) => Response | Promise<Response>,
+): RemoteShare {
+  return ({ reviewId, version }) =>
+    isRemote(reviewId)
+      ? (async () => {
+          const response = await fetch(
+            new Request(
+              `http://whiteboard/reviews-api/${encodeURIComponent(reviewId)}/share-bundle`,
+              {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ version }),
+              },
+            ),
+          );
+
+          const body: unknown = await response.json().catch(() => undefined);
+
+          if (!response.ok)
+            throw new ReviewInputError(
+              z.object({ error: z.string() }).safeParse(body).data?.error ??
+                "Could not read the board from its host.",
+              response.status === 400 ? 400 : 409,
+            );
+
+          return preparedShareSchema.parse(body);
+        })()
+      : undefined;
+}
+
 /** Publishing needs only an authored store, never Desktop or recipient workspaces. */
 export function mountSharingPublisher(
   app: Hono,
@@ -308,10 +356,12 @@ export function mountSharingPublisher(
   data: LocalReviewData,
   options: Pick<
     SharingHostOptions,
-    "readRepository" | "fetch" | "onPublished" | "onRevoked"
+    "readRepository" | "fetch" | "onPublished" | "onRevoked" | "remoteShare"
   > = {},
 ) {
-  const shareable = (input: z.infer<typeof publishSchema>) => {
+  const prepareLocal = async (
+    input: z.infer<typeof publishSchema>,
+  ): Promise<PreparedShare> => {
     const snapshot = store.read(input.reviewId, input.version);
 
     if (snapshot.target?.kind === "worktree")
@@ -321,10 +371,6 @@ export function mountSharingPublisher(
 
     validateShareSources(snapshot);
 
-    return snapshot;
-  };
-
-  const shareBundle = async (snapshot: Snapshot) => {
     const repositoryId =
       snapshot.pins?.repositoryId ?? snapshot.target?.repositoryId;
 
@@ -348,24 +394,40 @@ export function mountSharingPublisher(
 
     if (verified) bundle.repository = verified;
 
-    return bundle;
+    return {
+      title: snapshot.title,
+      version: snapshot.version,
+      bundle,
+      needsRepository: needsRepository(bundle, snapshot),
+    };
   };
 
+  const prepare = (input: z.infer<typeof publishSchema>) =>
+    options.remoteShare?.(input) ?? prepareLocal(input);
+
+  // Desktop uploads it with its own login.
+  app.post("/:id/share-bundle", async (context) => {
+    const { version } = publishSchema
+      .pick({ version: true })
+      .parse(await readBoundedRequestJson(context.req.raw));
+
+    return context.json(
+      await prepareLocal({ reviewId: context.req.param("id"), version }),
+    );
+  });
   app.post("/sharing/export", async (context) => {
-    const snapshot = shareable(
+    const { title, bundle, needsRepository } = await prepare(
       publishSchema.parse(await readBoundedRequestJson(context.req.raw)),
     );
 
-    const bundle = await shareBundle(snapshot);
-
     // A link falls back to the browser viewer; a file has no such reader.
-    if (!bundle.repository && needsRepository(bundle, snapshot))
+    if (!bundle.repository && needsRepository)
       throw new ReviewInputError(
         "Exporting pinned code needs a GitHub remote the file's reader can fetch from.",
       );
 
     return context.json({
-      filename: whiteboardFileName(snapshot.title),
+      filename: whiteboardFileName(title),
       text: whiteboardFileText(bundle),
     });
   });
@@ -374,7 +436,6 @@ export function mountSharingPublisher(
       await readBoundedRequestJson(context.req.raw),
     );
 
-    const snapshot = shareable(input);
     const account = await readSharingAuth();
 
     if (!account)
@@ -383,7 +444,7 @@ export function mountSharingPublisher(
         409,
       );
 
-    const bundle = await shareBundle(snapshot);
+    const { bundle, version } = await prepare(input);
 
     try {
       const result = await new ShareClient(
@@ -402,13 +463,13 @@ export function mountSharingPublisher(
 
       options.onPublished?.({
         reviewId: input.reviewId,
-        version: snapshot.version,
+        version,
       });
 
       return context.json({
         ...result,
         url: url.href,
-        version: snapshot.version,
+        version,
       });
     } catch (error) {
       if (error instanceof ReviewInputError) throw error;

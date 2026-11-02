@@ -363,10 +363,7 @@ export function ApiCanvas({
 
   const sharing = useMemo(
     () =>
-      data &&
-      !content.host &&
-      !data.snapshot.trashedAt &&
-      !data.snapshot.sourceUnavailable
+      data && !data.snapshot.trashedAt && !data.snapshot.sourceUnavailable
         ? {
             client,
             reviewId: content.reviewId,
@@ -374,7 +371,7 @@ export function ApiCanvas({
             sender: data.snapshot.shared?.login,
           }
         : null,
-    [client, content.reviewId, content.host, data],
+    [client, content.reviewId, data],
   );
 
   const trashBanner = trashedAt && (
