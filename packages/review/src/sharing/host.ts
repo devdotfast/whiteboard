@@ -417,12 +417,7 @@ export function mountSharingPublisher(
   ): Promise<PreparedShare> => {
     const snapshot = store.read(input.reviewId, input.version);
 
-    if (snapshot.target?.kind === "worktree")
-      throw new ReviewInputError(
-        "Pin this review to commits before sharing it.",
-      );
-
-    validateShareSources(snapshot);
+    if (snapshot.target?.kind !== "worktree") validateShareSources(snapshot);
 
     const repositoryId =
       snapshot.pins?.repositoryId ?? snapshot.target?.repositoryId;
@@ -474,7 +469,11 @@ export function mountSharingPublisher(
     );
 
     // A link falls back to the browser viewer; a file has no such reader.
-    if (!bundle.repository && needsRepository)
+    if (bundle.frozen)
+      throw new ReviewInputError(
+        "Commit your changes to export this whiteboard as a file.",
+      );
+    else if (!bundle.repository && needsRepository)
       throw new ReviewInputError(
         "Exporting pinned code needs a GitHub remote the file's reader can fetch from.",
       );

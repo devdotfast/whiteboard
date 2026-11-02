@@ -15,6 +15,8 @@ import { readOnlyHost } from "./share-host";
 export interface ShareView {
   title: string;
   repository?: { cloneUrl: string };
+  /** Quotes uncommitted changes, so Desktop cannot open it. */
+  frozen?: true;
   data: WhiteboardData;
   host: WhiteboardHost;
   dispose(): void;
@@ -63,6 +65,7 @@ export async function openShare(
   return {
     title: bundle.title,
     ...(bundle.repository && { repository: bundle.repository }),
+    ...(bundle.frozen && { frozen: bundle.frozen }),
     data: {
       ...data,
       // A share has no checkout to open.
