@@ -34,8 +34,10 @@ export declare function ReviewTopBar(): ReactElement;
 
 export interface ShareView {
   title: string;
-  /** Present when Desktop can import the share. */
+  /** Present when Desktop can import the share, unless it is frozen. */
   repository?: { cloneUrl: string };
+  /** Quotes uncommitted changes, so Desktop cannot open it. */
+  frozen?: true;
   data: WhiteboardData;
   host: WhiteboardHost;
   dispose(): void;
