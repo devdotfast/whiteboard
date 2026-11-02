@@ -15,6 +15,7 @@ import type { EditorInput } from '../../../workbench/common/editor/editorInput.j
 import { IEditorService } from '../../../workbench/services/editor/common/editorService.js';
 import { IWorkbenchLayoutService } from '../../../workbench/services/layout/browser/layoutService.js';
 import { ReviewCanvasEditorInput } from '../../browser/parts/canvas/reviewCanvasEditorInput.js';
+import { REVIEW_OPEN_HOME_COMMAND_ID } from '../../common/reviewCommandPalette.js';
 import { IReviewCanvasEditorTabsService } from '../../services/reviewCanvasEditorTabsService.js';
 import { REVIEW_HOME_ACTIVE as REVIEW_HOME_ACTIVE_KEY } from './reviewWindowKeys.js';
 
@@ -57,7 +58,7 @@ registerWorkbenchContribution2(ReviewHomeContribution.ID, ReviewHomeContribution
 registerAction2(class extends Action2 {
 	constructor() {
 		super({
-			id: 'review.openHome',
+			id: REVIEW_OPEN_HOME_COMMAND_ID,
 			title: localize2('review.openHome', "Go Home"),
 			f1: true,
 			keybinding: {

@@ -796,6 +796,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	override focus(): void {
 		this.canvas.value?.focus();
+		// The canvas focuses its surface, which takes focus only through an
+		// element inside it. Opening a board from elsewhere still lands in it.
+		if (this.container && !this.container.contains(this.container.ownerDocument.activeElement)) this.container.focus();
 	}
 
 	showFind(): boolean {

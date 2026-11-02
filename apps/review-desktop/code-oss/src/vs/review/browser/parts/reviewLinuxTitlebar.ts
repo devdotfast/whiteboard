@@ -19,6 +19,7 @@ import { IKeybindingService } from '../../../platform/keybinding/common/keybindi
 import { INativeHostService } from '../../../platform/native/common/native.js';
 import { INotificationService } from '../../../platform/notification/common/notification.js';
 import { WindowControlsStyle, getWindowControlsStyle } from '../../../platform/window/common/window.js';
+import { REVIEW_OPEN_SETTINGS_COMMAND_ID } from '../../common/reviewCommandPalette.js';
 
 /** Linux has no macOS application menu. Keep its commands next to navigation. */
 export class ReviewLinuxTitlebar extends Disposable {
@@ -52,7 +53,7 @@ export class ReviewLinuxTitlebar extends Disposable {
 				autoSelectFirstItem: true,
 				getActions: () => [
 					command('workbench.action.showCommands', localize('review.menu.commands', "Command Palette...")),
-					command('review.openSettings', localize('review.menu.settings', "Settings...")),
+					command(REVIEW_OPEN_SETTINGS_COMMAND_ID, localize('review.menu.settings', "Settings...")),
 					command('review.manageExtensions', localize('review.menu.extensions', "Manage Extensions...")),
 					command('review.openWelcome', localize('review.menu.welcome', "Getting Started...")),
 					new Separator(),
