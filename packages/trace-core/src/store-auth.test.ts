@@ -81,6 +81,48 @@ describe("store-auth", () => {
     expect(errors).toContain("https");
   });
 
+  it("signs in to DEV_REVIEW_SERVICE_ORIGIN when no origin is given", async () => {
+    vi.stubEnv("DEV_REVIEW_HOME", tmp);
+    vi.stubEnv("DEV_REVIEW_SERVICE_ORIGIN", "https://stg.dev.fast/");
+
+    const responses = [
+      json({
+        device_code: "dc",
+        user_code: "ABCD-1234",
+        verification_uri_complete: "https://stg.dev.fast/device",
+        expires_in: 900,
+        interval: 1,
+      }),
+      json({ access_token: "tok", token_type: "Bearer" }),
+      json({
+        user: {
+          id: "u",
+          name: "dev",
+          email: "dev@example.com",
+          githubLogin: null,
+        },
+      }),
+    ];
+
+    const fetch = vi.fn<typeof globalThis.fetch>(
+      async () => responses.shift()!,
+    );
+
+    const code = await runStoreLogin({
+      stdout: outputStream(),
+      stderr: outputStream(),
+      fetch,
+      openUrl: async () => {},
+      sleep: async () => {},
+    });
+
+    expect(code).toBe(0);
+    expect(String(fetch.mock.calls[0]?.[0])).toMatch(
+      /^https:\/\/stg\.dev\.fast\//,
+    );
+    expect((await readStoreAuth())?.origin).toBe("https://stg.dev.fast");
+  });
+
   it.each([false, true])(
     "completes device login even with an expired saved token: %s",
     async (expired) => {

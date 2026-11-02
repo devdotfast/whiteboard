@@ -24,6 +24,8 @@
 
 export const REVIEW_KEYMAP_SETTING = 'review.keymap';
 export const REVIEW_TELEMETRY_SETTING = 'review.telemetry.enabled';
+/** Unregistered on purpose: set in settings.json only, e.g. `https://stg.dev.fast`; read at startup. */
+export const REVIEW_SERVICE_URL_SETTING = 'review.serviceUrl';
 export const REVIEW_SOFTWARE_MAP_SETTING = 'review.experimental.softwareMap.enabled';
 /** Code OSS's own setting, registered in `update.config.contribution.ts`. */
 export const REVIEW_SHOW_RELEASE_NOTES_SETTING = 'update.showReleaseNotes';
