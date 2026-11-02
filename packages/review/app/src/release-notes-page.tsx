@@ -109,15 +109,19 @@ function ReleaseNotes({
               action={github}
             />
           ) : (
-            releases.data.map((release, index) => (
-              <Release
-                key={release.tag_name}
-                release={release}
-                target={release.tag_name === `v${version}`}
-                // The newest release already sits under the header.
-                scrollTo={index > 0}
-              />
-            ))
+            releases.data.map((release, index) => {
+              const target = release.tag_name === `v${version}`;
+
+              return (
+                <Release
+                  key={release.tag_name}
+                  release={release}
+                  target={target}
+                  // The newest release already sits under the header.
+                  scrollTo={target && index > 0}
+                />
+              );
+            })
           )}
         </div>
       </div>
@@ -137,8 +141,8 @@ function Release({
   const ref = useRef<HTMLElement>(null);
   // Scroll anchoring holds the spot while images above load.
   useLayoutEffect(() => {
-    if (target && scrollTo) ref.current?.scrollIntoView({ block: "start" });
-  }, [target, scrollTo]);
+    if (scrollTo) ref.current?.scrollIntoView({ block: "start" });
+  }, [scrollTo]);
 
   const version = release.tag_name.slice(1);
 
@@ -149,12 +153,8 @@ function Release({
     : undefined;
 
   return (
-    <section
-      ref={ref}
-      aria-labelledby={`release-${version}`}
-      {...stylex.props(styles.release)}
-    >
-      <h2 id={`release-${version}`} {...stylex.props(styles.releaseHeading)}>
+    <section ref={ref} {...stylex.props(styles.release)}>
+      <h2 {...stylex.props(styles.releaseHeading)}>
         {release.name || `Whiteboard ${version}`}
         {target ? <Chip variant="pill">This version</Chip> : null}
       </h2>
