@@ -139,11 +139,61 @@ export const createShareSchema = z.object({
   bundle: shareBundleSchema,
 });
 
-export function shareLink(origin: string, capability: string): string {
-  return new URL(`/s/${capabilitySchema.parse(capability)}`, origin).href;
+export const shareCreatedSchema = z.strictObject({
+  shareId: shareIdSchema,
+  url: z.url(),
+});
+
+const shareSizeSchema = z.number().int().positive().max(MAX_SHARE_BYTES);
+
+export const shareRevisionRefSchema = z.object({
+  id: shareIdSchema,
+  version: z.number().int().nonnegative(),
+  createdAt: z.number(),
+});
+
+export const shareRevisionSchema = shareRevisionRefSchema.extend({
+  size: shareSizeSchema,
+  url: z.url(),
+});
+
+export const shareRevisionsSchema = z.object({
+  latest: shareIdSchema,
+  items: z.array(shareRevisionSchema),
+});
+
+export type ShareRevisions = z.infer<typeof shareRevisionsSchema>;
+
+export const sharedMetaSchema = z.object({
+  sender: z.strictObject({ login: z.string().min(1).max(256) }),
+  sharedAt: z.number(),
+  size: shareSizeSchema,
+  revision: shareRevisionRefSchema,
+  latest: shareIdSchema,
+});
+
+export type SharedMeta = z.infer<typeof sharedMetaSchema>;
+
+export function shareLink(
+  origin: string,
+  capability: string,
+  revision?: string,
+): string {
+  const url = new URL(`/s/${capabilitySchema.parse(capability)}`, origin);
+
+  if (revision !== undefined)
+    url.searchParams.set("rev", shareIdSchema.parse(revision));
+
+  return url.href;
 }
 
-export function parseShareLink(value: string) {
+export type ShareLink = {
+  origin: string;
+  capability: string;
+  revision?: string;
+};
+
+export function parseShareLink(value: string): ShareLink {
   const url = new URL(value);
 
   if (
@@ -151,14 +201,20 @@ export function parseShareLink(value: string) {
     url.username ||
     url.password ||
     url.hash ||
-    [...url.searchParams.keys()].some((key) => key !== "app")
+    [...url.searchParams.keys()].some((key) => key !== "app" && key !== "rev")
   )
     throw new Error("Use an HTTPS Whiteboard share link.");
 
-  return {
+  const link: ShareLink = {
     origin: url.origin,
     capability: capabilitySchema.parse(
       /^\/s\/([^/]+)$/.exec(url.pathname)?.[1],
     ),
   };
+
+  const revision = url.searchParams.get("rev");
+
+  if (revision !== null) link.revision = shareIdSchema.parse(revision);
+
+  return link;
 }

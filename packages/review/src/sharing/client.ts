@@ -4,8 +4,14 @@ import { type JsonValue, parseJsonText } from "@dev.fast/json";
 import {
   MAX_SHARE_BYTES,
   type ShareBundle,
+  type ShareRevisions,
+  type SharedMeta,
   capabilitySchema,
   shareBundleSchema,
+  shareCreatedSchema,
+  shareIdSchema,
+  shareRevisionsSchema,
+  sharedMetaSchema,
 } from "@dev.fast/review-share-protocol";
 import {
   StreamLimitError,
@@ -36,14 +42,6 @@ const jwtSchema = z.object({ token: z.string().min(1) });
 const jwtPayloadSchema = z.object({ exp: z.number() });
 
 const bearers = new Map<string, Promise<{ bearer: string; until: number }>>();
-
-const linkSchema = z.strictObject({ shareId: z.uuid(), url: z.url() });
-
-const receivedSchema = z.object({
-  sender: z.strictObject({ login: z.string().min(1).max(256) }),
-  sharedAt: z.number(),
-  size: z.number().int().positive().max(MAX_SHARE_BYTES),
-});
 
 /** Size is checked while reading, even if Content-Length is absent or false. */
 export async function readBoundedBytes(
@@ -206,7 +204,7 @@ export class ShareClient {
   }
 
   async create(bundle: ShareBundle, requestId: string = randomUUID()) {
-    return linkSchema.parse(
+    return shareCreatedSchema.parse(
       await this.api(
         "/api/v2/shares",
         "POST",
@@ -222,7 +220,7 @@ export class ShareClient {
   }
 
   async recoverLink(shareId: string) {
-    return linkSchema.parse(
+    return shareCreatedSchema.parse(
       await this.api(`/api/v2/shares/${z.uuid().parse(shareId)}/link`),
     );
   }
@@ -231,16 +229,35 @@ export class ShareClient {
     return this.api(`/api/v2/shares/${z.uuid().parse(shareId)}`, "DELETE");
   }
 
-  /** The bundle and who shared it, read with the link's capability. */
-  async download(capability: string) {
-    const route = `/api/v2/shared/${capabilitySchema.parse(capability)}`;
-
-    const received = receivedSchema.parse(
-      await this.api(route, "GET", undefined, true),
+  async revisions(shareId: string): Promise<ShareRevisions> {
+    return shareRevisionsSchema.parse(
+      await this.api(
+        `/api/v2/shares/${shareIdSchema.parse(shareId)}/revisions`,
+      ),
     );
+  }
+
+  /** Who shared a link's revision, and which revision is its latest. */
+  async shared(capability: string, revision?: string): Promise<SharedMeta> {
+    const query =
+      revision === undefined ? "" : `?rev=${shareIdSchema.parse(revision)}`;
+
+    return sharedMetaSchema.parse(
+      await this.api(
+        `/api/v2/shared/${capabilitySchema.parse(capability)}${query}`,
+        "GET",
+        undefined,
+        true,
+      ),
+    );
+  }
+
+  /** The bundle of the revision the meta names, and who shared it. */
+  async download(capability: string, revision?: string) {
+    const meta = await this.shared(capability, revision);
 
     const bytes = await this.request(
-      `${route}/bundle`,
+      `/api/v2/shared/${capability}/bundle?rev=${meta.revision.id}`,
       "GET",
       undefined,
       true,
@@ -251,10 +268,9 @@ export class ShareClient {
       bundle: shareBundleSchema.parse(
         parseJsonText(new TextDecoder().decode(bytes)),
       ),
-      attribution: {
-        login: received.sender.login,
-        sharedAt: received.sharedAt,
-      },
+      attribution: { login: meta.sender.login, sharedAt: meta.sharedAt },
+      revision: meta.revision,
+      latest: meta.latest,
     };
   }
 }

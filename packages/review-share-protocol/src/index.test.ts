@@ -29,6 +29,33 @@ it("puts the capability in the path and rejects credentials, fragments or other 
   );
 });
 
+it("carries a revision as ?rev= and rejects any other query", () => {
+  const token = "a".repeat(43),
+    rev = "5b0e9a52-4a43-4f7e-9d8e-3c1f0e7b2a11";
+
+  expect(shareLink("https://app.dev.fast", token, rev)).toBe(
+    `https://app.dev.fast/s/${token}?rev=${rev}`,
+  );
+  expect(parseShareLink(`https://app.dev.fast/s/${token}?rev=${rev}`)).toEqual({
+    origin: "https://app.dev.fast",
+    capability: token,
+    revision: rev,
+  });
+  expect(
+    parseShareLink(`https://app.dev.fast/s/${token}?app=preview&rev=${rev}`)
+      .revision,
+  ).toBe(rev);
+  expect(() =>
+    parseShareLink(`https://app.dev.fast/s/${token}?rev=nope`),
+  ).toThrow("Invalid UUID");
+  expect(() => parseShareLink(`https://app.dev.fast/s/${token}?x=1`)).toThrow(
+    "HTTPS",
+  );
+  expect(parseShareLink(`https://app.dev.fast/s/${token}`)).not.toHaveProperty(
+    "revision",
+  );
+});
+
 it("rejects traversal paths and platform-specific separators", () => {
   for (const file of [
     "../secret",

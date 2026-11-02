@@ -362,6 +362,11 @@ export interface SharedProvenance {
   sharedAt?: number;
   cloneUrl?: string;
   key?: string;
+  revisionId?: string;
+  /** The version import wrote; anything later is the receiver's edit. */
+  importedVersion?: number;
+  /** Opened from a link naming a revision: never refreshed. */
+  pinned?: boolean;
 }
 
 /** Content a new board starts with, as another board left it. */
@@ -1110,16 +1115,24 @@ export class ReviewStore {
 
     return run;
   }
-  /** The board copied from a share link, until it is deleted. */
-  copyOf(key: string): string | undefined {
-    const row = this.db
+  /** The boards copied from a share link, newest first, until each is deleted. */
+  copiesOf(
+    key: string,
+  ): { reviewId: string; version: number; shared: SharedProvenance }[] {
+    return this.db
       .prepare(
-        `SELECT reviews.id FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
-        WHERE CASE WHEN json_valid(versions.snapshot) THEN json_extract(versions.snapshot,'$.shared.key') END=?`,
+        `SELECT reviews.id, reviews.version, json_extract(versions.snapshot,'$.shared') AS shared
+        FROM reviews JOIN versions ON versions.review_id=reviews.id AND versions.version=reviews.version
+        WHERE CASE WHEN json_valid(versions.snapshot) THEN json_extract(versions.snapshot,'$.shared.key') END=?
+        ORDER BY reviews.rowid DESC`,
       )
-      .get(key);
-
-    return row && String(row.id);
+      .all(key)
+      .map((row) => ({
+        reviewId: String(row.id),
+        version: Number(row.version),
+        // SAFETY: the key matched this row's seed.
+        shared: JSON.parse(String(row.shared)) as SharedProvenance,
+      }));
   }
   /** Checkouts whose remote is cloneUrl, most recently used first. */
   checkoutsOf(cloneUrl: string): string[] {
@@ -1600,6 +1613,50 @@ export class ReviewStore {
       author,
     ).then((source) => this.applyPreparedCommand(source, initial, author));
 
+    return this.track(prepared);
+  }
+
+  /** Replaces a share copy's content under the same board id; 409 once it moved past `baseVersion`. */
+  refreshCopy(
+    reviewId: string,
+    baseVersion: number,
+    // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Command boundary: commandSchema.parse below rejects malformed input before mutation.
+    create: unknown,
+    seed: Seed,
+  ): Promise<Result> {
+    if (this.closing)
+      return Promise.reject(new Error("Review store is closing."));
+    const command = commandSchema.parse(create);
+    const op = command.operation;
+
+    if (
+      op.type !== "create" ||
+      op.pullRequestUrl ||
+      op.parentId ||
+      op.dependsOn ||
+      op.projectId
+    )
+      throw new ReviewInputError(
+        "A refresh takes a create command with a title and target alone.",
+      );
+    const person: Author = { kind: "person" };
+
+    return this.track(
+      this.prepareCommand(
+        command,
+        undefined,
+        Promise.resolve(undefined),
+        person,
+      ).then((source) =>
+        this.applyPreparedCommand(source, seed, person, {
+          reviewId,
+          baseVersion,
+        }),
+      ),
+    );
+  }
+
+  private track(prepared: Promise<Result>) {
     this.preparing.add(prepared);
     void prepared
       .finally(() => this.preparing.delete(prepared))
@@ -1690,6 +1747,7 @@ export class ReviewStore {
     prepared: PreparedCommand,
     initial: Seed | undefined,
     author: Author,
+    into?: { reviewId: string; baseVersion: number },
   ) {
     const {
       op,
@@ -1703,6 +1761,7 @@ export class ReviewStore {
 
     return this.enqueue(async () => {
       if (
+        !into &&
         op.type === "create" &&
         (op.pullRequestUrl
           ? op.reuseExisting !== false
@@ -1774,9 +1833,19 @@ export class ReviewStore {
           fromTrash: true,
         });
 
-      const id = op.type === "create" ? randomUUID() : op.reviewId;
+      const id =
+        into?.reviewId ?? (op.type === "create" ? randomUUID() : op.reviewId);
 
-      const previous = op.type === "create" ? undefined : this.read(id);
+      const previous =
+        op.type === "create" && !into ? undefined : this.read(id);
+
+      if (
+        into &&
+        (!previous?.shared?.key || previous.shared.key !== initial?.shared?.key)
+      )
+        throw new ReviewInputError(
+          "Only a copy of the same share link refreshes in place.",
+        );
 
       let snapshot: Snapshot =
         op.type === "create"
@@ -1994,9 +2063,11 @@ export class ReviewStore {
         restore: op.type === "restore",
         repin: op.type === "set_target",
         copied: initial !== undefined,
+        inPlace: into !== undefined,
+        baseVersion: into?.baseVersion,
         projectLive: op.type !== "restore" && !resolvedTarget,
         result: {
-          ...(op.type === "create" && { created: true }),
+          ...(op.type === "create" && !into && { created: true }),
           targetId: applied?.targetId ?? lensTarget?.targetId,
           ...(applied && { type: applied.type }),
           ...(lensTarget && { type: lensTarget.type }),
@@ -2039,6 +2110,8 @@ export class ReviewStore {
     repin?: boolean;
     /** A board made from another's content, whose images stayed behind. */
     copied?: boolean;
+    /** A share copy refreshed in place, in Trash or not. */
+    inPlace?: boolean;
     projectLive: boolean;
     /** The ids a person's save gave new blocks, by client key. */
     personIds?: Record<string, string>;
@@ -2104,6 +2177,9 @@ export class ReviewStore {
     }));
     warnings = [...(change.warnings ?? []), ...warnings];
 
+    if (change.copied && snapshot.shared)
+      snapshot.shared.importedVersion = snapshot.version;
+
     const result: Result = {
       ...change.result,
       reviewId: id,
@@ -2156,7 +2232,8 @@ export class ReviewStore {
       previous
         ? () => {
             // A board in Trash is read-only, whoever writes.
-            this.assertWritable(id);
+            if (change.inPlace) this.assertExists(id);
+            else this.assertWritable(id);
 
             if (change.baseVersion !== undefined)
               assertBaseVersion(change.baseVersion, this.currentVersion(id));

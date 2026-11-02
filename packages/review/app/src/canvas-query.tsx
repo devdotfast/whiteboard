@@ -34,8 +34,7 @@ export function createCanvasQueryClient(): QueryClient {
 /** Desktop shares one client across boards, so board keys name the board. */
 export const canvasQueryKeys = {
   sharingAccount: () => ["sharing", "account"] as const,
-  shareLink: (board: string, version: number | undefined) =>
-    ["sharing", "link", board, version] as const,
+  shareLink: (board: string) => ["sharing", "link", board] as const,
   traceList: (
     board: string,
     version: number | undefined,

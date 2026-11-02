@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   MAX_SHARE_BYTES,
+  type SharedMeta,
   createShareSchema,
 } from "@dev.fast/review-share-protocol";
 import { ReviewInputError } from "@dev.fast/whiteboard-document";
@@ -96,45 +97,62 @@ it("surfaces a failed create and refuses an oversized share before any request",
   expect(send).not.toHaveBeenCalled();
 });
 
+function sharedService(meta: SharedMeta, body: () => BodyInit) {
+  const requests: { path: string; headers: Headers }[] = [];
+
+  const send: typeof fetch = async (input, init) => {
+    const url = new URL(String(input));
+    requests.push({
+      path: url.pathname + url.search,
+      headers: new Headers(init?.headers),
+    });
+
+    return url.pathname.endsWith("/bundle")
+      ? new Response(body())
+      : Response.json(meta);
+  };
+
+  return {
+    requests,
+    client: new ShareClient("https://app.dev.fast", "secret", send),
+  };
+}
+
 it("downloads a share with the link's capability within the size limit", async () => {
   const shared = await bundle();
   const capability = "c".repeat(43);
-  const requests: { path: string; headers: Headers }[] = [];
+  const R = randomUUID();
+  const L = randomUUID();
 
-  const client = (body: () => BodyInit) =>
-    new ShareClient("https://app.dev.fast", "secret", async (input, init) => {
-      const url = new URL(String(input));
-      requests.push({
-        path: url.pathname,
-        headers: new Headers(init?.headers),
-      });
+  const meta = {
+    sender: { login: "sender" },
+    sharedAt: 1,
+    size: 1,
+    revision: { id: R, version: 3, createdAt: 1 },
+    latest: L,
+  };
 
-      return url.pathname.endsWith("/bundle")
-        ? new Response(body())
-        : Response.json({
-            title: shared.title,
-            sender: { login: "sender" },
-            sharedAt: 1,
-            size: 1,
-          });
-    });
+  const { requests, client } = sharedService(meta, () =>
+    JSON.stringify(shared),
+  );
 
-  expect(
-    await client(() => JSON.stringify(shared)).download(capability),
-  ).toEqual({
+  expect(await client.download(capability)).toEqual({
     bundle: shared,
     attribution: { login: "sender", sharedAt: 1 },
+    revision: { id: R, version: 3, createdAt: 1 },
+    latest: L,
   });
   expect(requests.map(({ path }) => path)).toEqual([
     `/api/v2/shared/${capability}`,
-    `/api/v2/shared/${capability}/bundle`,
+    `/api/v2/shared/${capability}/bundle?rev=${R}`,
   ]);
 
   for (const { headers } of requests)
     expect(headers.get("authorization")).toBeNull();
 
   await expect(
-    client(
+    sharedService(
+      meta,
       () =>
         new ReadableStream({
           start(controller) {
@@ -142,8 +160,29 @@ it("downloads a share with the link's capability within the size limit", async (
             controller.close();
           },
         }),
-    ).download(capability),
+    ).client.download(capability),
   ).rejects.toThrow("limit");
+});
+
+it("asks for a named revision", async () => {
+  const shared = await bundle();
+  const capability = "c".repeat(43);
+  const R = randomUUID();
+
+  const meta = {
+    sender: { login: "sender" },
+    sharedAt: 1,
+    size: 1,
+    revision: { id: R, version: 2, createdAt: 1 },
+    latest: randomUUID(),
+  };
+
+  const { requests, client } = sharedService(meta, () =>
+    JSON.stringify(shared),
+  );
+
+  await client.download(capability, R);
+  expect(requests[0]?.path).toBe(`/api/v2/shared/${capability}?rev=${R}`);
 });
 
 it("stops a streamed response as soon as it exceeds the declared size", async () => {

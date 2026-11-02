@@ -4,7 +4,7 @@ import path from "node:path";
 import { Writable } from "node:stream";
 
 import {
-  type ShareBundle,
+  type SharedMeta,
   parseShareLink,
   shareBundleSchema,
   shareIdSchema,
@@ -33,9 +33,11 @@ import {
   whiteboardFileText,
 } from "./file.js";
 import {
-  type ShareAttribution,
+  type ShareImport,
   importShare,
   needsRepository,
+  planShareCopy,
+  receiveShare,
   shareKey,
 } from "./import.js";
 import {
@@ -183,8 +185,19 @@ export function mountSharingHost(
 
   const imports = new Map<string, ImportStatus>();
 
-  // One import at a time, so two links of one repository clone it once.
+  // One download at a time, so two links of one repository clone it once.
   let importing = Promise.resolve();
+
+  const serially = (task: () => Promise<string>) => {
+    const run = importing.then(task);
+
+    importing = run.then(
+      () => {},
+      () => {},
+    );
+
+    return run;
+  };
 
   app.get("/sharing/import/:id", (context) => {
     const id = context.req.param("id");
@@ -201,54 +214,40 @@ export function mountSharingHost(
     });
   });
 
+  const shareInput = (onStage: ShareImport["onStage"]): ShareImport => ({
+    store,
+    data,
+    fetchRepository: options.fetchRepository,
+    cloneRepository: options.cloneRepository,
+    onStage,
+  });
+
   const startImport = (
     id: string,
     initial: "downloading" | "reading",
-    load: () => Promise<{
-      bundle: ShareBundle;
-      attribution?: ShareAttribution;
-    }>,
+    receive: (onStage: ShareImport["onStage"]) => Promise<string>,
   ) => {
     const known = imports.get(id)?.stage;
 
-    // A failed import retries, and a deleted copy imports again.
+    // A finished import asks again: its link may serve a newer revision.
     if (!known || known === "ready" || known === "error") {
-      const copy = store.copyOf(id);
-
-      const status: ImportStatus = copy
-        ? { stage: "ready", reviewId: copy }
-        : { stage: initial };
+      const status: ImportStatus = { stage: initial };
 
       imports.set(id, status);
-
-      if (!copy)
-        importing = importing
-          .then(async () => {
-            const { bundle, attribution } = await load();
-
-            status.reviewId = await importShare(
-              {
-                store,
-                data,
-                fetchRepository: options.fetchRepository,
-                cloneRepository: options.cloneRepository,
-                onStage: (stage) => {
-                  status.stage = stage;
-                },
-              },
-              id,
-              bundle,
-              attribution,
-            );
-            status.stage = "ready";
-          })
-          .catch((error) => {
-            status.stage = "error";
-            status.error =
-              error instanceof ReviewInputError
-                ? error.message
-                : "This share is unavailable, revoked, or needs a newer Whiteboard version.";
-          });
+      receive((stage) => {
+        status.stage = stage;
+      })
+        .then((reviewId) => {
+          status.reviewId = reviewId;
+          status.stage = "ready";
+        })
+        .catch((error) => {
+          status.stage = "error";
+          status.error =
+            error instanceof ReviewInputError
+              ? error.message
+              : "This share is unavailable, revoked, or needs a newer Whiteboard version.";
+        });
     }
 
     const { reviewId: _reviewId, ...status } = imports.get(id)!;
@@ -272,10 +271,25 @@ export function mountSharingHost(
         );
       });
 
+      const key = whiteboardFileKey(text);
+      const copy = () => store.copiesOf(key)[0]?.reviewId;
+
       return context.json(
-        startImport(whiteboardFileKey(text), "reading", async () => ({
-          bundle: parseWhiteboardFile(text),
-        })),
+        startImport(
+          key,
+          "reading",
+          async (onStage) =>
+            copy() ??
+            serially(
+              async () =>
+                copy() ??
+                importShare(
+                  shareInput(onStage),
+                  key,
+                  parseWhiteboardFile(text),
+                ),
+            ),
+        ),
         202,
       );
     }
@@ -292,11 +306,49 @@ export function mountSharingHost(
         400,
       );
 
+    const { origin, capability, revision } = parsed;
+    const key = shareKey(origin, capability);
+    const client = new ShareClient(origin, undefined, options.fetch);
+
     return context.json(
       startImport(
-        shareKey(parsed.origin, parsed.capability),
+        revision ? `${key}-${revision}` : key,
         "downloading",
-        () => new ShareClient(parsed.origin).download(parsed.capability),
+        async (onStage) => {
+          let meta: SharedMeta;
+
+          try {
+            meta = await client.shared(capability, revision);
+          } catch (error) {
+            // Offline, the copy the link prefers still opens.
+            const copies = store.copiesOf(key);
+
+            const copy =
+              copies.find(({ shared }) =>
+                revision ? shared.revisionId === revision : !shared.pinned,
+              ) ?? copies[0];
+
+            if (!copy) throw error;
+
+            return copy.reviewId;
+          }
+
+          const pinned = revision !== undefined;
+          const plan = planShareCopy(store.copiesOf(key), meta, pinned);
+
+          // receiveShare plans again: the queue may have made a copy since.
+          return plan.kind === "open"
+            ? plan.reviewId
+            : serially(() =>
+                receiveShare(
+                  shareInput(onStage),
+                  key,
+                  meta,
+                  () => client.download(capability, meta.revision.id),
+                  pinned,
+                ),
+              );
+        },
       ),
       202,
     );
@@ -502,7 +554,9 @@ export function mountSharingPublisher(
         "Set DEV_REVIEW_SHARE_TOKEN for CI, or run whiteboard login first.",
         409,
       );
-    await new ShareClient(account.origin, account.token).revoke(shareId);
+    await new ShareClient(account.origin, account.token, options.fetch).revoke(
+      shareId,
+    );
     options.onRevoked?.({ shareId });
 
     return context.json({ shareId, revoked: true });
