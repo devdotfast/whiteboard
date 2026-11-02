@@ -9,12 +9,13 @@ import {
   type runStoreLogin,
   writeStoreAuth,
 } from "@dev.fast/trace-core";
+import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import type { SharedProvenance } from "@review/review-api/store.js";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
-import { ShareClient } from "./client.js";
+import { ShareClient, ShareRequestError } from "./client.js";
 import { exportShare } from "./export.js";
 import { mountSharingHost } from "./host.js";
 import { shareKey } from "./import.js";
@@ -299,6 +300,54 @@ it("opens the copy a link prefers when the share service cannot answer", async (
     await opens(`${url}?rev=${randomUUID()}`, pinned);
   } finally {
     await close();
+  }
+});
+
+it.each([
+  new ReviewInputError(
+    "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+    426,
+  ),
+  new ShareRequestError(
+    426,
+    "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  ),
+])("preserves safe update guidance while importing: %s", async (error) => {
+  const root = await mkdtemp(path.join(tmpdir(), "share-update-"));
+  vi.stubEnv("DEV_REVIEW_HOME", root);
+  const fixture = await createShareFixture(root);
+
+  const download = vi
+    .spyOn(ShareClient.prototype, "download")
+    .mockRejectedValue(error);
+
+  const api = new Hono();
+  mountSharingHost(api, fixture.store, fixture.data);
+
+  try {
+    const started = await api.request("/sharing/import", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ url: `https://app.dev.fast/s/${"u".repeat(43)}` }),
+    });
+
+    expect(started.status).toBe(202);
+    const { reviewId } = await started.json();
+
+    await vi.waitFor(async () => {
+      const response = await api.request(`/sharing/import/${reviewId}`);
+
+      expect(await response.json()).toMatchObject({
+        stage: "error",
+        error:
+          "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+      });
+    });
+  } finally {
+    download.mockRestore();
+    await fixture.data.close();
+    await fixture.store.close();
+    await rm(root, { recursive: true, force: true });
   }
 });
 

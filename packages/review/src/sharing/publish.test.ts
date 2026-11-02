@@ -103,6 +103,17 @@ it.each([
       "The sharing service is temporarily unavailable (HTTP 503). Try again shortly.",
   },
   {
+    send: async () => new Response(null, { status: 426 }),
+    error:
+      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  },
+  {
+    send: async () =>
+      Response.json({ error: { code: "upgrade_required" } }, { status: 400 }),
+    error:
+      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  },
+  {
     send: async () => {
       throw new TypeError("fetch failed");
     },

@@ -7,7 +7,6 @@ import {
   type ShareRevisions,
   type SharedMeta,
   capabilitySchema,
-  shareBundleSchema,
   shareCreatedSchema,
   shareIdSchema,
   shareRevisionsSchema,
@@ -21,6 +20,10 @@ import { Agent } from "undici";
 import { z } from "zod";
 
 import { shareRequestBody } from "./export.js";
+import {
+  WHITEBOARD_UPGRADE_REQUIRED_MESSAGE,
+  parseWhiteboardFile,
+} from "./file.js";
 
 const MAX_RESPONSE_BYTES = MAX_SHARE_BYTES;
 
@@ -110,7 +113,9 @@ async function requestError(response: Response) {
 
   let message = `The sharing service refused this request (HTTP ${response.status}). Please report this issue.`;
 
-  if (
+  if (response.status === 426 || code === "upgrade_required")
+    message = WHITEBOARD_UPGRADE_REQUIRED_MESSAGE;
+  else if (
     response.status === 403 &&
     contentType.includes("text/html") &&
     response.headers.get("server")?.toLowerCase() === "cloudflare"
@@ -332,9 +337,7 @@ export class ShareClient {
     );
 
     return {
-      bundle: shareBundleSchema.parse(
-        parseJsonText(new TextDecoder().decode(bytes)),
-      ),
+      bundle: parseWhiteboardFile(new TextDecoder().decode(bytes)),
       attribution: { login: meta.sender.login, sharedAt: meta.sharedAt },
       revision: meta.revision,
       latest: meta.latest,

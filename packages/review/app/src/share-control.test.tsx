@@ -25,6 +25,7 @@ function mount(options: {
   signedIn: boolean;
   publishFails?: boolean;
   publishExpired?: boolean;
+  publishError?: { message: string; status: number };
   holdPublish?: Promise<void>;
   sender?: string;
 }) {
@@ -90,6 +91,12 @@ function mount(options: {
         return Response.json(
           { error: "Review exceeds the sharing limit." },
           { status: 400 },
+        );
+
+      if (path.endsWith("/publish") && state.publishError)
+        return Response.json(
+          { error: state.publishError.message },
+          { status: state.publishError.status },
         );
 
       return Response.json({
@@ -204,6 +211,33 @@ it("names who shared a copy and shares it again like any review", async () => {
   expect(publishes(harness).map((post) => post.body)).toEqual([
     expect.objectContaining({ reviewId: "authoring-review", version: 2 }),
   ]);
+  expect(harness.container.querySelector("input")?.value).toContain(
+    "/s/capability",
+  );
+});
+
+it("shows update-required guidance in the share popover without asking for a new login", async () => {
+  const message =
+    "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.";
+
+  const harness = mount({
+    signedIn: true,
+    publishError: { status: 409, message },
+  });
+
+  await harness.render(4);
+  await harness.click("Share review");
+  await harness.settle();
+  expect(harness.container.querySelector('[role="alert"]')?.textContent).toBe(
+    message,
+  );
+  expect(harness.container.textContent).not.toContain("Sign in to share");
+  expect(publishes(harness)).toHaveLength(1);
+
+  harness.state.publishError = undefined;
+  await harness.click("Retry");
+  await harness.settle();
+  expect(harness.container.querySelector('[role="alert"]')).toBeNull();
   expect(harness.container.querySelector("input")?.value).toContain(
     "/s/capability",
   );

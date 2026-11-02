@@ -244,9 +244,10 @@ export function mountSharingHost(
         .catch((error) => {
           status.stage = "error";
           status.error =
-            error instanceof ReviewInputError
+            error instanceof ReviewInputError ||
+            error instanceof ShareRequestError
               ? error.message
-              : "This share is unavailable, revoked, or needs a newer Whiteboard version.";
+              : "This share is unavailable, revoked, or could not be read.";
         });
     }
 

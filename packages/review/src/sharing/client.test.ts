@@ -5,7 +5,11 @@ import path from "node:path";
 
 import {
   MAX_SHARE_BYTES,
+<<<<<<< HEAD
   type SharedMeta,
+=======
+  SHARE_FORMAT,
+>>>>>>> 04fe4c9e4 (Show update guidance for incompatible sharing versions)
   createShareSchema,
 } from "@dev.fast/review-share-protocol";
 import { ReviewInputError } from "@dev.fast/whiteboard-document";
@@ -175,6 +179,25 @@ it.each([
     message:
       "The sharing service is temporarily unavailable (HTTP 503). Try again shortly.",
   },
+  {
+    response: () => new Response(null, { status: 426 }),
+    message:
+      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  },
+  {
+    response: () =>
+      Response.json(
+        {
+          error: {
+            code: "upgrade_required",
+            message: "private response details",
+          },
+        },
+        { status: 400 },
+      ),
+    message:
+      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  },
 ])(
   "explains a rejected sharing request: $message",
   async ({ response, message }) => {
@@ -265,6 +288,7 @@ it("downloads a share with the link's capability within the size limit", async (
   ).rejects.toThrow("limit");
 });
 
+<<<<<<< HEAD
 it("asks for a named revision", async () => {
   const shared = await bundle();
   const capability = "c".repeat(43);
@@ -284,6 +308,25 @@ it("asks for a named revision", async () => {
 
   await client.download(capability, R);
   expect(requests[0]?.path).toBe(`/api/v2/shared/${capability}?rev=${R}`);
+=======
+it("explains when a downloaded bundle uses a newer format", async () => {
+  const future = `review-share/${Number(SHARE_FORMAT.split("/")[1]) + 1}`;
+
+  const client = new ShareClient(
+    "https://app.dev.fast",
+    undefined,
+    async (input) =>
+      String(input).endsWith("/bundle")
+        ? Response.json({ format: future })
+        : Response.json({ sender: { login: "sender" }, sharedAt: 1, size: 1 }),
+  );
+
+  await expect(client.download("c".repeat(43))).rejects.toMatchObject({
+    status: 426,
+    message:
+      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  });
+>>>>>>> 04fe4c9e4 (Show update guidance for incompatible sharing versions)
 });
 
 it("stops a streamed response as soon as it exceeds the declared size", async () => {

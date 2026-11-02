@@ -11,6 +11,9 @@ import { z } from "zod";
 
 export const WHITEBOARD_FILE_EXTENSION = ".whiteboard";
 
+export const WHITEBOARD_UPGRADE_REQUIRED_MESSAGE =
+  "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.";
+
 const headerSchema = z.looseObject({ format: z.string() });
 
 export function whiteboardFileName(title: string): string {
@@ -34,6 +37,11 @@ export function parseWhiteboardFile(text: string): ShareBundle {
 
   if (!header.success)
     throw new ReviewInputError("This is not a Whiteboard file.", 400);
+
+  const version = /^review-share\/([1-9]\d*)$/.exec(header.data.format);
+
+  if (version && Number(version[1]) > Number(SHARE_FORMAT.split("/")[1]))
+    throw new ReviewInputError(WHITEBOARD_UPGRADE_REQUIRED_MESSAGE, 426);
 
   if (header.data.format !== SHARE_FORMAT)
     throw new ReviewInputError(
