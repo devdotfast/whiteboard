@@ -1114,6 +1114,8 @@ export type ReviewCanvasContent =
 
 /** The GitHub API's release fields the tab reads. */
 export interface ReviewCanvasRelease {
+  tag_name: string;
+  name: string | null;
   body: string;
   published_at: string | null;
 }
@@ -1132,11 +1134,11 @@ export interface ReviewCanvasUpdateHost {
   apply(): void;
 }
 
-/** The Release notes tab: one version's GitHub release. */
+/** The Release notes tab: every Whiteboard release. */
 export interface ReviewCanvasReleaseNotes {
   version: string;
-  // Rejects with a message the tab shows.
-  readRelease(): Promise<ReviewCanvasRelease>;
+  // Newest first; rejects with a message the tab shows.
+  readReleases(): Promise<ReviewCanvasRelease[]>;
   // Backed by the `update.showReleaseNotes` workbench setting.
   showAfterUpdate: boolean;
   setShowAfterUpdate(enabled: boolean): Promise<boolean>;
@@ -1152,10 +1154,7 @@ export function whiteboardReleaseUrl(version: string): string {
   return `${WHITEBOARD_RELEASES_URL}/tag/v${encodeURIComponent(version)}`;
 }
 
-/** The GitHub API's copy of a version's release, readable without a token. */
-export function whiteboardReleaseApiUrl(version: string): string {
-  return `https://api.github.com/repos/${WHITEBOARD_REPOSITORY}/releases/tags/v${encodeURIComponent(version)}`;
-}
+export const WHITEBOARD_RELEASES_API_URL = `https://api.github.com/repos/${WHITEBOARD_REPOSITORY}/releases?per_page=100`;
 
 /** What Home shows; a new snapshot on every change. */
 export interface ReviewCanvasHomeData {
