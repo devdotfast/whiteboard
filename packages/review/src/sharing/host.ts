@@ -24,7 +24,7 @@ import type { Hono } from "hono";
 import { z } from "zod";
 
 import { readSharingAuth } from "./auth.js";
-import { ShareAuthError, ShareClient } from "./client.js";
+import { ShareAuthError, ShareClient, ShareRequestError } from "./client.js";
 import { exportShare, validateShareSources } from "./export.js";
 import {
   parseWhiteboardFile,
@@ -244,9 +244,10 @@ export function mountSharingHost(
         .catch((error) => {
           status.stage = "error";
           status.error =
-            error instanceof ReviewInputError
+            error instanceof ReviewInputError ||
+            (error instanceof ShareRequestError && error.status !== 404)
               ? error.message
-              : "This share is unavailable, revoked, or needs a newer Whiteboard version.";
+              : "This share is unavailable, revoked, or could not be read.";
         });
     }
 
@@ -526,6 +527,9 @@ export function mountSharingPublisher(
     } catch (error) {
       if (error instanceof ReviewInputError) throw error;
 
+      if (error instanceof ShareRequestError)
+        throw new ReviewInputError(error.message, 409);
+
       if (error instanceof ShareAuthError) {
         // A CI token lives in the environment; only the saved login can go stale.
         if (process.env.DEV_REVIEW_SHARE_TOKEN === undefined)
@@ -536,8 +540,19 @@ export function mountSharingPublisher(
         );
       }
 
+      if (
+        error instanceof DOMException &&
+        (error.name === "TimeoutError" || error.name === "AbortError")
+      )
+        throw new ReviewInputError(
+          "The sharing request timed out. Please retry.",
+          409,
+        );
+
       throw new ReviewInputError(
-        "Sharing failed. Check your connection and login, then retry.",
+        error instanceof TypeError
+          ? "Could not reach the sharing service. Check your connection, then retry."
+          : "The sharing service returned an unexpected response. Update Whiteboard or report this issue.",
         409,
       );
     }

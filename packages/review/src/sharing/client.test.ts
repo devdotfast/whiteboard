@@ -5,6 +5,7 @@ import path from "node:path";
 
 import {
   MAX_SHARE_BYTES,
+  SHARE_FORMAT,
   type SharedMeta,
   createShareSchema,
 } from "@dev.fast/review-share-protocol";
@@ -12,7 +13,12 @@ import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
-import { ShareAuthError, ShareClient, readBoundedBytes } from "./client.js";
+import {
+  ShareAuthError,
+  ShareClient,
+  ShareRequestError,
+  readBoundedBytes,
+} from "./client.js";
 import { exportShare } from "./export.js";
 
 const cleanup: Array<() => Promise<void>> = [];
@@ -118,6 +124,121 @@ function sharedService(meta: SharedMeta, body: () => BodyInit) {
   };
 }
 
+it.each([
+  {
+    response: () =>
+      new Response("<html>private response details</html>", {
+        status: 403,
+        headers: {
+          server: "cloudflare",
+          "content-type": "text/html; charset=UTF-8",
+          "cf-ray": "a54583b349764b60-EWR",
+        },
+      }),
+    message:
+      "The sharing service's security filter blocked this request. Please report this issue. Reference: a54583b349764b60-EWR.",
+  },
+  {
+    response: () =>
+      Response.json(
+        { error: { code: "forbidden", message: "private response details" } },
+        { status: 403, headers: { "cf-ray": "untrusted reference" } },
+      ),
+    message:
+      "The sharing service refused this request (HTTP 403). Please report this issue.",
+  },
+  {
+    response: () =>
+      Response.json(
+        { error: { code: "share_quota_exceeded" } },
+        { status: 429 },
+      ),
+    message:
+      "Your sharing storage limit has been reached. Please contact support.",
+  },
+  {
+    response: () => new Response(null, { status: 429 }),
+    message: "Too many sharing requests. Wait a moment, then retry.",
+  },
+  {
+    response: () => new Response(null, { status: 413 }),
+    message:
+      "This review is too large to share. Remove large resources, then retry.",
+  },
+  {
+    response: () =>
+      Response.json({ error: { code: "invalid_request" } }, { status: 400 }),
+    message:
+      "The sharing service could not accept this review. Update Whiteboard or report this issue.",
+  },
+  {
+    response: () => new Response(null, { status: 503 }),
+    message:
+      "The sharing service is temporarily unavailable (HTTP 503). Try again shortly.",
+  },
+  {
+    response: () => new Response(null, { status: 426 }),
+    message:
+      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  },
+  {
+    response: () =>
+      Response.json(
+        {
+          error: {
+            code: "upgrade_required",
+            message: "private response details",
+          },
+        },
+        { status: 400 },
+      ),
+    message:
+      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  },
+])(
+  "explains a rejected sharing request: $message",
+  async ({ response, message }) => {
+    const result = response();
+    const status = result.status;
+
+    const client = new ShareClient(
+      "https://app.dev.fast",
+      undefined,
+      async () => result,
+    );
+
+    await expect(client.list()).rejects.toMatchObject({
+      name: "ShareRequestError",
+      status,
+      message,
+    });
+  },
+);
+
+it("bounds error bodies and cancels a response that exceeds the limit", async () => {
+  let cancelled = false;
+
+  const client = new ShareClient(
+    "https://app.dev.fast",
+    undefined,
+    async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array(16 * 1024 + 1));
+          },
+          cancel() {
+            cancelled = true;
+          },
+        }),
+        { status: 429, headers: { "content-type": "application/json" } },
+      ),
+  );
+
+  await expect(client.list()).rejects.toBeInstanceOf(ShareRequestError);
+  expect(cancelled).toBe(true);
+});
+
 it("downloads a share with the link's capability within the size limit", async () => {
   const shared = await bundle();
   const capability = "c".repeat(43);
@@ -183,6 +304,25 @@ it("asks for a named revision", async () => {
 
   await client.download(capability, R);
   expect(requests[0]?.path).toBe(`/api/v2/shared/${capability}?rev=${R}`);
+});
+
+it("explains when a downloaded bundle uses a newer format", async () => {
+  const future = `review-share/${Number(SHARE_FORMAT.split("/")[1]) + 1}`;
+
+  const { client } = sharedService(
+    {
+      sender: { login: "sender" },
+      sharedAt: 1,
+      size: 1,
+      revision: { id: randomUUID(), version: 1, createdAt: 1 },
+      latest: randomUUID(),
+    },
+    () => JSON.stringify({ format: future }),
+  );
+
+  await expect(client.download("c".repeat(43))).rejects.toThrow(
+    "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  );
 });
 
 it("stops a streamed response as soon as it exceeds the declared size", async () => {

@@ -7,7 +7,6 @@ import {
   type ShareRevisions,
   type SharedMeta,
   capabilitySchema,
-  shareBundleSchema,
   shareCreatedSchema,
   shareIdSchema,
   shareRevisionsSchema,
@@ -21,6 +20,10 @@ import { Agent } from "undici";
 import { z } from "zod";
 
 import { shareRequestBody } from "./export.js";
+import {
+  WHITEBOARD_UPGRADE_REQUIRED_MESSAGE,
+  parseWhiteboardFile,
+} from "./file.js";
 
 const MAX_RESPONSE_BYTES = MAX_SHARE_BYTES;
 
@@ -72,6 +75,79 @@ export class ShareAuthError extends Error {
     super("The share service rejected the stored login.");
     this.name = "ShareAuthError";
   }
+}
+
+export class ShareRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ShareRequestError";
+  }
+}
+
+const errorSchema = z.object({ error: z.object({ code: z.string() }) });
+
+async function errorCode(response: Response) {
+  if (!response.body) return undefined;
+
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    await response.body.cancel();
+
+    return undefined;
+  }
+
+  try {
+    const bytes = await readBoundedStream(response.body, 16 * 1024);
+
+    return errorSchema.safeParse(parseJsonText(bytes.toString())).data?.error
+      .code;
+  } catch {
+    return undefined;
+  }
+}
+
+function requestErrorMessage(response: Response, code: string | undefined) {
+  const { status, headers } = response;
+
+  if (status === 426 || code === "upgrade_required")
+    return WHITEBOARD_UPGRADE_REQUIRED_MESSAGE;
+
+  if (
+    status === 403 &&
+    headers.get("content-type")?.includes("text/html") &&
+    headers.get("server")?.toLowerCase() === "cloudflare"
+  )
+    return "The sharing service's security filter blocked this request. Please report this issue.";
+
+  if (status === 413)
+    return "This review is too large to share. Remove large resources, then retry.";
+
+  if (status === 429)
+    return code === "share_quota_exceeded"
+      ? "Your sharing storage limit has been reached. Please contact support."
+      : "Too many sharing requests. Wait a moment, then retry.";
+
+  if (status === 400 && code === "invalid_request")
+    return "The sharing service could not accept this review. Update Whiteboard or report this issue.";
+
+  if (status >= 500)
+    return `The sharing service is temporarily unavailable (HTTP ${status}). Try again shortly.`;
+
+  return `The sharing service refused this request (HTTP ${status}). Please report this issue.`;
+}
+
+async function requestError(response: Response) {
+  const message = requestErrorMessage(response, await errorCode(response));
+  const ray = response.headers.get("cf-ray");
+
+  const reference =
+    ray && /^[a-f0-9]{16}(?:-[a-z]{3})?$/i.test(ray)
+      ? ` Reference: ${ray}.`
+      : "";
+
+  return new ShareRequestError(response.status, message + reference);
 }
 
 /** Account tokens go only to the configured API origin. */
@@ -130,10 +206,12 @@ export class ShareClient {
     const response = await this.send(this.origin + route, init);
 
     if (!response.ok) {
-      await response.body?.cancel();
+      if (response.status === 401 && !anonymous) {
+        await response.body?.cancel();
+        throw new ShareAuthError();
+      }
 
-      if (response.status === 401 && !anonymous) throw new ShareAuthError();
-      throw new Error(`Share request failed (${response.status}).`);
+      throw await requestError(response);
     }
 
     return readBoundedBytes(response, maxBytes);
@@ -167,14 +245,19 @@ export class ShareClient {
     });
 
     if (!response.ok) {
-      await response.body?.cancel();
-
       // A service without the JWT plugin still takes the device token.
-      if (response.status === 404 || response.status === 405)
-        return { bearer: token, until: Date.now() + 10 * 60_000 };
+      if (response.status === 404 || response.status === 405) {
+        await response.body?.cancel();
 
-      if (response.status === 401) throw new ShareAuthError();
-      throw new Error(`Share request failed (${response.status}).`);
+        return { bearer: token, until: Date.now() + 10 * 60_000 };
+      }
+
+      if (response.status === 401) {
+        await response.body?.cancel();
+        throw new ShareAuthError();
+      }
+
+      throw await requestError(response);
     }
 
     const { token: jwt } = jwtSchema.parse(
@@ -265,9 +348,7 @@ export class ShareClient {
     );
 
     return {
-      bundle: shareBundleSchema.parse(
-        parseJsonText(new TextDecoder().decode(bytes)),
-      ),
+      bundle: parseWhiteboardFile(new TextDecoder().decode(bytes)),
       attribution: { login: meta.sender.login, sharedAt: meta.sharedAt },
       revision: meta.revision,
       latest: meta.latest,
