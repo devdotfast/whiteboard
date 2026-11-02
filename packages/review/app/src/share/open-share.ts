@@ -65,6 +65,8 @@ export async function openShare(
     ...(bundle.repository && { repository: bundle.repository }),
     data: {
       ...data,
+      // A share has no checkout to open.
+      available: { sourceWindows: false },
       place: {
         siblings: [],
         ...(cloneUrl && { repository: repositoryLabel(cloneUrl) }),
