@@ -14,7 +14,7 @@ A change touches how a request is parsed, validated, mapped or persisted, and th
 
 ## Technique
 
-A scene: `whiteboard.scene({ columns: 4 })` with four `actor`s, solid `link`s for requests and dashed ones for replies, one `send` per hop per frame, and `on(frame, card, { text, tone })` for the payload shape. Each card wears its layer's `form`: a `window` for the client, `bars` for the API and the service, a `cylinder` in `teal` for the database. `highlight` rings the active card; `code` on a card and each frame's `code` link the ranges.
+A scene: `whiteboard.scene({ columns: 4 })` with four `actor`s, solid `link`s for requests and dashed ones for replies, one `send` per hop per frame, and `on(frame, card, { text, tone })` for the payload shape. Each card wears its layer's `form`: a `window` for the client, `bars` for the API and the service, a `cylinder` in `teal` for the database. A `group` boxes the API and the service as the one server, `change: "modified"` marks the API as what the review touched, and a `legend` decodes the three marks. `highlight` rings the active card; `code` on a card and each frame's `code` link the ranges.
 
 ## Adapt
 

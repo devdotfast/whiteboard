@@ -16,6 +16,7 @@
     at: [2, 1],
     title: "API",
     form: "bars",
+    change: "modified",
     code: "validate",
     highlight: ["validate", "rejected"],
   });
@@ -36,6 +37,14 @@
     code: "repository",
     highlight: ["stored"],
   });
+
+  // The API and the service are the one codebase; the review changed the API.
+  s.group({ id: "server", at: [2, 1, 1, 2], title: "Order server" });
+  s.legend([
+    { form: "bars", label: "This codebase" },
+    { form: "cylinder", color: "teal", label: "Database" },
+    { change: "modified", label: "Changed in this review" },
+  ]);
 
   // Requests travel solid edges; replies ride dashed ones beside them.
   s.link(client, api);

@@ -185,6 +185,14 @@ const CLASSES: [selector: string, use: string][] = [
     "An SVG shape drawn like a card, and the text inside it.",
   ],
   [
+    ".wb-group",
+    "A washed box behind a scene's cards with a .wb-group-title; scene.group draws one.",
+  ],
+  [
+    ".wb-legend",
+    "A row of .wb-legend-entry glyphs and labels under a scene; scene.legend draws one.",
+  ],
+  [
     "[data-wb-paint]",
     'When an agent writes the block, its parts paint in: data-wb-paint="3" orders a part (numbers first, then document order), "none" shows it and its subtree at once; data-wb-paint-style="fade|draw|wipe|none" picks the effect.',
   ],
@@ -266,7 +274,7 @@ body {
 :is(.wb-card, .wb-node)[data-form]::before, :is(.wb-card, .wb-node)[data-form]::after { pointer-events: none; }
 :is(.wb-card, .wb-node)[data-form="pill"] { padding-inline: var(--wb-space-16); border-radius: var(--wb-radius-pill); }
 :is(.wb-card, .wb-node)[data-form="cut"] { border-radius: var(--wb-space-12); corner-shape: bevel; }
-:is(.wb-card, .wb-node)[data-form="cylinder"] { padding-top: var(--wb-space-20); padding-bottom: var(--wb-space-12); border-radius: 50% / var(--wb-space-10); }
+:is(.wb-card, .wb-node)[data-form="cylinder"] { padding-top: var(--wb-space-28); padding-bottom: var(--wb-space-12); border-radius: 50% / var(--wb-space-10); }
 :is(.wb-card, .wb-node)[data-form="cylinder"]::before {
   content: ""; position: absolute; inset: -1px -1px auto; height: var(--wb-space-20);
   border: 1px solid; border-color: inherit; border-radius: 50%; background: inherit;
@@ -286,6 +294,17 @@ body {
 :is(.wb-card, .wb-node)[data-form="bars"]::before, :is(.wb-card, .wb-node)[data-form="bars"]::after { content: ""; position: absolute; top: 0; bottom: 0; border-left: 1px solid; border-color: inherit; }
 :is(.wb-card, .wb-node)[data-form="bars"]::before { left: var(--wb-space-6); }
 :is(.wb-card, .wb-node)[data-form="bars"]::after { right: var(--wb-space-6); }
+/* What the change under review did to a part: its dot and a stripe down its
+   left edge in the change colour, at rest; a removed part's title is struck.
+   A frame's tone still colours the whole card over it. */
+:is(.wb-card, .wb-node)[data-change] { border-left-width: 3px; }
+:is(.wb-card, .wb-node)[data-change="added"] { border-left-color: var(--wb-added); }
+:is(.wb-card, .wb-node)[data-change="modified"] { border-left-color: var(--wb-modified); }
+:is(.wb-card, .wb-node)[data-change="removed"] { border-left-color: var(--wb-removed); }
+.wb-card[data-change="added"] .wb-card-dot { background: var(--wb-added); }
+.wb-card[data-change="modified"] .wb-card-dot { background: var(--wb-modified); }
+.wb-card[data-change="removed"] .wb-card-dot { background: var(--wb-removed); }
+.wb-card[data-change="removed"] .wb-card-title { color: var(--wb-ink-muted); text-decoration: line-through; }
 :is(.wb-card, .wb-node)[data-outline="dashed"] { border-style: dashed; }
 :is(.wb-card, .wb-node)[data-outline="dotted"] { border-style: dotted; }
 :is(.wb-card, .wb-node)[data-color="ink"] { border-color: var(--wb-ink); }
@@ -436,6 +455,33 @@ body {
 .wb-items > [data-wb-state="before"], .wb-items > [data-wb-state="after"],
 .wb-table tr[data-wb-state="before"], .wb-table tr[data-wb-state="after"] { display: none; }
 .wb-scene-top { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--wb-space-8); margin-bottom: var(--wb-space-4); }
+/* A group is a washed box behind the cards of its cells, bleeding into the
+   gaps around them, titled in its top-left. Cards paint over it. A folded
+   scene no longer keeps its cells together, so it hides. */
+.wb-scene > .wb-card { position: relative; z-index: 1; }
+.wb-group {
+  position: relative; z-index: 0; align-self: stretch; justify-self: stretch;
+  margin: calc(-1 * var(--wb-space-18)) calc(-1 * var(--wb-space-16)) calc(-1 * var(--wb-space-10));
+  border: 1px solid var(--wb-rule-soft); border-radius: var(--wb-radius-surface); background: var(--wb-well);
+  transition: opacity var(--wb-duration) ease;
+}
+.wb-group-title { position: absolute; top: var(--wb-space-4); left: var(--wb-space-12); color: var(--wb-ink-muted); font: var(--wb-text-micro)/var(--wb-leading-normal) var(--wb-font-mono); letter-spacing: var(--wb-tracking-chrome); text-transform: uppercase; white-space: nowrap; }
+.wb-group[data-color="accent"] { border-color: color-mix(in srgb, var(--wb-accent) 30%, transparent); background: color-mix(in srgb, var(--wb-accent) 7%, transparent); }
+.wb-group[data-color="accent"] .wb-group-title { color: var(--wb-accent); }
+.wb-group[data-color="teal"] { border-color: color-mix(in srgb, var(--wb-teal) 36%, transparent); background: color-mix(in srgb, var(--wb-teal) 8%, transparent); }
+.wb-group[data-color="teal"] .wb-group-title { color: var(--wb-teal); }
+.wb-group[data-color="violet"] { border-color: color-mix(in srgb, var(--wb-violet) 36%, transparent); background: color-mix(in srgb, var(--wb-violet) 8%, transparent); }
+.wb-group[data-color="violet"] .wb-group-title { color: var(--wb-violet); }
+.wb-group[data-color="ink"] { border-color: var(--wb-rule); }
+.wb-group[data-color="ink"] .wb-group-title { color: var(--wb-ink); }
+:is(.wb-scene-fold, .wb-scene-compact) > .wb-group { display: none; }
+/* The legend: a card-like glyph per entry, drawn with the card rules at
+   0.4 scale, and what it stands for. */
+.wb-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--wb-space-6) var(--wb-space-16); padding: 0 var(--wb-space-24) var(--wb-space-12); color: var(--wb-ink-muted); font: var(--wb-text-micro)/var(--wb-leading-normal) var(--wb-font-mono); letter-spacing: var(--wb-tracking-chrome); text-transform: uppercase; }
+.wb-legend-entry { display: inline-flex; align-items: center; gap: var(--wb-space-6); white-space: nowrap; }
+.wb-card.wb-legend-glyph { display: block; flex: none; width: 50px; min-width: 0; height: 32px; padding: 0; zoom: 0.4; }
+.wb-card.wb-legend-glyph[data-form="cylinder"] { height: 44px; }
+.wb-card.wb-legend-glyph[data-form="stack"] { margin: 0 8px 8px 0; }
 :root[data-wb-instant] *, :root[data-wb-instant] *::before, :root[data-wb-instant] *::after {
   transition: none !important;
   animation-duration: 0s !important;

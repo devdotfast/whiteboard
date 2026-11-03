@@ -40,6 +40,12 @@ export type Outline = "solid" | "dashed" | "dotted";
  * on() takes over while set. As data-color on a kit element. */
 export type Color = "ink" | "accent" | "teal" | "violet";
 
+/** What the change under review did to the part a card stands for. A
+ * resting mark in the change colours, its dot and a stripe down its left
+ * edge, that a frame's `tone` does not replace; a removed part's title is
+ * struck through. As data-change on a kit element. */
+export type Change = "added" | "modified" | "removed";
+
 /** One frame, as your scripts read it. */
 export interface Frame {
   key: string;
@@ -290,6 +296,14 @@ export interface Scene {
   ): HTMLElement;
   /** A pill above the scene, e.g. a version; on() changes its text. */
   badge(options: { text?: string; tone?: Tone }): HTMLElement;
+  /** A washed box behind the cards in its cells, titled in its corner: a
+   * boundary such as a service, a process or a layer. Declare it before or
+   * after its cards; it hides when the scene folds narrow. */
+  group(options: SceneGroupOptions): HTMLElement;
+  /** A row under the scene saying what the cards' marks mean: one glyph,
+   * drawn like a card with the entry's marks, and a label each. Name only
+   * what the reader must decode. */
+  legend(entries: SceneLegendEntry[]): HTMLElement;
   /** Change a card's note, or an item's or badge's text, or a tone, from this
    * frame on, until a later frame changes it. Follows the active path. */
   on(frame: string, part: CardRef, change: SceneChange): void;
@@ -346,10 +360,31 @@ export interface SceneCardOptions extends Lifecycle {
   outline?: Outline;
   /** The border's colour at rest; see Color. */
   color?: Color;
+  /** What the change under review did to this part; see Change. */
+  change?: Change;
   /** Frames during which the card is ringed. */
   highlight?: string[];
   /** The code the card opens when clicked: a name in the block's code. */
   code?: string;
+}
+
+export interface SceneGroupOptions extends Lifecycle {
+  id: string;
+  /** The cells the group covers; its cards sit on its wash. */
+  at: Cell;
+  /** A caps title in its top-left corner, e.g. SEARCH SERVICE. */
+  title?: string;
+  /** The wash and title colour; see Color. Default a neutral well. */
+  color?: Color;
+}
+
+export interface SceneLegendEntry {
+  label: string;
+  form?: Form;
+  outline?: Outline;
+  color?: Color;
+  tone?: Tone;
+  change?: Change;
 }
 
 export interface SceneItemOptions extends Lifecycle {

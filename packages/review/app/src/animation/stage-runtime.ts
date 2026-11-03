@@ -85,6 +85,34 @@ type Outline = "solid" | "dashed" | "dotted";
 /** A resting border colour; a tone takes over while one is set. */
 type Color = "ink" | "accent" | "teal" | "violet";
 
+/** What a review did to the part a card stands for: a resting mark in the
+ * change colours that a frame's tone does not replace. */
+type Change = "added" | "modified" | "removed";
+
+export interface SceneGroupOptions {
+  id: string;
+  /** The cells the group covers; the cards in them sit on its wash. */
+  at: Cell;
+  /** A caps title in its top-left corner. */
+  title?: string;
+  /** The wash and title colour. Default a neutral well. */
+  color?: Color;
+  enter?: string;
+  exit?: string;
+  only?: string[];
+}
+
+/** One row of a scene's legend: a glyph drawn like a card with these marks,
+ * and what it means. */
+export interface SceneLegendEntry {
+  label: string;
+  form?: Form;
+  outline?: Outline;
+  color?: Color;
+  tone?: Tone;
+  change?: Change;
+}
+
 /** Where a scene part sits: 1-based column and row, with optional row and
  * column spans. A wide peek spans columns: [1, 2, 1, 4] is row 2, four wide. */
 export type Cell = [
@@ -109,6 +137,8 @@ export interface SceneCardOptions {
   outline?: Outline;
   /** The border's colour at rest, for grouping cards of a kind. */
   color?: Color;
+  /** What the change under review did to this part, marked at rest. */
+  change?: Change;
   /** Show from this frame on, hide from this one on, or only on these. */
   enter?: string;
   exit?: string;
@@ -202,6 +232,13 @@ export interface Scene {
   ): HTMLElement;
   /** A small pill above the scene; scene.on changes its text per frame. */
   badge(options: { text?: string; tone?: Tone }): HTMLElement;
+  /** A washed box behind the cards in its cells, with a caps title: a
+   * boundary such as a service, a process or a layer. Hidden when the
+   * scene folds, since its cells no longer sit together. */
+  group(options: SceneGroupOptions): HTMLElement;
+  /** A row under the scene that says what the cards' marks mean, one glyph
+   * and label per entry. */
+  legend(entries: SceneLegendEntry[]): HTMLElement;
   /** Change a card, item, or badge from this frame on: its text or tone.
    * The change holds until the next frame that changes the same part. */
   on(frame: string, part: CardRef, change: SceneChange): void;
@@ -2739,6 +2776,8 @@ export function stageRuntime(port: MessagePort): void {
         el.dataset.outline = options.outline;
 
       if (options.color) el.dataset.color = options.color;
+
+      if (options.change) el.dataset.change = options.change;
       place(el, options.at);
       applyLifecycle(el, options);
 
@@ -2855,6 +2894,58 @@ export function stageRuntime(port: MessagePort): void {
         grid.append(slot);
 
         return slot;
+      },
+      group(options) {
+        const el = document.createElement("div");
+        el.className = "wb-group";
+        el.id = options.id;
+
+        if (options.color) el.dataset.color = options.color;
+        place(el, options.at);
+        applyLifecycle(el, options);
+
+        if (options.title) {
+          const title = document.createElement("div");
+          title.className = "wb-group-title";
+          title.textContent = options.title;
+          el.append(title);
+        }
+
+        // Before the cards in the DOM, so a card always paints over it.
+        grid.prepend(el);
+
+        return el;
+      },
+      legend(entries) {
+        const el = document.createElement("div");
+        el.className = "wb-legend";
+
+        for (const entry of entries) {
+          const row = document.createElement("span");
+          row.className = "wb-legend-entry";
+          const glyph = document.createElement("i");
+          glyph.className = "wb-card wb-legend-glyph";
+
+          if (entry.form && entry.form !== "box")
+            glyph.dataset.form = entry.form;
+
+          if (entry.outline && entry.outline !== "solid")
+            glyph.dataset.outline = entry.outline;
+
+          if (entry.color) glyph.dataset.color = entry.color;
+
+          if (entry.tone) glyph.dataset.tone = entry.tone;
+
+          if (entry.change) glyph.dataset.change = entry.change;
+          const label = document.createElement("span");
+          label.textContent = entry.label;
+          row.append(glyph, label);
+          el.append(row);
+        }
+
+        grid.after(el);
+
+        return el;
       },
       badge(options) {
         if (!topBar) {
