@@ -178,10 +178,8 @@ export interface SceneLinkOptions {
 }
 
 export interface SceneSendOptions {
+  /** Colours the chip, and the edge and its label while the frame shows. */
   tone?: Tone;
-  /** Default true: the chip waits at the target until the next frame. false
-   * fades it out on arrival. */
-  stay?: boolean;
   enter?: string;
   exit?: string;
   /** The only frames in which the chip is visible. */
@@ -1331,6 +1329,8 @@ export function stageRuntime(port: MessagePort): void {
     group: SVGGElement;
     path: SVGPathElement;
     text?: SVGTextElement;
+    /** The edge's own label, shown when no send of the frame names one. */
+    label?: string;
     clipPath: SVGClipPathElement;
     clipRect: SVGRectElement;
     from: Element;
@@ -1349,6 +1349,18 @@ export function stageRuntime(port: MessagePort): void {
   }
 
   const arrows: ArrowRecord[] = [];
+
+  // The <text> an edge's label is drawn in, made on first need.
+  const labelText = (arrow: ArrowRecord) => {
+    if (!arrow.text) {
+      const text = document.createElementNS(svg, "text");
+      text.setAttribute("class", "wb-label");
+      arrow.group.append(text);
+      arrow.text = text;
+    }
+
+    return arrow.text;
+  };
 
   const layer = <T extends Element>(selector: string, make: () => T): T => {
     const found = document.body.querySelector<T>(`:scope > ${selector}`);
@@ -1839,11 +1851,12 @@ export function stageRuntime(port: MessagePort): void {
 
       // Reserve the packet's swept area, not just its current position. This
       // keeps a label still and readable throughout a trip instead of moving
-      // it out of the chip's way on every animation frame.
+      // it out of the chip's way on every animation frame. A sent message's
+      // label is quiet while its chip rides, so it keeps its place.
       const flights: DOMRect[] = [];
 
       for (const travel of travels) {
-        if (travel.arrow !== arrow) continue;
+        if (travel.arrow !== arrow || travel.sent) continue;
         const chip = travel.element.getBoundingClientRect();
 
         if (!chip.width || !chip.height) continue;
@@ -1978,15 +1991,10 @@ export function stageRuntime(port: MessagePort): void {
       to,
       bend: spec.bend ?? 0,
       offset: spec.offset ?? 0,
+      label: spec.label,
     };
 
-    if (spec.label) {
-      const text = document.createElementNS(svg, "text");
-      text.setAttribute("class", "wb-label");
-      text.textContent = spec.label;
-      group.append(text);
-      record.text = text;
-    }
+    if (spec.label) labelText(record).textContent = spec.label;
 
     arrowLayer().append(group);
     arrows.push(record);
@@ -2082,6 +2090,8 @@ export function stageRuntime(port: MessagePort): void {
         // SAFETY: a travel's element is the <div> chip makeToken created.
         (travel.element as HTMLElement).style.opacity = "0";
 
+    restSends(frame.key);
+
     const change: FrameChange = {
       frame,
       previous,
@@ -2117,17 +2127,6 @@ export function stageRuntime(port: MessagePort): void {
         finishOthers();
         await nextFrame();
         root.removeAttribute("data-wb-instant");
-
-        // Drawn without motion, the frame shows its chips at their origins,
-        // ready to be sent, not at the heads they would have reached; Play
-        // or a step forward rides them. A chip told to stay keeps its head.
-        for (const travel of travels)
-          if (travel.frame === frame.key && !travel.stay) {
-            travel.progress.value = 0;
-            // SAFETY: a travel's element is the <div> chip makeToken created.
-            (travel.element as HTMLElement).style.opacity = "1";
-            placeTravel(travel);
-          }
       } else {
         waits.push(
           ...document
@@ -2525,9 +2524,10 @@ export function stageRuntime(port: MessagePort): void {
     element: Element;
     arrow: ArrowRecord;
     owner: TravelOwner;
-    /** The frame the chip rides in, and whether it stays at the head after. */
+    /** The frame the chip rides in. */
     frame: string;
-    stay: boolean;
+    /** For a scene send: the message, which rests as the edge's label. */
+    sent?: { label: string; tone?: Tone };
     progress: { value: number };
     x?: number;
     y?: number;
@@ -2573,6 +2573,38 @@ export function stageRuntime(port: MessagePort): void {
     lib().set(travel.element, { translateX: x, translateY: y });
   };
 
+  // A frame's messages rest as labels on their edges, in the marker colour,
+  // in place of the edges' own labels: the same picture however the frame
+  // was reached. The chips only ride, when the frame plays.
+  const restSends = (key: string) => {
+    const sent = new Map<ArrowRecord, { labels: string[]; tone?: Tone }>();
+
+    for (const travel of travels) {
+      if (!travel.sent || travel.frame !== key) continue;
+
+      const entry = sent.get(travel.arrow) ?? {
+        labels: [],
+        tone: travel.sent.tone,
+      };
+
+      entry.labels.push(travel.sent.label);
+      sent.set(travel.arrow, entry);
+    }
+
+    for (const arrow of arrows) {
+      const entry = sent.get(arrow);
+      const label = entry ? entry.labels.join(" · ") : (arrow.label ?? "");
+
+      if (entry) arrow.group.dataset.wbSent = entry.tone ?? "accent";
+      else delete arrow.group.dataset.wbSent;
+
+      if (arrow.text && arrow.text.textContent !== label)
+        arrow.text.textContent = label;
+    }
+
+    placeArrowLabels();
+  };
+
   // Tween normalized progress along an edge during a frame. Geometry is read
   // when the token is placed, rather than captured when the timeline is built.
   const travelAlong = (
@@ -2584,6 +2616,7 @@ export function stageRuntime(port: MessagePort): void {
       ease?: string;
       position?: TimelinePosition;
       stay?: boolean;
+      sent?: { label: string; tone?: Tone };
     },
   ) => {
     let owner = travelOwners.get(element);
@@ -2599,11 +2632,18 @@ export function stageRuntime(port: MessagePort): void {
       arrow: record,
       owner,
       frame,
-      stay: options.stay === true,
+      sent: options.sent,
       progress: { value: 0 },
     };
 
     travels.push(travel);
+
+    // The message rests as a label on its edge: quiet from the frame's start,
+    // while the chip sets off and rides, until the chip dissolves into it at
+    // the head. Drawn without motion, the frame lands on that rest.
+    const text = options.sent ? labelText(record) : undefined;
+
+    if (text) frameTimeline(frame).set(text, { opacity: 0 }, 0);
 
     const segment = frameTimeline(frame)
       .set(owner.active, { value: travel.id }, options.position)
@@ -2618,9 +2658,13 @@ export function stageRuntime(port: MessagePort): void {
         "<",
       );
 
-    // The chip waits at the head until the next frame, so what it carried
+    if (text)
+      segment
+        .add(element, { opacity: 0, duration: 250 }, "<")
+        .add(text, { opacity: 1, duration: 250 }, "<<");
+    // A token waits at the head until the next frame, so what it carried
     // can be read; `stay: false` fades it on arrival instead.
-    if (options.stay === false)
+    else if (options.stay === false)
       segment.add(element, { opacity: 0, duration: 250 }, "<");
   };
 
@@ -3071,10 +3115,17 @@ export function stageRuntime(port: MessagePort): void {
           Math.max(900, Math.round(length / 0.16)),
         );
 
+        // At rest the message is the edge's label; between cards in one row
+        // the columns open up to fit it.
+        if (rows.has(a) && rows.get(a) === rows.get(b)) {
+          rowLabels.add(label);
+          scheduleLayout();
+        }
+
         travelAlong(chip, record, frame, {
           duration,
           position: SEND_LEAD + nth * 240,
-          stay: options.stay,
+          sent: { label, tone: options.tone },
         });
       },
     };

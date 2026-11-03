@@ -416,6 +416,17 @@ body {
 .wb-arrow[data-tone="removed"] .wb-line { stroke: var(--wb-removed); marker-end: url(#wb-head-removed); }
 .wb-arrow[data-tone="modified"] .wb-line { stroke: var(--wb-modified); marker-end: url(#wb-head-modified); }
 .wb-arrow[data-wb-headless] .wb-line { marker-end: none; }
+/* An edge carrying one of the frame's messages takes the marker, label too. */
+.wb-arrow[data-wb-sent] .wb-line { stroke: var(--wb-accent); marker-end: url(#wb-head-accent); }
+.wb-arrow[data-wb-sent] .wb-label { fill: var(--wb-accent); }
+.wb-arrow[data-wb-sent="added"] .wb-line { stroke: var(--wb-added); marker-end: url(#wb-head-added); }
+.wb-arrow[data-wb-sent="added"] .wb-label { fill: var(--wb-added); }
+.wb-arrow[data-wb-sent="removed"] .wb-line { stroke: var(--wb-removed); marker-end: url(#wb-head-removed); }
+.wb-arrow[data-wb-sent="removed"] .wb-label { fill: var(--wb-removed); }
+.wb-arrow[data-wb-sent="modified"] .wb-line { stroke: var(--wb-modified); marker-end: url(#wb-head-modified); }
+.wb-arrow[data-wb-sent="modified"] .wb-label { fill: var(--wb-modified); }
+.wb-arrow[data-wb-sent="muted"] .wb-line { stroke: var(--wb-ink-faint); marker-end: url(#wb-head); }
+.wb-arrow[data-wb-sent="muted"] .wb-label { fill: var(--wb-ink-muted); }
 .wb-label {
   fill: var(--wb-ink-muted);
   font: var(--wb-text-micro) var(--wb-font-mono);

@@ -906,6 +906,76 @@ describe("block components", () => {
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
+  it("rests a frame's message as the label of its edge", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Messages at rest",
+          height: "auto",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+          frames: [
+            { key: "idle", title: "Idle" },
+            { key: "run", title: "Request" },
+            { key: "later", title: "Later" },
+          ],
+          code: { proof: "head/order.ts#L1" },
+          html: [
+            "<script>",
+            "const s=whiteboard.scene({columns:3});",
+            'const a=s.actor({id:"a",at:[1,1],title:"A"});',
+            'const b=s.actor({id:"b",at:[3,1],title:"B"});',
+            'const edge=s.link(a,b,{label:"call"});',
+            's.send(a,b,"req","run");',
+            'const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
+            'const chip=document.querySelector(".wb-token"),text=edge.querySelector("text");',
+            "const read=()=>({label:text.textContent,sent:edge.dataset.wbSent,labelOn:Number(getComputedStyle(text).opacity)>.5,chipOn:Number(getComputedStyle(chip).opacity)>.5});",
+            // In its frame the message is the label, in the marker, with no
+            // chip in sight; in any other frame the edge wears its own label.
+            'const rest=(key)=>{const r=read();return !r.chipOn&&r.labelOn&&(key==="run"?r.label==="req"&&r.sent==="accent":r.label==="call"&&!r.sent)};',
+            // Each way into a frame reports its own width, so a stale one
+            // cannot pass for the next.
+            'const widths={idle:"200px",later:"220px",run:"260px"};',
+            'whiteboard.on("*",({frame,direction})=>{',
+            'if(direction!=="forward"||frame.key!=="run"){setTimeout(()=>{proof.style.width=rest(frame.key)?widths[frame.key]:"100px"},300);return}',
+            // Played, the chip rides while the label is quiet, then settles.
+            'setTimeout(()=>{const r=read();const riding=r.chipOn&&!r.labelOn;setTimeout(()=>{proof.style.width=riding?(rest("run")?"240px":"120px"):"100px"},2800)},700)});',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    const width = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.width;
+
+    const step = (label: string) =>
+      act(async () =>
+        container
+          .querySelector<HTMLButtonElement>(`button[aria-label='${label}']`)!
+          .click(),
+      );
+
+    const outcome = (...expected: string[]) =>
+      settled(() =>
+        width() === "100px" || expected.includes(width()!)
+          ? width()
+          : undefined,
+      );
+
+    expect(await outcome("200px")).toBe("200px");
+    await step("Next frame");
+    expect(await outcome("240px", "120px")).toBe("240px");
+    await step("Next frame");
+    expect(await outcome("220px")).toBe("220px");
+    // Stepped back into, the frame shows the same rest as a fresh draw.
+    await step("Previous frame");
+    expect(await outcome("260px")).toBe("260px");
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
   it("clears a later frame's note when the reader steps back", async () => {
     const { container } = await mountFixture("animation", {
       document: [

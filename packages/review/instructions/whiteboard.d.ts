@@ -310,8 +310,11 @@ export interface Scene {
   /** A straight edge between two cards that follows them. It bows around
    * cards in the way; keep the cells between linked cards empty. */
   link(from: CardRef, to: CardRef, options?: SceneLinkOptions): SVGGElement;
-  /** A chip that rides the edge during a frame at one fixed speed, drawing the
-   * edge if there is none. Keep labels to about 12 characters. */
+  /** A message from one card to another in a frame, drawing the edge if there
+   * is none. While the frame shows, the message is the edge's label and the
+   * edge takes the marker colour, however the frame was reached; stepping
+   * into the frame rides a chip from the sender that settles into the label.
+   * Keep labels to about 12 characters. */
   send(
     from: CardRef,
     to: CardRef,
@@ -408,10 +411,8 @@ export interface SceneLinkOptions extends Lifecycle {
 }
 
 export interface SceneSendOptions extends Lifecycle {
+  /** Colours the chip, and the edge and its label while the frame shows. */
   tone?: Tone;
-  /** Default true: the chip waits at its target until the next frame. false
-   * fades it out on arrival. Scope when it shows with enter, exit or only. */
-  stay?: boolean;
 }
 
 export interface ArrowOptions extends Lifecycle {
