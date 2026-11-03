@@ -1,6 +1,6 @@
 import type {
   ReviewDiffLayout,
-  ReviewInlineStaticSpec,
+  ReviewPeekStaticSpec,
 } from "@dev.fast/review-protocol";
 import type {
   ShareAlignment,
@@ -11,7 +11,7 @@ import { type DiffHunk, parseUnifiedPatch } from "@review/unified-diff";
 import { afterEach, describe, expect, it } from "vitest";
 
 import fixtures from "./__fixtures__/real-diffs.json";
-import { type PeekSettings, shareInlineEditors } from "./inline-editors";
+import { type PeekSettings, sharePeeks } from "./peeks";
 
 interface Fixture {
   name: string;
@@ -106,7 +106,7 @@ function share(fixture: Fixture) {
   };
 }
 
-function hunkSpec(file: string, hunk: DiffHunk): ReviewInlineStaticSpec {
+function hunkSpec(file: string, hunk: DiffHunk): ReviewPeekStaticSpec {
   return {
     path: file,
     title: file,
@@ -177,7 +177,7 @@ describe.each(fixtures as Fixture[])("$name", (fixture) => {
   const { pins, sources, alignment, hunks } = share(fixture);
 
   it("shows each hunk as Git does, in both layouts, with its text", async () => {
-    const editors = await shareInlineEditors(sources, pins, [alignment]);
+    const editors = await sharePeeks(sources, pins, [alignment]);
 
     for (const hunk of hunks) {
       const spec = hunkSpec(fixture.file, hunk);
@@ -199,7 +199,7 @@ describe.each(fixtures as Fixture[])("$name", (fixture) => {
   });
 
   it("shows what a selection on one side's changed lines alone replaced", async () => {
-    const editors = await shareInlineEditors(sources, pins, [alignment]);
+    const editors = await sharePeeks(sources, pins, [alignment]);
 
     for (const hunk of hunks) {
       // The hunk's first change: its lines up to the next context line.

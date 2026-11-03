@@ -8,7 +8,7 @@ import type { ICodeEditor } from "../../editor/browser/editorBrowser.js";
 import type { ICompositeCodeEditor } from "../../editor/common/editorCommon.js";
 
 /** Tracks focus and retained selections for all native editors embedded in a review. */
-export class ReviewEmbeddedEditors extends Disposable implements ICompositeCodeEditor {
+export class ReviewMonacoPeeks extends Disposable implements ICompositeCodeEditor {
 	private readonly changed = this._register(new Emitter<ICompositeCodeEditor>());
 	readonly onDidChangeActiveEditor = this.changed.event;
 	private active: ICodeEditor | undefined;

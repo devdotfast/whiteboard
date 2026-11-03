@@ -4,7 +4,7 @@ import { persist } from "zustand/middleware";
 import { type StateCreator, createStore } from "zustand/vanilla";
 
 import type { ReviewClientConfig } from "./host/review-client";
-import type { ReviewInlineFindRegistration } from "./review-find";
+import type { ReviewPeekFindRegistration } from "./review-find";
 import { reviewPersistence } from "./review-persistence";
 import { reviewUiStateKey } from "./review-ui-state";
 
@@ -14,7 +14,7 @@ export type ReviewFindMatch =
   | { kind: "mdx"; range: Range; node: Node }
   | {
       kind: "editor";
-      registration: ReviewInlineFindRegistration;
+      registration: ReviewPeekFindRegistration;
       localIndex: number;
       node: Node;
     };
@@ -50,7 +50,7 @@ export interface ReviewFindActions {
   clearResults: () => void;
   rejectQuery: (error: string) => void;
   setActiveIndex: (index: number) => void;
-  forgetRegistration: (registration: ReviewInlineFindRegistration) => void;
+  forgetRegistration: (registration: ReviewPeekFindRegistration) => void;
   close: (options?: { clearQuery?: boolean }) => void;
 }
 

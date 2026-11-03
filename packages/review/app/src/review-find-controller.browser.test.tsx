@@ -1,6 +1,6 @@
 import type {
   ReviewFindQuery,
-  ReviewInlineEditorHandle,
+  ReviewPeekHandle,
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import { act, useLayoutEffect, useMemo, useRef } from "react";
@@ -599,9 +599,9 @@ function FindHarness({
   onDocumentRender,
 }: {
   host: ReviewFindHost;
-  handles: ReviewInlineEditorHandle[];
+  handles: ReviewPeekHandle[];
   /** Registers on the diff surface, outside the article. */
-  diff?: ReviewInlineEditorHandle;
+  diff?: ReviewPeekHandle;
   onSurface?: (set: (surface: ReviewFindSurface | null) => void) => void;
   documentKey?: string;
   onDocumentRender?: () => void;
@@ -675,7 +675,7 @@ function InlineRegistration({
   handle,
   surface,
 }: {
-  handle: ReviewInlineEditorHandle;
+  handle: ReviewPeekHandle;
   surface?: ReviewFindSurface;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);

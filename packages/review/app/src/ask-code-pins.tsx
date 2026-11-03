@@ -3,7 +3,7 @@ import { useTooltip } from "@canvas/ui/tooltip";
 import type {
   ReviewAskMark,
   ReviewDiffViewHandle,
-  ReviewInlineEditorHandle,
+  ReviewPeekHandle,
 } from "@dev.fast/review-protocol";
 import type { AskHistoryEntry } from "@review/ask/thread-state";
 import * as stylex from "@stylexjs/stylex";
@@ -91,7 +91,7 @@ export function AskCodePins({
   handle,
   commit,
 }: {
-  handle: ReviewDiffViewHandle | ReviewInlineEditorHandle | null;
+  handle: ReviewDiffViewHandle | ReviewPeekHandle | null;
   commit?: string;
 }): ReactElement {
   const history = useAskHistory();

@@ -3,12 +3,12 @@ import type {
   ReviewDiffLayout,
   ReviewDiffLayoutScope,
   ReviewDisposable,
-  ReviewInlineEditorFactory,
+  ReviewPeekViewer,
   ReviewSurfaceEvent,
   ReviewTheme,
 } from "@dev.fast/review-protocol";
 
-import { type PeekSettings, sourcelessEditors } from "./inline-editors";
+import { type PeekSettings, sourcelessPeeks } from "./peeks";
 
 // Shipped beside the package's index.js; Vite serves it from node_modules in
 // tests and dev. Read on demand: a Worker may lack import.meta.url.
@@ -38,7 +38,7 @@ function listeners<T>() {
 export function shareHost(options: {
   theme: ReviewTheme;
   wasmUrl: string;
-  inlineEditors: (settings: PeekSettings) => ReviewInlineEditorFactory;
+  peeks: (settings: PeekSettings) => ReviewPeekViewer;
 }): WhiteboardHost & ReviewDisposable {
   let lineNumbers = false;
 
@@ -67,7 +67,7 @@ export function shareHost(options: {
     ...settings,
     wasmUrl: options.wasmUrl,
     appVersion: "share",
-    inlineEditors: options.inlineEditors(settings),
+    peeks: options.peeks(settings),
     diffView: {
       files: async () => [],
       create: () => ({
@@ -106,12 +106,12 @@ export function readOnlyHost(
   options: {
     theme?: ReviewTheme;
     wasmUrl?: string;
-    peeks?: (settings: PeekSettings) => ReviewInlineEditorFactory;
+    peeks?: (settings: PeekSettings) => ReviewPeekViewer;
   } = {},
 ): WhiteboardHost & ReviewDisposable {
   return shareHost({
     theme: options.theme ?? "system",
     wasmUrl: options.wasmUrl ?? libavoidWasmUrl(),
-    inlineEditors: options.peeks ?? sourcelessEditors,
+    peeks: options.peeks ?? sourcelessPeeks,
   });
 }

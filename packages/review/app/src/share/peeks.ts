@@ -10,9 +10,9 @@ import type {
   ReviewCanvasBridge,
   ReviewDiffSide,
   ReviewFindQuery,
-  ReviewInlineEditorFactory,
-  ReviewInlineFindSpec,
-  ReviewInlineStaticSpec,
+  ReviewPeekFindSpec,
+  ReviewPeekStaticSpec,
+  ReviewPeekViewer,
   ReviewSourcePins,
 } from "@dev.fast/review-protocol";
 import type {
@@ -64,7 +64,7 @@ interface Found {
   active?: number;
 }
 
-type Spec = Pick<ReviewInlineFindSpec, "path" | "side" | "pins" | "ranges">;
+type Spec = Pick<ReviewPeekFindSpec, "path" | "side" | "pins" | "ranges">;
 
 type Excerpt = (
   file: string,
@@ -527,30 +527,30 @@ function peekInner(
 
 /** Read-only peeks of the lines a share carries, laid out as the reader's
  * Diff settings say. */
-export async function shareInlineEditors(
+export async function sharePeeks(
   sources: readonly ShareSource[],
   boardPins: ReviewSourcePins | undefined,
   alignments: readonly ShareAlignment[] = [],
-): Promise<(settings: PeekSettings) => ReviewInlineEditorFactory> {
-  return editorsOver(await excerpts(sources), boardPins, alignments);
+): Promise<(settings: PeekSettings) => ReviewPeekViewer> {
+  return peeksOver(await excerpts(sources), boardPins, alignments);
 }
 
-/** `shareInlineEditors` for `readOnlyHost({ peeks })`, which takes one object. */
+/** `sharePeeks` for `readOnlyHost({ peeks })`, which takes one object. */
 export const excerptPeeks = (code: {
   sources: readonly ShareSource[];
   pins?: ReviewSourcePins;
   alignments?: readonly ShareAlignment[];
-}) => shareInlineEditors(code.sources, code.pins, code.alignments);
+}) => sharePeeks(code.sources, code.pins, code.alignments);
 
 /** Peeks with no lines to show: each says its source is unavailable. */
-export const sourcelessEditors = (settings: PeekSettings) =>
-  editorsOver(() => ({}), undefined, [])(settings);
+export const sourcelessPeeks = (settings: PeekSettings) =>
+  peeksOver(() => ({}), undefined, [])(settings);
 
-function editorsOver(
+function peeksOver(
   excerpt: Excerpt,
   boardPins: ReviewSourcePins | undefined,
   alignments: readonly ShareAlignment[],
-): (settings: PeekSettings) => ReviewInlineEditorFactory {
+): (settings: PeekSettings) => ReviewPeekViewer {
   const blocksOf = (spec: Spec) =>
     rangeBlocks(excerpt, boardPins, alignments, spec);
 
@@ -560,7 +560,7 @@ function editorsOver(
         matchCount: find(blocksOf(spec), matcher(query)).count,
       };
     },
-    renderStatic: (spec: ReviewInlineStaticSpec) =>
+    renderStatic: (spec: ReviewPeekStaticSpec) =>
       `<div class="${peekClass(spec.heightMode, false)}">${peekInner(spec.title, blocksOf(spec), find([], undefined), settings)}</div>`,
     create(spec) {
       const blocks = blocksOf(spec);

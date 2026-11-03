@@ -11,7 +11,7 @@ import type {
   ReviewCanvasBridge,
   ReviewDiffFileWire,
   ReviewDiffViewSpec,
-  ReviewInlineEditorSpec,
+  ReviewPeekSpec,
   ReviewSurfaceEvent,
 } from "@dev.fast/review-protocol";
 import {
@@ -581,7 +581,7 @@ it("renders a code peek block on its pinned side without fetching source text", 
   app.route("/reviews-api", createReviewApi(store));
   app.get("/reviews-api/:id/commits", (context) => context.json([]));
   const requested: string[] = [];
-  const created: ReviewInlineEditorSpec[] = [];
+  const created: ReviewPeekSpec[] = [];
 
   const bridge = testReviewBridge(
     {},
@@ -591,7 +591,7 @@ it("renders a code peek block on its pinned side without fetching source text", 
 
         return app.request(url, init);
       },
-      inlineEditors: {
+      peeks: {
         async find() {
           return { matchCount: 0 };
         },
@@ -1573,7 +1573,7 @@ async function mountPeekReview(content: {
   app.route("/reviews-api", createReviewApi(store, data));
   app.get("/reviews-api/:id/commits", (context) => context.json([]));
   const requested: string[] = [];
-  const inline: ReviewInlineEditorSpec[] = [];
+  const inline: ReviewPeekSpec[] = [];
   const diffs: ReviewDiffViewSpec[] = [];
 
   const bridge = testReviewBridge(
@@ -1584,7 +1584,7 @@ async function mountPeekReview(content: {
 
         return app.request(url, init);
       },
-      inlineEditors: {
+      peeks: {
         async find() {
           return { matchCount: 0 };
         },

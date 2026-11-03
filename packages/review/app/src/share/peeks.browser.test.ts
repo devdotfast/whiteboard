@@ -1,7 +1,7 @@
 import type { ReviewDiffLayout } from "@dev.fast/review-protocol";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { type PeekSettings, shareInlineEditors } from "./inline-editors";
+import { type PeekSettings, sharePeeks } from "./peeks";
 
 const base = "b".repeat(40);
 
@@ -78,9 +78,7 @@ const lines = (selector = "") =>
   );
 
 it("shows a selection's base and head ranges as one unified diff", async () => {
-  const editors = (await shareInlineEditors(sources, pins))(
-    settings("unified").peek,
-  );
+  const editors = (await sharePeeks(sources, pins))(settings("unified").peek);
 
   container.innerHTML = editors.renderStatic!(spec);
 
@@ -96,7 +94,7 @@ it("shows a selection's base and head ranges as one unified diff", async () => {
 
 it("shows removed lines from the base between the head's", async () => {
   const editors = (
-    await shareInlineEditors(
+    await sharePeeks(
       [
         { ...sources[0], lines: ["a", "old", "b"] },
         { ...sources[1], lines: ["a", "new", "b"] },
@@ -127,7 +125,7 @@ it("shows removed lines from the base between the head's", async () => {
 
 it("lays a diff out as base and head columns when split", async () => {
   const editors = (
-    await shareInlineEditors(
+    await sharePeeks(
       [
         { ...sources[0], lines: ["a", "old", "b"] },
         { ...sources[1], lines: ["a", "new", "newer", "b"] },
@@ -159,7 +157,7 @@ it("lays a diff out as base and head columns when split", async () => {
 });
 
 it("hides line numbers unless the reader shows them", async () => {
-  const editors = (await shareInlineEditors(sources, pins))(
+  const editors = (await sharePeeks(sources, pins))(
     settings("unified", false).peek,
   );
 
@@ -170,7 +168,7 @@ it("hides line numbers unless the reader shows them", async () => {
 
 it("follows the reader's layout choice and reports focus", async () => {
   const layout = settings("unified");
-  const editors = (await shareInlineEditors(sources, pins))(layout.peek);
+  const editors = (await sharePeeks(sources, pins))(layout.peek);
   document.body.append(container);
   const onDidFocus = vi.fn<() => void>();
 
@@ -192,7 +190,7 @@ it("follows the reader's layout choice and reports focus", async () => {
 
 it("reads a pair with differing text as removed then added, and leaves ranges the alignment misses to pairing", async () => {
   const editors = (
-    await shareInlineEditors(
+    await sharePeeks(
       [
         { ...sources[0], lines: ["a", "old", "b"] },
         { ...sources[1], lines: ["a", "new", "b", "c"] },
