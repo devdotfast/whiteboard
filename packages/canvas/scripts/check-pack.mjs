@@ -20,10 +20,11 @@ try {
     "package/dist/index.js",
     "package/dist/index.d.ts",
     "package/dist/assets/canvas.css",
+    "package/dist/assets/theme.css",
   ])
     if (!files.includes(file)) throw new Error(`${tarball} lacks ${file}`);
 
-  if (files.filter((file) => file.endsWith(".css")).length !== 1)
+  if (files.filter((file) => file.endsWith(".css")).length !== 2)
     throw new Error(`${tarball} splits its stylesheet`);
 
   if (!files.some((file) => file.endsWith(".wasm")))

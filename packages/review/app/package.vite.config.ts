@@ -4,6 +4,16 @@ import { defineConfig } from "vite";
 
 import { canvasAliases, canvasPlugins } from "./canvas-vite";
 
+// The faces and palette alone, on :root, for a host's own UI around the canvas.
+function themeCss(source: string | Uint8Array) {
+  const css =
+    typeof source === "string" ? source : new TextDecoder().decode(source);
+  const faces = css.match(/@font-face\s*\{[^}]*\}/g) ?? [];
+  const palette = css.match(/:scope\{([^}]*--ghost:[^}]*)\}/)?.[1];
+  if (!palette) throw new Error("canvas.css lacks the palette");
+  return `${faces.join("\n")}\n:root{${palette}}\n`;
+}
+
 // React stays external; fonts and wasm ship as files.
 export default defineConfig({
   root: __dirname,
@@ -21,6 +31,11 @@ export default defineConfig({
             type: "asset",
             fileName: "assets/canvas.css",
             source: output.source,
+          });
+          this.emitFile({
+            type: "asset",
+            fileName: "assets/theme.css",
+            source: themeCss(output.source),
           });
         }
       },
