@@ -377,7 +377,13 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		this.desktopConnection.attachControl(async (value) => {
 			const request = parseReviewVerbRequest(value);
 			if (request.name === "authoringCapabilities") {
-				return { ok: true, result: { softwareMapEnabled: this.currentSoftwareMapEnabled() } };
+				return {
+					ok: true,
+					result: {
+						softwareMapEnabled: this.currentSoftwareMapEnabled(),
+						animationsEnabled: await this.desktopConnection.readAnimationsEnabled().catch(() => false),
+					},
+				};
 			}
 			if (request.name === "openApiReview") {
 				const response = await this.verbs.dispatch(request);
