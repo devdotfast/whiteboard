@@ -101,6 +101,26 @@ export function ArrowRightIcon({ xstyle }: IconProps = {}): ReactElement {
   );
 }
 
+/** The Whiteboard view: a board with a squiggle, as Desktop's sidebar tab. */
+export function WhiteboardIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <Icon xstyle={xstyle}>
+      <rect x="3" y="4" width="18" height="15" rx="2" />
+      <path d="M7 12.5c1.25-2.2 2.75-2.2 4 0s2.75 2.2 4 0 1.5-1.4 2-1" />
+    </Icon>
+  );
+}
+
+/** The Diff view: Lucide's file-diff, as Desktop's sidebar tab. */
+export function DiffIcon({ xstyle }: IconProps = {}): ReactElement {
+  return (
+    <Icon xstyle={xstyle}>
+      <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.7.7l3.6 3.6A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2Z" />
+      <path d="M9 10h6M12 13V7M9 17h6" />
+    </Icon>
+  );
+}
+
 /** Opens somewhere outside the canvas. */
 export function ExternalLinkIcon({ xstyle }: IconProps = {}): ReactElement {
   return (

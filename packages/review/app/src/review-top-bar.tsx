@@ -2,7 +2,12 @@ import { DiscordIcon } from "@canvas/ui/brand-icons";
 import { Button, IconButton } from "@canvas/ui/button";
 import { dividerStyles } from "@canvas/ui/divider";
 import { iconStyles } from "@canvas/ui/icon-styles";
-import { ArchiveIcon, ExternalLinkIcon } from "@canvas/ui/icons";
+import {
+  ArchiveIcon,
+  DiffIcon,
+  ExternalLinkIcon,
+  WhiteboardIcon,
+} from "@canvas/ui/icons";
 import { useTooltip } from "@canvas/ui/tooltip";
 import type { ReviewCommitSummary } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
@@ -140,7 +145,8 @@ export function ReviewTopBar(): ReactElement {
             status={<BoardUpdatedAt />}
           />
         ) : null}
-        {sidebarLeads ? null : (
+        {/* A board with one view, like a hosted one, needs no tabs. */}
+        {sidebarLeads || reviewViews.length < 2 ? null : (
           <SegmentedControl
             label="Session views"
             variant="topbar"
@@ -150,6 +156,12 @@ export function ReviewTopBar(): ReactElement {
               "aria-label":
                 view === "map" ? "Map (Experimental)" : reviewViewLabel(view),
               title: view === "map" ? "Map (Experimental)" : undefined,
+              icon:
+                view === "review" ? (
+                  <WhiteboardIcon />
+                ) : view === "diff" ? (
+                  <DiffIcon />
+                ) : undefined,
               label:
                 view === "review" ? (
                   <ReviewSurfaceLabel

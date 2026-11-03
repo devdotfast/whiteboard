@@ -93,10 +93,15 @@ export const boardSnapshotSchema = z.looseObject({
   createdAt: z.string(),
 });
 
+export interface BoardViewParts extends Omit<BoardParts, "snapshot"> {
+  /** Named under the title, such as "octo / widgets". */
+  repository?: string;
+}
+
 /** Validates a version and reads it whole, with its activity. */
 export function boardView(
   { activity, ...snapshot }: BoardSnapshot,
-  parts: Omit<BoardParts, "snapshot"> = {},
+  { repository, ...parts }: BoardViewParts = {},
 ): WhiteboardData {
   return {
     ...boardData({
@@ -104,6 +109,7 @@ export function boardView(
       snapshot: { ...snapshot, ...boardSnapshotSchema.parse(snapshot) },
     }),
     ...(activity && { activity }),
+    ...(repository && { place: { siblings: [], repository } }),
     // A share or hosted board has no checkout to open.
     available: { sourceWindows: false },
   };
