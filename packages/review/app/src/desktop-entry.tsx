@@ -389,7 +389,7 @@ function mountThemed(container: HTMLElement): ThemedRoot {
   };
 }
 
-/** A themed root rendering one component, re-rendered by `update`. */
+/** A themed root showing one component. */
 function mountComponent<Props extends object>(
   container: HTMLElement,
   Component: ComponentType<Props>,

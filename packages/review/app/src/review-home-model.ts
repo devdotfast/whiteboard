@@ -154,8 +154,7 @@ export function repositoryLabel(review: ReviewApiSummary): string {
   return repositoryIdentity(review)?.label || review.repositoryName || "";
 }
 
-/** What a search for a board hits, title first: its PR's title, branch,
- * worktree and repository. Not the PR's number: Home's search is words. */
+/** What a board search hits. Not the PR number: Home searches words. */
 export function boardSearchLabels(review: ReviewApiSummary): string[] {
   const { pullRequestTitle, branch } = review.origin ?? {};
 

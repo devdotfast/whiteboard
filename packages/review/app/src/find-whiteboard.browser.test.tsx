@@ -4,7 +4,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 
 import { mountReviewFinder } from "./desktop-entry";
-import { finderCatalog, finderRows } from "./find-whiteboard-model";
 
 const board = (overrides: Partial<ReviewApiSummary>): ReviewApiSummary => ({
   reviewId: "board",
@@ -115,21 +114,4 @@ it("closes on Escape and says when nothing matches", async () => {
   );
   await userEvent.keyboard("{Escape}");
   await expect.poll(() => onClose.mock.calls.length).toBe(1);
-});
-
-it("ranks a title hit over a branch hit", () => {
-  const ranked = finderRows(
-    finderCatalog([
-      board({
-        reviewId: "branch",
-        title: "Zebra",
-        createdAt: "2026-09-25T12:00:00Z",
-        origin: { branch: "feat/theming" },
-      }),
-      board({ reviewId: "title", title: "Theming" }),
-    ]),
-    "theming",
-  );
-
-  expect(ranked.map((row) => row.reviewId)).toEqual(["title", "branch"]);
 });

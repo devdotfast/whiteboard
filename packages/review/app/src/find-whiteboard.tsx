@@ -40,11 +40,8 @@ import {
 } from "./find-whiteboard-model";
 import { formatRelativeTime } from "./format";
 
-/**
- * The finder: one search over every whiteboard, as a modal in the top
- * layer so it sits over the whole window. Arrows pick a row, Enter opens
- * it; the pointer picks the row under it. Escape or a press outside closes.
- */
+/** One search over every whiteboard, modal over the whole window. Arrows
+ * or the pointer pick a row; Enter opens it. */
 export function FindWhiteboard({
   boards,
   current,
@@ -225,7 +222,7 @@ const styles = stylex.create({
     display: "flex",
     flexDirection: "column",
     width: "min(640px, calc(100% - 48px))",
-    // Near the top, as Spotlight sits, not centred: the list grows down.
+    // Near the top, not centred: the list grows down.
     marginBlock: `${space.s120} auto`,
     fontFamily: tokens.chromeFont,
     fontSize: fontSize.ui,
@@ -249,7 +246,6 @@ const styles = stylex.create({
     overflowY: "auto",
     listStyle: "none",
     overscrollBehavior: "contain",
-    // The picked row keeps the same inset whether or not the list scrolls.
     scrollbarGutter: "stable",
   },
   heading: { padding: `${space.s12} ${space.s8} ${space.s6}` },
@@ -284,7 +280,7 @@ const styles = stylex.create({
     fontWeight: fontWeight.medium,
     lineHeight: leading.px18,
   },
-  // A child's parent, cut short before it crowds out the child's own name.
+  // Cut short before it crowds out the child's name.
   parent: {
     flexShrink: 0,
     maxWidth: space.s160,

@@ -60,9 +60,8 @@ export function Dialog({ onClose, xstyle, ...props }: DialogProps) {
         props.onKeyDown?.(event);
 
         if (event.key !== "Escape" || event.defaultPrevented) return;
-        // The canvas's document-wide Escape listeners cancel the key before
-        // the dialog's own close watcher sees it, and the page behind the
-        // dialog should not react to it either.
+        // The canvas's own Escape listeners cancel the key before the
+        // dialog's close watcher sees it; the page behind must not react.
         event.preventDefault();
         event.stopPropagation();
         close();

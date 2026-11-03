@@ -30,8 +30,7 @@ export interface IReviewFinderService {
 	toggle(): Promise<void>;
 }
 
-/** The finder (⌘K): the canvas bundle's search over the catalog, mounted
- * in the workbench container while it is up. */
+/** The finder (⌘K), mounted from the canvas bundle while it is up. */
 class ReviewFinderService extends Disposable implements IReviewFinderService {
 	declare readonly _serviceBrand: undefined;
 	private shown: DisposableStore | undefined;
@@ -106,7 +105,7 @@ registerAction2(class extends Action2 {
 			f1: true,
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyCode.KeyK,
-				// Over upstream's ⌘K chords; the theme picker keeps its menu entry.
+				// Over upstream's ⌘K chords.
 				weight: KeybindingWeight.WorkbenchContrib + 1,
 			},
 		});

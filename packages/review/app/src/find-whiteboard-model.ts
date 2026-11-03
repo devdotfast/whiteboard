@@ -15,9 +15,8 @@ export interface FinderBoard {
   labels: string[];
 }
 
-/** The boards in the order the finder lists them, touched last first,
- * with what a query is matched against: Home's search labels and the PR's
- * number. Computed once per catalog. */
+/** Every board, touched last first, with what a query matches: Home's
+ * search labels and the PR number. */
 export function finderCatalog(
   boards: readonly ReviewApiSummary[],
 ): FinderBoard[] {
@@ -42,8 +41,7 @@ export function finderCatalog(
     .map(({ board, labels }) => ({ board, labels }));
 }
 
-/** The rows for `query`: the boards it hits, best first, ties by recency;
- * every board, touched last first, without one. */
+/** The boards `query` hits, best first; all of them without a query. */
 export function finderRows(
   catalog: readonly FinderBoard[],
   query: string,
@@ -53,7 +51,7 @@ export function finderRows(
     .map(({ board }) => board);
 }
 
-/** The row's second line: where the board is, then its branch and PR. */
+/** The row's second line: worktree or repository, branch, PR. */
 export function finderDetails(board: ReviewApiSummary): string[] {
   const { pullRequestNumber, branch } = board.origin ?? {};
 
