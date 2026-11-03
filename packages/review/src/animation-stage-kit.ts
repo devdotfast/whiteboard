@@ -495,6 +495,10 @@ body {
 .wb-legend-box { position: relative; flex: none; width: 20px; height: 13px; }
 .wb-card.wb-legend-glyph { position: absolute; top: 0; left: 0; display: block; width: 50px; min-width: 0; height: 32px; padding: 0; transform: scale(0.4); transform-origin: 0 0; }
 .wb-card.wb-legend-glyph[data-form="cylinder"] { height: 44px; }
+/* Lines that scale to a pixel: the glyph's borders, its lid and rule marks,
+   and its change stripe are drawn 2.5x heavier before the 0.4 scale. */
+.wb-card.wb-legend-glyph, .wb-card.wb-legend-glyph::before, .wb-card.wb-legend-glyph::after { border-width: 2.5px; }
+.wb-card.wb-legend-glyph[data-change] { border-left-width: 7px; }
 :root[data-wb-instant] *, :root[data-wb-instant] *::before, :root[data-wb-instant] *::after {
   transition: none !important;
   animation-duration: 0s !important;
