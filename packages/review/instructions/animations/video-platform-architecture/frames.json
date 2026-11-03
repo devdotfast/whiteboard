@@ -1,0 +1,97 @@
+[
+  {
+    "key": "post",
+    "title": "A creator uploads a video",
+    "label": "POST",
+    "caption": "The app posts the file to the API gateway, which fronts every service.",
+    "code": ["upload"]
+  },
+  {
+    "key": "receive",
+    "title": "The gateway hands it to the upload service",
+    "label": "RECEIVE",
+    "caption": "Routing by path: /videos belongs to the upload service.",
+    "code": ["upload"]
+  },
+  {
+    "key": "store",
+    "title": "The original goes to blob storage",
+    "label": "STORE",
+    "caption": "handleUpload streams the original into the blob store before anything else happens.",
+    "code": ["upload"]
+  },
+  {
+    "key": "enqueue",
+    "title": "A transcode job is queued",
+    "label": "ENQUEUE",
+    "caption": "The upload service answers the creator now; the heavy work waits in the queue.",
+    "code": ["upload"]
+  },
+  {
+    "key": "transcode",
+    "title": "A transcoder takes the job",
+    "label": "TRANSCODE",
+    "caption": "A worker takes the job and renders the renditions clients can stream.",
+    "code": ["transcode"]
+  },
+  {
+    "key": "renditions",
+    "title": "Renditions go back to the blob store",
+    "label": "RENDITIONS",
+    "caption": "Each rendition is written beside the original, keyed by video and quality.",
+    "code": ["transcode"]
+  },
+  {
+    "key": "ready",
+    "title": "The catalog marks the video ready",
+    "label": "READY",
+    "caption": "The transcoder tells the catalog service, which updates the catalog database; the video is now playable.",
+    "code": ["transcode"]
+  },
+  {
+    "key": "watch",
+    "title": "A viewer opens a video",
+    "label": "WATCH",
+    "caption": "The app asks the gateway for /watch/v1.",
+    "code": ["watch"]
+  },
+  {
+    "key": "lookup",
+    "title": "The catalog service resolves it",
+    "label": "LOOKUP",
+    "caption": "resolveWatch reads the video's row: its renditions and where they live.",
+    "code": ["watch"]
+  },
+  {
+    "key": "resolve",
+    "title": "A manifest comes back",
+    "label": "RESOLVE",
+    "caption": "The manifest lists segment URLs on the CDN, not the blob store.",
+    "code": ["watch"]
+  },
+  {
+    "key": "deliver",
+    "title": "The gateway returns the manifest",
+    "label": "DELIVER",
+    "caption": "The app can now fetch segments without touching our services again.",
+    "code": ["watch"]
+  },
+  {
+    "key": "segment",
+    "title": "The app fetches a segment from the CDN",
+    "label": "SEGMENT",
+    "caption": "Segments are plain files: the edge serves them, not the catalog."
+  },
+  {
+    "key": "edge-miss",
+    "title": "The edge misses and fetches from blob storage",
+    "label": "EDGE MISS",
+    "caption": "The first viewer in a region pays the fetch from our blob store; the CDN keeps the segment."
+  },
+  {
+    "key": "play",
+    "title": "Segments stream from the edge",
+    "label": "PLAY",
+    "caption": "Later viewers near this edge are served from the CDN's cache, without touching our services."
+  }
+]
