@@ -86,6 +86,10 @@ const STAGE_MIN_HEIGHT = 120;
 // its current frame's height instead.
 const MEASURE_WAIT = 1000;
 
+// Fullscreen, the stage keeps its inline layout and grows to fit the room,
+// at most this much: past 2x a drawing made for a column reads as a poster.
+const STAGE_MAX_SCALE = 2;
+
 let animeSource: Promise<string> | undefined;
 
 // anime.js's source, for the stage: its own chunk, fetched by the first
@@ -279,6 +283,23 @@ function StageBlock({
   // figure's height so the document keeps its place.
   const [expanded, setExpanded] = useState(false);
   const [held, setHeld] = useState(0);
+
+  // The stage's inline width, which it keeps fullscreen, scaled to the room.
+  const [inlineWidth, setInlineWidth] = useState(0);
+
+  const [room, setRoom] = useState<{ width: number; height: number } | null>(
+    null,
+  );
+
+  const roomRef = useRef<HTMLDivElement>(null);
+
+  // What the figure leaves behind when it moves to the overlay: a placeholder
+  // of its height, and the width its stage was laid out at.
+  const holdInline = () => {
+    setHeld(figureRef.current?.offsetHeight ?? 0);
+    setInlineWidth(canvasRef.current?.clientWidth ?? 0);
+  };
+
   const openRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -356,7 +377,7 @@ function StageBlock({
     if (!tourOpen) {
       captureUiEvent(session, "tour_started", { steps: tour.stops.length });
 
-      if (!expanded) setHeld(figureRef.current?.offsetHeight ?? 0);
+      if (!expanded) holdInline();
     }
 
     setExpanded(false);
@@ -594,6 +615,38 @@ function StageBlock({
 
   const fullscreen = (tourOpen || expanded) && portalTarget !== null;
 
+  // Fullscreen, the room the controls leave the stage, inside its padding.
+  useLayoutEffect(() => {
+    const element = roomRef.current;
+
+    if (!fullscreen || !element) {
+      setRoom(null);
+
+      return;
+    }
+
+    const read = () => {
+      const style = getComputedStyle(element);
+
+      setRoom({
+        width:
+          element.clientWidth -
+          Number.parseFloat(style.paddingLeft) -
+          Number.parseFloat(style.paddingRight),
+        height:
+          element.clientHeight -
+          Number.parseFloat(style.paddingTop) -
+          Number.parseFloat(style.paddingBottom),
+      });
+    };
+
+    read();
+    const observer = new ResizeObserver(read);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [fullscreen]);
+
   // Going fullscreen draws a new canvas; a resize changes its width.
   useLayoutEffect(() => {
     const canvas = canvasRef.current;
@@ -707,6 +760,26 @@ function StageBlock({
     followFrame();
   }, [frameAnchor, tour]);
 
+  const stageHeight =
+    node.height !== "auto"
+      ? node.height
+      : measuredHeight || measureLate
+        ? Math.max(contentHeight, measuredHeight)
+        : STAGE_MIN_HEIGHT;
+
+  // Fullscreen, the stage keeps its inline width and scales up to fit the
+  // room, never down: a room too small for it scrolls, as before.
+  const scale =
+    fullscreen && room && inlineWidth
+      ? Math.min(
+          STAGE_MAX_SCALE,
+          Math.max(
+            1,
+            Math.min(room.width / inlineWidth, room.height / stageHeight),
+          ),
+        )
+      : 1;
+
   const figure = (
     <figure
       ref={figureRef}
@@ -748,7 +821,7 @@ function StageBlock({
               xstyle={diagramStyles.button}
               aria-label={`Expand ${noun}`}
               onClick={() => {
-                setHeld(figureRef.current?.offsetHeight ?? 0);
+                holdInline();
                 setExpanded(true);
               }}
             >
@@ -777,80 +850,89 @@ function StageBlock({
         </div>
       )}
       <div
+        ref={roomRef}
         {...stylex.props(styles.stage, fullscreen && styles.stageFullscreen)}
       >
         <div
-          ref={canvasRef}
-          {...stylex.props(styles.canvas)}
-          style={{
-            height:
-              node.height !== "auto"
-                ? node.height
-                : measuredHeight || measureLate
-                  ? Math.max(contentHeight, measuredHeight)
-                  : STAGE_MIN_HEIGHT,
-          }}
+          {...stylex.props(styles.zoom)}
+          style={
+            scale === 1
+              ? undefined
+              : { width: inlineWidth * scale, height: stageHeight * scale }
+          }
         >
-          <iframe
-            key={stageKey}
-            ref={frameRef}
-            src={stageUrl()}
-            title={node.title}
-            sandbox="allow-scripts"
-            onLoad={boot}
-            {...stylex.props(styles.frame)}
-          />
-          {node.type === "animation" &&
-            node.height === "auto" &&
-            measureRun !== null && (
-              <MeasuringStage
-                key={measureRun}
-                init={() => {
-                  const kind = measureKind();
+          <div
+            ref={canvasRef}
+            {...stylex.props(styles.canvas, scale !== 1 && styles.canvasScaled)}
+            style={{
+              height: stageHeight,
+              ...(scale !== 1 && {
+                width: inlineWidth,
+                transform: `scale(${scale})`,
+              }),
+            }}
+          >
+            <iframe
+              key={stageKey}
+              ref={frameRef}
+              src={stageUrl()}
+              title={node.title}
+              sandbox="allow-scripts"
+              onLoad={boot}
+              {...stylex.props(styles.frame)}
+            />
+            {node.type === "animation" &&
+              node.height === "auto" &&
+              measureRun !== null && (
+                <MeasuringStage
+                  key={measureRun}
+                  init={() => {
+                    const kind = measureKind();
 
-                  return stageInit(figureRef.current!, kind!, false).then(
-                    (init) => ({
-                      ...init,
-                      measure: true,
-                      slotSizes: Object.fromEntries(slotSizesRef.current),
-                    }),
-                  );
-                }}
-                onMeasured={(height) => {
-                  setMeasuredHeight(height);
-                  setMeasureRun(null);
-                }}
-              />
-            )}
-          <div {...stylex.props(styles.overlays)}>
-            {slots.map((slot) => (
-              <SlotOverlay
-                key={slot.slot}
-                slot={slot}
-                onHeight={(height) => {
-                  send({ type: "slot-size", slot: slot.slot, height });
+                    return stageInit(figureRef.current!, kind!, false).then(
+                      (init) => ({
+                        ...init,
+                        measure: true,
+                        slotSizes: Object.fromEntries(slotSizesRef.current),
+                      }),
+                    );
+                  }}
+                  onMeasured={(height) => {
+                    setMeasuredHeight(height);
+                    setMeasureRun(null);
+                  }}
+                />
+              )}
+            <div {...stylex.props(styles.overlays)}>
+              {slots.map((slot) => (
+                <SlotOverlay
+                  key={slot.slot}
+                  slot={slot}
+                  onHeight={(height) => {
+                    send({ type: "slot-size", slot: slot.slot, height });
 
-                  if (slotSizesRef.current.get(slot.slot) === height) return;
-                  slotSizesRef.current.set(slot.slot, height);
-                  clearTimeout(remeasureTimer.current);
-                  remeasureTimer.current = setTimeout(remeasure, 100);
-                }}
-              >
-                {slot.kind === "code"
-                  ? node.code[slot.ref] && (
-                      <CodePeekCard
-                        source={anchorSelection(
-                          animationCode(node.code[slot.ref]!).source,
-                          node.pins,
-                        )}
-                        heightMode="capped"
-                        xstyle={styles.peek}
-                      />
-                    )
-                  : embeddable.get(slot.ref) &&
-                    children([embeddable.get(slot.ref)!])}
-              </SlotOverlay>
-            ))}
+                    if (slotSizesRef.current.get(slot.slot) === height) return;
+                    slotSizesRef.current.set(slot.slot, height);
+                    clearTimeout(remeasureTimer.current);
+                    remeasureTimer.current = setTimeout(remeasure, 100);
+                  }}
+                >
+                  {slot.kind === "code"
+                    ? node.code[slot.ref] && (
+                        <CodePeekCard
+                          source={anchorSelection(
+                            animationCode(node.code[slot.ref]!).source,
+                            node.pins,
+                          )}
+                          heightMode="capped"
+                          xstyle={styles.peek}
+                        />
+                      )
+                    : embeddable.get(slot.ref) &&
+                      children([embeddable.get(slot.ref)!])}
+                </SlotOverlay>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -1138,15 +1220,24 @@ const styles = stylex.create({
     display: "flex",
     flex: "1 1 auto",
     flexDirection: "column",
+    alignItems: "center",
     justifyContent: "safe center",
     minHeight: 0,
     overflowY: "auto",
     padding: { default: space.s32, [narrow]: space.s16 },
   },
+  // The scaled stage's footprint, so the room centres and scrolls it whole.
+  zoom: {
+    flex: "0 0 auto",
+    width: "100%",
+  },
   canvas: {
     position: "relative",
     flex: "0 0 auto",
     overflow: "hidden",
+  },
+  canvasScaled: {
+    transformOrigin: "0 0",
   },
   overlay: {
     position: "fixed",

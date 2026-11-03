@@ -2235,6 +2235,57 @@ describe("animation tour", () => {
     expect(overlay()).toBeNull();
   });
 
+  it("scales an expanded animation up to the room it is given", async () => {
+    // The overlay spans the host, which is wider than the inline column.
+    const { container } = await mountFixture(
+      "animation",
+      {
+        document: documentSchema.parse([
+          {
+            id: "block-1",
+            type: "animation",
+            title: "Scaled",
+            height: 160,
+            frames: [{ key: "a", title: "One" }],
+            code: {},
+            html: "<p>Stage</p>",
+            pins: { repositoryId: "repo", base: "base", head: "head" },
+          },
+        ]),
+      },
+      "width: 1100px",
+    );
+
+    const inline = (await settled(() => container.querySelector("iframe")))!
+      .parentElement!;
+
+    const inlineWidth = inline.clientWidth;
+
+    const expand = document.querySelector<HTMLButtonElement>(
+      "button[aria-label='Expand animation']",
+    )!;
+
+    await act(async () => expand.click());
+
+    const stage = await settled(
+      () =>
+        document.querySelector<HTMLElement>("[role='dialog'] figure iframe")
+          ?.parentElement,
+    );
+
+    const scaleOf = () =>
+      new DOMMatrixReadOnly(getComputedStyle(stage!).transform).a;
+
+    // The overlay is wider than the column: the stage grows, to at most 2x.
+    expect(await settled(() => scaleOf() > 1)).toBe(true);
+    expect(scaleOf()).toBeLessThanOrEqual(2);
+    expect(stage!.clientWidth).toBe(inlineWidth);
+    expect(stage!.parentElement!.clientWidth).toBeCloseTo(
+      inlineWidth * scaleOf(),
+      0,
+    );
+  });
+
   it("opens its code in the column with the tour, which follows the frames", async () => {
     const { container } = await mountFixture("animation", {
       document: tourAnimation(),
