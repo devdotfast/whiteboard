@@ -7,10 +7,14 @@ import { canvasAliases, canvasPlugins } from "./canvas-vite";
 // The faces and palette alone, on :root, for a host's own UI around the canvas.
 function themeCss(source: string | Uint8Array) {
   const css =
-    typeof source === "string" ? source : new TextDecoder().decode(source);
+    source instanceof Uint8Array ? new TextDecoder().decode(source) : source;
+
   const faces = css.match(/@font-face\s*\{[^}]*\}/g) ?? [];
+
   const palette = css.match(/:scope\{([^}]*--ghost:[^}]*)\}/)?.[1];
+
   if (!palette) throw new Error("canvas.css lacks the palette");
+
   return `${faces.join("\n")}\n:root{${palette}}\n`;
 }
 
