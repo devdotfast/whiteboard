@@ -12,6 +12,8 @@ import type {
   ReviewCanvasUi,
   ReviewCliInstallStatus,
   ReviewDisposable,
+  ReviewFinderHandle,
+  ReviewFinderProps,
   ReviewSidebarSectionHandle,
   ReviewSidebarSectionProps,
   ReviewTheme,
@@ -34,6 +36,7 @@ import {
 } from "./canvas-query";
 import { type DiffFilePicker, DiffFilePickerContext } from "./diff-file-picker";
 import { FeedbackDialog } from "./feedback-dialog";
+import { FindWhiteboard } from "./find-whiteboard";
 import { CanvasUiContext } from "./host/canvas-ui";
 import { loadKatex } from "./markdown-math";
 import { FirstRun, readOnboardingSkipped } from "./onboarding/first-run";
@@ -382,6 +385,21 @@ function mountThemed(container: HTMLElement): ThemedRoot {
       theme.dispose();
       themed.dispose();
     },
+  };
+}
+
+/** Mounts the finder over the window; it closes when disposed. */
+export function mountReviewFinder(
+  container: HTMLElement,
+  props: ReviewFinderProps,
+): ReviewFinderHandle {
+  const mounted = mountThemed(container);
+
+  mounted.render(<FindWhiteboard {...props} />);
+
+  return {
+    update: (next) => mounted.render(<FindWhiteboard {...next} />),
+    dispose: () => mounted.dispose(),
   };
 }
 

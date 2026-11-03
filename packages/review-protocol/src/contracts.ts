@@ -623,6 +623,8 @@ export interface ReviewSidebarSectionProps {
   /** Create and open an empty child of a top-level board. */
   onNewChildWhiteboard?(parentId: string): Promise<void>;
   newWhiteboardShortcut?: string;
+  /** Whiteboards: the key that opens the finder, hinted in the search. */
+  findWhiteboardShortcut?: string;
   onOpenThread?(threadId: string): void;
   /** Lenses: the Diff view's, as its canvas reports them. */
   lenses?: ReviewSidebarLenses;
@@ -640,6 +642,22 @@ export interface ReviewSidebarSectionProps {
 
 export interface ReviewSidebarSectionHandle {
   update(props: ReviewSidebarSectionProps): void;
+  dispose(): void;
+}
+
+/** The finder (⌘K): a search over every board in Desktop's catalog, shown
+ * over the whole window until a board is picked or it is dismissed. */
+export interface ReviewFinderProps {
+  boards: ReviewApiSummary[];
+  /** The board in the active tab, if any. */
+  current?: string;
+  onOpen(reviewId: string): void;
+  /** Escape, a press outside, or a pick. Dispose the handle in reply. */
+  onClose(): void;
+}
+
+export interface ReviewFinderHandle {
+  update(props: ReviewFinderProps): void;
   dispose(): void;
 }
 
@@ -1296,6 +1314,10 @@ export interface ReviewCanvasModule {
     container: HTMLElement,
     props: ReviewSidebarSectionProps,
   ): ReviewSidebarSectionHandle;
+  mountReviewFinder(
+    container: HTMLElement,
+    props: ReviewFinderProps,
+  ): ReviewFinderHandle;
 }
 
 // Tolerant of unknown keys so future additive fields never force a version

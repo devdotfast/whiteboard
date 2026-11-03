@@ -387,7 +387,6 @@ export const styles = stylex.create({
     animationIterationCount: "infinite",
   },
   expiring: { color: tokens.changeModified },
-  mark: { color: tokens.ink, backgroundColor: tokens.markerTint },
   footer: {
     display: "flex",
     justifyContent: "center",

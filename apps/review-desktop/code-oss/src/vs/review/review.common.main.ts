@@ -23,6 +23,7 @@ import "./browser/reviewTheme.contribution.js";
 import "./contrib/boardTabs/reviewBoardTabs.contribution.js";
 import "./contrib/explorer/reviewFileTree.contribution.js";
 import "./contrib/extensions/reviewCuratedExtensions.contribution.js";
+import "./contrib/finder/reviewFindWhiteboard.contribution.js";
 import "./contrib/install/reviewCliInstall.contribution.js";
 import "./contrib/quickaccess/reviewQuickAccess.contribution.js";
 import "./contrib/settings/reviewSettings.contribution.js";

@@ -49,6 +49,7 @@ import { boardOf, keepsSidebar } from "../canvas/reviewCanvasEditorInput.js";
 import { ReviewTooltip } from "../../reviewTooltip.js";
 import { type ReviewSidebarPaneId, ReviewSidebarTabs } from "./reviewSidebarTabs.js";
 import { REVIEW_SIDEBAR_TAB_COMMANDS } from "../../../contrib/tabs/reviewWindowKeys.js";
+import { REVIEW_FIND_WHITEBOARD_COMMAND_ID } from "../../../common/reviewFindWhiteboard.js";
 import { REVIEW_NEW_WHITEBOARD_COMMAND_ID } from "../../../common/reviewNewWhiteboard.js";
 
 /** Whether a thread started on the board or edited it. */
@@ -701,6 +702,7 @@ export class ReviewSidebarPart extends Part {
 		if (this.familyBody) this.familyBody.hidden = !reviewId;
 
 		const newWhiteboardShortcut = this.shortcut(REVIEW_NEW_WHITEBOARD_COMMAND_ID);
+		const findWhiteboardShortcut = this.shortcut(REVIEW_FIND_WHITEBOARD_COMMAND_ID);
 		const props: ReviewSidebarSectionProps = {
 			section: "whiteboards",
 			connection: { serverUrl: connection.serverUrl, token: connection.token },
@@ -718,6 +720,7 @@ export class ReviewSidebarPart extends Part {
 			onNewWhiteboard: () => void this.commandService.executeCommand(REVIEW_NEW_WHITEBOARD_COMMAND_ID, "sidebar"),
 			onNewChildWhiteboard: (parentId) => openChildWhiteboard(this.catalog, this.tabs, parentId),
 			...(newWhiteboardShortcut && { newWhiteboardShortcut }),
+			...(findWhiteboardShortcut && { findWhiteboardShortcut }),
 			...(reviewId && this.boardProps(reviewId)),
 		};
 

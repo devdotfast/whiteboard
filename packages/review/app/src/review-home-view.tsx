@@ -19,6 +19,7 @@ import {
   SortIcon,
   StackIcon,
 } from "@canvas/ui/icons";
+import { MatchedText } from "@canvas/ui/matched-text";
 import { textStyles } from "@canvas/ui/text";
 import { fieldStyles } from "@canvas/ui/text-field";
 import { useTooltip } from "@canvas/ui/tooltip";
@@ -31,7 +32,6 @@ import {
   boardTitle,
   reviewHostStatus,
 } from "@dev.fast/review-protocol";
-import { fuzzySegments } from "@review/fuzzy-match";
 import * as stylex from "@stylexjs/stylex";
 import { QueryClientProvider } from "@tanstack/react-query";
 import {
@@ -1881,51 +1881,4 @@ function HomeRowMenu({
       <MoreIcon xstyle={iconStyles.inline} />
     </IconButton>
   );
-}
-
-function MatchedText({
-  text,
-  queries,
-  from = 0,
-  to = text.length,
-}: {
-  text: string;
-  queries: string[];
-  from?: number;
-  to?: number;
-}) {
-  const matched = new Set<number>();
-
-  for (const query of queries) {
-    let offset = 0;
-
-    for (const segment of fuzzySegments(query, text)) {
-      if (segment.matched)
-        for (let i = offset; i < offset + segment.text.length; i++)
-          matched.add(i);
-      offset += segment.text.length;
-    }
-  }
-
-  const segments: ReactNode[] = [];
-
-  for (let start = from; start < to; ) {
-    let end = start + 1;
-
-    while (end < to && matched.has(end) === matched.has(start)) end++;
-    const part = text.slice(start, end);
-
-    segments.push(
-      matched.has(start) ? (
-        <mark key={start} {...stylex.props(styles.mark)}>
-          {part}
-        </mark>
-      ) : (
-        part
-      ),
-    );
-    start = end;
-  }
-
-  return segments;
 }

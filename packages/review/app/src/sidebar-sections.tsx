@@ -6,6 +6,7 @@ import { EmptyState } from "@canvas/ui/empty-state";
 import { focusStyles } from "@canvas/ui/focus";
 import { iconStyles } from "@canvas/ui/icon-styles";
 import { PlusIcon, SearchIcon, StackIcon } from "@canvas/ui/icons";
+import { Kbd } from "@canvas/ui/kbd";
 import { listRowStyles } from "@canvas/ui/list-row";
 import { textStyles } from "@canvas/ui/text";
 import { fieldStyles } from "@canvas/ui/text-field";
@@ -527,6 +528,7 @@ function SectionBody(props: ReviewSidebarSectionProps): ReactElement | null {
 function WhiteboardsSectionBody({
   project,
   reviewId,
+  findWhiteboardShortcut,
   onNewChildWhiteboard,
   onOpenBoard,
 }: ReviewSidebarSectionProps): ReactElement | null {
@@ -549,6 +551,11 @@ function WhiteboardsSectionBody({
             if (event.key === "Escape") setQuery("");
           }}
         />
+        {findWhiteboardShortcut && !query ? (
+          <Kbd aria-hidden="true" xstyle={styles.searchKey}>
+            {findWhiteboardShortcut}
+          </Kbd>
+        ) : null}
       </label>
       {query.trim() ? (
         <WhiteboardsList
@@ -979,6 +986,10 @@ const styles = stylex.create({
     backgroundColor: tokens.surface,
   },
   searchIcon: { width: "13px", height: "13px", color: tokens.inkFaint },
+  searchKey: {
+    color: tokens.inkFaint,
+    fontSize: fontSize.small,
+  },
   searchInput: {
     flex: 1,
     lineHeight: leading.px16,

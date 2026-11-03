@@ -165,7 +165,7 @@ export const SETTING_NAME = [
   "diff_ignore_whitespace",
 ] as const;
 
-export const REVIEW_OPENED_VIA = ["home", "cli", "other"] as const;
+export const REVIEW_OPENED_VIA = ["home", "finder", "cli", "other"] as const;
 
 /** Where a review's source comes from: its target's kind. */
 export const SESSION_SOURCE_KIND = ["worktree", "commits", "project"] as const;
