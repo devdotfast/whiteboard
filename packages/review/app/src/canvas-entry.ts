@@ -6,6 +6,8 @@ export { boardView } from "./share/board-data";
 
 export { openShare, type ShareView } from "./share/open-share";
 
+export { excerptPeeks } from "./share/inline-editors";
+
 export { readOnlyHost } from "./share/share-host";
 
 export { Whiteboard, WhiteboardProvider } from "./whiteboard";
