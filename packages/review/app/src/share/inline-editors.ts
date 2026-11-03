@@ -532,14 +532,21 @@ export async function shareInlineEditors(
   boardPins: ReviewSourcePins | undefined,
   alignments: readonly ShareAlignment[] = [],
 ): Promise<(settings: PeekSettings) => ReviewInlineEditorFactory> {
-  return excerptEditors(await excerpts(sources), boardPins, alignments);
+  return editorsOver(await excerpts(sources), boardPins, alignments);
 }
+
+/** `shareInlineEditors` for `readOnlyHost({ peeks })`, which takes one object. */
+export const excerptPeeks = (code: {
+  sources: readonly ShareSource[];
+  pins?: ReviewSourcePins;
+  alignments?: readonly ShareAlignment[];
+}) => shareInlineEditors(code.sources, code.pins, code.alignments);
 
 /** Peeks with no lines to show: each says its source is unavailable. */
 export const sourcelessEditors = (settings: PeekSettings) =>
-  excerptEditors(() => ({}), undefined, [])(settings);
+  editorsOver(() => ({}), undefined, [])(settings);
 
-function excerptEditors(
+function editorsOver(
   excerpt: Excerpt,
   boardPins: ReviewSourcePins | undefined,
   alignments: readonly ShareAlignment[],

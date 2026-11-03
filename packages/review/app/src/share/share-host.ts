@@ -101,17 +101,17 @@ export function shareHost(options: {
   };
 }
 
-/** `shareHost` with openShare's defaults. */
+/** `shareHost` with openShare's defaults; `peeks` draws the source peeks. */
 export function readOnlyHost(
   options: {
     theme?: ReviewTheme;
     wasmUrl?: string;
-    inlineEditors?: (settings: PeekSettings) => ReviewInlineEditorFactory;
+    peeks?: (settings: PeekSettings) => ReviewInlineEditorFactory;
   } = {},
 ): WhiteboardHost & ReviewDisposable {
   return shareHost({
     theme: options.theme ?? "system",
     wasmUrl: options.wasmUrl ?? libavoidWasmUrl(),
-    inlineEditors: options.inlineEditors ?? sourcelessEditors,
+    inlineEditors: options.peeks ?? sourcelessEditors,
   });
 }

@@ -14,7 +14,15 @@ import { renderToString } from "react-dom/server";
 import { expect, it } from "vitest";
 
 import { shareFixture } from "../../review/app/src/share/share-fixture";
-import { Whiteboard, WhiteboardProvider, openShare } from "../dist/index.js";
+import {
+  type PeekViewer,
+  Whiteboard,
+  WhiteboardProvider,
+  boardView,
+  excerptPeeks,
+  openShare,
+  readOnlyHost,
+} from "../dist/index.js";
 
 type Canvas = typeof import("../dist/index.js");
 
@@ -103,4 +111,67 @@ it("imports and renders where import.meta.url is undefined, as in a Worker", asy
   } finally {
     rmSync(dist, { recursive: true, force: true });
   }
+});
+
+/** A live board: the snapshot without its pins, its peeks from `options`. */
+const renderLive = (options: Parameters<typeof readOnlyHost>[0]) => {
+  const { snapshot, selections } = shareFixture;
+  const { pins: _pins, ...live } = snapshot;
+  const host = readOnlyHost(options);
+
+  const data = boardView(live, {
+    progress: {
+      complete: true,
+      files: [],
+      lenses: [],
+      resolvedSelections: selections,
+    },
+  });
+
+  const html = renderToString(
+    createElement(
+      "div",
+      { className: "review-canvas-root" },
+      createElement(
+        WhiteboardProvider,
+        { data, host, settings: {} },
+        createElement(Whiteboard),
+      ),
+    ),
+  );
+
+  host.dispose();
+
+  return html;
+};
+
+it("quotes a live board's sources through excerptPeeks", async () => {
+  const { sources, snapshot } = shareFixture;
+
+  const html = renderLive({
+    peeks: await excerptPeeks({ sources, pins: snapshot.pins }),
+  });
+
+  expect(html).toContain("// sent once written");
+  expect(html).not.toContain("Code unavailable");
+});
+
+it("draws peeks through any PeekViewer", () => {
+  const seen: string[] = [];
+
+  const viewer: PeekViewer = {
+    renderStatic(spec) {
+      seen.push(`${spec.side}/${spec.path}`);
+
+      return `<pre data-viewer>${spec.ranges.map((range) => `${range.startLine}-${range.endLine}`).join(",")}</pre>`;
+    },
+    create() {
+      throw new Error("not mounted on a server");
+    },
+    find: async () => ({ matchCount: 0 }),
+  };
+
+  const html = renderLive({ peeks: () => viewer });
+  expect(seen).toEqual(["head/order.ts"]);
+  expect(html).toContain("<pre data-viewer>1-2</pre>");
 });
