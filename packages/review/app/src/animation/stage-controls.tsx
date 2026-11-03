@@ -6,9 +6,9 @@ import { tokens } from "@canvas/tokens.stylex";
 import { IconButton } from "@canvas/ui/button";
 import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
 
-import type { PlayerStop } from "./stage-player";
+import type { FrameTimer, PlayerStop } from "./stage-player";
 
 export function ControlButton({
   label,
@@ -57,17 +57,36 @@ export function StopCaption({ stop }: { stop: PlayerStop | undefined }) {
   );
 }
 
-/** A named step per stop, like a progress strip. */
+/** The clock as custom properties: where the marker starts, how much of it
+ * is left to draw, and how long that takes. Reduced motion ignores them. */
+export const timerVars = (timer: FrameTimer) =>
+  // SAFETY: React passes custom properties through to style.setProperty;
+  // only its CSSProperties type leaves them out.
+  ({
+    "--frame-timer-fill": `${timer.fraction * 100}%`,
+    "--frame-timer-rest": `${1 - timer.fraction}`,
+    "--frame-timer-ms": `${timer.remaining}ms`,
+  }) as CSSProperties;
+
+/** The clock's state, a marker for tests. */
+export const timerState = (timer: FrameTimer) =>
+  timer.running ? "running" : "held";
+
+/** A named step per stop, like a progress strip. While frames play, the
+ * marker under the step showing is drawn along it as the frame's time runs,
+ * over a wash of where it will end. */
 export function StepStrip({
   label,
   items,
   activeIndex,
+  timer,
   onPick,
   onKeyDown,
 }: {
   label: string;
   items: { key: string; text: string }[];
   activeIndex: number;
+  timer?: FrameTimer | null;
   onPick(position: number): void;
   onKeyDown(event: KeyboardEvent): void;
 }) {
@@ -87,15 +106,32 @@ export function StepStrip({
           {...stylex.props(
             styles.step,
             position === activeIndex && styles.stepCurrent,
+            position === activeIndex && timer && styles.stepTimed,
           )}
         >
           <span {...stylex.props(styles.stepIndex)}>{position + 1}</span>
           <span data-review-copy-prose>{item.text}</span>
+          {position === activeIndex && timer && (
+            <i
+              aria-hidden="true"
+              data-frame-timer={timerState(timer)}
+              {...stylex.props(
+                styles.timer,
+                timer.running && styles.timerRunning,
+              )}
+              style={timerVars(timer)}
+            />
+          )}
         </button>
       ))}
     </div>
   );
 }
+
+// The marker drawn along the underline, from where the clock was read to its end.
+const draw = stylex.keyframes({
+  to: { width: "100%" },
+});
 
 const styles = stylex.create({
   icon: {
@@ -127,6 +163,7 @@ const styles = stylex.create({
     borderTopColor: tokens.rule,
   },
   step: {
+    position: "relative",
     display: "flex",
     flex: "1 1 0",
     alignItems: "center",
@@ -155,6 +192,32 @@ const styles = stylex.create({
   stepCurrent: {
     borderBottomColor: tokens.accent,
     color: tokens.ink,
+  },
+  // With a clock, the underline rests as a wash and the marker draws over it.
+  stepTimed: {
+    borderBottomColor: {
+      default: tokens.accentStripe,
+      [stylex.env.reducedMotion]: tokens.accent,
+    },
+  },
+  // Sits on the step's own 2px underline, one height below the padding box.
+  timer: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    transform: "translateY(100%)",
+    width: {
+      default: tokens.frameTimerFill,
+      [stylex.env.reducedMotion]: "100%",
+    },
+    height: "2px",
+    backgroundColor: tokens.accent,
+  },
+  timerRunning: {
+    animationName: { default: draw, [stylex.env.reducedMotion]: "none" },
+    animationDuration: tokens.frameTimerMs,
+    animationTimingFunction: "linear",
+    animationFillMode: "forwards",
   },
   stepIndex: {
     color: "inherit",

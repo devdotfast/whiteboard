@@ -1255,6 +1255,94 @@ describe("block components", () => {
     ).toBe(true);
   });
 
+  it("runs the frame's clock along the step underline while playing, holds it on pause and drops it on a hand step", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Clock",
+          height: "auto",
+          frames: [
+            { key: "a", title: "Start", label: "START", duration: 1500 },
+            { key: "b", title: "Middle", label: "MIDDLE", duration: 1500 },
+          ],
+          code: {},
+          html: "<p>Stage</p>",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    const press = (label: string) =>
+      act(async () =>
+        container
+          .querySelector<HTMLButtonElement>(`button[aria-label='${label}']`)!
+          .click(),
+      );
+
+    const timer = () =>
+      container.querySelector<HTMLElement>(
+        "[aria-label='Steps'] [data-frame-timer]",
+      );
+
+    expect(timer()).toBeNull();
+    await press("Play");
+    expect(await settled(() => timer()?.dataset.frameTimer === "running")).toBe(
+      true,
+    );
+    expect(timer()!.closest("button")!.textContent).toContain("START");
+
+    await press("Pause");
+    expect(await settled(() => timer()?.dataset.frameTimer === "held")).toBe(
+      true,
+    );
+
+    const held = Number.parseFloat(
+      timer()!.style.getPropertyValue("--frame-timer-fill"),
+    );
+
+    expect(held).toBeGreaterThan(0);
+    expect(held).toBeLessThan(100);
+
+    await press("Next frame");
+    expect(timer()).toBeNull();
+  });
+
+  it("sweeps the current dot while an animation without labels plays", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Dots",
+          height: "auto",
+          frames: [
+            { key: "a", title: "Start", duration: 1500 },
+            { key: "b", title: "End", duration: 1500 },
+          ],
+          code: {},
+          html: "<p>Stage</p>",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Play']")!
+        .click(),
+    );
+    expect(
+      await settled(
+        () =>
+          container.querySelector(
+            "[aria-label='Frames'] [aria-current='step'][data-frame-timer='running'] svg",
+          ) !== null,
+      ),
+    ).toBe(true);
+  });
+
   it("draws an edited animation again from its first frame", async () => {
     const animation = (caption: string) => ({
       id: "block-1",

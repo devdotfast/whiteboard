@@ -21,6 +21,15 @@ export type PickedBy = "controls" | "tour";
 
 export type StageSend = (message: HostMessage) => void;
 
+/** How far the frame showing has run while playing: the fraction reached
+ * when it was read, the milliseconds left to run, and whether it is running
+ * or holding (paused, or full and waiting for the stage to settle). */
+export interface FrameTimer {
+  fraction: number;
+  remaining: number;
+  running: boolean;
+}
+
 export interface StagePlayer {
   /** The stops of the path showing, in order. */
   stops: readonly PlayerStop[];
@@ -45,8 +54,13 @@ export interface StagePlayer {
   /** The scenario showing, by key. */
   scenario: string | undefined;
   selectScenario(key: string): void;
-  /** The strip of named stops under the stage, when there is one. */
-  strip: { label: string; items: { key: string; text: string }[] } | null;
+  /** The strip of named stops under the stage, when there is one, with the
+   * clock of the stop showing while frames play. */
+  strip: {
+    label: string;
+    items: { key: string; text: string }[];
+    timer?: FrameTimer | null;
+  } | null;
   /** Drawn right under the stage. */
   afterStage?: ReactNode;
   /** The footer's controls and caption. */

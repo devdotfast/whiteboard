@@ -731,6 +731,7 @@ function StageBlock({
           label={player.strip.label}
           items={player.strip.items}
           activeIndex={activeIndex}
+          timer={player.strip.timer}
           onPick={(position) => player.pick(position, "controls")}
           onKeyDown={player.onKeyDown}
         />
