@@ -1,10 +1,8 @@
-import { segmentMarker } from "@canvas/markers.stylex";
 import { fontSize, fontWeight, radius, space } from "@canvas/scale.stylex";
 import { type StyleArg, withClass } from "@canvas/stylex-props";
 import { tokens } from "@canvas/tokens.stylex";
 import { buttonStyles } from "@canvas/ui/button";
 import { focusStyles } from "@canvas/ui/focus";
-import { MarkerUnderline } from "@canvas/ui/marker-underline";
 import * as stylex from "@stylexjs/stylex";
 import type { ComponentProps, ReactNode } from "react";
 
@@ -18,7 +16,7 @@ type SegmentedControlProps<T extends string> = Omit<
   onChange(value: T): void;
   // Large segments stand in prose (the welcome page).
   size?: "default" | "large";
-  // The top bar's view tabs: words on the tray, a marker under the chosen.
+  // The top bar's view tabs: the same track, a step taller, icons beside labels.
   variant?: "default" | "topbar";
   disabled?: boolean;
   className?: string;
@@ -28,6 +26,8 @@ type SegmentedControlProps<T extends string> = Omit<
 type SegmentOption<T extends string> = {
   value: T;
   label: ReactNode;
+  // Drawn before the label.
+  icon?: ReactNode;
   // A tally after the label, like a tab's file count.
   count?: number;
   "aria-label"?: string;
@@ -55,12 +55,7 @@ export function SegmentedControl<T extends string>({
       role="group"
       aria-label={label}
       {...props}
-      {...withClass(
-        className,
-        segmentStyles.segmented,
-        topbar && segmentStyles.segmentedTopbar,
-        xstyle,
-      )}
+      {...withClass(className, segmentStyles.segmented, xstyle)}
     >
       {options.map((option) => {
         const active = option.value === value;
@@ -74,17 +69,16 @@ export function SegmentedControl<T extends string>({
             title={option.title}
             disabled={disabled}
             {...stylex.props(
-              topbar && segmentMarker,
               focusStyles.ringInset,
               buttonStyles.reset,
               segmentStyles.segment,
               size === "large" && segmentStyles.segmentLarge,
               topbar && segmentStyles.segmentTopbar,
               active && segmentStyles.segmentActive,
-              active && topbar && segmentStyles.segmentTopbarActive,
             )}
             onClick={() => onChange(option.value)}
           >
+            {option.icon}
             {option.label}
             {option.count === undefined ? null : (
               <span
@@ -96,7 +90,6 @@ export function SegmentedControl<T extends string>({
                 {option.count}
               </span>
             )}
-            {topbar ? <MarkerUnderline active={active} /> : null}
           </button>
         );
       })}
@@ -119,9 +112,8 @@ export function labeledOptions<T extends string>(labels: Record<T, ReactNode>) {
 // "Other…" menu trigger.
 export const segmentStyles = stylex.create({
   // Segmented choice controls: a tray-colored track, the chosen side raised
-  // on a hairline. One part for every "pick one of a few" setting. The
-  // surface tabs on the left of the top bar are the exception: words on the
-  // tray with the marker under the current one.
+  // on a hairline. One part for every "pick one of a few" setting, the top
+  // bar's view tabs included.
   segmented: {
     display: "flex",
     flex: "0 0 auto",
@@ -133,15 +125,6 @@ export const segmentStyles = stylex.create({
     borderColor: tokens.rule,
     borderRadius: radius.control,
     backgroundColor: tokens.tray,
-  },
-  segmentedTopbar: {
-    gap: space.s18,
-    padding: 0,
-    borderWidth: 0,
-    borderStyle: "none",
-    borderColor: "currentcolor",
-    borderRadius: 0,
-    backgroundColor: tokens.transparent,
   },
   segment: {
     display: "inline-flex",
@@ -166,21 +149,13 @@ export const segmentStyles = stylex.create({
     fontSize: fontSize.ui,
   },
   segmentTopbar: {
-    height: tokens.reviewHeaderHeight,
-    padding: 0,
-    borderRadius: { default: 0, ":focus-visible": radius.small },
-    fontSize: fontSize.body,
-    fontWeight: fontWeight.regular,
+    height: "24px",
   },
   segmentActive: {
     backgroundColor: tokens.raised,
     boxShadow: `0 0 0 1px ${tokens.ruleSoft}`,
     color: tokens.ink,
     fontWeight: fontWeight.semibold,
-  },
-  segmentTopbarActive: {
-    backgroundColor: tokens.transparent,
-    boxShadow: "none",
   },
   segmentCount: {
     flex: "0 0 auto",

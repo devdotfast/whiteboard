@@ -5,9 +5,6 @@ import * as stylex from "@stylexjs/stylex";
 // stylex.create: the compiler evaluates the call, and stylex.when throws at
 // runtime.
 
-/** A top bar surface tab; its marker underline draws while it is hovered. */
-export const segmentMarker = stylex.defineMarker();
-
 /** A disclosure toggle, a button or summary; its chevron inks and turns. */
 export const chevronMarker = stylex.defineMarker();
 
