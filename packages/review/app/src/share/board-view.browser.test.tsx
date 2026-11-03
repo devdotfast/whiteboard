@@ -95,3 +95,34 @@ it("rejects a document that is not a Whiteboard document", () => {
     boardView({ ...version(1, ["a"]), document: [{ type: "nonsense" }] }),
   ).toThrow(/"document"/);
 });
+
+it("names a hosted board's repository and pull request under its title", async () => {
+  const container = document.body.appendChild(document.createElement("div"));
+  await act(async () => {
+    canvas = mountWhiteboard(
+      container,
+      boardView(
+        {
+          ...version(1, ["a"]),
+          origin: {
+            pullRequestNumber: 612,
+            pullRequestUrl: "https://github.com/octo/widgets/pull/612",
+          },
+        },
+        { repository: "octo / widgets" },
+      ),
+      { host },
+    );
+  });
+
+  const header = () =>
+    container.querySelector("[data-review-document-header]")?.textContent;
+
+  await settled(() => header()?.includes("#612"));
+  expect(header()).toContain("octo / widgets");
+  expect(
+    container.querySelector(
+      'a[href="https://github.com/octo/widgets/pull/612"]',
+    ),
+  ).not.toBeNull();
+});

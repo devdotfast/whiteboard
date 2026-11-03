@@ -50,6 +50,7 @@ export async function openShare(
         lenses: [],
         resolvedSelections: bundle.selections,
       },
+      ...(cloneUrl && { repository: repositoryLabel(cloneUrl) }),
     },
   );
 
@@ -66,13 +67,7 @@ export async function openShare(
     title: bundle.title,
     ...(bundle.repository && { repository: bundle.repository }),
     ...(bundle.frozen && { frozen: bundle.frozen }),
-    data: {
-      ...data,
-      place: {
-        siblings: [],
-        ...(cloneUrl && { repository: repositoryLabel(cloneUrl) }),
-      },
-    },
+    data,
     host,
     dispose() {
       host.dispose();

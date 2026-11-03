@@ -94,6 +94,8 @@ export interface BoardSnapshot {
   lastEdit?: BoardEdit;
   /** Present for a live board; "unknown" once its stream is lost. */
   activity?: BoardActivity | "unknown";
+  /** The pull request named under the title. */
+  origin?: { pullRequestNumber?: number; pullRequestUrl?: string };
 }
 
 export interface BoardTrace {
@@ -116,6 +118,8 @@ export interface BoardViewOptions {
   commits?: readonly object[];
   /** The board's resolved selections, for a host that cannot read them. */
   progress?: object;
+  /** Named under the title, such as "octo / widgets". */
+  repository?: string;
 }
 
 /** Reads one version into board data; throws on an invalid document.
