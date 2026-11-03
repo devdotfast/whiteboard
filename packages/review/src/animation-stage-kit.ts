@@ -21,6 +21,10 @@ export const STAGE_THEME = {
   "added-bg": "--diff-added-bg",
   "removed-bg": "--diff-removed-bg",
   "modified-bg": "--diff-modified-bg",
+  // Two more outline colours for telling kinds of card apart: the software
+  // map's storage colour, and the merged purple.
+  teal: "--map-storage-border",
+  violet: "--merged",
   // Each face by its role: the chrome's for labels, mono for what a
   // terminal would print, the reading face for prose, and the code font.
   "font-sans": "--chrome-font",
@@ -52,6 +56,8 @@ export const STAGE_VARIABLES: [note: string, names: string[]][] = [
       "added-bg",
       "removed-bg",
       "modified-bg",
+      "teal",
+      "violet",
     ],
   ],
   [
@@ -248,6 +254,52 @@ body {
 .wb-card-dot { flex: none; width: 7px; height: 7px; border-radius: var(--wb-radius-round); background: var(--wb-ink-faint); }
 .wb-card-title { min-width: 0; overflow-wrap: anywhere; font-weight: var(--wb-weight-semibold); }
 .wb-card-note { color: var(--wb-ink-muted); overflow-wrap: anywhere; font-size: var(--wb-text-micro); min-height: 12px; }
+
+/* Shapes: a card's or node's silhouette says what it stands for before
+   its title does. data-form is box (the default), pill, cut (a branch),
+   cylinder (a database), drum (a cache), stack (a queue), window (a
+   client) or bars (a service of this codebase). data-outline is solid,
+   dashed (outside the system) or dotted. data-color is the resting border
+   colour: ink, accent, teal or violet; a tone takes over while set. The
+   scene's cards take these as options. */
+:is(.wb-card, .wb-node)[data-form] { position: relative; }
+:is(.wb-card, .wb-node)[data-form]::before, :is(.wb-card, .wb-node)[data-form]::after { pointer-events: none; }
+:is(.wb-card, .wb-node)[data-form="pill"] { padding-inline: var(--wb-space-16); border-radius: var(--wb-radius-pill); }
+:is(.wb-card, .wb-node)[data-form="cut"] { border-radius: var(--wb-space-12); corner-shape: bevel; }
+:is(.wb-card, .wb-node)[data-form="cylinder"] { padding-top: var(--wb-space-20); padding-bottom: var(--wb-space-12); border-radius: 50% / var(--wb-space-10); }
+:is(.wb-card, .wb-node)[data-form="cylinder"]::before {
+  content: ""; position: absolute; inset: -1px -1px auto; height: var(--wb-space-20);
+  border: 1px solid; border-color: inherit; border-radius: 50%; background: inherit;
+}
+:is(.wb-card, .wb-node)[data-form="drum"] { padding-left: var(--wb-space-28); padding-right: var(--wb-space-16); border-radius: var(--wb-space-12) / 50%; }
+:is(.wb-card, .wb-node)[data-form="drum"]::before {
+  content: ""; position: absolute; inset: -1px auto -1px -1px; width: var(--wb-space-24);
+  border: 1px solid; border-color: inherit; border-radius: 50%; background: inherit;
+}
+:is(.wb-card, .wb-node)[data-form="stack"] {
+  margin-right: var(--wb-space-8); margin-bottom: var(--wb-space-8);
+  box-shadow: 4px 4px 0 -1px var(--wb-surface), 4px 4px 0 0 var(--wb-rule), 8px 8px 0 -1px var(--wb-surface), 8px 8px 0 0 var(--wb-rule);
+}
+:is(.wb-card, .wb-node)[data-form="window"] { padding-top: var(--wb-space-16); }
+:is(.wb-card, .wb-node)[data-form="window"]::before { content: ""; position: absolute; top: var(--wb-space-8); right: 0; left: 0; border-top: 1px solid; border-color: inherit; }
+:is(.wb-card, .wb-node)[data-form="bars"] { padding-inline: var(--wb-space-18); }
+:is(.wb-card, .wb-node)[data-form="bars"]::before, :is(.wb-card, .wb-node)[data-form="bars"]::after { content: ""; position: absolute; top: 0; bottom: 0; border-left: 1px solid; border-color: inherit; }
+:is(.wb-card, .wb-node)[data-form="bars"]::before { left: var(--wb-space-6); }
+:is(.wb-card, .wb-node)[data-form="bars"]::after { right: var(--wb-space-6); }
+:is(.wb-card, .wb-node)[data-outline="dashed"] { border-style: dashed; }
+:is(.wb-card, .wb-node)[data-outline="dotted"] { border-style: dotted; }
+:is(.wb-card, .wb-node)[data-color="ink"] { border-color: var(--wb-ink); }
+:is(.wb-card, .wb-node)[data-color="accent"] { border-color: var(--wb-accent); }
+:is(.wb-card, .wb-node)[data-color="teal"] { border-color: var(--wb-teal); }
+:is(.wb-card, .wb-node)[data-color="violet"] { border-color: var(--wb-violet); }
+.wb-card[data-color="ink"] .wb-card-dot { background: var(--wb-ink); }
+.wb-card[data-color="accent"] .wb-card-dot { background: var(--wb-accent); }
+.wb-card[data-color="teal"] .wb-card-dot { background: var(--wb-teal); }
+.wb-card[data-color="violet"] .wb-card-dot { background: var(--wb-violet); }
+.wb-shape[data-color="ink"] { stroke: var(--wb-ink); }
+.wb-shape[data-color="accent"] { stroke: var(--wb-accent); }
+.wb-shape[data-color="teal"] { stroke: var(--wb-teal); }
+.wb-shape[data-color="violet"] { stroke: var(--wb-violet); }
 .wb-well { padding: var(--wb-space-12); border: 1px solid var(--wb-rule-soft); border-radius: var(--wb-radius-surface); background: var(--wb-well); }
 .wb-well :is(.wb-item, .wb-chip, .wb-badge, .wb-code) { background: var(--wb-surface); }
 .wb-rule { margin: var(--wb-space-12) 0; border: 0; border-top: 1px solid var(--wb-rule); }
@@ -311,6 +363,9 @@ body {
 .wb-shape[data-tone="modified"] { stroke: var(--wb-modified); fill: var(--wb-modified-bg); }
 .wb-shape[data-tone="muted"] { stroke-dasharray: 4 3; }
 :is(.wb-card, .wb-node)[data-wb-highlit] { border-color: var(--wb-accent); box-shadow: 0 0 0 3px var(--wb-accent-soft); }
+:is(.wb-card, .wb-node)[data-form="stack"][data-wb-highlit] {
+  box-shadow: 0 0 0 3px var(--wb-accent-soft), 4px 4px 0 -1px var(--wb-surface), 4px 4px 0 0 var(--wb-rule), 8px 8px 0 -1px var(--wb-surface), 8px 8px 0 0 var(--wb-rule);
+}
 .wb-shape[data-wb-highlit] { stroke: var(--wb-accent); stroke-width: 2; }
 
 /* Connectors and tokens. */

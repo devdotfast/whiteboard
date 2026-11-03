@@ -28,8 +28,8 @@ For a few services, processes or stores with messages moving between them, use `
 ```html
 <script>
   const s = whiteboard.scene({ columns: 2 });
-  const client = s.actor({ id: "client", at: [1, 1], title: "Client" });
-  const api = s.actor({ id: "api", at: [2, 1], title: "API" });
+  const client = s.actor({ id: "client", at: [1, 1], title: "Client", form: "window" });
+  const api = s.actor({ id: "api", at: [2, 1], title: "API", form: "bars" });
 
   s.send(client, api, "GET", "send");
   s.on("send", api, { note: "timed out", tone: "removed" });
@@ -39,6 +39,8 @@ For a few services, processes or stores with messages moving between them, use `
 ```
 
 A scene names frame keys, so a new scenario means new frames and a few new lines like these. A card's `id` is its element's id, so your own CSS can address it as `#api`.
+
+Give each card the silhouette of what it stands for, so a reader tells the parts apart before reading a title: `form: "window"` for a client, `"bars"` for a service or worker of this codebase, `"cylinder"` for a database, `"drum"` for a cache, `"stack"` for a queue or topic, `"pill"` for a start or end, `"cut"` for a branch. A third-party service or API gets `outline: "dashed"`. `color` sets a border colour at rest (`teal` for stores, `violet` for queues, `accent` for the part under discussion); a frame's `tone` takes over while set. The same `data-form`, `data-outline` and `data-color` work on a `wb-node` in a hand-made layout.
 
 ### A hand-made layout: lanes, axes, graphs
 

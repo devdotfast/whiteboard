@@ -15,6 +15,31 @@
 /** Colors any scene part, arrow, token, or kit element (as data-tone). */
 export type Tone = "accent" | "added" | "removed" | "modified" | "muted";
 
+/** A card's silhouette, so a reader tells kinds apart before reading a
+ * title. Pick by what the card stands for: `cylinder` for a database,
+ * `drum` for a cache, `stack` for a queue or topic, `window` for a client
+ * (a browser, an app), `bars` for a service or worker of this codebase,
+ * `pill` for a start or end, `cut` for a branch. Any kit element takes it as
+ * data-form. */
+export type Form =
+  | "box"
+  | "pill"
+  | "cut"
+  | "cylinder"
+  | "drum"
+  | "stack"
+  | "window"
+  | "bars";
+
+/** A border's line. `dashed` reads as outside the system: a third-party
+ * service or API. As data-outline on a kit element. */
+export type Outline = "solid" | "dashed" | "dotted";
+
+/** A border's colour at rest, for grouping cards of a kind: `teal` suits
+ * stores, `violet` queues, `accent` the part under discussion. A tone from
+ * on() takes over while set. As data-color on a kit element. */
+export type Color = "ink" | "accent" | "teal" | "violet";
+
 /** One frame, as your scripts read it. */
 export interface Frame {
   key: string;
@@ -315,6 +340,12 @@ export interface SceneCardOptions extends Lifecycle {
   /** The second line; on() changes it per frame. */
   note?: string;
   tone?: Tone;
+  /** What the card is, by silhouette; see Form. Default box. */
+  form?: Form;
+  /** The border's line; see Outline. Default solid. */
+  outline?: Outline;
+  /** The border's colour at rest; see Color. */
+  color?: Color;
   /** Frames during which the card is ringed. */
   highlight?: string[];
   /** The code the card opens when clicked: a name in the block's code. */

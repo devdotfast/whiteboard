@@ -8,8 +8,23 @@
 <script>
   const s = whiteboard.scene({ columns: 3 });
   const caller = s.actor({ id: "caller", at: [1, 1], title: "Handler", note: "getUser(id)" });
-  const cache = s.store({ id: "cache", at: [2, 1], title: "UserCache", note: "LRU · capacity 3", code: "lookup" });
-  const source = s.actor({ id: "source", at: [3, 1], title: "Postgres", note: "~120 ms a read" });
+  const cache = s.store({
+    id: "cache",
+    at: [2, 1],
+    title: "UserCache",
+    note: "LRU · capacity 3",
+    form: "drum",
+    color: "teal",
+    code: "lookup",
+  });
+  const source = s.actor({
+    id: "source",
+    at: [3, 1],
+    title: "Postgres",
+    note: "~120 ms a read",
+    form: "cylinder",
+    color: "teal",
+  });
 
   // Items keep their order, so each scenario seeds its own entries, oldest first.
 

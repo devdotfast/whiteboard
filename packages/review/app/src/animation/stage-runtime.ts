@@ -69,6 +69,22 @@ type PaintHandler = (paint: PaintChange) => FrameResult;
 
 type Tone = "accent" | "added" | "removed" | "modified" | "muted";
 
+/** A card's silhouette; whiteboard.css draws each. */
+type Form =
+  | "box"
+  | "pill"
+  | "cut"
+  | "cylinder"
+  | "drum"
+  | "stack"
+  | "window"
+  | "bars";
+
+type Outline = "solid" | "dashed" | "dotted";
+
+/** A resting border colour; a tone takes over while one is set. */
+type Color = "ink" | "accent" | "teal" | "violet";
+
 /** Where a scene part sits: 1-based column and row, with optional row and
  * column spans. A wide peek spans columns: [1, 2, 1, 4] is row 2, four wide. */
 export type Cell = [
@@ -85,6 +101,14 @@ export interface SceneCardOptions {
   /** The second line under the title; scene.on changes it per frame. */
   note?: string;
   tone?: Tone;
+  /** What the card is, by silhouette: a cylinder for a database, a drum
+   * for a cache, a stack for a queue, a window for a client, bars for a
+   * service of this codebase. Default box. */
+  form?: Form;
+  /** The border's line; dashed for a service outside the system. */
+  outline?: Outline;
+  /** The border's colour at rest, for grouping cards of a kind. */
+  color?: Color;
   /** Show from this frame on, hide from this one on, or only on these. */
   enter?: string;
   exit?: string;
@@ -2689,6 +2713,14 @@ export function stageRuntime(port: MessagePort): void {
       el.id = options.id;
 
       if (options.code !== undefined) el.dataset.wbOpen = options.code;
+
+      if (options.form && options.form !== "box")
+        el.dataset.form = options.form;
+
+      if (options.outline && options.outline !== "solid")
+        el.dataset.outline = options.outline;
+
+      if (options.color) el.dataset.color = options.color;
       place(el, options.at);
       applyLifecycle(el, options);
 

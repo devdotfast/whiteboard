@@ -2,21 +2,40 @@
   const s = whiteboard.scene({ columns: 4 });
 
   // Ring the card that reshapes the payload in each frame.
+  // Each card wears the shape of its layer: a window for the client, bars
+  // for the services this codebase runs, a cylinder for the database.
   const client = s.actor({
     id: "client",
     at: [1, 1],
     title: "Client",
+    form: "window",
     highlight: ["request", "respond", "bad-request"],
   });
-  const api = s.actor({ id: "api", at: [2, 1], title: "API", code: "validate", highlight: ["validate", "rejected"] });
+  const api = s.actor({
+    id: "api",
+    at: [2, 1],
+    title: "API",
+    form: "bars",
+    code: "validate",
+    highlight: ["validate", "rejected"],
+  });
   const service = s.actor({
     id: "service",
     at: [3, 1],
     title: "OrderService",
+    form: "bars",
     code: "service",
     highlight: ["persist", "map"],
   });
-  const db = s.actor({ id: "db", at: [4, 1], title: "Postgres", code: "repository", highlight: ["stored"] });
+  const db = s.actor({
+    id: "db",
+    at: [4, 1],
+    title: "Postgres",
+    form: "cylinder",
+    color: "teal",
+    code: "repository",
+    highlight: ["stored"],
+  });
 
   // Requests travel solid edges; replies ride dashed ones beside them.
   s.link(client, api);
