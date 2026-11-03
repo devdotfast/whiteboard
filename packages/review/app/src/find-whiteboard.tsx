@@ -1,4 +1,10 @@
-import { fontSize, fontWeight, leading, space } from "@canvas/scale.stylex";
+import {
+  fontSize,
+  fontWeight,
+  leading,
+  radius,
+  space,
+} from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { BoardIcon } from "@canvas/ui/board-icons";
 import { CrumbSeparator } from "@canvas/ui/crumbs";
@@ -140,7 +146,6 @@ export function FindWhiteboard({
               aria-current={board.reviewId === current ? "page" : undefined}
               {...stylex.props(
                 listRowStyles.row,
-                listRowStyles.wash,
                 styles.row,
                 board === picked && listRowStyles.highlighted,
               )}
@@ -158,17 +163,23 @@ export function FindWhiteboard({
                 )}
               </span>
               <span {...stylex.props(styles.text)}>
-                <span {...stylex.props(textStyles.truncate, styles.title)}>
+                <span {...stylex.props(styles.title)}>
                   {board.parentId && titles.has(board.parentId) ? (
-                    <span {...stylex.props(styles.parent)}>
-                      {titles.get(board.parentId)}
+                    <>
+                      <span
+                        {...stylex.props(textStyles.truncate, styles.parent)}
+                      >
+                        {titles.get(board.parentId)}
+                      </span>
                       <CrumbSeparator />
-                    </span>
+                    </>
                   ) : null}
-                  <MatchedText
-                    text={boardTitle(board.title)}
-                    queries={[query]}
-                  />
+                  <span {...stylex.props(textStyles.truncate)}>
+                    <MatchedText
+                      text={boardTitle(board.title)}
+                      queries={[query]}
+                    />
+                  </span>
                 </span>
                 <span {...stylex.props(textStyles.truncate, styles.details)}>
                   {finderDetails(board).map((detail, position) => (
@@ -234,22 +245,26 @@ const styles = stylex.create({
   list: {
     maxHeight: "min(420px, calc(100vh - 240px))",
     margin: 0,
-    padding: space.s6,
+    padding: space.s8,
     overflowY: "auto",
     listStyle: "none",
     overscrollBehavior: "contain",
+    // The picked row keeps the same inset whether or not the list scrolls.
+    scrollbarGutter: "stable",
   },
-  heading: { padding: `${space.s8} ${space.s10} ${space.s4}` },
+  heading: { padding: `${space.s12} ${space.s8} ${space.s6}` },
   row: {
+    gap: space.s12,
     height: "auto",
-    padding: `${space.s6} ${space.s10}`,
+    padding: `${space.s8} ${space.s8}`,
+    borderRadius: radius.control,
   },
   iconSlot: {
     display: "flex",
     flexShrink: 0,
     alignItems: "center",
     justifyContent: "center",
-    width: space.s16,
+    width: space.s20,
     height: space.s18,
   },
   stackIcon: { width: space.s14, height: space.s14, color: tokens.inkMuted },
@@ -261,11 +276,21 @@ const styles = stylex.create({
     gap: space.s2,
   },
   title: {
+    display: "flex",
+    alignItems: "center",
+    gap: space.s4,
+    minWidth: 0,
     fontSize: fontSize.ui,
     fontWeight: fontWeight.medium,
     lineHeight: leading.px18,
   },
-  parent: { color: tokens.inkMuted, fontWeight: fontWeight.regular },
+  // A child's parent, cut short before it crowds out the child's own name.
+  parent: {
+    flexShrink: 0,
+    maxWidth: space.s160,
+    color: tokens.inkMuted,
+    fontWeight: fontWeight.regular,
+  },
   details: {
     minHeight: leading.px16,
     color: tokens.inkMuted,
@@ -275,6 +300,7 @@ const styles = stylex.create({
   time: {
     flexShrink: 0,
     alignSelf: "flex-start",
+    marginInlineStart: space.s16,
     color: tokens.inkFaint,
     fontSize: fontSize.small,
     lineHeight: leading.px18,
@@ -287,8 +313,8 @@ const styles = stylex.create({
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.ruleSoft,
-    color: tokens.inkFaint,
+    color: tokens.inkMuted,
     fontSize: fontSize.small,
   },
-  hint: { display: "inline-flex", alignItems: "center", gap: space.s4 },
+  hint: { display: "inline-flex", alignItems: "center", gap: space.s6 },
 });
