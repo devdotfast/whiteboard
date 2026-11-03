@@ -201,7 +201,7 @@ export interface Whiteboard {
   /** A dot, or a pill with a label, that travel() moves along arrows. */
   token(options?: TokenOptions): HTMLElement;
   /** Move a token along an arrow during a frame, at the arrow's live geometry.
-   * It fades out on arrival unless `stay` keeps it at the head. Trips append
+   * It waits at the head until the next frame unless `stay` is false. Trips append
    * to the frame; `position: 0` starts trips together, a number of
    * milliseconds sequences one after another. Declare trips while the script
    * first runs, not from a frame handler. */
@@ -409,8 +409,8 @@ export interface SceneLinkOptions extends Lifecycle {
 
 export interface SceneSendOptions extends Lifecycle {
   tone?: Tone;
-  /** Keep the chip at its target instead of fading it out; scope when it shows
-   * with enter, exit or only. */
+  /** Default true: the chip waits at its target until the next frame. false
+   * fades it out on arrival. Scope when it shows with enter, exit or only. */
   stay?: boolean;
 }
 

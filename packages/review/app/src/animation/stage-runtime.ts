@@ -179,7 +179,8 @@ export interface SceneLinkOptions {
 
 export interface SceneSendOptions {
   tone?: Tone;
-  /** Keep the chip at the target instead of fading it out on arrival. */
+  /** Default true: the chip waits at the target until the next frame. false
+   * fades it out on arrival. */
   stay?: boolean;
   enter?: string;
   exit?: string;
@@ -377,7 +378,8 @@ export interface WhiteboardShim {
    * Pass `visible` for a static marker at its authored position. */
   token(options?: TokenOptions): HTMLElement;
   /** Move a token along an arrow during a frame. It fades out on arrival
-   * unless `stay` keeps it at the arrow's head. */
+   * and waits at the arrow's head until the next frame unless `stay` is
+   * false, which fades it on arrival. */
   travel(
     token: HTMLElement | string,
     arrow: SVGGElement,
@@ -2067,10 +2069,10 @@ export function stageRuntime(port: MessagePort): void {
     root.dataset.frameIndex = String(frame.index);
     applyStates();
 
-    // A chip another frame left mid-edge, or at its head, when the reader
-    // stepped or switched scenario before it faded, is not this frame's.
+    // A chip stays where its frame left it until the reader moves on: the
+    // frame showing hides every other frame's chips.
     for (const travel of travels)
-      if (travel.frame !== frame.key && !travel.stay)
+      if (travel.frame !== frame.key)
         // SAFETY: a travel's element is the <div> chip makeToken created.
         (travel.element as HTMLElement).style.opacity = "0";
 
@@ -2599,8 +2601,10 @@ export function stageRuntime(port: MessagePort): void {
         "<",
       );
 
-    // A token left at an edge's head covers the node it points at.
-    if (!options.stay) segment.add(element, { opacity: 0, duration: 250 }, "<");
+    // The chip waits at the head until the next frame, so what it carried
+    // can be read; `stay: false` fades it on arrival instead.
+    if (options.stay === false)
+      segment.add(element, { opacity: 0, duration: 250 }, "<");
   };
 
   // One shared id per element, for pairing parallel edges and lookups.
