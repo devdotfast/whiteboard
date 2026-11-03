@@ -1627,10 +1627,27 @@ export function stageRuntime(port: MessagePort): void {
         if (!crosses(p, q, r, 4)) continue;
         const cx = r.x + r.width / 2;
         const cy = r.y + r.height / 2;
-        // Signed distance of the card's centre from the a→b line.
+        // Signed distance of the card's centre from the a→b line, and how
+        // far the card reaches across that line: its extent along the normal,
+        // so a horizontal edge clears a wide card by its height, not its width.
         const signed = ((bx - ax) * (cy - ay) - (by - ay) * (cx - ax)) / length;
-        const span = Math.abs(signed) + Math.max(r.width, r.height) / 2 + 20;
-        const bow = span * 2 * Math.sign(signed || 1);
+
+        const reach = (Math.abs(nx) * r.width + Math.abs(ny) * r.height) / 2;
+
+        const span = Math.abs(signed) + reach + 20;
+
+        // A card dead on the line is passed on the side nearer the body's
+        // middle, so a top-row edge bows down into the drawing, not out of it.
+        const body = document.body.getBoundingClientRect();
+
+        const toMiddle =
+          (body.x + body.width / 2 - (ax + bx) / 2) * nx +
+          (body.y + body.height / 2 - (ay + by) / 2) * ny;
+
+        const side =
+          Math.abs(signed) > 1 ? Math.sign(signed) : -Math.sign(toMiddle || 1);
+
+        const bow = span * 2 * side;
 
         if (Math.abs(bow) > Math.abs(avoid)) avoid = bow;
       }
@@ -2049,6 +2066,13 @@ export function stageRuntime(port: MessagePort): void {
     root.dataset.frame = frame.key;
     root.dataset.frameIndex = String(frame.index);
     applyStates();
+
+    // A chip another frame left mid-edge, or at its head, when the reader
+    // stepped or switched scenario before it faded, is not this frame's.
+    for (const travel of travels)
+      if (travel.frame !== frame.key && !travel.stay)
+        // SAFETY: a travel's element is the <div> chip makeToken created.
+        (travel.element as HTMLElement).style.opacity = "0";
 
     const change: FrameChange = {
       frame,
@@ -2482,6 +2506,9 @@ export function stageRuntime(port: MessagePort): void {
     element: Element;
     arrow: ArrowRecord;
     owner: TravelOwner;
+    /** The frame the chip rides in, and whether it stays at the head after. */
+    frame: string;
+    stay: boolean;
     progress: { value: number };
     x?: number;
     y?: number;
@@ -2552,6 +2579,8 @@ export function stageRuntime(port: MessagePort): void {
       element,
       arrow: record,
       owner,
+      frame,
+      stay: options.stay === true,
       progress: { value: 0 },
     };
 
