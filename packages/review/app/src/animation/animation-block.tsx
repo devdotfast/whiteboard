@@ -92,6 +92,7 @@ const MEASURE_WAIT = 1000;
 // at most 2x, past which a drawing made for a column reads as a poster, and
 // at least 0.4x, below which its text cannot be read and the room scrolls.
 const STAGE_MAX_SCALE = 2;
+
 const STAGE_MIN_SCALE = 0.4;
 
 // How long a render waits for the stage to boot, paint, show the stop asked
