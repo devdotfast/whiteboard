@@ -101,10 +101,6 @@ it("renders a share's document and its excerpts read-only", async () => {
     ),
   ).toBe(true);
 
-  // Neither Diff nor Trace: the share has no diff and no traces.
-  expect(
-    [...container.querySelectorAll("[aria-pressed]")].map((tab) =>
-      tab.getAttribute("aria-label"),
-    ),
-  ).toEqual(["Whiteboard"]);
+  // Neither Diff nor Trace, so no view tabs: the share has no diff and no traces.
+  expect(container.querySelector('[aria-label="Session views"]')).toBeNull();
 });

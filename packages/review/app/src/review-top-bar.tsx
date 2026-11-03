@@ -145,7 +145,8 @@ export function ReviewTopBar(): ReactElement {
             status={<BoardUpdatedAt />}
           />
         ) : null}
-        {sidebarLeads ? null : (
+        {/* A board with one view, like a hosted one, needs no tabs. */}
+        {sidebarLeads || reviewViews.length < 2 ? null : (
           <SegmentedControl
             label="Session views"
             variant="topbar"
