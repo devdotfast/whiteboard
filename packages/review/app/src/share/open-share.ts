@@ -68,8 +68,6 @@ export async function openShare(
     ...(bundle.frozen && { frozen: bundle.frozen }),
     data: {
       ...data,
-      // A share has no checkout to open.
-      available: { sourceWindows: false },
       place: {
         siblings: [],
         ...(cloneUrl && { repository: repositoryLabel(cloneUrl) }),
