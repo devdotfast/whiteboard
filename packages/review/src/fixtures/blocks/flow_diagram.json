@@ -4,8 +4,15 @@
     "title": "Queue an order",
     "nodes": [
       {
+        "key": "app",
+        "label": "Checkout app",
+        "kind": "client",
+        "attachments": []
+      },
+      {
         "key": "request",
         "label": "Queue order",
+        "kind": "service",
         "attachments": [
           {
             "label": "Handler",
@@ -18,6 +25,18 @@
         ]
       },
       {
+        "key": "payments",
+        "label": "Payment provider",
+        "kind": "external",
+        "attachments": []
+      },
+      {
+        "key": "orders",
+        "label": "Orders table",
+        "kind": "database",
+        "attachments": []
+      },
+      {
         "key": "saved",
         "label": "Saved",
         "kind": "terminal",
@@ -26,9 +45,24 @@
     ],
     "edges": [
       {
+        "from": "app",
+        "to": "request",
+        "label": "submit"
+      },
+      {
         "from": "request",
-        "to": "saved",
+        "to": "payments",
+        "label": "authorize",
+        "style": "dashed"
+      },
+      {
+        "from": "request",
+        "to": "orders",
         "label": "persist"
+      },
+      {
+        "from": "orders",
+        "to": "saved"
       }
     ],
     "id": "flow-1"

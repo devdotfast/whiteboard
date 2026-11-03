@@ -23,7 +23,9 @@ export type { Definitions } from "./blocks/index.js";
 export {
   type FlowDiagramBlock,
   type FlowDiagramNode,
+  type FlowNodeKind,
   flowDiagramSchema,
+  flowNodeKinds,
   nodeSources,
 } from "./blocks/flow_diagram.js";
 

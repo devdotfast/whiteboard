@@ -41,6 +41,12 @@ import { diagramStyles } from "./diagram-styles";
 import { useMotionPhase } from "./draw-queue-provider";
 import { drawStyles } from "./draw-styles";
 import { loadElk } from "./elk";
+import {
+  CACHE_LID,
+  DATABASE_LID,
+  flowNodeDrawing,
+  kindStrokes,
+} from "./flow-node-drawing";
 import { ElementCountsText } from "./lens-counts";
 import { documentMarker, flowNodeMarker } from "./markers.stylex";
 import { MetaWheelZoom } from "./meta-wheel-zoom";
@@ -54,7 +60,8 @@ import { tokens } from "./tokens.stylex";
  * fits the whole drawing to itself, so a node landing at the bottom of a
  * tall layout is still inside the box the reader is looking at. Nodes are
  * DOM, edges are paths, so the draw queue's phases apply as they do to a
- * sequence diagram. A decision is a dashed box, a terminal a pill.
+ * sequence diagram. A node's kind picks its drawing (flow-node-drawing.tsx):
+ * a cylinder for a database, a dashed box for an external service.
  */
 export function FlowGraph({
   block,
@@ -388,6 +395,14 @@ interface Layout {
 
 const SIZE = { width: 210, height: 62 };
 
+// A cache's lid takes the left of its box; the label starts after it.
+const textInset = (kind: FlowDiagramNode["kind"]) =>
+  kind === "cache" ? CACHE_LID : 0;
+
+// A database's lid and base take the top and bottom of its box.
+const extraHeight = (kind: FlowDiagramNode["kind"]) =>
+  kind === "database" ? DATABASE_LID * 2 : 0;
+
 // So the tour's fullscreen copy draws on its first render.
 const cachedLayouts = new WeakMap<
   FlowDiagramBlock,
@@ -424,10 +439,14 @@ async function layoutFlow(
     const singleLineHeight = label.offsetHeight;
 
     for (const node of block.nodes) {
+      // The label wraps in the room the shape leaves it.
+      measure.style.width = `${SIZE.width - textInset(node.kind)}px`;
       label.textContent = node.label;
       heights.set(
         node.key,
-        SIZE.height + Math.max(0, label.offsetHeight - singleLineHeight),
+        SIZE.height +
+          extraHeight(node.kind) +
+          Math.max(0, label.offsetHeight - singleLineHeight),
       );
     }
   } finally {
@@ -541,6 +560,12 @@ function FlowNode({ data, height = SIZE.height }: NodeProps<FlowNodeType>) {
   const progress =
     lenses?.stats(lenses.resolve(sources)) ?? coverageProgress([]);
 
+  const drawing = flowNodeDrawing(node.kind, SIZE.width, height);
+
+  // The drawing's marks arrive with the fill, after the outline is traced.
+  const marksHidden =
+    motion === "queued" || motion === "outline" || motion === "stroke";
+
   // The flow's onNodeClick handles the mouse; the keyboard lands here.
   const select = () => {
     if (!unavailable) data.select();
@@ -563,6 +588,7 @@ function FlowNode({ data, height = SIZE.height }: NodeProps<FlowNodeType>) {
       aria-pressed={selected}
       aria-label={node.label}
       data-review-unit-id={node.id}
+      data-flow-kind={node.kind ?? "process"}
       data-motion={motion}
       title={
         unavailable
@@ -596,12 +622,24 @@ function FlowNode({ data, height = SIZE.height }: NodeProps<FlowNodeType>) {
         preserveAspectRatio="none"
         aria-hidden="true"
       >
-        <rect
+        {drawing.echoes.map((d) => (
+          <path
+            key={d}
+            {...stylex.props(
+              styles.outline,
+              kindStrokes[node.kind ?? "process"],
+              marksHidden && drawStyles.hidden,
+            )}
+            d={d}
+          />
+        ))}
+        <path
           {...stylex.props(
             styles.outline,
+            kindStrokes[node.kind ?? "process"],
             changeOutline[change(progress)],
             selected && styles.outlineSelected,
-            node.kind === "decision" && !motion && styles.outlineDecision,
+            node.kind === "external" && !motion && styles.outlineExternal,
             motion === "stroke" && [
               styles.outlineTracing,
               drawStyles.traceQuick,
@@ -612,16 +650,28 @@ function FlowNode({ data, height = SIZE.height }: NodeProps<FlowNodeType>) {
             motion === "attention" && styles.outlineAttention,
           )}
           pathLength={1}
-          x={0.5}
-          y={0.5}
-          width={SIZE.width - 1}
-          height={height - 1}
-          rx={node.kind === "terminal" ? height / 2 : 6}
+          d={drawing.outline}
         />
+        {drawing.details.map((d) => (
+          <path
+            key={d}
+            {...stylex.props(
+              styles.outline,
+              kindStrokes[node.kind ?? "process"],
+              changeOutline[change(progress)],
+              selected && styles.outlineSelected,
+              styles.detail,
+              marksHidden && drawStyles.hidden,
+            )}
+            d={d}
+          />
+        ))}
       </svg>
       <div
         {...stylex.props(
           styles.text,
+          node.kind === "database" && styles.textDatabase,
+          node.kind === "cache" && styles.textCache,
           motion === "stroke" && drawStyles.labelQuick,
           motion === "outline" && drawStyles.hidden,
           (motion === "fill" || motion === "relabel") && drawStyles.labelFill,
@@ -757,19 +807,26 @@ const styles = stylex.create({
       [stylex.when.ancestor(":focus-visible", flowNodeMarker)]: 1.5,
     },
     vectorEffect: "non-scaling-stroke",
-    transition: `fill ${motion.medium} ${motion.ease}, stroke ${motion.medium} ${motion.ease}`,
+    transition: {
+      default: `fill ${motion.medium} ${motion.ease}, stroke ${motion.medium} ${motion.ease}`,
+      [stylex.env.reducedMotion]: "none",
+    },
   },
   outlineSelected: {
     fill: tokens.markerTint,
     stroke: tokens.accent,
     strokeWidth: 1.5,
   },
-  // A decision rests as a dashed box; the trace draws it solid. With
-  // pathLength 1, the dashes are fractions of the outline: about 4px on,
-  // 3px off.
-  outlineDecision: {
+  // An external service rests as a dashed box; the trace draws it solid.
+  // With pathLength 1, the dashes are fractions of the outline: about 4px
+  // on, 3px off.
+  outlineExternal: {
     stroke: tokens.inkMuted,
     strokeDasharray: "0.0075 0.0057",
+  },
+  // A lid, a title bar or a side rule: stroked like the outline, not filled.
+  detail: {
+    fill: "none",
   },
   // While drawn, the trace strokes it in the marker.
   outlineTracing: {
@@ -795,6 +852,15 @@ const styles = stylex.create({
     gap: space.s2,
     minWidth: 0,
     padding: `0 ${space.s12}`,
+  },
+  // Clear of the lid and the base.
+  textDatabase: {
+    paddingTop: space.s14,
+    paddingBottom: space.s6,
+  },
+  // Starts after the lid.
+  textCache: {
+    paddingLeft: space.s20,
   },
   measure: {
     padding: `0 ${space.s12}`,

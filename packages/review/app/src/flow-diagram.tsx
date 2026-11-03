@@ -3,6 +3,7 @@ import { Button } from "@canvas/ui/button";
 import { surfaceStyles } from "@canvas/ui/surface";
 import {
   type FlowDiagramBlock,
+  flowNodeKinds,
   nodeSources,
 } from "@dev.fast/whiteboard-document";
 import type { Snapshot } from "@review/review-api/store";
@@ -15,6 +16,7 @@ import { diagramStyles } from "./diagram-styles";
 import { DiagramTourOverlay, useDiagramTourShell } from "./diagram-tour";
 import { drawStyles } from "./draw-styles";
 import { FlowGraph } from "./flow-graph";
+import { FLOW_KIND_LABELS, FlowKindGlyph } from "./flow-node-drawing";
 import { countLabel } from "./format";
 import { documentMarker } from "./markers.stylex";
 import { useReviewLenses } from "./review-lenses";
@@ -72,6 +74,17 @@ export function FlowDiagram({
   const lenses = useReviewLenses();
   const total = lenses?.stats(lenses.resolve(sources)).total;
   const changed = !!total && total.additions + total.deletions > 0;
+
+  // The kinds drawn, in their declared order. One kind needs no decoding.
+  const kinds = useMemo(
+    () =>
+      flowNodeKinds.filter((kind) =>
+        node.nodes.some((item) => (item.kind ?? "process") === kind),
+      ),
+    [node],
+  );
+
+  const mixed = kinds.length > 1;
 
   const tour = useMemo<GuidedTour>(
     () => ({ id: node.id, title: node.title, stops }),
@@ -162,9 +175,19 @@ export function FlowDiagram({
           />
         </div>
       </div>
-      {(footerHint(sources.length > 0, fullscreen) || changed) && (
+      {(footerHint(sources.length > 0, fullscreen) || mixed || changed) && (
         <footer {...stylex.props(styles.footer)}>
           <span>{footerHint(sources.length > 0, fullscreen)}</span>
+          {mixed && (
+            <ul aria-label="Node kinds" {...stylex.props(styles.kinds)}>
+              {kinds.map((kind) => (
+                <li key={kind} {...stylex.props(styles.kind)}>
+                  <FlowKindGlyph kind={kind} />
+                  {FLOW_KIND_LABELS[kind]}
+                </li>
+              ))}
+            </ul>
+          )}
           {changed && (
             <span {...stylex.props(styles.legend)}>
               <i {...stylex.props(styles.swatch, styles.added)} />
@@ -275,6 +298,20 @@ const styles = stylex.create({
     display: "flex",
     alignItems: "center",
     gap: space.s6,
+  },
+  kinds: {
+    display: "flex",
+    flexWrap: "wrap",
+    alignItems: "center",
+    gap: `${space.s4} ${space.s12}`,
+    margin: 0,
+    padding: 0,
+    listStyle: "none",
+  },
+  kind: {
+    display: "inline-flex",
+    alignItems: "center",
+    whiteSpace: "nowrap",
   },
   swatch: {
     display: "inline-block",

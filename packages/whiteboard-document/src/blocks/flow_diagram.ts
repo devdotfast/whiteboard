@@ -14,6 +14,24 @@ import {
   label,
 } from "./definition.js";
 
+/** What a node stands for; each kind draws as its own shape, and a diagram
+ * that mixes kinds gets a legend. `process` is the default. */
+export const flowNodeKinds = [
+  "process",
+  "decision",
+  "terminal",
+  "client",
+  "service",
+  "external",
+  "database",
+  "queue",
+  "cache",
+] as const;
+
+export const flowNodeKindSchema = z.enum(flowNodeKinds);
+
+export type FlowNodeKind = z.infer<typeof flowNodeKindSchema>;
+
 /** Nodes and edges are the diagram's children: each is its own edit target,
  * so an agent can draw a diagram one unit at a time. Edges still name nodes
  * by their diagram-local key. */
@@ -23,7 +41,7 @@ export const flowNodeSchema = z.strictObject({
   key: label,
   label,
   description: z.string().optional(),
-  kind: z.enum(["process", "decision", "terminal"]).optional(),
+  kind: flowNodeKindSchema.optional(),
   attachments: z
     .array(
       z.strictObject({
@@ -94,7 +112,8 @@ export const flow_diagram = {
   type: "flow_diagram",
   reference: [
     "- flow_diagram {title, nodes: flow_node[] (1 to 100), edges: flow_edge[], description?, direction?: right|down, pins?}",
-    "- flow_node {key, label, description?, kind?: process|decision|terminal, attachments?: {label, sources: anchor[], pins?}[], link?: {from or to, label?, style?}}",
+    "- flow_node {key, label, description?, kind?: process|decision|terminal|client|service|external|database|queue|cache, attachments?: {label, sources: anchor[], pins?}[], link?: {from or to, label?, style?}}",
+    "A node's kind sets its shape, so a reader tells the parts apart at a glance: process (the default) is a step, decision a branch, terminal a start or end; client is a user-facing app or browser, service one of this codebase's own servers or workers, external a third-party service or API, database a durable store, queue a message queue or topic, cache an in-memory store. A diagram that mixes kinds draws a legend.",
     "- flow_edge {from, to (node keys), label?, style?: solid|dashed}",
   ],
   schema: flowDiagramSchema,
