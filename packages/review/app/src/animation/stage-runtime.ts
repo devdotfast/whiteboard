@@ -1537,6 +1537,9 @@ export function stageRuntime(port: MessagePort): void {
     return t0 < t1;
   };
 
+  // Milliseconds into a frame before its first send sets off.
+  const SEND_LEAD = 240;
+
   const route = (arrow: ArrowRecord) => {
     const endpointDetached =
       !arrow.from.isConnected ||
@@ -1597,18 +1600,20 @@ export function stageRuntime(port: MessagePort): void {
     }
 
     const bend = arrow.bend + Math.max(-240, Math.min(240, avoid));
+    // A parallel edge's offset moves the whole line, ends and control alike,
+    // once it is routed, so a fanned pair stays straight and parallel.
     const px = nx * arrow.offset;
     const py = ny * arrow.offset;
 
     let control = {
-      x: (ax + bx) / 2 + ((by - ay) / length) * bend + px,
-      y: (ay + by) / 2 - ((bx - ax) / length) * bend + py,
+      x: (ax + bx) / 2 + ((by - ay) / length) * bend,
+      y: (ay + by) / 2 - ((bx - ax) / length) * bend,
     };
 
     let start = edge(a, control);
     let end = edge(b, control);
 
-    if (bend === 0 && arrow.offset === 0) {
+    if (bend === 0) {
       const boundaryStart = edge(a, control, 0);
       const boundaryEnd = edge(b, control, 0);
       const tangentX = (bx - ax) / length;
@@ -1652,6 +1657,8 @@ export function stageRuntime(port: MessagePort): void {
     start.y += py;
     end.x += px;
     end.y += py;
+    control.x += px;
+    control.y += py;
     const d = `M${start.x} ${start.y}Q${control.x} ${control.y} ${end.x} ${end.y}`;
 
     if (arrow.path.getAttribute("d") !== d) {
@@ -2891,15 +2898,17 @@ export function stageRuntime(port: MessagePort): void {
 
         sendCount.set(stagger, nth + 1);
 
-        // One fixed speed, so a longer edge takes proportionally longer.
+        // One fixed speed, slow enough to read, so a longer edge takes
+        // proportionally longer; a short lead lets the frame's own change
+        // register before the chip moves.
         const duration = Math.min(
-          1500,
-          Math.max(450, Math.round(length / 0.32)),
+          2400,
+          Math.max(900, Math.round(length / 0.16)),
         );
 
         travelAlong(chip, record, frame, {
           duration,
-          position: nth * 200,
+          position: SEND_LEAD + nth * 240,
           stay: options.stay,
         });
       },

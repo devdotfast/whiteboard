@@ -422,7 +422,7 @@ body {
 .wb-token[data-labelled][data-tone="muted"] { color: var(--wb-token-muted-ink); }
 
 /* The scene. */
-.wb-scene { display: grid; gap: var(--wb-space-28) var(--wb-space-48); padding: var(--wb-space-24); align-items: start; justify-items: stretch; min-width: 0; }
+.wb-scene { display: grid; gap: var(--wb-space-28) var(--wb-space-48); padding: var(--wb-space-24); align-items: center; justify-items: stretch; min-width: 0; }
 /* A card is as wide as what it says, within bounds, and sits mid-column, so
    a folded scene does not stretch it into a slab and squeeze its edges. A
    table keeps its column; a scene's own CSS may set any width. */

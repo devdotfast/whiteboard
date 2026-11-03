@@ -682,6 +682,55 @@ describe("block components", () => {
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
+  it("plays the first frame's motion when Play starts on it", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Replay",
+          height: 240,
+          frames: [
+            { key: "a", title: "Slides in", duration: 2000 },
+            { key: "b", title: "Rests", duration: 2000 },
+          ],
+          code: { status: "head/order.ts#L1" },
+          html: [
+            '<div id="peek" data-wb-code="status" style="width: 200px; margin: 0 16px"></div>',
+            "<script>",
+            'whiteboard.timeline("a").set("#peek", { translateX: 0 }).add("#peek", { translateX: 120, duration: 900 });',
+            "</script>",
+          ].join(""),
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    const x = () => {
+      const slot = container.querySelector<HTMLElement>(
+        "[data-animation-slot='code']",
+      );
+
+      return (
+        slot && Number(/translate\(([-\d.]+)px/.exec(slot.style.transform)?.[1])
+      );
+    };
+
+    // Loaded without motion, the first frame rests at its end.
+    const rest = await settled(x);
+
+    expect(rest).toBeGreaterThan(0);
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Play']")!
+        .click(),
+    );
+    // Play shows the frame again with its motion: the peek starts over.
+    expect(await settled(() => x()! < rest! - 20)).toBe(true);
+    expect(await settled(() => x() === rest)).toBe(true);
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
   it("shows an animation's data-only element during its frames alone", async () => {
     const { container } = await mountFixture("animation", {
       document: [

@@ -46,6 +46,9 @@ export function useFramePlayer(
   // pause left it so play resumes from there.
   const [timer, setTimer] = useState<FrameTimer | null>(null);
   const heldRef = useRef({ index: -1, fraction: 0 });
+  // Whether the frame showing was drawn without its motion: a new stage's
+  // first frame, or a jump. Play shows such a frame again, with it.
+  const stillRef = useRef(true);
   const indexRef = useRef(index);
   indexRef.current = index;
 
@@ -87,6 +90,7 @@ export function useFramePlayer(
 
       if (next < 0 || next === indexRef.current) return;
       setIndex(next);
+      stillRef.current = instant;
       send({
         type: "frame",
         index: next,
@@ -130,6 +134,7 @@ export function useFramePlayer(
     const next = keys.includes(currentKey) ? indexRef.current : fallback;
 
     if (next !== indexRef.current) setIndex(next);
+    stillRef.current = true;
 
     // Refresh even a preserved key: lifecycle ranges, held scene changes,
     // and its timeline can differ when active order changes.
@@ -179,6 +184,7 @@ export function useFramePlayer(
 
     sequenceRef.current = sequence;
     setSequenceKeys(sequence);
+    stillRef.current = true;
 
     if (sequence && !sequence.includes(frames[indexRef.current]!.key)) {
       indexRef.current = frames.findIndex((item) => item.key === sequence[0]);
@@ -226,6 +232,20 @@ export function useFramePlayer(
       heldRef.current = { index, fraction: from + (1 - from) * ran };
     };
   }, [playing, index, frame.duration]);
+
+  // Play on a frame drawn without its motion shows it again with it, so a
+  // new stage's first frame, and the first frame after Replay, move too.
+  useEffect(() => {
+    if (!playing || !stillRef.current) return;
+    stillRef.current = false;
+    send({
+      type: "frame",
+      index: indexRef.current,
+      instant: false,
+      direction: "forward",
+      adjacent: true,
+    });
+  }, [playing, index, send]);
 
   // Paused: the marker holds where it was. A frame reached by hand has no
   // clock, and forgets the one it held.
