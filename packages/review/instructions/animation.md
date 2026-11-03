@@ -10,6 +10,7 @@ A `clip` component runs in the same stage with the same API, but it has no frame
 2. Edit those files with your file tools.
 3. Publish the folder: `session_edit({ sessionId, edit: { type: "update", targetId, fromFiles: "<folder>" } })`. Only the files you changed are saved. Keep editing and publishing the same folder; it records what it last published in `checkout.json`.
 4. Read it back with `session_get({ sessionId, targetId })`. Its script runs only where the whiteboard is open, a moment after you publish, so the read says whether it ran there without an error, threw (with the error), or has not run yet. Fix an error and publish again.
+5. Look at it: `session_render({ sessionId, targetId, frame })` shows that frame (or a clip at that marker; omitted, the first) on the whiteboard open in Desktop, as the reader sees it, and returns it as a PNG image, with the error the script threw, if any. It also writes the PNG to the path the result names. Render each frame you changed and check the drawing is what you meant: cards where you placed them, arrows between the right parts, nothing clipped or overlapping. Do not take screenshots of the screen. The whiteboard must be open in Desktop: `session_create` opens it, and `session_open` opens an existing one.
 
 For a new animation, write the same files into a folder of your own and publish with `{ type: "insert", fromFiles: "<folder>", parentId, afterId }`. If someone else changed the animation after your checkout, the publish is refused: check it out again.
 

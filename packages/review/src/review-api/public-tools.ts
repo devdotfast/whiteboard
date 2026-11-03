@@ -1,5 +1,9 @@
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
+
 import { type JsonValue, isJsonObject, isStringValue } from "@dev.fast/json";
 import { boardTitle } from "@dev.fast/review-protocol";
+import { devReviewHome } from "@dev.fast/trace-core";
 import { ReviewInputError } from "@dev.fast/whiteboard-document";
 
 import {
@@ -172,6 +176,13 @@ export async function callPublicTool(
   const published = withoutRepositoryIds(publicResult(result));
 
   if (
+    tool.name === "session_render" &&
+    isStringValue(sessionId) &&
+    isStringValue(rest.targetId)
+  )
+    return saveRenderedFrame(published, sessionId, rest.targetId);
+
+  if (
     draft &&
     isStringValue(sessionId) &&
     isJsonObject(published) &&
@@ -187,6 +198,64 @@ export async function callPublicTool(
     ).catch(() => {});
 
   return published;
+}
+
+/** A tool result with its rendered frame, if any, taken out as an image. */
+export interface RenderedImage {
+  image?: { data: string; mimeType: "image/png" };
+  result: JsonValue | ToolText;
+}
+
+/** A rendered frame's PNG, for an agent that reads images from a tool
+ * result, and the rest of the result for its text. */
+export function renderedImage(
+  tool: Pick<AuthoringTool, "name">,
+  result: JsonValue | ToolText,
+): RenderedImage {
+  if (
+    tool.name !== "session_render" ||
+    result instanceof ToolText ||
+    !isJsonObject(result) ||
+    !isStringValue(result.png)
+  )
+    return { result };
+
+  const { png, ...rest } = result;
+
+  return { image: { data: png, mimeType: "image/png" }, result: rest };
+}
+
+/** Writes the frame's PNG where the agent can open it with its own tools,
+ * beside the animation drafts, and names the file in the result. A folder
+ * that cannot be written leaves the image in the result alone. */
+async function saveRenderedFrame(
+  result: JsonValue,
+  sessionId: string,
+  targetId: string,
+): Promise<JsonValue> {
+  if (!isJsonObject(result) || !isStringValue(result.png)) return result;
+
+  const key =
+    isJsonObject(result.frame) && isStringValue(result.frame.key)
+      ? result.frame.key
+      : "frame";
+
+  const file = path.join(
+    devReviewHome(),
+    "animation-renders",
+    ...[sessionId, targetId, `${key}.png`].map((part) =>
+      part.replace(/[^\w.-]/g, "_"),
+    ),
+  );
+
+  try {
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, Buffer.from(result.png, "base64"));
+  } catch {
+    return result;
+  }
+
+  return { ...result, file };
 }
 
 /** The read a draft compares and records against: session_get's JSON. */

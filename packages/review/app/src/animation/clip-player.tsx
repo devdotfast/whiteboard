@@ -53,8 +53,9 @@ export function useClipPlayer(
 
     if (!stop) return;
 
-    // The tour reads a stop at rest; the controls keep playing if it was.
-    if (by === "tour" && playing) {
+    // The tour and a render read a stop at rest; the controls keep playing
+    // if it was.
+    if (by !== "controls" && playing) {
       send({ type: "pause" });
       setPlaying(false);
     }

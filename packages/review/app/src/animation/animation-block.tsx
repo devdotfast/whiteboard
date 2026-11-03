@@ -32,6 +32,7 @@ import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
 import { useDiagramSelection } from "@canvas/use-diagram-selection";
 import { useWhiteboardSettings } from "@canvas/whiteboard-settings";
+import type { ReviewRenderedFrame } from "@dev.fast/review-protocol";
 import {
   type Block,
   anchorSelection,
@@ -63,7 +64,7 @@ import { useClipPlayer } from "./clip-player";
 import { useFramePlayer } from "./frame-player";
 import { useReportAnimationRun } from "./report-run";
 import { StepStrip } from "./stage-controls";
-import type { StagePlayer } from "./stage-player";
+import type { PlayerStop, StagePlayer } from "./stage-player";
 import {
   type HostMessage,
   STAGE_BOOT,
@@ -73,6 +74,7 @@ import {
   type StageMessage,
   stageMessageSchema,
 } from "./stage-protocol";
+import { registerStageRenderer } from "./stage-renderer";
 import { stageRuntime } from "./stage-runtime";
 import { SCALE } from "./stage-scale";
 
@@ -89,6 +91,32 @@ const MEASURE_WAIT = 1000;
 // Fullscreen, the stage keeps its inline layout and grows to fit the room,
 // at most this much: past 2x a drawing made for a column reads as a poster.
 const STAGE_MAX_SCALE = 2;
+
+// How long a render waits for the stage to boot, paint, show the stop asked
+// for and settle, within Desktop's own wait on the verb.
+const RENDER_WAIT = 30_000;
+
+// A render polls on a timer, not on animation frames: a window in the
+// background may paint no frame for a while, and a timer still runs there.
+const RENDER_POLL = 50;
+
+// How many frames a render gives the figure to come to rest in the window
+// before it measures where it is: enough for a smooth scroll to finish.
+const RENDER_STILL_FRAMES = 60;
+
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// A frame to lay out and paint, or the poll's wait where none comes.
+const nextFrame = () =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, RENDER_POLL * 4);
+
+    requestAnimationFrame(() => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 
 let animeSource: Promise<string> | undefined;
 
@@ -178,15 +206,43 @@ function embeddableBlocks(document: Block[]): Map<string, Block> {
 
 type StageBlockProps = BlockProps<"animation" | "clip">;
 
+/** What the stage was last asked to show and what it reports showing: a
+ * frame's index once it settled there, or a clip's marker once the playhead
+ * reached it. A render waits for the two to agree. */
+interface StageShowing {
+  askedFrame: number | null;
+  shownFrame: number | null;
+  askedMarker: string | null;
+  shownMarker: string | null;
+}
+
+const nothingShowing = (): StageShowing => ({
+  askedFrame: null,
+  shownFrame: null,
+  askedMarker: null,
+  shownMarker: null,
+});
+
 /** The channel to the stage showing: set when it boots. */
 function useStagePort() {
   const portRef = useRef<MessagePort | null>(null);
+  const showingRef = useRef(nothingShowing());
 
   const send = useCallback((message: HostMessage) => {
+    const showing = showingRef.current;
+
+    if (message.type === "frame") {
+      showing.askedFrame = message.index;
+      showing.shownFrame = null;
+    } else if (message.type === "seek") {
+      showing.askedMarker = message.marker;
+      showing.shownMarker = null;
+    }
+
     portRef.current?.postMessage(message);
   }, []);
 
-  return { portRef, send };
+  return { portRef, showingRef, send };
 }
 
 type StagePort = ReturnType<typeof useStagePort>;
@@ -233,7 +289,7 @@ function StageBlock({
   node,
   data,
   children,
-  port: { portRef, send },
+  port: { portRef, showingRef, send },
   player,
 }: StageBlockProps & { port: StagePort; player: StagePlayer }) {
   const { theme } = useReviewDebugSettings();
@@ -266,11 +322,12 @@ function StageBlock({
   const { painted } = useDrawQueueControls();
 
   // The stage showing now: whether it boots unseen, has run its scripts, was
-  // told to paint, and reported an error.
+  // told to paint, has painted, and reported an error.
   const paintRef = useRef({
     wanted: false,
     ready: false,
     sent: false,
+    painted: false,
     failed: false,
   });
 
@@ -422,6 +479,8 @@ function StageBlock({
   const onMessage = useRef<(message: StageMessage) => void>(() => {});
 
   onMessage.current = (message) => {
+    const showing = showingRef.current;
+
     switch (message.type) {
       case "size":
         setContentHeight(Math.ceil(message.height));
@@ -445,7 +504,20 @@ function StageBlock({
         paintStage();
         break;
       case "painted":
+        paintRef.current.painted = true;
         endPaint();
+        break;
+      case "settled":
+        showing.shownFrame = message.index;
+
+        if (showing.askedFrame === message.index) showing.askedFrame = null;
+        player.receive(message);
+        break;
+      case "marker":
+        showing.shownMarker = message.key;
+
+        if (showing.askedMarker === message.key) showing.askedMarker = null;
+        player.receive(message);
         break;
       default:
         player.receive(message);
@@ -537,6 +609,7 @@ function StageBlock({
     bootedRef.current = frameRef.current;
     const channel = new MessageChannel();
     portRef.current = channel.port1;
+    showingRef.current = nothingShowing();
     channel.port1.onmessage = (event: MessageEvent) => {
       const message = stageMessageSchema.safeParse(event.data);
 
@@ -557,6 +630,7 @@ function StageBlock({
       wanted: paint,
       ready: false,
       sent: false,
+      painted: false,
       failed: false,
     };
 
@@ -574,7 +648,158 @@ function StageBlock({
         endPaint();
       },
     );
-  }, [noun, endPaint, portRef, stageInit]);
+  }, [noun, endPaint, portRef, showingRef, stageInit]);
+
+  // An agent rendering a stop reads the block as it is now, whatever
+  // render it was registered in.
+  const playerRef = useRef(player);
+  playerRef.current = player;
+  const errorRef = useRef(error);
+  errorRef.current = error;
+  const measuringRef = useRef(false);
+  measuringRef.current = measureRun !== null;
+
+  // Shows a stop for an agent: once the stage is up and painted, in the
+  // scenario that has the stop, at rest, scrolled into view.
+  const show = useEffectEvent(
+    async (key: string): Promise<ReviewRenderedFrame> => {
+      const deadline = Date.now() + RENDER_WAIT;
+
+      // A covered or minimized window paints no frame, and its timers slow to
+      // a crawl, so nothing here would move: say so instead of waiting.
+      const hidden = () => {
+        if (figureRef.current?.ownerDocument.visibilityState === "hidden")
+          throw new Error(
+            "Desktop's window is hidden, minimized or covered by other windows, so the stage cannot draw. Bring it onto the screen and render again.",
+          );
+      };
+
+      // A stage that failed shows what it has: the render reports the error.
+      const until = async (
+        condition: () => boolean,
+        what: string,
+        by = deadline,
+      ) => {
+        while (!condition() && !paintRef.current.failed) {
+          hidden();
+
+          if (Date.now() > by) throw new Error(`The ${noun} did not ${what}.`);
+          await wait(RENDER_POLL);
+        }
+      };
+
+      hidden();
+
+      await until(() => paintRef.current.ready, "start in time");
+
+      const listed = (stops: readonly PlayerStop[]) =>
+        stops.some((stop) => stop.key === key);
+
+      if (!listed(playerRef.current.stops)) {
+        const scenario =
+          node.type === "animation"
+            ? node.scenarios?.find((item) => item.frames.includes(key))
+            : undefined;
+
+        if (!scenario)
+          throw new Error(
+            `${key} is not a ${clip ? "marker" : "frame"} of the ${noun}.`,
+          );
+        playerRef.current.selectScenario(scenario.key);
+        await until(
+          () => listed(playerRef.current.stops),
+          `switch to scenario ${scenario.key} in time`,
+        );
+      }
+
+      const { stops } = playerRef.current;
+      const position = stops.findIndex((stop) => stop.key === key);
+      playerRef.current.pick(position, "render");
+
+      const showing = showingRef.current;
+
+      if (clip)
+        await until(
+          () => showing.shownMarker === key && showing.askedMarker === null,
+          `reach marker ${key} in time`,
+        );
+      else {
+        const index = node.frames.findIndex((frame) => frame.key === key);
+        await until(
+          () => showing.shownFrame === index && showing.askedFrame === null,
+          `settle on frame ${key} in time`,
+        );
+      }
+
+      const paint = paintRef.current;
+      await until(() => !paint.wanted || paint.painted, "paint in time");
+
+      // Its height follows the tallest frame once measured; a measure that
+      // takes too long does not hold the render.
+      await until(
+        () => !measuringRef.current,
+        "measure",
+        Date.now() + MEASURE_WAIT,
+      ).catch(() => {});
+      await nextFrame();
+      await nextFrame();
+
+      const figure = figureRef.current;
+      const view = figure?.ownerDocument.defaultView;
+
+      if (!figure || !view) throw new Error(`The ${noun} is not on the board.`);
+
+      figure.scrollIntoView({
+        block: figure.offsetHeight > view.innerHeight ? "start" : "nearest",
+        behavior: "instant",
+      });
+
+      // Measure once the figure holds still: a scroll may still be moving, and
+      // a block above may still be taking its height.
+      let box = figure.getBoundingClientRect();
+
+      for (let frame = 0; frame < RENDER_STILL_FRAMES; frame++) {
+        await nextFrame();
+        const next = figure.getBoundingClientRect();
+
+        const still =
+          Math.abs(next.top - box.top) < 0.5 &&
+          Math.abs(next.left - box.left) < 0.5 &&
+          Math.abs(next.height - box.height) < 0.5 &&
+          Math.abs(next.width - box.width) < 0.5;
+
+        box = next;
+
+        if (still) break;
+      }
+
+      const x = Math.max(0, box.left);
+      const y = Math.max(0, box.top);
+      const right = Math.min(view.innerWidth, box.right);
+      const bottom = Math.min(view.innerHeight, box.bottom);
+      const width = Math.max(0, right - x);
+      const height = Math.max(0, bottom - y);
+      const stop = stops[position]!;
+
+      return {
+        frame: { key, title: stop.title, position, count: stops.length },
+        ...(playerRef.current.scenario !== undefined && {
+          scenario: playerRef.current.scenario,
+        }),
+        rect: { x, y, width, height },
+        clipped: width < box.width - 1 || height < box.height - 1,
+        error: errorRef.current,
+      };
+    },
+  );
+
+  useEffect(() => {
+    if (!node.id) return;
+
+    return registerStageRenderer(data.snapshot.reviewId, node.id, {
+      show: (key) => show(key),
+    });
+  }, [data.snapshot.reviewId, node.id]);
 
   // Measure again in a new copy after anything that can move a frame's layout.
   const remeasure = useCallback(() => {

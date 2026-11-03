@@ -27,6 +27,7 @@ import {
 } from "react";
 import { createRoot } from "react-dom/client";
 
+import { renderStage } from "./animation/stage-renderer";
 import { ApiCanvas } from "./api-canvas";
 import {
   SharedCanvasQueryClient,
@@ -461,6 +462,12 @@ export function mountReviewCanvas(
     },
     focus() {
       container.focus();
+    },
+    renderAnimation(targetId, frame) {
+      if (content.kind !== "api")
+        return Promise.reject(new Error("The canvas shows no whiteboard."));
+
+      return renderStage(content.reviewId, targetId, frame);
     },
     showFind(seed) {
       return (

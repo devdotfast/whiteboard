@@ -16,8 +16,9 @@ export interface PlayerStop {
   code?: string[];
 }
 
-/** Who picked a stop: the controls under the stage, or the tour. */
-export type PickedBy = "controls" | "tour";
+/** Who picked a stop: the controls under the stage, the tour, or an agent
+ * rendering the stop, which reads it at rest. */
+export type PickedBy = "controls" | "tour" | "render";
 
 export type StageSend = (message: HostMessage) => void;
 

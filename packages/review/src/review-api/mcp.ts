@@ -17,7 +17,7 @@ import { authoringTools } from "./authoring-tools.js";
 import type { ReviewApiClient } from "./client.js";
 import { ReviewApiError } from "./client.js";
 import { mcpClientAgent } from "./mcp-client-agent.js";
-import { callPublicTool, publicTool } from "./public-tools.js";
+import { callPublicTool, publicTool, renderedImage } from "./public-tools.js";
 import { RECOVERY } from "./recovery.js";
 import { REVIEW_STATUS_TOOL } from "./status-tool.js";
 import { type ToolFailure, toolFailure } from "./tool-failure.js";
@@ -191,11 +191,14 @@ export async function serveReviewMcp(
           `Unknown Whiteboard tool: ${request.params.name}`,
         );
 
-      const result = await callPublicTool(
-        client,
+      const { image, result } = renderedImage(
         tool,
-        request.params.arguments ?? {},
-        ctx.mcpReq.signal,
+        await callPublicTool(
+          client,
+          tool,
+          request.params.arguments ?? {},
+          ctx.mcpReq.signal,
+        ),
       );
 
       const text = toolResultText(tool, result);
@@ -203,6 +206,8 @@ export async function serveReviewMcp(
 
       const response: CallToolResult = {
         content: [
+          // The frame an agent rendered, ahead of what the host says about it.
+          ...(image ? [{ type: "image" as const, ...image }] : []),
           {
             type: "text",
             text:

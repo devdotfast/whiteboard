@@ -27,7 +27,7 @@ import { IEnvironmentMainService } from '../../environment/electron-main/environ
 import { createDecorator, IInstantiationService } from '../../instantiation/common/instantiation.js';
 import { ILifecycleMainService, IRelaunchOptions } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { ILogService } from '../../log/common/log.js';
-import { FocusMode, ICommonNativeHostService, INativeHostOptions, INativeSystemWideKeybinding, INativeSystemWideKeybindingResult, IOSProperties, IOSStatistics, IStartTracingOptions, IToastOptions, IToastResult, IUninstallShellCommandOptions, PowerSaveBlockerType, SystemIdleState, ThermalState } from '../common/native.js';
+import { FocusMode, ICommonNativeHostService, INativeHostOptions, INativeSystemWideKeybinding, INativeSystemWideKeybindingResult, IOSProperties, IOSStatistics, IStartTracingOptions, IToastOptions, IToastResult, IUninstallShellCommandOptions, PowerSaveBlockerType, SystemIdleState, ThermalState, IScreenshotOptions } from '../common/native.js';
 import { IGlobalKeybindingsMainService } from '../../globalKeybindings/electron-main/globalKeybindingsMainService.js';
 import { IProductService } from '../../product/common/productService.js';
 import { IPartsSplash } from '../../theme/common/themeService.js';
@@ -910,12 +910,21 @@ export class NativeHostMainService extends Disposable implements INativeHostMain
 
 	//#region Screenshots
 
-	async getScreenshot(windowId: number | undefined, rect?: IRectangle, options?: INativeHostOptions): Promise<VSBuffer | undefined> {
+	async getScreenshot(windowId: number | undefined, rect?: IRectangle, options?: INativeHostOptions & IScreenshotOptions): Promise<VSBuffer | undefined> {
 		const window = this.windowById(options?.targetWindowId, windowId);
 		const captured = await window?.win?.webContents.capturePage(rect);
+		if (!captured || captured.isEmpty()) {
+			return undefined;
+		}
 
-		const buf = captured?.toJPEG(95);
-		return buf && VSBuffer.wrap(buf);
+		let image = captured;
+		const { width, height } = image.getSize();
+		const maxEdge = options?.maxEdge;
+		if (maxEdge && Math.max(width, height) > maxEdge) {
+			image = image.resize(width >= height ? { width: maxEdge, quality: 'best' } : { height: maxEdge, quality: 'best' });
+		}
+
+		return VSBuffer.wrap(options?.format === 'png' ? image.toPNG() : image.toJPEG(95));
 	}
 
 	//#endregion

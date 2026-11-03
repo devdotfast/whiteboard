@@ -56,6 +56,13 @@ export interface INativeHostOptions {
 	readonly targetWindowId?: number;
 }
 
+export interface IScreenshotOptions {
+	/** JPEG at quality 95 unless 'png'. */
+	readonly format?: 'jpeg' | 'png';
+	/** Scales the capture down so neither edge exceeds this many pixels. */
+	readonly maxEdge?: number;
+}
+
 export interface IUninstallShellCommandOptions {
 	readonly commandName?: string;
 	readonly symlinkOnly?: boolean;
@@ -249,7 +256,7 @@ export interface ICommonNativeHostService {
 	hasWSLFeatureInstalled(): Promise<boolean>;
 
 	// Screenshots
-	getScreenshot(rect?: IRectangle): Promise<VSBuffer | undefined>;
+	getScreenshot(rect?: IRectangle, options?: INativeHostOptions & IScreenshotOptions): Promise<VSBuffer | undefined>;
 
 	// GitHub mobile upload API (runs in main process to avoid CORS)
 	uploadFileViaMobileApi(token: string, repoId: string, fileName: string, fileBytes: VSBuffer, contentType: string): Promise<{ fileName: string; assetUrl: string; contentType: string }>;

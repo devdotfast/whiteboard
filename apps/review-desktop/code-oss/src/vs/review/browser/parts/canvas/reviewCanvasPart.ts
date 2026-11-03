@@ -6,7 +6,9 @@
 import { openChildWhiteboard } from "../../reviewChildWhiteboard.js";
 
 import { reviewBottomScrollPadding } from "../../reviewScrollPadding.js";
+import { getZoomFactor } from "../../../../base/browser/browser.js";
 import { $, addDisposableListener, getWindow, type Dimension } from "../../../../base/browser/dom.js";
+import { encodeBase64 } from "../../../../base/common/buffer.js";
 import { mainWindow } from "../../../../base/browser/window.js";
 import type { IHoverOptions, IHoverWidget } from "../../../../base/browser/ui/hover/hover.js";
 import { HoverPosition } from "../../../../base/browser/ui/hover/hoverWidget.js";
@@ -163,6 +165,12 @@ const APPEARANCE_SETTINGS = {
 } as const satisfies Record<keyof ReviewAppearance, { key: string; setting: string }>;
 
 const requestReviewApi: typeof fetch = (url, init) => fetch(url, init);
+
+/** The longest edge of a rendered frame's PNG: a retina capture of a column-wide block, which agents read whole. */
+const RENDER_MAX_EDGE = 1600;
+
+/** How long a render waits for a board that is still opening. */
+const RENDER_READY_WAIT_MS = 10_000;
 
 function embeddedSelectionChangeReason(event: ICursorPositionChangedEvent): EditorPaneSelectionChangeReason {
 	switch (event.source) {
@@ -386,6 +394,9 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			if (request.name === "focusWindow") {
 				await this.hostService.focus(this.targetDocument?.defaultView ?? window, { mode: FocusMode.Force });
 				return { ok: true };
+			}
+			if (request.name === "renderAnimation") {
+				return this.renderAnimation(request.args);
 			}
 			return this.verbs.dispatch(request);
 		});
@@ -1505,6 +1516,59 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				lifecycle?.reportDiagnostic(diagnostic);
 			},
 		};
+	}
+
+	/**
+	 * An agent's look at a frame it wrote: the canvas shows the frame and says
+	 * where its figure sits, and the window captures that rectangle as a PNG.
+	 * Only the board open in this part can be rendered; the canvas measures
+	 * CSS pixels, which the window's zoom scales to the capture's pixels.
+	 */
+	private async renderAnimation(args: { reviewId: string; targetId: string; frame: string }): Promise<ReviewVerbResponse> {
+		if (this.apiContent?.reviewId !== args.reviewId) {
+			return { ok: false, error: "The whiteboard is not open in Desktop. Open it with session_open, then render again." };
+		}
+		if (this.targetDocument !== mainWindow.document) {
+			return { ok: false, error: "The whiteboard is open in a secondary window; only the main window can render it." };
+		}
+		try {
+			const canvas = await this.whenCanvasReady(args.reviewId);
+			const shown = await canvas.renderAnimation(args.targetId, args.frame);
+			if (shown.rect.width < 1 || shown.rect.height < 1) {
+				throw new Error("The animation is outside the window.");
+			}
+			const zoom = getZoomFactor(mainWindow);
+			const png = await this.hostService.getScreenshot(
+				{
+					x: Math.round(shown.rect.x * zoom),
+					y: Math.round(shown.rect.y * zoom),
+					width: Math.round(shown.rect.width * zoom),
+					height: Math.round(shown.rect.height * zoom),
+				},
+				{ format: "png", maxEdge: RENDER_MAX_EDGE },
+			);
+			if (!png) {
+				throw new Error("Desktop could not capture its window; it must be visible on screen.");
+			}
+			return { ok: true, result: { ...shown, png: encodeBase64(png) } };
+		} catch (error) {
+			return { ok: false, error: error instanceof Error ? error.message : String(error) };
+		}
+	}
+
+	/** The mounted canvas once it reports the board drawn, within a bound. */
+	private async whenCanvasReady(reviewId: string): Promise<ReviewCanvasHandle> {
+		const deadline = Date.now() + RENDER_READY_WAIT_MS;
+		for (;;) {
+			const canvas = this.canvas.value;
+			if (canvas && this.readyInput !== undefined && this.readyInput === this.renderedInput && this.apiContent?.reviewId === reviewId) {
+				return canvas;
+			}
+			if (Date.now() > deadline) {
+				throw new Error("The whiteboard has not finished opening in Desktop. Render again in a moment.");
+			}
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
 	}
 
 	private canvasSettings(): ReviewCanvasSettings {

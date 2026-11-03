@@ -5,7 +5,7 @@
 
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { IHostService, IToastOptions, IToastResult } from '../browser/host.js';
-import { FocusMode, INativeHostService } from '../../../../platform/native/common/native.js';
+import { FocusMode, INativeHostService, IScreenshotOptions } from '../../../../platform/native/common/native.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { ILabelService, Verbosity } from '../../../../platform/label/common/label.js';
 import { IWorkbenchEnvironmentService } from '../../environment/common/environmentService.js';
@@ -226,8 +226,8 @@ class WorkbenchHostService extends Disposable implements IHostService {
 
 	//#region Screenshots
 
-	getScreenshot(rect?: IRectangle): Promise<VSBuffer | undefined> {
-		return this.nativeHostService.getScreenshot(rect);
+	getScreenshot(rect?: IRectangle, options?: IScreenshotOptions): Promise<VSBuffer | undefined> {
+		return this.nativeHostService.getScreenshot(rect, options);
 	}
 
 	//#endregion
