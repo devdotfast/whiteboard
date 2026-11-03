@@ -259,10 +259,17 @@ body {
 .wb-node { min-width: 88px; text-align: center; }
 .wb-node small { display: block; color: var(--wb-ink-faint); font-size: var(--wb-text-micro); }
 .wb-card-head { display: flex; align-items: center; gap: var(--wb-space-6); }
-.wb-card-dot { flex: none; width: 7px; height: 7px; border-radius: var(--wb-radius-round); background: var(--wb-ink-faint); }
+/* The dot says what state a card is in: it shows only with a tone or a
+   change mark, in that colour, so a plain card carries no unexplained mark. */
+.wb-card-dot { display: none; flex: none; width: 7px; height: 7px; border-radius: var(--wb-radius-round); background: var(--wb-ink-faint); }
+.wb-card:is([data-tone], [data-change]) .wb-card-dot { display: block; }
 .wb-card-title { min-width: 0; overflow-wrap: anywhere; font-weight: var(--wb-weight-semibold); }
 .wb-card-note { color: var(--wb-ink-muted); overflow-wrap: anywhere; font-size: var(--wb-text-micro); min-height: 12px; }
 
+/* A store's text sits in the middle of its drum or cylinder, as a label on
+   a tank does; a pill's too. */
+:is(.wb-card, .wb-node):is([data-form="cylinder"], [data-form="drum"], [data-form="pill"]) { align-items: center; text-align: center; }
+.wb-card:is([data-form="cylinder"], [data-form="drum"], [data-form="pill"]) :is(.wb-card-head, .wb-items) { justify-content: center; }
 /* Shapes: a card's or node's silhouette says what it stands for before
    its title does. data-form is box (the default), pill, cut (a branch),
    cylinder (a database), drum (a cache), stack (a queue), window (a
