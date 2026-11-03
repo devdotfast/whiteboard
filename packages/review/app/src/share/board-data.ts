@@ -104,5 +104,7 @@ export function boardView(
       snapshot: { ...snapshot, ...boardSnapshotSchema.parse(snapshot) },
     }),
     ...(activity && { activity }),
+    // A share or hosted board has no checkout to open.
+    available: { sourceWindows: false },
   };
 }
