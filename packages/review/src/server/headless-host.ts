@@ -18,6 +18,7 @@ import { cliAskTools } from "@review/ask/threads.js";
 import { desktopUsesHome } from "@review/desktop-discovery.js";
 import { findReviewPackageRoot } from "@review/package-paths.js";
 import { openReviewProfile } from "@review/review-api/profile.js";
+import { readAnimationsEnabled } from "@review/review-preferences.js";
 import {
   DESKTOP_TAKEOVER_SIGNAL,
   type ReviewServerDiscovery,
@@ -198,6 +199,8 @@ async function serve(input: HeadlessServerInput) {
     manageWorkspaces: true,
   });
 
+  const animationsEnabled = await readAnimationsEnabled(input.stateDir);
+
   const discovery: ReviewServerDiscovery = {
     version: 1,
     instanceId: randomUUID(),
@@ -221,6 +224,7 @@ async function serve(input: HeadlessServerInput) {
     token: discovery.token,
     instanceId: discovery.instanceId,
     softwareMapEnabled: input.softwareMapEnabled,
+    animations: () => animationsEnabled,
     status: () => ({ key: "headless", home: input.stateDir }),
     ask: {
       tools: cliAskTools(() => (existsSync(cliPath) ? cliPath : undefined), {

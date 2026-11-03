@@ -25,6 +25,7 @@ it("discovers the live Desktop map preference without opening a review", async (
   const local = openLocalReviewStore(path.join(home, "review-api.db"));
   const relay = new GlobalReviewDesktopVerbRelay();
   let softwareMapEnabled = false;
+  let animationsEnabled = false;
   let opened = false;
   relay.attach({
     signal: new AbortController().signal,
@@ -36,7 +37,10 @@ it("discovers the live Desktop map preference without opening a review", async (
       if (request.name === "openApiReview") opened = true;
       relay.acceptResult({
         id,
-        response: { ok: true, result: { softwareMapEnabled } },
+        response: {
+          ok: true,
+          result: { softwareMapEnabled, animationsEnabled },
+        },
       });
     },
     close() {},
@@ -72,11 +76,14 @@ it("discovers the live Desktop map preference without opening a review", async (
     expect(await client.read("/capabilities")).toMatchObject({
       desktopAvailable: true,
       softwareMapEnabled: false,
+      animationsEnabled: false,
     });
     softwareMapEnabled = true;
+    animationsEnabled = true;
     expect(await client.read("/capabilities")).toMatchObject({
       desktopAvailable: true,
       softwareMapEnabled: true,
+      animationsEnabled: true,
     });
     expect(opened).toBe(false);
     await expect(
@@ -86,6 +93,7 @@ it("discovers the live Desktop map preference without opening a review", async (
     expect(await client.read("/capabilities")).toMatchObject({
       desktopAvailable: false,
       softwareMapEnabled: false,
+      animationsEnabled: false,
     });
     await expect(
       connectReviewApi({
