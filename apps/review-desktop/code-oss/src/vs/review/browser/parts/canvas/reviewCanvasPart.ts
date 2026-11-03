@@ -128,7 +128,7 @@ import {
 	ReviewEmbeddedEditorSelection,
 	reviewEmbeddedSelectionFromOptions,
 } from "../../../services/reviewEmbeddedNavigation.js";
-import { ReviewEmbeddedEditors } from "../../../services/reviewEmbeddedEditors.js";
+import { ReviewMonacoPeeks } from "../../../services/reviewMonacoPeeks.js";
 import { homeViewFromOptions, ReviewHomeSelection } from "../../../services/reviewHomeNavigation.js";
 import { IReviewTelemetryService } from "../../../services/reviewTelemetryService.js";
 
@@ -202,7 +202,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	private renderedInput: ReviewCanvasEditorInput | undefined;
 	private readyInput: ReviewCanvasEditorInput | undefined;
 	private readonly modelSubscription = this._register(new MutableDisposable());
-	private readonly inlineEditors: ReviewEmbeddedEditors;
+	private readonly peeks: ReviewMonacoPeeks;
 	private readonly diffViews: ReviewDiffViewService;
 	private readonly sessionTelemetry: ReviewSessionTelemetry;
 
@@ -290,10 +290,10 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			this.updateRemoteEntry();
 		}));
 		this._register(this.remoteHosts.onDidChangeBusy(() => this.updateRemoteEntry()));
-		this.inlineEditors = this._register(reviewInstantiationService.createInstance(ReviewEmbeddedEditors));
+		this.peeks = this._register(reviewInstantiationService.createInstance(ReviewMonacoPeeks));
 		this.refreshProgress = this._register(new LongRunningOperation(editorProgressService));
 		this.diffViews = this._register(
-			reviewInstantiationService.createInstance(ReviewDiffViewService, this.inlineEditors),
+			reviewInstantiationService.createInstance(ReviewDiffViewService, this.peeks),
 		);
 		// Pass sidebar events on to the board this pane shows.
 		this._register(
@@ -321,7 +321,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			}),
 		);
 		this._register(
-			this.inlineEditors.onDidChangeActiveEditor(() => {
+			this.peeks.onDidChangeActiveEditor(() => {
 				this._onDidChangeControl.fire();
 				this.bindEmbeddedSelectionControl();
 			}),
@@ -487,7 +487,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				this.sessionTelemetry.start(reviewId);
 				let sourceSelection: ReviewSourceSelection = { reviewId, kind: "current" };
 				let sourceView: ReviewSourceView = resolveReviewSourceView({ reviewId, version: 0, pins: {} });
-				const source = this.apiSource.canvas(() => sourceView, this.inlineEditors, this.diffViews);
+				const source = this.apiSource.canvas(() => sourceView, this.peeks, this.diffViews);
 				await this.render(
 					{
 						kind: "api",
@@ -788,7 +788,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	showFind(): boolean {
-		const editor = this.inlineEditors.activeCodeEditor;
+		const editor = this.peeks.activeCodeEditor;
 		let seed: string | undefined;
 		if (editor?.hasTextFocus()) {
 			const model = editor.getModel();
@@ -829,7 +829,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	override getControl(): IEditorControl | undefined {
-		return this.inlineEditors;
+		return this.peeks;
 	}
 
 	override setOptions(options: IEditorOptions | undefined): void {
@@ -844,7 +844,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 
 	getSelection(): IEditorPaneSelection | undefined {
 		if (this.input instanceof ReviewCanvasEditorInput && this.input.target.kind === "home") return new ReviewHomeSelection(this.homeView);
-		const editor = this.inlineEditors.selectionCodeEditor;
+		const editor = this.peeks.selectionCodeEditor;
 		const position = editor?.getPosition();
 		const model = editor?.getModel();
 		if (!editor || !position || !model) return undefined;
@@ -862,7 +862,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	private bindEmbeddedSelectionControl(): void {
-		const editor = this.inlineEditors.activeCodeEditor;
+		const editor = this.peeks.activeCodeEditor;
 		if (!editor) {
 			this.embeddedSelectionListeners.clear();
 			return;
@@ -1526,7 +1526,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			return false;
 		}
 		this.readyInput = undefined;
-		this.inlineEditors.reset();
+		this.peeks.reset();
 		this.diffViews.reset();
 		return generation === this.loadGeneration;
 	}

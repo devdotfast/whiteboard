@@ -9,7 +9,7 @@ import { traceSchema } from "@review/review-api/trace-schema";
 import { z } from "zod";
 
 import { boardSnapshotSchema, boardView } from "./board-data";
-import { shareInlineEditors } from "./inline-editors";
+import { sharePeeks } from "./peeks";
 import { readOnlyHost } from "./share-host";
 
 export interface ShareView {
@@ -55,7 +55,7 @@ export async function openShare(
 
   const host = readOnlyHost({
     ...options,
-    peeks: await shareInlineEditors(bundle.sources, pins, bundle.alignments),
+    peeks: await sharePeeks(bundle.sources, pins, bundle.alignments),
   });
 
   return {

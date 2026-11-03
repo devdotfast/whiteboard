@@ -178,7 +178,7 @@ function createTestSession(): ReviewSession {
           throw new Error("unused test diff view");
         },
       },
-      inlineEditors: {
+      peeks: {
         async find() {
           return { matchCount: 0 };
         },
