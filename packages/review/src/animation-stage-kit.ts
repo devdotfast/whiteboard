@@ -486,13 +486,15 @@ body {
 .wb-group[data-color="ink"] { border-color: var(--wb-rule); }
 .wb-group[data-color="ink"] .wb-group-title { color: var(--wb-ink); }
 :is(.wb-scene-fold, .wb-scene-compact) > .wb-group { display: none; }
-/* The legend: a card-like glyph per entry, drawn with the card rules at
-   0.4 scale, and what it stands for. */
+/* The legend: a card-like glyph per entry, drawn with the card rules and
+   scaled to 0.4 inside a box of the scaled size, and what it stands for.
+   A transform, not zoom: Electron's Chromium reports a zoomed element's
+   rect in unzoomed units, which made the stage measure itself 2.5x tall. */
 .wb-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--wb-space-6) var(--wb-space-16); padding: 0 var(--wb-space-24) var(--wb-space-12); color: var(--wb-ink-muted); font: var(--wb-text-micro)/var(--wb-leading-normal) var(--wb-font-mono); letter-spacing: var(--wb-tracking-chrome); text-transform: uppercase; }
 .wb-legend-entry { display: inline-flex; align-items: center; gap: var(--wb-space-6); white-space: nowrap; }
-.wb-card.wb-legend-glyph { display: block; flex: none; width: 50px; min-width: 0; height: 32px; padding: 0; zoom: 0.4; }
+.wb-legend-box { position: relative; flex: none; width: 20px; height: 13px; }
+.wb-card.wb-legend-glyph { position: absolute; top: 0; left: 0; display: block; width: 50px; min-width: 0; height: 32px; padding: 0; transform: scale(0.4); transform-origin: 0 0; }
 .wb-card.wb-legend-glyph[data-form="cylinder"] { height: 44px; }
-.wb-card.wb-legend-glyph[data-form="stack"] { margin: 0 8px 8px 0; }
 :root[data-wb-instant] *, :root[data-wb-instant] *::before, :root[data-wb-instant] *::after {
   transition: none !important;
   animation-duration: 0s !important;

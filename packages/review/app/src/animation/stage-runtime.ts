@@ -2969,9 +2969,12 @@ export function stageRuntime(port: MessagePort): void {
           if (entry.tone) glyph.dataset.tone = entry.tone;
 
           if (entry.change) glyph.dataset.change = entry.change;
+          const box = document.createElement("span");
+          box.className = "wb-legend-box";
+          box.append(glyph);
           const label = document.createElement("span");
           label.textContent = entry.label;
-          row.append(glyph, label);
+          row.append(box, label);
           el.append(row);
         }
 
