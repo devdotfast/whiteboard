@@ -839,6 +839,12 @@ export function stageRuntime(port: MessagePort): void {
     timeline?.pause();
     timeline = undefined;
 
+    // A tween starts from its target's value when the timeline is built. A
+    // chip that has already ridden its edge sits at 1, and a timeline built
+    // then, as a scenario change does, would tween it 1 to 1: the chip would
+    // appear at its head without moving. Every ride starts over.
+    for (const travel of travels) travel.progress.value = 0;
+
     if (!queued.size) return;
 
     const next = lib().createTimeline({
