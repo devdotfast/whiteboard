@@ -2644,6 +2644,14 @@ export function stageRuntime(port: MessagePort): void {
     // the widest, so it sits between its cards rather than off its line.
     const rowLabels = new Set<string>();
 
+    // How many columns each placed part spans. A scene drawn on half-step
+    // columns, every card two wide so a pair can centre under one, folds
+    // by the columns its cards make, not the ones it declares.
+    const spans = new Map<HTMLElement, number>();
+
+    const unitSpan = () =>
+      Math.max(1, Math.min(...spans.values(), Infinity) || 1);
+
     const sizeGap = () => {
       if (!rowLabels.size) return;
       const probe = document.createElement("span");
@@ -2681,8 +2689,19 @@ export function stageRuntime(port: MessagePort): void {
 
       const gap = parseFloat(style.columnGap);
 
-      const fits = (count: number) =>
-        grid.clientWidth >= count * 140 + (count - 1) * gap + padding;
+      const unit = unitSpan();
+
+      // A card that spans more than the scene's unit takes a folded row.
+      for (const [el, span] of spans)
+        el.toggleAttribute("data-wb-wide", span > unit);
+
+      const fits = (count: number) => {
+        const effective = Math.ceil(count / unit);
+
+        return (
+          grid.clientWidth >= effective * 140 + (effective - 1) * gap + padding
+        );
+      };
 
       let shown = columns;
 
@@ -2775,8 +2794,7 @@ export function stageRuntime(port: MessagePort): void {
       el.style.gridColumn = colSpan
         ? `${column} / span ${colSpan}`
         : String(column);
-      // Folded into fewer columns, a cell that spans columns takes the row.
-      el.toggleAttribute("data-wb-wide", (colSpan ?? 1) > 1);
+      spans.set(el, colSpan ?? 1);
       rows.set(el, row);
       el.style.gridRow = rowSpan ? `${row} / span ${rowSpan}` : String(row);
       el.style.order = String((row - 1) * columns + column);
