@@ -86,9 +86,12 @@ const STAGE_MIN_HEIGHT = 120;
 // its current frame's height instead.
 const MEASURE_WAIT = 1000;
 
-// Fullscreen, the stage keeps its inline layout and grows to fit the room,
-// at most this much: past 2x a drawing made for a column reads as a poster.
+// Fullscreen, the stage keeps its inline layout and scales to fit the room:
+// at most 2x, past which a drawing made for a column reads as a poster, and
+// at least 0.4x, below which its text cannot be read and the room scrolls.
 const STAGE_MAX_SCALE = 2;
+
+const STAGE_MIN_SCALE = 0.4;
 
 let animeSource: Promise<string> | undefined;
 
@@ -767,14 +770,17 @@ function StageBlock({
         ? Math.max(contentHeight, measuredHeight)
         : STAGE_MIN_HEIGHT;
 
-  // Fullscreen, the stage keeps its inline width and scales up to fit the
-  // room, never down: a room too small for it scrolls, as before.
+  // Fullscreen, the stage keeps its inline width, so its layout and its
+  // measured height hold, and scales to fit the room: up on a wide screen,
+  // down beside the tour's pane. A narrower stage would fold the drawing.
+  const scaled = fullscreen && inlineWidth > 0;
+
   const scale =
-    fullscreen && room && inlineWidth
+    scaled && room
       ? Math.min(
           STAGE_MAX_SCALE,
           Math.max(
-            1,
+            STAGE_MIN_SCALE,
             Math.min(room.width / inlineWidth, room.height / stageHeight),
           ),
         )
@@ -856,17 +862,17 @@ function StageBlock({
         <div
           {...stylex.props(styles.zoom)}
           style={
-            scale === 1
-              ? undefined
-              : { width: inlineWidth * scale, height: stageHeight * scale }
+            scaled
+              ? { width: inlineWidth * scale, height: stageHeight * scale }
+              : undefined
           }
         >
           <div
             ref={canvasRef}
-            {...stylex.props(styles.canvas, scale !== 1 && styles.canvasScaled)}
+            {...stylex.props(styles.canvas, scaled && styles.canvasScaled)}
             style={{
               height: stageHeight,
-              ...(scale !== 1 && {
+              ...(scaled && {
                 width: inlineWidth,
                 transform: `scale(${scale})`,
               }),
@@ -1223,7 +1229,7 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "safe center",
     minHeight: 0,
-    overflowY: "auto",
+    overflow: "auto",
     padding: { default: space.s32, [narrow]: space.s16 },
   },
   // The scaled stage's footprint, so the room centres and scrolls it whole.
