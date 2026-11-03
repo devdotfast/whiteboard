@@ -1,6 +1,7 @@
 import { fontSize, fontWeight, leading, space } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { BoardIcon } from "@canvas/ui/board-icons";
+import { CrumbSeparator } from "@canvas/ui/crumbs";
 import { Dialog } from "@canvas/ui/dialog";
 import { EmptyState } from "@canvas/ui/empty-state";
 import { SearchIcon, StackIcon } from "@canvas/ui/icons";
@@ -26,7 +27,11 @@ import {
   useState,
 } from "react";
 
-import { finderBoards, finderDetails } from "./find-whiteboard-model";
+import {
+  finderCatalog,
+  finderDetails,
+  finderRows,
+} from "./find-whiteboard-model";
 import { formatRelativeTime } from "./format";
 
 /**
@@ -52,7 +57,8 @@ export function FindWhiteboard({
     [boards],
   );
 
-  const rows = useMemo(() => finderBoards(boards, query), [boards, query]);
+  const catalog = useMemo(() => finderCatalog(boards), [boards]);
+  const rows = useMemo(() => finderRows(catalog, query), [catalog, query]);
   const picked = rows[Math.min(active, rows.length - 1)];
 
   // The picked row stays in view as the arrows move it.
@@ -66,20 +72,13 @@ export function FindWhiteboard({
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
 
-      if (!rows.length) return;
+      if (!picked) return;
       const step = event.key === "ArrowDown" ? 1 : -1;
-      const from = Math.min(active, rows.length - 1);
 
-      setActive((from + step + rows.length) % rows.length);
+      setActive((rows.indexOf(picked) + step + rows.length) % rows.length);
     } else if (event.key === "Enter" && picked) {
       event.preventDefault();
       onOpen(picked.reviewId);
-    } else if (event.key === "Escape") {
-      // The workbench claims Escape before the dialog's own cancel; the
-      // canvas watches it too, and the board behind should not react.
-      event.preventDefault();
-      event.stopPropagation();
-      onClose();
     }
   };
 
@@ -142,11 +141,9 @@ export function FindWhiteboard({
               {...stylex.props(
                 listRowStyles.row,
                 styles.row,
-                board === picked && listRowStyles.current,
+                board === picked && listRowStyles.highlighted,
               )}
-              onPointerMove={() => {
-                if (index !== active) setActive(index);
-              }}
+              onPointerMove={() => setActive(index)}
               onClick={() => onOpen(board.reviewId)}
             >
               <span {...stylex.props(styles.iconSlot)}>
@@ -164,7 +161,7 @@ export function FindWhiteboard({
                   {board.parentId && titles.has(board.parentId) ? (
                     <span {...stylex.props(styles.parent)}>
                       {titles.get(board.parentId)}
-                      {" › "}
+                      <CrumbSeparator />
                     </span>
                   ) : null}
                   <MatchedText
@@ -194,9 +191,7 @@ export function FindWhiteboard({
         <EmptyState
           xstyle={styles.empty}
           message={
-            boards.some((board) => !board.trashedAt)
-              ? "No whiteboards match"
-              : "No whiteboards yet"
+            boards.length ? "No whiteboards match" : "No whiteboards yet"
           }
         />
       )}
@@ -236,8 +231,6 @@ const styles = stylex.create({
   searchIcon: { width: space.s16, height: space.s16, color: tokens.inkFaint },
   input: { flex: 1, fontSize: fontSize.reading, lineHeight: leading.px24 },
   list: {
-    display: "flex",
-    flexDirection: "column",
     maxHeight: "min(420px, calc(100vh - 240px))",
     margin: 0,
     padding: space.s6,
@@ -247,7 +240,6 @@ const styles = stylex.create({
   },
   heading: { padding: `${space.s8} ${space.s10} ${space.s4}` },
   row: {
-    gap: space.s10,
     height: "auto",
     padding: `${space.s6} ${space.s10}`,
     cursor: "default",

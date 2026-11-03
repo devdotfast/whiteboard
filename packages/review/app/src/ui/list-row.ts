@@ -31,4 +31,8 @@ export const listRowStyles = stylex.create({
   current: {
     backgroundColor: tokens.markerTint,
   },
+  // Keyboard-highlighted in a list driven from a search field.
+  highlighted: {
+    backgroundColor: tokens.tray,
+  },
 });

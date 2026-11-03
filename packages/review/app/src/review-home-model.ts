@@ -154,6 +154,20 @@ export function repositoryLabel(review: ReviewApiSummary): string {
   return repositoryIdentity(review)?.label || review.repositoryName || "";
 }
 
+/** What a search for a board hits, title first: its PR's title, branch,
+ * worktree and repository. Not the PR's number: Home's search is words. */
+export function boardSearchLabels(review: ReviewApiSummary): string[] {
+  const { pullRequestTitle, branch } = review.origin ?? {};
+
+  return [
+    boardTitle(review.title),
+    pullRequestTitle,
+    branch,
+    worktreeLabel(review),
+    repositoryLabel(review),
+  ].filter((label): label is string => Boolean(label));
+}
+
 /** Only hide a location when the filter pins that worktree, not its entire repo.
  * A review's PR stands in for its worktree. */
 export function reviewMetadataPills(
@@ -252,16 +266,7 @@ export function matchesHomeFilters(
       filters.branches.includes(review.origin?.branch ?? "")) &&
     [...filters.searches, query]
       .filter((term) => term.trim())
-      .every((term) =>
-        fuzzyMatches(
-          term.trim(),
-          boardTitle(review.title),
-          worktreeLabel(review),
-          review.origin?.branch ?? "",
-          review.origin?.pullRequestTitle ?? "",
-          repositoryLabel(review),
-        ),
-      )
+      .every((term) => fuzzyMatches(term.trim(), ...boardSearchLabels(review)))
   );
 }
 

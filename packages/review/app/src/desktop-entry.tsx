@@ -20,6 +20,7 @@ import type {
 } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
 import {
+  type ComponentType,
   type ReactElement,
   createRef,
   useEffect,
@@ -388,19 +389,26 @@ function mountThemed(container: HTMLElement): ThemedRoot {
   };
 }
 
+/** A themed root rendering one component, re-rendered by `update`. */
+function mountComponent<Props extends object>(
+  container: HTMLElement,
+  Component: ComponentType<Props>,
+  props: Props,
+) {
+  const mounted = mountThemed(container);
+  const update = (next: Props) => mounted.render(<Component {...next} />);
+
+  update(props);
+
+  return { update, dispose: mounted.dispose };
+}
+
 /** Mounts the finder over the window; it closes when disposed. */
 export function mountReviewFinder(
   container: HTMLElement,
   props: ReviewFinderProps,
 ): ReviewFinderHandle {
-  const mounted = mountThemed(container);
-
-  mounted.render(<FindWhiteboard {...props} />);
-
-  return {
-    update: (next) => mounted.render(<FindWhiteboard {...next} />),
-    dispose: () => mounted.dispose(),
-  };
+  return mountComponent(container, FindWhiteboard, props);
 }
 
 /** Mounts one section's list in Desktop's sidebar. */
@@ -408,14 +416,7 @@ export function mountReviewSidebarSection(
   container: HTMLElement,
   props: ReviewSidebarSectionProps,
 ): ReviewSidebarSectionHandle {
-  const mounted = mountThemed(container);
-
-  mounted.render(<ReviewSidebarSection {...props} />);
-
-  return {
-    update: (next) => mounted.render(<ReviewSidebarSection {...next} />),
-    dispose: () => mounted.dispose(),
-  };
+  return mountComponent(container, ReviewSidebarSection, props);
 }
 
 export function mountReviewCanvas(

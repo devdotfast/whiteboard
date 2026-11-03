@@ -1,56 +1,65 @@
-import { type ReviewApiSummary, boardTitle } from "@dev.fast/review-protocol";
+import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { fuzzyRank } from "@review/fuzzy-match";
 
-import { repositoryLabel, worktreeLabel } from "./review-home-model";
+import {
+  boardSearchLabels,
+  repositoryLabel,
+  worktreeLabel,
+} from "./review-home-model";
 
-/** How many boards the finder lists before a query narrows them. */
-export const FINDER_RECENT_SHOWN = 60;
+/** How many boards the finder lists at most. */
+export const FINDER_SHOWN = 60;
 
-/** The boards the finder lists for `query`: without one, the active boards
- * touched last; with one, those the query hits, best first, ties by
- * recency. Fields the query can hit: title, PR title and number, branch,
- * worktree and repository. */
-export function finderBoards(
+export interface FinderBoard {
+  board: ReviewApiSummary;
+  labels: string[];
+}
+
+/** The boards in the order the finder lists them, touched last first,
+ * with what a query is matched against: Home's search labels and the PR's
+ * number. Computed once per catalog. */
+export function finderCatalog(
   boards: readonly ReviewApiSummary[],
-  query: string,
-): ReviewApiSummary[] {
+): FinderBoard[] {
   const touched = (board: ReviewApiSummary) =>
     Math.max(
       Date.parse(board.createdAt) || 0,
       board.viewedAt ? Date.parse(board.viewedAt) || 0 : 0,
     );
 
-  const recent = boards
-    .filter((board) => !board.trashedAt)
-    .sort((left, right) => touched(right) - touched(left));
+  const number = (board: ReviewApiSummary) =>
+    board.origin?.pullRequestNumber
+      ? [`#${board.origin.pullRequestNumber}`]
+      : [];
 
-  if (!query.trim()) return recent.slice(0, FINDER_RECENT_SHOWN);
-
-  return fuzzyRank(query, recent, finderLabels);
+  return boards
+    .map((board) => ({
+      board,
+      labels: [...boardSearchLabels(board), ...number(board)],
+      touched: touched(board),
+    }))
+    .sort((left, right) => right.touched - left.touched)
+    .map(({ board, labels }) => ({ board, labels }));
 }
 
-/** What the query is matched against, title first. */
-export function finderLabels(board: ReviewApiSummary): string[] {
-  const { pullRequestNumber, pullRequestTitle, branch } = board.origin ?? {};
-
-  return [
-    boardTitle(board.title),
-    pullRequestTitle ?? "",
-    pullRequestNumber ? `#${pullRequestNumber}` : "",
-    branch ?? "",
-    worktreeLabel(board),
-    repositoryLabel(board),
-  ].filter(Boolean);
+/** The rows for `query`: the boards it hits, best first, ties by recency;
+ * every board, touched last first, without one. */
+export function finderRows(
+  catalog: readonly FinderBoard[],
+  query: string,
+): ReviewApiSummary[] {
+  return fuzzyRank(query, catalog, ({ labels }) => labels)
+    .slice(0, FINDER_SHOWN)
+    .map(({ board }) => board);
 }
 
 /** The row's second line: where the board is, then its branch and PR. */
 export function finderDetails(board: ReviewApiSummary): string[] {
   const { pullRequestNumber, branch } = board.origin ?? {};
-  const place = worktreeLabel(board) || repositoryLabel(board);
 
   return [
-    ...(place ? [place] : []),
-    ...(branch ? [branch] : []),
-    ...(pullRequestNumber ? [`#${pullRequestNumber}`] : []),
-  ];
+    worktreeLabel(board) || repositoryLabel(board),
+    branch,
+    pullRequestNumber && `#${pullRequestNumber}`,
+  ].filter((detail): detail is string => Boolean(detail));
 }

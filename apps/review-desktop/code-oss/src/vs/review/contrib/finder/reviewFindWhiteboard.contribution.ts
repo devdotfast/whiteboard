@@ -35,7 +35,6 @@ export interface IReviewFinderService {
 class ReviewFinderService extends Disposable implements IReviewFinderService {
 	declare readonly _serviceBrand: undefined;
 	private shown: DisposableStore | undefined;
-	private showing = false;
 
 	constructor(
 		@IWorkbenchLayoutService private readonly layoutService: IWorkbenchLayoutService,
@@ -53,27 +52,22 @@ class ReviewFinderService extends Disposable implements IReviewFinderService {
 			this.close();
 			return;
 		}
-		if (this.showing) return;
-		this.showing = true;
-		try {
-			const [assets] = await Promise.all([
-				loadReviewCanvasAssets(),
-				this.catalog.initialize().catch((error) => this.logService.warn("[Whiteboard] Finder catalog failed:", error)),
-			]);
-			if (this.shown || this._store.isDisposed) return;
-			const container = $(".review-finder");
-			this.layoutService.mainContainer.appendChild(container);
-			const shown = new DisposableStore();
-			const handle = assets.mountReviewFinder(container, this.props());
-			shown.add(toDisposable(() => {
-				handle.dispose();
-				container.remove();
-			}));
-			shown.add(this.catalog.onDidChange(() => handle.update(this.props())));
-			this.shown = shown;
-		} finally {
-			this.showing = false;
-		}
+		const [assets] = await Promise.all([
+			loadReviewCanvasAssets(),
+			this.catalog.initialize().catch((error) => this.logService.warn("[Whiteboard] Finder catalog failed:", error)),
+		]);
+		// A second press while loading, or a window on its way out.
+		if (this.shown || this._store.isDisposed) return;
+		const container = $(".review-finder");
+		this.layoutService.mainContainer.appendChild(container);
+		const shown = new DisposableStore();
+		const handle = assets.mountReviewFinder(container, this.props());
+		shown.add(toDisposable(() => {
+			handle.dispose();
+			container.remove();
+		}));
+		shown.add(this.catalog.onDidChange(() => handle.update(this.props())));
+		this.shown = shown;
 	}
 
 	private props(): ReviewFinderProps {
@@ -112,7 +106,7 @@ registerAction2(class extends Action2 {
 			f1: true,
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyCode.KeyK,
-				// Over upstream's ⌘K chords, which Whiteboard does not offer.
+				// Over upstream's ⌘K chords; the theme picker keeps its menu entry.
 				weight: KeybindingWeight.WorkbenchContrib + 1,
 			},
 		});

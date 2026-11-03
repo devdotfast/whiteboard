@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 
 import { mountReviewFinder } from "./desktop-entry";
-import { finderBoards } from "./find-whiteboard-model";
+import { finderCatalog, finderRows } from "./find-whiteboard-model";
 
 const board = (overrides: Partial<ReviewApiSummary>): ReviewApiSummary => ({
   reviewId: "board",
@@ -37,30 +37,24 @@ const boards = [
     createdAt: "2026-09-01T12:00:00Z",
     viewedAt: "2026-09-23T12:00:00Z",
   }),
-  board({ reviewId: "gone", title: "Trashed", trashedAt: "2026-09-20" }),
 ];
 
+const mounted: ReturnType<typeof mountReviewFinder>[] = [];
+
 afterEach(() => {
+  for (const handle of mounted.splice(0)) handle.dispose();
   document.body.replaceChildren();
 });
 
-async function mount(
-  props: Partial<Parameters<typeof mountReviewFinder>[1]> = {},
-) {
+async function mount() {
   const container = document.createElement("div");
 
   document.body.append(container);
   const onOpen = vi.fn<(reviewId: string) => void>();
   const onClose = vi.fn<() => void>();
-  let handle: ReturnType<typeof mountReviewFinder> | undefined;
 
   await act(async () => {
-    handle = mountReviewFinder(container, {
-      boards,
-      onOpen,
-      onClose,
-      ...props,
-    });
+    mounted.push(mountReviewFinder(container, { boards, onOpen, onClose }));
   });
 
   const rows = () =>
@@ -71,10 +65,10 @@ async function mount(
   const picked = () =>
     document.querySelector<HTMLElement>('[aria-selected="true"]')?.textContent;
 
-  return { handle: handle!, onOpen, onClose, rows, picked };
+  return { onOpen, onClose, rows, picked };
 }
 
-it("lists active boards touched last first and focuses the search", async () => {
+it("lists boards touched last first and focuses the search", async () => {
   const { rows } = await mount();
 
   expect(rows().map((row) => row?.slice(0, 8))).toEqual([
@@ -124,8 +118,8 @@ it("closes on Escape and says when nothing matches", async () => {
 });
 
 it("ranks a title hit over a branch hit", () => {
-  const ranked = finderBoards(
-    [
+  const ranked = finderRows(
+    finderCatalog([
       board({
         reviewId: "branch",
         title: "Zebra",
@@ -133,7 +127,7 @@ it("ranks a title hit over a branch hit", () => {
         origin: { branch: "feat/theming" },
       }),
       board({ reviewId: "title", title: "Theming" }),
-    ],
+    ]),
     "theming",
   );
 

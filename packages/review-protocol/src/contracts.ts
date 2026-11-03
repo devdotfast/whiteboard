@@ -648,6 +648,7 @@ export interface ReviewSidebarSectionHandle {
 /** The finder (⌘K): a search over every board in Desktop's catalog, shown
  * over the whole window until a board is picked or it is dismissed. */
 export interface ReviewFinderProps {
+  /** Every active board in the catalog; the finder orders and ranks them. */
   boards: ReviewApiSummary[];
   /** The board in the active tab, if any. */
   current?: string;
