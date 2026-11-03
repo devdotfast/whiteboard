@@ -31,8 +31,9 @@ export const listRowStyles = stylex.create({
   current: {
     backgroundColor: tokens.markerTint,
   },
-  // Keyboard-highlighted in a list driven from a search field.
+  // Keyboard-highlighted in a list driven from a search field. The tray
+  // is darker than a raised surface, so the tint marks it instead.
   highlighted: {
-    backgroundColor: tokens.tray,
+    backgroundColor: tokens.markerTint,
   },
 });

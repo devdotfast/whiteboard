@@ -140,6 +140,7 @@ export function FindWhiteboard({
               aria-current={board.reviewId === current ? "page" : undefined}
               {...stylex.props(
                 listRowStyles.row,
+                listRowStyles.wash,
                 styles.row,
                 board === picked && listRowStyles.highlighted,
               )}
@@ -242,7 +243,6 @@ const styles = stylex.create({
   row: {
     height: "auto",
     padding: `${space.s6} ${space.s10}`,
-    cursor: "default",
   },
   iconSlot: {
     display: "flex",
