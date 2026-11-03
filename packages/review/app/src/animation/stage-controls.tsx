@@ -47,12 +47,41 @@ export const playIcon = <path d="M8.5 6.5v11l9-5.5z" />;
 
 export const pauseIcon = <path d="M9 6.5v11M15 6.5v11" />;
 
-/** The title and caption of the stop showing, read out as it changes. */
-export function StopCaption({ stop }: { stop: PlayerStop | undefined }) {
+/** The title and caption of the stop showing, read out as it changes. Every
+ * stop's caption shares one cell, with only the current one visible, so the
+ * row keeps the height of the longest and never moves as the reader steps. */
+export function StopCaption({
+  stops,
+  activeIndex,
+}: {
+  stops: readonly PlayerStop[];
+  activeIndex: number;
+}) {
   return (
     <div {...stylex.props(styles.caption)} aria-live="polite">
-      {stop && <strong data-review-copy-prose>{stop.title}</strong>}
-      {stop?.caption && <span data-review-copy-prose> {stop.caption}</span>}
+      {stops.map((stop, position) => {
+        const current = position === activeIndex;
+
+        return (
+          <div
+            key={stop.key}
+            {...stylex.props(
+              styles.captionText,
+              !current && styles.captionHidden,
+            )}
+          >
+            <strong data-review-copy-prose={current || undefined}>
+              {stop.title}
+            </strong>
+            {stop.caption && (
+              <span data-review-copy-prose={current || undefined}>
+                {" "}
+                {stop.caption}
+              </span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -144,12 +173,19 @@ const styles = stylex.create({
     strokeLinejoin: "round",
   },
   caption: {
+    display: "grid",
     flex: "1 1 auto",
     minWidth: 0,
     marginLeft: space.s6,
     paddingBlock: space.s8,
     color: tokens.inkMuted,
     lineHeight: leading.px18,
+  },
+  captionText: {
+    gridArea: "1 / 1",
+  },
+  captionHidden: {
+    visibility: "hidden",
   },
   steps: {
     display: { default: "flex", [stylex.env.narrow]: "grid" },

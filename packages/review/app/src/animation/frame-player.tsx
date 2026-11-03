@@ -321,7 +321,7 @@ export function useFramePlayer(
         >
           <path d="M9.5 6.5 15 12l-5.5 5.5" />
         </ControlButton>
-        <StopCaption stop={frame} />
+        <StopCaption stops={activeFrames} activeIndex={activeIndex} />
         {!steps && (
           <div {...stylex.props(styles.dots)} role="group" aria-label="Frames">
             {activeFrames.map((item, position) => (
