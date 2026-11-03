@@ -423,6 +423,10 @@ body {
 
 /* The scene. */
 .wb-scene { display: grid; gap: var(--wb-space-28) var(--wb-space-48); padding: var(--wb-space-24); align-items: start; justify-items: stretch; min-width: 0; }
+/* A card is as wide as what it says, within bounds, and sits mid-column, so
+   a folded scene does not stretch it into a slab and squeeze its edges. A
+   table keeps its column; a scene's own CSS may set any width. */
+.wb-scene > .wb-card:not([data-kind="table"]) { justify-self: center; width: fit-content; min-width: 140px; max-width: 300px; }
 .wb-scene-compact { grid-template-columns: minmax(0, 1fr) !important; row-gap: var(--wb-space-48); }
 .wb-scene-compact > * { grid-column: 1 / -1 !important; grid-row: auto !important; }
 .wb-scene-fold { grid-template-columns: repeat(var(--wb-fold), minmax(0, 1fr)) !important; }
