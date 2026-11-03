@@ -466,6 +466,10 @@ body {
    gaps around them, titled in its top-left. Cards paint over it. A folded
    scene no longer keeps its cells together, so it hides. */
 .wb-scene > .wb-card { position: relative; z-index: 1; }
+/* Groups bleed into the gaps around their cells, so a grouped scene opens
+   its rows and columns to keep the boxes apart and give edges between
+   layers room to be read. */
+.wb-scene:has(> .wb-group) { row-gap: var(--wb-space-72); column-gap: var(--wb-space-72); padding: var(--wb-space-32) var(--wb-space-24); }
 .wb-group {
   position: relative; z-index: 0; align-self: stretch; justify-self: stretch;
   margin: calc(-1 * var(--wb-space-18)) calc(-1 * var(--wb-space-16)) calc(-1 * var(--wb-space-10));

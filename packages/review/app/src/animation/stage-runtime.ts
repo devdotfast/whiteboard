@@ -1645,7 +1645,7 @@ export function stageRuntime(port: MessagePort): void {
           (body.y + body.height / 2 - (ay + by) / 2) * ny;
 
         const side =
-          Math.abs(signed) > 1 ? Math.sign(signed) : -Math.sign(toMiddle || 1);
+          Math.abs(signed) > 12 ? Math.sign(signed) : -Math.sign(toMiddle || 1);
 
         const bow = span * 2 * side;
 
@@ -2655,7 +2655,10 @@ export function stageRuntime(port: MessagePort): void {
       }
 
       probe.remove();
-      grid.style.columnGap = `${Math.min(160, Math.max(48, Math.ceil(widest) + 16))}px`;
+      // A grouped scene keeps the wider gap its groups ask for.
+      const floor = grid.querySelector(".wb-group") ? 72 : 48;
+
+      grid.style.columnGap = `${Math.min(160, Math.max(floor, Math.ceil(widest) + 16))}px`;
     };
 
     const responsive = options.responsive !== false && columns > 1;
