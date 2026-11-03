@@ -2117,6 +2117,17 @@ export function stageRuntime(port: MessagePort): void {
         finishOthers();
         await nextFrame();
         root.removeAttribute("data-wb-instant");
+
+        // Drawn without motion, the frame shows its chips at their origins,
+        // ready to be sent, not at the heads they would have reached; Play
+        // or a step forward rides them. A chip told to stay keeps its head.
+        for (const travel of travels)
+          if (travel.frame === frame.key && !travel.stay) {
+            travel.progress.value = 0;
+            // SAFETY: a travel's element is the <div> chip makeToken created.
+            (travel.element as HTMLElement).style.opacity = "1";
+            placeTravel(travel);
+          }
       } else {
         waits.push(
           ...document
