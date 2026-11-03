@@ -14,7 +14,7 @@ A change adds, removes or guards a transition, such as an order status, a job li
 
 ## Technique
 
-Data-driven: each frame's `data` is `{ state, transition?: { event, from, to, refused? } }`, complete per frame, and one `whiteboard.on("*", ...)` draws any frame from it. Nodes are `.wb-node` elements in a CSS grid; `whiteboard.arrow` draws the edges and one `whiteboard.token` rides them. The ride is a `whiteboard.animate` over points sampled from the arrow's path, so it skips itself on a jump and under reduced motion; it plays only when stepping forward.
+Data-driven: each frame's `data` is `{ state, transition?: { event, from, to, refused? } }`, complete per frame, and one `whiteboard.on("*", ...)` draws any frame from it. Nodes are `.wb-node` elements in a CSS grid, the start and the final states as `data-form="pill"`; `whiteboard.arrow` draws the edges and one `whiteboard.token` rides them. The ride is a `whiteboard.animate` over points sampled from the arrow's path, so it skips itself on a jump and under reduced motion; it plays only when stepping forward.
 
 ## Adapt
 

@@ -13,7 +13,7 @@ A change introduces or tunes a job queue, a worker pool or a channel with a capa
 
 ## Technique
 
-Data-driven. Each frame's `data` holds the full state: the producer's next job and state, the queue contents (head first), the bound, each worker's job and the done list. One `whiteboard.on("*", ...)` handler redraws every card from it, then animates only what changed: it records where each job (`data-job`) was drawn before the redraw and glides it from there with `whiteboard.animate`, fading in jobs that are new. `whiteboard.arrow` draws the edges; the put edge takes `data-tone="removed"` while the producer is blocked.
+Data-driven. Each frame's `data` holds the full state: the producer's next job and state, the queue contents (head first), the bound, each worker's job and the done list. One `whiteboard.on("*", ...)` handler redraws every card from it, then animates only what changed: it records where each job (`data-job`) was drawn before the redraw and glides it from there with `whiteboard.animate`, fading in jobs that are new. `whiteboard.arrow` draws the edges; the put edge takes `data-tone="removed"` while the producer is blocked. The producer and workers are `data-form="bars"`, parts of this codebase, and the queue a violet `data-form="stack"`, so the silhouettes tell them apart before the titles do.
 
 ## Adapt
 
