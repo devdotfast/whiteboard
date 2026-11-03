@@ -395,7 +395,9 @@ body {
 .wb-shape[data-wb-highlit] { stroke: var(--wb-accent); stroke-width: 2; }
 
 /* Connectors and tokens. */
-.wb-arrows, .wb-tokens { position: fixed; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+/* Above the cards, which sit above their groups: an edge's head meets a
+   card's border, and a chip stays readable as it passes one. */
+.wb-arrows, .wb-tokens { position: fixed; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .wb-line {
   fill: none;
   stroke: var(--wb-ink-faint);
