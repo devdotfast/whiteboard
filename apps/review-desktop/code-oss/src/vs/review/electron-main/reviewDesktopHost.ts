@@ -32,6 +32,7 @@ import {
   REVIEW_REMOTE_HOSTS_SETTING,
   REVIEW_REMOTE_INSTALL_MODES,
   REVIEW_REMOTE_INSTALL_SETTING,
+  REVIEW_SERVICE_URL_SETTING,
   REVIEW_TELEMETRY_SETTING,
 } from "../common/reviewConfigurationDefaults.js";
 import { remoteHostAliases } from "../common/reviewSshAlias.js";
@@ -150,6 +151,9 @@ export class ReviewDesktopHost extends Disposable {
         telemetryEnabled:
           this.configurationService.getValue<boolean>(REVIEW_TELEMETRY_SETTING) !==
           false,
+        serviceOrigin: this.configurationService
+          .getValue<string>(REVIEW_SERVICE_URL_SETTING)
+          ?.trim(),
         crashDumpsDir,
         onServerTerminated: (detail) => {
           errorTelemetry?.serverLost();

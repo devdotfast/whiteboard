@@ -15,11 +15,11 @@ import { IFileService, type IFileStat } from "../../platform/files/common/files.
 import { createDecorator } from "../../platform/instantiation/common/instantiation.js";
 import { IEditorService } from "../../workbench/services/editor/common/editorService.js";
 import type {
-	ReviewInlineFindSpec,
+	ReviewPeekFindSpec,
 	ReviewDiffLens,
-	ReviewInlineEditorRange,
+	ReviewPeekRange,
 	ReviewDiffFileWire,
-	ReviewInlineEditorFactory,
+	ReviewPeekViewer,
 	ReviewDiffViewFactory,
 	ReviewSourceEntry,
 	ReviewApiSourceLocation,
@@ -30,7 +30,7 @@ import { apiSourceUri, sourceLocation, sourceTreeUri, sourceTreeSelection, REVIE
 import { IReviewCanvasEditorTabsService } from "./reviewCanvasEditorTabsService.js";
 import { IReviewDesktopConnectionService, reviewResponseError } from "./reviewDesktopConnectionService.js";
 import type { ReviewDiffViewService, ReviewDiffViewSource } from "./reviewDiffViewService.js";
-import type { ReviewEmbeddedEditors } from "./reviewEmbeddedEditors.js";
+import type { ReviewMonacoPeeks } from "./reviewMonacoPeeks.js";
 
 export { apiSourceUri, REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
 
@@ -73,15 +73,15 @@ export function apiSourceTarget(resource: URI): ApiSourceTarget | undefined {
 export const IReviewApiSourceService = createDecorator<IReviewApiSourceService>("reviewApiSourceService");
 export interface IReviewApiSourceService {
 	readonly _serviceBrand: undefined;
-	open(target: ApiSourceTarget, range?: ReviewInlineEditorRange): Promise<void>;
+	open(target: ApiSourceTarget, range?: ReviewPeekRange): Promise<void>;
 	children(resource: URI): Promise<IFileStat[]>;
 	openDiff(view: ReviewSourceView, path: string): Promise<void>;
 	canvas(
 		view: () => ReviewSourceView,
-		inline: ReviewEmbeddedEditors,
+		inline: ReviewMonacoPeeks,
 		diff: ReviewDiffViewService,
 	): {
-		inlineEditors: ReviewInlineEditorFactory;
+		peeks: ReviewPeekViewer;
 		diffView: ReviewDiffViewFactory;
 		openStructuralComparison(): void;
 	};
@@ -180,7 +180,7 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 		return apiSourceUri(target, empty);
 	}
 
-	async open(target: ApiSourceTarget, range?: ReviewInlineEditorRange): Promise<void> {
+	async open(target: ApiSourceTarget, range?: ReviewPeekRange): Promise<void> {
 		const pane = await this.editors.openEditor({
 			resource: await this.sourceResource(target),
 			options: {
@@ -241,7 +241,7 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 		}));
 	}
 
-	canvas(view: () => ReviewSourceView, inline: ReviewEmbeddedEditors, diff: ReviewDiffViewService) {
+	canvas(view: () => ReviewSourceView, inline: ReviewMonacoPeeks, diff: ReviewDiffViewService) {
 		const comparisonGeneration = diff.comparisonGeneration;
 		// A live checkout's saves change its generation; each comparison keeps only the latest.
 		const lists = new Map<string, { generation?: string; list: Promise<readonly ReviewDiffFileWire[]> }>();
@@ -285,7 +285,7 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 			},
 		});
 		const diffSource = makeSource(view, true);
-		const documentScope = (spec: ReviewInlineFindSpec) => {
+		const documentScope = (spec: ReviewPeekFindSpec) => {
 			// A source with its own pins is read at them; the review comparison does not apply.
 			const current = spec.pins ? reviewSourceAnchor(view(), spec.pins) : reviewSourceComparison(view());
 			const lens: ReviewDiffLens = {
@@ -297,10 +297,10 @@ export class ReviewApiSourceService extends Disposable implements IReviewApiSour
 		};
 		return {
 			openStructuralComparison: () => openComparison(reviewSourceComparison(view()), true),
-			inlineEditors: {
+			peeks: {
 				create: (spec) => { const { lens, source } = documentScope(spec); return diff.createDocument(spec, lens, source); },
 				find: async (spec, query) => { const { lens, source } = documentScope(spec); return { matchCount: (await diff.findDocument(lens, source, query)).length }; },
-			} satisfies ReviewInlineEditorFactory,
+			} satisfies ReviewPeekViewer,
 			diffView: {
 				create: (spec) => diff.create(spec, diffSource),
 				files: diffSource.files,

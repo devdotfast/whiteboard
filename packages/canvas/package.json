@@ -1,6 +1,6 @@
 {
   "name": "@dev.fast/canvas",
-  "version": "0.3.2",
+  "version": "0.3.9",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -19,7 +19,8 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
-    "./canvas.css": "./dist/assets/canvas.css"
+    "./canvas.css": "./dist/assets/canvas.css",
+    "./theme.css": "./dist/assets/theme.css"
   },
   "publishConfig": {
     "access": "public",
@@ -39,7 +40,7 @@
     "tsdown": "0.22.14",
     "typescript": "6.0.3",
     "vite": "8.1.6",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   },
   "peerDependencies": {
     "react": "^19.2.0",

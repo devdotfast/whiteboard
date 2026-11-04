@@ -93,7 +93,9 @@ function mount(options: {
         );
 
       return Response.json({
+        shareId: "6f1c2b0e-8e0a-4b8e-9a51-0d6f1e2c3b4a",
         url: "https://app.dev.fast/s/capability",
+        version: JSON.parse(String(init!.body)).version,
       });
     },
   );

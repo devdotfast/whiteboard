@@ -71,7 +71,7 @@ const sideSchema = z.enum(["base", "head"]);
 
 /** An excerpt is the lines a board references. */
 export const shareSourceSchema = z.discriminatedUnion("kind", [
-  z.strictObject({
+  z.object({
     kind: z.literal("excerpt"),
     file: sharePathSchema,
     commit: commitSchema,
@@ -80,13 +80,13 @@ export const shareSourceSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const lineRangeSchema = z.strictObject({
+const lineRangeSchema = z.object({
   side: sideSchema,
   file: sharePathSchema,
   fromLine: z.number().int().positive(),
   toLine: z.number().int().positive(),
   pins: z
-    .strictObject({
+    .object({
       repositoryId: z.string(),
       head: z.string(),
       base: z.string().optional(),
@@ -94,39 +94,108 @@ const lineRangeSchema = z.strictObject({
     .optional(),
 });
 
-export const shareBundleSchema = z.strictObject({
+/** 1-based base and head lines; null when a side lacks the line. */
+const alignmentRowSchema = z.tuple([
+  z.number().int().positive().nullable(),
+  z.number().int().positive().nullable(),
+]);
+
+export const shareAlignmentSchema = z.object({
+  file: sharePathSchema,
+  previousFile: sharePathSchema.optional(),
+  head: z.string(),
+  base: z.string().optional(),
+  rows: z.array(alignmentRowSchema).min(1),
+});
+
+/** Unknown fields drop, so a reader opens bundles from newer sharers. */
+export const shareBundleSchema = z.object({
   format: z.literal(SHARE_FORMAT),
   reviewId: z.string().min(1).max(256),
   version: z.number().int().nonnegative(),
   title: z.string().max(4096),
   /** Validated against the document schema by the reader. */
   snapshot: z.record(z.string(), z.unknown()),
-  images: z.record(z.string(), z.strictObject({ png: z.base64() })),
+  images: z.record(z.string(), z.object({ png: z.base64() })),
   traces: z.record(z.string(), z.unknown()),
   maps: z.record(z.string(), z.unknown()),
   commits: z.array(z.unknown()),
   /** Each reference's lines, resolved where the board was shared. */
   selections: z.record(z.string(), z.array(lineRangeSchema)),
   sources: z.array(shareSourceSchema),
-  repository: z
-    .strictObject({ cloneUrl: gitHubRepositoryUrlSchema })
-    .optional(),
+  /** The sharer's diff over the selections, since 0.4. */
+  alignments: z.array(shareAlignmentSchema).optional(),
+  repository: z.object({ cloneUrl: gitHubRepositoryUrlSchema }).optional(),
+  /** Quotes uncommitted changes: view only, never imported. Since 0.6. */
+  frozen: z.literal(true).optional(),
 });
 
 export type ShareBundle = z.infer<typeof shareBundleSchema>;
 
 export type ShareSource = z.infer<typeof shareSourceSchema>;
 
-export const createShareSchema = z.strictObject({
+export type ShareAlignment = z.infer<typeof shareAlignmentSchema>;
+
+export const createShareSchema = z.object({
   requestId: z.uuid(),
   bundle: shareBundleSchema,
 });
 
-export function shareLink(origin: string, capability: string): string {
-  return new URL(`/s/${capabilitySchema.parse(capability)}`, origin).href;
+export const shareCreatedSchema = z.strictObject({
+  shareId: shareIdSchema,
+  url: z.url(),
+});
+
+const shareSizeSchema = z.number().int().positive().max(MAX_SHARE_BYTES);
+
+export const shareRevisionRefSchema = z.object({
+  id: shareIdSchema,
+  version: z.number().int().nonnegative(),
+  createdAt: z.number(),
+});
+
+export const shareRevisionSchema = shareRevisionRefSchema.extend({
+  size: shareSizeSchema,
+  url: z.url(),
+});
+
+export const shareRevisionsSchema = z.object({
+  latest: shareIdSchema,
+  items: z.array(shareRevisionSchema),
+});
+
+export type ShareRevisions = z.infer<typeof shareRevisionsSchema>;
+
+export const sharedMetaSchema = z.object({
+  sender: z.strictObject({ login: z.string().min(1).max(256) }),
+  sharedAt: z.number(),
+  size: shareSizeSchema,
+  revision: shareRevisionRefSchema,
+  latest: shareIdSchema,
+});
+
+export type SharedMeta = z.infer<typeof sharedMetaSchema>;
+
+export function shareLink(
+  origin: string,
+  capability: string,
+  revision?: string,
+): string {
+  const url = new URL(`/s/${capabilitySchema.parse(capability)}`, origin);
+
+  if (revision !== undefined)
+    url.searchParams.set("rev", shareIdSchema.parse(revision));
+
+  return url.href;
 }
 
-export function parseShareLink(value: string) {
+export type ShareLink = {
+  origin: string;
+  capability: string;
+  revision?: string;
+};
+
+export function parseShareLink(value: string): ShareLink {
   const url = new URL(value);
 
   if (
@@ -134,14 +203,20 @@ export function parseShareLink(value: string) {
     url.username ||
     url.password ||
     url.hash ||
-    [...url.searchParams.keys()].some((key) => key !== "app")
+    [...url.searchParams.keys()].some((key) => key !== "app" && key !== "rev")
   )
     throw new Error("Use an HTTPS Whiteboard share link.");
 
-  return {
+  const link: ShareLink = {
     origin: url.origin,
     capability: capabilitySchema.parse(
       /^\/s\/([^/]+)$/.exec(url.pathname)?.[1],
     ),
   };
+
+  const revision = url.searchParams.get("rev");
+
+  if (revision !== null) link.revision = shareIdSchema.parse(revision);
+
+  return link;
 }

@@ -2,10 +2,12 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { SHARE_FORMAT } from "@dev.fast/review-share-protocol";
 import { ReviewInputError } from "@dev.fast/whiteboard-document";
 import { openLocalReviewStore } from "@review/review-api/local-data.js";
 import { Hono } from "hono";
 import { afterEach, expect, it, vi } from "vitest";
+import { ZodError } from "zod";
 
 import { createShareFixture } from "../../test/fixtures/share/create.js";
 import { exportShare } from "./export.js";
@@ -43,6 +45,22 @@ it("rejects text that is not a Whiteboard file", () => {
   expect(() =>
     parseWhiteboardFile(JSON.stringify({ format: "review-share/1" })),
   ).toThrow(/different Whiteboard version/);
+});
+
+it("requires an update only for a strictly newer share format", () => {
+  const next = Number(SHARE_FORMAT.split("/")[1]) + 1;
+
+  expect(() =>
+    parseWhiteboardFile(JSON.stringify({ format: `review-share/${next}` })),
+  ).toThrow(
+    "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  );
+  expect(() =>
+    parseWhiteboardFile(JSON.stringify({ format: "other-format/999" })),
+  ).toThrow(/different Whiteboard version/);
+  expect(() =>
+    parseWhiteboardFile(JSON.stringify({ format: SHARE_FORMAT })),
+  ).toThrow(ZodError);
 });
 
 it("round-trips an exported bundle through its file text", async () => {
@@ -221,6 +239,18 @@ it("reports a file that is not a whiteboard", async () => {
   expect(await open({ path: file })).toMatchObject({
     stage: "error",
     error: "This is not a Whiteboard file.",
+  });
+});
+
+it("shows update guidance when opening a newer Whiteboard file", async () => {
+  const { file, open } = await recipientApi();
+  const next = Number(SHARE_FORMAT.split("/")[1]) + 1;
+  await writeFile(file, JSON.stringify({ format: `review-share/${next}` }));
+
+  expect(await open({ path: file })).toMatchObject({
+    stage: "error",
+    error:
+      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
   });
 });
 

@@ -1,6 +1,6 @@
 import { ContentHoverController } from "../../editor/contrib/hover/browser/contentHoverController.js";
 import { orderReviewDiffFiles } from "../common/reviewChangedFilesModel.js";
-import type { ReviewInlineEditorSpec, ReviewInlineEditorHandle, ReviewFindQuery, ReviewInlineFindResult, ReviewAskMark, ReviewAskPinMount } from "../common/reviewProtocol.js";
+import type { ReviewPeekSpec, ReviewPeekHandle, ReviewFindQuery, ReviewPeekFindResult, ReviewAskMark, ReviewAskPinMount } from "../common/reviewProtocol.js";
 import { reviewFileCounts } from "../common/reviewStructuralDiff.js";
 import type { ReviewDiffLayoutScope, ReviewDiffProgress } from "../common/reviewProtocol.js";
 import { DiffFindIndex, findInEntries, type DiffFindMatch } from "./reviewDiffFind.js";
@@ -37,7 +37,7 @@ import { markReviewEmbeddedEditor } from "./reviewEmbeddedNavigation.js";
 import { markReviewDefinitionPeekHost } from "./reviewDefinitionPeek.js";
 import { sourceLocation } from "../common/reviewSourceView.js";
 import { ReviewFilesDiffView, ReviewFilesEditorInput, type ReviewFilesEditorEntry } from "./reviewFilesDiffView.js";
-import { ReviewEmbeddedEditors } from "./reviewEmbeddedEditors.js";
+import { ReviewMonacoPeeks } from "./reviewMonacoPeeks.js";
 
 import { createStructuralDiffEditors } from "./reviewStructuralDiff.js";
 import { StructuralViewedState } from "./reviewStructuralViewed.js";
@@ -74,7 +74,7 @@ export class ReviewDiffViewService extends Disposable {
 	private readonly viewStates: ReviewDiffViewStateStorage;
 
 	constructor(
-		private readonly inlineEditors: ReviewEmbeddedEditors,
+		private readonly peeks: ReviewMonacoPeeks,
 		@IInstantiationService
 		private readonly instantiationService: IInstantiationService,
 		@IStorageService storage: IStorageService,
@@ -128,7 +128,7 @@ export class ReviewDiffViewService extends Disposable {
 		const handle = new DiffViewController(
 			spec,
 			this.instantiationService,
-			this.inlineEditors,
+			this.peeks,
 			this.overflowWidgetsDomNode,
 			spec.document ? this.peekLayout : this.diffLayout,
 			this.viewStates,
@@ -141,7 +141,7 @@ export class ReviewDiffViewService extends Disposable {
 	}
 
 	/** Document peeks use the same controller, providers and widget as the Diff tab. */
-	createDocument(spec: ReviewInlineEditorSpec, lens: ReviewDiffLens, source: ReviewDiffViewSource): ReviewInlineEditorHandle {
+	createDocument(spec: ReviewPeekSpec, lens: ReviewDiffLens, source: ReviewDiffViewSource): ReviewPeekHandle {
 		const lifetime = new DisposableStore();
 		const heightChanged = lifetime.add(new Emitter<number>());
 		let height = 400;
@@ -236,7 +236,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 	private matches: DiffFindMatch[] = [];
 	private findGeneration = 0;
 	private readonly decorations: ReviewFindDecorations;
-	async setFindQuery(query: ReviewFindQuery): Promise<ReviewInlineFindResult> {
+	async setFindQuery(query: ReviewFindQuery): Promise<ReviewPeekFindResult> {
 		const request = ++this.findGeneration;
 		await this.ready;
 		const view = this.view;
@@ -266,7 +266,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 	constructor(
 		private readonly spec: ReviewDiffViewSpec,
 		private readonly instantiationService: IInstantiationService,
-		private readonly inlineEditors: ReviewEmbeddedEditors,
+		private readonly peeks: ReviewMonacoPeeks,
 		private readonly overflowWidgetsDomNode: HTMLElement | undefined,
 		private readonly diffLayout: ReviewDiffLayoutSetting,
 		private readonly viewStates: ReviewDiffViewStateStorage,
@@ -303,7 +303,7 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 	}
 
 	private releaseEditors(): void {
-		for (const editor of this.adoptedEditors) this.inlineEditors.clearExternalActiveEditor(editor);
+		for (const editor of this.adoptedEditors) this.peeks.clearExternalActiveEditor(editor);
 		this.adoptedEditors = [];
 	}
 
@@ -442,9 +442,9 @@ class DiffViewController extends Disposable implements ReviewDiffViewHandle {
 		this.adoptedEditors = editors;
 		for (const editor of editors) {
 			this.activeControlStore.add(markReviewEmbeddedEditor(editor));
-			if (this.spec.document) ReviewEmbeddedEditors.markDocumentEditor(editor);
+			if (this.spec.document) ReviewMonacoPeeks.markDocumentEditor(editor);
 			this.activeControlStore.add(
-				editor.onDidFocusEditorText(() => { this.inlineEditors.setExternalActiveEditor(editor); this.spec.document?.onDidFocus?.(); }),
+				editor.onDidFocusEditorText(() => { this.peeks.setExternalActiveEditor(editor); this.spec.document?.onDidFocus?.(); }),
 			);
 			const hover = this.spec.document?.onDidShowHover && ContentHoverController.get(editor);
 			if (hover) {

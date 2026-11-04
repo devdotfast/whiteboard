@@ -83,6 +83,79 @@ it.each(["dev-fast-review", "dev-fast-review-preview"])(
   },
 );
 
+it.each([
+  {
+    send: async () => new Response(null, { status: 426 }),
+    error:
+      "This action requires a newer version of Whiteboard. Use Check for Updates, then try again.",
+  },
+  {
+    send: async () => {
+      throw new TypeError("fetch failed");
+    },
+    error:
+      "Could not reach the sharing service. Check your connection, then retry.",
+  },
+  {
+    send: async () => {
+      throw new DOMException("private response details", "TimeoutError");
+    },
+    error: "The sharing request timed out. Please retry.",
+  },
+  {
+    send: async () => Response.json({ unexpected: "private response details" }),
+    error:
+      "The sharing service returned an unexpected response. Update Whiteboard or report this issue.",
+  },
+])(
+  "preserves the login and explains a failed publish: $error",
+  async ({ send, error }) => {
+    const root = await mkdtemp(path.join(tmpdir(), "sharing-publish-"));
+    const fixture = await createShareFixture(root);
+    vi.stubEnv("DEV_REVIEW_HOME", root);
+
+    try {
+      const auth = {
+        origin: "https://app.dev.fast",
+        token: randomUUID(),
+        login: "fixture",
+        savedAt: new Date().toISOString(),
+      };
+
+      await writeStoreAuth(auth);
+      const api = new Hono();
+      api.onError((failure, context) =>
+        context.json(
+          { error: failure.message },
+          failure instanceof ReviewInputError ? failure.status : 500,
+        ),
+      );
+      mountSharingHost(api, fixture.store, fixture.data, {
+        readRepository: async () => fixture.repository,
+        fetch: async (input) =>
+          String(input).endsWith("/api/auth/token")
+            ? new Response(null, { status: 404 })
+            : send(),
+      });
+
+      const response = await api.request("/sharing/publish", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ reviewId: fixture.reviewId }),
+      });
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toEqual({ error });
+      expect(await readStoreAuth()).toEqual(auth);
+    } finally {
+      vi.unstubAllEnvs();
+      await fixture.data.close();
+      await fixture.store.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);
+
 it("signs the user out when the share service rejects the stored token", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "sharing-publish-"));
   const fixture = await createShareFixture(root);

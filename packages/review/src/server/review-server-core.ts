@@ -164,7 +164,11 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
     relay: input.relay,
   });
 
-  const callbacks = relayReviewCallbacks(input.relay, input.softwareMapEnabled);
+  const callbacks = relayReviewCallbacks(
+    input.relay,
+    input.softwareMapEnabled,
+    input.animations,
+  );
 
   const { ask } = input;
 
@@ -205,7 +209,7 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
       threads: askThreads,
       agents: async () => detectAskAgents(await ask?.env),
     },
-    input.animations,
+    callbacks.animations,
     callbacks.render,
   );
 
@@ -216,6 +220,7 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
     app,
     api,
     close: () => {
+      callbacks.close();
       stopLocal?.();
       closeDeletedThreads();
       askThreads?.closeAll();
@@ -223,12 +228,53 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
   };
 }
 
-/** The Desktop callbacks `createReviewApi` takes, answered over the relay. */
+const capabilitiesAnswerSchema = z.object({
+  softwareMapEnabled: z.boolean(),
+  // Older Desktops omit it.
+  animationsEnabled: z.boolean().optional(),
+});
+
+/**
+ * The Desktop callbacks `createReviewApi` takes, answered over the relay.
+ * `animations` never asks Desktop: it is the last answer while one is
+ * attached, else the host's own.
+ */
 export function relayReviewCallbacks(
   relay: ReviewDesktopVerbRelay,
   softwareMapEnabled = false,
+  animations: () => boolean = () => false,
 ) {
+  let desktopAnimations: boolean | undefined;
+
+  const capabilities = async (): Promise<AuthoringCapabilities> => {
+    if (!relay.attached) return { desktopAvailable: false, softwareMapEnabled };
+
+    const result = await relay.dispatch({
+      name: "authoringCapabilities",
+      args: {},
+    });
+
+    if (!result.ok) throw new ReviewInputError(result.error, 409);
+
+    const answer = capabilitiesAnswerSchema.parse(result.result);
+    desktopAnimations = answer.animationsEnabled;
+
+    return {
+      desktopAvailable: true,
+      softwareMapEnabled: answer.softwareMapEnabled,
+    };
+  };
+
+  const stop = relay.onAttachedChange(() => {
+    desktopAnimations = undefined;
+
+    if (relay.attached) capabilities().catch(() => {});
+  });
+
   return {
+    capabilities,
+    animations: () => desktopAnimations ?? animations(),
+    close: stop,
     async open(review: {
       reviewId: string;
       title: string;
@@ -241,22 +287,6 @@ export function relayReviewCallbacks(
       if (!result.ok) throw new ReviewInputError(result.error, 409);
 
       return z.object({ softwareMapEnabled: z.boolean() }).parse(result.result);
-    },
-    async capabilities(): Promise<AuthoringCapabilities> {
-      if (!relay.attached)
-        return { desktopAvailable: false, softwareMapEnabled };
-
-      const result = await relay.dispatch({
-        name: "authoringCapabilities",
-        args: {},
-      });
-
-      if (!result.ok) throw new ReviewInputError(result.error, 409);
-
-      return {
-        desktopAvailable: true,
-        ...z.object({ softwareMapEnabled: z.boolean() }).parse(result.result),
-      };
     },
     async render(request: RenderRequest): Promise<RenderedFrame> {
       if (!relay.attached)

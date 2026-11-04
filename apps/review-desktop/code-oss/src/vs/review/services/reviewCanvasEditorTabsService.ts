@@ -241,7 +241,7 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		active: boolean,
 		configure?: (input: ReviewCanvasEditorInput) => void,
 	): Promise<ReviewCanvasEditorInput> {
-		const key = target.kind === "release-notes" ? `${target.kind}/${target.version}` : target.kind;
+		const key = target.kind;
 		let input = this.inputs.get(key);
 		if (!input || input.isDisposed()) {
 			input = this.instantiationService.createInstance(ReviewCanvasEditorInput, target);
@@ -251,11 +251,13 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 			}
 		}
 		configure?.(input);
+		// An open Release notes tab re-renders to scroll to the version asked for.
+		const forceReload = target.kind === "release-notes" && input.setReleaseNotesVersion(target.version);
 		// A control command may arrive while an Ask's loading pane has focus.
 		// Reuse the review's group instead of mounting a second canvas there.
 		const existingGroup = this.editorGroupsService.groups.find((group) => group.contains(input));
 		const targetGroup = existingGroup === undefined ? this.editorGroupsService.mainPart.activeGroup : existingGroup;
-		await this.editorService.openEditor(input, { pinned: true, inactive: !active, revealIfVisible: true }, targetGroup);
+		await this.editorService.openEditor(input, { pinned: true, inactive: !active, revealIfVisible: true, forceReload }, targetGroup);
 		return input;
 	}
 

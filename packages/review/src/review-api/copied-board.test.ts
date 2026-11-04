@@ -91,7 +91,8 @@ it("keeps a copied board's blocks, lenses and provenance, reading in its own rep
     seed.document[2],
   ]);
   expect(snapshot.lenses).toEqual(seed.lenses);
-  expect(snapshot.shared).toEqual(seed.shared);
+  expect(snapshot.shared).toEqual({ ...seed.shared, importedVersion: 0 });
+  expect(snapshot.version).toBe(0);
   expect(snapshot.origin?.branch).toBe("feature");
 
   const { targetId } = await store.execute({
@@ -105,23 +106,33 @@ it("keeps a copied board's blocks, lenses and provenance, reading in its own rep
   expect(targetId).toBe("block-13");
 });
 
-it("finds a copy by its link until it is deleted", async () => {
-  const { reviewId } = await copy();
+it("lists a link's copies newest first, Trash included, until each is deleted", async () => {
+  const { reviewId: first } = await copy();
+  const { reviewId: second } = await copy();
+  const shared = { ...seed.shared, importedVersion: 0 };
 
-  expect(store.copyOf("link")).toBe(reviewId);
-  expect(store.copyOf("other")).toBeUndefined();
+  expect(store.copiesOf("link")).toEqual([
+    { reviewId: second, version: 0, shared },
+    { reviewId: first, version: 0, shared },
+  ]);
+  expect(store.copiesOf("other")).toEqual([]);
 
   await store.execute(
-    { operation: { type: "lifecycle", state: "trash", reviewId } },
+    { operation: { type: "lifecycle", state: "trash", reviewId: first } },
     undefined,
     { kind: "person" },
   );
-  expect(store.copyOf("link")).toBe(reviewId);
+  expect(store.copiesOf("link").map((c) => c.reviewId)).toEqual([
+    second,
+    first,
+  ]);
 
-  await store.execute({ operation: { type: "delete", reviewId } }, undefined, {
-    kind: "person",
-  });
-  expect(store.copyOf("link")).toBeUndefined();
+  await store.execute(
+    { operation: { type: "delete", reviewId: first } },
+    undefined,
+    { kind: "person" },
+  );
+  expect(store.copiesOf("link").map((c) => c.reviewId)).toEqual([second]);
 });
 
 it("still checks the images of a board made from scratch", async () => {
