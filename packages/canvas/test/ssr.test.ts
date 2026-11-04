@@ -19,7 +19,6 @@ import {
   Whiteboard,
   WhiteboardProvider,
   boardView,
-  excerptPeeks,
   openShare,
   readOnlyHost,
 } from "../dist/index.js";
@@ -113,20 +112,18 @@ it("imports and renders where import.meta.url is undefined, as in a Worker", asy
   }
 });
 
-/** A live board: the snapshot without its pins, its peeks from `options`. */
-const renderLive = (options: Parameters<typeof readOnlyHost>[0]) => {
+/** A live board: the snapshot without its pins, its peeks from `options`,
+ * quoting `code` once it arrives. */
+const renderLive = async (
+  options: Parameters<typeof readOnlyHost>[0],
+  code?: Parameters<ReturnType<typeof readOnlyHost>["setSources"]>[0],
+) => {
   const { snapshot, selections } = shareFixture;
   const { pins: _pins, ...live } = snapshot;
   const host = readOnlyHost(options);
 
-  const data = boardView(live, {
-    progress: {
-      complete: true,
-      files: [],
-      lenses: [],
-      resolvedSelections: selections,
-    },
-  });
+  if (code) await host.setSources(code);
+  const data = boardView(live, { resolvedSelections: selections });
 
   const html = renderToString(
     createElement(
@@ -145,18 +142,17 @@ const renderLive = (options: Parameters<typeof readOnlyHost>[0]) => {
   return html;
 };
 
-it("quotes a live board's sources through excerptPeeks", async () => {
+it("quotes a live board's sources once the host has them", async () => {
   const { sources, snapshot } = shareFixture;
 
-  const html = renderLive({
-    peeks: await excerptPeeks({ sources, pins: snapshot.pins }),
-  });
+  expect(await renderLive({})).toContain("Code unavailable");
+  const html = await renderLive({}, { sources, pins: snapshot.pins });
 
   expect(html).toContain("// sent once written");
   expect(html).not.toContain("Code unavailable");
 });
 
-it("draws peeks through any PeekViewer", () => {
+it("draws peeks through any PeekViewer", async () => {
   const seen: string[] = [];
 
   const viewer: PeekViewer = {
@@ -171,7 +167,7 @@ it("draws peeks through any PeekViewer", () => {
     find: async () => ({ matchCount: 0 }),
   };
 
-  const html = renderLive({ peeks: () => viewer });
+  const html = await renderLive({ peeks: () => viewer });
   expect(seen).toEqual(["head/order.ts"]);
   expect(html).toContain("<pre data-viewer>1-2</pre>");
 });

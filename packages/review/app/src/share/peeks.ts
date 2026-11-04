@@ -525,36 +525,41 @@ function peekInner(
   );
 }
 
-/** Read-only peeks of the lines a share carries, laid out as the reader's
- * Diff settings say. */
-export async function sharePeeks(
-  sources: readonly ShareSource[],
-  boardPins: ReviewSourcePins | undefined,
-  alignments: readonly ShareAlignment[] = [],
-): Promise<(settings: PeekSettings) => ReviewPeekViewer> {
-  return peeksOver(await excerpts(sources), boardPins, alignments);
-}
-
-/** `sharePeeks` for `readOnlyHost({ peeks })`, which takes one object. */
-export const excerptPeeks = (code: {
+/** The lines a board's peeks quote, pinned at `pins`. */
+export interface BoardSources {
   sources: readonly ShareSource[];
   pins?: ReviewSourcePins;
   alignments?: readonly ShareAlignment[];
-}) => sharePeeks(code.sources, code.pins, code.alignments);
+}
 
-/** Peeks with no lines to show: each says its source is unavailable. */
-export const sourcelessPeeks = (settings: PeekSettings) =>
-  peeksOver(() => ({}), undefined, [])(settings);
+export interface SourcePeeks extends ReviewPeekViewer {
+  /** Replaces the lines the peeks quote; mounted peeks redraw. */
+  setSources(code: BoardSources): Promise<void>;
+}
 
-function peeksOver(
-  excerpt: Excerpt,
-  boardPins: ReviewSourcePins | undefined,
-  alignments: readonly ShareAlignment[],
-): (settings: PeekSettings) => ReviewPeekViewer {
-  const blocksOf = (spec: Spec) =>
-    rangeBlocks(excerpt, boardPins, alignments, spec);
+/** Read-only peeks drawn as highlighted HTML, laid out as the reader's Diff
+ * settings say. Until `setSources`, each says its source is unavailable. */
+export function staticPeeks(settings: PeekSettings): SourcePeeks {
+  let excerpt: Excerpt = () => ({});
+  let pins: ReviewSourcePins | undefined;
+  let alignments: readonly ShareAlignment[] = [];
+  const mounted = new Set<() => void>();
+  let loads = 0;
 
-  return (settings) => ({
+  const blocksOf = (spec: Spec) => rangeBlocks(excerpt, pins, alignments, spec);
+
+  return {
+    async setSources(code) {
+      const load = ++loads;
+      const next = await excerpts(code.sources);
+
+      if (load !== loads) return;
+      excerpt = next;
+      pins = code.pins;
+      alignments = code.alignments ?? [];
+
+      for (const redraw of mounted) redraw();
+    },
     async find(spec, query) {
       return {
         matchCount: find(blocksOf(spec), matcher(query)).count,
@@ -563,9 +568,10 @@ function peeksOver(
     renderStatic: (spec: ReviewPeekStaticSpec) =>
       `<div class="${peekClass(spec.heightMode, false)}">${peekInner(spec.title, blocksOf(spec), find([], undefined), settings)}</div>`,
     create(spec) {
-      const blocks = blocksOf(spec);
+      let blocks = blocksOf(spec);
       const listeners = new Set<(height: number) => void>();
-      let found = find([], undefined);
+      let regex: RegExp | undefined;
+      let found = find(blocks, regex);
       let collapsed = false;
 
       // Focusable, so a click gives it the wheel as a Desktop editor's does.
@@ -577,6 +583,14 @@ function peeksOver(
         peek.className = peekClass(spec.heightMode, collapsed);
         peek.innerHTML = peekInner(spec.title, blocks, found, settings);
       };
+
+      const redraw = () => {
+        blocks = blocksOf(spec);
+        found = find(blocks, regex);
+        render();
+      };
+
+      mounted.add(redraw);
 
       const subscriptions = [
         settings.onDidChangeDiffLayout("peek", render),
@@ -615,7 +629,8 @@ function peeksOver(
         },
         onDidError: () => ({ dispose() {} }),
         async setFindQuery(query) {
-          found = find(blocks, matcher(query));
+          regex = matcher(query);
+          found = find(blocks, regex);
           render();
 
           return { matchCount: found.count };
@@ -645,10 +660,13 @@ function peeksOver(
           render();
         },
         clearFind() {
-          found = find([], undefined);
+          regex = undefined;
+          found = find(blocks, regex);
           render();
         },
         dispose() {
+          mounted.delete(redraw);
+
           for (const subscription of subscriptions) subscription.dispose();
           observer.disconnect();
           listeners.clear();
@@ -656,7 +674,7 @@ function peeksOver(
         },
       };
     },
-  });
+  };
 }
 
 const styles = stylex.create({

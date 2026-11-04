@@ -1,7 +1,7 @@
 import type { ReviewDiffLayout } from "@dev.fast/review-protocol";
 import { afterEach, expect, it, vi } from "vitest";
 
-import { type PeekSettings, sharePeeks } from "./peeks";
+import { type BoardSources, type PeekSettings, staticPeeks } from "./peeks";
 
 const base = "b".repeat(40);
 
@@ -62,6 +62,14 @@ function settings(layout: ReviewDiffLayout, lineNumbers = true) {
   };
 }
 
+/** Peeks quoting `code`, drawn as `peek` says. */
+async function peeks(peek: PeekSettings, code: BoardSources) {
+  const viewer = staticPeeks(peek);
+  await viewer.setSources(code);
+
+  return viewer;
+}
+
 const container = document.createElement("div");
 
 afterEach(() => container.replaceChildren());
@@ -78,7 +86,7 @@ const lines = (selector = "") =>
   );
 
 it("shows a selection's base and head ranges as one unified diff", async () => {
-  const editors = (await sharePeeks(sources, pins))(settings("unified").peek);
+  const editors = await peeks(settings("unified").peek, { sources, pins });
 
   container.innerHTML = editors.renderStatic!(spec);
 
@@ -93,15 +101,13 @@ it("shows a selection's base and head ranges as one unified diff", async () => {
 });
 
 it("shows removed lines from the base between the head's", async () => {
-  const editors = (
-    await sharePeeks(
-      [
-        { ...sources[0], lines: ["a", "old", "b"] },
-        { ...sources[1], lines: ["a", "new", "b"] },
-      ],
-      pins,
-    )
-  )(settings("unified").peek);
+  const editors = await peeks(settings("unified").peek, {
+    sources: [
+      { ...sources[0], lines: ["a", "old", "b"] },
+      { ...sources[1], lines: ["a", "new", "b"] },
+    ],
+    pins,
+  });
 
   container.innerHTML = editors.renderStatic!({
     ...spec,
@@ -124,15 +130,13 @@ it("shows removed lines from the base between the head's", async () => {
 });
 
 it("lays a diff out as base and head columns when split", async () => {
-  const editors = (
-    await sharePeeks(
-      [
-        { ...sources[0], lines: ["a", "old", "b"] },
-        { ...sources[1], lines: ["a", "new", "newer", "b"] },
-      ],
-      pins,
-    )
-  )(settings("split").peek);
+  const editors = await peeks(settings("split").peek, {
+    sources: [
+      { ...sources[0], lines: ["a", "old", "b"] },
+      { ...sources[1], lines: ["a", "new", "newer", "b"] },
+    ],
+    pins,
+  });
 
   container.innerHTML = editors.renderStatic!({
     ...spec,
@@ -157,9 +161,10 @@ it("lays a diff out as base and head columns when split", async () => {
 });
 
 it("hides line numbers unless the reader shows them", async () => {
-  const editors = (await sharePeeks(sources, pins))(
-    settings("unified", false).peek,
-  );
+  const editors = await peeks(settings("unified", false).peek, {
+    sources,
+    pins,
+  });
 
   container.innerHTML = editors.renderStatic!(spec);
 
@@ -168,7 +173,7 @@ it("hides line numbers unless the reader shows them", async () => {
 
 it("follows the reader's layout choice and reports focus", async () => {
   const layout = settings("unified");
-  const editors = (await sharePeeks(sources, pins))(layout.peek);
+  const editors = await peeks(layout.peek, { sources, pins });
   document.body.append(container);
   const onDidFocus = vi.fn<() => void>();
 
@@ -188,28 +193,44 @@ it("follows the reader's layout choice and reports focus", async () => {
   container.remove();
 });
 
+it("redraws a mounted peek when its sources arrive", async () => {
+  const editors = staticPeeks(settings("unified").peek);
+  const handle = editors.create({ ...spec, container, active: false });
+
+  expect(container.textContent).toContain("Code unavailable");
+  await handle.setFindQuery({
+    text: "write",
+    matchCase: false,
+    wholeWord: false,
+    isRegex: false,
+  });
+
+  await editors.setSources({ sources, pins });
+  expect(lines().map((row) => row?.[0])).toEqual(["12", "13", "14", "15"]);
+  expect(container.querySelectorAll("mark[data-match]")).toHaveLength(1);
+  handle.dispose();
+});
+
 it("reads a pair with differing text as removed then added, and leaves ranges the alignment misses to pairing", async () => {
-  const editors = (
-    await sharePeeks(
-      [
-        { ...sources[0], lines: ["a", "old", "b"] },
-        { ...sources[1], lines: ["a", "new", "b", "c"] },
-      ],
-      pins,
-      [
-        {
-          file: "exec.ts",
-          base,
-          head,
-          rows: [
-            [10, 12],
-            [11, 13],
-            [12, 14],
-          ],
-        },
-      ],
-    )
-  )(settings("unified").peek);
+  const editors = await peeks(settings("unified").peek, {
+    sources: [
+      { ...sources[0], lines: ["a", "old", "b"] },
+      { ...sources[1], lines: ["a", "new", "b", "c"] },
+    ],
+    pins,
+    alignments: [
+      {
+        file: "exec.ts",
+        base,
+        head,
+        rows: [
+          [10, 12],
+          [11, 13],
+          [12, 14],
+        ],
+      },
+    ],
+  });
 
   container.innerHTML = editors.renderStatic!({
     ...spec,

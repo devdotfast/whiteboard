@@ -11,7 +11,7 @@ import { type DiffHunk, parseUnifiedPatch } from "@review/unified-diff";
 import { afterEach, describe, expect, it } from "vitest";
 
 import fixtures from "./__fixtures__/real-diffs.json";
-import { type PeekSettings, sharePeeks } from "./peeks";
+import { type PeekSettings, staticPeeks } from "./peeks";
 
 interface Fixture {
   name: string;
@@ -176,22 +176,30 @@ function split(hunk: DiffHunk) {
 describe.each(fixtures as Fixture[])("$name", (fixture) => {
   const { pins, sources, alignment, hunks } = share(fixture);
 
-  it("shows each hunk as Git does, in both layouts, with its text", async () => {
-    const editors = await sharePeeks(sources, pins, [alignment]);
+  const editors = async (peek: PeekSettings) => {
+    const viewer = staticPeeks(peek);
+    await viewer.setSources({ sources, pins, alignments: [alignment] });
 
+    return viewer;
+  };
+
+  it("shows each hunk as Git does, in both layouts, with its text", async () => {
     for (const hunk of hunks) {
       const spec = hunkSpec(fixture.file, hunk);
 
-      container.innerHTML = editors(settings("unified")).renderStatic!(spec);
+      container.innerHTML = (await editors(settings("unified"))).renderStatic!(
+        spec,
+      );
       expect(lines()).toEqual(unified(hunk));
       expect(container.querySelectorAll("[data-range]")).toHaveLength(1);
 
-      container.innerHTML = editors(settings("unified", false)).renderStatic!(
-        spec,
-      );
+      container.innerHTML = (await editors(settings("unified", false)))
+        .renderStatic!(spec);
       expect(texts()).toEqual(hunk.lines.map((line) => line.text));
 
-      container.innerHTML = editors(settings("split")).renderStatic!(spec);
+      container.innerHTML = (await editors(settings("split"))).renderStatic!(
+        spec,
+      );
       const columns = split(hunk);
       expect(lines('[data-column="base"]')).toEqual(columns.base);
       expect(lines('[data-column="head"]')).toEqual(columns.head);
@@ -199,8 +207,6 @@ describe.each(fixtures as Fixture[])("$name", (fixture) => {
   });
 
   it("shows what a selection on one side's changed lines alone replaced", async () => {
-    const editors = await sharePeeks(sources, pins, [alignment]);
-
     for (const hunk of hunks) {
       // The hunk's first change: its lines up to the next context line.
       const start = hunk.lines.findIndex((line) => line.kind !== "context");
@@ -235,7 +241,8 @@ describe.each(fixtures as Fixture[])("$name", (fixture) => {
         if (!own.length) continue;
         const at = side === "head" ? "newLine" : "oldLine";
 
-        container.innerHTML = editors(settings("unified")).renderStatic!({
+        container.innerHTML = (await editors(settings("unified")))
+          .renderStatic!({
           ...hunkSpec(fixture.file, hunk),
           ranges: [
             { side, startLine: own[0]![at]!, endLine: own.at(-1)![at]! },

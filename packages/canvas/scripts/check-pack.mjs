@@ -48,7 +48,7 @@ try {
     "openShare",
     "boardView",
     "readOnlyHost",
-    "excerptPeeks",
+    "staticPeeks",
   ])
     if (!types.includes(`function ${name}`))
       throw new Error(`index.d.ts lacks ${name}`);
