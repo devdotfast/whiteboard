@@ -1307,17 +1307,22 @@ describe("block components", () => {
     expect(stages.count("ready")).toBe(1);
   });
 
-  it("folds a scene into fewer columns before one, and opens columns to fit a row's link labels", async () => {
+  it("folds a scene row by row into fewer cards a line, keeps its groups as bands, and opens columns to fit a row's link labels", async () => {
+    // The video platform's shape: a client centred on half-step columns over
+    // an edge pair over three services, each layer a group, and a wide peek.
     const scene = (box: string) =>
-      `const ${box} = whiteboard.scene({ columns: 4, container: "#${box}" });` +
-      ["a", "b", "c", "d"]
-        .map(
-          (id, i) =>
-            `${box}.actor({ id: "${box}-${id}", at: [${i + 1}, 1], title: "${id}" });`,
-        )
-        .join("") +
-      `${box}.link("${box}-a", "${box}-b", { label: "init + port to the stage" });` +
-      `${box}.peek("status", { at: [1, 2, 1, 4] });`;
+      `const ${box} = whiteboard.scene({ columns: 6, container: "#${box}" });` +
+      `${box}.group({ id: "${box}-client", at: [3, 1, 1, 2], title: "Client" });` +
+      `${box}.group({ id: "${box}-edge", at: [2, 2, 1, 4], title: "Edge" });` +
+      `${box}.group({ id: "${box}-services", at: [1, 3, 1, 6], title: "Services" });` +
+      `${box}.actor({ id: "${box}-app", at: [3, 1, 1, 2], title: "app" });` +
+      `${box}.actor({ id: "${box}-gateway", at: [2, 2, 1, 2], title: "gateway" });` +
+      `${box}.actor({ id: "${box}-cdn", at: [4, 2, 1, 2], title: "cdn" });` +
+      `${box}.actor({ id: "${box}-upload", at: [1, 3, 1, 2], title: "upload" });` +
+      `${box}.actor({ id: "${box}-transcoder", at: [3, 3, 1, 2], title: "transcoder" });` +
+      `${box}.actor({ id: "${box}-catalog", at: [5, 3, 1, 2], title: "catalog" });` +
+      `${box}.link("${box}-gateway", "${box}-cdn", { label: "init + port to the stage" });` +
+      `${box}.peek("status", { at: [1, 4, 1, 6] });`;
 
     const { container } = await mountFixture("animation", {
       document: [
@@ -1328,13 +1333,25 @@ describe("block components", () => {
           height: "auto",
           frames: [{ key: "only", title: "Only" }],
           code: { status: "head/order.ts#L1" },
-          // Each scene reports its column count and gap through the error line.
+          // Each scene reports its lines of cards, the cards each visible
+          // group spans, whether a lone card sits centred, and its gap,
+          // through the error line.
           html:
-            '<div id="narrow" style="width: 760px"></div><div id="wide" style="width: 1400px"></div><script>' +
-            scene("narrow") +
+            '<div id="wide" style="width: 900px"></div><div id="mid" style="width: 600px"></div><div id="narrow" style="width: 320px"></div><script>' +
             scene("wide") +
-            'const report = (id) => { const s = getComputedStyle(document.querySelector(`#${id} .wb-scene`)); return `${id} ${s.gridTemplateColumns.split(" ").length} gap ${parseFloat(s.columnGap) > 48}`; };' +
-            'setTimeout(() => { throw new Error(`${report("narrow")}, ${report("wide")}`); }, 600);' +
+            scene("mid") +
+            scene("narrow") +
+            "const report = (id) => {" +
+            "const grid = document.querySelector(`#${id} .wb-scene`);" +
+            'const name = (el) => el.id ? el.id.slice(id.length + 1) : "peek";' +
+            'const cards = [...grid.children].filter((el) => !el.classList.contains("wb-group")).map((el) => ({ el, rect: el.getBoundingClientRect() })).sort((a, b) => a.rect.top - b.rect.top || a.rect.left - b.rect.left);' +
+            "const lines = [];" +
+            "for (const card of cards) { const last = lines.at(-1); if (last && Math.abs(last[0].rect.top - card.rect.top) < 1) last.push(card); else lines.push([card]); }" +
+            'const bands = [...grid.querySelectorAll(".wb-group")].map((g) => { const r = g.getBoundingClientRect(); const inside = cards.filter((c) => c.rect.top >= r.top && c.rect.bottom <= r.bottom).map((c) => name(c.el)); return `${name(g)}:${r.height ? inside.join(",") : "hidden"}`; }).sort();' +
+            "const middle = grid.getBoundingClientRect(); const centred = lines.filter((line) => line.length === 1 && line[0].el.id).every((line) => Math.abs(line[0].rect.left + line[0].rect.width / 2 - (middle.left + middle.width / 2)) < 1);" +
+            'return `${id} [${lines.map((line) => line.map((c) => name(c.el)).join(" ")).join("|")}] ${bands.join(" ")} centred ${centred} gap ${parseFloat(getComputedStyle(grid).columnGap) > 48}`;' +
+            "};" +
+            'setTimeout(() => { throw new Error(`${report("wide")}; ${report("mid")}; ${report("narrow")}`); }, 600);' +
             "</script>",
           pins: { repositoryId: "repo", base: "base", head: "head" },
         },
@@ -1344,8 +1361,14 @@ describe("block components", () => {
     expect(await settled(() => alertText(container).includes("narrow"))).toBe(
       true,
     );
+
+    const groups =
+      "client:app edge:gateway,cdn services:upload,transcoder,catalog centred true gap true";
+
     expect(alertText(container)).toContain(
-      "narrow 2 gap true, wide 4 gap true",
+      `wide [app|gateway cdn|upload transcoder catalog|peek] ${groups}; ` +
+        `mid [app|gateway cdn|upload transcoder|catalog|peek] ${groups}; ` +
+        `narrow [app|gateway|cdn|upload|transcoder|catalog|peek] ${groups}`,
     );
   });
 

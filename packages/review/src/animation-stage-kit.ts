@@ -466,18 +466,17 @@ body {
    a folded scene does not stretch it into a slab and squeeze its edges. A
    table keeps its column; a scene's own CSS may set any width. */
 .wb-scene > .wb-card:not([data-kind="table"]) { justify-self: center; width: fit-content; min-width: 140px; max-width: 300px; }
-.wb-scene-compact { grid-template-columns: minmax(0, 1fr) !important; row-gap: var(--wb-space-48); }
-.wb-scene-compact > * { grid-column: 1 / -1 !important; grid-row: auto !important; }
-.wb-scene-fold { grid-template-columns: repeat(var(--wb-fold), minmax(0, 1fr)) !important; }
-.wb-scene-fold > * { grid-column: auto !important; grid-row: auto !important; }
-.wb-scene-fold > [data-wb-wide] { grid-column: 1 / -1 !important; }
+/* A folded scene places its parts itself, line by line; one card a line
+   opens the rows. */
+.wb-scene-compact { row-gap: var(--wb-space-48); }
 .wb-scene > [data-wb-state="before"], .wb-scene > [data-wb-state="after"],
 .wb-items > [data-wb-state="before"], .wb-items > [data-wb-state="after"],
 .wb-table tr[data-wb-state="before"], .wb-table tr[data-wb-state="after"] { display: none; }
 .wb-scene-top { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--wb-space-8); margin-bottom: var(--wb-space-4); }
 /* A group is a washed box behind the cards of its cells, bleeding into the
    gaps around them, titled in its top-left. Cards paint over it. A folded
-   scene no longer keeps its cells together, so it hides. */
+   scene draws it as a band across its cards' lines, or hides it when another
+   card shares them. */
 .wb-scene > .wb-card { position: relative; z-index: 1; }
 /* Groups bleed into the gaps around their cells, so a grouped scene opens
    its rows and columns to keep the boxes apart and give edges between
@@ -498,7 +497,7 @@ body {
 .wb-group[data-color="violet"] .wb-group-title { color: var(--wb-violet); }
 .wb-group[data-color="ink"] { border-color: var(--wb-rule); }
 .wb-group[data-color="ink"] .wb-group-title { color: var(--wb-ink); }
-:is(.wb-scene-fold, .wb-scene-compact) > .wb-group { display: none; }
+.wb-scene > .wb-group[hidden] { display: none; }
 /* The legend: a card-like glyph per entry, drawn with the card rules and
    scaled to 0.4 inside a box of the scaled size, and what it stands for.
    A transform, not zoom: Electron's Chromium reports a zoomed element's
