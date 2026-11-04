@@ -2159,6 +2159,121 @@ it("opens a flow node in a full-screen tour with all its code attachments", asyn
   expect(container.querySelector(".lens-flow-node")).not.toBeNull();
 });
 
+it("keeps a tour's close button in Desktop's right column clear of window controls", async () => {
+  // A step picked on the diagram opens the tour in Desktop's right column,
+  // which runs under the window controls Windows and Linux draw at the
+  // window's top-right corner. The host publishes their width on the column
+  // as --review-chrome-right-width.
+  const controls = document.createElement("div");
+  const column = document.createElement("div");
+
+  controls.style.cssText =
+    "position:fixed;top:0;right:0;width:138px;height:40px;z-index:2147483647";
+  column.style.cssText =
+    "position:fixed;top:0;right:0;bottom:0;width:480px;display:flex;flex-direction:column;--review-chrome-right-width:138px";
+  document.body.append(column, controls);
+
+  try {
+    const { container } = await mountFixture(
+      "sequence",
+      {
+        diagramFullscreenOnClick: false,
+        host: { askPanelHost: () => column },
+      },
+      "position:fixed;top:0;bottom:0;left:0;right:480px",
+    );
+
+    const step = await settled(() =>
+      container.querySelector<HTMLButtonElement>(
+        "button[data-review-anchor-id='step-1']",
+      ),
+    );
+
+    await act(async () => step!.click());
+
+    const close = await settled(() =>
+      document.querySelector<HTMLButtonElement>(
+        'button[aria-label="Close guided tour"]',
+      ),
+    );
+
+    expect(column.contains(close)).toBe(true);
+    // The reader clicks once the panel has slid in.
+    await Promise.allSettled(
+      column
+        .getAnimations({ subtree: true })
+        .map((animation) => animation.finished),
+    );
+    const box = close!.getBoundingClientRect();
+
+    const hit = document.elementFromPoint(
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    );
+
+    expect(close!.contains(hit)).toBe(true);
+    await act(async () => close!.click());
+    expect(
+      document.querySelector('button[aria-label="Close guided tour"]'),
+    ).toBeNull();
+  } finally {
+    controls.remove();
+    column.remove();
+  }
+});
+
+it("keeps a full-screen tour's close button clear of window controls on the right", async () => {
+  // Windows and Linux draw the window controls over the canvas's top-right
+  // corner, above everything the canvas renders. The host publishes their
+  // width as --review-chrome-right-width.
+  const controls = document.createElement("div");
+
+  controls.style.cssText =
+    "position:fixed;top:0;right:0;width:138px;height:35px;z-index:2147483647";
+  document.body.append(controls);
+
+  try {
+    const { container } = await mountFixture(
+      "sequence",
+      {},
+      "position:fixed;inset:0;--review-chrome-right-width:138px",
+    );
+
+    const expand = await settled(() =>
+      container.querySelector<HTMLButtonElement>(".diagram-tour-button"),
+    );
+
+    await act(async () => expand!.click());
+
+    const close = await settled(() =>
+      container.querySelector<HTMLButtonElement>(
+        '[role="dialog"] button[aria-label="Close guided tour"]',
+      ),
+    );
+
+    expect(close).toBeTruthy();
+    // The reader clicks once the panel has slid in.
+    await Promise.allSettled(
+      close!
+        .closest('[role="dialog"]')!
+        .getAnimations({ subtree: true })
+        .map((animation) => animation.finished),
+    );
+    const box = close!.getBoundingClientRect();
+
+    const hit = document.elementFromPoint(
+      box.left + box.width / 2,
+      box.top + box.height / 2,
+    );
+
+    expect(close!.contains(hit)).toBe(true);
+    await act(async () => close!.click());
+    expect(container.querySelector('[role="dialog"]')).toBeNull();
+  } finally {
+    controls.remove();
+  }
+});
+
 it.each([
   {
     kind: "database_lens" as const,

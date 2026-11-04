@@ -317,6 +317,8 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 	protected _editorPartAutoVisibilitySuppressionCount = 0;
 	protected _hasAppliedInitialEditorSplit = false;
 	private readonly reviewChromeTabStrips: HTMLElement[] = [];
+	private reviewChromeRightPart: HTMLElement | undefined;
+	private reviewChromeRightWidth: string | undefined;
 	private readonly reviewChromeDragListeners = this._register(new DisposableStore());
 	private readonly reviewChromeInsetScheduler = this._register(new RunOnceScheduler(() => this.updateReviewChromeInset(), 0));
 
@@ -996,6 +998,9 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		if (titlebarPart instanceof MainReviewTitlebarPart) {
 			this._register(titlebarPart.onDidChangeChromeInsets(() => this.reviewChromeInsetScheduler.schedule()));
 		}
+		// The Ask column opening or closing moves the window's top-right corner
+		// to another part.
+		this._register(this.onDidChangePartVisibility(() => this.reviewChromeInsetScheduler.schedule()));
 		this._register(editorMainPart.onDidAddGroup(() => this.reviewChromeInsetScheduler.schedule()));
 		this._register(editorMainPart.onDidRemoveGroup(() => this.reviewChromeInsetScheduler.schedule()));
 		this._register(editorMainPart.onDidMoveGroup(() => this.reviewChromeInsetScheduler.schedule()));
@@ -1207,7 +1212,42 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		tabStrip.style.setProperty('--review-explorer-width', `${explorerWidth}px`);
 	}
 
+	/**
+	 * With tabs hidden, whichever part reaches the window's top-right corner,
+	 * a top-row editor group or the Ask column, runs under the window
+	 * controls Windows and Linux draw there. Its canvas reads their width so
+	 * a header's close button clears them. Written on that part, and only
+	 * when it changes, for the reason above.
+	 */
+	private updateReviewChromeRightInset(): void {
+		const bounds = this.mainContainer.getBoundingClientRect();
+		const candidates = [
+			...Array.from(this._editorPartContainer?.getElementsByClassName('editor-group-container') ?? []),
+			...Array.from(this.mainContainer.getElementsByClassName('review-ask-part')),
+		];
+		const part = candidates.find((candidate): candidate is HTMLElement => {
+			if (!isHTMLElement(candidate)) {
+				return false;
+			}
+			const rect = candidate.getBoundingClientRect();
+			return rect.width > 0 && Math.abs(rect.top - bounds.top) <= 1 && Math.abs(rect.right - bounds.right) <= 1;
+		});
+		const titlebarPart = this.getPart(Parts.TITLEBAR_PART);
+		const width = part && titlebarPart instanceof MainReviewTitlebarPart ? `${titlebarPart.chromeInsets.right}px` : undefined;
+		if (part === this.reviewChromeRightPart && width === this.reviewChromeRightWidth) {
+			return;
+		}
+		this.reviewChromeRightPart?.style.removeProperty('--review-chrome-right-width');
+		this.reviewChromeRightPart = part;
+		this.reviewChromeRightWidth = width;
+		if (part && width) {
+			part.style.setProperty('--review-chrome-right-width', width);
+		}
+	}
+
 	private updateReviewChromeInset(): void {
+		this.updateReviewChromeRightInset();
+
 		this.reviewChromeDragListeners.clear();
 		this.mainContainer.classList.remove('review-tab-dragging');
 		for (const tabStrip of this.reviewChromeTabStrips) {

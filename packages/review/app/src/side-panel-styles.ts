@@ -102,7 +102,7 @@ export const panelStyles = stylex.create({
     gap: space.s12,
     minHeight: tokens.reviewHeaderHeight,
     paddingBlock: 0,
-    paddingRight: space.s10,
+    paddingRight: "calc(10px + var(--review-header-inset-right, 0px))",
     paddingLeft: "calc(16px + var(--review-fullscreen-inset, 0px))",
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
@@ -137,11 +137,13 @@ export const panelStyles = stylex.create({
     gap: space.s2,
   },
   // As tall as the window controls beside it, with no rule: the header row
-  // of Desktop's Ask panel.
+  // of Desktop's Ask panel. At the window's right end, under the controls
+  // Windows and Linux draw there, its close button clears them.
   nativeHeader: {
     height: tokens.reviewPageBarHeight,
     minHeight: tokens.reviewPageBarHeight,
     borderBottomWidth: 0,
+    "--review-header-inset-right": "var(--review-chrome-right-width, 0px)",
   },
   // A conversation sits on the tray, header and all.
   tray: {

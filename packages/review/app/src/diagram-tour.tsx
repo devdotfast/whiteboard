@@ -100,7 +100,12 @@ export function DiagramTourOverlay({
         )}
         {...paneResize.separatorProps}
       />
-      <div {...stylex.props(styles.panel, !flow && styles.panelAlone)}>
+      <div
+        {...stylex.props(
+          styles.panel,
+          flow ? styles.panelUnderStage : styles.panelAlone,
+        )}
+      >
         <GuidedTourPanel
           tour={tour}
           activeAnchor={activeAnchor}
@@ -187,12 +192,23 @@ const styles = stylex.create({
     display: { default: null, [narrow]: "none" },
   },
   // Positioned so the panel's floating pager centers on this column.
+  // The panel is the right column, under the window controls that Windows
+  // and Linux draw at the window's right end; its header clears them.
   panel: {
     position: "relative",
     display: "flex",
     flexDirection: "column",
     minWidth: 0,
     minHeight: 0,
+    "--review-header-inset-right": "var(--review-chrome-right-width, 0px)",
+  },
+  // A narrow flow stacks its stage above the panel, so the panel's header
+  // no longer meets the window controls.
+  panelUnderStage: {
+    "--review-header-inset-right": {
+      default: null,
+      [narrow]: "0px",
+    },
   },
   // Without its stage, the panel is the left column, under the window
   // controls.
