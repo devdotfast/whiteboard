@@ -2373,6 +2373,57 @@ describe("animation tour", () => {
     expect(overlay()).toBeNull();
   });
 
+  it("keeps the step strip on one row and scrolls it to the step showing", async () => {
+    const { container } = await mountFixture(
+      "animation",
+      {
+        document: documentSchema.parse([
+          {
+            id: "block-1",
+            type: "animation",
+            title: "Many steps",
+            height: 160,
+            frames: Array.from({ length: 8 }, (_, i) => ({
+              key: `s${i}`,
+              title: `Step ${i}`,
+              label: `A LONGER STEP LABEL ${i}`,
+            })),
+            code: {},
+            html: "<p>Stage</p>",
+            pins: { repositoryId: "repo", base: "base", head: "head" },
+          },
+        ]),
+      },
+      "width: 360px",
+    );
+
+    const strip = (await settled(() =>
+      container.querySelector<HTMLElement>("[aria-label='Steps']"),
+    ))!;
+
+    const steps = [...strip.querySelectorAll<HTMLElement>("button")];
+
+    const shown = (step: HTMLElement) => {
+      const rect = step.getBoundingClientRect();
+      const bounds = strip.getBoundingClientRect();
+
+      return rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1;
+    };
+
+    expect(steps).toHaveLength(8);
+    expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+    expect(new Set(steps.map((step) => step.offsetTop)).size).toBe(1);
+    expect(shown(steps[0]!)).toBe(true);
+    expect(shown(steps[7]!)).toBe(false);
+
+    await act(async () => steps[7]!.click());
+    expect(await settled(() => shown(steps[7]!))).toBe(true);
+
+    await act(async () => steps[0]!.click());
+    expect(await settled(() => shown(steps[0]!))).toBe(true);
+    expect(strip.scrollLeft).toBe(0);
+  });
+
   it("scales an expanded animation up to the room it is given", async () => {
     // The overlay spans the host, which is wider than the inline column.
     const { container } = await mountFixture(
