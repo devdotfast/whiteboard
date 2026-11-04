@@ -729,6 +729,7 @@ export const REVIEW_OPEN_FILES_IN_CHOICES = [
   "vscode",
   "cursor",
   "zed",
+  "intellij",
   "application",
 ] as const;
 

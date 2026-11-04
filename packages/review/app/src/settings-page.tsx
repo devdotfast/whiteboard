@@ -57,6 +57,7 @@ const OPEN_FILES_IN_EDITORS: Record<
   vscode: "VS Code",
   cursor: "Cursor",
   zed: "Zed",
+  intellij: "IntelliJ IDEA",
 };
 
 const CHOOSE_APPLICATION = "choose";

@@ -44,6 +44,7 @@ configurationRegistry.registerConfiguration({
 				localize('review.openFilesIn.vscode', "Open files in Visual Studio Code."),
 				localize('review.openFilesIn.cursor', "Open files in Cursor."),
 				localize('review.openFilesIn.zed', "Open files in Zed."),
+				localize('review.openFilesIn.intellij', "Open files in IntelliJ IDEA."),
 				localize('review.openFilesIn.application', "Open files in the application set in `#review.openFilesInApplication#`, without a line."),
 			],
 			default: 'whiteboard',
