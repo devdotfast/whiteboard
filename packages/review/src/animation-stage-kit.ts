@@ -268,7 +268,7 @@ body {
 
 /* A store's text sits in the middle of its drum or cylinder, as a label on
    a tank does; a pill's too. */
-:is(.wb-card, .wb-node):is([data-form="cylinder"], [data-form="drum"], [data-form="pill"]) { align-items: center; text-align: center; }
+:where(.wb-card, .wb-node):is([data-form="cylinder"], [data-form="drum"], [data-form="pill"]) { align-items: center; text-align: center; }
 .wb-card:is([data-form="cylinder"], [data-form="drum"], [data-form="pill"]) :is(.wb-card-head, .wb-items) { justify-content: center; }
 /* Shapes: a card's or node's silhouette says what it stands for before
    its title does. data-form is box (the default), pill, cut (a branch),
@@ -276,48 +276,51 @@ body {
    client) or bars (a service of this codebase). data-outline is solid,
    dashed (outside the system) or dotted. data-color is the resting border
    colour: ink, accent, teal or violet; a tone takes over while set. The
-   scene's cards take these as options. */
-:is(.wb-card, .wb-node)[data-form] { position: relative; }
-:is(.wb-card, .wb-node)[data-form]::before, :is(.wb-card, .wb-node)[data-form]::after { pointer-events: none; }
-:is(.wb-card, .wb-node)[data-form="pill"] { padding-inline: var(--wb-space-16); border-radius: var(--wb-radius-pill); }
-:is(.wb-card, .wb-node)[data-form="cut"] { border-radius: var(--wb-space-12); corner-shape: bevel; }
-:is(.wb-card, .wb-node)[data-form="cylinder"] { padding-top: var(--wb-space-28); padding-bottom: var(--wb-space-12); border-radius: 50% / var(--wb-space-10); }
-:is(.wb-card, .wb-node)[data-form="cylinder"]::before {
+   scene's cards take these as options. These rules and the change marks
+   weigh one class, as the card rules do: a hand-made layout's own rule for
+   its nodes, say position: absolute, comes later and wins. A tone or a
+   highlight still takes over. */
+:where(.wb-card, .wb-node)[data-form] { position: relative; }
+:where(.wb-card, .wb-node)[data-form]::before, :where(.wb-card, .wb-node)[data-form]::after { pointer-events: none; }
+:where(.wb-card, .wb-node)[data-form="pill"] { padding-inline: var(--wb-space-16); border-radius: var(--wb-radius-pill); }
+:where(.wb-card, .wb-node)[data-form="cut"] { border-radius: var(--wb-space-12); corner-shape: bevel; }
+:where(.wb-card, .wb-node)[data-form="cylinder"] { padding-top: var(--wb-space-28); padding-bottom: var(--wb-space-12); border-radius: 50% / var(--wb-space-10); }
+:where(.wb-card, .wb-node)[data-form="cylinder"]::before {
   content: ""; position: absolute; inset: -1px -1px auto; height: var(--wb-space-20);
   border: 1px solid; border-color: inherit; border-radius: 50%; background: inherit;
 }
-:is(.wb-card, .wb-node)[data-form="drum"] { padding-left: var(--wb-space-28); padding-right: var(--wb-space-16); border-radius: var(--wb-space-12) / 50%; }
-:is(.wb-card, .wb-node)[data-form="drum"]::before {
+:where(.wb-card, .wb-node)[data-form="drum"] { padding-left: var(--wb-space-28); padding-right: var(--wb-space-16); border-radius: var(--wb-space-12) / 50%; }
+:where(.wb-card, .wb-node)[data-form="drum"]::before {
   content: ""; position: absolute; inset: -1px auto -1px -1px; width: var(--wb-space-24);
   border: 1px solid; border-color: inherit; border-radius: 50%; background: inherit;
 }
-:is(.wb-card, .wb-node)[data-form="stack"] {
+:where(.wb-card, .wb-node)[data-form="stack"] {
   margin-right: var(--wb-space-8); margin-bottom: var(--wb-space-8);
   box-shadow: 4px 4px 0 -1px var(--wb-surface), 4px 4px 0 0 var(--wb-rule), 8px 8px 0 -1px var(--wb-surface), 8px 8px 0 0 var(--wb-rule);
 }
-:is(.wb-card, .wb-node)[data-form="window"] { padding-top: var(--wb-space-16); }
-:is(.wb-card, .wb-node)[data-form="window"]::before { content: ""; position: absolute; top: var(--wb-space-8); right: 0; left: 0; border-top: 1px solid; border-color: inherit; }
-:is(.wb-card, .wb-node)[data-form="bars"] { padding-inline: var(--wb-space-18); }
-:is(.wb-card, .wb-node)[data-form="bars"]::before, :is(.wb-card, .wb-node)[data-form="bars"]::after { content: ""; position: absolute; top: 0; bottom: 0; border-left: 1px solid; border-color: inherit; }
-:is(.wb-card, .wb-node)[data-form="bars"]::before { left: var(--wb-space-6); }
-:is(.wb-card, .wb-node)[data-form="bars"]::after { right: var(--wb-space-6); }
+:where(.wb-card, .wb-node)[data-form="window"] { padding-top: var(--wb-space-16); }
+:where(.wb-card, .wb-node)[data-form="window"]::before { content: ""; position: absolute; top: var(--wb-space-8); right: 0; left: 0; border-top: 1px solid; border-color: inherit; }
+:where(.wb-card, .wb-node)[data-form="bars"] { padding-inline: var(--wb-space-18); }
+:where(.wb-card, .wb-node)[data-form="bars"]::before, :where(.wb-card, .wb-node)[data-form="bars"]::after { content: ""; position: absolute; top: 0; bottom: 0; border-left: 1px solid; border-color: inherit; }
+:where(.wb-card, .wb-node)[data-form="bars"]::before { left: var(--wb-space-6); }
+:where(.wb-card, .wb-node)[data-form="bars"]::after { right: var(--wb-space-6); }
 /* What the change under review did to a part: its dot and a stripe down its
    left edge in the change colour, at rest; a removed part's title is struck.
    A frame's tone still colours the whole card over it. */
-:is(.wb-card, .wb-node)[data-change] { border-left-width: 3px; }
-:is(.wb-card, .wb-node)[data-change="added"] { border-left-color: var(--wb-added); }
-:is(.wb-card, .wb-node)[data-change="modified"] { border-left-color: var(--wb-modified); }
-:is(.wb-card, .wb-node)[data-change="removed"] { border-left-color: var(--wb-removed); }
+:where(.wb-card, .wb-node)[data-change] { border-left-width: 3px; }
+:where(.wb-card, .wb-node)[data-change="added"] { border-left-color: var(--wb-added); }
+:where(.wb-card, .wb-node)[data-change="modified"] { border-left-color: var(--wb-modified); }
+:where(.wb-card, .wb-node)[data-change="removed"] { border-left-color: var(--wb-removed); }
 .wb-card[data-change="added"] .wb-card-dot { background: var(--wb-added); }
 .wb-card[data-change="modified"] .wb-card-dot { background: var(--wb-modified); }
 .wb-card[data-change="removed"] .wb-card-dot { background: var(--wb-removed); }
 .wb-card[data-change="removed"] .wb-card-title { color: var(--wb-ink-muted); text-decoration: line-through; }
-:is(.wb-card, .wb-node)[data-outline="dashed"] { border-style: dashed; }
-:is(.wb-card, .wb-node)[data-outline="dotted"] { border-style: dotted; }
-:is(.wb-card, .wb-node)[data-color="ink"] { border-color: var(--wb-ink); }
-:is(.wb-card, .wb-node)[data-color="accent"] { border-color: var(--wb-accent); }
-:is(.wb-card, .wb-node)[data-color="teal"] { border-color: var(--wb-teal); }
-:is(.wb-card, .wb-node)[data-color="violet"] { border-color: var(--wb-violet); }
+:where(.wb-card, .wb-node)[data-outline="dashed"] { border-style: dashed; }
+:where(.wb-card, .wb-node)[data-outline="dotted"] { border-style: dotted; }
+:where(.wb-card, .wb-node)[data-color="ink"] { border-color: var(--wb-ink); }
+:where(.wb-card, .wb-node)[data-color="accent"] { border-color: var(--wb-accent); }
+:where(.wb-card, .wb-node)[data-color="teal"] { border-color: var(--wb-teal); }
+:where(.wb-card, .wb-node)[data-color="violet"] { border-color: var(--wb-violet); }
 .wb-card[data-color="ink"] .wb-card-dot { background: var(--wb-ink); }
 .wb-card[data-color="accent"] .wb-card-dot { background: var(--wb-accent); }
 .wb-card[data-color="teal"] .wb-card-dot { background: var(--wb-teal); }
