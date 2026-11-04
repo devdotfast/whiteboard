@@ -1,0 +1,9 @@
+{
+  "title": "Order status transitions",
+  "code": {
+    "transitions": {
+      "source": "head/src/orders/transitions.ts#L8-L34",
+      "label": "ORDER_TRANSITIONS"
+    }
+  }
+}

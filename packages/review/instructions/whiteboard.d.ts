@@ -5,6 +5,9 @@
  *
  * Frames are states, not events: whatever a frame shows must also be right
  * when the reader jumps to it or steps back, not only when it plays.
+ *
+ * A clip has no frames: its script builds one timeline with clip(), places
+ * the block's markers on it, and the reader plays it or jumps to a marker.
  */
 
 /* oxlint-disable anti-slop/no-unknown-parameters, anti-slop/no-object-parameters -- Documents a script API; anime.js parses its own targets and params. */
@@ -35,6 +38,41 @@ export interface FrameChange {
   instant: boolean;
 }
 
+/** One of a clip's markers, as your scripts read it. */
+export interface Marker {
+  key: string;
+  title: string;
+  caption?: string;
+  /** The code names the marker lists, for data-wb-open. */
+  code?: string[];
+  /** Milliseconds into the active timeline, once the scripts have run. */
+  at?: number;
+}
+
+/** A marker the playhead reached: placed, with its place in time order. */
+export interface ReachedMarker extends Marker {
+  at: number;
+  index: number;
+}
+
+/** What a marker handler learns as a clip's playhead reaches its marker. */
+export interface MarkerChange {
+  marker: ReachedMarker;
+  /** A jump to the marker, the first draw, or reduced motion: draw the
+   * marker's state at once. */
+  instant: boolean;
+}
+
+/** What a paint handler learns as the block paints its first frame in. */
+export interface PaintChange {
+  /** The first frame, already drawn in its end state. A clip has none: it
+   * paints in at time 0. */
+  frame?: Frame;
+  /** Skip motion and leave everything in its end state: the block loaded
+   * without painting in, or the reader prefers reduced motion. */
+  instant: boolean;
+}
+
 /** Return the animations a handler starts, or a finite promise, so playback
  * waits for them. */
 export type FrameResult =
@@ -44,7 +82,8 @@ export type FrameResult =
   | Promise<void>;
 
 export interface Whiteboard {
-  /** The active path's frames, in order: a scenario's, or all of them. */
+  /** The active path's frames, in order: a scenario's, or all of them. A
+   * frame outside the active scenario is not listed. */
   readonly frames: readonly Frame[];
   /** The current frame object; read `.key` for its name. */
   readonly frame: Frame;
@@ -57,12 +96,25 @@ export interface Whiteboard {
    * helpers do not manage when it is true. */
   readonly reducedMotion: boolean;
 
+  /** Paint the first frame in yourself, in place of the default painter. Runs
+   * once, after the first frame is drawn: with motion when an agent writes
+   * the block, with `instant: true` on a cold load or under reduced motion,
+   * when it must leave everything in its end state. Painting ends when what
+   * it returns has finished. */
+  on(key: "paint", handler: (paint: PaintChange) => FrameResult): () => void;
   /** Run when a frame shows; "*" runs on every frame, before frame-specific
    * handlers, and again when reduced motion changes. Cancel earlier work when
    * another frame shows. Returns an unsubscribe function. */
   on(key: string, handler: (change: FrameChange) => FrameResult): () => void;
+  /** In a clip: run when the playhead crosses the marker playing forward, or
+   * lands on it after a jump (`instant: true`); "*" runs on every marker.
+   * What a marker sets must also be right when the reader jumps there.
+   * Returns an unsubscribe function. */
+  on(key: string, handler: (change: MarkerChange) => FrameResult): () => void;
   /** element.animate that holds its end state, lands at the end on a jump, and
-   * skips motion under reduced motion. */
+   * skips motion under reduced motion. Give every keyframe its start value, and
+   * measure positions before starting one: a started animation already
+   * reports its transform. */
   animate(
     target: Element | string,
     keyframes: Keyframe[] | PropertyIndexedKeyframes,
@@ -70,8 +122,22 @@ export interface Whiteboard {
   ): Animation;
   /** The frame's part of one anime.js timeline: it plays when the reader steps
    * into the frame and lands at its end on a jump. A tween starts where the
-   * frames before it left the element, so write only where it goes. */
+   * frames before it left the element, so write only where it goes. Add to it
+   * while the script first runs, not from a frame handler. "paint" is a
+   * timeline of its own that plays once, after the first frame is drawn, as
+   * the block paints in, in place of the default painter; it lands at its end
+   * otherwise. Numeric positions count from its start. */
   timeline(key: string): FrameTimeline;
+  /** A clip's one timeline: build it while the script first runs and place
+   * every marker on it. With scenarios, call it once per scenario key, each
+   * a timeline of its own; one built without a key serves every scenario
+   * without its own. Throws in an animation. */
+  clip(scenario?: string): ClipTimeline;
+  /** A clip's markers as declared, each with `at` once placed. Empty in an
+   * animation. */
+  readonly markers: readonly Marker[];
+  /** The marker a clip's playhead last reached, if any. */
+  readonly marker: ReachedMarker | undefined;
   /** anime.js v4, also the global `anime`: easings, stagger, utils. */
   readonly anime: unknown;
 
@@ -106,7 +172,8 @@ export interface Whiteboard {
   /** Move a token along an arrow during a frame, at the arrow's live geometry.
    * It fades out on arrival unless `stay` keeps it at the head. Trips append
    * to the frame; `position: 0` starts trips together, a number of
-   * milliseconds sequences one after another. */
+   * milliseconds sequences one after another. Declare trips while the script
+   * first runs, not from a frame handler. */
   travel(
     token: HTMLElement | string,
     arrow: SVGGElement,
@@ -133,6 +200,25 @@ export interface FrameTimeline {
   call(callback: () => void, position?: number | string): FrameTimeline;
 }
 
+/** A clip's timeline. Numeric positions count milliseconds from its start;
+ * "<" starts at the previous call's end and "<<" at its beginning. */
+export interface ClipTimeline {
+  add(
+    targets: unknown,
+    params: object,
+    position?: number | string,
+  ): ClipTimeline;
+  set(
+    targets: unknown,
+    params: object,
+    position?: number | string,
+  ): ClipTimeline;
+  call(callback: () => void, position?: number | string): ClipTimeline;
+  /** Place a declared marker at the timeline's end so far, or at an anime.js
+   * position. Every marker must be placed once on each timeline. */
+  marker(key: string, position?: number | string): ClipTimeline;
+}
+
 export interface TravelOptions {
   duration?: number;
   ease?: string;
@@ -140,7 +226,9 @@ export interface TravelOptions {
   stay?: boolean;
 }
 
-/** A scene card, its id, or an element. */
+/** A scene card, its id, or an element. In `whiteboard.arrow` and `travel`
+ * a string is a CSS selector (`"#api"`); in a scene's methods it is a card
+ * id. */
 export type CardRef = SceneCard | string | Element;
 
 /** 1-based column and row, with optional row and column spans: [1, 2, 1, 4] is

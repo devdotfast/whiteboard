@@ -1,0 +1,89 @@
+<style>
+  .structure { padding: var(--wb-space-16) var(--wb-space-24); }
+  .node { width: max-content; max-width: 100%; min-width: var(--wb-space-120); }
+  .structure > .node { width: auto; }
+  .children { display: flex; flex-direction: column; align-items: flex-start; gap: var(--wb-space-8); margin-top: var(--wb-space-6); }
+  .children[data-layout="row"] { flex-direction: row; flex-wrap: wrap; gap: var(--wb-space-12); }
+  .fields { flex-direction: column; align-items: flex-start; }
+</style>
+<div class="structure"></div>
+<script>
+  const stage = document.querySelector(".structure");
+
+  function element(tag, className, text) {
+    const el = document.createElement(tag);
+    el.className = className;
+    if (text !== undefined) el.textContent = text;
+    return el;
+  }
+
+  // One card per node: a title, an optional type note, fields as chips, and nested children.
+  function draw(node, code) {
+    const card = element("div", "wb-card node");
+    card.dataset.id = node.id;
+    if (node.tone) card.dataset.tone = node.tone;
+    if (node.open && code.includes(node.open)) card.dataset.wbOpen = node.open;
+
+    const head = element("div", "wb-card-head");
+    head.append(element("i", "wb-card-dot"), element("span", "wb-card-title", node.title));
+    card.append(head);
+    if (node.note) card.append(element("div", "wb-card-note", node.note));
+
+    if (node.fields) {
+      const fields = element("div", "wb-items fields");
+      for (const field of node.fields) {
+        const chip = element("span", "wb-chip", `${field.name}: ${field.value}`);
+        chip.dataset.id = `${node.id}.${field.name}`;
+        if (field.tone) chip.dataset.tone = field.tone;
+        fields.append(chip);
+      }
+      card.append(fields);
+    }
+
+    if (node.children) {
+      const children = element("div", "children");
+      children.dataset.layout = node.layout ?? "column";
+      children.append(...node.children.map((child) => draw(child, code)));
+      card.append(children);
+    }
+    return card;
+  }
+
+  const rects = () =>
+    new Map([...stage.querySelectorAll("[data-id]")].map((el) => [el, el.getBoundingClientRect()]));
+
+  whiteboard.on("*", ({ frame }) => {
+    const was = new Map([...rects()].map(([el, rect]) => [el.dataset.id, rect]));
+    stage.replaceChildren(draw(frame.data.root, frame.code ?? []));
+    const now = rects();
+
+    // Slide each kept element from where it was (FLIP). A child rides its parent's
+    // slide, so it moves only by the part of its offset the parent does not cover.
+    const offsets = new Map();
+    return [...now].flatMap(([el, to]) => {
+      const inherited = offsets.get(el.parentElement.closest("[data-id]")) ?? [0, 0];
+      const from = was.get(el.dataset.id);
+      if (!from) {
+        offsets.set(el, inherited);
+        // A new container keeps the moved elements it now holds visible: fade only its own chrome.
+        const holds = [...el.querySelectorAll("[data-id]")].some((child) => was.has(child.dataset.id));
+        if (!holds) return [whiteboard.animate(el, [{ opacity: 0 }, { opacity: 1 }], 300)];
+        const chrome = [...el.children].filter((part) => !part.classList.contains("children"));
+        return [
+          whiteboard.animate(el, [{ borderColor: "transparent", backgroundColor: "transparent" }, {}], 300),
+          ...chrome.map((part) => whiteboard.animate(part, [{ opacity: 0 }, { opacity: 1 }], 300)),
+        ];
+      }
+      const offset = [from.left - to.left, from.top - to.top];
+      offsets.set(el, offset);
+      const [x, y] = [offset[0] - inherited[0], offset[1] - inherited[1]];
+      if (Math.abs(x) < 1 && Math.abs(y) < 1) return [];
+      return [
+        whiteboard.animate(el, [{ transform: `translate(${x}px, ${y}px)` }, { transform: "none" }], {
+          duration: 550,
+          easing: whiteboard.theme["motion-settle"],
+        }),
+      ];
+    });
+  });
+</script>

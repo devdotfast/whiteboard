@@ -30,7 +30,7 @@ export interface InstructionContext {
 /** Keep disabled experimental components out of agent guidance. */
 export const desktopBlockTypes = (animationsEnabled: boolean) =>
   writableBlockTypes.filter(
-    (type) => animationsEnabled || type !== "animation",
+    (type) => animationsEnabled || (type !== "animation" && type !== "clip"),
   );
 
 const COMPONENT_EXAMPLE =

@@ -1,0 +1,17 @@
+[
+  {
+    "key": "miss",
+    "label": "Miss, then fill",
+    "frames": ["request", "miss", "fill", "serve"]
+  },
+  {
+    "key": "hit",
+    "label": "Hit",
+    "frames": ["hit-request", "hit-found", "hit-serve"]
+  },
+  {
+    "key": "evict",
+    "label": "Full: evict oldest",
+    "frames": ["evict-request", "evict-miss", "evict-fill", "evict-serve"]
+  }
+]

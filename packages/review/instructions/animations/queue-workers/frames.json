@@ -1,0 +1,119 @@
+[
+  {
+    "key": "steady-put",
+    "title": "The producer enqueues two jobs",
+    "label": "PUT",
+    "caption": "j1 and j2 wait in the queue; both workers are idle.",
+    "data": {
+      "producer": { "next": "j3", "state": "ready" },
+      "queue": ["j1", "j2"],
+      "bound": 4,
+      "workers": [null, null],
+      "done": []
+    }
+  },
+  {
+    "key": "steady-take",
+    "title": "Each worker takes one",
+    "label": "TAKE",
+    "caption": "Workers take from the head of the queue, oldest first, one job each.",
+    "data": {
+      "producer": { "next": "j3", "state": "ready" },
+      "queue": [],
+      "bound": 4,
+      "workers": ["j1", "j2"],
+      "done": []
+    }
+  },
+  {
+    "key": "steady-refill",
+    "title": "More jobs arrive",
+    "label": "PUT",
+    "caption": "The producer keeps putting while the workers run. Two of four slots are used.",
+    "data": {
+      "producer": { "next": "j5", "state": "ready" },
+      "queue": ["j3", "j4"],
+      "bound": 4,
+      "workers": ["j1", "j2"],
+      "done": []
+    }
+  },
+  {
+    "key": "steady-done",
+    "title": "A worker finishes and takes the next",
+    "label": "DONE",
+    "caption": "Worker 1 completes j1 and takes j3. Under steady load the queue stays short and never reaches its bound.",
+    "data": {
+      "producer": { "next": "j5", "state": "ready" },
+      "queue": ["j4"],
+      "bound": 4,
+      "workers": ["j3", "j2"],
+      "done": ["j1"]
+    }
+  },
+  {
+    "key": "burst-busy",
+    "title": "Both workers are busy",
+    "label": "BUSY",
+    "caption": "j1 and j2 are running and j3 waits. The producer is about to send a burst.",
+    "data": {
+      "producer": { "next": "j4", "state": "ready" },
+      "queue": ["j3"],
+      "bound": 4,
+      "workers": ["j1", "j2"],
+      "done": []
+    }
+  },
+  {
+    "key": "burst-fill",
+    "title": "The burst fills the queue",
+    "label": "FILL",
+    "caption": "j4 to j6 arrive faster than the workers finish. The queue holds four jobs: its bound.",
+    "data": {
+      "producer": { "next": "j7", "state": "ready" },
+      "queue": ["j3", "j4", "j5", "j6"],
+      "bound": 4,
+      "workers": ["j1", "j2"],
+      "done": []
+    }
+  },
+  {
+    "key": "burst-wait",
+    "title": "put() blocks the producer",
+    "label": "BACKPRESSURE",
+    "caption": "The queue is full, so put(j7) waits instead of growing the queue. The producer slows to the workers' pace.",
+    "data": {
+      "producer": { "next": "j7", "state": "blocked" },
+      "queue": ["j3", "j4", "j5", "j6"],
+      "bound": 4,
+      "workers": ["j1", "j2"],
+      "done": []
+    }
+  },
+  {
+    "key": "burst-drain",
+    "title": "A worker frees a slot",
+    "label": "TAKE",
+    "caption": "Worker 1 completes j1 and takes j3. That frees a slot and wakes the blocked put.",
+    "data": {
+      "producer": { "next": "j7", "state": "woken" },
+      "queue": ["j4", "j5", "j6"],
+      "bound": 4,
+      "workers": ["j3", "j2"],
+      "done": ["j1"]
+    }
+  },
+  {
+    "key": "burst-resume",
+    "title": "The waiting put goes through",
+    "label": "RESUME",
+    "caption": "j7 takes the free slot and the queue is full again, so put(j8) blocks until the next completion.",
+    "data": {
+      "producer": { "next": "j8", "state": "blocked" },
+      "queue": ["j4", "j5", "j6", "j7"],
+      "bound": 4,
+      "workers": ["j3", "j2"],
+      "done": ["j1"]
+    }
+  }
+]

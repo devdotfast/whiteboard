@@ -1,0 +1,58 @@
+[
+  {
+    "key": "request",
+    "title": "The client posts a JSON body",
+    "label": "REQUEST",
+    "caption": "The body is untyped JSON: qty arrives as the string \"2\".",
+    "code": ["validate"]
+  },
+  {
+    "key": "validate",
+    "title": "The API validates it into a DTO",
+    "label": "VALIDATE",
+    "caption": "validateCreateOrder parses the body; qty becomes a number and the service only ever sees a CreateOrderDto.",
+    "code": ["validate"]
+  },
+  {
+    "key": "persist",
+    "title": "The service builds an Order and inserts it",
+    "label": "PERSIST",
+    "caption": "OrderService builds a domain Order, which has no id until the database assigns one.",
+    "code": ["service", "repository"]
+  },
+  {
+    "key": "stored",
+    "title": "The database returns the row",
+    "label": "STORED",
+    "caption": "The insert returns the row with the id Postgres assigned.",
+    "code": ["repository"]
+  },
+  {
+    "key": "map",
+    "title": "The row maps back to an Order",
+    "label": "MAP",
+    "caption": "The service returns a domain Order, not the row: the API never sees column names.",
+    "code": ["service"]
+  },
+  {
+    "key": "respond",
+    "title": "The API answers 201 with a response body",
+    "label": "RESPOND",
+    "caption": "The API serializes the Order for the wire, exposing the id as a public string.",
+    "code": ["validate"]
+  },
+  {
+    "key": "bad-request",
+    "title": "The client posts an invalid body",
+    "label": "BAD REQUEST",
+    "caption": "Same endpoint, but qty is \"-1\".",
+    "code": ["validate"]
+  },
+  {
+    "key": "rejected",
+    "title": "Validation rejects it at the API",
+    "label": "REJECTED",
+    "caption": "The API answers 422 naming the field. The service and the database are never called.",
+    "code": ["validate"]
+  }
+]

@@ -522,7 +522,10 @@ function parsePersistedTourState(
 
   if (tourId === undefined || activeAnchor === undefined) return undefined;
 
-  return kind === "sequence" || kind === "database" || kind === "flow"
+  return kind === "sequence" ||
+    kind === "database" ||
+    kind === "flow" ||
+    kind === "animation"
     ? { tourId, activeAnchor, kind }
     : { tourId, activeAnchor };
 }

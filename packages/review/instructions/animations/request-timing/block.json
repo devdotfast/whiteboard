@@ -1,0 +1,21 @@
+{
+  "title": "One read, with and without the cache",
+  "code": {
+    "client": {
+      "source": "head/web/src/orders/api.ts#L14-L30",
+      "label": "fetchOrder"
+    },
+    "handler": {
+      "source": "head/src/api/orders/get.ts#L8-L36",
+      "label": "getOrder"
+    },
+    "cache": {
+      "source": "head/src/orders/cache.ts#L10-L44",
+      "label": "OrderCache.read"
+    },
+    "query": {
+      "source": "head/src/orders/repository.ts#L52-L70",
+      "label": "selectOrder"
+    }
+  }
+}

@@ -18,6 +18,7 @@ import { defineSoftwareMap } from "@review/software-map-model";
 import { type ReactNode, act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { page } from "vitest/browser";
 
 import { STAGE_MAX_HEIGHT, STAGE_MAX_SLOTS } from "./animation/stage-protocol";
 import type { SavedMap } from "./api-document";
@@ -172,6 +173,12 @@ const rendered: Record<
       c,
       "[data-animation-slot='code'] .fixture-inline-editor[data-path='order.ts']",
     ) && text(c).includes("An order arrives"),
+  // A clip boots the same stage, and lists its markers under it.
+  clip: (c) =>
+    has(
+      c,
+      "[data-animation-slot='code'] .fixture-inline-editor[data-path='order.ts']",
+    ) && text(c).includes("Status queued"),
 };
 
 let canvas: ReturnType<typeof mount> | undefined;
@@ -1955,4 +1962,213 @@ it("grows a tall, wide sequence diagram to its height instead of scrolling it ve
   expect(body!.scrollWidth).toBeGreaterThan(body!.clientWidth);
   expect(body!.clientHeight).toBeGreaterThan(700);
   expect(body!.scrollHeight).toBe(body!.clientHeight);
+});
+
+describe("animation tour", () => {
+  // Frames that show code make a tour, a stop per frame.
+  const tourAnimation = (scenarios = false) =>
+    documentSchema.parse([
+      {
+        id: "block-1",
+        type: "animation",
+        title: "Order tour",
+        height: 160,
+        frames: [
+          { key: "a", title: "Arrives", caption: "An order comes in." },
+          {
+            key: "b",
+            title: "Saved",
+            caption: "The row is written.",
+            code: ["status"],
+          },
+          {
+            key: "c",
+            title: "Sent",
+            caption: "The queue takes it.",
+            code: ["status"],
+          },
+        ],
+        ...(scenarios && {
+          scenarios: [
+            { key: "all", label: "Everything", frames: ["a", "b", "c"] },
+            { key: "short", label: "Shortcut", frames: ["a", "c"] },
+          ],
+        }),
+        code: { status: "head/order.ts#L1" },
+        html: '<button data-wb-open="status">Open status</button>',
+        pins: { repositoryId: "repo", base: "base", head: "head" },
+      },
+    ]);
+
+  const overlay = () => document.querySelector(".diagram-tour-overlay");
+
+  const caption = () =>
+    document.querySelector(".animation-block [aria-live='polite']")
+      ?.textContent ?? "";
+
+  const meta = () =>
+    document.querySelector(".animation-block figcaption em")?.textContent;
+
+  const pill = () => document.querySelector(".tour-pill-count")?.textContent;
+
+  const press = (label: string) =>
+    act(async () =>
+      document
+        .querySelector<HTMLButtonElement>(
+          `.animation-block button[aria-label='${label}']`,
+        )!
+        .click(),
+    );
+
+  it("tours its frames fullscreen, the panel and the animation in step", async () => {
+    await mountFixture("animation", { document: tourAnimation(true) });
+
+    const tour = await settled(() =>
+      document.querySelector<HTMLButtonElement>(".diagram-tour-button"),
+    );
+
+    expect(tour?.textContent).toBe("Tour");
+    expect(
+      document.querySelector("button[aria-label='Expand animation']"),
+    ).toBeNull();
+    await act(async () => tour!.click());
+    expect(await settled(overlay)).toBeTruthy();
+    expect(
+      await settled(
+        () =>
+          overlay()!.querySelectorAll("section[data-review-anchor-id]")
+            .length === 3,
+      ),
+    ).toBe(true);
+
+    // The panel's Next shows the next frame.
+    await act(async () =>
+      overlay()!
+        .querySelector<HTMLButtonElement>("[data-tour-target='tour-next']")!
+        .click(),
+    );
+    expect(await settled(() => caption().includes("The row is written."))).toBe(
+      true,
+    );
+    expect(meta()).toBe("2 / 3");
+    expect(pill()).toBe("2/3");
+
+    // The animation's own Next moves the panel's stop.
+    await press("Next frame");
+    expect(await settled(() => pill() === "3/3")).toBe(true);
+    expect(meta()).toBe("3 / 3");
+
+    // A scenario keeping the frame keeps the tour open there.
+    await act(async () =>
+      [
+        ...document.querySelectorAll<HTMLButtonElement>(
+          ".diagram-tour-overlay [aria-label='Scenario'] button",
+        ),
+      ]
+        .find((button) => button.textContent === "Shortcut")!
+        .click(),
+    );
+    expect(await settled(() => pill() === "2/2")).toBe(true);
+    expect(overlay()).toBeTruthy();
+    expect(meta()).toBe("2 / 2");
+    expect(caption()).toContain("The queue takes it.");
+
+    await act(async () =>
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })),
+    );
+    expect(await settled(() => overlay() === null)).toBe(true);
+    expect(
+      await settled(() =>
+        document.activeElement?.classList.contains("diagram-tour-button"),
+      ),
+    ).toBe(true);
+  });
+
+  it("expands an animation without code plainly", async () => {
+    await mountFixture("animation", {
+      document: documentSchema.parse([
+        {
+          id: "block-1",
+          type: "animation",
+          title: "No code",
+          height: 160,
+          frames: [
+            { key: "a", title: "One" },
+            { key: "b", title: "Two" },
+          ],
+          code: { status: "head/order.ts#L1" },
+          html: "<p>Stage</p>",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ]),
+    });
+
+    const expand = await settled(() =>
+      document.querySelector<HTMLButtonElement>(
+        "button[aria-label='Expand animation']",
+      ),
+    );
+
+    expect(document.querySelector(".diagram-tour-button")).toBeNull();
+    await act(async () => expand!.click());
+    expect(
+      await settled(() =>
+        document.querySelector("[role='dialog'][aria-modal='true']"),
+      ),
+    ).toBeTruthy();
+    expect(overlay()).toBeNull();
+  });
+
+  it("opens its code in the column with the tour, which follows the frames", async () => {
+    const { container } = await mountFixture("animation", {
+      document: tourAnimation(),
+    });
+
+    const stage = await settled(() =>
+      document.querySelector<HTMLIFrameElement>(".animation-block iframe"),
+    );
+
+    await press("Next frame");
+    expect(await settled(() => meta() === "2 / 3")).toBe(true);
+
+    await act(() =>
+      page
+        .frameLocator(page.elementLocator(stage!))
+        .getByRole("button", { name: "Open status" })
+        .click(),
+    );
+
+    const sections = () =>
+      container.querySelectorAll("aside section[data-review-anchor-id]");
+
+    expect(await settled(() => sections().length === 3)).toBe(true);
+    expect(pill()).toBe("2/3");
+    expect(overlay()).toBeNull();
+
+    await press("Next frame");
+    expect(await settled(() => pill() === "3/3")).toBe(true);
+
+    // The column's own steps move the animation too.
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>("button[aria-label='Previous step']")!
+        .click(),
+    );
+    expect(await settled(() => meta() === "2 / 3")).toBe(true);
+    expect(pill()).toBe("2/3");
+
+    // Put away, the column stays closed as the frames change.
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>(
+          "button[aria-label='Close guided tour']",
+        )!
+        .click(),
+    );
+    expect(await settled(() => sections().length === 0)).toBe(true);
+    await press("Next frame");
+    expect(await settled(() => meta() === "3 / 3")).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(sections()).toHaveLength(0);
+  });
 });

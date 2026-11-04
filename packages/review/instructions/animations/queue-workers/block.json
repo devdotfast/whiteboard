@@ -1,0 +1,13 @@
+{
+  "title": "Bounded queue with two workers",
+  "code": {
+    "put": {
+      "source": "head/src/jobs/queue.ts#L14-L32",
+      "label": "BoundedQueue.put"
+    },
+    "take": {
+      "source": "head/src/jobs/worker.ts#L8-L26",
+      "label": "Worker.run"
+    }
+  }
+}

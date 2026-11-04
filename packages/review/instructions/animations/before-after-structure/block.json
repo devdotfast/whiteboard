@@ -1,0 +1,10 @@
+{
+  "title": "Orders grouped by customer",
+  "code": {
+    "group": {
+      "source": "head/src/orders/group-by-customer.ts#L8-L31",
+      "label": "groupByCustomer"
+    },
+    "order": { "source": "head/src/orders/order.ts#L3-L12", "label": "Order" }
+  }
+}

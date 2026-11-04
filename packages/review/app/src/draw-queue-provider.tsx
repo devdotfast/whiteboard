@@ -3,9 +3,11 @@ import {
   type Context,
   type ReactNode,
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -17,6 +19,7 @@ import {
   type MotionPhase,
   arrive,
   nextDue,
+  painted,
   phases,
   standingCursor,
   tick,
@@ -50,6 +53,26 @@ const MotionPhasesContexts: Record<
   lenses: createContext<Map<string, MotionPhase>>(new Map()),
 };
 
+/** What a block may tell its queue about its own drawing. */
+export interface DrawQueueControls {
+  /** The block's stage finished painting it in. */
+  painted: (id: string) => void;
+}
+
+const noControls: DrawQueueControls = { painted: () => {} };
+
+const ControlsContexts: Record<ActivitySurface, Context<DrawQueueControls>> = {
+  document: createContext<DrawQueueControls>(noControls),
+  lenses: createContext<DrawQueueControls>(noControls),
+};
+
+/** The queue's controls; outside a queue (history) they do nothing. */
+export function useDrawQueueControls(
+  scope: ActivitySurface = "document",
+): DrawQueueControls {
+  return useContext(ControlsContexts[scope]);
+}
+
 /** Every element's phase, for a list that must keep an erased block around. */
 export function useMotionPhases(
   scope: ActivitySurface = "document",
@@ -72,6 +95,10 @@ export function useMotionPhase(
  * the cursor the courier stands on (the head of the queue), and each
  * element's motion phase. Timers advance the queue; the pure model in
  * draw-queue.ts decides what happens. `undefined` is history: no queue.
+ *
+ * Every updater reads the clock before it is queued, never inside: React may
+ * run a queued updater again later, and one that told the time itself would
+ * then end a step early.
  */
 export function DrawQueueProvider({
   cursor,
@@ -88,6 +115,11 @@ export function DrawQueueProvider({
   children: ReactNode;
 }) {
   const [state, setState] = useState<DrawState>(EMPTY_QUEUE);
+  // The state as last rendered, for a control that must not queue an update
+  // it knows changes nothing: a stale no-op update can be replayed over a
+  // later arrival and lose it.
+  const stateRef = useRef(state);
+  stateRef.current = state;
 
   const [seen, setSeen] = useState<AuthoringCursor | null | undefined>(
     undefined,
@@ -101,7 +133,8 @@ export function DrawQueueProvider({
     if (!cursor) setState(EMPTY_QUEUE);
     else {
       const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
-      setState((current) => arrive(current, cursor, clock.now(), reduced));
+      const now = clock.now();
+      setState((current) => arrive(current, cursor, now, reduced));
     }
   }
 
@@ -113,21 +146,38 @@ export function DrawQueueProvider({
     // A timer can fire a hair before its due time; the step it was set for
     // is due regardless, or the queue would stall with no timer to follow.
     const timer = clock.setTimeout(
-      () => setState((current) => tick(current, Math.max(due, clock.now()))),
+      () => {
+        const now = Math.max(due, clock.now());
+        setState((current) => tick(current, now));
+      },
       Math.max(0, due - clock.now()),
     );
 
     return () => clock.clearTimeout(timer);
   }, [state, clock]);
 
+  const onPainted = useCallback(
+    (id: string) => {
+      const now = clock.now();
+
+      if (painted(stateRef.current, id, now) === stateRef.current) return;
+      setState((current) => painted(current, id, now));
+    },
+    [clock],
+  );
+
+  const controls = useMemo(() => ({ painted: onPainted }), [onPainted]);
   const standing = standingCursor(state);
   const map = useMemo(() => phases(state), [state]);
   const CursorContext = cursorContext(scope);
   const PhasesContext = MotionPhasesContexts[scope];
+  const ControlsContext = ControlsContexts[scope];
 
   return (
     <CursorContext.Provider value={cursor === undefined ? undefined : standing}>
-      <PhasesContext.Provider value={map}>{children}</PhasesContext.Provider>
+      <ControlsContext.Provider value={controls}>
+        <PhasesContext.Provider value={map}>{children}</PhasesContext.Provider>
+      </ControlsContext.Provider>
     </CursorContext.Provider>
   );
 }

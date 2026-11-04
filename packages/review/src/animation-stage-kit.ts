@@ -149,7 +149,7 @@ const CLASSES: [selector: string, use: string][] = [
   ],
   [
     ".wb-card",
-    "A box with a title and note: put .wb-card-title and .wb-card-note inside. The scene's cards are these.",
+    "A box with a title and note: a .wb-card-head holding a .wb-card-dot and the .wb-card-title, then a .wb-card-note. The scene's cards are these.",
   ],
   [
     ".wb-node",
@@ -178,6 +178,10 @@ const CLASSES: [selector: string, use: string][] = [
     ".wb-shape, .wb-shape-text",
     "An SVG shape drawn like a card, and the text inside it.",
   ],
+  [
+    "[data-wb-paint]",
+    'When an agent writes the block, its parts paint in: data-wb-paint="3" orders a part (numbers first, then document order), "none" shows it and its subtree at once; data-wb-paint-style="fade|draw|wipe|none" picks the effect.',
+  ],
 ];
 
 /** The CSS every stage loads before its own markup. */
@@ -186,6 +190,7 @@ export const STAGE_KIT_CSS = `:root { --wb-duration: 450ms; color-scheme: light 
 button { color: inherit; font: inherit; }
 html, body { margin: 0; height: 100%; }
 html[data-wb-auto-size] body { height: auto; display: flow-root; }
+html[data-wb-unpainted] body { visibility: hidden; }
 body {
   overflow: hidden;
   background: transparent;
@@ -397,7 +402,8 @@ export function stageStyleReference(): string {
  * animation.html only for what they do not cover, written with the variables:
  * no literal colors, sizes or font names. data-tone="accent|added|removed|
  * modified|muted" colors any card, node, chip, badge, shape or table row;
- * data-highlight="frameKey ..." rings a card, node or shape in those frames.
+ * data-highlight="frameKey ..." rings a card, node or shape in those frames
+ * (in a clip, those markers).
  *
  * Classes:
 ${classes}

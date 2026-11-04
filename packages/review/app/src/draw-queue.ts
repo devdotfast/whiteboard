@@ -9,11 +9,13 @@ import type { AuthoringCursor } from "./authoring-cursor";
  * A diagram written whole is traced in one quick pass, unit by unit in the
  * order a hand would draw it; a burst of units for one diagram larger than
  * WHOLE_THRESHOLD is folded into the same quick pass instead of a strobe of
- * full outlines.
+ * full outlines. A new animation paints itself in: it holds the queue until
+ * its stage reports it is painted, or until PAINT_CAP.
  */
 export type MotionPhase =
   | "queued"
   | "landing"
+  | "painting"
   | "outline"
   | "stroke"
   | "fill"
@@ -58,6 +60,10 @@ export const EMPTY_QUEUE: DrawState = {
 };
 
 const HOLD = Infinity;
+
+/** The longest a new animation holds the queue while its stage paints, should
+ * the stage never say it is done. */
+export const PAINT_CAP = 4000;
 
 /** One quick pass over a whole diagram: a stroke per unit, each as long as
  * its trace, and a large diagram takes several units per stroke so the pass
@@ -111,6 +117,11 @@ export function stepsFor(cursor: AuthoringCursor): DrawStep[] {
           { phase: "outline", ms: 450 },
           { phase: "fill", ms: 250 },
         ];
+
+      // An animation's or clip's stage paints its own first frame; painted()
+      // ends it.
+      if (edit.kind === "animation" || edit.kind === "clip")
+        return [{ phase: "painting", ms: PAINT_CAP }];
 
       return [{ phase: "landing", ms: 680 }];
     case "update":
@@ -295,6 +306,25 @@ export function tick(state: DrawState, now: number): DrawState {
   }
 
   return changed ? { pending, head, standing } : state;
+}
+
+/** A block's stage finished painting: end its painting step now and move on,
+ * as a tick at that moment would. Anything else is left alone. */
+export function painted(
+  state: DrawState,
+  blockId: string,
+  now: number,
+): DrawState {
+  const head = state.head;
+
+  if (
+    !head ||
+    head.cursor.targetId !== blockId ||
+    head.steps[head.index]?.phase !== "painting"
+  )
+    return state;
+
+  return tick({ ...state, head: { ...head, until: now } }, now);
 }
 
 /** The head moved on to `index`, starting when the step before it was due. */

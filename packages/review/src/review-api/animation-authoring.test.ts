@@ -141,6 +141,92 @@ it("gates animation authoring live, including stale MCP tools, while keeping sav
   }
 });
 
+it("gates clips with animations", async () => {
+  let enabled = false;
+
+  const store = new ReviewStore(":memory:", {
+    validatePins: async () => {},
+    validateSource: async () => {},
+    validateResource: async () => {},
+  });
+
+  const app = createReviewApi(
+    store,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    () => enabled,
+  );
+
+  const client = new ReviewApiClient(
+    { serverUrl: "http://review.test", token: "test" },
+    async (url, init) => app.request(url.replace("/reviews-api", ""), init),
+  );
+
+  const clip = {
+    type: "clip",
+    title: "Race",
+    html: "<p>Race</p>",
+    markers: [{ key: "go", title: "Go" }],
+  };
+
+  const editTool = async () =>
+    (await client.read<AuthoringTool[]>("/authoring"))
+      .map(publicTool)
+      .find((tool) => tool.name === "session_edit")!;
+
+  try {
+    const { reviewId } = await store.execute({
+      operation: {
+        type: "create",
+        title: "Clips",
+        target: {
+          kind: "commits",
+          repositoryId: "repo",
+          base: "base",
+          head: "head",
+        },
+      },
+    });
+
+    expect(await client.read<string>("/instructions")).not.toContain("- clip ");
+    await expect(
+      callPublicTool(client, await editTool(), {
+        sessionId: reviewId,
+        edit: { type: "insert", content: clip },
+      }),
+    ).rejects.toThrow("Animation authoring is disabled");
+    expect(store.read(reviewId).document).toEqual([]);
+
+    enabled = true;
+    expect(await client.read<string>("/instructions")).toContain("- clip ");
+    await callPublicTool(client, await editTool(), {
+      sessionId: reviewId,
+      edit: { type: "insert", content: clip },
+    });
+    const targetId = store.read(reviewId).document[0]!.id;
+
+    enabled = false;
+    await expect(
+      callPublicTool(client, await editTool(), {
+        sessionId: reviewId,
+        edit: { type: "update", targetId, changes: { title: "Renamed" } },
+      }),
+    ).rejects.toThrow("Animation authoring is disabled");
+    expect(store.read(reviewId).document[0]).toMatchObject({
+      type: "clip",
+      title: "Race",
+    });
+  } finally {
+    store.close();
+  }
+});
+
 it("defaults animation authoring off and persists it", async () => {
   const home = await mkdtemp(path.join(tmpdir(), "animation-preferences-"));
 

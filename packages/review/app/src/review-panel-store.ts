@@ -74,7 +74,7 @@ export interface MapFocus {
   pending: boolean;
 }
 
-export type OverlayTourKind = "sequence" | "database" | "flow";
+export type OverlayTourKind = "sequence" | "database" | "flow" | "animation";
 
 /** A fullscreen diagram tour. `kind` is absent on one restored from an
  * older build's in-panel record. */

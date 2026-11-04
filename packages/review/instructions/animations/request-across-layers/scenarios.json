@@ -1,0 +1,12 @@
+[
+  {
+    "key": "success",
+    "label": "Valid order",
+    "frames": ["request", "validate", "persist", "stored", "map", "respond"]
+  },
+  {
+    "key": "invalid",
+    "label": "Validation fails",
+    "frames": ["bad-request", "rejected"]
+  }
+]

@@ -2,6 +2,8 @@ An `animation` component draws HTML you write on the whiteboard, in a sandboxed 
 
 For paths a reader can pick, such as a retry that succeeds or one that gives up, use `scenarios`: the whiteboard draws the picker, so do not draw your own buttons.
 
+A `clip` component runs in the same stage with the same API, but it has no frames: it is one timeline the reader plays, pauses and jumps around by named markers. See "Clips: one timeline, played" below.
+
 ## Work in files
 
 1. `session_checkout({ sessionId, targetId })` writes the animation to a folder: `animation.html`, `frames.json`, `scenarios.json` (once it has scenarios) and `block.json` (`title`, and `code` and `pins` when it shows code).
@@ -15,7 +17,9 @@ For a new animation, write the same files into a folder of your own and publish 
 
 Before you write HTML, read the two files whose paths `session_checkout` and these instructions give: `whiteboard.css`, the classes and `--wb-*` variables every animation loads, and `whiteboard.d.ts`, the `whiteboard` API. Use the classes and variables rather than your own colors, sizes or fonts, so the animation matches the board in light and dark.
 
-There are two ways to draw.
+Start from the reference closest to what you are drawing, listed under References at the end of these instructions: copy its folder into your draft, then change the data, the prose and the code links.
+
+There are three ways to draw.
 
 ### A scene: cards and messages
 
@@ -34,7 +38,17 @@ For a few services, processes or stores with messages moving between them, use `
 </script>
 ```
 
-A scene names frame keys, so a new scenario means new frames and a few new lines like these.
+A scene names frame keys, so a new scenario means new frames and a few new lines like these. A card's `id` is its element's id, so your own CSS can address it as `#api`.
+
+### A hand-made layout: lanes, axes, graphs
+
+When the drawing is not a grid of cards (attempts on a time axis, two lanes interleaving, a state graph), lay out your own elements with the kit (`wb-node`, `wb-lane`, `wb-table`) and connect them:
+
+- `whiteboard.arrow("#caller", "#service", { enter: "a1" })` draws an SVG arrow that follows the two elements. A string here is a CSS selector; in a scene's methods it is a card id.
+- `whiteboard.token({ label: "GET" })` and `whiteboard.travel(token, arrow, "a1")` ride a chip along the arrow during that frame.
+- `whiteboard.timeline("a1").add(".wait", { scaleX: [0, 1], duration: 600 })` adds tweens that play when the reader steps into the frame and land at their end on a jump.
+
+Declare arrows, tokens, travels and timelines while the script first runs, naming the frames they play in; they cannot be added from a frame handler. `data-enter="a1"`, `data-exit="a3"`, `data-only="a1 a3"` and `data-highlight="a1 a3"` on any element show, hide or ring it in those frames with no script.
 
 ### Your own HTML: draw each frame from its data
 
@@ -65,7 +79,19 @@ Draw the frame in full, then animate what is new since the previous frame:
 </script>
 ```
 
-Write each frame's data in full, not as a change from the one before: a reader can jump straight to any frame. `whiteboard.animate` skips the motion on a jump and under reduced motion, and returning its animations makes playback wait for them.
+Write each frame's data in full, not as a change from the one before: a reader can jump straight to any frame. `whiteboard.animate` skips the motion on a jump and under reduced motion, and returning its animations makes playback wait for them. Give every keyframe its start value (`[{ opacity: 0 }, { opacity: 1 }]`, not `[{ opacity: 1 }]`): a jump finishes the animation, and a missing start lands wrong.
+
+Something that moves between frames (a job changing queue slot, a record regrouped under a new parent) is drawn the same way: measure every element's position, redraw, then animate each moved element from its old position to `transform: none`. Measure everything before starting any animation; one that has started already reports its transform.
+
+`whiteboard.frames` and `frame.index` follow the active scenario, so a frame outside it is not listed. Key your drawing on `frame.data`, not on positions.
+
+## Painting in
+
+When you write an animation, the reader watches it arrive: its first frame paints in, part by part, instead of appearing at once. It paints only then, not when the board loads with it already there, and not under reduced motion. The test harness and a cold load do not paint, so you see it only by watching your own write land on the board.
+
+- By default the kit's parts (cards, nodes, chips, badges, table rows, lanes, labels, peeks, tokens) fade in one after another in document order, and arrows draw along their path, all within about a second and a half. A part inside another goes in with it.
+- `data-wb-paint="1"` orders a part: numbered parts first, the rest in document order. `data-wb-paint="none"` shows an element and everything in it at once. `data-wb-paint-style="fade"`, `"draw"` (an SVG line), `"wipe"` (left to right) or `"none"` picks the effect. Any element with either attribute paints on its own.
+- `whiteboard.on("paint", ({ frame, instant }) => ...)` replaces the default painter: draw the first frame in yourself and return the animations, as a frame handler does. It also runs with `instant: true` when the block does not paint in; leave everything in its end state then. `whiteboard.timeline("paint")` is a timeline that plays once as the block paints in and lands at its end otherwise; it also replaces the default painter. Do not name a frame `paint`.
 
 ## Link the code
 
@@ -74,3 +100,34 @@ Name the ranges the animation explains in `code`, then link the drawing to them:
 - `data-wb-open="retry"` (or `code: "retry"` on a scene card) opens the code beside the whiteboard when the reader clicks that element, and names it when they hover. Put it on the part of the drawing the code explains.
 - A frame's `code` lists the ranges that frame shows. Your script reads it as `frame.code`, so one script can mark what to open in every frame.
 - `<div data-wb-code="retry">` (or `scene.peek`) shows a range inside the drawing instead.
+
+## Clips: one timeline, played
+
+Pick a clip when the motion itself is the point and the timing carries the meaning: a token crossing a system, two requests racing, a queue draining, a timeout firing while a reply is on its way. Pick an animation when the reader needs to compare discrete states, one frame against the next.
+
+A clip's folder holds `markers.json` where an animation's holds `frames.json`; `session_checkout` writes whichever the block has, and publishing a folder with `markers.json` makes a clip. A marker is `{ key, title, caption?, code? }`: a named moment the reader jumps to and the tour stops at. The strip under the clip shows each title, so keep titles to a few words. Markers have no `data` or `duration`: the script decides when each one happens.
+
+Build the timeline while the script first runs, and place every marker on it:
+
+```html
+<script>
+  whiteboard
+    .clip()
+    .marker("sent")
+    .add(".packet", { left: ["10%", "50%"], duration: 700 })
+    .marker("accepted")
+    .add(".packet", { left: ["50%", "90%"], duration: 900 })
+    .marker("stored");
+</script>
+```
+
+- `whiteboard.clip()` returns a timeline with `add`, `set` and `call`, as `whiteboard.timeline` does, and `.marker(key)`, which places a declared marker at the timeline's end so far, or at an anime.js position (`.marker("timeout", 1500)`). Numeric positions count from the clip's start. Markers are labels on the timeline, so later calls can start at one: `.add(".retry", { opacity: [0, 1] }, "timeout")`.
+- A marker the script leaves unplaced shows an error under the clip, naming it.
+- With `scenarios` (`[{ key, label }]` in `scenarios.json`), each scenario is a timeline of its own: call `whiteboard.clip("fast")`, `whiteboard.clip("slow")`, once each, and place every marker on each. A `whiteboard.clip()` without a key serves every scenario that has no timeline of its own.
+- Write each tween with its start value (`left: ["10%", "50%"]`, not `left: "50%"`), and make what differs between beats a `set` or a tween on the timeline: jumping back to a marker then undoes everything after it.
+- `whiteboard.on("stored", ({ marker, instant }) => ...)` runs when the playhead crosses that marker playing forward, or lands on it after a jump with `instant: true`; `"*"` runs on every marker. Use it for what a tween cannot draw, such as changing text, and set the whole state for that marker, since the reader can jump straight to it. `whiteboard.markers` lists the markers with their `at` (milliseconds) once placed, and `whiteboard.marker` is the one the playhead last reached.
+- In a clip, `data-enter`, `data-exit`, `data-only`, `data-highlight` and `scene.on` name markers instead of frames, and follow the marker the playhead last reached.
+- `whiteboard.frames`, `frame`, `goto`, `next`, `prev`, `setSequence`, `timeline(key)`, `travel` and `scene.send` belong to frames and throw in a clip. Move tokens with tweens on the clip instead.
+- Under reduced motion the clip never animates: Play steps from marker to marker, holding each for a few seconds and landing on its time at once, and a jump lands at once. Marker handlers get `instant: true`.
+- Painting in and code linking work as for an animation: the clip paints in at time 0, before anything plays, and a marker's `code` gives its tour stop, as a frame's does.
+

@@ -1,0 +1,18 @@
+[
+  {
+    "key": "clean",
+    "label": "Clean replay",
+    "frames": ["open-a", "deposit-a", "open-b", "withdraw-a"]
+  },
+  {
+    "key": "duplicate",
+    "label": "Redelivered event",
+    "frames": [
+      "open-a",
+      "deposit-a",
+      "redeliver",
+      "dup-open-b",
+      "dup-withdraw-a"
+    ]
+  }
+]

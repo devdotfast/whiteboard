@@ -3,6 +3,7 @@ import { z } from "zod";
 import { animation } from "./animation.js";
 import { call_stack_diff } from "./call_stack_diff.js";
 import { type CalloutBlock, callout, calloutSchema } from "./callout.js";
+import { clip } from "./clip.js";
 import { code } from "./code.js";
 import { code_peek } from "./code_peek.js";
 import { database_lens } from "./database_lens.js";
@@ -30,6 +31,7 @@ export const leafSchema = z.discriminatedUnion("type", [
   software_map.schema,
   flow_diagram.schema,
   animation.schema,
+  clip.schema,
 ]);
 
 export type LeafBlock = z.infer<typeof leafSchema>;
@@ -56,6 +58,7 @@ export const blocks = {
   software_map,
   flow_diagram,
   animation,
+  clip,
   section,
   callout,
 } satisfies Definitions;
@@ -81,6 +84,7 @@ const referenceOrder: readonly BlockType[] = [
   "call_stack_diff",
   "database_lens",
   "animation",
+  "clip",
 ];
 
 /** The selected blocks' fields, for agent guidance. */

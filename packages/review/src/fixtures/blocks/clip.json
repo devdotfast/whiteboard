@@ -1,0 +1,19 @@
+[
+  {
+    "id": "block-1",
+    "type": "clip",
+    "title": "Order status",
+    "height": 300,
+    "markers": [
+      { "key": "sent", "title": "Order sent" },
+      {
+        "key": "queued",
+        "title": "Status queued",
+        "caption": "The status line sets it.",
+        "code": ["status"]
+      }
+    ],
+    "code": { "status": "head/order.ts#L1" },
+    "html": "<div class=\"wb-row\"><div class=\"wb-node\" id=\"order\">order</div></div><div data-wb-code=\"status\"></div><script>whiteboard.clip().marker(\"sent\").add(\"#order\", { translateX: [0, 120], duration: 800 }).marker(\"queued\");</script>"
+  }
+]

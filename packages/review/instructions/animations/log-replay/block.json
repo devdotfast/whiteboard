@@ -1,0 +1,10 @@
+{
+  "title": "Replaying the account log",
+  "code": {
+    "apply": { "source": "head/src/ledger/apply.ts#L12-L40", "label": "apply" },
+    "guard": {
+      "source": "head/src/ledger/apply.ts#L13-L17",
+      "label": "checkpoint guard"
+    }
+  }
+}

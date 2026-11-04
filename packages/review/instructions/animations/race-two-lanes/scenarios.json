@@ -1,0 +1,19 @@
+[
+  {
+    "key": "no-lock",
+    "label": "Without a lock",
+    "frames": ["n-start", "n-read", "n-modify", "n-write-a", "n-write-b"]
+  },
+  {
+    "key": "lock",
+    "label": "With a row lock",
+    "frames": [
+      "l-start",
+      "l-lock",
+      "l-modify",
+      "l-write-a",
+      "l-read-b",
+      "l-write-b"
+    ]
+  }
+]

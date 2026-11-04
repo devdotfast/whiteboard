@@ -1,9 +1,18 @@
-// An animation checked out as files, so an agent edits it with its own file
-// tools and publishes the folder: the bytes travel by path, not through the
-// agent's output.
+// An animation or clip checked out as files, so an agent edits it with its
+// own file tools and publishes the folder: the bytes travel by path, not
+// through the agent's output. A clip's folder holds markers.json where an
+// animation's holds frames.json.
 
 import { createHash } from "node:crypto";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -24,9 +33,15 @@ import { isMissingFileError } from "@review/fs-utils.js";
 import { findReviewPackageRoot } from "@review/package-paths.js";
 import { z } from "zod";
 
+import {
+  type AnimationReference,
+  readAnimationReferences,
+} from "./animation-references.js";
+
 const FILES = {
   html: "animation.html",
   frames: "frames.json",
+  markers: "markers.json",
   scenarios: "scenarios.json",
   block: "block.json",
   checkout: "checkout.json",
@@ -35,8 +50,11 @@ const FILES = {
 /** The fields block.json holds: everything but the ones with files of their own. */
 const BLOCK_FIELDS = ["title", "code", "height", "pins"];
 
-/** Every field an animation's files can set. */
-const FIELDS = ["html", "frames", "scenarios", ...BLOCK_FIELDS];
+/** Every field an animation's or clip's files can set. */
+const FIELDS = ["html", "frames", "markers", "scenarios", ...BLOCK_FIELDS];
+
+/** The block types that check out as files. */
+type DraftType = "animation" | "clip";
 
 /** What checkout.json records: the block the folder came from, as it was. */
 const checkoutSchema = z.strictObject({
@@ -57,10 +75,12 @@ const handle = /^[\w-]{1,128}$/;
 
 /** The animation references, read-only beside the drafts so they always match
  * the Whiteboard that wrote them: whiteboard.css, the style kit every
- * animation loads, and whiteboard.d.ts, the API its scripts call. */
+ * animation loads, whiteboard.d.ts, the API its scripts call, and the
+ * reference animations an agent copies from. */
 export interface StageReference {
   styles: string;
   api: string;
+  references: AnimationReference[];
 }
 
 async function writeReadOnly(file: string, content: string): Promise<void> {
@@ -69,27 +89,83 @@ async function writeReadOnly(file: string, content: string): Promise<void> {
   await writeFile(file, content, { mode: 0o444 });
 }
 
-export async function writeStageReference(): Promise<StageReference> {
+/** Copies `source` to `target` with every file read-only, replacing what was there. */
+async function copyReadOnly(source: string, target: string): Promise<void> {
+  await rm(target, { recursive: true, force: true });
+  await cp(source, target, { recursive: true });
+
+  for (const entry of await readdir(target, {
+    recursive: true,
+    withFileTypes: true,
+  }))
+    if (entry.isFile())
+      await chmod(path.join(entry.parentPath, entry.name), 0o444);
+}
+
+export async function writeStageReference(
+  root = findReviewPackageRoot(import.meta.url),
+): Promise<StageReference> {
   const directory = path.join(devReviewHome(), "animation-drafts");
   const styles = path.join(directory, "whiteboard.css");
   const api = path.join(directory, "whiteboard.d.ts");
+  const copies = path.join(directory, "references");
+  const sources = await readAnimationReferences(root, { strict: false });
 
-  const source = path.join(
-    findReviewPackageRoot(import.meta.url),
-    "instructions",
-    "whiteboard.d.ts",
+  await mkdir(copies, { recursive: true });
+  await writeReadOnly(styles, stageStyleReference());
+  await writeReadOnly(
+    api,
+    await readFile(path.join(root, "instructions", "whiteboard.d.ts"), "utf8"),
   );
 
-  await mkdir(directory, { recursive: true });
-  await writeReadOnly(styles, stageStyleReference());
-  await writeReadOnly(api, await readFile(source, "utf8"));
+  const names = new Set(sources.map(({ name }) => name));
 
-  return { styles, api };
+  for (const stale of await readdir(copies))
+    if (!names.has(stale))
+      await rm(path.join(copies, stale), { recursive: true, force: true });
+
+  const references = await Promise.all(
+    sources.map(async (reference) => {
+      const copy = path.join(copies, reference.name);
+
+      await copyReadOnly(reference.directory, copy);
+
+      return { ...reference, directory: copy };
+    }),
+  );
+
+  return { styles, api, references };
 }
 
 /** The line that sends an agent to the references before it writes an animation. */
-export const stageReferenceHint = ({ styles, api }: StageReference) =>
-  `Before writing or restyling an animation's HTML, read ${styles} (the classes and --wb-* variables every animation loads) and ${api} (the whiteboard API its scripts call). Both are read-only and rewritten by Whiteboard.`;
+export const stageReferenceHint = ({
+  styles,
+  api,
+  references,
+}: StageReference) =>
+  `Before writing or restyling an animation's HTML, read ${styles} (the classes and --wb-* variables every animation loads) and ${api} (the whiteboard API its scripts call).${references.length ? ` Reference animations to start from are in ${path.dirname(references[0]!.directory)}: read the README of the closest one.` : ""} All are read-only and rewritten by Whiteboard.`;
+
+/** Lists the reference animations where the agent can read them. */
+function referencesSection({ references }: StageReference): string[] {
+  if (!references.length) return [];
+
+  return [
+    [
+      "## References",
+      "",
+      "Before you write an animation, read the README of the reference closest to what you are drawing, then copy its files into your draft folder as a starting point.",
+      "",
+      ...references.map(
+        ({ name, summary, directory }) =>
+          `- \`${name}\`: ${summary} ${directory}`,
+      ),
+    ].join("\n"),
+  ];
+}
+
+/** What follows the animation instructions: the hint, then the references. */
+export const stageReferenceText = (reference: StageReference) =>
+  [stageReferenceHint(reference), ...referencesSection(reference)].join("\n\n");
 
 export function draftDirectory(
   sessionId: string,
@@ -110,9 +186,12 @@ const fingerprint = (block: JsonValue) =>
 const json = (value: JsonValue) => `${JSON.stringify(value, null, 2)}\n`;
 
 function animationBlock(block: JsonValue, targetId: string): JsonObject {
-  if (!isJsonObject(block) || block.type !== "animation")
+  if (
+    !isJsonObject(block) ||
+    (block.type !== "animation" && block.type !== "clip")
+  )
     throw new ReviewInputError(
-      `${targetId} is ${isJsonObject(block) ? `a ${String(block.type)}` : "not a component"}; only animations check out as files.`,
+      `${targetId} is ${isJsonObject(block) ? `a ${String(block.type)}` : "not a component"}; only animations and clips check out as files.`,
     );
 
   return block;
@@ -143,7 +222,9 @@ export async function checkoutAnimation(
   };
 
   await put("html", String(block.html));
-  await put("frames", json(block.frames ?? []));
+
+  if (block.type === "clip") await put("markers", json(block.markers ?? []));
+  else await put("frames", json(block.frames ?? []));
 
   if (block.scenarios !== undefined)
     await put("scenarios", json(block.scenarios));
@@ -167,7 +248,8 @@ export async function checkoutAnimation(
   return {
     directory,
     files,
-    ...reference,
+    styles: reference.styles,
+    api: reference.api,
     next: `Edit these files with your file tools, then publish the folder: session_edit {sessionId, edit: {type: "update", targetId: "${targetId}", fromFiles: "${directory}"}}. ${stageReferenceHint(reference)}`,
   };
 }
@@ -184,7 +266,7 @@ async function readText(directory: string, name: string, required: boolean) {
 
     if (required)
       throw new ReviewInputError(
-        `${path.join(directory, name)} does not exist. Check the animation out with session_checkout, or write the file.`,
+        `${path.join(directory, name)} does not exist. Check the animation or clip out with session_checkout, or write the file.`,
       );
 
     return undefined;
@@ -205,15 +287,29 @@ async function readJson(directory: string, name: string, required: boolean) {
   }
 }
 
-/** The animation a folder holds, as a block's fields, and where it came from. */
-async function readDraft(directory: string) {
-  const [html, frames, scenarios, block, checkout] = await Promise.all([
+/** The animation or clip a folder holds, as a block's fields with its type,
+ * checked as a publish would be. frames.json makes it an animation and
+ * markers.json a clip. */
+export async function readAnimationFolder(
+  directory: string,
+): Promise<JsonObject & { type: DraftType }> {
+  const [html, frames, markers, scenarios, block] = await Promise.all([
     readText(directory, FILES.html, true),
-    readJson(directory, FILES.frames, true),
+    readJson(directory, FILES.frames, false),
+    readJson(directory, FILES.markers, false),
     readJson(directory, FILES.scenarios, false),
     readJson(directory, FILES.block, true),
-    readJson(directory, FILES.checkout, false),
   ]);
+
+  if (frames !== undefined && markers !== undefined)
+    throw new ReviewInputError(
+      `${directory} holds both ${FILES.frames} and ${FILES.markers}. Keep ${FILES.frames} for an animation or ${FILES.markers} for a clip, not both.`,
+    );
+
+  if (frames === undefined && markers === undefined)
+    throw new ReviewInputError(
+      `${path.join(directory, FILES.frames)} does not exist. Write ${FILES.frames} for an animation or ${FILES.markers} for a clip, or check one out with session_checkout.`,
+    );
 
   if (!isJsonObject(block))
     throw new ReviewInputError(`${FILES.block} must hold a JSON object.`);
@@ -222,14 +318,27 @@ async function readDraft(directory: string) {
 
   if (stray.length)
     throw new ReviewInputError(
-      `${FILES.block} holds only ${BLOCK_FIELDS.join(", ")}; move ${stray.join(", ")} out (html is ${FILES.html}, frames ${FILES.frames}, scenarios ${FILES.scenarios}).`,
+      `${FILES.block} holds only ${BLOCK_FIELDS.join(", ")}; move ${stray.join(", ")} out (html is ${FILES.html}, frames ${FILES.frames} or markers ${FILES.markers}, scenarios ${FILES.scenarios}).`,
     );
 
-  const fields: JsonObject = { ...block, html: html!, frames: frames! };
+  const fields: JsonObject & { type: DraftType } =
+    markers === undefined
+      ? { ...block, type: "animation", html: html!, frames: frames! }
+      : { ...block, type: "clip", html: html!, markers };
 
   if (scenarios !== undefined) fields.scenarios = scenarios;
 
   validate(fields);
+
+  return fields;
+}
+
+/** The animation a folder holds, as a block's fields, and where it came from. */
+async function readDraft(directory: string) {
+  const [fields, checkout] = await Promise.all([
+    readAnimationFolder(directory),
+    readJson(directory, FILES.checkout, false),
+  ]);
 
   const parsed = checkoutSchema.safeParse(checkout);
 
@@ -246,7 +355,7 @@ function located(issuePath: PropertyKey[]): string {
 
   if (field === "html") return FILES.html;
 
-  if (field === "frames" || field === "scenarios")
+  if (field === "frames" || field === "markers" || field === "scenarios")
     return `${FILES[field]} ${at.replace(/^\./, "") || "(top level)"}`;
 
   return `${FILES.block} ${field ?? ""}${at}`;
@@ -254,13 +363,9 @@ function located(issuePath: PropertyKey[]): string {
 
 /** Checks the files before anything is sent, so an issue names its file. The
  * host checks pins: agents write them without the repository it fills in. */
-function validate(fields: JsonObject) {
+function validate(fields: JsonObject & { type: DraftType }) {
   const { pins: _pins, ...rest } = fields;
-
-  const parsed = blocks.animation.schema.safeParse({
-    ...rest,
-    type: "animation",
-  });
+  const parsed = blocks[fields.type].schema.safeParse(rest);
 
   if (!parsed.success)
     throw new ReviewInputError(
@@ -274,8 +379,8 @@ function validate(fields: JsonObject) {
 
 /**
  * Turns an edit that names a draft folder into the edit the host takes: the
- * folder's animation as an insert's or replace's content, or as an update's
- * changed fields. An update from a checkout is refused once the block has
+ * folder's animation or clip as an insert's or replace's content, or as an
+ * update's changed fields. An update from a checkout is refused once the block has
  * changed since. Returns `unchanged` when the files match the block.
  */
 export async function resolveDraftEdit(
@@ -295,10 +400,7 @@ export async function resolveDraftEdit(
   const { fields, checkout } = await readDraft(directory);
 
   if (rest.type === "insert")
-    return {
-      directory,
-      edit: { ...rest, content: { type: "animation", ...fields } },
-    };
+    return { directory, edit: { ...rest, content: fields } };
 
   const targetId = String(rest.targetId);
   const current = animationBlock(await read(sessionId, targetId), targetId);
@@ -315,14 +417,16 @@ export async function resolveDraftEdit(
     );
 
   if (rest.type === "replace")
-    return {
-      directory,
-      edit: { ...rest, content: { type: "animation", ...fields } },
-    };
+    return { directory, edit: { ...rest, content: fields } };
 
   if (rest.type !== "update")
     throw new ReviewInputError(
       "fromFiles publishes an insert, replace or update.",
+    );
+
+  if (current.type !== fields.type)
+    throw new ReviewInputError(
+      `${directory} holds ${fields.type === "clip" ? "a clip" : "an animation"} but ${targetId} is ${current.type === "clip" ? "a clip" : "an animation"}. Publish it with type "replace" to change its kind.`,
     );
 
   const changes: JsonObject = {};

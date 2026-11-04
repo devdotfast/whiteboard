@@ -619,7 +619,8 @@ export const DocumentNode = memo(function DocumentNode({
           ? drawStyles.blockPulse
           : motion === "erasing"
             ? drawStyles.blockCollapse
-            : motion === "landing" && drawStyles.blockLand,
+            : (motion === "landing" || motion === "painting") &&
+              drawStyles.blockLand,
       )}
       data-review-node-id={node.id}
       data-motion={motion}

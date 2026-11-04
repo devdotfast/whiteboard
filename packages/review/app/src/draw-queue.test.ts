@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import type { AuthoringCursor } from "./authoring-cursor";
 import {
   EMPTY_QUEUE,
+  PAINT_CAP,
   STROKE_MS,
   WHOLE_THRESHOLD,
   arrive,
   nextDue,
+  painted,
   phases,
   standingCursor,
   tick,
@@ -33,6 +35,17 @@ const block = (id: string): AuthoringCursor => ({
   blockId: id,
   source: "edit",
   edit: { type: "insert", targetId: id, blockId: id, kind: "markdown" },
+  seq: ++seq,
+});
+
+const animation = (
+  id: string,
+  kind: "animation" | "clip" = "animation",
+): AuthoringCursor => ({
+  targetId: id,
+  blockId: id,
+  source: "edit",
+  edit: { type: "insert", targetId: id, blockId: id, kind },
   seq: ++seq,
 });
 
@@ -346,5 +359,52 @@ describe("draw queue", () => {
     expect(phases(state)).toEqual(new Map([["block-2", "landing"]]));
     state = tick(state, 780);
     expect(standingCursor(state)?.targetId).toBe("block-2");
+  });
+
+  it("holds a new animation while it paints, until its stage is done or the cap", () => {
+    let state = arrive(EMPTY_QUEUE, animation("anim-1"), 0);
+    state = arrive(state, block("block-2"), 10);
+    expect(phases(state)).toEqual(
+      new Map([
+        ["anim-1", "painting"],
+        ["block-2", "queued"],
+      ]),
+    );
+    expect(nextDue(state)).toBe(PAINT_CAP);
+
+    state = painted(state, "anim-1", 900);
+    expect(phases(state)).toEqual(new Map([["block-2", "landing"]]));
+    expect(nextDue(state)).toBe(900 + 680);
+
+    // Left alone, the cap ends it.
+    const capped = tick(arrive(EMPTY_QUEUE, animation("anim-3"), 0), PAINT_CAP);
+    expect(capped.head).toBeNull();
+    expect(standingCursor(capped)?.targetId).toBe("anim-3");
+  });
+
+  it("holds a new clip while it paints, as an animation", () => {
+    let state = arrive(EMPTY_QUEUE, animation("clip-1", "clip"), 0);
+    expect(phases(state)).toEqual(new Map([["clip-1", "painting"]]));
+    expect(nextDue(state)).toBe(PAINT_CAP);
+
+    state = painted(state, "clip-1", 400);
+    expect(state.head).toBeNull();
+  });
+
+  it("ignores a painted report for another block, or when the head is not painting", () => {
+    let state = arrive(EMPTY_QUEUE, animation("anim-1"), 0);
+    expect(painted(state, "anim-2", 100)).toBe(state);
+
+    state = arrive(EMPTY_QUEUE, block("block-1"), 0);
+    state = arrive(state, animation("anim-1"), 0);
+    expect(painted(state, "anim-1", 100)).toBe(state);
+    expect(painted(EMPTY_QUEUE, "anim-1", 100)).toBe(EMPTY_QUEUE);
+  });
+
+  it("paints a new animation for no time with reduced motion", () => {
+    let state = arrive(EMPTY_QUEUE, animation("anim-1"), 0, true);
+    expect(nextDue(state)).toBe(0);
+    state = tick(state, 0);
+    expect(state.head).toBeNull();
   });
 });

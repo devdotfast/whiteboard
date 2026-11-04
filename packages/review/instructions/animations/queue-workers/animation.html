@@ -1,0 +1,107 @@
+<div class="wb-grid pipeline">
+  <div class="wb-card" id="producer" data-wb-open="put">
+    <span class="wb-card-title">Producer</span>
+    <span class="wb-card-note"></span>
+    <div class="wb-items"></div>
+  </div>
+  <div class="wb-card" id="queue" data-wb-open="put">
+    <span class="wb-card-title">Queue</span>
+    <span class="wb-card-note"></span>
+    <div class="wb-items"></div>
+  </div>
+  <div class="workers">
+    <div class="wb-card" id="w1" data-wb-open="take">
+      <span class="wb-card-title">Worker 1</span>
+      <span class="wb-card-note"></span>
+      <div class="wb-items"></div>
+    </div>
+    <div class="wb-card" id="w2" data-wb-open="take">
+      <span class="wb-card-title">Worker 2</span>
+      <span class="wb-card-note"></span>
+      <div class="wb-items"></div>
+    </div>
+    <div class="wb-well done">
+      <span class="wb-caps">Done</span>
+      <div class="wb-items"></div>
+    </div>
+  </div>
+</div>
+
+<style>
+  .pipeline { --wb-columns: 3; column-gap: var(--wb-space-48); align-items: center; }
+  .workers { display: flex; flex-direction: column; gap: var(--wb-space-12); }
+  .done { padding: var(--wb-space-6) var(--wb-space-12); }
+  .done .wb-items { min-height: var(--wb-space-20); }
+  /* Every job and empty slot is the same width, so the queue reads as slots. */
+  .slot { min-width: var(--wb-space-28); text-align: center; }
+  .slot:empty::before { content: "\00a0"; }
+  @media (max-width: 520px) {
+    .pipeline { grid-template-columns: minmax(0, 1fr); row-gap: var(--wb-space-40); }
+  }
+</style>
+
+<script>
+  const put = whiteboard.arrow("#producer", "#queue", { label: "put" });
+  whiteboard.arrow("#queue", "#w1");
+  whiteboard.arrow("#queue", "#w2");
+
+  const slot = (job, tone) => {
+    const el = document.createElement("span");
+    el.className = "wb-chip slot";
+    if (job) el.textContent = el.dataset.job = job;
+    if (tone) el.dataset.tone = tone;
+    return el;
+  };
+
+  const show = (selector, note, chips, tone) => {
+    const card = document.querySelector(selector);
+    card.querySelector(".wb-card-note").textContent = note;
+    card.querySelector(".wb-items").replaceChildren(...chips);
+    if (tone) card.dataset.tone = tone;
+    else delete card.dataset.tone;
+  };
+
+  whiteboard.on("*", ({ frame }) => {
+    const { producer, queue, bound, workers, done } = frame.data;
+
+    // Where every job was drawn, so a job that changed place glides from there.
+    const was = new Map(
+      [...document.querySelectorAll("[data-job]")].map((el) => [el.dataset.job, el.getBoundingClientRect()]),
+    );
+
+    const blocked = producer.state === "blocked";
+    const notes = { ready: "next", blocked: "put() blocks:", woken: "put() resumes:" };
+    show(
+      "#producer",
+      producer.next ? `${notes[producer.state]} ${producer.next}` : "idle",
+      [slot(producer.next, blocked ? "removed" : undefined)],
+      blocked ? "removed" : undefined,
+    );
+    if (blocked) put.dataset.tone = "removed";
+    else delete put.dataset.tone;
+
+    // Tail on the left, head on the right beside the workers.
+    const free = Array.from({ length: bound - queue.length }, () => slot(null, "muted"));
+    const full = queue.length === bound;
+    show(
+      "#queue",
+      `${queue.length} of ${bound}${full ? ", full" : ""}`,
+      [...free, ...queue.toReversed().map((job) => slot(job))],
+      full ? "modified" : undefined,
+    );
+
+    workers.forEach((job, i) =>
+      show(`#w${i + 1}`, job ? `running ${job}` : "idle", [slot(job, job ? undefined : "muted")]),
+    );
+    document.querySelector(".done .wb-items").replaceChildren(...done.map((job) => slot(job, "added")));
+
+    return [...document.querySelectorAll("[data-job]")].flatMap((el) => {
+      const from = was.get(el.dataset.job);
+      if (!from) return whiteboard.animate(el, [{ opacity: 0 }, { opacity: 1 }], 300);
+      const to = el.getBoundingClientRect();
+      const [dx, dy] = [from.left - to.left, from.top - to.top];
+      if (!dx && !dy) return [];
+      return whiteboard.animate(el, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], 600);
+    });
+  });
+</script>

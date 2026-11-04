@@ -1,0 +1,10 @@
+{
+  "title": "Retry with exponential backoff",
+  "code": {
+    "retry": { "source": "head/src/retry.ts#L10-L36", "label": "retry loop" },
+    "backoff": {
+      "source": "head/src/retry.ts#L38-L44",
+      "label": "backoffDelay"
+    }
+  }
+}

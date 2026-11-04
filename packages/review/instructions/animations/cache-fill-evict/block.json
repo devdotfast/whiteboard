@@ -1,0 +1,13 @@
+{
+  "title": "Read-through cache with LRU eviction",
+  "code": {
+    "lookup": {
+      "source": "head/src/cache.ts#L20-L48",
+      "label": "UserCache.get"
+    },
+    "evict": {
+      "source": "head/src/cache.ts#L52-L70",
+      "label": "UserCache.evictOldest"
+    }
+  }
+}
