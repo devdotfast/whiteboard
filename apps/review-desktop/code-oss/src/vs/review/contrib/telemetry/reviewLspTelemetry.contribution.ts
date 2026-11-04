@@ -24,6 +24,7 @@ import {
 import { IExtensionService } from '../../../workbench/services/extensions/common/extensions.js';
 import { LifecyclePhase } from '../../../workbench/services/lifecycle/common/lifecycle.js';
 import { ReviewMonacoPeeks } from '../../services/reviewMonacoPeeks.js';
+import { isReviewDefinitionPeekEditor } from '../../services/reviewDefinitionPeek.js';
 import { IReviewTelemetryService } from '../../services/reviewTelemetryService.js';
 
 const HOVER_DWELL_MS = 1_000;
@@ -74,6 +75,7 @@ const LSP_COMMANDS: Record<string, string> = {
 	'editor.action.goToReferences': 'references',
 	'editor.action.referenceSearch.trigger': 'references',
 	'editor.action.findReferences': 'references',
+	'review.action.embeddedShowReferences': 'references',
 	'editor.action.rename': 'rename',
 	'editor.action.formatDocument': 'format',
 	'editor.action.formatSelection': 'format',
@@ -184,7 +186,7 @@ class ReviewLspTelemetryContribution extends Disposable implements IWorkbenchCon
 			captured = true;
 			if (Date.now() - (this.lastCommandHover.get(editor) ?? 0) >= HOVER_DWELL_MS) {
 				const model = editor.getModel();
-				if (model) {
+				if (model && this.languageFeaturesService.hoverProvider.has(model)) {
 					this.captureLspUsed(editor, model, 'hover', 'mouse');
 				}
 			}
@@ -239,6 +241,9 @@ class ReviewLspTelemetryContribution extends Disposable implements IWorkbenchCon
 	private editorKind(editor: ICodeEditor): string {
 		if (ReviewMonacoPeeks.owns(editor)) {
 			return 'inline_peek';
+		}
+		if (isReviewDefinitionPeekEditor(editor)) {
+			return 'definition_peek';
 		}
 		for (const diffEditor of this.codeEditorService.listDiffEditors()) {
 			if (diffEditor.getOriginalEditor() === editor || diffEditor.getModifiedEditor() === editor) {

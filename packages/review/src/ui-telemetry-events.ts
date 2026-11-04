@@ -21,6 +21,7 @@ import {
   REVIEW_COLOR_THEME_KINDS,
   REVIEW_DIFF_LAYOUTS,
   REVIEW_DIFF_LAYOUT_SCOPES,
+  REVIEW_OPEN_FILES_IN_CHOICES,
   isJsonObject,
   jsonBoolean,
   jsonNumber,
@@ -93,7 +94,12 @@ export const LSP_FEATURE = [
 
 export const LSP_VIA = ["command", "mouse"] as const;
 
-export const LSP_EDITOR_KIND = ["files_tab", "inline_peek", "diff"] as const;
+export const LSP_EDITOR_KIND = [
+  "files_tab",
+  "inline_peek",
+  "diff",
+  "definition_peek",
+] as const;
 
 export const LSP_LANGUAGE = [
   "typescript",
@@ -211,6 +217,16 @@ const REVIEW_RESTORED_VIA = ["home", "open"] as const;
 const MAP_LEVEL = ["system", "container", "component", "code"] as const;
 
 const SOURCE_TREE_OPENED_VIA = ["topbar", "home"] as const;
+
+const SOURCE_OPENED_DESTINATION = [
+  "source_window",
+  "vscode",
+  "cursor",
+  "zed",
+  "application",
+] as const;
+
+const SOURCE_OPENED_KIND = ["file", "diff", "references", "tree"] as const;
 
 /** Tab names the dwell beacon reports. Shared with its request parser. */
 export const REVIEW_TELEMETRY_TABS = [
@@ -431,6 +447,13 @@ export const UI_TELEMETRY_EVENTS = {
     event: "review_source_tree_opened",
     properties: { via: SOURCE_TREE_OPENED_VIA },
   },
+  source_opened: {
+    event: "review_source_opened",
+    properties: {
+      destination: SOURCE_OPENED_DESTINATION,
+      kind: SOURCE_OPENED_KIND,
+    },
+  },
   whiteboard_file_exported: {
     event: "review_whiteboard_file_exported",
     properties: {},
@@ -571,6 +594,7 @@ export const UI_TELEMETRY_EVENTS = {
       setting: SETTING_NAME,
       enabled: "boolean",
       value: REVIEW_COLOR_THEME_KINDS,
+      choice: REVIEW_OPEN_FILES_IN_CHOICES,
     },
   },
   review_opened: {

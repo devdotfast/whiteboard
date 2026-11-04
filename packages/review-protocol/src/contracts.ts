@@ -724,12 +724,16 @@ export const REVIEW_KEYMAP_CHOICES = [
 
 export type ReviewKeymapChoice = (typeof REVIEW_KEYMAP_CHOICES)[number];
 
+export const REVIEW_OPEN_FILES_IN_CHOICES = [
+  "whiteboard",
+  "vscode",
+  "cursor",
+  "zed",
+  "application",
+] as const;
+
 export type ReviewOpenFilesInChoice =
-  | "whiteboard"
-  | "vscode"
-  | "cursor"
-  | "zed"
-  | "application";
+  (typeof REVIEW_OPEN_FILES_IN_CHOICES)[number];
 
 /**
  * Where Open file sends a file. `application` is one the reader picked with

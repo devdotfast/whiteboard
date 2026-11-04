@@ -29,6 +29,7 @@ test("opening historical source requests its version and opens a separate native
 		{} as never,
 		{} as never,
 		{} as never,
+		{ capture() {} } as never,
 	);
 	t.after(() => tabs.dispose());
 	await tabs.openApiSource({ reviewId: "review-a", kind: "version", version: 7 }, "Historical Review");
@@ -64,7 +65,7 @@ test("native group restoration preserves both reviews, order and pinned source v
 	};
 	const groupService = { groups, mainPart: { activeGroup: undefined as EditorGroupModel | undefined } };
 	const createTabs = () =>
-		new ReviewCanvasEditorTabsService(instantiation as never, editors as never, groupService as never, {} as never, {} as never, { warn() {} } as never, {} as never, {} as never, {} as never);
+		new ReviewCanvasEditorTabsService(instantiation as never, editors as never, groupService as never, {} as never, {} as never, { warn() {} } as never, {} as never, {} as never, {} as never, { capture() {} } as never);
 	tabs = createTabs();
 	const registry = Registry.as<IEditorFactoryRegistry>(EditorExtensions.EditorFactory);
 	registry.start({ get: () => instantiation } as never);
@@ -131,7 +132,7 @@ test("current Source tabs retain identity and main version tabs still restore", 
     },
     invokeFunction(fn: (accessor: { get(): ReviewCanvasEditorTabsService }) => unknown) { return fn({ get: () => tabs }); },
   };
-  tabs = new ReviewCanvasEditorTabsService(instantiation as never, { onDidCloseEditor: Event.None } as never, {} as never, {} as never, {} as never, { warn() {} } as never, {} as never, {} as never, {} as never);
+  tabs = new ReviewCanvasEditorTabsService(instantiation as never, { onDidCloseEditor: Event.None } as never, {} as never, {} as never, {} as never, { warn() {} } as never, {} as never, {} as never, {} as never, { capture() {} } as never);
   try {
     const serializer = new ReviewApiEditorSerializer();
     const restored = serializer.deserialize(instantiation as never, JSON.stringify({ kind: "api-source", reviewId: "a", title: "A", selection: { reviewId: "a", kind: "current" } }));
