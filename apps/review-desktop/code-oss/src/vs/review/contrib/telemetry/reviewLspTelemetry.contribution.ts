@@ -116,7 +116,7 @@ class ReviewLspTelemetryContribution extends Disposable implements IWorkbenchCon
 			}
 			const editor = this.activeEditor();
 			const model = editor?.getModel();
-			if (!editor || !model) {
+			if (!editor || !model || !this.hasProvider(feature, model)) {
 				return;
 			}
 			if (feature === 'hover') {
@@ -227,6 +227,33 @@ class ReviewLspTelemetryContribution extends Disposable implements IWorkbenchCon
 	private untrackEditor(editor: ICodeEditor): void {
 		this.editorStores.get(editor)?.dispose();
 		this.editorStores.delete(editor);
+	}
+
+	private hasProvider(feature: string, model: ITextModel): boolean {
+		const features = this.languageFeaturesService;
+		switch (feature) {
+			case 'goto_definition':
+			case 'peek_definition':
+				return features.definitionProvider.has(model) || features.declarationProvider.has(model);
+			case 'goto_type_definition':
+				return features.typeDefinitionProvider.has(model);
+			case 'goto_implementation':
+				return features.implementationProvider.has(model);
+			case 'references':
+				return features.referenceProvider.has(model);
+			case 'rename':
+				return features.renameProvider.has(model);
+			case 'format':
+				return features.documentFormattingEditProvider.has(model) || features.documentRangeFormattingEditProvider.has(model);
+			case 'code_action':
+				return features.codeActionProvider.has(model);
+			case 'hover':
+				return features.hoverProvider.has(model);
+			case 'symbol_search':
+				return features.documentSymbolProvider.has(model);
+			default:
+				return true;
+		}
 	}
 
 	private captureLspUsed(editor: ICodeEditor, model: ITextModel, feature: string, via: string): void {
