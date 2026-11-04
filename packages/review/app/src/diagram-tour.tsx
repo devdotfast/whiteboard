@@ -87,6 +87,7 @@ export function DiagramTourOverlay({
           styles.stage,
           flow && styles.flowStage,
           shellStyles.clearsWindowControls,
+          styles.stageEnd,
         )}
       >
         {children}
@@ -100,7 +101,12 @@ export function DiagramTourOverlay({
         )}
         {...paneResize.separatorProps}
       />
-      <div {...stylex.props(styles.panel, !flow && styles.panelAlone)}>
+      <div
+        {...stylex.props(
+          styles.panel,
+          flow ? styles.panelUnderStage : styles.panelAlone,
+        )}
+      >
         <GuidedTourPanel
           tour={tour}
           activeAnchor={activeAnchor}
@@ -167,6 +173,8 @@ const styles = stylex.create({
     minHeight: 0,
     overflow: "hidden",
     backgroundColor: tokens.bg,
+    // The stage's and the panel's headers line up with the window controls.
+    "--review-fullscreen-header-height": tokens.reviewPageBarHeight,
   },
   flowOverlay: {
     gridTemplateRows: {
@@ -183,6 +191,14 @@ const styles = stylex.create({
   flowStage: {
     display: "flex",
   },
+  // Beside the panel, the stage is the left column; stacked over it, the
+  // stage is the top row and runs under the window controls on the right.
+  stageEnd: {
+    "--review-fullscreen-end-inset": {
+      default: "0px",
+      [narrow]: "var(--review-window-controls-end, 0px)",
+    },
+  },
   resizer: {
     display: { default: null, [narrow]: "none" },
   },
@@ -193,6 +209,13 @@ const styles = stylex.create({
     flexDirection: "column",
     minWidth: 0,
     minHeight: 0,
+    "--review-fullscreen-end-inset": "var(--review-window-controls-end, 0px)",
+  },
+  panelUnderStage: {
+    "--review-fullscreen-end-inset": {
+      default: "var(--review-window-controls-end, 0px)",
+      [narrow]: "0px",
+    },
   },
   // Without its stage, the panel is the left column, under the window
   // controls.

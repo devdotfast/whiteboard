@@ -1207,6 +1207,25 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		tabStrip.style.setProperty('--review-explorer-width', `${explorerWidth}px`);
 	}
 
+	/**
+	 * How far the titlebar's right cluster, Windows' and Linux's window
+	 * controls, overlaps the editor and Ask parts, so the canvas headers under
+	 * it clear it. Written only on change; see `publishReviewChromeInset`.
+	 */
+	private publishWindowControlsEnd(): void {
+		const titlebarPart = this.getPart(Parts.TITLEBAR_PART);
+		const controlsLeft = this._mainContainerDimension.width - (titlebarPart instanceof MainReviewTitlebarPart ? titlebarPart.chromeInsets.right : 0);
+		for (const part of [this._editorPartContainer, this.getContainer(mainWindow, Parts.REVIEW_ASK_PART)]) {
+			if (!part) {
+				continue;
+			}
+			const end = `${Math.max(0, Math.round(part.getBoundingClientRect().right - controlsLeft))}px`;
+			if (part.style.getPropertyValue('--review-window-controls-end') !== end) {
+				part.style.setProperty('--review-window-controls-end', end);
+			}
+		}
+	}
+
 	private updateReviewChromeInset(): void {
 		this.reviewChromeDragListeners.clear();
 		this.mainContainer.classList.remove('review-tab-dragging');
@@ -1219,6 +1238,7 @@ export class ReviewWorkbench extends Disposable implements IAgentWorkbenchLayout
 		this.reviewChromeTabStrips.length = 0;
 
 		const editorPartContainer = this._editorPartContainer;
+		this.publishWindowControlsEnd();
 		if (!editorPartContainer) {
 			return;
 		}

@@ -2824,6 +2824,8 @@ const styles = stylex.create({
     backgroundColor: tokens.bg,
     // Its header clears the window controls, as the page bar does.
     "--review-fullscreen-inset": "var(--review-page-bar-inset, 0px)",
+    "--review-fullscreen-end-inset": "var(--review-window-controls-end, 0px)",
+    "--review-fullscreen-header-height": tokens.reviewPageBarHeight,
   },
   frame: {
     position: "relative",
@@ -2873,9 +2875,9 @@ const styles = stylex.create({
     gap: space.s16,
     minWidth: 0,
     alignItems: "center",
-    minHeight: "36px",
+    minHeight: "var(--review-fullscreen-header-height, 36px)",
     paddingBlock: 0,
-    paddingRight: space.s12,
+    paddingRight: `calc(${space.s12} + var(--review-fullscreen-end-inset, 0px))`,
     paddingLeft: "calc(12px + var(--review-fullscreen-inset, 0px))",
     boxShadow: "none",
     fontFamily: tokens.chromeFont,
