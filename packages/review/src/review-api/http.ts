@@ -57,6 +57,7 @@ import { resolveReviewStackLayers } from "@review/review-stack.js";
 import { readBoundedRequestJson } from "@review/server/hono-http.js";
 import { HttpJsonError } from "@review/server/http-json.js";
 import {
+  type RemoteShare,
   type SharingHostEvents,
   mountSharingHost,
 } from "@review/sharing/host.js";
@@ -172,7 +173,7 @@ export interface ReviewApiHooks {
     via: ReviewRequestVia;
     agentKind?: ReviewSessionAgent;
   }) => void;
-  sharing?: SharingHostEvents;
+  sharing?: SharingHostEvents & { remoteShare?: RemoteShare };
 }
 
 /** A person's save carries the whole board, which edits one at a time can
@@ -2199,7 +2200,7 @@ export function createReviewApi(
             ...(threadId && { threadId }),
           };
 
-    // A copy's kept commits go when it is deleted for good.
+    // A link's kept commits go when its last copy is deleted for good.
     const copy =
       input.operation.type === "delete" && store.has(input.operation.reviewId)
         ? store.read(input.operation.reviewId)
@@ -2209,7 +2210,16 @@ export function createReviewApi(
     const key = copy?.shared?.key;
     const kept = copy && boardRepositoryId(copy);
 
-    if (result.deleted && key && kept)
+    if (
+      result.deleted &&
+      key &&
+      kept &&
+      !store
+        .copiesOf(key)
+        .some(
+          ({ reviewId }) => boardRepositoryId(store.read(reviewId)) === kept,
+        )
+    )
       await Promise.resolve()
         .then(() => forgetSharedCommits(store.repositoryPath(kept), key))
         .catch((error) =>

@@ -1,8 +1,8 @@
 import { space } from "@canvas/scale.stylex";
 import type {
   ReviewDiffSide,
-  ReviewInlineEditorHeightMode,
-  ReviewInlineEditorRange,
+  ReviewPeekHeightMode,
+  ReviewPeekRange,
 } from "@dev.fast/review-protocol";
 import {
   type DiffSelection,
@@ -60,11 +60,11 @@ interface GroupedCodePeek {
   key: string;
   file: string;
   side: ReviewDiffSide;
-  ranges: ReviewInlineEditorRange[];
-  countRanges?: ReviewInlineEditorRange[];
+  ranges: ReviewPeekRange[];
+  countRanges?: ReviewPeekRange[];
 }
 
-interface AuthoredCodePeekRange extends ReviewInlineEditorRange {
+interface AuthoredCodePeekRange extends ReviewPeekRange {
   side: ReviewDiffSide;
 }
 
@@ -137,7 +137,7 @@ export function CodePeekCard({
 }: {
   source: DiffSelection;
   active?: boolean;
-  heightMode?: ReviewInlineEditorHeightMode;
+  heightMode?: ReviewPeekHeightMode;
   onNativeFocus?: () => void;
   lenses?: ReviewLensView;
   /** Report resolution telemetry. Only the panel the user opened sets this,
@@ -293,7 +293,7 @@ function FileSnippetCard({
 }: {
   source: FileLineRange;
   active?: boolean;
-  heightMode?: ReviewInlineEditorHeightMode;
+  heightMode?: ReviewPeekHeightMode;
   onNativeFocus?: () => void;
   lenses?: ReviewLensView;
 }) {
@@ -394,8 +394,8 @@ function groupedCodePeeks(peeks: readonly FileLineRange[]): GroupedCodePeek[] {
 function mergedCodePeekRanges(
   ranges: readonly AuthoredCodePeekRange[],
   defaultSide: ReviewDiffSide,
-): ReviewInlineEditorRange[] {
-  const merged: ReviewInlineEditorRange[] = [];
+): ReviewPeekRange[] {
+  const merged: ReviewPeekRange[] = [];
 
   const sides: readonly ReviewDiffSide[] =
     defaultSide === "head" ? ["head", "base"] : ["base", "head"];
@@ -418,7 +418,7 @@ function mergedCodePeekRanges(
     }
 
     for (const range of mergedForSide) {
-      const compactRange: ReviewInlineEditorRange = {
+      const compactRange: ReviewPeekRange = {
         startLine: range.startLine,
         endLine: range.endLine,
       };

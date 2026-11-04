@@ -79,7 +79,7 @@ export function createReviewFindHost(): ReviewFindHost {
 /** The tab a search runs over: the Review document, or a diff. */
 export type ReviewFindSurface = "review" | "diff";
 
-export interface ReviewInlineFindRegistration {
+export interface ReviewPeekFindRegistration {
   /** Defaults to the Review document. */
   surface?: ReviewFindSurface;
   container: HTMLElement;
@@ -91,7 +91,7 @@ export interface ReviewInlineFindRegistration {
 }
 
 interface FindContextValue {
-  register(registration: ReviewInlineFindRegistration): () => void;
+  register(registration: ReviewPeekFindRegistration): () => void;
   /** null closes find and refuses to open it. */
   setSurface(surface: ReviewFindSurface | null): void;
 }
@@ -158,7 +158,7 @@ function createFindController(
   onOpen?: (surface: ReviewFindSurface) => void,
 ) {
   const store = createReviewFindStore(config);
-  const registrations = new Set<ReviewInlineFindRegistration>();
+  const registrations = new Set<ReviewPeekFindRegistration>();
   const inputRef = createRef<HTMLInputElement>();
   let surface: ReviewFindSurface | null = "review";
   let priorFocus: HTMLElement | null = null;
@@ -371,7 +371,7 @@ function createFindController(
     resetForDocument() {
       close(true, true);
     },
-    register(registration: ReviewInlineFindRegistration) {
+    register(registration: ReviewPeekFindRegistration) {
       registrations.add(registration);
       scheduleSearch();
 

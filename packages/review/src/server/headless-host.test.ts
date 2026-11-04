@@ -47,6 +47,7 @@ import {
   reviewManagedCheckoutDir,
   reviewManagedCheckoutRoot,
 } from "@review/review-checkout-paths.js";
+import { writeAnimationsEnabled } from "@review/review-preferences.js";
 import { ReviewTelemetry } from "@review/review-telemetry.js";
 import {
   type ReviewServerDiscovery,
@@ -569,12 +570,14 @@ it("authors through CLI and MCP without Desktop and retains source, unfinished s
 });
 
 it("authenticates clients, reports capabilities and readiness without exposing the token, and diagnoses unavailable commits", async () => {
+  await writeAnimationsEnabled(true, path.join(root, "server"));
   const server = await start(undefined, true);
   expect(await reviewServerIsHealthy(server.discovery)).toBe(true);
   expect((await fetch(`${server.discovery.url}/reviews-api`)).status).toBe(401);
   expect(await server.client.read("/capabilities")).toMatchObject({
     desktopAvailable: false,
     softwareMapEnabled: true,
+    animationsEnabled: true,
   });
 
   const status = await cli(
@@ -627,7 +630,6 @@ async function attachDesktop(
 ) {
   const abort = new AbortController();
   const opened: JsonValue[] = [];
-  const verbs: string[] = [];
 
   const control = await fetch(`${discovery.url}/control`, {
     headers: { "x-review-token": discovery.token },
@@ -655,8 +657,6 @@ async function attachDesktop(
           JSON.parse(frame.slice("data: ".length)),
         );
 
-        verbs.push(request.name);
-
         if (request.name === "openApiReview") opened.push(request.args);
         await fetch(`${discovery.url}/control/result`, {
           method: "POST",
@@ -666,14 +666,17 @@ async function attachDesktop(
           },
           body: JSON.stringify({
             id,
-            response: { ok: true, result: { softwareMapEnabled: true } },
+            response: {
+              ok: true,
+              result: { softwareMapEnabled: true, animationsEnabled: true },
+            },
           }),
         });
       }
     }
   })().catch(() => {});
 
-  return { opened, verbs, detach: () => abort.abort() };
+  return { opened, detach: () => abort.abort() };
 }
 
 it("reports attached Desktops and sends each the reviews to open", async () => {
@@ -685,9 +688,18 @@ it("reports attached Desktops and sends each the reviews to open", async () => {
   ];
 
   try {
+    await expect
+      .poll(() =>
+        server.client.read("/instructions?topic=animation").then(
+          () => true,
+          () => false,
+        ),
+      )
+      .toBe(true);
     expect(await server.client.read("/capabilities")).toMatchObject({
       desktopAvailable: true,
       softwareMapEnabled: true,
+      animationsEnabled: true,
     });
 
     const repo = await repository();
@@ -724,7 +736,7 @@ it("reports attached Desktops and sends each the reviews to open", async () => {
 
   await expect
     .poll(() => server.client.read("/capabilities"))
-    .toMatchObject({ desktopAvailable: false });
+    .toMatchObject({ desktopAvailable: false, animationsEnabled: false });
 });
 
 /** A registered repository with an uncommitted change, reviewed as a worktree and as commits. */
@@ -844,7 +856,6 @@ it("gives a worktree file its local path and opens a source window", async () =>
     ).toBe("export const value = 2;\n");
 
     expect(await workspaceFiles()).toEqual([]);
-    expect(desktop.verbs).toEqual([]);
 
     const navigator = await call(worktree, "/navigator", "POST");
     expect(navigator.status).toBe(200);

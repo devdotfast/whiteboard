@@ -9,12 +9,13 @@ import { traceSchema } from "@review/review-api/trace-schema";
 import { z } from "zod";
 
 import { boardSnapshotSchema, boardView } from "./board-data";
-import { shareInlineEditors } from "./inline-editors";
 import { readOnlyHost } from "./share-host";
 
 export interface ShareView {
   title: string;
   repository?: { cloneUrl: string };
+  /** Quotes uncommitted changes, so Desktop cannot open it. */
+  frozen?: true;
   data: WhiteboardData;
   host: WhiteboardHost;
   dispose(): void;
@@ -42,23 +43,22 @@ export async function openShare(
       // SAFETY: the sharer wrote these maps; a malformed one fails in its block.
       maps: bundle.maps as Record<string, SavedMap>,
       commits: z.array(ReviewCommitSummarySchema).parse(bundle.commits),
-      progress: {
-        complete: true,
-        files: [],
-        lenses: [],
-        resolvedSelections: bundle.selections,
-      },
+      resolvedSelections: bundle.selections,
     },
   );
 
-  const host = readOnlyHost({
-    ...options,
-    inlineEditors: await shareInlineEditors(bundle.sources, pins),
+  const host = readOnlyHost(options);
+
+  await host.setSources({
+    sources: bundle.sources,
+    pins,
+    alignments: bundle.alignments,
   });
 
   return {
     title: bundle.title,
     ...(bundle.repository && { repository: bundle.repository }),
+    ...(bundle.frozen && { frozen: bundle.frozen }),
     data: {
       ...data,
       place: {

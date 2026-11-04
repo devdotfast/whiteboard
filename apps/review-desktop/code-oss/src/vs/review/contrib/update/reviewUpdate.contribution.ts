@@ -44,7 +44,7 @@ import { IUpdateService, StateType, type State } from '../../../platform/update/
 import { REVIEW_SHOW_RELEASE_NOTES_SETTING } from '../../common/reviewConfigurationDefaults.js';
 import { REVIEW_DESKTOP_CHANNEL } from '../../common/reviewDesktopBootstrap.js';
 import { WHITEBOARD_RELEASES_URL } from '../../common/reviewProtocol.js';
-import { fetchWhiteboardRelease, REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID } from '../../common/reviewReleaseNotes.js';
+import { REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID } from '../../common/reviewReleaseNotes.js';
 import { IReviewCanvasEditorTabsService } from '../../services/reviewCanvasEditorTabsService.js';
 import { IReviewTelemetryService } from '../../services/reviewTelemetryService.js';
 import { registerWorkbenchContribution2, WorkbenchPhase } from '../../../workbench/common/contributions.js';
@@ -64,20 +64,6 @@ const STAGED_UPDATE_STORAGE_KEY = 'review.update.staged.v1';
 const SKIPPED_UPDATE_STORAGE_KEY = 'review.update.skipped.v1';
 /** Failed update attempt that Review already announced. */
 const FAILED_UPDATE_NOTICE_STORAGE_KEY = 'review.update.failedNotice.v1';
-/** Release whose notes the tab last opened. */
-const SHOWN_RELEASE_NOTES_STORAGE_KEY = 'review.update.releaseNotesShown.v1';
-
-/** Releases opt into opening the tab after an update; the rest only toast. `<!-- whiteboard:show-notes 0.4.0 -->` opens 0.4.0's notes. */
-const SHOW_RELEASE_NOTES_MARKER = /<!-- whiteboard:show-notes(?: v?(\S+))? -->/;
-
-async function releaseNotesToOpen(version: string): Promise<string | undefined> {
-	try {
-		const match = (await fetchWhiteboardRelease(version)).body.match(SHOW_RELEASE_NOTES_MARKER);
-		return match ? match[1] ?? version : undefined;
-	} catch {
-		return undefined;
-	}
-}
 
 class ReviewUpdateNotifications extends Disposable {
 
@@ -146,7 +132,7 @@ class ReviewUpdateNotifications extends Disposable {
 
 	/**
 	 * If this launch is the first one on a build we staged, say so — once: with
-	 * the Release notes tab when it is on and GitHub has notes, else a toast.
+	 * the Release notes tab when it is on, else a toast.
 	 *
 	 * The record is cleared whether or not it matched: a record for some other
 	 * build is stale (a hand-installed DMG, or an abandoned update) and should
@@ -170,10 +156,8 @@ class ReviewUpdateNotifications extends Disposable {
 		this.storageService.remove(SKIPPED_UPDATE_STORAGE_KEY, StorageScope.APPLICATION);
 		this.logService.info(`[WhiteboardUpdate] running the staged update (${this.productService.commit})`);
 		const version = this.productService.reviewVersion ?? notice.productVersion;
-		const notes = version && this.configurationService.getValue<boolean>(REVIEW_SHOW_RELEASE_NOTES_SETTING) !== false && await releaseNotesToOpen(version);
-		if (notes && notes !== this.storageService.get(SHOWN_RELEASE_NOTES_STORAGE_KEY, StorageScope.APPLICATION)) {
-			this.storageService.store(SHOWN_RELEASE_NOTES_STORAGE_KEY, notes, StorageScope.APPLICATION, StorageTarget.MACHINE);
-			await this.commandService.executeCommand(REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID, notes, 'update');
+		if (version && this.configurationService.getValue<boolean>(REVIEW_SHOW_RELEASE_NOTES_SETTING) !== false) {
+			await this.commandService.executeCommand(REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID, version, 'update');
 			return;
 		}
 		this.notificationService.notify({

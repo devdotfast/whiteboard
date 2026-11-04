@@ -21,7 +21,10 @@ import {
 import { textIncludesQuote } from "@review/evidence.js";
 import type { LocalReviewData } from "@review/review-api/local-data.js";
 import { pullRequestUrl } from "@review/review-api/origin.js";
-import type { ReviewStore } from "@review/review-api/store.js";
+import type {
+  ReviewStore,
+  SharedProvenance,
+} from "@review/review-api/store.js";
 import { traceSchema } from "@review/review-api/trace-schema.js";
 import {
   devReviewHome,
@@ -45,7 +48,7 @@ import {
   sharedGit,
 } from "./repository.js";
 
-export const sharedSnapshotSchema = z.strictObject({
+export const sharedSnapshotSchema = z.object({
   reviewId: z.string().min(1),
   version: z.number().int().nonnegative(),
   /** Empty for a board never named; it reads "Untitled". */
@@ -60,7 +63,7 @@ export const sharedSnapshotSchema = z.strictObject({
   lenses: z.array(lensSchema).optional(),
   createdAt: z.string(),
   origin: z
-    .strictObject({
+    .object({
       branch: z.string().optional(),
       baseRef: z.string().optional(),
       baseBranch: z.string().optional(),
@@ -75,7 +78,7 @@ export const sharedSnapshotSchema = z.strictObject({
 
 const count = z.number().int().nonnegative();
 
-const counts = z.strictObject({ additions: count, deletions: count });
+const counts = z.object({ additions: count, deletions: count });
 
 const mapSchema = softwareModelDataSchema.extend({
   commit: z.string().regex(COMMIT_ID),
@@ -88,10 +91,10 @@ const mapSchema = softwareModelDataSchema.extend({
         counts.extend({
           file: z.string(),
           hunks: z.array(
-            z.strictObject({
+            z.object({
               startLine: count,
               lines: z.array(
-                z.strictObject({
+                z.object({
                   kind: z.enum(["add", "remove"]),
                   oldLine: count.nullable(),
                   newLine: count.nullable(),
@@ -106,7 +109,7 @@ const mapSchema = softwareModelDataSchema.extend({
   ),
 });
 
-export const sharePresentationSchema = z.strictObject({
+export const sharePresentationSchema = z.object({
   maps: z.record(z.string(), mapSchema),
 });
 
@@ -129,6 +132,12 @@ export function needsRepository(
 
 export function validateShareBundle(input: ShareBundle) {
   const bundle = shareBundleSchema.parse(input);
+
+  if (bundle.frozen)
+    throw new ReviewInputError(
+      "This whiteboard is a read-only snapshot of uncommitted changes. View it in the browser.",
+      409,
+    );
   // SAFETY: a bundle is parsed from JSON, so its snapshot is a JSON object.
   const stored = bundle.snapshot as JsonObject;
 
@@ -235,18 +244,99 @@ export interface ShareImport {
   onStage?: (stage: "fetching" | "validating") => void;
 }
 
-/** Imports a share as an ordinary board, once per link: the link's copy
- * comes back while it exists, even from Trash. */
+export const FRESH_IMPORT_VERSION = 0;
+
+/** The revision a link serves and its share's latest. */
+export interface ServedRevision {
+  revision: { id: string; version: number; createdAt: number };
+  latest: string;
+}
+
+export type ShareCopyPlan =
+  | { kind: "open"; reviewId: string }
+  | { kind: "refresh"; reviewId: string; version: number }
+  | { kind: "import" };
+
+/** Which copy a served revision opens or refreshes in place; otherwise a new copy. */
+export function planShareCopy(
+  copies: ReturnType<ReviewStore["copiesOf"]>,
+  served: ServedRevision,
+  pinned = false,
+): ShareCopyPlan {
+  const same = copies.find(({ shared }) =>
+    shared.revisionId === undefined
+      ? shared.sharedAt === served.revision.createdAt
+      : shared.revisionId === served.revision.id,
+  );
+
+  if (same) return { kind: "open", reviewId: same.reviewId };
+
+  const unedited =
+    !pinned &&
+    served.revision.id === served.latest &&
+    copies.find(
+      (copy) =>
+        !copy.shared.pinned &&
+        copy.version === (copy.shared.importedVersion ?? FRESH_IMPORT_VERSION),
+    );
+
+  return unedited
+    ? {
+        kind: "refresh",
+        reviewId: unedited.reviewId,
+        version: unedited.version,
+      }
+    : { kind: "import" };
+}
+
+/** Opens, refreshes or copies a link's board by the revision it serves. */
+export async function receiveShare(
+  input: ShareImport,
+  key: string,
+  served: ServedRevision,
+  download: () => Promise<{
+    bundle: ShareBundle;
+    attribution: ShareAttribution;
+  }>,
+  pinned = false,
+): Promise<string> {
+  const plan = planShareCopy(input.store.copiesOf(key), served, pinned);
+
+  if (plan.kind === "open") return plan.reviewId;
+  const { bundle, attribution } = await download();
+
+  const provenance = {
+    ...attribution,
+    revisionId: served.revision.id,
+    ...(pinned && { pinned }),
+  };
+
+  if (plan.kind === "import")
+    return importShare(input, key, bundle, provenance);
+
+  try {
+    return await importShare(input, key, bundle, provenance, plan);
+  } catch (error) {
+    // The board was edited or deleted since the plan read it.
+    if (
+      error instanceof ReviewInputError &&
+      (error.status === 409 || error.status === 404)
+    )
+      return importShare(input, key, bundle, provenance);
+    throw error;
+  }
+}
+
+/** Imports a share as an ordinary board, or into a copy of its link. */
 export async function importShare(
   input: ShareImport,
   key: string,
   received: ShareBundle,
-  attribution?: ShareAttribution,
+  provenance?: ShareAttribution &
+    Pick<SharedProvenance, "revisionId" | "pinned">,
+  into?: { reviewId: string; version: number },
 ): Promise<string> {
   const { store, data } = input;
-  const existing = store.copyOf(key);
-
-  if (existing) return existing;
   const { bundle, snapshot, maps } = validateShareBundle(received);
   const cloneUrl = bundle.repository?.cloneUrl;
   let repositoryId: string | undefined;
@@ -319,27 +409,29 @@ export async function importShare(
 
   for (const [id, copy] of ids) document = document.replaceAll(id, copy);
 
-  const { reviewId } = await store.execute(
-    {
-      operation: {
-        type: "create",
-        ...(snapshot.title && { title: snapshot.title }),
-        ...(pins
-          ? { target: { kind: "commits", ...pins } }
-          : repositoryId && {
-              target: { kind: "project", repositoryId },
-            }),
-      },
+  const create = {
+    operation: {
+      type: "create",
+      ...(snapshot.title && { title: snapshot.title }),
+      ...(pins
+        ? { target: { kind: "commits", ...pins } }
+        : repositoryId && {
+            target: { kind: "project", repositoryId },
+          }),
     },
-    {
-      document: JSON.parse(document),
-      lenses: snapshot.lenses,
-      origin: snapshot.origin,
-      shared: { ...attribution, cloneUrl, key },
-      copiedFrom: snapshot.reviewId,
-    },
-    { kind: "person" },
-  );
+  };
+
+  const seed = {
+    document: JSON.parse(document),
+    lenses: snapshot.lenses,
+    origin: snapshot.origin,
+    shared: { ...provenance, cloneUrl, key },
+    copiedFrom: snapshot.reviewId,
+  };
+
+  const { reviewId } = into
+    ? await store.refreshCopy(into.reviewId, into.version, create, seed)
+    : await store.execute(create, seed, { kind: "person" });
 
   return reviewId;
 }

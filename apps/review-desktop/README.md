@@ -281,8 +281,9 @@ makes no version bump, tag, or new GitHub release. Linux packages are not
 byte-for-byte reproducible, so a Linux publish that failed partway is recovered
 by re-running its failed jobs, not by a backfill.
 
-The `platforms` input picks `all` (the default), `macos-arm64`, `macos-x64`,
-`linux` or `windows`. The two Mac arches build, publish and backfill on their own.
+The `platforms` input picks `all` (the default), `macos-arm64`, `macos-x64`
+(stable only), `linux` or `windows`. The two Mac arches build, publish and
+backfill on their own.
 Windows builds in parallel with the Darwin payload and the Linux packages
 (`review-windows-build.yml` on the 16-core `review_big_boy_windows` runner) and
 signs every binary and installer with Azure Artifact Signing through the

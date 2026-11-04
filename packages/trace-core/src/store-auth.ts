@@ -153,7 +153,11 @@ export async function runStoreLogin(input: {
   let origin: string;
 
   try {
-    origin = normalizeStoreOrigin(input.origin ?? DEFAULT_STORE_ORIGIN);
+    origin = normalizeStoreOrigin(
+      input.origin ||
+        (input.env ?? process.env).DEV_REVIEW_SERVICE_ORIGIN ||
+        DEFAULT_STORE_ORIGIN,
+    );
   } catch (error) {
     return failWithJsonError(output, "login", errorMessage(error));
   }

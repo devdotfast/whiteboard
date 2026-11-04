@@ -34,8 +34,10 @@ export declare function ReviewTopBar(): ReactElement;
 
 export interface ShareView {
   title: string;
-  /** Present when Desktop can import the share. */
+  /** Present when Desktop can import the share, unless it is frozen. */
   repository?: { cloneUrl: string };
+  /** Quotes uncommitted changes, so Desktop cannot open it. */
+  frozen?: true;
   data: WhiteboardData;
   host: WhiteboardHost;
   dispose(): void;
@@ -112,8 +114,18 @@ export interface BoardViewOptions {
   /** By map version id. */
   maps?: Record<string, BoardMap>;
   commits?: readonly object[];
-  /** The board's resolved selections, for a host that cannot read them. */
-  progress?: object;
+  /** Where each source anchor resolved, by `selectionKey`, for a host that
+   * cannot read them. */
+  resolvedSelections?: Record<string, readonly ResolvedRange[]>;
+}
+
+/** 1-based, inclusive. */
+export interface ResolvedRange {
+  side: SourceSide;
+  file: string;
+  fromLine: number;
+  toLine: number;
+  pins?: SourcePins;
 }
 
 /** Reads one version into board data; throws on an invalid document.
@@ -123,9 +135,123 @@ export declare function boardView(
   options?: BoardViewOptions,
 ): WhiteboardData;
 
-/** A host that reads and edits nothing; source peeks show no lines.
- * `theme` defaults to "system" and `wasmUrl` to the shipped routing wasm. */
+export interface Disposable {
+  dispose(): void;
+}
+
+export type SourceSide = "base" | "head";
+
+export interface SourcePins {
+  repositoryId: string;
+  head: string;
+  base?: string;
+}
+
+/** 1-based, inclusive; `side` defaults to the peek's. */
+export interface SourceRange {
+  startLine: number;
+  endLine: number;
+  side?: SourceSide;
+}
+
+/** What the reader chose in Diff settings; a peek re-renders on change. */
+export interface PeekSettings {
+  currentDiffLayout(scope: "diff" | "peek"): "split" | "unified";
+  onDidChangeDiffLayout(
+    scope: "diff" | "peek",
+    listener: (layout: "split" | "unified") => void,
+  ): Disposable;
+  currentInlineLineNumbers(): boolean;
+  onDidChangeInlineLineNumbers(listener: (show: boolean) => void): Disposable;
+}
+
+/** One source peek: the lines of `path` to show at `pins`. */
+export interface PeekSpec {
+  path: string;
+  title: string;
+  side: SourceSide;
+  /** The peek's own pins, else the board's. */
+  pins?: SourcePins;
+  ranges: readonly SourceRange[];
+  /** "capped" scrolls past an editor's height; "content" grows to fit. */
+  heightMode: "capped" | "content";
+  active: boolean;
+  onDidFocus?: () => void;
+}
+
+export interface FindQuery {
+  text: string;
+  matchCase: boolean;
+  wholeWord: boolean;
+  isRegex: boolean;
+}
+
+/** A mounted peek; the canvas lays out around `height`. */
+export interface PeekHandle extends Disposable {
+  readonly height: number;
+  setActive(active: boolean): void;
+  setCollapsed(collapsed: boolean): void;
+  onDidChangeHeight(listener: (height: number) => void): Disposable;
+  onDidError(listener: (message: string) => void): Disposable;
+  setFindQuery(query: FindQuery): Promise<{ matchCount: number }>;
+  revealFindMatch(index: number): void;
+  clearActiveFindMatch(): void;
+  clearFind(): void;
+}
+
+/** Draws source peeks: any code or diff viewer that can show a line range. */
+export interface PeekViewer {
+  /** Mounts a peek into `container`, replacing any server render. */
+  create(spec: PeekSpec & { container: HTMLElement }): PeekHandle;
+  /** Escaped HTML for a server render; `create` replaces it on hydration. */
+  renderStatic?(spec: Omit<PeekSpec, "active" | "onDidFocus">): string;
+  find(
+    spec: Pick<PeekSpec, "path" | "side" | "pins" | "ranges">,
+    query: FindQuery,
+  ): Promise<{ matchCount: number }>;
+  /** Takes the lines the peeks quote; mounted peeks redraw. A viewer that
+   * reads its own lines leaves it out. */
+  setSources?(code: BoardSources): Promise<void>;
+}
+
+/** A host that reads and edits nothing. `theme` defaults to "system",
+ * `wasmUrl` to the shipped routing wasm and `peeks` to `staticPeeks`.
+ * `setSources` hands the peeks the lines they quote. */
 export declare function readOnlyHost(options?: {
   theme?: "light" | "dark" | "system";
   wasmUrl?: string;
-}): WhiteboardHost & { dispose(): void };
+  peeks?: (settings: PeekSettings) => PeekViewer;
+}): WhiteboardHost &
+  Disposable & {
+    setSources(code: BoardSources): Promise<void>;
+  };
+
+/** Lines of one file at one commit; `fromLine` is 1-based. */
+export interface SourceExcerpt {
+  kind: "excerpt";
+  file: string;
+  commit: string;
+  fromLine: number;
+  lines: string[];
+}
+
+/** Row pairs of base and head line numbers, 1-based; null where a side has no line. */
+export interface SourceAlignment {
+  file: string;
+  previousFile?: string;
+  head: string;
+  base?: string;
+  rows: [number | null, number | null][];
+}
+
+/** The code a board's source peeks quote, pinned at `pins`. */
+export interface BoardSources {
+  sources: readonly SourceExcerpt[];
+  pins?: SourcePins;
+  alignments?: readonly SourceAlignment[];
+}
+
+/** The share viewer's peeks: each range drawn as highlighted HTML, as a
+ * unified or split diff where its base and head lines both arrive. Pass the
+ * board's resolved selections to `boardView`. */
+export declare function staticPeeks(settings: PeekSettings): PeekViewer;

@@ -32,7 +32,7 @@ export function fixtureHost(
     { wasmUrl: libavoidWasmUrl() },
     {
       request: undefined,
-      inlineEditors: {
+      peeks: {
         async find() {
           return { matchCount: 0 };
         },

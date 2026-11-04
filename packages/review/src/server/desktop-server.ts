@@ -54,6 +54,7 @@ import {
   ReviewTelemetry,
   type ReviewTelemetryContext,
 } from "@review/review-telemetry";
+import { remoteShare } from "@review/sharing/host.js";
 import { Hono } from "hono";
 import { z } from "zod";
 
@@ -204,6 +205,12 @@ export function createGlobalReviewServer(
     }
   }
 
+  const hooks = reviewLifecycleTelemetry(
+    telemetry,
+    (reviewId) => reviewStore.summary(reviewId)?.firstCreatedAt,
+    () => aliasInstallationToAccount(telemetry),
+  );
+
   const core = createWhiteboardCore({
     profile: {
       store: reviewStore,
@@ -229,11 +236,16 @@ export function createGlobalReviewServer(
         home: devReviewHome(),
       };
     },
-    hooks: reviewLifecycleTelemetry(
-      telemetry,
-      (reviewId) => reviewStore.summary(reviewId)?.firstCreatedAt,
-      () => aliasInstallationToAccount(telemetry),
-    ),
+    hooks: {
+      ...hooks,
+      sharing: {
+        ...hooks.sharing,
+        remoteShare: remoteShare(
+          (reviewId) => gateway.isRemote(reviewId),
+          (request) => gateway.fetch(request),
+        ),
+      },
+    },
     ask: { tools: askTools },
   });
 

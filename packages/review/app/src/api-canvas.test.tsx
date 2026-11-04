@@ -11,7 +11,7 @@ import type {
   ReviewCanvasBridge,
   ReviewDiffFileWire,
   ReviewDiffViewSpec,
-  ReviewInlineEditorSpec,
+  ReviewPeekSpec,
   ReviewSurfaceEvent,
 } from "@dev.fast/review-protocol";
 import {
@@ -581,7 +581,7 @@ it("renders a code peek block on its pinned side without fetching source text", 
   app.route("/reviews-api", createReviewApi(store));
   app.get("/reviews-api/:id/commits", (context) => context.json([]));
   const requested: string[] = [];
-  const created: ReviewInlineEditorSpec[] = [];
+  const created: ReviewPeekSpec[] = [];
 
   const bridge = testReviewBridge(
     {},
@@ -591,7 +591,7 @@ it("renders a code peek block on its pinned side without fetching source text", 
 
         return app.request(url, init);
       },
-      inlineEditors: {
+      peeks: {
         async find() {
           return { matchCount: 0 };
         },
@@ -1573,7 +1573,7 @@ async function mountPeekReview(content: {
   app.route("/reviews-api", createReviewApi(store, data));
   app.get("/reviews-api/:id/commits", (context) => context.json([]));
   const requested: string[] = [];
-  const inline: ReviewInlineEditorSpec[] = [];
+  const inline: ReviewPeekSpec[] = [];
   const diffs: ReviewDiffViewSpec[] = [];
 
   const bridge = testReviewBridge(
@@ -1584,7 +1584,7 @@ async function mountPeekReview(content: {
 
         return app.request(url, init);
       },
-      inlineEditors: {
+      peeks: {
         async find() {
           return { matchCount: 0 };
         },
@@ -1711,7 +1711,7 @@ it.each([
   { host: undefined, shown: true },
   { host: "devbox", shown: false },
 ])(
-  "shows the share control and the trace tab only for a laptop review (host $host)",
+  "shows the share control, and the trace tab only for a laptop review (host $host)",
   async ({ host }) => {
     const shown = host === undefined;
 
@@ -1725,7 +1725,7 @@ it.each([
     await act(async () => {
       await vi.waitFor(() => expect(Boolean(button("Trace"))).toBe(shown));
     });
-    expect(Boolean(button("Share review"))).toBe(shown);
+    expect(button("Share review")).toBeDefined();
     expect(requested.some((path) => path.endsWith("/agent-traces"))).toBe(
       shown,
     );

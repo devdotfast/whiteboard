@@ -1,4 +1,4 @@
-import type { ReviewInlineEditorSpec } from "@dev.fast/review-protocol";
+import type { ReviewPeekSpec } from "@dev.fast/review-protocol";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -66,7 +66,7 @@ function findRoots(
 
 let root: ReturnType<typeof createRoot> | undefined;
 
-let created: ReviewInlineEditorSpec[] = [];
+let created: ReviewPeekSpec[] = [];
 
 beforeEach(() => {
   created = [];
@@ -90,7 +90,7 @@ function renderPeek(active: boolean) {
           throw new Error("unused test diff view");
         },
       },
-      inlineEditors: {
+      peeks: {
         async find() {
           return { matchCount: 0 };
         },
@@ -162,7 +162,7 @@ it("refreshes header inputs when authored count ranges change within the same di
   const session = testReviewSession(
     {},
     {
-      inlineEditors: {
+      peeks: {
         async find() {
           return { matchCount: 0 };
         },
@@ -192,7 +192,7 @@ it("refreshes header inputs when authored count ranges change within the same di
   document.body.append(element);
   root = createRoot(element);
 
-  const render = (countRanges: ReviewInlineEditorSpec["countRanges"]) =>
+  const render = (countRanges: ReviewPeekSpec["countRanges"]) =>
     act(() => {
       root?.render(
         reviewSessionElement(
@@ -239,7 +239,7 @@ it("searches an offscreen peek without mounting Monaco", async () => {
   const session = testReviewSession(
     {},
     {
-      inlineEditors: {
+      peeks: {
         find,
         create: (spec) => {
           created.push(spec);
@@ -317,7 +317,7 @@ it("finishes search when revealing a failed editor", async () => {
   const session = testReviewSession(
     {},
     {
-      inlineEditors: {
+      peeks: {
         async find() {
           return { matchCount: 1 };
         },
