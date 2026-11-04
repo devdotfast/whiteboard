@@ -9,7 +9,6 @@ import { traceSchema } from "@review/review-api/trace-schema";
 import { z } from "zod";
 
 import { boardSnapshotSchema, boardView } from "./board-data";
-import { sharePeeks } from "./peeks";
 import { readOnlyHost } from "./share-host";
 
 export interface ShareView {
@@ -44,18 +43,16 @@ export async function openShare(
       // SAFETY: the sharer wrote these maps; a malformed one fails in its block.
       maps: bundle.maps as Record<string, SavedMap>,
       commits: z.array(ReviewCommitSummarySchema).parse(bundle.commits),
-      progress: {
-        complete: true,
-        files: [],
-        lenses: [],
-        resolvedSelections: bundle.selections,
-      },
+      resolvedSelections: bundle.selections,
     },
   );
 
-  const host = readOnlyHost({
-    ...options,
-    peeks: await sharePeeks(bundle.sources, pins, bundle.alignments),
+  const host = readOnlyHost(options);
+
+  await host.setSources({
+    sources: bundle.sources,
+    pins,
+    alignments: bundle.alignments,
   });
 
   return {

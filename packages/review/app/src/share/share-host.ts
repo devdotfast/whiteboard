@@ -8,7 +8,22 @@ import type {
   ReviewTheme,
 } from "@dev.fast/review-protocol";
 
-import { type PeekSettings, sourcelessPeeks } from "./peeks";
+import {
+  type BoardSources,
+  type PeekSettings,
+  type SourcePeeks,
+  staticPeeks,
+} from "./peeks";
+
+/** Draws a host's peeks; one that quotes lines takes them by `setSources`. */
+export type SharePeeks = (
+  settings: PeekSettings,
+) => ReviewPeekViewer & Partial<Pick<SourcePeeks, "setSources">>;
+
+export interface ShareHost extends WhiteboardHost, ReviewDisposable {
+  /** Hands the peeks the lines they quote. */
+  setSources(code: BoardSources): Promise<void>;
+}
 
 // Shipped beside the package's index.js; Vite serves it from node_modules in
 // tests and dev. Read on demand: a Worker may lack import.meta.url.
@@ -38,8 +53,8 @@ function listeners<T>() {
 export function shareHost(options: {
   theme: ReviewTheme;
   wasmUrl: string;
-  peeks: (settings: PeekSettings) => ReviewPeekViewer;
-}): WhiteboardHost & ReviewDisposable {
+  peeks: SharePeeks;
+}): ShareHost {
   let lineNumbers = false;
 
   const layouts: Record<ReviewDiffLayoutScope, ReviewDiffLayout> = {
@@ -63,11 +78,16 @@ export function shareHost(options: {
     onDidChangeInlineLineNumbers: lineNumberListeners.add,
   };
 
+  const peeks = options.peeks(settings);
+
   return {
     ...settings,
     wasmUrl: options.wasmUrl,
     appVersion: "share",
-    peeks: options.peeks(settings),
+    peeks,
+    async setSources(code) {
+      await peeks.setSources?.(code);
+    },
     diffView: {
       files: async () => [],
       create: () => ({
@@ -106,12 +126,12 @@ export function readOnlyHost(
   options: {
     theme?: ReviewTheme;
     wasmUrl?: string;
-    peeks?: (settings: PeekSettings) => ReviewPeekViewer;
+    peeks?: SharePeeks;
   } = {},
-): WhiteboardHost & ReviewDisposable {
+): ShareHost {
   return shareHost({
     theme: options.theme ?? "system",
     wasmUrl: options.wasmUrl ?? libavoidWasmUrl(),
-    peeks: options.peeks ?? sourcelessPeeks,
+    peeks: options.peeks ?? staticPeeks,
   });
 }

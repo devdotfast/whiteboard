@@ -32,6 +32,8 @@ export interface BoardParts {
   maps?: Record<string, SavedMap>;
   commits?: ReviewCommitSummary[];
   progress?: ReviewProgress;
+  /** The board's resolved selections, for a host that cannot read them. */
+  resolvedSelections?: ReviewProgress["resolvedSelections"];
 }
 
 /** Images read from blob URLs the caller revokes. */
@@ -72,7 +74,14 @@ export function boardData(parts: BoardParts): WhiteboardData {
   return {
     ...data,
     commits: parts.commits ?? [],
-    progress: parts.progress,
+    progress:
+      parts.progress ??
+      (parts.resolvedSelections && {
+        complete: true,
+        files: [],
+        lenses: [],
+        resolvedSelections: parts.resolvedSelections,
+      }),
   };
 }
 

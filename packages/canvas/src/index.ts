@@ -114,8 +114,18 @@ export interface BoardViewOptions {
   /** By map version id. */
   maps?: Record<string, BoardMap>;
   commits?: readonly object[];
-  /** The board's resolved selections, for a host that cannot read them. */
-  progress?: object;
+  /** Where each source anchor resolved, by `selectionKey`, for a host that
+   * cannot read them. */
+  resolvedSelections?: Record<string, readonly ResolvedRange[]>;
+}
+
+/** 1-based, inclusive. */
+export interface ResolvedRange {
+  side: SourceSide;
+  file: string;
+  fromLine: number;
+  toLine: number;
+  pins?: SourcePins;
 }
 
 /** Reads one version into board data; throws on an invalid document.
@@ -199,16 +209,22 @@ export interface PeekViewer {
     spec: Pick<PeekSpec, "path" | "side" | "pins" | "ranges">,
     query: FindQuery,
   ): Promise<{ matchCount: number }>;
+  /** Takes the lines the peeks quote; mounted peeks redraw. A viewer that
+   * reads its own lines leaves it out. */
+  setSources?(code: BoardSources): Promise<void>;
 }
 
-/** A host that reads and edits nothing. `theme` defaults to "system" and
- * `wasmUrl` to the shipped routing wasm. Without `peeks`, source peeks show
- * no lines. */
+/** A host that reads and edits nothing. `theme` defaults to "system",
+ * `wasmUrl` to the shipped routing wasm and `peeks` to `staticPeeks`.
+ * `setSources` hands the peeks the lines they quote. */
 export declare function readOnlyHost(options?: {
   theme?: "light" | "dark" | "system";
   wasmUrl?: string;
   peeks?: (settings: PeekSettings) => PeekViewer;
-}): WhiteboardHost & Disposable;
+}): WhiteboardHost &
+  Disposable & {
+    setSources(code: BoardSources): Promise<void>;
+  };
 
 /** Lines of one file at one commit; `fromLine` is 1-based. */
 export interface SourceExcerpt {
@@ -235,8 +251,7 @@ export interface BoardSources {
   alignments?: readonly SourceAlignment[];
 }
 
-/** The share viewer's peeks over `code`, for `readOnlyHost`; pass the
- * board's resolved selections to `boardView` as `progress.resolvedSelections`. */
-export declare function excerptPeeks(
-  code: BoardSources,
-): Promise<(settings: PeekSettings) => PeekViewer>;
+/** The share viewer's peeks: each range drawn as highlighted HTML, as a
+ * unified or split diff where its base and head lines both arrive. Pass the
+ * board's resolved selections to `boardView`. */
+export declare function staticPeeks(settings: PeekSettings): PeekViewer;
