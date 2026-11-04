@@ -1743,6 +1743,14 @@ describe("block components", () => {
         width() === "100px" || width() === "240px" ? width() : undefined,
       ),
     ).toBe("240px");
+    // The hidden measuring copy leaves once it has reported the tallest frame;
+    // until then the stage still has its first height.
+    expect(
+      await settled(
+        () =>
+          container.querySelector("iframe[title='Measuring copy']") === null,
+      ),
+    ).toBe(true);
     const iframe = container.querySelector("iframe")!;
     const expandedHeight = iframe.getBoundingClientRect().height;
 
