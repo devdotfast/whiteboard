@@ -140,6 +140,63 @@ export type LensSource = DiffSelection;
 
 export type AlignmentRow = readonly [number | null, number | null];
 
+const HUNK = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@/;
+
+/** The 0-based line pairs a unified patch aligns, unchanged gaps included,
+ * for files of `baseCount` and `headCount` lines. An empty patch pairs each
+ * line with itself. */
+export function patchRows(
+  patch: string,
+  baseCount: number,
+  headCount: number,
+): AlignmentRow[] {
+  const rows: AlignmentRow[] = [];
+  let base = 0;
+  let head = 0;
+  let removed = 0;
+  let added = 0;
+  let inHunk = false;
+
+  const append = (baseEnd: number, headEnd: number) => {
+    while (base < baseEnd || head < headEnd)
+      rows.push([
+        base < baseEnd ? base++ : null,
+        head < headEnd ? head++ : null,
+      ]);
+  };
+
+  const flush = () => {
+    append(base + removed, head + added);
+    removed = added = 0;
+  };
+
+  for (const line of patch.split(/\r?\n/)) {
+    const hunk = HUNK.exec(line);
+
+    if (hunk) {
+      inHunk = true;
+      flush();
+      const [, oldStart, oldLines = "1", newStart, newLines = "1"] = hunk;
+
+      append(
+        Number(oldLines) ? Number(oldStart) - 1 : Number(oldStart),
+        Number(newLines) ? Number(newStart) - 1 : Number(newStart),
+      );
+    } else if (!inHunk) continue;
+    else if (line.startsWith("+")) added++;
+    else if (line.startsWith("-")) removed++;
+    else if (line.startsWith(" ")) {
+      flush();
+      append(base + 1, head + 1);
+    }
+  }
+
+  flush();
+  append(baseCount, headCount);
+
+  return rows;
+}
+
 /** Pins-less selections keep the key they always had. */
 export function selectionKey(source: LensSource): string {
   return JSON.stringify([

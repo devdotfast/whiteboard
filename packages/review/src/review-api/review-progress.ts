@@ -13,6 +13,7 @@ import {
   comparisonKey,
   fileLineRangeSchema,
   lensSelections,
+  patchRows,
   resolveDiffSelection,
   selectionKey,
   selectionReferences,
@@ -26,7 +27,6 @@ import {
   resolveFileLens,
   uncategorizedSources,
 } from "./file-lenses.js";
-import { textualRows } from "./lens-alignment.js";
 import type { LocalReviewData } from "./local-data.js";
 import type { ReviewStore, Snapshot } from "./store.js";
 
@@ -208,8 +208,7 @@ export async function reviewProgress(
           "no_alignment",
           "Changed context file has no alignment.",
         );
-      rows = textualRows(
-        source.file,
+      rows = patchRows(
         "",
         base?.split("\n").length ?? 0,
         head?.split("\n").length ?? 0,
