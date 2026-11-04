@@ -20,7 +20,11 @@ import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { page } from "vitest/browser";
 
-import { STAGE_MAX_HEIGHT, STAGE_MAX_SLOTS } from "./animation/stage-protocol";
+import {
+  STAGE_MAX_HEIGHT,
+  STAGE_MAX_SLOTS,
+  STAGE_MIN_WIDTH,
+} from "./animation/stage-protocol";
 import type { SavedMap } from "./api-document";
 import {
   BlockErrorBoundary,
@@ -1307,7 +1311,81 @@ describe("block components", () => {
     expect(stages.count("ready")).toBe(1);
   });
 
-  it("keeps a scene's columns at a minimum width, scrolling the block sideways, and opens columns to fit a row's link labels", async () => {
+  it("fits a scene to the block, opening columns to fit a row's link labels as far as the width allows", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Scene",
+          height: "auto",
+          frames: [{ key: "only", title: "Only" }],
+          code: {},
+          // Three cards in a row, each link label as wide as the widest gap
+          // a label opens. The stage reports its columns, gap and whether
+          // every card sits inside it through the error line.
+          html:
+            "<script>const s = whiteboard.scene({ columns: 3 });" +
+            ["a", "b", "c"]
+              .map(
+                (id, i) =>
+                  `s.actor({ id: "${id}", at: [${i + 1}, 1], title: "Sharing host / ${id}" });`,
+              )
+              .join("") +
+            's.link("a", "b", { label: "Existing local board ID, reopened" });' +
+            's.link("b", "c", { label: "Download the published bundle" });' +
+            'setTimeout(() => { const grid = document.querySelector(".wb-scene"); const right = document.documentElement.clientWidth; const inside = [...grid.querySelectorAll(".wb-card")].every((card) => card.getBoundingClientRect().right <= right); const style = getComputedStyle(grid); throw new Error(`columns ${style.gridTemplateColumns.split(" ").length} gap ${parseFloat(style.columnGap) > 48} inside ${inside}`); }, 600);' +
+            "</script>",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    expect(await settled(() => alertText(container).includes("columns"))).toBe(
+      true,
+    );
+    expect(alertText(container)).toContain("columns 3 gap true inside true");
+
+    // The stage is no wider than the block, so nothing scrolls.
+    const iframe = container.querySelector("iframe")!;
+    const figure = container.querySelector<HTMLElement>(".animation-block")!;
+    expect(iframe.getBoundingClientRect().width).toBeLessThanOrEqual(
+      figure.clientWidth,
+    );
+  });
+
+  it("keeps a link's label off the parallel line drawn back between the same cards", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Round trip",
+          height: "auto",
+          frames: [{ key: "only", title: "Only" }],
+          code: {},
+          // The stage reports whether any point of the return line falls
+          // inside the outbound label through the error line.
+          html:
+            "<script>const s = whiteboard.scene({ columns: 2 });" +
+            's.actor({ id: "a", at: [1, 1], title: "Desktop" });' +
+            's.actor({ id: "b", at: [2, 1], title: "Host" });' +
+            's.link("a", "b", { label: "Import link" });' +
+            's.link("b", "a");' +
+            'setTimeout(() => { const label = [...document.querySelectorAll(".wb-label")].find((text) => text.textContent === "Import link"); const box = label.getBoundingClientRect(); const back = [...document.querySelectorAll(".wb-arrow")].find((arrow) => !arrow.contains(label)).querySelector(".wb-line"); const length = back.getTotalLength(); let crossed = false; for (let at = 0; at <= length; at += 2) { const p = back.getPointAtLength(at); if (p.x >= box.left && p.x <= box.right && p.y >= box.top && p.y <= box.bottom) crossed = true; } throw new Error(`label crosses ${crossed}`); }, 600);' +
+            "</script>",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+        },
+      ],
+    });
+
+    expect(await settled(() => alertText(container).includes("label"))).toBe(
+      true,
+    );
+    expect(alertText(container)).toContain("label crosses false");
+  });
+
+  it("keeps a scene's columns in a block narrower than its cards need, scrolling it sideways", async () => {
     const { container } = await mountFixture("animation", {
       document: [
         {
@@ -1317,10 +1395,9 @@ describe("block components", () => {
           height: "auto",
           frames: [{ key: "only", title: "Only" }],
           code: { status: "head/order.ts#L1" },
-          // Six cards in a row with a label that opens the gap, and a wide
-          // peek: wider than any block, so the stage asks for its width. Once
-          // the stage is as wide as the scene, or time is up, it reports its
-          // columns, gap and card widths through the error line.
+          // Six cards in a row and a wide peek: wider than any block, so the stage asks for its width. Once the stage
+          // is as wide as the scene, or time is up, it reports its columns
+          // and card widths through the error line.
           html:
             "<script>const s = whiteboard.scene({ columns: 6 });" +
             ["a", "b", "c", "d", "e", "f"]
@@ -1332,7 +1409,7 @@ describe("block components", () => {
             's.link("a", "b", { label: "init + port to the stage" });' +
             's.peek("status", { at: [1, 2, 1, 6] });' +
             "const deadline = Date.now() + 3000;" +
-            'const check = () => { const grid = document.querySelector(".wb-scene"); const fits = grid.getBoundingClientRect().width <= document.documentElement.clientWidth; if (!fits && Date.now() < deadline) { setTimeout(check, 50); return; } const style = getComputedStyle(grid); const widths = [...grid.querySelectorAll(".wb-card")].map((card) => card.getBoundingClientRect().width); throw new Error(`columns ${style.gridTemplateColumns.split(" ").length} gap ${parseFloat(style.columnGap) > 48} cards ${Math.min(...widths) >= 140} fits ${fits}`); };' +
+            'const check = () => { const grid = document.querySelector(".wb-scene"); const fits = grid.getBoundingClientRect().width <= document.documentElement.clientWidth; if (!fits && Date.now() < deadline) { setTimeout(check, 50); return; } const style = getComputedStyle(grid); const widths = [...grid.querySelectorAll(".wb-card")].map((card) => card.getBoundingClientRect().width); throw new Error(`columns ${style.gridTemplateColumns.split(" ").length} cards ${Math.min(...widths) >= 140} fits ${fits}`); };' +
             "setTimeout(check, 300);" +
             "</script>",
           pins: { repositoryId: "repo", base: "base", head: "head" },
@@ -1343,9 +1420,7 @@ describe("block components", () => {
     expect(await settled(() => alertText(container).includes("columns"))).toBe(
       true,
     );
-    expect(alertText(container)).toContain(
-      "columns 6 gap true cards true fits true",
-    );
+    expect(alertText(container)).toContain("columns 6 cards true fits true");
 
     // The block scrolls the stage, at least six cards and their gaps wide.
     const iframe = container.querySelector("iframe")!;
@@ -1387,6 +1462,37 @@ describe("block components", () => {
     expect(
       await settled(() => iframe.getBoundingClientRect().width >= 900),
     ).toBe(true);
+    expect(
+      getComputedStyle(iframe.parentElement!.parentElement!).overflowX,
+    ).toBe("auto");
+  });
+
+  it("lays a stage out at the board's reading width in a narrower block, scrolling it sideways", async () => {
+    const { container } = await mountFixture(
+      "animation",
+      {
+        document: documentSchema.parse([
+          {
+            id: "block-1",
+            type: "animation",
+            title: "Small",
+            height: 160,
+            frames: [{ key: "a", title: "One" }],
+            code: {},
+            html: '<div class="wb-row">Small</div>',
+            pins: { repositoryId: "repo", base: "base", head: "head" },
+          },
+        ]),
+      },
+      "width: 480px",
+    );
+
+    const iframe = (await settled(() => container.querySelector("iframe")))!;
+    const figure = container.querySelector<HTMLElement>(".animation-block")!;
+    expect(figure.clientWidth).toBeLessThan(STAGE_MIN_WIDTH);
+    expect(iframe.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+      STAGE_MIN_WIDTH,
+    );
     expect(
       getComputedStyle(iframe.parentElement!.parentElement!).overflowX,
     ).toBe("auto");
