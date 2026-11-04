@@ -100,9 +100,9 @@ export const panelStyles = stylex.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: space.s12,
-    minHeight: tokens.reviewHeaderHeight,
+    minHeight: `var(--review-fullscreen-header-height, ${tokens.reviewHeaderHeight})`,
     paddingBlock: 0,
-    paddingRight: space.s10,
+    paddingRight: `calc(${space.s10} + var(--review-fullscreen-end-inset, 0px))`,
     paddingLeft: "calc(16px + var(--review-fullscreen-inset, 0px))",
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
@@ -139,6 +139,7 @@ export const panelStyles = stylex.create({
   // As tall as the window controls beside it, with no rule: the header row
   // of Desktop's Ask panel.
   nativeHeader: {
+    paddingRight: `calc(${space.s10} + var(--review-window-controls-end, 0px))`,
     height: tokens.reviewPageBarHeight,
     minHeight: tokens.reviewPageBarHeight,
     borderBottomWidth: 0,

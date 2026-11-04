@@ -199,7 +199,7 @@ export const shellStyles = stylex.create({
     justifyContent: "space-between",
     gap: space.s8,
     height: tokens.reviewHeaderHeight,
-    padding: `0 ${space.s12} 0 ${space.s16}`,
+    padding: `0 calc(${space.s12} + var(--review-window-controls-end, 0px)) 0 ${space.s16}`,
     borderBottomWidth: "1px",
     borderBottomStyle: "solid",
     borderBottomColor: tokens.rule,
@@ -213,10 +213,13 @@ export const shellStyles = stylex.create({
   // the far right, on the page's own surface with no rule under it.
   // In Desktop a collapsed sidebar leaves the window controls over the
   // bar's left end; --review-page-bar-inset clears them.
+  // Windows and Linux put them over its right end instead.
   // A fullscreen surface's left column runs under those controls too: its
   // header reads --review-fullscreen-inset to clear them as the page bar does.
   clearsWindowControls: {
     "--review-fullscreen-inset": "var(--review-page-bar-inset, 0px)",
+    "--review-fullscreen-end-inset": "var(--review-window-controls-end, 0px)",
+    "--review-fullscreen-header-height": tokens.reviewPageBarHeight,
   },
   pageBar: {
     height: tokens.reviewPageBarHeight,
