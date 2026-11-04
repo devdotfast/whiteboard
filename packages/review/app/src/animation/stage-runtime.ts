@@ -208,8 +208,6 @@ export interface SceneOptions {
   columns?: number;
   /** A selector or element to put the scene inside; defaults to document.body. */
   container?: string | HTMLElement;
-  /** Stack cards when their cells become too narrow. Defaults to true. */
-  responsive?: boolean;
 }
 
 export interface Scene {
@@ -232,8 +230,7 @@ export interface Scene {
   /** A small pill above the scene; scene.on changes its text per frame. */
   badge(options: { text?: string; tone?: Tone }): HTMLElement;
   /** A washed box behind the cards in its cells, with a caps title: a
-   * boundary such as a service, a process or a layer. Hidden when the
-   * scene folds, since its cells no longer sit together. */
+   * boundary such as a service, a process or a layer. */
   group(options: SceneGroupOptions): HTMLElement;
   /** A row under the scene that says what the cards' marks mean, one glyph
    * and label per entry. */
@@ -2690,12 +2687,34 @@ export function stageRuntime(port: MessagePort): void {
     if (options.highlight) el.dataset.highlight = options.highlight.join(" ");
   };
 
-  // Scenes with a layout pass due next frame. Measuring runs them first, so a
-  // measuring copy sizes the folded layout, not the one it is about to leave.
+  // Scenes with a layout pass due next frame. Measuring runs them first, so
+  // it reports the gap and width a scene is about to take.
   const dueLayouts = new Set<() => void>();
 
   const layoutScenes = () => {
     for (const run of [...dueLayouts]) run();
+  };
+
+  // Every scene's grid, for the width the stage asks of its host.
+  const scenes: HTMLElement[] = [];
+
+  // The narrowest the stage draws well: its widest scene's minimum, with the
+  // body's padding. The host keeps the stage that wide and scrolls it
+  // sideways in a narrower block, rather than folding the drawing.
+  const minWidth = () => {
+    const style = getComputedStyle(document.body);
+
+    const padding =
+      parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+
+    let widest = 0;
+
+    for (const grid of scenes)
+      if (grid.isConnected && grid.checkVisibility())
+        widest = Math.max(widest, parseFloat(grid.style.minWidth) || 0);
+
+    // STAGE_MAX_WIDTH in stage-protocol.ts.
+    return widest ? Math.min(4000, Math.ceil(widest + padding)) : 0;
   };
 
   // A grid of cards, routed edges, and chips that ride them. The scene owns
@@ -2708,14 +2727,15 @@ export function stageRuntime(port: MessagePort): void {
     (options.container ? resolve(options.container) : document.body).append(
       grid,
     );
+    scenes.push(grid);
 
     // Labels of links between cards in one row: the columns open up to fit
     // the widest, so it sits between its cards rather than off its line.
     const rowLabels = new Set<string>();
 
     // How many columns each placed part spans. A scene drawn on half-step
-    // columns, every card two wide so a pair can centre under one, folds
-    // by the columns its cards make, not the ones it declares.
+    // columns, every card two wide so a pair can centre under one, is as
+    // wide as the columns its cards make, not the ones it declares.
     const spans = new Map<HTMLElement, number>();
 
     const unitSpan = () =>
@@ -2742,169 +2762,19 @@ export function stageRuntime(port: MessagePort): void {
       grid.style.columnGap = `${Math.min(160, Math.max(floor, Math.ceil(widest) + 16))}px`;
     };
 
-    const responsive = options.responsive !== false && columns > 1;
-
-    // The declared cell of every placed part, for folding and unfolding.
-    const cells = new Map<HTMLElement, Cell>();
-
-    const setCell = (
-      el: HTMLElement,
-      [column, row, rowSpan, colSpan]: Cell,
-    ) => {
-      el.style.gridColumn = colSpan
-        ? `${column} / span ${colSpan}`
-        : String(column);
-      el.style.gridRow = rowSpan ? `${row} / span ${rowSpan}` : String(row);
-    };
-
-    const isGroup = (el: HTMLElement) => el.classList.contains("wb-group");
-
-    // A folded scene keeps its layers: each declared row wraps into lines of
-    // at most `shown` cards, balanced and centred on half-step tracks, so a
-    // client over its edge over its services still reads top to bottom. A
-    // part wider than the scene's unit takes a line of its own. A group
-    // becomes a band across the lines of its cards, when no other card
-    // shares them; otherwise it hides.
-    const foldInto = (shown: number) => {
-      const unit = unitSpan();
-      const byRow = new Map<number, HTMLElement[]>();
-
-      for (const [el, cell] of cells) {
-        if (isGroup(el)) continue;
-        const row = byRow.get(cell[1]) ?? [];
-        row.push(el);
-        byRow.set(cell[1], row);
-      }
-
-      const lines = new Map<HTMLElement, number>();
-      let line = 0;
-
-      const placeLine = (run: HTMLElement[]) => {
-        const count = Math.ceil(run.length / shown);
-        const base = Math.floor(run.length / count);
-        let extra = run.length % count;
-
-        for (let start = 0; start < run.length; ) {
-          const size = base + (extra-- > 0 ? 1 : 0);
-          const offset = shown - size;
-          line++;
-
-          run.slice(start, start + size).forEach((el, index) => {
-            el.style.gridColumn = `${1 + offset + 2 * index} / span 2`;
-            el.style.gridRow = String(line);
-            lines.set(el, line);
-          });
-
-          start += size;
-        }
-      };
-
-      for (const row of [...byRow.keys()].sort((a, b) => a - b)) {
-        const parts = byRow
-          .get(row)!
-          .sort((a, b) => cells.get(a)![0] - cells.get(b)![0]);
-
-        let run: HTMLElement[] = [];
-
-        for (const el of parts) {
-          if ((cells.get(el)![3] ?? 1) <= unit) {
-            run.push(el);
-            continue;
-          }
-
-          if (run.length) placeLine(run);
-          run = [];
-          line++;
-          el.style.gridColumn = "1 / -1";
-          el.style.gridRow = String(line);
-          lines.set(el, line);
-        }
-
-        if (run.length) placeLine(run);
-      }
-
-      for (const [el, cell] of cells) {
-        if (!isGroup(el)) continue;
-        const [column, row, rowSpan = 1, colSpan = 1] = cell;
-
-        const inside = (part: HTMLElement) => {
-          const [c, r] = cells.get(part)!;
-
-          return (
-            c >= column && c < column + colSpan && r >= row && r < row + rowSpan
-          );
-        };
-
-        const own = [...lines].flatMap(([part, at]) =>
-          inside(part) ? [at] : [],
-        );
-
-        const first = Math.min(...own);
-        const last = Math.max(...own);
-
-        const alone =
-          own.length > 0 &&
-          [...lines].every(
-            ([part, at]) => at < first || at > last || inside(part),
-          );
-
-        el.hidden = !alone;
-
-        if (!alone) continue;
-        el.style.gridColumn = "1 / -1";
-        el.style.gridRow = `${first} / ${last + 1}`;
-      }
-
-      grid.style.gridTemplateColumns = `repeat(${2 * shown}, minmax(0, 1fr))`;
-    };
-
-    const unfold = () => {
-      for (const [el, cell] of cells) {
-        setCell(el, cell);
-        el.hidden = false;
-      }
-
-      grid.style.gridTemplateColumns = `repeat(${columns}, minmax(0, 1fr))`;
-    };
-
-    // Preserve declared cells on wider layouts. In a narrower container, fold
-    // into fewer columns of cards, and below that into one, rather than
-    // shrinking cards, tables and labels to fit.
-    const reflow = () => {
+    // The scene keeps its columns at any width: narrower than its cards
+    // need, it overflows and the host scrolls the stage sideways, rather than
+    // shrinking cards, tables and labels, or reflowing the drawing.
+    const layout = () => {
       sizeGap();
-
-      if (!responsive) return;
       const style = getComputedStyle(grid);
 
       const padding =
         parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
 
       const gap = parseFloat(style.columnGap);
-
-      // The columns the cards make: a scene on half-step columns, every card
-      // two wide, folds by those, not the ones it declares.
       const effective = Math.ceil(columns / unitSpan());
-
-      const fits = (count: number) =>
-        grid.clientWidth >= count * 140 + (count - 1) * gap + padding;
-
-      let shown = effective;
-
-      if (!fits(effective)) {
-        shown = 1;
-
-        for (let count = effective - 1; count >= 2; count--)
-          if (fits(count)) {
-            shown = count;
-            break;
-          }
-      }
-
-      grid.classList.toggle("wb-scene-compact", shown === 1 && effective > 1);
-      grid.classList.toggle("wb-scene-fold", shown < effective);
-
-      if (shown < effective) foldInto(shown);
-      else unfold();
+      grid.style.minWidth = `${effective * 140 + (effective - 1) * gap + padding}px`;
     };
 
     let layoutFrame: number | undefined;
@@ -2913,7 +2783,8 @@ export function stageRuntime(port: MessagePort): void {
       if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame);
       layoutFrame = undefined;
       dueLayouts.delete(runLayout);
-      reflow();
+      layout();
+      wake();
     };
 
     const scheduleLayout = () => {
@@ -2922,11 +2793,8 @@ export function stageRuntime(port: MessagePort): void {
       layoutFrame = requestAnimationFrame(runLayout);
     };
 
-    new ResizeObserver(() => {
-      wake();
-      scheduleLayout();
-    }).observe(grid);
-    reflow();
+    new ResizeObserver(() => wake()).observe(grid);
+    layout();
 
     const nodes = new Map<string, HTMLElement>();
     const links = new Map<string, ArrowRecord>();
@@ -2980,14 +2848,15 @@ export function stageRuntime(port: MessagePort): void {
 
     const rows = new Map<HTMLElement, number>();
 
-    const place = (el: HTMLElement, cell: Cell) => {
-      const [column, row, , colSpan] = cell;
-      setCell(el, cell);
-      cells.set(el, cell);
+    const place = (el: HTMLElement, [column, row, rowSpan, colSpan]: Cell) => {
+      el.style.gridColumn = colSpan
+        ? `${column} / span ${colSpan}`
+        : String(column);
       spans.set(el, colSpan ?? 1);
       rows.set(el, row);
+      el.style.gridRow = rowSpan ? `${row} / span ${rowSpan}` : String(row);
       el.style.order = String((row - 1) * columns + column);
-      // A part placed after the scene last folded joins the fold.
+      // A part's span can change the columns the cards make.
       scheduleLayout();
     };
 
@@ -3496,6 +3365,7 @@ export function stageRuntime(port: MessagePort): void {
   // quiet frames later, so a settling frame is still sent.
   let lastLayout = "";
   let lastHeight = -1;
+  let lastWidth = -1;
   let measuring = false;
   let looping = false;
   let quietFrames = 0;
@@ -3641,17 +3511,24 @@ export function stageRuntime(port: MessagePort): void {
       post({ type: "slots", slots });
     }
 
+    const width = minWidth();
+
     if (init?.autoSize) {
       const bottom = contentBottom();
 
       // STAGE_MAX_HEIGHT in stage-protocol.ts.
       const height = Math.min(4000, Math.max(120, Math.ceil(bottom)));
 
-      if (height !== lastHeight) {
+      if (height !== lastHeight || width !== lastWidth) {
         changed = true;
         lastHeight = height;
-        post({ type: "size", height });
+        lastWidth = width;
+        post({ type: "size", height, width });
       }
+    } else if (width !== lastWidth) {
+      changed = true;
+      lastWidth = width;
+      post({ type: "size", width });
     }
 
     clipGeometryCache = undefined;

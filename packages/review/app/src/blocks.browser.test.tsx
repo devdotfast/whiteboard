@@ -1307,68 +1307,56 @@ describe("block components", () => {
     expect(stages.count("ready")).toBe(1);
   });
 
-  it("folds a scene row by row into fewer cards a line, keeps its groups as bands, and opens columns to fit a row's link labels", async () => {
-    // The video platform's shape: a client centred on half-step columns over
-    // an edge pair over three services, each layer a group, and a wide peek.
-    const scene = (box: string) =>
-      `const ${box} = whiteboard.scene({ columns: 6, container: "#${box}" });` +
-      `${box}.group({ id: "${box}-client", at: [3, 1, 1, 2], title: "Client" });` +
-      `${box}.group({ id: "${box}-edge", at: [2, 2, 1, 4], title: "Edge" });` +
-      `${box}.group({ id: "${box}-services", at: [1, 3, 1, 6], title: "Services" });` +
-      `${box}.actor({ id: "${box}-app", at: [3, 1, 1, 2], title: "app" });` +
-      `${box}.actor({ id: "${box}-gateway", at: [2, 2, 1, 2], title: "gateway" });` +
-      `${box}.actor({ id: "${box}-cdn", at: [4, 2, 1, 2], title: "cdn" });` +
-      `${box}.actor({ id: "${box}-upload", at: [1, 3, 1, 2], title: "upload" });` +
-      `${box}.actor({ id: "${box}-transcoder", at: [3, 3, 1, 2], title: "transcoder" });` +
-      `${box}.actor({ id: "${box}-catalog", at: [5, 3, 1, 2], title: "catalog" });` +
-      `${box}.link("${box}-gateway", "${box}-cdn", { label: "init + port to the stage" });` +
-      `${box}.peek("status", { at: [1, 4, 1, 6] });`;
-
+  it("keeps a scene's columns at a minimum width, scrolling the block sideways, and opens columns to fit a row's link labels", async () => {
     const { container } = await mountFixture("animation", {
       document: [
         {
           id: "block-1",
           type: "animation",
-          title: "Folds",
+          title: "Wide scene",
           height: "auto",
           frames: [{ key: "only", title: "Only" }],
           code: { status: "head/order.ts#L1" },
-          // Each scene reports its lines of cards, the cards each visible
-          // group spans, whether a lone card sits centred, and its gap,
-          // through the error line.
+          // Six cards in a row with a label that opens the gap, and a wide
+          // peek: wider than any block, so the stage asks for its width. Once
+          // the stage is as wide as the scene, or time is up, it reports its
+          // columns, gap and card widths through the error line.
           html:
-            '<div id="wide" style="width: 900px"></div><div id="mid" style="width: 600px"></div><div id="narrow" style="width: 320px"></div><script>' +
-            scene("wide") +
-            scene("mid") +
-            scene("narrow") +
-            "const report = (id) => {" +
-            "const grid = document.querySelector(`#${id} .wb-scene`);" +
-            'const name = (el) => el.id ? el.id.slice(id.length + 1) : "peek";' +
-            'const cards = [...grid.children].filter((el) => !el.classList.contains("wb-group")).map((el) => ({ el, rect: el.getBoundingClientRect() })).sort((a, b) => a.rect.top - b.rect.top || a.rect.left - b.rect.left);' +
-            "const lines = [];" +
-            "for (const card of cards) { const last = lines.at(-1); if (last && Math.abs(last[0].rect.top - card.rect.top) < 1) last.push(card); else lines.push([card]); }" +
-            'const bands = [...grid.querySelectorAll(".wb-group")].map((g) => { const r = g.getBoundingClientRect(); const inside = cards.filter((c) => c.rect.top >= r.top && c.rect.bottom <= r.bottom).map((c) => name(c.el)); return `${name(g)}:${r.height ? inside.join(",") : "hidden"}`; }).sort();' +
-            "const middle = grid.getBoundingClientRect(); const centred = lines.filter((line) => line.length === 1 && line[0].el.id).every((line) => Math.abs(line[0].rect.left + line[0].rect.width / 2 - (middle.left + middle.width / 2)) < 1);" +
-            'return `${id} [${lines.map((line) => line.map((c) => name(c.el)).join(" ")).join("|")}] ${bands.join(" ")} centred ${centred} gap ${parseFloat(getComputedStyle(grid).columnGap) > 48}`;' +
-            "};" +
-            'setTimeout(() => { throw new Error(`${report("wide")}; ${report("mid")}; ${report("narrow")}`); }, 600);' +
+            "<script>const s = whiteboard.scene({ columns: 6 });" +
+            ["a", "b", "c", "d", "e", "f"]
+              .map(
+                (id, i) =>
+                  `s.actor({ id: "${id}", at: [${i + 1}, 1], title: "${id}" });`,
+              )
+              .join("") +
+            's.link("a", "b", { label: "init + port to the stage" });' +
+            's.peek("status", { at: [1, 2, 1, 6] });' +
+            "const deadline = Date.now() + 3000;" +
+            'const check = () => { const grid = document.querySelector(".wb-scene"); const fits = grid.getBoundingClientRect().width <= document.documentElement.clientWidth; if (!fits && Date.now() < deadline) { setTimeout(check, 50); return; } const style = getComputedStyle(grid); const widths = [...grid.querySelectorAll(".wb-card")].map((card) => card.getBoundingClientRect().width); throw new Error(`columns ${style.gridTemplateColumns.split(" ").length} gap ${parseFloat(style.columnGap) > 48} cards ${Math.min(...widths) >= 140} fits ${fits}`); };' +
+            "setTimeout(check, 300);" +
             "</script>",
           pins: { repositoryId: "repo", base: "base", head: "head" },
         },
       ],
     });
 
-    expect(await settled(() => alertText(container).includes("narrow"))).toBe(
+    expect(await settled(() => alertText(container).includes("columns"))).toBe(
       true,
     );
-
-    const groups =
-      "client:app edge:gateway,cdn services:upload,transcoder,catalog centred true gap true";
-
     expect(alertText(container)).toContain(
-      `wide [app|gateway cdn|upload transcoder catalog|peek] ${groups}; ` +
-        `mid [app|gateway cdn|upload transcoder|catalog|peek] ${groups}; ` +
-        `narrow [app|gateway|cdn|upload|transcoder|catalog|peek] ${groups}`,
+      "columns 6 gap true cards true fits true",
+    );
+
+    // The block scrolls the stage, at least six cards and their gaps wide.
+    const iframe = container.querySelector("iframe")!;
+    const figure = container.querySelector<HTMLElement>(".animation-block")!;
+    const scroller = iframe.parentElement!.parentElement!;
+    expect(getComputedStyle(scroller).overflowX).toBe("auto");
+    expect(iframe.getBoundingClientRect().width).toBeGreaterThan(
+      figure.clientWidth,
+    );
+    expect(iframe.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+      6 * 140 + 5 * 48 + 48,
     );
   });
 
@@ -1709,7 +1697,7 @@ describe("block components", () => {
     ).toBe(true);
   });
 
-  it("mounts a scene in its container and keeps narrow tables readable", async () => {
+  it("mounts a scene in its container, keeps its tables readable and holds its height across frames", async () => {
     const { container } = await mountFixture("animation", {
       document: [
         {
@@ -1737,7 +1725,7 @@ describe("block components", () => {
             'const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
             "function luminance(color){const c=color.match(/[0-9.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4});return .2126*c[0]+.7152*c[1]+.0722*c[2]}",
             "function readable(el){const x=luminance(getComputedStyle(el).color),y=luminance(getComputedStyle(a.element).backgroundColor);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)>=4.5}",
-            'function report(key){const bounds=files.element.getBoundingClientRect();const fits=[...files.element.querySelectorAll("th,td")].every(cell=>{const r=document.createRange();r.selectNodeContents(cell);return [...r.getClientRects()].every(b=>b.left>=bounds.left&&b.right<=bounds.right)});const stacked=bounds.top>a.element.getBoundingClientRect().bottom;const note=[...a.element.children].find(el=>el.textContent==="Read an object response");const contrast=readable(note)&&readable(files.element.querySelector("th"));const okay=shell.contains(a.element)&&shell.contains(badge)&&fits&&stacked===(key==="narrow")&&contrast&&(key!=="wide-idle"||b.element.getBoundingClientRect().height===0);proof.style.width=okay?(key==="narrow"?"200px":key==="wide"?"240px":"280px"):"100px"}',
+            'function report(key){const bounds=files.element.getBoundingClientRect();const fits=[...files.element.querySelectorAll("th,td")].every(cell=>{const r=document.createRange();r.selectNodeContents(cell);return [...r.getClientRects()].every(b=>b.left>=bounds.left&&b.right<=bounds.right)});const note=[...a.element.children].find(el=>el.textContent==="Read an object response");const contrast=readable(note)&&readable(files.element.querySelector("th"));const okay=shell.contains(a.element)&&shell.contains(badge)&&fits&&contrast&&(key!=="wide-idle"||b.element.getBoundingClientRect().height===0);proof.style.width=okay?(key==="narrow"?"200px":key==="wide"?"240px":"280px"):"100px"}',
             'whiteboard.on("*",({frame})=>{shell.style.width=frame.key==="narrow"?"320px":"720px";setTimeout(()=>report(frame.key),100)});',
             "</script>",
           ].join(""),

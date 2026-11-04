@@ -273,13 +273,11 @@ export type Cell = [
 
 export interface SceneOptions {
   /** Declared columns; default 3. Three cards with short labels fit a row at
-   * the document's width; past four, use a second row. */
+   * the document's width; past four, use a second row. The scene keeps its
+   * columns at any width: a narrower block scrolls it sideways. */
   columns?: number;
   /** Where the scene goes; defaults to the animation's body. */
   container?: string | HTMLElement;
-  /** Fold when narrow: each row wraps into lines of fewer cards, centred,
-   * then one card a line, so the layers keep their order. Default true. */
-  responsive?: boolean;
 }
 
 export interface Scene {
@@ -299,8 +297,7 @@ export interface Scene {
   badge(options: { text?: string; tone?: Tone }): HTMLElement;
   /** A washed box behind the cards in its cells, titled in its corner: a
    * boundary such as a service, a process or a layer. Declare it before or
-   * after its cards. When the scene folds narrow it spans the lines its
-   * cards wrap into, or hides if another card shares one of them. */
+   * after its cards. */
   group(options: SceneGroupOptions): HTMLElement;
   /** A row under the scene saying what the cards' marks mean: one glyph,
    * drawn like a card with the entry's marks, and a label each. Name only

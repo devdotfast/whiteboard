@@ -116,6 +116,10 @@ export type HostMessage =
 /** The tallest an auto-sized stage may report itself. */
 export const STAGE_MAX_HEIGHT = 4000;
 
+/** The widest a stage may ask to stay, scrolling sideways in a narrower
+ * block. */
+export const STAGE_MAX_WIDTH = 4000;
+
 /** The most code and block placeholders a stage may lay out. */
 export const STAGE_MAX_SLOTS = 200;
 
@@ -145,9 +149,12 @@ export type SlotLayout = z.infer<typeof slotLayoutSchema>;
 /** The stage runs an agent's scripts, so the host parses what it sends. */
 export const stageMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("ready") }),
+  /** The stage's content height, when it sizes itself, and the width it
+   * needs to draw well, or 0 when any width does. */
   z.strictObject({
     type: z.literal("size"),
-    height: z.number().finite().nonnegative().max(STAGE_MAX_HEIGHT),
+    height: z.number().finite().nonnegative().max(STAGE_MAX_HEIGHT).optional(),
+    width: z.number().finite().nonnegative().max(STAGE_MAX_WIDTH),
   }),
   /** A measuring copy's tallest frame. */
   z.strictObject({
