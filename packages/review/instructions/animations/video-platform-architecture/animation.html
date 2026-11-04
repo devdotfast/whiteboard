@@ -1,26 +1,29 @@
 <script>
-  const s = whiteboard.scene({ columns: 3 });
+  // Six half-step columns, every card two wide, so a row of two can sit
+  // centred under a row of one.
+  const s = whiteboard.scene({ columns: 6 });
 
-  // Four layers, each a group behind its cells.
-  s.group({ id: "clients", at: [1, 1], title: "Client", color: "accent" });
-  s.group({ id: "edge", at: [2, 1, 1, 2], title: "Edge" });
-  s.group({ id: "services", at: [1, 2, 1, 3], title: "Our services" });
-  s.group({ id: "storage", at: [1, 3, 1, 3], title: "Storage", color: "teal" });
+  // Four layers, one row each, each a group behind its cells. Every hop in
+  // the story is between neighbouring cells, so no edge crosses a card.
+  s.group({ id: "clients", at: [3, 1, 1, 2], title: "Client", color: "accent" });
+  s.group({ id: "edge", at: [2, 2, 1, 4], title: "Edge" });
+  s.group({ id: "services", at: [1, 3, 1, 6], title: "Our services" });
+  s.group({ id: "storage", at: [1, 4, 1, 6], title: "Storage", color: "teal" });
 
   // Each card wears its kind: a window for the app, bars for our services,
   // a drum for the CDN's cache, dashed because we do not run it, cylinders
   // for the stores and a stack for the queue.
-  const app = s.actor({ id: "app", at: [1, 1], title: "Video app", form: "window", highlight: ["post", "watch", "play"] });
-  const gateway = s.actor({ id: "gateway", at: [2, 1], title: "API gateway", form: "bars", highlight: ["receive", "deliver"] });
-  const cdn = s.store({ id: "cdn", at: [3, 1], title: "CDN", note: "edge cache · third party", form: "drum", outline: "dashed", highlight: ["segment", "edge-miss"] });
+  const app = s.actor({ id: "app", at: [3, 1, 1, 2], title: "Video app", form: "window", highlight: ["post", "watch", "play"] });
+  const gateway = s.actor({ id: "gateway", at: [2, 2, 1, 2], title: "API gateway", form: "bars", highlight: ["receive", "deliver"] });
+  const cdn = s.store({ id: "cdn", at: [4, 2, 1, 2], title: "CDN", note: "edge cache · third party", form: "drum", outline: "dashed", highlight: ["segment", "edge-miss"] });
 
-  const upload = s.actor({ id: "upload", at: [1, 2], title: "Upload service", form: "bars", code: "upload", highlight: ["store", "enqueue"] });
-  const transcoder = s.actor({ id: "transcoder", at: [2, 2], title: "Transcoder", note: "worker pool", form: "bars", code: "transcode", highlight: ["transcode", "renditions"] });
-  const catalog = s.actor({ id: "catalog", at: [3, 2], title: "Catalog service", form: "bars", code: "watch", highlight: ["ready", "lookup", "resolve"] });
+  const upload = s.actor({ id: "upload", at: [1, 3, 1, 2], title: "Upload service", form: "bars", code: "upload", highlight: ["store", "enqueue"] });
+  const transcoder = s.actor({ id: "transcoder", at: [3, 3, 1, 2], title: "Transcoder", note: "worker pool", form: "bars", code: "transcode", highlight: ["transcode", "renditions"] });
+  const catalog = s.actor({ id: "catalog", at: [5, 3, 1, 2], title: "Catalog service", form: "bars", code: "watch", highlight: ["ready", "lookup", "resolve"] });
 
-  const queue = s.store({ id: "queue", at: [1, 3], title: "Transcode queue", form: "stack", color: "violet" });
-  const blob = s.store({ id: "blob", at: [2, 3], title: "Blob store", note: "originals · renditions", form: "cylinder", color: "teal" });
-  const db = s.store({ id: "db", at: [3, 3], title: "Catalog DB", note: "videos · renditions", form: "cylinder", color: "teal" });
+  const queue = s.store({ id: "queue", at: [1, 4, 1, 2], title: "Transcode queue", form: "stack", color: "violet" });
+  const blob = s.store({ id: "blob", at: [3, 4, 1, 2], title: "Blob store", note: "originals · renditions", form: "cylinder", color: "teal" });
+  const db = s.store({ id: "db", at: [5, 4, 1, 2], title: "Catalog DB", note: "videos · renditions", form: "cylinder", color: "teal" });
 
   s.legend([
     { form: "window", label: "Client" },

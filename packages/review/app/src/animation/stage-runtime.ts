@@ -178,9 +178,8 @@ export interface SceneLinkOptions {
 }
 
 export interface SceneSendOptions {
+  /** Colours the chip, and the edge and its label while the frame shows. */
   tone?: Tone;
-  /** Keep the chip at the target instead of fading it out on arrival. */
-  stay?: boolean;
   enter?: string;
   exit?: string;
   /** The only frames in which the chip is visible. */
@@ -209,8 +208,6 @@ export interface SceneOptions {
   columns?: number;
   /** A selector or element to put the scene inside; defaults to document.body. */
   container?: string | HTMLElement;
-  /** Stack cards when their cells become too narrow. Defaults to true. */
-  responsive?: boolean;
 }
 
 export interface Scene {
@@ -233,8 +230,7 @@ export interface Scene {
   /** A small pill above the scene; scene.on changes its text per frame. */
   badge(options: { text?: string; tone?: Tone }): HTMLElement;
   /** A washed box behind the cards in its cells, with a caps title: a
-   * boundary such as a service, a process or a layer. Hidden when the
-   * scene folds, since its cells no longer sit together. */
+   * boundary such as a service, a process or a layer. */
   group(options: SceneGroupOptions): HTMLElement;
   /** A row under the scene that says what the cards' marks mean, one glyph
    * and label per entry. */
@@ -377,7 +373,8 @@ export interface WhiteboardShim {
    * Pass `visible` for a static marker at its authored position. */
   token(options?: TokenOptions): HTMLElement;
   /** Move a token along an arrow during a frame. It fades out on arrival
-   * unless `stay` keeps it at the arrow's head. */
+   * and waits at the arrow's head until the next frame unless `stay` is
+   * false, which fades it on arrival. */
   travel(
     token: HTMLElement | string,
     arrow: SVGGElement,
@@ -836,6 +833,12 @@ export function stageRuntime(port: MessagePort): void {
     built = true;
     timeline?.pause();
     timeline = undefined;
+
+    // A tween starts from its target's value when the timeline is built. A
+    // chip that has already ridden its edge sits at 1, and a timeline built
+    // then, as a scenario change does, would tween it 1 to 1: the chip would
+    // appear at its head without moving. Every ride starts over.
+    for (const travel of travels) travel.progress.value = 0;
 
     if (!queued.size) return;
 
@@ -1323,6 +1326,8 @@ export function stageRuntime(port: MessagePort): void {
     group: SVGGElement;
     path: SVGPathElement;
     text?: SVGTextElement;
+    /** The edge's own label, shown when no send of the frame names one. */
+    label?: string;
     clipPath: SVGClipPathElement;
     clipRect: SVGRectElement;
     from: Element;
@@ -1341,6 +1346,18 @@ export function stageRuntime(port: MessagePort): void {
   }
 
   const arrows: ArrowRecord[] = [];
+
+  // The <text> an edge's label is drawn in, made on first need.
+  const labelText = (arrow: ArrowRecord) => {
+    if (!arrow.text) {
+      const text = document.createElementNS(svg, "text");
+      text.setAttribute("class", "wb-label");
+      arrow.group.append(text);
+      arrow.text = text;
+    }
+
+    return arrow.text;
+  };
 
   const layer = <T extends Element>(selector: string, make: () => T): T => {
     const found = document.body.querySelector<T>(`:scope > ${selector}`);
@@ -1831,11 +1848,12 @@ export function stageRuntime(port: MessagePort): void {
 
       // Reserve the packet's swept area, not just its current position. This
       // keeps a label still and readable throughout a trip instead of moving
-      // it out of the chip's way on every animation frame.
+      // it out of the chip's way on every animation frame. A sent message's
+      // label is quiet while its chip rides, so it keeps its place.
       const flights: DOMRect[] = [];
 
       for (const travel of travels) {
-        if (travel.arrow !== arrow) continue;
+        if (travel.arrow !== arrow || travel.sent) continue;
         const chip = travel.element.getBoundingClientRect();
 
         if (!chip.width || !chip.height) continue;
@@ -1970,15 +1988,10 @@ export function stageRuntime(port: MessagePort): void {
       to,
       bend: spec.bend ?? 0,
       offset: spec.offset ?? 0,
+      label: spec.label,
     };
 
-    if (spec.label) {
-      const text = document.createElementNS(svg, "text");
-      text.setAttribute("class", "wb-label");
-      text.textContent = spec.label;
-      group.append(text);
-      record.text = text;
-    }
+    if (spec.label) labelText(record).textContent = spec.label;
 
     arrowLayer().append(group);
     arrows.push(record);
@@ -2067,12 +2080,14 @@ export function stageRuntime(port: MessagePort): void {
     root.dataset.frameIndex = String(frame.index);
     applyStates();
 
-    // A chip another frame left mid-edge, or at its head, when the reader
-    // stepped or switched scenario before it faded, is not this frame's.
+    // A chip stays where its frame left it until the reader moves on: the
+    // frame showing hides every other frame's chips.
     for (const travel of travels)
-      if (travel.frame !== frame.key && !travel.stay)
+      if (travel.frame !== frame.key)
         // SAFETY: a travel's element is the <div> chip makeToken created.
         (travel.element as HTMLElement).style.opacity = "0";
+
+    restSends(frame.key);
 
     const change: FrameChange = {
       frame,
@@ -2506,9 +2521,10 @@ export function stageRuntime(port: MessagePort): void {
     element: Element;
     arrow: ArrowRecord;
     owner: TravelOwner;
-    /** The frame the chip rides in, and whether it stays at the head after. */
+    /** The frame the chip rides in. */
     frame: string;
-    stay: boolean;
+    /** For a scene send: the message, which rests as the edge's label. */
+    sent?: { label: string; tone?: Tone };
     progress: { value: number };
     x?: number;
     y?: number;
@@ -2554,6 +2570,38 @@ export function stageRuntime(port: MessagePort): void {
     lib().set(travel.element, { translateX: x, translateY: y });
   };
 
+  // A frame's messages rest as labels on their edges, in the marker colour,
+  // in place of the edges' own labels: the same picture however the frame
+  // was reached. The chips only ride, when the frame plays.
+  const restSends = (key: string) => {
+    const sent = new Map<ArrowRecord, { labels: string[]; tone?: Tone }>();
+
+    for (const travel of travels) {
+      if (!travel.sent || travel.frame !== key) continue;
+
+      const entry = sent.get(travel.arrow) ?? {
+        labels: [],
+        tone: travel.sent.tone,
+      };
+
+      entry.labels.push(travel.sent.label);
+      sent.set(travel.arrow, entry);
+    }
+
+    for (const arrow of arrows) {
+      const entry = sent.get(arrow);
+      const label = entry ? entry.labels.join(" · ") : (arrow.label ?? "");
+
+      if (entry) arrow.group.dataset.wbSent = entry.tone ?? "accent";
+      else delete arrow.group.dataset.wbSent;
+
+      if (arrow.text && arrow.text.textContent !== label)
+        arrow.text.textContent = label;
+    }
+
+    placeArrowLabels();
+  };
+
   // Tween normalized progress along an edge during a frame. Geometry is read
   // when the token is placed, rather than captured when the timeline is built.
   const travelAlong = (
@@ -2565,6 +2613,7 @@ export function stageRuntime(port: MessagePort): void {
       ease?: string;
       position?: TimelinePosition;
       stay?: boolean;
+      sent?: { label: string; tone?: Tone };
     },
   ) => {
     let owner = travelOwners.get(element);
@@ -2580,11 +2629,18 @@ export function stageRuntime(port: MessagePort): void {
       arrow: record,
       owner,
       frame,
-      stay: options.stay === true,
+      sent: options.sent,
       progress: { value: 0 },
     };
 
     travels.push(travel);
+
+    // The message rests as a label on its edge: quiet from the frame's start,
+    // while the chip sets off and rides, until the chip dissolves into it at
+    // the head. Drawn without motion, the frame lands on that rest.
+    const text = options.sent ? labelText(record) : undefined;
+
+    if (text) frameTimeline(frame).set(text, { opacity: 0 }, 0);
 
     const segment = frameTimeline(frame)
       .set(owner.active, { value: travel.id }, options.position)
@@ -2599,8 +2655,14 @@ export function stageRuntime(port: MessagePort): void {
         "<",
       );
 
-    // A token left at an edge's head covers the node it points at.
-    if (!options.stay) segment.add(element, { opacity: 0, duration: 250 }, "<");
+    if (text)
+      segment
+        .add(element, { opacity: 0, duration: 250 }, "<")
+        .add(text, { opacity: 1, duration: 250 }, "<<");
+    // A token waits at the head until the next frame, so what it carried
+    // can be read; `stay: false` fades it on arrival instead.
+    else if (options.stay === false)
+      segment.add(element, { opacity: 0, duration: 250 }, "<");
   };
 
   // One shared id per element, for pairing parallel edges and lookups.
@@ -2625,6 +2687,14 @@ export function stageRuntime(port: MessagePort): void {
     if (options.highlight) el.dataset.highlight = options.highlight.join(" ");
   };
 
+  // Scenes with a layout pass due next frame. Measuring runs them first, so
+  // it reports the gap and width a scene is about to take.
+  const dueLayouts = new Set<() => void>();
+
+  const layoutScenes = () => {
+    for (const run of [...dueLayouts]) run();
+  };
+
   // A grid of cards, routed edges, and chips that ride them. The scene owns
   // spacing, edge drawing, and chip motion, so every scene reads the same.
   const scene = (options: SceneOptions): Scene => {
@@ -2639,6 +2709,14 @@ export function stageRuntime(port: MessagePort): void {
     // Labels of links between cards in one row: the columns open up to fit
     // the widest, so it sits between its cards rather than off its line.
     const rowLabels = new Set<string>();
+
+    // How many columns each placed part spans. A scene drawn on half-step
+    // columns, every card two wide so a pair can centre under one, is as
+    // wide as the columns its cards make, not the ones it declares.
+    const spans = new Map<HTMLElement, number>();
+
+    const unitSpan = () =>
+      Math.max(1, Math.min(...spans.values(), Infinity) || 1);
 
     const sizeGap = () => {
       if (!rowLabels.size) return;
@@ -2661,59 +2739,40 @@ export function stageRuntime(port: MessagePort): void {
       grid.style.columnGap = `${Math.min(160, Math.max(floor, Math.ceil(widest) + 16))}px`;
     };
 
-    const responsive = options.responsive !== false && columns > 1;
-
-    // Preserve declared cells on wider layouts. In a narrower container, fold
-    // into fewer columns in reading order, and below that into one, rather
-    // than shrinking cards, tables and labels to fit.
-    const reflow = () => {
+    // The scene keeps its columns at any width: narrower than its cards
+    // need, it overflows the stage, which asks its host for the width and is
+    // scrolled sideways, rather than shrinking cards, tables and labels, or
+    // reflowing the drawing.
+    const layout = () => {
       sizeGap();
-
-      if (!responsive) return;
       const style = getComputedStyle(grid);
 
       const padding =
         parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
 
       const gap = parseFloat(style.columnGap);
-
-      const fits = (count: number) =>
-        grid.clientWidth >= count * 140 + (count - 1) * gap + padding;
-
-      let shown = columns;
-
-      if (!fits(columns)) {
-        shown = 1;
-
-        // An even fold, or two columns: four cards fold to two rows of two,
-        // not three and one.
-        for (let count = columns - 1; count >= 2; count--)
-          if ((columns % count === 0 || count === 2) && fits(count)) {
-            shown = count;
-            break;
-          }
-      }
-
-      grid.classList.toggle("wb-scene-compact", shown === 1);
-      grid.classList.toggle("wb-scene-fold", shown > 1 && shown < columns);
-      grid.style.setProperty("--wb-fold", String(shown));
+      const effective = Math.ceil(columns / unitSpan());
+      grid.style.minWidth = `${effective * 140 + (effective - 1) * gap + padding}px`;
     };
 
     let layoutFrame: number | undefined;
 
-    const scheduleLayout = () => {
-      if (layoutFrame !== undefined) return;
-      layoutFrame = requestAnimationFrame(() => {
-        layoutFrame = undefined;
-        reflow();
-      });
+    const runLayout = () => {
+      if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame);
+      layoutFrame = undefined;
+      dueLayouts.delete(runLayout);
+      layout();
+      wake();
     };
 
-    new ResizeObserver(() => {
-      wake();
-      scheduleLayout();
-    }).observe(grid);
-    reflow();
+    const scheduleLayout = () => {
+      if (layoutFrame !== undefined) return;
+      dueLayouts.add(runLayout);
+      layoutFrame = requestAnimationFrame(runLayout);
+    };
+
+    new ResizeObserver(() => wake()).observe(grid);
+    layout();
 
     const nodes = new Map<string, HTMLElement>();
     const links = new Map<string, ArrowRecord>();
@@ -2771,11 +2830,12 @@ export function stageRuntime(port: MessagePort): void {
       el.style.gridColumn = colSpan
         ? `${column} / span ${colSpan}`
         : String(column);
-      // Folded into fewer columns, a cell that spans columns takes the row.
-      el.toggleAttribute("data-wb-wide", (colSpan ?? 1) > 1);
+      spans.set(el, colSpan ?? 1);
       rows.set(el, row);
       el.style.gridRow = rowSpan ? `${row} / span ${rowSpan}` : String(row);
       el.style.order = String((row - 1) * columns + column);
+      // A part's span can change the columns the cards make.
+      scheduleLayout();
     };
 
     const cardEl = (ref: CardRef): HTMLElement => {
@@ -2969,9 +3029,12 @@ export function stageRuntime(port: MessagePort): void {
           if (entry.tone) glyph.dataset.tone = entry.tone;
 
           if (entry.change) glyph.dataset.change = entry.change;
+          const box = document.createElement("span");
+          box.className = "wb-legend-box";
+          box.append(glyph);
           const label = document.createElement("span");
           label.textContent = entry.label;
-          row.append(glyph, label);
+          row.append(box, label);
           el.append(row);
         }
 
@@ -3029,10 +3092,17 @@ export function stageRuntime(port: MessagePort): void {
           Math.max(900, Math.round(length / 0.16)),
         );
 
+        // At rest the message is the edge's label; between cards in one row
+        // the columns open up to fit it.
+        if (rows.has(a) && rows.get(a) === rows.get(b)) {
+          rowLabels.add(label);
+          scheduleLayout();
+        }
+
         travelAlong(chip, record, frame, {
           duration,
           position: SEND_LEAD + nth * 240,
-          stay: options.stay,
+          sent: { label, tone: options.tone },
         });
       },
     };
@@ -3273,6 +3343,7 @@ export function stageRuntime(port: MessagePort): void {
   // quiet frames later, so a settling frame is still sent.
   let lastLayout = "";
   let lastHeight = -1;
+  let lastWidth = -1;
   let measuring = false;
   let looping = false;
   let quietFrames = 0;
@@ -3291,10 +3362,14 @@ export function stageRuntime(port: MessagePort): void {
         (animation) => animation.pending || animation.playState === "running",
       );
 
-  const contentBottom = () => {
+  // How far the content reaches: its bottom, for an auto-sized stage's
+  // height, and its right edge, which past the viewport is the width the
+  // stage needs its host to keep.
+  const contentBounds = () => {
     // Natural body height includes slot-size feedback from host overlays.
     // Exclude viewport-sized drawing layers to avoid a resize feedback loop.
     let bottom = document.body.getBoundingClientRect().bottom;
+    let widest = 0;
 
     for (const element of document.body.querySelectorAll("*")) {
       // Global drawing layers are viewport-sized. Their descendants can
@@ -3319,15 +3394,17 @@ export function stageRuntime(port: MessagePort): void {
 
       if (right <= left || visibleBottom <= top) continue;
       bottom = Math.max(bottom, visibleBottom);
+      widest = Math.max(widest, right);
     }
 
-    return bottom;
+    return { bottom, right: widest };
   };
 
   // A measuring copy shows each frame of its scenario in turn, as an instant
   // jump does, all within one task, and reports the tallest. What a frame
   // leaves behind does not matter: the copy is thrown away.
   const measureFrames = () => {
+    layoutScenes();
     const declared = declaredFrames();
     let previous: FrameChange["previous"];
     let tallest = 0;
@@ -3350,7 +3427,7 @@ export function stageRuntime(port: MessagePort): void {
       for (const animation of document.getAnimations())
         if (finite(animation)) animation.finish();
 
-      tallest = Math.max(tallest, contentBottom());
+      tallest = Math.max(tallest, contentBounds().bottom);
       previous = frame;
     }
 
@@ -3362,6 +3439,7 @@ export function stageRuntime(port: MessagePort): void {
   };
 
   const measure = () => {
+    layoutScenes();
     let changed = false;
     clipGeometryCache = new Map();
     arrows.forEach(route);
@@ -3416,17 +3494,38 @@ export function stageRuntime(port: MessagePort): void {
       post({ type: "slots", slots });
     }
 
+    const bounds = contentBounds();
+    const viewport = document.documentElement.clientWidth;
+
+    // Content past the stage's right edge, in any animation: the width the
+    // stage needs. Its host keeps it that wide and scrolls a narrower block
+    // sideways, rather than letting the drawing squeeze or fold. 0 when the
+    // content fits. STAGE_MAX_WIDTH in stage-protocol.ts.
+    const width =
+      bounds.right > viewport + 0.5
+        ? Math.min(
+            4000,
+            Math.ceil(
+              bounds.right +
+                parseFloat(getComputedStyle(document.body).paddingRight),
+            ),
+          )
+        : 0;
+
     if (init?.autoSize) {
-      const bottom = contentBottom();
-
       // STAGE_MAX_HEIGHT in stage-protocol.ts.
-      const height = Math.min(4000, Math.max(120, Math.ceil(bottom)));
+      const height = Math.min(4000, Math.max(120, Math.ceil(bounds.bottom)));
 
-      if (height !== lastHeight) {
+      if (height !== lastHeight || width !== lastWidth) {
         changed = true;
         lastHeight = height;
-        post({ type: "size", height });
+        lastWidth = width;
+        post({ type: "size", height, width });
       }
+    } else if (width !== lastWidth) {
+      changed = true;
+      lastWidth = width;
+      post({ type: "size", width });
     }
 
     clipGeometryCache = undefined;

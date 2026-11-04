@@ -301,6 +301,9 @@ function StageBlock({
   const { diagramFullscreenOnClick } = useWhiteboardSettings();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [contentHeight, setContentHeight] = useState(STAGE_MIN_HEIGHT);
+  // The widest the stage's content has reached past its edge, in any frame;
+  // the stage keeps that width and a narrower block scrolls it.
+  const [minWidth, setMinWidth] = useState(0);
   // The tallest frame of the scenario, from a hidden measuring copy, so the
   // stage does not change height as the reader steps through frames.
   const [measuredHeight, setMeasuredHeight] = useState(0);
@@ -486,7 +489,11 @@ function StageBlock({
 
     switch (message.type) {
       case "size":
-        setContentHeight(Math.ceil(message.height));
+        if (message.height !== undefined)
+          setContentHeight(Math.ceil(message.height));
+
+        if (message.width > 0)
+          setMinWidth((widest) => Math.max(widest, Math.ceil(message.width)));
         break;
       case "slots":
         setSlots(message.slots);
@@ -1028,7 +1035,6 @@ function StageBlock({
       <DiagramHeader
         kind={clip ? "CLIP" : "ANIMATION"}
         title={node.title}
-        titleStyle={styles.headerTitle}
         meta={`${activeIndex + 1} / ${stops.length}`}
         action={
           fullscreen ? (
@@ -1094,7 +1100,11 @@ function StageBlock({
         >
           <div
             ref={canvasRef}
-            {...stylex.props(styles.canvas, scaled && styles.canvasScaled)}
+            {...stylex.props(
+              styles.canvas,
+              minWidth > 0 && styles.canvasScrolls,
+              scaled && styles.canvasScaled,
+            )}
             style={{
               height: stageHeight,
               ...(scaled && {
@@ -1103,66 +1113,72 @@ function StageBlock({
               }),
             }}
           >
-            <iframe
-              key={stageKey}
-              ref={frameRef}
-              src={stageUrl()}
-              title={node.title}
-              sandbox="allow-scripts"
-              onLoad={boot}
-              {...stylex.props(styles.frame)}
-            />
-            {node.type === "animation" &&
-              node.height === "auto" &&
-              measureRun !== null && (
-                <MeasuringStage
-                  key={measureRun}
-                  init={() => {
-                    const kind = measureKind();
+            <div
+              {...stylex.props(styles.sheet)}
+              style={{ minWidth: minWidth || undefined }}
+            >
+              <iframe
+                key={stageKey}
+                ref={frameRef}
+                src={stageUrl()}
+                title={node.title}
+                sandbox="allow-scripts"
+                onLoad={boot}
+                {...stylex.props(styles.frame)}
+              />
+              {node.type === "animation" &&
+                node.height === "auto" &&
+                measureRun !== null && (
+                  <MeasuringStage
+                    key={measureRun}
+                    init={() => {
+                      const kind = measureKind();
 
-                    return stageInit(figureRef.current!, kind!, false).then(
-                      (init) => ({
-                        ...init,
-                        measure: true,
-                        slotSizes: Object.fromEntries(slotSizesRef.current),
-                      }),
-                    );
-                  }}
-                  onMeasured={(height) => {
-                    setMeasuredHeight(height);
-                    setMeasureRun(null);
-                  }}
-                />
-              )}
-            <div {...stylex.props(styles.overlays)}>
-              {slots.map((slot) => (
-                <SlotOverlay
-                  key={slot.slot}
-                  slot={slot}
-                  onHeight={(height) => {
-                    send({ type: "slot-size", slot: slot.slot, height });
+                      return stageInit(figureRef.current!, kind!, false).then(
+                        (init) => ({
+                          ...init,
+                          measure: true,
+                          slotSizes: Object.fromEntries(slotSizesRef.current),
+                        }),
+                      );
+                    }}
+                    onMeasured={(height) => {
+                      setMeasuredHeight(height);
+                      setMeasureRun(null);
+                    }}
+                  />
+                )}
+              <div {...stylex.props(styles.overlays)}>
+                {slots.map((slot) => (
+                  <SlotOverlay
+                    key={slot.slot}
+                    slot={slot}
+                    onHeight={(height) => {
+                      send({ type: "slot-size", slot: slot.slot, height });
 
-                    if (slotSizesRef.current.get(slot.slot) === height) return;
-                    slotSizesRef.current.set(slot.slot, height);
-                    clearTimeout(remeasureTimer.current);
-                    remeasureTimer.current = setTimeout(remeasure, 100);
-                  }}
-                >
-                  {slot.kind === "code"
-                    ? node.code[slot.ref] && (
-                        <CodePeekCard
-                          source={anchorSelection(
-                            animationCode(node.code[slot.ref]!).source,
-                            node.pins,
-                          )}
-                          heightMode="capped"
-                          xstyle={styles.peek}
-                        />
-                      )
-                    : embeddable.get(slot.ref) &&
-                      children([embeddable.get(slot.ref)!])}
-                </SlotOverlay>
-              ))}
+                      if (slotSizesRef.current.get(slot.slot) === height)
+                        return;
+                      slotSizesRef.current.set(slot.slot, height);
+                      clearTimeout(remeasureTimer.current);
+                      remeasureTimer.current = setTimeout(remeasure, 100);
+                    }}
+                  >
+                    {slot.kind === "code"
+                      ? node.code[slot.ref] && (
+                          <CodePeekCard
+                            source={anchorSelection(
+                              animationCode(node.code[slot.ref]!).source,
+                              node.pins,
+                            )}
+                            heightMode="capped"
+                            xstyle={styles.peek}
+                          />
+                        )
+                      : embeddable.get(slot.ref) &&
+                        children([embeddable.get(slot.ref)!])}
+                  </SlotOverlay>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -1413,11 +1429,6 @@ const styles = stylex.create({
     color: tokens.ink,
     font: `${fontSize.body}/${leading.normal} ${tokens.fontMono}`,
   },
-  headerTitle: {
-    overflow: { default: null, [narrow]: "visible" },
-    textOverflow: { default: null, [narrow]: "clip" },
-    whiteSpace: { default: null, [narrow]: "normal" },
-  },
   figureFullscreen: {
     display: "flex",
     flex: "1 1 auto",
@@ -1467,8 +1478,18 @@ const styles = stylex.create({
     flex: "0 0 auto",
     overflow: "hidden",
   },
+  // The stage asked for a width: it keeps it, and a narrower block scrolls
+  // it sideways rather than folding the drawing.
+  canvasScrolls: {
+    overflowX: "auto",
+  },
   canvasScaled: {
     transformOrigin: "0 0",
+  },
+  // The stage and what the host draws over it, at the width the stage asked.
+  sheet: {
+    position: "relative",
+    height: "100%",
   },
   overlay: {
     position: "fixed",

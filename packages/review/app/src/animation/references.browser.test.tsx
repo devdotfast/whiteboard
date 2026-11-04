@@ -4,7 +4,8 @@
 // jumps to each marker of every scenario, then plays to its end. Set
 // VITE_ANIMATION_SHOTS=1 to save a screenshot of each frame under
 // __screenshots__/references/<name>/<path>/ beside this file (gitignored),
-// the way an author looks at their work without opening Desktop:
+// the way an author looks at their work without opening Desktop, and
+// VITE_ANIMATION_WIDTH=<px> to see them folded narrow:
 //
 //   VITE_ANIMATION_SHOTS=1 pnpm --filter @dev.fast/review-canvas exec \
 //     vitest run --config vitest.config.ts --project browser \
@@ -163,8 +164,9 @@ async function mount(reference: Reference) {
   };
 
   const container = document.createElement("div");
-  // The document's width in Desktop, so layouts fold as they would there.
-  container.style.cssText = "width: 860px; margin: 0 auto;";
+  // The document's width in Desktop, so layouts fold as they would there;
+  // VITE_ANIMATION_WIDTH shows a narrower one.
+  container.style.cssText = `width: ${import.meta.env.VITE_ANIMATION_WIDTH || 860}px; margin: 0 auto;`;
   document.body.append(container);
 
   await act(async () => {

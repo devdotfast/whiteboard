@@ -201,7 +201,7 @@ export interface Whiteboard {
   /** A dot, or a pill with a label, that travel() moves along arrows. */
   token(options?: TokenOptions): HTMLElement;
   /** Move a token along an arrow during a frame, at the arrow's live geometry.
-   * It fades out on arrival unless `stay` keeps it at the head. Trips append
+   * It waits at the head until the next frame unless `stay` is false. Trips append
    * to the frame; `position: 0` starts trips together, a number of
    * milliseconds sequences one after another. Declare trips while the script
    * first runs, not from a frame handler. */
@@ -273,12 +273,11 @@ export type Cell = [
 
 export interface SceneOptions {
   /** Declared columns; default 3. Three cards with short labels fit a row at
-   * the document's width; past four, use a second row. */
+   * the document's width; past four, use a second row. The scene keeps its
+   * columns at any width: a narrower block scrolls it sideways. */
   columns?: number;
   /** Where the scene goes; defaults to the animation's body. */
   container?: string | HTMLElement;
-  /** Fold into fewer columns when narrow, then one. Default true. */
-  responsive?: boolean;
 }
 
 export interface Scene {
@@ -298,7 +297,7 @@ export interface Scene {
   badge(options: { text?: string; tone?: Tone }): HTMLElement;
   /** A washed box behind the cards in its cells, titled in its corner: a
    * boundary such as a service, a process or a layer. Declare it before or
-   * after its cards; it hides when the scene folds narrow. */
+   * after its cards. */
   group(options: SceneGroupOptions): HTMLElement;
   /** A row under the scene saying what the cards' marks mean: one glyph,
    * drawn like a card with the entry's marks, and a label each. Name only
@@ -310,8 +309,11 @@ export interface Scene {
   /** A straight edge between two cards that follows them. It bows around
    * cards in the way; keep the cells between linked cards empty. */
   link(from: CardRef, to: CardRef, options?: SceneLinkOptions): SVGGElement;
-  /** A chip that rides the edge during a frame at one fixed speed, drawing the
-   * edge if there is none. Keep labels to about 12 characters. */
+  /** A message from one card to another in a frame, drawing the edge if there
+   * is none. While the frame shows, the message is the edge's label and the
+   * edge takes the marker colour, however the frame was reached; stepping
+   * into the frame rides a chip from the sender that settles into the label.
+   * Keep labels to about 12 characters. */
   send(
     from: CardRef,
     to: CardRef,
@@ -408,10 +410,8 @@ export interface SceneLinkOptions extends Lifecycle {
 }
 
 export interface SceneSendOptions extends Lifecycle {
+  /** Colours the chip, and the edge and its label while the frame shows. */
   tone?: Tone;
-  /** Keep the chip at its target instead of fading it out; scope when it shows
-   * with enter, exit or only. */
-  stay?: boolean;
 }
 
 export interface ArrowOptions extends Lifecycle {

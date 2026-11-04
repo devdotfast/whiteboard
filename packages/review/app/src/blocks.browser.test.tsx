@@ -906,6 +906,76 @@ describe("block components", () => {
     expect(container.querySelector("[role='alert']")).toBeNull();
   });
 
+  it("rests a frame's message as the label of its edge", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Messages at rest",
+          height: "auto",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+          frames: [
+            { key: "idle", title: "Idle" },
+            { key: "run", title: "Request" },
+            { key: "later", title: "Later" },
+          ],
+          code: { proof: "head/order.ts#L1" },
+          html: [
+            "<script>",
+            "const s=whiteboard.scene({columns:3});",
+            'const a=s.actor({id:"a",at:[1,1],title:"A"});',
+            'const b=s.actor({id:"b",at:[3,1],title:"B"});',
+            'const edge=s.link(a,b,{label:"call"});',
+            's.send(a,b,"req","run");',
+            'const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
+            'const chip=document.querySelector(".wb-token"),text=edge.querySelector("text");',
+            "const read=()=>({label:text.textContent,sent:edge.dataset.wbSent,labelOn:Number(getComputedStyle(text).opacity)>.5,chipOn:Number(getComputedStyle(chip).opacity)>.5});",
+            // In its frame the message is the label, in the marker, with no
+            // chip in sight; in any other frame the edge wears its own label.
+            'const rest=(key)=>{const r=read();return !r.chipOn&&r.labelOn&&(key==="run"?r.label==="req"&&r.sent==="accent":r.label==="call"&&!r.sent)};',
+            // Each way into a frame reports its own width, so a stale one
+            // cannot pass for the next.
+            'const widths={idle:"200px",later:"220px",run:"260px"};',
+            'whiteboard.on("*",({frame,direction})=>{',
+            'if(direction!=="forward"||frame.key!=="run"){setTimeout(()=>{proof.style.width=rest(frame.key)?widths[frame.key]:"100px"},300);return}',
+            // Played, the chip rides while the label is quiet, then settles.
+            'setTimeout(()=>{const r=read();const riding=r.chipOn&&!r.labelOn;setTimeout(()=>{proof.style.width=riding?(rest("run")?"240px":"120px"):"100px"},2800)},700)});',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    const width = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.width;
+
+    const step = (label: string) =>
+      act(async () =>
+        container
+          .querySelector<HTMLButtonElement>(`button[aria-label='${label}']`)!
+          .click(),
+      );
+
+    const outcome = (...expected: string[]) =>
+      settled(() =>
+        width() === "100px" || expected.includes(width()!)
+          ? width()
+          : undefined,
+      );
+
+    expect(await outcome("200px")).toBe("200px");
+    await step("Next frame");
+    expect(await outcome("240px", "120px")).toBe("240px");
+    await step("Next frame");
+    expect(await outcome("220px")).toBe("220px");
+    // Stepped back into, the frame shows the same rest as a fresh draw.
+    await step("Previous frame");
+    expect(await outcome("260px")).toBe("260px");
+    expect(container.querySelector("[role='alert']")).toBeNull();
+  });
+
   it("clears a later frame's note when the reader steps back", async () => {
     const { container } = await mountFixture("animation", {
       document: [
@@ -1237,46 +1307,89 @@ describe("block components", () => {
     expect(stages.count("ready")).toBe(1);
   });
 
-  it("folds a scene into fewer columns before one, and opens columns to fit a row's link labels", async () => {
-    const scene = (box: string) =>
-      `const ${box} = whiteboard.scene({ columns: 4, container: "#${box}" });` +
-      ["a", "b", "c", "d"]
-        .map(
-          (id, i) =>
-            `${box}.actor({ id: "${box}-${id}", at: [${i + 1}, 1], title: "${id}" });`,
-        )
-        .join("") +
-      `${box}.link("${box}-a", "${box}-b", { label: "init + port to the stage" });` +
-      `${box}.peek("status", { at: [1, 2, 1, 4] });`;
-
+  it("keeps a scene's columns at a minimum width, scrolling the block sideways, and opens columns to fit a row's link labels", async () => {
     const { container } = await mountFixture("animation", {
       document: [
         {
           id: "block-1",
           type: "animation",
-          title: "Folds",
+          title: "Wide scene",
           height: "auto",
           frames: [{ key: "only", title: "Only" }],
           code: { status: "head/order.ts#L1" },
-          // Each scene reports its column count and gap through the error line.
+          // Six cards in a row with a label that opens the gap, and a wide
+          // peek: wider than any block, so the stage asks for its width. Once
+          // the stage is as wide as the scene, or time is up, it reports its
+          // columns, gap and card widths through the error line.
           html:
-            '<div id="narrow" style="width: 760px"></div><div id="wide" style="width: 1400px"></div><script>' +
-            scene("narrow") +
-            scene("wide") +
-            'const report = (id) => { const s = getComputedStyle(document.querySelector(`#${id} .wb-scene`)); return `${id} ${s.gridTemplateColumns.split(" ").length} gap ${parseFloat(s.columnGap) > 48}`; };' +
-            'setTimeout(() => { throw new Error(`${report("narrow")}, ${report("wide")}`); }, 600);' +
+            "<script>const s = whiteboard.scene({ columns: 6 });" +
+            ["a", "b", "c", "d", "e", "f"]
+              .map(
+                (id, i) =>
+                  `s.actor({ id: "${id}", at: [${i + 1}, 1], title: "${id}" });`,
+              )
+              .join("") +
+            's.link("a", "b", { label: "init + port to the stage" });' +
+            's.peek("status", { at: [1, 2, 1, 6] });' +
+            "const deadline = Date.now() + 3000;" +
+            'const check = () => { const grid = document.querySelector(".wb-scene"); const fits = grid.getBoundingClientRect().width <= document.documentElement.clientWidth; if (!fits && Date.now() < deadline) { setTimeout(check, 50); return; } const style = getComputedStyle(grid); const widths = [...grid.querySelectorAll(".wb-card")].map((card) => card.getBoundingClientRect().width); throw new Error(`columns ${style.gridTemplateColumns.split(" ").length} gap ${parseFloat(style.columnGap) > 48} cards ${Math.min(...widths) >= 140} fits ${fits}`); };' +
+            "setTimeout(check, 300);" +
             "</script>",
           pins: { repositoryId: "repo", base: "base", head: "head" },
         },
       ],
     });
 
-    expect(await settled(() => alertText(container).includes("narrow"))).toBe(
+    expect(await settled(() => alertText(container).includes("columns"))).toBe(
       true,
     );
     expect(alertText(container)).toContain(
-      "narrow 2 gap true, wide 4 gap true",
+      "columns 6 gap true cards true fits true",
     );
+
+    // The block scrolls the stage, at least six cards and their gaps wide.
+    const iframe = container.querySelector("iframe")!;
+    const figure = container.querySelector<HTMLElement>(".animation-block")!;
+    const scroller = iframe.parentElement!.parentElement!;
+    expect(getComputedStyle(scroller).overflowX).toBe("auto");
+    expect(iframe.getBoundingClientRect().width).toBeGreaterThan(
+      figure.clientWidth,
+    );
+    expect(iframe.getBoundingClientRect().width).toBeGreaterThanOrEqual(
+      6 * 140 + 5 * 48 + 48,
+    );
+  });
+
+  it("keeps any stage as wide as its content reaches and scrolls the block sideways", async () => {
+    // A hand-made layout: a lane wider than the block, drawn with no scene.
+    const { container } = await mountFixture(
+      "animation",
+      {
+        document: documentSchema.parse([
+          {
+            id: "block-1",
+            type: "animation",
+            title: "Wide lane",
+            height: 160,
+            frames: [{ key: "a", title: "One" }],
+            code: {},
+            html: '<div class="wb-lane" style="width: 900px">Wide</div>',
+            pins: { repositoryId: "repo", base: "base", head: "head" },
+          },
+        ]),
+      },
+      "width: 480px",
+    );
+
+    const iframe = (await settled(() => container.querySelector("iframe")))!;
+    const figure = container.querySelector<HTMLElement>(".animation-block")!;
+    expect(figure.clientWidth).toBeLessThan(900);
+    expect(
+      await settled(() => iframe.getBoundingClientRect().width >= 900),
+    ).toBe(true);
+    expect(
+      getComputedStyle(iframe.parentElement!.parentElement!).overflowX,
+    ).toBe("auto");
   });
 
   it("starts on the first scenario and switches the stage's path from the picker", async () => {
@@ -1616,7 +1729,7 @@ describe("block components", () => {
     ).toBe(true);
   });
 
-  it("mounts a scene in its container and keeps narrow tables readable", async () => {
+  it("mounts a scene in its container, keeps its tables readable and holds its height across frames", async () => {
     const { container } = await mountFixture("animation", {
       document: [
         {
@@ -1644,7 +1757,7 @@ describe("block components", () => {
             'const proof=whiteboard.code("proof");proof.style.width="10px";document.body.append(proof);',
             "function luminance(color){const c=color.match(/[0-9.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4});return .2126*c[0]+.7152*c[1]+.0722*c[2]}",
             "function readable(el){const x=luminance(getComputedStyle(el).color),y=luminance(getComputedStyle(a.element).backgroundColor);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)>=4.5}",
-            'function report(key){const bounds=files.element.getBoundingClientRect();const fits=[...files.element.querySelectorAll("th,td")].every(cell=>{const r=document.createRange();r.selectNodeContents(cell);return [...r.getClientRects()].every(b=>b.left>=bounds.left&&b.right<=bounds.right)});const stacked=bounds.top>a.element.getBoundingClientRect().bottom;const note=[...a.element.children].find(el=>el.textContent==="Read an object response");const contrast=readable(note)&&readable(files.element.querySelector("th"));const okay=shell.contains(a.element)&&shell.contains(badge)&&fits&&stacked===(key==="narrow")&&contrast&&(key!=="wide-idle"||b.element.getBoundingClientRect().height===0);proof.style.width=okay?(key==="narrow"?"200px":key==="wide"?"240px":"280px"):"100px"}',
+            'function report(key){const bounds=files.element.getBoundingClientRect();const fits=[...files.element.querySelectorAll("th,td")].every(cell=>{const r=document.createRange();r.selectNodeContents(cell);return [...r.getClientRects()].every(b=>b.left>=bounds.left&&b.right<=bounds.right)});const note=[...a.element.children].find(el=>el.textContent==="Read an object response");const contrast=readable(note)&&readable(files.element.querySelector("th"));const okay=shell.contains(a.element)&&shell.contains(badge)&&fits&&contrast&&(key!=="wide-idle"||b.element.getBoundingClientRect().height===0);proof.style.width=okay?(key==="narrow"?"200px":key==="wide"?"240px":"280px"):"100px"}',
             'whiteboard.on("*",({frame})=>{shell.style.width=frame.key==="narrow"?"320px":"720px";setTimeout(()=>report(frame.key),100)});',
             "</script>",
           ].join(""),
@@ -1673,6 +1786,14 @@ describe("block components", () => {
         width() === "100px" || width() === "240px" ? width() : undefined,
       ),
     ).toBe("240px");
+    // The hidden measuring copy leaves once it has reported the tallest frame;
+    // until then the stage still has its first height.
+    expect(
+      await settled(
+        () =>
+          container.querySelector("iframe[title='Measuring copy']") === null,
+      ),
+    ).toBe(true);
     const iframe = container.querySelector("iframe")!;
     const expandedHeight = iframe.getBoundingClientRect().height;
 
@@ -2284,6 +2405,57 @@ describe("animation tour", () => {
     expect(overlay()).toBeNull();
   });
 
+  it("keeps the step strip on one row and scrolls it to the step showing", async () => {
+    const { container } = await mountFixture(
+      "animation",
+      {
+        document: documentSchema.parse([
+          {
+            id: "block-1",
+            type: "animation",
+            title: "Many steps",
+            height: 160,
+            frames: Array.from({ length: 8 }, (_, i) => ({
+              key: `s${i}`,
+              title: `Step ${i}`,
+              label: `A LONGER STEP LABEL ${i}`,
+            })),
+            code: {},
+            html: "<p>Stage</p>",
+            pins: { repositoryId: "repo", base: "base", head: "head" },
+          },
+        ]),
+      },
+      "width: 360px",
+    );
+
+    const strip = (await settled(() =>
+      container.querySelector<HTMLElement>("[aria-label='Steps']"),
+    ))!;
+
+    const steps = [...strip.querySelectorAll<HTMLElement>("button")];
+
+    const shown = (step: HTMLElement) => {
+      const rect = step.getBoundingClientRect();
+      const bounds = strip.getBoundingClientRect();
+
+      return rect.left >= bounds.left - 1 && rect.right <= bounds.right + 1;
+    };
+
+    expect(steps).toHaveLength(8);
+    expect(strip.scrollWidth).toBeGreaterThan(strip.clientWidth);
+    expect(new Set(steps.map((step) => step.offsetTop)).size).toBe(1);
+    expect(shown(steps[0]!)).toBe(true);
+    expect(shown(steps[7]!)).toBe(false);
+
+    await act(async () => steps[7]!.click());
+    expect(await settled(() => shown(steps[7]!))).toBe(true);
+
+    await act(async () => steps[0]!.click());
+    expect(await settled(() => shown(steps[0]!))).toBe(true);
+    expect(strip.scrollLeft).toBe(0);
+  });
+
   it("scales an expanded animation up to the room it is given", async () => {
     // The overlay spans the host, which is wider than the inline column.
     const { container } = await mountFixture(
@@ -2305,8 +2477,10 @@ describe("animation tour", () => {
       "width: 1100px",
     );
 
+    // The sheet holds the iframe at the stage's width; the canvas above it
+    // is what scales.
     const inline = (await settled(() => container.querySelector("iframe")))!
-      .parentElement!;
+      .parentElement!.parentElement!;
 
     const inlineWidth = inline.clientWidth;
 
@@ -2319,7 +2493,7 @@ describe("animation tour", () => {
     const stage = await settled(
       () =>
         document.querySelector<HTMLElement>("[role='dialog'] figure iframe")
-          ?.parentElement,
+          ?.parentElement?.parentElement,
     );
 
     const scaleOf = () =>

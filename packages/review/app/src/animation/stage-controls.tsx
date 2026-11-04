@@ -4,9 +4,16 @@
 import { fontSize, leading, space, tracking } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { IconButton } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
-import type { CSSProperties, KeyboardEvent, ReactNode } from "react";
+import {
+  type CSSProperties,
+  type KeyboardEvent,
+  type ReactNode,
+  useEffect,
+  useRef,
+} from "react";
 
 import type { FrameTimer, PlayerStop } from "./stage-player";
 
@@ -49,7 +56,8 @@ export const pauseIcon = <path d="M9 6.5v11M15 6.5v11" />;
 
 /** The title and caption of the stop showing, read out as it changes. Every
  * stop's caption shares one cell, with only the current one visible, so the
- * row keeps the height of the longest and never moves as the reader steps. */
+ * row keeps the height of the longest and never moves as the reader steps.
+ * A caption stops at three lines. */
 export function StopCaption({
   stops,
   activeIndex,
@@ -66,6 +74,7 @@ export function StopCaption({
           <div
             key={stop.key}
             {...stylex.props(
+              textStyles.clamp3,
               styles.captionText,
               !current && styles.captionHidden,
             )}
@@ -103,7 +112,8 @@ export const timerState = (timer: FrameTimer) =>
 
 /** A named step per stop, like a progress strip. While frames play, the
  * marker under the step showing is drawn along it as the frame's time runs,
- * over a wash of where it will end. */
+ * over a wash of where it will end. The strip stays one row: narrower than
+ * its steps, it scrolls sideways and keeps the step showing in view. */
 export function StepStrip({
   label,
   items,
@@ -119,8 +129,25 @@ export function StepStrip({
   onPick(position: number): void;
   onKeyDown(event: KeyboardEvent): void;
 }) {
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  // Scroll the strip alone, not the page: a step off its edge comes in.
+  useEffect(() => {
+    const strip = stripRef.current;
+    const step = strip?.children[activeIndex];
+
+    if (!strip || !(step instanceof HTMLElement)) return;
+    const left = step.offsetLeft - strip.offsetLeft;
+    const right = left + step.offsetWidth;
+
+    if (left < strip.scrollLeft) strip.scrollLeft = left;
+    else if (right > strip.scrollLeft + strip.clientWidth)
+      strip.scrollLeft = right - strip.clientWidth;
+  }, [activeIndex]);
+
   return (
     <div
+      ref={stripRef}
       {...stylex.props(styles.steps)}
       role="group"
       aria-label={label}
@@ -188,12 +215,8 @@ const styles = stylex.create({
     visibility: "hidden",
   },
   steps: {
-    display: { default: "flex", [stylex.env.narrow]: "grid" },
-    gridTemplateColumns: {
-      default: null,
-      [stylex.env.narrow]: "repeat(4, minmax(0, 1fr))",
-    },
-    overflowX: { default: "auto", [stylex.env.narrow]: "visible" },
+    display: "flex",
+    overflowX: "auto",
     borderTopWidth: "1px",
     borderTopStyle: "solid",
     borderTopColor: tokens.rule,
@@ -205,11 +228,8 @@ const styles = stylex.create({
     alignItems: "center",
     justifyContent: "center",
     gap: space.s4,
-    minWidth: { default: "fit-content", [stylex.env.narrow]: 0 },
-    padding: {
-      default: `${space.s6} ${space.s10}`,
-      [stylex.env.narrow]: `${space.s6} ${space.s4}`,
-    },
+    minWidth: "fit-content",
+    padding: `${space.s6} ${space.s10}`,
     borderStyle: "none",
     borderBottomWidth: "2px",
     borderBottomStyle: "solid",
@@ -220,7 +240,7 @@ const styles = stylex.create({
     letterSpacing: tracking.chrome,
     textAlign: "center",
     textTransform: "uppercase",
-    whiteSpace: { default: "nowrap", [stylex.env.narrow]: "normal" },
+    whiteSpace: "nowrap",
     cursor: "pointer",
     outline: { default: null, ":focus-visible": `1px solid ${tokens.accent}` },
     outlineOffset: "-2px",

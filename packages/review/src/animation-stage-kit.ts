@@ -395,7 +395,9 @@ body {
 .wb-shape[data-wb-highlit] { stroke: var(--wb-accent); stroke-width: 2; }
 
 /* Connectors and tokens. */
-.wb-arrows, .wb-tokens { position: fixed; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+/* Above the cards, which sit above their groups: an edge's head meets a
+   card's border, and a chip stays readable as it passes one. */
+.wb-arrows, .wb-tokens { position: fixed; inset: 0; z-index: 2; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .wb-line {
   fill: none;
   stroke: var(--wb-ink-faint);
@@ -414,6 +416,17 @@ body {
 .wb-arrow[data-tone="removed"] .wb-line { stroke: var(--wb-removed); marker-end: url(#wb-head-removed); }
 .wb-arrow[data-tone="modified"] .wb-line { stroke: var(--wb-modified); marker-end: url(#wb-head-modified); }
 .wb-arrow[data-wb-headless] .wb-line { marker-end: none; }
+/* An edge carrying one of the frame's messages takes the marker, label too. */
+.wb-arrow[data-wb-sent] .wb-line { stroke: var(--wb-accent); marker-end: url(#wb-head-accent); }
+.wb-arrow[data-wb-sent] .wb-label { fill: var(--wb-accent); }
+.wb-arrow[data-wb-sent="added"] .wb-line { stroke: var(--wb-added); marker-end: url(#wb-head-added); }
+.wb-arrow[data-wb-sent="added"] .wb-label { fill: var(--wb-added); }
+.wb-arrow[data-wb-sent="removed"] .wb-line { stroke: var(--wb-removed); marker-end: url(#wb-head-removed); }
+.wb-arrow[data-wb-sent="removed"] .wb-label { fill: var(--wb-removed); }
+.wb-arrow[data-wb-sent="modified"] .wb-line { stroke: var(--wb-modified); marker-end: url(#wb-head-modified); }
+.wb-arrow[data-wb-sent="modified"] .wb-label { fill: var(--wb-modified); }
+.wb-arrow[data-wb-sent="muted"] .wb-line { stroke: var(--wb-ink-faint); marker-end: url(#wb-head); }
+.wb-arrow[data-wb-sent="muted"] .wb-label { fill: var(--wb-ink-muted); }
 .wb-label {
   fill: var(--wb-ink-muted);
   font: var(--wb-text-micro) var(--wb-font-mono);
@@ -450,29 +463,26 @@ body {
 /* The scene. */
 .wb-scene { display: grid; gap: var(--wb-space-28) var(--wb-space-48); padding: var(--wb-space-24); align-items: center; justify-items: stretch; min-width: 0; }
 /* A card is as wide as what it says, within bounds, and sits mid-column, so
-   a folded scene does not stretch it into a slab and squeeze its edges. A
-   table keeps its column; a scene's own CSS may set any width. */
+   a wide column does not stretch it into a slab. A table keeps its column;
+   a scene's own CSS may set any width. The scene sets its own min-width from
+   the columns its cards make, and the block scrolls it sideways when
+   narrower. */
 .wb-scene > .wb-card:not([data-kind="table"]) { justify-self: center; width: fit-content; min-width: 140px; max-width: 300px; }
-.wb-scene-compact { grid-template-columns: minmax(0, 1fr) !important; row-gap: var(--wb-space-48); }
-.wb-scene-compact > * { grid-column: 1 / -1 !important; grid-row: auto !important; }
-.wb-scene-fold { grid-template-columns: repeat(var(--wb-fold), minmax(0, 1fr)) !important; }
-.wb-scene-fold > * { grid-column: auto !important; grid-row: auto !important; }
-.wb-scene-fold > [data-wb-wide] { grid-column: 1 / -1 !important; }
 .wb-scene > [data-wb-state="before"], .wb-scene > [data-wb-state="after"],
 .wb-items > [data-wb-state="before"], .wb-items > [data-wb-state="after"],
 .wb-table tr[data-wb-state="before"], .wb-table tr[data-wb-state="after"] { display: none; }
 .wb-scene-top { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--wb-space-8); margin-bottom: var(--wb-space-4); }
 /* A group is a washed box behind the cards of its cells, bleeding into the
-   gaps around them, titled in its top-left. Cards paint over it. A folded
-   scene no longer keeps its cells together, so it hides. */
+   gaps around them, titled in its top-left. Cards paint over it. */
 .wb-scene > .wb-card { position: relative; z-index: 1; }
 /* Groups bleed into the gaps around their cells, so a grouped scene opens
    its rows and columns to keep the boxes apart and give edges between
-   layers room to be read. */
+   layers room to be read. The top bleed holds the title clear of the cards
+   below it, ring and all. */
 .wb-scene:has(> .wb-group) { row-gap: var(--wb-space-72); column-gap: var(--wb-space-72); padding: var(--wb-space-32) var(--wb-space-24); }
 .wb-group {
   position: relative; z-index: 0; align-self: stretch; justify-self: stretch;
-  margin: calc(-1 * var(--wb-space-18)) calc(-1 * var(--wb-space-16)) calc(-1 * var(--wb-space-10));
+  margin: calc(-1 * var(--wb-space-28)) calc(-1 * var(--wb-space-16)) calc(-1 * var(--wb-space-10));
   border: 1px solid var(--wb-rule-soft); border-radius: var(--wb-radius-surface); background: var(--wb-well);
   transition: opacity var(--wb-duration) ease;
 }
@@ -485,14 +495,19 @@ body {
 .wb-group[data-color="violet"] .wb-group-title { color: var(--wb-violet); }
 .wb-group[data-color="ink"] { border-color: var(--wb-rule); }
 .wb-group[data-color="ink"] .wb-group-title { color: var(--wb-ink); }
-:is(.wb-scene-fold, .wb-scene-compact) > .wb-group { display: none; }
-/* The legend: a card-like glyph per entry, drawn with the card rules at
-   0.4 scale, and what it stands for. */
+/* The legend: a card-like glyph per entry, drawn with the card rules and
+   scaled to 0.4 inside a box of the scaled size, and what it stands for.
+   A transform, not zoom: Electron's Chromium reports a zoomed element's
+   rect in unzoomed units, which made the stage measure itself 2.5x tall. */
 .wb-legend { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--wb-space-6) var(--wb-space-16); padding: 0 var(--wb-space-24) var(--wb-space-12); color: var(--wb-ink-muted); font: var(--wb-text-micro)/var(--wb-leading-normal) var(--wb-font-mono); letter-spacing: var(--wb-tracking-chrome); text-transform: uppercase; }
 .wb-legend-entry { display: inline-flex; align-items: center; gap: var(--wb-space-6); white-space: nowrap; }
-.wb-card.wb-legend-glyph { display: block; flex: none; width: 50px; min-width: 0; height: 32px; padding: 0; zoom: 0.4; }
+.wb-legend-box { position: relative; flex: none; width: 20px; height: 13px; }
+.wb-card.wb-legend-glyph { position: absolute; top: 0; left: 0; display: block; width: 50px; min-width: 0; height: 32px; padding: 0; transform: scale(0.4); transform-origin: 0 0; }
 .wb-card.wb-legend-glyph[data-form="cylinder"] { height: 44px; }
-.wb-card.wb-legend-glyph[data-form="stack"] { margin: 0 8px 8px 0; }
+/* Lines that scale to a pixel: the glyph's borders, its lid and rule marks,
+   and its change stripe are drawn 2.5x heavier before the 0.4 scale. */
+.wb-card.wb-legend-glyph, .wb-card.wb-legend-glyph::before, .wb-card.wb-legend-glyph::after { border-width: 2.5px; }
+.wb-card.wb-legend-glyph[data-change] { border-left-width: 7px; }
 :root[data-wb-instant] *, :root[data-wb-instant] *::before, :root[data-wb-instant] *::after {
   transition: none !important;
   animation-duration: 0s !important;
