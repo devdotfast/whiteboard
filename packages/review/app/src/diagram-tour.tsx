@@ -173,7 +173,6 @@ const styles = stylex.create({
     minHeight: 0,
     overflow: "hidden",
     backgroundColor: tokens.bg,
-    // The stage's and the panel's headers line up with the window controls.
     "--review-fullscreen-header-height": tokens.reviewPageBarHeight,
   },
   flowOverlay: {
@@ -191,8 +190,7 @@ const styles = stylex.create({
   flowStage: {
     display: "flex",
   },
-  // Beside the panel, the stage is the left column; stacked over it, the
-  // stage is the top row and runs under the window controls on the right.
+  // Only stacked over the panel does the stage reach the controls.
   stageEnd: {
     "--review-fullscreen-end-inset": {
       default: "0px",
