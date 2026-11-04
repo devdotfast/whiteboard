@@ -18,6 +18,8 @@ For a new animation, write the same files into a folder of your own and publish 
 
 Before you write HTML, read the two files whose paths `session_checkout` and these instructions give: `whiteboard.css`, the classes and `--wb-*` variables every animation loads, and `whiteboard.d.ts`, the `whiteboard` API. Use the classes and variables rather than your own colors, sizes or fonts, so the animation matches the board in light and dark.
 
+Draw for a stage 720px wide: the width of the board's reading column, and the narrowest the stage gets. Fit that width with nothing past its right edge, so the reader never scrolls sideways on a full-size board: a scene fits three columns of cards, with room for link labels between them. A wider board or fullscreen gives the stage more room, and a narrower window keeps it at 720px and scrolls it sideways, so do not shrink the drawing for small widths. A scene keeps its columns at any width.
+
 Start from the reference closest to what you are drawing, listed under References at the end of these instructions: copy its folder into your draft, then change the data, the prose and the code links.
 
 There are three ways to draw.
@@ -39,7 +41,7 @@ For a few services, processes or stores with messages moving between them, use `
 </script>
 ```
 
-A scene names frame keys, so a new scenario means new frames and a few new lines like these. While a frame shows, each message it sends is the label of its edge and the edge takes the marker colour, however the reader reached the frame; stepping into the frame rides a chip from the sender that settles into the label. A card's `id` is its element's id, so your own CSS can address it as `#api`. A scene keeps its columns at any width: when the board is narrower than its cards need, the block scrolls the drawing sideways rather than reflowing it.
+A scene names frame keys, so a new scenario means new frames and a few new lines like these. While a frame shows, each message it sends is the label of its edge and the edge takes the marker colour, however the reader reached the frame; stepping into the frame rides a chip from the sender that settles into the label. A card's `id` is its element's id, so your own CSS can address it as `#api`.
 
 Give each card the silhouette of what it stands for, so a reader tells the parts apart before reading a title: `form: "window"` for a client, `"bars"` for a service or worker of this codebase, `"cylinder"` for a database, `"drum"` for a cache, `"stack"` for a queue or topic, `"pill"` for a start or end, `"cut"` for a branch. A third-party service or API gets `outline: "dashed"`. `color` sets a border colour at rest (`teal` for stores, `violet` for queues, `accent` for the part under discussion); a frame's `tone` takes over while set. The same `data-form`, `data-outline` and `data-color` work on a `wb-node` in a hand-made layout.
 

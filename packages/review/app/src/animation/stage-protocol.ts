@@ -116,6 +116,11 @@ export type HostMessage =
 /** The tallest an auto-sized stage may report itself. */
 export const STAGE_MAX_HEIGHT = 4000;
 
+/** The narrowest a stage lays out: the board's reading width. In a
+ * narrower block it keeps this width and scrolls sideways, rather than
+ * squeezing a drawing made for the board. */
+export const STAGE_MIN_WIDTH = 720;
+
 /** The widest a stage may ask to stay, scrolling sideways in a narrower
  * block. */
 export const STAGE_MAX_WIDTH = 4000;

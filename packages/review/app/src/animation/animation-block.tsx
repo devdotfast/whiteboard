@@ -68,6 +68,7 @@ import type { PlayerStop, StagePlayer } from "./stage-player";
 import {
   type HostMessage,
   STAGE_BOOT,
+  STAGE_MIN_WIDTH,
   type SlotLayout,
   type StageColorScheme,
   type StageInit,
@@ -301,9 +302,10 @@ function StageBlock({
   const { diagramFullscreenOnClick } = useWhiteboardSettings();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [contentHeight, setContentHeight] = useState(STAGE_MIN_HEIGHT);
-  // The widest the stage's content has reached past its edge, in any frame;
-  // the stage keeps that width and a narrower block scrolls it.
-  const [minWidth, setMinWidth] = useState(0);
+  // The board's reading width, or the widest the stage's content has
+  // reached past its edge in any frame: the stage keeps that width and a
+  // narrower block scrolls it.
+  const [minWidth, setMinWidth] = useState(STAGE_MIN_WIDTH);
   // The tallest frame of the scenario, from a hidden measuring copy, so the
   // stage does not change height as the reader steps through frames.
   const [measuredHeight, setMeasuredHeight] = useState(0);
@@ -360,7 +362,7 @@ function StageBlock({
   // of its height, and the width its stage was laid out at.
   const holdInline = () => {
     setHeld(figureRef.current?.offsetHeight ?? 0);
-    setInlineWidth(canvasRef.current?.clientWidth ?? 0);
+    setInlineWidth(Math.max(canvasRef.current?.clientWidth ?? 0, minWidth));
   };
 
   const openRef = useRef<HTMLButtonElement>(null);
@@ -1100,11 +1102,7 @@ function StageBlock({
         >
           <div
             ref={canvasRef}
-            {...stylex.props(
-              styles.canvas,
-              minWidth > 0 && styles.canvasScrolls,
-              scaled && styles.canvasScaled,
-            )}
+            {...stylex.props(styles.canvas, scaled && styles.canvasScaled)}
             style={{
               height: stageHeight,
               ...(scaled && {
@@ -1113,10 +1111,7 @@ function StageBlock({
               }),
             }}
           >
-            <div
-              {...stylex.props(styles.sheet)}
-              style={{ minWidth: minWidth || undefined }}
-            >
+            <div {...stylex.props(styles.sheet)} style={{ minWidth }}>
               <iframe
                 key={stageKey}
                 ref={frameRef}
@@ -1476,12 +1471,10 @@ const styles = stylex.create({
   canvas: {
     position: "relative",
     flex: "0 0 auto",
-    overflow: "hidden",
-  },
-  // The stage asked for a width: it keeps it, and a narrower block scrolls
-  // it sideways rather than folding the drawing.
-  canvasScrolls: {
+    // The stage keeps its width, and a narrower block scrolls it sideways
+    // rather than folding the drawing.
     overflowX: "auto",
+    overflowY: "hidden",
   },
   canvasScaled: {
     transformOrigin: "0 0",

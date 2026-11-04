@@ -1783,6 +1783,51 @@ export function stageRuntime(port: MessagePort): void {
         : [],
     );
 
+    // Every drawn line, as thin boxes along its curve: a label clear of
+    // cards can still sit on a parallel edge fanned a few pixels from its
+    // own, so it avoids every line but its own.
+    const lines = new Map<ArrowRecord, DOMRect[]>();
+
+    for (const arrow of arrows) {
+      const route = arrow.labelRoute;
+
+      if (
+        !route ||
+        (arrow.group.dataset.wbState && arrow.group.dataset.wbState !== "on") ||
+        !arrow.path.checkVisibility({
+          visibilityProperty: true,
+          opacityProperty: true,
+        })
+      )
+        continue;
+
+      const { start, control, end } = route;
+      const boxes: DOMRect[] = [];
+      let previous = start;
+
+      for (let step = 1; step <= 24; step++) {
+        const t = step / 24;
+        const u = 1 - t;
+
+        const point = {
+          x: u * u * start.x + 2 * u * t * control.x + t * t * end.x,
+          y: u * u * start.y + 2 * u * t * control.y + t * t * end.y,
+        };
+
+        boxes.push(
+          new DOMRect(
+            Math.min(previous.x, point.x) - 1,
+            Math.min(previous.y, point.y) - 1,
+            Math.abs(point.x - previous.x) + 2,
+            Math.abs(point.y - previous.y) + 2,
+          ),
+        );
+        previous = point;
+      }
+
+      lines.set(arrow, boxes);
+    }
+
     for (const arrow of arrows) {
       const { text, labelRoute } = arrow;
 
@@ -1884,6 +1929,19 @@ export function stageRuntime(port: MessagePort): void {
       }
 
       const collisions = [...obstacles, ...endpoints, ...controls, ...flights];
+
+      // Only the lines near enough to the label's candidates to meet them.
+      const reach = new DOMRect(
+        baseX + relative.left - 150,
+        baseY + relative.top - 160,
+        relative.width + 300,
+        relative.height + 320,
+      );
+
+      const crossing = [...lines]
+        .filter(([other]) => other !== arrow)
+        .flatMap(([, boxes]) => boxes.filter((box) => overlaps(box, reach)));
+
       let selected: { x: number; y: number; rect: DOMRect } | undefined;
 
       for (const [normalOffset, tangentOffset] of offsets) {
@@ -1906,6 +1964,7 @@ export function stageRuntime(port: MessagePort): void {
         if (
           inViewport &&
           !collisions.some((obstacle) => overlaps(rect, obstacle, 3)) &&
+          !crossing.some((line) => overlaps(rect, line)) &&
           !placed.some((other) => overlaps(rect, other, 4))
         ) {
           selected = { x, y, rect };
@@ -2739,20 +2798,29 @@ export function stageRuntime(port: MessagePort): void {
       grid.style.columnGap = `${Math.min(160, Math.max(floor, Math.ceil(widest) + 16))}px`;
     };
 
-    // The scene keeps its columns at any width: narrower than its cards
-    // need, it overflows the stage, which asks its host for the width and is
-    // scrolled sideways, rather than shrinking cards, tables and labels, or
-    // reflowing the drawing.
+    // The scene keeps its columns at any width and fits the stage's: a row's
+    // labels give back the gap they opened before cards narrow. Narrower than
+    // its cards need, it overflows the stage, which asks its host for the
+    // width and is scrolled sideways, rather than shrinking cards, tables and
+    // labels, or reflowing the drawing.
     const layout = () => {
-      sizeGap();
+      grid.style.columnGap = "";
+      grid.style.minWidth = "";
       const style = getComputedStyle(grid);
+      const floor = parseFloat(style.columnGap);
 
       const padding =
         parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
 
-      const gap = parseFloat(style.columnGap);
+      sizeGap();
+      const wanted = parseFloat(getComputedStyle(grid).columnGap);
       const effective = Math.ceil(columns / unitSpan());
-      grid.style.minWidth = `${effective * 140 + (effective - 1) * gap + padding}px`;
+      const room = grid.clientWidth - padding;
+
+      if (effective > 1 && room - (effective - 1) * wanted < effective * 140)
+        grid.style.columnGap = `${Math.max(floor, (room - effective * 140) / (effective - 1))}px`;
+
+      grid.style.minWidth = `${effective * 140 + (effective - 1) * floor + padding}px`;
     };
 
     let layoutFrame: number | undefined;
@@ -2771,7 +2839,10 @@ export function stageRuntime(port: MessagePort): void {
       layoutFrame = requestAnimationFrame(runLayout);
     };
 
-    new ResizeObserver(() => wake()).observe(grid);
+    new ResizeObserver(() => {
+      wake();
+      scheduleLayout();
+    }).observe(grid);
     layout();
 
     const nodes = new Map<string, HTMLElement>();
