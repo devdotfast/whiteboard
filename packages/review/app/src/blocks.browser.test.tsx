@@ -2394,8 +2394,10 @@ describe("animation tour", () => {
       "width: 1100px",
     );
 
+    // The sheet holds the iframe at the stage's width; the canvas above it
+    // is what scales.
     const inline = (await settled(() => container.querySelector("iframe")))!
-      .parentElement!;
+      .parentElement!.parentElement!;
 
     const inlineWidth = inline.clientWidth;
 
@@ -2408,7 +2410,7 @@ describe("animation tour", () => {
     const stage = await settled(
       () =>
         document.querySelector<HTMLElement>("[role='dialog'] figure iframe")
-          ?.parentElement,
+          ?.parentElement?.parentElement,
     );
 
     const scaleOf = () =>
