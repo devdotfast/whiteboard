@@ -33,6 +33,7 @@ import { REVIEW_LANGUAGE_SOURCE_SCHEME } from "../common/reviewReadonlySource.js
 import { sourceLocation, sourceSelectionIdentity, REVIEW_API_SOURCE_SCHEME } from "../common/reviewSourceView.js";
 import { reviewRemoteAuthority } from "./remote/reviewRemoteAuthority.js";
 import { IReviewDesktopConnectionService, reviewResponseError } from "./reviewDesktopConnectionService.js";
+import { IReviewTelemetryService } from "./reviewTelemetryService.js";
 
 type NavigatorAnswer = { workspacePath: string; filePath?: string; rootPath?: string } | ReviewRemoteNavigatorAnswer;
 
@@ -85,6 +86,7 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		@IFileService private readonly files: IFileService,
 		@IEnvironmentService private readonly environment: IEnvironmentService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
+		@IReviewTelemetryService private readonly telemetry: IReviewTelemetryService,
 	) {
 		super();
 		this._register(
@@ -137,6 +139,7 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		const result = await this.navigatorWorkspace(selection.reviewId, selection.kind === "version" ? { version: selection.version } : {});
 		const { uri, remote } = navigatorPaths(result);
 		await this.host.openWindow([{ workspaceUri: uri(result.workspacePath), label: title }], { forceNewWindow: true, ...remote });
+		this.telemetry.capture("source_opened", { destination: "source_window", kind: "tree" });
 	}
 
 	/**
@@ -151,26 +154,31 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 		const destinations = await Promise.all(resources.map(resource => this.sourceDestination(resource)));
 		const { workspaceUri, remote } = destinations[destinations.length - 1];
 		const selection = !diff ? (editor.options as ITextEditorOptions | undefined)?.selection : undefined;
-		if (!diff && destinations[0].external && await this.openExternalEditor(destinations[0], selection)) return true;
+		const external = !diff && destinations[0].external ? await this.openExternalEditor(destinations[0], selection) : undefined;
+		if (external) {
+			this.telemetry.capture("source_opened", { destination: external, kind: "file" });
+			return true;
+		}
 		await this.host.openWindow([
 			{ workspaceUri },
 			...destinations.map(({ fileUri }) => ({ fileUri: selection ? fileUri.with({ path: `${fileUri.path}:${selection.startLineNumber}:${selection.startColumn ?? 1}` }) : fileUri })),
 		], { forceNewWindow: true, gotoLineMode: true, diffMode: diff, ...remote });
+		this.telemetry.capture("source_opened", { destination: "source_window", kind: diff ? "diff" : "file" });
 		return true;
 	}
 
-	private async openExternalEditor({ fileUri, rootPath }: { fileUri: URI; rootPath?: string }, selection: ITextEditorOptions["selection"]): Promise<boolean> {
+	private async openExternalEditor({ fileUri, rootPath }: { fileUri: URI; rootPath?: string }, selection: ITextEditorOptions["selection"]): Promise<string | undefined> {
 		const editor = this.configurationService.getValue<string>(REVIEW_OPEN_FILES_IN_SETTING);
 		if (editor === "application") {
 			// An application takes the file alone: only the editors' URLs carry a line.
 			const application = this.configurationService.getValue<string>(REVIEW_OPEN_FILES_IN_APPLICATION_SETTING);
-			if (!application) return false;
+			if (!application) return undefined;
 			await this.desktopConnection.openInApplication(application, fileUri.fsPath);
-			return true;
+			return editor;
 		}
-		if (!isExternalEditor(editor)) return false;
+		if (!isExternalEditor(editor)) return undefined;
 		await this.desktopConnection.openInExternalEditor({ editor, filePath: fileUri.fsPath, line: selection?.startLineNumber, column: selection?.startColumn, folder: rootPath });
-		return true;
+		return editor;
 	}
 
 	async openSourceReferences(resource: URI, position: { readonly lineNumber: number; readonly column: number }): Promise<boolean> {
@@ -181,6 +189,7 @@ export class ReviewCanvasEditorTabsService extends Disposable implements IReview
 			...remote,
 			reviewReferencesToShow: { resource: fileUri, lineNumber: position.lineNumber, column: position.column },
 		});
+		this.telemetry.capture("source_opened", { destination: "source_window", kind: "references" });
 		return true;
 	}
 

@@ -40,6 +40,10 @@ export function markReviewDefinitionPeekHost(container: HTMLElement, diffs: Revi
 	return toDisposable(() => hosts.delete(container));
 }
 
+export function isReviewDefinitionPeekEditor(editor: ICodeEditor): boolean {
+	return !!peeks.get(editor)?.editors.includes(editor);
+}
+
 function hostDiffs(editor: ICodeEditor): ReviewDefinitionPeekDiffs | undefined {
 	// A native peek's preview keeps its own navigation.
 	if (editor instanceof EmbeddedCodeEditorWidget) return undefined;
@@ -169,7 +173,10 @@ export class ReviewDefinitionPeek extends Disposable {
 			const range = (input.options as { selection?: IRange } | undefined)?.selection;
 			if (!source || sideBySide || !range || input.resource.scheme !== REVIEW_API_SOURCE_SCHEME) return null;
 			const peek = peeks.get(source);
-			if (peek?.editors.includes(source)) return peek.setInput(input.resource, range);
+			if (peek?.editors.includes(source)) {
+				telemetry.capture("peek_opened", { via: "diff_definition" });
+				return peek.setInput(input.resource, range);
+			}
 			const diffs = hostDiffs(source);
 			if (!diffs) return null;
 			telemetry.capture("peek_opened", { via: "diff_definition" });

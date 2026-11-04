@@ -1060,6 +1060,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 				this.reviewTelemetryService.capture("setting_changed", {
 					setting: "open_files_in",
 					enabled: true,
+					choice,
 				});
 				await this.configurationService.updateValue(REVIEW_OPEN_FILES_IN_SETTING, choice, ConfigurationTarget.USER);
 				return this.currentOpenFilesIn();
@@ -1170,6 +1171,7 @@ export class ReviewCanvasEditorPane extends EditorPane {
 		this.reviewTelemetryService.capture("setting_changed", {
 			setting: "open_files_in",
 			enabled: true,
+			choice: "application",
 		});
 		await this.configurationService.updateValue(REVIEW_OPEN_FILES_IN_APPLICATION_SETTING, path, ConfigurationTarget.USER);
 		await this.configurationService.updateValue(REVIEW_OPEN_FILES_IN_SETTING, "application", ConfigurationTarget.USER);

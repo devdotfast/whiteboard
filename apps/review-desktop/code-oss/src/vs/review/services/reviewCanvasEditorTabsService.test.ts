@@ -41,6 +41,7 @@ async function closeWelcome(updateNeeded: boolean): Promise<number> {
 		{} as never,
 		{} as never,
 		{} as never,
+		{ capture() {} } as never,
 	);
 	try {
 		const welcome = await tabs.openWelcome(true);
@@ -75,6 +76,7 @@ function sourceTabs(t: TestContext, answer: (url: URL) => object, openFilesIn = 
 		{ async writeFile(resource: URI, content: VSBuffer) { written.push(`${resource.toString()}=${content.toString()}`); } } as never,
 		{ cacheHome: URI.file("/laptop/cache") } as never,
 		{ getValue: () => openFilesIn } as never,
+		{ capture() {} } as never,
 	);
 	t.after(() => tabs.dispose());
 	return { tabs, opened, written };
