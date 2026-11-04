@@ -223,6 +223,7 @@ const SOURCE_OPENED_DESTINATION = [
   "vscode",
   "cursor",
   "zed",
+  "intellij",
   "application",
 ] as const;
 

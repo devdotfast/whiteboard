@@ -53,7 +53,7 @@ function launchingChannel(picked: string | null = null, commandLine = true) {
 	const launcher = {
 		async openUrl(url: string) { launched.push(url); },
 		async openInApplication(application: string, filePath: string) { launched.push({ application, filePath }); },
-		async openEditorWorkspace(editor: string, folder: string, file: string) {
+		async openEditorWorkspace(editor: string, folder: string, file: unknown) {
 			if (commandLine) launched.push({ [editor]: [folder, file] });
 			return commandLine;
 		},
@@ -78,9 +78,9 @@ test("an editor's command line gets the checkout and file together", async () =>
 	const { channel, launched } = launchingChannel();
 
 	for (const editor of ["vscode", "cursor", "zed"])
-		await channel.call("", "openInExternalEditor", { editor, filePath: "/repo/src/a.ts", line: 3, folder: "/repo" });
+		await channel.call("", "openInExternalEditor", { editor, filePath: "/repo/src/a.ts", line: 3, column: 2, folder: "/repo" });
 
-	assert.deepEqual(launched, ["vscode", "cursor", "zed"].map((editor) => ({ [editor]: ["/repo", "/repo/src/a.ts:3:1"] })));
+	assert.deepEqual(launched, ["vscode", "cursor", "zed"].map((editor) => ({ [editor]: ["/repo", { path: "/repo/src/a.ts", line: 3, column: 2 }] })));
 });
 
 test("without its command line, an editor gets the folder's URL before the file's, and Zed only the file's", async () => {

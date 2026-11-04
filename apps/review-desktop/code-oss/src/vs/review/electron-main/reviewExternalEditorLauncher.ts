@@ -8,6 +8,7 @@ import { existsSync } from "fs";
 import { join } from "../../base/common/path.js";
 import type { IProcessEnvironment } from "../../base/common/platform.js";
 import { removeDangerousEnvVariables, sanitizeProcessEnvironment } from "../../base/common/processes.js";
+import { editorPosition, isLineNumber } from "../common/reviewExternalEditor.js";
 
 /**
  * The environment an editor gets when Whiteboard starts it.
@@ -76,22 +77,36 @@ export interface EditorWorkspaceLaunchOptions extends ExternalEditorLaunchOption
 	readonly exists?: (path: string) => boolean;
 }
 
+export interface EditorWorkspaceFile {
+	readonly path: string;
+	readonly line?: number;
+	readonly column?: number;
+}
+
+const gotoArgs = (folder: string, { path, line, column }: EditorWorkspaceFile) => [folder, "--goto", path + editorPosition(line, column)];
+
 /** Each editor's command line inside its macOS app, and how it takes a folder and a file at a position. */
-const EDITOR_COMMAND_LINES: Readonly<Record<string, { scheme: string; path: string[]; args: (folder: string, file: string) => string[] }>> = {
-	vscode: { scheme: "vscode", path: ["Contents", "Resources", "app", "bin", "code"], args: (folder, file) => [folder, "--goto", file] },
-	cursor: { scheme: "cursor", path: ["Contents", "Resources", "app", "bin", "cursor"], args: (folder, file) => [folder, "--goto", file] },
-	zed: { scheme: "zed", path: ["Contents", "MacOS", "cli"], args: (folder, file) => [folder, file] },
+const EDITOR_COMMAND_LINES: Readonly<Record<string, { scheme: string; path: string[]; args: (folder: string, file: EditorWorkspaceFile) => string[] }>> = {
+	vscode: { scheme: "vscode", path: ["Contents", "Resources", "app", "bin", "code"], args: gotoArgs },
+	cursor: { scheme: "cursor", path: ["Contents", "Resources", "app", "bin", "cursor"], args: gotoArgs },
+	zed: { scheme: "zed", path: ["Contents", "MacOS", "cli"], args: (folder, { path, line, column }) => [folder, path + editorPosition(line, column)] },
+	// IntelliJ counts columns from 0.
+	intellij: {
+		scheme: "idea",
+		path: ["Contents", "MacOS", "idea"],
+		args: (folder, { path, line, column }) => isLineNumber(line) ? [folder, "--line", String(line), "--column", String(isLineNumber(column) ? column - 1 : 0), path] : [folder, path],
+	},
 };
 
 /**
- * Opens a checkout and a file, `<path>:<line>:<column>`, in one editor window
+ * Opens a checkout and a file, at its position, in one editor window
  * through the editor's command line. Its URLs cannot: Zed opens each in a
  * window of its own, and Cursor drops a file URL that arrives while it is
  * still opening the folder's. Resolves false where the command line is not
  * found, which is anywhere but macOS: elsewhere a `zed` or `code` on `PATH`
  * may be another program, such as the ZFS event daemon on Linux.
  */
-export async function launchEditorWorkspace(editor: string, folder: string, file: string, options: EditorWorkspaceLaunchOptions = {}): Promise<boolean> {
+export async function launchEditorWorkspace(editor: string, folder: string, file: EditorWorkspaceFile, options: EditorWorkspaceLaunchOptions = {}): Promise<boolean> {
 	const { editorApplication = protocolApplication, exists = existsSync } = options;
 	const commandLine = Object.hasOwn(EDITOR_COMMAND_LINES, editor) ? EDITOR_COMMAND_LINES[editor] : undefined;
 	if (!commandLine || (options.platform ?? process.platform) !== "darwin") return false;

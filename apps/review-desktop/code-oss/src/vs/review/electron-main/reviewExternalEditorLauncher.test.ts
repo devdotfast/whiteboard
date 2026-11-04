@@ -85,14 +85,15 @@ test("each editor's command line from the app that handles its scheme gets the f
 		exists: () => true,
 	};
 
-	for (const editor of ["vscode", "cursor", "zed"])
-		assert.equal(await launchEditorWorkspace(editor, "/repo", "/repo/a.ts:4:1", options), true);
+	for (const editor of ["vscode", "cursor", "zed", "intellij"])
+		assert.equal(await launchEditorWorkspace(editor, "/repo", { path: "/repo/a.ts", line: 4, column: 2 }, options), true);
 
-	assert.deepEqual(asked, ["vscode", "cursor", "zed"]);
+	assert.deepEqual(asked, ["vscode", "cursor", "zed", "idea"]);
 	assert.deepEqual(opener.calls.map(({ command, args }) => [command, ...args]), [
-		["/Applications/vscode app.app/Contents/Resources/app/bin/code", "/repo", "--goto", "/repo/a.ts:4:1"],
-		["/Applications/cursor app.app/Contents/Resources/app/bin/cursor", "/repo", "--goto", "/repo/a.ts:4:1"],
-		["/Applications/zed app.app/Contents/MacOS/cli", "/repo", "/repo/a.ts:4:1"],
+		["/Applications/vscode app.app/Contents/Resources/app/bin/code", "/repo", "--goto", "/repo/a.ts:4:2"],
+		["/Applications/cursor app.app/Contents/Resources/app/bin/cursor", "/repo", "--goto", "/repo/a.ts:4:2"],
+		["/Applications/zed app.app/Contents/MacOS/cli", "/repo", "/repo/a.ts:4:2"],
+		["/Applications/idea app.app/Contents/MacOS/idea", "/repo", "--line", "4", "--column", "1", "/repo/a.ts"],
 	]);
 	assert.equal(opener.calls[0].env.VSCODE_DEV, undefined);
 });
@@ -101,9 +102,9 @@ test("without an editor's command line nothing starts", async () => {
 	const opener = fakeOpener({ code: 0 });
 	const options = { spawn: opener.spawn, env: whiteboardEnv, exists: () => false };
 
-	assert.equal(await launchEditorWorkspace("zed", "/repo", "/repo/a.ts", { ...options, platform: "darwin", editorApplication: async () => undefined }), false);
-	assert.equal(await launchEditorWorkspace("cursor", "/repo", "/repo/a.ts", { ...options, platform: "darwin", editorApplication: async () => "/Applications/Cursor.app" }), false);
-	assert.equal(await launchEditorWorkspace("vscode", "/repo", "/repo/a.ts", { ...options, platform: "linux", exists: () => true }), false);
-	assert.equal(await launchEditorWorkspace("toString", "/repo", "/repo/a.ts", { ...options, platform: "darwin", exists: () => true }), false);
+	assert.equal(await launchEditorWorkspace("zed", "/repo", { path: "/repo/a.ts" }, { ...options, platform: "darwin", editorApplication: async () => undefined }), false);
+	assert.equal(await launchEditorWorkspace("cursor", "/repo", { path: "/repo/a.ts" }, { ...options, platform: "darwin", editorApplication: async () => "/Applications/Cursor.app" }), false);
+	assert.equal(await launchEditorWorkspace("vscode", "/repo", { path: "/repo/a.ts" }, { ...options, platform: "linux", exists: () => true }), false);
+	assert.equal(await launchEditorWorkspace("toString", "/repo", { path: "/repo/a.ts" }, { ...options, platform: "darwin", exists: () => true }), false);
 	assert.equal(opener.calls.length, 0);
 });

@@ -9,21 +9,21 @@ import { IServerChannel } from "../../base/parts/ipc/common/ipc.js";
 import type { IDialogMainService } from "../../platform/dialogs/electron-main/dialogMainService.js";
 import type { IWindowsMainService } from "../../platform/windows/electron-main/windows.js";
 import type { ReviewDesktopConnection } from "../common/reviewDesktopBootstrap.js";
-import { editorPosition, externalEditorUrl, type ReviewExternalEditorTarget } from "../common/reviewExternalEditor.js";
+import { externalEditorUrl, type ReviewExternalEditorTarget } from "../common/reviewExternalEditor.js";
 import { REVIEW_SSH_ANSWER_CALL, REVIEW_SSH_PROMPT_EVENT } from "../common/reviewSshPrompt.js";
 import {
   reviewSshPromptRelay,
   type ReviewSshPromptRelay,
 } from "./remote/reviewSshPromptRelay.js";
 import type { ReviewDesktopHost } from "./reviewDesktopHost.js";
-import { applicationPickerOptions, launchApplication, launchEditorWorkspace, launchExternalEditorUrl } from "./reviewExternalEditorLauncher.js";
+import { applicationPickerOptions, launchApplication, launchEditorWorkspace, launchExternalEditorUrl, type EditorWorkspaceFile } from "./reviewExternalEditorLauncher.js";
 
 /** How the channel reaches outside Whiteboard; tests replace it. */
 export interface ReviewExternalLauncher {
   openUrl(url: string): Promise<void>;
   openInApplication(application: string, filePath: string): Promise<void>;
   /** False where the editor's command line is not found. */
-  openEditorWorkspace(editor: string, folder: string, file: string): Promise<boolean>;
+  openEditorWorkspace(editor: string, folder: string, file: EditorWorkspaceFile): Promise<boolean>;
 }
 
 const externalLauncher: ReviewExternalLauncher = {
@@ -78,7 +78,7 @@ export class ReviewDesktopChannel implements IServerChannel {
       if (!url) throw new Error("Not a file Whiteboard can open in an external editor.");
       const folder = typeof target.folder === "string" && isAbsolute(target.folder) ? target.folder : undefined;
       // The command line takes the folder and file together, into one window.
-      if (folder && await this.launcher.openEditorWorkspace(target.editor, folder, target.filePath + editorPosition(target.line, target.column))) return undefined as T;
+      if (folder && await this.launcher.openEditorWorkspace(target.editor, folder, { path: target.filePath, line: target.line, column: target.column })) return undefined as T;
       // Without it, the folder's URL first, so the editor puts the file in
       // the window that has its checkout open. Zed would open the folder in
       // a window of its own, so it gets only the file.
