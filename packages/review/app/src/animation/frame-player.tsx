@@ -20,8 +20,10 @@ import {
   StopCaption,
   pauseIcon,
   playIcon,
+  timerState,
+  timerVars,
 } from "./stage-controls";
-import type { StagePlayer, StageSend } from "./stage-player";
+import type { FrameTimer, StagePlayer, StageSend } from "./stage-player";
 import type { StageMessage } from "./stage-protocol";
 
 const DEFAULT_DURATION = 3000;
@@ -40,6 +42,13 @@ export function useFramePlayer(
   const [playing, setPlaying] = useState(false);
   const [settled, setSettled] = useState(-1);
   const [timeUp, setTimeUp] = useState(-1);
+  // The frame's clock, as the strip and the dots draw it, and how far a
+  // pause left it so play resumes from there.
+  const [timer, setTimer] = useState<FrameTimer | null>(null);
+  const heldRef = useRef({ index: -1, fraction: 0 });
+  // Whether the frame showing was drawn without its motion: a new stage's
+  // first frame, or a jump. Play shows such a frame again, with it.
+  const stillRef = useRef(true);
   const indexRef = useRef(index);
   indexRef.current = index;
 
@@ -81,6 +90,7 @@ export function useFramePlayer(
 
       if (next < 0 || next === indexRef.current) return;
       setIndex(next);
+      stillRef.current = instant;
       send({
         type: "frame",
         index: next,
@@ -124,6 +134,7 @@ export function useFramePlayer(
     const next = keys.includes(currentKey) ? indexRef.current : fallback;
 
     if (next !== indexRef.current) setIndex(next);
+    stillRef.current = true;
 
     // Refresh even a preserved key: lifecycle ranges, held scene changes,
     // and its timeline can differ when active order changes.
@@ -173,6 +184,7 @@ export function useFramePlayer(
 
     sequenceRef.current = sequence;
     setSequenceKeys(sequence);
+    stillRef.current = true;
 
     if (sequence && !sequence.includes(frames[indexRef.current]!.key)) {
       indexRef.current = frames.findIndex((item) => item.key === sequence[0]);
@@ -195,17 +207,60 @@ export function useFramePlayer(
     };
   };
 
-  // Play: hold each active-sequence frame for its duration and until its motion ends.
+  // Play: hold each active-sequence frame for its duration and until its
+  // motion ends. The clock runs from where a pause left this frame, and the
+  // cleanup notes how far it got.
   useEffect(() => {
     if (!playing) return;
 
-    const timer = setTimeout(
-      () => setTimeUp(index),
-      frame.duration ?? DEFAULT_DURATION,
-    );
+    const duration = frame.duration ?? DEFAULT_DURATION;
+    const held = heldRef.current;
+    const from = held.index === index ? held.fraction : 0;
+    const remaining = Math.round((1 - from) * duration);
+    const began = performance.now();
+    setTimer({ fraction: from, remaining, running: true });
+    const timeout = setTimeout(() => setTimeUp(index), remaining);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timeout);
+
+      const ran = Math.min(
+        1,
+        (performance.now() - began) / Math.max(1, remaining),
+      );
+
+      heldRef.current = { index, fraction: from + (1 - from) * ran };
+    };
   }, [playing, index, frame.duration]);
+
+  // Play on a frame drawn without its motion shows it again with it, so a
+  // new stage's first frame, and the first frame after Replay, move too.
+  useEffect(() => {
+    if (!playing || !stillRef.current) return;
+    stillRef.current = false;
+    send({
+      type: "frame",
+      index: indexRef.current,
+      instant: false,
+      direction: "forward",
+      adjacent: true,
+    });
+  }, [playing, index, send]);
+
+  // Paused: the marker holds where it was. A frame reached by hand has no
+  // clock, and forgets the one it held.
+  useEffect(() => {
+    if (playing) return;
+
+    const held = heldRef.current;
+
+    if (held.index === index)
+      setTimer({ fraction: held.fraction, remaining: 0, running: false });
+    else {
+      heldRef.current = { index: -1, fraction: 0 };
+      setTimer(null);
+    }
+  }, [playing, index]);
 
   useEffect(() => {
     if (!playing || timeUp !== index || settled !== index) return;
@@ -245,6 +300,7 @@ export function useFramePlayer(
     strip: steps && {
       label: "Steps",
       items: steps.map((item) => ({ key: item.key, text: item.label! })),
+      timer,
     },
     onKeyDown(event: KeyboardEvent) {
       if (event.key === "ArrowRight") go(activeIndex + 1, false);
@@ -267,7 +323,11 @@ export function useFramePlayer(
           onClick={() => {
             if (playing) return setPlaying(false);
 
-            if (activeIndex >= last) go(0, true);
+            // Replay starts the first frame's clock over.
+            if (activeIndex >= last) {
+              heldRef.current = { index: -1, fraction: 0 };
+              go(0, true);
+            }
 
             setPlaying(true);
           }}
@@ -281,7 +341,7 @@ export function useFramePlayer(
         >
           <path d="M9.5 6.5 15 12l-5.5 5.5" />
         </ControlButton>
-        <StopCaption stop={frame} />
+        <StopCaption stops={activeFrames} activeIndex={activeIndex} />
         {!steps && (
           <div {...stylex.props(styles.dots)} role="group" aria-label="Frames">
             {activeFrames.map((item, position) => (
@@ -289,6 +349,7 @@ export function useFramePlayer(
                 key={item.key}
                 title={item.title}
                 current={position === activeIndex}
+                timer={position === activeIndex ? timer : null}
                 onClick={() => pick(position)}
               />
             ))}
@@ -299,16 +360,22 @@ export function useFramePlayer(
   };
 }
 
+/** One frame of a strip without labels. The current dot carries the clock
+ * while playing: a ring swept clockwise over a wash, whole when time is up.
+ * At rest, and while paused, it is the filled dot it always was. */
 function FrameDot({
   title,
   current,
+  timer,
   onClick,
 }: {
   title: string;
   current: boolean;
+  timer: FrameTimer | null;
   onClick(): void;
 }) {
   const tooltip = useTooltip(title, { instant: true });
+  const sweeping = timer?.running === true;
 
   return (
     <button
@@ -316,11 +383,39 @@ function FrameDot({
       type="button"
       aria-label={title}
       aria-current={current ? "step" : undefined}
+      data-frame-timer={timer ? timerState(timer) : undefined}
       onClick={onClick}
-      {...stylex.props(styles.dot, current && styles.dotCurrent)}
-    />
+      {...stylex.props(
+        styles.dot,
+        current && styles.dotCurrent,
+        sweeping && styles.dotSweeping,
+      )}
+      style={sweeping ? timerVars(timer) : undefined}
+    >
+      {sweeping && (
+        <svg
+          aria-hidden="true"
+          focusable="false"
+          viewBox="0 0 8 8"
+          {...stylex.props(styles.sweep)}
+        >
+          <circle
+            cx="4"
+            cy="4"
+            r="3.5"
+            pathLength={1}
+            {...stylex.props(styles.sweepRing)}
+          />
+        </svg>
+      )}
+    </button>
   );
 }
+
+// The ring drawn clockwise from twelve as the frame's time runs.
+const sweep = stylex.keyframes({
+  to: { strokeDashoffset: 0 },
+});
 
 const styles = stylex.create({
   dots: {
@@ -329,6 +424,7 @@ const styles = stylex.create({
     gap: space.s6,
   },
   dot: {
+    position: "relative",
     width: "8px",
     height: "8px",
     padding: 0,
@@ -344,5 +440,36 @@ const styles = stylex.create({
   dotCurrent: {
     borderColor: tokens.accent,
     backgroundColor: tokens.accent,
+  },
+  // While the clock runs, the dot is a wash ring the marker sweeps around.
+  dotSweeping: {
+    borderColor: {
+      default: tokens.accentStripe,
+      [stylex.env.reducedMotion]: tokens.accent,
+    },
+    backgroundColor: {
+      default: tokens.transparent,
+      [stylex.env.reducedMotion]: tokens.accent,
+    },
+  },
+  sweep: {
+    position: "absolute",
+    inset: "-1px",
+    display: { default: "block", [stylex.env.reducedMotion]: "none" },
+    width: "8px",
+    height: "8px",
+    overflow: "visible",
+    transform: "rotate(-90deg)",
+  },
+  sweepRing: {
+    fill: "none",
+    stroke: tokens.accent,
+    strokeWidth: 1.4,
+    strokeDasharray: 1,
+    strokeDashoffset: tokens.frameTimerRest,
+    animationName: sweep,
+    animationDuration: tokens.frameTimerMs,
+    animationTimingFunction: "linear",
+    animationFillMode: "forwards",
   },
 });

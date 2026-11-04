@@ -190,7 +190,7 @@ export function useClipPlayer(
         >
           {playing ? pauseIcon : playIcon}
         </ControlButton>
-        <StopCaption stop={stops[activeIndex]} />
+        <StopCaption stops={stops} activeIndex={activeIndex} />
       </>
     ),
   };

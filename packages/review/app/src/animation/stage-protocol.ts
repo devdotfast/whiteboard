@@ -76,6 +76,13 @@ export interface StageInit {
   scenario?: string;
   /** Library sources the stage runs before its own scripts: anime.js. */
   libraries: string[];
+  /** A hidden copy that steps through every frame of its scenario and
+   * reports the tallest, so the stage the reader sees can take that height
+   * before they reach it. */
+  measure?: boolean;
+  /** The heights the host's content takes in each slot, for a measuring
+   * copy, which has no content of its own drawn over it. */
+  slotSizes?: Record<string, number>;
 }
 
 export type HostMessage =
@@ -109,6 +116,10 @@ export type HostMessage =
 /** The tallest an auto-sized stage may report itself. */
 export const STAGE_MAX_HEIGHT = 4000;
 
+/** The widest a stage may ask to stay, scrolling sideways in a narrower
+ * block. */
+export const STAGE_MAX_WIDTH = 4000;
+
 /** The most code and block placeholders a stage may lay out. */
 export const STAGE_MAX_SLOTS = 200;
 
@@ -138,8 +149,17 @@ export type SlotLayout = z.infer<typeof slotLayoutSchema>;
 /** The stage runs an agent's scripts, so the host parses what it sends. */
 export const stageMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("ready") }),
+  /** The stage's content height, when it sizes itself, and the width its
+   * content reaches past its right edge, or 0 when it fits. The host keeps
+   * the stage at least as wide as any width it reported. */
   z.strictObject({
     type: z.literal("size"),
+    height: z.number().finite().nonnegative().max(STAGE_MAX_HEIGHT).optional(),
+    width: z.number().finite().nonnegative().max(STAGE_MAX_WIDTH),
+  }),
+  /** A measuring copy's tallest frame. */
+  z.strictObject({
+    type: z.literal("measured"),
     height: z.number().finite().nonnegative().max(STAGE_MAX_HEIGHT),
   }),
   z.strictObject({

@@ -16,7 +16,7 @@ A clip: markers.json declares the beats, and the script builds one timeline per 
 
 ## Adapt
 
-- Rename the four nodes and their `<small>` lines for your path, and keep the column centers in `client`, `api`, `cache`, `db` in step with the grid.
+- Rename the four nodes and their `<small>` lines for your path, keeping each node's `data-form` to what it stands for (a window, bars, a drum, a cylinder), and keep the column centers in `client`, `api`, `cache`, `db` in step with the grid.
 - Change the leg lengths in `hop` and `hold` to the proportions that matter, a slow query or a fast cache, and set `LONGEST` to the longest scenario's sum.
 - Add a scenario (a stale entry, a timeout) with an entry in scenarios.json and one more `build` call that places every marker.
 - Point `code` at your client call, handler, cache and query, and list them on the markers that show them.

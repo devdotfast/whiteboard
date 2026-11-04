@@ -1,0 +1,76 @@
+<script>
+  // Six half-step columns, every card two wide, so a row of two can sit
+  // centred under a row of one.
+  const s = whiteboard.scene({ columns: 6 });
+
+  // Four layers, one row each, each a group behind its cells. Every hop in
+  // the story is between neighbouring cells, so no edge crosses a card.
+  s.group({ id: "clients", at: [3, 1, 1, 2], title: "Client", color: "accent" });
+  s.group({ id: "edge", at: [2, 2, 1, 4], title: "Edge" });
+  s.group({ id: "services", at: [1, 3, 1, 6], title: "Our services" });
+  s.group({ id: "storage", at: [1, 4, 1, 6], title: "Storage", color: "teal" });
+
+  // Each card wears its kind: a window for the app, bars for our services,
+  // a drum for the CDN's cache, dashed because we do not run it, cylinders
+  // for the stores and a stack for the queue.
+  const app = s.actor({ id: "app", at: [3, 1, 1, 2], title: "Video app", form: "window", highlight: ["post", "watch", "play"] });
+  const gateway = s.actor({ id: "gateway", at: [2, 2, 1, 2], title: "API gateway", form: "bars", highlight: ["receive", "deliver"] });
+  const cdn = s.store({ id: "cdn", at: [4, 2, 1, 2], title: "CDN", note: "edge cache · third party", form: "drum", outline: "dashed", highlight: ["segment", "edge-miss"] });
+
+  const upload = s.actor({ id: "upload", at: [1, 3, 1, 2], title: "Upload service", form: "bars", code: "upload", highlight: ["store", "enqueue"] });
+  const transcoder = s.actor({ id: "transcoder", at: [3, 3, 1, 2], title: "Transcoder", note: "worker pool", form: "bars", code: "transcode", highlight: ["transcode", "renditions"] });
+  const catalog = s.actor({ id: "catalog", at: [5, 3, 1, 2], title: "Catalog service", form: "bars", code: "watch", highlight: ["ready", "lookup", "resolve"] });
+
+  const queue = s.store({ id: "queue", at: [1, 4, 1, 2], title: "Transcode queue", form: "stack", color: "violet" });
+  const blob = s.store({ id: "blob", at: [3, 4, 1, 2], title: "Blob store", note: "originals · renditions", form: "cylinder", color: "teal" });
+  const db = s.store({ id: "db", at: [5, 4, 1, 2], title: "Catalog DB", note: "videos · renditions", form: "cylinder", color: "teal" });
+
+  s.legend([
+    { form: "window", label: "Client" },
+    { form: "bars", label: "Our service" },
+    { form: "cylinder", color: "teal", label: "Store" },
+    { form: "stack", color: "violet", label: "Queue" },
+    { form: "drum", label: "Cache" },
+    { outline: "dashed", label: "Third party" },
+  ]);
+
+  // The catalog always reads its database; the other edges arrive with sends.
+  s.link(catalog, db);
+
+  // Upload: down through the layers, then ready.
+  s.send(app, gateway, "POST /videos", "post");
+  s.send(gateway, upload, "video.mp4", "receive");
+  s.on("receive", upload, { text: "receiving 1.2 GB" });
+  s.send(upload, blob, "original", "store");
+  s.on("store", blob, { text: "v1/original.mp4", tone: "added" });
+  s.on("enqueue", upload, { text: "202 Accepted", tone: "added" });
+  queue.item("v1", { enter: "enqueue", exit: "transcode", tone: "added" });
+  s.send(upload, queue, "transcode v1", "enqueue");
+  s.send(queue, transcoder, "job v1", "transcode");
+  s.on("transcode", transcoder, { text: "rendering 360p · 720p · 1080p", tone: "accent" });
+  s.on("transcode", upload, { tone: "none" });
+  s.send(transcoder, blob, "renditions", "renditions");
+  s.on("renditions", blob, { text: "v1/{360,720,1080}p" });
+  s.send(transcoder, catalog, "v1 ready", "ready");
+  s.on("ready", transcoder, { text: "idle", tone: "none" });
+  s.on("ready", catalog, { text: "v1: ready", tone: "added" });
+  s.on("ready", db, { text: "videos.v1 = ready", tone: "added" });
+
+  // Playback: resolved by our services once, then served from the edge.
+  s.on("watch", catalog, { tone: "none" });
+  s.on("watch", db, { tone: "none" });
+  s.send(app, gateway, "GET /watch/v1", "watch");
+  s.send(gateway, catalog, "watch v1", "lookup");
+  s.on("lookup", db, { text: "read videos.v1" });
+  s.send(catalog, gateway, "manifest", "resolve");
+  s.on("resolve", catalog, { text: "manifest → CDN URLs" });
+  s.send(gateway, app, "manifest", "deliver");
+  s.on("deliver", app, { text: "playing v1", tone: "accent" });
+  s.send(app, cdn, "GET seg-0001", "segment");
+  s.on("segment", cdn, { text: "miss", tone: "modified" });
+  s.send(cdn, blob, "fetch seg-0001", "edge-miss");
+  s.on("edge-miss", blob, { text: "v1/720p/seg-0001" });
+  cdn.item("seg-0001", { enter: "edge-miss", tone: "added" });
+  s.send(cdn, app, "seg-0001", "play");
+  s.on("play", cdn, { text: "cached at the edge", tone: "none" });
+</script>

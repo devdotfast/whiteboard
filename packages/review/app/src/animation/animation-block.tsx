@@ -79,6 +79,20 @@ import { SCALE } from "./stage-scale";
 // Read on demand: a Worker may lack import.meta.url.
 const stageUrl = () => new URL("./stage.html", import.meta.url).href;
 
+// An auto-sized stage's height before it has reported one.
+const STAGE_MIN_HEIGHT = 120;
+
+// How long a new stage waits for its frames' measurement before it takes
+// its current frame's height instead.
+const MEASURE_WAIT = 1000;
+
+// Fullscreen, the stage keeps its inline layout and scales to fit the room:
+// at most 2x, past which a drawing made for a column reads as a poster, and
+// at least 0.4x, below which its text cannot be read and the room scrolls.
+const STAGE_MAX_SCALE = 2;
+
+const STAGE_MIN_SCALE = 0.4;
+
 let animeSource: Promise<string> | undefined;
 
 // anime.js's source, for the stage: its own chunk, fetched by the first
@@ -230,7 +244,19 @@ function StageBlock({
   const session = useReviewSession();
   const { diagramFullscreenOnClick } = useWhiteboardSettings();
   const frameRef = useRef<HTMLIFrameElement>(null);
-  const [contentHeight, setContentHeight] = useState(120);
+  const [contentHeight, setContentHeight] = useState(STAGE_MIN_HEIGHT);
+  // The widest the stage's content has reached past its edge, in any frame;
+  // the stage keeps that width and a narrower block scrolls it.
+  const [minWidth, setMinWidth] = useState(0);
+  // The tallest frame of the scenario, from a hidden measuring copy, so the
+  // stage does not change height as the reader steps through frames.
+  const [measuredHeight, setMeasuredHeight] = useState(0);
+  const [measureRun, setMeasureRun] = useState<number | null>(null);
+  const [measureLate, setMeasureLate] = useState(false);
+  const slotSizesRef = useRef(new Map<string, number>());
+  const remeasureTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const measureRuns = useRef(0);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [slots, setSlots] = useState<SlotLayout[]>([]);
   const [error, setError] = useState<string | null>(null);
   const clip = node.type === "clip";
@@ -263,6 +289,23 @@ function StageBlock({
   // figure's height so the document keeps its place.
   const [expanded, setExpanded] = useState(false);
   const [held, setHeld] = useState(0);
+
+  // The stage's inline width, which it keeps fullscreen, scaled to the room.
+  const [inlineWidth, setInlineWidth] = useState(0);
+
+  const [room, setRoom] = useState<{ width: number; height: number } | null>(
+    null,
+  );
+
+  const roomRef = useRef<HTMLDivElement>(null);
+
+  // What the figure leaves behind when it moves to the overlay: a placeholder
+  // of its height, and the width its stage was laid out at.
+  const holdInline = () => {
+    setHeld(figureRef.current?.offsetHeight ?? 0);
+    setInlineWidth(canvasRef.current?.clientWidth ?? 0);
+  };
+
   const openRef = useRef<HTMLButtonElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
 
@@ -340,7 +383,7 @@ function StageBlock({
     if (!tourOpen) {
       captureUiEvent(session, "tour_started", { steps: tour.stops.length });
 
-      if (!expanded) setHeld(figureRef.current?.offsetHeight ?? 0);
+      if (!expanded) holdInline();
     }
 
     setExpanded(false);
@@ -387,7 +430,11 @@ function StageBlock({
   onMessage.current = (message) => {
     switch (message.type) {
       case "size":
-        setContentHeight(Math.ceil(message.height));
+        if (message.height !== undefined)
+          setContentHeight(Math.ceil(message.height));
+
+        if (message.width > 0)
+          setMinWidth((widest) => Math.max(widest, Math.ceil(message.width)));
         break;
       case "slots":
         setSlots(message.slots);
@@ -417,6 +464,66 @@ function StageBlock({
 
   const bootedRef = useRef<HTMLIFrameElement | null>(null);
   const bootPlayer = useEffectEvent(() => player.boot());
+
+  // The stage's first message, for the stage showing and for a measuring copy.
+  const stageInit = useCallback(
+    async (
+      figure: Element,
+      kind: ReturnType<StagePlayer["boot"]>,
+      paint: boolean,
+    ): Promise<StageInit> => {
+      const [anime, fonts] = await Promise.all([loadAnime(), loadFonts()]);
+
+      return {
+        type: "init",
+        ...kind,
+        html: node.html,
+        kit: STAGE_KIT_CSS,
+        autoSize: node.height === "auto",
+        code: Object.keys(node.code),
+        codeTitles: codeTitles(node, data.anchors),
+        blocks: [...embeddable.keys()],
+        ...readTheme(figure),
+        scale: SCALE,
+        reducedMotion: reducedMotion(),
+        paint,
+        libraries: [anime],
+        fonts,
+      };
+    },
+    [node, data.anchors, embeddable],
+  );
+
+  // What a measuring copy of an animation boots with: the scenario showing,
+  // from its first frame. A clip has one timeline and no frames to measure.
+  const measureKind = (): ReturnType<StagePlayer["boot"]> | null => {
+    if (node.type !== "animation") return null;
+
+    const sequence =
+      node.scenarios?.find((scenario) => scenario.key === player.scenario)
+        ?.frames ?? null;
+
+    const first = sequence
+      ? node.frames.findIndex((frame) => frame.key === sequence[0])
+      : 0;
+
+    return {
+      mode: "frames",
+      frames: node.frames.map(
+        ({ key, title, caption, data: frameData, code }) => ({
+          key,
+          title,
+          caption,
+          data: frameData,
+          code,
+        }),
+      ),
+      markers: [],
+      scenarios: [],
+      frame: Math.max(0, first),
+      ...(sequence && { sequence }),
+    };
+  };
 
   // Hand the stage its runtime and a private port when its page first loads.
   // A later load in the same frame is a page the stage navigated to, which
@@ -470,34 +577,35 @@ function StageBlock({
       [channel.port2],
     );
 
-    const init: Omit<StageInit, "libraries" | "fonts"> = {
-      type: "init",
-      ...kind,
-      html: node.html,
-      kit: STAGE_KIT_CSS,
-      autoSize: node.height === "auto",
-      code: Object.keys(node.code),
-      codeTitles: codeTitles(node, data.anchors),
-      blocks: [...embeddable.keys()],
-      ...readTheme(figure),
-      scale: SCALE,
-      reducedMotion: reducedMotion(),
-      paint,
-    };
-
-    Promise.all([loadAnime(), loadFonts()]).then(
-      ([anime, fonts]) =>
-        channel.port1.postMessage({
-          ...init,
-          libraries: [anime],
-          fonts,
-        } satisfies HostMessage),
+    stageInit(figure, kind, paint).then(
+      (init) => channel.port1.postMessage(init satisfies HostMessage),
       () => {
         setError(`The ${noun} libraries or fonts could not be loaded.`);
         endPaint();
       },
     );
-  }, [node, noun, embeddable, endPaint, portRef]);
+  }, [noun, endPaint, portRef, stageInit]);
+
+  // Measure again in a new copy after anything that can move a frame's layout.
+  const remeasure = useCallback(() => {
+    clearTimeout(remeasureTimer.current);
+    setMeasureRun(++measureRuns.current);
+  }, []);
+
+  // A new stage keeps its first height until its frames are measured, so it
+  // grows once, to its tallest frame, rather than to its current one first.
+  useEffect(() => {
+    setMeasuredHeight(0);
+    setMeasureLate(false);
+    slotSizesRef.current.clear();
+    remeasure();
+    const timer = setTimeout(() => setMeasureLate(true), MEASURE_WAIT);
+
+    return () => clearTimeout(timer);
+  }, [stageKey, remeasure]);
+
+  useEffect(() => remeasure(), [player.scenario, theme, remeasure]);
+  useEffect(() => () => clearTimeout(remeasureTimer.current), []);
 
   useEffect(() => () => portRef.current?.close(), [portRef]);
 
@@ -516,6 +624,57 @@ function StageBlock({
   const { portalTarget } = useDiagramTourShell(tourOpen || expanded, close);
 
   const fullscreen = (tourOpen || expanded) && portalTarget !== null;
+
+  // Fullscreen, the room the controls leave the stage, inside its padding.
+  useLayoutEffect(() => {
+    const element = roomRef.current;
+
+    if (!fullscreen || !element) {
+      setRoom(null);
+
+      return;
+    }
+
+    const read = () => {
+      const style = getComputedStyle(element);
+
+      setRoom({
+        width:
+          element.clientWidth -
+          Number.parseFloat(style.paddingLeft) -
+          Number.parseFloat(style.paddingRight),
+        height:
+          element.clientHeight -
+          Number.parseFloat(style.paddingTop) -
+          Number.parseFloat(style.paddingBottom),
+      });
+    };
+
+    read();
+    const observer = new ResizeObserver(read);
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [fullscreen]);
+
+  // Going fullscreen draws a new canvas; a resize changes its width.
+  useLayoutEffect(() => {
+    const canvas = canvasRef.current;
+
+    if (!canvas) return;
+    let width = canvas.clientWidth;
+    remeasure();
+
+    const observer = new ResizeObserver(() => {
+      if (canvas.clientWidth === width) return;
+      width = canvas.clientWidth;
+      remeasure();
+    });
+
+    observer.observe(canvas);
+
+    return () => observer.disconnect();
+  }, [fullscreen, remeasure]);
 
   // Focus follows the figure in and back out to the control that opened it.
   const wasFullscreen = useRef(false);
@@ -611,6 +770,29 @@ function StageBlock({
     followFrame();
   }, [frameAnchor, tour]);
 
+  const stageHeight =
+    node.height !== "auto"
+      ? node.height
+      : measuredHeight || measureLate
+        ? Math.max(contentHeight, measuredHeight)
+        : STAGE_MIN_HEIGHT;
+
+  // Fullscreen, the stage keeps its inline width, so its layout and its
+  // measured height hold, and scales to fit the room: up on a wide screen,
+  // down beside the tour's pane. A narrower stage would fold the drawing.
+  const scaled = fullscreen && inlineWidth > 0;
+
+  const scale =
+    scaled && room
+      ? Math.min(
+          STAGE_MAX_SCALE,
+          Math.max(
+            STAGE_MIN_SCALE,
+            Math.min(room.width / inlineWidth, room.height / stageHeight),
+          ),
+        )
+      : 1;
+
   const figure = (
     <figure
       ref={figureRef}
@@ -628,7 +810,6 @@ function StageBlock({
       <DiagramHeader
         kind={clip ? "CLIP" : "ANIMATION"}
         title={node.title}
-        titleStyle={styles.headerTitle}
         meta={`${activeIndex + 1} / ${stops.length}`}
         action={
           fullscreen ? (
@@ -652,7 +833,7 @@ function StageBlock({
               xstyle={diagramStyles.button}
               aria-label={`Expand ${noun}`}
               onClick={() => {
-                setHeld(figureRef.current?.offsetHeight ?? 0);
+                holdInline();
                 setExpanded(true);
               }}
             >
@@ -681,47 +862,99 @@ function StageBlock({
         </div>
       )}
       <div
+        ref={roomRef}
         {...stylex.props(styles.stage, fullscreen && styles.stageFullscreen)}
       >
         <div
-          {...stylex.props(styles.canvas)}
-          style={{
-            height: node.height === "auto" ? contentHeight : node.height,
-          }}
+          {...stylex.props(styles.zoom)}
+          style={
+            scaled
+              ? { width: inlineWidth * scale, height: stageHeight * scale }
+              : undefined
+          }
         >
-          <iframe
-            key={stageKey}
-            ref={frameRef}
-            src={stageUrl()}
-            title={node.title}
-            sandbox="allow-scripts"
-            onLoad={boot}
-            {...stylex.props(styles.frame)}
-          />
-          <div {...stylex.props(styles.overlays)}>
-            {slots.map((slot) => (
-              <SlotOverlay
-                key={slot.slot}
-                slot={slot}
-                onHeight={(height) =>
-                  send({ type: "slot-size", slot: slot.slot, height })
-                }
-              >
-                {slot.kind === "code"
-                  ? node.code[slot.ref] && (
-                      <CodePeekCard
-                        source={anchorSelection(
-                          animationCode(node.code[slot.ref]!).source,
-                          node.pins,
-                        )}
-                        heightMode="capped"
-                        xstyle={styles.peek}
-                      />
-                    )
-                  : embeddable.get(slot.ref) &&
-                    children([embeddable.get(slot.ref)!])}
-              </SlotOverlay>
-            ))}
+          <div
+            ref={canvasRef}
+            {...stylex.props(
+              styles.canvas,
+              minWidth > 0 && styles.canvasScrolls,
+              scaled && styles.canvasScaled,
+            )}
+            style={{
+              height: stageHeight,
+              ...(scaled && {
+                width: inlineWidth,
+                transform: `scale(${scale})`,
+              }),
+            }}
+          >
+            <div
+              {...stylex.props(styles.sheet)}
+              style={{ minWidth: minWidth || undefined }}
+            >
+              <iframe
+                key={stageKey}
+                ref={frameRef}
+                src={stageUrl()}
+                title={node.title}
+                sandbox="allow-scripts"
+                onLoad={boot}
+                {...stylex.props(styles.frame)}
+              />
+              {node.type === "animation" &&
+                node.height === "auto" &&
+                measureRun !== null && (
+                  <MeasuringStage
+                    key={measureRun}
+                    init={() => {
+                      const kind = measureKind();
+
+                      return stageInit(figureRef.current!, kind!, false).then(
+                        (init) => ({
+                          ...init,
+                          measure: true,
+                          slotSizes: Object.fromEntries(slotSizesRef.current),
+                        }),
+                      );
+                    }}
+                    onMeasured={(height) => {
+                      setMeasuredHeight(height);
+                      setMeasureRun(null);
+                    }}
+                  />
+                )}
+              <div {...stylex.props(styles.overlays)}>
+                {slots.map((slot) => (
+                  <SlotOverlay
+                    key={slot.slot}
+                    slot={slot}
+                    onHeight={(height) => {
+                      send({ type: "slot-size", slot: slot.slot, height });
+
+                      if (slotSizesRef.current.get(slot.slot) === height)
+                        return;
+                      slotSizesRef.current.set(slot.slot, height);
+                      clearTimeout(remeasureTimer.current);
+                      remeasureTimer.current = setTimeout(remeasure, 100);
+                    }}
+                  >
+                    {slot.kind === "code"
+                      ? node.code[slot.ref] && (
+                          <CodePeekCard
+                            source={anchorSelection(
+                              animationCode(node.code[slot.ref]!).source,
+                              node.pins,
+                            )}
+                            heightMode="capped"
+                            xstyle={styles.peek}
+                          />
+                        )
+                      : embeddable.get(slot.ref) &&
+                        children([embeddable.get(slot.ref)!])}
+                  </SlotOverlay>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -731,6 +964,7 @@ function StageBlock({
           label={player.strip.label}
           items={player.strip.items}
           activeIndex={activeIndex}
+          timer={player.strip.timer}
           onPick={(position) => player.pick(position, "controls")}
           onKeyDown={player.onKeyDown}
         />
@@ -792,6 +1026,66 @@ function StageBlock({
         portalTarget,
       )}
     </>
+  );
+}
+
+/** A hidden copy of the stage that shows every frame of the scenario in
+ * turn and reports the tallest. Each frame's scripts run while it shows, as
+ * they would for a reader, so nothing they leave behind reaches the stage the
+ * reader sees. */
+function MeasuringStage({
+  init,
+  onMeasured,
+}: {
+  init(): Promise<StageInit>;
+  onMeasured(height: number): void;
+}) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const portRef = useRef<MessagePort | null>(null);
+  const initRef = useRef(init);
+  const onMeasuredRef = useRef(onMeasured);
+  onMeasuredRef.current = onMeasured;
+
+  // Boot on the first load only; a later one is a page the stage navigated to.
+  const boot = useCallback(() => {
+    const target = ref.current?.contentWindow;
+
+    if (!target || portRef.current) return;
+    const channel = new MessageChannel();
+    portRef.current = channel.port1;
+
+    channel.port1.onmessage = (event: MessageEvent) => {
+      const message = stageMessageSchema.safeParse(event.data);
+
+      if (message.success && message.data.type === "measured")
+        onMeasuredRef.current(message.data.height);
+    };
+
+    target.postMessage(
+      { type: STAGE_BOOT, runtime: stageRuntime.toString() },
+      "*",
+      [channel.port2],
+    );
+    initRef.current().then(
+      (message) => channel.port1.postMessage(message satisfies HostMessage),
+      () => {},
+    );
+  }, []);
+
+  useEffect(() => () => portRef.current?.close(), []);
+
+  return (
+    <iframe
+      ref={ref}
+      src={stageUrl()}
+      title="Measuring copy"
+      sandbox="allow-scripts"
+      aria-hidden="true"
+      tabIndex={-1}
+      inert
+      onLoad={boot}
+      {...stylex.props(styles.frame, styles.measuring)}
+    />
   );
 }
 
@@ -910,11 +1204,6 @@ const styles = stylex.create({
     color: tokens.ink,
     font: `${fontSize.body}/${leading.normal} ${tokens.fontMono}`,
   },
-  headerTitle: {
-    overflow: { default: null, [narrow]: "visible" },
-    textOverflow: { default: null, [narrow]: "clip" },
-    whiteSpace: { default: null, [narrow]: "normal" },
-  },
   figureFullscreen: {
     display: "flex",
     flex: "1 1 auto",
@@ -948,15 +1237,34 @@ const styles = stylex.create({
     display: "flex",
     flex: "1 1 auto",
     flexDirection: "column",
+    alignItems: "center",
     justifyContent: "safe center",
     minHeight: 0,
-    overflowY: "auto",
+    overflow: "auto",
     padding: { default: space.s32, [narrow]: space.s16 },
+  },
+  // The scaled stage's footprint, so the room centres and scrolls it whole.
+  zoom: {
+    flex: "0 0 auto",
+    width: "100%",
   },
   canvas: {
     position: "relative",
     flex: "0 0 auto",
     overflow: "hidden",
+  },
+  // The stage asked for a width: it keeps it, and a narrower block scrolls
+  // it sideways rather than folding the drawing.
+  canvasScrolls: {
+    overflowX: "auto",
+  },
+  canvasScaled: {
+    transformOrigin: "0 0",
+  },
+  // The stage and what the host draws over it, at the width the stage asked.
+  sheet: {
+    position: "relative",
+    height: "100%",
   },
   overlay: {
     position: "fixed",
@@ -980,6 +1288,14 @@ const styles = stylex.create({
     backgroundColor: tokens.transparent,
   },
   // Over the stage but out of the pointer's way; each slot takes it back.
+  // Laid out at the stage's width but never seen; still rendered, so the
+  // browser does not throttle its frames.
+  measuring: {
+    position: "absolute",
+    inset: 0,
+    opacity: 0,
+    pointerEvents: "none",
+  },
   overlays: {
     position: "absolute",
     inset: 0,

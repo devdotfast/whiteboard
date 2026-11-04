@@ -28,8 +28,8 @@ For a few services, processes or stores with messages moving between them, use `
 ```html
 <script>
   const s = whiteboard.scene({ columns: 2 });
-  const client = s.actor({ id: "client", at: [1, 1], title: "Client" });
-  const api = s.actor({ id: "api", at: [2, 1], title: "API" });
+  const client = s.actor({ id: "client", at: [1, 1], title: "Client", form: "window" });
+  const api = s.actor({ id: "api", at: [2, 1], title: "API", form: "bars" });
 
   s.send(client, api, "GET", "send");
   s.on("send", api, { note: "timed out", tone: "removed" });
@@ -38,7 +38,11 @@ For a few services, processes or stores with messages moving between them, use `
 </script>
 ```
 
-A scene names frame keys, so a new scenario means new frames and a few new lines like these. A card's `id` is its element's id, so your own CSS can address it as `#api`.
+A scene names frame keys, so a new scenario means new frames and a few new lines like these. While a frame shows, each message it sends is the label of its edge and the edge takes the marker colour, however the reader reached the frame; stepping into the frame rides a chip from the sender that settles into the label. A card's `id` is its element's id, so your own CSS can address it as `#api`. A scene keeps its columns at any width: when the board is narrower than its cards need, the block scrolls the drawing sideways rather than reflowing it.
+
+Give each card the silhouette of what it stands for, so a reader tells the parts apart before reading a title: `form: "window"` for a client, `"bars"` for a service or worker of this codebase, `"cylinder"` for a database, `"drum"` for a cache, `"stack"` for a queue or topic, `"pill"` for a start or end, `"cut"` for a branch. A third-party service or API gets `outline: "dashed"`. `color` sets a border colour at rest (`teal` for stores, `violet` for queues, `accent` for the part under discussion); a frame's `tone` takes over while set. The same `data-form`, `data-outline` and `data-color` work on a `wb-node` in a hand-made layout.
+
+Draw a boundary around cards that belong together with `s.group({ id, at: [column, row, rowSpan, colSpan], title: "SEARCH SERVICE", color })`: a washed box behind the cards in those cells, titled in its corner. On a board that reviews a change, mark what it did to a part with `change: "added" | "modified" | "removed"` on the card: its dot and left edge take the change colour at rest, and a removed part's title is struck. When the cards carry marks a reader must decode, add `s.legend([{ form: "cylinder", label: "Database" }, { change: "modified", label: "Changed here" }])`, one row under the scene; name only what matters.
 
 ### A hand-made layout: lanes, axes, graphs
 

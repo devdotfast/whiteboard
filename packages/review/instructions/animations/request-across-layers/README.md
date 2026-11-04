@@ -14,11 +14,11 @@ A change touches how a request is parsed, validated, mapped or persisted, and th
 
 ## Technique
 
-A scene: `whiteboard.scene({ columns: 4 })` with four `actor`s, solid `link`s for requests and dashed ones for replies, one `send` per hop per frame, and `on(frame, card, { text, tone })` for the payload shape. `highlight` rings the active card; `code` on a card and each frame's `code` link the ranges.
+A scene: `whiteboard.scene({ columns: 4 })` with four `actor`s, solid `link`s for requests and dashed ones for replies, one `send` per hop per frame, and `on(frame, card, { text, tone })` for the payload shape. Each card wears its layer's `form`: a `window` for the client, `bars` for the API and the service, a `cylinder` in `teal` for the database. A `group` boxes the API and the service as the one server, `change: "modified"` marks the API as what the review touched, and a `legend` decodes the three marks. `highlight` rings the active card; `code` on a card and each frame's `code` link the ranges.
 
 ## Adapt
 
-- Rename the actors and code ranges to your layers; keep four or fewer in a row.
+- Rename the actors and code ranges to your layers; keep four or fewer in a row. A third-party API in the chain gets `outline: "dashed"`.
 - Write each note as the payload's real type at that layer, short enough for two lines.
 - Keep one `send` per frame: sends on different edges in one frame start together.
 - Branch with new frame keys (a different body) and a scenario, not by drawing buttons.

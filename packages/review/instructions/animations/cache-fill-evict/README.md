@@ -14,7 +14,7 @@ A change adds or alters a cache in front of a slower dependency: its read-throug
 
 ## Technique
 
-Scene-based. `whiteboard.scene` places three cards; `scene.store` holds the entries as `cache.item(label, { enter, exit, tone })`. `scene.send` moves each request and reply, and `scene.on(frame, part, { text, tone })` changes notes and tones from a frame on. Items keep their order, so each scenario seeds its own entries, and a moved entry is one item exiting while another enters. The cache card opens code with `code:`; a `whiteboard.on("*")` handler points it at the first name in `frame.code`, so clicking it during an eviction opens the eviction range.
+Scene-based. `whiteboard.scene` places three cards; `scene.store` holds the entries as `cache.item(label, { enter, exit, tone })`. `scene.send` moves each request and reply, and `scene.on(frame, part, { text, tone })` changes notes and tones from a frame on. Items keep their order, so each scenario seeds its own entries, and a moved entry is one item exiting while another enters. The cache card opens code with `code:`; a `whiteboard.on("*")` handler points it at the first name in `frame.code`, so clicking it during an eviction opens the eviction range. The cache is a `drum` and Postgres a `cylinder`, both in `teal`, so the two stores read as stores beside the handler's plain box.
 
 ## Adapt
 

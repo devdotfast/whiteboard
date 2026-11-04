@@ -54,6 +54,10 @@ export const tokens = stylex.defineConsts({
   fontMono: "var(--font-mono)",
   fontSans: "var(--font-sans)",
   fontSerif: "var(--font-serif)",
+  // The frame clock, set inline by the step strip and the frame dots.
+  frameTimerFill: "var(--frame-timer-fill)",
+  frameTimerMs: "var(--frame-timer-ms)",
+  frameTimerRest: "var(--frame-timer-rest)",
   ghost: "var(--ghost)",
   ink: "var(--ink)",
   inkFaint: "var(--ink-faint)",

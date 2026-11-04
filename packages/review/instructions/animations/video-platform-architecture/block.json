@@ -1,0 +1,17 @@
+{
+  "title": "How a video gets from upload to playback",
+  "code": {
+    "upload": {
+      "source": "head/services/upload/src/handler.ts#L18-L64",
+      "label": "handleUpload"
+    },
+    "transcode": {
+      "source": "head/services/transcoder/src/worker.ts#L30-L92",
+      "label": "TranscodeWorker.run"
+    },
+    "watch": {
+      "source": "head/services/catalog/src/watch.ts#L12-L58",
+      "label": "resolveWatch"
+    }
+  }
+}

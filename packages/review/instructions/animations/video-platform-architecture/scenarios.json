@@ -1,0 +1,28 @@
+[
+  {
+    "key": "upload",
+    "label": "Upload",
+    "frames": [
+      "post",
+      "receive",
+      "store",
+      "enqueue",
+      "transcode",
+      "renditions",
+      "ready"
+    ]
+  },
+  {
+    "key": "playback",
+    "label": "Playback",
+    "frames": [
+      "watch",
+      "lookup",
+      "resolve",
+      "deliver",
+      "segment",
+      "edge-miss",
+      "play"
+    ]
+  }
+]

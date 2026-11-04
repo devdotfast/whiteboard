@@ -2,21 +2,49 @@
   const s = whiteboard.scene({ columns: 4 });
 
   // Ring the card that reshapes the payload in each frame.
+  // Each card wears the shape of its layer: a window for the client, bars
+  // for the services this codebase runs, a cylinder for the database.
   const client = s.actor({
     id: "client",
     at: [1, 1],
     title: "Client",
+    form: "window",
     highlight: ["request", "respond", "bad-request"],
   });
-  const api = s.actor({ id: "api", at: [2, 1], title: "API", code: "validate", highlight: ["validate", "rejected"] });
+  const api = s.actor({
+    id: "api",
+    at: [2, 1],
+    title: "API",
+    form: "bars",
+    change: "modified",
+    code: "validate",
+    highlight: ["validate", "rejected"],
+  });
   const service = s.actor({
     id: "service",
     at: [3, 1],
     title: "OrderService",
+    form: "bars",
     code: "service",
     highlight: ["persist", "map"],
   });
-  const db = s.actor({ id: "db", at: [4, 1], title: "Postgres", code: "repository", highlight: ["stored"] });
+  const db = s.actor({
+    id: "db",
+    at: [4, 1],
+    title: "Postgres",
+    form: "cylinder",
+    color: "teal",
+    code: "repository",
+    highlight: ["stored"],
+  });
+
+  // The API and the service are the one codebase; the review changed the API.
+  s.group({ id: "server", at: [2, 1, 1, 2], title: "Order server" });
+  s.legend([
+    { form: "bars", label: "This codebase" },
+    { form: "cylinder", color: "teal", label: "Database" },
+    { change: "modified", label: "Changed in this review" },
+  ]);
 
   // Requests travel solid edges; replies ride dashed ones beside them.
   s.link(client, api);
