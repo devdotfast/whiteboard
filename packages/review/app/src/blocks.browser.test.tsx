@@ -1062,6 +1062,45 @@ describe("block components", () => {
     ).toBe("200px");
   });
 
+  it("keeps a hand-made layout's own position for a node with a form", async () => {
+    const { container } = await mountFixture("animation", {
+      document: [
+        {
+          id: "block-1",
+          type: "animation",
+          title: "Placed nodes",
+          height: "auto",
+          pins: { repositoryId: "repo", base: "base", head: "head" },
+          frames: [{ key: "only", title: "Only" }],
+          code: { proof: "head/order.ts#L1" },
+          html: [
+            "<style>.architecture{position:relative;width:720px;height:420px}.node{position:absolute;width:196px}#a{left:12px;top:10px}#b{left:262px;top:162px}</style>",
+            '<div class="architecture">',
+            '<div id="a" class="node wb-node" data-form="bars">Ingest</div>',
+            '<div id="b" class="node wb-node" data-form="bars">Transcode</div>',
+            "</div>",
+            "<script>",
+            'const proof=whiteboard.code("proof");document.body.append(proof);',
+            'const box=document.querySelector(".architecture").getBoundingClientRect();',
+            'const at=(id)=>{const r=document.getElementById(id).getBoundingClientRect();return [r.left-box.left,r.top-box.top].join(",")};',
+            'proof.style.width=at("a")==="12,10"&&at("b")==="262,162"?"200px":"100px";',
+            "</script>",
+          ].join(""),
+        },
+      ],
+    });
+
+    const width = () =>
+      container.querySelector<HTMLElement>("[data-animation-slot='code']")
+        ?.style.width;
+
+    expect(
+      await settled(() =>
+        width() === "100px" || width() === "200px" ? width() : undefined,
+      ),
+    ).toBe("200px");
+  });
+
   it("does not report a ResizeObserver that resizes its own target", async () => {
     const { container } = await mountFixture("animation", {
       document: [
