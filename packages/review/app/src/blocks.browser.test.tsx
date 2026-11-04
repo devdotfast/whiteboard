@@ -1360,6 +1360,38 @@ describe("block components", () => {
     );
   });
 
+  it("keeps any stage as wide as its content reaches and scrolls the block sideways", async () => {
+    // A hand-made layout: a lane wider than the block, drawn with no scene.
+    const { container } = await mountFixture(
+      "animation",
+      {
+        document: documentSchema.parse([
+          {
+            id: "block-1",
+            type: "animation",
+            title: "Wide lane",
+            height: 160,
+            frames: [{ key: "a", title: "One" }],
+            code: {},
+            html: '<div class="wb-lane" style="width: 900px">Wide</div>',
+            pins: { repositoryId: "repo", base: "base", head: "head" },
+          },
+        ]),
+      },
+      "width: 480px",
+    );
+
+    const iframe = (await settled(() => container.querySelector("iframe")))!;
+    const figure = container.querySelector<HTMLElement>(".animation-block")!;
+    expect(figure.clientWidth).toBeLessThan(900);
+    expect(
+      await settled(() => iframe.getBoundingClientRect().width >= 900),
+    ).toBe(true);
+    expect(
+      getComputedStyle(iframe.parentElement!.parentElement!).overflowX,
+    ).toBe("auto");
+  });
+
   it("starts on the first scenario and switches the stage's path from the picker", async () => {
     const { container } = await mountFixture("animation", {
       document: [

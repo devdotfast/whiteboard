@@ -43,4 +43,11 @@ export const textStyles = stylex.create({
     WebkitBoxOrient: "vertical",
     WebkitLineClamp: 2,
   },
+  // At most three lines, the third cut with an ellipsis.
+  clamp3: {
+    display: "-webkit-box",
+    overflow: "hidden",
+    WebkitBoxOrient: "vertical",
+    WebkitLineClamp: 3,
+  },
 });

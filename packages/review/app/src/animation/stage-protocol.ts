@@ -149,8 +149,9 @@ export type SlotLayout = z.infer<typeof slotLayoutSchema>;
 /** The stage runs an agent's scripts, so the host parses what it sends. */
 export const stageMessageSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("ready") }),
-  /** The stage's content height, when it sizes itself, and the width it
-   * needs to draw well, or 0 when any width does. */
+  /** The stage's content height, when it sizes itself, and the width its
+   * content reaches past its right edge, or 0 when it fits. The host keeps
+   * the stage at least as wide as any width it reported. */
   z.strictObject({
     type: z.literal("size"),
     height: z.number().finite().nonnegative().max(STAGE_MAX_HEIGHT).optional(),

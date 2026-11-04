@@ -4,6 +4,7 @@
 import { fontSize, leading, space, tracking } from "@canvas/scale.stylex";
 import { tokens } from "@canvas/tokens.stylex";
 import { IconButton } from "@canvas/ui/button";
+import { textStyles } from "@canvas/ui/text";
 import { useTooltip } from "@canvas/ui/tooltip";
 import * as stylex from "@stylexjs/stylex";
 import {
@@ -55,7 +56,8 @@ export const pauseIcon = <path d="M9 6.5v11M15 6.5v11" />;
 
 /** The title and caption of the stop showing, read out as it changes. Every
  * stop's caption shares one cell, with only the current one visible, so the
- * row keeps the height of the longest and never moves as the reader steps. */
+ * row keeps the height of the longest and never moves as the reader steps.
+ * A caption stops at three lines. */
 export function StopCaption({
   stops,
   activeIndex,
@@ -72,6 +74,7 @@ export function StopCaption({
           <div
             key={stop.key}
             {...stylex.props(
+              textStyles.clamp3,
               styles.captionText,
               !current && styles.captionHidden,
             )}

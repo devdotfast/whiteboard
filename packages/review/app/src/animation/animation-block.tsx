@@ -245,7 +245,8 @@ function StageBlock({
   const { diagramFullscreenOnClick } = useWhiteboardSettings();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [contentHeight, setContentHeight] = useState(STAGE_MIN_HEIGHT);
-  // The width the stage needs to draw well; a narrower block scrolls it.
+  // The widest the stage's content has reached past its edge, in any frame;
+  // the stage keeps that width and a narrower block scrolls it.
   const [minWidth, setMinWidth] = useState(0);
   // The tallest frame of the scenario, from a hidden measuring copy, so the
   // stage does not change height as the reader steps through frames.
@@ -431,7 +432,9 @@ function StageBlock({
       case "size":
         if (message.height !== undefined)
           setContentHeight(Math.ceil(message.height));
-        setMinWidth(Math.ceil(message.width));
+
+        if (message.width > 0)
+          setMinWidth((widest) => Math.max(widest, Math.ceil(message.width)));
         break;
       case "slots":
         setSlots(message.slots);
@@ -807,7 +810,6 @@ function StageBlock({
       <DiagramHeader
         kind={clip ? "CLIP" : "ANIMATION"}
         title={node.title}
-        titleStyle={styles.headerTitle}
         meta={`${activeIndex + 1} / ${stops.length}`}
         action={
           fullscreen ? (
@@ -1201,11 +1203,6 @@ const styles = stylex.create({
     backgroundColor: tokens.surface,
     color: tokens.ink,
     font: `${fontSize.body}/${leading.normal} ${tokens.fontMono}`,
-  },
-  headerTitle: {
-    overflow: { default: null, [narrow]: "visible" },
-    textOverflow: { default: null, [narrow]: "clip" },
-    whiteSpace: { default: null, [narrow]: "normal" },
   },
   figureFullscreen: {
     display: "flex",

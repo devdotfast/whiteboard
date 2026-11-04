@@ -2695,28 +2695,6 @@ export function stageRuntime(port: MessagePort): void {
     for (const run of [...dueLayouts]) run();
   };
 
-  // Every scene's grid, for the width the stage asks of its host.
-  const scenes: HTMLElement[] = [];
-
-  // The narrowest the stage draws well: its widest scene's minimum, with the
-  // body's padding. The host keeps the stage that wide and scrolls it
-  // sideways in a narrower block, rather than folding the drawing.
-  const minWidth = () => {
-    const style = getComputedStyle(document.body);
-
-    const padding =
-      parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-
-    let widest = 0;
-
-    for (const grid of scenes)
-      if (grid.isConnected && grid.checkVisibility())
-        widest = Math.max(widest, parseFloat(grid.style.minWidth) || 0);
-
-    // STAGE_MAX_WIDTH in stage-protocol.ts.
-    return widest ? Math.min(4000, Math.ceil(widest + padding)) : 0;
-  };
-
   // A grid of cards, routed edges, and chips that ride them. The scene owns
   // spacing, edge drawing, and chip motion, so every scene reads the same.
   const scene = (options: SceneOptions): Scene => {
@@ -2727,7 +2705,6 @@ export function stageRuntime(port: MessagePort): void {
     (options.container ? resolve(options.container) : document.body).append(
       grid,
     );
-    scenes.push(grid);
 
     // Labels of links between cards in one row: the columns open up to fit
     // the widest, so it sits between its cards rather than off its line.
@@ -2763,8 +2740,9 @@ export function stageRuntime(port: MessagePort): void {
     };
 
     // The scene keeps its columns at any width: narrower than its cards
-    // need, it overflows and the host scrolls the stage sideways, rather than
-    // shrinking cards, tables and labels, or reflowing the drawing.
+    // need, it overflows the stage, which asks its host for the width and is
+    // scrolled sideways, rather than shrinking cards, tables and labels, or
+    // reflowing the drawing.
     const layout = () => {
       sizeGap();
       const style = getComputedStyle(grid);
@@ -3384,10 +3362,14 @@ export function stageRuntime(port: MessagePort): void {
         (animation) => animation.pending || animation.playState === "running",
       );
 
-  const contentBottom = () => {
+  // How far the content reaches: its bottom, for an auto-sized stage's
+  // height, and its right edge, which past the viewport is the width the
+  // stage needs its host to keep.
+  const contentBounds = () => {
     // Natural body height includes slot-size feedback from host overlays.
     // Exclude viewport-sized drawing layers to avoid a resize feedback loop.
     let bottom = document.body.getBoundingClientRect().bottom;
+    let widest = 0;
 
     for (const element of document.body.querySelectorAll("*")) {
       // Global drawing layers are viewport-sized. Their descendants can
@@ -3412,9 +3394,10 @@ export function stageRuntime(port: MessagePort): void {
 
       if (right <= left || visibleBottom <= top) continue;
       bottom = Math.max(bottom, visibleBottom);
+      widest = Math.max(widest, right);
     }
 
-    return bottom;
+    return { bottom, right: widest };
   };
 
   // A measuring copy shows each frame of its scenario in turn, as an instant
@@ -3444,7 +3427,7 @@ export function stageRuntime(port: MessagePort): void {
       for (const animation of document.getAnimations())
         if (finite(animation)) animation.finish();
 
-      tallest = Math.max(tallest, contentBottom());
+      tallest = Math.max(tallest, contentBounds().bottom);
       previous = frame;
     }
 
@@ -3511,13 +3494,27 @@ export function stageRuntime(port: MessagePort): void {
       post({ type: "slots", slots });
     }
 
-    const width = minWidth();
+    const bounds = contentBounds();
+    const viewport = document.documentElement.clientWidth;
+
+    // Content past the stage's right edge, in any animation: the width the
+    // stage needs. Its host keeps it that wide and scrolls a narrower block
+    // sideways, rather than letting the drawing squeeze or fold. 0 when the
+    // content fits. STAGE_MAX_WIDTH in stage-protocol.ts.
+    const width =
+      bounds.right > viewport + 0.5
+        ? Math.min(
+            4000,
+            Math.ceil(
+              bounds.right +
+                parseFloat(getComputedStyle(document.body).paddingRight),
+            ),
+          )
+        : 0;
 
     if (init?.autoSize) {
-      const bottom = contentBottom();
-
       // STAGE_MAX_HEIGHT in stage-protocol.ts.
-      const height = Math.min(4000, Math.max(120, Math.ceil(bottom)));
+      const height = Math.min(4000, Math.max(120, Math.ceil(bounds.bottom)));
 
       if (height !== lastHeight || width !== lastWidth) {
         changed = true;
