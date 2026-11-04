@@ -477,11 +477,12 @@ body {
 .wb-scene > .wb-card { position: relative; z-index: 1; }
 /* Groups bleed into the gaps around their cells, so a grouped scene opens
    its rows and columns to keep the boxes apart and give edges between
-   layers room to be read. */
+   layers room to be read. The top bleed holds the title clear of the cards
+   below it, ring and all. */
 .wb-scene:has(> .wb-group) { row-gap: var(--wb-space-72); column-gap: var(--wb-space-72); padding: var(--wb-space-32) var(--wb-space-24); }
 .wb-group {
   position: relative; z-index: 0; align-self: stretch; justify-self: stretch;
-  margin: calc(-1 * var(--wb-space-18)) calc(-1 * var(--wb-space-16)) calc(-1 * var(--wb-space-10));
+  margin: calc(-1 * var(--wb-space-28)) calc(-1 * var(--wb-space-16)) calc(-1 * var(--wb-space-10));
   border: 1px solid var(--wb-rule-soft); border-radius: var(--wb-radius-surface); background: var(--wb-well);
   transition: opacity var(--wb-duration) ease;
 }
