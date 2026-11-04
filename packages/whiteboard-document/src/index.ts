@@ -118,6 +118,7 @@ export {
   comparisonKey,
   formatAnchor,
   parseAnchor,
+  patchRows,
   rangeAnchor,
   resolveDiffSelection,
   selectSource,

@@ -6,7 +6,7 @@ import type {
   ShareAlignment,
   ShareSource,
 } from "@dev.fast/review-share-protocol";
-import { textualRows } from "@review/review-api/lens-alignment";
+import { patchRows } from "@dev.fast/whiteboard-document";
 import { type DiffHunk, parseUnifiedPatch } from "@review/unified-diff";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -60,8 +60,7 @@ const lineCount = (text: string | null) =>
 function share(fixture: Fixture) {
   const pins = { repositoryId: "repo", base: fixture.base, head: fixture.head };
 
-  const rows = textualRows(
-    fixture.file,
+  const rows = patchRows(
     fixture.patch,
     lineCount(fixture.baseText),
     lineCount(fixture.headText),

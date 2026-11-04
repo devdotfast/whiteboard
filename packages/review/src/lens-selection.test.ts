@@ -3,6 +3,7 @@ import {
   anchorSelection,
   formatAnchor,
   parseAnchor,
+  patchRows,
   resolveDiffSelection,
   selectSource,
   selectionKey,
@@ -11,7 +12,6 @@ import {
 } from "@dev.fast/whiteboard-document";
 import { expect, it } from "vitest";
 
-import { textualRows } from "./review-api/lens-alignment.js";
 import {
   type CoverageFile,
   coverageProgress,
@@ -122,12 +122,7 @@ it("rejects stale or reversed endpoints instead of inventing correspondence", ()
 });
 
 it("resolves selections over existing textual hunks, including unchanged gaps", () => {
-  const alignment = textualRows(
-    "a",
-    "@@ -2,2 +2,1 @@\n-deleted\n context",
-    4,
-    3,
-  );
+  const alignment = patchRows("@@ -2,2 +2,1 @@\n-deleted\n context", 4, 3);
 
   expect(
     resolveDiffSelection(

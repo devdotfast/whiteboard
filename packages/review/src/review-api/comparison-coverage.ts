@@ -7,10 +7,11 @@ import {
   applyStructuralUpdate,
   structuralRows,
 } from "@dev.fast/review-protocol";
-import type {
-  AlignmentRow,
-  FileLineRange,
-  Pins,
+import {
+  type AlignmentRow,
+  type FileLineRange,
+  type Pins,
+  patchRows,
 } from "@dev.fast/whiteboard-document";
 import { parseUnifiedPatch } from "@review/unified-diff.js";
 import {
@@ -23,7 +24,6 @@ import {
   unionIntervals,
 } from "@review/viewed-coverage.js";
 
-import { textualRows } from "./lens-alignment.js";
 import type { LocalReviewData } from "./local-data.js";
 
 const hash = (parts: (string | null)[]) =>
@@ -91,8 +91,7 @@ export async function comparisonCoverage(
 
     alignments.set(
       file.path,
-      textualRows(
-        file.path,
+      patchRows(
         patch,
         base === null ? 0 : base.split("\n").length,
         head === null ? 0 : head.split("\n").length,
