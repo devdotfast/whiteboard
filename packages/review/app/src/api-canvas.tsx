@@ -3,7 +3,7 @@ import {
   type ReviewCanvasContent,
   type ReviewCanvasSettings,
   type ReviewDiffViewSpec,
-  type ReviewInlineEditorSpec,
+  type ReviewPeekSpec,
   boardTitle,
   resolveReviewSourceView,
 } from "@dev.fast/review-protocol";
@@ -268,13 +268,13 @@ export function ApiCanvas({
   openFile.current = content.available?.sourceWindows !== false;
 
   const nativeSources = useMemo(() => {
-    const { inlineEditors, diffView } = content.bridge;
+    const { peeks, diffView } = content.bridge;
 
     return {
-      inlineEditors: {
-        ...inlineEditors,
-        create: (spec: ReviewInlineEditorSpec) =>
-          inlineEditors.create(
+      peeks: {
+        ...peeks,
+        create: (spec: ReviewPeekSpec) =>
+          peeks.create(
             openFile.current ? spec : { ...spec, onDidOpen: undefined },
           ),
       },
@@ -363,10 +363,7 @@ export function ApiCanvas({
 
   const sharing = useMemo(
     () =>
-      data &&
-      !content.host &&
-      !data.snapshot.trashedAt &&
-      !data.snapshot.sourceUnavailable
+      data && !data.snapshot.trashedAt && !data.snapshot.sourceUnavailable
         ? {
             client,
             reviewId: content.reviewId,
@@ -374,7 +371,7 @@ export function ApiCanvas({
             sender: data.snapshot.shared?.login,
           }
         : null,
-    [client, content.reviewId, content.host, data],
+    [client, content.reviewId, data],
   );
 
   const trashBanner = trashedAt && (

@@ -496,33 +496,45 @@ it("keeps the copy and its code after the sender edits and moves the branch", as
   ).toBe("export const answer = 2;\n");
 });
 
-it("requires a pinned review before sharing saved worktree changes", async () => {
-  const { local, reviewId, repo } = await fixture();
-  const snapshot = local.store.read(reviewId);
+it("shares a clean worktree board at HEAD and freezes uncommitted lines", async () => {
+  const { root, local, reviewId, repo } = await fixture();
+  const pins = local.store.read(reviewId).pins!;
   await local.store.execute({
     operation: {
       type: "set_target",
       reviewId,
       target: {
         kind: "worktree",
-        repositoryId: snapshot.pins!.repositoryId,
-        base: snapshot.pins!.base,
+        repositoryId: pins.repositoryId,
+        base: pins.base,
       },
     },
   });
+
+  const clean = await exportShare({ ...local, reviewId, repository });
+  expect(clean.frozen).toBeUndefined();
+  expect(validateShareBundle(clean).snapshot.pins).toEqual(pins);
+
   await writeFile(path.join(repo, "main.ts"), "export const answer = 99;\n");
-  await expect(exportShare({ ...local, reviewId, repository })).rejects.toThrow(
-    "Pin this review to commits before sharing it.",
+  const frozen = await exportShare({ ...local, reviewId, repository });
+  expect(frozen.frozen).toBe(true);
+  expect(frozen.snapshot.pins).toEqual(pins);
+  expect(frozen.sources).toContainEqual(
+    expect.objectContaining({
+      file: "main.ts",
+      commit: pins.head,
+      lines: ["export const answer = 99;"],
+    }),
   );
-  await local.store.execute({
-    operation: {
-      type: "set_target",
-      reviewId,
-      target: { kind: "commits", ...snapshot.pins },
-    },
-  });
-  const bundle = await exportShare({ ...local, reviewId, repository });
-  expect(validateShareBundle(bundle).snapshot.pins!.head).toBe(
-    snapshot.pins!.head,
-  );
+
+  const recipient = openLocalReviewStore(path.join(root, "recipient.db"));
+  cleanup.push(() => recipient.store.close());
+  cleanup.push(() => recipient.data.close());
+  await expect(
+    importShare(
+      recipient,
+      shareKey("https://app.dev.fast", capability()),
+      frozen,
+    ),
+  ).rejects.toThrow("read-only snapshot");
 });

@@ -10,12 +10,15 @@ import type {
   ReviewCanvasBridge,
   ReviewDiffSide,
   ReviewFindQuery,
-  ReviewInlineEditorFactory,
-  ReviewInlineFindSpec,
-  ReviewInlineStaticSpec,
+  ReviewPeekFindSpec,
+  ReviewPeekStaticSpec,
+  ReviewPeekViewer,
   ReviewSourcePins,
 } from "@dev.fast/review-protocol";
-import type { ShareSource } from "@dev.fast/review-share-protocol";
+import type {
+  ShareAlignment,
+  ShareSource,
+} from "@dev.fast/review-share-protocol";
 import { type ShjToken, tokenize } from "@speed-highlight/core";
 import * as stylex from "@stylexjs/stylex";
 import { diffArrays } from "diff";
@@ -61,7 +64,7 @@ interface Found {
   active?: number;
 }
 
-type Spec = Pick<ReviewInlineFindSpec, "path" | "side" | "pins" | "ranges">;
+type Spec = Pick<ReviewPeekFindSpec, "path" | "side" | "pins" | "ranges">;
 
 type Excerpt = (
   file: string,
@@ -136,22 +139,113 @@ function unified(base: Block, head: Block): Block[] {
   return [{ side: "head", rows, diff: true }];
 }
 
+type SideRange = Spec["ranges"][number] & { side: ReviewDiffSide };
+
+/** Blocks for the ranges an alignment reaches; the rest stay in `ranges`. */
+function alignedBlocks(
+  excerpt: Excerpt,
+  pins: ReviewSourcePins | undefined,
+  alignments: readonly ShareAlignment[],
+  ranges: Set<SideRange>,
+): Block[] {
+  const blocks: Block[] = [];
+
+  if (!pins) return blocks;
+  const reached = new Set<SideRange>();
+
+  for (const alignment of alignments) {
+    if (alignment.head !== pins.head || alignment.base !== pins.base) continue;
+    let run: Row[] | undefined;
+
+    // A change's removed lines come before its added lines, as in a patch.
+    let added: Row[] = [];
+
+    const flush = () => {
+      run?.push(...added);
+      added = [];
+    };
+
+    for (const [b, h] of alignment.rows) {
+      const hit = [...ranges].filter((range) => {
+        const n = range.side === "base" ? b : h;
+
+        return n !== null && range.startLine <= n && n <= range.endLine;
+      });
+
+      if (!hit.length) {
+        flush();
+        run = undefined;
+
+        continue;
+      }
+
+      for (const range of hit) reached.add(range);
+
+      if (!run) blocks.push({ side: "head", rows: (run = []), diff: true });
+
+      const before =
+        b === null
+          ? undefined
+          : {
+              n: b,
+              ...excerpt(
+                alignment.previousFile ?? alignment.file,
+                pins.base ?? pins.head,
+                b,
+              ),
+            };
+
+      const after =
+        h === null
+          ? undefined
+          : { n: h, ...excerpt(alignment.file, pins.head, h) };
+
+      if (before && after && before.text === after.text) {
+        flush();
+        run.push({ ...after, base: b! });
+      } else {
+        if (before) run.push({ ...before, change: "removed" });
+
+        if (after) added.push({ ...after, change: "added" });
+      }
+    }
+
+    flush();
+  }
+
+  for (const range of reached) ranges.delete(range);
+
+  return blocks;
+}
+
 /** Each range read at its own side. A selection resolves to a base range and
  * a head range, which read as one diff. */
 function rangeBlocks(
   excerpt: Excerpt,
   boardPins: ReviewSourcePins | undefined,
+  alignments: readonly ShareAlignment[],
   spec: Spec,
 ) {
   const pins = spec.pins ?? boardPins;
+
+  const ranges = new Set<SideRange>(
+    spec.ranges.map((range) => ({ ...range, side: range.side ?? spec.side })),
+  );
+
+  const aligned = alignedBlocks(
+    excerpt,
+    pins,
+    alignments.filter((alignment) => alignment.file === spec.path),
+    ranges,
+  );
+
   const sides: Record<ReviewDiffSide, Block[]> = { base: [], head: [] };
 
-  for (const range of spec.ranges) {
-    const side = range.side ?? spec.side;
+  for (const { side, startLine, endLine } of ranges) {
     const commit = side === "base" ? (pins?.base ?? pins?.head) : pins?.head;
     const rows: Row[] = [];
 
-    for (let n = Math.max(1, range.startLine); n <= range.endLine; n++)
+    for (let n = Math.max(1, startLine); n <= endLine; n++)
       rows.push({ n, ...(commit && excerpt(spec.path, commit, n)) });
 
     sides[side].push({ side, rows });
@@ -160,6 +254,7 @@ function rangeBlocks(
   const { base, head } = sides;
 
   return [
+    ...aligned,
     ...head.flatMap((block, k) => (base[k] ? unified(base[k], block) : block)),
     ...base.slice(head.length),
   ];
@@ -430,36 +525,53 @@ function peekInner(
   );
 }
 
-/** Read-only peeks of the lines a share carries, laid out as the reader's
- * Diff settings say. */
-export async function shareInlineEditors(
-  sources: readonly ShareSource[],
-  boardPins: ReviewSourcePins | undefined,
-): Promise<(settings: PeekSettings) => ReviewInlineEditorFactory> {
-  return excerptEditors(await excerpts(sources), boardPins);
+/** The lines a board's peeks quote, pinned at `pins`. */
+export interface BoardSources {
+  sources: readonly ShareSource[];
+  pins?: ReviewSourcePins;
+  alignments?: readonly ShareAlignment[];
 }
 
-/** Peeks with no lines to show: each says its source is unavailable. */
-export const sourcelessEditors = (settings: PeekSettings) =>
-  excerptEditors(() => ({}), undefined)(settings);
+export interface SourcePeeks extends ReviewPeekViewer {
+  /** Replaces the lines the peeks quote; mounted peeks redraw. */
+  setSources(code: BoardSources): Promise<void>;
+}
 
-function excerptEditors(
-  excerpt: Excerpt,
-  boardPins: ReviewSourcePins | undefined,
-): (settings: PeekSettings) => ReviewInlineEditorFactory {
-  return (settings) => ({
+/** Read-only peeks drawn as highlighted HTML, laid out as the reader's Diff
+ * settings say. Until `setSources`, each says its source is unavailable. */
+export function staticPeeks(settings: PeekSettings): SourcePeeks {
+  let excerpt: Excerpt = () => ({});
+  let pins: ReviewSourcePins | undefined;
+  let alignments: readonly ShareAlignment[] = [];
+  const mounted = new Set<() => void>();
+  let loads = 0;
+
+  const blocksOf = (spec: Spec) => rangeBlocks(excerpt, pins, alignments, spec);
+
+  return {
+    async setSources(code) {
+      const load = ++loads;
+      const next = await excerpts(code.sources);
+
+      if (load !== loads) return;
+      excerpt = next;
+      pins = code.pins;
+      alignments = code.alignments ?? [];
+
+      for (const redraw of mounted) redraw();
+    },
     async find(spec, query) {
       return {
-        matchCount: find(rangeBlocks(excerpt, boardPins, spec), matcher(query))
-          .count,
+        matchCount: find(blocksOf(spec), matcher(query)).count,
       };
     },
-    renderStatic: (spec: ReviewInlineStaticSpec) =>
-      `<div class="${peekClass(spec.heightMode, false)}">${peekInner(spec.title, rangeBlocks(excerpt, boardPins, spec), find([], undefined), settings)}</div>`,
+    renderStatic: (spec: ReviewPeekStaticSpec) =>
+      `<div class="${peekClass(spec.heightMode, false)}">${peekInner(spec.title, blocksOf(spec), find([], undefined), settings)}</div>`,
     create(spec) {
-      const blocks = rangeBlocks(excerpt, boardPins, spec);
+      let blocks = blocksOf(spec);
       const listeners = new Set<(height: number) => void>();
-      let found = find([], undefined);
+      let regex: RegExp | undefined;
+      let found = find(blocks, regex);
       let collapsed = false;
 
       // Focusable, so a click gives it the wheel as a Desktop editor's does.
@@ -471,6 +583,14 @@ function excerptEditors(
         peek.className = peekClass(spec.heightMode, collapsed);
         peek.innerHTML = peekInner(spec.title, blocks, found, settings);
       };
+
+      const redraw = () => {
+        blocks = blocksOf(spec);
+        found = find(blocks, regex);
+        render();
+      };
+
+      mounted.add(redraw);
 
       const subscriptions = [
         settings.onDidChangeDiffLayout("peek", render),
@@ -509,7 +629,8 @@ function excerptEditors(
         },
         onDidError: () => ({ dispose() {} }),
         async setFindQuery(query) {
-          found = find(blocks, matcher(query));
+          regex = matcher(query);
+          found = find(blocks, regex);
           render();
 
           return { matchCount: found.count };
@@ -539,10 +660,13 @@ function excerptEditors(
           render();
         },
         clearFind() {
-          found = find([], undefined);
+          regex = undefined;
+          found = find(blocks, regex);
           render();
         },
         dispose() {
+          mounted.delete(redraw);
+
           for (const subscription of subscriptions) subscription.dispose();
           observer.disconnect();
           listeners.clear();
@@ -550,7 +674,7 @@ function excerptEditors(
         },
       };
     },
-  });
+  };
 }
 
 const styles = stylex.create({

@@ -3,9 +3,9 @@ import type {
   ReviewDiffProgress,
   ReviewDiffSide,
   ReviewFindQuery,
-  ReviewInlineEditorHandle,
-  ReviewInlineEditorHeightMode,
-  ReviewInlineEditorRange,
+  ReviewPeekHandle,
+  ReviewPeekHeightMode,
+  ReviewPeekRange,
   ReviewSourcePins,
 } from "@dev.fast/review-protocol";
 import { coverageProgress, coverageSources } from "@review/viewed-coverage";
@@ -50,9 +50,9 @@ export function DocumentCodeView({
   /** Read at these pins instead of the review's. Such a view is outside
    * the review's comparison, so it carries no viewed-coverage marks. */
   pins?: ReviewSourcePins;
-  ranges: readonly ReviewInlineEditorRange[];
-  heightMode: ReviewInlineEditorHeightMode;
-  countRanges?: readonly ReviewInlineEditorRange[];
+  ranges: readonly ReviewPeekRange[];
+  heightMode: ReviewPeekHeightMode;
+  countRanges?: readonly ReviewPeekRange[];
   active: boolean;
   onFocus?: () => void;
   onOpen?: () => void;
@@ -98,7 +98,7 @@ export function DocumentCodeView({
 
   // A host that renders static markup sizes the peek by its content, so a
   // server render and the live editor agree without an estimate.
-  const sizedByHost = session.bridge.inlineEditors.renderStatic !== undefined;
+  const sizedByHost = session.bridge.peeks.renderStatic !== undefined;
 
   const [height, setHeight] = useState(() =>
     estimatedHeight(ranges, heightMode),
@@ -116,17 +116,15 @@ export function DocumentCodeView({
   const commitKey = JSON.stringify(commit ?? null);
 
   const [error, setError] = useState<string | null>(null);
-  const handleRef = useRef<ReviewInlineEditorHandle | null>(null);
+  const handleRef = useRef<ReviewPeekHandle | null>(null);
 
-  const [askTarget, setAskTarget] = useState<ReviewInlineEditorHandle | null>(
-    null,
-  );
+  const [askTarget, setAskTarget] = useState<ReviewPeekHandle | null>(null);
 
   const creationFailedRef = useRef(false);
   const latestFindQueryRef = useRef<ReviewFindQuery | null>(null);
 
   const handleWaitersRef = useRef<
-    Array<(handle: ReviewInlineEditorHandle | null) => void>
+    Array<(handle: ReviewPeekHandle | null) => void>
   >([]);
 
   const onFocusRef = useRef(onFocus);
@@ -137,7 +135,7 @@ export function DocumentCodeView({
   const handleOpen = useCallback(() => onOpenRef.current?.(), []);
   const collapsedRef = useRef(collapsed);
   collapsedRef.current = collapsed;
-  const inlineEditorFactory = session.bridge.inlineEditors;
+  const inlineEditorFactory = session.bridge.peeks;
   const inlineEditorSessionId = session.reviewId;
   const reviewFind = useReviewFindRegistration();
 
@@ -160,7 +158,7 @@ export function DocumentCodeView({
     if (creationFailedRef.current) return null;
     setShouldMount(true);
 
-    return new Promise<ReviewInlineEditorHandle | null>((resolve) => {
+    return new Promise<ReviewPeekHandle | null>((resolve) => {
       handleWaitersRef.current.push(resolve);
     });
   }, []);
@@ -245,7 +243,7 @@ export function DocumentCodeView({
     if (!container || !shouldMount) return;
     setError(null);
     creationFailedRef.current = false;
-    let handle: ReviewInlineEditorHandle;
+    let handle: ReviewPeekHandle;
 
     try {
       handle = inlineEditorFactory.create({
@@ -370,8 +368,8 @@ export function DocumentCodeView({
 }
 
 function estimatedHeight(
-  ranges: readonly ReviewInlineEditorRange[],
-  heightMode: ReviewInlineEditorHeightMode,
+  ranges: readonly ReviewPeekRange[],
+  heightMode: ReviewPeekHeightMode,
 ): number {
   const lineCount = ranges.reduce((total, range) => {
     const contextBefore = Math.min(3, Math.max(0, range.startLine - 1));

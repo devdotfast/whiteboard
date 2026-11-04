@@ -1,5 +1,5 @@
 import type {
-  ReviewInlineEditorSpec,
+  ReviewPeekSpec,
   ReviewVerbRequest,
 } from "@dev.fast/review-protocol";
 import { selectSource, sourceAnchors } from "@dev.fast/whiteboard-document";
@@ -32,9 +32,9 @@ let root: ReturnType<typeof createRoot> | undefined;
 
 let posted: ReviewVerbRequest[] = [];
 
-let created: ReviewInlineEditorSpec[] = [];
+let created: ReviewPeekSpec[] = [];
 
-let disposed: ReviewInlineEditorSpec[] = [];
+let disposed: ReviewPeekSpec[] = [];
 
 let session: ReviewSession;
 
@@ -386,7 +386,7 @@ function createTestSession(reviewId = "test"): ReviewSession {
           throw new Error("unused test diff view");
         },
       },
-      inlineEditors: {
+      peeks: {
         async find() {
           return { matchCount: 0 };
         },

@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import type { ServerResponse } from "node:http";
@@ -517,6 +518,81 @@ it("mounts the gateway in the Desktop server, with host states behind the token"
   const unknown = await get("/reviews-api/status/unknown");
   expect(unknown.status).toBe(404);
   expect(await unknown.json()).toEqual({ ok: false, error: "Not found." });
+});
+
+it("exports a remote review's share from the bundle its host prepares", async () => {
+  const a = await startRemote(path.join(root, "a"));
+  const repo = await repository();
+  execFileSync("git", [
+    "-C",
+    repo.directory,
+    "remote",
+    "add",
+    "origin",
+    "https://github.com/example/project.git",
+  ]);
+
+  const { id: repositoryId } = await a.api<{ id: string }>("/repositories", {
+    method: "POST",
+    body: JSON.stringify({ path: repo.directory }),
+  });
+
+  const { reviewId: onA } = await a.api<{ reviewId: string }>("/commands", {
+    method: "POST",
+    body: command({
+      type: "create",
+      title: "On a",
+      target: {
+        kind: "commits",
+        repositoryId,
+        base: repo.base,
+        head: repo.head,
+      },
+    }),
+  });
+
+  const local = await openReviewProfile(path.join(root, "local"), {
+    manageWorkspaces: true,
+  });
+
+  const packageRoot = findReviewPackageRoot(import.meta.url);
+
+  const desktop = createGlobalReviewServer({
+    reviewStore: local.store,
+    reviewData: local.data,
+    appPid: process.pid,
+    packageRoot,
+    toolingRoot: packageRoot,
+    port: 0,
+    token: LOCAL_TOKEN,
+    discoveryPath: path.join(root, "desktop.json"),
+    sharing: true,
+  });
+
+  cleanups.push(async () => {
+    await desktop.close();
+    await local.data.close();
+    await local.store.close();
+  });
+  await desktop.listen();
+  desktop.setRemoteHosts([{ alias: "wb-a", endpoint: a.endpoint }]);
+
+  const exported = () =>
+    fetch(`${desktop.url}/reviews-api/sharing/export`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-review-token": LOCAL_TOKEN,
+      },
+      body: JSON.stringify({ reviewId: onA }),
+    });
+
+  await expect.poll(async () => (await exported()).status).toBe(200);
+  const { text } = await (await exported()).json();
+  expect(JSON.parse(text)).toMatchObject({
+    snapshot: { title: "On a" },
+    repository: { cloneUrl: "https://github.com/example/project.git" },
+  });
 });
 
 it("keeps routing a review its host trashed, and stops once the host's list drops it", async () => {

@@ -376,6 +376,10 @@ export function streamToPromise(stream: NodeJS.ReadWriteStream): Promise<void> {
 export function getElectronVersion(): Record<string, string> {
 	const npmrc = fs.readFileSync(path.join(root, '.npmrc'), 'utf8');
 	const electronVersion = /^target="(.*)"$/m.exec(npmrc)![1];
+	const packageVersion = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).devDependencies.electron;
+	if (electronVersion !== packageVersion) {
+		throw new Error(`Electron version mismatch: .npmrc targets ${electronVersion}, but package.json declares ${packageVersion}. Update .npmrc and build/checksums/electron.txt together.`);
+	}
 	const msBuildId = /^ms_build_id="(.*)"$/m.exec(npmrc)![1];
 	return { electronVersion, msBuildId };
 }

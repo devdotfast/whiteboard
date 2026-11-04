@@ -34,7 +34,7 @@ export const ReviewEmbeddedEditorFocus = new RawContextKey<boolean>(
   false,
 );
 
-const reviewEmbeddedEditors = new WeakSet<ICodeEditor>();
+const reviewMonacoPeeks = new WeakSet<ICodeEditor>();
 
 export interface ReviewEmbeddedNavigationLocation {
   readonly view: "review" | "diff";
@@ -50,12 +50,12 @@ interface ReviewEmbeddedEditorOptions extends IEditorOptions {
 }
 
 export function markReviewEmbeddedEditor(editor: ICodeEditor): IDisposable {
-  reviewEmbeddedEditors.add(editor);
+  reviewMonacoPeeks.add(editor);
   const focus = ReviewEmbeddedEditorFocus.bindTo(editor.contextKeyService);
   focus.set(true);
   return {
     dispose: () => {
-      reviewEmbeddedEditors.delete(editor);
+      reviewMonacoPeeks.delete(editor);
       focus.reset();
     },
   };
@@ -139,7 +139,7 @@ CommandsRegistry.registerCommand(showReferencesCommand, async (accessor, sourceE
   const editor = sourceEditor ?? accessor.get(ICodeEditorService).getActiveCodeEditor();
   const tabs = accessor.get(IReviewCanvasEditorTabsService);
   const notifications = accessor.get(INotificationService);
-  if (!editor || !reviewEmbeddedEditors.has(editor) || !editor.hasModel()) return;
+  if (!editor || !reviewMonacoPeeks.has(editor) || !editor.hasModel()) return;
   const position = editor.getPosition();
   try {
     await tabs.openSourceReferences(editor.getModel().uri, position);
@@ -175,7 +175,7 @@ function runEmbeddedSymbolCommand(
   recordsHistory: boolean,
 ): void {
   const editor = codeEditorService.getActiveCodeEditor();
-  if (!editor || !reviewEmbeddedEditors.has(editor) || !editor.hasModel()) return;
+  if (!editor || !reviewMonacoPeeks.has(editor) || !editor.hasModel()) return;
   const model = editor.getModel();
   const position = editor.getPosition();
   editor.focus();

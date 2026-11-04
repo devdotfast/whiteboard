@@ -4,8 +4,13 @@ import { type JsonValue, parseJsonText } from "@dev.fast/json";
 import {
   MAX_SHARE_BYTES,
   type ShareBundle,
+  type ShareRevisions,
+  type SharedMeta,
   capabilitySchema,
-  shareBundleSchema,
+  shareCreatedSchema,
+  shareIdSchema,
+  shareRevisionsSchema,
+  sharedMetaSchema,
 } from "@dev.fast/review-share-protocol";
 import {
   StreamLimitError,
@@ -15,6 +20,10 @@ import { Agent } from "undici";
 import { z } from "zod";
 
 import { shareRequestBody } from "./export.js";
+import {
+  WHITEBOARD_UPGRADE_REQUIRED_MESSAGE,
+  parseWhiteboardFile,
+} from "./file.js";
 
 const MAX_RESPONSE_BYTES = MAX_SHARE_BYTES;
 
@@ -36,14 +45,6 @@ const jwtSchema = z.object({ token: z.string().min(1) });
 const jwtPayloadSchema = z.object({ exp: z.number() });
 
 const bearers = new Map<string, Promise<{ bearer: string; until: number }>>();
-
-const linkSchema = z.strictObject({ shareId: z.uuid(), url: z.url() });
-
-const receivedSchema = z.object({
-  sender: z.strictObject({ login: z.string().min(1).max(256) }),
-  sharedAt: z.number(),
-  size: z.number().int().positive().max(MAX_SHARE_BYTES),
-});
 
 /** Size is checked while reading, even if Content-Length is absent or false. */
 export async function readBoundedBytes(
@@ -74,6 +75,79 @@ export class ShareAuthError extends Error {
     super("The share service rejected the stored login.");
     this.name = "ShareAuthError";
   }
+}
+
+export class ShareRequestError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ShareRequestError";
+  }
+}
+
+const errorSchema = z.object({ error: z.object({ code: z.string() }) });
+
+async function errorCode(response: Response) {
+  if (!response.body) return undefined;
+
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    await response.body.cancel();
+
+    return undefined;
+  }
+
+  try {
+    const bytes = await readBoundedStream(response.body, 16 * 1024);
+
+    return errorSchema.safeParse(parseJsonText(bytes.toString())).data?.error
+      .code;
+  } catch {
+    return undefined;
+  }
+}
+
+function requestErrorMessage(response: Response, code: string | undefined) {
+  const { status, headers } = response;
+
+  if (status === 426 || code === "upgrade_required")
+    return WHITEBOARD_UPGRADE_REQUIRED_MESSAGE;
+
+  if (
+    status === 403 &&
+    headers.get("content-type")?.includes("text/html") &&
+    headers.get("server")?.toLowerCase() === "cloudflare"
+  )
+    return "The sharing service's security filter blocked this request. Please report this issue.";
+
+  if (status === 413)
+    return "This review is too large to share. Remove large resources, then retry.";
+
+  if (status === 429)
+    return code === "share_quota_exceeded"
+      ? "Your sharing storage limit has been reached. Please contact support."
+      : "Too many sharing requests. Wait a moment, then retry.";
+
+  if (status === 400 && code === "invalid_request")
+    return "The sharing service could not accept this review. Update Whiteboard or report this issue.";
+
+  if (status >= 500)
+    return `The sharing service is temporarily unavailable (HTTP ${status}). Try again shortly.`;
+
+  return `The sharing service refused this request (HTTP ${status}). Please report this issue.`;
+}
+
+async function requestError(response: Response) {
+  const message = requestErrorMessage(response, await errorCode(response));
+  const ray = response.headers.get("cf-ray");
+
+  const reference =
+    ray && /^[a-f0-9]{16}(?:-[a-z]{3})?$/i.test(ray)
+      ? ` Reference: ${ray}.`
+      : "";
+
+  return new ShareRequestError(response.status, message + reference);
 }
 
 /** Account tokens go only to the configured API origin. */
@@ -132,10 +206,12 @@ export class ShareClient {
     const response = await this.send(this.origin + route, init);
 
     if (!response.ok) {
-      await response.body?.cancel();
+      if (response.status === 401 && !anonymous) {
+        await response.body?.cancel();
+        throw new ShareAuthError();
+      }
 
-      if (response.status === 401 && !anonymous) throw new ShareAuthError();
-      throw new Error(`Share request failed (${response.status}).`);
+      throw await requestError(response);
     }
 
     return readBoundedBytes(response, maxBytes);
@@ -169,14 +245,19 @@ export class ShareClient {
     });
 
     if (!response.ok) {
-      await response.body?.cancel();
-
       // A service without the JWT plugin still takes the device token.
-      if (response.status === 404 || response.status === 405)
-        return { bearer: token, until: Date.now() + 10 * 60_000 };
+      if (response.status === 404 || response.status === 405) {
+        await response.body?.cancel();
 
-      if (response.status === 401) throw new ShareAuthError();
-      throw new Error(`Share request failed (${response.status}).`);
+        return { bearer: token, until: Date.now() + 10 * 60_000 };
+      }
+
+      if (response.status === 401) {
+        await response.body?.cancel();
+        throw new ShareAuthError();
+      }
+
+      throw await requestError(response);
     }
 
     const { token: jwt } = jwtSchema.parse(
@@ -206,7 +287,7 @@ export class ShareClient {
   }
 
   async create(bundle: ShareBundle, requestId: string = randomUUID()) {
-    return linkSchema.parse(
+    return shareCreatedSchema.parse(
       await this.api(
         "/api/v2/shares",
         "POST",
@@ -222,7 +303,7 @@ export class ShareClient {
   }
 
   async recoverLink(shareId: string) {
-    return linkSchema.parse(
+    return shareCreatedSchema.parse(
       await this.api(`/api/v2/shares/${z.uuid().parse(shareId)}/link`),
     );
   }
@@ -231,16 +312,35 @@ export class ShareClient {
     return this.api(`/api/v2/shares/${z.uuid().parse(shareId)}`, "DELETE");
   }
 
-  /** The bundle and who shared it, read with the link's capability. */
-  async download(capability: string) {
-    const route = `/api/v2/shared/${capabilitySchema.parse(capability)}`;
-
-    const received = receivedSchema.parse(
-      await this.api(route, "GET", undefined, true),
+  async revisions(shareId: string): Promise<ShareRevisions> {
+    return shareRevisionsSchema.parse(
+      await this.api(
+        `/api/v2/shares/${shareIdSchema.parse(shareId)}/revisions`,
+      ),
     );
+  }
+
+  /** Who shared a link's revision, and which revision is its latest. */
+  async shared(capability: string, revision?: string): Promise<SharedMeta> {
+    const query =
+      revision === undefined ? "" : `?rev=${shareIdSchema.parse(revision)}`;
+
+    return sharedMetaSchema.parse(
+      await this.api(
+        `/api/v2/shared/${capabilitySchema.parse(capability)}${query}`,
+        "GET",
+        undefined,
+        true,
+      ),
+    );
+  }
+
+  /** The bundle of the revision the meta names, and who shared it. */
+  async download(capability: string, revision?: string) {
+    const meta = await this.shared(capability, revision);
 
     const bytes = await this.request(
-      `${route}/bundle`,
+      `/api/v2/shared/${capability}/bundle?rev=${meta.revision.id}`,
       "GET",
       undefined,
       true,
@@ -248,13 +348,10 @@ export class ShareClient {
     );
 
     return {
-      bundle: shareBundleSchema.parse(
-        parseJsonText(new TextDecoder().decode(bytes)),
-      ),
-      attribution: {
-        login: received.sender.login,
-        sharedAt: received.sharedAt,
-      },
+      bundle: parseWhiteboardFile(new TextDecoder().decode(bytes)),
+      attribution: { login: meta.sender.login, sharedAt: meta.sharedAt },
+      revision: meta.revision,
+      latest: meta.latest,
     };
   }
 }

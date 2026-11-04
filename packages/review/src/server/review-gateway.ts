@@ -69,6 +69,7 @@ const REMOTE_ROUTES: readonly RemoteRoute[] = [
   { method: "GET", path: "maps/:name" },
   { method: "POST", path: "navigator" },
   { method: "POST", path: "copy-context" },
+  { method: "POST", path: "share-bundle", slow: true },
   { method: "GET", path: "language-context", slow: true },
   { method: "GET", path: "ask/agents" },
   { method: "GET", path: "ask/agents/:agent/offer", slow: true },

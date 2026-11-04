@@ -52,14 +52,19 @@ export class ReviewCanvasEditorInput extends EditorInput {
 					? `/${sourceSelectionIdentity(target.selection)}`
 					: target.kind === "api"
 						? `/${target.reviewId}`
-						: target.kind === "release-notes"
-							? `/${target.kind}/${target.version}`
-							: `/${target.kind}`,
+						: `/${target.kind}`,
 		});
 	}
 
 	get target(): ReviewCanvasEditorTarget {
 		return this._target;
+	}
+
+	/** True when the version changed. */
+	setReleaseNotesVersion(version: string): boolean {
+		if (this._target.kind !== "release-notes" || this._target.version === version) return false;
+		this._target = { ...this._target, version };
+		return true;
 	}
 
 	setApiTitle(title: string): void {

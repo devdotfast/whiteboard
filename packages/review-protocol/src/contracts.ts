@@ -117,9 +117,9 @@ export interface ReviewDisposable {
   dispose(): void;
 }
 
-export type ReviewInlineEditorHeightMode = "capped" | "content";
+export type ReviewPeekHeightMode = "capped" | "content";
 
-export interface ReviewInlineEditorRange {
+export interface ReviewPeekRange {
   startLine: number;
   endLine: number;
   side?: ReviewDiffSide;
@@ -140,7 +140,7 @@ export interface ReviewCodeCommit {
   tooltip?: { label: string; detail?: string };
 }
 
-export interface ReviewInlineEditorSpec {
+export interface ReviewPeekSpec {
   progress?: ReviewDiffProgress;
   onSetViewed?: ReviewDiffViewSpec["onSetViewed"];
   container: HTMLElement;
@@ -152,10 +152,10 @@ export interface ReviewInlineEditorSpec {
   pins?: ReviewSourcePins;
   /** The commit to name in the file header: one other than the board's. */
   commit?: ReviewCodeCommit;
-  ranges: readonly ReviewInlineEditorRange[];
+  ranges: readonly ReviewPeekRange[];
   /** Original authored selections, before display ranges are merged. */
-  countRanges?: readonly ReviewInlineEditorRange[];
-  heightMode: ReviewInlineEditorHeightMode;
+  countRanges?: readonly ReviewPeekRange[];
+  heightMode: ReviewPeekHeightMode;
   active: boolean;
   onDidFocus?: () => void;
   onDidOpen?: () => void;
@@ -171,18 +171,18 @@ export interface ReviewFindQuery {
   skipFolded?: boolean;
 }
 
-export interface ReviewInlineFindResult {
+export interface ReviewPeekFindResult {
   matchCount: number;
 }
 
-export interface ReviewInlineFindSpec {
+export interface ReviewPeekFindSpec {
   path: string;
   side: ReviewDiffSide;
   pins?: ReviewSourcePins;
-  ranges: readonly ReviewInlineEditorRange[];
+  ranges: readonly ReviewPeekRange[];
 }
 
-export interface ReviewInlineEditorHandle extends ReviewDisposable {
+export interface ReviewPeekHandle extends ReviewDisposable {
   setProgress?(progress: ReviewDiffProgress): void;
   /** Updates the commit's name, as when its description loads. */
   setCommit?(commit: ReviewCodeCommit | undefined): void;
@@ -191,7 +191,7 @@ export interface ReviewInlineEditorHandle extends ReviewDisposable {
   setCollapsed(collapsed: boolean): void;
   onDidChangeHeight(listener: (height: number) => void): ReviewDisposable;
   onDidError(listener: (message: string) => void): ReviewDisposable;
-  setFindQuery(query: ReviewFindQuery): Promise<ReviewInlineFindResult>;
+  setFindQuery(query: ReviewFindQuery): Promise<ReviewPeekFindResult>;
   revealFindMatch(index: number): void;
   clearActiveFindMatch(): void;
   clearFind(): void;
@@ -199,20 +199,20 @@ export interface ReviewInlineEditorHandle extends ReviewDisposable {
 }
 
 /** What a peek shows before a host takes its container over. */
-export type ReviewInlineStaticSpec = Pick<
-  ReviewInlineEditorSpec,
+export type ReviewPeekStaticSpec = Pick<
+  ReviewPeekSpec,
   "path" | "title" | "side" | "pins" | "ranges" | "heightMode"
 >;
 
-export interface ReviewInlineEditorFactory {
-  create(spec: ReviewInlineEditorSpec): ReviewInlineEditorHandle;
+export interface ReviewPeekViewer {
+  create(spec: ReviewPeekSpec): ReviewPeekHandle;
   /** Escaped HTML for a peek, for a server render and its hydration; `create`
    * then replaces the container's content. */
-  renderStatic?(spec: ReviewInlineStaticSpec): string;
+  renderStatic?(spec: ReviewPeekStaticSpec): string;
   find(
-    spec: ReviewInlineFindSpec,
+    spec: ReviewPeekFindSpec,
     query: ReviewFindQuery,
-  ): Promise<ReviewInlineFindResult>;
+  ): Promise<ReviewPeekFindResult>;
 }
 
 /** A lens is scoped to one immutable saved review version. */
@@ -269,7 +269,7 @@ export interface ReviewDiffProgress {
 export interface ReviewDiffViewSpec {
   /** Embed the same diff renderer in the review document. */
   document?: {
-    heightMode: ReviewInlineEditorHeightMode;
+    heightMode: ReviewPeekHeightMode;
     onDidChangeHeight(height: number): void;
     onDidFocus?: () => void;
     onDidOpen?: () => void;
@@ -309,7 +309,7 @@ export interface ReviewDiffViewHandle extends ReviewDisposable {
   /** Scroll to a changed file once loaded. Restore requests defer to saved editor position. */
   revealFile?(path: string, options?: { restore?: boolean }): void;
   /** Find across every file in the view; matches are ordered by file, then line. */
-  setFindQuery?(query: ReviewFindQuery): Promise<ReviewInlineFindResult>;
+  setFindQuery?(query: ReviewFindQuery): Promise<ReviewPeekFindResult>;
   revealFindMatch?(index: number): void;
   clearActiveFindMatch?(): void;
   clearFind?(): void;
@@ -378,7 +378,7 @@ export interface ReviewCanvasBridge {
   readonly appSessionId?: string;
   readonly wasmUrl: string;
   readonly appVersion: string;
-  readonly inlineEditors: ReviewInlineEditorFactory;
+  readonly peeks: ReviewPeekViewer;
   readonly diffView: ReviewDiffViewFactory;
   /** `path` is `/reviews-api/…`; the host adds its origin and token. */
   request?(path: string, init?: RequestInit): Promise<Response>;
@@ -436,7 +436,7 @@ export interface ReviewCanvasBridge {
   ): void;
   openSource?(
     source: ReviewApiSourceLocation,
-    range: ReviewInlineEditorRange,
+    range: ReviewPeekRange,
   ): Promise<void>;
 }
 
@@ -1114,6 +1114,8 @@ export type ReviewCanvasContent =
 
 /** The GitHub API's release fields the tab reads. */
 export interface ReviewCanvasRelease {
+  tag_name: string;
+  name: string | null;
   body: string;
   published_at: string | null;
 }
@@ -1132,11 +1134,11 @@ export interface ReviewCanvasUpdateHost {
   apply(): void;
 }
 
-/** The Release notes tab: one version's GitHub release. */
+/** The Release notes tab: every Whiteboard release. */
 export interface ReviewCanvasReleaseNotes {
   version: string;
-  // Rejects with a message the tab shows.
-  readRelease(): Promise<ReviewCanvasRelease>;
+  // Newest first; rejects with a message the tab shows.
+  readReleases(): Promise<ReviewCanvasRelease[]>;
   // Backed by the `update.showReleaseNotes` workbench setting.
   showAfterUpdate: boolean;
   setShowAfterUpdate(enabled: boolean): Promise<boolean>;
@@ -1152,10 +1154,7 @@ export function whiteboardReleaseUrl(version: string): string {
   return `${WHITEBOARD_RELEASES_URL}/tag/v${encodeURIComponent(version)}`;
 }
 
-/** The GitHub API's copy of a version's release, readable without a token. */
-export function whiteboardReleaseApiUrl(version: string): string {
-  return `https://api.github.com/repos/${WHITEBOARD_REPOSITORY}/releases/tags/v${encodeURIComponent(version)}`;
-}
+export const WHITEBOARD_RELEASES_API_URL = `https://api.github.com/repos/${WHITEBOARD_REPOSITORY}/releases?per_page=100`;
 
 /** What Home shows; a new snapshot on every change. */
 export interface ReviewCanvasHomeData {

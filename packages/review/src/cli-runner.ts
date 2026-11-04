@@ -1226,7 +1226,10 @@ export async function runReviewCli(input: ReviewCliInput): Promise<number> {
     program.command("login").description("Log in to Whiteboard with GitHub"),
     "plain",
   )
-    .option("--origin <url>", "Whiteboard service origin", DEFAULT_STORE_ORIGIN)
+    .option(
+      "--origin <url>",
+      `Whiteboard service origin (default: $DEV_REVIEW_SERVICE_ORIGIN or ${DEFAULT_STORE_ORIGIN})`,
+    )
     .option("--traces", "Also authorize GitHub repositories for hosted traces")
     .option("--no-browser", "Print the URL instead of opening a browser")
     .action(

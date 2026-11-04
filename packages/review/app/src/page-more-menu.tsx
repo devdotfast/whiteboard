@@ -52,6 +52,7 @@ export function PageMoreMenu({
   const sharing = useContext(SharingContext);
   const historical = Boolean(session.review?.historicalRevision);
   const finished = submissionOutcome !== null;
+  const sourceWindows = session.review?.available?.sourceWindows !== false;
 
   const menu = useCanvasMenu({
     items: [
@@ -63,11 +64,9 @@ export function PageMoreMenu({
         : []),
       ...views.map(({ view, label }) => ({ id: `view:${view}`, label })),
       // A remote review keeps it, disabled while its host can't open one.
-      {
-        id: "source",
-        label: "Source tree ↗",
-        enabled: session.review?.available?.sourceWindows !== false,
-      },
+      ...(sourceWindows || session.review?.host
+        ? [{ id: "source", label: "Source tree ↗", enabled: sourceWindows }]
+        : []),
     ],
     onSelect: async (id) => {
       if (id === "contents") onOpenContents?.();

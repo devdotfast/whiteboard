@@ -25,7 +25,6 @@ on:
         options:
           - all
           - macos-arm64
-          - macos-x64
           - linux
           - windows
         default: all
@@ -344,21 +343,6 @@ jobs:
       commit: ${{ needs.version.outputs.commit }}
       version: ${{ needs.version.outputs.version }}
       target: darwin-arm64
-      channel: preview
-      publish: ${{ !inputs.dry_run }}
-    secrets: inherit
-
-  macos-x64:
-    if: ${{ inputs.platforms == 'all' || inputs.platforms == 'macos-x64' }}
-    needs: version
-    permissions:
-      contents: write
-      actions: read
-    uses: ./.github/workflows/review-macos-build.yml
-    with:
-      commit: ${{ needs.version.outputs.commit }}
-      version: ${{ needs.version.outputs.version }}
-      target: darwin-x64
       channel: preview
       publish: ${{ !inputs.dry_run }}
     secrets: inherit

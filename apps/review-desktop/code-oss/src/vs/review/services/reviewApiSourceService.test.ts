@@ -83,7 +83,7 @@ test("a document diff retains its pinned comparison even if the review advances 
 		openComparison: () => ({}),
 		createDocument: (_: unknown, scope: ReviewDiffLens, input: ReviewDiffViewSource) => { lens = scope; source = input; return {}; },
 	} as never);
-	canvas.inlineEditors.create({ path: "src/[route].ts", side: "base", ranges: [{ startLine: 2, endLine: 2 }] } as never);
+	canvas.peeks.create({ path: "src/[route].ts", side: "base", ranges: [{ startLine: 2, endLine: 2 }] } as never);
 	version = 4;
 	const result = await source.load(undefined, lens);
 	assert.equal(result.entries.length, 1);
