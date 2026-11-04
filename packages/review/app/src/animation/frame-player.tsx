@@ -23,7 +23,12 @@ import {
   timerState,
   timerVars,
 } from "./stage-controls";
-import type { FrameTimer, StagePlayer, StageSend } from "./stage-player";
+import type {
+  FrameTimer,
+  PickedBy,
+  StagePlayer,
+  StageSend,
+} from "./stage-player";
 import type { StageMessage } from "./stage-protocol";
 
 const DEFAULT_DURATION = 3000;
@@ -274,8 +279,11 @@ export function useFramePlayer(
     if (!activeFrames.some((item) => item.key === frame.key)) go(0, true);
   }, [activeFrames, frame.key, go]);
 
-  const pick = (position: number) =>
+  // A render reads the frame at rest; the controls and the tour keep playing.
+  const pick = (position: number, by: PickedBy) => {
+    if (by === "render") setPlaying(false);
     go(position, Math.abs(position - activeIndex) > 1);
+  };
 
   const steps = activeFrames.every((item) => item.label) ? activeFrames : null;
 
@@ -350,7 +358,7 @@ export function useFramePlayer(
                 title={item.title}
                 current={position === activeIndex}
                 timer={position === activeIndex ? timer : null}
-                onClick={() => pick(position)}
+                onClick={() => pick(position, "controls")}
               />
             ))}
           </div>

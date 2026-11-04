@@ -68,6 +68,11 @@ import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 
 import { anchorQuotes } from "./anchor-quotes.js";
+import {
+  type RenderAnimation,
+  renderQuerySchema,
+  renderTarget,
+} from "./animation-render.js";
 import type { AskRecord } from "./ask-history.js";
 import { authoringTools } from "./authoring-tools.js";
 import { documentText } from "./document-text.js";
@@ -208,6 +213,8 @@ export function createReviewApi(
   /** Desktop's Ask: local agents answering questions about a selection. */
   ask?: AskHost,
   animationsEnabled: () => boolean = () => false,
+  /** Shows a frame of an animation in the attached Desktop and captures it. */
+  render?: RenderAnimation,
 ) {
   const app = new Hono();
   app.onError((error, context) => {
@@ -2085,6 +2092,32 @@ export function createReviewApi(
               ...listedRelations(store.relations(id)),
             },
     );
+  });
+  // One frame of an animation (or a clip at a marker) as the reader sees it:
+  // the attached Desktop shows it on the open board and captures it.
+  app.get("/:id/render", async (context) => {
+    const query = renderQuerySchema.parse(context.req.query());
+    const id = context.req.param("id");
+    const target = renderTarget(readReview(id), query.targetId, query.frame);
+
+    if (!render)
+      throw new ReviewInputError(
+        "Rendering a frame needs Whiteboard Desktop, which this server cannot reach.",
+        409,
+      );
+
+    const rendered = await render({
+      reviewId: id,
+      targetId: query.targetId,
+      frame: target.key,
+    });
+
+    return context.json({
+      reviewId: id,
+      targetId: query.targetId,
+      type: target.type,
+      ...rendered,
+    });
   });
   app.get("/:id", async (context) => {
     const query = readQuerySchemas.get.parse(context.req.query());

@@ -18,7 +18,7 @@ import {
 } from "./agent-client.js";
 import { type ReviewApiClient, ReviewApiError } from "./client.js";
 import { exitOnInstallUpdate } from "./install-update.js";
-import { callPublicTool, publicTool } from "./public-tools.js";
+import { callPublicTool, publicTool, renderedImage } from "./public-tools.js";
 import { RECOVERY } from "./recovery.js";
 import {
   ASK_THREAD_ENV,
@@ -212,7 +212,8 @@ export async function runReviewAgentCli(input: AgentCliInput): Promise<number> {
       durationMs: Date.now() - startedAt,
     });
 
-    const text = toolResultText(tool, result);
+    // A rendered frame is read from its file; its bytes stay out of stdout.
+    const text = toolResultText(tool, renderedImage(tool, result).result);
     input.stdout.write(text.endsWith("\n") ? text : text + "\n");
 
     return 0;

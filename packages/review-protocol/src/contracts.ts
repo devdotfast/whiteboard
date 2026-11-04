@@ -1228,9 +1228,31 @@ export interface ReviewCanvasRange {
   worktreeRevision?: string;
 }
 
+/** Where a block's figure sits in the window, in CSS pixels, after the
+ * canvas showed the frame asked for. */
+export interface ReviewRenderedFrame {
+  /** The stop showing: its key, title, and place in the path showing. */
+  frame: { key: string; title: string; position: number; count: number };
+  /** The scenario the stop belongs to, when the block has scenarios. */
+  scenario?: string;
+  /** The part of the figure inside the window, to capture. */
+  rect: { x: number; y: number; width: number; height: number };
+  /** Whether the figure runs past the window, so `rect` cuts it. */
+  clipped: boolean;
+  /** The error the stage reported, if its script threw. */
+  error: string | null;
+}
+
 export interface ReviewCanvasHandle extends ReviewDisposable {
   update(content: ReviewCanvasContent): void;
   focus(): void;
+  /** Shows a frame of an animation (or a clip at a marker) on the board
+   * showing, scrolled into view, and reports where to capture it. Rejects
+   * when the canvas shows another board or the block is not on it. */
+  renderAnimation(
+    targetId: string,
+    frame: string,
+  ): Promise<ReviewRenderedFrame>;
   showFind(seed?: string): boolean;
   /** False when find is closed. */
   navigateFind(delta: 1 | -1): boolean;
@@ -2032,6 +2054,16 @@ export const ReviewVerbRequestSchema = z.discriminatedUnion("name", [
     args: z.strictObject({
       reviewId: apiReviewIdSchema,
       version: z.number().int().nonnegative().optional(),
+    }),
+  }),
+  /** Show one frame of an animation (or a clip at one marker) on the open
+   * board and capture it; answers a `ReviewRenderedFrame` with its `png`. */
+  z.strictObject({
+    name: z.literal("renderAnimation"),
+    args: z.strictObject({
+      reviewId: apiReviewIdSchema,
+      targetId: requiredString,
+      frame: requiredString,
     }),
   }),
 ]);

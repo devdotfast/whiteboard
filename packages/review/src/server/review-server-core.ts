@@ -17,6 +17,11 @@ import {
   readReviewPackageVersion,
 } from "@review/package-paths.js";
 import {
+  type RenderRequest,
+  type RenderedFrame,
+  renderedFrameSchema,
+} from "@review/review-api/animation-render.js";
+import {
   type AuthoringCapabilities,
   type ReviewApiHooks,
   createReviewApi,
@@ -95,7 +100,8 @@ export function createReviewServerApp(input: {
   mountFeedback(app);
   app.post("/control/result", async (context) => {
     const accepted = input.relay.acceptResult(
-      await readBoundedRequestJson(context.req.raw),
+      // A rendered frame's PNG rides back in a result.
+      await readBoundedRequestJson(context.req.raw, VERB_RESULT_MAX_BYTES),
     );
 
     return serverJson(accepted ? 200 : 404, { ok: accepted });
@@ -143,6 +149,10 @@ export interface WhiteboardCoreInput {
     env?: Promise<NodeJS.ProcessEnv>;
   };
 }
+
+/** A verb result may carry a captured frame: a PNG of up to 1600 pixels on
+ * its longest edge, base64. */
+const VERB_RESULT_MAX_BYTES = 16 * 1024 * 1024;
 
 export function createWhiteboardCore(input: WhiteboardCoreInput) {
   const { store, data } = input.profile;
@@ -200,6 +210,7 @@ export function createWhiteboardCore(input: WhiteboardCoreInput) {
       agents: async () => detectAskAgents(await ask?.env),
     },
     callbacks.animations,
+    callbacks.render,
   );
 
   // Desktop's sharing host mounts the publisher with the rest of sharing.
@@ -276,6 +287,24 @@ export function relayReviewCallbacks(
       if (!result.ok) throw new ReviewInputError(result.error, 409);
 
       return z.object({ softwareMapEnabled: z.boolean() }).parse(result.result);
+    },
+    async render(request: RenderRequest): Promise<RenderedFrame> {
+      if (!relay.attached)
+        throw new ReviewInputError(
+          "No Whiteboard Desktop is attached, so nothing can show the animation. Open the whiteboard in Desktop and render again.",
+          409,
+        );
+
+      const { reviewId, targetId, frame } = request;
+
+      const result = await relay.dispatch({
+        name: "renderAnimation",
+        args: { reviewId, targetId, frame },
+      });
+
+      if (!result.ok) throw new ReviewInputError(result.error, 409);
+
+      return renderedFrameSchema.parse(result.result);
     },
   };
 }

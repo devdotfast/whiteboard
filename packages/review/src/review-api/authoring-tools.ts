@@ -182,6 +182,13 @@ export function authoringTools(
             "GET",
             "/:reviewId/inspect",
           ),
+          tool(
+            "render",
+            "See an animation or clip as the reader does: Desktop shows one of its frames (frame: a frame key, or a clip's marker key; omitted, the first) on the open whiteboard and returns it as a PNG image, with the error its script threw, if any. The PNG is also written to the path the result names. After publishing, render each frame you changed and look at it, instead of taking screenshots of the screen. The whiteboard must be open in Desktop: review_create opens it, and review_open opens an existing one.",
+            z.strictObject({ ...review, targetId: id, frame: id.optional() }),
+            "GET",
+            "/:reviewId/render",
+          ),
         ]
       : []),
     tool("list", "List saved reviews.", z.strictObject({}), "GET", ""),
