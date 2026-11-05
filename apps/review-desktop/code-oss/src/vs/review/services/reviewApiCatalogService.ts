@@ -29,6 +29,9 @@ export interface IReviewApiCatalogService {
 	/** Creates an empty top-level board, a plan in the checkout's project; returns its id. */
 	/** A new board in the repository's project, unnamed until the person types a title. */
 	createReview(repositoryPath: string, parentId?: string): Promise<string>;
+	/** A board of the PR at `url`, made in the checkout; the server answers
+	 * with the PR's existing board when it has one. Returns its id. */
+	createPullRequestReview(repositoryPath: string, url: string): Promise<string>;
 	/** Deletes the board if it is still untouched: no title, no blocks; the server decides. */
 	discardReview(reviewId: string): Promise<boolean>;
 }
@@ -118,6 +121,13 @@ export class ReviewApiCatalogService extends Disposable implements IReviewApiCat
 		// open:false: the caller opens the tab itself.
 		// The person's own board: History credits its first version to them.
 		const result = await this.client!.personCommand<{ reviewId: string }>({ type: "create", title: "", target: { kind: "project", repositoryPath }, ...(parentId && { parentId }), open: false });
+		return result.reviewId;
+	}
+
+	async createPullRequestReview(repositoryPath: string, url: string): Promise<string> {
+		await this.initialize();
+		// open:false: the caller opens the tab itself. No title: the board takes the PR's.
+		const result = await this.client!.personCommand<{ reviewId: string }>({ type: "create", title: "", target: { kind: "pullRequest", repositoryPath, pullRequest: url }, open: false });
 		return result.reviewId;
 	}
 

@@ -8,6 +8,7 @@ import { KeyCode, KeyMod } from '../../../base/common/keyCodes.js';
 import { Action2, registerAction2 } from '../../../platform/actions/common/actions.js';
 import type { ServicesAccessor } from '../../../platform/instantiation/common/instantiation.js';
 import { KeybindingWeight } from '../../../platform/keybinding/common/keybindingsRegistry.js';
+import { REVIEW_OPEN_SETTINGS_COMMAND_ID } from '../../common/reviewCommandPalette.js';
 import { IReviewCanvasEditorTabsService } from '../../services/reviewCanvasEditorTabsService.js';
 
 /**
@@ -17,7 +18,7 @@ import { IReviewCanvasEditorTabsService } from '../../services/reviewCanvasEdito
 class OpenReviewSettingsAction extends Action2 {
 	constructor() {
 		super({
-			id: 'review.openSettings',
+			id: REVIEW_OPEN_SETTINGS_COMMAND_ID,
 			title: localize2('review.openSettings', "Whiteboard: Settings..."),
 			f1: true,
 			keybinding: {

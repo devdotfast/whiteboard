@@ -34,6 +34,7 @@ import { CommandCenterControl } from '../../../workbench/browser/parts/titlebar/
 import { INativeHostService } from '../../../platform/native/common/native.js';
 import { getDefaultHoverDelegate } from '../../../base/browser/ui/hover/hoverDelegateFactory.js';
 import { ReviewLinuxTitlebar } from './reviewLinuxTitlebar.js';
+import { REVIEW_OPEN_HOME_COMMAND_ID } from '../../common/reviewCommandPalette.js';
 
 /**
  * The deliberately small Review titlebar. It owns the drag region and the macOS
@@ -229,7 +230,7 @@ export class ReviewTitlebarPart extends Part implements ITitlebarPart {
 		icon.appendChild(house);
 		button.appendChild(icon);
 
-		const run = () => void this.commandService.executeCommand('review.openHome');
+		const run = () => void this.commandService.executeCommand(REVIEW_OPEN_HOME_COMMAND_ID);
 		this._register(addDisposableListener(button, 'click', run));
 		this._register(addDisposableListener(button, 'keydown', event => {
 			const keyboardEvent = new StandardKeyboardEvent(event);

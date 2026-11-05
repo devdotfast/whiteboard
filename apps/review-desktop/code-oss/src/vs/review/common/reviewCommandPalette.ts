@@ -7,6 +7,9 @@ import { stripIcons } from '../../base/common/iconLabels.js';
 import { localize } from '../../nls.js';
 import type { ICommandAction } from '../../platform/action/common/action.js';
 
+export const REVIEW_OPEN_HOME_COMMAND_ID = 'review.openHome';
+export const REVIEW_OPEN_SETTINGS_COMMAND_ID = 'review.openSettings';
+
 type CommandLabel = Pick<ICommandAction, 'title' | 'category'>;
 
 const stockPaletteCommands = new Set(['workbench.action.reloadWindow']);

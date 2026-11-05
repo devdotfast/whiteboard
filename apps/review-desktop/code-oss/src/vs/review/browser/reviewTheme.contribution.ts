@@ -83,6 +83,7 @@ const STATUS_COLORS = [
 	{ name: 'warning', candidates: ['editorWarning.foreground', 'terminal.ansiYellow'], dark: '#F2C14E', light: '#C98A0B' },
 	{ name: 'danger', candidates: ['editorError.foreground', 'terminal.ansiRed'], dark: '#F26A55', light: '#D8402C' },
 	{ name: 'success', candidates: ['terminal.ansiGreen', 'testing.iconPassed'], dark: '#4ED990', light: '#1B9A57' },
+	{ name: 'merged', candidates: [], dark: '#A371F7', light: '#8250DF' },
 ];
 
 /** The first readable candidate the theme defines (registry defaults are VS Code's), else Whiteboard's. */
