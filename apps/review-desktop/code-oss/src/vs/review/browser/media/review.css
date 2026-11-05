@@ -90,7 +90,7 @@
   left: 0;
   z-index: 100;
   width: 100%;
-  height: 40px;
+  height: 52px;
   box-shadow: none;
   pointer-events: none;
   background: transparent;
@@ -259,7 +259,7 @@
    before the part first lays out. */
 .monaco-workbench .part.review-explorer > .review-explorer-chrome-spacer {
   box-sizing: border-box;
-  height: var(--review-chrome-height, 40px);
+  height: var(--review-chrome-height, 52px);
   flex-shrink: 0;
   background-color: var(--vscode-editorGroupHeader-tabsBackground);
   user-select: none;
@@ -435,8 +435,8 @@
   );
 }
 
-/* 28px pill + 6px above + 6px below = the 40px row. EditorTabsControl reports
-   the same 40px through EDITOR_TAB_HEIGHT.review. The tab-height variable is
+/* 28px pill + 12px above + 12px below = the 52px row. EditorTabsControl reports
+   the same 52px through EDITOR_TAB_HEIGHT.review. The tab-height variable is
    an inline style on `.title`, so this rule redeclares it one level down. */
 body
   .monaco-workbench.review-workbench
@@ -446,8 +446,8 @@ body
   > .title
   > .tabs-and-actions-container {
   --editor-group-tab-height: 28px;
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 12px;
+  padding-bottom: 12px;
 }
 
 body
@@ -636,7 +636,7 @@ body
   flex-shrink: 0;
   /* macOS moves the traffic lights right as the zoom makes the row taller.
      The doubled class outranks upstream's fixed 70px. */
-  width: calc(50px + 20px * var(--zoom-factor, 1));
+  width: calc(50px + 26px * var(--zoom-factor, 1));
   -webkit-app-region: drag;
 }
 
@@ -691,8 +691,8 @@ body
 
    `CodeWindow.updateWindowControls` moves the traffic lights itself: it calls
    `setWindowButtonPosition({ x: floor((REVIEW_CHROME_HEIGHT - buttonHeight) / 2) + 1 })`.
-   At 40px with the 14px macOS Tahoe button that is x=14, and three 14px buttons
-   on the 20px macOS pitch end at 68. Change REVIEW_CHROME_HEIGHT and that
+   At 52px with the 14px macOS Tahoe button that is x=20, and three 14px buttons
+   on the 20px macOS pitch end at 74. Change REVIEW_CHROME_HEIGHT and that
    number moves.
 
    The arrow glyph carries 2px of side bearing inside its box, so the back arrow
@@ -2084,7 +2084,7 @@ body
    --------------------------------------------------------------------------- */
 .monaco-workbench .review-sidebar-rail {
   position: absolute;
-  top: 40px;
+  top: 52px;
   bottom: 0;
   left: 0;
   z-index: 50;
