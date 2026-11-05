@@ -47,6 +47,97 @@ describe("trace-read-cli", () => {
     rmSync(tempDir, { recursive: true, force: true });
   });
 
+  it.each(["claude", "codex", "pi"] as const)(
+    "pulls uncommitted %s sessions without an origin or remote storage",
+    async (harness) => {
+      vi.stubEnv("TRACE_R2_MODE", "");
+      const root = path.join(tempDir, "repo");
+      mkdirSync(root);
+      git(root, ["init", "--quiet"]);
+      const claude = path.join(tempDir, "claude");
+      mkdirSync(claude);
+      vi.stubEnv("TRACE_LOCAL_TRACE_ROOT", claude);
+      vi.stubEnv("TRACE_CODEX_SESSIONS_ROOT", path.join(tempDir, "codex"));
+      vi.stubEnv("TRACE_PI_SESSIONS_ROOT", path.join(tempDir, "pi"));
+      const sessionId = "11111111-aaaa-bbbb-cccc-000000000001";
+      const codex = path.join(tempDir, "codex");
+      const pi = path.join(tempDir, "pi");
+      mkdirSync(codex);
+      mkdirSync(pi);
+
+      const files = {
+        claude: path.join(claude, `${sessionId}.jsonl`),
+        codex: path.join(codex, `rollout-2026-10-01-${sessionId}.jsonl`),
+        pi: path.join(pi, `2026-10-01_${sessionId}.jsonl`),
+      };
+
+      const records = {
+        claude: [
+          {
+            type: "user",
+            cwd: root,
+            sessionId,
+            message: { content: "Find my local requirement" },
+          },
+        ],
+        codex: [
+          { type: "session_meta", payload: { id: sessionId, cwd: root } },
+          {
+            type: "event_msg",
+            payload: {
+              type: "user_message",
+              message: "Find my local requirement",
+            },
+          },
+        ],
+        pi: [
+          { type: "session", id: sessionId, cwd: root },
+          {
+            type: "message",
+            message: { role: "user", content: "Find my local requirement" },
+          },
+        ],
+      };
+
+      writeFileSync(
+        files[harness],
+        "malformed record\n" +
+          records[harness].map((record) => JSON.stringify(record)).join("\n"),
+      );
+      writeFileSync(
+        path.join(claude, "invalid-session.jsonl"),
+        JSON.stringify({ cwd: root, sessionId: "", id: "invalid-session" }),
+      );
+      writeFileSync(
+        path.join(claude, "unrelated-session.jsonl"),
+        JSON.stringify({
+          type: "user",
+          cwd: tempDir,
+          sessionId: "unrelated-session",
+          message: { content: "Other project" },
+        }),
+      );
+      const out: string[] = [];
+      const err: string[] = [];
+      expect(
+        await runTracePull({
+          cwd: root,
+          scope: { repository: true },
+          json: true,
+          stdout: collectingWritable(out),
+          stderr: collectingWritable(err),
+        }),
+      ).toBe(0);
+      const report = JSON.parse(out.join(""));
+      expect(
+        report.sessions.map((session: { session: string }) => session.session),
+      ).toEqual([sessionId]);
+      expect(report.events).toBe(1);
+      expect(report.paths.every((file: string) => existsSync(file))).toBe(true);
+      expect(err.join("")).toBe("");
+    },
+  );
+
   it("lists a review scope's sessions from the change range it was given", async () => {
     const sessionId = "aaaa1111-bbbb-cccc-dddd-eeee00000001";
     const gitDir = path.join(tempDir, "repo");
