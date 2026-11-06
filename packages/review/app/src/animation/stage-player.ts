@@ -50,6 +50,10 @@ export interface StagePlayer {
     | "sequence"
     | "scenario"
   >;
+  /** Play from the first stop, when this kind plays on its own. */
+  play?(): void;
+  /** Stop playing, holding the stop showing. */
+  pause(): void;
   /** A message only this kind's stage sends. */
   receive(message: StageMessage): void;
   /** The scenario showing, by key. */

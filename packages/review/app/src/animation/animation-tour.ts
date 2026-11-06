@@ -24,32 +24,33 @@ export const frameAnchorId = (blockId: string, frameKey: string) =>
 export const markerAnchorId = (blockId: string, markerKey: string) =>
   `${blockId}:marker:${markerKey}`;
 
-/** The code a frame lists that resolves, `lead` first when it resolves. */
+/** Code the reader opened from the drawing, shown at the stop it was opened
+ * on until they step away. */
+export interface OpenedCode {
+  stop: string;
+  name: string;
+}
+
+/** The code a frame lists that resolves. */
 function frameSources(
   blockId: string,
   anchors: Anchors,
   frame: AnimationFrame,
-  lead?: string,
 ) {
-  const names = lead
-    ? [lead, ...(frame.code ?? []).filter((name) => name !== lead)]
-    : (frame.code ?? []);
-
-  return names.flatMap((name) => {
+  return (frame.code ?? []).flatMap((name) => {
     const anchor = anchors.get(animationCodeId(blockId, name));
 
     return anchor ? [anchor.peek] : [];
   });
 }
 
-/** What a frame's stop shows: its code, `lead` first, or its words. */
-export function frameContent(
+/** What a frame's stop shows: its code, or its words. */
+function frameContent(
   blockId: string,
   anchors: Anchors,
   frame: AnimationFrame,
-  lead?: string,
 ): ReviewPeekContent {
-  const [source, ...more] = frameSources(blockId, anchors, frame, lead);
+  const [source, ...more] = frameSources(blockId, anchors, frame);
 
   return source
     ? { kind: "source", source, ...(more.length > 0 && { more }) }
@@ -60,13 +61,15 @@ export function frameContent(
  * An animation's tour: a stop per frame of the path being shown, in order,
  * or a clip's: a stop per marker. There is none unless some frame or marker
  * shows code that resolves. `anchorId` names each stop: `frameAnchorId`, or
- * `markerAnchorId` for a clip.
+ * `markerAnchorId` for a clip. The stop `opened` names shows that code alone,
+ * whatever its frame lists.
  */
 export function animationTour(
   block: { id: string; title?: string },
   anchors: Anchors,
   path: readonly AnimationFrame[],
   anchorId: (blockId: string, key: string) => string = frameAnchorId,
+  opened?: OpenedCode | null,
 ): GuidedTour | null {
   if (!path.some((frame) => frameSources(block.id, anchors, frame).length))
     return null;
@@ -75,7 +78,14 @@ export function animationTour(
     id: block.id,
     title: block.title,
     stops: path.map((frame): GuidedTourStop => {
-      const content = frameContent(block.id, anchors, frame);
+      const named =
+        opened?.stop === frame.key
+          ? anchors.get(animationCodeId(block.id, opened.name))
+          : undefined;
+
+      const content: ReviewPeekContent = named
+        ? { kind: "source", source: named.peek }
+        : frameContent(block.id, anchors, frame);
 
       return {
         anchor: {

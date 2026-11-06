@@ -633,13 +633,67 @@ export function stageRuntime(port: MessagePort): void {
       ? target.closest<HTMLElement | SVGElement>("[data-wb-openable]")
       : null;
 
+  // A press opens on release, by the name pressed: a frame can redraw the
+  // element under the pointer, and then no click ever comes. It opens just
+  // after the click, so the code lands on any frame the drawing's own click
+  // handler goes to.
+  let press: { name: string; x: number; y: number } | null = null;
+  let released = false;
+
+  document.addEventListener("pointerdown", (event) => {
+    const name = openTarget(event.target)?.dataset.wbOpen;
+
+    press = name ? { name, x: event.clientX, y: event.clientY } : null;
+  });
+
+  document.addEventListener("pointercancel", () => {
+    press = null;
+  });
+
+  document.addEventListener("pointerup", (event) => {
+    const held = press;
+
+    press = null;
+
+    if (!held || Math.hypot(event.clientX - held.x, event.clientY - held.y) > 4)
+      return;
+    released = true;
+    setTimeout(() => {
+      released = false;
+      post({ type: "reveal", name: held.name });
+    });
+  });
+
   document.addEventListener("click", (event) => {
     const target = openTarget(event.target);
 
-    if (target) post({ type: "reveal", name: target.dataset.wbOpen! });
+    // The release before it opens it already.
+    if (target && !released)
+      post({ type: "reveal", name: target.dataset.wbOpen! });
   });
 
   document.addEventListener("keydown", (event) => {
+    // ← and → step the animation, as they do on its controls, unless the
+    // drawing's own field (a select, an input) takes them.
+    const arrow =
+      event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+
+    if (
+      arrow &&
+      !event.defaultPrevented &&
+      !(
+        event.target instanceof Element &&
+        event.target.closest(
+          'input, textarea, select, [contenteditable="true"]',
+        )
+      )
+    ) {
+      event.preventDefault();
+      post({ type: "step", delta: arrow });
+
+      return;
+    }
+
     const target = openTarget(event.target);
 
     if (!target || (event.key !== "Enter" && event.key !== " ")) return;
@@ -3471,6 +3525,43 @@ export function stageRuntime(port: MessagePort): void {
     return { bottom, right: widest };
   };
 
+  // Where the frame's marks run across the stage: anything with nothing
+  // inside it, a whole SVG, or a box drawn with a fill or a border. Elements
+  // that only lay others out are not drawing.
+  const inkBounds = () => {
+    let left = Infinity;
+    let right = -Infinity;
+
+    for (const element of document.body.querySelectorAll("*")) {
+      if (
+        element.closest(".wb-arrows, .wb-tokens") ||
+        (element.closest("svg") && !(element instanceof SVGSVGElement)) ||
+        !element.checkVisibility({
+          visibilityProperty: true,
+          opacityProperty: true,
+        })
+      )
+        continue;
+
+      const style = getComputedStyle(element);
+
+      const drawn =
+        element instanceof SVGSVGElement ||
+        element.childElementCount === 0 ||
+        parseFloat(style.borderTopWidth) > 0 ||
+        style.backgroundColor !== "rgba(0, 0, 0, 0)";
+
+      if (!drawn) continue;
+      const rect = element.getBoundingClientRect();
+
+      if (rect.width <= 0 || rect.height <= 0) continue;
+      left = Math.min(left, rect.left);
+      right = Math.max(right, rect.right);
+    }
+
+    return { left, right };
+  };
+
   // A measuring copy shows each frame of its scenario in turn, as an instant
   // jump does, all within one task, and reports the tallest. What a frame
   // leaves behind does not matter: the copy is thrown away.
@@ -3479,6 +3570,8 @@ export function stageRuntime(port: MessagePort): void {
     const declared = declaredFrames();
     let previous: FrameChange["previous"];
     let tallest = 0;
+    let inkLeft = Infinity;
+    let inkRight = -Infinity;
     instantMode = true;
     root.setAttribute("data-wb-instant", "");
 
@@ -3499,6 +3592,11 @@ export function stageRuntime(port: MessagePort): void {
         if (finite(animation)) animation.finish();
 
       tallest = Math.max(tallest, contentBounds().bottom);
+
+      const ink = inkBounds();
+
+      inkLeft = Math.min(inkLeft, ink.left);
+      inkRight = Math.max(inkRight, ink.right);
       previous = frame;
     }
 
@@ -3506,6 +3604,9 @@ export function stageRuntime(port: MessagePort): void {
     post({
       type: "measured",
       height: Math.min(4000, Math.max(120, Math.ceil(tallest))),
+      // Within SLOT_MAX_OFFSET in stage-protocol.ts. Nothing drawn is no ink.
+      left: inkRight > inkLeft ? clamp(inkLeft, -100_000, 100_000) : 0,
+      right: inkRight > inkLeft ? clamp(inkRight, -100_000, 100_000) : 0,
     });
   };
 

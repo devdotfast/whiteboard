@@ -607,3 +607,11 @@ button {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
+
+/* A hero runs to the pane's edges: its ring stays inside them. */
+.review-board-editor
+  [data-board-selected]
+  > [data-review-node-id]
+  > [data-hero] {
+  outline-offset: -2px;
+}
