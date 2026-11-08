@@ -72,7 +72,7 @@ export function readTraceEnvFile(envPath: string): Map<string, string> {
   const values = new Map<string, string>();
 
   try {
-    for (const line of readFileSync(envPath, "utf8").split("\n")) {
+    for (const line of readFileSync(envPath, "utf8").split(/\r?\n/)) {
       const match = /^\s*(?:export\s+)?([A-Z0-9_]+)=(.*)$/.exec(line);
 
       if (!match) continue;
