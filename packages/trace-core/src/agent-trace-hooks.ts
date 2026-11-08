@@ -434,11 +434,13 @@ export async function installCodexTraceHook(
   const codexDir = path.join(homeDir, ".codex");
   const configPath = codexConfigPath(homeDir);
 
-  let existing = "";
+  let original = "";
 
   if (existsSync(configPath)) {
-    existing = await readFile(configPath, "utf8");
+    original = await readFile(configPath, "utf8");
   }
+
+  const existing = lfText(original);
 
   const hookEvents = [
     "SessionStart",
@@ -486,7 +488,7 @@ export async function installCodexTraceHook(
 
   if (!result.modified) return result;
   await mkdir(codexDir, { recursive: true });
-  await writeFile(configPath, next, "utf8");
+  await writeFile(configPath, withLineEndings(next, original), "utf8");
 
   return result;
 }
@@ -642,7 +644,8 @@ export async function removeAgentTraceHook(
     const configPath = codexConfigPath(homeDir);
 
     if (!existsSync(configPath)) return false;
-    const existing = await readFile(configPath, "utf8");
+    const original = await readFile(configPath, "utf8");
+    const existing = lfText(original);
 
     const removed = transformCodexHooks(existing, (block, command) =>
       traceHookCommandOwner(command) === "review" &&
@@ -655,7 +658,7 @@ export async function removeAgentTraceHook(
     const next = removed.replace(/\n{3,}/g, "\n\n");
     await writeFile(
       configPath,
-      next.trim() ? `${next.trimEnd()}\n` : "",
+      withLineEndings(next.trim() ? `${next.trimEnd()}\n` : "", original),
       "utf8",
     );
 
@@ -708,6 +711,17 @@ function codexHookBlock(reviewCommand: string): string {
   return `\n# review-trace-hooks:start\n${events
     .map((eventName) => codexTraceHookToml(eventName, reviewCommand))
     .join("\n\n")}\n# review-trace-hooks:end\n`;
+}
+
+// A config.toml saved with CRLF (a Windows editor, core.autocrlf) is matched as
+// LF, since the patterns below and the generated blocks use LF, and written
+// back with CRLF.
+function lfText(text: string): string {
+  return text.replace(/\r\n/g, "\n");
+}
+
+function withLineEndings(text: string, original: string): string {
+  return original.includes("\r\n") ? text.replace(/\n/g, "\r\n") : text;
 }
 
 // Restrict edits to the lifecycle blocks we generate, never arbitrary TOML keys.
@@ -845,7 +859,7 @@ export async function describeTraceHookOwners(
 
   let codex: TraceHookOwner | null = null;
   transformCodexHooks(
-    await readTextOrEmpty(codexConfigPath(homeDir)),
+    lfText(await readTextOrEmpty(codexConfigPath(homeDir))),
     (block, command, event) => {
       if (event === "SessionStart")
         codex = traceHookCommandOwner(command) ?? codex;
