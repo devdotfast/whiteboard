@@ -53,6 +53,8 @@ ensure_code_oss_dependencies() {
   case "$needs_install" in
     true)
       echo "Installing Code OSS dependencies..."
+      # npm runs the root preinstall after dependency builds, so parallel node-gyp runs race to extract headers.
+      VSCODE_FORCE_INSTALL=1 node build/npm/preinstall.ts
       npm ci --no-audit --no-fund --prefer-offline
       node "$bootstrap_helper" digest "$checkout" > "$install_stamp"
       ;;
