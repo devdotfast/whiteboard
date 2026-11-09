@@ -156,6 +156,13 @@ export {
 } from "./markdown.js";
 
 export {
+  type DiffHunk,
+  type DiffHunkLine,
+  parseUnifiedPatch,
+  patchChanges,
+} from "./unified-patch.js";
+
+export {
   type FileLineRange,
   type SourcePins,
   SourceRangeError,

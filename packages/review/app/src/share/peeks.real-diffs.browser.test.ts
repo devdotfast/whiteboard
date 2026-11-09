@@ -6,8 +6,11 @@ import type {
   ShareAlignment,
   ShareSource,
 } from "@dev.fast/review-share-protocol";
-import { patchRows } from "@dev.fast/whiteboard-document";
-import { type DiffHunk, parseUnifiedPatch } from "@review/unified-diff";
+import {
+  type DiffHunk,
+  parseUnifiedPatch,
+  patchRows,
+} from "@dev.fast/whiteboard-document";
 import { afterEach, describe, expect, it } from "vitest";
 
 import fixtures from "./__fixtures__/real-diffs.json";
