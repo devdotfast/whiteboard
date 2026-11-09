@@ -29,7 +29,7 @@ export function showReviewCanvasMenu(
     },
   }));
   service.showContextMenu({
-    getAnchor: () => request.anchor,
+    getAnchor: () => request.at ?? request.anchor,
     getMenuClassName: () => menuClass,
     getActions: () => actions,
     getCheckedActionsRepresentation: () => "radio",

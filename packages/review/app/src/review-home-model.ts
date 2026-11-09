@@ -1,7 +1,11 @@
 import { type ReviewApiSummary, boardTitle } from "@dev.fast/review-protocol";
 import { fuzzyMatches } from "@review/fuzzy-match";
 
-import { type WhiteboardBranch, whiteboardTree } from "./whiteboard-tree";
+import {
+  type WhiteboardBranch,
+  isUnread,
+  whiteboardTree,
+} from "./whiteboard-tree";
 
 export type HomeSort = "updated" | "created" | "title" | "trash";
 
@@ -195,13 +199,6 @@ export function reviewMetadataPills(
           ]
         : []),
   ];
-}
-
-export function isUnread(review: ReviewApiSummary): boolean {
-  return (
-    review.viewedAt === null ||
-    Date.parse(review.createdAt) > Date.parse(review.viewedAt)
-  );
 }
 
 /** Adds the children of `boards` that are in `pool`. */

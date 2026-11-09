@@ -1,5 +1,6 @@
 import type {
   ReviewApiSummary,
+  ReviewMenuRequest,
   ReviewProjectThread,
   ReviewSidebarSectionProps,
   ReviewThreadsFilter,
@@ -52,8 +53,7 @@ const mount = async (initial: ReviewSidebarSectionProps) => {
     handle = mountReviewSidebarSection(container, initial);
   });
 
-  /** Each row's text, a child's indented under its parent; a changed
-   * board's ends in "•". */
+  /** Each row's text, a child's indented under its parent. */
   const rows = () =>
     [...container.querySelectorAll<HTMLElement>("li")].map((row) => {
       const main = [
@@ -61,9 +61,8 @@ const mount = async (initial: ReviewSidebarSectionProps) => {
       ].at(-1)!;
 
       const nested = row.parentElement!.closest("li") ? "  " : "";
-      const changed = main.querySelector("[data-changed]") ? " •" : "";
 
-      return nested + main.textContent + changed;
+      return nested + main.textContent;
     });
 
   const click = (selector: string) =>
@@ -205,12 +204,7 @@ it("shows the open board's family with its place, the boards opened last, and a 
       }),
       board({ reviewId: "s1", title: "Step 1", parentId: "plan" }),
       board({ reviewId: "s2", title: "Step 2", parentId: "plan" }),
-      board({
-        reviewId: "s3",
-        title: "Step 3",
-        parentId: "plan",
-        changed: true,
-      }),
+      board({ reviewId: "s3", title: "Step 3", parentId: "plan" }),
       ...Array.from({ length: 6 }, (_, index) =>
         board({
           reviewId: `b${index + 1}`,
@@ -230,7 +224,7 @@ it("shows the open board's family with its place, the boards opened last, and a 
       "Plan",
       "  Step 1",
       "  Step 2",
-      "  Step 3 •",
+      "  Step 3",
     ]),
   );
   expect(document.body.textContent).toContain("This board2 of 3");
@@ -771,5 +765,177 @@ it("adds a child only at the top level, preserves focus while pending, and permi
     expect(document.querySelector('[role="alert"]')).toBeNull(),
   );
   expect(onNewChildWhiteboard).toHaveBeenCalledTimes(2);
+  await view.dispose();
+});
+
+const unreadBoards = () => [
+  board({ reviewId: "open", title: "Open board", viewedAt: null }),
+  board({
+    reviewId: "plan",
+    title: "Plan",
+    createdAt: day(1),
+    viewedAt: day(2),
+    children: ["step"],
+  }),
+  board({
+    reviewId: "step",
+    title: "Step",
+    createdAt: day(3),
+    viewedAt: null,
+    parentId: "plan",
+  }),
+  board({
+    reviewId: "read",
+    title: "Read",
+    createdAt: day(4),
+    viewedAt: day(5),
+  }),
+  ...[6, 7, 8, 9, 10].map((n) =>
+    board({ reviewId: `new${n}`, title: `New ${n}`, createdAt: day(n) }),
+  ),
+];
+
+it("lists unread families newest first, without the open one, five until asked", async () => {
+  const view = await mount(
+    props({ section: "unread", reviewId: "open", recent: unreadBoards() }),
+  );
+
+  expect(document.body.textContent).toContain("Unread6");
+  expect(view.rows()).toEqual([
+    "New 10",
+    "New 9",
+    "New 8",
+    "New 7",
+    "New 6",
+    "Show 1 more",
+  ]);
+  await view.click("[data-show-more]");
+  expect(view.rows().slice(5, 6)).toEqual(["Plan"]);
+
+  await view.update(
+    props({
+      section: "unread",
+      reviewId: "open",
+      recent: unreadBoards().map((b) => ({ ...b, viewedAt: day(20) })),
+    }),
+  );
+  expect(view.rows()).toEqual([]);
+  expect(document.body.textContent).not.toContain("Unread");
+  await view.dispose();
+});
+
+it("selects unread rows with command and shift clicks, opens on a plain click, and clears on Escape", async () => {
+  const onOpenBoard = vi.fn<ReviewSidebarSectionProps["onOpenBoard"]>();
+
+  const view = await mount(
+    props({
+      section: "unread",
+      reviewId: "open",
+      recent: unreadBoards(),
+      onOpenBoard,
+    }),
+  );
+
+  const row = (title: string) =>
+    [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === title,
+    )!;
+
+  const selected = () =>
+    [...view.container.querySelectorAll("[data-selected]")].map(
+      (row) => row.querySelector("button")!.textContent,
+    );
+
+  const clickWith = (title: string, init: MouseEventInit) =>
+    act(async () =>
+      row(title).dispatchEvent(
+        new MouseEvent("click", { bubbles: true, ...init }),
+      ),
+    );
+
+  await clickWith("New 9", { metaKey: true });
+  expect(selected()).toEqual(["New 9"]);
+  expect(onOpenBoard).not.toHaveBeenCalled();
+
+  await clickWith("New 7", { shiftKey: true });
+  expect(selected()).toEqual(["New 9", "New 8", "New 7"]);
+
+  await clickWith("New 8", { ctrlKey: true });
+  expect(selected()).toEqual(["New 9", "New 7"]);
+
+  await act(async () => {
+    row("New 7").focus();
+    await userEvent.keyboard("{Escape}");
+  });
+  expect(selected()).toEqual([]);
+
+  await clickWith("New 6", {});
+  expect(onOpenBoard).toHaveBeenLastCalledWith("new6", true);
+  await view.dispose();
+});
+
+it("marks a right-clicked row or the selection read from the host menu, and rolls back a failure", async () => {
+  const onMarkRead = vi.fn<(id: string) => Promise<void>>(async (id) => {
+    if (id === "new8") throw new Error("offline");
+  });
+
+  let request: ReviewMenuRequest | undefined;
+
+  const showMenu = vi.fn<NonNullable<ReviewSidebarSectionProps["showMenu"]>>(
+    (req) => {
+      request = req;
+
+      return { dispose: () => {} };
+    },
+  );
+
+  const view = await mount(
+    props({
+      section: "unread",
+      reviewId: "open",
+      recent: unreadBoards(),
+      onMarkRead,
+      showMenu,
+    }),
+  );
+
+  const row = (title: string) =>
+    [...document.querySelectorAll("button")].find(
+      (button) => button.textContent === title,
+    )!;
+
+  const fire = (title: string, type: string, init: MouseEventInit = {}) =>
+    act(async () =>
+      row(title).dispatchEvent(
+        new MouseEvent(type, { bubbles: true, ...init }),
+      ),
+    );
+
+  // A row outside the selection is the only target.
+  await fire("New 10", "contextmenu");
+  expect(request!.items.map((item) => item.label)).toEqual(["Mark as read"]);
+  await act(async () => request!.onSelect("read"));
+  expect(onMarkRead.mock.calls.map(([id]) => id)).toEqual(["new10"]);
+  expect(view.rows()).toEqual(["New 9", "New 8", "New 7", "New 6", "Plan"]);
+
+  // The selection marks together; a parent marks its unread children too.
+  await fire("New 9", "click", { metaKey: true });
+  await fire("Plan", "click", { metaKey: true });
+  await fire("Plan", "contextmenu");
+  onMarkRead.mockClear();
+  await act(async () => request!.onSelect("read"));
+  expect(onMarkRead.mock.calls.map(([id]) => id).sort()).toEqual([
+    "new9",
+    "step",
+  ]);
+  expect(view.rows()).toEqual(["New 8", "New 7", "New 6"]);
+
+  // A failure brings the row back with the reason.
+  await fire("New 8", "contextmenu");
+  await act(async () => request!.onSelect("read"));
+  expect(view.rows()).toEqual(["New 8", "New 7", "New 6"]);
+  expect(document.querySelector("[role=alert]")?.textContent).toContain(
+    "offline",
+  );
   await view.dispose();
 });

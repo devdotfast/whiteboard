@@ -1,7 +1,7 @@
 import type { ReviewApiSummary } from "@dev.fast/review-protocol";
 import { expect, it } from "vitest";
 
-import { recentTree } from "./whiteboard-tree";
+import { recentTree, unreadTree } from "./whiteboard-tree";
 
 const board = (
   reviewId: string,
@@ -55,4 +55,40 @@ it("groups a recently opened child under its unvisited parent and keeps dependen
       ({ board }) => board.reviewId,
     ),
   ).toEqual(["other"]);
+});
+
+it("lists families with an unread member, newest first, without the open family or any in Trash", () => {
+  const created = (
+    reviewId: string,
+    createdAt: string,
+    viewedAt: string | null,
+    extra: Partial<ReviewApiSummary> = {},
+  ) => ({ ...board(reviewId, "app", viewedAt), createdAt, ...extra });
+
+  const plan = created("plan", "2026-10-01", "2026-10-02", {
+    children: ["step"],
+  });
+
+  const step = created("step", "2026-10-03", null, { parentId: "plan" });
+  const open = created("open", "2026-10-06", null, { children: ["sibling"] });
+
+  const sibling = created("sibling", "2026-10-07", null, {
+    parentId: "open",
+  });
+
+  const tree = unreadTree(
+    [
+      plan,
+      step,
+      open,
+      sibling,
+      created("read", "2026-10-04", "2026-10-05"),
+      created("updated", "2026-10-05", "2026-10-04"),
+      created("gone", "2026-10-08", null, { trashedAt: "2026-10-09" }),
+    ],
+    "sibling",
+  );
+
+  expect(tree.map(({ board }) => board.reviewId)).toEqual(["updated", "plan"]);
+  expect(tree[1]!.children.map(({ reviewId }) => reviewId)).toEqual(["step"]);
 });
