@@ -1317,7 +1317,6 @@ function ReviewHomeBody({
                             boardRowMarker,
                             styles.row,
                             nested && styles.nestedRow,
-                            styles.waterfall(index),
                             unavailable(review) && styles.unavailableRow,
                             isSelected(index) && styles.selected,
                             isSelected(index) &&
