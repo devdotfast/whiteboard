@@ -137,13 +137,14 @@ it("opens a review a remote creates with open: true, and knows its owner before 
   expect(first).toEqual([{ status: 200, host: "wb-a" }]);
 });
 
-async function pushingRemote(frames: JsonValue[] = []) {
+async function pushingRemote(frames: JsonValue[] = [], reviewIds?: string[]) {
   const results: JsonValue[] = [];
   const controls: IncomingMessage[] = [];
   const streams: ServerResponse[] = [];
 
   const fake = await startFake({
     version,
+    reviewIds,
     handle(request, response) {
       if (request.url === "/control") {
         controls.push(request);
@@ -279,6 +280,45 @@ it("refuses every push from a remote but capabilities, focus and opening one of 
     ),
   );
   expect(received).toEqual([]);
+});
+
+it("renders a frame of a review the remote lists, and refuses one it does not", async () => {
+  const own = randomUUID();
+  const other = randomUUID();
+
+  const render = (reviewId: string) => ({
+    name: "renderAnimation",
+    args: { reviewId, targetId: "block-1", frame: "start" },
+  });
+
+  const remote = await pushingRemote(
+    [verb("own", render(own)), verb("other", render(other))],
+    [own],
+  );
+
+  const relay = new GlobalReviewDesktopVerbRelay({ maxClients: 1 });
+  const received = attachWindow(relay, () => ({ ok: true, result: "frame" }));
+
+  await startGateway(
+    root,
+    [{ alias: "wb-a", endpoint: remote.fake.endpoint }],
+    { relay },
+  );
+
+  await vi.waitFor(() => expect(remote.results).toHaveLength(2), {
+    timeout: 5_000,
+  });
+  expect(remote.results).toEqual(
+    expect.arrayContaining([
+      { id: "own", response: { ok: true, result: "frame" } },
+      {
+        id: "other",
+        response: { ok: false, error: expect.stringContaining("wb-a") },
+      },
+    ]),
+  );
+  expect(received).toContainEqual(render(own));
+  expect(received).not.toContainEqual(render(other));
 });
 
 it("attaches to remotes only while a window is attached to this machine", async () => {
