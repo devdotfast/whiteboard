@@ -83,6 +83,7 @@ export function ShareControl({
   const [open, setOpen] = useState(false);
   const [target, setTarget] = useState<ShareTarget>();
   const [copyError, setCopyError] = useState<string>();
+  const [resharing, setResharing] = useState(false);
   const control = useRef<HTMLDivElement>(null);
   const accountKey = canvasQueryKeys.sharingAccount();
 
@@ -147,6 +148,7 @@ export function ShareControl({
       publish.reset();
       login.reset();
       setCopyError(undefined);
+      setResharing(Boolean(link));
     }
 
     // The read warms the host's connection to the share service.
@@ -227,9 +229,6 @@ export function ShareControl({
                   value={current.url}
                   onFocus={(event) => event.target.select()}
                 />
-                <p {...stylex.props(styles.paragraph, styles.status)}>
-                  This link always opens the latest share of this board.
-                </p>
                 <Button variant="primary" onClick={() => copy(current.url)}>
                   {copied === current.url ? "Copied" : "Copy link"}
                 </Button>
@@ -274,6 +273,17 @@ export function ShareControl({
                 </Button>
               </>
             )
+          )}
+          <p {...stylex.props(styles.paragraph, styles.status)}>
+            Hit share again to update the link in-place
+          </p>
+          {resharing && current && publish.isSuccess && (
+            <p
+              {...stylex.props(styles.paragraph, textStyles.success)}
+              role="status"
+            >
+              Content updated
+            </p>
           )}
         </Popover>
       )}

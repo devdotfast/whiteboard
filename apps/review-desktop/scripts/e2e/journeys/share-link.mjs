@@ -45,7 +45,7 @@ export async function run(ctx) {
 
     assert.equal(service.posts.length, 1);
     await page
-      .getByText("This link always opens the latest share of this board.")
+      .getByText("Hit share again to update the link in-place")
       .waitFor();
     ctx.check("the first share uploads once and shows its link");
     await page.keyboard.press("Escape");
@@ -69,6 +69,7 @@ export async function run(ctx) {
         (await input.inputValue().catch(() => "")) === u1,
       "the reshared link",
     );
+    await page.getByText("Content updated").waitFor();
     ctx.check("an edited board uploads again behind the same link");
 
     const { shareId } = service.links.get(reviewId);
@@ -88,6 +89,7 @@ export async function run(ctx) {
     await input.waitFor();
     await sleep(2000);
     assert.equal(service.posts.length, 2);
+    assert.equal(await page.getByText("Content updated").count(), 0);
     assert.equal(await input.inputValue(), u1);
     ctx.check("reopening an unchanged board uploads nothing");
   } finally {

@@ -30,6 +30,9 @@ export const textStyles = stylex.create({
   error: {
     color: tokens.changeRemoved,
   },
+  success: {
+    color: tokens.changeAdded,
+  },
   // One line, cut with an ellipsis.
   truncate: {
     overflow: "hidden",
