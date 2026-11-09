@@ -184,7 +184,7 @@ test("recovery notice is sticky, deduplicated, specific to native macOS read-onl
     "review/contrib/update/reviewUpdate.contribution.ts",
     {
       "../../../base/common/lifecycle.js": { Disposable: Object },
-      "../../../base/common/platform.js": { isMacintosh: true, isLinux: false },
+      "../../../base/common/platform.js": { isMacintosh: true },
       "../../../platform/actions/common/actions.js": {
         Action2: Object,
         registerAction2: noOp,
@@ -240,7 +240,7 @@ test("authorization failures show one actionable warning", () => {
     "review/contrib/update/reviewUpdate.contribution.ts",
     {
       "../../../base/common/lifecycle.js": { Disposable: Object },
-      "../../../base/common/platform.js": { isMacintosh: true, isLinux: false },
+      "../../../base/common/platform.js": { isMacintosh: true },
       "../../../platform/actions/common/actions.js": {
         Action2: Object,
         registerAction2: noOp,

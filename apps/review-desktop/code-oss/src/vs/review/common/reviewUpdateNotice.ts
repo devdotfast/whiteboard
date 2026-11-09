@@ -103,17 +103,3 @@ export function supersedesStagedUpdate(
 ): boolean {
 	return !existing || existing.targetCommit !== next.targetCommit;
 }
-
-/**
- * Whether to prompt for this update.
- *
- * Skipping is bound to the exact commit, so a later release still prompts. Note
- * that skipping only silences the toast: Squirrel still installs the update on
- * quit, which is why the staged record is written regardless.
- */
-export function shouldPromptForUpdate(
-	next: IReviewStagedUpdate,
-	skippedCommit: string | undefined,
-): boolean {
-	return !skippedCommit || skippedCommit !== next.targetCommit;
-}

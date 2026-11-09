@@ -31,7 +31,7 @@ import { IProductService } from "../../../../platform/product/common/productServ
 import { IUpdateService, StateType, type State } from "../../../../platform/update/common/update.js";
 import { IWorkbenchEnvironmentService } from "../../../../workbench/services/environment/common/environmentService.js";
 import { IEditorProgressService, LongRunningOperation } from "../../../../platform/progress/common/progress.js";
-import { IStorageService, StorageScope } from "../../../../platform/storage/common/storage.js";
+import { IStorageService, StorageScope, StorageTarget } from "../../../../platform/storage/common/storage.js";
 import { ITelemetryService } from "../../../../platform/telemetry/common/telemetry.js";
 import { ColorScheme } from "../../../../platform/theme/common/theme.js";
 import { IThemeService } from "../../../../platform/theme/common/themeService.js";
@@ -72,7 +72,6 @@ import {
 	REVIEW_SHOW_RELEASE_NOTES_SETTING,
 	REVIEW_SOFTWARE_MAP_SETTING,
 	REVIEW_TELEMETRY_SETTING,
-	REVIEW_UPDATE_PILL_SETTING,
 } from "../../../common/reviewConfigurationDefaults.js";
 import { fetchWhiteboardReleases, REVIEW_SHOW_RELEASE_NOTES_COMMAND_ID } from "../../../common/reviewReleaseNotes.js";
 import { ReviewApiClient, type ReviewApiSummary, resolveReviewSourceView, reviewSourceAnchor, type ReviewSourceView, type ReviewSourceSelection } from "../../../common/reviewProtocol.js";
@@ -1109,8 +1108,6 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			},
 			showReleaseNotes: this.currentShowReleaseNotes(),
 			setShowReleaseNotes: (enabled) => this.setShowReleaseNotes(enabled),
-			updatePill: this.currentUpdatePill(),
-			setUpdatePill: (enabled) => this.setUpdatePill(enabled),
 			animationsEnabled: await this.desktopConnection.readAnimationsEnabled().catch(() => false),
 			setAnimationsEnabled: (enabled) => this.desktopConnection.setAnimationsEnabled(enabled),
 			remoteHosts: reviewRemoteHostsSettings({
@@ -1212,7 +1209,8 @@ export class ReviewCanvasEditorPane extends EditorPane {
 	}
 
 	private updateHost(): ReviewCanvasUpdateHost {
-		const pending = () => this.currentUpdatePill() ? pendingUpdateOf(this.updateService.state) : undefined;
+		const dismissed = () => this.storageService.get(UPDATE_PILL_DISMISSED_KEY, StorageScope.APPLICATION);
+		const pending = () => pendingUpdateOf(this.updateService.state, dismissed());
 		let current = pending();
 		const changes = this._register(new Emitter<void>());
 		const refresh = () => {
@@ -1222,24 +1220,16 @@ export class ReviewCanvasEditorPane extends EditorPane {
 			changes.fire();
 		};
 		this._register(this.updateService.onStateChange(refresh));
-		this._register(this.configurationService.onDidChangeConfiguration((event) => {
-			if (event.affectsConfiguration(REVIEW_UPDATE_PILL_SETTING)) refresh();
-		}));
+		this._register(this.storageService.onDidChangeValue(StorageScope.APPLICATION, UPDATE_PILL_DISMISSED_KEY, this._store)(refresh));
 		return {
 			current: () => current,
 			onDidChange: (listener) => changes.event(listener),
 			apply: () => void (current?.action === "instructions" ? this.updateService.downloadUpdate(true) : this.updateService.quitAndInstall()),
+			dismiss: () => {
+				const state = this.updateService.state;
+				if ("update" in state && state.update) this.storageService.store(UPDATE_PILL_DISMISSED_KEY, state.update.version, StorageScope.APPLICATION, StorageTarget.MACHINE);
+			},
 		};
-	}
-
-	private currentUpdatePill(): boolean {
-		return this.configurationService.getValue<boolean>(REVIEW_UPDATE_PILL_SETTING) !== false;
-	}
-
-	private async setUpdatePill(enabled: boolean): Promise<boolean> {
-		this.reviewTelemetryService.capture("setting_changed", { setting: "update_pill", enabled });
-		await this.configurationService.updateValue(REVIEW_UPDATE_PILL_SETTING, enabled, ConfigurationTarget.USER);
-		return this.currentUpdatePill();
 	}
 
 	private currentShowReleaseNotes(): boolean {
@@ -1670,10 +1660,13 @@ export class ReviewCanvasParts extends Disposable implements IReviewCanvasPartsS
 	}
 }
 
+/** The update build whose pill the reader dismissed, in every window and across launches. */
+const UPDATE_PILL_DISMISSED_KEY = "review.update.pillDismissed.v1";
+
 /** Linux never reaches Ready: its package manager installs the update. */
-function pendingUpdateOf(state: State): ReviewCanvasPendingUpdate | undefined {
+function pendingUpdateOf(state: State, dismissed: string | undefined): ReviewCanvasPendingUpdate | undefined {
 	const action = state.type === StateType.Ready ? "restart" : isLinux && state.type === StateType.AvailableForDownload ? "instructions" : undefined;
-	if (!action || !("update" in state)) return undefined;
+	if (!action || !("update" in state) || state.update?.version === dismissed) return undefined;
 	const version = state.update?.productVersion;
 	return { action, ...(version && { version }) };
 }

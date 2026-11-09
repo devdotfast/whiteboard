@@ -903,8 +903,6 @@ export interface ReviewCanvasSettingsContent {
   // Backed by `update.showReleaseNotes`, as the Release notes tab's checkbox.
   showReleaseNotes: boolean;
   setShowReleaseNotes(enabled: boolean): Promise<boolean>;
-  updatePill: boolean;
-  setUpdatePill(enabled: boolean): Promise<boolean>;
   // Not a workbench setting: the review server reads it, so it lives in the
   // server preferences file. Off by default. On, agents can author
   // animations over MCP; off, existing animations still render.
@@ -1142,6 +1140,8 @@ export interface ReviewCanvasUpdateHost {
   onDidChange(listener: () => void): ReviewDisposable;
   /** Restarts into the update, or opens the package manager instructions. */
   apply(): void;
+  /** Hides this update everywhere until a newer one arrives. */
+  dismiss(): void;
 }
 
 /** The Release notes tab: every Whiteboard release. */

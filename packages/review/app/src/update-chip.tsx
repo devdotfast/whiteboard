@@ -11,17 +11,13 @@ import { CheckIcon, CloseIcon } from "@canvas/ui/icons";
 import { pillStyles } from "@canvas/ui/pill";
 import { surfaceStyles } from "@canvas/ui/surface";
 import { useTooltip } from "@canvas/ui/tooltip";
-import type {
-  ReviewCanvasPendingUpdate,
-  ReviewCanvasUpdateHost,
-} from "@dev.fast/review-protocol";
+import type { ReviewCanvasUpdateHost } from "@dev.fast/review-protocol";
 import * as stylex from "@stylexjs/stylex";
-import { useCallback, useState, useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 import { tickerMotion } from "./ticker-motion.stylex";
 import { tokens } from "./tokens.stylex";
 
-/** Stays while an update waits, after its toast is gone. */
 export function UpdateChip({ host }: { host: ReviewCanvasUpdateHost }) {
   const subscribe = useCallback(
     (listener: () => void) => {
@@ -33,10 +29,9 @@ export function UpdateChip({ host }: { host: ReviewCanvasUpdateHost }) {
   );
 
   const update = useSyncExternalStore(subscribe, host.current);
-  const [dismissed, setDismissed] = useState<ReviewCanvasPendingUpdate>();
   const tooltip = useTooltip("Dismiss");
 
-  if (!update || update === dismissed) return null;
+  if (!update) return null;
   const restart = update.action === "restart";
   const named = update.version ? `Whiteboard ${update.version}` : "Update";
 
@@ -71,7 +66,7 @@ export function UpdateChip({ host }: { host: ReviewCanvasUpdateHost }) {
         ref={tooltip}
         aria-label="Dismiss"
         xstyle={styles.close}
-        onClick={() => setDismissed(update)}
+        onClick={() => host.dismiss()}
       >
         <CloseIcon xstyle={iconStyles.inert} />
       </IconButton>
@@ -88,7 +83,7 @@ const styles = stylex.create({
   pill: {
     position: "fixed",
     zIndex: layer.overlay,
-    left: space.s16,
+    right: space.s16,
     bottom: space.s16,
     padding: space.s6,
     paddingLeft: space.s10,
